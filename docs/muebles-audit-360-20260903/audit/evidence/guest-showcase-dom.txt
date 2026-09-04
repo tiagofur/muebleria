@@ -1,0 +1,94 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina" [active]:
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: VENTAS
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - heading "Vitrina" [level=2]
+  - paragraph: "Catálogo visual para cotizar: obras terminadas y plantillas de muebles."
+  - generic "Vistas de la vitrina":
+    - tablist "Vistas de la Vitrina Comercial":
+      - tab "Portafolio de Obras 0 elementos" [selected]:
+        - text: Portafolio de Obras
+        - generic "0 elementos": "0"
+      - tab "Catálogo de Módulos 17 elementos":
+        - text: Catálogo de Módulos
+        - generic "17 elementos": "17"
+  - tabpanel "Portafolio de Obras 0 elementos":
+    - group "Filtros de fotos":
+      - button "Todas (0)"
+      - button "Destacadas (0)":
+        - text: Destacadas (0)
+      - button "Instaladas / Terminadas"
+      - button "En Taller"
+      - button "Relevamiento (Antes)"
+    - searchbox "Buscar"
+    - button "Modo Showroom / Cliente":
+      - generic: Modo Showroom / Cliente
+    - status:
+      - heading "No hay fotos en el portafolio" [level=3]
+      - paragraph: Sube fotos en la pestaña "Fotos de Obra" de cualquier proyecto y márcalas con la estrella para destacarlas aquí.
+- generic "Notificaciones"

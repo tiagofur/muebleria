@@ -1,0 +1,226 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles" [active]:
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: LIBRERÍA
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - heading "Muebles" [level=2]
+  - paragraph: Plantillas de muebles reutilizables para cotizar y fabricar
+  - generic "Acciones de Muebles":
+    - button "Editar categorías":
+      - text: Editar categorías
+    - button "Nuevo mueble":
+      - text: Nuevo mueble
+  - complementary "Filtro por categorías":
+    - heading "Filtrar" [level=3]
+    - button "Editar categorías":
+    - button "Todas 17":
+      - generic: Todas
+      - generic: "17"
+    - button "Sin categoría 17":
+      - generic: Sin categoría
+      - generic: "17"
+    - paragraph: Sin categorías. Usá «Editar categorías» para crear la jerarquía.
+  - generic "Buscar y filtrar muebles":
+    - searchbox "Buscar muebles"
+  - list "Lista de muebles":
+    - button "MOD-GAB-01 Gabinete 1 Puerta 300 x 720 x 590 mm 2 componentes 5 herrajes Costo estimado $842.90 MXN":
+      - text: Sin foto
+      - generic: MOD-GAB-01
+      - heading "Gabinete 1 Puerta 300 x 720 x 590 mm" [level=3]
+      - text: 2 componentes
+      - text: 5 herrajes
+      - generic: Costo estimado
+      - generic: $842.90 MXN
+    - button "MOD-CAJ-01 Cajonera 4 Cajones 500 x 720 x 590 mm 4 componentes 4 herrajes Costo estimado $2,070.16 MXN":
+      - text: Sin foto
+      - generic: MOD-CAJ-01
+      - heading "Cajonera 4 Cajones 500 x 720 x 590 mm" [level=3]
+      - text: 4 componentes
+      - text: 4 herrajes
+      - generic: Costo estimado
+      - generic: $2,070.16 MXN
+    - button "MOD-COMP-001 Gabinete Compuesto 600 2 componentes 0 herrajes Costo estimado $521.46 MXN":
+      - text: Sin foto
+      - generic: MOD-COMP-001
+      - heading "Gabinete Compuesto 600" [level=3]
+      - text: 2 componentes
+      - text: 0 herrajes
+      - generic: Costo estimado
+      - generic: $521.46 MXN
+    - button "MOD-BAJO-ZOCLO-600 Bajo 600 con zoclo melamina 2 componentes 1 herraje Costo estimado $532.11 MXN":
+      - text: Sin foto
+      - generic: MOD-BAJO-ZOCLO-600
+      - heading "Bajo 600 con zoclo melamina" [level=3]
+      - text: 2 componentes
+      - text: 1 herraje
+      - generic: Costo estimado
+      - generic: $532.11 MXN
+    - button "MOD-BAJO-PERFIL-600 Bajo 600 con zoclo perfil (ml) 1 componente 2 herrajes Costo estimado $502.95 MXN":
+      - text: Sin foto
+      - generic: MOD-BAJO-PERFIL-600
+      - heading "Bajo 600 con zoclo perfil (ml)" [level=3]
+      - text: 1 componente
+      - text: 2 herrajes
+      - generic: Costo estimado
+      - generic: $502.95 MXN
+    - button "MOD-ALA-001 Alacena 1 Puerta 600 x 720 x 320 mm 0 componentes 1 herraje Costo estimado $403.87 MXN":
+      - text: Sin foto
+      - generic: MOD-ALA-001
+      - heading "Alacena 1 Puerta 600 x 720 x 320 mm" [level=3]
+      - text: 0 componentes
+      - text: 1 herraje
+      - generic: Costo estimado
+      - generic: $403.87 MXN
+    - button "MOD-DES-001 Despensa 2 Puertas 600 x 2100 x 600 mm 0 componentes 1 herraje Costo estimado $1,254.75 MXN":
+      - text: Sin foto
+      - generic: MOD-DES-001
+      - heading "Despensa 2 Puertas 600 x 2100 x 600 mm" [level=3]
+      - text: 0 componentes
+      - text: 1 herraje
+      - generic: Costo estimado
+      - generic: $1,254.75 MXN
+    - button "MOD-BAJO-800 Gabinete Bajo 2 Puertas 800 x 720 x 590 mm 2 componentes 3 herrajes Costo estimado $1,263.99 MXN":
+      - text: Sin foto
+      - generic: MOD-BAJO-800
+      - heading "Gabinete Bajo 2 Puertas 800 x 720 x 590 mm" [level=3]
+      - text: 2 componentes
+      - text: 3 herrajes
+      - generic: Costo estimado
+      - generic: $1,263.99 MXN
+    - button "MOD-FREG-900 Gabinete Bajo Fregadero 900 x 720 x 590 mm 1 componente 3 herrajes Costo estimado $1,231.06 MXN":
+      - text: Sin foto
+      - generic: MOD-FREG-900
+      - heading "Gabinete Bajo Fregadero 900 x 720 x 590 mm" [level=3]
+      - text: 1 componente
+      - text: 3 herrajes
+      - generic: Costo estimado
+      - generic: $1,231.06 MXN
+    - button "MOD-HORNO-600 Gabinete Bajo para Horno 600 x 720 x 590 mm 1 componente 3 herrajes Costo estimado $827.06 MXN":
+      - text: Sin foto
+      - generic: MOD-HORNO-600
+      - heading "Gabinete Bajo para Horno 600 x 720 x 590 mm" [level=3]
+      - text: 1 componente
+      - text: 3 herrajes
+      - generic: Costo estimado
+      - generic: $827.06 MXN
+    - button "MOD-ESQ-900 Gabinete Bajo Esquinero L 900 x 720 x 900 mm 2 componentes 3 herrajes Costo estimado $1,360.48 MXN":
+      - text: Sin foto
+      - generic: MOD-ESQ-900
+      - heading "Gabinete Bajo Esquinero L 900 x 720 x 900 mm" [level=3]
+      - text: 2 componentes
+      - text: 3 herrajes
+      - generic: Costo estimado
+      - generic: $1,360.48 MXN
+    - button "MOD-CAJ-3C Cajonera 3 Cajones (2+1 Cacerolero) 600 x 720 x 590 mm 4 componentes 3 herrajes Costo estimado $1,661.53 MXN":
+      - text: Sin foto
+      - generic: MOD-CAJ-3C
+      - heading "Cajonera 3 Cajones (2+1 Cacerolero) 600 x 720 x 590 mm" [level=3]
+      - text: 4 componentes
+      - text: 3 herrajes
+      - generic: Costo estimado
+      - generic: $1,661.53 MXN
+    - button "MOD-ALA-800 Alacena Superior 2 Puertas 800 x 720 x 320 mm 2 componentes 2 herrajes Costo estimado $922.22 MXN":
+      - text: Sin foto
+      - generic: MOD-ALA-800
+      - heading "Alacena Superior 2 Puertas 800 x 720 x 320 mm" [level=3]
+      - text: 2 componentes
+      - text: 2 herrajes
+      - generic: Costo estimado
+      - generic: $922.22 MXN
+    - button "MOD-ALA-CAMP Alacena Sobrecampana 600 x 400 x 320 mm 1 componente 2 herrajes Costo estimado $466.43 MXN":
+      - text: Sin foto
+      - generic: MOD-ALA-CAMP
+      - heading "Alacena Sobrecampana 600 x 400 x 320 mm" [level=3]
+      - text: 1 componente
+      - text: 2 herrajes
+      - generic: Costo estimado
+      - generic: $466.43 MXN
+    - button "MOD-ALA-ESQ Alacena Esquinera 600 x 720 x 600 mm 2 componentes 2 herrajes Costo estimado $734.85 MXN":
+      - text: Sin foto
+      - generic: MOD-ALA-ESQ
+      - heading "Alacena Esquinera 600 x 720 x 600 mm" [level=3]
+      - text: 2 componentes
+      - text: 2 herrajes
+      - generic: Costo estimado
+      - generic: $734.85 MXN
+    - button "MOD-TORRE-HORNO Torre Horno y Microondas 600 x 2100 x 600 mm 2 componentes 3 herrajes Costo estimado $1,981.20 MXN":
+      - text: Sin foto
+      - generic: MOD-TORRE-HORNO
+      - heading "Torre Horno y Microondas 600 x 2100 x 600 mm" [level=3]
+      - text: 2 componentes
+      - text: 3 herrajes
+      - generic: Costo estimado
+      - generic: $1,981.20 MXN
+    - button "MOD-ISLA-1200 Módulo Isla Central 1200 x 860 x 700 mm 2 componentes 3 herrajes Costo estimado $2,397.31 MXN":
+      - text: Sin foto
+      - generic: MOD-ISLA-1200
+      - heading "Módulo Isla Central 1200 x 860 x 700 mm" [level=3]
+      - text: 2 componentes
+      - text: 3 herrajes
+      - generic: Costo estimado
+      - generic: $2,397.31 MXN
+- generic "Notificaciones"

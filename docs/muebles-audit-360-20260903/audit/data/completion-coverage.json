@@ -1,0 +1,2206 @@
+{
+  "snapshot": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "generatedAt": "2026-09-04T12:37:35.959797+00:00",
+  "overallStatus": "BOUNDED_REVIEW_DOCUMENTED; PRODUCT_RUNTIME_NOT_CERTIFIED",
+  "coverage": [
+    {
+      "id": "DOD-01",
+      "requirement": "inventario de documentación",
+      "status": "INVENTORIED",
+      "evidence": [
+        "data/docs-governance.json#documents"
+      ],
+      "missingArtifacts": [],
+      "limitation": "371 documentos indexados y vinculados a revisión semántica por familias; alcance exacto: árbol rastreado del SHA, no documentos externos.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-02",
+      "requirement": "auditoría de documentación",
+      "status": "FAMILY_SEMANTIC_REVIEW_PERFORMED",
+      "evidence": [
+        "data/docs-semantic-audit.json#documents",
+        "data/docs-semantic-audit.json#families",
+        "data/docs-semantic-audit.json#findings",
+        "evidence/docs-semantic-audit.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "371 archivos leídos para claims/metadatos y clasificados mediante 15 familias y contraste de afirmaciones seleccionadas. No es certificación de cada frase ni reejecución de toda evidencia histórica; ver readScope y rationale por documento.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-03",
+      "requirement": "inventario de módulos",
+      "status": "INVENTORIED",
+      "evidence": [
+        "data/backend-audit.json#modules",
+        "data/synthesis.json#productMap"
+      ],
+      "missingArtifacts": [],
+      "limitation": "151 archivos backend declarados por capa; no equivale a inventario semántico completo de todos los bounded contexts ni revisión de todos los servicios.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-04",
+      "requirement": "inventario de funcionalidades",
+      "status": "SOURCE_MATRIX_RUNTIME_UNKNOWN",
+      "evidence": [
+        "data/feature-matrix.json#features",
+        "data/docs-governance.json#features",
+        "data/sketchup-audit.json#features"
+      ],
+      "missingArtifacts": [],
+      "limitation": "204 entradas enriquecidas por fuente:200 PARTIAL/4 UNKNOWN más seis capacidades SketchUp. Cada fila tiene fragmento semántico o alcance de postergación revisado; esto no cumple automáticamente todos los criterios o pruebas de capas. Cero funcionalidades COMPLETE acreditadas. Ver fieldCoverage y auditDepth.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-05",
+      "requirement": "inventario de pantallas",
+      "status": "INVENTORIED",
+      "evidence": [
+        "data/web-inventory.json#screens",
+        "data/web-inventory.json#secondaryInterfaces"
+      ],
+      "missingArtifacts": [],
+      "limitation": "29 rutas primarias, 259 interfaces secundarias y patrones adicionales. Hallazgo mecánico de componente no demuestra cobertura de toda interacción condicional.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-06",
+      "requirement": "auditoría pantalla por pantalla",
+      "status": "STATIC_PLUS_LIMITED_RUNTIME",
+      "evidence": [
+        "data/web-inventory.json",
+        "data/web-semantic-audit.json",
+        "data/runtime-ui.json",
+        "evidence/web-audit.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "29 pantallas con fragmentos semánticos y26cuerpos de tests inspeccionados;259secundarios/140inline con profundidad por fila. Sin contexto semántico específico: secundarios0, inline0; contratos compartidos no certifican cada consumidor. Navegación guest y algunas vistas/estados ejercitados; no se ejecutaron todos los formularios, roles, estados, responsive y flujos backend por pantalla.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-07",
+      "requirement": "inventario de endpoints",
+      "status": "MIXED_INVENTORY_AND_BOUNDED_HANDLER_REVIEW",
+      "evidence": [
+        "data/backend-audit.json#endpoints",
+        "data/endpoint-deep-audit.json#endpoints",
+        "data/endpoint-supplement.json#endpoints"
+      ],
+      "missingArtifacts": [],
+      "limitation": "265 registros mixtos: 241 registros runtime (incluidos wildcards/health) + 24 declaraciones OpenAPI/aliases; no son endpoints runtime distintos. 21 filas profundas + 244 suplementarias; 263 revisiones semánticas acotadas + 2 declaraciones futuras revisadas como scope; 0 sin disposición revisada. Declaración futura no es handler implementado. No prueban cada caller, DTO, side effect ni matriz HTTP.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-08",
+      "requirement": "auditoría backend",
+      "status": "TARGETED_STATIC_AND_TESTS",
+      "evidence": [
+        "data/backend-audit.json",
+        "data/endpoint-supplement.json",
+        "data/defect-proofs.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Inventario de handlers/storage y defectos focalizados; proofs de fallo cliente/DXF no prueban cada endpoint Go ni cada transacción.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-09",
+      "requirement": "auditoría frontend",
+      "status": "STATIC_PLUS_LIMITED_RUNTIME",
+      "evidence": [
+        "data/web-inventory.json",
+        "data/web-semantic-audit.json",
+        "data/runtime-ui.json",
+        "evidence/web-audit.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "29 pantallas con fragmentos semánticos y26cuerpos de tests inspeccionados;259secundarios/140inline con profundidad por fila. Sin contexto semántico específico: secundarios0, inline0; contratos compartidos no certifican cada consumidor. Navegación guest y algunas vistas/estados ejercitados; no se ejecutaron todos los formularios, roles, estados, responsive y flujos backend por pantalla.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-10",
+      "requirement": "auditoría SketchUp",
+      "status": "STATIC_REVIEW_RUNTIME_UNKNOWN",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "evidence/native-host-verification.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Arquitectura/contratos/edición/catálogo recorridos en código y suites Ruby. Host nativo TestUp, interacción undo/save-reopen, secure store y binding reales siguen sin ejecutar.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-11",
+      "requirement": "auditoría integración Web/Backend/SketchUp",
+      "status": "TARGETED_STATIC_AND_TESTS",
+      "evidence": [
+        "data/backend-audit.json",
+        "data/endpoint-supplement.json",
+        "data/defect-proofs.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Inventario de handlers/storage y defectos focalizados; proofs de fallo cliente/DXF no prueban cada endpoint Go ni cada transacción.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-12",
+      "requirement": "auditoría modelo de dominio",
+      "status": "TARGETED_STATIC_REVIEW",
+      "evidence": [
+        "data/synthesis.json#graphs",
+        "data/synthesis.json#domainInvariants"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Grafos y ownership contrastados para contextos críticos; no revisión semántica de cada entidad/regla del repositorio.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-13",
+      "requirement": "auditoría base de datos",
+      "status": "FINAL_SCHEMA_METADATA_AND_SEMANTIC_REVIEW",
+      "evidence": [
+        "data/database-deep-audit.json",
+        "data/backend-audit.json#migrations",
+        "evidence/database-deep-audit.md",
+        "evidence/pilot-foundation-proof.log"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Metadata SELECT-only del esquema final:75 tablas public (74 aplicación/control +schema_migrations),842 columnas,435 constraints,279 índices,71 RLS enable+force,27 triggers,migración116;11 revisiones semánticas. Inventario histórico76 incluye2tablas retiradas y no schema_migrations. Sin consultar filas negocio: huérfanos reales, planes SQL/cargas y producción siguen no verificados.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-14",
+      "requirement": "auditoría multitenancy",
+      "status": "SCOPED_RUNTIME_VERIFIED",
+      "evidence": [
+        "evidence/pilot-foundation-proof.log",
+        "evidence/organization-browser.log",
+        "data/backend-audit.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Foundation y cambio de tenant probados en alcance de sus tests. No acredita aislamiento de todos los uploads/jobs/exports/logs/SketchUp del producto.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-15",
+      "requirement": "auditoría roles/permisos",
+      "status": "STATIC_EFFECTIVE_COMPOSITION_RUNTIME_PARTIAL",
+      "evidence": [
+        "data/backend-audit.json#permissions",
+        "data/effective-permissions.json",
+        "data/synthesis.json#permissionsReference"
+      ],
+      "missingArtifacts": [],
+      "limitation": "536 filas role-only más41composiciones efectivas por familia recurso/acción, con credential/tenant/ownership/step-up y limitaciones. No son todas las permutaciones rol×estado ni denegaciones HTTP por cada celda.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-16",
+      "requirement": "auditoría seguridad",
+      "status": "TARGETED_REVIEW",
+      "evidence": [
+        "data/backend-audit.json#findings",
+        "data/operations-audit.json",
+        "evidence/pilot-foundation-proof.log"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Auth/RLS y upload revisados; no pentest integral, consulta de advisories de dependencias, entorno productivo, explotación IDOR/XSS/CSRF por cada ruta.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-17",
+      "requirement": "auditoría tests",
+      "status": "SCOPED_CHECKS_VERIFIED",
+      "evidence": [
+        "data/operations-audit.json",
+        "evidence/main-checks.json",
+        "evidence/organization-browser.log",
+        "evidence/init-isolated-db.log"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Resultados acotados del SHA y revisión CI/operación. No cobertura semántica exhaustiva, escáner externo de supply chain ni deploy/restore real. Cachés y skips del init no se convierten en pruebas ejecutadas.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-18",
+      "requirement": "auditoría CI/CD",
+      "status": "SCOPED_CHECKS_VERIFIED",
+      "evidence": [
+        "data/operations-audit.json",
+        "evidence/main-checks.json",
+        "evidence/organization-browser.log",
+        "evidence/init-isolated-db.log"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Resultados acotados del SHA y revisión CI/operación. No cobertura semántica exhaustiva, escáner externo de supply chain ni deploy/restore real. Cachés y skips del init no se convierten en pruebas ejecutadas.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-19",
+      "requirement": "auditoría UX/UI",
+      "status": "STATIC_PLUS_LIMITED_RUNTIME",
+      "evidence": [
+        "data/web-inventory.json",
+        "data/web-semantic-audit.json",
+        "data/runtime-ui.json",
+        "evidence/web-audit.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "29 pantallas con fragmentos semánticos y26cuerpos de tests inspeccionados;259secundarios/140inline con profundidad por fila. Sin contexto semántico específico: secundarios0, inline0; contratos compartidos no certifican cada consumidor. Navegación guest y algunas vistas/estados ejercitados; no se ejecutaron todos los formularios, roles, estados, responsive y flujos backend por pantalla.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-20",
+      "requirement": "auditoría 3D",
+      "status": "STATIC_PLUS_LIMITED_RUNTIME",
+      "evidence": [
+        "data/runtime-ui.json",
+        "data/guest-journey.json",
+        "evidence/guest-proyectar-390-measurements.json",
+        "evidence/guest-proyectar-768-measurements.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "WebGL desktop/cámara, placement local y undo/redo ensayados; canvas cero en 390/768 observado. Falta drag/snap exhaustivo, carga compleja, profiling FPS y host real.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-21",
+      "requirement": "auditoría herrajes",
+      "status": "STATIC_PLUS_HAZARD_PROOFS",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "data/defect-proofs.json",
+        "evidence/guest-hardware-editor-dom.txt"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Modelo/editor genérico y defectos DXF/fallback reproducidos. No homologación SKU Blum, operación interactiva host ni import-readback de software/máquina real.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-22",
+      "requirement": "auditoría perforaciones",
+      "status": "STATIC_PLUS_HAZARD_PROOFS",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "data/defect-proofs.json",
+        "evidence/guest-hardware-editor-dom.txt"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Modelo/editor genérico y defectos DXF/fallback reproducidos. No homologación SKU Blum, operación interactiva host ni import-readback de software/máquina real.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-23",
+      "requirement": "auditoría CNC/exportación",
+      "status": "STATIC_PLUS_HAZARD_PROOFS",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "data/defect-proofs.json",
+        "evidence/guest-hardware-editor-dom.txt"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Modelo/editor genérico y defectos DXF/fallback reproducidos. No homologación SKU Blum, operación interactiva host ni import-readback de software/máquina real.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-24",
+      "requirement": "auditoría quotes",
+      "status": "PARTIAL_VERTICAL_REVIEW",
+      "evidence": [
+        "data/synthesis.json#journeys",
+        "data/guest-journey.json",
+        "data/quote-version-audit.json",
+        "data/operational-flows.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Cadenas operativas revisadas y recorrido guest sintético cliente→cotización→placement→undo/redo→quoted→accepted→plant board ejecutado; defecto QV-01 de historial corroborado. Falta continuidad autoritativa API/PostgreSQL/host hasta release, producción e instalación; no contar estado comercial local como ejecución física.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-25",
+      "requirement": "auditoría designs",
+      "status": "PARTIAL_VERTICAL_REVIEW",
+      "evidence": [
+        "data/synthesis.json#journeys",
+        "data/guest-journey.json",
+        "data/quote-version-audit.json",
+        "data/operational-flows.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Cadenas operativas revisadas y recorrido guest sintético cliente→cotización→placement→undo/redo→quoted→accepted→plant board ejecutado; defecto QV-01 de historial corroborado. Falta continuidad autoritativa API/PostgreSQL/host hasta release, producción e instalación; no contar estado comercial local como ejecución física.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-26",
+      "requirement": "auditoría furniture",
+      "status": "PARTIAL_VERTICAL_REVIEW",
+      "evidence": [
+        "data/synthesis.json#journeys",
+        "data/guest-journey.json",
+        "data/quote-version-audit.json",
+        "data/operational-flows.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Cadenas operativas revisadas y recorrido guest sintético cliente→cotización→placement→undo/redo→quoted→accepted→plant board ejecutado; defecto QV-01 de historial corroborado. Falta continuidad autoritativa API/PostgreSQL/host hasta release, producción e instalación; no contar estado comercial local como ejecución física.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-27",
+      "requirement": "auditoría production",
+      "status": "PARTIAL_VERTICAL_REVIEW",
+      "evidence": [
+        "data/synthesis.json#journeys",
+        "data/guest-journey.json",
+        "data/quote-version-audit.json",
+        "data/operational-flows.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Cadenas operativas revisadas y recorrido guest sintético cliente→cotización→placement→undo/redo→quoted→accepted→plant board ejecutado; defecto QV-01 de historial corroborado. Falta continuidad autoritativa API/PostgreSQL/host hasta release, producción e instalación; no contar estado comercial local como ejecución física.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-28",
+      "requirement": "auditoría installation",
+      "status": "PARTIAL_VERTICAL_REVIEW",
+      "evidence": [
+        "data/synthesis.json#journeys",
+        "data/guest-journey.json",
+        "data/quote-version-audit.json",
+        "data/operational-flows.json"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Cadenas operativas revisadas y recorrido guest sintético cliente→cotización→placement→undo/redo→quoted→accepted→plant board ejecutado; defecto QV-01 de historial corroborado. Falta continuidad autoritativa API/PostgreSQL/host hasta release, producción e instalación; no contar estado comercial local como ejecución física.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-29",
+      "requirement": "revisión de issues relevantes",
+      "status": "TARGETED_REVIEW_AND_METADATA",
+      "evidence": [
+        "data/docs-governance.json#issues",
+        "data/docs-governance.json#prs",
+        "data/docs-governance.json#githubScope"
+      ],
+      "missingArtifacts": [],
+      "limitation": "154 issues/100 PRs inventariados; metadatos y trackers críticos contrastados. No revisión completa de comentarios/diff de todos los issues/PRs; snapshot de metadata puede ser posterior al main auditado.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-30",
+      "requirement": "revisión de PRs relevantes",
+      "status": "TARGETED_REVIEW_AND_METADATA",
+      "evidence": [
+        "data/docs-governance.json#issues",
+        "data/docs-governance.json#prs",
+        "data/docs-governance.json#githubScope"
+      ],
+      "missingArtifacts": [],
+      "limitation": "154 issues/100 PRs inventariados; metadatos y trackers críticos contrastados. No revisión completa de comentarios/diff de todos los issues/PRs; snapshot de metadata puede ser posterior al main auditado.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-31",
+      "requirement": "contract drift analizado",
+      "status": "STATIC_REVIEW_RUNTIME_UNKNOWN",
+      "evidence": [
+        "data/synthesis.json#integrationMatrix",
+        "data/synthesis.json#journeys",
+        "data/sketchup-audit.json",
+        "evidence/openapi-check.log"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Matriz y cadenas A–E documentan rupturas. Check generado prueba drift de generación, no toda paridad legacy. Falta recorrido bidireccional Web/Go/SketchUp del mismo ID y revisión.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-32",
+      "requirement": "documentación vs implementación contrastada",
+      "status": "FAMILY_SEMANTIC_REVIEW_PERFORMED",
+      "evidence": [
+        "data/docs-semantic-audit.json#documents",
+        "data/docs-semantic-audit.json#families",
+        "data/docs-semantic-audit.json#findings",
+        "evidence/docs-semantic-audit.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "371 archivos leídos para claims/metadatos y clasificados mediante 15 familias y contraste de afirmaciones seleccionadas. No es certificación de cada frase ni reejecución de toda evidencia histórica; ver readScope y rationale por documento.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-33",
+      "requirement": "feature matrix completa",
+      "status": "SOURCE_MATRIX_RUNTIME_UNKNOWN",
+      "evidence": [
+        "data/feature-matrix.json#features",
+        "data/docs-governance.json#features",
+        "data/sketchup-audit.json#features"
+      ],
+      "missingArtifacts": [],
+      "limitation": "204 entradas enriquecidas por fuente:200 PARTIAL/4 UNKNOWN más seis capacidades SketchUp. Cada fila tiene fragmento semántico o alcance de postergación revisado; esto no cumple automáticamente todos los criterios o pruebas de capas. Cero funcionalidades COMPLETE acreditadas. Ver fieldCoverage y auditDepth.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-34",
+      "requirement": "integration matrix completa",
+      "status": "STATIC_REVIEW_RUNTIME_UNKNOWN",
+      "evidence": [
+        "data/synthesis.json#integrationMatrix",
+        "data/synthesis.json#journeys",
+        "data/sketchup-audit.json",
+        "evidence/openapi-check.log"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Matriz y cadenas A–E documentan rupturas. Check generado prueba drift de generación, no toda paridad legacy. Falta recorrido bidireccional Web/Go/SketchUp del mismo ID y revisión.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-35",
+      "requirement": "permission matrix completa",
+      "status": "STATIC_EFFECTIVE_COMPOSITION_RUNTIME_PARTIAL",
+      "evidence": [
+        "data/backend-audit.json#permissions",
+        "data/effective-permissions.json",
+        "data/synthesis.json#permissionsReference"
+      ],
+      "missingArtifacts": [],
+      "limitation": "536 filas role-only más41composiciones efectivas por familia recurso/acción, con credential/tenant/ownership/step-up y limitaciones. No son todas las permutaciones rol×estado ni denegaciones HTTP por cada celda.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-36",
+      "requirement": "risk register",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#risks",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-37",
+      "requirement": "technical debt register",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#technicalDebt",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-38",
+      "requirement": "MVP gap analysis",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#mvpGaps",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-39",
+      "requirement": "demo gap analysis",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#mvpGaps",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-40",
+      "requirement": "demo blockers identificados",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#tasks",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-41",
+      "requirement": "fastest safe path to demo",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#fastestSafePath",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-42",
+      "requirement": "roadmap",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#roadmap",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-43",
+      "requirement": "issue plan",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#issuePlan",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-44",
+      "requirement": "user manual",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#userManual",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-45",
+      "requirement": "demo playbook",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#demoPlaybook",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-46",
+      "requirement": "scorecard",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#scorecard",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-47",
+      "requirement": "reporte HTML completo",
+      "status": "ARTIFACT_IMPLEMENTED_SCOPED_QA",
+      "evidence": [
+        "index.html",
+        "js/app.js",
+        "css/main.css",
+        "css/print.css",
+        "evidence/portal-static-qa.md",
+        "assets/portal-mobile.png"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Portal implementado; root verificó HTTP localhost desktop/móvil y búsqueda antes del último mapping. Último mapping sólo syntax/rutas estáticas: reintento browser bloqueado por error interno tras servidor reiniciado, no defecto demostrado del portal. Apertura file:// bloqueada por política del navegador de herramientas: runtime file:// UNKNOWN. No confundir portal completo con auditoría completa.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-48",
+      "requirement": "CSS completo",
+      "status": "ARTIFACT_IMPLEMENTED_SCOPED_QA",
+      "evidence": [
+        "index.html",
+        "js/app.js",
+        "css/main.css",
+        "css/print.css",
+        "evidence/portal-static-qa.md",
+        "assets/portal-mobile.png"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Portal implementado; root verificó HTTP localhost desktop/móvil y búsqueda antes del último mapping. Último mapping sólo syntax/rutas estáticas: reintento browser bloqueado por error interno tras servidor reiniciado, no defecto demostrado del portal. Apertura file:// bloqueada por política del navegador de herramientas: runtime file:// UNKNOWN. No confundir portal completo con auditoría completa.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-49",
+      "requirement": "JavaScript funcional",
+      "status": "ARTIFACT_IMPLEMENTED_SCOPED_QA",
+      "evidence": [
+        "index.html",
+        "js/app.js",
+        "css/main.css",
+        "css/print.css",
+        "evidence/portal-static-qa.md",
+        "assets/portal-mobile.png"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Portal implementado; root verificó HTTP localhost desktop/móvil y búsqueda antes del último mapping. Último mapping sólo syntax/rutas estáticas: reintento browser bloqueado por error interno tras servidor reiniciado, no defecto demostrado del portal. Apertura file:// bloqueada por política del navegador de herramientas: runtime file:// UNKNOWN. No confundir portal completo con auditoría completa.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-50",
+      "requirement": "navegación y búsqueda funcionando",
+      "status": "ARTIFACT_IMPLEMENTED_SCOPED_QA",
+      "evidence": [
+        "index.html",
+        "js/app.js",
+        "css/main.css",
+        "css/print.css",
+        "evidence/portal-static-qa.md",
+        "assets/portal-mobile.png"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Portal implementado; root verificó HTTP localhost desktop/móvil y búsqueda antes del último mapping. Último mapping sólo syntax/rutas estáticas: reintento browser bloqueado por error interno tras servidor reiniciado, no defecto demostrado del portal. Apertura file:// bloqueada por política del navegador de herramientas: runtime file:// UNKNOWN. No confundir portal completo con auditoría completa.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-51",
+      "requirement": "executive summary",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#executive",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    },
+    {
+      "id": "DOD-52",
+      "requirement": "lista final de prioridades",
+      "status": "ARTIFACT_PRODUCED_NOT_EXECUTED",
+      "evidence": [
+        "data/synthesis.json#tasks",
+        "evidence/synthesis.md"
+      ],
+      "missingArtifacts": [],
+      "limitation": "Contenido estructurado basado en evidencia e inferencia/propuesta explícitas. Recomendaciones, guion y bandas ordinales no acreditan implementación ni ensayo integral; consultar unknowns y gates.",
+      "reviewPerformed": true,
+      "auditDisposition": "BOUNDED_REVIEW_PERFORMED",
+      "goalCompletion": "ROOT_REQUIRES_ACCEPTANCE_REVIEW",
+      "completeMeaning": "Review performed and remaining verification are separate; this script does not decide goal completion."
+    }
+  ],
+  "fieldCoverage": [
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "ID",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "id"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Module",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "module"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Feature",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "name",
+        "title"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Description",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 1,
+      "aliasesChecked": [
+        "description"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Users",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "users"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Status",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 4,
+      "aliasesChecked": [
+        "status"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Frontend",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 204,
+      "aliasesChecked": [
+        "Frontend",
+        "frontend"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Backend",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 204,
+      "aliasesChecked": [
+        "Backend",
+        "backend"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "SketchUp",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 204,
+      "aliasesChecked": [
+        "SketchUp",
+        "sketchup"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Tests",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 204,
+      "aliasesChecked": [
+        "Tests",
+        "tests"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Documentation",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 59,
+      "aliasesChecked": [
+        "documentation"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Demo importance",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "demoImportance"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "MVP importance",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "mvpImportance"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Problems",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 182,
+      "aliasesChecked": [
+        "problems"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Recommendation",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "recommendation"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Related issues",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 101,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "relatedIssues"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "features",
+      "source": "feature-matrix",
+      "field": "Related PRs",
+      "rows": 204,
+      "present": 204,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 152,
+      "aliasesChecked": [
+        "relatedPRs"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "METHOD",
+      "rows": 265,
+      "present": 265,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "method"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "PATH",
+      "rows": 265,
+      "present": 265,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "path"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "PURPOSE",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "purpose"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "AUTH",
+      "rows": 265,
+      "present": 241,
+      "missing": 24,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "authorization"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "ROLES",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "roles"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "TENANT",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "tenant"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "INPUT",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "input"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "VALIDATION",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "validation"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "OUTPUT",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "output"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "ERRORS",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "errors"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "DOMAIN OBJECTS",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "domainObjects"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "CALLERS",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "callers"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "DEPENDENCIES",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "dependencies"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "SIDE EFFECTS",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "sideEffects"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "RELATED WEB SCREEN",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "relatedWebScreen"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "RELATED SKETCHUP FUNCTION",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "relatedSketchupFunction"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "TEST COVERAGE",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "testCoverage"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints",
+      "source": "backend-audit",
+      "field": "KNOWN PROBLEMS",
+      "rows": 265,
+      "present": 0,
+      "missing": 265,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "knownProblems"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Nombre",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "name"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Ruta",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "route"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Objetivo",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "objective"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Usuario objetivo",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "targetUser"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Roles permitidos",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "allowedRoles"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Datos utilizados",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "dataUsed"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "APIs utilizadas",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 23,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "apisUsed"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Estados",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 29,
+      "aliasesChecked": [
+        "states"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Acciones principales",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 8,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "primaryActions"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Acciones secundarias",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "secondaryActions"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Navegación de entrada",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "entryNavigation"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Navegación de salida",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 3,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "exitNavigation"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Componentes relevantes",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 28,
+      "aliasesChecked": [
+        "relevantComponents"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Loading state",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 29,
+      "aliasesChecked": [
+        "states.loading"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Empty state",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 29,
+      "aliasesChecked": [
+        "states.empty"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Error state",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 29,
+      "aliasesChecked": [
+        "states.error"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Success state",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 29,
+      "aliasesChecked": [
+        "states.success"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Validaciones",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 15,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "validations"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Responsive behavior",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 29,
+      "aliasesChecked": [
+        "responsiveBehavior"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Permisos",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 1,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "permissions"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Problemas",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 20,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "problems"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Deuda",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "debt"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Mejoras",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "improvements"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Prioridad",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "priority"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "screens",
+      "source": "web-inventory",
+      "field": "Importancia para demo",
+      "rows": 29,
+      "present": 29,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "demoImportance"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "METHOD",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "method"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "PATH",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "path"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "PURPOSE",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "purpose"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "AUTH",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "authAndRoles"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "ROLES",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "authAndRoles"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "TENANT",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "tenantScope"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "INPUT",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "input"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "VALIDATION",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "validation"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "OUTPUT",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "output"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "ERRORS",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "errors"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "DOMAIN OBJECTS",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 2,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "domain"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "CALLERS",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "callers"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "DEPENDENCIES",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "dependencies"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "SIDE EFFECTS",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "sideEffects"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "RELATED WEB SCREEN",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "webAndSketchUp"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "RELATED SKETCHUP FUNCTION",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "webAndSketchUp"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "TEST COVERAGE",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "tests"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-deep",
+      "source": "endpoint-deep-audit",
+      "field": "KNOWN PROBLEMS",
+      "rows": 21,
+      "present": 21,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 1,
+      "aliasesChecked": [
+        "problems"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "METHOD",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "method"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "PATH",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "path"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "PURPOSE",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "purpose"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "AUTH",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "authAndRoles"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "ROLES",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "authAndRoles"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "TENANT",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "tenantScope"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "INPUT",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 2,
+      "aliasesChecked": [
+        "inputValidation"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "VALIDATION",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 2,
+      "aliasesChecked": [
+        "inputValidation"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "OUTPUT",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "outputErrors"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "ERRORS",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "outputErrors"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "DOMAIN OBJECTS",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "domain"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "CALLERS",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 87,
+      "aliasesChecked": [
+        "callers"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "DEPENDENCIES",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 43,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "storageDependenciesInventory"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "SIDE EFFECTS",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "sideEffects"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "RELATED WEB SCREEN",
+      "rows": 244,
+      "present": 0,
+      "missing": 244,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "webAndSketchUp"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "RELATED SKETCHUP FUNCTION",
+      "rows": 244,
+      "present": 0,
+      "missing": 244,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "webAndSketchUp"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "TEST COVERAGE",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 181,
+      "aliasesChecked": [
+        "tests"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    },
+    {
+      "inventory": "endpoints-supplement",
+      "source": "endpoint-supplement",
+      "field": "KNOWN PROBLEMS",
+      "rows": 244,
+      "present": 244,
+      "missing": 0,
+      "empty": 0,
+      "explicitUnknown": 0,
+      "aliasesChecked": [
+        "unknowns"
+      ],
+      "meaning": "Presence only; nested unknowns and source-signal extraction are not completed verification."
+    }
+  ],
+  "limitations": [
+    "This is a gap report, not an automatic completion gate.",
+    "reviewPerformed acknowledges actual bounded review; missing runtime or acceptance evidence is stated separately, not a blanket claim that nothing was audited.",
+    "Endpoint handlerPermissionFunctions/storageMethods/declaredResponses are clues, not full role/side-effect/output audits.",
+    "Feature references do not replace explicit per-layer implementation, users, issues/PRs and test mapping.",
+    "Screen state tokens require semantically inspecting the control and executing its state; column presence alone is weak evidence."
+  ]
+}

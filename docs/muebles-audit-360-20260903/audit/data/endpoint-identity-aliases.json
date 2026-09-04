@@ -1,0 +1,177 @@
+{
+  "aliasMap": {
+    "POST /api/organizations/{id}:suspend": {
+      "handlers": [
+        "HandleOrganizationLifecycleCommand"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:32-49",
+        "backend-go/internal/api/routes.go:199-205"
+      ]
+    },
+    "POST /api/organizations/{id}:reactivate": {
+      "handlers": [
+        "HandleOrganizationLifecycleCommand"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:32-49",
+        "backend-go/internal/api/routes.go:199-205"
+      ]
+    },
+    "POST /api/organizations/{id}:begin-offboarding": {
+      "handlers": [
+        "HandleOrganizationLifecycleCommand"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:32-49",
+        "backend-go/internal/api/routes.go:199-205"
+      ]
+    },
+    "POST /api/organizations/{id}:terminate": {
+      "handlers": [
+        "HandleOrganizationLifecycleCommand"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:32-49",
+        "backend-go/internal/api/routes.go:199-205"
+      ]
+    },
+    "POST /api/org/memberships/{membershipId}:change-roles": {
+      "handlers": [
+        "HandleChangeMembershipRoles"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:14-30",
+        "backend-go/internal/api/routes.go:217-226"
+      ]
+    },
+    "POST /api/org/memberships/{membershipId}:suspend": {
+      "handlers": [
+        "HandleSuspendMembership"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:14-30",
+        "backend-go/internal/api/routes.go:217-226"
+      ]
+    },
+    "POST /api/org/memberships/{membershipId}:reactivate": {
+      "handlers": [
+        "HandleReactivateMembership"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:14-30",
+        "backend-go/internal/api/routes.go:217-226"
+      ]
+    },
+    "POST /api/org/memberships/{membershipId}:revoke-sessions": {
+      "handlers": [
+        "HandleRevokeMembershipSessions"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:14-30",
+        "backend-go/internal/api/routes.go:217-226"
+      ]
+    },
+    "POST /api/org/memberships/{membershipId}:offboarding-preview": {
+      "handlers": [
+        "HandleMembershipOffboardingPreview"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:14-30",
+        "backend-go/internal/api/routes.go:217-226"
+      ]
+    },
+    "POST /api/org/memberships/{membershipId}:transfer-admin": {
+      "handlers": [
+        "HandleTransferOrganizationAdmin"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:14-30",
+        "backend-go/internal/api/routes.go:217-226"
+      ]
+    },
+    "POST /api/org/memberships/{membershipId}:change-sectors": {
+      "handlers": [
+        "HandleChangeMembershipSectors"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:14-30",
+        "backend-go/internal/api/routes.go:217-226"
+      ]
+    },
+    "POST /api/org/memberships/{membershipId}:offboard": {
+      "handlers": [
+        "HandleOffboardMembership"
+      ],
+      "evidence": [
+        "backend-go/internal/api/routes.go:14-30",
+        "backend-go/internal/api/routes.go:217-226"
+      ]
+    },
+    "POST /api/org/invitations/{invitationId}:resend": {
+      "handlers": [
+        "HandleOrgInvitationCommand",
+        "HandleOrgResendInvitation"
+      ],
+      "evidence": [
+        "backend-go/internal/api/orgteam.go:842-860"
+      ]
+    },
+    "POST /api/org/invitations/{invitationId}:revoke": {
+      "handlers": [
+        "HandleOrgInvitationCommand",
+        "HandleOrgRevokeInvitation"
+      ],
+      "evidence": [
+        "backend-go/internal/api/orgteam.go:842-860"
+      ]
+    },
+    "POST /api/platform/users/{userId}:set-account-status": {
+      "handlers": [
+        "HandlePlatformUserCommand",
+        "HandlePlatformAccountStatus"
+      ],
+      "evidence": [
+        "backend-go/internal/api/platform.go:263-272",
+        "backend-go/internal/api/routes.go:179"
+      ]
+    },
+    "POST /api/auth/mfa/totp/{factorId}:verify": {
+      "handlers": [
+        "HandleVerifyMFAEnrollment"
+      ],
+      "evidence": [
+        "backend-go/internal/api/mfa.go:148-174",
+        "backend-go/internal/api/routes.go:152-154"
+      ]
+    },
+    "POST /api/auth/mfa/factors/{factorId}:remove": {
+      "handlers": [
+        "HandleRemoveMFAFactor"
+      ],
+      "evidence": [
+        "backend-go/internal/api/mfa.go:148-174",
+        "backend-go/internal/api/routes.go:155-157"
+      ]
+    }
+  },
+  "futureDeclarations": [
+    {
+      "method": "GET",
+      "path": "/api/organization-relationships",
+      "classification": "DECLARED_FUTURE_NOT_RUNTIME",
+      "owner": "#453",
+      "evidence": "contracts/openapi/granete-api.v1.yaml:729-733",
+      "limitation": "Explicit x-future-owner; no registration found in api routes. Not a functioning endpoint by declaration alone."
+    },
+    {
+      "method": "GET",
+      "path": "/api/sales-network",
+      "classification": "DECLARED_FUTURE_NOT_RUNTIME",
+      "owner": "#459",
+      "evidence": "contracts/openapi/granete-api.v1.yaml:753-757",
+      "limitation": "Explicit x-future-owner; no registration found in api routes."
+    }
+  ],
+  "runtimeStatus": "No invocations; exact static dispatch mapping only"
+}

@@ -1,0 +1,119 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes" [active]:
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: CONFIG
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Ajustes del taller":
+    - heading "Ajustes" [level=2]
+    - paragraph: Configuración global del taller para cotizaciones y producción
+    - tablist "Secciones de ajustes del taller":
+      - tab "General y Comercial" [selected]:
+        - text: General y Comercial
+      - tab "Ingeniería y Producción":
+        - text: Ingeniería y Producción
+    - group "Cotización por defecto":
+      - generic: Cotización por defecto
+      - paragraph:
+        - text: Solo afecta
+        - strong: cotizaciones nuevas
+        - text: . Las ya creadas no cambian.
+      - generic: Factor de margen
+      - spinbutton "Factor de margen": "1.35"
+      - generic: "Ejemplo: 1.35 multiplica el costo directo para el precio de venta."
+      - generic: Mano de obra fija
+      - spinbutton "Mano de obra fija": "0"
+      - generic: Monto fijo sumado al costo en cada cotización nueva.
+      - generic: Moneda
+      - textbox "Moneda": MXN
+      - generic: Código de moneda (ej. MXN).
+    - group "Identidad":
+      - generic: Identidad
+      - generic: Nombre del taller
+      - textbox "Nombre del taller":
+        - /placeholder: Ej. Carpintería Los Pinos
+      - generic: Aparece en el pie de página de los PDFs exportados.
+    - group "Permisos":
+      - generic: Permisos
+      - checkbox "Vendedor puede ver costos del taller"
+      - generic: Vendedor puede ver costos del taller
+      - generic: Por defecto el vendedor solo ve precio de venta. Activá esto si querés que vea unitarios, margen y desglose.
+    - group "Navegación":
+      - generic: Navegación
+      - generic: Tamaño del taller
+      - 'radio "Taller pequeño: menú simplificado — Inicio, Cotizaciones, Órdenes, Almacén e Instalaciones. Todo lo avanzado vive dentro de cada obra."'
+      - strong: "Taller pequeño:"
+      - text: menú simplificado — Inicio, Cotizaciones, Órdenes, Almacén e Instalaciones. Todo lo avanzado vive dentro de cada obra.
+      - 'radio "Empresa mediana: navegación por departamentos (Ventas, Ingeniería, Producción, Compras/Almacén)." [checked]'
+      - strong: "Empresa mediana:"
+      - text: navegación por departamentos (Ventas, Ingeniería, Producción, Compras/Almacén).
+      - generic: Solo cambia el menú visible; los permisos por rol se mantienen igual.
+    - group "Ayuda & Tour":
+      - generic: Ayuda & Tour
+      - paragraph: Revive las novedades del catálogo LatAm, despiece 3D y exportaciones a taller.
+      - button "Ver tour de bienvenida"
+    - button "Guardar preferencias"
+- generic "Notificaciones"

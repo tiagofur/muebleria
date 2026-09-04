@@ -1,0 +1,36 @@
+{
+  "id": "FM-03-PURE-PROOF",
+  "findingId": "FM-03",
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "status": "CONFIRMED_PURE_DOMAIN_REPRODUCTION",
+  "mechanismProven": "First part-owner reuse across two different customDims cache keys sharing expanded part IDs. Missing preset/options key dimensions are not independently isolated by this test.",
+  "sourceFixture": "packages/domain/src/__fixtures__/plantillaDemo.ts",
+  "lineA": {
+    "widthMm": 300,
+    "heightMm": 720,
+    "depthMm": 590
+  },
+  "lineB": {
+    "widthMm": 800,
+    "heightMm": 1000,
+    "depthMm": 450
+  },
+  "expected": {
+    "independentlyResolvedLargeDoorHingeCups": 3,
+    "independentlyResolvedLargeFloorIssues": 0
+  },
+  "actual": {
+    "combinedABLargeDoorHingeCups": 2,
+    "reversedBALargeDoorHingeCups": 3,
+    "combinedABLargeFloorIssues": 6,
+    "reverseRestoresLargeDoorIndependentHoles": true
+  },
+  "evidence": [
+    "packages/domain/src/projectDrilling.ts:99-110",
+    "packages/domain/src/projectDrilling.ts:154-180",
+    "evidence/drilling-context-observation.json",
+    "evidence/drilling-context-proof.log"
+  ],
+  "scope": "Production pure-domain functions with existing fixture and two synthetic line dimensions. No UI, API, DB, exported DXF, host or machine readback.",
+  "limits": "Actual in-memory hole output is wrong relative to independent resolution and depends on item order. No physical damage, production file or machine behavior was tested. Passing assertions reproduce the defect, not a fix."
+}

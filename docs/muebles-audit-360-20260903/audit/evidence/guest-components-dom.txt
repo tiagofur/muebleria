@@ -1,0 +1,288 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes" [active]:
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: LIBRERÍA
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - heading "Componentes" [level=2]
+  - paragraph: Piezas reutilizables de ingeniería para composición de muebles
+  - generic "Acciones de Componentes":
+    - button "Nuevo componente":
+      - text: Nuevo componente
+  - generic "Buscar y filtrar componentes":
+    - searchbox "Buscar"
+    - group "Filtrar por estado":
+      - button "Todos"
+      - button "Activos" [pressed]
+      - button "Inactivos"
+    - generic: Ubicación
+    - combobox "Filtrar por ubicación":
+      - option "Todas" [selected]
+      - option "Base"
+      - option "Superior"
+      - option "Lateral Izquierdo"
+      - option "Lateral Derecho"
+      - option "Frontal"
+      - option "Trasera"
+      - option "Interno"
+      - option "Puerta"
+      - option "Frente de Cajón"
+      - option "Personalizado"
+  - list:
+    - 'button "COM-PUE-01 Puerta Puerta Geometría: 717×296×18 mm Roles: Melamina de Frentes"':
+      - generic: COM-PUE-01
+      - generic: Puerta
+      - heading "Puerta" [level=3]
+      - text: "Geometría:"
+      - strong: 717×296×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Frentes
+    - 'button "COM-ENT-01 Interno Entrepaño Regulable Geometría: 462×550×15 mm Roles: Melamina de Interiores"':
+      - generic: COM-ENT-01
+      - generic: Interno
+      - heading "Entrepaño Regulable" [level=3]
+      - text: "Geometría:"
+      - strong: 462×550×15 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-COS-01 Lateral Izquierdo Costado Lateral Geometría: 720×560×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-COS-01
+      - generic: Lateral Izquierdo
+      - heading "Costado Lateral" [level=3]
+      - text: "Geometría:"
+      - strong: 720×560×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-BAS-01 Base Base Estructura Geometría: 564×560×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-BAS-01
+      - generic: Base
+      - heading "Base Estructura" [level=3]
+      - text: "Geometría:"
+      - strong: 564×560×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-ZOC-01 Personalizado Zoclo frontal Geometría: PW×B×18 mm Roles: Melamina de zoclo Altura B desde Module.baseClearanceMm. En BOM solo si baseMode=plinth_board."':
+      - generic: COM-ZOC-01
+      - generic: Personalizado
+      - heading "Zoclo frontal" [level=3]
+      - text: "Geometría:"
+      - strong: PW×B×18 mm
+      - text: "Roles:"
+      - strong: Melamina de zoclo
+      - paragraph: Altura B desde Module.baseClearanceMm. En BOM solo si baseMode=plinth_board.
+    - 'button "COM-GAB-COS Lateral Izquierdo Costado Gabinete Geometría: PH×PD×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-GAB-COS
+      - generic: Lateral Izquierdo
+      - heading "Costado Gabinete" [level=3]
+      - text: "Geometría:"
+      - strong: PH×PD×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-GAB-RES Trasera Respaldo Gabinete Geometría: PH - 31×PW - 31×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-GAB-RES
+      - generic: Trasera
+      - heading "Respaldo Gabinete" [level=3]
+      - text: "Geometría:"
+      - strong: PH - 31×PW - 31×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-GAB-PIS Base Piso Gabinete Geometría: PW - 31×PD×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-GAB-PIS
+      - generic: Base
+      - heading "Piso Gabinete" [level=3]
+      - text: "Geometría:"
+      - strong: PW - 31×PD×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-GAB-MAN Frontal Manguete Geometría: PW - 31×120×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-GAB-MAN
+      - generic: Frontal
+      - heading "Manguete" [level=3]
+      - text: "Geometría:"
+      - strong: PW - 31×120×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-GAB-PUE Puerta Puerta Gabinete Geometría: PH - 3×PW - 4×18 mm Roles: Melamina de Frentes"':
+      - generic: COM-GAB-PUE
+      - generic: Puerta
+      - heading "Puerta Gabinete" [level=3]
+      - text: "Geometría:"
+      - strong: PH - 3×PW - 4×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Frentes
+    - 'button "COM-GAB-ENT Interno Entrepaño Gabinete Geometría: PH - 200×PW - 31×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-GAB-ENT
+      - generic: Interno
+      - heading "Entrepaño Gabinete" [level=3]
+      - text: "Geometría:"
+      - strong: PH - 200×PW - 31×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-CAJ-COS Lateral Izquierdo Costado Cajonera Geometría: PH×PD×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-CAJ-COS
+      - generic: Lateral Izquierdo
+      - heading "Costado Cajonera" [level=3]
+      - text: "Geometría:"
+      - strong: PH×PD×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-CAJ-PIS Base Piso Cajonera Geometría: PW - 31×PD×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-CAJ-PIS
+      - generic: Base
+      - heading "Piso Cajonera" [level=3]
+      - text: "Geometría:"
+      - strong: PW - 31×PD×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-CAJ-RES Trasera Respaldo Cajonera Geometría: PH - 31×PW - 31×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-CAJ-RES
+      - generic: Trasera
+      - heading "Respaldo Cajonera" [level=3]
+      - text: "Geometría:"
+      - strong: PH - 31×PW - 31×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-CAJ-FRE Frente de Cajón Frente de Cajón Geometría: 175×496×18 mm Roles: Melamina de Frentes"':
+      - generic: COM-CAJ-FRE
+      - generic: Frente de Cajón
+      - heading "Frente de Cajón" [level=3]
+      - text: "Geometría:"
+      - strong: 175×496×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Frentes
+    - 'button "COM-CAJ-LAT Interno Lateral de Cajón Geometría: PW×120×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-CAJ-LAT
+      - generic: Interno
+      - heading "Lateral de Cajón" [level=3]
+      - text: "Geometría:"
+      - strong: PW×120×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-CAJ-FTC Interno Frente/Tras Cajón Geometría: PW - 88×120×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-CAJ-FTC
+      - generic: Interno
+      - heading "Frente/Tras Cajón" [level=3]
+      - text: "Geometría:"
+      - strong: PW - 88×120×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-CAJ-FON Trasera Fondo de Cajón Geometría: PW×PW - 58×3 mm Roles: Fondos delgados"':
+      - generic: COM-CAJ-FON
+      - generic: Trasera
+      - heading "Fondo de Cajón" [level=3]
+      - text: "Geometría:"
+      - strong: PW×PW - 58×3 mm
+      - text: "Roles:"
+      - strong: Fondos delgados
+    - 'button "COM-ALA-COS Lateral Izquierdo Costado Alacena Geometría: PH×PD×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-ALA-COS
+      - generic: Lateral Izquierdo
+      - heading "Costado Alacena" [level=3]
+      - text: "Geometría:"
+      - strong: PH×PD×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-ALA-BAS Base Base Alacena Geometría: PW - 31×PD×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-ALA-BAS
+      - generic: Base
+      - heading "Base Alacena" [level=3]
+      - text: "Geometría:"
+      - strong: PW - 31×PD×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-ALA-RES Trasera Respaldo Alacena Geometría: PH - 31×PW - 31×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-ALA-RES
+      - generic: Trasera
+      - heading "Respaldo Alacena" [level=3]
+      - text: "Geometría:"
+      - strong: PH - 31×PW - 31×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-DES-COS Lateral Izquierdo Costado Despensa Geometría: PH×PD×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-DES-COS
+      - generic: Lateral Izquierdo
+      - heading "Costado Despensa" [level=3]
+      - text: "Geometría:"
+      - strong: PH×PD×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-DES-BAS Base Base Despensa Geometría: PW - 31×PD×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-DES-BAS
+      - generic: Base
+      - heading "Base Despensa" [level=3]
+      - text: "Geometría:"
+      - strong: PW - 31×PD×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+    - 'button "COM-DES-RES Trasera Respaldo Despensa Geometría: PH - 31×PW - 31×18 mm Roles: Melamina de Interiores"':
+      - generic: COM-DES-RES
+      - generic: Trasera
+      - heading "Respaldo Despensa" [level=3]
+      - text: "Geometría:"
+      - strong: PH - 31×PW - 31×18 mm
+      - text: "Roles:"
+      - strong: Melamina de Interiores
+- generic "Notificaciones"

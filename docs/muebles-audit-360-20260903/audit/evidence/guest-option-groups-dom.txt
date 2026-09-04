@@ -1,0 +1,161 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos" [active]:
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: LIBRERÍA
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Grupos":
+    - heading "Grupos" [level=2]
+    - paragraph: Opciones de material, canto o herraje que eligen los muebles
+    - generic "Acciones de Grupos":
+      - button "Nuevo grupo":
+        - text: Nuevo grupo
+    - generic "Buscar y filtrar grupos":
+      - searchbox "Buscar grupos de opciones"
+    - table:
+      - rowgroup:
+        - row "Detalle Código Nombre Tipo Requerido Miembros Acciones":
+          - columnheader "Detalle":
+            - generic: Detalle
+          - columnheader "Código"
+          - columnheader "Nombre"
+          - columnheader "Tipo"
+          - columnheader "Requerido"
+          - columnheader "Miembros"
+          - columnheader "Acciones":
+            - generic: Acciones
+      - rowgroup:
+        - row "INTERIOR Melamina de Interiores Tablero Sí 1 Editar INTERIOR Eliminar INTERIOR":
+          - cell
+          - cell "INTERIOR"
+          - cell "Melamina de Interiores"
+          - cell "Tablero"
+          - cell "Sí"
+          - cell "1"
+          - cell "Editar INTERIOR Eliminar INTERIOR":
+            - button "Editar INTERIOR": Editar
+            - button "Eliminar INTERIOR": Eliminar
+        - row "FRENTE Melamina de Frentes Tablero Sí 1 Editar FRENTE Eliminar FRENTE":
+          - cell
+          - cell "FRENTE"
+          - cell "Melamina de Frentes"
+          - cell "Tablero"
+          - cell "Sí"
+          - cell "1"
+          - cell "Editar FRENTE Eliminar FRENTE":
+            - button "Editar FRENTE": Editar
+            - button "Eliminar FRENTE": Eliminar
+        - row "FONDO Fondos delgados Tablero Sí 1 Editar FONDO Eliminar FONDO":
+          - cell
+          - cell "FONDO"
+          - cell "Fondos delgados"
+          - cell "Tablero"
+          - cell "Sí"
+          - cell "1"
+          - cell "Editar FONDO Eliminar FONDO":
+            - button "Editar FONDO": Editar
+            - button "Eliminar FONDO": Eliminar
+        - row "BISAGRA Bisagras Herraje Sí 1 Editar BISAGRA Eliminar BISAGRA":
+          - cell
+          - cell "BISAGRA"
+          - cell "Bisagras"
+          - cell "Herraje"
+          - cell "Sí"
+          - cell "1"
+          - cell "Editar BISAGRA Eliminar BISAGRA":
+            - button "Editar BISAGRA": Editar
+            - button "Eliminar BISAGRA": Eliminar
+        - row "CORREDERA Correderas Herraje Sí 1 Editar CORREDERA Eliminar CORREDERA":
+          - cell
+          - cell "CORREDERA"
+          - cell "Correderas"
+          - cell "Herraje"
+          - cell "Sí"
+          - cell "1"
+          - cell "Editar CORREDERA Eliminar CORREDERA":
+            - button "Editar CORREDERA": Editar
+            - button "Eliminar CORREDERA": Eliminar
+        - row "ZOCLO Melamina de zoclo Tablero No 2 Editar ZOCLO Eliminar ZOCLO":
+          - cell
+          - cell "ZOCLO"
+          - cell "Melamina de zoclo"
+          - cell "Tablero"
+          - cell "No"
+          - cell "2"
+          - cell "Editar ZOCLO Eliminar ZOCLO":
+            - button "Editar ZOCLO": Editar
+            - button "Eliminar ZOCLO": Eliminar
+        - row "ZOCLO_PERFIL Zoclo perfil (ml) Herraje No 3 Editar ZOCLO_PERFIL Eliminar ZOCLO_PERFIL":
+          - cell
+          - cell "ZOCLO_PERFIL"
+          - cell "Zoclo perfil (ml)"
+          - cell "Herraje"
+          - cell "No"
+          - cell "3"
+          - cell "Editar ZOCLO_PERFIL Eliminar ZOCLO_PERFIL":
+            - button "Editar ZOCLO_PERFIL": Editar
+            - button "Eliminar ZOCLO_PERFIL": Eliminar
+- generic "Notificaciones"

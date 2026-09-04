@@ -1,0 +1,8 @@
+[
+  "apps/web/src/components/BoardEditor.tsx",
+  "packages/ui/src/optionGroups/PricePreviewGate.tsx",
+  "packages/ui/src/placeholder.tsx",
+  "packages/ui/src/purchasing/MaterialPlanningPanel.tsx",
+  "packages/ui/src/security/SecurityScreen.tsx",
+  "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx"
+]

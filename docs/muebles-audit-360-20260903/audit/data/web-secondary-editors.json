@@ -1,0 +1,837 @@
+{
+  "features": [
+    {
+      "file": "packages/ui/src/components/editor/ComponentEditorEdgesPanel.tsx",
+      "claim": "Edge toggles patch draft flags; positive resolved preview dimensions override zero/base geometry. Same fields have checkbox fallback with labels, so the diagram is not the only input path.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/ComponentEditorEdgesPanel.tsx",
+          "startLine": 28,
+          "endLine": 110,
+          "excerpt": "export function ComponentEditorEdgesPanel({\n  draft,\n  setDraft,\n  hidden,\n  previewLengthMm,\n  previewWidthMm,\n}: ComponentEditorEdgesPanelProps): ReactNode {\n  const edgeStates: EdgeStates = {\n    L1: draft.edgeL1,\n    L2: draft.edgeL2,\n    W1: draft.edgeW1,\n    W2: draft.edgeW2,\n  };\n\n  const toggle = (side: EdgeSide) => {\n    const key = `edge${side}` as (typeof EDGE_KEYS)[number];\n    setDraft((prev) => ({ ...prev, [key]: !prev[key] }));\n  };\n\n  // Prefer resolved preview dims when base is 0 / formulas present (R3-S2).\n  const lengthMm =\n    previewLengthMm != null && previewLengthMm > 0\n      ? previewLengthMm\n      : draft.lengthMm;\n  const widthMm =\n    previewWidthMm != null && previewWidthMm > 0\n      ? previewWidthMm\n      : draft.widthMm;\n\n  return (\n    <div\n      role=\"tabpanel\"\n      id=\"component-editor-panel-edges\"\n      aria-labelledby=\"component-editor-tab-edges\"\n      hidden={hidden}\n      data-testid=\"component-editor-panel-edges\"\n    >\n      <p className=\"component-edges__intro\">\n        Tocá un borde de la placa para marcarlo como <strong>encintado</strong> por\n        defecto. Los bordes encintados llevan cintilla en todas las piezas de este\n        componente.\n      </p>\n\n      <PlankEdgeDiagram\n        edges={edgeStates}\n        onToggle={toggle}\n        lengthMm={lengthMm}\n        widthMm={widthMm}\n      />\n\n      <details className=\"component-edges__fallback\">\n        <summary>Lista de cantos</summary>\n        <div\n          className=\"module-edge-flags\"\n          role=\"group\"\n          aria-label=\"Cantos por defecto\"\n          data-testid=\"component-edges-group\"\n        >\n          {(\n            [\n              ['edgeL1', 'L1', 'Largo arriba'],\n              ['edgeL2', 'L2', 'Largo abajo'],\n              ['edgeW1', 'W1', 'Ancho izquierda'],\n              ['edgeW2', 'W2', 'Ancho derecha'],\n            ] as const\n          ).map(([key, label, sub]) => (\n            <label key={key} className=\"component-edge-check\">\n              <input\n                type=\"checkbox\"\n                checked={draft[key]}\n                onChange={(e) =>\n                  setDraft((prev) => ({ ...prev, [key]: e.target.checked }))\n                }\n              />\n              <span>{label}</span>\n              <span className=\"component-edge-check__sub\">{sub}</span>\n            </label>\n          ))}\n        </div>\n      </details>\n    </div>\n  );\n}",
+          "sha256": "e1301c145ddda444dfb0ac8d4901d24d6a91936353923bef71a11b4be1a901bd"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/components/editor/ComponentEditorOptionsPanel.tsx",
+      "claim": "Role chips normally replace the current binding, clicking selected clears it; legacy multiple roles remain visible with ambiguity alert instead of silent normalization. UI uses domain ambiguity predicate; this is not proof of resolved material parity.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/ComponentEditorOptionsPanel.tsx",
+          "startLine": 39,
+          "endLine": 110,
+          "excerpt": "export function ComponentEditorOptionsPanel({\n  draft,\n  setDraft,\n  optionGroups,\n  hidden,\n}: ComponentEditorOptionsPanelProps): ReactNode {\n  const selected = draft.optionRoles\n    .split(',')\n    .map((s) => s.trim().toUpperCase())\n    .filter(Boolean);\n\n  // Exclusive selection: the binding role is single (#403). Clicking the\n  // active chip clears it; clicking another replaces the previous binding.\n  const toggle = (code: string) => {\n    const upper = code.toUpperCase();\n    const next = selected.includes(upper)\n      ? selected.filter((c) => c !== upper)\n      : [upper];\n    setDraft((prev) => ({ ...prev, optionRoles: next.join(', ') }));\n  };\n\n  return (\n    <div\n      role=\"tabpanel\"\n      id=\"component-editor-panel-options\"\n      aria-labelledby=\"component-editor-tab-options\"\n      hidden={hidden}\n      data-testid=\"component-editor-panel-options\"\n    >\n      <p className=\"component-options__intro\">\n        Elegí qué selección de material sigue esta pieza. Una pieza de tablero\n        sigue un único rol: todas las piezas con el mismo rol cambian juntas de\n        material.\n      </p>\n\n      {hasAmbiguousOptionRoles(draft.optionRoles.split(',')) ? (\n        <p\n          className=\"component-options__warning\"\n          data-testid=\"component-options-ambiguity-warning\"\n          role=\"alert\"\n        >\n          Este componente tiene varios roles declarados (\n          {optionRolesSummary(selected, optionGroups)}). El motor usa sólo el\n          primero y el resto quedaría sin efecto. Dejá un único rol.\n        </p>\n      ) : null}\n\n      <div\n        className=\"component-options__chips\"\n        role=\"group\"\n        aria-label=\"Roles de opción\"\n        data-testid=\"input-optionRoles\"\n      >\n        {optionGroups.length === 0 ? (\n          <p className=\"component-options__empty\">\n            No hay grupos de opciones definidos. Creá grupos en la sección\n            correspondiente para asignarlos acá.\n          </p>\n        ) : (\n          optionGroups.map((g) => {\n            const active = selected.includes(g.code.toUpperCase());\n            return (\n              <button\n                key={g.id}\n                type=\"button\"\n                className={\n                  'component-options__chip' +\n                  (active ? ' component-options__chip--on' : '')\n                }\n                aria-pressed={active}\n                data-testid={`option-role-${g.code}`}\n                onClick={() => toggle(g.code)}",
+          "sha256": "2c3128f30ad8d8718a3aced8867c7b7d2c7a5ba65026cce5210792c97627400f"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/ModuleEditorHardwarePanel.tsx",
+      "claim": "Hardware rows add/remove/update by line ID. Switching fixed/role changes optionRole and clears hardwareId when returning to role mode; grid keyboard callback is forwarded, not implemented in this panel.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/ModuleEditorHardwarePanel.tsx",
+          "startLine": 24,
+          "endLine": 115,
+          "excerpt": "export function ModuleEditorHardwarePanel({\n  hardwareLines,\n  hardwareRoles,\n  activeHardware,\n  onAdd,\n  onRemove,\n  onUpdate,\n  onGridKeyDown,\n  hidden,\n}: ModuleEditorHardwarePanelProps): ReactNode {\n  return (\n    <div\n      className=\"module-editor__section\"\n      role=\"tabpanel\"\n      id=\"module-editor-panel-hardware\"\n      aria-labelledby=\"module-editor-tab-hardware\"\n      hidden={hidden}\n      data-testid=\"module-editor-panel-hardware\"\n    >\n      <div className=\"module-editor__section-header\">\n        <h4 className=\"module-editor__section-title\">\n          Herrajes ({hardwareLines.length})\n        </h4>\n        <button type=\"button\" className=\"btn btn--small\" onClick={onAdd}>\n          Agregar herraje\n        </button>\n      </div>\n      {hardwareLines.length === 0 ? (\n        <p className=\"catalog-empty\">Sin líneas de herraje.</p>\n      ) : (\n        <div\n          className=\"module-part-list\"\n          data-testid=\"module-hardware-grid\"\n          onKeyDown={onGridKeyDown}\n        >\n          {hardwareLines.map((line, index) => (\n            <div key={line.id} className=\"module-part-card\">\n              <div className=\"module-part-card__header\">\n                <h5 className=\"module-part-card__title\">\n                  Herraje {index + 1}\n                </h5>\n                <button\n                  type=\"button\"\n                  className=\"btn btn--small btn--danger\"\n                  onClick={() => onRemove(line.id)}\n                >\n                  Quitar\n                </button>\n              </div>\n              <div className=\"module-editor__grid\">\n                <div className=\"catalog-form__field\">\n                  <label htmlFor={moduleHardwareGridInputId(line.id, 'mode')}>\n                    Modo\n                  </label>\n                  <select\n                    id={moduleHardwareGridInputId(line.id, 'mode')}\n                    data-grid-row={line.id}\n                    data-grid-field=\"mode\"\n                    value={line.mode}\n                    onChange={(e) => {\n                      const mode = e.target.value as 'role' | 'fixed';\n                      onUpdate(line.id, {\n                        mode,\n                        optionRole:\n                          mode === 'fixed'\n                            ? line.optionRole || 'FIXED'\n                            : line.optionRole === 'FIXED'\n                              ? (hardwareRoles[0]?.code ?? '')\n                              : line.optionRole,\n                        hardwareId: mode === 'role' ? '' : line.hardwareId,\n                      });\n                    }}\n                  >\n                    <option value=\"role\">Por rol de opción</option>\n                    <option value=\"fixed\">Herraje fijo</option>\n                  </select>\n                </div>\n                <div className=\"catalog-form__field\">\n                  <label htmlFor={moduleHardwareGridInputId(line.id, 'qty')}>\n                    Cantidad\n                  </label>\n                  <input\n                    id={moduleHardwareGridInputId(line.id, 'qty')}\n                    data-grid-row={line.id}\n                    data-grid-field=\"qty\"\n                    type=\"number\"\n                    min={1}\n                    step={1}\n                    value={line.quantity}\n                    onChange={(e) =>\n                      onUpdate(line.id, {\n                        quantity: Number(e.target.value),",
+          "sha256": "5ada120745fc69b8feccaa876ef589838e8ee6ac6f14c5bd8919a25b38472fb7"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/ModuleEditorStructurePanel.tsx",
+      "claim": "Structure selector excludes inactive records, clears module components only when removing the structure and imports exterior dimensions when available; shows structure revision and separates body versus module component ownership.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/ModuleEditorStructurePanel.tsx",
+          "startLine": 18,
+          "endLine": 86,
+          "excerpt": "export function ModuleEditorStructurePanel({\n  draft,\n  setDraft,\n  structures,\n  selectedStructure,\n  hidden,\n}: ModuleEditorStructurePanelProps): ReactNode {\n  return (\n    <div\n      className=\"module-editor__section\"\n      role=\"tabpanel\"\n      id=\"module-editor-panel-structure\"\n      aria-labelledby=\"module-editor-tab-structure\"\n      hidden={hidden}\n      data-testid=\"module-editor-panel-structure\"\n    >\n      <h4 className=\"module-editor__section-title\">Estructura (cuerpo)</h4>\n      <p className=\"module-editor__hint module-editor__hint--flush\">\n        El cuerpo se arma en Ingeniería → Estructuras. Acá elegís cuál usa este\n        mueble y la medida base (obligatoria si hay estructura).\n      </p>\n      <div className=\"catalog-form__field\">\n        <label htmlFor=\"mod-structure\">Estructura base</label>\n        <select\n          id=\"mod-structure\"\n          value={draft.structureId}\n          onChange={(e) => {\n            const sid = e.target.value;\n            const struct = structures.find((s) => s.id === sid);\n            setDraft((prev) => ({\n              ...prev,\n              structureId: sid,\n              components: sid ? prev.components : [],\n              ...(struct?.externalDims\n                ? {\n                    externalWidth: String(struct.externalDims.width),\n                    externalHeight: String(struct.externalDims.height),\n                    externalDepth: String(struct.externalDims.depth),\n                  }\n                : {}),\n            }));\n          }}\n          data-testid=\"structure-picker\"\n        >\n          <option value=\"\">— Sin estructura —</option>\n          {structures\n            .filter((s) => s.active !== false)\n            .map((s) => (\n              <option key={s.id} value={s.id}>\n                {s.code} — {s.name}\n              </option>\n            ))}\n        </select>\n        {selectedStructure ? (\n          <StructureRevisionBadge\n            structure={selectedStructure}\n            testId=\"module-editor-selected-structure-revision\"\n          />\n        ) : null}\n      </div>\n      {selectedStructure?.components &&\n      selectedStructure.components.length > 0 ? (\n        <p className=\"catalog-empty\" data-testid=\"structure-body-hint\">\n          Esta estructura aporta {selectedStructure.components.length}{' '}\n          componente\n          {selectedStructure.components.length === 1 ? '' : 's'} de cuerpo. Los\n          del mueble (puertas, entrepaños…) van en la pestaña Componentes.\n        </p>\n      ) : null}",
+          "sha256": "f7b96a640af01dd8d7401c619faeddb222997648acdfab1565e815a4b59bafb1"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/ModuleEditorMeasuresPanel.tsx",
+      "claim": "Commercial presets are draft-owned; import clones structure presets with fresh IDs and appends, base seeding requires three positive dimensions. canMutate disables child editor, not server authority.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/ModuleEditorMeasuresPanel.tsx",
+          "startLine": 29,
+          "endLine": 95,
+          "excerpt": "export function ModuleEditorMeasuresPanel({\n  draft,\n  setDraft,\n  selectedStructure,\n  canMutate,\n  hidden,\n}: ModuleEditorMeasuresPanelProps): ReactNode {\n  return (\n    <div\n      className=\"module-editor__section\"\n      role=\"tabpanel\"\n      id=\"module-editor-panel-measures\"\n      aria-labelledby=\"module-editor-tab-measures\"\n      hidden={hidden}\n      data-testid=\"module-editor-panel-measures\"\n    >\n      <ModuleMeasureSection\n        presets={draft.presets}\n        disabled={!canMutate}\n        onPresetsChange={(presets) =>\n          setDraft((prev) => ({ ...prev, presets }))\n        }\n        nextId={nextPresetId}\n        canImportFromStructure={(selectedStructure?.presets?.length ?? 0) > 0}\n        onImportFromStructure={() => {\n          const fromStructure = (selectedStructure?.presets ?? []).map(\n            (pr) => ({\n              id: nextPresetId(),\n              name: pr.name ?? '',\n              width: pr.width,\n              height: pr.height,\n              depth: pr.depth,\n            }),\n          );\n          setDraft((prev) => ({\n            ...prev,\n            presets: [...prev.presets, ...fromStructure],\n          }));\n        }}\n        canSeedFromBase={\n          Number(draft.externalWidth) > 0 &&\n          Number(draft.externalHeight) > 0 &&\n          Number(draft.externalDepth) > 0\n        }\n        onSeedFromBase={() => {\n          const w = Number(draft.externalWidth);\n          const h = Number(draft.externalHeight);\n          const d = Number(draft.externalDepth);\n          if (!(w > 0 && h > 0 && d > 0)) return;\n          setDraft((prev) => ({\n            ...prev,\n            presets: [\n              ...prev.presets,\n              {\n                id: nextPresetId(),\n                name: 'Medida base',\n                width: w,\n                height: h,\n                depth: d,\n              },\n            ],\n          }));\n        }}\n      />\n    </div>\n  );\n}",
+          "sha256": "468441f866b3c67a72966f8c980e77c9855a7534a5c643f904b14fa7984540d7"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/structures/components/StructureEditorPresetsPanel.tsx",
+      "claim": "Dimension errors are keyed per preset; validation rejects NaN/nonpositive values, copying exterior dimensions updates three fields and clears local errors. Copy availability requires positive exterior dimensions; commercial presets remain a separate module concern.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/structures/components/StructureEditorPresetsPanel.tsx",
+          "startLine": 27,
+          "endLine": 101,
+          "excerpt": "export function StructureEditorPresetsPanel({\n  presets,\n  exteriorDims,\n  onAdd,\n  onRemove,\n  onUpdate,\n  hidden,\n}: StructureEditorPresetsPanelProps): ReactNode {\n  const [dimErrors, setDimErrors] = useState<DimErrors>({});\n  const canCopyExterior =\n    exteriorDims.width > 0 &&\n    exteriorDims.height > 0 &&\n    exteriorDims.depth > 0;\n\n  const validateDim = (\n    presetId: string,\n    key: DimKey,\n    label: string,\n    value: number,\n  ) => {\n    const invalid = Number.isNaN(value) || value <= 0;\n    setDimErrors((prev) => ({\n      ...prev,\n      [presetId]: {\n        ...prev[presetId],\n        [key]: invalid ? `${label} debe ser mayor a 0.` : undefined,\n      },\n    }));\n  };\n\n  const copyExteriorInto = (presetId: string) => {\n    onUpdate(presetId, {\n      width: exteriorDims.width,\n      height: exteriorDims.height,\n      depth: exteriorDims.depth,\n    });\n    setDimErrors((prev) => {\n      const next = { ...prev };\n      delete next[presetId];\n      return next;\n    });\n  };\n\n  return (\n    <div\n      role=\"tabpanel\"\n      id=\"structure-editor-panel-presets\"\n      aria-labelledby=\"structure-editor-tab-presets\"\n      hidden={hidden}\n      data-testid=\"structure-editor-panel-presets\"\n    >\n      <div className=\"structure-editor-panel-header\">\n        <h4 className=\"module-editor__section-title\">\n          Presets de medidas ({presets.length})\n        </h4>\n        <button\n          type=\"button\"\n          className=\"btn btn--small btn--primary\"\n          onClick={onAdd}\n          data-testid=\"add-preset-btn\"\n        >\n          <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar preset\n        </button>\n      </div>\n\n      <p className=\"catalog-form__hint\">\n        Variantes de estirado para preview 3D e ingeniería. No son la lista\n        comercial del mueble (eso vive en Muebles).\n      </p>\n\n      {presets.length === 0 ? (\n        <div className=\"structure-presets-empty\" data-testid=\"presets-empty\">\n          Sin presets de medida. Si no hay presets, la estructura usará su\n          medida exterior (General) como referencia.\n        </div>",
+          "sha256": "e741af48184c38c2b8dd5af6b4b32e6ee132d27069b88131a7eaebb8b023aff9"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/structures/components/StructureEditorComponentsPanel.tsx",
+      "claim": "Preview delegates to resolveStructure3DPreview only when catalog input exists; empty components offer add action and populated list resolves catalog identity by componentId. This range does not prove all per-instance override mutations.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/structures/components/StructureEditorComponentsPanel.tsx",
+          "startLine": 31,
+          "endLine": 108,
+          "excerpt": "export function StructureEditorComponentsPanel({\n  draft,\n  setDraft,\n  catalogComponents,\n  onRequestAdd,\n  hidden,\n  catalogInput,\n  previewPresetId,\n  onPreviewPresetChange,\n}: StructureEditorComponentsPanelProps): ReactNode {\n  const preview = useMemo(() => {\n    if (!catalogInput) return null;\n    return resolveStructure3DPreview(\n      draft,\n      catalogInput,\n      previewPresetId || undefined,\n    );\n  }, [draft, catalogInput, previewPresetId]);\n\n  return (\n    <div\n      role=\"tabpanel\"\n      id=\"structure-editor-panel-components\"\n      aria-labelledby=\"structure-editor-tab-components\"\n      hidden={hidden}\n      data-testid=\"structure-editor-panel-components\"\n    >\n      <div\n        className={\n          preview\n            ? 'structure-components-layout structure-components-layout--with-preview'\n            : 'structure-components-layout'\n        }\n        data-testid=\"structure-editor-panel-components-body\"\n      >\n        <div className=\"structure-components-list\">\n          <div className=\"structure-editor-panel-header\">\n            <h4 className=\"module-editor__section-title\">\n              Componentes ({draft.components.length})\n            </h4>\n            <button\n              type=\"button\"\n              className=\"btn btn--small btn--primary\"\n              onClick={onRequestAdd}\n              data-testid=\"add-component-btn\"\n            >\n              <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar\n              componente\n            </button>\n          </div>\n\n          {draft.components.length === 0 ? (\n            <div className=\"structure-components-empty\" data-testid=\"components-empty\">\n              <p className=\"catalog-empty\">\n                Sin componentes. El cuerpo necesita al menos una pieza\n                (laterales, base, etc.).\n              </p>\n              <button\n                type=\"button\"\n                className=\"btn btn--primary\"\n                onClick={onRequestAdd}\n                data-testid=\"add-component-empty-cta\"\n              >\n                <Plus size={16} strokeWidth={1.5} aria-hidden /> Agregar primer\n                componente\n              </button>\n            </div>\n          ) : (\n            <div data-testid=\"component-instance-list\">\n              {draft.components.map((comp, idx) => {\n                const catComp = catalogComponents.find(\n                  (c) => c.id === comp.componentId,\n                );\n                return (\n                  <div\n                    key={`${comp.componentId}-${idx}`}\n                    className=\"module-part-card\"\n                    data-testid={`component-instance-${idx}`}",
+          "sha256": "4db42b9b7d2a3631120c9422491f58cf95c887772f9fbf99c7f4762fa98badaf"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/ExportIssueList.tsx",
+      "claim": "Empty issue list renders nothing; nonempty alert formats module/part/field/option context and messages. It presents diagnostics, not validation itself or navigation to fixes.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/ExportIssueList.tsx",
+          "startLine": 13,
+          "endLine": 62,
+          "excerpt": "function issueKey(issue: ExportIssue, index: number): string {\n  return [\n    issue.projectItemId ?? '',\n    issue.moduleCode ?? '',\n    issue.partId ?? issue.partCode ?? '',\n    issue.field,\n    String(index),\n  ].join('|');\n}\n\nfunction formatIssueMeta(issue: ExportIssue): string {\n  const parts: string[] = [];\n  if (issue.moduleCode) parts.push(`mueble ${issue.moduleCode}`);\n  if (issue.partCode) parts.push(`pieza ${issue.partCode}`);\n  else if (issue.partId) parts.push(`pieza ${issue.partId}`);\n  if (issue.field) parts.push(`campo ${issue.field}`);\n  if (issue.optionGroupCode) parts.push(`opción ${issue.optionGroupCode}`);\n  return parts.join(' · ');\n}\n\nexport function ExportIssueList({\n  issues,\n  title = 'No se puede exportar. Corregí estos problemas:',\n}: ExportIssueListProps): ReactNode {\n  if (issues.length === 0) return null;\n\n  return (\n    <div\n      className=\"export-issues\"\n      role=\"alert\"\n      aria-live=\"assertive\"\n      aria-label=\"Errores de export\"\n    >\n      <p className=\"export-issues__title\">{title}</p>\n      <ul className=\"export-issues__list\">\n        {issues.map((issue, index) => {\n          const meta = formatIssueMeta(issue);\n          return (\n            <li key={issueKey(issue, index)} className=\"export-issues__item\">\n              <span className=\"export-issues__message\">{issue.message}</span>\n              {meta ? (\n                <span className=\"export-issues__meta\">{meta}</span>\n              ) : null}\n            </li>\n          );\n        })}\n      </ul>\n    </div>\n  );\n}",
+          "sha256": "1f4beac4ff465815c6fd84222017bae7883e9647fabbbf64effc8e0abb11d469"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/ProjectItemStructureRevisionIndicator.tsx",
+      "claim": "Closed-quote indicator forwards exact supplied pin into pinned StructureRevisionBadge; it does not select latest or resolve historical BOM.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/ProjectItemStructureRevisionIndicator.tsx",
+          "startLine": 17,
+          "endLine": 29,
+          "excerpt": "export function ProjectItemStructureRevisionIndicator({\n  pin,\n  testId,\n}: ProjectItemStructureRevisionIndicatorProps): ReactNode {\n  return (\n    <StructureRevisionBadge\n      revision={pin}\n      variant=\"pinned\"\n      suffix=\"(cerrada)\"\n      testId={testId}\n    />\n  );\n}",
+          "sha256": "97b32bd5eab38fa9d70a20fca239aab2df72e20197a231d05f2dd9f269d8db05"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/ProjectStalenessBanner.tsx",
+      "claim": "Domain staleness report controls alert visibility and reason labels. Change-order/release CTAs appear only when callbacks are provided; banner does not enforce production blocking.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/ProjectStalenessBanner.tsx",
+          "startLine": 21,
+          "endLine": 84,
+          "excerpt": "export function ProjectStalenessBanner({\n  project,\n  onOpenReleaseModal,\n  onOpenChangeOrderModal,\n}: ProjectStalenessBannerProps): ReactNode {\n  const report = getProjectStalenessReport(project);\n\n  if (!report.isStale) {\n    return null;\n  }\n\n  return (\n    <div\n      className=\"project-staleness-banner\"\n      role=\"alert\"\n      data-testid=\"project-staleness-banner\"\n    >\n      <div className=\"project-staleness-banner__header\">\n        <AlertTriangle\n          className=\"project-staleness-banner__icon\"\n          size={18}\n          aria-hidden=\"true\"\n        />\n        <div className=\"project-staleness-banner__title-box\">\n          <strong className=\"project-staleness-banner__title\">\n            Atención: Cambios detectados post-liberación (Estado Desactualizado / Stale)\n          </strong>\n          <p className=\"project-staleness-banner__description\">\n            {report.reasons\n              .map((r) => STALENESS_REASON_LABELS_ES[r] ?? r)\n              .join('. ')}\n            . Los planos, despiece y listas de corte actuales no coinciden con la orden liberada a taller.\n          </p>\n        </div>\n      </div>\n\n      <div className=\"project-staleness-banner__actions\">\n        {onOpenChangeOrderModal ? (\n          <button\n            type=\"button\"\n            className=\"btn btn--secondary btn--small\"\n            onClick={onOpenChangeOrderModal}\n            data-testid=\"btn-staleness-change-order\"\n          >\n            <FileSpreadsheet size={14} aria-hidden=\"true\" />\n            Crear Change Order\n          </button>\n        ) : null}\n\n        {onOpenReleaseModal ? (\n          <button\n            type=\"button\"\n            className=\"btn btn--primary btn--small\"\n            onClick={onOpenReleaseModal}\n            data-testid=\"btn-staleness-rerelease\"\n          >\n            <RefreshCw size={14} aria-hidden=\"true\" />\n            Re-evaluar Liberación\n          </button>\n        ) : null}\n      </div>\n    </div>\n  );\n}",
+          "sha256": "312381f5fb40104e84e6f4a6d87a48695d9fe566a164a0a0832ab076af1e9d49"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/StatusBadge.tsx",
+      "claim": "Pure status label/class presentation delegates mapping to project helpers; decorative dot is aria-hidden. No workflow transition is implemented.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/StatusBadge.tsx",
+          "startLine": 10,
+          "endLine": 23,
+          "excerpt": "export function StatusBadge({\n  status,\n}: {\n  readonly status: Project['status'];\n}): ReactNode {\n  return (\n    <span className={`status-badge ${projectStatusBadgeClass(status)}`}>\n      <span className=\"status-badge__dot\" aria-hidden>\n        ●\n      </span>\n      {projectStatusLabel(status)}\n    </span>\n  );\n}",
+          "sha256": "d123d9d680b029ee25405ebae096bb4fbebe2ece05246ae8c021ae397ec39a6e"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/ProjectMeasureDefaults.tsx",
+      "claim": "Editor hides for closed projects or absent update callback. Per-type depth/height changes preserve other values, remove empty/NaN fields and emit exact project ID; positive constraints/server validation remain beyond this handler.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/ProjectMeasureDefaults.tsx",
+          "startLine": 19,
+          "endLine": 67,
+          "excerpt": "export const ProjectMeasureDefaults = memo(function ProjectMeasureDefaults(): ReactNode {\n  const { project, modules, onUpdateMeasureDefaults } = useProjectDetail();\n\n  if (!onUpdateMeasureDefaults || isProjectClosed(project.status)) {\n    return null;\n  }\n\n  const typesInUse = Array.from(\n    new Set(modules.map((m) => m.furnitureType ?? 'inferior')),\n  ) as FurnitureType[];\n\n  if (typesInUse.length === 0) return null;\n\n  const handleUpdate = (\n    type: FurnitureType,\n    field: 'depth' | 'height',\n    value: string,\n  ) => {\n    const prev = { ...(project.measureDefaults ?? {}) } as Record<\n      FurnitureType,\n      { depth?: number; height?: number } | undefined\n    >;\n    const typeEntry = prev[type] ? { ...prev[type]! } : {};\n    const parsed = value.trim() === '' ? undefined : Number(value);\n\n    if (field === 'depth') {\n      if (parsed === undefined || Number.isNaN(parsed))\n        delete typeEntry.depth;\n      else typeEntry.depth = parsed;\n    } else {\n      if (parsed === undefined || Number.isNaN(parsed))\n        delete typeEntry.height;\n      else typeEntry.height = parsed;\n    }\n\n    if (typeEntry.depth === undefined && typeEntry.height === undefined) {\n      delete prev[type];\n    } else {\n      prev[type] = typeEntry;\n    }\n\n    const hasAny = (Object.keys(prev) as FurnitureType[]).some(\n      (k) => prev[k] !== undefined,\n    );\n    onUpdateMeasureDefaults(\n      project.id,\n      hasAny ? (prev as Project['measureDefaults']) : undefined,\n    );\n  };",
+          "sha256": "b706b6eca0d5b9b15b97d89f269906823587182deaf7de672e65fdfb15975eca"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/ProjectOptionsSection.tsx",
+      "claim": "Project default options hide when no groups, callback or editable content; select emits group code/value through detail context. Line override inheritance is promised copy but requires domain/consumer proof.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/ProjectOptionsSection.tsx",
+          "startLine": 12,
+          "endLine": 73,
+          "excerpt": "export const ProjectOptionsSection = memo(function ProjectOptionsSection(): ReactNode {\n  const {\n    project,\n    optionGroups,\n    catalogs,\n    updateProjectLevelChoice,\n    onUpdateProjectLevelChoices,\n    canEditContent,\n  } = useProjectDetail();\n\n  if (optionGroups.length === 0 || !onUpdateProjectLevelChoices) {\n    return null;\n  }\n\n  // Closed quotes: hide project-level option editor (view-only).\n  if (!canEditContent) {\n    return null;\n  }\n\n  return (\n    <section\n      className=\"project-detail__section project-level-options\"\n      aria-label=\"Opciones del proyecto\"\n      data-testid=\"project-level-options\"\n    >\n      <div className=\"project-detail__section-header\">\n        <h3 className=\"project-detail__section-title\">Opciones del proyecto</h3>\n      </div>\n      <p className=\"project-editor__hint\">\n        Defaults de cotización. Cada mueble las hereda salvo que overridees en\n        la línea.\n      </p>\n      <div className=\"project-item-choices\">\n        {optionGroups.map((group) => {\n          const options = optionsForGroup(group, catalogs);\n          return (\n            <div key={group.id} className=\"catalog-form__field\">\n              <label htmlFor={`project-level-${group.code}`}>\n                {group.name} ({group.code})\n              </label>\n              <select\n                id={`project-level-${group.code}`}\n                value={project.projectLevelChoices?.[group.code] ?? ''}\n                onChange={(e) =>\n                  updateProjectLevelChoice(group.code, e.target.value)\n                }\n                data-testid={`project-level-choice-${group.code}`}\n              >\n                <option value=\"\">Sin default</option>\n                {options.map((opt) => (\n                  <option key={opt.id} value={opt.id}>\n                    {opt.name} — {opt.code}\n                  </option>\n                ))}\n              </select>\n            </div>\n          );\n        })}\n      </div>\n    </section>\n  );\n});",
+          "sha256": "1ad1e969a07b93e0fc6e7d7f3f3eef8df43aca3704228e256f03e2b7c203354a"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/BoardFinishPickers.tsx",
+      "claim": "Preview-only material selector explicitly says it does not save quote choices; selection defaults to first group option, shows color/grain and emits group code/material ID.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/BoardFinishPickers.tsx",
+          "startLine": 17,
+          "endLine": 75,
+          "excerpt": "export function BoardFinishPickers({\n  groups,\n  choices,\n  onChange,\n  testId = 'board-finish-pickers',\n}: BoardFinishPickersProps): ReactNode {\n  if (groups.length === 0) return null;\n\n  return (\n    <div className=\"board-finish-pickers\" data-testid={testId}>\n      <p\n        className=\"catalog-form__hint board-finish-pickers__intro\"\n        data-testid={`${testId}-intro`}\n      >\n        Acabados de preview (solo esta vista 3D — no guarda la cotización):\n      </p>\n      {groups.map((g) => {\n        const selected = choices[g.code] ?? g.options[0]?.id ?? '';\n        const selectedOpt = g.options.find((o) => o.id === selected);\n        return (\n          <div\n            key={g.code}\n            className=\"catalog-form__field board-finish-pickers__field\"\n            data-testid={`${testId}-group-${g.code}`}\n          >\n            <label htmlFor={`${testId}-${g.code}`}>\n              {g.name}\n              {selectedOpt?.grainDefault ? ' · veta' : ''}\n            </label>\n            <div className=\"board-finish-pickers__control\">\n              {selectedOpt?.previewColor ? (\n                <span\n                  className=\"board-finish-pickers__swatch\"\n                  aria-hidden\n                  title={selectedOpt.previewColor}\n                  style={{ background: selectedOpt.previewColor }}\n                />\n              ) : null}\n              <select\n                id={`${testId}-${g.code}`}\n                className=\"board-finish-pickers__select\"\n                value={selected}\n                onChange={(e) => onChange(g.code, e.target.value)}\n                data-testid={`${testId}-select-${g.code}`}\n              >\n                {g.options.map((o) => (\n                  <option key={o.id} value={o.id}>\n                    {o.code} — {o.name}\n                    {o.grainDefault ? ' (veta)' : ''}\n                  </option>\n                ))}\n              </select>\n            </div>\n          </div>\n        );\n      })}\n    </div>\n  );\n}",
+          "sha256": "acf4f34dfd8a2680f0546ff268212f48f1d8ca203be0e4594b26698c545c8f92"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/CostPreviewPanel.tsx",
+      "claim": "Cost preview differentiates unsaved hint, blocked/missing calculation and supplied numeric breakdown. Missing group names and resolution error are visible with polite status; amounts are not recomputed by the component.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/CostPreviewPanel.tsx",
+          "startLine": 19,
+          "endLine": 93,
+          "excerpt": "export function CostPreviewPanel({\n  costPreview,\n  previewBlocked,\n  missingGroups,\n  groupLabels,\n  allowEmptyHint,\n  previewError,\n}: CostPreviewPanelProps): ReactNode {\n  if (allowEmptyHint && !costPreview && !previewBlocked) {\n    return (\n      <p className=\"catalog-empty catalog-empty--flush\">\n        Guardá el mueble para ver el preview de costo con defaults de opción.\n      </p>\n    );\n  }\n\n  return (\n    <div\n      className={\n        previewBlocked || !costPreview\n          ? 'module-cost-preview module-cost-preview--blocked'\n          : 'module-cost-preview'\n      }\n      role=\"status\"\n      aria-live=\"polite\"\n    >\n      <h4 className=\"module-cost-preview__title\">\n        Preview de costo (con opciones por defecto)\n      </h4>\n      {previewBlocked || !costPreview ? (\n        <>\n          <p className=\"module-cost-preview__blocked-msg\">\n            Preview bloqueado: faltan grupos o no se pudo calcular.\n          </p>\n          {missingGroups.length > 0 ? (\n            <ul className=\"module-cost-preview__missing\">\n              {missingGroups.map((code) => (\n                <li key={code}>{groupLabels?.[code] ?? code}</li>\n              ))}\n            </ul>\n          ) : null}\n          {previewError ? (\n            <p className=\"module-cost-preview__blocked-msg\">\n              {previewError}\n            </p>\n          ) : null}\n        </>\n      ) : (\n        <>\n          <dl className=\"module-cost-preview__grid\">\n            <div>\n              <dt>Materiales</dt>\n              <dd>{formatModuleMoney(costPreview.materialsCost)}</dd>\n            </div>\n            <div>\n              <dt>Cantos</dt>\n              <dd>{formatModuleMoney(costPreview.edgeTotal)}</dd>\n            </div>\n            <div>\n              <dt>Herrajes</dt>\n              <dd>{formatModuleMoney(costPreview.hardwareTotal)}</dd>\n            </div>\n            <div>\n              <dt>Costo directo</dt>\n              <dd>{formatModuleMoney(costPreview.directCost)}</dd>\n            </div>\n          </dl>\n          <p className=\"module-cost-preview__sale\">\n            Precio de venta: {formatModuleMoney(costPreview.salePrice)}\n          </p>\n        </>\n      )}\n    </div>\n  );\n}",
+          "sha256": "73abce61403dda7a384dc1ec42e6bd80fc5bee005ec5b659b8690dab2612821d"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/ModuleEditorCostPanel.tsx",
+      "claim": "Existing entity passes supplied cost/error/missing-group state to preview; new entity intentionally shows save-first hint. It is a wrapper, not independent price authority.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/ModuleEditorCostPanel.tsx",
+          "startLine": 19,
+          "endLine": 54,
+          "excerpt": "export function ModuleEditorCostPanel({\n  editingId,\n  costPreview,\n  previewBlocked,\n  previewError,\n  missingGroups,\n  groupLabels,\n  hidden,\n}: ModuleEditorCostPanelProps): ReactNode {\n  return (\n    <div\n      role=\"tabpanel\"\n      id=\"module-editor-panel-cost\"\n      aria-labelledby=\"module-editor-tab-cost\"\n      hidden={hidden}\n      data-testid=\"module-editor-panel-cost\"\n    >\n      {editingId ? (\n        <CostPreviewPanel\n          costPreview={costPreview}\n          previewBlocked={previewBlocked}\n          previewError={previewError}\n          missingGroups={missingGroups}\n          groupLabels={groupLabels}\n        />\n      ) : (\n        <CostPreviewPanel\n          costPreview={null}\n          previewBlocked={false}\n          missingGroups={[]}\n          allowEmptyHint\n        />\n      )}\n    </div>\n  );\n}",
+          "sha256": "b69f1219d4a59fa265041bfb65ff66f8d5d8e3b9f5cc3bc445d9379678e4a5b1"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/components/editor/ComponentEditorGeneralPanel.tsx",
+      "claim": "Identity fields patch draft; code is disabled during edit with explanatory hint. Placement-convention availability is computed only when both dimension formulas are empty; no automatic server identity enforcement is implied.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/ComponentEditorGeneralPanel.tsx",
+          "startLine": 28,
+          "endLine": 100,
+          "excerpt": "  const placementHint = PLACEMENT_DESCRIPTION[draft.placement];\n  const convention = sizeFormulasForPlacement(draft.placement);\n  const canApplyConvention =\n    convention != null &&\n    !draft.lengthFormula.trim() &&\n    !draft.widthFormula.trim();\n\n  return (\n    <div\n      role=\"tabpanel\"\n      id=\"component-editor-panel-general\"\n      aria-labelledby=\"component-editor-tab-general\"\n      hidden={hidden}\n      data-testid=\"component-editor-panel-general\"\n      className=\"component-general__workspace\"\n    >\n      <div className=\"component-general__main\">\n        <div className=\"component-general__card\">\n          <h3 className=\"component-general__card-title\">Identidad del componente</h3>\n\n          <div className=\"component-general__form-row\">\n            <div className=\"catalog-form__field component-general__field--code\">\n              <label htmlFor={`${formId}-code`}>Código</label>\n              <input\n                id={`${formId}-code`}\n                value={draft.code}\n                onChange={(e) =>\n                  setDraft((prev) => ({ ...prev, code: e.target.value }))\n                }\n                placeholder=\"Ej: COM-PUE-01\"\n                required\n                disabled={!!editingId}\n                data-testid=\"input-code\"\n                aria-describedby={\n                  editingId ? `${formId}-code-hint` : undefined\n                }\n              />\n              {editingId ? (\n                <p\n                  id={`${formId}-code-hint`}\n                  className=\"catalog-form__hint\"\n                  data-testid=\"input-code-hint\"\n                >\n                  El código no se cambia al editar (identifica la pieza en el\n                  catálogo).\n                </p>\n              ) : null}\n            </div>\n\n            <div className=\"catalog-form__field component-general__field--name\">\n              <label htmlFor={`${formId}-name`}>Nombre</label>\n              <input\n                id={`${formId}-name`}\n                value={draft.name}\n                onChange={(e) =>\n                  setDraft((prev) => ({ ...prev, name: e.target.value }))\n                }\n                placeholder=\"Ej: Puerta principal de gabinete\"\n                required\n                data-testid=\"input-name\"\n              />\n            </div>\n          </div>\n\n          <div className=\"catalog-form__field\">\n            <label htmlFor={`${formId}-placement`}>Ubicación / Posición de montaje</label>\n            <select\n              id={`${formId}-placement`}\n              value={draft.placement}\n              onChange={(e) =>\n                setDraft((prev) => ({ ...prev, placement: e.target.value }))\n              }\n              required",
+          "sha256": "65004a7e37d14843c12af534a877fc896f862a48f2bdb8c38fc4ca7eb964cfe5"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/components/editor/ComponentEditorGeometryPanel.tsx",
+      "claim": "Base dimension errors reject NaN/nonpositive inputs; adding length or width formula clears the corresponding stale base-dimension error. Formula-guide focus opens assistance; final formula evaluation is outside this fragment.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/ComponentEditorGeometryPanel.tsx",
+          "startLine": 100,
+          "endLine": 148,
+          "excerpt": "  const validateDim = (key: keyof DimErrors, label: string, v: number) => {\n    const invalid = Number.isNaN(v) || v <= 0;\n    setDimErrors((prev) => ({\n      ...prev,\n      [key]: invalid ? `El ${label} debe ser mayor a 0.` : undefined,\n    }));\n  };\n\n  // Clear stale length/width dim errors once a formula replaces the base (R3-S3).\n  useEffect(() => {\n    if (!draft.lengthFormula.trim()) return;\n    setDimErrors((prev) =>\n      prev.length ? { ...prev, length: undefined } : prev,\n    );\n  }, [draft.lengthFormula]);\n\n  useEffect(() => {\n    if (!draft.widthFormula.trim()) return;\n    setDimErrors((prev) =>\n      prev.width ? { ...prev, width: undefined } : prev,\n    );\n  }, [draft.widthFormula]);\n\n  const openGuideOnFormulaFocus = () => {\n    setGuideOpen(true);\n  };\n\n  return (\n    <div\n      role=\"tabpanel\"\n      id=\"component-editor-panel-geometry\"\n      aria-labelledby=\"component-editor-tab-geometry\"\n      hidden={hidden}\n      data-testid=\"component-editor-panel-geometry\"\n    >\n      <div className=\"component-geometry__workspace\">\n        <div className=\"component-geometry__form\">\n          <ComponentFormulaGuide\n            guideOpen={guideOpen}\n            onToggle={() => setGuideOpen((v) => !v)}\n          />\n\n          <FieldGroup\n            title=\"Dimensiones base\"\n            hint=\"tamaño fijo de la placa cuando no hay fórmula\"\n          >\n            <div className=\"component-editor__grid\">\n              <div\n                className={`catalog-form__field${dimErrors.length ? ' catalog-form__field--error' : ''}`}",
+          "sha256": "ace464040904f58b77f8a18f2ad5610b3dc16cf01ce6ffcad3b8e8aaa20d536a"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/ModuleEditorGeneralPanel.tsx",
+      "claim": "General tab binds code/name/base labor to draft; existing code is locked while name remains editable. HTML required/min fields do not prove authoritative validation or cost permissions.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/ModuleEditorGeneralPanel.tsx",
+          "startLine": 35,
+          "endLine": 100,
+          "excerpt": "export function ModuleEditorGeneralPanel({\n  draft,\n  setDraft,\n  draftCascade,\n  draftCascadeOpts,\n  setDraftCascadeLevel,\n  resolveImageUrl,\n  onUploadImage,\n  editingId = null,\n  hidden,\n}: ModuleEditorGeneralPanelProps): ReactNode {\n  return (\n    <div\n      className=\"module-editor__section\"\n      role=\"tabpanel\"\n      id=\"module-editor-panel-general\"\n      aria-labelledby=\"module-editor-tab-general\"\n      hidden={hidden}\n      data-testid=\"module-editor-panel-general\"\n    >\n      <h4 className=\"module-editor__section-title\">Datos generales</h4>\n\n      <div className=\"module-editor__grid\">\n        <div className=\"catalog-form__field\">\n          <label htmlFor=\"mod-code\">Código</label>\n          <input\n            id=\"mod-code\"\n            value={draft.code}\n            onChange={(e) => setDraft({ ...draft, code: e.target.value })}\n            autoComplete=\"off\"\n            required\n            disabled={!!editingId}\n            data-testid=\"input-code\"\n            aria-describedby={editingId ? 'mod-code-hint' : undefined}\n          />\n        </div>\n        <div className=\"catalog-form__field\">\n          <label htmlFor=\"mod-name\">Nombre</label>\n          <input\n            id=\"mod-name\"\n            value={draft.name}\n            onChange={(e) => setDraft({ ...draft, name: e.target.value })}\n            required\n          />\n        </div>\n        <div className=\"catalog-form__field\">\n          <label htmlFor=\"mod-labor\">Mano de obra base</label>\n          <input\n            id=\"mod-labor\"\n            type=\"number\"\n            min={0}\n            step=\"any\"\n            value={draft.baseLaborCost}\n            onChange={(e) =>\n              setDraft({ ...draft, baseLaborCost: e.target.value })\n            }\n            placeholder=\"Opcional\"\n          />\n        </div>\n      </div>\n\n      {editingId ? (\n        <p\n          id=\"mod-code-hint\"\n          className=\"module-editor__hint module-editor__hint--full\"\n          data-testid=\"module-code-hint\"",
+          "sha256": "e18a72fcaf61babf2130bdf5661d8556b31156e00d03f1175f1db789122ee412"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/ModuleEditorComponentsPanel.tsx",
+      "claim": "No structure and no own components have distinct guidance. Duplicate shallow-copies a draft component at index+1; remove filters by draft index. This is local composition, not stable physical occurrence identity.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/ModuleEditorComponentsPanel.tsx",
+          "startLine": 59,
+          "endLine": 115,
+          "excerpt": "      {!composedEnabled ? (\n        <p className=\"catalog-empty\" data-testid=\"composed-section\">\n          Seleccioná una estructura en la pestaña Estructura para agregar\n          componentes.\n        </p>\n      ) : draft.components.length === 0 ? (\n        <p className=\"catalog-empty\" data-testid=\"composed-section\">\n          Sin componentes propios. Agregá reutilizables o cotizá solo con el\n          cuerpo de la estructura.\n        </p>\n      ) : (\n        <div className=\"module-part-list\" data-testid=\"component-instance-list\">\n          {draft.components.map((comp, idx) => {\n            const catComp = catalogComponents.find(\n              (c) => c.id === comp.componentId,\n            );\n            return (\n              <div\n                key={`${comp.componentId}-${idx}`}\n                className=\"module-part-card\"\n                data-testid={`component-instance-${idx}`}\n              >\n                <div className=\"module-part-card__header\">\n                  <h5 className=\"module-part-card__title\">\n                    {catComp\n                      ? `${catComp.code} — ${catComp.name}`\n                      : comp.componentId}\n                  </h5>\n                  <div className=\"module-part-card__actions\">\n                    <button\n                      type=\"button\"\n                      className=\"btn btn--small btn--ghost\"\n                      onClick={() => {\n                        setDraft((prev) => {\n                          const itemToClone = prev.components[idx];\n                          if (!itemToClone) return prev;\n                          const nextList = [...prev.components];\n                          nextList.splice(idx + 1, 0, { ...itemToClone });\n                          return { ...prev, components: nextList };\n                        });\n                      }}\n                      title=\"Duplicar este componente\"\n                      data-testid={`duplicate-component-${idx}`}\n                    >\n                      <Copy size={13} strokeWidth={1.5} aria-hidden /> Duplicar\n                    </button>\n                    <button\n                      type=\"button\"\n                      className=\"btn btn--small btn--danger\"\n                      onClick={() => {\n                        setDraft((prev) => ({\n                          ...prev,\n                          components: prev.components.filter((_, i) => i !== idx),\n                        }));\n                      }}\n                      data-testid={`remove-component-${idx}`}\n                    >",
+          "sha256": "5df4246ec84aca05bffc3c38190a2ca2a62e9ccbb421664e713aa80e6b02e6da"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/structures/components/StructureEditorGeneralPanel.tsx",
+      "claim": "Structure code is locked on edit with identity explanation; name is required. Exterior width input clamps negative numbers to zero and remains reference geometry, with presets explicitly separate.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/structures/components/StructureEditorGeneralPanel.tsx",
+          "startLine": 25,
+          "endLine": 98,
+          "excerpt": "      role=\"tabpanel\"\n      id=\"structure-editor-panel-general\"\n      aria-labelledby=\"structure-editor-tab-general\"\n      hidden={hidden}\n      data-testid=\"structure-editor-panel-general\"\n    >\n      <div className=\"structure-editor__grid\">\n        <div className=\"catalog-form__field\">\n          <label htmlFor={`${formId}-code`}>Código de Estructura</label>\n          <input\n            id={`${formId}-code`}\n            value={draft.code}\n            onChange={(e) =>\n              setDraft((prev) => ({ ...prev, code: e.target.value }))\n            }\n            placeholder=\"Ej: EST-GAB-720\"\n            required\n            disabled={!!editingId}\n            data-testid=\"input-code\"\n            aria-describedby={editingId ? `${formId}-code-hint` : undefined}\n          />\n          {editingId ? (\n            <p\n              id={`${formId}-code-hint`}\n              className=\"catalog-form__hint\"\n              data-testid=\"structure-code-hint\"\n            >\n              El código no se cambia al editar (identifica el cuerpo en el\n              catálogo).\n            </p>\n          ) : null}\n        </div>\n\n        <div className=\"catalog-form__field\">\n          <label htmlFor={`${formId}-name`}>Nombre</label>\n          <input\n            id={`${formId}-name`}\n            value={draft.name}\n            onChange={(e) =>\n              setDraft((prev) => ({ ...prev, name: e.target.value }))\n            }\n            placeholder=\"Ej: Cuerpo Gabinete Bajo\"\n            required\n            data-testid=\"input-name\"\n          />\n        </div>\n      </div>\n\n      <fieldset className=\"catalog-form__section structure-editor__dims\">\n        <legend className=\"catalog-form__section-title\">\n          Dimensiones exteriores\n        </legend>\n        <p className=\"catalog-form__hint\" data-testid=\"structure-exterior-hint\">\n          Tamaño de referencia del cuerpo. Los presets (pestaña Presets) son\n          variantes de prueba de estirado; el 3D usa un preset si hay, si no\n          estas medidas.\n        </p>\n        <div className=\"structure-editor__grid\">\n          <div className=\"catalog-form__field\">\n            <label htmlFor={`${formId}-width`}>Ancho Externo (mm)</label>\n            <input\n              id={`${formId}-width`}\n              type=\"number\"\n              min={0}\n              value={draft.widthMm || ''}\n              onChange={(e) =>\n                setDraft((prev) => ({\n                  ...prev,\n                  widthMm: Math.max(0, Number(e.target.value)),\n                }))\n              }\n              placeholder=\"Opcional\"\n              data-testid=\"input-width\"\n            />",
+          "sha256": "90ee05c5f6b5f1099287bd09a2902540ec71d3e2017cf22c931ec80d0f220a51"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/ModuleMeasureSection.tsx",
+      "claim": "Commercial measure list adds fresh empty draft, updates/removes by preset ID, and disables add/import/base actions via disabled. It explains base-versus-option sales choice rather than silently adding base to the list.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/ModuleMeasureSection.tsx",
+          "startLine": 26,
+          "endLine": 100,
+          "excerpt": "  onPresetsChange,\n  nextId,\n  onImportFromStructure,\n  canImportFromStructure = false,\n  onSeedFromBase,\n  canSeedFromBase = false,\n}: ModuleMeasureSectionProps) {\n  const addPreset = () => {\n    onPresetsChange([...presets, emptyMeasurePresetDraft(nextId())]);\n  };\n\n  const updatePreset = (id: string, patch: Partial<MeasurePresetDraft>) => {\n    onPresetsChange(\n      presets.map((p) => (p.id === id ? { ...p, ...patch } : p)),\n    );\n  };\n\n  const removePreset = (id: string) => {\n    onPresetsChange(presets.filter((p) => p.id !== id));\n  };\n\n  return (\n    <div className=\"module-measure-section\" data-testid=\"module-measure-section\">\n      <div\n        style={{\n          display: 'flex',\n          alignItems: 'center',\n          justifyContent: 'space-between',\n          gap: 'var(--space-3)',\n          marginBottom: 'var(--space-2)',\n          marginTop: 'var(--space-4)',\n        }}\n      >\n        <h5 className=\"module-editor__section-title\" style={{ margin: 0 }}>\n          Más medidas para cotización ({presets.length})\n        </h5>\n        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>\n          {canSeedFromBase && onSeedFromBase ? (\n            <button\n              type=\"button\"\n              className=\"btn btn--small\"\n              disabled={disabled}\n              onClick={onSeedFromBase}\n              data-testid=\"module-seed-base-preset-btn\"\n            >\n              Incluir medida base\n            </button>\n          ) : null}\n          {canImportFromStructure && onImportFromStructure ? (\n            <button\n              type=\"button\"\n              className=\"btn btn--small\"\n              disabled={disabled}\n              onClick={onImportFromStructure}\n              data-testid=\"module-import-structure-presets-btn\"\n            >\n              Importar de estructura\n            </button>\n          ) : null}\n          <button\n            type=\"button\"\n            className=\"btn btn--small\"\n            disabled={disabled}\n            onClick={addPreset}\n            data-testid=\"module-add-preset-btn\"\n          >\n            <Plus size={16} aria-hidden />\n            Agregar\n          </button>\n        </div>\n      </div>\n      <p className=\"catalog-empty\" style={{ marginTop: 0 }}>\n        Opcional. Si no agregás nada, se cotiza solo con la medida base. Si\n        agregás opciones, el vendedor elige entre ellas en la cotización (incluí\n        la base acá si también querés venderla como opción de la lista).",
+          "sha256": "4f347a5c1e6a394425a34224c41437ec6e88b1c2b95801ba533c786872751077"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/StudioSelectionBar.tsx",
+      "claim": "Empty selection hides toolbar. View fit and copy are available independently of mutation; duplicate/paste depend on canEdit and clipboard with explanatory titles, island alignment also requires at least two.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/StudioSelectionBar.tsx",
+          "startLine": 81,
+          "endLine": 158,
+          "excerpt": "  if (count === 0) return null;\n  const readOnlyTitle = canEdit ? undefined : 'Modo lectura: la obra no se puede editar.';\n  const alignBlockedTitle = 'Funcionan sobre muebles de un mismo muro.';\n\n  return (\n    <div\n      className=\"spatial-studio__selection-bar\"\n      role=\"toolbar\"\n      aria-label={`Acciones de la selección (${count} muebles)`}\n      data-testid=\"spatial-studio-selection-bar\"\n    >\n      <span\n        className=\"spatial-studio__selection-bar-count\"\n        data-testid=\"spatial-studio-selection-count\"\n      >\n        {count} seleccionado{count === 1 ? '' : 's'}\n      </span>\n\n      <div className=\"spatial-studio__selection-bar-group\" role=\"group\" aria-label=\"Vista\">\n        <button\n          type=\"button\"\n          className=\"btn btn--small\"\n          onClick={onFitSelection}\n          title=\"Enfocar la selección en la cámara (F)\"\n          data-testid=\"spatial-studio-cmd-fit\"\n        >\n          <Focus size={14} strokeWidth={1.5} aria-hidden /> Enfocar\n        </button>\n      </div>\n\n      <div className=\"spatial-studio__selection-bar-group\" role=\"group\" aria-label=\"Portapapeles\">\n        <button\n          type=\"button\"\n          className=\"btn btn--small\"\n          onClick={onDuplicate}\n          disabled={!canEdit}\n          title={readOnlyTitle ?? 'Duplicar la selección a la derecha (Ctrl+D)'}\n          data-testid=\"spatial-studio-cmd-duplicate\"\n        >\n          <Copy size={14} strokeWidth={1.5} aria-hidden /> Duplicar\n        </button>\n        <button\n          type=\"button\"\n          className=\"btn btn--small\"\n          onClick={onCopy}\n          title=\"Copiar la selección (Ctrl+C)\"\n          data-testid=\"spatial-studio-cmd-copy\"\n        >\n          <ClipboardCopy size={14} strokeWidth={1.5} aria-hidden /> Copiar\n        </button>\n        <button\n          type=\"button\"\n          className=\"btn btn--small\"\n          onClick={onPaste}\n          disabled={!canEdit || !hasClipboard}\n          title={\n            !hasClipboard\n              ? 'Copiá muebles primero (Ctrl+C).'\n              : (readOnlyTitle ?? 'Pegar copias a la derecha del último pegado (Ctrl+V)')\n          }\n          data-testid=\"spatial-studio-cmd-paste\"\n        >\n          <ClipboardPaste size={14} strokeWidth={1.5} aria-hidden /> Pegar\n        </button>\n      </div>\n\n      {allIslands ? (\n        <div className=\"spatial-studio__selection-bar-group\" role=\"group\" aria-label=\"Alinear islas\">\n          <button\n            type=\"button\"\n            className=\"btn btn--small btn--icon\"\n            onClick={() => onAlignIslands('left')}\n            disabled={!canEdit || count < 2}\n            title={\n              count < 2 ? 'Alinear necesita al menos 2 islas.' : 'Alinear bordes izquierdos'\n            }\n            data-testid=\"spatial-studio-cmd-align-left\"\n            aria-label=\"Alinear bordes izquierdos\"",
+          "sha256": "448eaa74aace948e87f41be3afa6b2e04ba28722a4c090fbd7caac4cf29f1bb2"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/detail/ProjectDetailToolsNav.tsx",
+      "claim": "Advanced panel buttons use aria-pressed and onToggleTools rather than ARIA tab semantics. Survey blocker count comes from domain survey helper; navigation does not itself enforce gate.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/detail/ProjectDetailToolsNav.tsx",
+          "startLine": 29,
+          "endLine": 92,
+          "excerpt": "  const ctx = useProjectDetail();\n  const surveyBlockers = ctx.project.siteSurvey\n    ? surveyFabricationBlockers(ctx.project.siteSurvey).length\n    : 0;\n\n  return (\n    <div className=\"project-detail__tools-header\">\n      <h3 className=\"project-detail__section-title\">Herramientas</h3>\n      <div\n        className=\"project-detail__tools-tabs\"\n        role=\"group\"\n        aria-label=\"Paneles avanzados\"\n      >\n        <button\n          type=\"button\"\n          aria-pressed={toolsPanel === 'overview'}\n          className={\n            toolsPanel === 'overview'\n              ? 'project-detail__tools-tab project-detail__tools-tab--active'\n              : 'project-detail__tools-tab'\n          }\n          data-testid=\"project-tools-overview\"\n          onClick={() => onToggleTools('overview')}\n        >\n          <ClipboardList size={14} aria-hidden=\"true\" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />\n          Resumen de obra\n        </button>\n        <button\n          type=\"button\"\n          aria-pressed={toolsPanel === 'lifecycle'}\n          className={\n            toolsPanel === 'lifecycle'\n              ? 'project-detail__tools-tab project-detail__tools-tab--active'\n              : 'project-detail__tools-tab'\n          }\n          data-testid=\"project-tools-lifecycle\"\n          onClick={() => onToggleTools('lifecycle')}\n        >\n          <Activity size={14} aria-hidden=\"true\" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />\n          Lifecycle / Entregas\n        </button>\n        <button\n          type=\"button\"\n          aria-pressed={toolsPanel === 'survey'}\n          className={\n            toolsPanel === 'survey'\n              ? 'project-detail__tools-tab project-detail__tools-tab--active'\n              : 'project-detail__tools-tab'\n          }\n          data-testid=\"project-tools-survey\"\n          onClick={() => onToggleTools('survey')}\n        >\n          <Ruler size={14} aria-hidden=\"true\" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />\n          Levantamiento\n          {surveyBlockers > 0 ? (\n            <span\n              className=\"project-detail__tools-badge\"\n              data-testid=\"project-tools-survey-blockers\"\n              title={`${surveyBlockers} medidas pendientes de levantar/aprobar`}\n            >\n              {surveyBlockers}\n            </span>\n          ) : null}\n        </button>",
+          "sha256": "43c1fe41e709eb77525f820708d1d7cfb442076342b9eda3e1861cc76b6a2587"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/CostingPanel.tsx",
+      "claim": "Time/other-cost/rate inputs require finite positive values; handlers use exact project ID but inputs clear without awaiting them. Capture availability combines permission prop with domain baseline gate. No persisted cost-success claim follows local clearing.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/CostingPanel.tsx",
+          "startLine": 51,
+          "endLine": 115,
+          "excerpt": "export function CostingPanel({\n  view,\n  handlers,\n  labelsByMaterial = {},\n  canManage = true,\n  canCapture,\n  canRecordOther,\n  canVoid = false,\n  testId,\n}: CostingPanelProps): ReactNode {\n  const captureAllowed = canCapture ?? canManage;\n  const otherAllowed = canRecordOther ?? canManage;\n  const [minutes, setMinutes] = useState('');\n  const [category, setCategory] = useState<string>('cut');\n  const [otherKind, setOtherKind] = useState<string>('freight');\n  const [otherAmount, setOtherAmount] = useState('');\n  const [otherVendor, setOtherVendor] = useState('');\n  const [rate, setRate] = useState('');\n\n  const minutesValue = Number(minutes);\n  const amountValue = Number(otherAmount);\n  const rateValue = Number(rate);\n\n  const recordTime = (): void => {\n    if (!handlers.onRecordTime || !Number.isFinite(minutesValue) || minutesValue <= 0) return;\n    void handlers.onRecordTime(view.projectId, { category, minutes: minutesValue });\n    setMinutes('');\n  };\n\n  const recordOther = (): void => {\n    if (!handlers.onRecordOtherCost || !Number.isFinite(amountValue) || amountValue <= 0) return;\n    void handlers.onRecordOtherCost(view.projectId, {\n      kind: otherKind,\n      amount: amountValue,\n      vendor: otherVendor.trim() || undefined,\n    });\n    setOtherAmount('');\n    setOtherVendor('');\n  };\n\n  const saveRate = (): void => {\n    if (!handlers.onSetLaborRate || !Number.isFinite(rateValue) || rateValue <= 0) return;\n    void handlers.onSetLaborRate(view.projectId, rateValue);\n    setRate('');\n  };\n\n  if (!view.hasCosting) {\n    return (\n      <section className=\"costing-panel\" data-testid={testId ?? `costing-panel-${view.projectId}`}>\n        <h3 className=\"costing-panel__title\">\n          <DollarSign size={18} strokeWidth={1.5} aria-hidden />\n          Costos de la obra\n        </h3>\n        <p className=\"costing-panel__hint\">\n          {view.canCaptureBaseline\n            ? 'Congelá el baseline (snapshot de cotización + liberación) para comparar estimado vs real.'\n            : `Para capturar el baseline falta: ${view.captureBlockers.join(' y ')}.`}\n        </p>\n        {captureAllowed && view.canCaptureBaseline && handlers.onCaptureBaseline ? (\n          <button\n            type=\"button\"\n            className=\"btn btn--primary btn--small\"\n            onClick={() => handlers.onCaptureBaseline?.(view.projectId)}\n            data-testid={`costing-capture-${view.projectId}`}\n          >",
+          "sha256": "fda9e8c5dc6768da539b65583bd51ef2a2a01939057def1644b0a09ef8a88af0"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/InstallationChecklistPanel.tsx",
+      "claim": "Absent checklist uses generated default items; first checkbox edit seeds labels with selected label done, while later toggles use stored IDs. canEdit disables controls. This legacy checklist is separate from installation-job unit/visit closeout.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/InstallationChecklistPanel.tsx",
+          "startLine": 31,
+          "endLine": 110,
+          "excerpt": "    if (project.installationChecklist && project.installationChecklist.length > 0) {\n      return project.installationChecklist;\n    }\n    return DEFAULT_INSTALLATION_CHECKLIST.map((c) => ({\n      id: newId(),\n      label: c.label,\n      done: c.done,\n    }));\n  }, [project.installationChecklist]);\n\n  // Seed default into parent once when empty so it persists\n  const ensureSeeded = () => {\n    if (\n      !project.installationChecklist ||\n      project.installationChecklist.length === 0\n    ) {\n      onChange(\n        DEFAULT_INSTALLATION_CHECKLIST.map((c) => ({\n          id: newId(),\n          label: c.label,\n          done: false,\n        })),\n      );\n    }\n  };\n\n  const toggle = (id: string) => {\n    ensureSeeded();\n    const base =\n      project.installationChecklist && project.installationChecklist.length > 0\n        ? project.installationChecklist\n        : items;\n    onChange(\n      base.map((c) => (c.id === id ? { ...c, done: !c.done } : c)),\n    );\n  };\n\n  const doneCount = items.filter((c) => c.done).length;\n\n  return (\n    <div\n      className=\"project-detail__section\"\n      data-testid=\"installation-checklist\"\n    >\n      <div className=\"project-detail__section-header\">\n        <h3 className=\"project-detail__section-title\">\n          Checklist de instalación ({doneCount}/{items.length})\n        </h3>\n      </div>\n      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>\n        {items.map((c) => (\n          <li key={c.id} style={{ marginBottom: 8 }}>\n            <label\n              style={{\n                display: 'flex',\n                gap: '0.5rem',\n                alignItems: 'center',\n                cursor: canEdit ? 'pointer' : 'default',\n              }}\n            >\n              <input\n                type=\"checkbox\"\n                checked={c.done}\n                disabled={!canEdit}\n                onChange={() => {\n                  if (!canEdit) return;\n                  if (\n                    !project.installationChecklist ||\n                    project.installationChecklist.length === 0\n                  ) {\n                    const seeded = DEFAULT_INSTALLATION_CHECKLIST.map((d) => ({\n                      id: newId(),\n                      label: d.label,\n                      done: d.label === c.label,\n                    }));\n                    onChange(seeded);\n                    return;\n                  }\n                  toggle(c.id);\n                }}",
+          "sha256": "e787869ff459f9e97a34f4e85286400402ec79ed4183342339964468188c47c6"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/InternalCommsPanel.tsx",
+      "claim": "Message type filter and engineer/sales owner labels use provided entities. Sending trims content, awaits callback and clears only after success, finally resets busy; selected technical transitions request comment before callback. Local error catch is absent in this range.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/InternalCommsPanel.tsx",
+          "startLine": 49,
+          "endLine": 111,
+          "excerpt": "export function InternalCommsPanel({\n  project,\n  messages = [],\n  assignableOwners = [],\n  currentUserId,\n  onSendMessage,\n  onUpdateTechnicalWorkflow,\n}: InternalCommsPanelProps) {\n  const [activeFilter, setActiveFilter] = useState<'all' | ProjectInternalMessageType>('all');\n  const [messageType, setMessageType] = useState<ProjectInternalMessageType>('comment');\n  const [content, setContent] = useState('');\n  const [isSending, setIsSending] = useState(false);\n  const [actionComment, setActionComment] = useState('');\n  const [showCommentInputForStatus, setShowCommentInputForStatus] = useState<ProjectTechnicalStatus | null>(null);\n\n  const currentTechStatus = project.technicalStatus ?? 'pending_assignment';\n  const statusMeta = TECHNICAL_STATUS_METADATA[currentTechStatus];\n  const availableTransitions = useMemo(\n    () => getAvailableTechnicalTransitions(currentTechStatus),\n    [currentTechStatus],\n  );\n\n  const filteredMessages = useMemo(() => {\n    if (activeFilter === 'all') return messages;\n    return messages.filter((m) => m.messageType === activeFilter);\n  }, [messages, activeFilter]);\n\n  const ownerLabel = useMemo(() => {\n    if (!project.ownerUserId) return 'Sin asignar (Ventas)';\n    const found = assignableOwners.find((o) => o.id === project.ownerUserId);\n    return found ? found.label : project.ownerUserId;\n  }, [project.ownerUserId, assignableOwners]);\n\n  const engineerLabel = useMemo(() => {\n    if (!project.assignedEngineerId) return 'Sin asignar';\n    const found = assignableOwners.find((o) => o.id === project.assignedEngineerId);\n    return found ? found.label : project.assignedEngineerId;\n  }, [project.assignedEngineerId, assignableOwners]);\n\n  const handleSend = async (e: React.FormEvent) => {\n    e.preventDefault();\n    if (!content.trim() || isSending) return;\n    try {\n      setIsSending(true);\n      await onSendMessage({\n        messageType,\n        content: content.trim(),\n      });\n      setContent('');\n    } finally {\n      setIsSending(false);\n    }\n  };\n\n  const handleTransitionClick = (targetStatus: ProjectTechnicalStatus) => {\n    if (targetStatus === 'changes_requested' || targetStatus === 'approved_for_production') {\n      setShowCommentInputForStatus(targetStatus);\n    } else {\n      void onUpdateTechnicalWorkflow({\n        technicalStatus: targetStatus,\n      });\n    }\n  };",
+          "sha256": "2ca4ad0e1cd1399a6ee20e5ed52947fe73e4fa274f9c90280a9bdfb0f3f8618e"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/ProjectItemsSection.tsx",
+      "claim": "Drag state tracks source index and above/below target midpoint with dropEffect move; end/leave clear feedback. This range does not certify final reorder command or real drag behavior; callback presence alone is not permission enforcement.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/ProjectItemsSection.tsx",
+          "startLine": 44,
+          "endLine": 115,
+          "excerpt": "  // ─── Drag & drop state ────────────────────────────────────────────────\n  const dragIndexRef = useRef<number | null>(null);\n  const dropPosRef = useRef<DropPosition>(null);\n  const [overIndex, setOverIndex] = useState<number | null>(null);\n  const [dropPos, setDropPos] = useState<DropPosition>(null);\n\n  const handleDragStart = useCallback(\n    (e: React.DragEvent, index: number) => {\n      if (!itemHandlers.onReorderItems) return;\n      dragIndexRef.current = index;\n      e.dataTransfer.effectAllowed = 'move';\n      // Set a transparent pixel as drag image so the browser uses a ghost of the element\n      const img = new Image();\n      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';\n      e.dataTransfer.setDragImage(img, 0, 0);\n      // Add class to the dragged element after a tick (so browser captures the ghost first)\n      requestAnimationFrame(() => {\n        const el = e.currentTarget as HTMLElement;\n        el.classList.add('project-item-card--dragging');\n      });\n    },\n    [itemHandlers.onReorderItems],\n  );\n\n  const handleDragEnd = useCallback((e: React.DragEvent) => {\n    const el = e.currentTarget as HTMLElement;\n    el.classList.remove('project-item-card--dragging');\n    dragIndexRef.current = null;\n    setOverIndex(null);\n    setDropPos(null);\n  }, []);\n\n  const handleDragOver = useCallback(\n    (e: React.DragEvent, index: number) => {\n      if (dragIndexRef.current === null) return;\n      if (dragIndexRef.current === index) return;\n      e.preventDefault();\n      e.dataTransfer.dropEffect = 'move';\n\n      // Determine if cursor is in top or bottom half of the target\n      const rect = e.currentTarget.getBoundingClientRect();\n      const midY = rect.top + rect.height / 2;\n      const pos: DropPosition = e.clientY < midY ? 'above' : 'below';\n      setOverIndex(index);\n      setDropPos(pos);\n      dropPosRef.current = pos;\n    },\n    [],\n  );\n\n  const handleDragLeave = useCallback(() => {\n    setOverIndex(null);\n    setDropPos(null);\n    dropPosRef.current = null;\n  }, []);\n\n  const handleDrop = useCallback(\n    (e: React.DragEvent, toIndex: number) => {\n      e.preventDefault();\n      const fromIndex = dragIndexRef.current;\n      const currentDropPos = dropPosRef.current;\n      dragIndexRef.current = null;\n      dropPosRef.current = null;\n      setOverIndex(null);\n      setDropPos(null);\n\n      if (fromIndex === null || fromIndex === toIndex) return;\n      if (!itemHandlers.onReorderItems) return;\n\n      // Adjust target index based on drop position.\n      // 'above' = insert before this item; 'below' = insert after.\n      // Account for the removed item shifting indices.",
+          "sha256": "d1bb8ff368ef75d26d34fdb9009e2a32ec47cd64268591b7a3698ce5f39f0618"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/ProjectOverviewPanel.tsx",
+      "claim": "Overview composes survey, produced-project staleness, blocking punch and field issues. It selects next open visit with legacy scheduled-date fallback, and routes to supplied engineering/production/dispatch callbacks. Derived summary is not release authority.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/ProjectOverviewPanel.tsx",
+          "startLine": 51,
+          "endLine": 115,
+          "excerpt": "function deriveBlockers(project: Project): readonly BlockerLine[] {\n  const blockers: BlockerLine[] = [];\n\n  // Same rule as the release gate: a missing structured survey falls back to\n  // the legacy stamp — not a blocker by itself.\n  if (project.siteSurvey) {\n    for (const blocker of surveyFabricationBlockers(project.siteSurvey)) {\n      blockers.push({ id: `survey-${blocker.kind}-${blocker.spaceId ?? 'all'}`, message: blocker.message });\n    }\n  }\n\n  if (project.status === 'produced') {\n    const stale = getProductionStaleInfo(project);\n    if (stale.stale && stale.messageEs) {\n      blockers.push({ id: 'stale-revision', message: stale.messageEs });\n    }\n  }\n\n  for (const punch of blockingPunchItems(project.installation)) {\n    blockers.push({ id: `punch-${punch.id}`, message: `Punch bloqueante: ${punch.description}` });\n  }\n\n  for (const issue of openFieldIssues(project.installation)) {\n    blockers.push({ id: `field-${issue.id}`, message: `Incidencia en obra: ${issue.description}` });\n  }\n\n  return blockers;\n}\n\nexport function ProjectOverviewPanel({\n  project,\n  nav,\n  testId = 'project-overview-panel',\n}: ProjectOverviewPanelProps): ReactNode {\n  const stage = deriveProjectStage(project);\n  const release = project.productionRelease;\n  const stale = getProductionStaleInfo(project);\n  const nextVisit = openInstallationVisits(project.installation)[0];\n  const installationDate = nextVisit?.date ?? project.installationScheduledDate;\n  const blockers = deriveBlockers(project);\n\n  const links = [\n    {\n      id: 'engineering',\n      label: 'Ingeniería / Release',\n      icon: <Wrench strokeWidth={1.5} size={16} aria-hidden=\"true\" />,\n      detail: release\n        ? `Liberada rev. ${release.projectVersion} · ${release.releasedAt.slice(0, 10)}`\n        : 'Sin liberación a producción',\n      href: nav.onOpenEngineering,\n    },\n    {\n      id: 'production',\n      label: 'Producción',\n      icon: <Factory strokeWidth={1.5} size={16} aria-hidden=\"true\" />,\n      detail: stale.stale ? 'Diseño cambió tras el último export' : 'Abrir el hub de fábrica',\n      href: nav.onOpenInProduction,\n    },\n    {\n      id: 'shipping',\n      label: 'Embarque',\n      icon: <Truck strokeWidth={1.5} size={16} aria-hidden=\"true\" />,\n      detail: 'Control de carga y despacho',\n      href: nav.onOpenShipments,\n    },",
+          "sha256": "12316461077a0f5b044a9faedbb2ae5118249f8eb35aa3a429e06b67a23701fc"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/ProjectTotalsAside.tsx",
+      "claim": "Totals explicitly label closed quote snapshot as frozen, expose recalculation and error states, gate missing options, and show cost lines only when showCosts. Display hiding does not redact received cost payload or prove snapshot history accuracy.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/ProjectTotalsAside.tsx",
+          "startLine": 44,
+          "endLine": 114,
+          "excerpt": "  return (\n    <aside\n      className={\n        previewBlocked || !breakdown\n          ? 'project-totals project-totals--blocked project-totals--sticky'\n          : 'project-totals project-totals--sticky'\n      }\n      aria-label=\"Totales de cotización\"\n      aria-live=\"polite\"\n    >\n      <div className=\"project-totals__header\">\n        <div className=\"project-totals__heading\">\n          <h3 className=\"project-totals__title\">\n            {isProjectClosed(project.status) && project.priceSnapshot\n              ? 'Totales (congelados)'\n              : 'Totales'}\n          </h3>\n          {isProjectClosed(project.status) && project.priceSnapshot ? (\n            <span\n              className=\"project-totals__frozen-badge\"\n              title={`Precios capturados el ${formatIsoDate(project.priceSnapshot.capturedAt)}`}\n            >\n              Precios congelados\n            </span>\n          ) : null}\n        </div>\n        {breakdownLoading ? (\n          <InlineLoading label=\"Recalculando…\" data-testid=\"breakdown-loading\" />\n        ) : null}\n      </div>\n\n      {breakdownError ? (\n        <p className=\"project-totals__error\" role=\"alert\" data-testid=\"breakdown-error\">\n          <AlertCircle size={16} strokeWidth={1.5} aria-hidden />\n          <span>{breakdownError}</span>\n        </p>\n      ) : null}\n\n      <PricePreviewGate\n        requiredGroupCodes={previewBlocked ? missingGroups : []}\n        optionChoices={{}}\n        groupLabels={groupLabels}\n        blockedMessage=\"Totales bloqueados: faltan opciones obligatorias en uno o más ítems.\"\n      >\n        {breakdownLoading && !breakdown ? (\n          <TotalsSkeleton />\n        ) : breakdown ? (\n          <dl className=\"project-totals__grid\">\n            {showCosts ? (\n              <>\n                <div><dt>Materiales</dt><dd>{formatProjectMoney(breakdown.materialsCost, project.currency)}</dd></div>\n                <div><dt>Cantos</dt><dd>{formatProjectMoney(breakdown.edgeTotal, project.currency)}</dd></div>\n                <div><dt>Herrajes</dt><dd>{formatProjectMoney(breakdown.hardwareTotal, project.currency)}</dd></div>\n                <div><dt>Costo directo</dt><dd>{formatProjectMoney(breakdown.directCost, project.currency)}</dd></div>\n                <div><dt>MO modular</dt><dd>{formatProjectMoney(breakdown.laborModular, project.currency)}</dd></div>\n                <div>\n                  <dt>Factor margen</dt>\n                  <dd>\n                    {breakdown.marginFactor.toFixed(2)}\n                    {breakdown.marginFactor > 1 ? (\n                      <span\n                        className=\"project-totals__margin-pct\"\n                        title=\"Margen bruto sobre precio de venta: (Venta - Costo) / Venta\"\n                      >\n                        {' '}({(((breakdown.marginFactor - 1) / breakdown.marginFactor) * 100).toFixed(1)}% mg)\n                      </span>\n                    ) : null}\n                  </dd>\n                </div>\n              </>\n            ) : null}",
+          "sha256": "35a85efebf1f60110d2fceab65e8f05bc38e38c20ce23e2237d85ff2c0912913"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/QuoteScenarioCompare.tsx",
+      "claim": "Scenario B selection calls pure compareRoleScenario only when role and choice exist; changing role clears choice, and empty groups/items hide comparison. Actual apply/duplicate/export commands remain outside this preview fragment.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/QuoteScenarioCompare.tsx",
+          "startLine": 34,
+          "endLine": 101,
+          "excerpt": "export function QuoteScenarioCompare({\n  project,\n  catalog,\n  optionGroups,\n  canApply,\n  canDuplicate = false,\n  currency,\n  onApplyB,\n  onDuplicateWithB,\n  onExportScenarioPdf,\n}: QuoteScenarioCompareProps): ReactNode {\n  const allGroups = useMemo(\n    () =>\n      optionGroups.filter(\n        (g) =>\n          g.kind === 'board' ||\n          g.kind === 'hardware' ||\n          g.code === 'FRENTE' ||\n          g.code === 'INTERIOR' ||\n          g.code === 'FONDO' ||\n          g.code === 'BISAGRA' ||\n          g.code === 'CORREDERA' ||\n          g.code === 'JALADERA',\n      ),\n    [optionGroups],\n  );\n\n  const [role, setRole] = useState(allGroups[0]?.code ?? '');\n  const [choiceB, setChoiceB] = useState('');\n  const [showBreakdown, setShowBreakdown] = useState(false);\n\n  const group = allGroups.find((g) => g.code === role);\n  const options = group\n    ? optionsForGroup(group, {\n        materials: catalog.materials,\n        edges: catalog.edges,\n        hardware: catalog.hardware,\n      })\n    : [];\n\n  const result = useMemo(():\n    | ScenarioCompareResult\n    | { ok: false; message: string }\n    | null => {\n    if (!role || !choiceB) return null;\n    return compareRoleScenario(\n      project,\n      catalog as Catalog,\n      role,\n      choiceB,\n    );\n  }, [project, catalog, role, choiceB]);\n\n  if (allGroups.length === 0 || project.items.length === 0) {\n    return null;\n  }\n\n  return (\n    <div\n      className=\"project-detail__section\"\n      data-testid=\"quote-scenario-compare\"\n    >\n      <div className=\"project-detail__section-header\">\n        <h3 className=\"project-detail__section-title\">Comparar escenario B</h3>\n      </div>\n      <p className=\"catalog-form__hint scenario-compare__hint--no-top\">\n        Probá otro material o herraje sin alterar la cotización actual. Podés comparar\n        costos, descargar el PDF para el cliente o aplicar B.",
+          "sha256": "080469e8274decb559e8eb60fc42a9502aa87f9433fe142827f58d3c4af72648"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/optionSelector/MaterialOptionSelectorDialog.tsx",
+      "claim": "On opening for a group/current selection, resets search, category path, candidate and furniture scope, then locates current material category. This is picker context-reset proof, not scope application/persistence or real keyboard behavior.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/optionSelector/MaterialOptionSelectorDialog.tsx",
+          "startLine": 75,
+          "endLine": 110,
+          "excerpt": "export function MaterialOptionSelectorDialog({\n  open,\n  group,\n  materials,\n  materialCategories,\n  currentValue,\n  currentIsOverride,\n  canEdit,\n  resolveMediaUrl,\n  onApply,\n  onInherit,\n  onClose,\n}: MaterialOptionSelectorDialogProps) {\n  const [search, setSearch] = useState('');\n  const [selectedL1, setSelectedL1] = useState<string | null>(null);\n  const [selectedL2, setSelectedL2] = useState<string | null>(null);\n  const [selectedL3, setSelectedL3] = useState<string | null>(null);\n  const [candidateId, setCandidateId] = useState<string | null>(null);\n  const [scope, setScope] = useState<MaterialSelectorScope>('furniture');\n\n  // Reset navigation each time the dialog opens for a role, auto-locating the\n  // current material's category branch (same behavior as the SketchUp picker).\n  useEffect(() => {\n    if (!open || !group) return;\n    setSearch('');\n    setSelectedL1(null);\n    setSelectedL2(null);\n    setSelectedL3(null);\n    setCandidateId(currentValue ?? null);\n    setScope('furniture');\n    const current = materials.find((m) => m.id === currentValue);\n    const path = categoryPath(current?.categoryId, materialCategories);\n    if (path[0]) setSelectedL1(path[0].id);\n    if (path[1]) setSelectedL2(path[1].id);\n    if (path[2]) setSelectedL3(path[2].id);\n  }, [open, group, currentValue, materials, materialCategories]);",
+          "sha256": "6753450a237d07309c278b0fb696a83ec06cb5b84c6a7cd739d0ecbae10ac59c"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/presentation/PresentationHeader.tsx",
+      "claim": "Header displays supplied workshop/project/customer and sale total, using dash for missing price; labelled exit delegates close. It does not calculate pricing or fetch customer data.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/presentation/PresentationHeader.tsx",
+          "startLine": 18,
+          "endLine": 63,
+          "excerpt": "export function PresentationHeader({\n  workshopName,\n  projectName,\n  customerName,\n  salePrice,\n  currency,\n  onClose,\n}: PresentationHeaderProps): ReactNode {\n  return (\n    <header className=\"project-presentation__header\">\n      <div>\n        {workshopName ? (\n          <p className=\"project-presentation__workshop-name\">\n            {workshopName}\n          </p>\n        ) : null}\n        <p className=\"project-presentation__kicker\">Cotización</p>\n        <h1 className=\"project-presentation__title\">{projectName}</h1>\n        {customerName ? (\n          <p className=\"project-presentation__customer\">{customerName}</p>\n        ) : null}\n      </div>\n      <div className=\"project-presentation__total-block\">\n        <span className=\"project-presentation__total-label\">Total</span>\n        <span\n          className=\"project-presentation__total-value\"\n          data-testid=\"project-presentation-total\"\n        >\n          {salePrice == null\n            ? '—'\n            : formatMoneyDisplay(salePrice, { currency })}\n        </span>\n      </div>\n      <button\n        type=\"button\"\n        className=\"btn btn--ghost project-presentation__close\"\n        onClick={onClose}\n        data-testid=\"project-presentation-close\"\n        aria-label=\"Salir de presentación\"\n      >\n        <X size={20} strokeWidth={1.5} aria-hidden />\n        Salir\n      </button>\n    </header>\n  );\n}",
+          "sha256": "0a5fc7f01e9466a4c5247f261269708c4e098fe3f4c9d95ee380b98ac119af0f"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/presentation/PresentationSummarySlide.tsx",
+      "claim": "Summary lists quantity and preset/default/exterior dimensions with fallback on resolve failure, and offers 3D navigation when scene exists. This dimension-label helper does not consult item.customDims; custom-size presentation parity remains to be reproduced.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/presentation/PresentationSummarySlide.tsx",
+          "startLine": 19,
+          "endLine": 96,
+          "excerpt": "function lineLabel(\n  item: ProjectItem,\n  modules: readonly Module[],\n): { title: string; measures: string } {\n  const mod = modules.find((m) => m.id === item.moduleId);\n  const title = mod ? `${mod.code} — ${mod.name}` : 'Mueble';\n  let measures = '';\n  if (mod) {\n    try {\n      const preset = resolveModuleMeasurePreset(\n        mod,\n        item.measurePresetId?.trim() ||\n          defaultMeasurePresetId(mod) ||\n          undefined,\n      );\n      if (preset) {\n        measures = `${preset.width} × ${preset.height} × ${preset.depth} mm`;\n      } else if (mod.externalDims) {\n        measures = `${mod.externalDims.width} × ${mod.externalDims.height} × ${mod.externalDims.depth} mm`;\n      }\n    } catch {\n      if (mod.externalDims) {\n        measures = `${mod.externalDims.width} × ${mod.externalDims.height} × ${mod.externalDims.depth} mm`;\n      }\n    }\n  }\n  return { title, measures };\n}\n\nexport function PresentationSummarySlide({\n  project,\n  modules,\n  has3dScene,\n  onGoTo3D,\n}: PresentationSummarySlideProps): ReactNode {\n  return (\n    <section className=\"project-presentation__list\" aria-label=\"Muebles\">\n      <h2 className=\"project-presentation__section-title\">Muebles</h2>\n      <ul className=\"project-presentation__items\">\n        {project.items.map((item) => {\n          const { title, measures } = lineLabel(item, modules);\n          return (\n            <li key={item.id} className=\"project-presentation__item\">\n              <span className=\"project-presentation__item-qty\">\n                {item.quantity}×\n              </span>\n              <span>\n                <span className=\"project-presentation__item-title\">\n                  {title}\n                </span>\n                {measures ? (\n                  <span className=\"project-presentation__item-measures\">\n                    {measures}\n                  </span>\n                ) : null}\n              </span>\n            </li>\n          );\n        })}\n      </ul>\n      {has3dScene ? (\n        <div className=\"project-presentation__hero-cta\">\n          <p className=\"project-presentation__hint project-presentation__hint--flush\">\n            La cotización tiene vista 3D lista para mostrar al cliente.\n          </p>\n          <button\n            type=\"button\"\n            className=\"btn btn--primary\"\n            onClick={onGoTo3D}\n            data-testid=\"presentation-goto-3d\"\n          >\n            Ver vista 3D\n          </button>\n        </div>\n      ) : null}\n    </section>\n  );\n}",
+          "sha256": "cbc9a079536c5979d8557be7aace7646a9b24a65286981d8000f927fc220773a"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/presentation/PresentationShortcutsModal.tsx",
+      "claim": "Custom help overlay renders only when open, closes on backdrop-self click or labelled button and lists keyboard shortcuts. It does not itself implement focus trap, restore or Escape; parent coordination requires separate proof.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/presentation/PresentationShortcutsModal.tsx",
+          "startLine": 13,
+          "endLine": 57,
+          "excerpt": "export function PresentationShortcutsModal({\n  open,\n  onClose,\n}: PresentationShortcutsModalProps): ReactNode {\n  if (!open) return null;\n\n  return (\n    <div\n      className=\"project-presentation__shortcuts-overlay\"\n      role=\"dialog\"\n      aria-label=\"Atajos de teclado\"\n      data-testid=\"presentation-shortcuts-overlay\"\n      onClick={(e) => {\n        if (e.target === e.currentTarget) onClose();\n      }}\n    >\n      <div className=\"project-presentation__shortcuts-card\">\n        <div className=\"project-presentation__shortcuts-header\">\n          <Keyboard size={18} strokeWidth={1.5} aria-hidden />\n          <span>Atajos de teclado</span>\n          <button\n            type=\"button\"\n            className=\"btn btn--ghost project-presentation__shortcuts-close\"\n            onClick={onClose}\n            aria-label=\"Cerrar ayuda\"\n          >\n            <X size={16} strokeWidth={1.5} aria-hidden />\n          </button>\n        </div>\n        <ul className=\"project-presentation__shortcuts-list\">\n          <li>\n            <kbd>→</kbd> <kbd>←</kbd> Navegar diapositivas\n          </li>\n          <li>\n            <kbd>?</kbd> Mostrar / ocultar esta ayuda\n          </li>\n          <li>\n            <kbd>Esc</kbd> Salir de la presentación\n          </li>\n          <li>Deslizá izquierda / derecha para cambiar diapositiva</li>\n        </ul>\n      </div>\n    </div>\n  );\n}",
+          "sha256": "3807e33b95f0579d6d9836c4005e7c5f85118dda07c4c04c1ccf8d1a48da34ae"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/TotalsSkeleton.tsx",
+      "claim": "Pure loading placeholder exposes role=status, labelled calculation and aria-busy with empty decorative rows; no totals are invented while waiting.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/TotalsSkeleton.tsx",
+          "startLine": 8,
+          "endLine": 24,
+          "excerpt": "export function TotalsSkeleton(): ReactNode {\n  return (\n    <div\n      className=\"project-totals__skeleton\"\n      role=\"status\"\n      aria-label=\"Calculando totales\"\n      aria-busy=\"true\"\n    >\n      {/* Simulated total rows */}\n      <div className=\"project-totals__skeleton-row\" />\n      <div className=\"project-totals__skeleton-row\" />\n      <div className=\"project-totals__skeleton-row\" />\n      <div className=\"project-totals__skeleton-row project-totals__skeleton-row--wide\" />\n      <div className=\"project-totals__skeleton-row project-totals__skeleton-row--highlight\" />\n    </div>\n  );\n}",
+          "sha256": "cb56ac70d3e538a754af771c9b09099cd6f9955ca0ce0b98a81e9c2ab0235fc4"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/projectDetailContext.tsx",
+      "claim": "Shared context transports typed project/catalog/state/callback value unchanged; useProjectDetail throws when provider is absent. It is dependency wiring, not authorization, fetching or mutation state machine.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/projectDetailContext.tsx",
+          "startLine": 358,
+          "endLine": 387,
+          "excerpt": "\nconst ProjectDetailContext = createContext<ProjectDetailContextValue | null>(\n  null,\n);\n\nexport function useProjectDetail(): ProjectDetailContextValue {\n  const ctx = useContext(ProjectDetailContext);\n  if (!ctx) {\n    throw new Error(\n      'useProjectDetail must be used within a <ProjectDetailProvider>',\n    );\n  }\n  return ctx;\n}\n\nexport function ProjectDetailProvider({\n  value,\n  children,\n}: {\n  readonly value: ProjectDetailContextValue;\n  readonly children: ReactNode;\n}): ReactNode {\n  return (\n    <ProjectDetailContext.Provider value={value}>\n      {children}\n    </ProjectDetailContext.Provider>\n  );\n}\n\nexport { ProjectDetailContext };",
+          "sha256": "f40eb2f59f21d5ab6ec8589d63ff132539abb18a0b0e4a53e334bcdf44098523"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/presentation/Presentation3DViewSlide.tsx",
+      "claim": "Client toolbar is conditional on R3F and nonempty preview, disables surface selector outside material mode and delegates capture/share. Clipboard success text comes from parent flag; no capture/export/clipboard implementation is certified here.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/presentation/Presentation3DViewSlide.tsx",
+          "startLine": 112,
+          "endLine": 165,
+          "excerpt": "  return (\n    <section className=\"project-presentation__viewer\" aria-label=\"Vista 3D\">\n      {useR3f && !preview.empty ? (\n        <div\n          className=\"project-presentation__controls\"\n          role=\"toolbar\"\n          aria-label=\"Controles de vista 3D\"\n          data-testid=\"presentation-client-toolbar\"\n        >\n          {/* Client actions — always visible */}\n          <div\n            className=\"project-presentation__control-group\"\n            role=\"group\"\n            aria-label=\"Acciones para el cliente\"\n          >\n            <select\n              value={surfaceMode}\n              onChange={(e) =>\n                setSurfaceMode(e.target.value as MaterialSurfaceMode)\n              }\n              className=\"project-presentation__surface-select\"\n              data-testid=\"presentation-surface-mode\"\n              aria-label=\"Vista del acabado\"\n              title=\"Solo color, color con veta, o textura foto\"\n              disabled={colorMode !== 'material'}\n            >\n              <option value=\"color\">Solo color</option>\n              <option value=\"grain\">Color + veta</option>\n              <option value=\"texture\">Textura</option>\n            </select>\n            <button\n              type=\"button\"\n              className=\"btn btn--small btn--primary\"\n              onClick={handleCapturePng}\n              data-testid=\"presentation-capture-png\"\n              aria-label=\"Guardar captura PNG de la vista 3D\"\n            >\n              <Camera size={14} strokeWidth={1.5} aria-hidden />\n              Captura\n            </button>\n            <button\n              type=\"button\"\n              className=\"btn btn--small\"\n              onClick={handleShareLink}\n              data-testid=\"presentation-share-link\"\n              aria-label={\n                linkCopied\n                  ? 'Link copiado al portapapeles'\n                  : 'Copiar link de presentación'\n              }\n              aria-live=\"polite\"\n            >\n              <Link2 size={14} strokeWidth={1.5} aria-hidden />\n              {linkCopied ? '¡Copiado!' : 'Compartir'}",
+          "sha256": "a1d6303895ed3be0c6d6eef8dd02b8abfc020a30b5c169dddffdd278585953f7"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/components/editor/ComponentDetailView.tsx",
+      "claim": "Detail maps four known edge sides and treats explicit zero rotation as custom rather than auto. Entity-ID change resets confirmation state. Geometry/pose are summaries, not authoritative recomputation.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/ComponentDetailView.tsx",
+          "startLine": 41,
+          "endLine": 98,
+          "excerpt": "function edgesToStates(edges: Component['defaultEdges']): EdgeStates {\n  const next = { ...EMPTY_EDGES };\n  for (const e of edges ?? []) {\n    const side = e.side as EdgeSide;\n    if (side === 'L1' || side === 'L2' || side === 'W1' || side === 'W2') {\n      next[side] = Boolean(e.enabled);\n    }\n  }\n  return next;\n}\n\n/** Plate chrome metric — formula-aware so parametric pieces are not 0×0. */\nfunction plateMetric(c: Component): string | null {\n  if (c.geometry?.kind !== 'rectangular_board') return null;\n  return geometrySummary(c);\n}\n\n/** null/undefined = placement auto; 0 is a valid explicit rotation (C5). */\nfunction poseHasCustom(c: Component): boolean {\n  const rot = c.rotateX != null || c.rotateY != null || c.rotateZ != null;\n  const formulas = Boolean(c.xFormula || c.yFormula || c.zFormula);\n  return rot || formulas;\n}\n\nfunction poseSummary(c: Component): string {\n  if (!poseHasCustom(c)) return 'Por defecto del placement';\n  const parts: string[] = [];\n  if (c.rotateX != null) parts.push(`Rx ${c.rotateX}°`);\n  if (c.rotateY != null) parts.push(`Ry ${c.rotateY}°`);\n  if (c.rotateZ != null) parts.push(`Rz ${c.rotateZ}°`);\n  if (c.xFormula || c.yFormula || c.zFormula) parts.push('fórmulas XYZ');\n  return parts.join(' · ') || 'Personalizada';\n}\n\nfunction edgeEnabledCount(edges: EdgeStates): number {\n  return (['L1', 'L2', 'W1', 'W2'] as const).filter((s) => edges[s]).length;\n}\n\nexport function ComponentDetailView({\n  component: c,\n  onBack,\n  onEdit,\n  onToggleActive,\n  canMutate,\n  optionGroups,\n}: ComponentDetailViewProps): ReactNode {\n  const [confirmToggle, setConfirmToggle] = useState(false);\n  useEffect(() => {\n    setConfirmToggle(false);\n  }, [c.id]);\n\n  const geometry =\n    c.geometry?.kind === 'rectangular_board' ? c.geometry : null;\n  const edges = edgesToStates(c.defaultEdges);\n  const perforations = c.perforations ?? [];\n  const metric = plateMetric(c);\n  const customPose = poseHasCustom(c);\n  const encintados = edgeEnabledCount(edges);",
+          "sha256": "79657645e2dfd7c9ad1544a84b10addccc9f13ce5f6d428096c661e0c5e739a0"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/components/editor/ComponentFormulaGuide.tsx",
+      "claim": "Controlled disclosure toggles help with aria-expanded and names PW/PH/PD/T/i variables; it is reference text, not evaluator or validation.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/ComponentFormulaGuide.tsx",
+          "startLine": 13,
+          "endLine": 71,
+          "excerpt": "export function ComponentFormulaGuide({\n  guideOpen,\n  onToggle,\n}: ComponentFormulaGuideProps): ReactNode {\n  return (\n    <div\n      className=\"component-geometry__formula-guide\"\n      data-testid=\"formula-vars-guide\"\n    >\n      <button\n        type=\"button\"\n        className=\"component-geometry__formula-guide-toggle\"\n        aria-expanded={guideOpen}\n        data-testid=\"formula-guide-toggle\"\n        onClick={onToggle}\n      >\n        {guideOpen ? (\n          <ChevronDown size={16} strokeWidth={1.5} aria-hidden />\n        ) : (\n          <ChevronRight size={16} strokeWidth={1.5} aria-hidden />\n        )}\n        <Lightbulb size={14} strokeWidth={1.5} aria-hidden />\n        <span className=\"component-geometry__formula-guide-title\">\n          Variables de fórmulas\n        </span>\n        <span className=\"component-geometry__formula-guide-summary\">\n          PW · PH · PD · T · i\n        </span>\n      </button>\n      {guideOpen ? (\n        <div\n          className=\"component-geometry__formula-guide-body\"\n          data-testid=\"formula-guide-body\"\n        >\n          <p className=\"component-geometry__formula-guide-lead\">\n            Matemática estándar: +, −, *, /, ().\n          </p>\n          <div className=\"component-geometry__formula-vars\">\n            <span title=\"Ancho total del contenedor/mueble\">\n              <code>PW</code>: Ancho Mueble\n            </span>\n            <span title=\"Alto total del contenedor/mueble\">\n              <code>PH</code>: Alto Mueble\n            </span>\n            <span title=\"Profundidad del contenedor/mueble\">\n              <code>PD</code>: Profundidad\n            </span>\n            <span title=\"Espesor del tablero\">\n              <code>T</code>: Espesor\n            </span>\n            <span title=\"Índice de la copia (0, 1, 2...)\">\n              <code>i</code>: Índice Copia\n            </span>\n          </div>\n        </div>\n      ) : null}\n    </div>\n  );\n}",
+          "sha256": "3c4d8052e873891439e7e660a9b561201835bce8810c68149c1e80bc7aaaf959"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/components/editor/ComponentGeometry3DViewport.tsx",
+      "claim": "Reference-container inputs clamp width/height/depth to at least one and emit updated dimensions; context and outline checkboxes affect preview only. Real renderer/performance and production geometry are not proved.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/ComponentGeometry3DViewport.tsx",
+          "startLine": 36,
+          "endLine": 110,
+          "excerpt": "  return (\n    <div\n      className=\"component-geometry__viewport\"\n      data-testid=\"component-geometry-viewport\"\n    >\n      <div className=\"component-geometry__preview-bar\">\n        <div className=\"component-geometry__container-fields\">\n          <span className=\"component-geometry__container-label\">\n            Mueble de referencia:\n          </span>\n          <label className=\"component-geometry__container-field\">\n            <span>Ancho</span>\n            <input\n              type=\"number\"\n              min={1}\n              value={Math.round(containerDims.PW)}\n              onChange={(e) =>\n                onContainerDimsChange({\n                  ...containerDims,\n                  PW: Math.max(1, Number(e.target.value)),\n                })\n              }\n              data-testid=\"container-pw\"\n            />\n          </label>\n          <label className=\"component-geometry__container-field\">\n            <span>Alto</span>\n            <input\n              type=\"number\"\n              min={1}\n              value={Math.round(containerDims.PH)}\n              onChange={(e) =>\n                onContainerDimsChange({\n                  ...containerDims,\n                  PH: Math.max(1, Number(e.target.value)),\n                })\n              }\n              data-testid=\"container-ph\"\n            />\n          </label>\n          <label className=\"component-geometry__container-field\">\n            <span>Prof.</span>\n            <input\n              type=\"number\"\n              min={1}\n              value={Math.round(containerDims.PD)}\n              onChange={(e) =>\n                onContainerDimsChange({\n                  ...containerDims,\n                  PD: Math.max(1, Number(e.target.value)),\n                })\n              }\n              data-testid=\"container-pd\"\n            />\n          </label>\n        </div>\n        <label className=\"component-geometry__toggle\">\n          <input\n            type=\"checkbox\"\n            checked={showInContext}\n            onChange={(e) => onShowInContextChange(e.target.checked)}\n            data-testid=\"show-in-context-toggle\"\n          />\n          <span>Mostrar en el mueble</span>\n        </label>\n        <label className=\"component-geometry__toggle\">\n          <input\n            type=\"checkbox\"\n            checked={showOutlines}\n            onChange={(e) => setShowOutlines(e.target.checked)}\n            data-testid=\"component-geometry-outlines-toggle\"\n          />\n          <span>Contornos</span>\n        </label>\n      </div>",
+          "sha256": "c3a036da42f34a286234a64102e34c1622142c227e199c66c5aae0aba48c5e5f"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/components/editor/ComponentListView.tsx",
+      "claim": "Empty filtered state derives from search/status/placement filters; reset restores active/all. Create CTA is present only for canMutate, while toolbar forwards controlled filters.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/ComponentListView.tsx",
+          "startLine": 39,
+          "endLine": 110,
+          "excerpt": "export function ComponentListView({\n  rows,\n  search,\n  setSearch,\n  status,\n  setStatus,\n  placementFilter,\n  setPlacementFilter,\n  canMutate,\n  onCreate,\n  onOpenDetail,\n  optionGroups,\n}: ComponentListViewProps): ReactNode {\n  const isFilterEmpty =\n    rows.length === 0 &&\n    (Boolean(search.trim()) ||\n      status !== 'active' ||\n      placementFilter !== 'all');\n\n  const clearFilters = () => {\n    setSearch('');\n    setStatus('active');\n    setPlacementFilter('all');\n  };\n\n  return (\n    <>\n      <PageHeader\n        title=\"Componentes\"\n        subtitle=\"Piezas reutilizables de ingeniería para composición de muebles\"\n        icon={<Puzzle size={16} strokeWidth={1.5} />}\n        primaryAction={\n          canMutate ? (\n            <button\n              type=\"button\"\n              className=\"btn btn--primary\"\n              onClick={onCreate}\n              data-testid=\"create-component-btn\"\n            >\n              <Plus size={16} strokeWidth={1.5} aria-hidden /> Nuevo componente\n            </button>\n          ) : undefined\n        }\n      />\n\n      <PageToolbar\n        ariaLabel=\"Buscar y filtrar componentes\"\n        search={\n          <SearchInput\n            value={search}\n            onChange={setSearch}\n            placeholder=\"Buscar por código, nombre o ubicación…\"\n          />\n        }\n        filters={\n          <>\n            <StatusChips\n              value={status}\n              onChange={setStatus}\n              data-testid=\"component-status-chips\"\n            />\n            <label className=\"component-list__placement-filter\">\n              <span className=\"component-list__placement-filter-label\">\n                Ubicación\n              </span>\n              <select\n                value={placementFilter}\n                onChange={(e) => setPlacementFilter(e.target.value)}\n                aria-label=\"Filtrar por ubicación\"\n                data-testid=\"component-placement-filter\"\n              >\n                <option value=\"all\">Todas</option>",
+          "sha256": "1c9f0fb639aac5a537020e8e5b65985d59cc59522eb997e3a1d2e1a50497366e"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/components/editor/PlankEdgeDiagram.tsx",
+      "claim": "SVG edge controls expose pressed state and descriptive labels; both click and Enter/Space call toggle only when enabled. Aspect-fit rendering is illustrative and does not mutate domain geometry.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/components/editor/PlankEdgeDiagram.tsx",
+          "startLine": 105,
+          "endLine": 161,
+          "excerpt": "export function PlankEdgeDiagram({\n  edges,\n  onToggle,\n  lengthMm,\n  widthMm,\n  disabled = false,\n}: PlankEdgeDiagramProps): ReactNode {\n  const rect = plankRect(lengthMm, widthMm);\n  const meta = edgeMetadata(rect.x, rect.y, rect.w, rect.h);\n  const sides = Object.keys(meta) as EdgeSide[];\n\n  const handleKey = (e: KeyboardEvent<SVGPolylineElement>, side: EdgeSide) => {\n    if (e.key === 'Enter' || e.key === ' ') {\n      e.preventDefault();\n      onToggle(side);\n    }\n  };\n\n  return (\n    <div className=\"plank-edge-diagram\" data-testid=\"plank-edge-diagram\">\n      <svg\n        className=\"plank-edge-diagram__svg\"\n        viewBox={`0 0 ${VB_W} ${VB_H}`}\n        role=\"group\"\n        aria-label={`Placa de ${Math.round(lengthMm)} × ${Math.round(widthMm)} mm. Tocá un borde para marcarlo como encintado.`}\n      >\n        {/* Plank fill */}\n        <rect\n          x={rect.x}\n          y={rect.y}\n          width={rect.w}\n          height={rect.h}\n          rx={3}\n          className=\"plank-edge-diagram__plank\"\n        />\n\n        {/* Edges: drawn as polylines with thick stroke; the polyline is the button */}\n        {sides.map((side) => {\n          const m = meta[side];\n          const encintado = edges[side];\n          return (\n            <g key={side}>\n              <polyline\n                points={m.points}\n                className={\n                  'plank-edge-diagram__edge' +\n                  (encintado ? ' plank-edge-diagram__edge--on' : '') +\n                  (disabled ? ' is-disabled' : '')\n                }\n                role=\"button\"\n                tabIndex={disabled ? -1 : 0}\n                aria-pressed={encintado}\n                aria-label={`${m.label} · ${m.sublabel} · ${encintado ? 'encintado' : 'sin canto'}`}\n                data-testid={`edge-${side}`}\n                onClick={() => !disabled && onToggle(side)}\n                onKeyDown={(e) => !disabled && handleKey(e, side)}\n              />",
+          "sha256": "ed321fca589e741dbf905dd28519846da2a3f401c6b85e57d398502541495c83"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/modules/components/ModuleListView.tsx",
+      "claim": "Estimate display distinguishes absent key, null estimate and actual provided numeric value. Category selection toggles current ID while displaying derived count; this fragment does not calculate price or certify recursive hierarchy handling.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/modules/components/ModuleListView.tsx",
+          "startLine": 42,
+          "endLine": 110,
+          "excerpt": "function estimateLabel(\n  moduleEstimates: Readonly<Record<string, number | null>>,\n  moduleId: string,\n): ReactNode {\n  if (!(moduleId in moduleEstimates)) {\n    return (\n      <span className=\"module-card__cost-value module-card__cost-value--muted\">\n        —\n      </span>\n    );\n  }\n  const value = moduleEstimates[moduleId];\n  if (value == null) {\n    return (\n      <span className=\"module-card__cost-value module-card__cost-value--muted\">\n        Sin estimado\n      </span>\n    );\n  }\n  return (\n    <span className=\"module-card__cost-value\">{formatModuleMoney(value)}</span>\n  );\n}\n\nfunction CategoryTree({\n  categories,\n  parentId,\n  depth,\n  categoryFilter,\n  setCategoryFilter,\n  counts,\n}: {\n  readonly categories: readonly ModuleCategory[];\n  readonly parentId: string | undefined;\n  readonly depth: number;\n  readonly categoryFilter: CategoryFilterId;\n  readonly setCategoryFilter: Dispatch<SetStateAction<CategoryFilterId>>;\n  readonly counts: ReadonlyMap<string, number>;\n}): ReactNode {\n  const nodes = childrenOf(categories, parentId);\n  if (nodes.length === 0) return null;\n  return (\n    <ul\n      className={\n        depth === 0\n          ? 'module-category-tree__list'\n          : 'module-category-tree__list module-category-tree__list--nested'\n      }\n    >\n      {nodes.map((node) => {\n        const active = categoryFilter === node.id;\n        const count = counts.get(node.id) ?? 0;\n        return (\n          <li key={node.id}>\n            <button\n              type=\"button\"\n              className={\n                active\n                  ? 'module-category-tree__item module-category-tree__item--active'\n                  : 'module-category-tree__item'\n              }\n              onClick={() =>\n                setCategoryFilter((prev) => (prev === node.id ? null : node.id))\n              }\n              data-testid={`category-filter-${node.id}`}\n            >\n              <span className=\"module-category-tree__label\">{node.name}</span>\n              <span\n                className=\"module-category-tree__count\"",
+          "sha256": "c4e1245c36cc37cb84895ecd9c8b95361d44bde3f239fd87bdb89b85f88d203a"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/structures/components/StructureListView.tsx",
+      "claim": "Create is permission-prop gated; empty/no-results branches have different text and only true empty offers create. Cards display supplied exterior dimensions and component/preset counts, not resolved manufacturing geometry.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/structures/components/StructureListView.tsx",
+          "startLine": 40,
+          "endLine": 110,
+          "excerpt": "  const isFilterEmpty = rows.length === 0 && (Boolean(search.trim()) || status !== 'active');\n\n  return (\n    <>\n      <PageHeader\n        title=\"Estructuras\"\n        subtitle=\"Cuerpos de ingeniería reutilizables para el taller\"\n        icon={<LayoutGrid size={16} strokeWidth={1.5} />}\n        primaryAction={\n          canMutate ? (\n            <button\n              type=\"button\"\n              className=\"btn btn--primary\"\n              onClick={onCreate}\n              data-testid=\"create-structure-btn\"\n            >\n              <Plus size={16} strokeWidth={1.5} aria-hidden /> Nueva estructura\n            </button>\n          ) : undefined\n        }\n      />\n\n      <PageToolbar\n        ariaLabel=\"Buscar y filtrar estructuras\"\n        search={\n          <SearchInput\n            value={search}\n            onChange={setSearch}\n            placeholder=\"Buscar por código o nombre…\"\n            data-testid=\"structure-search\"\n          />\n        }\n        filters={\n          <StatusChips\n            value={status}\n            onChange={setStatus}\n            data-testid=\"structure-status-chips\"\n          />\n        }\n      />\n\n      {rows.length === 0 ? (\n        <EmptyState\n          icon={LayoutGrid}\n          title={\n            isFilterEmpty ? 'No se encontraron estructuras' : 'Sin estructuras'\n          }\n          description={\n            isFilterEmpty\n              ? 'Probá cambiando el texto de búsqueda o el filtro de estado.'\n              : 'Comenzá agregando una estructura de ingeniería reutilizable.'\n          }\n          actionLabel={\n            canMutate && !isFilterEmpty ? 'Crear estructura' : undefined\n          }\n          onAction={canMutate && !isFilterEmpty ? onCreate : undefined}\n          variant={isFilterEmpty ? 'no-results' : 'empty'}\n        />\n      ) : (\n        <ul className=\"structure-cards-grid\" data-testid=\"structure-list\">\n          {rows.map((item) => {\n            const dims =\n              item.externalDims &&\n              (item.externalDims.width > 0 ||\n                item.externalDims.height > 0 ||\n                item.externalDims.depth > 0)\n                ? `${item.externalDims.width} × ${item.externalDims.height} × ${item.externalDims.depth} mm`\n                : '—';\n            const presetCount = item.presets?.length ?? 0;\n            const componentCount = item.components?.length ?? 0;\n",
+          "sha256": "91bff51b1a1a421029ef20a352ff2a6a0d26d7000c63626eda38f22650da8b63"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/KitchenPlanPanel.tsx",
+      "claim": "Legacy plan prunes layout against project items, resolves wall frames/warnings and identifies placed versus unplaced by item ID plus instance index; commits prune before callback. Full interactive commands and modern multi-space parity remain outside this range.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/KitchenPlanPanel.tsx",
+          "startLine": 65,
+          "endLine": 94,
+          "excerpt": "export function KitchenPlanPanel({\n  project,\n  modules,\n  canEdit,\n  onChange,\n}: KitchenPlanPanelProps): ReactNode {\n  const layout = useMemo(\n    () => pruneKitchenLayout(project.kitchenLayout ?? emptyKitchenLayout(), project.items),\n    [project.kitchenLayout, project.items],\n  );\n  const footprints = useMemo(\n    () => allFootprints(project, modules),\n    [project, modules],\n  );\n  const frames = useMemo(() => resolveWallFrames(layout.walls), [layout.walls]);\n  const warnings = useMemo(\n    () => kitchenLayoutWarnings(layout, project.items, footprints),\n    [layout, project.items, footprints],\n  );\n\n  const placedKeys = new Set(\n    layout.placements.map((p) => `${p.itemId}#${p.instanceIndex}`),\n  );\n  const unplaced = footprints.filter(\n    (f) => !placedKeys.has(`${f.itemId}#${f.instanceIndex}`),\n  );\n\n  const commit = (next: ProjectKitchenLayout) => {\n    onChange(pruneKitchenLayout(next, project.items));\n  };",
+          "sha256": "ad3196c562d2e8da86668775c02385740861428d2320b3a6d6ed9b8193a81c7b"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/PresentationOptionsSlide.tsx",
+      "claim": "Empty items/groups show no-options state. Selected options inherit item choice then project choice; dimension text resolves preset/default/exterior only, not item.customDims. Real custom-size presentation correctness remains unverified.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/PresentationOptionsSlide.tsx",
+          "startLine": 28,
+          "endLine": 95,
+          "excerpt": "export function PresentationOptionsSlide({\n  project,\n  modules,\n  optionGroups,\n  catalog,\n  resolveMediaUrl,\n}: PresentationOptionsSlideProps): ReactNode {\n  if (project.items.length === 0 || optionGroups.length === 0) {\n    return (\n      <div\n        className=\"presentation-options presentation-options--empty\"\n        data-testid=\"presentation-options-slide\"\n      >\n        <p className=\"presentation-options__empty\">Sin opciones configuradas.</p>\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"presentation-options\" data-testid=\"presentation-options-slide\">\n      <h2 className=\"project-presentation__section-title\">Opciones seleccionadas</h2>\n      <p className=\"project-presentation__hint project-presentation__hint--flush\">\n        Cada mueble incluye los materiales, cantos y herrajes elegidos para esta cotización.\n      </p>\n\n      <div className=\"presentation-options__grid\">\n        {project.items.map((item) => {\n          const mod = modules.find((m) => m.id === item.moduleId);\n          let measures = '';\n          if (mod) {\n            try {\n              const preset = resolveModuleMeasurePreset(\n                mod,\n                item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,\n              );\n              if (preset) {\n                measures = `${preset.width} × ${preset.height} × ${preset.depth} mm`;\n              } else if (mod.externalDims) {\n                measures = `${mod.externalDims.width} × ${mod.externalDims.height} × ${mod.externalDims.depth} mm`;\n              }\n            } catch {\n              if (mod.externalDims) {\n                measures = `${mod.externalDims.width} × ${mod.externalDims.height} × ${mod.externalDims.depth} mm`;\n              }\n            }\n          }\n\n          const title = mod ? `${mod.code} — ${mod.name}` : 'Mueble';\n\n          return (\n            <div key={item.id} className=\"presentation-options__item\">\n              <div className=\"presentation-options__item-header\">\n                <h3 className=\"presentation-options__item-title\">\n                  {item.quantity}× {title}\n                </h3>\n                {measures ? (\n                  <span className=\"project-presentation__item-measures\">{measures}</span>\n                ) : null}\n              </div>\n\n              <ul className=\"presentation-options__chips\">\n                {optionGroups.map((group) => {\n                  const effectiveChoice =\n                    item.optionChoices[group.code]?.trim() ||\n                    project.projectLevelChoices?.[group.code]?.trim() ||\n                    '';\n                  if (!effectiveChoice) return null;\n                  const label = optionLabelForId(effectiveChoice, group, catalog);",
+          "sha256": "c35e5d6323eafa69a6045c7eaba98332e62b9c6460c4472c3bcf71214a3bd9b1"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/ProjectsListView.tsx",
+      "claim": "List wrapper gates create and template commands by canMutate, template presence and capability callbacks. Filtered data/true-empty flags are supplied; this wrapper does not authorize or persist projects.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/ProjectsListView.tsx",
+          "startLine": 53,
+          "endLine": 105,
+          "excerpt": "export function ProjectsListView({\n  projects,\n  filtered,\n  customers,\n  projectTemplates,\n  search,\n  statusFilter,\n  isTrulyEmpty,\n  isFilterEmpty,\n  canMutate,\n  hasCreateFromTemplate,\n  hasDeleteTemplate,\n  estimateLabel,\n  onSearchChange,\n  onStatusFilterChange,\n  onClearFilters,\n  onNewProject,\n  onFromTemplate,\n  onManageTemplates,\n  onOpenProject,\n}: ProjectsListViewProps): ReactNode {\n  const hasTemplates =\n    projectTemplates && projectTemplates.length > 0;\n  const showTemplateSecondary =\n    Boolean(canMutate && hasTemplates && hasCreateFromTemplate);\n\n  return (\n    <>\n      <PageHeader\n        title=\"Cotizaciones\"\n        primaryAction={\n          canMutate ? (\n            <button\n              type=\"button\"\n              className=\"btn btn--primary\"\n              onClick={onNewProject}\n            >\n              <Plus size={16} strokeWidth={1.5} aria-hidden />\n              Nueva cotización\n            </button>\n          ) : undefined\n        }\n        overflowActions={\n          canMutate && hasTemplates\n            ? [\n                ...(hasCreateFromTemplate\n                  ? [\n                      {\n                        id: 'from-template',\n                        label: 'Desde plantilla',\n                        onSelect: onFromTemplate,\n                      },\n                    ]",
+          "sha256": "8cc757f6bbb578771a4105ce4f226ecde013bdba2e91d9a739e7f20836ce3797"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/projects/components/library/ModuleLibraryPanel.tsx",
+      "claim": "Library navigation reads local scope/path/search with type filtering and safe fallback after malformed storage. Representative module size resolves preset, then exterior, then fixed fallback; this is placement-preview context, not actual resolved BOM.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/projects/components/library/ModuleLibraryPanel.tsx",
+          "startLine": 46,
+          "endLine": 107,
+          "excerpt": "function scopeId(scope: LibraryScope): string {\n  if (scope.kind === 'catalog') return 'catalog';\n  return `collection:${scope.collection}`;\n}\n\nfunction scopeFromId(value: string): LibraryScope {\n  if (value === 'collection:favorites') return { kind: 'collection', collection: 'favorites' };\n  if (value === 'collection:recent') return { kind: 'collection', collection: 'recent' };\n  return { kind: 'catalog' };\n}\n\nconst COLLECTION_LABELS: Record<LibraryCollection, string> = {\n  favorites: 'Favoritos',\n  recent: 'Recientes',\n};\n\nfunction readNavigation(): LibraryNavigation {\n  try {\n    const raw = globalThis.localStorage?.getItem(NAVIGATION_STORAGE_KEY);\n    if (!raw) return { scope: { kind: 'catalog' }, path: [], search: '' };\n    const parsed = JSON.parse(raw) as {\n      scope?: unknown;\n      path?: unknown;\n      search?: unknown;\n    };\n    return {\n      scope: typeof parsed.scope === 'string' ? scopeFromId(parsed.scope) : { kind: 'catalog' },\n      path: Array.isArray(parsed.path)\n        ? parsed.path.filter((id): id is string => typeof id === 'string')\n        : [],\n      search: typeof parsed.search === 'string' ? parsed.search : '',\n    };\n  } catch {\n    return { scope: { kind: 'catalog' }, path: [], search: '' };\n  }\n}\n\n/** Dimensiones representativas del módulo (preset default → exterior → 600×720×560). */\nexport function moduleDefaultDims(mod: Module): {\n  width: number;\n  height: number;\n  depth: number;\n} {\n  try {\n    const preset = resolveModuleMeasurePreset(\n      mod,\n      defaultMeasurePresetId(mod) || undefined,\n    );\n    if (preset) {\n      return { width: preset.width, height: preset.height, depth: preset.depth };\n    }\n  } catch {\n    /* fall through */\n  }\n  if (mod.externalDims) {\n    return {\n      width: mod.externalDims.width,\n      height: mod.externalDims.height,\n      depth: mod.externalDims.depth,\n    };\n  }\n  return { width: 600, height: 720, depth: 560 };",
+          "sha256": "146252fcc1d3e44df9ed97533d5c3931642e30597a1169064362315bec6e27ea"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/structures/components/StructureRevisionBadge.tsx",
+      "claim": "Explicit numeric revision wins, otherwise structure revision defaults to one; pinned styling and suffix are presentational. Badge does not verify history existence or select an immutable snapshot.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/structures/components/StructureRevisionBadge.tsx",
+          "startLine": 29,
+          "endLine": 56,
+          "excerpt": "function resolveRevision(\n  structure: Structure | undefined,\n  revision: number | undefined,\n): number {\n  if (typeof revision === 'number') return revision;\n  if (structure) return structure.revision ?? 1;\n  return 1;\n}\n\nexport function StructureRevisionBadge({\n  structure,\n  revision,\n  variant = 'default',\n  suffix,\n  className,\n  testId,\n}: StructureRevisionBadgeProps): ReactNode {\n  const value = resolveRevision(structure, revision);\n  const classes = ['structure-revision-badge'];\n  if (variant === 'pinned') classes.push('structure-revision-badge--pinned');\n  if (className) classes.push(className);\n  return (\n    <span className={classes.join(' ')} data-testid={testId}>\n      {`Rev ${value}`}\n      {suffix ? ` ${suffix}` : ''}\n    </span>\n  );\n}",
+          "sha256": "a45ce2afdea489ad688807d1625d95ac8c2e205a82bb97f85af985e67a4d63f7"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/structures/components/agregados/StructureAgregadoFormulaLegend.tsx",
+      "claim": "Local disclosure exposes formula-variable help with aria-expanded. W/H/D/B and fixed-thickness example text are documentation, not guaranteed formulas for every material thickness.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/structures/components/agregados/StructureAgregadoFormulaLegend.tsx",
+          "startLine": 8,
+          "endLine": 45,
+          "excerpt": "export function StructureAgregadoFormulaLegend(): ReactNode {\n  const [open, setOpen] = useState(false);\n  return (\n    <div\n      className=\"structure-editor__formula-legend\"\n      data-testid=\"formula-legend\"\n    >\n      <button\n        type=\"button\"\n        className=\"structure-editor__formula-legend-toggle\"\n        onClick={() => setOpen((prev) => !prev)}\n        aria-expanded={open}\n      >\n        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}\n        <span>Variables de fórmulas (W, H, D, B)</span>\n      </button>\n      {open ? (\n        <div className=\"structure-editor__formula-legend-body\">\n          <p>\n            Podés usar números exactos en milímetros (ej. <code>500</code>) o\n            fórmulas paramétricas con estas variables:\n          </p>\n          <ul>\n            <li><code>W</code> = Ancho exterior del mueble / estructura.</li>\n            <li><code>H</code> = Alto exterior del mueble / estructura.</li>\n            <li><code>D</code> = Profundidad exterior del mueble.</li>\n            <li><code>B</code> = Alto de zoclo / patas (mm).</li>\n          </ul>\n          <p className=\"structure-editor__formula-legend-example\">\n            Ejemplos: <code>W - 36</code> (para puertas con laterales de 18mm),{' '}\n            <code>H - B - 36</code> (alto util sobre zoclo), <code>B + 18</code>{' '}\n            (elevación X/Z).\n          </p>\n        </div>\n      ) : null}\n    </div>\n  );\n}",
+          "sha256": "c03098e09abd8b60a2f43a45edc237b0dff440c51d969b11bc99929ab53d035b"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    },
+    {
+      "file": "packages/ui/src/structures/components/agregados/StructureAgregadoCard.tsx",
+      "claim": "Card derives named template and local item key (ID else draft index), summarizes dimension/position overrides and drives controlled expand state with linked body ID. Deletion and nested override commands remain outside this fragment.",
+      "scope": "Named component control-flow fragment only; no full acceptance or runtime proof",
+      "evidence": [
+        {
+          "file": "packages/ui/src/structures/components/agregados/StructureAgregadoCard.tsx",
+          "startLine": 33,
+          "endLine": 95,
+          "excerpt": "export function StructureAgregadoCard({\n  idx,\n  inst,\n  catalogAgregados,\n  catalogHardware = [],\n  optionGroups = [],\n  isOpen,\n  defaultOpen,\n  isPendingRemove,\n  onToggleExpand,\n  onRemove,\n  onUpdate,\n}: StructureAgregadoCardProps): ReactNode {\n  const template = catalogAgregados.find((a) => a.id === inst.agregadoId);\n  const itemKey = inst.id || `agr-${idx}`;\n\n  const hasDimW = Boolean(inst.dimensions?.widthFormula?.trim());\n  const hasDimH = Boolean(inst.dimensions?.heightFormula?.trim());\n  const hasDimD = Boolean(inst.dimensions?.depthFormula?.trim());\n  const hasDimensions = hasDimW || hasDimH || hasDimD;\n\n  const hasPosX = Boolean(inst.position?.xFormula?.trim());\n  const hasPosY = Boolean(inst.position?.yFormula?.trim());\n  const hasPosZ = Boolean(inst.position?.zFormula?.trim());\n  const hasPosition = hasPosX || hasPosY || hasPosZ;\n\n  const overrideCount = Object.keys(inst.optionOverrides ?? {}).length;\n\n  return (\n    <div\n      className={[\n        'structure-editor__agregado-card',\n        !isOpen ? 'structure-editor__agregado-card--collapsed' : '',\n        isPendingRemove ? 'structure-editor__agregado-card--removing' : '',\n      ]\n        .filter(Boolean)\n        .join(' ')}\n      data-testid={`structure-agregado-item-${idx}`}\n    >\n      <div className=\"structure-editor__agregado-header\">\n        <button\n          type=\"button\"\n          className=\"structure-editor__agregado-toggle-btn\"\n          onClick={() => onToggleExpand(itemKey, defaultOpen)}\n          aria-expanded={isOpen}\n          aria-controls={`structure-agr-body-${idx}`}\n          data-testid={`structure-agregado-toggle-${idx}`}\n        >\n          {isOpen ? (\n            <ChevronDown size={16} strokeWidth={1.5} aria-hidden />\n          ) : (\n            <ChevronRight size={16} strokeWidth={1.5} aria-hidden />\n          )}\n          <span className=\"structure-editor__agregado-code\">\n            {template?.code ?? 'AGR'}\n          </span>\n          <strong className=\"structure-editor__agregado-name\">\n            {inst.name || template?.name || 'Agregado'}\n          </strong>\n\n          {!isOpen && (\n            <div\n              className=\"structure-editor__agregado-summary\"",
+          "sha256": "f8307a8b7e373ea5f98d7956c9ff7c9dd8ee3318824f2e3be7cc1839ef72ac14"
+        }
+      ],
+      "missingProof": "Verify caller-owned update/persistence and denied/failed/dirty/keyboard paths; downstream BOM/revision/price semantics are not established by this view fragment.",
+      "runtimeStatus": "NOT_EXECUTED"
+    }
+  ],
+  "scope": "Read-only exact source fragments"
+}

@@ -1,0 +1,180 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales" [active]:
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: CATÁLOGOS
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Catálogo de materiales":
+    - heading "Materiales" [level=2]
+    - paragraph: Tableros del catálogo (melamina, MDF, etc.)
+    - generic "Acciones de Materiales":
+      - button "Nuevo material":
+        - text: Nuevo material
+    - complementary "Filtro por categorías":
+      - heading "Categorías" [level=3]
+      - button "Editar categorías":
+      - button "Todas 3":
+        - generic: Todas
+        - generic: "3"
+      - button "Sin categoría 0":
+        - generic: Sin categoría
+        - generic: "0"
+      - list:
+        - button "Melamina 2":
+          - generic: Melamina
+          - generic: "2"
+        - list:
+          - button "Blancos 1":
+            - generic: Blancos
+            - generic: "1"
+          - button "Maderados 1":
+            - generic: Maderados
+            - generic: "1"
+        - button "MDF 1":
+          - generic: MDF
+          - generic: "1"
+    - generic "Buscar y filtrar materiales":
+      - searchbox "Buscar materiales"
+      - group "Filtrar por estado":
+        - button "Todos"
+        - button "Activos" [pressed]
+        - button "Inactivos"
+    - table:
+      - rowgroup:
+        - row "Detalle Foto Color Código Nombre Espesor (mm) Medidas (mm) Precio Hoja Merma (%) Costo/m² Estado Acciones":
+          - columnheader "Detalle":
+            - generic: Detalle
+          - columnheader "Foto"
+          - columnheader "Color"
+          - columnheader "Código"
+          - columnheader "Nombre"
+          - columnheader "Espesor (mm)"
+          - columnheader "Medidas (mm)"
+          - columnheader "Precio Hoja"
+          - columnheader "Merma (%)"
+          - columnheader "Costo/m²"
+          - columnheader "Estado"
+          - columnheader "Acciones":
+            - generic: Acciones
+      - rowgroup:
+        - row "#F5F5F0 TAB-ARA-BLA ARAUCO BLANCO 15 2440 × 1830 (4.47 m²) $714.43 MXN 0% $160.00 MXN Activo Editar TAB-ARA-BLA Desactivar TAB-ARA-BLA":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "#F5F5F0":
+            - img "#F5F5F0"
+          - cell "TAB-ARA-BLA"
+          - cell "ARAUCO BLANCO"
+          - cell "15"
+          - cell "2440 × 1830 (4.47 m²)"
+          - cell "$714.43 MXN"
+          - cell "0%"
+          - cell "$160.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar TAB-ARA-BLA Desactivar TAB-ARA-BLA":
+            - button "Editar TAB-ARA-BLA": Editar
+            - button "Desactivar TAB-ARA-BLA": Desactivar
+        - row "#C4A574 TAB-MAD-FRE MADERADO FRENTE 18 2440 × 1830 (4.47 m²) $1,294.91 MXN 0% $290.00 MXN Activo Editar TAB-MAD-FRE Desactivar TAB-MAD-FRE":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "#C4A574":
+            - img "#C4A574"
+          - cell "TAB-MAD-FRE"
+          - cell "MADERADO FRENTE"
+          - cell "18"
+          - cell "2440 × 1830 (4.47 m²)"
+          - cell "$1,294.91 MXN"
+          - cell "0%"
+          - cell "$290.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar TAB-MAD-FRE Desactivar TAB-MAD-FRE":
+            - button "Editar TAB-MAD-FRE": Editar
+            - button "Desactivar TAB-MAD-FRE": Desactivar
+        - row "#8B7355 TAB-MDF-3 MDF 3MM 3 2440 × 1830 (4.47 m²) $334.89 MXN 0% $75.00 MXN Activo Editar TAB-MDF-3 Desactivar TAB-MDF-3":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "#8B7355":
+            - img "#8B7355"
+          - cell "TAB-MDF-3"
+          - cell "MDF 3MM"
+          - cell "3"
+          - cell "2440 × 1830 (4.47 m²)"
+          - cell "$334.89 MXN"
+          - cell "0%"
+          - cell "$75.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar TAB-MDF-3 Desactivar TAB-MDF-3":
+            - button "Editar TAB-MDF-3": Editar
+            - button "Desactivar TAB-MDF-3": Desactivar
+- generic "Notificaciones"

@@ -1,0 +1,422 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: CATÁLOGOS
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Catálogo de herrajes":
+    - heading "Herrajes" [level=2]
+    - paragraph: Bisagras, correderas y demás del catálogo
+    - generic "Acciones de Herrajes":
+      - button "Nuevo herraje":
+        - text: Nuevo herraje
+    - generic "Buscar y filtrar herrajes":
+      - searchbox "Buscar herrajes"
+      - group "Filtrar por estado":
+        - button "Todos"
+        - button "Activos" [pressed]
+        - button "Inactivos"
+    - table:
+      - rowgroup:
+        - row "Detalle Foto Código Nombre Unidad Costo unit. Estado Acciones":
+          - columnheader "Detalle":
+            - generic: Detalle
+          - columnheader "Foto"
+          - columnheader "Código"
+          - columnheader "Nombre"
+          - columnheader "Unidad"
+          - columnheader "Costo unit."
+          - columnheader "Estado"
+          - columnheader "Acciones":
+            - generic: Acciones
+      - rowgroup:
+        - row "HER-BIS-CL Bisagra Cierre Lento Pieza $35.00 MXN Activo Editar HER-BIS-CL Desactivar HER-BIS-CL":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-BIS-CL"
+          - cell "Bisagra Cierre Lento"
+          - cell "Pieza"
+          - cell "$35.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-BIS-CL Desactivar HER-BIS-CL":
+            - button "Editar HER-BIS-CL": Editar
+            - button "Desactivar HER-BIS-CL": Desactivar
+        - row "HER-JAL-INOX Jaladera Acero Inox Pieza $45.00 MXN Activo Editar HER-JAL-INOX Desactivar HER-JAL-INOX":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-JAL-INOX"
+          - cell "Jaladera Acero Inox"
+          - cell "Pieza"
+          - cell "$45.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-JAL-INOX Desactivar HER-JAL-INOX":
+            - button "Editar HER-JAL-INOX": Editar
+            - button "Desactivar HER-JAL-INOX": Desactivar
+        - row "HER-PATA-REG Pata Regulable Plastica Pieza $15.00 MXN Activo Editar HER-PATA-REG Desactivar HER-PATA-REG":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-PATA-REG"
+          - cell "Pata Regulable Plastica"
+          - cell "Pieza"
+          - cell "$15.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-PATA-REG Desactivar HER-PATA-REG":
+            - button "Editar HER-PATA-REG": Editar
+            - button "Desactivar HER-PATA-REG": Desactivar
+        - row "HER-TOR-4X50 Tornillo 4x50 mm Pieza $0.50 MXN Activo Editar HER-TOR-4X50 Desactivar HER-TOR-4X50":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-TOR-4X50"
+          - cell "Tornillo 4x50 mm"
+          - cell "Pieza"
+          - cell "$0.50 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-TOR-4X50 Desactivar HER-TOR-4X50":
+            - button "Editar HER-TOR-4X50": Editar
+            - button "Desactivar HER-TOR-4X50": Desactivar
+        - row "HER-CORR-500 Corredera Telescópica 500mm Juego $120.00 MXN Activo Editar HER-CORR-500 Desactivar HER-CORR-500":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-CORR-500"
+          - cell "Corredera Telescópica 500mm"
+          - cell "Juego"
+          - cell "$120.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-CORR-500 Desactivar HER-CORR-500":
+            - button "Editar HER-CORR-500": Editar
+            - button "Desactivar HER-CORR-500": Desactivar
+        - row "HER-SOP-ENT Soporte de Entrepaño Pieza $2.00 MXN Activo Editar HER-SOP-ENT Desactivar HER-SOP-ENT":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-SOP-ENT"
+          - cell "Soporte de Entrepaño"
+          - cell "Pieza"
+          - cell "$2.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-SOP-ENT Desactivar HER-SOP-ENT":
+            - button "Editar HER-SOP-ENT": Editar
+            - button "Desactivar HER-SOP-ENT": Desactivar
+        - row "HER-TAQ-8X30 Taquete Madera 8x30 mm Pieza $0.80 MXN Activo Editar HER-TAQ-8X30 Desactivar HER-TAQ-8X30":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-TAQ-8X30"
+          - cell "Taquete Madera 8x30 mm"
+          - cell "Pieza"
+          - cell "$0.80 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-TAQ-8X30 Desactivar HER-TAQ-8X30":
+            - button "Editar HER-TAQ-8X30": Editar
+            - button "Desactivar HER-TAQ-8X30": Desactivar
+        - row "HER-MIN-15 Minifix 15 mm (juego) Juego $4.50 MXN Activo Editar HER-MIN-15 Desactivar HER-MIN-15":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-MIN-15"
+          - cell "Minifix 15 mm (juego)"
+          - cell "Juego"
+          - cell "$4.50 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-MIN-15 Desactivar HER-MIN-15":
+            - button "Editar HER-MIN-15": Editar
+            - button "Desactivar HER-MIN-15": Desactivar
+        - row "HER-PLACA-BIS Placa Base Bisagra Pieza $6.00 MXN Activo Editar HER-PLACA-BIS Desactivar HER-PLACA-BIS":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-PLACA-BIS"
+          - cell "Placa Base Bisagra"
+          - cell "Pieza"
+          - cell "$6.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-PLACA-BIS Desactivar HER-PLACA-BIS":
+            - button "Editar HER-PLACA-BIS": Editar
+            - button "Desactivar HER-PLACA-BIS": Desactivar
+        - row "HER-ZOC-ALU Zoclo perfil aluminio natural Metro $18.00 MXN Activo Editar HER-ZOC-ALU Desactivar HER-ZOC-ALU":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-ZOC-ALU"
+          - cell "Zoclo perfil aluminio natural"
+          - cell "Metro"
+          - cell "$18.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-ZOC-ALU Desactivar HER-ZOC-ALU":
+            - button "Editar HER-ZOC-ALU": Editar
+            - button "Desactivar HER-ZOC-ALU": Desactivar
+        - row "HER-ZOC-BRO Zoclo perfil bronce Metro $22.00 MXN Activo Editar HER-ZOC-BRO Desactivar HER-ZOC-BRO":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-ZOC-BRO"
+          - cell "Zoclo perfil bronce"
+          - cell "Metro"
+          - cell "$22.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-ZOC-BRO Desactivar HER-ZOC-BRO":
+            - button "Editar HER-ZOC-BRO": Editar
+            - button "Desactivar HER-ZOC-BRO": Desactivar
+        - row "HER-ZOC-NEG Zoclo perfil negro Metro $22.00 MXN Activo Editar HER-ZOC-NEG Desactivar HER-ZOC-NEG":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-ZOC-NEG"
+          - cell "Zoclo perfil negro"
+          - cell "Metro"
+          - cell "$22.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-ZOC-NEG Desactivar HER-ZOC-NEG":
+            - button "Editar HER-ZOC-NEG": Editar
+            - button "Desactivar HER-ZOC-NEG": Desactivar
+- generic "Notificaciones"
+- button "Cerrar diálogo"
+- dialog "Editar herraje":
+  - banner:
+    - heading "Editar herraje" [level=2]
+    - button "Cerrar" [active]:
+  - group "Identidad":
+    - generic: Identidad
+    - generic: Código
+    - textbox "Código": HER-BIS-CL
+    - generic: Nombre
+    - textbox "Nombre": Bisagra Cierre Lento
+    - generic: Foto
+    - text: Sin foto
+    - paragraph: Sin foto
+  - group "Compra":
+    - generic: Compra
+    - generic: Unidad
+    - combobox "Unidad":
+      - option "Pieza" [selected]
+      - option "Juego"
+      - option "Metro"
+    - generic: Costo unitario
+    - spinbutton "Costo unitario": "35"
+    - generic: Empaque (misma unidad)
+    - spinbutton "Empaque (misma unidad)"
+    - paragraph: La lista de compra redondea el consumo hacia arriba a paquetes (ej. zoclo en barras de 4 m).
+    - generic: Notas
+    - textbox "Notas"
+  - button "Vista 3D Configurado" [expanded]:
+    - generic: Vista 3D
+    - generic: Configurado
+  - generic: Forma (3D)
+  - combobox "Forma (3D)":
+    - option "— Sin forma —"
+    - option "Tirador (perilla)"
+    - option "Tirador (barra)"
+    - option "Tirador (copa)"
+    - option "Bisagra" [selected]
+    - option "Corredera"
+    - option "Riel"
+    - option "Pata"
+  - generic: Acabado
+  - combobox "Acabado":
+    - option "— Personalizado —" [selected]
+    - option "Cromado"
+    - option "Negro mate"
+    - option "Bronce"
+    - option "Cepillado"
+    - option "Oro"
+  - generic: Color
+  - textbox "Color": "#9aa0a6"
+  - generic "#9aa0a6"
+  - generic: Acabado · Cuerpo
+  - combobox "Acabado · Cuerpo":
+    - option "Igual al acabado general" [selected]
+    - option "Cromado"
+    - option "Negro mate"
+    - option "Bronce"
+    - option "Cepillado"
+    - option "Oro"
+  - generic: Acabado · Base
+  - combobox "Acabado · Base":
+    - option "Igual al acabado general" [selected]
+    - option "Cromado"
+    - option "Negro mate"
+    - option "Bronce"
+    - option "Cepillado"
+    - option "Oro"
+  - paragraph: Cada parte puede llevar su propio acabado (F080). Vacío = usa el acabado general de arriba.
+  - button "Maquinado CNC 1 parte · 3 operaciones" [expanded]:
+    - generic: Maquinado CNC
+    - generic: 1 parte · 3 operaciones
+  - paragraph: "Huella de perforación del herraje: cada parte (taza, cazuela, placa…) declara sus operaciones en mm, medidas desde el punto donde se ancla el herraje. El tornillo de un minifix o la placa de una bisagra van como partes separadas."
+  - generic: Rol de la parte
+  - textbox "Rol de la parte":
+    - /placeholder: ej. taza, cazuela, placa, perno
+    - text: cup
+  - button "Quitar parte cup":
+    - text: Quitar
+  - generic: Taza 35 mm
+  - button "Quitar operación 1 de cup":
+  - generic: Tipo
+  - combobox "Tipo":
+    - option "Taladro ciego" [selected]
+    - option "Taladro pasante"
+    - option "Escareado"
+    - option "Piloto de tornillo"
+  - generic: Diámetro (mm)
+  - spinbutton "Diámetro (mm)": "35"
+  - generic: Profundidad (mm)
+  - spinbutton "Profundidad (mm)": "12.5"
+  - generic: Offset X (mm)
+  - spinbutton "Offset X (mm)": "0"
+  - generic: Offset Y (mm)
+  - spinbutton "Offset Y (mm)": "0"
+  - generic: Cara de entrada
+  - combobox "Cara de entrada":
+    - option "Cara del anclaje" [selected]
+    - option "Cara opuesta"
+  - generic: Nombre (opcional)
+  - textbox "Nombre (opcional)":
+    - /placeholder: ej. Taza 35 mm
+    - text: Taza 35 mm
+  - generic: Fijación taza 1
+  - button "Quitar operación 2 de cup":
+  - generic: Tipo
+  - combobox "Tipo":
+    - option "Taladro ciego"
+    - option "Taladro pasante"
+    - option "Escareado"
+    - option "Piloto de tornillo" [selected]
+  - generic: Diámetro (mm)
+  - spinbutton "Diámetro (mm)": "5"
+  - generic: Profundidad (mm)
+  - spinbutton "Profundidad (mm)": "10"
+  - generic: Offset X (mm)
+  - spinbutton "Offset X (mm)": "0"
+  - generic: Offset Y (mm)
+  - spinbutton "Offset Y (mm)": "-22.5"
+  - generic: Cara de entrada
+  - combobox "Cara de entrada":
+    - option "Cara del anclaje" [selected]
+    - option "Cara opuesta"
+  - generic: Nombre (opcional)
+  - textbox "Nombre (opcional)":
+    - /placeholder: ej. Taza 35 mm
+    - text: Fijación taza 1
+  - generic: Fijación taza 2
+  - button "Quitar operación 3 de cup":
+  - generic: Tipo
+  - combobox "Tipo":
+    - option "Taladro ciego"
+    - option "Taladro pasante"
+    - option "Escareado"
+    - option "Piloto de tornillo" [selected]
+  - generic: Diámetro (mm)
+  - spinbutton "Diámetro (mm)": "5"
+  - generic: Profundidad (mm)
+  - spinbutton "Profundidad (mm)": "10"
+  - generic: Offset X (mm)
+  - spinbutton "Offset X (mm)": "0"
+  - generic: Offset Y (mm)
+  - spinbutton "Offset Y (mm)": "22.5"
+  - generic: Cara de entrada
+  - combobox "Cara de entrada":
+    - option "Cara del anclaje" [selected]
+    - option "Cara opuesta"
+  - generic: Nombre (opcional)
+  - textbox "Nombre (opcional)":
+    - /placeholder: ej. Taza 35 mm
+    - text: Fijación taza 2
+  - button "Operación":
+    - text: Operación
+  - button "Parte":
+    - text: Parte
+  - contentinfo:
+    - button "Cancelar"
+    - button "Guardar"

@@ -1,0 +1,28 @@
+{
+  "proof": "PICKING_PARTIAL_FAILURE",
+  "initialBalance": 10,
+  "afterFirstFailure": 8,
+  "afterRetryFailure": 6,
+  "pickingStatus": "pendiente",
+  "pickingPersistenceAttempts": 2,
+  "movements": [
+    {
+      "kind": "tableros",
+      "materialId": "audit-board",
+      "quantity": 2,
+      "type": "despacho",
+      "projectId": "audit-project",
+      "id": "audit-1",
+      "delta": -2
+    },
+    {
+      "kind": "tableros",
+      "materialId": "audit-board",
+      "quantity": 2,
+      "type": "despacho",
+      "projectId": "audit-project",
+      "id": "audit-2",
+      "delta": -2
+    }
+  ]
+}

@@ -1,0 +1,1160 @@
+{
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "method": "Read-only manual semantic review of30 exact secondary files; evidence names bounded behavior, no whole feature completion",
+  "features": [
+    {
+      "id": "WEB-VIS-01",
+      "file": "packages/ui/src/agregados/editor/AgregadoDetailView.tsx",
+      "claim": "Read-only composition separates bulk hardware from positioned overrides; edit/delete rendered only canMutate, callbacks own persistence. Header counts entries, not multiplied physical quantities.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoDetailView.tsx",
+          "startLine": 42,
+          "endLine": 56,
+          "excerpt": "  const compLookup = new Map(catalogComponents.map((c) => [c.id, c]));\n  const hwLookup = new Map(catalogHardware.map((h) => [h.id, h]));\n\n  const bulkLines = a.hardwareLines ?? [];\n  const placementItems = (a.components ?? []).flatMap((inst, compIdx) => {\n    const comp = compLookup.get(inst.componentId);\n    const compName = comp ? `${comp.code} — ${comp.name}` : inst.componentId;\n    return (inst.overrides?.hardwarePlacements ?? []).map((p, pIdx) => ({\n      key: `placement-${compIdx}-${pIdx}`,\n      placement: p,\n      component: inst,\n      compName,\n    }));\n  });\n  const totalHardwareCount = bulkLines.length + placementItems.length;",
+          "sha256": "442fafe499dec5a412124d10529e2b930ce97156f3583263712aad88a8357e04"
+        },
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoDetailView.tsx",
+          "startLine": 88,
+          "endLine": 123,
+          "excerpt": "      <div className=\"workspace-chrome__actions\">\n        {onView3D ? (\n          <button\n            type=\"button\"\n            className=\"btn btn--secondary\"\n            onClick={() => onView3D(a)}\n            data-testid=\"agregado-detail-view-3d\"\n          >\n            <Box size={16} strokeWidth={1.5} aria-hidden />\n            Vista 3D\n          </button>\n        ) : null}\n        {canMutate ? (\n          <>\n            <button\n              type=\"button\"\n              className=\"btn btn--primary\"\n              onClick={() => onEdit(a)}\n              data-testid=\"agregado-detail-edit\"\n            >\n              <Pencil size={16} strokeWidth={1.5} aria-hidden />\n              Editar\n            </button>\n            {onDelete ? (\n              <button\n                type=\"button\"\n                className=\"btn btn--danger\"\n                onClick={() => onDelete(a.id)}\n                data-testid=\"agregado-detail-delete\"\n              >\n                <Trash2 size={16} strokeWidth={1.5} aria-hidden />\n                Eliminar\n              </button>\n            ) : null}\n          </>\n        ) : null}",
+          "sha256": "442fafe499dec5a412124d10529e2b930ce97156f3583263712aad88a8357e04"
+        },
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoDetailView.tsx",
+          "startLine": 171,
+          "endLine": 212,
+          "excerpt": "            {bulkLines.map((line, idx) => {\n              const hw = line.hardwareId ? hwLookup.get(line.hardwareId) : undefined;\n              return (\n                <li key={`bulk-${idx}`} className=\"eng-detail__list-item\" data-testid={`agregado-detail-bulk-hw-${idx}`}>\n                  <span className=\"eng-detail__list-main eng-detail__mono\">\n                    {hw\n                      ? `${hw.code} — ${hw.name}`\n                      : `Rol: ${optionRoleLabel(line.optionRole, optionGroups)}`}\n                    <small\n                      className=\"eng-detail__list-meta\"\n                      style={{\n                        display: 'block',\n                        fontSize: 'var(--text-xs)',\n                        color: 'var(--text-muted)',\n                      }}\n                    >\n                      Presupuesto / Cantidad\n                    </small>\n                  </span>\n                  <span className=\"eng-detail__list-sub\">× {line.quantity}</span>\n                </li>\n              );\n            })}\n            {placementItems.map(({ key, placement: p, component: inst, compName }) => {\n              const hw = p.hardwareId ? hwLookup.get(p.hardwareId) : undefined;\n              const posText = `Cara: ${p.anchorFace} · X: ${p.relativePosition.xFormula ?? p.relativePosition.xMm} · Y: ${p.relativePosition.yFormula ?? p.relativePosition.yMm}`;\n              return (\n                <li key={key} className=\"eng-detail__list-item\" data-testid={`agregado-detail-${key}`}>\n                  <span className=\"eng-detail__list-main eng-detail__mono\">\n                    {hw ? `${hw.code} — ${hw.name}` : p.hardwareId || 'Herraje'}\n                    <small\n                      className=\"eng-detail__list-meta\"\n                      style={{\n                        display: 'block',\n                        fontSize: 'var(--text-xs)',\n                        color: 'var(--text-muted)',\n                      }}\n                    >\n                      Posicionado 3D en {compName} ({posText})\n                    </small>\n                  </span>\n                  <span className=\"eng-detail__list-sub\">× {inst.quantity}</span>",
+          "sha256": "442fafe499dec5a412124d10529e2b930ce97156f3583263712aad88a8357e04"
+        },
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoDetailView.tsx",
+          "startLine": 247,
+          "endLine": 257,
+          "excerpt": "  return (\n    <EngineeringDetailLayout\n      dataTestId=\"agregado-detail\"\n      className=\"agregado-detail\"\n      chrome={chrome}\n      notes={notes}\n      primary={primary}\n      secondary={secondary}\n    />\n  );\n}",
+          "sha256": "442fafe499dec5a412124d10529e2b930ce97156f3583263712aad88a8357e04"
+        }
+      ],
+      "missingProof": [
+        "Server authorization and deletion confirmation",
+        "Catalog references/quantity resolution",
+        "Responsive layout"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-02",
+      "file": "packages/ui/src/agregados/editor/AgregadoEditorGeneralPanel.tsx",
+      "claim": "Controlled draft updates identity and nonnegative numeric reference dimensions; blank/invalid numeric maps0. Summary counts component and hardware entries; tab shortcuts navigate without saving.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoEditorGeneralPanel.tsx",
+          "startLine": 28,
+          "endLine": 35,
+          "excerpt": "  const hasDims =\n    draft.widthMm > 0 || draft.heightMm > 0 || draft.depthMm > 0;\n\n  const totalHardwarePlacements = draft.components.reduce(\n    (acc, c) => acc + (c.overrides?.hardwarePlacements?.length ?? 0),\n    0,\n  );\n  const totalHardwareCount = draft.hardwareLines.length + totalHardwarePlacements;",
+          "sha256": "f3bade03c32e0021ccf420d7bf06e90534ea99adbfa6779ad204ae4ef5d3e6ab"
+        },
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoEditorGeneralPanel.tsx",
+          "startLine": 49,
+          "endLine": 82,
+          "excerpt": "          <div className=\"catalog-form__row\">\n            <div className=\"catalog-form__field\">\n              <label className=\"catalog-form__label\" htmlFor={`${formId}-code`}>\n                Código\n              </label>\n              <input\n                id={`${formId}-code`}\n                type=\"text\"\n                className=\"catalog-form__input\"\n                value={draft.code}\n                onChange={(e) =>\n                  setDraft((prev) => ({ ...prev, code: e.target.value }))\n                }\n                placeholder=\"Ej: PUERTA_BISAGRA_IZQ\"\n                required\n                data-testid=\"agregado-field-code\"\n              />\n            </div>\n            <div className=\"catalog-form__field\">\n              <label className=\"catalog-form__label\" htmlFor={`${formId}-name`}>\n                Nombre\n              </label>\n              <input\n                id={`${formId}-name`}\n                type=\"text\"\n                className=\"catalog-form__input\"\n                value={draft.name}\n                onChange={(e) =>\n                  setDraft((prev) => ({ ...prev, name: e.target.value }))\n                }\n                placeholder=\"Ej: Puerta Batiente Izquierda\"\n                required\n                data-testid=\"agregado-field-name\"\n              />",
+          "sha256": "f3bade03c32e0021ccf420d7bf06e90534ea99adbfa6779ad204ae4ef5d3e6ab"
+        },
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoEditorGeneralPanel.tsx",
+          "startLine": 96,
+          "endLine": 155,
+          "excerpt": "            <div className=\"catalog-form__row catalog-form__row--3\">\n              <div className=\"catalog-form__field\">\n                <label className=\"catalog-form__label\" htmlFor={`${formId}-w`}>\n                  Ancho (W)\n                </label>\n                <input\n                  id={`${formId}-w`}\n                  type=\"number\"\n                  className=\"catalog-form__input\"\n                  value={draft.widthMm || ''}\n                  onChange={(e) =>\n                    setDraft((prev) => ({\n                      ...prev,\n                      widthMm: Math.max(0, Number(e.target.value)) || 0,\n                    }))\n                  }\n                  min={0}\n                  placeholder=\"Opcional\"\n                  data-testid=\"agregado-field-width\"\n                />\n              </div>\n              <div className=\"catalog-form__field\">\n                <label className=\"catalog-form__label\" htmlFor={`${formId}-h`}>\n                  Alto (H)\n                </label>\n                <input\n                  id={`${formId}-h`}\n                  type=\"number\"\n                  className=\"catalog-form__input\"\n                  value={draft.heightMm || ''}\n                  onChange={(e) =>\n                    setDraft((prev) => ({\n                      ...prev,\n                      heightMm: Math.max(0, Number(e.target.value)) || 0,\n                    }))\n                  }\n                  min={0}\n                  placeholder=\"Opcional\"\n                  data-testid=\"agregado-field-height\"\n                />\n              </div>\n              <div className=\"catalog-form__field\">\n                <label className=\"catalog-form__label\" htmlFor={`${formId}-d`}>\n                  Profundidad (D)\n                </label>\n                <input\n                  id={`${formId}-d`}\n                  type=\"number\"\n                  className=\"catalog-form__input\"\n                  value={draft.depthMm || ''}\n                  onChange={(e) =>\n                    setDraft((prev) => ({\n                      ...prev,\n                      depthMm: Math.max(0, Number(e.target.value)) || 0,\n                    }))\n                  }\n                  min={0}\n                  placeholder=\"Opcional\"\n                  data-testid=\"agregado-field-depth\"\n                />",
+          "sha256": "f3bade03c32e0021ccf420d7bf06e90534ea99adbfa6779ad204ae4ef5d3e6ab"
+        },
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoEditorGeneralPanel.tsx",
+          "startLine": 214,
+          "endLine": 253,
+          "excerpt": "          <div className=\"agregado-general__summary-row\">\n            <span className=\"agregado-general__summary-meta\">\n              <Layers size={14} strokeWidth={1.5} aria-hidden />\n              Piezas\n              <strong\n                className=\"agregado-general__count\"\n                data-testid=\"agregado-general-count-components\"\n              >\n                {draft.components.length}\n              </strong>\n            </span>\n            <button\n              type=\"button\"\n              className=\"btn btn--small\"\n              onClick={() => setEditorTab('components')}\n              data-testid=\"agregado-general-goto-components\"\n            >\n              Ver piezas\n            </button>\n          </div>\n\n          <div className=\"agregado-general__summary-row\">\n            <span className=\"agregado-general__summary-meta\">\n              <Settings2 size={14} strokeWidth={1.5} aria-hidden />\n              Herrajes\n              <strong\n                className=\"agregado-general__count\"\n                data-testid=\"agregado-general-count-hardware\"\n              >\n                {totalHardwareCount}\n              </strong>\n            </span>\n            <button\n              type=\"button\"\n              className=\"btn btn--small\"\n              onClick={() => setEditorTab('hardware')}\n              data-testid=\"agregado-general-goto-hardware\"\n            >\n              Ver herrajes\n            </button>",
+          "sha256": "f3bade03c32e0021ccf420d7bf06e90534ea99adbfa6779ad204ae4ef5d3e6ab"
+        }
+      ],
+      "missingProof": [
+        "Submit validation/rollback and finite upper bounds",
+        "Meaning of reference dims in resolver",
+        "Keyboard tabs and narrow view"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-03",
+      "file": "packages/ui/src/agregados/editor/AgregadoListView.tsx",
+      "claim": "Parent-provided filtered rows distinguish no-results vs empty; create gated canMutate; detail passes exact item. Displayed pieces/hardware counts are line/placement counts, not BOM quantity totals.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoListView.tsx",
+          "startLine": 27,
+          "endLine": 46,
+          "excerpt": "  const isFilterEmpty = rows.length === 0 && Boolean(search.trim());\n\n  return (\n    <>\n      <PageHeader\n        title=\"Agregados\"\n        subtitle=\"Sub-ensambles reutilizables: cajones, puertas con bisagras y jaladeras, divisiones.\"\n        icon={<Blocks size={16} strokeWidth={1.5} />}\n        primaryAction={\n          canMutate ? (\n            <button\n              type=\"button\"\n              className=\"btn btn--primary\"\n              onClick={onCreate}\n              data-testid=\"create-agregado-btn\"\n            >\n              <Plus size={16} strokeWidth={1.5} aria-hidden /> Nuevo agregado\n            </button>\n          ) : undefined\n        }",
+          "sha256": "58c93714b0c24502c64a7568017e43096762a89c38c536795620800a923d8f86"
+        },
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoListView.tsx",
+          "startLine": 49,
+          "endLine": 86,
+          "excerpt": "      <PageToolbar\n        ariaLabel=\"Buscar y filtrar agregados\"\n        search={\n          <SearchInput\n            value={search}\n            onChange={setSearch}\n            placeholder=\"Buscar por código o nombre…\"\n          />\n        }\n      />\n\n      {rows.length === 0 ? (\n        <EmptyState\n          icon={Blocks}\n          title={isFilterEmpty ? 'No se encontraron agregados' : 'Sin agregados'}\n          description={\n            isFilterEmpty\n              ? 'Probá cambiando la búsqueda.'\n              : 'Creá tu primer agregado: una puerta con bisagras y jaladera, un cajón maderero, etc.'\n          }\n          actionLabel={\n            isFilterEmpty ? 'Limpiar búsqueda' : canMutate ? 'Crear agregado' : undefined\n          }\n          onAction={\n            isFilterEmpty ? () => setSearch('') : canMutate ? onCreate : undefined\n          }\n          variant={isFilterEmpty ? 'no-results' : 'empty'}\n        />\n      ) : (\n        <ul className=\"agregado-cards-grid\" data-testid=\"agregado-list\">\n          {rows.map((item) => {\n            const dims = item.externalDims ?? { width: 0, height: 0, depth: 0 };\n            const piecesCount = (item.components ?? []).length;\n            const placementsCount = (item.components ?? []).reduce(\n              (acc, c) => acc + (c.overrides?.hardwarePlacements?.length ?? 0),\n              0,\n            );\n            const hardwareCount = (item.hardwareLines ?? []).length + placementsCount;",
+          "sha256": "58c93714b0c24502c64a7568017e43096762a89c38c536795620800a923d8f86"
+        },
+        {
+          "file": "packages/ui/src/agregados/editor/AgregadoListView.tsx",
+          "startLine": 88,
+          "endLine": 115,
+          "excerpt": "              <li key={item.id}>\n                <button\n                  type=\"button\"\n                  className=\"entity-card agregado-card\"\n                  onClick={() => onOpenDetail(item)}\n                  data-testid={`agregado-card-${item.code}`}\n                >\n                  <div className=\"agregado-card__meta\">\n                    <span className=\"agregado-card__code\">{item.code}</span>\n                    {dims.width > 0 && (\n                      <span className=\"agregado-card__dims\">\n                        {dims.width} × {dims.height} × {dims.depth} mm\n                      </span>\n                    )}\n                  </div>\n                  <h3 className=\"agregado-card__name\">{item.name}</h3>\n                  {item.description && (\n                    <p className=\"agregado-card__desc\">{item.description}</p>\n                  )}\n                  <div className=\"agregado-card__stats\">\n                    <span className=\"agregado-card__stat\">\n                      <Layers size={13} /> {piecesCount} pieza{piecesCount !== 1 ? 's' : ''}\n                    </span>\n                    <span className=\"agregado-card__stat\">\n                      <Settings2 size={13} /> {hardwareCount} herraje{hardwareCount !== 1 ? 's' : ''}\n                    </span>\n                  </div>\n                </button>",
+          "sha256": "58c93714b0c24502c64a7568017e43096762a89c38c536795620800a923d8f86"
+        }
+      ],
+      "missingProof": [
+        "Parent filter and API scope",
+        "Complete inventory quantities",
+        "Long list performance"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-04",
+      "file": "packages/ui/src/preview3d/BoardMaterialPalette.tsx",
+      "claim": "Active boards filtered by manufacturer, validated category path and all normalized search terms. Scope control and draggable cards gated canEdit; drag transfers materialId only, parent owns target/scope mutation. No keyboard apply callback in this component.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/BoardMaterialPalette.tsx",
+          "startLine": 84,
+          "endLine": 138,
+          "excerpt": "  const activeMaterials = useMemo(\n    () => materials.filter((m) => m.active),\n    [materials],\n  );\n\n  const manufacturers = useMemo(() => {\n    const seen = new Map<string, string>();\n    for (const m of activeMaterials) {\n      const name = materialManufacturer(m);\n      if (!seen.has(name)) seen.set(name, name);\n    }\n    return Array.from(seen.keys()).sort((a, b) =>\n      a === MATERIAL_MANUFACTURER_UNSET\n        ? 1\n        : b === MATERIAL_MANUFACTURER_UNSET\n          ? -1\n          : a.localeCompare(b, 'es'),\n    );\n  }, [activeMaterials]);\n\n  const path = useMemo(\n    () => sanitizeCategoryPath(materialCategories, subgroupPath),\n    [materialCategories, subgroupPath],\n  );\n  const levelRows = useMemo(\n    () =>\n      materialCategories.length === 0 ? [] : cascadeLevels(materialCategories, path),\n    [materialCategories, path],\n  );\n\n  const scoped = useMemo(() => {\n    if (manufacturer === null) return activeMaterials;\n    return activeMaterials.filter(\n      (m) => materialManufacturer(m) === manufacturer,\n    );\n  }, [activeMaterials, manufacturer]);\n\n  const deepest = path[path.length - 1];\n  const byCategory = useMemo(\n    () =>\n      deepest\n        ? filterMaterialBoardsByCategory(scoped, deepest, materialCategories)\n        : scoped,\n    [scoped, deepest, materialCategories],\n  );\n\n  const searching = search.trim().length > 0;\n  const filtered = useMemo(() => {\n    if (!searching) return byCategory;\n    const q = normalizeSearchText(search);\n    const terms = q.split(' ');\n    return byCategory.filter((m) =>\n      terms.every((t) => materialHaystack(m, materialCategories).includes(t)),\n    );\n  }, [byCategory, searching, search, materialCategories]);",
+          "sha256": "31ba61d4c9cbe697ad9d15c6407aea24cb0e51c383d1f321caf6ad611b4be736"
+        },
+        {
+          "file": "packages/ui/src/preview3d/BoardMaterialPalette.tsx",
+          "startLine": 159,
+          "endLine": 175,
+          "excerpt": "      <div className=\"board-palette__controls\">\n        <label className=\"spatial-studio__field\" htmlFor=\"board-palette-scope\">\n          <span>Al soltar, aplicar a</span>\n          <select\n            id=\"board-palette-scope\"\n            value={scope}\n            disabled={!canEdit}\n            onChange={(e) => onScopeChange(e.target.value as BoardApplyScope)}\n            data-testid=\"board-palette-scope\"\n          >\n            {BOARD_APPLY_SCOPES.map((option) => (\n              <option key={option.id} value={option.id}>\n                {option.label}\n              </option>\n            ))}\n          </select>\n        </label>",
+          "sha256": "31ba61d4c9cbe697ad9d15c6407aea24cb0e51c383d1f321caf6ad611b4be736"
+        },
+        {
+          "file": "packages/ui/src/preview3d/BoardMaterialPalette.tsx",
+          "startLine": 278,
+          "endLine": 319,
+          "excerpt": "      <div className=\"board-palette__results\">\n        {activeMaterials.length === 0 ? (\n          <p className=\"spatial-studio__hint\">\n            No hay tableros activos en el catálogo. Agregá materiales desde\n            Catálogos → Materiales.\n          </p>\n        ) : filtered.length === 0 ? (\n          <p className=\"spatial-studio__hint\">\n            Sin tableros para este fabricante o subgrupo.\n          </p>\n        ) : (\n          <ul className=\"board-palette__list\" data-testid=\"board-palette-results\">\n            {filtered.map((material) => {\n              const imageUrl =\n                resolveMediaUrl?.(material.imageUrl ?? material.previewTextureUrl) ??\n                (material.imageUrl ?? material.previewTextureUrl);\n              const dims = `${material.thicknessMm} mm`;\n              const handleDragStart = (e: DragEvent<HTMLDivElement>): void => {\n                e.dataTransfer.setData(\n                  BOARD_PAINT_DRAG_MIME,\n                  encodeBoardPaintDrag({ materialId: material.id }),\n                );\n                e.dataTransfer.effectAllowed = 'copy';\n                onCardDragStart?.(material.id);\n              };\n              return (\n                <li key={material.id}>\n                  <div\n                    className={\n                      'board-palette__card' +\n                      (canEdit ? '' : ' board-palette__card--disabled')\n                    }\n                    title={\n                      canEdit\n                        ? 'Arrastrá sobre un mueble del plano para aplicarlo'\n                        : material.name\n                    }\n                    aria-disabled={!canEdit}\n                    aria-label={`${material.name} (${material.code}) — arrastrar sobre un mueble para aplicar`}\n                    draggable={canEdit}\n                    onDragStart={canEdit ? handleDragStart : undefined}\n                    onDragEnd={canEdit ? onCardDragEnd : undefined}",
+          "sha256": "31ba61d4c9cbe697ad9d15c6407aea24cb0e51c383d1f321caf6ad611b4be736"
+        },
+        {
+          "file": "packages/ui/src/preview3d/BoardMaterialPalette.tsx",
+          "startLine": 322,
+          "endLine": 340,
+          "excerpt": "                    <span className=\"board-palette__thumb\" aria-hidden>\n                      {imageUrl ? (\n                        <img src={imageUrl} alt=\"\" loading=\"lazy\" />\n                      ) : material.previewColor ? (\n                        <span\n                          className=\"board-palette__swatch\"\n                          style={{ background: material.previewColor }}\n                        />\n                      ) : (\n                        <span className=\"board-palette__swatch board-palette__swatch--empty\" />\n                      )}\n                    </span>\n                    <span className=\"board-palette__meta\">\n                      <span className=\"board-palette__name\">{material.name}</span>\n                      <span className=\"board-palette__code\">\n                        {materialManufacturer(material)} · {material.code}\n                      </span>\n                      <span className=\"board-palette__dims\">{dims}</span>\n                    </span>",
+          "sha256": "31ba61d4c9cbe697ad9d15c6407aea24cb0e51c383d1f321caf6ad611b4be736"
+        }
+      ],
+      "missingProof": [
+        "Real drag/drop/keyboard alternative and target rejection",
+        "Tenant material authorization",
+        "Parent material resolve and persistence"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-05",
+      "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+      "claim": "Plan gates ambient out of catalog mode; ceiling true when showCeiling OR assigned ceiling material, not necessarily roomBox despite older comment. Floor/wall texture effects set repeated UVs; wall openings use domain split segments and window panes; ghost disables depth write. Backwall/ceiling/baseboard are distinct meshes.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 91,
+          "endLine": 118,
+          "excerpt": "export function planAmbientScene(opts: {\n  readonly lightMode: SceneLightingMode;\n  readonly ambientFloor?: AmbientMaterial;\n  readonly ambientWall?: AmbientMaterial;\n  readonly ambientCeiling?: AmbientMaterial;\n  readonly showCeiling?: boolean;\n  readonly showFloor?: boolean;\n}): AmbientScenePlan {\n  const {\n    lightMode,\n    ambientFloor,\n    ambientWall,\n    ambientCeiling,\n    showCeiling,\n    showFloor = true,\n  } = opts;\n  const isAmbientMode = lightMode !== 'catalog';\n  return {\n    ambientFloor: isAmbientMode && Boolean(ambientFloor) && showFloor,\n    ambientWall: isAmbientMode && Boolean(ambientWall),\n    roomBox: isAmbientMode && Boolean(ambientWall),\n    ceiling: isAmbientMode && (Boolean(showCeiling) || Boolean(ambientCeiling)),\n    contactShadow: isAmbientMode\n      ? contactShadowForFloor(ambientFloor?.previewColor)\n      : null,\n  };\n}\n",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        },
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 165,
+          "endLine": 182,
+          "excerpt": "function resolveAmbientPhysical(\n  material: AmbientMaterial | undefined,\n  lightingMode: SceneLightingMode,\n): AmbientPhysical {\n  const base = boardPhysicalResponse({\n    hasMap: Boolean(material?.previewTextureUrl),\n    hasGrain: false,\n    lightingMode,\n  });\n  return {\n    roughness: material?.previewRoughness ?? base.roughness,\n    metalness: material?.previewMetalness ?? base.metalness,\n    clearcoat: material?.previewClearcoat ?? base.clearcoat,\n    clearcoatRoughness: base.clearcoatRoughness,\n    envMapIntensity: base.envMapIntensity,\n  };\n}\n",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        },
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 218,
+          "endLine": 234,
+          "excerpt": "  const map = useTexture(url);\n  useEffect(() => {\n    const [u, v] = floorPlaneUvRepeat(widthMm, depthMm, tileWidthMm, tileLengthMm);\n    applyRepeat(map, u, v);\n  }, [map, widthMm, depthMm, tileWidthMm, tileLengthMm]);\n  return (\n    <meshPhysicalMaterial\n      map={map}\n      // White so the photo shows true colors (map * color).\n      color=\"#ffffff\"\n      roughness={phys.roughness}\n      metalness={phys.metalness}\n      clearcoat={phys.clearcoat}\n      clearcoatRoughness={phys.clearcoatRoughness}\n      envMapIntensity={phys.envMapIntensity}\n    />\n  );",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        },
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 263,
+          "endLine": 310,
+          "excerpt": "  const color = resolveFloorColor(material);\n  const phys = resolveFloorPhysical(material, lightingMode);\n  const pos: Vec3 = position ?? [0, 0, 0];\n  return (\n    <>\n      <mesh\n        rotation={[-Math.PI / 2, 0, 0]}\n        position={[pos[0], pos[1], pos[2]]}\n        receiveShadow\n        userData={{ surface: 'floor' }}\n        onClick={\n          onClick\n            ? (e) => {\n                e.stopPropagation();\n                onClick(e);\n              }\n            : undefined\n        }\n      >\n        <planeGeometry\n          args={[widthMm * FLOOR_WIDTH_FACTOR, depthMm * FLOOR_DEPTH_FACTOR]}\n        />\n        <Suspense\n          fallback={\n            <meshStandardMaterial\n              color={color}\n              roughness={phys.roughness}\n              metalness={phys.metalness}\n            />\n          }\n        >\n          {material.previewTextureUrl ? (\n            <FloorTextureMaterial\n              url={material.previewTextureUrl}\n              widthMm={widthMm}\n              depthMm={depthMm}\n              tileWidthMm={material.previewTextureTileWidthMm}\n              tileLengthMm={material.previewTextureTileLengthMm}\n              phys={phys}\n            />\n          ) : (\n            <meshStandardMaterial\n              color={color}\n              roughness={phys.roughness}\n              metalness={phys.metalness}\n            />\n          )}\n        </Suspense>",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        },
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 402,
+          "endLine": 430,
+          "excerpt": "  const h = wall.heightMm ?? ROOM_WALL_HEIGHT_MM;\n  const dx = wall.endXMm - wall.originXMm;\n  const dy = wall.endYMm - wall.originYMm;\n  const length = Math.max(1, Math.hypot(dx, dy));\n  const midX = (wall.originXMm + wall.endXMm) / 2;\n  const midY = (wall.originYMm + wall.endYMm) / 2;\n  const yaw = Math.atan2(dy, dx);\n  const thickness = selected ? 48 : 40;\n  const color = resolveWallColor(material);\n  const phys = resolveWallPhysical(material, lightingMode);\n  const segments = useMemo(\n    () =>\n      splitWallSegments(\n        {\n          id: wall.id,\n          lengthMm: length,\n          angleDeg: 0,\n          ...(wall.openings ? { openings: wall.openings } : {}),\n        },\n        h,\n      ),\n    [wall.id, wall.openings, length, h],\n  );\n  const handleClick = onSelect\n    ? (e: { stopPropagation: () => void }) => {\n        e.stopPropagation();\n        onSelect(wall.id);\n      }\n    : undefined;",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        },
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 445,
+          "endLine": 486,
+          "excerpt": "  return (\n    <group position={[midX, h / 2, midY]} rotation={[0, -yaw, 0]}>\n      {segments.map((seg, i) => {\n        const segH = seg.zTopMm - seg.zBottomMm;\n        return (\n          <mesh\n            key={i}\n            position={[\n              seg.startMm + seg.lengthMm / 2 - length / 2,\n              (seg.zBottomMm + seg.zTopMm) / 2 - h / 2,\n              -thickness / 2,\n            ]}\n            userData={{ wallId: wall.id }}\n            onClick={handleClick}\n            onPointerOver={handleOver}\n            onPointerOut={handleOut}\n          >\n            <boxGeometry args={[seg.lengthMm, segH, thickness]} />\n            {selected ? <Edges threshold={15} color=\"#3b82f6\" lineWidth={2} /> : null}\n            <Suspense\n              fallback={\n                <meshStandardMaterial\n                  color={color}\n                  roughness={phys.roughness}\n                  metalness={phys.metalness}\n                  transparent={ghost}\n                  opacity={ghost ? WALL_GHOST_OPACITY : 1}\n                  depthWrite={!ghost}\n                />\n              }\n            >\n              {material.previewTextureUrl ? (\n                <WallTextureMaterial\n                  url={material.previewTextureUrl}\n                  lengthMm={seg.lengthMm}\n                  heightMm={segH}\n                  tileWidthMm={material.previewTextureTileWidthMm}\n                  tileLengthMm={material.previewTextureTileLengthMm}\n                  phys={phys}\n                  selected={selected}\n                  ghost={ghost}\n                />",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        },
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 501,
+          "endLine": 524,
+          "excerpt": "      {(wall.openings ?? [])\n        .filter((o) => o.kind === 'window')\n        .map((o) => {\n          const sill = o.sillMm ?? 900;\n          const height = o.heightMm ?? 1200;\n          return (\n            <mesh\n              key={`pane-${o.id}`}\n              position={[\n                o.offsetMm + o.widthMm / 2 - length / 2,\n                sill + height / 2 - h / 2,\n                -thickness / 2,\n              ]}\n              userData={{ wallId: wall.id, openingPane: true }}\n            >\n              <boxGeometry args={[o.widthMm, height, thickness * 0.25]} />\n              <meshStandardMaterial\n                color={WINDOW_PANE_COLOR}\n                transparent\n                opacity={ghost ? 0.04 : 0.3}\n                roughness={0.15}\n                metalness={0.1}\n                depthWrite={false}\n              />",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        },
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 605,
+          "endLine": 676,
+          "excerpt": "export function CeilingMesh({\n  material,\n  widthMm,\n  depthMm,\n  position,\n  thicknessMm = 40,\n  lightingMode = 'present',\n  paintHover = false,\n}: {\n  readonly material?: AmbientMaterial;\n  readonly widthMm: number;\n  readonly depthMm: number;\n  readonly position: Vec3;\n  readonly thicknessMm?: number;\n  readonly lightingMode?: SceneLightingMode;\n  readonly paintHover?: boolean;\n}): ReactNode {\n  const color = material ? resolveWallColor(material) : CEILING_DEFAULT_COLOR;\n  const phys = resolveWallPhysical(material, lightingMode);\n  // Center Y of box = position[1] + thickness/2 so the underside rests at\n  // position[1] (e.g. 2400mm wall height) and the box extrudes upward.\n  const posY = position[1] + thicknessMm / 2;\n  return (\n    <group position={[position[0], posY, position[2]]}>\n      <mesh\n        receiveShadow\n        castShadow\n        userData={{ surface: 'ceiling' }}\n      >\n        <boxGeometry args={[widthMm, thicknessMm, depthMm]} />\n        <Suspense\n          fallback={\n            <meshStandardMaterial\n              color={paintHover ? PAINT_HOVER_COLOR : color}\n              side={DoubleSide}\n              roughness={phys.roughness}\n              metalness={phys.metalness}\n            />\n          }\n        >\n          {material?.previewTextureUrl ? (\n            <WallTextureMaterial\n              url={material.previewTextureUrl}\n              lengthMm={widthMm}\n              heightMm={depthMm}\n              tileWidthMm={material.previewTextureTileWidthMm}\n              tileLengthMm={material.previewTextureTileLengthMm}\n              phys={phys}\n            />\n          ) : (\n            <meshStandardMaterial\n              color={paintHover ? PAINT_HOVER_COLOR : color}\n              side={DoubleSide}\n              roughness={phys.roughness}\n              metalness={phys.metalness}\n            />\n          )}\n        </Suspense>\n      </mesh>\n      {paintHover ? (\n        <mesh\n          rotation={[Math.PI / 2, 0, 0]}\n          position={[0, -thicknessMm / 2 - 1, 0]}\n          userData={{ surface: 'ceiling', paintHoverOverlay: true }}\n        >\n          <planeGeometry args={[widthMm, depthMm]} />\n          <meshBasicMaterial\n            color={PAINT_HOVER_COLOR}\n            transparent\n            opacity={PAINT_HOVER_OPACITY}\n            side={DoubleSide}\n          />",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        },
+        {
+          "file": "packages/ui/src/preview3d/AmbientMeshes.tsx",
+          "startLine": 687,
+          "endLine": 708,
+          "excerpt": "export function BaseboardMesh({\n  material,\n  lengthMm,\n  position,\n  rotationY = 0,\n}: {\n  readonly material?: AmbientMaterial;\n  readonly lengthMm: number;\n  readonly position: Vec3;\n  readonly rotationY?: number;\n}): ReactNode {\n  const color = resolveWallColor(material);\n  return (\n    <mesh\n      position={[position[0], position[1], position[2]]}\n      rotation={[0, rotationY, 0]}\n    >\n      <boxGeometry args={[lengthMm, BASEBOARD_HEIGHT_MM, BASEBOARD_THICKNESS_MM]} />\n      <meshStandardMaterial color={color} roughness={0.85} metalness={0.05} />\n    </mesh>\n  );\n}",
+          "sha256": "64616e5801300317c5800a770814e49c950d22abbe5a3d6307887fff4d103558"
+        }
+      ],
+      "missingProof": [
+        "WebGL rendering/shared useTexture ownership",
+        "UV/occlusion correctness with same URL and different surfaces",
+        "Caller plan wiring and user toggles; source comment not treated authority"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-06",
+      "file": "packages/ui/src/editor/BoardCanvas.tsx",
+      "claim": "SVG drag captures pointer, converts screen delta using fixed module-dimension scale, keeps depth unchanged and calls snapPosition; snapToPeer prop renamed unused while peerEnabled follows snapEnabled. Pointerup clears state; no pointercancel branch shown.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/editor/BoardCanvas.tsx",
+          "startLine": 71,
+          "endLine": 101,
+          "excerpt": "export function BoardCanvas({\n  parts,\n  selectedPartId,\n  onSelectPart,\n  onDragPart,\n  moduleWidth,\n  moduleHeight,\n  moduleDepth,\n  showGrid = true,\n  snapEnabled = true,\n  snapGridMm = 50,\n  snapToPeer: _snapToPeer = true,\n}: BoardCanvasProps): ReactNode {\n  // --- Drag state ---\n  const dragRef = useRef<{\n    partId: string;\n    startPx: number;\n    startPy: number;\n    origX: number;\n    origY: number;\n    origZ: number;\n  } | null>(null);\n  const [dragPartId, setDragPartId] = useState<string | null>(null);\n  const svgRef = useRef<SVGSVGElement | null>(null);\n\n  // Compute scale from viewBox + container (approx: use viewBox width / element width).\n  // For simplicity, we use a fixed scale based on the largest module dim.\n  const effectiveScale = useMemo(() => {\n    const maxDim = Math.max(moduleWidth ?? 600, moduleHeight ?? 720, moduleDepth ?? 580, 600);\n    return 400 / maxDim; // ~400px of projected space for the largest dim.\n  }, [moduleWidth, moduleHeight, moduleDepth]);",
+          "sha256": "f7849f0c2d325ee3bb90822e941b70dd2bb0264c8d99c9988911cbf1268ce047"
+        },
+        {
+          "file": "packages/ui/src/editor/BoardCanvas.tsx",
+          "startLine": 135,
+          "endLine": 184,
+          "excerpt": "  const handlePointerDown = useCallback(\n    (e: ReactPointerEvent<SVGPolygonElement>, partId: string) => {\n      if (!onDragPart) return;\n      e.stopPropagation();\n      const part = parts.find((p) => p.id === partId);\n      if (!part) return;\n      onSelectPart(partId);\n      const [px, pyThree, pzThree] = part.position;\n      dragRef.current = {\n        partId,\n        startPx: e.clientX,\n        startPy: e.clientY,\n        origX: px,\n        origY: pzThree, // workshop Y (depth)\n        origZ: pyThree, // workshop Z (height)\n      };\n      setDragPartId(partId);\n      (e.target as SVGPolygonElement).setPointerCapture(e.pointerId);\n    },\n    [onDragPart, onSelectPart, parts],\n  );\n\n  const handlePointerMove = useCallback(\n    (e: ReactPointerEvent<SVGPolygonElement>) => {\n      const drag = dragRef.current;\n      if (!drag || !onDragPart) return;\n      const dxPx = e.clientX - drag.startPx;\n      const dyPx = e.clientY - drag.startPy;\n      const [dwsX, , dwsZ] = screenDeltaToWorkshop(dxPx, dyPx, effectiveScale);\n      const newX = drag.origX + dwsX;\n      const newY = drag.origY; // depth unchanged for planar drag\n      const newZ = drag.origZ + dwsZ;\n\n      // Collect peer positions (other parts' X/Z).\n      const peerXs = parts.filter((p) => p.id !== drag.partId).map((p) => p.position[0]);\n      const peerZs = parts.filter((p) => p.id !== drag.partId).map((p) => p.position[1]);\n\n      const [snappedX, , snappedZ] = snapPosition(newX, newY, newZ, {\n        gridSize: snapGridMm,\n        gridEnabled: snapEnabled,\n        peerXs,\n        peerZs,\n        peerEnabled: snapEnabled,\n        peerThreshold: 10,\n      });\n\n      onDragPart(drag.partId, { x: Math.round(snappedX), y: Math.round(newY), z: Math.round(snappedZ) });\n    },\n    [onDragPart, parts, effectiveScale, snapEnabled, snapGridMm],\n  );",
+          "sha256": "f7849f0c2d325ee3bb90822e941b70dd2bb0264c8d99c9988911cbf1268ce047"
+        },
+        {
+          "file": "packages/ui/src/editor/BoardCanvas.tsx",
+          "startLine": 186,
+          "endLine": 196,
+          "excerpt": "  const handlePointerUp = useCallback(\n    (e: ReactPointerEvent<SVGPolygonElement>) => {\n      dragRef.current = null;\n      setDragPartId(null);\n      try {\n        (e.target as SVGPolygonElement).releasePointerCapture(e.pointerId);\n      } catch {\n        // ignore\n      }\n    },\n    []);",
+          "sha256": "f7849f0c2d325ee3bb90822e941b70dd2bb0264c8d99c9988911cbf1268ce047"
+        },
+        {
+          "file": "packages/ui/src/editor/BoardCanvas.tsx",
+          "startLine": 233,
+          "endLine": 261,
+          "excerpt": "          {/* Board parts */}\n          {renderedParts.map((part) =>\n            part.faces.map((face, faceIdx) => (\n              <polygon\n                key={`${part.id}-${faceIdx}`}\n                points={facesToPolygonPoints(face.points)}\n                fill={shadeColor(part.color, SHADE_FACTOR[face.shade])}\n                stroke={\n                  part.isSelected\n                    ? 'var(--canvas-part-stroke-selected)'\n                    : 'var(--canvas-part-stroke)'\n                }\n                strokeWidth={part.isSelected ? 2.5 : 1}\n                className={\n                  part.isSelected ? 'board-canvas__part--selected' : ''\n                }\n                onClick={(e) => {\n                  e.stopPropagation();\n                  onSelectPart(part.id);\n                }}\n                onPointerDown={\n                  onDragPart\n                    ? (e) => handlePointerDown(e, part.id)\n                    : undefined\n                }\n                onPointerMove={handlePointerMove}\n                onPointerUp={handlePointerUp}\n                style={{ cursor: onDragPart ? 'grab' : 'pointer' }}\n              />",
+          "sha256": "f7849f0c2d325ee3bb90822e941b70dd2bb0264c8d99c9988911cbf1268ce047"
+        }
+      ],
+      "missingProof": [
+        "Real drag scale across responsive viewBox",
+        "Independent peer-snap toggle expectation",
+        "Pointercancel and keyboard movement, undo/server persistence"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-07",
+      "file": "packages/ui/src/editor/BoardCostSummary.tsx",
+      "claim": "Uses domain line metrics for valid positive board dimensions; optional material estimate multiplies area by catalog cost, missing material silently omitted. Material cost renders only positive, not full landed/project costing.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/editor/BoardCostSummary.tsx",
+          "startLine": 22,
+          "endLine": 56,
+          "excerpt": "  const summary = useMemo(() => {\n    let totalAreaM2 = 0;\n    let totalEdgeMl = 0;\n    let partsCount = 0;\n\n    for (const part of parts) {\n      if (part.lengthMm > 0 && part.widthMm > 0) {\n        const { areaM2, edgeMl } = calcBoardLineMetrics(part);\n        totalAreaM2 += areaM2;\n        totalEdgeMl += edgeMl;\n        partsCount++;\n      }\n    }\n\n    // Material cost (optional, needs catalog).\n    let materialCost = 0;\n    if (catalog) {\n      for (const part of parts) {\n        if (part.lengthMm <= 0 || part.widthMm <= 0) continue;\n        try {\n          const material = catalog.materials.find(\n            (m) => m.id === part.materialId,\n          );\n          if (material) {\n            const { areaM2 } = calcBoardLineMetrics(part);\n            materialCost += areaM2 * material.costPerM2;\n          }\n        } catch {\n          // skip if material not found\n        }\n      }\n    }\n\n    return { totalAreaM2, totalEdgeMl, partsCount, materialCost };\n  }, [parts, catalog]);",
+          "sha256": "cba2b34d98e031bffb0d5160e7b5d8cf44b435acdde68c561f9466bf579190bb"
+        },
+        {
+          "file": "packages/ui/src/editor/BoardCostSummary.tsx",
+          "startLine": 58,
+          "endLine": 83,
+          "excerpt": "  return (\n    <div className=\"board-cost\" data-testid=\"board-cost-summary\">\n      <div className=\"board-cost__item\">\n        <span className=\"board-cost__label\">Piezas</span>\n        <span className=\"board-cost__value\">{summary.partsCount}</span>\n      </div>\n      <div className=\"board-cost__item\">\n        <span className=\"board-cost__label\">Superficie</span>\n        <span className=\"board-cost__value\">\n          {summary.totalAreaM2.toFixed(2)} m²\n        </span>\n      </div>\n      <div className=\"board-cost__item\">\n        <span className=\"board-cost__label\">Cantos</span>\n        <span className=\"board-cost__value\">\n          {summary.totalEdgeMl.toFixed(1)} ML\n        </span>\n      </div>\n      {catalog && summary.materialCost > 0 ? (\n        <div className=\"board-cost__item board-cost__item--highlight\">\n          <span className=\"board-cost__label\">Material</span>\n          <span className=\"board-cost__value\">\n            ${summary.materialCost.toFixed(2)}\n          </span>\n        </div>\n      ) : null}",
+          "sha256": "cba2b34d98e031bffb0d5160e7b5d8cf44b435acdde68c561f9466bf579190bb"
+        }
+      ],
+      "missingProof": [
+        "Domain quantity/cost completeness",
+        "Missing-price feedback",
+        "Cost visibility authorization at parent"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-08",
+      "file": "packages/ui/src/editor/BoardPropertiesPanel.tsx",
+      "claim": "Maps Three size/position axes to workshop fields and radians to degrees; updates partial pose/dimensions and forwards duplicate/delete. NumberField always rounds displayed value even thickness step0.5; accepts empty as0 with no positive bound.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/editor/BoardPropertiesPanel.tsx",
+          "startLine": 25,
+          "endLine": 55,
+          "excerpt": "function NumberField({\n  label,\n  value,\n  onChange,\n  unit = 'mm',\n  step = 1,\n}: {\n  readonly label: string;\n  readonly value: number;\n  readonly onChange: (v: number) => void;\n  readonly unit?: string;\n  readonly step?: number;\n}): ReactNode {\n  return (\n    <label className=\"board-props__field\">\n      <span className=\"board-props__label\">{label}</span>\n      <div className=\"board-props__input-row\">\n        <input\n          type=\"number\"\n          className=\"board-props__input\"\n          value={Math.round(value)}\n          step={step}\n          onChange={(e) => {\n            const v = Number(e.target.value);\n            if (!Number.isNaN(v)) onChange(v);\n          }}\n        />\n        <span className=\"board-props__unit\">{unit}</span>\n      </div>\n    </label>\n  );",
+          "sha256": "3162090cb0d45f8586c95fa622b48ad63d9daac4ec3d815435fd1b65a89c4e13"
+        },
+        {
+          "file": "packages/ui/src/editor/BoardPropertiesPanel.tsx",
+          "startLine": 66,
+          "endLine": 76,
+          "excerpt": "  if (!part) return null;\n\n  // BoardPartVisual.size = [width(X), thickness(Y), length(Z)]\n  // BoardPartVisual.position = [x, z_workshop, y_workshop] (Three swap)\n  const [width, thickness, length] = part.size;\n  const [posX, posZ, posY] = part.position;\n\n  // Rotation is in radians from the visual — convert to degrees for display.\n  const rotXDeg = Math.round((part.rotation[0] * 180) / Math.PI);\n  const rotYDeg = Math.round((part.rotation[1] * 180) / Math.PI);\n  const rotZDeg = Math.round((part.rotation[2] * 180) / Math.PI);",
+          "sha256": "3162090cb0d45f8586c95fa622b48ad63d9daac4ec3d815435fd1b65a89c4e13"
+        },
+        {
+          "file": "packages/ui/src/editor/BoardPropertiesPanel.tsx",
+          "startLine": 105,
+          "endLine": 155,
+          "excerpt": "      <section className=\"board-props__section\">\n        <h4 className=\"board-props__section-title\">Dimensiones</h4>\n        <div className=\"board-props__grid-2\">\n          <NumberField\n            label=\"Largo\"\n            value={length}\n            onChange={(v) => onUpdateDimensions({ lengthMm: v })}\n          />\n          <NumberField\n            label=\"Ancho\"\n            value={width}\n            onChange={(v) => onUpdateDimensions({ widthMm: v })}\n          />\n        </div>\n        <NumberField\n          label=\"Espesor\"\n          value={thickness}\n          step={0.5}\n          onChange={(v) => onUpdateDimensions({ thicknessMm: v })}\n        />\n      </section>\n\n      <section className=\"board-props__section\">\n        <h4 className=\"board-props__section-title\">Posición (mm)</h4>\n        <div className=\"board-props__grid-3\">\n          <NumberField label=\"X\" value={posX} onChange={(v) => onUpdatePose({ x: v })} />\n          <NumberField label=\"Y\" value={posY} onChange={(v) => onUpdatePose({ y: v })} />\n          <NumberField label=\"Z\" value={posZ} onChange={(v) => onUpdatePose({ z: v })} />\n        </div>\n      </section>\n\n      <section className=\"board-props__section\">\n        <h4 className=\"board-props__section-title\">Rotación (°)</h4>\n        <div className=\"board-props__grid-3\">\n          <NumberField\n            label=\"Rot X\"\n            value={rotXDeg}\n            unit=\"°\"\n            onChange={(v) => onUpdatePose({ rotateX: v })}\n          />\n          <NumberField\n            label=\"Rot Y\"\n            value={rotYDeg}\n            unit=\"°\"\n            onChange={(v) => onUpdatePose({ rotateY: v })}\n          />\n          <NumberField\n            label=\"Rot Z\"\n            value={rotZDeg}\n            unit=\"°\"\n            onChange={(v) => onUpdatePose({ rotateZ: v })}",
+          "sha256": "3162090cb0d45f8586c95fa622b48ad63d9daac4ec3d815435fd1b65a89c4e13"
+        },
+        {
+          "file": "packages/ui/src/editor/BoardPropertiesPanel.tsx",
+          "startLine": 160,
+          "endLine": 178,
+          "excerpt": "      <footer className=\"board-props__actions\">\n        <button\n          type=\"button\"\n          className=\"btn btn--small\"\n          onClick={onDuplicate}\n          data-testid=\"board-props-duplicate\"\n        >\n          <Copy size={14} strokeWidth={1.5} aria-hidden />\n          Duplicar\n        </button>\n        <button\n          type=\"button\"\n          className=\"btn btn--small btn--danger\"\n          onClick={onRemove}\n          data-testid=\"board-props-delete\"\n        >\n          <Trash2 size={14} strokeWidth={1.5} aria-hidden />\n          Eliminar\n        </button>",
+          "sha256": "3162090cb0d45f8586c95fa622b48ad63d9daac4ec3d815435fd1b65a89c4e13"
+        }
+      ],
+      "missingProof": [
+        "Half-millimeter editing/display fidelity",
+        "Domain finite/positive validation and removal confirmation",
+        "Undo and backend authoring truth"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-09",
+      "file": "packages/ui/src/preview3d/BoardMeshMaterial.tsx",
+      "claim": "Photo/grain/solid modes use keyed material replacement and white map color; grain CanvasTexture disposed on change. Photo useTexture map repeat is mutated per part dimensions; no per-instance clone in this component.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/BoardMeshMaterial.tsx",
+          "startLine": 45,
+          "endLine": 72,
+          "excerpt": "export function textureUvRepeat(\n  widthMm: number,\n  lengthMm: number,\n  tileWidthMm: number = DEFAULT_TEXTURE_TILE_MM,\n  tileLengthMm: number = DEFAULT_TEXTURE_TILE_MM,\n): readonly [number, number] {\n  const tw = Math.max(tileWidthMm, 1);\n  const tl = Math.max(tileLengthMm, 1);\n  const u = Math.max(Math.max(widthMm, 1) / tw, 0.25);\n  const v = Math.max(Math.max(lengthMm, 1) / tl, 0.25);\n  return [u, v];\n}\n\nfunction applyUv(\n  map: Texture,\n  widthMm: number,\n  lengthMm: number,\n  tileWidthMm: number = DEFAULT_TEXTURE_TILE_MM,\n  tileLengthMm: number = DEFAULT_TEXTURE_TILE_MM,\n): void {\n  const [u, v] = textureUvRepeat(widthMm, lengthMm, tileWidthMm, tileLengthMm);\n  map.wrapS = RepeatWrapping;\n  map.wrapT = RepeatWrapping;\n  map.repeat.set(u, v);\n  map.colorSpace = SRGBColorSpace;\n  map.anisotropy = 4;\n  map.needsUpdate = true;\n}",
+          "sha256": "410f1c646d9ce17f264b118a50e30b93c2590e191c0c4113657c32627aa89466"
+        },
+        {
+          "file": "packages/ui/src/preview3d/BoardMeshMaterial.tsx",
+          "startLine": 89,
+          "endLine": 119,
+          "excerpt": "  const map = useTexture(url);\n  useEffect(() => {\n    applyUv(map, widthMm, lengthMm, tileWidthMm, tileLengthMm);\n  }, [map, widthMm, lengthMm, tileWidthMm, tileLengthMm]);\n\n  const phys = boardPhysicalResponse({\n    hasMap: true,\n    hasGrain: false,\n    lightingMode: shared.lightingMode,\n    previewRoughness: shared.previewRoughness,\n    previewMetalness: shared.previewMetalness,\n    previewClearcoat: shared.previewClearcoat,\n  });\n\n  return (\n    <meshPhysicalMaterial\n      key={`photo:${url}`}\n      map={map}\n      // White so the photo shows true colors (map * color).\n      color=\"#ffffff\"\n      emissive={shared.emissive}\n      emissiveIntensity={shared.emissiveIntensity}\n      transparent={shared.transparent}\n      opacity={shared.opacity}\n      depthWrite={shared.depthWrite}\n      roughness={phys.roughness}\n      metalness={phys.metalness}\n      clearcoat={phys.clearcoat}\n      clearcoatRoughness={phys.clearcoatRoughness}\n      envMapIntensity={phys.envMapIntensity}\n    />",
+          "sha256": "410f1c646d9ce17f264b118a50e30b93c2590e191c0c4113657c32627aa89466"
+        },
+        {
+          "file": "packages/ui/src/preview3d/BoardMeshMaterial.tsx",
+          "startLine": 136,
+          "endLine": 152,
+          "excerpt": "  const map = useMemo(() => {\n    if (grain !== 1) return null;\n    const canvas = createGrainCanvas(color, 256);\n    if (!canvas) return null;\n    const tex = new CanvasTexture(canvas);\n    applyUv(tex, widthMm, lengthMm);\n    return tex;\n  }, [grain, color, widthMm, lengthMm]);\n\n  useEffect(() => {\n    return () => {\n      map?.dispose();\n    };\n  }, [map]);\n\n  // Remount when switching solid ↔ grain so Three drops the previous map.\n  const matKey = grain === 1 && map ? `grain:${color}` : `solid:${color}`;",
+          "sha256": "410f1c646d9ce17f264b118a50e30b93c2590e191c0c4113657c32627aa89466"
+        },
+        {
+          "file": "packages/ui/src/preview3d/BoardMeshMaterial.tsx",
+          "startLine": 198,
+          "endLine": 239,
+          "excerpt": "  const [w, , l] = visual.size;\n  const shared: SharedMatProps = {\n    color: visual.color,\n    emissive: selected ? '#f5c542' : '#000000',\n    emissiveIntensity: selected ? 0.4 : 0,\n    transparent,\n    opacity,\n    depthWrite: !transparent,\n    lightingMode,\n    previewRoughness: visual.previewRoughness,\n    previewMetalness: visual.previewMetalness,\n    previewClearcoat: visual.previewClearcoat,\n  };\n\n  // Outer key forces full material swap between surface modes.\n  const modeKey = visual.textureUrl\n    ? `t:${visual.textureUrl}`\n    : visual.grain === 1\n      ? `g:${visual.color}`\n      : `c:${visual.color}`;\n\n  if (visual.textureUrl) {\n    return (\n      <PhotoTextureMaterial\n        key={modeKey}\n        url={visual.textureUrl}\n        widthMm={w}\n        lengthMm={l}\n        tileWidthMm={\n          visual.textureTileWidthMm && visual.textureTileWidthMm > 0\n            ? visual.textureTileWidthMm\n            : DEFAULT_TEXTURE_TILE_MM\n        }\n        tileLengthMm={\n          visual.textureTileLengthMm && visual.textureTileLengthMm > 0\n            ? visual.textureTileLengthMm\n            : DEFAULT_TEXTURE_TILE_MM\n        }\n        shared={shared}\n      />\n    );\n  }",
+          "sha256": "410f1c646d9ce17f264b118a50e30b93c2590e191c0c4113657c32627aa89466"
+        }
+      ],
+      "missingProof": [
+        "Shared URL texture repeat isolation in real WebGL",
+        "Texture load failure/fallback caller",
+        "GPU disposal/performance"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-10",
+      "file": "packages/ui/src/preview3d/KeyboardNav.tsx",
+      "claim": "When active, wrapper-focused arrow keys orbit/elevate and +/- moves camera distance fraction, then updates controls and polite announcements; effect removes key listener. This is camera navigation, not furniture mutation.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/KeyboardNav.tsx",
+          "startLine": 39,
+          "endLine": 61,
+          "excerpt": "  // Sync target ref with controls target each frame\n  useFrame(() => {\n    if (controlsRef.current?.target) {\n      targetRef.current.copy(controlsRef.current.target);\n    }\n  });\n\n  useEffect(() => {\n    const el = controlsRef.current?.domElement?.parentElement;\n    if (!el) return;\n\n    const handleKeyDown = (e: KeyboardEvent) => {\n      // Only handle keys when the canvas wrapper has focus\n      if (!el.contains(document.activeElement) && document.activeElement !== el) {\n        return;\n      }\n\n      const controls = controlsRef.current;\n      if (!controls) return;\n\n      const target = targetRef.current;\n      const offset = new THREE.Vector3().subVectors(camera.position, target);\n      const dist = offset.length();",
+          "sha256": "6ea88a329c0aa22b3a494124afda083b14b660909cc078e87dbe124fcf3f4db2"
+        },
+        {
+          "file": "packages/ui/src/preview3d/KeyboardNav.tsx",
+          "startLine": 63,
+          "endLine": 130,
+          "excerpt": "      switch (e.key) {\n        case 'ArrowLeft': {\n          e.preventDefault();\n          const angle = ORBIT_STEP;\n          const cos = Math.cos(angle);\n          const sin = Math.sin(angle);\n          const x = offset.x * cos - offset.z * sin;\n          const z = offset.x * sin + offset.z * cos;\n          camera.position.set(target.x + x, camera.position.y, target.z + z);\n          camera.lookAt(target);\n          controls.update();\n          onAction?.('Cámara rotada a la izquierda');\n          break;\n        }\n        case 'ArrowRight': {\n          e.preventDefault();\n          const angle = -ORBIT_STEP;\n          const cos = Math.cos(angle);\n          const sin = Math.sin(angle);\n          const x = offset.x * cos - offset.z * sin;\n          const z = offset.x * sin + offset.z * cos;\n          camera.position.set(target.x + x, camera.position.y, target.z + z);\n          camera.lookAt(target);\n          controls.update();\n          onAction?.('Cámara rotada a la derecha');\n          break;\n        }\n        case 'ArrowUp': {\n          e.preventDefault();\n          camera.position.y += dist * ORBIT_STEP;\n          camera.lookAt(target);\n          controls.update();\n          onAction?.('Vista elevada');\n          break;\n        }\n        case 'ArrowDown': {\n          e.preventDefault();\n          camera.position.y -= dist * ORBIT_STEP;\n          camera.lookAt(target);\n          controls.update();\n          onAction?.('Vista descendida');\n          break;\n        }\n        case '+':\n        case '=': {\n          e.preventDefault();\n          const dir = new THREE.Vector3().subVectors(target, camera.position).normalize();\n          camera.position.addScaledVector(dir, dist * ZOOM_STEP);\n          controls.update();\n          onAction?.('Zoom acercado');\n          break;\n        }\n        case '-':\n        case '_': {\n          e.preventDefault();\n          const dir = new THREE.Vector3().subVectors(target, camera.position).normalize();\n          camera.position.addScaledVector(dir, -dist * ZOOM_STEP);\n          controls.update();\n          onAction?.('Zoom alejado');\n          break;\n        }\n      }\n    };\n\n    el.addEventListener('keydown', handleKeyDown);\n    return () => el.removeEventListener('keydown', handleKeyDown);\n    // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, [camera, controlsRef]);",
+          "sha256": "6ea88a329c0aa22b3a494124afda083b14b660909cc078e87dbe124fcf3f4db2"
+        },
+        {
+          "file": "packages/ui/src/preview3d/KeyboardNav.tsx",
+          "startLine": 135,
+          "endLine": 165,
+          "excerpt": "export function KeyboardNav({\n  active,\n  controlsRef,\n  center,\n}: KeyboardNavProps): ReactNode {\n  const [announcement, setAnnouncement] = useState('');\n\n  const handleKeyAction = useCallback((msg: string) => {\n    setAnnouncement('');\n    // Force re-render so screen reader picks up new text\n    requestAnimationFrame(() => setAnnouncement(msg));\n  }, []);\n\n  if (!active) return null;\n  return (\n    <>\n      <KeyboardNavInner controlsRef={controlsRef} center={center} onAction={handleKeyAction} />\n      {/* Screen reader announcement region */}\n      <Html>\n        <div\n          className=\"sr-only\"\n          role=\"status\"\n          aria-live=\"polite\"\n          aria-atomic=\"true\"\n        >\n          {announcement}\n        </div>\n      </Html>\n    </>\n  );\n}",
+          "sha256": "6ea88a329c0aa22b3a494124afda083b14b660909cc078e87dbe124fcf3f4db2"
+        }
+      ],
+      "missingProof": [
+        "Actual focused editable child behavior and camera bounds",
+        "Screen reader repeated action handling",
+        "Browser/WebGL controls lifecycle"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-11",
+      "file": "packages/ui/src/preview3d/MaterialSurfaceModeField.tsx",
+      "claim": "Controlled visible select offers color/grain/photo surface modes with mode-specific fallback explanation; changing visualization does not assign a material.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/MaterialSurfaceModeField.tsx",
+          "startLine": 17,
+          "endLine": 23,
+          "excerpt": "const HINTS: Record<MaterialSurfaceMode, string> = {\n  color: 'Solo el color de preview del material (sin veta ni foto).',\n  grain:\n    'Color; y marca de veta solo en materiales con “Veta por defecto”. Sin veta = solo color.',\n  texture:\n    'Foto del material (textura 3D o foto de catálogo). Si no hay foto: veta si aplica, si no color.',\n};",
+          "sha256": "2c8664abfba4c11cab3788ba565069cfeef973b2072ff3f40def22197a725d79"
+        },
+        {
+          "file": "packages/ui/src/preview3d/MaterialSurfaceModeField.tsx",
+          "startLine": 25,
+          "endLine": 52,
+          "excerpt": "export function MaterialSurfaceModeField({\n  id,\n  value,\n  onChange,\n  testId = 'material-surface-mode',\n  visible = true,\n}: MaterialSurfaceModeFieldProps): ReactNode {\n  if (!visible) return null;\n\n  return (\n    <div className=\"catalog-form__field\" data-testid={`${testId}-field`}>\n      <label htmlFor={id}>Vista del acabado</label>\n      <select\n        id={id}\n        value={value}\n        onChange={(e) => onChange(e.target.value as MaterialSurfaceMode)}\n        data-testid={`${testId}-select`}\n      >\n        <option value=\"color\">Solo color</option>\n        <option value=\"grain\">Color + marca de veta</option>\n        <option value=\"texture\">Textura (foto)</option>\n      </select>\n      <p className=\"catalog-form__hint\" data-testid={`${testId}-hint`}>\n        {HINTS[value]}\n      </p>\n    </div>\n  );\n}",
+          "sha256": "2c8664abfba4c11cab3788ba565069cfeef973b2072ff3f40def22197a725d79"
+        }
+      ],
+      "missingProof": [
+        "Caller material visual resolver consistency",
+        "Keyboard/labels across multiple instances"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-12",
+      "file": "packages/ui/src/preview3d/MeasurementTool.tsx",
+      "claim": "Captures rounded hit coordinates from transparent horizontal plane at y=-2; computes distance between two points, third begins a new pair. Not arbitrary snapped board-face measurement by this handler.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/MeasurementTool.tsx",
+          "startLine": 17,
+          "endLine": 34,
+          "excerpt": "/** Snap a coordinate to 1mm precision. */\nfunction snap(v: number): number {\n  return Math.round(v);\n}\n\nfunction snapPoint(p: Point3D): Point3D {\n  return [snap(p[0]), snap(p[1]), snap(p[2])];\n}\n\n/** Euclidean distance in mm. */\nfunction distance(a: Point3D, b: Point3D): number {\n  return Math.sqrt(\n    (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2 + (b[2] - a[2]) ** 2,\n  );\n}\n\nfunction midpoint(a: Point3D, b: Point3D): Point3D {\n  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];",
+          "sha256": "1985fe450f3124e9484c82b0265d5c179235b2f01bcd04e605a8e228c5a2ee03"
+        },
+        {
+          "file": "packages/ui/src/preview3d/MeasurementTool.tsx",
+          "startLine": 64,
+          "endLine": 99,
+          "excerpt": "export function MeasurementTool({ active }: MeasurementToolProps): ReactNode {\n  const [points, setPoints] = useState<Point3D[]>([]);\n\n  const handleClick = useCallback(\n    (e: ThreeEvent<PointerEvent>) => {\n      if (!active) return;\n      e.stopPropagation();\n      const hit = snapPoint([\n        e.point.x,\n        e.point.y,\n        e.point.z,\n      ]);\n      setPoints((prev) => {\n        // After 2 points, start a new measurement\n        if (prev.length >= 2) return [hit];\n        return [...prev, hit];\n      });\n    },\n    [active],\n  );\n\n  const dist = useMemo(() => {\n    const a = points[0];\n    const b = points[1];\n    if (!a || !b) return null;\n    return distance(a, b);\n  }, [points]);\n\n  const mid = useMemo(() => {\n    const a = points[0];\n    const b = points[1];\n    if (!a || !b) return null;\n    return midpoint(a, b);\n  }, [points]);\n\n  if (!active) return null;",
+          "sha256": "1985fe450f3124e9484c82b0265d5c179235b2f01bcd04e605a8e228c5a2ee03"
+        },
+        {
+          "file": "packages/ui/src/preview3d/MeasurementTool.tsx",
+          "startLine": 101,
+          "endLine": 113,
+          "excerpt": "  return (\n    <>\n      {/* Invisible capture plane — captures clicks when measurement is active.\n          visible must stay true (opacity=0 handles visual invisibility)\n          otherwise R3F raycaster skips the mesh entirely. */}\n      <mesh\n        onClick={handleClick}\n        position={[0, -2, 0]}\n        rotation={[-Math.PI / 2, 0, 0]}\n      >\n        <planeGeometry args={[50000, 50000]} />\n        <meshBasicMaterial transparent opacity={0} side={2} depthWrite={false} />\n      </mesh>",
+          "sha256": "1985fe450f3124e9484c82b0265d5c179235b2f01bcd04e605a8e228c5a2ee03"
+        },
+        {
+          "file": "packages/ui/src/preview3d/MeasurementTool.tsx",
+          "startLine": 132,
+          "endLine": 135,
+          "excerpt": "      {/* Distance label at midpoint */}\n      {dist !== null && mid !== null && (\n        <DistanceLabel position={mid} dist={dist} />\n      )}",
+          "sha256": "1985fe450f3124e9484c82b0265d5c179235b2f01bcd04e605a8e228c5a2ee03"
+        }
+      ],
+      "missingProof": [
+        "Real raycasting/occlusion and physical accuracy",
+        "Keyboard alternative and reset on mode change",
+        "User expectation for vertical/3D face measurement"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-13",
+      "file": "packages/ui/src/preview3d/ModelExporter.tsx",
+      "claim": "Exports current scene with lazy Three GLTF/GLB/OBJ/STL exporters and sanitized filename; busyRef rejects overlap. Failure only logs console and invokes same onExportComplete reset in finally, without failure result.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/ModelExporter.tsx",
+          "startLine": 36,
+          "endLine": 60,
+          "excerpt": "async function exportGLTF(\n  scene: Object3D,\n  projectName: string,\n  binary: boolean,\n): Promise<void> {\n  const { GLTFExporter } = await import(\n    'three/examples/jsm/exporters/GLTFExporter.js'\n  );\n  const exporter = new GLTFExporter();\n  const result = await exporter.parseAsync(scene, { binary });\n\n  const format: ModelFormat = binary ? 'glb' : 'gltf';\n  const ext = getExportExtension(format);\n  const mime = getExportMimeType(format);\n  const filename = `${sanitizeFilename(projectName)}.${ext}`;\n\n  if (binary) {\n    downloadBlob(result as ArrayBuffer, filename, mime);\n  } else {\n    downloadBlob(\n      JSON.stringify(result, null, 2),\n      filename,\n      mime,\n    );\n  }",
+          "sha256": "241a8ca5acdd01ff1203d023759f16eca6f440800266b2b737249a6314ca79ea"
+        },
+        {
+          "file": "packages/ui/src/preview3d/ModelExporter.tsx",
+          "startLine": 63,
+          "endLine": 88,
+          "excerpt": "async function exportOBJ(\n  scene: Object3D,\n  projectName: string,\n): Promise<void> {\n  const { OBJExporter } = await import(\n    'three/examples/jsm/exporters/OBJExporter.js'\n  );\n  const exporter = new OBJExporter();\n  const result = exporter.parse(scene);\n  const filename = `${sanitizeFilename(projectName)}.obj`;\n  downloadBlob(result, filename, getExportMimeType('obj'));\n}\n\nasync function exportSTL(\n  scene: Object3D,\n  projectName: string,\n): Promise<void> {\n  const { STLExporter } = await import(\n    'three/examples/jsm/exporters/STLExporter.js'\n  );\n  const exporter = new STLExporter();\n  const result = exporter.parse(scene, { binary: true });\n  const filename = `${sanitizeFilename(projectName)}.stl`;\n  // STLExporter binary parse returns DataView (extends ArrayBufferView)\n  downloadBlob(result, filename, getExportMimeType('stl'));\n}",
+          "sha256": "241a8ca5acdd01ff1203d023759f16eca6f440800266b2b737249a6314ca79ea"
+        },
+        {
+          "file": "packages/ui/src/preview3d/ModelExporter.tsx",
+          "startLine": 90,
+          "endLine": 130,
+          "excerpt": "export function ModelExporter({\n  exportFormat,\n  onExportComplete,\n  projectName,\n}: ModelExporterProps): ReactNode {\n  const { scene } = useThree();\n  const busyRef = useRef(false);\n\n  useEffect(() => {\n    if (!exportFormat || busyRef.current) return;\n\n    busyRef.current = true;\n    const run = async () => {\n      try {\n        switch (exportFormat) {\n          case 'gltf':\n            await exportGLTF(scene, projectName, false);\n            break;\n          case 'glb':\n            await exportGLTF(scene, projectName, true);\n            break;\n          case 'obj':\n            await exportOBJ(scene, projectName);\n            break;\n          case 'stl':\n            await exportSTL(scene, projectName);\n            break;\n        }\n      } catch (err) {\n        console.error('[ModelExporter] Export failed:', err);\n      } finally {\n        busyRef.current = false;\n        onExportComplete();\n      }\n    };\n\n    run();\n  }, [exportFormat, scene, projectName, onExportComplete]);\n\n  return null;\n}",
+          "sha256": "241a8ca5acdd01ff1203d023759f16eca6f440800266b2b737249a6314ca79ea"
+        }
+      ],
+      "missingProof": [
+        "Actual export/download/import readback",
+        "Scene includes helper/ambient scope and unit mapping",
+        "User-visible error at caller; no machine output certification"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-14",
+      "file": "packages/ui/src/preview3d/ModuleScene3D.tsx",
+      "claim": "Adapter wraps exact resolved parts in one module at origin, forwards material/selection/hardware camera inputs to FurnitureScene3D, disables floor; does not resolve manufacturing geometry itself.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/ModuleScene3D.tsx",
+          "startLine": 68,
+          "endLine": 107,
+          "excerpt": "export function ModuleScene3D({\n  parts,\n  width,\n  height,\n  depth,\n  className,\n  style,\n  colorMode = 'material',\n  materialColors,\n  materialTextures,\n  surfaceMode,\n  cameraView,\n  cameraType,\n  showWireframe,\n  showOutlines,\n  selectedPartId,\n  onSelectPart,\n  isolateSelected,\n  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,\n  showAxes = true,\n  showOuterGhost = true,\n  resolvedHardwarePlacements,\n  hardwareCatalog,\n}: ModuleScene3DProps): ReactNode {\n  return (\n    <FurnitureScene3D\n      modules={[\n        {\n          key: 'module',\n          parts,\n          width,\n          height,\n          depth,\n          originX: 0,\n          originY: 0,\n          originZ: 0,\n          showOuterGhost,\n          resolvedHardwarePlacements,\n        },\n      ]}",
+          "sha256": "086d62f48ed23d4cb3ff870f541d02d77107c8ba9e5a17e5591460a2aa2ac008"
+        },
+        {
+          "file": "packages/ui/src/preview3d/ModuleScene3D.tsx",
+          "startLine": 108,
+          "endLine": 131,
+          "excerpt": "      totalWidth={width}\n      totalHeight={height}\n      totalDepth={depth}\n      className={className}\n      style={style}\n      testId=\"module-scene-3d\"\n      showFloor={false}\n      showAxes={showAxes}\n      colorMode={colorMode}\n      materialColors={materialColors}\n      materialTextures={materialTextures}\n      surfaceMode={surfaceMode}\n      cameraView={cameraView}\n      cameraType={cameraType}\n      showWireframe={showWireframe}\n      showOutlines={showOutlines}\n      selectedPartId={selectedPartId}\n      onSelectPart={onSelectPart}\n      isolateSelected={isolateSelected}\n      lightingMode={lightingMode}\n      hardwareCatalog={hardwareCatalog}\n    />\n  );\n}",
+          "sha256": "086d62f48ed23d4cb3ff870f541d02d77107c8ba9e5a17e5591460a2aa2ac008"
+        }
+      ],
+      "missingProof": [
+        "Child WebGL behavior",
+        "Catalog hardware placement identity",
+        "Parent resolved revision truth"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-15",
+      "file": "packages/ui/src/dashboard/OpsExceptionsPanel.tsx",
+      "claim": "Props-driven exception list hides when empty, severity text accompanies color, exact projectId passed to open callback; no threshold/exception derivation here.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/dashboard/OpsExceptionsPanel.tsx",
+          "startLine": 31,
+          "endLine": 56,
+          "excerpt": "export function OpsExceptionsPanel({\n  exceptions,\n  onOpenProject,\n  testId = 'ops-exceptions-panel',\n}: OpsExceptionsPanelProps): ReactNode {\n  if (exceptions.length === 0) return null;\n  const critical = exceptions.filter((e) => e.severity === 'critical').length;\n\n  return (\n    <section\n      className=\"dashboard__section\"\n      aria-labelledby=\"ops-exceptions-title\"\n      data-testid={testId}\n    >\n      <div className=\"ops-exceptions__header\">\n        <h3 id=\"ops-exceptions-title\" className=\"ops-exceptions__title\">\n          {critical > 0 ? (\n            <TriangleAlert size={18} strokeWidth={1.5} aria-hidden />\n          ) : (\n            <CircleAlert size={18} strokeWidth={1.5} aria-hidden />\n          )}\n          Necesita atención — {exceptions.length} alerta{exceptions.length === 1 ? '' : 's'}\n        </h3>\n        <p className=\"ops-exceptions__hint\">\n          Cada alerta abre la obra correspondiente para resolverla.\n        </p>",
+          "sha256": "ae36983ba1b2a4202ae1d5025fa70807d2e50c95b4fa6d9dae21ddf319d8434b"
+        },
+        {
+          "file": "packages/ui/src/dashboard/OpsExceptionsPanel.tsx",
+          "startLine": 58,
+          "endLine": 83,
+          "excerpt": "      <ul className=\"ops-exceptions__list\" data-testid={`${testId}-list`}>\n        {exceptions.map((exception, index) => (\n          <li\n            key={`${exception.kind}-${exception.projectId}-${index}`}\n            className={`ops-exceptions__item ${severityClass(exception.severity)}`}\n            data-testid={`${testId}-item`}\n          >\n            <button\n              type=\"button\"\n              className=\"ops-exceptions__button\"\n              onClick={() => onOpenProject(exception.projectId)}\n              data-testid={`${testId}-open`}\n            >\n              <span className=\"ops-exceptions__severity\" aria-label={SEVERITY_LABEL_ES[exception.severity]}>\n                {SEVERITY_LABEL_ES[exception.severity]}\n              </span>\n              <span className=\"ops-exceptions__body\">\n                <span className=\"ops-exceptions__project\">{exception.projectName}</span>\n                <span className=\"ops-exceptions__message\">{exception.message}</span>\n                <span className=\"ops-exceptions__action\">{exception.actionHint}</span>\n              </span>\n              <ArrowRight size={16} strokeWidth={1.5} aria-hidden />\n            </button>\n          </li>\n        ))}\n      </ul>",
+          "sha256": "ae36983ba1b2a4202ae1d5025fa70807d2e50c95b4fa6d9dae21ddf319d8434b"
+        }
+      ],
+      "missingProof": [
+        "Domain exception provenance and role scope",
+        "Navigation callback success",
+        "Empty vs unavailable inputs"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-16",
+      "file": "packages/ui/src/preview3d/PaintModeField.tsx",
+      "claim": "Named select switches existing-part material appearance vs role colors; hint explicitly distinguishes display mode from choosing material.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/PaintModeField.tsx",
+          "startLine": 18,
+          "endLine": 45,
+          "excerpt": "export function PaintModeField({\n  id,\n  value,\n  onChange,\n  testId = 'paint-mode',\n  hint,\n}: PaintModeFieldProps): ReactNode {\n  return (\n    <div className=\"catalog-form__field\" data-testid={`${testId}-field`}>\n      <label htmlFor={id}>Cómo se pinta</label>\n      <select\n        id={id}\n        value={value}\n        onChange={(e) => onChange(e.target.value as BoardColorMode)}\n        data-testid={`${testId}-select`}\n      >\n        <option value=\"material\">Acabados del material</option>\n        <option value=\"role\">Solo roles de pieza (taller)</option>\n      </select>\n      <p className=\"catalog-form__hint\" data-testid={`${testId}-hint`}>\n        {hint ??\n          (value === 'material'\n            ? 'Muestra color, veta y textura del material de cada pieza. No elige el material: solo cómo se ve.'\n            : 'Colorea por rol (INTERIOR, FRENTE…) con tintes fijos de taller. Útil para leer el despiece, no para ver el acabado real.')}\n      </p>\n    </div>\n  );\n}",
+          "sha256": "bb8f26524ac3814bd5fbfcd107a39380517a0a9babb8fa375e7a7f0b70e1d4bb"
+        }
+      ],
+      "missingProof": [
+        "Caller visual mode mapping",
+        "Keyboard and contrast"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-17",
+      "file": "packages/ui/src/preview3d/PartList.tsx",
+      "claim": "Uses resolved part id for option selection/callback and description/code/id fallback; dimensions rounded for display. Listbox markup does not implement custom arrow-key roving behavior.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/PartList.tsx",
+          "startLine": 18,
+          "endLine": 60,
+          "excerpt": "export function PartList({\n  parts,\n  selectedPartId = null,\n  onSelectPart,\n  testId = 'part-list',\n  optionGroups,\n}: PartListProps): ReactNode {\n  if (parts.length === 0) {\n    return null;\n  }\n\n  return (\n    <ul className=\"part-list\" data-testid={testId} role=\"listbox\" aria-label=\"Piezas del mueble\">\n      {parts.map((part) => {\n        const selected = part.id === selectedPartId;\n        const label = part.description || part.code || part.id;\n        return (\n          <li key={part.id} role=\"option\" aria-selected={selected}>\n            <button\n              type=\"button\"\n              className={\n                selected\n                  ? 'part-list__item part-list__item--selected'\n                  : 'part-list__item'\n              }\n              onClick={() => onSelectPart(part.id)}\n              data-testid={`${testId}-item-${part.id}`}\n            >\n              <span className=\"part-list__name\">{label}</span>\n              <span className=\"part-list__meta\">\n                {part.optionRole\n                  ? `${optionRoleLabel(part.optionRole, optionGroups)} · `\n                  : ''}\n                {Math.round(part.lengthMm)}×{Math.round(part.widthMm)}×\n                {Math.round(part.thicknessMm)}\n              </span>\n            </button>\n          </li>\n        );\n      })}\n    </ul>\n  );\n}",
+          "sha256": "5232ae39fd48dd84ee70851d7021efb71c23ec77ae3b125ad433b8e9a689fc0c"
+        }
+      ],
+      "missingProof": [
+        "Keyboard listbox behavior",
+        "Physical identity source and full-precision dimensions",
+        "Selection synchronization with viewport"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-18",
+      "file": "packages/ui/src/preview3d/PieceFaceDrillingEditor.tsx",
+      "claim": "Domain resolves manual+derived drilling and per-face dimensions/issues; only manual placement indexes editable. Pointer patch snaps coordinates and clears x/y formulas; face switches via radios. SVG maps bounding rect to viewBox, stops drag on leave/up.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/preview3d/PieceFaceDrillingEditor.tsx",
+          "startLine": 39,
+          "endLine": 54,
+          "excerpt": "export function snappedPlacementPatch(\n  current: HardwarePlacement,\n  xMm: number,\n  yMm: number,\n  gridMm: number,\n): Partial<HardwarePlacement> {\n  return {\n    relativePosition: {\n      ...current.relativePosition,\n      xMm: snapValue(xMm, gridMm),\n      yMm: snapValue(yMm, gridMm),\n      xFormula: undefined,\n      yFormula: undefined,\n    },\n  };\n}",
+          "sha256": "452da9e45b1440171f6420ffeb8da113137b6723c494217cb99d55baa932e61e"
+        },
+        {
+          "file": "packages/ui/src/preview3d/PieceFaceDrillingEditor.tsx",
+          "startLine": 84,
+          "endLine": 109,
+          "excerpt": "  const face = useMemo(\n    () => getFaceDimensions(activeFace, piece),\n    [activeFace, piece],\n  );\n\n  const resolved = useMemo(\n    () =>\n      hardwareCatalog\n        ? resolvePartDrilling({\n            piece,\n            placements: [...placements, ...derivedPlacements],\n            hardwareCatalog,\n          })\n        : null,\n    [piece, placements, derivedPlacements, hardwareCatalog],\n  );\n\n  const holesOnFace = resolved\n    ? resolved.holes.filter((h) => h.face === activeFace)\n    : [];\n  const issuesOnFace = resolved\n    ? resolved.issues.filter((i) => i.hole.face === activeFace)\n    : [];\n  const facePlacements = placements\n    .map((p, idx) => ({ placement: p, idx }))\n    .filter(({ placement }) => placement.anchorFace === (activeFace as AnchorFace));",
+          "sha256": "452da9e45b1440171f6420ffeb8da113137b6723c494217cb99d55baa932e61e"
+        },
+        {
+          "file": "packages/ui/src/preview3d/PieceFaceDrillingEditor.tsx",
+          "startLine": 116,
+          "endLine": 138,
+          "excerpt": "  const pointerToFaceMm = (event: { readonly clientX: number; readonly clientY: number }) => {\n    const svg = svgRef.current;\n    if (!svg) return null;\n    const rect = svg.getBoundingClientRect();\n    if (rect.width === 0 || rect.height === 0) return null;\n    const xMm = ((event.clientX - rect.left) / rect.width) * svgW - padMm;\n    const yMm = face.heightMm - (((event.clientY - rect.top) / rect.height) * svgH - padMm);\n    return { xMm, yMm };\n  };\n\n  const handleDragMove = (event: React.PointerEvent) => {\n    if (dragIndex == null || !onUpdatePlacement) return;\n    const pos = pointerToFaceMm(event);\n    if (!pos) return;\n    const current = placements[dragIndex];\n    if (!current) return;\n    onUpdatePlacement(dragIndex, snappedPlacementPatch(current, pos.xMm, pos.yMm, gridMm));\n  };\n\n  const gridLines: number[] = [];\n  for (let g = gridMm; g < Math.max(face.widthMm, face.heightMm); g += gridMm) {\n    gridLines.push(g);\n  }",
+          "sha256": "452da9e45b1440171f6420ffeb8da113137b6723c494217cb99d55baa932e61e"
+        },
+        {
+          "file": "packages/ui/src/preview3d/PieceFaceDrillingEditor.tsx",
+          "startLine": 144,
+          "endLine": 168,
+          "excerpt": "      <div className=\"face-editor__faces\" role=\"radiogroup\" aria-label=\"Cara de la pieza\">\n        {FACES.map((f) => (\n          <button\n            key={f}\n            type=\"button\"\n            role=\"radio\"\n            aria-checked={activeFace === f}\n            className={`face-editor__face-tab ${activeFace === f ? 'face-editor__face-tab--active' : ''}`}\n            onClick={() => setActiveFace(f)}\n            data-testid={`${testId}-face-${f}`}\n          >\n            {FACE_LABELS_ES[f]}\n          </button>\n        ))}\n      </div>\n\n      <svg\n        ref={svgRef}\n        className=\"face-editor__svg\"\n        viewBox={`0 0 ${svgW} ${svgH}`}\n        data-testid={`${testId}-svg`}\n        onPointerMove={handleDragMove}\n        onPointerUp={() => setDragIndex(null)}\n        onPointerLeave={() => setDragIndex(null)}\n      >",
+          "sha256": "452da9e45b1440171f6420ffeb8da113137b6723c494217cb99d55baa932e61e"
+        },
+        {
+          "file": "packages/ui/src/preview3d/PieceFaceDrillingEditor.tsx",
+          "startLine": 203,
+          "endLine": 240,
+          "excerpt": "        {/* Draggable manual placement anchors */}\n        {facePlacements.map(({ placement, idx }) => (\n          <g\n            key={`anchor-${idx}`}\n            className={`face-editor__anchor ${dragIndex === idx ? 'face-editor__anchor--dragging' : ''}`}\n            data-testid={`${testId}-anchor-${idx}`}\n            onPointerDown={(e) => {\n              e.preventDefault();\n              setDragIndex(idx);\n            }}\n          >\n            <circle cx={padMm + placement.relativePosition.xMm} cy={padMm + toY(placement.relativePosition.yMm)} r={gridMm * 0.45} />\n            <text x={padMm + placement.relativePosition.xMm} y={padMm + toY(placement.relativePosition.yMm)} className=\"face-editor__anchor-label\">\n              {idx + 1}\n            </text>\n          </g>\n        ))}\n      </svg>\n\n      <p className=\"face-editor__meta\" data-testid={`${testId}-meta`}>\n        {FACE_LABELS_ES[activeFace]} · {Math.round(face.widthMm)} × {Math.round(face.heightMm)} mm ·{' '}\n        {holesOnFace.length} {holesOnFace.length === 1 ? 'perforación' : 'perforaciones'} · snap {gridMm} mm\n      </p>\n\n      {issuesOnFace.length > 0 ? (\n        <ul className=\"face-editor__issues\" data-testid={`${testId}-issues`}>\n          {issuesOnFace.map((issue, i) => (\n            <li key={i} className=\"face-editor__issue\" role=\"alert\">\n              {issue.message}\n            </li>\n          ))}\n        </ul>\n      ) : (\n        resolved && (\n          <p className=\"face-editor__ok\" data-testid={`${testId}-ok`}>\n            {issuesOnFace.length === 0 && resolved.issues.length === 0\n              ? '✓ Perforaciones válidas en toda la pieza'\n              : '✓ Sin problemas en esta cara'}",
+          "sha256": "452da9e45b1440171f6420ffeb8da113137b6723c494217cb99d55baa932e61e"
+        }
+      ],
+      "missingProof": [
+        "Real pointer coordinate/aspect-ratio behavior",
+        "Index stability during simultaneous placement change",
+        "Positive gridMm validation, keyboard movement, server manufacturing proof"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-19",
+      "file": "packages/ui/src/dashboard/WorkshopAnalyticsPanel.tsx",
+      "claim": "Props-only analytics preserves missing rates/days as dash and margin risk null; avgTicket null becomes0. Period callback and loading/hasData gate control display; bars clamp normalized width.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/dashboard/WorkshopAnalyticsPanel.tsx",
+          "startLine": 35,
+          "endLine": 41,
+          "excerpt": "function pct(rate: number | null): string {\n  return rate === null ? '—' : `${Math.round(rate * 100)}%`;\n}\n\nfunction days1(value: number | null): string {\n  return value === null ? '—' : `${value.toFixed(1)} d`;\n}",
+          "sha256": "59684585e1a9e0d530b754f9aa666cb6e244a261171cc3836f79a19f494ceaed"
+        },
+        {
+          "file": "packages/ui/src/dashboard/WorkshopAnalyticsPanel.tsx",
+          "startLine": 63,
+          "endLine": 88,
+          "excerpt": "function BarRow({\n  label,\n  value,\n  max,\n  valueLabel,\n  testId,\n}: {\n  readonly label: string;\n  readonly value: number;\n  readonly max: number;\n  readonly valueLabel: string;\n  readonly testId: string;\n}): ReactNode {\n  const width = max > 0 ? Math.min(Math.max(Math.round((value / max) * 100), 0), 100) : 0;\n  return (\n    <li className=\"analytics__bar-row\" data-testid={testId}>\n      <span className=\"analytics__bar-label\">{label}</span>\n      <span className=\"analytics__bar-track\" aria-hidden>\n        <span\n          className=\"analytics__bar-fill\"\n          style={{ transform: `scaleX(${width / 100})` }}\n        />\n      </span>\n      <span className=\"analytics__bar-value\">{valueLabel}</span>\n    </li>\n  );",
+          "sha256": "59684585e1a9e0d530b754f9aa666cb6e244a261171cc3836f79a19f494ceaed"
+        },
+        {
+          "file": "packages/ui/src/dashboard/WorkshopAnalyticsPanel.tsx",
+          "startLine": 104,
+          "endLine": 125,
+          "excerpt": "        <StatCard\n          label=\"Cotizado → ganado\"\n          value={pct(funnel.quoteToWonRate)}\n          hint=\"De lo cotizado en el período\"\n          testId=\"analytics-quote-won-rate\"\n        />\n        <StatCard\n          label=\"Tiempo al cierre\"\n          value={days1(funnel.avgDaysToClose)}\n          hint=\"Creación → aceptación\"\n          testId=\"analytics-avg-close-days\"\n        />\n        <StatCard\n          label=\"Ticket promedio\"\n          value={formatMoneyDisplay(funnel.avgTicket ?? 0)}\n          testId=\"analytics-avg-ticket\"\n        />\n        <StatCard\n          label=\"Pipeline abierto\"\n          value={`${funnel.openPipelineCount}`}\n          hint={formatMoneyDisplay(funnel.openPipelineValue)}\n          testId=\"analytics-open-pipeline\"",
+          "sha256": "59684585e1a9e0d530b754f9aa666cb6e244a261171cc3836f79a19f494ceaed"
+        },
+        {
+          "file": "packages/ui/src/dashboard/WorkshopAnalyticsPanel.tsx",
+          "startLine": 188,
+          "endLine": 197,
+          "excerpt": "        <StatCard\n          label=\"Margen en riesgo\"\n          value={\n            warranties.marginAtRisk === null\n              ? '—'\n              : formatMoneyDisplay(warranties.marginAtRisk)\n          }\n          hint=\"Venta − costo directo de obras con reclamo\"\n          testId=\"analytics-warranty-margin\"\n        />",
+          "sha256": "59684585e1a9e0d530b754f9aa666cb6e244a261171cc3836f79a19f494ceaed"
+        },
+        {
+          "file": "packages/ui/src/dashboard/WorkshopAnalyticsPanel.tsx",
+          "startLine": 235,
+          "endLine": 299,
+          "excerpt": "export function WorkshopAnalyticsPanel({\n  analytics,\n  period,\n  onPeriodChange,\n  loading = false,\n}: WorkshopAnalyticsPanelProps): ReactNode {\n  const hasData =\n    analytics.funnel.openPipelineCount +\n      analytics.funnel.wonCount +\n      analytics.warranties.total >\n    0;\n  return (\n    <section\n      className=\"analytics\"\n      aria-labelledby=\"analytics-title\"\n      data-testid=\"dashboard-analytics\"\n    >\n      <header className=\"analytics__header\">\n        <div>\n          <h3 className=\"analytics__title\" id=\"analytics-title\">\n            Métricas del taller\n          </h3>\n          <p className=\"analytics__subtitle\">\n            Conversión comercial y garantías post-venta (F090).\n          </p>\n        </div>\n        <div\n          className=\"analytics__periods\"\n          role=\"toolbar\"\n          aria-label=\"Período de análisis\"\n        >\n          {ANALYTICS_PERIODS.map((p) => (\n            <button\n              key={String(p.value)}\n              type=\"button\"\n              className={\n                period === p.value\n                  ? 'analytics__period analytics__period--active'\n                  : 'analytics__period'\n              }\n              onClick={() => onPeriodChange(p.value)}\n              data-testid={`analytics-period-${p.value}`}\n            >\n              {p.label}\n            </button>\n          ))}\n        </div>\n      </header>\n      {loading ? (\n        <p className=\"analytics__empty\" data-testid=\"analytics-loading\">\n          Cargando métricas…\n        </p>\n      ) : hasData ? (\n        <div className=\"analytics__grid\">\n          <FunnelBlock funnel={analytics.funnel} />\n          <WarrantyBlock warranties={analytics.warranties} />\n        </div>\n      ) : (\n        <p className=\"analytics__empty\" data-testid=\"analytics-empty\">\n          Sin actividad en este período.\n        </p>\n      )}\n    </section>\n  );\n}",
+          "sha256": "59684585e1a9e0d530b754f9aa666cb6e244a261171cc3836f79a19f494ceaed"
+        }
+      ],
+      "missingProof": [
+        "Metric event provenance and missing-vs-zero policy",
+        "Role redaction",
+        "Empty/failed datasets and accessible period selection"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-20",
+      "file": "packages/ui/src/sales/components/AlertsSection.tsx",
+      "claim": "Renders provided alert messages with type/project key, hides empty list; no click-through or alert derivation in this component.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/sales/components/AlertsSection.tsx",
+          "startLine": 5,
+          "endLine": 27,
+          "excerpt": "export function AlertsSection({\n  alerts,\n}: {\n  readonly alerts: readonly SalesAlert[];\n}): ReactNode {\n  if (alerts.length === 0) return null;\n\n  return (\n    <div className=\"sales-alerts\">\n      <h3 className=\"sales-alerts__title\">\n        <AlertTriangle size={16} strokeWidth={1.5} />\n        Alertas\n      </h3>\n      <ul className=\"sales-alerts__list\">\n        {alerts.map((alert) => (\n          <li key={`${alert.type}-${alert.projectId}`} className=\"sales-alerts__item\">\n            <span className=\"sales-alerts__text\">{alert.message}</span>\n          </li>\n        ))}\n      </ul>\n    </div>\n  );\n}",
+          "sha256": "84a719bb51e2af321b1616fe5a1c83fad02430326b64b49b47cfd8a2d9cc5c02"
+        }
+      ],
+      "missingProof": [
+        "Domain thresholds",
+        "Duplicate key combinations",
+        "Accessible announcement/real navigation expectations"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-21",
+      "file": "packages/ui/src/engineering/components/EngineeringResumenTab.tsx",
+      "claim": "Derives cut totals using domain summarizer; materials/edges/hardware shown first6 entries. Hardware block nested under nonempty board totals; readiness/banners consume provided legacy readiness flags, not server DesignRelease proof.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringResumenTab.tsx",
+          "startLine": 78,
+          "endLine": 89,
+          "excerpt": "export function EngineeringResumenTab({\n  readiness,\n  cutRows,\n  hardwareRows,\n}: EngineeringResumenTabProps): ReactNode {\n  const totals = useMemo(\n    () =>\n      cutRows && cutRows.length > 0\n        ? summarizeProductionTotals(cutRows)\n        : null,\n    [cutRows],\n  );",
+          "sha256": "d0e2408e5a14a5272433cf232710e3b4c401dc2d34f15c1faa54a4abdcd307be"
+        },
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringResumenTab.tsx",
+          "startLine": 145,
+          "endLine": 201,
+          "excerpt": "      {/* Material breakdown */}\n      {totals && (totals.materials.length > 0 || totals.edges.length > 0) ? (\n        <div className=\"eng-resumen__breakdown\">\n          {totals.materials.length > 0 ? (\n            <div className=\"eng-resumen__breakdown-col\">\n              <h4 className=\"eng-resumen__breakdown-title\">Tablero</h4>\n              <ul className=\"eng-resumen__breakdown-list\">\n                {totals.materials.slice(0, 6).map((m) => (\n                  <li key={m.key}>\n                    <span className=\"eng-resumen__breakdown-material\">\n                      {m.name}\n                    </span>\n                    <span className=\"eng-resumen__breakdown-num\">\n                      {m.pieces} {m.pieces === 1 ? 'pieza' : 'piezas'} ·{' '}\n                      {m.areaM2.toLocaleString('es-MX')} m²\n                    </span>\n                  </li>\n                ))}\n              </ul>\n            </div>\n          ) : null}\n          {totals.edges.length > 0 ? (\n            <div className=\"eng-resumen__breakdown-col\">\n              <h4 className=\"eng-resumen__breakdown-title\">Canto</h4>\n              <ul className=\"eng-resumen__breakdown-list\">\n                {totals.edges.slice(0, 6).map((e) => (\n                  <li key={e.key}>\n                    <span className=\"eng-resumen__breakdown-material\">\n                      {e.name}\n                    </span>\n                    <span className=\"eng-resumen__breakdown-num\">\n                      {e.ml.toLocaleString('es-MX')} ml\n                    </span>\n                  </li>\n                ))}\n              </ul>\n            </div>\n          ) : null}\n          {hardwareRows && hardwareRows.length > 0 ? (\n            <div className=\"eng-resumen__breakdown-col\">\n              <h4 className=\"eng-resumen__breakdown-title\">Herrajes</h4>\n              <ul className=\"eng-resumen__breakdown-list\">\n                {hardwareRows.slice(0, 6).map((h) => (\n                  <li key={h.hardwareId}>\n                    <span className=\"eng-resumen__breakdown-material\">\n                      {h.description || h.code}\n                    </span>\n                    <span className=\"eng-resumen__breakdown-num\">\n                      {h.purchaseQuantity} {h.unit}\n                    </span>\n                  </li>\n                ))}\n              </ul>\n            </div>\n          ) : null}\n        </div>\n      ) : null}",
+          "sha256": "d0e2408e5a14a5272433cf232710e3b4c401dc2d34f15c1faa54a4abdcd307be"
+        },
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringResumenTab.tsx",
+          "startLine": 203,
+          "endLine": 258,
+          "excerpt": "      {/* Readiness checklist */}\n      <div className=\"eng-resumen__checklist-block\">\n        <h3 className=\"eng-resumen__checklist-title\">Listo para cortar</h3>\n        <ul className=\"eng-resumen__checklist\">\n          <CheckRow\n            ok={readiness.cutListOk}\n            label=\"BOM / cut-list válido\"\n            detail={\n              readiness.cutListOk\n                ? undefined\n                : (readiness.cutListError ?? undefined)\n            }\n          />\n          <CheckRow\n            ok={readiness.materialsResolved}\n            label=\"Materiales resueltos\"\n            detail={\n              readiness.materialsResolved\n                ? `${readiness.cutRowCount} piezas de tablero`\n                : 'Sin piezas de tablero para exportar'\n            }\n          />\n          <CheckRow\n            ok={readiness.hasKitchenLayout ? readiness.hasPlacements : true}\n            warn={readiness.hasUnplacedItems}\n            label={\n              readiness.hasKitchenLayout\n                ? 'Layout de cocina'\n                : 'Layout de cocina (opcional)'\n            }\n            detail={\n              !readiness.hasKitchenLayout\n                ? 'Sin muros — obra lineal o solo despiece'\n                : readiness.hasUnplacedItems\n                  ? 'Hay muebles sin colocar en el layout'\n                  : `${readiness.hasPlacements ? 'Con placements' : 'Sin placements'}`\n            }\n          />\n          <CheckRow\n            ok={readiness.optimizerGenerable}\n            label=\"Optimizer generable\"\n            detail={\n              readiness.optimizerGenerable\n                ? 'Plantilla_Optimizer.xlsx listo'\n                : 'Bloqueado hasta tener despiece válido'\n            }\n          />\n          <CheckRow\n            ok={readiness.packGenerable}\n            label=\"Pack descargable\"\n            detail={\n              readiness.packGenerable\n                ? 'Núcleo Optimizer disponible'\n                : 'Requiere despiece de corte'\n            }\n          />",
+          "sha256": "d0e2408e5a14a5272433cf232710e3b4c401dc2d34f15c1faa54a4abdcd307be"
+        },
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringResumenTab.tsx",
+          "startLine": 261,
+          "endLine": 271,
+          "excerpt": "        {/* Ready banner */}\n        {readiness.readyToCut ? (\n          <div className=\"eng-resumen__banner eng-resumen__banner--ready\">\n            <CheckCircle2 size={18} strokeWidth={1.5} />\n            Listo para generar pack y mandar a corte.\n          </div>\n        ) : (\n          <div className=\"eng-resumen__banner eng-resumen__banner--blocked\">\n            Falta resolver el despiece antes de cortar.\n          </div>\n        )}",
+          "sha256": "d0e2408e5a14a5272433cf232710e3b4c401dc2d34f15c1faa54a4abdcd307be"
+        }
+      ],
+      "missingProof": [
+        "Hardware-only project visibility",
+        "Readiness truth/revision authority",
+        "Truncation affordance and actual export"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-22",
+      "file": "packages/ui/src/sales/components/ClientRankingTable.tsx",
+      "claim": "Sorts copied clients descending by chosen numeric metric, shows top5; money/count formatting distinct and all values supplied by parent.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/sales/components/ClientRankingTable.tsx",
+          "startLine": 6,
+          "endLine": 33,
+          "excerpt": "export function ClientRankingTable({\n  title,\n  icon: Icon,\n  clients,\n  valueField,\n}: {\n  readonly title: string;\n  readonly icon: typeof Users;\n  readonly clients: readonly ClientRanking[];\n  readonly valueField: 'totalValue' | 'projectCount' | 'openCount' | 'cancelledCount';\n}): ReactNode {\n  if (clients.length === 0) return null;\n\n  const sorted = [...clients].sort((a, b) => b[valueField] - a[valueField]);\n  const top = sorted.slice(0, 5);\n\n  const formatValue = (c: ClientRanking): string => {\n    switch (valueField) {\n      case 'totalValue':\n        return formatMoneyDisplay(c.totalValue);\n      case 'projectCount':\n        return `${c.projectCount}`;\n      case 'openCount':\n        return `${c.openCount}`;\n      case 'cancelledCount':\n        return `${c.cancelledCount}`;\n    }\n  };",
+          "sha256": "61d9c63cccba37ad7d9f18c6a315f39d5eeed65ee5a1619e6db791c7d9aba53e"
+        },
+        {
+          "file": "packages/ui/src/sales/components/ClientRankingTable.tsx",
+          "startLine": 35,
+          "endLine": 57,
+          "excerpt": "  return (\n    <div className=\"sales-ranking\">\n      <h3 className=\"sales-section-title\">\n        <Icon size={16} strokeWidth={1.5} />\n        {title}\n      </h3>\n      <ul className=\"sales-ranking__list\">\n        {top.map((c, i) => (\n          <li key={c.customerId} className=\"sales-ranking__item\">\n            <span className=\"sales-ranking__rank\">{i + 1}</span>\n            <div className=\"sales-ranking__info\">\n              <span className=\"sales-ranking__name\">{c.customerLabel}</span>\n              <span className=\"sales-ranking__detail\">\n                {c.projectCount} proyectos · {c.openCount} abiertos · {c.closedCount} cerrados\n              </span>\n            </div>\n            <span className=\"sales-ranking__value\">{formatValue(c)}</span>\n          </li>\n        ))}\n      </ul>\n    </div>\n  );\n}",
+          "sha256": "61d9c63cccba37ad7d9f18c6a315f39d5eeed65ee5a1619e6db791c7d9aba53e"
+        }
+      ],
+      "missingProof": [
+        "Ranking metric provenance/filter boundaries",
+        "Ties and missing data",
+        "Accessible/full ranking navigation"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-23",
+      "file": "packages/ui/src/engineering/components/EngineerWorkloadTable.tsx",
+      "claim": "Hides empty workload; displays named engineer assignment/process/documented/sent counts from props, null average cycle as dash.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/engineering/components/EngineerWorkloadTable.tsx",
+          "startLine": 14,
+          "endLine": 39,
+          "excerpt": "export function EngineerWorkloadTable({\n  engineerWorkload,\n  resolveEngineerName,\n}: EngineerWorkloadTableProps): ReactNode {\n  if (engineerWorkload.length === 0) return null;\n\n  return (\n    <div className=\"eng-dashboard__panel\" data-testid=\"eng-workload-panel\">\n      <div className=\"eng-dashboard__panel-header\">\n        <Users\n          size={16}\n          strokeWidth={1.5}\n          className=\"eng-dashboard__panel-icon\"\n        />\n        <h3 className=\"eng-dashboard__panel-title\">\n          Carga por Ingeniero Responsable\n        </h3>\n      </div>\n      <div className=\"eng-dashboard__workload-grid\">\n        {engineerWorkload.map((eng) => (\n          <div key={eng.engineerId} className=\"eng-dashboard__workload-card\">\n            <div className=\"eng-dashboard__workload-header\">\n              <span className=\"eng-dashboard__workload-name\">\n                {resolveEngineerName(eng.engineerId)}\n              </span>\n              <span className=\"meta-chip\">{eng.totalAssigned} obras</span>",
+          "sha256": "36890f3c0925d543214a443614027feeefdf1c6624a46d7a248c69fb96ffebcc"
+        },
+        {
+          "file": "packages/ui/src/engineering/components/EngineerWorkloadTable.tsx",
+          "startLine": 41,
+          "endLine": 76,
+          "excerpt": "            <div className=\"eng-dashboard__workload-metrics\">\n              <div className=\"eng-dashboard__workload-stat\">\n                <span className=\"eng-dashboard__workload-num\">\n                  {eng.activeCount}\n                </span>\n                <span className=\"eng-dashboard__workload-lbl\">En proceso</span>\n              </div>\n              <div className=\"eng-dashboard__workload-stat\">\n                <span className=\"eng-dashboard__workload-num\">\n                  {eng.documentedCount}\n                </span>\n                <span className=\"eng-dashboard__workload-lbl\">\n                  Documentadas\n                </span>\n              </div>\n              <div className=\"eng-dashboard__workload-stat\">\n                <span className=\"eng-dashboard__workload-num\">\n                  {eng.sentCount}\n                </span>\n                <span className=\"eng-dashboard__workload-lbl\">Enviadas</span>\n              </div>\n              <div className=\"eng-dashboard__workload-stat\">\n                <span className=\"eng-dashboard__workload-num\">\n                  {eng.avgCycleHours !== null ? `${eng.avgCycleHours}h` : '—'}\n                </span>\n                <span className=\"eng-dashboard__workload-lbl\">\n                  Ciclo prom.\n                </span>\n              </div>\n            </div>\n          </div>\n        ))}\n      </div>\n    </div>\n  );\n}",
+          "sha256": "36890f3c0925d543214a443614027feeefdf1c6624a46d7a248c69fb96ffebcc"
+        }
+      ],
+      "missingProof": [
+        "Identity resolution and assignment semantics",
+        "Actual event-derived cycles",
+        "Role filtering"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-24",
+      "file": "packages/ui/src/engineering/components/EngineeringKpiStatsGrid.tsx",
+      "claim": "Displays pending/in-progress/documented/sent counts; wait/cycle null as dash, average revision null instead defaults v1.0. Cut-piece proxy displays explicit estimated label and ~8/module hint.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringKpiStatsGrid.tsx",
+          "startLine": 25,
+          "endLine": 80,
+          "excerpt": "      <div className=\"eng-dashboard__stats-grid\">\n        <div\n          className=\"stat-card stat-card--eng\"\n          data-testid=\"eng-stat-kpi-pending\"\n        >\n          <span className=\"stat-card__icon\" aria-hidden>\n            <Clock size={18} strokeWidth={1.5} />\n          </span>\n          <div className=\"stat-card__body\">\n            <span className=\"stat-card__value\">{stats.pendingCount}</span>\n            <span className=\"stat-card__label\">En espera de inicio</span>\n          </div>\n        </div>\n\n        <div\n          className=\"stat-card stat-card--eng\"\n          data-testid=\"eng-stat-kpi-in-progress\"\n        >\n          <span className=\"stat-card__icon\" aria-hidden>\n            <FileText size={18} strokeWidth={1.5} />\n          </span>\n          <div className=\"stat-card__body\">\n            <span className=\"stat-card__value\">{stats.inProgressCount}</span>\n            <span className=\"stat-card__label\">En modelado / despiece</span>\n          </div>\n        </div>\n\n        <div\n          className=\"stat-card stat-card--eng stat-card--emphasis\"\n          data-testid=\"eng-stat-kpi-documented\"\n        >\n          <span className=\"stat-card__icon\" aria-hidden>\n            <FileCheck size={18} strokeWidth={1.5} />\n          </span>\n          <div className=\"stat-card__body\">\n            <span className=\"stat-card__value\">{stats.documentedCount}</span>\n            <span className=\"stat-card__label\">\n              Listas para enviar a planta\n            </span>\n          </div>\n        </div>\n\n        <div\n          className=\"stat-card stat-card--eng\"\n          data-testid=\"eng-stat-kpi-sent\"\n        >\n          <span className=\"stat-card__icon\" aria-hidden>\n            <Send size={18} strokeWidth={1.5} />\n          </span>\n          <div className=\"stat-card__body\">\n            <span className=\"stat-card__value\">\n              {stats.sentToProductionCount}\n            </span>\n            <span className=\"stat-card__label\">Despachadas a planta</span>\n          </div>\n        </div>",
+          "sha256": "15868cb4613bf4212d4c1fb64c72322cdaa818a74b70cf0a12260f7330830081"
+        },
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringKpiStatsGrid.tsx",
+          "startLine": 96,
+          "endLine": 140,
+          "excerpt": "          <div className=\"eng-dashboard__cycle-grid\">\n            <div className=\"eng-dashboard__cycle-item\">\n              <span className=\"eng-dashboard__cycle-value\">\n                {stats.avgWaitTimeHours !== null\n                  ? `${stats.avgWaitTimeHours}h`\n                  : '—'}\n              </span>\n              <span className=\"eng-dashboard__cycle-label\">\n                Espera en cola promedio\n                <span className=\"eng-dashboard__cycle-sub\">\n                  {' '}\n                  (aceptación → inicio)\n                </span>\n              </span>\n            </div>\n\n            <div className=\"eng-dashboard__cycle-item\">\n              <span className=\"eng-dashboard__cycle-value\">\n                {stats.avgCycleTimeHours !== null\n                  ? `${stats.avgCycleTimeHours}h`\n                  : '—'}\n              </span>\n              <span className=\"eng-dashboard__cycle-label\">\n                Documentación técnica\n                <span className=\"eng-dashboard__cycle-sub\">\n                  {' '}\n                  (inicio → envío a planta)\n                </span>\n              </span>\n            </div>\n\n            <div className=\"eng-dashboard__cycle-item\">\n              <span className=\"eng-dashboard__cycle-value\">\n                {stats.avgRevisionCount !== null\n                  ? `v${stats.avgRevisionCount}`\n                  : 'v1.0'}\n              </span>\n              <span className=\"eng-dashboard__cycle-label\">\n                Revisiones promedio\n                <span className=\"eng-dashboard__cycle-sub\">\n                  {' '}\n                  (packs generados por obra)\n                </span>\n              </span>\n            </div>",
+          "sha256": "15868cb4613bf4212d4c1fb64c72322cdaa818a74b70cf0a12260f7330830081"
+        },
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringKpiStatsGrid.tsx",
+          "startLine": 155,
+          "endLine": 175,
+          "excerpt": "          <div className=\"eng-dashboard__cycle-grid\">\n            <div className=\"eng-dashboard__cycle-item\">\n              <span className=\"eng-dashboard__cycle-value\">\n                {stats.totalModulesCalculated}\n              </span>\n              <span className=\"eng-dashboard__cycle-label\">\n                Módulos procesados\n              </span>\n            </div>\n\n            <div className=\"eng-dashboard__cycle-item\">\n              <span className=\"eng-dashboard__cycle-value\">\n                {stats.totalCutPiecesCalculated}\n              </span>\n              <span className=\"eng-dashboard__cycle-label\">\n                Piezas estimadas\n                {stats.totalCutPiecesOrigin === 'proxy' ? (\n                  <span className=\"eng-dashboard__cycle-sub\"> (~8/módulo)</span>\n                ) : null}\n              </span>\n            </div>",
+          "sha256": "15868cb4613bf4212d4c1fb64c72322cdaa818a74b70cf0a12260f7330830081"
+        }
+      ],
+      "missingProof": [
+        "Missing revision displayed as default versus actual policy",
+        "Domain event provenance",
+        "Role scope and stale data feedback"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-25",
+      "file": "packages/ui/src/engineering/components/EngineeringProjectsTable.tsx",
+      "claim": "EmptyState for no projects; exact project rows show technical status vs sent-to-production label, revision and optional wait/cycle; accessible open callback uses projectId.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringProjectsTable.tsx",
+          "startLine": 26,
+          "endLine": 64,
+          "excerpt": "export function EngineeringProjectsTable({\n  projects,\n  resolveEngineerName,\n  onOpenProject,\n}: EngineeringProjectsTableProps): ReactNode {\n  return (\n    <div className=\"eng-dashboard__panel\">\n      <div className=\"eng-dashboard__panel-header\">\n        <LayoutGrid\n          size={16}\n          strokeWidth={1.5}\n          className=\"eng-dashboard__panel-icon\"\n        />\n        <h3 className=\"eng-dashboard__panel-title\">\n          Trazabilidad Técnica de Obras ({projects.length})\n        </h3>\n      </div>\n\n      {projects.length === 0 ? (\n        <EmptyState\n          icon={SearchX}\n          title=\"Sin obras para mostrar\"\n          description=\"No hay proyectos que coincidan con los filtros seleccionados.\"\n        />\n      ) : (\n        <div className=\"data-table-wrap\">\n          <table className=\"data-table\" aria-label=\"Proyectos de ingeniería\">\n            <thead>\n              <tr>\n                <th>Obra / Cliente</th>\n                <th>Estado</th>\n                <th>Responsable</th>\n                <th>Revisión</th>\n                <th>Espera</th>\n                <th>Ciclo</th>\n                <th>Módulos</th>\n                <th style={{ textAlign: 'right' }}>Acción</th>\n              </tr>\n            </thead>",
+          "sha256": "18449a4f8bb446df77238ccd6b3515311c9d81214fff52108d28bb946932574e"
+        },
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringProjectsTable.tsx",
+          "startLine": 66,
+          "endLine": 117,
+          "excerpt": "              {projects.map((p) => (\n                <tr key={p.projectId} data-testid={`eng-row-${p.projectId}`}>\n                  <td>\n                    <div className=\"eng-dashboard__table-project\">\n                      <span className=\"eng-dashboard__table-name\">\n                        {p.projectName}\n                      </span>\n                      {p.customerLabel ? (\n                        <span className=\"eng-dashboard__table-sub\">\n                          {p.customerLabel}\n                        </span>\n                      ) : null}\n                    </div>\n                  </td>\n                  <td>\n                    <span\n                      className={`status-badge status-badge--${\n                        p.isSentToProduction\n                          ? 'done'\n                          : STATUS_BADGE_MODIFIERS[p.status]\n                      }`}\n                    >\n                      <span className=\"status-badge__dot\" aria-hidden>\n                        ●\n                      </span>\n                      {p.isSentToProduction\n                        ? 'Enviada a planta'\n                        : ENGINEERING_STATUS_LABELS_ES[p.status]}\n                    </span>\n                  </td>\n                  <td>\n                    <span className=\"eng-dashboard__table-engineer\">\n                      {resolveEngineerName(p.engineerId)}\n                    </span>\n                  </td>\n                  <td>\n                    <span className=\"meta-chip\">Rev. {p.revision}</span>\n                  </td>\n                  <td>\n                    <span className=\"eng-dashboard__table-time\">\n                      {p.waitTimeHours !== undefined\n                        ? `${p.waitTimeHours}h`\n                        : '—'}\n                    </span>\n                  </td>\n                  <td>\n                    <span className=\"eng-dashboard__table-time\">\n                      {p.cycleTimeHours !== undefined\n                        ? `${p.cycleTimeHours}h`\n                        : '—'}\n                    </span>\n                  </td>",
+          "sha256": "18449a4f8bb446df77238ccd6b3515311c9d81214fff52108d28bb946932574e"
+        },
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringProjectsTable.tsx",
+          "startLine": 123,
+          "endLine": 139,
+          "excerpt": "                  <td style={{ textAlign: 'right' }}>\n                    <button\n                      type=\"button\"\n                      className=\"btn btn--secondary btn--small\"\n                      onClick={() => onOpenProject(p.projectId)}\n                      aria-label={`Abrir workspace de ${p.projectName}`}\n                    >\n                      Abrir\n                    </button>\n                  </td>\n                </tr>\n              ))}\n            </tbody>\n          </table>\n        </div>\n      )}\n    </div>",
+          "sha256": "18449a4f8bb446df77238ccd6b3515311c9d81214fff52108d28bb946932574e"
+        }
+      ],
+      "missingProof": [
+        "Data provenance and normalized release distinction",
+        "Keyboard/table responsive view",
+        "Parent callback/backend access"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-26",
+      "file": "packages/ui/src/engineering/components/EngineeringStagnantAlerts.tsx",
+      "claim": "Hides empty alerts; renders provided stagnantReason and opens exact projectId with button, no threshold inference locally.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/engineering/components/EngineeringStagnantAlerts.tsx",
+          "startLine": 14,
+          "endLine": 63,
+          "excerpt": "export function EngineeringStagnantAlerts({\n  stagnantAlerts,\n  onOpenProject,\n}: EngineeringStagnantAlertsProps): ReactNode {\n  if (stagnantAlerts.length === 0) return null;\n\n  return (\n    <div\n      className=\"eng-dashboard__alerts-section\"\n      data-testid=\"eng-stagnant-alerts\"\n    >\n      <div className=\"eng-dashboard__alerts-header\">\n        <AlertTriangle\n          size={18}\n          strokeWidth={1.5}\n          className=\"eng-dashboard__alert-icon\"\n        />\n        <h3 className=\"eng-dashboard__alerts-title\">\n          Alertas de Obras Demoradas ({stagnantAlerts.length})\n        </h3>\n      </div>\n      <ul className=\"eng-dashboard__alerts-list\">\n        {stagnantAlerts.map((alert) => (\n          <li key={alert.projectId} className=\"eng-dashboard__alert-item\">\n            <div className=\"eng-dashboard__alert-info\">\n              <span className=\"eng-dashboard__alert-name\">\n                {alert.projectName}\n              </span>\n              {alert.customerLabel ? (\n                <span className=\"eng-dashboard__alert-customer\">\n                  · {alert.customerLabel}\n                </span>\n              ) : null}\n              <span className=\"eng-dashboard__alert-reason\">\n                {alert.stagnantReason}\n              </span>\n            </div>\n            <button\n              type=\"button\"\n              className=\"btn btn--secondary btn--small\"\n              onClick={() => onOpenProject(alert.projectId)}\n            >\n              Abrir obra <ArrowRight size={12} strokeWidth={1.5} />\n            </button>\n          </li>\n        ))}\n      </ul>\n    </div>\n  );\n}",
+          "sha256": "204f503c923d9759aa3096ba8c47900d466b2508b4c905df8080f62a561943a6"
+        }
+      ],
+      "missingProof": [
+        "Domain stale-time definition",
+        "Role scoped projects",
+        "Navigation and loading/error states"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-27",
+      "file": "packages/ui/src/sales/components/MonthlyActivityChart.tsx",
+      "claim": "Hides all-zero supplied series; max-normalizes CSS created/won bars and adds textual role-img monthly description. Does not infer event timestamps.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/sales/components/MonthlyActivityChart.tsx",
+          "startLine": 5,
+          "endLine": 26,
+          "excerpt": "export function MonthlyActivityChart({\n  data,\n}: {\n  readonly data: readonly MonthlyActivity[];\n}): ReactNode {\n  const total = data.reduce((acc, d) => acc + d.created + d.won, 0);\n  if (total === 0) return null;\n  const max = Math.max(1, ...data.map((d) => Math.max(d.created, d.won)));\n  const description = data\n    .map((d) => `${d.label}: ${d.created} creadas, ${d.won} ganadas`)\n    .join('; ');\n  return (\n    <div className=\"sales-monthly-chart\" data-testid=\"sales-monthly-chart\">\n      <h3 className=\"sales-section-title\">\n        <BarChart3 size={16} strokeWidth={1.5} />\n        Actividad por mes\n      </h3>\n      <div\n        className=\"sales-monthly-chart__chart\"\n        role=\"img\"\n        aria-label={`Proyectos creados y ganados por mes. ${description}.`}\n      >",
+          "sha256": "808a7fdbecb8088c5b37a4759962c90f97c0c67d0536463efce96aa1d72087ca"
+        },
+        {
+          "file": "packages/ui/src/sales/components/MonthlyActivityChart.tsx",
+          "startLine": 27,
+          "endLine": 56,
+          "excerpt": "        {data.map((d) => (\n          <div\n            key={d.key}\n            className=\"sales-monthly-chart__month\"\n            data-testid={`sales-month-${d.key}`}\n          >\n            <div className=\"sales-monthly-chart__bars\">\n              <span className=\"sales-monthly-chart__bar-col\">\n                <span className=\"sales-monthly-chart__value\">\n                  {d.created > 0 ? d.created : ''}\n                </span>\n                <span\n                  className=\"sales-monthly-chart__bar sales-monthly-chart__bar--created\"\n                  style={{ height: `${Math.round((d.created / max) * 100)}%` }}\n                />\n              </span>\n              <span className=\"sales-monthly-chart__bar-col\">\n                <span className=\"sales-monthly-chart__value\">\n                  {d.won > 0 ? d.won : ''}\n                </span>\n                <span\n                  className=\"sales-monthly-chart__bar sales-monthly-chart__bar--won\"\n                  style={{ height: `${Math.round((d.won / max) * 100)}%` }}\n                />\n              </span>\n            </div>\n            <span className=\"sales-monthly-chart__label\">{d.label}</span>\n          </div>\n        ))}\n      </div>",
+          "sha256": "808a7fdbecb8088c5b37a4759962c90f97c0c67d0536463efce96aa1d72087ca"
+        }
+      ],
+      "missingProof": [
+        "Created/won event-time correctness upstream",
+        "Negative/missing data",
+        "Browser chart accessibility/size"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-28",
+      "file": "packages/ui/src/sales/components/MonthlyStatsSection.tsx",
+      "claim": "Renders supplied current-month and total quote/open/closed/cancelled/installed counts and currency values; no timestamp/filter calculation or missing state here.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/sales/components/MonthlyStatsSection.tsx",
+          "startLine": 6,
+          "endLine": 32,
+          "excerpt": "export function MonthlyStatsSection({\n  stats,\n  title,\n}: {\n  readonly stats: MonthlyStats;\n  readonly title: string;\n}): ReactNode {\n  return (\n    <div className=\"sales-monthly\">\n      <h3 className=\"sales-section-title\">\n        <BarChart3 size={16} strokeWidth={1.5} />\n        {title}\n      </h3>\n\n      <div className=\"sales-monthly__grid\">\n        {/* Mes actual */}\n        <div className=\"sales-monthly__card\">\n          <h4 className=\"sales-monthly__card-title\">Este mes</h4>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Cotizaciones</span>\n            <span className=\"sales-monthly__value\">\n              {stats.mesActual.cotizaciones.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.mesActual.cotizaciones.totalValue)}\n            </span>\n          </div>",
+          "sha256": "9e92ee2fe1510532f6ae5abbfb2adfc05ce75228d095f243edd35b347f7a476d"
+        },
+        {
+          "file": "packages/ui/src/sales/components/MonthlyStatsSection.tsx",
+          "startLine": 33,
+          "endLine": 68,
+          "excerpt": "          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Abiertas</span>\n            <span className=\"sales-monthly__value sales-monthly__value--open\">\n              {stats.mesActual.abiertas.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.mesActual.abiertas.totalValue)}\n            </span>\n          </div>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Cerradas</span>\n            <span className=\"sales-monthly__value sales-monthly__value--closed\">\n              {stats.mesActual.cerradas.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.mesActual.cerradas.totalValue)}\n            </span>\n          </div>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Canceladas</span>\n            <span className=\"sales-monthly__value sales-monthly__value--cancelled\">\n              {stats.mesActual.canceladas.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.mesActual.canceladas.totalValue)}\n            </span>\n          </div>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Instaladas</span>\n            <span className=\"sales-monthly__value sales-monthly__value--installed\">\n              {stats.mesActual.instaladas.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.mesActual.instaladas.totalValue)}\n            </span>\n          </div>",
+          "sha256": "9e92ee2fe1510532f6ae5abbfb2adfc05ce75228d095f243edd35b347f7a476d"
+        },
+        {
+          "file": "packages/ui/src/sales/components/MonthlyStatsSection.tsx",
+          "startLine": 71,
+          "endLine": 118,
+          "excerpt": "        {/* Totales */}\n        <div className=\"sales-monthly__card\">\n          <h4 className=\"sales-monthly__card-title\">Totales</h4>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Cotizaciones</span>\n            <span className=\"sales-monthly__value\">\n              {stats.total.cotizaciones.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.total.cotizaciones.totalValue)}\n            </span>\n          </div>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Abiertas</span>\n            <span className=\"sales-monthly__value sales-monthly__value--open\">\n              {stats.total.abiertas.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.total.abiertas.totalValue)}\n            </span>\n          </div>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Cerradas</span>\n            <span className=\"sales-monthly__value sales-monthly__value--closed\">\n              {stats.total.cerradas.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.total.cerradas.totalValue)}\n            </span>\n          </div>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Canceladas</span>\n            <span className=\"sales-monthly__value sales-monthly__value--cancelled\">\n              {stats.total.canceladas.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.total.canceladas.totalValue)}\n            </span>\n          </div>\n          <div className=\"sales-monthly__row\">\n            <span className=\"sales-monthly__label\">Instaladas</span>\n            <span className=\"sales-monthly__value sales-monthly__value--installed\">\n              {stats.total.instaladas.count}\n            </span>\n            <span className=\"sales-monthly__money\">\n              {formatMoneyDisplay(stats.total.instaladas.totalValue)}\n            </span>\n          </div>",
+          "sha256": "9e92ee2fe1510532f6ae5abbfb2adfc05ce75228d095f243edd35b347f7a476d"
+        }
+      ],
+      "missingProof": [
+        "Lifecycle category/time semantics in parent",
+        "Unknown data not silently zero",
+        "Cost/commercial visibility"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-29",
+      "file": "packages/ui/src/sales/components/PipelineBar.tsx",
+      "claim": "Calculates supplied open/closed/cancelled count total, hides zero; positive segments show proportional width and text legend, not pipeline value.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/sales/components/PipelineBar.tsx",
+          "startLine": 4,
+          "endLine": 39,
+          "excerpt": "export function PipelineBar({\n  abiertas,\n  cerradas,\n  canceladas,\n}: {\n  readonly abiertas: StatusStats;\n  readonly cerradas: StatusStats;\n  readonly canceladas: StatusStats;\n}): ReactNode {\n  const total = abiertas.count + cerradas.count + canceladas.count;\n  if (total === 0) return null;\n\n  return (\n    <div className=\"sales-pipeline\" aria-label=\"Pipeline de ventas\">\n      <div className=\"sales-pipeline__bar\">\n        {abiertas.count > 0 && (\n          <div\n            className=\"sales-pipeline__seg sales-pipeline__seg--abiertas\"\n            style={{ width: `${(abiertas.count / total) * 100}%` }}\n            title={`Abiertas: ${abiertas.count}`}\n          />\n        )}\n        {cerradas.count > 0 && (\n          <div\n            className=\"sales-pipeline__seg sales-pipeline__seg--cerradas\"\n            style={{ width: `${(cerradas.count / total) * 100}%` }}\n            title={`Cerradas: ${cerradas.count}`}\n          />\n        )}\n        {canceladas.count > 0 && (\n          <div\n            className=\"sales-pipeline__seg sales-pipeline__seg--canceladas\"\n            style={{ width: `${(canceladas.count / total) * 100}%` }}\n            title={`Canceladas: ${canceladas.count}`}\n          />\n        )}",
+          "sha256": "cc901e5ae4b34870eb5d1de825bbc50b4ecb6a2d8dbe01cf0f4fa97e28ea2f14"
+        },
+        {
+          "file": "packages/ui/src/sales/components/PipelineBar.tsx",
+          "startLine": 41,
+          "endLine": 57,
+          "excerpt": "      <div className=\"sales-pipeline__legend\">\n        <span className=\"sales-pipeline__legend-item\">\n          <span className=\"sales-pipeline__dot sales-pipeline__dot--abiertas\" />\n          Abiertas ({abiertas.count})\n        </span>\n        <span className=\"sales-pipeline__legend-item\">\n          <span className=\"sales-pipeline__dot sales-pipeline__dot--cerradas\" />\n          Cerradas ({cerradas.count})\n        </span>\n        <span className=\"sales-pipeline__legend-item\">\n          <span className=\"sales-pipeline__dot sales-pipeline__dot--canceladas\" />\n          Canceladas ({canceladas.count})\n        </span>\n      </div>\n    </div>\n  );\n}",
+          "sha256": "cc901e5ae4b34870eb5d1de825bbc50b4ecb6a2d8dbe01cf0f4fa97e28ea2f14"
+        }
+      ],
+      "missingProof": [
+        "Upstream lifecycle classifications",
+        "Negative values and empty/error distinction",
+        "Accessible chart semantics"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    },
+    {
+      "id": "WEB-VIS-30",
+      "file": "packages/ui/src/sales/components/VendedorFilter.tsx",
+      "claim": "Controlled named seller select maps empty option to null and exact ID otherwise; all-seller availability is supplied presentation, not server owner permission.",
+      "scope": "Named control-flow, component branches and markup only; no inherited child/callback certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/sales/components/VendedorFilter.tsx",
+          "startLine": 5,
+          "endLine": 35,
+          "excerpt": "export function VendedorFilter({\n  vendedores,\n  selectedId,\n  onChange,\n}: {\n  readonly vendedores: readonly VendedorOption[];\n  readonly selectedId: string | null;\n  readonly onChange: (id: string | null) => void;\n}): ReactNode {\n  return (\n    <div className=\"sales-filter\">\n      <Filter size={14} strokeWidth={1.5} />\n      <label className=\"sales-filter__label\" htmlFor=\"vendedor-filter\">\n        Vendedor:\n      </label>\n      <select\n        id=\"vendedor-filter\"\n        className=\"sales-filter__select\"\n        value={selectedId ?? ''}\n        onChange={(e) => onChange(e.target.value || null)}\n      >\n        <option value=\"\">Todos los vendedores</option>\n        {vendedores.map((v) => (\n          <option key={v.id} value={v.id}>\n            {v.name}\n          </option>\n        ))}\n      </select>\n    </div>\n  );\n}",
+          "sha256": "a5e525ee2bff96ff906dc908183baaa0af37253dd8ba0b8222a9c156fa93e6b6"
+        }
+      ],
+      "missingProof": [
+        "Caller authorized seller set",
+        "Server portfolio filtering",
+        "Duplicate fixed DOM id across instances"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No new tests or browser/WebGL probes"
+    }
+  ],
+  "coverage": {
+    "uniqueFiles": 30,
+    "namedEvidenceRanges": 90,
+    "runtimeExecutions": 0
+  },
+  "reviewNotes": [
+    "BoardCanvas snapToPeer ignored; peerEnabled derives snapEnabled. Source-confirmed local contract difference, not reproduced UI defect.",
+    "BoardPropertiesPanel rounds display even step0.5; precision acceptance requires UI proof.",
+    "ModelExporter resets via onExportComplete after console-only error; do not present callback as export success.",
+    "MeasurementTool captures floor plane, not arbitrary furniture face; physical accuracy remains unknown."
+  ],
+  "limits": [
+    "No browser/WebGL/keyboard/contrast verification",
+    "Callbacks/storage/children not certified by parent markup",
+    "No new remote artifacts, product mutations or probes"
+  ]
+}

@@ -1,0 +1,131 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos" [active]:
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: CATÁLOGOS
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Catálogo de cantos":
+    - heading "Cantos" [level=2]
+    - paragraph: Cintillas y melaminas de canto del taller
+    - generic "Acciones de Cantos":
+      - button "Nuevo canto":
+        - text: Nuevo canto
+    - generic "Buscar y filtrar cantos":
+      - searchbox "Buscar cantos"
+      - group "Filtrar por estado":
+        - button "Todos"
+        - button "Activos" [pressed]
+        - button "Inactivos"
+    - table:
+      - rowgroup:
+        - row "Detalle Código Nombre Espesor (mm) Costo/ML Estado Acciones":
+          - columnheader "Detalle":
+            - generic: Detalle
+          - columnheader "Código"
+          - columnheader "Nombre"
+          - columnheader "Espesor (mm)"
+          - columnheader "Costo/ML"
+          - columnheader "Estado"
+          - columnheader "Acciones":
+            - generic: Acciones
+      - rowgroup:
+        - row "CAN-ARA-BLA ARAUCO BLANCO 0.5 $12.00 MXN Activo Editar CAN-ARA-BLA Desactivar CAN-ARA-BLA":
+          - cell
+          - cell "CAN-ARA-BLA"
+          - cell "ARAUCO BLANCO"
+          - cell "0.5"
+          - cell "$12.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar CAN-ARA-BLA Desactivar CAN-ARA-BLA":
+            - button "Editar CAN-ARA-BLA": Editar
+            - button "Desactivar CAN-ARA-BLA": Desactivar
+        - row "CAN-MAD-FRE MADERADO FRENTE 2 $25.00 MXN Activo Editar CAN-MAD-FRE Desactivar CAN-MAD-FRE":
+          - cell
+          - cell "CAN-MAD-FRE"
+          - cell "MADERADO FRENTE"
+          - cell "2"
+          - cell "$25.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar CAN-MAD-FRE Desactivar CAN-MAD-FRE":
+            - button "Editar CAN-MAD-FRE": Editar
+            - button "Desactivar CAN-MAD-FRE": Desactivar
+        - row "CAN-MDF-3 MDF 3MM 0 $0.00 MXN Activo Editar CAN-MDF-3 Desactivar CAN-MDF-3":
+          - cell
+          - cell "CAN-MDF-3"
+          - cell "MDF 3MM"
+          - cell "0"
+          - cell "$0.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar CAN-MDF-3 Desactivar CAN-MDF-3":
+            - button "Editar CAN-MDF-3": Editar
+            - button "Desactivar CAN-MDF-3": Desactivar
+- generic "Notificaciones"

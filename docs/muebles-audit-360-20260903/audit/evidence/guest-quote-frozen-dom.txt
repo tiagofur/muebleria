@@ -1,0 +1,194 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: VENTAS
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Cotizaciones":
+    - button "Volver a la lista":
+      - text: Lista
+    - heading "Cotización de ensayo AUDIT 360" [level=2]
+    - generic: ●
+    - text: Cotizado
+    - generic "Etapa Operativa del Proyecto": Ventas
+    - paragraph: Cliente de ensayo AUDIT 360·1 mueble·MXN·Margen ×1.35
+    - generic: Precio de venta
+    - generic: $904.13 MXN
+    - button "Aceptar cotización":
+      - text: Aceptar cotización
+    - button "Proyectar"
+    - button "Más":
+      - generic: Más
+    - region "Ítems de cotización":
+      - heading "Muebles (1)" [level=3]
+      - button "Vista 3D cotización":
+        - text: Vista 3D cotización
+      - generic: "1."
+      - heading "Gabinete 1 Puerta 300 x 720 x 590 mm — MOD-GAB-01 Inferior Rev 1 (cerrada)" [level=4]:
+        - text: Gabinete 1 Puerta 300 x 720 x 590 mm — MOD-GAB-01
+        - generic: Inferior
+        - generic: Rev 1 (cerrada)
+      - button "3D":
+        - text: 3D
+      - generic: Cantidad
+      - spinbutton "Cantidad" [disabled]: "1"
+      - text: Melamina de Interiores (INTERIOR)
+      - generic "Esta línea overridea el default del proyecto": Override
+      - combobox "Melamina de Interiores (INTERIOR) Override" [disabled]:
+        - option "Usar default del proyecto"
+        - option "ARAUCO BLANCO — TAB-ARA-BLA" [selected]
+      - text: Melamina de Frentes (FRENTE)
+      - generic "Esta línea overridea el default del proyecto": Override
+      - combobox "Melamina de Frentes (FRENTE) Override" [disabled]:
+        - option "Usar default del proyecto"
+        - option "MADERADO FRENTE — TAB-MAD-FRE" [selected]
+      - text: Bisagras (BISAGRA)
+      - generic "Esta línea overridea el default del proyecto": Override
+      - combobox "Bisagras (BISAGRA) Override" [disabled]:
+        - option "Usar default del proyecto"
+        - option "Bisagra Cierre Lento — HER-BIS-CL" [selected]
+      - generic: Melamina de zoclo (ZOCLO)
+      - combobox "Melamina de zoclo (ZOCLO)" [disabled]:
+        - option "Usar default del proyecto" [selected]
+        - option "ARAUCO BLANCO — TAB-ARA-BLA"
+        - option "MADERADO FRENTE — TAB-MAD-FRE"
+    - region "Herramientas de cotización":
+      - heading "Herramientas" [level=3]
+      - group "Paneles avanzados":
+        - button "Resumen de obra":
+          - text: Resumen de obra
+        - button "Lifecycle / Entregas":
+          - text: Lifecycle / Entregas
+        - button "Levantamiento":
+          - text: Levantamiento
+        - button "Plano / ambiente"
+        - button "Escenarios A/B"
+        - button "Checklist instalación"
+        - button "Fotos / Galería":
+          - text: Fotos / Galería
+        - button "Comunicaciones":
+          - text: Comunicaciones
+        - button "Garantías":
+          - text: Garantías
+    - heading "Costos de la obra" [level=3]:
+      - text: Costos de la obra
+    - paragraph: "Para capturar el baseline falta: liberar la revisión de ingeniería a producción."
+    - complementary "Totales de cotización":
+      - heading "Totales (congelados)" [level=3]
+      - generic "Precios capturados el 3 sep 2026": Precios congelados
+      - term: Materiales
+      - definition: $309.60 MXN
+      - term: Cantos
+      - definition: $157.13 MXN
+      - term: Herrajes
+      - definition: $203.00 MXN
+      - term: Costo directo
+      - definition: $669.73 MXN
+      - term: MO modular
+      - definition: $0.00 MXN
+      - term: Factor margen
+      - definition:
+        - text: "1.35"
+        - 'generic "Margen bruto sobre precio de venta: (Venta - Costo) / Venta"': (25.9% mg)
+      - term: Precio de venta
+      - definition: $904.13 MXN
+      - region "Resumen de materiales":
+        - heading "Resumen de materiales" [level=4]
+        - paragraph: Tableros · 1.694 m²
+        - list:
+          - generic: ARAUCO BLANCO
+          - generic: 1.398 m² · $223.69 MXN
+          - generic: MADERADO FRENTE
+          - generic: 0.296 m² · $85.91 MXN
+        - paragraph: Pliegos estimados
+        - paragraph: Estimado — nesting real en software de corte
+        - list:
+          - generic: ARAUCO BLANCO
+          - generic: ~1 pliego (1830×2440 mm)
+          - generic: MADERADO FRENTE
+          - generic: ~1 pliego (1830×2440 mm)
+        - generic: Importar nesting (CSV)
+        - paragraph: "Columnas: material_code, sheets_used [, area_m2]"
+        - paragraph: Cantos · 9.99 ML
+        - list:
+          - generic: ARAUCO BLANCO
+          - generic: 7.12 ML · $85.48 MXN
+          - generic: MADERADO FRENTE
+          - generic: 2.87 ML · $71.65 MXN
+        - paragraph: Herrajes · 51 uds
+        - list:
+          - generic: Bisagra Cierre Lento
+          - generic: ×2 · $70.00 MXN
+          - generic: Jaladera Acero Inox
+          - generic: ×1 · $45.00 MXN
+          - generic: Pata Regulable Plastica
+          - generic: ×4 · $60.00 MXN
+          - generic: Soporte de Entrepaño
+          - generic: ×4 · $8.00 MXN
+          - generic: Tornillo 4x50 mm
+          - generic: ×40 · $20.00 MXN
+      - paragraph: Sin versiones guardadas. Las versiones se crean automáticamente al cambiar de estado.
+- generic "Notificaciones"

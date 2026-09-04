@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "capturedAt": "2026-09-04T12:37:36.156Z",
+  "counts": {
+    "features": 210,
+    "screens": 29,
+    "documents": 371,
+    "endpoints": 265,
+    "tables": 75
+  },
+  "scope": "Executed report normalization code against current JSON only; not browser rendering, event interaction, source semantics or product behavior."
+}

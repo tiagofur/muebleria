@@ -1,0 +1,45 @@
+{
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "validation": "PASS",
+  "checks": [
+    "29 primary IDs",
+    "259 secondary exports retained",
+    "140 inline files retained",
+    "132 component-file fragments integrated",
+    "all fragment excerpts match pinned source line ranges",
+    "no pending record without semantic fragment/reused context or literal classification",
+    "no full consumer behavior or runtime certification inferred"
+  ],
+  "coverage": {
+    "primaryScreens": 29,
+    "semanticScreenFragments": 29,
+    "runtimeCertifiedScreens": 0,
+    "testBodiesInspected": 26,
+    "secondarySurfacesAccounted": 259,
+    "secondaryExactFileContextLinks": 0,
+    "secondarySemanticallyCertified": 0,
+    "inlineFilesAccounted": 140,
+    "inlineExactFileContextLinks": 21,
+    "inlineSemanticallyCertified": 0,
+    "sharedContractsReviewed": 23,
+    "secondaryAuditDepthCounts": {
+      "REUSED_FEATURE_FILE_FRAGMENT": 28,
+      "SEMANTIC_COMPONENT_FRAGMENT": 141,
+      "SEMANTIC_SHARED_OR_CHILD_CONTRACT": 25,
+      "REVIEWED_REUSED_PATTERN_ONLY": 39,
+      "NONINTERACTIVE_LITERAL_CLASSIFIED": 26
+    },
+    "secondaryOnlyPendingNoSemanticContext": 0,
+    "secondaryConsumerBehaviorComplete": 0,
+    "inlineAuditDepthCounts": {
+      "REVIEWED_REUSED_PATTERN_ONLY": 44,
+      "SEMANTIC_COMPONENT_FRAGMENT": 49,
+      "REUSED_FEATURE_FILE_FRAGMENT": 27,
+      "SEMANTIC_SHARED_OR_CHILD_CONTRACT": 20
+    },
+    "inlineOnlyPendingNoSemanticContext": 0,
+    "inlineConsumerBehaviorComplete": 0,
+    "componentFragmentFiles": 132,
+    "secondaryDirectScreenCallerLinks": 73
+  }
+}

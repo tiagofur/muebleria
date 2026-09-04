@@ -1,0 +1,1515 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "flows": [
+    {
+      "id": "OP-FLOW-01",
+      "name": "Customer → quote creation",
+      "status": "PARTIAL",
+      "classification": "CONFIRMED source wiring / UNKNOWN end-to-end runtime",
+      "verticalChain": [
+        {
+          "layer": "UI",
+          "evidence": {
+            "file": "packages/ui/src/customers/CustomersScreen.tsx",
+            "startLine": 141,
+            "endLine": 163,
+            "excerpt": "\t\tsetError(null);\n\t\tsetModalOpen(true);\n\t};\n\n\tconst toggleExpand = (item: Customer) => {\n\t\ttoggleSelectedId(item.id);\n\t};\n\n\tconst validate = (): string | null => {\n\t\treturn validateRequiredName(draft.name);\n\t};\n\n\tconst handleSubmit = (e: FormEvent) => {\n\t\te.preventDefault();\n\t\tconst err = validate();\n\t\tif (err) {\n\t\t\tsetError(err);\n\t\t\treturn;\n\t\t}\n\t\tsetError(null);\n\t\tif (editingId) {\n\t\t\tonUpdate(editingId, draft);\n\t\t} else {"
+          }
+        },
+        {
+          "layer": "state customer",
+          "evidence": {
+            "file": "apps/web/src/stores/catalog/customers.ts",
+            "startLine": 17,
+            "endLine": 52,
+            "excerpt": "  const pendingCreates = new Set<string>();\n\n  return {\n    createCustomer: (draft, actor) => {\n      const ownerUserId = resolveOwnerOnCreate(\n        actor.id,\n        actor.roles?.[0] ?? actor.role,\n        draft.ownerUserId,\n      );\n      const item: Customer = {\n        id: ctx.newId(),\n        name: draft.name.trim(),\n        email: draft.email.trim() || undefined,\n        phone: draft.phone.trim() || undefined,\n        address: draft.address.trim() || undefined,\n        notes: draft.notes.trim() || undefined,\n        active: true,\n        ownerUserId,\n      };\n      const submissionKey = JSON.stringify({\n        name: item.name,\n        email: item.email,\n        phone: item.phone,\n        address: item.address,\n        notes: item.notes,\n        ownerUserId: item.ownerUserId,\n      });\n      if (pendingCreates.has(submissionKey)) return;\n      pendingCreates.add(submissionKey);\n\n      void ctx.saveAndToast(\n        (c) => ({\n          ...c,\n          customers: [...(c.customers ?? []), item],\n        }),\n        `✓ Cliente \"${item.name}\" creado`,"
+          }
+        },
+        {
+          "layer": "state quote",
+          "evidence": {
+            "file": "apps/web/src/stores/projectStore.ts",
+            "startLine": 751,
+            "endLine": 799,
+            "excerpt": "    createProject: (draft, catalog, actor) => {\n      const now = new Date().toISOString();\n      const resolved = resolveCustomerFromDraft(\n        draft,\n        catalog.customers ?? [],\n        newId,\n      );\n      const updatedCatalog = { ...catalog, customers: resolved.customers };\n      const meta = draftToProjectMeta(draft, resolved.customerId);\n      const ownerUserId = resolveOwnerOnCreateRoles(\n        actor.id,\n        rolesOfUser(actor),\n        draft.ownerUserId,\n      );\n      const base: Project = {\n        id: newId(),\n        ...meta,\n        ownerUserId,\n        createdBy: actor.id,\n        status: 'draft',\n        items: [],\n        createdAt: now,\n        updatedAt: now,\n      };\n      // Capture snapshot if created already as quoted/accepted (PRD §7.4).\n      let project: Project;\n      try {\n        project = transitionProjectStatus(\n          base,\n          meta.status,\n          updatedCatalog,\n          now,\n        );\n      } catch (err) {\n        toastTransitionError('crear la cotización', err);\n        return;\n      }\n\n      // F062 bug fix: persist customers via catalogStore (catalogStore owns catalog).\n      getCatalogStoreState().upsertCustomers(resolved.customers);\n\n      set({ projects: [...get().projects, project] });\n\n      persistCreateProject(project).catch((err) => {\n        console.error('Error al crear proyecto:', err);\n        toast({\n          type: 'error',\n          message: 'No se pudo guardar la cotización en el servidor',\n        });"
+          }
+        },
+        {
+          "layer": "repository",
+          "evidence": {
+            "file": "packages/storage/src/apiWorkspaceRepository.ts",
+            "startLine": 624,
+            "endLine": 643,
+            "excerpt": "  async createProject(project: Project): Promise<void> {\n    const res = await this.fetch(`${this.baseUrl}/projects`, {\n      method: 'POST',\n      headers: this.getHeaders(),\n      body: JSON.stringify(projectToApi(project)),\n    });\n    if (res.ok) return;\n    const text = await res.text().catch(() => '');\n    if (isConflict(res.status, text)) return;\n    console.error(`API create failed /projects: ${res.status} ${text}`);\n    throw new Error(`Failed to create project: ${res.status} ${text}`);\n  }\n\n  async saveProject(project: Project): Promise<void> {\n    await this.upsert(\n      `/projects/${project.id}`,\n      '/projects',\n      projectToApi(project),\n    );\n  }"
+          }
+        },
+        {
+          "layer": "routed API",
+          "evidence": {
+            "file": "backend-go/internal/api/routes.go",
+            "startLine": 251,
+            "endLine": 255,
+            "excerpt": "\tmux.Handle(\"GET /api/customers\", authMW(http.HandlerFunc(server.HandleCustomers)))\n\tmux.Handle(\"POST /api/customers\", authMW(http.HandlerFunc(server.HandleCustomers)))\n\tmux.Handle(\"GET /api/customers/{id}\", authMW(http.HandlerFunc(server.HandleCustomerByID)))\n\tmux.Handle(\"PUT /api/customers/{id}\", authMW(http.HandlerFunc(server.HandleCustomerByID)))\n\tmux.Handle(\"DELETE /api/customers/{id}\", authMW(http.HandlerFunc(server.HandleCustomerByID)))"
+          }
+        },
+        {
+          "layer": "handler permission/ownership",
+          "evidence": {
+            "file": "backend-go/internal/api/handlers.go",
+            "startLine": 998,
+            "endLine": 1036,
+            "excerpt": "func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {\n\tclaims := claimsFromRequest(r)\n\troles := actorRoles(claims)\n\tid := actorID(claims)\n\n\tswitch r.Method {\n\tcase http.MethodGet:\n\t\tif !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessCustomers), \"no tenés permiso para ver clientes\") {\n\t\t\treturn\n\t\t}\n\t\tlist, err := s.Store.ListCustomers(r.Context())\n\t\tif err != nil {\n\t\t\trespondWithInternalError(w, err, \"handler\")\n\t\t\treturn\n\t\t}\n\t\trespondWithJSON(w, http.StatusOK, filterCustomersByOwner(list, id, roles))\n\n\tcase http.MethodPost:\n\t\tif !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCustomers), \"no tenés permiso para crear clientes\") {\n\t\t\treturn\n\t\t}\n\t\tvar c domain.Customer\n\t\tif !decodeJSONBody(w, r, &c) {\n\t\t\treturn\n\t\t}\n\t\tc.Active = true\n\t\tc.OwnerUserID = domain.ResolveOwnerOnCreateRoles(id, roles, c.OwnerUserID)\n\t\terr := s.Store.CreateCustomer(r.Context(), &c)\n\t\tif err != nil {\n\t\t\tif isDuplicateKey(err) {\n\t\t\t\trespondWithError(w, http.StatusConflict, \"El registro ya existe\")\n\t\t\t\treturn\n\t\t\t}\n\t\t\trespondWithInternalError(w, err, \"handler\")\n\t\t\treturn\n\t\t}\n\t\trespondWithJSON(w, http.StatusCreated, c)\n\n\tdefault:"
+          }
+        },
+        {
+          "layer": "database",
+          "evidence": {
+            "file": "backend-go/internal/storage/customers.go",
+            "startLine": 41,
+            "endLine": 72,
+            "excerpt": "func (s *PostgresStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {\n\tvar owner *string\n\tif c.OwnerUserID != \"\" {\n\t\towner = &c.OwnerUserID\n\t}\n\tif c.ID != \"\" {\n\t\tquery := `\n\t\t\tINSERT INTO customers (id, name, email, phone, address, notes, active, owner_user_id, organization_id)\n\t\t\tVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n\t\t\tRETURNING created_at, updated_at;\n\t\t`\n\t\terr := s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).\n\t\t\tScan(&c.CreatedAt, &c.UpdatedAt)\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"error creating customer: %w\", err)\n\t\t}\n\t\treturn nil\n\t}\n\tquery := `\n\t\tINSERT INTO customers (name, email, phone, address, notes, active, owner_user_id, organization_id)\n\t\tVALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n\t\tRETURNING id, created_at, updated_at;\n\t`\n\terr := s.db(ctx).QueryRow(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).\n\t\tScan(&c.ID, &c.CreatedAt, &c.UpdatedAt)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"error creating customer: %w\", err)\n\t}\n\treturn nil\n}\n\nfunc (s *PostgresStore) UpdateCustomer(ctx context.Context, id string, c *domain.Customer) error {"
+          }
+        }
+      ],
+      "invariants": [
+        "Customer ID links quote to customer; owner resolution enforced server-side; tenant supplied by OrgFromCtx, not client request."
+      ],
+      "confirmedImplementedMechanisms": [
+        "Customer create uses role permission plus owner assignment; duplicate key mapped409.",
+        "Customer store saveAndToast waits for catalog patch resolution, unlike project patch immediate success.",
+        "Quote creation resolves existing/new customer and then sends project create."
+      ],
+      "missingProof": [
+        "New inline customer upsertCustomers returns void while project create starts independently: ordering/rollback under slow customer request NEEDS VERIFICATION.",
+        "Real browser create→reload and cross-owner/cross-tenant denial not executed.",
+        "Customer name validation source in UI does not establish server validation coverage."
+      ],
+      "tests": [
+        {
+          "file": "packages/ui/src/customers/CustomersScreen.test.tsx",
+          "line": 31,
+          "name": "it('renders list of active customers by default', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/ui/src/customers/CustomersScreen.test.tsx",
+          "line": 48,
+          "name": "it('renders empty state when there are no customers', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/ui/src/customers/CustomersScreen.test.tsx",
+          "line": 62,
+          "name": "it('opens modal and submits new customer draft', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/ui/src/customers/CustomersScreen.test.tsx",
+          "line": 101,
+          "name": "it('F034: admin can pick owner on create', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        }
+      ],
+      "runtime": "NEEDS VERIFICATION; do not translate test source into passed tests"
+    },
+    {
+      "id": "OP-FLOW-02",
+      "name": "Quote status → frozen price and structure pins",
+      "status": "PARTIAL",
+      "classification": "CONFIRMED source wiring / UNKNOWN end-to-end runtime",
+      "verticalChain": [
+        {
+          "layer": "state",
+          "evidence": {
+            "file": "apps/web/src/stores/projectStore.ts",
+            "startLine": 1025,
+            "endLine": 1054,
+            "excerpt": "    changeProjectStatus: (id, status, catalog) => {\n      const project = get().projects.find((p) => p.id === id);\n      if (!project || project.status === status) return;\n      const now = new Date().toISOString();\n      const cat = catalog ?? getCatalogStoreState().catalog ?? {\n        materials: [],\n        edges: [],\n        hardware: [],\n        categories: [],\n        optionGroups: [],\n        modules: [],\n      };\n      let withTransition: Project;\n      try {\n        withTransition = transitionProjectStatus(project, status, cat, now);\n      } catch (err) {\n        toastTransitionError('cambiar el estado de la cotización', err);\n        return;\n      }\n      const updated = snapshotOnStatusChange(withTransition, status);\n      patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));\n      const label =\n        status === 'quoted'\n          ? '✓ Cotización enviada (precios congelados)'\n          : status === 'accepted'\n            ? '✓ Cotización aceptada'\n            : `✓ Estado: ${status}`;\n      toast({ type: 'success', message: label });\n    },\n"
+          }
+        },
+        {
+          "layer": "domain price freeze",
+          "evidence": {
+            "file": "packages/domain/src/engine/pricing.ts",
+            "startLine": 392,
+            "endLine": 440,
+            "excerpt": "export function transitionProjectStatus(\n  project: Project,\n  newStatus: ProjectStatus,\n  catalog: Catalog,\n  capturedAt?: string,\n): Project {\n  const wasClosed = isProjectClosed(project.status);\n  const willClose = isProjectClosed(newStatus);\n\n  if (!wasClosed && willClose) {\n    return {\n      ...project,\n      status: newStatus,\n      priceSnapshot: captureQuoteSnapshot(project, catalog, capturedAt),\n      // #108 — freeze each item to its module's current structure revision.\n      items: captureProjectItemStructurePins(project.items, catalog),\n    };\n  }\n\n  if (wasClosed && !willClose) {\n    // #108 — pins kept on reopen for audit continuity (see JSDoc above).\n    const { priceSnapshot: _removed, ...rest } = project;\n    return {\n      ...rest,\n      status: newStatus,\n    };\n  }\n\n  if (wasClosed && willClose) {\n    if (project.priceSnapshot) {\n      return { ...project, status: newStatus };\n    }\n    return {\n      ...project,\n      status: newStatus,\n      priceSnapshot: captureQuoteSnapshot(project, catalog, capturedAt),\n      items: captureProjectItemStructurePins(project.items, catalog),\n    };\n  }\n\n  // draft → draft (or same status)\n  if (project.priceSnapshot) {\n    const { priceSnapshot: _stale, ...rest } = project;\n    return { ...rest, status: newStatus };\n  }\n  return { ...project, status: newStatus };\n}\n\n/**"
+          }
+        },
+        {
+          "layer": "domain version snapshot",
+          "evidence": {
+            "file": "packages/domain/src/projectVersioning.ts",
+            "startLine": 96,
+            "endLine": 135,
+            "excerpt": "export function snapshotOnStatusChange(\n  project: Project,\n  newStatus: ProjectStatus,\n): Project {\n  if (project.status === newStatus) return project;\n\n  const label = statusTransitionLabel(project.status, newStatus);\n  return snapshotProjectVersion(project, label);\n}\n\n/**\n * Human-readable label for a status transition.\n */\nfunction statusTransitionLabel(\n  from: ProjectStatus,\n  to: ProjectStatus,\n): string {\n  const labels: Record<ProjectStatus, string> = {\n    draft: 'Borrador',\n    quoted: 'Cotizado',\n    accepted: 'Aceptado',\n    produced: 'Producido',\n  };\n  return `${labels[from]} → ${labels[to]}`;\n}\n\n/**\n * Compute a summary diff between two project versions for display.\n */\nexport function diffVersions(\n  older: ProjectVersion,\n  newer: ProjectVersion,\n): {\n  readonly itemAdded: boolean;\n  readonly itemRemoved: boolean;\n  readonly itemChanged: boolean;\n  readonly statusChanged: boolean;\n  readonly notesChanged: boolean;\n} {\n  const olderIds = new Set(older.items.map((i) => i.id));"
+          }
+        },
+        {
+          "layer": "repository",
+          "evidence": {
+            "file": "packages/storage/src/apiWorkspaceRepository.ts",
+            "startLine": 637,
+            "endLine": 643,
+            "excerpt": "  async saveProject(project: Project): Promise<void> {\n    await this.upsert(\n      `/projects/${project.id}`,\n      '/projects',\n      projectToApi(project),\n    );\n  }"
+          }
+        },
+        {
+          "layer": "route",
+          "evidence": {
+            "file": "backend-go/internal/api/routes.go",
+            "startLine": 342,
+            "endLine": 346,
+            "excerpt": "\tmux.Handle(\"GET /api/projects\", authMW(http.HandlerFunc(server.HandleProjects)))\n\tmux.Handle(\"POST /api/projects\", authMW(http.HandlerFunc(server.HandleProjects)))\n\tmux.Handle(\"GET /api/projects/{id}\", authMW(http.HandlerFunc(server.HandleProjectByID)))\n\tmux.Handle(\"PUT /api/projects/{id}\", authMW(http.HandlerFunc(server.HandleProjectByID)))\n\tmux.Handle(\"DELETE /api/projects/{id}\", authMW(http.HandlerFunc(server.HandleProjectByID)))"
+          }
+        },
+        {
+          "layer": "handler",
+          "evidence": {
+            "file": "backend-go/internal/api/handlers.go",
+            "startLine": 1447,
+            "endLine": 1524,
+            "excerpt": "\t\tstatusChanging := p.Status != \"\" && p.Status != existing.Status\n\t\tif statusChanging {\n\t\t\treopen := engine.IsProjectClosed(existing.Status) && p.Status == domain.StatusDraft\n\t\t\tmarkProduced := p.Status == domain.StatusProduced\n\t\t\tif reopen {\n\t\t\t\tif !requirePermission(w, domain.AnyRole(roles, func(rr domain.UserRole) bool { return domain.ProjectAllowsReopenToDraft(existing.Status, rr) }), \"no tenés permiso para reabrir cotizaciones\") {\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t} else if markProduced {\n\t\t\t\tif !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMarkProduced), \"no tenés permiso para marcar en producción\") {\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t\t// Production queue roles may only flip status (not rewrite BOM).\n\t\t\t\tif !domain.AnyRole(roles, domain.RoleCanMutateProjects) {\n\t\t\t\t\tnext := *existing\n\t\t\t\t\tnext.Status = domain.StatusProduced\n\t\t\t\t\tif next.PriceSnapshot == nil && existing.PriceSnapshot != nil {\n\t\t\t\t\t\tnext.PriceSnapshot = existing.PriceSnapshot\n\t\t\t\t\t}\n\t\t\t\t\t// Keep closed→closed snapshot; engine-equivalent without catalog re-freeze.\n\t\t\t\t\tp = next\n\t\t\t\t}\n\t\t\t} else if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), \"no tenés permiso para editar cotizaciones\") {\n\t\t\t\treturn\n\t\t\t}\n\t\t} else if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), \"no tenés permiso para editar cotizaciones\") {\n\t\t\treturn\n\t\t}\n\n\t\tp.OwnerUserID = domain.ResolveOwnerOnUpdateRoles(roles, existing.OwnerUserID, p.OwnerUserID)\n\t\t// Reopen must clear snapshot even if client resends one.\n\t\tif statusChanging && p.Status == domain.StatusDraft && engine.IsProjectClosed(existing.Status) {\n\t\t\tp.PriceSnapshot = nil\n\t\t}\n\t\t// Preserve snapshot when moving accepted → produced if client omitted it.\n\t\tif statusChanging && p.Status == domain.StatusProduced && p.PriceSnapshot == nil {\n\t\t\tp.PriceSnapshot = existing.PriceSnapshot\n\t\t}\n\t\t// #108: closing a quote pins each item's structure revision so later\n\t\t// edits to the structure do not silently mutate the closed quote's BOM.\n\t\t// Same caveat as PriceSnapshot above: the handler builds the freeze\n\t\t// inline rather than calling TransitionProjectStatus.\n\t\tif statusChanging && engine.IsProjectClosed(p.Status) {\n\t\t\tcatalog, cerr := s.Store.GetFullCatalog(r.Context())\n\t\t\tif cerr != nil {\n\t\t\t\trespondWithInternalError(w, cerr, \"handler: load catalog for structure pins\")\n\t\t\t\treturn\n\t\t\t}\n\t\t\tp.Items = engine.CaptureProjectItemStructurePins(p.Items, catalog)\n\t\t}\n\t\t// OC-010 server authority: lifecycle events also arrive via the project\n\t\t// aggregate (dual-write). New event ids must pass the same vocabulary +\n\t\t// RBAC gates as POST /api/projects/{id}/events; resending the existing\n\t\t// log is always allowed.\n\t\tif !authorizeProjectEventAppends(w, roles, existing.Events, p.Events) {\n\t\t\treturn\n\t\t}\n\t\t// OC-074: new closeout events in the dual-write path must pass the\n\t\t// closeout gates against the stored project state.\n\t\tif !authorizeCloseoutEventAppends(w, existing, p.Events) {\n\t\t\treturn\n\t\t}\n\t\terr = s.Store.UpdateProject(r.Context(), id, &p)\n\t\tif err != nil {\n\t\t\tif strings.Contains(err.Error(), \"not found\") {\n\t\t\t\trespondWithError(w, http.StatusNotFound, err.Error())\n\t\t\t\treturn\n\t\t\t}\n\t\t\trespondWithInternalError(w, err, \"handler\")\n\t\t\treturn\n\t\t}\n\t\tif !orgSeesManufacturing(claims, &p) {\n\t\t\tdomain.RedactProjectManufacturing(&p)\n\t\t}\n\t\tif !s.actorCanViewCosts(r) {\n\t\t\tdomain.RedactProjectCosts(&p)\n\t\t}\n\t\trespondWithJSON(w, http.StatusOK, p)"
+          }
+        },
+        {
+          "layer": "database",
+          "evidence": {
+            "file": "backend-go/internal/storage/projects.go",
+            "startLine": 1189,
+            "endLine": 1240,
+            "excerpt": "\n\t// Closed statuses freeze prices (quoted/accepted/produced — F036).\n\tif engine.IsProjectClosed(p.Status) {\n\t\t// Eliminar snapshot previo\n\t\tif _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id); err != nil {\n\t\t\treturn fmt.Errorf(\"delete previous quote snapshot: %w\", err)\n\t\t}\n\n\t\tif p.PriceSnapshot != nil {\n\t\t\tsnapQuery := `\n\t\t\t\tINSERT INTO quote_snapshots (project_id, captured_at, materials_cost, edge_total, hardware_total, direct_cost, labor_modular, labor_fixed_cost, margin_factor, sale_price, organization_id)\n\t\t\t\tVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n\t\t\t\tRETURNING id;\n\t\t\t`\n\t\t\tvar snapID string\n\t\t\terr = tx.QueryRow(ctx, snapQuery, id, p.PriceSnapshot.CapturedAt,\n\t\t\t\tp.PriceSnapshot.Breakdown.MaterialsCost, p.PriceSnapshot.Breakdown.EdgeTotal, p.PriceSnapshot.Breakdown.HardwareTotal,\n\t\t\t\tp.PriceSnapshot.Breakdown.DirectCost, p.PriceSnapshot.Breakdown.LaborModular, p.PriceSnapshot.Breakdown.LaborFixedCost,\n\t\t\t\tp.PriceSnapshot.Breakdown.MarginFactor, p.PriceSnapshot.Breakdown.SalePrice, OrgFromCtx(ctx)).Scan(&snapID)\n\t\t\tif err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\n\t\t\t// Insertar precios unitarios congelados\n\t\t\tfor mid, val := range p.PriceSnapshot.MaterialCostPerM2 {\n\t\t\t\t_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES ($1, 'material', $2, $3, $4)`, snapID, mid, val, OrgFromCtx(ctx))\n\t\t\t\tif err != nil {\n\t\t\t\t\treturn err\n\t\t\t\t}\n\t\t\t}\n\t\t\tfor eid, val := range p.PriceSnapshot.EdgeCostPerMl {\n\t\t\t\t_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES ($1, 'edge', $2, $3, $4)`, snapID, eid, val, OrgFromCtx(ctx))\n\t\t\t\tif err != nil {\n\t\t\t\t\treturn err\n\t\t\t\t}\n\t\t\t}\n\t\t\tfor hid, val := range p.PriceSnapshot.HardwareCostPerUnit {\n\t\t\t\t_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES ($1, 'hardware', $2, $3, $4)`, snapID, hid, val, OrgFromCtx(ctx))\n\t\t\t\tif err != nil {\n\t\t\t\t\treturn err\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t} else {\n\t\t// Si vuelve a borrador, eliminar snapshot (descongelar)\n\t\tif _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id); err != nil {\n\t\t\treturn fmt.Errorf(\"delete quote snapshot: %w\", err)\n\t\t}\n\t}\n\n\treturn tx.Commit(ctx)\n}"
+          }
+        }
+      ],
+      "invariants": [
+        "TS open→closed captures price snapshot and structure pins; closed→closed preserves existing price; reopen removes snapshot.",
+        "Role-specific reopen and produced transitions exist server-side.",
+        "Accepted/frozen truth must be server-owned; current generic write violates this invariant (OP-01)."
+      ],
+      "confirmedImplementedMechanisms": [
+        "UI/domain explicitly model frozen prices and revisions; backend pins structures on closing and protects reopen permission."
+      ],
+      "missingProof": [
+        "OP-01 client-supplied snapshot can replace/delete frozen snapshot.",
+        "OP-03 success before save and no rollback in project patch.",
+        "No real browser quote→accept→catalog price change→reload freeze proof executed here."
+      ],
+      "tests": [
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 180,
+          "name": "it('replaces projects', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 189,
+          "name": "it('replaces projectTemplates', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 203,
+          "name": "it('creates project + persists customers via catalogStore.upsertCustomers', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 228,
+          "name": "it('no-op when draft has existing customerId (no new customer)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 247,
+          "name": "it('updates project + persists', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 268,
+          "name": "it('no-op when project id not found', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 283,
+          "name": "it('draft to draft does not resolve prices even with an incomplete catalog', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 309,
+          "name": "it('toasts ResolutionError and keeps project state intact', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 342,
+          "name": "it('deletes project, persists delete, fires onProjectDeleted callback', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 357,
+          "name": "it('creates a copy with new id', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 372,
+          "name": "it('no-op when source not found', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 385,
+          "name": "it('transitions accepted → produced', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 399,
+          "name": "it('no-op when status is not accepted', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 412,
+          "name": "it('transitions non-draft → draft and clears snapshot', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 423,
+          "name": "it('no-op when already draft', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 439,
+          "name": "it('creates template from project', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 455,
+          "name": "it('creates project from template + persists customers', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 480,
+          "name": "it('removes template by id', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 497,
+          "name": "it('addProjectItem appends + persists via saveProject', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 512,
+          "name": "it('updateProjectItem replaces by id', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 528,
+          "name": "it('removeProjectItem filters by id', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 544,
+          "name": "it('removeProjectItem prunes kitchen placements for that item', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 592,
+          "name": "it('restoreProjectItems re-inserta con el id original (undo de Proyectar)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 613,
+          "name": "it('restoreProjectItems es idempotente por id (no duplica)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 629,
+          "name": "it('restoreProjectItems con order restaura la posición original', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 648,
+          "name": "it('restoreProjectItems restaura varios contiguos en orden', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 674,
+          "name": "it('restoreProjectItems no pisa reordenamientos posteriores a la eliminación', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 702,
+          "name": "it('updateProjectItem prunes placements when qty shrinks', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 749,
+          "name": "it('sets choices when non-empty, clears when empty', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 765,
+          "name": "it('gated to draft status only', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 778,
+          "name": "it('applies when draft', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 790,
+          "name": "it('duplicates + applies scenario B + fires navigate callback', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 810,
+          "name": "it('importNestingResult sets + toasts', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 826,
+          "name": "it('updateKitchenLayout clears layout when empty', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 838,
+          "name": "it('updateKitchenLayout sets when non-empty', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 852,
+          "name": "it('updateKitchenLayout / addProjectItem no-op when accepted (#257 freeze)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 871,
+          "name": "it('reopenProject: vendedor cannot force accepted; admin can (#257)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 887,
+          "name": "it('updateKitchenLayout keeps other spaces when active top-level is empty', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 933,
+          "name": "it('exports a function (hook wiring contract)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 939,
+          "name": "it('loads, creates, updates and deletes warranty tickets', async () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1003,
+          "name": "it('startEngineering creates the log and persists the project', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1019,
+          "name": "it('startEngineering is idempotent — an existing log is not overwritten', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1038,
+          "name": "it('recordEngineeringGeneration stamps generatedBy/At (Documentado)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1060,
+          "name": "it('recordEngineeringGeneration is a no-op without a log', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1071,
+          "name": "it('sendProjectToProduction records the handshake, bumps revision and transitions', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1100,
+          "name": "it('sendProjectToProduction is a no-op without documented engineering (stage gate)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1111,
+          "name": "it('releaseProjectMaterials stamps the release after engineering sent', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1136,
+          "name": "it('releaseProjectMaterials ignores works whose engineering was not sent', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1147,
+          "name": "it('sendProjectToProduction rejects non-accepted projects', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1174,
+          "name": "it('recordDeposit appends a real deposit_received event and persists it (OC-013)', async () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1193,
+          "name": "it('recordDeposit rejects non-positive amounts without touching the project', async () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1204,
+          "name": "it('releaseToProduction runs the 6 gates end-to-end after deposit + approvals (OC-022)', async () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1233,
+          "name": "it('releaseToProduction stays blocked while the deposit gate is missing', async () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1300,
+          "name": "it('advancePartInstanceLocal completa la operación actual y deriva el estado legacy', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1315,
+          "name": "it('advanceModuleUnitLocal respeta el gate de armado', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "apps/web/src/stores/projectStore.test.ts",
+          "line": 1344,
+          "name": "it('setPartExecutions reemplaza y re-deriva los estados de los ítems', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        }
+      ],
+      "runtime": "NEEDS VERIFICATION; do not translate test source into passed tests"
+    },
+    {
+      "id": "OP-FLOW-03",
+      "name": "Engineering → materials → physical production → packaging",
+      "status": "PARTIAL",
+      "classification": "CONFIRMED source wiring / UNKNOWN end-to-end runtime",
+      "verticalChain": [
+        {
+          "layer": "process stage domain",
+          "evidence": {
+            "file": "packages/domain/src/processStage.ts",
+            "startLine": 37,
+            "endLine": 68,
+            "excerpt": " * Derive the current process stage of a project.\n *\n * Cancelled projects are not special-cased here — callers exclude them from\n * work queues the same way they do today.\n */\nexport function projectProcessStage(project: Project): ProjectProcessStage {\n  if (project.status !== 'accepted' && project.status !== 'produced') {\n    return 'ventas';\n  }\n  if (!project.engineeringLog?.sentToProductionAt) return 'ingenieria';\n  if (!project.materialsRelease) return 'almacen';\n  return 'produccion';\n}\n\n/** Projects currently in a given process stage (unchanged order). */\nexport function filterProjectsByProcessStage(\n  projects: readonly Project[],\n  stage: ProjectProcessStage,\n): Project[] {\n  return projects.filter((p) => projectProcessStage(p) === stage);\n}\n\n/**\n * Whether Almacén can release the project's materials to production:\n * engineering already sent it and materials weren't released yet.\n */\nexport function canReleaseMaterials(project: Project): boolean {\n  return (\n    (project.status === 'accepted' || project.status === 'produced') &&\n    Boolean(project.engineeringLog?.sentToProductionAt) &&\n    !project.materialsRelease\n  );"
+          }
+        },
+        {
+          "layer": "UI physical action",
+          "evidence": {
+            "file": "packages/ui/src/production/FabricScreen.tsx",
+            "startLine": 466,
+            "endLine": 485,
+            "excerpt": "                  )}\n                </div>\n                {canAdvance && item.part && onAdvancePart ? (\n                  <button\n                    type=\"button\"\n                    className=\"btn btn--small\"\n                    onClick={() => onAdvancePart(card.projectId, item.part!.id)}\n                    data-testid={`fabric-advance-part-${rowKey}`}\n                  >\n                    Completar {PART_OPERATION_LABELS_ES[item.part.operationType]}\n                  </button>\n                ) : canAdvance && item.unit && onAdvanceUnit ? (\n                  <button\n                    type=\"button\"\n                    className=\"btn btn--small\"\n                    onClick={() => onAdvanceUnit(card.projectId, item.unit!.id)}\n                    data-testid={`fabric-advance-unit-${rowKey}`}\n                  >\n                    Avanzar unidad\n                  </button>"
+          }
+        },
+        {
+          "layer": "shell/API",
+          "evidence": {
+            "file": "apps/web/src/AppContent.tsx",
+            "startLine": 1621,
+            "endLine": 1674,
+            "excerpt": "  // offline/local workspace uses the pure path directly.\n  const handleAdvancePart = useCallback(\n    (projectId: string, partId: string) => {\n      const repo = getRepository();\n      if (repo.advancePartOperation) {\n        void repo\n          .advancePartOperation(projectId, partId, { advance: true, source: 'manual' })\n          .then(() => {\n            projectActions.advancePartInstanceLocal(projectId, partId);\n          })\n          .catch((err) => {\n            toast({\n              type: 'error',\n              message:\n                err instanceof Error && err.message\n                  ? err.message\n                  : 'No se pudo avanzar la pieza',\n            });\n          });\n      } else {\n        projectActions.advancePartInstanceLocal(projectId, partId);\n      }\n    },\n    [getRepository, projectActions, toast],\n  );\n\n  const handleAdvanceUnit = useCallback(\n    (projectId: string, unitId: string) => {\n      const repo = getRepository();\n      if (repo.advanceModuleUnit) {\n        void repo\n          .advanceModuleUnit(projectId, unitId, { advance: true, source: 'manual' })\n          .then(() => {\n            projectActions.advanceModuleUnitLocal(projectId, unitId);\n          })\n          .catch((err) => {\n            toast({\n              type: 'error',\n              message:\n                err instanceof Error && err.message\n                  ? err.message\n                  : 'No se pudo avanzar la unidad',\n            });\n          });\n      } else {\n        const result = projectActions.advanceModuleUnitLocal(projectId, unitId);\n        if (!result.ok) {\n          toast({ type: 'error', message: result.blockers.join(' · ') });\n        }\n      }\n    },\n    [getRepository, projectActions, toast],\n  );\n"
+          }
+        },
+        {
+          "layer": "local mirror persistence",
+          "evidence": {
+            "file": "apps/web/src/stores/projectStore.ts",
+            "startLine": 660,
+            "endLine": 725,
+            "excerpt": "  }\n\n  /**\n   * Replace the physical executions of a project and re-derive the legacy\n   * item floor statuses from the physical truth (OC-034 bridge — same\n   * derivation the server persists on every advance). Persists through the\n   * regular project save channel.\n   */\n  function patchPartExecutions(\n    set: (partial: Partial<ProjectState>) => void,\n    get: () => ProjectState,\n    projectId: string,\n    parts: readonly PartInstance[],\n    units: readonly ModuleUnitExecution[],\n  ): void {\n    const project = get().projects.find((p) => p.id === projectId);\n    if (!project) return;\n    let updated: Project = { ...project, partInstances: parts, moduleUnits: units };\n    const itemIds = new Set<string>([\n      ...parts.map((p) => p.projectItemId),\n      ...units.map((u) => u.projectItemId),\n    ]);\n    for (const itemId of itemIds) {\n      const derived = deriveLegacyItemFloorStatus(\n        units.filter((u) => u.projectItemId === itemId),\n        parts.filter((p) => p.projectItemId === itemId),\n      );\n      updated = setProjectItemFloorStatus(updated, itemId, derived, new Date().toISOString());\n    }\n    if (updated === project) return;\n    patch(set, get, (ps) => ps.map((p) => (p.id === projectId ? updated : p)));\n  }\n\n  /**\n   * Projects updater (reducer style). Saves only projects whose reference\n   * changed vs previous list (#15). Replaces App.tsx `patchProjects` wrapper.\n   */\n  function patch(\n    set: (partial: Partial<ProjectState>) => void,\n    get: () => ProjectState,\n    updater: (\n      projects: readonly Project[],\n    ) => readonly Project[],\n  ): void {\n    const prev = get().projects;\n    const nextProjects = updater(prev);\n    set({ projects: nextProjects });\n    const prevById = new Map(prev.map((p) => [p.id, p]));\n    for (const p of nextProjects) {\n      if (prevById.get(p.id) !== p) {\n        persistSaveProject(p).catch((err: unknown) => {\n          console.error('Error al guardar proyecto:', err);\n          // F118 S2: a save that fails because the session ended must expire\n          // the session, and must not toast on the login screen after logout.\n          const message = err instanceof Error ? err.message : String(err);\n          const workspaceState = useWorkspaceStore.getState();\n          if (workspaceState.session === null) return;\n          if (/401|unauthorized/i.test(message) && workspaceState.session === 'auth') {\n            workspaceState.markSessionEnded('expired');\n            return;\n          }\n          toast({\n            type: 'error',\n            message: 'No se pudieron guardar los cambios en el servidor.',\n          });\n        });"
+          }
+        },
+        {
+          "layer": "routes",
+          "evidence": {
+            "file": "backend-go/internal/api/routes.go",
+            "startLine": 420,
+            "endLine": 433,
+            "excerpt": "\tmux.Handle(\"GET /api/projects/{id}/part-executions\", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectPartExecutions))))\n\tmux.Handle(\"PUT /api/projects/{id}/part-executions\", authMW(mfgOnly(http.HandlerFunc(server.HandleGeneratePartExecutions))))\n\tmux.Handle(\"POST /api/projects/{id}/parts/{partId}/advance\", authMW(mfgOnly(http.HandlerFunc(server.HandleAdvancePartOperation))))\n\tmux.Handle(\"POST /api/projects/{id}/parts/{partId}/rework\", authMW(mfgOnly(http.HandlerFunc(server.HandlePartRework))))\n\tmux.Handle(\"POST /api/projects/{id}/units/{unitId}/advance\", authMW(mfgOnly(http.HandlerFunc(server.HandleAdvanceModuleUnit))))\n\tmux.Handle(\"POST /api/projects/{id}/units/{unitId}/assembly-override\", authMW(mfgOnly(http.HandlerFunc(server.HandleAssemblyOverride))))\n\n\t// Material planning (OC-050..OC-054, #302): requirements from the released\n\t// BOM, reservations, shortage and the evidence-backed materials release.\n\tmux.Handle(\"GET /api/projects/{id}/materials\", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectMaterials))))\n\tmux.Handle(\"POST /api/projects/{id}/materials/derive\", authMW(mfgOnly(http.HandlerFunc(server.HandleMaterialsDerive))))\n\tmux.Handle(\"POST /api/projects/{id}/materials/reserve\", authMW(mfgOnly(http.HandlerFunc(server.HandleMaterialsReserve))))\n\tmux.Handle(\"POST /api/projects/{id}/materials/consume\", authMW(mfgOnly(http.HandlerFunc(server.HandleMaterialsConsume))))\n\tmux.Handle(\"POST /api/projects/{id}/materials/release\", authMW(mfgOnly(http.HandlerFunc(server.HandleMaterialsRelease))))"
+          }
+        },
+        {
+          "layer": "API convergence/QC",
+          "evidence": {
+            "file": "backend-go/internal/api/partExecutions.go",
+            "startLine": 372,
+            "endLine": 411,
+            "excerpt": "\t\t\tif !body.Advance {\n\t\t\t\treturn nil, fmt.Errorf(\"BAD_REQUEST:falta target_status o advance\")\n\t\t\t}\n\t\t\ttarget = domain.NextModuleUnitStatus(unit.Status)\n\t\t\tif target == \"\" {\n\t\t\t\treturn nil, fmt.Errorf(\"CONFLICT:la unidad ya está instalada\")\n\t\t\t}\n\t\t}\n\t\tif !domain.IsValidModuleUnitStatus(string(target)) {\n\t\t\treturn nil, fmt.Errorf(\"BAD_REQUEST:estado de unidad desconocido: %s\", target)\n\t\t}\n\t\tif !s.actorCanWorkSectorInTx(r, roles, actorID(claims), sectorForUnitTargetStatus(target)) {\n\t\t\treturn nil, fmt.Errorf(\"FORBIDDEN\")\n\t\t}\n\n\t\t// Convergence gate (OC-032): assembly may only start when every\n\t\t// required piece is ready against the released revision — or a\n\t\t// supervisor override was recorded.\n\t\tif target == domain.ModuleUnitStatusAssembly && unit.Status == domain.ModuleUnitStatusAwaitingParts {\n\t\t\tcheck := domain.CheckAssemblyReadiness(unit, snap.Parts, releasedRevisionFor(project))\n\t\t\tif !check.IsReady {\n\t\t\t\tblocked := check\n\t\t\t\tgateBlocked = &blocked\n\t\t\t\treturn nil, fmt.Errorf(\"ASSEMBLY_GATE\")\n\t\t\t}\n\t\t}\n\n\t\t// QC gate (OC-062): a unit only enters packaging with an approved QC\n\t\t// checklist and no open quality issue — or an audited supervisor\n\t\t// override recorded on its QC record.\n\t\tif target == domain.ModuleUnitStatusPackaged && unit.Status == domain.ModuleUnitStatusModuleQC {\n\t\t\tgate := domain.EvaluateUnitQcGate(snap.Quality, unit)\n\t\t\tif !gate.Ready {\n\t\t\t\tblocked := gate\n\t\t\t\tqcGateBlocked = &blocked\n\t\t\t\treturn nil, fmt.Errorf(\"QC_GATE\")\n\t\t\t}\n\t\t}\n\n\t\tbefore := deriveItemStatuses(snap)"
+          }
+        },
+        {
+          "layer": "domain convergence",
+          "evidence": {
+            "file": "backend-go/internal/domain/partExecution.go",
+            "startLine": 283,
+            "endLine": 342,
+            "excerpt": "func CheckAssemblyReadiness(unit ModuleUnitExecution, allParts []PartInstance, releasedRevision string) AssemblyReadiness {\n\tvar unitParts []PartInstance\n\tfor _, p := range allParts {\n\t\tif p.ProjectItemID == unit.ProjectItemID && p.UnitIndex == unit.UnitIndex {\n\t\t\tunitParts = append(unitParts, p)\n\t\t}\n\t}\n\tif len(unitParts) == 0 {\n\t\treturn AssemblyReadiness{\n\t\t\tBlockers: []string{\"No hay piezas generadas para esta unidad\"},\n\t\t}\n\t}\n\n\tunitRevisionStale := releasedRevision != \"\" && unit.ProductionRevision != releasedRevision\n\thasOverride := unit.SupervisorOverride != nil\n\n\treadyCount := 0\n\tstaleParts := 0\n\tvar missing []PartInstance\n\tfor _, p := range unitParts {\n\t\tif p.ProductionRevision != unit.ProductionRevision {\n\t\t\tstaleParts++\n\t\t\tmissing = append(missing, p)\n\t\t\tcontinue\n\t\t}\n\t\tif p.Status == PartInstanceStatusReadyForAssembly || p.Status == PartInstanceStatusAssembled {\n\t\t\treadyCount++\n\t\t} else {\n\t\t\tmissing = append(missing, p)\n\t\t}\n\t}\n\n\tisReady := (len(missing) == 0 && !unitRevisionStale) || hasOverride\n\n\tvar blockers []string\n\tif !hasOverride {\n\t\tif unitRevisionStale {\n\t\t\tblockers = append(blockers,\n\t\t\t\t\"La revisión liberada (\"+releasedRevision+\") difiere de la revisión de la unidad (\"+unit.ProductionRevision+\")\")\n\t\t}\n\t\tif staleParts > 0 {\n\t\t\tblockers = append(blockers, fmt.Sprintf(\"%d pieza(s) pertenecen a una revisión anterior\", staleParts))\n\t\t}\n\t\tif len(missing) > 0 {\n\t\t\tblockers = append(blockers, fmt.Sprintf(\"Faltan %d piezas por terminar antes de armado\", len(missing)))\n\t\t}\n\t}\n\tif missing == nil {\n\t\tmissing = []PartInstance{}\n\t}\n\tif blockers == nil {\n\t\tblockers = []string{}\n\t}\n\n\treturn AssemblyReadiness{\n\t\tIsReady:              isReady,\n\t\tCanStartWithOverride: !isReady,\n\t\tReadyPieces:          readyCount,\n\t\tTotalPieces:          len(unitParts),\n\t\tMissingPieces:        missing,"
+          }
+        },
+        {
+          "layer": "locked storage",
+          "evidence": {
+            "file": "backend-go/internal/storage/partExecutions.go",
+            "startLine": 30,
+            "endLine": 119,
+            "excerpt": "func (s *PostgresStore) MutateProjectPartExecutions(\n\tctx context.Context,\n\tprojectID string,\n\tmutate func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error),\n) (*domain.PartExecutionsMutation, error) {\n\ttx, err := s.beginTx(ctx)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"error beginning part executions tx: %w\", err)\n\t}\n\tdefer tx.Rollback(ctx)\n\n\tvar partsRaw, unitsRaw, qualityRaw []byte\n\terr = tx.QueryRow(ctx, `\n\t\tSELECT part_instances, module_units, quality FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;\n\t`, projectID, OrgFromCtx(ctx)).Scan(&partsRaw, &unitsRaw, &qualityRaw)\n\tif err != nil {\n\t\treturn nil, ErrPartExecutionsNotFound\n\t}\n\n\tsnap := &domain.PartExecutionsSnapshot{ItemStatuses: map[string]string{}, ItemQuantities: map[string]int{}}\n\tif len(qualityRaw) > 0 && string(qualityRaw) != \"null\" {\n\t\tvar job domain.QualityJob\n\t\tif err := json.Unmarshal(qualityRaw, &job); err == nil {\n\t\t\tsnap.Quality = &job\n\t\t}\n\t}\n\tif len(partsRaw) > 0 && string(partsRaw) != \"null\" {\n\t\tif err := json.Unmarshal(partsRaw, &snap.Parts); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error decoding part_instances: %w\", err)\n\t\t}\n\t}\n\tif len(unitsRaw) > 0 && string(unitsRaw) != \"null\" {\n\t\tif err := json.Unmarshal(unitsRaw, &snap.Units); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error decoding module_units: %w\", err)\n\t\t}\n\t}\n\n\trows, err := tx.Query(ctx, `\n\t\tSELECT id, COALESCE(floor_status, 'pending'), COALESCE(quantity, 1) FROM project_items WHERE project_id = $1;\n\t`, projectID)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"error loading item floor statuses: %w\", err)\n\t}\n\tdefer rows.Close()\n\tfor rows.Next() {\n\t\tvar id, status string\n\t\tvar quantity int\n\t\tif err := rows.Scan(&id, &status, &quantity); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error scanning item floor status: %w\", err)\n\t\t}\n\t\tsnap.ItemStatuses[id] = domain.NormalizeItemFloorStatus(status)\n\t\tsnap.ItemQuantities[id] = quantity\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"error iterating item floor statuses: %w\", err)\n\t}\n\n\tmutation, err := mutate(snap)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\tif _, err := tx.Exec(ctx, `\n\t\tUPDATE projects\n\t\tSET part_instances = $2, module_units = $3,\n\t\t    quality = COALESCE($4, quality),\n\t\t    updated_at = CURRENT_TIMESTAMP\n\t\tWHERE id = $1 AND (organization_id = $5 OR sales_organization_id = $5 OR manufacturing_organization_id = $5);\n\t`, projectID, jsonbSliceArg(mutation.Parts), jsonbSliceArg(mutation.Units), jsonbStructArg(mutation.Quality), OrgFromCtx(ctx)); err != nil {\n\t\treturn nil, fmt.Errorf(\"error persisting part executions: %w\", err)\n\t}\n\n\tfor itemID, status := range mutation.ItemStatuses {\n\t\tif before, ok := snap.ItemStatuses[itemID]; ok && before == status {\n\t\t\tcontinue\n\t\t}\n\t\tif _, err := tx.Exec(ctx, `\n\t\t\tUPDATE project_items SET floor_status = $2 WHERE id = $1;\n\t\t`, itemID, status); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error updating item floor status %s: %w\", itemID, err)\n\t\t}\n\t}\n\n\tif err := upsertFloorEventsTx(ctx, tx, projectID, mutation.FloorEvents); err != nil {\n\t\treturn nil, err\n\t}\n\n\tif err := tx.Commit(ctx); err != nil {\n\t\treturn nil, fmt.Errorf(\"error committing part executions tx: %w\", err)\n\t}"
+          }
+        },
+        {
+          "layer": "schema",
+          "evidence": {
+            "file": "backend-go/db/migration/000069_part_executions_and_module_units.up.sql",
+            "startLine": 1,
+            "endLine": 4,
+            "excerpt": "-- OC-030..OC-034 — Physical production execution: part instances, operations, routing and module units.\nALTER TABLE projects\n  ADD COLUMN IF NOT EXISTS part_instances JSONB,\n  ADD COLUMN IF NOT EXISTS module_units JSONB;"
+          }
+        }
+      ],
+      "invariants": [
+        "Cuts/CNC/edges operate parts; assembly requires ready parts of same unit/revision; packaging requires QC or recorded override.",
+        "Physical endpoint row lock atomically updates JSON, derived legacy status and audit.",
+        "Generic project mutation must not override physical state; current second writer violates boundary OP-02."
+      ],
+      "confirmedImplementedMechanisms": [
+        "Dedicated physical routes and domain convergence/stale-revision checks exist.",
+        "UI differentiates part and unit callbacks.",
+        "Order workspace explains missing material release separately from missing order."
+      ],
+      "missingProof": [
+        "OP-02 generic state replacement undermines dedicated gates and Web re-persists local mirror after dedicated advance.",
+        "WEB-01 picking ledger/state non-atomic; materials flow is not certified by production gate presence.",
+        "Real station scan, concurrent users, rollback and required piece→unit sequence not executed here."
+      ],
+      "tests": [
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 79,
+          "name": "func TestPartExec_AdvanceCutDerivesLegacyStatusAndAudits(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 104,
+          "name": "func TestPartExec_AdvanceRejectsOutOfSequence(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 114,
+          "name": "func TestPartExec_AssemblyGateBlocksAndReportsMissingPieces(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 135,
+          "name": "func TestPartExec_StaleRevisionBlocksAssemblyUntilOverride(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 172,
+          "name": "func TestPartExec_OverrideRequiresSupervisor(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 181,
+          "name": "func TestPartExec_UnitRejectsInvalidTransition(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 193,
+          "name": "func TestPartExec_ReworkEmitsQualityAndReworkEvents(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 212,
+          "name": "func TestPartExec_RbacRejectsVendedor(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 221,
+          "name": "func TestPartExec_LegacyEndpointsRejectItemsWithUnits(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 249,
+          "name": "func TestPartExec_GetReadinessIncludesReleasedRevision(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 303,
+          "name": "func TestPartExec_GenerateValidatesAndPersists(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 318,
+          "name": "func TestPartExec_GenerateRejectsWrongUnitCount(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 330,
+          "name": "func TestPartExec_GenerateRejectsStaleRevision(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 342,
+          "name": "func TestPartExec_GenerateRequiresForceOverProgress(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 379,
+          "name": "func TestPartExec_ScannerAdvanceResolvesCurrentOperation(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 395,
+          "name": "func TestPartExec_UnitAdvanceRecordsPackageCount(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 426,
+          "name": "func TestPartExec_QCGateBlocksPackagingWithoutChecklist(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 450,
+          "name": "func TestPartExec_QCGateOpenIssueBlocksPackaging(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/partExecutions_test.go",
+          "line": 476,
+          "name": "func TestPartExec_ReworkRecordsCosting(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/domain/partExecutionLogic_test.go",
+          "line": 38,
+          "name": "func TestAdvancePartOperationSequenceGuard(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/partExecutionLogic_test.go",
+          "line": 64,
+          "name": "func TestCheckAssemblyReadinessStaleRevision(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/partExecutionLogic_test.go",
+          "line": 102,
+          "name": "func TestModuleUnitTransitionChain(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/partExecutionLogic_test.go",
+          "line": 142,
+          "name": "func TestTriggerPartRework(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/partExecutionLogic_test.go",
+          "line": 166,
+          "name": "func TestDeriveLegacyItemFloorStatus(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/partExecutionParity_test.go",
+          "line": 11,
+          "name": "func TestPartOperationTypesFixtureParity(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/partExecutionParity_test.go",
+          "line": 69,
+          "name": "func TestModuleUnitStatusesFixtureParity(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        }
+      ],
+      "runtime": "NEEDS VERIFICATION; do not translate test source into passed tests"
+    },
+    {
+      "id": "OP-FLOW-04",
+      "name": "Installation visits → punch/issues → sign-off → closeout",
+      "status": "PARTIAL",
+      "classification": "CONFIRMED source wiring / UNKNOWN end-to-end runtime",
+      "verticalChain": [
+        {
+          "layer": "shell closeout",
+          "evidence": {
+            "file": "apps/web/src/AppContent.tsx",
+            "startLine": 1775,
+            "endLine": 1840,
+            "excerpt": "  /**\n   * #303 — server-authoritative closeout milestones: completar instalación,\n   * conformidad del cliente y cierre del proyecto (OC-074 gates). The pure\n   * action gives the same validation offline; the endpoint enforces it for\n   * every client.\n   */\n  const runInstallationCloseout = useCallback(\n    (\n      projectId: string,\n      payload: {\n        action: 'complete_installation' | 'sign_off' | 'close';\n        signedOffBy?: string;\n      },\n      action: (project: Project) => { project: Project },\n    ) => {\n      const project = projectActions.projects.find((p) => p.id === projectId);\n      if (!project) return;\n      let local: { project: Project };\n      try {\n        local = action(project);\n      } catch (err) {\n        toast({\n          type: 'error',\n          message:\n            err instanceof Error && err.message\n              ? err.message\n              : 'Acción de cierre inválida',\n        });\n        return;\n      }\n      const repo = getRepository();\n      if (repo.installationCloseout) {\n        void repo\n          .installationCloseout(projectId, payload)\n          .then((res) => {\n            projectActions.setInstallationJob(projectId, res.installation);\n            toast({\n              type: 'success',\n              message:\n                payload.action === 'complete_installation'\n                  ? '✓ Instalación completada'\n                  : payload.action === 'sign_off'\n                    ? '✓ Conformidad registrada'\n                    : '✓ Proyecto cerrado',\n            });\n          })\n          .catch((err) => {\n            toast({\n              type: 'error',\n              message:\n                err instanceof Error && err.message\n                  ? err.message\n                  : 'No se pudo completar la acción de cierre',\n            });\n          });\n      } else {\n        projectActions.applyInstallationProject(projectId, local.project);\n        toast({\n          type: 'success',\n          message:\n            payload.action === 'complete_installation'\n              ? '✓ Instalación completada'\n              : payload.action === 'sign_off'\n                ? '✓ Conformidad registrada'\n                : '✓ Proyecto cerrado',\n        });"
+          }
+        },
+        {
+          "layer": "repository",
+          "evidence": {
+            "file": "packages/storage/src/apiWorkspaceRepository.ts",
+            "startLine": 1123,
+            "endLine": 1197,
+            "excerpt": "\n  async getInstallation(projectId: string): Promise<InstallationView> {\n    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/installation`, {\n      headers: this.getHeaders(),\n    });\n    if (!res.ok) {\n      const text = await res.text().catch(() => '');\n      throw new Error(`Failed to get installation: ${res.status} ${text}`);\n    }\n    return this.parseInstallationView((await res.json()) as Record<string, unknown>);\n  }\n\n  async saveInstallation(\n    projectId: string,\n    job: InstallationJob,\n  ): Promise<InstallationView & { eventsAppended: number }> {\n    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/installation`, {\n      method: 'PUT',\n      headers: this.getHeaders(),\n      body: JSON.stringify(installationJobToApi(job)),\n    });\n    if (!res.ok) {\n      const text = await res.text().catch(() => '');\n      throw new Error(`Save installation failed: ${res.status} ${text}`);\n    }\n    const raw = (await res.json()) as Record<string, unknown>;\n    return {\n      ...this.parseInstallationView(raw),\n      eventsAppended: Number(raw.events_appended ?? raw.eventsAppended ?? 0),\n    };\n  }\n\n  async installationCloseout(\n    projectId: string,\n    payload: {\n      action: 'complete_installation' | 'sign_off' | 'close';\n      signedOffBy?: string;\n      notes?: string;\n      photoIds?: readonly string[];\n    },\n  ): Promise<{ installation: InstallationJob; closeout?: ClientCloseout } & InstallationView> {\n    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/installation/closeout`, {\n      method: 'POST',\n      headers: this.getHeaders(),\n      body: JSON.stringify({\n        action: payload.action,\n        signed_off_by: payload.signedOffBy,\n        notes: payload.notes,\n        photo_ids: payload.photoIds,\n      }),\n    });\n    const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;\n    if (!res.ok) {\n      const checks: readonly InstallationCloseoutCheck[] = closeoutChecksFromApi(\n        raw.closeout_checks ?? raw.closeoutChecks,\n      );\n      if (res.status === 409 && checks.length > 0) {\n        throw new CloseoutGateError(checks, String(raw.error ?? 'gates de cierre pendientes'));\n      }\n      throw new Error(`Installation closeout failed: ${res.status} ${JSON.stringify(raw)}`);\n    }\n    const view = this.parseInstallationView(raw);\n    const installation =\n      installationJobFromApi(raw.installation) ??\n      view.installation ??\n      (() => {\n        throw new Error('Installation closeout failed: respuesta sin installation');\n      })();\n    return {\n      ...view,\n      installation,\n      closeout: installation.closeout,\n    };\n  }\n"
+          }
+        },
+        {
+          "layer": "route manufacturing boundary",
+          "evidence": {
+            "file": "backend-go/internal/api/routes.go",
+            "startLine": 445,
+            "endLine": 448,
+            "excerpt": "\t// items and gated closeout — server-authoritative with audit events.\n\tmux.Handle(\"GET /api/projects/{id}/installation\", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectInstallation))))\n\tmux.Handle(\"PUT /api/projects/{id}/installation\", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectInstallation))))\n\tmux.Handle(\"POST /api/projects/{id}/installation/closeout\", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectInstallationCloseout))))"
+          }
+        },
+        {
+          "layer": "API install update",
+          "evidence": {
+            "file": "backend-go/internal/api/installation.go",
+            "startLine": 177,
+            "endLine": 214,
+            "excerpt": "\n\tcase http.MethodPut:\n\t\tif !requirePermission(w, domain.AnyRole(roles, roleCanManageInstallation), \"no tenés permiso para gestionar la instalación\") {\n\t\t\treturn\n\t\t}\n\t\tvar next domain.InstallationJob\n\t\tif !decodeJSONBody(w, r, &next) {\n\t\t\treturn\n\t\t}\n\t\tnext.ProjectID = projectID\n\n\t\tmutation, err := s.Store.MutateProjectInstallation(r.Context(), projectID, func(snap *domain.InstallationSnapshot) (*domain.InstallationMutation, error) {\n\t\t\tif err := domain.ValidateInstallationJobTransition(snap.Job, &next); err != nil {\n\t\t\t\treturn nil, fmt.Errorf(\"BAD_REQUEST:%s\", err.Error())\n\t\t\t}\n\t\t\t// Closeout facts are only produced by the closeout endpoint.\n\t\t\tvar prevCloseout *domain.ClientCloseout\n\t\t\tif snap.Job != nil {\n\t\t\t\tprevCloseout = snap.Job.Closeout\n\t\t\t}\n\t\t\tif !closeoutFactsEqual(prevCloseout, next.Closeout) {\n\t\t\t\treturn nil, fmt.Errorf(\"CONFLICT:conformidad/cierre sólo vía POST /installation/closeout\")\n\t\t\t}\n\t\t\tevents, err := installationDiffEvents(roles, claims, snap, &next)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t\treturn &domain.InstallationMutation{Job: &next, Events: events}, nil\n\t\t})\n\t\tif err != nil {\n\t\t\tif strings.HasPrefix(err.Error(), \"FORBIDDEN_EVENTS:\") {\n\t\t\t\teventType := strings.TrimPrefix(err.Error(), \"FORBIDDEN_EVENTS:\")\n\t\t\t\trespondWithError(w, http.StatusForbidden, \"no tenés permiso para registrar eventos de punch (\"+eventType+\")\")\n\t\t\t\treturn\n\t\t\t}\n\t\t\trespondWithMutationError(w, err)\n\t\t\treturn\n\t\t}"
+          }
+        },
+        {
+          "layer": "API closeout gate",
+          "evidence": {
+            "file": "backend-go/internal/api/installation.go",
+            "startLine": 253,
+            "endLine": 324,
+            "excerpt": "\t// Each action carries its own RBAC: completing the installation is a\n\t// plant milestone (produccion may do it); sign-off/close are gerente calls.\n\tactionEvent := map[string]string{\n\t\t\"complete_installation\": \"installation_completed\",\n\t\t\"sign_off\":              \"client_signed_off\",\n\t\t\"close\":                 \"project_closed\",\n\t}[body.Action]\n\tif actionEvent == \"\" {\n\t\trespondWithError(w, http.StatusBadRequest, \"action debe ser complete_installation, sign_off o close\")\n\t\treturn\n\t}\n\tif !requirePermission(w,\n\t\tdomain.AnyRole(roles, func(rr domain.UserRole) bool { return domain.RoleCanAppendProjectEvent(rr, actionEvent) }),\n\t\t\"no tenés permiso para esta acción de instalación (\"+body.Action+\")\") {\n\t\treturn\n\t}\n\n\tvar gateChecks []domain.CloseoutCheck\n\tgateBlocked := false\n\tmutation, err := s.Store.MutateProjectInstallation(r.Context(), projectID, func(snap *domain.InstallationSnapshot) (*domain.InstallationMutation, error) {\n\t\tjob := snap.Job\n\t\tif job == nil {\n\t\t\tjob = &domain.InstallationJob{\n\t\t\t\tID:          newInstallationEntityID(\"ijob\"),\n\t\t\t\tProjectID:   projectID,\n\t\t\t\tVisits:      []domain.InstallationVisit{},\n\t\t\t\tFieldIssues: []domain.FieldIssue{},\n\t\t\t\tPunchItems:  []domain.PunchItem{},\n\t\t\t\tCreatedAt:   time.Now().UTC(),\n\t\t\t}\n\t\t}\n\n\t\tif body.Action != \"complete_installation\" {\n\t\t\tchecks, ready := domain.EvaluateCloseoutReadiness(snap.Units, snap.Items, job, body.Action == \"close\")\n\t\t\tgateChecks = checks\n\t\t\tif !ready {\n\t\t\t\tgateBlocked = true\n\t\t\t\treturn nil, fmt.Errorf(\"CLOSEOUT_GATE\")\n\t\t\t}\n\t\t}\n\n\t\tnow := time.Now().UTC()\n\t\tbyUserID := installationByUserID(claims)\n\t\tnext := *job\n\n\t\tif body.Action == \"complete_installation\" {\n\t\t\t// Mirror of TS completeInstallation: every unit installed and no\n\t\t\t// open visits — completion is an audited milestone, not a close.\n\t\t\tif snap.HasInstallationCompletedEvent {\n\t\t\t\treturn nil, fmt.Errorf(\"CONFLICT:la instalación ya fue marcada como completada\")\n\t\t\t}\n\t\t\tmode, installed, total := domain.InstallationUnitsSummary(snap.Units, snap.Items)\n\t\t\tif total == 0 || installed != total {\n\t\t\t\treturn nil, fmt.Errorf(\"CONFLICT:no se puede completar la instalación: %d de %d unidades instaladas\", installed, total)\n\t\t\t}\n\t\t\tif open := domain.OpenInstallationVisits(job); len(open) > 0 {\n\t\t\t\treturn nil, fmt.Errorf(\"CONFLICT:no se puede completar la instalación con %d visita(s) pendiente(s)\", len(open))\n\t\t\t}\n\t\t\treturn &domain.InstallationMutation{Job: &next, Events: []domain.ProjectEvent{{\n\t\t\t\tID: newProjectEventID(), ProjectID: projectID,\n\t\t\t\tType: \"installation_completed\", At: now, ByUserID: byUserID, Source: \"web\",\n\t\t\t\tNote:    \"Instalación completada en obra\",\n\t\t\t\tPayload: installationPayload(map[string]interface{}{\"installed_units\": installed, \"total_units\": total, \"mode\": mode}),\n\t\t\t}}}, nil\n\t\t}\n\n\t\tif body.Action == \"sign_off\" {\n\t\t\tif strings.TrimSpace(body.SignedOffBy) == \"\" {\n\t\t\t\treturn nil, fmt.Errorf(\"BAD_REQUEST:la conformidad requiere el nombre de quien firma\")\n\t\t\t}\n\t\t\tvar closeout domain.ClientCloseout\n\t\t\tif job.Closeout != nil {"
+          }
+        },
+        {
+          "layer": "domain",
+          "evidence": {
+            "file": "backend-go/internal/domain/installation.go",
+            "startLine": 542,
+            "endLine": 592,
+            "excerpt": "\t\t\t\topenNonBlocking++\n\t\t\t}\n\t\t}\n\t}\n\tif n := len(blockers); n > 0 {\n\t\tpunchDetails = fmt.Sprintf(\"%d pendiente(s) bloqueante(s) del punch list: cerrar con evidencia antes del cierre\", n)\n\t} else if openNonBlocking > 0 {\n\t\tpunchDetails = fmt.Sprintf(\"%d pendiente(s) no bloqueante(s) abierto(s)\", openNonBlocking)\n\t}\n\n\tvisitsDetails := \"Sin visitas pendientes\"\n\tif n := len(openVisits); n > 0 {\n\t\tvisitsDetails = fmt.Sprintf(\"%d visita(s) en curso o planificada(s): completar o cancelar antes del cierre\", n)\n\t}\n\n\treturn []CloseoutCheck{\n\t\t{Code: CloseoutCheckUnitsInstalled, Label: closeoutCheckLabels[CloseoutCheckUnitsInstalled], Passed: unitsPassed, Required: true, Details: unitsDetails},\n\t\t{Code: CloseoutCheckFieldIssuesResolved, Label: closeoutCheckLabels[CloseoutCheckFieldIssuesResolved], Passed: len(openIssues) == 0, Required: true, Details: issuesDetails},\n\t\t{Code: CloseoutCheckPunchBlockersClosed, Label: closeoutCheckLabels[CloseoutCheckPunchBlockersClosed], Passed: len(blockers) == 0, Required: true, Details: punchDetails},\n\t\t{Code: CloseoutCheckVisitsCompleted, Label: closeoutCheckLabels[CloseoutCheckVisitsCompleted], Passed: len(openVisits) == 0, Required: true, Details: visitsDetails},\n\t}\n}\n\n// EvaluateCloseoutReadiness adds the client sign-off check on top of the\n// physical gates when requireSignOff is set (project close path).\nfunc EvaluateCloseoutReadiness(units []ModuleUnitExecution, items []ProjectItem, job *InstallationJob, requireSignOff bool) ([]CloseoutCheck, bool) {\n\tchecks := EvaluateCloseoutGates(units, items, job)\n\tif requireSignOff {\n\t\tsigned := job != nil && job.Closeout != nil && !job.Closeout.SignedOffAt.IsZero()\n\t\tdetails := \"Conformidad registrada\"\n\t\tif !signed {\n\t\t\tdetails = \"Registrar primero la conformidad firmada por el cliente\"\n\t\t}\n\t\tchecks = append(checks, CloseoutCheck{\n\t\t\tCode:     CloseoutCheckClientSignOff,\n\t\t\tLabel:    closeoutCheckLabels[CloseoutCheckClientSignOff],\n\t\t\tPassed:   signed,\n\t\t\tRequired: true,\n\t\t\tDetails:  details,\n\t\t})\n\t}\n\tready := true\n\tfor _, c := range checks {\n\t\tif c.Required && !c.Passed {\n\t\t\tready = false\n\t\t\tbreak\n\t\t}\n\t}\n\treturn checks, ready\n}\n"
+          }
+        },
+        {
+          "layer": "database lock + audit",
+          "evidence": {
+            "file": "backend-go/internal/storage/installation.go",
+            "startLine": 29,
+            "endLine": 116,
+            "excerpt": "func (s *PostgresStore) MutateProjectInstallation(\n\tctx context.Context,\n\tprojectID string,\n\tmutate func(snap *domain.InstallationSnapshot) (*domain.InstallationMutation, error),\n) (*domain.InstallationMutation, error) {\n\ttx, err := s.beginTx(ctx)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"error beginning installation tx: %w\", err)\n\t}\n\tdefer tx.Rollback(ctx)\n\n\tvar installationRaw, unitsRaw []byte\n\terr = tx.QueryRow(ctx, `\n\t\tSELECT installation, module_units FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;\n\t`, projectID, OrgFromCtx(ctx)).Scan(&installationRaw, &unitsRaw)\n\tif err != nil {\n\t\treturn nil, ErrInstallationProjectNotFound\n\t}\n\n\tsnap := &domain.InstallationSnapshot{}\n\tif len(installationRaw) > 0 && string(installationRaw) != \"null\" {\n\t\tvar job domain.InstallationJob\n\t\tif err := json.Unmarshal(installationRaw, &job); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error decoding installation: %w\", err)\n\t\t}\n\t\tsnap.Job = &job\n\t}\n\tif len(unitsRaw) > 0 && string(unitsRaw) != \"null\" {\n\t\tif err := json.Unmarshal(unitsRaw, &snap.Units); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error decoding module_units: %w\", err)\n\t\t}\n\t}\n\n\trows, err := tx.Query(ctx, `\n\t\tSELECT id, COALESCE(floor_status, 'pending')\n\t\tFROM project_items WHERE project_id = $1;\n\t`, projectID)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"error loading items for installation gates: %w\", err)\n\t}\n\tdefer rows.Close()\n\tfor rows.Next() {\n\t\tvar item domain.ProjectItem\n\t\tvar floorStatus string\n\t\tif err := rows.Scan(&item.ID, &floorStatus); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error scanning item for installation gates: %w\", err)\n\t\t}\n\t\titem.FloorStatus = domain.NormalizeItemFloorStatus(floorStatus)\n\t\tsnap.Items = append(snap.Items, item)\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn nil, fmt.Errorf(\"error iterating items for installation gates: %w\", err)\n\t}\n\n\terr = tx.QueryRow(ctx, `\n\t\tSELECT\n\t\t\tEXISTS(SELECT 1 FROM project_events WHERE project_id = $1 AND type = 'installation_started'),\n\t\t\tEXISTS(SELECT 1 FROM project_events WHERE project_id = $1 AND type = 'installation_completed');\n\t`, projectID).Scan(&snap.HasInstallationStartedEvent, &snap.HasInstallationCompletedEvent)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"error loading installation event flags: %w\", err)\n\t}\n\n\tmutation, err := mutate(snap)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\tif _, err := tx.Exec(ctx, `\n\t\tUPDATE projects\n\t\tSET installation = $2, updated_at = CURRENT_TIMESTAMP\n\t\tWHERE id = $1 AND (organization_id = $3 OR sales_organization_id = $3 OR manufacturing_organization_id = $3);\n\t`, projectID, jsonbStructArg(mutation.Job), OrgFromCtx(ctx)); err != nil {\n\t\treturn nil, fmt.Errorf(\"error persisting installation: %w\", err)\n\t}\n\n\tif err := upsertProjectEventsTx(ctx, tx, projectID, mutation.Events); err != nil {\n\t\treturn nil, err\n\t}\n\n\tif err := tx.Commit(ctx); err != nil {\n\t\treturn nil, fmt.Errorf(\"error committing installation tx: %w\", err)\n\t}\n\treturn mutation, nil\n}"
+          }
+        },
+        {
+          "layer": "schema",
+          "evidence": {
+            "file": "backend-go/db/migration/000070_project_installation.up.sql",
+            "startLine": 1,
+            "endLine": 3,
+            "excerpt": "-- OC-070..OC-074 — Installation job: visits, field issues, punch items and client closeout.\nALTER TABLE projects\n  ADD COLUMN IF NOT EXISTS installation JSONB;"
+          }
+        }
+      ],
+      "invariants": [
+        "Installation completion is not project close: all units installed and no open visits; sign-off requires physical/issue/punch/visit gates; closing additionally requires sign-off.",
+        "Non-blocking open punch is not same as blocking punch.",
+        "Installation facts cannot be smuggled through generic PUT: handler restores stored Installation.",
+        "Dedicated job PUT forbids changing closeout facts; closeout endpoint authors them under lock."
+      ],
+      "confirmedImplementedMechanisms": [
+        "Typed job schema and lifecycle transitions; field issues/punch and append-only events modeled.",
+        "Server computes gates from locked unit/item/job state and writes job/events together.",
+        "Web closeout success waits on endpoint response (unlike quote patch)."
+      ],
+      "missingProof": [
+        "Handler tests use direct calls and stubStore; not real router/auth/RLS/transaction evidence.",
+        "OP-02 can change underlying module_units through generic PUT, weakening confidence in closeout physical prerequisites.",
+        "Real visit→installed units→issue resolution→sign-off→close browser with DB not executed.",
+        "Physical units/legacy fallback behavior must be shown honestly for chosen demo fixture."
+      ],
+      "tests": [
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 66,
+          "name": "func TestInstallation_GetReturnsDerivedCloseoutView(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 98,
+          "name": "func TestInstallation_PutValidatesTransitionsAndDerivesEvents(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 141,
+          "name": "func TestInstallation_PutPunchEventsRequirePunchRoles(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 157,
+          "name": "func TestInstallation_PutRejectsCloseoutSmuggling(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 169,
+          "name": "func TestInstallation_PutRbacRejectsVendedor(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 177,
+          "name": "func TestInstallation_CloseoutGatesBlockThenAllow(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 237,
+          "name": "func TestInstallation_CloseoutWithBlockingPunchRejected(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 259,
+          "name": "func TestInstallation_RawCloseoutEventBlockedByGates(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 273,
+          "name": "func TestInstallation_CloseoutRbacRejectsProduccion(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/api/installation_test.go",
+          "line": 282,
+          "name": "func TestInstallation_CompleteInstallationMilestone(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "handler with stubStore (not routed HTTP/RLS)"
+        },
+        {
+          "file": "backend-go/internal/domain/installationParity_test.go",
+          "line": 13,
+          "name": "func TestInstallationStatusesFixtureParity(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/installationParity_test.go",
+          "line": 113,
+          "name": "func TestInstallationJobTransitionValidation(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/installationParity_test.go",
+          "line": 150,
+          "name": "func TestCloseoutGatesOC074(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/installationParity_test.go",
+          "line": 210,
+          "name": "func TestInstallationUnitsSummaryLegacyFallback(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "backend-go/internal/domain/installationParity_test.go",
+          "line": 231,
+          "name": "func TestDeriveInstallationJobStatus(t *testing.T) {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 67,
+          "name": "it('matches installationStatuses contract fixture exactly', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 76,
+          "name": "it('mirrors field issue transitions from the contract', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 84,
+          "name": "it('schedules multiple visits without hacks and auto-creates the job', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 100,
+          "name": "it('rejects visits without date or crew', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 110,
+          "name": "it('starts a visit once and appends installation_started only the first time', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 125,
+          "name": "it('completes a visit with result, units worked and evidence', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 142,
+          "name": "it('rejects completing a visit that never started and cancelling a completed one', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 155,
+          "name": "it('derives job status from real work, never from a stored field', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 165,
+          "name": "it('reports an issue linked to a mueble and a pieza with photos', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 179,
+          "name": "it('walks open → action_required → resolved → verified and rejects jumps', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 200,
+          "name": "it('reopens a verified issue whose verification failed', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 214,
+          "name": "it('exposes canTransitionFieldIssueStatus consistent with the map', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 233,
+          "name": "it('opens a punch with owner, due date and severity, audited as punch_opened', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 242,
+          "name": "it('closing requires resolution evidence (notes or photos)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 257,
+          "name": "it('rejects closing twice', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 267,
+          "name": "it('counts physical module units when they exist', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 276,
+          "name": "it('falls back to legacy item floor status', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 286,
+          "name": "it('reports none when there is nothing to install', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 300,
+          "name": "it('fails every gate on a fresh project and explains how to resolve each', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 324,
+          "name": "it('all units installed alone do NOT make the project closeable (OC-074)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 342,
+          "name": "it('non-blocking open punch does not block, blocking one does', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 366,
+          "name": "it('sign-off requires gates; close requires sign-off on top of gates', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 385,
+          "name": "it('rejects completion while units are missing or visits are open', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 393,
+          "name": "it('completes only with all units installed and no open visits', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 402,
+          "name": "it('completion does not close the project (installed ≠ cerrado)', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        },
+        {
+          "file": "packages/domain/src/installation.test.ts",
+          "line": 411,
+          "name": "it('stays in punch stage while opened punch items outnumber closed ones', () => {",
+          "execution": "NOT EXECUTED by this worker",
+          "scope": "source test located; inspect fixture/runtime requirements"
+        }
+      ],
+      "runtime": "NEEDS VERIFICATION; do not translate test source into passed tests"
+    }
+  ],
+  "findings": [
+    {
+      "id": "OP-01",
+      "title": "Generic project PUT accepts replacement/removal of frozen quote price",
+      "area": "Operational vertical flows",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "confidence": "CONFIRMED_STATIC",
+      "evidence": [
+        "backend-go/internal/api/handlers.go:1487-1505",
+        "backend-go/internal/storage/projects.go:1189-1238"
+      ],
+      "currentBehavior": "Handler preserves old snapshot only for produced transition with omitted snapshot; same-status quoted/accepted update can replace it. Storage deletes old quote_snapshots then inserts supplied payload, or none if omitted.",
+      "expectedBehavior": "Server-authoritative committed transitions across all entrypoints, not only dedicated endpoints.",
+      "businessImpact": "Frozen quote price is not authoritative against alternate client or stale full-aggregate save.",
+      "demoImpact": "Frozen quote price is not authoritative against alternate client or stale full-aggregate save.",
+      "recommendation": "Preserve server frozen snapshot for closed revisions; generate freeze on server; explicit versioned amend/reopen commands, regression with crafted same-status PUT.",
+      "effort": "M",
+      "dependencies": [
+        "Focused routed real-DB regression required",
+        "Review all aggregate writers"
+      ],
+      "relatedIssues": [],
+      "relatedPRs": [],
+      "runtime": "NEEDS VERIFICATION: no routed real-DB reproduction completed. Source path independently inspected by root.",
+      "scope": "Authorized same-organization actor allowed to mutate project. No cross-tenant access, credential bypass or data leakage claim.",
+      "priority": "P0 before relying on accepted/frozen quote authority in live demo",
+      "proposedAcceptanceCriteria": [
+        "Create and accept quote with server-derived snapshot.",
+        "Same-status generic PUT cannot replace, omit/delete or tamper with frozen prices.",
+        "Authorized explicit reopen/amend path changes snapshot according to exact revision policy.",
+        "Reload confirms snapshot and audit persist; cost-hidden caller does not erase snapshot."
+      ]
+    },
+    {
+      "id": "OP-02",
+      "title": "Generic aggregate physical writer bypasses dedicated assembly/QC authority",
+      "area": "Operational vertical flows",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "confidence": "CONFIRMED_STATIC",
+      "evidence": [
+        "backend-go/internal/api/handlers.go:1407-1524",
+        "backend-go/internal/storage/projects.go:1160-1187",
+        "apps/web/src/AppContent.tsx:1621-1655",
+        "apps/web/src/stores/projectStore.ts:668-725"
+      ],
+      "currentBehavior": "Generic update writes client part_instances/module_units/production_release without dedicated gates. Web awaits advance endpoint, discards returned authoritative object and locally advances then persists entire project through patch.",
+      "expectedBehavior": "Server-authoritative committed transitions across all entrypoints, not only dedicated endpoints.",
+      "businessImpact": "Stale Web saves or authorized generic writes can overwrite gated physical state; dedicated row-lock protection alone is insufficient.",
+      "demoImpact": "Stale Web saves or authorized generic writes can overwrite gated physical state; dedicated row-lock protection alone is insufficient.",
+      "recommendation": "Remove physical/release fields from generic mutation authority; hydrate exact server result after command; test generic PUT denial plus stale-client concurrency.",
+      "effort": "L",
+      "dependencies": [
+        "Focused routed real-DB regression required",
+        "Review all aggregate writers"
+      ],
+      "relatedIssues": [],
+      "relatedPRs": [],
+      "runtime": "NEEDS VERIFICATION: no routed real-DB reproduction completed. Source path independently inspected by root.",
+      "scope": "Authorized same-organization actor allowed to mutate project. No cross-tenant access, credential bypass or data leakage claim.",
+      "priority": "P0 before claiming live physical workflow gates",
+      "proposedAcceptanceCriteria": [
+        "Generic PUT rejects or preserves physical/release state; cannot move awaiting-parts to assembled or bypass packaging QC.",
+        "Dedicated endpoint response replaces local state without triggering generic PUT.",
+        "Stale generic client save cannot revert a second operator physical advance.",
+        "Same-org role denial, exact revision, rollback and audit verified through routed real-DB tests."
+      ]
+    },
+    {
+      "id": "OP-03",
+      "title": "Quote status and metadata report success before rejected persistence",
+      "area": "Operational vertical flows",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "confidence": "CONFIRMED_STATIC",
+      "evidence": [
+        "apps/web/src/stores/projectStore.ts:697-725",
+        "apps/web/src/stores/projectStore.ts:862-870",
+        "apps/web/src/stores/projectStore.ts:1025-1054"
+      ],
+      "currentBehavior": "Project patch updates memory then starts unawaited save; changeProjectStatus immediately toasts accepted/frozen. Failure emits error but does not restore project. Metadata save has same success-before-save pattern.",
+      "expectedBehavior": "Server-authoritative committed transitions across all entrypoints, not only dedicated endpoints.",
+      "businessImpact": "Sales can believe accepted/frozen quote persisted when server rejected it; reload may lose visible progress.",
+      "demoImpact": "Sales can believe accepted/frozen quote persisted when server rejected it; reload may lose visible progress.",
+      "recommendation": "Await command; return committed server project; maintain pending/failure without success, reconcile or rollback safely.",
+      "effort": "M",
+      "dependencies": [
+        "Focused routed real-DB regression required",
+        "Review all aggregate writers"
+      ],
+      "relatedIssues": [],
+      "relatedPRs": [],
+      "runtime": "NEEDS VERIFICATION: no routed real-DB reproduction completed. Source path independently inspected by root.",
+      "scope": "Authorized same-organization actor allowed to mutate project. No cross-tenant access, credential bypass or data leakage claim."
+    }
+  ],
+  "testHarnessEvidence": [
+    {
+      "file": "backend-go/internal/api/installation_test.go",
+      "startLine": 39,
+      "endLine": 63,
+      "excerpt": "\t\tItems:        []domain.ProjectItem{{ID: \"i1\", ModuleID: \"m-gab\", Quantity: 1, FloorStatus: \"installed\"}},\n\t\tModuleUnits:  []domain.ModuleUnitExecution{unit},\n\t\tInstallation: job,\n\t}\n\tstore := &stubStore{\n\t\tprojectReturnedByID: project,\n\t\tmoduleUnits:         []domain.ModuleUnitExecution{unit},\n\t\tinstallationJob:     job,\n\t\tinstallationUnits:   []domain.ModuleUnitExecution{unit},\n\t\tinstallationItems:   []domain.ProjectItem{{ID: \"i1\", ModuleID: \"m-gab\", FloorStatus: \"installed\"}},\n\t}\n\treturn store, &Server{Store: store}\n}\n\nfunc doInstallation(srv *Server, method, path, role, body string) *httptest.ResponseRecorder {\n\treq := withClaims(httptest.NewRequest(method, path, strings.NewReader(body)), \"u1\", role)\n\treq.SetPathValue(\"id\", \"p1\")\n\treq.Header.Set(\"Content-Type\", \"application/json\")\n\trr := httptest.NewRecorder()\n\tif strings.HasSuffix(path, \"/closeout\") {\n\t\tsrv.HandleProjectInstallationCloseout(rr, req)\n\t} else {\n\t\tsrv.HandleProjectInstallation(rr, req)\n\t}\n\treturn rr"
+    },
+    {
+      "file": "backend-go/internal/api/partExecutions_test.go",
+      "startLine": 41,
+      "endLine": 77,
+      "excerpt": "\tproject.PartInstances = []domain.PartInstance{lat}\n\tproject.ModuleUnits = []domain.ModuleUnitExecution{unit}\n\tstore := &stubStore{\n\t\tprojectReturnedByID: project,\n\t\tpartInstances:       []domain.PartInstance{lat},\n\t\tmoduleUnits:         []domain.ModuleUnitExecution{unit},\n\t\titemFloorStatuses:   map[string]string{\"i1\": \"pending\"},\n\t\tuserSectorsList:     []domain.UserSector{{UserID: \"u1\", Sector: \"cutting\"}, {UserID: \"u1\", Sector: \"assembly\"}, {UserID: \"u1\", Sector: \"packaging\"}},\n\t}\n\treturn store, &Server{Store: store}\n}\n\nfunc doPartExec(srv *Server, method, path, role, body string) *httptest.ResponseRecorder {\n\treq := withClaims(httptest.NewRequest(method, path, strings.NewReader(body)), \"u1\", role)\n\treq.SetPathValue(\"id\", \"p1\")\n\tif strings.Contains(path, \"/parts/\") {\n\t\treq.SetPathValue(\"partId\", \"p1_i1_u1_LAT_1\")\n\t}\n\tif strings.Contains(path, \"/units/\") {\n\t\treq.SetPathValue(\"unitId\", \"p1_i1_u1\")\n\t}\n\treq.Header.Set(\"Content-Type\", \"application/json\")\n\trr := httptest.NewRecorder()\n\tswitch {\n\tcase strings.HasSuffix(path, \"/advance\") && strings.Contains(path, \"/parts/\"):\n\t\tsrv.HandleAdvancePartOperation(rr, req)\n\tcase strings.HasSuffix(path, \"/rework\"):\n\t\tsrv.HandlePartRework(rr, req)\n\tcase strings.HasSuffix(path, \"/advance\"):\n\t\tsrv.HandleAdvanceModuleUnit(rr, req)\n\tcase strings.HasSuffix(path, \"/assembly-override\"):\n\t\tsrv.HandleAssemblyOverride(rr, req)\n\tdefault:\n\t\tsrv.HandleProjectPartExecutions(rr, req)\n\t}\n\treturn rr\n}"
+    }
+  ],
+  "coverage": {
+    "filesInspected": [
+      {
+        "file": "apps/web/src/AppContent.tsx",
+        "lines": 3076
+      },
+      {
+        "file": "apps/web/src/stores/catalog/customers.ts",
+        "lines": 106
+      },
+      {
+        "file": "apps/web/src/stores/projectStore.test.ts",
+        "lines": 1358
+      },
+      {
+        "file": "apps/web/src/stores/projectStore.ts",
+        "lines": 2264
+      },
+      {
+        "file": "backend-go/db/migration/000069_part_executions_and_module_units.up.sql",
+        "lines": 4
+      },
+      {
+        "file": "backend-go/db/migration/000070_project_installation.up.sql",
+        "lines": 3
+      },
+      {
+        "file": "backend-go/internal/api/handlers.go",
+        "lines": 2622
+      },
+      {
+        "file": "backend-go/internal/api/installation.go",
+        "lines": 396
+      },
+      {
+        "file": "backend-go/internal/api/installation_test.go",
+        "lines": 321
+      },
+      {
+        "file": "backend-go/internal/api/partExecutions.go",
+        "lines": 855
+      },
+      {
+        "file": "backend-go/internal/api/partExecutions_test.go",
+        "lines": 496
+      },
+      {
+        "file": "backend-go/internal/api/routes.go",
+        "lines": 577
+      },
+      {
+        "file": "backend-go/internal/domain/installation.go",
+        "lines": 646
+      },
+      {
+        "file": "backend-go/internal/domain/installationParity_test.go",
+        "lines": 246
+      },
+      {
+        "file": "backend-go/internal/domain/partExecution.go",
+        "lines": 557
+      },
+      {
+        "file": "backend-go/internal/domain/partExecutionLogic_test.go",
+        "lines": 200
+      },
+      {
+        "file": "backend-go/internal/domain/partExecutionParity_test.go",
+        "lines": 102
+      },
+      {
+        "file": "backend-go/internal/storage/customers.go",
+        "lines": 152
+      },
+      {
+        "file": "backend-go/internal/storage/installation.go",
+        "lines": 113
+      },
+      {
+        "file": "backend-go/internal/storage/partExecutions.go",
+        "lines": 121
+      },
+      {
+        "file": "backend-go/internal/storage/projects.go",
+        "lines": 2145
+      },
+      {
+        "file": "packages/domain/src/engine/pricing.ts",
+        "lines": 453
+      },
+      {
+        "file": "packages/domain/src/installation.test.ts",
+        "lines": 423
+      },
+      {
+        "file": "packages/domain/src/processStage.ts",
+        "lines": 89
+      },
+      {
+        "file": "packages/domain/src/projectVersioning.ts",
+        "lines": 152
+      },
+      {
+        "file": "packages/storage/src/apiWorkspaceRepository.ts",
+        "lines": 2540
+      },
+      {
+        "file": "packages/ui/src/customers/CustomersScreen.test.tsx",
+        "lines": 135
+      },
+      {
+        "file": "packages/ui/src/customers/CustomersScreen.tsx",
+        "lines": 527
+      },
+      {
+        "file": "packages/ui/src/production/FabricScreen.tsx",
+        "lines": 836
+      }
+    ],
+    "flowsTraced": 4,
+    "runtimeExecuted": false,
+    "unknowns": [
+      "End-to-end browser/API/DB run for all four flows not executed by this worker.",
+      "Tests listed are source evidence; mocks do not establish router/auth/RLS/storage proof.",
+      "Root/synthesis operational runtime proof must be referenced separately without promoting all flows to COMPLETE.",
+      "Digital Thread design/release APIs are not interchangeable with legacy project status/productionRelease; separate audit required."
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+[
+  "packages/ui/src/auth/AcceptInvitationScreen.tsx",
+  "packages/ui/src/common/BrandMark.tsx",
+  "packages/ui/src/shell/CommandPalette.tsx",
+  "packages/ui/src/common/EmptyState.tsx",
+  "packages/ui/src/common/EngineeringDetailLayout.tsx",
+  "packages/ui/src/common/InlineLoading.tsx",
+  "packages/ui/src/common/ListSkeleton.tsx",
+  "packages/ui/src/auth/LoginScreen.tsx",
+  "packages/ui/src/common/PageLoading.tsx",
+  "packages/ui/src/settings/SalesNetworkSection.tsx",
+  "packages/ui/src/common/SearchInput.tsx",
+  "packages/ui/src/common/Spinner.tsx",
+  "packages/ui/src/common/StatusChips.tsx",
+  "packages/ui/src/settings/DevicesScreen.tsx",
+  "apps/web/src/AppContent.tsx",
+  "apps/web/src/OrgPicker.tsx",
+  "apps/web/src/app/providers/ServerStateProvider.tsx",
+  "apps/web/src/SupportBanner.tsx",
+  "apps/web/src/components/ToastViewport.tsx",
+  "packages/ui/src/crm/WhatsAppButton.tsx"
+]

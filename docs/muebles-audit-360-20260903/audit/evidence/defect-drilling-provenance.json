@@ -1,0 +1,322 @@
+{
+  "resolved": [
+    {
+      "pieceCode": "MOD-GAB-01-P01",
+      "moduleCode": "MOD-GAB-01",
+      "partName": "Costado Gabinete",
+      "lengthMm": 720,
+      "widthMm": 590,
+      "materialName": "Sin material",
+      "holes": [],
+      "issues": [],
+      "fallbackUsed": true
+    },
+    {
+      "pieceCode": "MOD-GAB-01-P02",
+      "moduleCode": "MOD-GAB-01",
+      "partName": "Costado Gabinete",
+      "lengthMm": 720,
+      "widthMm": 590,
+      "materialName": "Sin material",
+      "holes": [],
+      "issues": [],
+      "fallbackUsed": true
+    },
+    {
+      "pieceCode": "MOD-GAB-01-P08",
+      "moduleCode": "MOD-GAB-01",
+      "partName": "Entrepaño Gabinete",
+      "lengthMm": 520,
+      "widthMm": 269,
+      "materialName": "Sin material",
+      "holes": [],
+      "issues": [],
+      "fallbackUsed": true
+    },
+    {
+      "pieceCode": "MOD-GAB-01-P05",
+      "moduleCode": "MOD-GAB-01",
+      "partName": "Manguete",
+      "lengthMm": 269,
+      "widthMm": 120,
+      "materialName": "Sin material",
+      "holes": [],
+      "issues": [],
+      "fallbackUsed": true
+    },
+    {
+      "pieceCode": "MOD-GAB-01-P06",
+      "moduleCode": "MOD-GAB-01",
+      "partName": "Manguete",
+      "lengthMm": 269,
+      "widthMm": 120,
+      "materialName": "Sin material",
+      "holes": [],
+      "issues": [],
+      "fallbackUsed": true
+    },
+    {
+      "pieceCode": "MOD-GAB-01-P04",
+      "moduleCode": "MOD-GAB-01",
+      "partName": "Piso Gabinete",
+      "lengthMm": 269,
+      "widthMm": 590,
+      "materialName": "Sin material",
+      "holes": [],
+      "issues": [],
+      "fallbackUsed": true
+    },
+    {
+      "pieceCode": "MOD-GAB-01-P07",
+      "moduleCode": "MOD-GAB-01",
+      "partName": "Puerta Gabinete",
+      "lengthMm": 717,
+      "widthMm": 296,
+      "materialName": "Sin material",
+      "holes": [
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 96,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Cazuela de bisagra superior 35mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 621,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Cazuela de bisagra inferior 35mm"
+        }
+      ],
+      "issues": [],
+      "fallbackUsed": true
+    },
+    {
+      "pieceCode": "MOD-GAB-01-P03",
+      "moduleCode": "MOD-GAB-01",
+      "partName": "Respaldo Gabinete",
+      "lengthMm": 689,
+      "widthMm": 269,
+      "materialName": "Sin material",
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 673,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 673,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 352,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 352,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        }
+      ],
+      "issues": [],
+      "fallbackUsed": false
+    }
+  ],
+  "exported": {
+    "schema": "muebles.drilling-data.v1",
+    "projectId": "proj-plantilla-demo",
+    "projectName": "Mobiliario Residencial Estándar",
+    "generatedAt": "2026-09-03T00:00:00.000Z",
+    "totalPiecesCount": 8,
+    "totalHolesCount": 8,
+    "patterns": [
+      {
+        "pieceCode": "MOD-GAB-01-P01",
+        "moduleCode": "MOD-GAB-01",
+        "partName": "Costado Gabinete",
+        "lengthMm": 720,
+        "widthMm": 590,
+        "materialName": "Sin material",
+        "holes": []
+      },
+      {
+        "pieceCode": "MOD-GAB-01-P02",
+        "moduleCode": "MOD-GAB-01",
+        "partName": "Costado Gabinete",
+        "lengthMm": 720,
+        "widthMm": 590,
+        "materialName": "Sin material",
+        "holes": []
+      },
+      {
+        "pieceCode": "MOD-GAB-01-P08",
+        "moduleCode": "MOD-GAB-01",
+        "partName": "Entrepaño Gabinete",
+        "lengthMm": 520,
+        "widthMm": 269,
+        "materialName": "Sin material",
+        "holes": []
+      },
+      {
+        "pieceCode": "MOD-GAB-01-P05",
+        "moduleCode": "MOD-GAB-01",
+        "partName": "Manguete",
+        "lengthMm": 269,
+        "widthMm": 120,
+        "materialName": "Sin material",
+        "holes": []
+      },
+      {
+        "pieceCode": "MOD-GAB-01-P06",
+        "moduleCode": "MOD-GAB-01",
+        "partName": "Manguete",
+        "lengthMm": 269,
+        "widthMm": 120,
+        "materialName": "Sin material",
+        "holes": []
+      },
+      {
+        "pieceCode": "MOD-GAB-01-P04",
+        "moduleCode": "MOD-GAB-01",
+        "partName": "Piso Gabinete",
+        "lengthMm": 269,
+        "widthMm": 590,
+        "materialName": "Sin material",
+        "holes": []
+      },
+      {
+        "pieceCode": "MOD-GAB-01-P07",
+        "moduleCode": "MOD-GAB-01",
+        "partName": "Puerta Gabinete",
+        "lengthMm": 717,
+        "widthMm": 296,
+        "materialName": "Sin material",
+        "holes": [
+          {
+            "face": "back",
+            "xMm": 22.5,
+            "yMm": 96,
+            "diameterMm": 35,
+            "depthMm": 12.5,
+            "type": "hinge",
+            "description": "Cazuela de bisagra superior 35mm"
+          },
+          {
+            "face": "back",
+            "xMm": 22.5,
+            "yMm": 621,
+            "diameterMm": 35,
+            "depthMm": 12.5,
+            "type": "hinge",
+            "description": "Cazuela de bisagra inferior 35mm"
+          }
+        ]
+      },
+      {
+        "pieceCode": "MOD-GAB-01-P03",
+        "moduleCode": "MOD-GAB-01",
+        "partName": "Respaldo Gabinete",
+        "lengthMm": 689,
+        "widthMm": 269,
+        "materialName": "Sin material",
+        "holes": [
+          {
+            "face": "front",
+            "xMm": 16,
+            "yMm": 16,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          {
+            "face": "front",
+            "xMm": 16,
+            "yMm": 673,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          {
+            "face": "front",
+            "xMm": 253,
+            "yMm": 16,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          {
+            "face": "front",
+            "xMm": 253,
+            "yMm": 673,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          {
+            "face": "front",
+            "xMm": 16,
+            "yMm": 352,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          {
+            "face": "front",
+            "xMm": 253,
+            "yMm": 352,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          }
+        ]
+      }
+    ]
+  }
+}

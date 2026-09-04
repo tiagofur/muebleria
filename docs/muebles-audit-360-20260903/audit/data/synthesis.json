@@ -1,0 +1,4469 @@
+{
+  "meta": {
+    "baselineSha": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+    "scope": "Síntesis del snapshot, no certificado de producción ni aprobación de cambios. No se modificó producto ni se crearon issues.",
+    "language": "es",
+    "status": "Evidence-bounded synthesis; audit-wide completeness owned by coverage ledger",
+    "laterMainReadback": {
+      "sha": "0eb53be61a5d7c4ea6d752264e6f37936fd054f1",
+      "evidence": "evidence/main-readback-final.json",
+      "scope": "Readback only; pinned audit unchanged; PR550 not audited"
+    }
+  },
+  "executive": {
+    "verdict": "NO",
+    "verdictScope": "Demo integral solicitada: cotización → diseño versionado → SketchUp → herrajes/perforaciones → fabricación → instalación.",
+    "answer": "Granete tiene una base operativa y de seguridad sustancial, pero NO está acreditada la demo integral. Además de los gaps Web↔SketchUp y DXF, la inspección confirmó autoridad alternativa de escritura: el PUT genérico puede reemplazar precio congelado y estado físico, y la UI puede anunciar éxito antes de persistir. Backup/restore también tienen caminos de falso éxito. OP-01/02/03 y OPS no fueron reproducidos en runtime; no se afirma fuga cross-tenant. La ampliación semántica también detectó gizmo Web visible sin callbacks de movimiento, cache de drilling que mezcla variantes y clone de plantilla espacial incompleto; son defectos estáticos, no incidentes físicos o exploits reproducidos.",
+    "currentProductState": "CONFIRMED: Web React, API Go/PostgreSQL, dominio TypeScript, extensión Ruby/HtmlDialog y exportadores existen. CONFIRMED runtime: 17 pruebas de organización en navegador y siete checks CI del SHA auditado, incluido Gate A, están verdes. CONFIRMED static: DT1–9 aportan identidad física y reconciliación backend, mientras superficies React y aprobación/release nuevas siguen incompletas.",
+    "product": "Plataforma vertical para pequeñas y medianas fábricas de muebles: conectar gestión comercial, diseño, materiales, fabricación y seguimiento de instalación. El valor propuesto es continuidad operativa, no replicar todo un CAD/CAM.",
+    "customerTrust": "No hay evidencia suficiente para recomendar dependencia operativa irrestricta. El piloto debe limitarse a flujos ensayados, con copia de seguridad restaurable y sin producción física desde perforaciones heurísticas.",
+    "whatWorks": [
+      "Autenticación Web, bootstrap, MFA y cambio de organización tienen pruebas de navegador reales y acotadas.",
+      "Build Web, contratos generados y smoke estructural pasan.",
+      "Backend de reconciliación exacta, publicación de revisiones y entidades físicas están implementados en el snapshot.",
+      "Cotizaciones, catálogo, órdenes e instalación tienen superficies y cadenas de persistencia; su ensayo comercial completo sigue pendiente."
+    ],
+    "deceptivelyIncomplete": [
+      "Un endpoint de reconciliación no es una UX bidireccional.",
+      "Un DXF descargado no prueba que contenga todas las perforaciones ni instrucciones seguras.",
+      "Un mueble insertable del catálogo no acredita release inmutable del catálogo.",
+      "Una suite Ruby fuera del host no prueba undo/save-reopen ni integración nativa.",
+      "Gate A no acredita Sales Network/Gate B ni toda la seguridad de producción.",
+      "Snapshot de precio congelado en UI no implica inmutabilidad server-side: OP-01.",
+      "Endpoint físico con row lock no impide segundo writer genérico: OP-02.",
+      "Toast de aceptación no significa commit completado: OP-03.",
+      "Backup complete/restored y health200 no prueban recuperación íntegra: OPS-02/03/04.",
+      "QV-01: transición calcula historial con estado ya cambiado, omite snapshot; Rev1(cerrada) del mueble no es historial de cotización.",
+      "FM-05: renderizar gizmo y pasar tests de helpers no prueba arrastre/rotación del componente.",
+      "FM-03: resolver dos líneas del mismo módulo no garantiza patrones diferentes si el cache omite preset/opciones.",
+      "FM-01: crear desde plantilla no conserva automáticamente el layout multiespacio moderno.",
+      "EPS-F01: autenticación y RLS no reemplazan capability/ownership y razón de override en workflow legacy."
+    ],
+    "firstAction": "Fijar un único escenario real por prospecto y sus SKUs/máquina; resolver o excluir explícitamente de la presentación toda promesa no demostrada. No comenzar por un rediseño general.",
+    "doNotDoYet": [
+      "No crear un CAM genérico ni un clon de Promob.",
+      "No incorporar la rama #394/PR550 al diagnóstico de main.",
+      "No abrir centenares de issues ni duplicar trackers existentes.",
+      "No prometer CNC compatible, soporte Blum genérico o sincronización completa sin evidencia.",
+      "No sustituir los flujos faltantes por reconstrucción manual presentada como integración."
+    ],
+    "evidence": [
+      "evidence/organization-browser.log",
+      "evidence/main-checks.json",
+      "evidence/openapi-check.log",
+      "evidence/web-build.log",
+      "evidence/deployment-smoke.log",
+      "data/sketchup-audit.json",
+      "data/docs-governance.json",
+      "data/backend-audit.json",
+      "data/operational-flows.json",
+      "data/operations-audit.json",
+      "data/quote-version-audit.json",
+      "data/feature-matrix.json",
+      "data/endpoint-supplement.json"
+    ],
+    "temporalScope": "Alcance temporal: este informe audita 316df57c. El readback posterior de main es 0eb53be6 (merge PR550/#394); esos cambios NO fueron auditados ni incorporados. Las conclusiones describen el snapshot, no el main actual."
+  },
+  "scorecardRubric": {
+    "meaning": "Escala ordinal 0–100 de preparación demostrable del área para el escenario solicitado, NO porcentaje de funcionalidades completas ni probabilidad de éxito. Son bandas de 25 puntos; un área amplia no hereda el score de una prueba estrecha.",
+    "levels": {
+      "0": "No hay evidencia utilizable del escenario.",
+      "25": "Hay implementación parcial o evidencia estática, con bloqueo conocido del escenario.",
+      "50": "Implementación sustancial y pruebas acotadas; flujo representativo integrado pendiente.",
+      "75": "Happy path representativo ejecutado en entorno real y sin blocker conocido del alcance.",
+      "100": "Escenario y fallos críticos aceptados con evidencia reproducible, incluidos host/máquina cuando aplican."
+    },
+    "aggregation": "No promediar: demo y MVP tienen gates de integridad/seguridad; un bloqueo crítico no se compensa con muchas áreas verdes. Intervalos orientativos de ±25; nunca leer 50 como 50% implementado.",
+    "status": "INFERRED"
+  },
+  "scorecard": [
+    {
+      "id": "SC-1",
+      "title": "Web",
+      "description": "Build y auth reales; recorrido comercial/producción completo pendiente.",
+      "status": "INFERRED",
+      "evidence": [
+        "evidence/web-build.log",
+        "evidence/organization-browser.log"
+      ],
+      "score": 50,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-2",
+      "title": "Backend",
+      "description": "CI/contratos y Foundation sólidos; despacho no atómico y validación media pendientes.",
+      "status": "INFERRED",
+      "evidence": [
+        "evidence/main-checks.json",
+        "data/backend-audit.json"
+      ],
+      "score": 50,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-3",
+      "title": "SketchUp",
+      "description": "Ruby/RBZ pasan; host no ensayado y autoría/preflight deshabilitados.",
+      "status": "INFERRED",
+      "evidence": [
+        "evidence/init-isolated-db.log",
+        "data/sketchup-audit.json"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-4",
+      "title": "Integration",
+      "description": "Reconciliación backend no cierra UX Web↔SketchUp ni release nuevo.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/docs-governance.json",
+        "data/sketchup-audit.json"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-5",
+      "title": "Furniture",
+      "description": "Catálogo/resolución e identidad física existentes; release/consumo inmutable no acreditados.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "data/docs-governance.json"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-6",
+      "title": "Hardware",
+      "description": "Patrones parciales; SKU físico y edición nativa no acreditados.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "FM-05"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-7",
+      "title": "Machining",
+      "description": "DXF existe pero pierde agujeros rotados y no codifica profundidad individual.",
+      "status": "INFERRED",
+      "evidence": [
+        "packages/excel/src/dxfCutPlanExport.ts:76-84",
+        "packages/excel/src/dxfCutPlanExport.ts:238-260",
+        "FM-03"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-8",
+      "title": "Quotes",
+      "description": "UI/lifecycle presentes; OP-01 permite sustitución de frozen snapshot y OP-03 éxito antes de commit; runtime negativo pendiente. QV-01 historial automático no creado; síntoma guest corroborado.",
+      "status": "INFERRED",
+      "evidence": [
+        "OP-01",
+        "OP-03",
+        "data/operational-flows.json",
+        "QV-01"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-9",
+      "title": "Design",
+      "description": "Publicación backend presente; workspace/release exacto incompletos.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/docs-governance.json",
+        "FM-01"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-10",
+      "title": "Production",
+      "description": "Flujo pieza→unidad existe; generic PUT bypass estático y despacho separado impiden confiar en autoridad integral.",
+      "status": "INFERRED",
+      "evidence": [
+        "docs/production-flow-v2.md",
+        "data/backend-audit.json",
+        "OP-02"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-11",
+      "title": "Installation",
+      "description": "Panel, dominio y mutación bloqueada por fila presentes; ensayo real pendiente.",
+      "status": "INFERRED",
+      "evidence": [
+        "packages/ui/src/production/InstallationJobPanel.tsx",
+        "backend-go/internal/storage/installation.go"
+      ],
+      "score": 50,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-12",
+      "title": "UX",
+      "description": "Controles reales inspeccionados; revisión visual/responsive completa pendiente; estados engañosos conocidos.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "data/backend-audit.json"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-13",
+      "title": "Security",
+      "description": "Gate A/auth-MFA reales; SEC8/9 y análisis por superficie no equivalen a certificación completa.",
+      "status": "INFERRED",
+      "evidence": [
+        "evidence/main-checks.json",
+        "evidence/organization-browser.log",
+        "progress/current.md:20-27",
+        "EPS-F01"
+      ],
+      "score": 50,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-14",
+      "title": "Reliability",
+      "description": "No se acreditó recuperación: restore/backup toleran fallos y anuncian éxito; writers alternativos afectan integridad.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/backend-audit.json",
+        "data/sketchup-audit.json",
+        "OPS-02",
+        "OPS-03",
+        "OP-02"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-15",
+      "title": "Tests",
+      "description": "Checks amplios más 17 browser reales; cadena comercial+host+máquina sin prueba conjunta.",
+      "status": "INFERRED",
+      "evidence": [
+        "evidence/main-checks.json",
+        "evidence/organization-browser.log",
+        "FM-05"
+      ],
+      "score": 50,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-16",
+      "title": "Documentation",
+      "description": "Mapa extenso pero implementación actual contradice resúmenes canónicos.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/docs-governance.json"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    },
+    {
+      "id": "SC-17",
+      "title": "Demo readiness",
+      "description": "Bloqueos confirmados en integración, autoría y mecanizado; ensayo integral ausente.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "data/docs-governance.json"
+      ],
+      "score": 25,
+      "missingProof": "Ejecutar el escenario representativo completo del área y sus fallos críticos; consultar unknowns y fastestSafePath."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "T01",
+      "title": "Fijar contrato de demo y fixtures verificables",
+      "description": "Acordar un mueble, SKU, materiales y salida exacta por prospecto; impide promesas no probadas. Si el receptor pide CSV, acordar preset/encoding real: F073 sólo ofrece presets fijos, no editor arbitrario de columnas (FM-02).",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "FM-02"
+      ],
+      "rank": 1,
+      "severity": "DEMO BLOCKER",
+      "demoImpact": 5,
+      "customerImpact": 5,
+      "riskReduction": 5,
+      "effort": "S",
+      "dependencies": [],
+      "parallelizable": true,
+      "priorityRationale": "Acordar un mueble, SKU, materiales y salida exacta por prospecto; impide promesas no probadas.",
+      "relatedIssues": [
+        352,
+        353
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+    },
+    {
+      "id": "T02",
+      "title": "Cerrar continuidad exacta Quote/Design/Release en Web",
+      "description": "Completar slices existentes y presentar diferencias por FurnitureInstance, no copiar datos entre pantallas. Es la principal promesa comercial. Incluir clone de plantilla multiespacio sin omitir campos de layout (FM-01) y separar historial legacy QV-01 de QuoteRevision/DesignRevision. Son scopes revisables separados, no una mega-feature.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/docs-governance.json",
+        "FM-01",
+        "QV-01"
+      ],
+      "rank": 2,
+      "severity": "DEMO BLOCKER",
+      "demoImpact": 5,
+      "customerImpact": 5,
+      "riskReduction": 5,
+      "effort": "XL",
+      "dependencies": [
+        "T01"
+      ],
+      "parallelizable": false,
+      "priorityRationale": "Completar slices existentes y presentar diferencias por FurnitureInstance, no copiar datos entre pantallas. Es la principal promesa comercial.",
+      "relatedIssues": [
+        394,
+        395,
+        500,
+        501,
+        502,
+        398
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Depende de contratos o pruebas de varias superficies; no ejecutar integración antes de sus precondiciones."
+    },
+    {
+      "id": "T03",
+      "title": "Conectar autoría nativa segura y preservar geometría aceptada",
+      "description": "Unificar interacción en host compartido; nil/stale/error no borra geometría válida. Un solo mueble end-to-end antes de ampliar edición. Para la demostración Web de herrajes, conectar eventos reales del gizmo montado (FM-05); no confundir este defecto React con capabilities SketchUp. Verificar pointer→callback→modelo→undo en su propio scope.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "FM-05"
+      ],
+      "rank": 3,
+      "severity": "DEMO BLOCKER",
+      "demoImpact": 5,
+      "customerImpact": 5,
+      "riskReduction": 5,
+      "effort": "L",
+      "dependencies": [
+        "T01"
+      ],
+      "parallelizable": true,
+      "priorityRationale": "Unificar interacción en host compartido; nil/stale/error no borra geometría válida. Un solo mueble end-to-end antes de ampliar edición.",
+      "relatedIssues": [
+        496,
+        498,
+        466,
+        467,
+        468,
+        474
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+    },
+    {
+      "id": "T04",
+      "title": "Bloquear salida productiva con perforaciones inferidas/incompletas",
+      "description": "Propagar fallbackUsed/issues hasta exportación y distinguir preview geométrico de mecanizado autorizado. Debe preceder cualquier fabricación. El preview PDF legacy tampoco debe encoger piezas sobredimensionadas para simular factibilidad (FM-04); distinto del nesting optimizer.",
+      "status": "PROPOSED",
+      "evidence": [
+        "packages/domain/src/partDrillingResolver.ts:515-533",
+        "FM-04"
+      ],
+      "rank": 4,
+      "severity": "MVP BLOCKER",
+      "demoImpact": 5,
+      "customerImpact": 5,
+      "riskReduction": 5,
+      "effort": "M",
+      "dependencies": [
+        "T01"
+      ],
+      "parallelizable": true,
+      "priorityRationale": "Propagar fallbackUsed/issues hasta exportación y distinguir preview geométrico de mecanizado autorizado. Debe preceder cualquier fabricación.",
+      "relatedIssues": [
+        354,
+        351
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+    },
+    {
+      "id": "T05",
+      "title": "Unificar SKU/patrón y verificar DXF transformado",
+      "description": "Misma autoridad de patrón para Go, TS y export; fixture rotado/no rotado, todas las caras y profundidad; readback del software exacto. Corregir además identidad del cache de drilling: el key omite preset/opciones aunque resolveBom los consume; partId first-owner colapsa variantes (FM-03). Fixture con mismo módulo y distintos presets/materiales antes de exportar. Prioridad corroborada por prueba pura FM-03: first-part-owner causa agujeros distintos según orden de líneas; agregar regresión de permutación. Ausencia de preset/opciones en cache sigue hallazgoestático separado.",
+      "status": "PROPOSED",
+      "evidence": [
+        "packages/excel/src/dxfCutPlanExport.ts:238-260",
+        "FM-03",
+        "data/drilling-context-proof.json"
+      ],
+      "rank": 5,
+      "severity": "DEMO BLOCKER",
+      "demoImpact": 5,
+      "customerImpact": 5,
+      "riskReduction": 5,
+      "effort": "L",
+      "dependencies": [
+        "T04"
+      ],
+      "parallelizable": false,
+      "priorityRationale": "Misma autoridad de patrón para Go, TS y export; fixture rotado/no rotado, todas las caras y profundidad; readback del software exacto.",
+      "relatedIssues": [
+        351,
+        352,
+        353,
+        354,
+        503
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Depende de contratos o pruebas de varias superficies; no ejecutar integración antes de sus precondiciones."
+    },
+    {
+      "id": "T06",
+      "title": "Cerrar autoridad de mutación comercial, física y stock",
+      "description": "Consolidar raíz: el aggregate PUT no puede sustituir snapshots cerrados ni estados físicos/release; consumir la respuesta autoritativa de commands; despacho stock+picking atómico e idempotente. Son slices separados bajo un mismo principio, no una megaissue. Incluir QV-01: componer transition/snapshot conservando old/new status; aclarar Project.history frente a QuoteRevision nueva. Cerrar capability/ownership de technical-workflow legacy y override force_release sin razón requerida (EPS-F01). No atribuirlo a nuevo DesignRelease ni afirmar exploit cross-tenant.",
+      "status": "PROPOSED",
+      "evidence": [
+        "OP-01",
+        "OP-02",
+        "BE-002",
+        "data/operational-flows.json",
+        "QV-01",
+        "EPS-F01"
+      ],
+      "rank": 6,
+      "severity": "MVP BLOCKER",
+      "demoImpact": 5,
+      "customerImpact": 5,
+      "riskReduction": 5,
+      "effort": "L",
+      "dependencies": [
+        "T01"
+      ],
+      "parallelizable": true,
+      "priorityRationale": "Integridad comercial y física precede polish. Runtime de OP sigue UNKNOWN; diseño actual es evidencia estática suficiente para impedir prometer autoridad completa.",
+      "relatedIssues": [],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+    },
+    {
+      "id": "T07",
+      "title": "Ensayar el flujo integral con navegador y host real",
+      "description": "Conservar IDs, revisiones y artefactos desde cliente hasta instalación, repetir desde datos reiniciados y capturar negativas críticas.",
+      "status": "PROPOSED",
+      "evidence": [
+        "evidence/organization-browser.log"
+      ],
+      "rank": 7,
+      "severity": "DEMO BLOCKER",
+      "demoImpact": 5,
+      "customerImpact": 5,
+      "riskReduction": 5,
+      "effort": "M",
+      "dependencies": [
+        "T02",
+        "T03",
+        "T05",
+        "T06"
+      ],
+      "parallelizable": false,
+      "priorityRationale": "Conservar IDs, revisiones y artefactos desde cliente hasta instalación, repetir desde datos reiniciados y capturar negativas críticas.",
+      "relatedIssues": [
+        398,
+        354
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Depende de contratos o pruebas de varias superficies; no ejecutar integración antes de sus precondiciones."
+    },
+    {
+      "id": "T08",
+      "title": "Mostrar éxito sólo después del commit",
+      "description": "Esperar persistencia de quote/status/metadata; error o cancelación conservan estado honesto y permiten reintento seguro. No cerrar modal ni anunciar aceptación antes del servidor. Mantener resultado de comando físico en vez de recrearlo localmente. El guardado de plan de corte comparte feedback optimista: onSaveCutPlan void seguido de success inmediato. Consolidar esta clase con OP-03/WEB-04; preservar errores y borrador.",
+      "status": "PROPOSED",
+      "evidence": [
+        "OP-03",
+        "OP-02",
+        "data/operational-flows.json",
+        "WEB-04",
+        "packages/ui/src/production/ProductionOrderOptimizationPanel.tsx:150-154"
+      ],
+      "rank": 8,
+      "severity": "HIGH",
+      "demoImpact": 4,
+      "customerImpact": 4,
+      "riskReduction": 4,
+      "effort": "M",
+      "dependencies": [
+        "T01"
+      ],
+      "parallelizable": true,
+      "priorityRationale": "Un falso éxito en la cotización dañaría confianza durante uso normal; protege happy path real, no un edge case cosmético.",
+      "relatedIssues": [
+        460
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+    },
+    {
+      "id": "T09",
+      "title": "Reconciliar documentación y guion comercial con main",
+      "description": "Actualizar snapshot de Gate A/DT y ledger, mantener Gate B futuro. Reduce trabajo duplicado y afirmaciones comerciales incorrectas. Corregir guía invitation-first, labels de onboarding y README device credentials (DOCS-01/02/03).",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/docs-governance.json",
+        "data/docs-semantic-audit.json"
+      ],
+      "rank": 9,
+      "severity": "HIGH",
+      "demoImpact": 4,
+      "customerImpact": 4,
+      "riskReduction": 3,
+      "effort": "S",
+      "dependencies": [],
+      "parallelizable": true,
+      "priorityRationale": "Actualizar snapshot de Gate A/DT y ledger, mantener Gate B futuro. Reduce trabajo duplicado y afirmaciones comerciales incorrectas.",
+      "relatedIssues": [
+        384,
+        446,
+        462,
+        465
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+    },
+    {
+      "id": "T10",
+      "title": "Eliminar falso éxito operacional y verificar piloto",
+      "description": "Restore y backup deben fallar honestamente ante datos/media incompletos o health timeout; readiness debe distinguir dependencia DB. Alinear toolchains Docker/CI y ensayar build/restore aislados. Mantener SEC8/9, upload byte-validation y observabilidad en scopes existentes. Follow-up separado MEDIUM: corregir metadata de expiry SessionScope y probar estabilidad de key tras refresh/rehydrate (AUTH-CONTRACT-01), sin afirmar logout ni bypass.",
+      "status": "PROPOSED",
+      "evidence": [
+        "OPS-01",
+        "OPS-02",
+        "OPS-03",
+        "OPS-04",
+        "OPS-12",
+        "BE-001",
+        "data/operations-audit.json",
+        "AUTH-CONTRACT-01"
+      ],
+      "rank": 10,
+      "severity": "HIGH",
+      "demoImpact": 3,
+      "customerImpact": 5,
+      "riskReduction": 5,
+      "effort": "L",
+      "dependencies": [
+        "T01"
+      ],
+      "parallelizable": true,
+      "priorityRationale": "Recuperación confiable y arranque reproducible importan antes de piloto con datos reales; no asumir fallo Docker observado ni pérdida real de datos.",
+      "relatedIssues": [
+        460,
+        461,
+        504
+      ],
+      "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+      "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+    }
+  ],
+  "risks": [
+    {
+      "id": "R01",
+      "title": "Prometer bidireccionalidad inexistente",
+      "description": "Reconciliación backend no tiene caller Web; release nuevo pendiente. Generic snapshot authority is also incomplete (OP-01).",
+      "status": "INFERRED",
+      "evidence": [
+        "DOC-005",
+        "OP-01"
+      ],
+      "category": "integration",
+      "probability": "Alta",
+      "impact": 5,
+      "severity": "DEMO BLOCKER",
+      "mitigation": "T02",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R02",
+      "title": "Fabricar con perforaciones incompletas",
+      "description": "Fallback por nombre, pérdida de procedencia y piezas rotadas sin agujeros. FM-03 reproduce salida de agujeros dependiente del orden por first-part-owner entre customDims distintos:3tazas esperadas frente a2enA→B,3enB→A. Sin pieza física dañada ni archivo exportado probado. Preview legacy FM-04 puede sugerir encaje al reducir dimensión visual; no es evidencia de fallo del optimizer moderno.",
+      "status": "INFERRED",
+      "evidence": [
+        "SU-01",
+        "SU-02",
+        "SU-05",
+        "FM-03",
+        "FM-04",
+        "data/drilling-context-proof.json"
+      ],
+      "category": "data",
+      "probability": "Alta si se usa salida actual",
+      "impact": 5,
+      "severity": "CRITICAL",
+      "mitigation": "T04/T05",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R03",
+      "title": "Degradar geometría al editar sin resolve",
+      "description": "Fallback genérico tras nil layout puede reemplazar hijos.",
+      "status": "INFERRED",
+      "evidence": [
+        "SU-03"
+      ],
+      "category": "product",
+      "probability": "Media; trayectoria estática, no frecuencia medida",
+      "impact": 5,
+      "severity": "HIGH",
+      "mitigation": "T03",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R04",
+      "title": "Estados comerciales/físicos y stock con writers alternativos",
+      "description": "PUT genérico permite sustituir snapshot y estados físicos; Web segundo writer persiste aggregate local; stock/picking entre requests. OP source only, picking simulated control-flow proof only. QV-01 omite historial legacy tras transición; guest nuevo corroborado, backend desconocido. EPS-F01 permite alcanzar workflow legacy sin capability/owner en handler y force_release evita loading sin razón obligatoria; autenticación/tenant sí presentes, sin explotación runtime.",
+      "status": "INFERRED",
+      "evidence": [
+        "OP-01",
+        "OP-02",
+        "BE-002",
+        "data/operational-flows.json",
+        "QV-01",
+        "EPS-F01"
+      ],
+      "category": "data",
+      "probability": "Media ante fallo parcial",
+      "impact": 5,
+      "severity": "CRITICAL",
+      "mitigation": "T06/T08",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R05",
+      "title": "Demostración nativa falla en host real",
+      "description": "Ruby fuera del host no prueba interacción, secure store ni save-reopen.",
+      "status": "INFERRED",
+      "evidence": [
+        "data/sketchup-audit.json"
+      ],
+      "category": "demo",
+      "probability": "Desconocida",
+      "impact": 5,
+      "severity": "DEMO BLOCKER",
+      "mitigation": "T07",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R06",
+      "title": "Usar catálogo stale como productivo",
+      "description": "Sin revalidación automática; refresh fallido conserva cache. No se demostró fuga cross-tenant.",
+      "status": "INFERRED",
+      "evidence": [
+        "SU-06"
+      ],
+      "category": "integration",
+      "probability": "Media",
+      "impact": 4,
+      "severity": "HIGH",
+      "mitigation": "T03",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R07",
+      "title": "Éxito de venta anterior al commit",
+      "description": "OP-03: patch actualiza memoria y dispara save no esperado; failure no restaura automáticamente. No se reprodujo fallo HTTP/DB.",
+      "status": "INFERRED",
+      "evidence": [
+        "OP-03"
+      ],
+      "category": "product",
+      "probability": "Media; explotación no demostrada",
+      "impact": 4,
+      "severity": "HIGH",
+      "mitigation": "T08",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R08",
+      "title": "Retrabajo inducido por documentación stale",
+      "description": "Gate A/F199 y lifecycle difieren del snapshot ejecutable.",
+      "status": "INFERRED",
+      "evidence": [
+        "DOC-001",
+        "DOC-002",
+        "DOC-003",
+        "DOC-004"
+      ],
+      "category": "maintenance",
+      "probability": "Alta",
+      "impact": 3,
+      "severity": "HIGH",
+      "mitigation": "T09",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R09",
+      "title": "Lentitud o consumo alto con datos reales",
+      "description": "Bundle principal 5 MB y listado proyectos no paginado; tamaño no equivale a latencia medida.",
+      "status": "INFERRED",
+      "evidence": [
+        "evidence/web-build.log",
+        "BE-004"
+      ],
+      "category": "architecture",
+      "probability": "Desconocida sin perfil",
+      "impact": 4,
+      "severity": "HIGH",
+      "mitigation": "Medir antes de optimizar",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R10",
+      "title": "Recuperación y despliegue aparentemente exitosos",
+      "description": "Restore admite pipeline failure y health timeout; backup puede omitir media; Docker toolchain difiere de CI. Evidencia estática, sin ejecutar restore/build Docker ni afirmar pérdida real.",
+      "status": "INFERRED",
+      "evidence": [
+        "OPS-01",
+        "OPS-02",
+        "OPS-03",
+        "OPS-04",
+        "OPS-12"
+      ],
+      "category": "operations",
+      "probability": "Desconocida",
+      "impact": 5,
+      "severity": "HIGH",
+      "mitigation": "T10",
+      "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+    },
+    {
+      "id": "R11",
+      "title": "Gizmo visible promete interacción que no está conectada",
+      "description": "FM-05: handlers de mover/rotar no son llamados por eventos del gizmo; sus tests revisados son helpers/typeof, no interacción montada. No implica que todos los campos manuales fallen.",
+      "status": "INFERRED",
+      "evidence": [
+        "FM-05"
+      ],
+      "category": "demo",
+      "probability": "Alta si se presenta ese gizmo como editable; no frecuencia medida",
+      "impact": 4,
+      "severity": "HIGH",
+      "mitigation": "T03/T07",
+      "probabilityBasis": "Control flow estático, sin prueba de viewport de esta interacción."
+    },
+    {
+      "id": "R12",
+      "title": "Reutilizar plantilla pierde configuración espacial moderna",
+      "description": "FM-01: actual domain converters lose six modern layout fields in3/3pure-domain tests; risk of changed design when reused. UI/persistence consequences remain unverified, no product fix.",
+      "status": "INFERRED",
+      "evidence": [
+        "FM-01",
+        "data/template-roundtrip-proof.json"
+      ],
+      "category": "data",
+      "probability": "Condicional a plantilla multiespacio/con campos omitidos",
+      "impact": 4,
+      "severity": "HIGH",
+      "mitigation": "T02",
+      "probabilityBasis": "Returned object loss reproduced by actual pure domain functions; no user-incident frequency."
+    },
+    {
+      "id": "R13",
+      "title": "Deriva semántica del deadline en SessionScope",
+      "description": "Metadata absolute_expires_at representa access expiry; un rehydrate posterior podría cambiar query key innecesariamente. No se demostró loop de refresh ni cierre prematuro.",
+      "status": "INFERRED_CONDITIONAL",
+      "severity": "MEDIUM",
+      "category": "contract",
+      "probability": "Desconocida; depende de rehidratación explícita posterior",
+      "impact": 2,
+      "evidence": [
+        "AUTH-CONTRACT-01"
+      ],
+      "mitigation": "T10",
+      "probabilityBasis": "Mismatch fuente confirmado; efecto en usuario no ejecutado."
+    }
+  ],
+  "technicalDebt": [
+    {
+      "id": "DEBT-1",
+      "title": "Dangerous debt",
+      "description": "Fallback productivo, pérdida de procedencia DXF y despacho entre requests pueden perjudicar datos o piezas. OP-01/02: snapshots y estado físico admiten escritor alternativo; OPS-02/03: backup/restore anuncian éxito incompleto. Añadir cache de drilling por variante FM-03 y capability/override legacy EPS-F01 a los scopes de integridad.",
+      "status": "PROPOSED",
+      "evidence": [
+        "SU-01",
+        "SU-02",
+        "BE-002",
+        "OP-01",
+        "OP-02",
+        "OPS-02",
+        "OPS-03",
+        "FM-03",
+        "EPS-F01"
+      ],
+      "tasks": [
+        "T04",
+        "T05",
+        "T06"
+      ]
+    },
+    {
+      "id": "DEBT-2",
+      "title": "Productivity debt",
+      "description": "Prioridad y ledger stale pueden enviar agentes a rehacer slices ya cerrados.",
+      "status": "PROPOSED",
+      "evidence": [
+        "DOC-001",
+        "DOC-004"
+      ],
+      "tasks": [
+        "T09"
+      ]
+    },
+    {
+      "id": "DEBT-3",
+      "title": "Maintainability debt",
+      "description": "Autoridades de machining Go/TS/export divergentes; resolver por contrato/versionado, no duplicar otro motor. Clone de plantilla debe seguir modelo multiespacio moderno (FM-01); no expandir deuda de DTO/layout parcial.",
+      "status": "PROPOSED",
+      "evidence": [
+        "SU-05",
+        "FM-01"
+      ],
+      "tasks": [
+        "T05"
+      ]
+    },
+    {
+      "id": "DEBT-4",
+      "title": "Cosmetic debt",
+      "description": "No se justifica una limpieza visual global. Sólo cambiar contraste/densidad cuando la revisión de pantalla mida un problema de lectura o tarea.",
+      "status": "PROPOSED",
+      "evidence": [
+        "evidence/request.md"
+      ],
+      "statusDetail": "UNKNOWN: no defecto cosmético global demostrado."
+    },
+    {
+      "id": "DEBT-5",
+      "title": "Acceptable MVP debt",
+      "description": "Posponer múltiples postprocesadores, hardware arbitrario y Red de Ventas completa; mantener explícitas limitaciones. Nunca aceptar deuda de aislamiento, identidad o seguridad física.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/docs-governance.json",
+        "data/sketchup-audit.json"
+      ]
+    }
+  ],
+  "mvpGaps": {
+    "must": [
+      {
+        "id": "MUST-1",
+        "title": "Escenario integral verificable",
+        "description": "T01 + T02 + T03 + T07: flujo con mismas identidades y revisiones; no reconstrucción manual.",
+        "status": "PROPOSED",
+        "evidence": [
+          "DOC-005",
+          "SU-04"
+        ]
+      },
+      {
+        "id": "MUST-2",
+        "title": "Mecanizado seguro",
+        "description": "T04/T05: no salida productiva inferida; exactitud y readback si se enseña fabricación/CNC. Sin máquina confirmada, mostrar sólo preview declarado y mantener la demo integral pendiente.",
+        "status": "PROPOSED",
+        "evidence": [
+          "SU-01",
+          "SU-02"
+        ]
+      },
+      {
+        "id": "MUST-3",
+        "title": "Integridad de operaciones",
+        "description": "T06/T08: snapshots cerrados y estados físicos protegidos en TODOS los entrypoints; despacho atómico y éxito sólo después del commit.",
+        "status": "PROPOSED",
+        "evidence": [
+          "BE-002",
+          "OP-01",
+          "OP-02",
+          "OP-03"
+        ]
+      },
+      {
+        "id": "MUST-4",
+        "title": "Datos aislados y ensayo reiniciable",
+        "description": "Sólo datos sintéticos aprobados, cuentas de mínimo privilegio y entorno aislado. No usar DB de trabajo compartida para pruebas.",
+        "status": "PROPOSED",
+        "evidence": [
+          "BE-003",
+          "evidence/init-isolated-db.log"
+        ]
+      }
+    ],
+    "should": [
+      {
+        "id": "SHOULD-1",
+        "title": "Feedback honesto",
+        "description": "T08/T09: cancelación no es éxito, errores no son catálogos vacíos y límites del guion visibles.",
+        "status": "PROPOSED",
+        "evidence": [
+          "SU-01",
+          "DOC-005"
+        ]
+      },
+      {
+        "id": "SHOULD-2",
+        "title": "Apertura rápida en el portátil de demo",
+        "description": "Perfilar cold load y 3D real; corregir importaciones que impiden split sólo con medición antes/después.",
+        "status": "PROPOSED",
+        "evidence": [
+          "evidence/web-build.log"
+        ]
+      },
+      {
+        "id": "SHOULD-3",
+        "title": "Soporte y recuperación preparados",
+        "description": "T10: corregir falso éxito en scripts de backup/restore antes de confiar en recuperación; una demo aislada no demuestra preparación operativa.",
+        "status": "PROPOSED",
+        "evidence": [
+          "evidence/deployment-smoke.log",
+          "OPS-02",
+          "OPS-03"
+        ]
+      }
+    ],
+    "after": [
+      {
+        "id": "AFTER-1",
+        "title": "Red de Ventas completa",
+        "description": "Seguir Gate B y relaciones/publicación/orders; no requisito para demostrar una fábrica aislada.",
+        "status": "PROPOSED",
+        "evidence": [
+          "data/docs-governance.json"
+        ]
+      },
+      {
+        "id": "AFTER-2",
+        "title": "CAM multimarcas y CAD amplio",
+        "description": "No bloquean un único SKU/máquina verificados; preservarlos como extensión por adapters.",
+        "status": "PROPOSED",
+        "evidence": [
+          "data/sketchup-audit.json"
+        ]
+      },
+      {
+        "id": "AFTER-3",
+        "title": "Escala y refinamientos amplios",
+        "description": "Paginación y observabilidad deben responder volumen real del piloto; no rehacer arquitectura por estética.",
+        "status": "PROPOSED",
+        "evidence": [
+          "BE-004"
+        ]
+      }
+    ]
+  },
+  "fastestSafePath": [
+    {
+      "id": "PATH-1",
+      "title": "Acordar y congelar el escenario",
+      "description": "T01. Dos prospectos pueden usar fixtures separados; no inventar sus máquinas ni preferencias.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/sketchup-audit.json"
+      ],
+      "dependencies": [],
+      "exitProof": "Ficha firmada de escenario, SKU, medidas/material, roles, máquina/software y claims permitidos."
+    },
+    {
+      "id": "PATH-2",
+      "title": "Cerrar contratos e integridad en paralelo",
+      "description": "T02/T03/T04/T06 con ownership existente. Contrato generado antes de consumidores.",
+      "status": "PROPOSED",
+      "evidence": [
+        "DOC-005",
+        "SU-03",
+        "BE-002",
+        "FM-01",
+        "EPS-F01"
+      ],
+      "dependencies": [
+        "PATH-1"
+      ],
+      "exitProof": "Pruebas de identidad/revisión y fallo parcial; ningún fallback productivo. Generic PUT no cambia frozen snapshot/physical state; UI espera server commit. Plantilla con dos ambientes/base/cubierta hace round-trip y remapea cada itemId; historial real se conserva tras cambio de estado y reload. Routed negative tests por rol/ownership y force_release sin razón; override autorizado con auditoría atómica y rollback."
+    },
+    {
+      "id": "PATH-3",
+      "title": "Probar hardware y salida exacta",
+      "description": "T05. Una pieza con operaciones conocidas; casos de todas las caras y rotación.",
+      "status": "PROPOSED",
+      "evidence": [
+        "SU-01",
+        "SU-02",
+        "SU-05",
+        "FM-03",
+        "FM-05"
+      ],
+      "dependencies": [
+        "PATH-2"
+      ],
+      "exitProof": "Patrón SKU documentado, fixture esperado, hash DXF y readback del software real aprobado por operador. Dos líneas del mismo módulo con distinto measurePresetId/opciones y IDs de pieza repetidos producen patrones propios; invalidación de cache y goldens de export. PointerDown/move/up del gizmo montado produce callback y geometría actualizada; helper puro o typeof component no basta. Undo restaura."
+    },
+    {
+      "id": "PATH-4",
+      "title": "Ensayar los dos recorridos",
+      "description": "T07. De cliente/cotización a instalación, con host y PostgreSQL reales; repetir desde fixture limpio.",
+      "status": "PROPOSED",
+      "evidence": [
+        "evidence/organization-browser.log",
+        "data/sketchup-audit.json"
+      ],
+      "dependencies": [
+        "PATH-3"
+      ],
+      "exitProof": "Grabación/logs con mismos IDs, revisiones y salida; tenant denial, stale, retry, undo y save-reopen."
+    },
+    {
+      "id": "PATH-5",
+      "title": "Pulir y congelar release de demo",
+      "description": "T08/T09/T10. Sólo cambios que eliminen tropiezos observados; rerun tras cambiar SHA.",
+      "status": "PROPOSED",
+      "evidence": [
+        "evidence/main-checks.json"
+      ],
+      "dependencies": [
+        "PATH-4"
+      ],
+      "exitProof": "Guion ejecutado dos veces, datos de reset y recuperación, build SHA fijo, sin blocker abierto del alcance. Backup/restore incompletos reportan failure verificable."
+    }
+  ],
+  "roadmap": [
+    {
+      "id": "P0",
+      "title": "Demo blockers",
+      "description": "T01; bloquear promesas y salidas físicas no acreditadas.",
+      "status": "PROPOSED",
+      "evidence": [
+        "R01",
+        "R02",
+        "R05"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "P1",
+      "title": "Demo critical path",
+      "description": "T02–T07 por dependencias; una cadena vertical antes de más amplitud.",
+      "status": "PROPOSED",
+      "evidence": [
+        "DOC-005",
+        "SU-04"
+      ],
+      "dependencies": [
+        "P0"
+      ]
+    },
+    {
+      "id": "P2",
+      "title": "Demo polish",
+      "description": "T08/T09; en paralelo tras acordar estados y alcance.",
+      "status": "PROPOSED",
+      "evidence": [
+        "DOC-001",
+        "BE-001"
+      ],
+      "dependencies": [
+        "P0"
+      ]
+    },
+    {
+      "id": "P3",
+      "title": "MVP stabilization",
+      "description": "T10, recuperación, cargas representativas, fallos/retries y QA de roles.",
+      "status": "PROPOSED",
+      "evidence": [
+        "BE-004",
+        "evidence/deployment-smoke.log"
+      ],
+      "dependencies": [
+        "P1"
+      ]
+    },
+    {
+      "id": "P4",
+      "title": "Post-demo product",
+      "description": "Gate B, workflows comerciales adicionales, expansión por evidencia de uso.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/docs-governance.json"
+      ],
+      "dependencies": [
+        "P3"
+      ]
+    },
+    {
+      "id": "P5",
+      "title": "Scale",
+      "description": "Más máquinas/SKUs y volumen con contratos, métricas y readback por combinación.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/sketchup-audit.json"
+      ],
+      "dependencies": [
+        "P4"
+      ]
+    }
+  ],
+  "issuePlan": [
+    {
+      "id": "ISSUE-T01",
+      "title": "Fijar contrato de demo y fixtures verificables",
+      "description": "Acordar un mueble, SKU, materiales y salida exacta por prospecto; impide promesas no probadas.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/sketchup-audit.json"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        352,
+        353
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Acordar un mueble, SKU, materiales y salida exacta por prospecto; impide promesas no probadas.",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Acordar un mueble, SKU, materiales y salida exacta por prospecto; impide promesas no probadas.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [],
+      "priority": "DEMO BLOCKER",
+      "estimatedComplexity": "S"
+    },
+    {
+      "id": "ISSUE-T02",
+      "title": "Cerrar continuidad exacta Quote/Design/Release en Web",
+      "description": "Completar slices existentes y presentar diferencias por FurnitureInstance, no copiar datos entre pantallas. Es la principal promesa comercial.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/docs-governance.json",
+        "FM-01",
+        "QV-01"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        394,
+        395,
+        500,
+        501,
+        502,
+        398
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Completar slices existentes y presentar diferencias por FurnitureInstance, no copiar datos entre pantallas. Es la principal promesa comercial. Incluir clone de plantilla multiespacio sin omitir campos de layout (FM-01) y separar historial legacy QV-01 de QuoteRevision/DesignRevision. Son scopes revisables separados, no una mega-feature.",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Completar slices existentes y presentar diferencias por FurnitureInstance, no copiar datos entre pantallas. Es la principal promesa comercial.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad.",
+        "Plantilla con dos ambientes/base/cubierta hace round-trip y remapea cada itemId; historial real se conserva tras cambio de estado y reload."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [
+        "T01"
+      ],
+      "priority": "DEMO BLOCKER",
+      "estimatedComplexity": "XL"
+    },
+    {
+      "id": "ISSUE-T03",
+      "title": "Conectar autoría nativa segura y preservar geometría aceptada",
+      "description": "Unificar interacción en host compartido; nil/stale/error no borra geometría válida. Un solo mueble end-to-end antes de ampliar edición.",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "FM-05"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        496,
+        498,
+        466,
+        467,
+        468,
+        474
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Unificar interacción en host compartido; nil/stale/error no borra geometría válida. Un solo mueble end-to-end antes de ampliar edición. Para la demostración Web de herrajes, conectar eventos reales del gizmo montado (FM-05); no confundir este defecto React con capabilities SketchUp. Verificar pointer→callback→modelo→undo en su propio scope.",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Unificar interacción en host compartido; nil/stale/error no borra geometría válida. Un solo mueble end-to-end antes de ampliar edición.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad.",
+        "PointerDown/move/up del gizmo montado produce callback y geometría actualizada; helper puro o typeof component no basta. Undo restaura."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [
+        "T01"
+      ],
+      "priority": "DEMO BLOCKER",
+      "estimatedComplexity": "L"
+    },
+    {
+      "id": "ISSUE-T04",
+      "title": "Bloquear salida productiva con perforaciones inferidas/incompletas",
+      "description": "Propagar fallbackUsed/issues hasta exportación y distinguir preview geométrico de mecanizado autorizado. Debe preceder cualquier fabricación.",
+      "status": "PROPOSED",
+      "evidence": [
+        "packages/domain/src/partDrillingResolver.ts:515-533"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        354,
+        351
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Propagar fallbackUsed/issues hasta exportación y distinguir preview geométrico de mecanizado autorizado. Debe preceder cualquier fabricación.",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Propagar fallbackUsed/issues hasta exportación y distinguir preview geométrico de mecanizado autorizado. Debe preceder cualquier fabricación.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [
+        "T01"
+      ],
+      "priority": "MVP BLOCKER",
+      "estimatedComplexity": "M"
+    },
+    {
+      "id": "ISSUE-T05",
+      "title": "Unificar SKU/patrón y verificar DXF transformado",
+      "description": "Misma autoridad de patrón para Go, TS y export; fixture rotado/no rotado, todas las caras y profundidad; readback del software exacto.",
+      "status": "PROPOSED",
+      "evidence": [
+        "packages/excel/src/dxfCutPlanExport.ts:238-260",
+        "FM-03"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        351,
+        352,
+        353,
+        354,
+        503
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Misma autoridad de patrón para Go, TS y export; fixture rotado/no rotado, todas las caras y profundidad; readback del software exacto. Corregir además identidad del cache de drilling: el key omite preset/opciones aunque resolveBom los consume; partId first-owner colapsa variantes (FM-03). Fixture con mismo módulo y distintos presets/materiales antes de exportar.",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Misma autoridad de patrón para Go, TS y export; fixture rotado/no rotado, todas las caras y profundidad; readback del software exacto.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad.",
+        "Dos líneas del mismo módulo con distinto measurePresetId/opciones y IDs de pieza repetidos producen patrones propios; invalidación de cache y goldens de export."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [
+        "T04"
+      ],
+      "priority": "DEMO BLOCKER",
+      "estimatedComplexity": "L"
+    },
+    {
+      "id": "ISSUE-T06",
+      "title": "Cerrar autoridad de mutación comercial, física y stock",
+      "description": "Consolidar raíz: el aggregate PUT no puede sustituir snapshots cerrados ni estados físicos/release; consumir la respuesta autoritativa de commands; despacho stock+picking atómico e idempotente. Son slices separados bajo un mismo principio, no una megaissue. Incluir QV-01: componer transition/snapshot conservando old/new status; aclarar Project.history frente a QuoteRevision nueva.",
+      "status": "PROPOSED",
+      "evidence": [
+        "OP-01",
+        "OP-02",
+        "BE-002",
+        "data/operational-flows.json",
+        "QV-01",
+        "EPS-F01"
+      ],
+      "disposition": "new issue",
+      "existingIssues": [],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Consolidar raíz: el aggregate PUT no puede sustituir snapshots cerrados ni estados físicos/release; consumir la respuesta autoritativa de commands; despacho stock+picking atómico e idempotente. Son slices separados bajo un mismo principio, no una megaissue. Incluir QV-01: componer transition/snapshot conservando old/new status; aclarar Project.history frente a QuoteRevision nueva. Cerrar capability/ownership de technical-workflow legacy y override force_release sin razón requerida (EPS-F01). No atribuirlo a nuevo DesignRelease ni afirmar exploit cross-tenant.",
+      "scope": "Three focused issue slices after duplicate check: commercial snapshot authority; physical command authority/consumer hydration; atomic picking. Do not collapse into a single broad implementation.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Consolidar raíz: el aggregate PUT no puede sustituir snapshots cerrados ni estados físicos/release; consumir la respuesta autoritativa de commands; despacho stock+picking atómico e idempotente. Son slices separados bajo un mismo principio, no una megaissue. Incluir QV-01: componer transition/snapshot conservando old/new status; aclarar Project.history frente a QuoteRevision nueva.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad.",
+        "Same-status closed PUT cannot replace/remove frozen snapshot.",
+        "Generic PUT cannot mutate part_instances/module_units/production_release; stale save cannot overwrite committed command.",
+        "Stock+picking share idempotent transaction; error leaves no partial debit.",
+        "Routed negative tests por rol/ownership y force_release sin razón; override autorizado con auditoría atómica y rollback."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [
+        "T01"
+      ],
+      "priority": "MVP BLOCKER",
+      "estimatedComplexity": "L"
+    },
+    {
+      "id": "ISSUE-T07",
+      "title": "Ensayar el flujo integral con navegador y host real",
+      "description": "Conservar IDs, revisiones y artefactos desde cliente hasta instalación, repetir desde datos reiniciados y capturar negativas críticas.",
+      "status": "PROPOSED",
+      "evidence": [
+        "evidence/organization-browser.log"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        398,
+        354
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Conservar IDs, revisiones y artefactos desde cliente hasta instalación, repetir desde datos reiniciados y capturar negativas críticas.",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Conservar IDs, revisiones y artefactos desde cliente hasta instalación, repetir desde datos reiniciados y capturar negativas críticas.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [
+        "T02",
+        "T03",
+        "T05",
+        "T06"
+      ],
+      "priority": "DEMO BLOCKER",
+      "estimatedComplexity": "M"
+    },
+    {
+      "id": "ISSUE-T08",
+      "title": "Mostrar éxito sólo después del commit",
+      "description": "Esperar persistencia de quote/status/metadata; error o cancelación conservan estado honesto y permiten reintento seguro. No cerrar modal ni anunciar aceptación antes del servidor. Mantener resultado de comando físico en vez de recrearlo localmente.",
+      "status": "PROPOSED",
+      "evidence": [
+        "OP-03",
+        "OP-02",
+        "data/operational-flows.json",
+        "WEB-04",
+        "packages/ui/src/production/ProductionOrderOptimizationPanel.tsx:150-154"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        460
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Esperar persistencia de quote/status/metadata; error o cancelación conservan estado honesto y permiten reintento seguro. No cerrar modal ni anunciar aceptación antes del servidor. Mantener resultado de comando físico en vez de recrearlo localmente. El guardado de plan de corte comparte feedback optimista: onSaveCutPlan void seguido de success inmediato. Consolidar esta clase con OP-03/WEB-04; preservar errores y borrador.",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Esperar persistencia de quote/status/metadata; error o cancelación conservan estado honesto y permiten reintento seguro. No cerrar modal ni anunciar aceptación antes del servidor. Mantener resultado de comando físico en vez de recrearlo localmente.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad.",
+        "Rejected save shows no success and restores/reconciles client state.",
+        "Rechazo tardío de persistencia de plan conserva draft y no presenta success; aceptación real sí anuncia guardado."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [
+        "T01"
+      ],
+      "priority": "HIGH",
+      "estimatedComplexity": "M"
+    },
+    {
+      "id": "ISSUE-T09",
+      "title": "Reconciliar documentación y guion comercial con main",
+      "description": "Actualizar snapshot de Gate A/DT y ledger, mantener Gate B futuro. Reduce trabajo duplicado y afirmaciones comerciales incorrectas. Corregir guía invitation-first, labels de onboarding y README device credentials (DOCS-01/02/03).",
+      "status": "PROPOSED",
+      "evidence": [
+        "data/docs-governance.json",
+        "data/docs-semantic-audit.json"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        384,
+        446,
+        462,
+        465
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Actualizar snapshot de Gate A/DT y ledger, mantener Gate B futuro. Reduce trabajo duplicado y afirmaciones comerciales incorrectas. Corregir guía invitation-first, labels de onboarding y README device credentials (DOCS-01/02/03).",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Actualizar snapshot de Gate A/DT y ledger, mantener Gate B futuro. Reduce trabajo duplicado y afirmaciones comerciales incorrectas. Corregir guía invitation-first, labels de onboarding y README device credentials (DOCS-01/02/03).",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [],
+      "priority": "HIGH",
+      "estimatedComplexity": "S"
+    },
+    {
+      "id": "ISSUE-T10",
+      "title": "Eliminar falso éxito operacional y verificar piloto",
+      "description": "Restore y backup deben fallar honestamente ante datos/media incompletos o health timeout; readiness debe distinguir dependencia DB. Alinear toolchains Docker/CI y ensayar build/restore aislados. Mantener SEC8/9, upload byte-validation y observabilidad en scopes existentes.",
+      "status": "PROPOSED",
+      "evidence": [
+        "OPS-01",
+        "OPS-02",
+        "OPS-03",
+        "OPS-04",
+        "OPS-12",
+        "BE-001",
+        "data/operations-audit.json"
+      ],
+      "disposition": "update existing issue",
+      "existingIssues": [
+        460,
+        461,
+        504
+      ],
+      "context": "Hallazgo del baseline auditado; propuesta sin escritura remota.",
+      "problem": "Restore y backup deben fallar honestamente ante datos/media incompletos o health timeout; readiness debe distinguir dependencia DB. Alinear toolchains Docker/CI y ensayar build/restore aislados. Mantener SEC8/9, upload byte-validation y observabilidad en scopes existentes.",
+      "scope": "Una unidad revisable por boundary; conservar los slices/trackers existentes, no agrupar todos estos IDs en una megafeature.",
+      "outOfScope": "Refactor global, nueva familia de negocio y claims de compatibilidad no probados.",
+      "technicalApproach": "Restore y backup deben fallar honestamente ante datos/media incompletos o health timeout; readiness debe distinguir dependencia DB. Alinear toolchains Docker/CI y ensayar build/restore aislados. Mantener SEC8/9, upload byte-validation y observabilidad en scopes existentes.",
+      "acceptanceCriteria": [
+        "Demostrar happy path real del alcance.",
+        "Demostrar denegación/rollback/retry pertinentes; no basta esconder botones.",
+        "Actualizar consumidor/contrato/documentación afectados sin duplicar autoridad.",
+        "Restore failure and missing media cannot exit/report full success.",
+        "Exact container build and isolated integrity-checked restore have evidence; liveness/readiness distinct."
+      ],
+      "definitionOfDone": [
+        "Pruebas ejecutadas del alcance y evidencia exacta de SHA.",
+        "Sin regresiones de tenant/identidad/revisión.",
+        "Lectura remota de resultados si se publica en una fase de implementación autorizada."
+      ],
+      "dependencies": [
+        "T01"
+      ],
+      "priority": "HIGH",
+      "estimatedComplexity": "L"
+    }
+  ],
+  "issueDispositionNotes": [
+    {
+      "id": "ISSUE-N1",
+      "title": "existing issue",
+      "description": "Conservar #384/#396/#465 como trackers y #462 para Gate B; verde parcial no autoriza cierre.",
+      "status": "CONFIRMED",
+      "evidence": [
+        "data/docs-governance.json"
+      ]
+    },
+    {
+      "id": "ISSUE-N2",
+      "title": "duplicate",
+      "description": "No se confirmó duplicado que deba cerrarse. Relacionar T06 con backlog vigente antes de crear issue.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "data/docs-governance.json"
+      ]
+    },
+    {
+      "id": "ISSUE-N3",
+      "title": "obsolete",
+      "description": "No se confirmó issue obsoleto sólo por metadata; contrastar DoD/código/PR antes de cambiar estado.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "data/docs-governance.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-1",
+      "title": "Una autoridad de mecanizado",
+      "description": "Contexto: Go autoría y TS catálogo generan operaciones por rutas diferentes.",
+      "status": "PROPOSED",
+      "evidence": [
+        "SU-05"
+      ],
+      "options": [
+        "Unificar contrato de operaciones/procedencia y consumidores.",
+        "Mantener motores distintos con paridad estricta."
+      ],
+      "recommendation": "Autoridad versionada SKU/patrón + operaciones semánticas; adapters puros para salidas.",
+      "tradeoffs": "Más trabajo de contrato ahora; evita geometría divergente y no requiere un CAM completo.",
+      "mvpDecision": "Un SKU y fixture de paridad completos.",
+      "futureDecision": "Ampliar familias/patrones por evidencia técnica."
+    },
+    {
+      "id": "DEC-2",
+      "title": "Separar preview de salida productiva",
+      "description": "Contexto: un export exitoso puede carecer de agujeros o usar inferencias.",
+      "status": "PROPOSED",
+      "evidence": [
+        "SU-01",
+        "SU-02"
+      ],
+      "options": [
+        "Fail-closed productivo con preview separado.",
+        "Best effort silencioso actual."
+      ],
+      "recommendation": "Bloquear output productivo incompleto; preview etiquetado y sin claim de fabricación.",
+      "tradeoffs": "Menos descargas aparentemente exitosas; mayor confianza y protección de material.",
+      "mvpDecision": "Nunca fabricar desde fallback.",
+      "futureDecision": "Adapters con capabilities y evidencia exacta."
+    },
+    {
+      "id": "DEC-3",
+      "title": "Host único para mutación y recuperación",
+      "description": "Contexto: fallback/edición desconectados de autoría rica.",
+      "status": "PROPOSED",
+      "evidence": [
+        "SU-03",
+        "SU-04"
+      ],
+      "options": [
+        "Coordinador compartido #498.",
+        "Coordinadores por feature."
+      ],
+      "recommendation": "Reutilizar #498 con resolve-before-mutate y supersession.",
+      "tradeoffs": "Dependencia inicial compartida; evita rollback/undo incompatibles.",
+      "mvpDecision": "Un flujo seguro y probado en host.",
+      "futureDecision": "Expandir edición manteniendo mismo protocolo."
+    },
+    {
+      "id": "DEC-4",
+      "title": "Demo integral frente a recorrido Web reducido",
+      "description": "Contexto: prioridad comercial y evidencia incompleta.",
+      "status": "PROPOSED",
+      "evidence": [
+        "DOC-005",
+        "data/sketchup-audit.json"
+      ],
+      "options": [
+        "Completar cadena integral antes de afirmar readiness.",
+        "Ensayo Web acotado explícitamente, sin sustituir alcance del objetivo."
+      ],
+      "recommendation": "Mantener NO para demo integral; usar recorrido limitado sólo si el responsable comercial acuerda límites.",
+      "tradeoffs": "Demora de promesa amplia frente a aprendizaje temprano honesto.",
+      "mvpDecision": "No presentar manual copy como bidireccionalidad.",
+      "futureDecision": "Ampliar guion cuando pase gate completo."
+    }
+  ],
+  "userManual": {
+    "scope": "Manual basado en controles reales del snapshot. CONFIRMED static no significa que se haya ejecutado cada paso. No existe rol instalador en la lista ProductRole inspeccionada: esta es una persona operativa, no una credencial inventada. Consultar matriz de permisos para roles exactos.",
+    "tutorials": [
+      {
+        "id": "MAN-ADMIN",
+        "title": "Administrador / equipo",
+        "description": "Procedimiento de uso del snapshot; ensayar antes de presentarlo.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "packages/ui/src/users/UsersScreen.tsx:527-619",
+          "packages/ui/src/users/UsersScreen.tsx:740-1017",
+          "packages/domain/src/rbac.ts:95-125"
+        ],
+        "verification": "Static controls; runtime not fully verified",
+        "route": "/users",
+        "prerequisites": [
+          "Cuenta admin de organización activa; acceso a MFA cuando se solicite."
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "action": "Abrir Usuarios y comprobar el taller activo."
+          },
+          {
+            "step": 2,
+            "action": "Elegir Invitar miembro; introducir identidad requerida y roles a asignar; revisar el alcance."
+          },
+          {
+            "step": 3,
+            "action": "Enviar invitación y verificar su fila/estado; no afirmar que se creó una nueva cuenta global."
+          },
+          {
+            "step": 4,
+            "action": "Para cambiar roles, abrir Modificar roles del miembro. Completar la confirmación de identidad cuando aparezca; si se cancela, revisar que nada cambió."
+          },
+          {
+            "step": 5,
+            "action": "Para suspender, usar Suspender membresía y proporcionar motivo. No confundir suspensión del taller con deshabilitar cuenta global."
+          },
+          {
+            "step": 6,
+            "action": "Para administrar catálogo abrir /modules, /materials o /hardware con permisos admin/ingeniero."
+          },
+          {
+            "step": 7,
+            "action": "Tiendas/distribuidores: NOT IMPLEMENTED como recorrido completo acreditado en este snapshot; no inventar botón de configuración de red."
+          }
+        ],
+        "expectedResult": "Miembro/invitación refleja respuesta autoritativa. Usuario conserva sólo permisos concedidos.",
+        "errorRecovery": [
+          "Error de equipo: usar Recargar usuarios.",
+          "Último administrador: usar flujo de transferencia, nunca borrar manualmente.",
+          "No mostrar éxito sólo porque se cerró un modal."
+        ],
+        "missingProof": "Ejecutar invitación/aceptación/roles/suspensión con dos cuentas reales y verificar backend/RLS; los 17 auth tests no cubren todos estos pasos."
+      },
+      {
+        "id": "MAN-SALES",
+        "title": "Ventas / gerente de ventas",
+        "description": "Procedimiento de uso del snapshot; ensayar antes de presentarlo.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "packages/ui/src/customers/CustomersScreen.tsx:445-510",
+          "packages/ui/src/projects/components/ProjectsListView.tsx:91",
+          "packages/ui/src/projects/components/ProjectMetaModal.tsx:119-185",
+          "packages/ui/src/projects/components/ProjectDetailView.tsx:395-490",
+          "data/operational-flows.json"
+        ],
+        "verification": "Static controls; runtime not fully verified",
+        "route": "/customers → /quotes",
+        "prerequisites": [
+          "Rol vendedor, gerente_ventas o admin; cliente y catálogo pertenecen al mismo taller."
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "action": "En Clientes elegir Nuevo cliente. Introducir Nombre completo; Email, Teléfono y Dirección cuando correspondan. Guardar."
+          },
+          {
+            "step": 2,
+            "action": "En Cotizaciones elegir Nueva cotización. Introducir Nombre y seleccionar Cliente; Guardar."
+          },
+          {
+            "step": 3,
+            "action": "Abrir la cotización y agregar/configurar muebles desde el catálogo disponible. No inventar precios ni materiales ausentes."
+          },
+          {
+            "step": 4,
+            "action": "Revisar cantidades, materiales y precio calculado. Un faltante de catálogo se corrige, no se oculta."
+          },
+          {
+            "step": 5,
+            "action": "Enviar cotización y confirmar Enviar: la UI advierte que congela precios/diseño."
+          },
+          {
+            "step": 6,
+            "action": "Aceptar sólo después de revisar: Aceptar cotización → Aceptar lleva el pedido a fábrica según el flujo actual."
+          },
+          {
+            "step": 7,
+            "action": "Abrir en Producción cuando esté disponible. Esto no es la aprobación/release del nuevo DesignRevision de #395."
+          }
+        ],
+        "expectedResult": "Cliente y cotización persistidos; estado comercial visible y explícito.",
+        "errorRecovery": [
+          "No reenviar mutaciones a ciegas después de error; recargar y verificar estado.",
+          "No usar reapertura excepcional para evitar reglas normales.",
+          "IMPORTANTE OP-01/03: la UI promete congelado y puede mostrar éxito antes de guardar. Verificar servidor/reload; no presentar inmutabilidad como garantizada."
+        ],
+        "missingProof": "Ejecutar create→quote→accept en navegador con PostgreSQL, comprobar persistencia tras reload, precio congelado y permisos de otro vendedor."
+      },
+      {
+        "id": "MAN-DESIGN",
+        "title": "Diseño / ingeniería",
+        "description": "Procedimiento de uso del snapshot; ensayar antes de presentarlo.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "apps/web/src/routes.ts:174-187",
+          "packages/ui/src/projects/components/ProjectItemsSection.tsx:175",
+          "apps/sketchup-extension/src/granete_for_sketchup/ui/dialog_controller.rb:393-443",
+          "data/sketchup-audit.json",
+          "evidence/guest-proyectar-dom.txt"
+        ],
+        "verification": "Static controls; runtime not fully verified",
+        "route": "/quotes/:id y Proyectar; /modules/new/edit",
+        "prerequisites": [
+          "Cotización draft editable y catálogo válido; permiso aplicable a proyecto/catálogo."
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "action": "Para editar catálogo abrir Muebles /modules; nuevo editor usa /modules/new/edit. Configurar sólo piezas/materiales disponibles y guardar."
+          },
+          {
+            "step": 2,
+            "action": "En cotización en borrador abrir Proyectar mediante el control de la cotización."
+          },
+          {
+            "step": 3,
+            "action": "Agregar/colocar muebles desde biblioteca; seleccionar para inspeccionar dimensiones/opciones disponibles. No tratar posiciones como nuevas identidades físicas."
+          },
+          {
+            "step": 4,
+            "action": "Si la cotización está aceptada, respetar modo sólo lectura: en el ensayo guest Cocina López se abrió congelada."
+          },
+          {
+            "step": 5,
+            "action": "Usar cámara Planta cuando el encuadre 3/4 o muros obstruyan la lectura. En tablet/móvil no presentar este editor hasta corregir canvas altura cero."
+          },
+          {
+            "step": 6,
+            "action": "Para SketchUp usar la librería/conexión existente; verificar catálogo actualizado, servidor activo e identidad de proyecto antes de insertar."
+          },
+          {
+            "step": 7,
+            "action": "NOT IMPLEMENTED como manual completo: edición interactiva de hardware/preflight y workspace React de reconciliación/release. No inventar esos controles."
+          }
+        ],
+        "expectedResult": "Una configuración visible y coherente; no se afirma publicación/release nueva por editar en Web.",
+        "errorRecovery": [
+          "No modificar geometría nativa con resolve fallido; detener y conservar último estado aceptado.",
+          "No presentar modos offline o fallback como datos productivos."
+        ],
+        "missingProof": "Ensayo real de inserción, selección, edición, undo/redo, save-reopen, publicación y misma FurnitureInstance en backend; pantalla desktop y responsive verificadas tras corrección."
+      },
+      {
+        "id": "MAN-PROD",
+        "title": "Producción / operador",
+        "description": "Procedimiento de uso del snapshot; ensayar antes de presentarlo.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "apps/web/src/routes.ts:87-126",
+          "docs/production-flow-v2.md",
+          "data/backend-audit.json",
+          "packages/excel/src/dxfCutPlanExport.ts:238-260",
+          "data/operational-flows.json"
+        ],
+        "verification": "Static controls; runtime not fully verified",
+        "route": "/orders y /production",
+        "prerequisites": [
+          "Rol con acceso a producción; pedido válido; revisión/autorización correctas; NO usar DXF no validado físicamente."
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "action": "Abrir pedido desde Abrir en Producción o /orders."
+          },
+          {
+            "step": 2,
+            "action": "Revisar pestañas resumen, módulos, piso, despiece, etiquetas, herrajes, vistas, optimización y documentos según ruta del hub."
+          },
+          {
+            "step": 3,
+            "action": "Revisar piezas, materiales y faltantes antes de descargar cualquier pack."
+          },
+          {
+            "step": 4,
+            "action": "Corte/CNC/enchape trabajan piezas/lotes; no declarar muebles armados porque terminó una pieza."
+          },
+          {
+            "step": 5,
+            "action": "Seguir unidades físicas a partir de armado; respetar bloqueos por revisión stale."
+          },
+          {
+            "step": 6,
+            "action": "No ejecutar despacho productivo hasta tener comando atómico validado; para ensayo usar datos aislados y verificar stock/picking después de cualquier error."
+          },
+          {
+            "step": 7,
+            "action": "Para DXF, comprobar operaciones y readback del software exacto antes de fabricar. Un toast de descarga no aprueba salida física."
+          }
+        ],
+        "expectedResult": "Trazabilidad pieza→unidad sin saltar gates; no se confunden estados comercial, diseño y producción.",
+        "errorRecovery": [
+          "Detenerse ante revisión stale o discrepancia de stock.",
+          "No repetir POST de despacho a ciegas.",
+          "No suplir agujeros ausentes con interpretación manual presentada como resultado del sistema.",
+          "OP-02: endpoint físico tiene gates, pero otro writer genérico puede sobrescribir. Autoridad end-to-end no acreditada; detener uso productivo hasta cerrar este boundary."
+        ],
+        "missingProof": "Ejecutar orden→pieza→armado→QC→envío con PostgreSQL real, negativos de estado/revisión y rollback despacho. Labels exactos de acciones de piso requieren completar inspección/runtime del panel."
+      },
+      {
+        "id": "MAN-INSTALL",
+        "title": "Instalación / personal de producción autorizado",
+        "description": "Procedimiento de uso del snapshot; ensayar antes de presentarlo.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "packages/ui/src/production/InstallationJobPanel.tsx:195-300",
+          "packages/ui/src/production/InstallationJobPanel.tsx:520-630",
+          "packages/domain/src/rbac.ts:95-104",
+          "backend-go/internal/storage/installation.go:25-113"
+        ],
+        "verification": "Static controls; runtime not fully verified",
+        "route": "/installations/:projectId",
+        "prerequisites": [
+          "Persona instaladora usa un rol de producción autorizado; no hay ProductRole instalador separado en el código inspeccionado. Trabajo/unidades elegibles."
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "action": "Abrir la instalación correspondiente al proyecto."
+          },
+          {
+            "step": 2,
+            "action": "Programar visita introduciendo Fecha de la visita y Crew de la visita; seleccionar Programar."
+          },
+          {
+            "step": 3,
+            "action": "En visita programada elegir Iniciar."
+          },
+          {
+            "step": 4,
+            "action": "Al finalizar elegir Completar, Resultado de la visita y notas; Guardar."
+          },
+          {
+            "step": 5,
+            "action": "Registrar incidencias y pendientes con descripción, responsable, severidad y fecha cuando corresponda."
+          },
+          {
+            "step": 6,
+            "action": "Las unidades se instalan desde En camino o escáner; no asumir que completar una visita instala automáticamente todas las unidades."
+          },
+          {
+            "step": 7,
+            "action": "Resolver pendientes bloqueantes. Completar instalación cuando los checks lo permitan."
+          },
+          {
+            "step": 8,
+            "action": "Introducir Nombre de quien firma la conformidad y elegir Registrar conformidad; luego Cerrar proyecto si está permitido."
+          }
+        ],
+        "expectedResult": "Visita, unidades, punch y cierre mantienen estados distintos; cerrar requiere conformidad y blockers resueltos.",
+        "errorRecovery": [
+          "Si botón está bloqueado leer el checklist; no intentar saltar por cierre comercial.",
+          "Tras error recargar antes de repetir; las acciones UI requieren comprobación autoritativa."
+        ],
+        "missingProof": "Ejecutar visita→incidencia→punch→signoff→close en navegador/DB, probar rechazo de blockers y persistencia tras reload."
+      }
+    ]
+  },
+  "demoPlaybook": {
+    "status": "PROPOSED",
+    "readiness": "NO for full requested chain",
+    "purpose": "Guion operativo para ensayo; no afirma que los pasos pendientes funcionen hoy.",
+    "prerequisites": [
+      "SHA de demo congelado y checks del mismo SHA.",
+      "Entorno de demo aislado, sin datos reales sensibles ni conexiones a bases compartidas.",
+      "Dos fichas de prospecto confirmadas: proceso, SKU, máquina/control/software y objetivo comercial; UNKNOWN hasta suministrarlas.",
+      "Fixture de catálogo con materiales/espesores y herrajes documentados; sin identidad de marca inventada.",
+      "Cuentas de mínimo privilegio, MFA disponible y sin secretos en capturas.",
+      "Portátil desktop y SketchUp licenciados/compatibles; red probada; no tablet para Proyectar actual.",
+      "Restauración/reset ensayados. Máquina sólo si dossier/readback aprobados."
+    ],
+    "demoData": {
+      "status": "PROPOSED — not created by this synthesis",
+      "organization": "Taller Demo A / Taller Demo B, aislados y sintéticos; nombres propuestos, no organizaciones existentes.",
+      "users": "Administrador preparador; vendedor; ingeniería; producción según roles reales. No usar admin para esconder denegaciones de un rol normal.",
+      "catalog": "Un mueble modular con dimensiones/materiales completos y SKU verificable; no todo catálogo Blum.",
+      "furniture": "Una unidad física simple para happy path y qty=2 para comprobar identidades distintas en ensayo técnico.",
+      "customer": "Cliente Demo, sin PII real.",
+      "quote": "Cotización sintética con precio derivado de datos aprobados; ningún precio de ejemplo es oferta comercial.",
+      "design": "Revisión pinneada del mismo proyecto/FurnitureInstance; no latest implícito.",
+      "hardware": "SKU y patrón técnico confirmado; BIS-CL110 es código del repo, no evidencia de homologación Blum.",
+      "production": "Una orden con piezas identificadas y unidades para armado.",
+      "installation": "Visita sintética con crew, un pendiente no bloqueante y un bloqueo resuelto antes de signoff."
+    },
+    "happyPath": [
+      {
+        "step": 1,
+        "action": "Presentar problema: cotizar, diseñar y producir sin reconstruir datos.",
+        "show": "Identidad del taller/cuenta.",
+        "proof": "Login y tenant activo; no se promete red de distribuidores.",
+        "gate": "Login/session acotados verificados por 17 tests."
+      },
+      {
+        "step": 2,
+        "action": "Clientes → Nuevo cliente → Nombre completo → Guardar.",
+        "show": "Cliente persistido tras recarga.",
+        "proof": "ID del cliente y tenant.",
+        "gate": "Real backend commercial rehearsal pending."
+      },
+      {
+        "step": 3,
+        "action": "Cotizaciones → Nueva cotización → Nombre/Cliente → Guardar; agregar mueble del catálogo.",
+        "show": "Cantidades/material/precio.",
+        "proof": "Proyecto y líneas persistidos.",
+        "gate": "BLOCKED for reliable sales claim: OP-01/03 frozen authority and commit-feedback source defects; runtime proof missing."
+      },
+      {
+        "step": 4,
+        "action": "Abrir Proyectar para colocar/inspeccionar mueble; usar cotización draft editable.",
+        "show": "Biblioteca → canvas → selección.",
+        "proof": "Layout del mismo proyecto.",
+        "gate": "Desktop only provisional; guest read-only exercised, editable full chain pending."
+      },
+      {
+        "step": 5,
+        "action": "Mostrar revisión/identidad exactas y conectar el modelo de SketchUp por flujo disponible.",
+        "show": "Mismo FurnitureInstance, no copia manual.",
+        "proof": "Server IDs, revisión y binding persistentes.",
+        "gate": "BLOCKED: superficies #500–502/#395 y ensayo host pendientes; no simular este paso."
+      },
+      {
+        "step": 6,
+        "action": "Insertar fixture verificado en SketchUp; seleccionar, inspeccionar material y herraje configurado.",
+        "show": "Componente nativo/partes y metadatos; no drag de hardware inexistente.",
+        "proof": "Undo/save-reopen y publicación preservan IDs.",
+        "gate": "Real host proof missing; rich hardware actions disabled."
+      },
+      {
+        "step": 7,
+        "action": "Mostrar operaciones del herraje y piezas receptoras.",
+        "show": "Cara, posición, diámetro, profundidad, orientación y conflictos.",
+        "proof": "SKU/patrón y paridad Go/TS.",
+        "gate": "BLOCKED para inspección interactiva completa; no vender preview como implementación."
+      },
+      {
+        "step": 8,
+        "action": "Exportar ejemplo verificado y revisar en software de máquina exacto.",
+        "show": "Transformadas y todas las operaciones.",
+        "proof": "Hash archivo + readback + aprobación operador.",
+        "gate": "BLOCKED hasta corregir DXF/patrón y disponer dossier."
+      },
+      {
+        "step": 9,
+        "action": "Pedido → Producción: piezas, armado/unidades, envío.",
+        "show": "Cambio de unidad de trabajo, bloqueos y stock.",
+        "proof": "Persistencia, revisión autorizada y despacho atómico.",
+        "gate": "BLOCKED: OP-02 alternative generic writer + atomic dispatch unresolved; no operational runtime proof."
+      },
+      {
+        "step": 10,
+        "action": "Instalaciones → Programar → Iniciar → Completar visita; resolver pendientes, Registrar conformidad, Cerrar proyecto.",
+        "show": "Resultado operacional, no sólo diseño bonito.",
+        "proof": "Estados y eventos persistidos, blockers respetados.",
+        "gate": "Real browser/DB rehearsal pending."
+      }
+    ],
+    "doNotShow": [
+      "CNC/script de fabricante no validado.",
+      "DXF rotado como mecanizado completo.",
+      "Hardware arbitrario/Blum genérico o edición de hardware deshabilitada.",
+      "Actualización offline como manufactura autoritativa.",
+      "Reconciliación/release React todavía no implementados en baseline.",
+      "Diseño Proyectar en tablet/móvil con canvas altura cero.",
+      "Métricas estimadas como rentabilidad real.",
+      "Administración de red de tiendas completa sólo porque Gate A pasó.",
+      "Precio congelado como inmutable o éxito UI como commit garantizado antes de corregir OP-01/03.",
+      "Backup/restore como recuperación certificada por mensajes de script.",
+      "Gizmo Web como arrastre/rotación funcional hasta corregir FM-05 y ensayar eventos reales.",
+      "Plantilla multiespacio como clone fiel hasta round-trip FM-01.",
+      "Variantes del mismo módulo como drilling independiente hasta prueba de cache FM-03.",
+      "Force release técnico legacy como override autorizado/auditado mientras EPS-F01 siga abierto.",
+      "Preview PDF legacy como prueba de que toda pieza cabe; FM-04 reduce dimensiones sobredimensionadas.",
+      "CSV arbitrariamente configurable/Latin-1/presets persistidos si no están implementados; FM-02 distingue presets reales de alcance histórico."
+    ],
+    "clientQuestions": [
+      {
+        "question": "¿Puedo fabricar directamente desde el DXF?",
+        "answer": "No con evidencia actual. Existe exportación geométrica, pero se identificaron omisiones y falta validar su máquina/software exactos.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-01",
+          "SU-02"
+        ]
+      },
+      {
+        "question": "¿Funciona con todos los herrajes Blum?",
+        "answer": "No está acreditado. Debemos verificar SKU, geometría y patrón técnico concretos.",
+        "status": "UNKNOWN",
+        "evidence": [
+          "SU-05"
+        ]
+      },
+      {
+        "question": "¿La cotización y SketchUp se actualizan en ambos sentidos?",
+        "answer": "Hay identidad física, publicación y reconciliación backend; la UX integral y release nuevo están pendientes en este main.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "DOC-005"
+        ]
+      },
+      {
+        "question": "¿Mis datos se mezclan con otro taller?",
+        "answer": "Foundation tiene RLS y pruebas reales de cambio de organización/Gate A. No afirmamos una certificación de toda superficie sin verificar uploads, jobs, exports y host.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "evidence/main-checks.json",
+          "evidence/organization-browser.log"
+        ]
+      },
+      {
+        "question": "¿Funciona sin internet?",
+        "answer": "Existe modo local y caché, pero no deben confundirse con sincronización ni autorización de fabricación. No presentar edición offline productiva como garantía.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-03",
+          "SU-06"
+        ]
+      },
+      {
+        "question": "¿Puedo gestionar instalación?",
+        "answer": "Existe panel de visitas, incidencias, pendientes y cierre; debemos ensayar su flujo con roles y datos del piloto antes de comprometer uso real.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "packages/ui/src/production/InstallationJobPanel.tsx"
+        ]
+      }
+    ],
+    "failureProtocol": [
+      "Detener el paso ante error; no pulsar repetidamente una mutación ni ocultar el fallo.",
+      "Anotar estado/ID sin secretos; recargar y comprobar servidor antes de reintentar.",
+      "No sustituir operación fallida por datos manuales fingiendo sincronización.",
+      "Volver a fixture reiniciado sólo después de confirmar que es entorno aislado.",
+      "Mostrar grabación previa sólo si se identifica como grabación del mismo alcance/SHA; nunca como operación en vivo."
+    ],
+    "acceptance": "No cambiar verdict integral a YES hasta pasar los gates de cada paso con evidencia actual. YES, WITH CONDITIONS sólo aplica a un alcance explícitamente acordado, no a encubrir pasos faltantes."
+  },
+  "unknowns": [
+    {
+      "id": "SYN-U1",
+      "title": "Ensayo comercial integrado",
+      "description": "Falta ejecución real cliente→cotización→diseño→release→SketchUp→manufactura→instalación con mismos IDs/revisiones.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "DOC-005",
+        "data/sketchup-audit.json"
+      ],
+      "nextProof": "T07: navegador+PostgreSQL+SketchUp, fixture limpio, logs/redacted y evidencia de cada transición."
+    },
+    {
+      "id": "SYN-U2",
+      "title": "Máquinas y SKUs de los prospectos",
+      "description": "No se conocen modelo/control/software, SKU/patrón fabricante ni criterios de aceptación físicos.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "data/sketchup-audit.json"
+      ],
+      "nextProof": "Dossiers #352/#353 y readback firmado por operador; sin eso no se ejecuta máquina."
+    },
+    {
+      "id": "SYN-U3",
+      "title": "Rendimiento representativo",
+      "description": "Build identifica tamaño; no mide FPS/latencia de datos reales ni traversal del host.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "evidence/web-build.log",
+        "BE-004"
+      ],
+      "nextProof": "Cold/warm load, React/network/DB y host profiling en equipo objetivo con fixture de volumen real."
+    },
+    {
+      "id": "SYN-U4",
+      "title": "Recuperación operacional",
+      "description": "Smoke estructural no valida despliegue, restore ni atención de incidencias.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "evidence/deployment-smoke.log"
+      ],
+      "nextProof": "Deploy aislado, fallo controlado, restore con integridad y tiempos medidos, bundle diagnóstico redactado."
+    },
+    {
+      "id": "SYN-U5",
+      "title": "Instalación y producción completas",
+      "description": "Código y tests presentes no prueban el recorrido real de roles y persistencia.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "data/docs-governance.json",
+        "BE-002"
+      ],
+      "nextProof": "Browser+DB con estados permitidos/rechazados, stock rollback, punch/signoff y eventos."
+    },
+    {
+      "id": "SYN-U6",
+      "title": "Cobertura exhaustiva final",
+      "description": "La síntesis no convierte inventarios de 371 docs/204 ledger/100 PRs en auditoría vertical completa.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "data/docs-governance.json"
+      ],
+      "nextProof": "Consultar matriz de cobertura raíz; revisar cada área faltante o consignar límite específico por fila, no omitir."
+    },
+    {
+      "id": "SYN-U7",
+      "title": "OP-01/02/03 runtime",
+      "description": "Se inspeccionaron fuente y fixture de prueba; NO se ejecutó prueba routed HTTP/DB ni overlay. Hallazgos permanecen CONFIRMED_STATIC.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "data/operational-flows.json"
+      ],
+      "nextProof": "En sesión autorizada: DB aislada, crafted same-status PUT, physical field/stale PUT y UI save rejection; comprobar persistencia/audit/rollback. No extrapolar a cross-tenant."
+    },
+    {
+      "id": "SYN-U8",
+      "title": "Restore, backup y container build efectivos",
+      "description": "Sólo trazado estático. No restore destructivo, outage ni Docker build ejecutados.",
+      "status": "UNKNOWN",
+      "evidence": [
+        "data/operations-audit.json"
+      ],
+      "nextProof": "Drill aislado con dump inválido/media ausente y assertions fail-closed; clean container build y readiness tras DB outage en entorno autorizado."
+    }
+  ],
+  "top10": {
+    "strengths": [
+      {
+        "id": "TOP-1",
+        "title": "Foundation Gate A",
+        "description": "Gate ejecutable verde en SHA auditado.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "evidence/main-checks.json"
+        ]
+      },
+      {
+        "id": "TOP-2",
+        "title": "Auth real en navegador",
+        "description": "17 pruebas con bootstrap, MFA, tenant switch y logout.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "evidence/organization-browser.log"
+        ]
+      },
+      {
+        "id": "TOP-3",
+        "title": "Contratos generados",
+        "description": "Drift check pasó.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "evidence/openapi-check.log"
+        ]
+      },
+      {
+        "id": "TOP-4",
+        "title": "Build reproducible",
+        "description": "Build de producción pasó; no es evidencia de performance.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "evidence/web-build.log"
+        ]
+      },
+      {
+        "id": "TOP-5",
+        "title": "Identidad física",
+        "description": "FurnitureInstance no depende de posición de línea.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "data/docs-governance.json"
+        ]
+      },
+      {
+        "id": "TOP-6",
+        "title": "Reconciliación exacta",
+        "description": "Comparación read-only por IDs/revisiones en backend.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "DOC-005"
+        ]
+      },
+      {
+        "id": "TOP-7",
+        "title": "Publicación de revisiones",
+        "description": "DT8 conserva snapshot/artefactos inmutables.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "data/docs-governance.json"
+        ]
+      },
+      {
+        "id": "TOP-8",
+        "title": "Modelo pieza→unidad",
+        "description": "Producción distingue corte de armado y logística.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "docs/production-flow-v2.md"
+        ]
+      },
+      {
+        "id": "TOP-9",
+        "title": "Instalación operativa modelada",
+        "description": "Visitas/punch/signoff y persistencia existentes.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "DOC-003"
+        ]
+      },
+      {
+        "id": "TOP-10",
+        "title": "Credenciales nativas separadas",
+        "description": "Provider dedicado y secure-store fail-closed en código.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "data/sketchup-audit.json"
+        ]
+      }
+    ],
+    "weaknesses": [
+      {
+        "id": "TOP-1",
+        "title": "UX Digital Thread incompleta",
+        "description": "Backend no equivale a flujo completo.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "DOC-005"
+        ]
+      },
+      {
+        "id": "TOP-2",
+        "title": "Perforaciones inferidas",
+        "description": "Export elimina procedencia. Cache por variante insuficiente FM-03.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-01",
+          "FM-03"
+        ]
+      },
+      {
+        "id": "TOP-3",
+        "title": "DXF incompleto",
+        "description": "Rotadas sin agujeros/profundidad por operación.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-02"
+        ]
+      },
+      {
+        "id": "TOP-4",
+        "title": "Edición hardware desconectada",
+        "description": "Capabilities deshabilitadas. Gizmo React también tiene eventos no conectados FM-05; no es sólo host.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-04",
+          "FM-05"
+        ]
+      },
+      {
+        "id": "TOP-5",
+        "title": "Fallback de geometría",
+        "description": "Riesgo nil-layout estático.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-03"
+        ]
+      },
+      {
+        "id": "TOP-6",
+        "title": "Autoridad de aggregate insuficiente",
+        "description": "Snapshot/physical state admiten writer alternativo y despacho separado.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "OP-01",
+          "OP-02",
+          "BE-002"
+        ]
+      },
+      {
+        "id": "TOP-7",
+        "title": "Cache stale",
+        "description": "No revalidación automática.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-06"
+        ]
+      },
+      {
+        "id": "TOP-8",
+        "title": "Docs stale",
+        "description": "Current-state diverge del código.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "DOC-001",
+          "DOC-002"
+        ]
+      },
+      {
+        "id": "TOP-9",
+        "title": "Recuperación con falso éxito",
+        "description": "Restore/backup no acreditan integridad por mensajes; source defect, runtime pendiente.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "OPS-02",
+          "OPS-03"
+        ]
+      },
+      {
+        "id": "TOP-10",
+        "title": "Ensayo host/máquina ausente",
+        "description": "No acreditar soporte físico por suites Ruby.",
+        "status": "UNKNOWN",
+        "evidence": [
+          "data/sketchup-audit.json"
+        ]
+      }
+    ],
+    "demoRisks": [
+      {
+        "id": "R01",
+        "title": "Prometer bidireccionalidad inexistente",
+        "description": "Reconciliación backend no tiene caller Web; release nuevo pendiente. Generic snapshot authority is also incomplete (OP-01).",
+        "status": "INFERRED",
+        "evidence": [
+          "DOC-005",
+          "OP-01"
+        ],
+        "category": "integration",
+        "probability": "Alta",
+        "impact": 5,
+        "severity": "DEMO BLOCKER",
+        "mitigation": "T02",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R02",
+        "title": "Fabricar con perforaciones incompletas",
+        "description": "Fallback por nombre, pérdida de procedencia y piezas rotadas sin agujeros. FM-03 reproduce salida de agujeros dependiente del orden por first-part-owner entre customDims distintos:3tazas esperadas frente a2enA→B,3enB→A. Sin pieza física dañada ni archivo exportado probado. Preview legacy FM-04 puede sugerir encaje al reducir dimensión visual; no es evidencia de fallo del optimizer moderno.",
+        "status": "INFERRED",
+        "evidence": [
+          "SU-01",
+          "SU-02",
+          "SU-05",
+          "FM-03",
+          "FM-04",
+          "data/drilling-context-proof.json"
+        ],
+        "category": "data",
+        "probability": "Alta si se usa salida actual",
+        "impact": 5,
+        "severity": "CRITICAL",
+        "mitigation": "T04/T05",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R03",
+        "title": "Degradar geometría al editar sin resolve",
+        "description": "Fallback genérico tras nil layout puede reemplazar hijos.",
+        "status": "INFERRED",
+        "evidence": [
+          "SU-03"
+        ],
+        "category": "product",
+        "probability": "Media; trayectoria estática, no frecuencia medida",
+        "impact": 5,
+        "severity": "HIGH",
+        "mitigation": "T03",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R04",
+        "title": "Estados comerciales/físicos y stock con writers alternativos",
+        "description": "PUT genérico permite sustituir snapshot y estados físicos; Web segundo writer persiste aggregate local; stock/picking entre requests. OP source only, picking simulated control-flow proof only. QV-01 omite historial legacy tras transición; guest nuevo corroborado, backend desconocido. EPS-F01 permite alcanzar workflow legacy sin capability/owner en handler y force_release evita loading sin razón obligatoria; autenticación/tenant sí presentes, sin explotación runtime.",
+        "status": "INFERRED",
+        "evidence": [
+          "OP-01",
+          "OP-02",
+          "BE-002",
+          "data/operational-flows.json",
+          "QV-01",
+          "EPS-F01"
+        ],
+        "category": "data",
+        "probability": "Media ante fallo parcial",
+        "impact": 5,
+        "severity": "CRITICAL",
+        "mitigation": "T06/T08",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R05",
+        "title": "Demostración nativa falla en host real",
+        "description": "Ruby fuera del host no prueba interacción, secure store ni save-reopen.",
+        "status": "INFERRED",
+        "evidence": [
+          "data/sketchup-audit.json"
+        ],
+        "category": "demo",
+        "probability": "Desconocida",
+        "impact": 5,
+        "severity": "DEMO BLOCKER",
+        "mitigation": "T07",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R06",
+        "title": "Usar catálogo stale como productivo",
+        "description": "Sin revalidación automática; refresh fallido conserva cache. No se demostró fuga cross-tenant.",
+        "status": "INFERRED",
+        "evidence": [
+          "SU-06"
+        ],
+        "category": "integration",
+        "probability": "Media",
+        "impact": 4,
+        "severity": "HIGH",
+        "mitigation": "T03",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R07",
+        "title": "Éxito de venta anterior al commit",
+        "description": "OP-03: patch actualiza memoria y dispara save no esperado; failure no restaura automáticamente. No se reprodujo fallo HTTP/DB.",
+        "status": "INFERRED",
+        "evidence": [
+          "OP-03"
+        ],
+        "category": "product",
+        "probability": "Media; explotación no demostrada",
+        "impact": 4,
+        "severity": "HIGH",
+        "mitigation": "T08",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R08",
+        "title": "Retrabajo inducido por documentación stale",
+        "description": "Gate A/F199 y lifecycle difieren del snapshot ejecutable.",
+        "status": "INFERRED",
+        "evidence": [
+          "DOC-001",
+          "DOC-002",
+          "DOC-003",
+          "DOC-004"
+        ],
+        "category": "maintenance",
+        "probability": "Alta",
+        "impact": 3,
+        "severity": "HIGH",
+        "mitigation": "T09",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R09",
+        "title": "Lentitud o consumo alto con datos reales",
+        "description": "Bundle principal 5 MB y listado proyectos no paginado; tamaño no equivale a latencia medida.",
+        "status": "INFERRED",
+        "evidence": [
+          "evidence/web-build.log",
+          "BE-004"
+        ],
+        "category": "architecture",
+        "probability": "Desconocida sin perfil",
+        "impact": 4,
+        "severity": "HIGH",
+        "mitigation": "Medir antes de optimizar",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R10",
+        "title": "Recuperación y despliegue aparentemente exitosos",
+        "description": "Restore admite pipeline failure y health timeout; backup puede omitir media; Docker toolchain difiere de CI. Evidencia estática, sin ejecutar restore/build Docker ni afirmar pérdida real.",
+        "status": "INFERRED",
+        "evidence": [
+          "OPS-01",
+          "OPS-02",
+          "OPS-03",
+          "OPS-04",
+          "OPS-12"
+        ],
+        "category": "operations",
+        "probability": "Desconocida",
+        "impact": 5,
+        "severity": "HIGH",
+        "mitigation": "T10",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      }
+    ],
+    "technicalRisks": [
+      {
+        "id": "R01",
+        "title": "Prometer bidireccionalidad inexistente",
+        "description": "Reconciliación backend no tiene caller Web; release nuevo pendiente. Generic snapshot authority is also incomplete (OP-01).",
+        "status": "INFERRED",
+        "evidence": [
+          "DOC-005",
+          "OP-01"
+        ],
+        "category": "integration",
+        "probability": "Alta",
+        "impact": 5,
+        "severity": "DEMO BLOCKER",
+        "mitigation": "T02",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R02",
+        "title": "Fabricar con perforaciones incompletas",
+        "description": "Fallback por nombre, pérdida de procedencia y piezas rotadas sin agujeros. FM-03 reproduce salida de agujeros dependiente del orden por first-part-owner entre customDims distintos:3tazas esperadas frente a2enA→B,3enB→A. Sin pieza física dañada ni archivo exportado probado. Preview legacy FM-04 puede sugerir encaje al reducir dimensión visual; no es evidencia de fallo del optimizer moderno.",
+        "status": "INFERRED",
+        "evidence": [
+          "SU-01",
+          "SU-02",
+          "SU-05",
+          "FM-03",
+          "FM-04",
+          "data/drilling-context-proof.json"
+        ],
+        "category": "data",
+        "probability": "Alta si se usa salida actual",
+        "impact": 5,
+        "severity": "CRITICAL",
+        "mitigation": "T04/T05",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R03",
+        "title": "Degradar geometría al editar sin resolve",
+        "description": "Fallback genérico tras nil layout puede reemplazar hijos.",
+        "status": "INFERRED",
+        "evidence": [
+          "SU-03"
+        ],
+        "category": "product",
+        "probability": "Media; trayectoria estática, no frecuencia medida",
+        "impact": 5,
+        "severity": "HIGH",
+        "mitigation": "T03",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R04",
+        "title": "Estados comerciales/físicos y stock con writers alternativos",
+        "description": "PUT genérico permite sustituir snapshot y estados físicos; Web segundo writer persiste aggregate local; stock/picking entre requests. OP source only, picking simulated control-flow proof only. QV-01 omite historial legacy tras transición; guest nuevo corroborado, backend desconocido. EPS-F01 permite alcanzar workflow legacy sin capability/owner en handler y force_release evita loading sin razón obligatoria; autenticación/tenant sí presentes, sin explotación runtime.",
+        "status": "INFERRED",
+        "evidence": [
+          "OP-01",
+          "OP-02",
+          "BE-002",
+          "data/operational-flows.json",
+          "QV-01",
+          "EPS-F01"
+        ],
+        "category": "data",
+        "probability": "Media ante fallo parcial",
+        "impact": 5,
+        "severity": "CRITICAL",
+        "mitigation": "T06/T08",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R05",
+        "title": "Demostración nativa falla en host real",
+        "description": "Ruby fuera del host no prueba interacción, secure store ni save-reopen.",
+        "status": "INFERRED",
+        "evidence": [
+          "data/sketchup-audit.json"
+        ],
+        "category": "demo",
+        "probability": "Desconocida",
+        "impact": 5,
+        "severity": "DEMO BLOCKER",
+        "mitigation": "T07",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R06",
+        "title": "Usar catálogo stale como productivo",
+        "description": "Sin revalidación automática; refresh fallido conserva cache. No se demostró fuga cross-tenant.",
+        "status": "INFERRED",
+        "evidence": [
+          "SU-06"
+        ],
+        "category": "integration",
+        "probability": "Media",
+        "impact": 4,
+        "severity": "HIGH",
+        "mitigation": "T03",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R07",
+        "title": "Éxito de venta anterior al commit",
+        "description": "OP-03: patch actualiza memoria y dispara save no esperado; failure no restaura automáticamente. No se reprodujo fallo HTTP/DB.",
+        "status": "INFERRED",
+        "evidence": [
+          "OP-03"
+        ],
+        "category": "product",
+        "probability": "Media; explotación no demostrada",
+        "impact": 4,
+        "severity": "HIGH",
+        "mitigation": "T08",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R08",
+        "title": "Retrabajo inducido por documentación stale",
+        "description": "Gate A/F199 y lifecycle difieren del snapshot ejecutable.",
+        "status": "INFERRED",
+        "evidence": [
+          "DOC-001",
+          "DOC-002",
+          "DOC-003",
+          "DOC-004"
+        ],
+        "category": "maintenance",
+        "probability": "Alta",
+        "impact": 3,
+        "severity": "HIGH",
+        "mitigation": "T09",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R09",
+        "title": "Lentitud o consumo alto con datos reales",
+        "description": "Bundle principal 5 MB y listado proyectos no paginado; tamaño no equivale a latencia medida.",
+        "status": "INFERRED",
+        "evidence": [
+          "evidence/web-build.log",
+          "BE-004"
+        ],
+        "category": "architecture",
+        "probability": "Desconocida sin perfil",
+        "impact": 4,
+        "severity": "HIGH",
+        "mitigation": "Medir antes de optimizar",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      },
+      {
+        "id": "R10",
+        "title": "Recuperación y despliegue aparentemente exitosos",
+        "description": "Restore admite pipeline failure y health timeout; backup puede omitir media; Docker toolchain difiere de CI. Evidencia estática, sin ejecutar restore/build Docker ni afirmar pérdida real.",
+        "status": "INFERRED",
+        "evidence": [
+          "OPS-01",
+          "OPS-02",
+          "OPS-03",
+          "OPS-04",
+          "OPS-12"
+        ],
+        "category": "operations",
+        "probability": "Desconocida",
+        "impact": 5,
+        "severity": "HIGH",
+        "mitigation": "T10",
+        "probabilityBasis": "Evaluación cualitativa, no incidencia observada; condición de fallo respaldada por referencias."
+      }
+    ],
+    "uxProblems": [
+      {
+        "id": "TOP-1",
+        "title": "Éxito de DXF engañoso",
+        "description": "Puede descargar sin drilling tras error.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-01"
+        ]
+      },
+      {
+        "id": "TOP-2",
+        "title": "Catálogo stale",
+        "description": "Datos retenidos tras refresh fallido.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-06"
+        ]
+      },
+      {
+        "id": "TOP-3",
+        "title": "Controles de autoría ausentes",
+        "description": "No hay inspección interactiva de mecanizado habilitada.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "SU-04"
+        ]
+      },
+      {
+        "id": "TOP-4",
+        "title": "Continuidad de diseño incompleta",
+        "description": "No caller Web de reconciliación nueva.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "DOC-005"
+        ]
+      },
+      {
+        "id": "TOP-5",
+        "title": "Encuadre 3D obstruido",
+        "description": "Escena guest desktop inspeccionada: muro tapa muebles; Planta sí funciona.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "evidence/guest-proyectar-dom.txt"
+        ]
+      },
+      {
+        "id": "TOP-6",
+        "title": "Canvas responsive altura cero",
+        "description": "Proyectar observado a390x844 y768x1024; no generalizar a toda app.",
+        "status": "CONFIRMED",
+        "evidence": [
+          "evidence/guest-proyectar-390-measurements.json",
+          "evidence/guest-proyectar-768-measurements.json"
+        ]
+      },
+      {
+        "id": "TOP-7",
+        "title": "Cotización anuncia éxito antes del save",
+        "description": "OP-03 estático: failure puede dejar estado optimista; runtime desconocido.",
+        "status": "CONFIRMED_STATIC",
+        "evidence": [
+          "OP-03"
+        ]
+      },
+      {
+        "id": "TOP-8",
+        "title": "Historial automático ausente tras transición",
+        "description": "QV-01: se pasa estado ya cambiado a helper que detecta no-op; guest nuevo lo corrobora. Rev1 cerrada es pin de estructura.",
+        "status": "CONFIRMED_STATIC + scoped guest symptom",
+        "evidence": [
+          "data/quote-version-audit.json"
+        ]
+      },
+      {
+        "id": "TOP-9",
+        "title": "Gizmo visible sin movimiento conectado",
+        "description": "FM-05: los handles sólo cambian su estado visual; no llaman mover/rotar. No equivale a fallo de campos manuales.",
+        "status": "CONFIRMED_STATIC",
+        "evidence": [
+          "FM-05"
+        ]
+      },
+      {
+        "id": "TOP-10",
+        "title": "Plantilla no conserva ambientes modernos",
+        "description": "FM-01: pérdida de seis campos reproducida en funciones puras. UI save/reload no ejercitado; impacto de experiencia es inferido desde la pérdida real.",
+        "status": "CONFIRMED_PURE_DOMAIN_WITH_UX_IMPACT_INFERRED",
+        "evidence": [
+          "FM-01",
+          "data/template-roundtrip-proof.json"
+        ]
+      }
+    ],
+    "quickWins": [
+      {
+        "id": "TOP-1",
+        "title": "Guion con límites explícitos",
+        "description": "Retirar claims CNC/bidireccionales no acreditados.",
+        "status": "PROPOSED",
+        "evidence": [
+          "DOC-005",
+          "SU-02"
+        ],
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "S",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-2",
+        "title": "Fixture curado",
+        "description": "Un SKU y material completos evitan faltantes durante ensayo.",
+        "status": "PROPOSED",
+        "evidence": [
+          "SU-05"
+        ],
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "S",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-3",
+        "title": "Warning salida geométrica",
+        "description": "Separar descarga de aprobación física. No sustituye corrección productiva.",
+        "status": "PROPOSED",
+        "evidence": [
+          "SU-01"
+        ],
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "S",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-4",
+        "title": "Snapshot documental correcto",
+        "description": "Actualizar Gate A/F199 y DT vigente.",
+        "status": "PROPOSED",
+        "evidence": [
+          "DOC-001"
+        ],
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "S",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-5",
+        "title": "Mostrar estado stale/error",
+        "description": "No usar vacío o catálogo anterior como éxito silencioso.",
+        "status": "PROPOSED",
+        "evidence": [
+          "SU-06"
+        ],
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "S",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-6",
+        "title": "Preparar cámara desktop",
+        "description": "Ensayar Planta; corregir framing antes de convertirlo en promesa visual.",
+        "status": "PROPOSED",
+        "evidence": [
+          "evidence/guest-proyectar-dom.txt"
+        ],
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "S",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-7",
+        "title": "Validar bytes de imagen",
+        "description": "Rechazar extensión sin contenido válido, prueba routed.",
+        "status": "PROPOSED",
+        "evidence": [
+          "BE-001"
+        ],
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "S",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-8",
+        "title": "Respetar cancelación de step-up",
+        "description": "No cerrar diálogo ni mostrar éxito cuando la elevación devuelve cancelación; probar acciones Team afectadas.",
+        "status": "PROPOSED",
+        "evidence": [
+          "WEB-02"
+        ],
+        "tradeoff": "Fix de feedback acotado; no reemplaza autorización server-side."
+      },
+      {
+        "id": "TOP-9",
+        "title": "Nombrar CSV por presets realmente disponibles",
+        "description": "Etiquetar alcance fijo y encoding real; no prometer reordenamiento arbitrario ni presets persistidos inexistentes.",
+        "status": "PROPOSED",
+        "evidence": [
+          "FM-02"
+        ],
+        "tradeoff": "Alinea expectativas con poco alcance; no incorpora importadores nuevos."
+      },
+      {
+        "id": "TOP-10",
+        "title": "No ofrecer gizmo inoperativo como editable",
+        "description": "Deshabilitar u ocultar interacción con explicación hasta conectar y ensayar pointer/callback/undo.",
+        "status": "PROPOSED",
+        "evidence": [
+          "FM-05"
+        ],
+        "tradeoff": "Reduce el alcance visible de demo; no sustituye el arreglo funcional ni prueba que edición manual sea suficiente."
+      }
+    ],
+    "mvpTasks": [
+      {
+        "id": "T01",
+        "title": "Fijar contrato de demo y fixtures verificables",
+        "description": "Acordar un mueble, SKU, materiales y salida exacta por prospecto; impide promesas no probadas. Si el receptor pide CSV, acordar preset/encoding real: F073 sólo ofrece presets fijos, no editor arbitrario de columnas (FM-02).",
+        "status": "PROPOSED",
+        "evidence": [
+          "data/sketchup-audit.json",
+          "FM-02"
+        ],
+        "rank": 1,
+        "severity": "DEMO BLOCKER",
+        "demoImpact": 5,
+        "customerImpact": 5,
+        "riskReduction": 5,
+        "effort": "S",
+        "dependencies": [],
+        "parallelizable": true,
+        "priorityRationale": "Acordar un mueble, SKU, materiales y salida exacta por prospecto; impide promesas no probadas.",
+        "relatedIssues": [
+          352,
+          353
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+      },
+      {
+        "id": "T02",
+        "title": "Cerrar continuidad exacta Quote/Design/Release en Web",
+        "description": "Completar slices existentes y presentar diferencias por FurnitureInstance, no copiar datos entre pantallas. Es la principal promesa comercial. Incluir clone de plantilla multiespacio sin omitir campos de layout (FM-01) y separar historial legacy QV-01 de QuoteRevision/DesignRevision. Son scopes revisables separados, no una mega-feature.",
+        "status": "PROPOSED",
+        "evidence": [
+          "data/docs-governance.json",
+          "FM-01",
+          "QV-01"
+        ],
+        "rank": 2,
+        "severity": "DEMO BLOCKER",
+        "demoImpact": 5,
+        "customerImpact": 5,
+        "riskReduction": 5,
+        "effort": "XL",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": false,
+        "priorityRationale": "Completar slices existentes y presentar diferencias por FurnitureInstance, no copiar datos entre pantallas. Es la principal promesa comercial.",
+        "relatedIssues": [
+          394,
+          395,
+          500,
+          501,
+          502,
+          398
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Depende de contratos o pruebas de varias superficies; no ejecutar integración antes de sus precondiciones."
+      },
+      {
+        "id": "T03",
+        "title": "Conectar autoría nativa segura y preservar geometría aceptada",
+        "description": "Unificar interacción en host compartido; nil/stale/error no borra geometría válida. Un solo mueble end-to-end antes de ampliar edición. Para la demostración Web de herrajes, conectar eventos reales del gizmo montado (FM-05); no confundir este defecto React con capabilities SketchUp. Verificar pointer→callback→modelo→undo en su propio scope.",
+        "status": "PROPOSED",
+        "evidence": [
+          "data/sketchup-audit.json",
+          "FM-05"
+        ],
+        "rank": 3,
+        "severity": "DEMO BLOCKER",
+        "demoImpact": 5,
+        "customerImpact": 5,
+        "riskReduction": 5,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Unificar interacción en host compartido; nil/stale/error no borra geometría válida. Un solo mueble end-to-end antes de ampliar edición.",
+        "relatedIssues": [
+          496,
+          498,
+          466,
+          467,
+          468,
+          474
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+      },
+      {
+        "id": "T04",
+        "title": "Bloquear salida productiva con perforaciones inferidas/incompletas",
+        "description": "Propagar fallbackUsed/issues hasta exportación y distinguir preview geométrico de mecanizado autorizado. Debe preceder cualquier fabricación. El preview PDF legacy tampoco debe encoger piezas sobredimensionadas para simular factibilidad (FM-04); distinto del nesting optimizer.",
+        "status": "PROPOSED",
+        "evidence": [
+          "packages/domain/src/partDrillingResolver.ts:515-533",
+          "FM-04"
+        ],
+        "rank": 4,
+        "severity": "MVP BLOCKER",
+        "demoImpact": 5,
+        "customerImpact": 5,
+        "riskReduction": 5,
+        "effort": "M",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Propagar fallbackUsed/issues hasta exportación y distinguir preview geométrico de mecanizado autorizado. Debe preceder cualquier fabricación.",
+        "relatedIssues": [
+          354,
+          351
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+      },
+      {
+        "id": "T05",
+        "title": "Unificar SKU/patrón y verificar DXF transformado",
+        "description": "Misma autoridad de patrón para Go, TS y export; fixture rotado/no rotado, todas las caras y profundidad; readback del software exacto. Corregir además identidad del cache de drilling: el key omite preset/opciones aunque resolveBom los consume; partId first-owner colapsa variantes (FM-03). Fixture con mismo módulo y distintos presets/materiales antes de exportar. Prioridad corroborada por prueba pura FM-03: first-part-owner causa agujeros distintos según orden de líneas; agregar regresión de permutación. Ausencia de preset/opciones en cache sigue hallazgoestático separado.",
+        "status": "PROPOSED",
+        "evidence": [
+          "packages/excel/src/dxfCutPlanExport.ts:238-260",
+          "FM-03",
+          "data/drilling-context-proof.json"
+        ],
+        "rank": 5,
+        "severity": "DEMO BLOCKER",
+        "demoImpact": 5,
+        "customerImpact": 5,
+        "riskReduction": 5,
+        "effort": "L",
+        "dependencies": [
+          "T04"
+        ],
+        "parallelizable": false,
+        "priorityRationale": "Misma autoridad de patrón para Go, TS y export; fixture rotado/no rotado, todas las caras y profundidad; readback del software exacto.",
+        "relatedIssues": [
+          351,
+          352,
+          353,
+          354,
+          503
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Depende de contratos o pruebas de varias superficies; no ejecutar integración antes de sus precondiciones."
+      },
+      {
+        "id": "T06",
+        "title": "Cerrar autoridad de mutación comercial, física y stock",
+        "description": "Consolidar raíz: el aggregate PUT no puede sustituir snapshots cerrados ni estados físicos/release; consumir la respuesta autoritativa de commands; despacho stock+picking atómico e idempotente. Son slices separados bajo un mismo principio, no una megaissue. Incluir QV-01: componer transition/snapshot conservando old/new status; aclarar Project.history frente a QuoteRevision nueva. Cerrar capability/ownership de technical-workflow legacy y override force_release sin razón requerida (EPS-F01). No atribuirlo a nuevo DesignRelease ni afirmar exploit cross-tenant.",
+        "status": "PROPOSED",
+        "evidence": [
+          "OP-01",
+          "OP-02",
+          "BE-002",
+          "data/operational-flows.json",
+          "QV-01",
+          "EPS-F01"
+        ],
+        "rank": 6,
+        "severity": "MVP BLOCKER",
+        "demoImpact": 5,
+        "customerImpact": 5,
+        "riskReduction": 5,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Integridad comercial y física precede polish. Runtime de OP sigue UNKNOWN; diseño actual es evidencia estática suficiente para impedir prometer autoridad completa.",
+        "relatedIssues": [],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+      },
+      {
+        "id": "T07",
+        "title": "Ensayar el flujo integral con navegador y host real",
+        "description": "Conservar IDs, revisiones y artefactos desde cliente hasta instalación, repetir desde datos reiniciados y capturar negativas críticas.",
+        "status": "PROPOSED",
+        "evidence": [
+          "evidence/organization-browser.log"
+        ],
+        "rank": 7,
+        "severity": "DEMO BLOCKER",
+        "demoImpact": 5,
+        "customerImpact": 5,
+        "riskReduction": 5,
+        "effort": "M",
+        "dependencies": [
+          "T02",
+          "T03",
+          "T05",
+          "T06"
+        ],
+        "parallelizable": false,
+        "priorityRationale": "Conservar IDs, revisiones y artefactos desde cliente hasta instalación, repetir desde datos reiniciados y capturar negativas críticas.",
+        "relatedIssues": [
+          398,
+          354
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Depende de contratos o pruebas de varias superficies; no ejecutar integración antes de sus precondiciones."
+      },
+      {
+        "id": "T08",
+        "title": "Mostrar éxito sólo después del commit",
+        "description": "Esperar persistencia de quote/status/metadata; error o cancelación conservan estado honesto y permiten reintento seguro. No cerrar modal ni anunciar aceptación antes del servidor. Mantener resultado de comando físico en vez de recrearlo localmente. El guardado de plan de corte comparte feedback optimista: onSaveCutPlan void seguido de success inmediato. Consolidar esta clase con OP-03/WEB-04; preservar errores y borrador.",
+        "status": "PROPOSED",
+        "evidence": [
+          "OP-03",
+          "OP-02",
+          "data/operational-flows.json",
+          "WEB-04",
+          "packages/ui/src/production/ProductionOrderOptimizationPanel.tsx:150-154"
+        ],
+        "rank": 8,
+        "severity": "HIGH",
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 4,
+        "effort": "M",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Un falso éxito en la cotización dañaría confianza durante uso normal; protege happy path real, no un edge case cosmético.",
+        "relatedIssues": [
+          460
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+      },
+      {
+        "id": "T09",
+        "title": "Reconciliar documentación y guion comercial con main",
+        "description": "Actualizar snapshot de Gate A/DT y ledger, mantener Gate B futuro. Reduce trabajo duplicado y afirmaciones comerciales incorrectas. Corregir guía invitation-first, labels de onboarding y README device credentials (DOCS-01/02/03).",
+        "status": "PROPOSED",
+        "evidence": [
+          "data/docs-governance.json",
+          "data/docs-semantic-audit.json"
+        ],
+        "rank": 9,
+        "severity": "HIGH",
+        "demoImpact": 4,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "S",
+        "dependencies": [],
+        "parallelizable": true,
+        "priorityRationale": "Actualizar snapshot de Gate A/DT y ledger, mantener Gate B futuro. Reduce trabajo duplicado y afirmaciones comerciales incorrectas.",
+        "relatedIssues": [
+          384,
+          446,
+          462,
+          465
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+      },
+      {
+        "id": "T10",
+        "title": "Eliminar falso éxito operacional y verificar piloto",
+        "description": "Restore y backup deben fallar honestamente ante datos/media incompletos o health timeout; readiness debe distinguir dependencia DB. Alinear toolchains Docker/CI y ensayar build/restore aislados. Mantener SEC8/9, upload byte-validation y observabilidad en scopes existentes. Follow-up separado MEDIUM: corregir metadata de expiry SessionScope y probar estabilidad de key tras refresh/rehydrate (AUTH-CONTRACT-01), sin afirmar logout ni bypass.",
+        "status": "PROPOSED",
+        "evidence": [
+          "OPS-01",
+          "OPS-02",
+          "OPS-03",
+          "OPS-04",
+          "OPS-12",
+          "BE-001",
+          "data/operations-audit.json",
+          "AUTH-CONTRACT-01"
+        ],
+        "rank": 10,
+        "severity": "HIGH",
+        "demoImpact": 3,
+        "customerImpact": 5,
+        "riskReduction": 5,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Recuperación confiable y arranque reproducible importan antes de piloto con datos reales; no asumir fallo Docker observado ni pérdida real de datos.",
+        "relatedIssues": [
+          460,
+          461,
+          504
+        ],
+        "estimateBasis": "Juicio ordinal 1–5 de impacto; XS/S/M/L/XL de complejidad, no días. El riesgo físico/datos prevalece sobre suma de puntos.",
+        "parallelRationale": "Puede avanzar en contrato/fixture independiente sin mutar el mismo boundary; integrar tras dependencias."
+      }
+    ],
+    "futureOpportunities": [
+      {
+        "id": "TOP-1",
+        "title": "Continuidad comercial real",
+        "description": "Valor diferenciador al completar IDs y revisiones sin reconstrucción.",
+        "status": "PROPOSED",
+        "evidence": [
+          "DOC-005"
+        ],
+        "demoImpact": 2,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-2",
+        "title": "Hardware explicable",
+        "description": "Selección muestra receptor/cara/diámetro/profundidad/conflicto, consumiendo operaciones autoritativas.",
+        "status": "PROPOSED",
+        "evidence": [
+          "SU-04",
+          "SU-05"
+        ],
+        "demoImpact": 2,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-3",
+        "title": "Machine packs verificables",
+        "description": "Una ficha por máquina/SKU/software reduce soporte y promesas ambiguas.",
+        "status": "PROPOSED",
+        "evidence": [
+          "data/sketchup-audit.json"
+        ],
+        "demoImpact": 2,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-4",
+        "title": "Red de fábricas/tiendas",
+        "description": "Seguir relaciones y Gate B después del flujo fábrica.",
+        "status": "PROPOSED",
+        "evidence": [
+          "data/docs-governance.json"
+        ],
+        "demoImpact": 2,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-5",
+        "title": "Instalación como cierre de valor",
+        "description": "Unir visita, punch y conformidad a la misma unidad.",
+        "status": "PROPOSED",
+        "evidence": [
+          "DOC-003"
+        ],
+        "demoImpact": 2,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-6",
+        "title": "Diagnóstico sin secretos",
+        "description": "Paquetes correlacionados con consentimiento mejoran soporte sin exponer cliente.",
+        "status": "PROPOSED",
+        "evidence": [
+          "progress/current.md",
+          "data/docs-governance.json"
+        ],
+        "demoImpact": 2,
+        "customerImpact": 4,
+        "riskReduction": 3,
+        "effort": "L",
+        "dependencies": [
+          "T01"
+        ],
+        "parallelizable": true,
+        "priorityRationale": "Estimación propuesta; validar alcance/contratos primero. No reemplaza los blockers físicos e integridad.",
+        "estimateBasis": "Ordinal, not measured"
+      },
+      {
+        "id": "TOP-7",
+        "title": "Biblioteca de plantillas multiespacio versionadas",
+        "description": "Después de reparar FM-01, extender reutilización con versiones comparables y configuración espacial explícita.",
+        "status": "PROPOSED",
+        "evidence": [
+          "FM-01"
+        ],
+        "tradeoff": "Amplía productividad; no posponer primero el round-trip correcto."
+      },
+      {
+        "id": "TOP-8",
+        "title": "Comparación explicable de historial comercial",
+        "description": "Después de corregir QV-01, ofrecer comparación entendible de revisiones de cotización sin confundirlas con revisiones de diseño.",
+        "status": "PROPOSED",
+        "evidence": [
+          "QV-01"
+        ],
+        "tradeoff": "Aporta claridad comercial; primero asegurar creación y persistencia correctas del historial."
+      },
+      {
+        "id": "TOP-9",
+        "title": "Trazabilidad visible de stock y despacho",
+        "description": "Después de cerrar atomicidad BE-002, exponer vínculo auditable entre movimiento y picking para soporte y operación.",
+        "status": "PROPOSED",
+        "evidence": [
+          "BE-002"
+        ],
+        "tradeoff": "Mejora diagnóstico; visualización nunca reemplaza transacción e idempotencia."
+      },
+      {
+        "id": "TOP-10",
+        "title": "Capacidad de planificación basada en rendimiento medido",
+        "description": "Usar escena/dataset representativos y latencias/FPS observados para orientar escala, no inferir capacidad del bundle o del número de tests.",
+        "status": "PROPOSED",
+        "evidence": [
+          "OPS-07",
+          "OPS-08",
+          "evidence/web-build.log"
+        ],
+        "tradeoff": "Medir cuesta preparación; evita optimización especulativa y no convierte resultados locales en SLA."
+      }
+    ]
+  },
+  "runtimeAddendum": {
+    "status": "CONFIRMED",
+    "provenance": "Root auditor current in-app-browser run; evidence written by root, not this worker.",
+    "observed": [
+      "Guest fresh login→Acceder sin conexión→Omitir tour→Cotizaciones→Cocina López accepted (10 muebles)→Proyectar read-only WebGL.",
+      "Default 3/4 view obstructed by foreground wall; Planta works.",
+      "At390x844 and768x1024 canvas height0 observed twice; desktop1280 renders.",
+      "Accepted seed displays Sin versiones guardadas; seed coherence issue, not proven backend defect.",
+      "Local Foundation log ends PASS; remote GateA already success.",
+      "15 guest nav destinations loaded; route loading does not prove all states/actions.",
+      "Hardware editor generic fixture: cup35mm depth12.5 and two pilot5mm depth10; not certified Blum.",
+      "Three audit hazard proofs reproduced: rotated DXF hole omission, actual fallback flags stripped, and client picking partial-failure/retry with fake repository. Green hazard assertions mean NOT fixed."
+    ],
+    "limits": "Guest/local UI is NOT backend persistence, cross-surface integration or physical manufacturing proof. Only Proyectar responsive was measured; do not generalize to all routes. Picking proof is client control flow with simulated repository, not real DB balance/HTTP failure; drilling fixture proves fallback/provenance stripping, not a nonempty geometry issue suppression.",
+    "evidence": [
+      "evidence/guest-home-dom.txt",
+      "evidence/guest-quotes-dom.txt",
+      "evidence/guest-quote-detail-dom.txt",
+      "evidence/guest-proyectar-dom.txt",
+      "evidence/pilot-foundation-proof.log",
+      "evidence/guest-proyectar-390-measurements.json",
+      "evidence/guest-proyectar-768-measurements.json",
+      "evidence/guest-hardware-editor-dom.txt",
+      "data/defect-proofs.json"
+    ]
+  },
+  "graphs": [
+    {
+      "id": "GRAPH-DOMAIN",
+      "title": "Dominio real: identidad y snapshots",
+      "status": "CONFIRMED static except explicitly PROPOSED edges",
+      "nodes": [
+        {
+          "id": "org",
+          "label": "Organization"
+        },
+        {
+          "id": "membership",
+          "label": "Membership"
+        },
+        {
+          "id": "user",
+          "label": "User"
+        },
+        {
+          "id": "project",
+          "label": "Project"
+        },
+        {
+          "id": "fi",
+          "label": "FurnitureInstance"
+        },
+        {
+          "id": "quote",
+          "label": "QuoteRevision"
+        },
+        {
+          "id": "design",
+          "label": "DesignRevision"
+        },
+        {
+          "id": "reconcile",
+          "label": "ReconciliationResult"
+        },
+        {
+          "id": "installation",
+          "label": "InstallationJob en Project JSONB"
+        }
+      ],
+      "edges": [
+        {
+          "from": "user",
+          "to": "membership",
+          "label": "identidad global participa mediante membresía",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "membership",
+          "to": "org",
+          "label": "acceso/roles del taller",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "org",
+          "to": "project",
+          "label": "tenant scope",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "project",
+          "to": "fi",
+          "label": "ownership físico",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "project",
+          "to": "quote",
+          "label": "snapshot comercial exacto",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "project",
+          "to": "design",
+          "label": "snapshot diseño exacto",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "quote",
+          "to": "reconcile",
+          "label": "quoteRevisionId exacto",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "design",
+          "to": "reconcile",
+          "label": "designRevisionId exacto",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "fi",
+          "to": "reconcile",
+          "label": "única clave de join",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "project",
+          "to": "installation",
+          "label": "persistencia mutada con row lock",
+          "status": "CONFIRMED"
+        }
+      ],
+      "evidence": [
+        "backend-go/internal/domain/reconciliation.go:12-110",
+        "backend-go/internal/storage/installation.go:12-41",
+        "data/docs-governance.json"
+      ]
+    },
+    {
+      "id": "GRAPH-INTEGRATION",
+      "title": "Cross-surface: implementación frente a siguiente tramo",
+      "status": "CONFIRMED static except explicitly PROPOSED edges",
+      "nodes": [
+        {
+          "id": "web",
+          "label": "React administración / catálogo / cotización"
+        },
+        {
+          "id": "go",
+          "label": "Go: identidad, resolve, revisiones"
+        },
+        {
+          "id": "db",
+          "label": "PostgreSQL tenant transactions / RLS"
+        },
+        {
+          "id": "ruby",
+          "label": "Ruby: host e interacción"
+        },
+        {
+          "id": "geometry",
+          "label": "Native ComponentInstance"
+        },
+        {
+          "id": "recon",
+          "label": "Reconciliación backend"
+        },
+        {
+          "id": "workspace",
+          "label": "Workspace React #500–502"
+        },
+        {
+          "id": "release",
+          "label": "Release nuevo exacto #395"
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "go",
+          "label": "API; contratos generados en ámbitos modernos",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "go",
+          "to": "db",
+          "label": "persistencia y enforcement",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "ruby",
+          "to": "go",
+          "label": "device auth + GET layout/publicación",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "ruby",
+          "to": "geometry",
+          "label": "render nativo y metadatos",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "go",
+          "to": "recon",
+          "label": "comparación exacta DT9",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "recon",
+          "to": "workspace",
+          "label": "consumidor UX pendiente",
+          "status": "PROPOSED"
+        },
+        {
+          "from": "workspace",
+          "to": "release",
+          "label": "aprobación/release pendiente",
+          "status": "PROPOSED"
+        }
+      ],
+      "evidence": [
+        "data/sketchup-audit.json",
+        "data/docs-governance.json",
+        "data/backend-audit.json"
+      ]
+    },
+    {
+      "id": "GRAPH-MFG",
+      "title": "Hardware → operación → salida: no una cadena cerrada",
+      "status": "CONFIRMED static except explicitly PROPOSED edges",
+      "nodes": [
+        {
+          "id": "sku",
+          "label": "Hardware SKU / patrón técnico"
+        },
+        {
+          "id": "go",
+          "label": "Go authoring: subset de perfiles"
+        },
+        {
+          "id": "ts",
+          "label": "TS catálogo + joinery"
+        },
+        {
+          "id": "fallback",
+          "label": "Fallback heurístico por nombre"
+        },
+        {
+          "id": "patterns",
+          "label": "data.patterns sin procedencia"
+        },
+        {
+          "id": "dxf",
+          "label": "DXF: capas/círculos"
+        },
+        {
+          "id": "machine",
+          "label": "Readback máquina/software exacto"
+        }
+      ],
+      "edges": [
+        {
+          "from": "sku",
+          "to": "go",
+          "label": "subset compilado actual",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "sku",
+          "to": "ts",
+          "label": "hardware.machining cuando existe",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "fallback",
+          "to": "patterns",
+          "label": "flags no viajan al export",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "ts",
+          "to": "patterns",
+          "label": "proyección de patrones",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "patterns",
+          "to": "dxf",
+          "label": "rotadas omitidas; depth no en capa",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "dxf",
+          "to": "machine",
+          "label": "pendiente validación/corrección",
+          "status": "PROPOSED"
+        }
+      ],
+      "evidence": [
+        "SU-01",
+        "SU-02",
+        "SU-05",
+        "data/defect-proofs.json"
+      ]
+    },
+    {
+      "id": "GRAPH-PRODUCTION",
+      "title": "Operación: piezas convergen en unidades",
+      "status": "CONFIRMED static except explicitly PROPOSED edges",
+      "nodes": [
+        {
+          "id": "quote",
+          "label": "Cotización aceptada"
+        },
+        {
+          "id": "order",
+          "label": "Pedido / hub producción"
+        },
+        {
+          "id": "piece",
+          "label": "Corte / CNC / enchape: piezas"
+        },
+        {
+          "id": "assembly",
+          "label": "Armado: convergencia"
+        },
+        {
+          "id": "unit",
+          "label": "QC / envío: unidad o bulto"
+        },
+        {
+          "id": "install",
+          "label": "Instalación: visita + unidades"
+        },
+        {
+          "id": "close",
+          "label": "Punch / conformidad / cierre"
+        }
+      ],
+      "edges": [
+        {
+          "from": "quote",
+          "to": "order",
+          "label": "flujo comercial actual; NO equivale a #395",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "order",
+          "to": "piece",
+          "label": "trabajo de piso",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "piece",
+          "to": "assembly",
+          "label": "convergencia de piezas",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "assembly",
+          "to": "unit",
+          "label": "tracking físico",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "unit",
+          "to": "install",
+          "label": "En camino / escáner",
+          "status": "CONFIRMED"
+        },
+        {
+          "from": "install",
+          "to": "close",
+          "label": "gates y eventos con row lock",
+          "status": "CONFIRMED"
+        }
+      ],
+      "evidence": [
+        "docs/production-flow-v2.md",
+        "packages/ui/src/projects/components/ProjectDetailView.tsx:395-490",
+        "packages/ui/src/production/InstallationJobPanel.tsx:520-630",
+        "backend-go/internal/storage/installation.go:12-41"
+      ]
+    }
+  ],
+  "journeys": [
+    {
+      "id": "FLOW-A",
+      "title": "Mueble → SketchUp",
+      "expected": "Crear/configurar/versionar/liberar y consumir sólo versión liberada.",
+      "actual": "Catálogo remoto y GET layout alimentan componentes nativos; identidad conectada de ProjectFurniture existe.",
+      "gap": "Catálogo insertable no prueba publicación/versionado manufacturing immutable; host edit usa ruta distinta a rich authoring.",
+      "recommendation": "T02/T03 y prueba de mueble draft vs liberado, revisión stale y refresh explícito.",
+      "status": "CONFIRMED static",
+      "evidence": [
+        "data/sketchup-audit.json"
+      ]
+    },
+    {
+      "id": "FLOW-B",
+      "title": "Cotización → Diseño",
+      "expected": "Preservar identidad física y revisión comercial al diseñar.",
+      "actual": "QuoteRevision/DesignRevision/FurnitureInstance existen; Proyectar Web también conserva layout de cotización en flujo legacy.",
+      "gap": "No confundir kitchenLayout/legacy project con nueva DesignRevision; workspace integrado pendiente.",
+      "recommendation": "T02/T07; mostrar ambos modelos explícitamente hasta migración deliberada.",
+      "status": "CONFIRMED static",
+      "evidence": [
+        "data/docs-governance.json",
+        "packages/ui/src/projects/components/ProjectDetailView.tsx"
+      ]
+    },
+    {
+      "id": "FLOW-C",
+      "title": "Diseño → Cotización",
+      "expected": "Cambio autorizado se refleja comercialmente sin reconstrucción manual.",
+      "actual": "DT9 compara revisiones read-only y no muta ninguna.",
+      "gap": "Clasificación comercial #394 y workspace/release pendientes; no hay bidireccionalidad UX completa.",
+      "recommendation": "Completar slices existentes y verificar una diferencia real por FurnitureInstance.",
+      "status": "CONFIRMED static",
+      "evidence": [
+        "backend-go/internal/domain/reconciliation.go:12-30",
+        "DOC-005"
+      ]
+    },
+    {
+      "id": "FLOW-D",
+      "title": "Herrajes reales",
+      "expected": "SKU/modelo/posición/receptor/reglas verificables.",
+      "actual": "Catálogo tiene machining y editor guest muestra copa35mm profundidad12.5 más dos pilotos5mm profundidad10; ejemplo genérico.",
+      "gap": "No prueba fabricante/SKU físico ni edición SketchUp rica.",
+      "recommendation": "Dossier SKU curado y un ciclo edit→resolve→preview→persist.",
+      "status": "CONFIRMED runtime scoped",
+      "evidence": [
+        "evidence/guest-hardware-editor-dom.txt",
+        "SU-04",
+        "SU-05"
+      ]
+    },
+    {
+      "id": "FLOW-E",
+      "title": "Contacto → perforaciones",
+      "expected": "Herraje→pieza receptora/cara/posición/diámetro/profundidad/orientación/condición/conflicto.",
+      "actual": "Relaciones explícitas y joinery rules existen; múltiples rutas y fallback no equivalen a contacto geométrico universal.",
+      "gap": "Procedencia no viaja al export; inspección interactiva desconectada; DXF incompleto.",
+      "recommendation": "T04/T05: operación semántica autoritativa con proveniencia, seleccionar hardware y resaltar receptor/operación sin inventar un CAD.",
+      "status": "CONFIRMED static + executable hazard proof",
+      "evidence": [
+        "SU-01",
+        "SU-02",
+        "SU-04",
+        "SU-05",
+        "data/defect-proofs.json"
+      ]
+    }
+  ],
+  "integrationMatrix": [
+    {
+      "feature": "Identity/auth",
+      "web": "Bootstrap/session/MFA browser verified",
+      "backend": "Auth/RLS Foundation GateA passed",
+      "sketchup": "Dedicated device provider static; secure-store host pending",
+      "docs": "Some stale tables",
+      "tests": "17 browser + CI; no full device host run",
+      "state": "PARTIAL",
+      "evidence": [
+        "evidence/organization-browser.log",
+        "data/sketchup-audit.json"
+      ]
+    },
+    {
+      "feature": "Furniture catalog",
+      "web": "CRUD/config surfaces; guest inspected",
+      "backend": "Catalog and layout present",
+      "sketchup": "Native rendering static + Ruby suites",
+      "docs": "Canonical integration contract",
+      "tests": "Live insertion/edit/save-reopen missing",
+      "state": "PARTIAL",
+      "evidence": [
+        "data/sketchup-audit.json",
+        "evidence/guest-modules-dom.txt"
+      ]
+    },
+    {
+      "feature": "Quote/Design reconciliation",
+      "web": "New consumer not located",
+      "backend": "Exact comparison DT9",
+      "sketchup": "Publication/binding implemented statically",
+      "docs": "DT program scoped by slice",
+      "tests": "Backend tests; full Web/host absent",
+      "state": "PARTIAL",
+      "evidence": [
+        "DOC-005"
+      ]
+    },
+    {
+      "feature": "Hardware/machining",
+      "web": "Generic editor inspected",
+      "backend": "Compiled profiles subset",
+      "sketchup": "Rich actions disabled",
+      "docs": "Intent exceeds implemented loop",
+      "tests": "Hazard proofs; no physical SKU readback",
+      "state": "PARTIAL",
+      "evidence": [
+        "data/defect-proofs.json",
+        "SU-04"
+      ]
+    },
+    {
+      "feature": "Production/installation",
+      "web": "Operational panels exist",
+      "backend": "State/domain/transaction structures exist",
+      "sketchup": "Not required for visit execution; design input gate relevant",
+      "docs": "Lifecycle text stale",
+      "tests": "Full browser operational journey pending",
+      "state": "PARTIAL",
+      "evidence": [
+        "DOC-003",
+        "BE-002"
+      ]
+    },
+    {
+      "feature": "Network/GateB",
+      "web": "Complete workflow not demonstrated",
+      "backend": "Relationships/order program remains target",
+      "sketchup": "Not proof of cross-org host permissions",
+      "docs": "GateB separate from GateA",
+      "tests": "GateB unproven",
+      "state": "UNKNOWN",
+      "evidence": [
+        "data/docs-governance.json"
+      ]
+    }
+  ],
+  "permissionsReference": {
+    "status": "CONFIRMED static inventory; not every row runtime tested",
+    "matrix": "data/backend-audit.json#permissions",
+    "rows": 536,
+    "source": "packages/domain/src/rbac.ts + backend middleware/handlers + contracts",
+    "roles": [
+      "admin",
+      "user",
+      "vendedor",
+      "gerente_ventas",
+      "gerente_produccion",
+      "ingeniero",
+      "produccion",
+      "almacen"
+    ],
+    "manualMapping": {
+      "MAN-ADMIN": "admin; managers only scoped staff permissions, not global user administration",
+      "MAN-SALES": "admin / gerente_ventas / vendedor",
+      "MAN-DESIGN": "ingeniero/admin for catalog; project mutation role policy differs, use actual matrix",
+      "MAN-PROD": "production roles per nav/action, not every production user is admin",
+      "MAN-INSTALL": "authorized production/shipping scope; installer persona is not separate role"
+    },
+    "rule": "A hidden button is not authorization. Consult API action enforcement and RLS; UI role union does not prove backend least privilege.",
+    "evidence": [
+      "packages/domain/src/rbac.ts:95-148",
+      "packages/domain/src/rbac.ts:622-623",
+      "data/backend-audit.json"
+    ],
+    "effectiveCompositionSupplement": {
+      "source": "data/effective-permissions.json",
+      "scope": "41 effective permission compositions by resource/action family, composed from inspected handlers and shared middleware. Not a complete security certification or a count of every role×state permutation.",
+      "coverage": {
+        "familyCompositions": 41,
+        "supplementRowsLinked": 244,
+        "unlinkedSupplementRows": [],
+        "deepRows": "21 prior deep endpoint rows remain separately linked in endpoint-deep-audit.json; family summaries do not replace their exact enforcement"
+      },
+      "boundary": "Effective source composition, not runtime role×state permutation proof."
+    }
+  },
+  "productMap": {
+    "status": "CONFIRMED structure / INFERRED value",
+    "targetUsers": [
+      "Dueño de fábrica",
+      "Administrador de taller",
+      "Ventas y gerente de ventas",
+      "Ingeniería/diseño",
+      "Producción y almacén",
+      "Personal de instalación autorizado"
+    ],
+    "valueProposition": "Continuidad de cliente/cotización a diseño y ejecución de una fábrica modular, sin duplicar información. No se acredita toda esa continuidad como terminada.",
+    "currentBoundedContexts": [
+      "Identity / Organization Access",
+      "Catalog / authoring",
+      "Sales / Projects",
+      "Design revisions / reconciliation",
+      "Production / Inventory",
+      "Installation / closeout"
+    ],
+    "implementedVsTarget": "Factory/Store son tipos/contextos de Organization, no nuevas entidades inventadas. OrganizationRelationship y ManufacturingOrder como programa completo siguen target. InstallationJob persiste dentro de Project; no afirmar tabla Installation independiente.",
+    "evidence": [
+      "data/backend-audit.json",
+      "data/docs-governance.json",
+      "backend-go/internal/storage/installation.go:12-41"
+    ]
+  },
+  "domainInvariants": [
+    {
+      "title": "Project owns physical identity",
+      "status": "CONFIRMED",
+      "invariant": "FurnitureInstance es identidad física; quote/design snapshots se unen por ella, nunca array index o SketchUp persistent_id.",
+      "evidence": [
+        "backend-go/internal/domain/reconciliation.go:12-30"
+      ]
+    },
+    {
+      "title": "Read-only reconciliation",
+      "status": "CONFIRMED",
+      "invariant": "synced/quoted_not_modeled/modeled_not_quoted/modified/removed/conflict describen diferencias, no actualizan cotización ni diseño.",
+      "evidence": [
+        "backend-go/internal/domain/reconciliation.go:12-30"
+      ]
+    },
+    {
+      "title": "Separate lifecycle meanings",
+      "status": "CONFIRMED",
+      "invariant": "Cotización accepted no equivale a nueva DesignRevision approved/released; legacy ProductionRelease no cierra #395.",
+      "evidence": [
+        "data/docs-governance.json"
+      ]
+    },
+    {
+      "title": "Installation atomic state",
+      "status": "CONFIRMED static",
+      "invariant": "InstallationJob y closeout mutan bajo row lock de Project junto con eventos; signoff requiere gates. Runtime concurrente pendiente.",
+      "evidence": [
+        "backend-go/internal/storage/installation.go:12-41"
+      ]
+    },
+    {
+      "title": "Manufacturing truth before host mutation",
+      "status": "PROPOSED remediation of existing rule",
+      "invariant": "Resolver antes de mutar geometría; si nil/stale no reemplazar snapshot aceptado por fallback.",
+      "evidence": [
+        "SU-03"
+      ]
+    }
+  ],
+  "architectureRecommendations": [
+    {
+      "title": "Mantener ownership, cerrar wiring",
+      "problem": "Endpoints/consumidores avanzan por separado.",
+      "impact": "No se puede demostrar continuidad de identidad/revisión.",
+      "solution": "Completar contratos generados, host compartido y React workspace existentes; no crear shadow stores.",
+      "benefit": "Una sola semántica y trazabilidad.",
+      "priority": "DEMO BLOCKER",
+      "status": "PROPOSED",
+      "tasks": [
+        "T02",
+        "T03"
+      ],
+      "evidence": [
+        "DOC-005",
+        "SU-04"
+      ]
+    },
+    {
+      "title": "Unificar salida semántica y adapter",
+      "problem": "Autorías distintas producen drilling distinto y DXF no conserva información.",
+      "impact": "Riesgo de piezas mal mecanizadas.",
+      "solution": "Operaciones autoritativas con procedencia y adapter capabilities; bloquear información que el formato no puede preservar.",
+      "benefit": "Compatibilidad verificable por máquina sin acoplar todo el dominio.",
+      "priority": "MVP BLOCKER",
+      "status": "PROPOSED",
+      "tasks": [
+        "T04",
+        "T05"
+      ],
+      "evidence": [
+        "SU-01",
+        "SU-02",
+        "SU-05"
+      ]
+    },
+    {
+      "title": "Command de despacho server-side",
+      "problem": "Stock/picking cruzan transacciones.",
+      "impact": "Débito sin despacho y duplicación al retry.",
+      "solution": "Command idempotente con ledger/picking en misma transacción.",
+      "benefit": "Integridad recuperable.",
+      "priority": "MVP BLOCKER",
+      "status": "PROPOSED",
+      "tasks": [
+        "T06"
+      ],
+      "evidence": [
+        "BE-002",
+        "data/defect-proofs.json"
+      ]
+    },
+    {
+      "title": "Cerrar todos los writers de aggregate",
+      "problem": "Dedicated commands tienen gates, generic PUT mantiene autoridad paralela.",
+      "impact": "Snapshot/producción pueden divergir sin romper el endpoint dedicado.",
+      "solution": "Proteger campos server-owned en generic PUT y consumir respuesta de command en Web.",
+      "benefit": "Una sola autoridad para precio y ejecución.",
+      "priority": "MVP BLOCKER",
+      "status": "PROPOSED",
+      "tasks": [
+        "T06",
+        "T08"
+      ],
+      "evidence": [
+        "OP-01",
+        "OP-02",
+        "OP-03"
+      ]
+    }
+  ],
+  "uxRecommendations": [
+    {
+      "title": "Feedback que distingue download de fabricación",
+      "problem": "Toast exitoso tras drilling ausente.",
+      "impact": "Confianza incorrecta en archivo.",
+      "solution": "Estados preview/productivo separados, warning persistente y blocker por datos faltantes.",
+      "benefit": "Evita fabricación accidental y preguntas confusas.",
+      "priority": "DEMO BLOCKER",
+      "status": "PROPOSED",
+      "tasks": [
+        "T04"
+      ],
+      "evidence": [
+        "SU-01"
+      ]
+    },
+    {
+      "title": "Hardware explicado en contexto",
+      "problem": "Capabilities inspect/manufacturing no habilitadas.",
+      "impact": "No se demuestra por qué una perforación existe.",
+      "solution": "Seleccionar hardware y resaltar pieza/cara; listar diámetro/profundidad/orientación/procedencia/conflictos desde operaciones autoritativas.",
+      "benefit": "Operador verifica sin aprender coordenadas globales ni otro CAD.",
+      "priority": "DEMO BLOCKER",
+      "status": "PROPOSED",
+      "tasks": [
+        "T03",
+        "T05"
+      ],
+      "evidence": [
+        "SU-04",
+        "SU-05"
+      ]
+    },
+    {
+      "title": "Canvas visible y encuadre útil",
+      "problem": "Guest Proyectar altura0 en dos tamaños; muro bloquea3/4 desktop.",
+      "impact": "Diseño no se ve en tablet/móvil o queda oculto.",
+      "solution": "Corregir sizing del canvas y framing; probar Planta/3/4/ocultar muros y resize con WebGL real.",
+      "benefit": "Presentación legible en dispositivo acordado.",
+      "priority": "HIGH",
+      "status": "PROPOSED",
+      "tasks": [
+        "T07"
+      ],
+      "evidence": [
+        "evidence/guest-proyectar-390-measurements.json",
+        "evidence/guest-proyectar-768-measurements.json",
+        "evidence/guest-proyectar-dom.txt"
+      ]
+    }
+  ],
+  "operationalIntegration": {
+    "status": "CONFIRMED_STATIC; runtime UNKNOWN",
+    "findings": [
+      {
+        "id": "OP-01",
+        "title": "Generic project PUT accepts replacement/removal of frozen quote price",
+        "evidence": [
+          "backend-go/internal/api/handlers.go:1487-1505",
+          "backend-go/internal/storage/projects.go:1189-1238"
+        ],
+        "claim": "Handler preserves old snapshot only for produced transition with omitted snapshot; same-status quoted/accepted update can replace it. Storage deletes old quote_snapshots then inserts supplied payload, or none if omitted.",
+        "runtime": "UNKNOWN / NEEDS VERIFICATION — no operational proof was executed; only source and fixture inspection."
+      },
+      {
+        "id": "OP-02",
+        "title": "Generic aggregate physical writer bypasses dedicated assembly/QC authority",
+        "evidence": [
+          "backend-go/internal/api/handlers.go:1407-1524",
+          "backend-go/internal/storage/projects.go:1160-1187",
+          "apps/web/src/AppContent.tsx:1621-1655",
+          "apps/web/src/stores/projectStore.ts:668-725"
+        ],
+        "claim": "Generic update writes client part_instances/module_units/production_release without dedicated gates. Web awaits advance endpoint, discards returned authoritative object and locally advances then persists entire project through patch.",
+        "runtime": "UNKNOWN / NEEDS VERIFICATION — no operational proof was executed; only source and fixture inspection."
+      },
+      {
+        "id": "OP-03",
+        "title": "Quote status and metadata report success before rejected persistence",
+        "evidence": [
+          "apps/web/src/stores/projectStore.ts:697-725",
+          "apps/web/src/stores/projectStore.ts:862-870",
+          "apps/web/src/stores/projectStore.ts:1025-1054"
+        ],
+        "claim": "Project patch updates memory then starts unawaited save; changeProjectStatus immediately toasts accepted/frozen. Failure emits error but does not restore project. Metadata save has same success-before-save pattern.",
+        "runtime": "UNKNOWN / NEEDS VERIFICATION — no operational proof was executed; only source and fixture inspection."
+      }
+    ],
+    "operationsFindings": [
+      {
+        "id": "OPS-01",
+        "title": "Production frontend build toolchain drifts from CI",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "Dockerfile.web:2-17",
+          "package.json:6-9",
+          ".github/workflows/ci.yml:62-81"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: clean Docker build with exact lockfile; no build/install performed here. Do not assert observed Docker failure."
+      },
+      {
+        "id": "OPS-02",
+        "title": "Restore swallows pg_restore failure and health timeout",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "scripts/restore.sh:133-141",
+          "scripts/restore.sh:180-203"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: isolated failing-restore fixture and actual recovery drill; script NOT executed (destructive)."
+      },
+      {
+        "id": "OPS-03",
+        "title": "Full backup may omit missing media and still announce completion",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "scripts/backup.sh:112-131",
+          "scripts/backup.sh:142-156"
+        ],
+        "missingEvidence": "UNKNOWN: production scheduled job, media volume presence, offsite copy, retention, encryption and restore history. No production access."
+      },
+      {
+        "id": "OPS-04",
+        "title": "Health endpoint measures liveness, not database readiness",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "backend-go/internal/api/routes.go:104-109",
+          "docker-compose.prod.yml:55-60",
+          "backend-go/internal/storage/postgres.go:73-80",
+          "backend-go/cmd/server/main.go:52-59"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: isolated post-start DB outage; no outage induced."
+      },
+      {
+        "id": "OPS-05",
+        "title": "Deployment operations snippet omits newly mandatory credentials",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "docs/deployment.md:119-132",
+          "docker-compose.prod.yml:13-40",
+          ".env.production.example:26-26",
+          ".env.production.example:53-53"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: operator deployment dry run; not proof a current production deployment is broken."
+      },
+      {
+        "id": "OPS-06",
+        "title": "CI coverage does not include production build, dependency scanning or host SketchUp proof",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          ".github/workflows/ci.yml:18-187",
+          ".github/workflows/ci.yml:118-144"
+        ],
+        "missingEvidence": "UNKNOWN: repository protection settings, external CI scanners, actual current remote runs and manual host evidence (not queried in this subtask). No CVE claim."
+      },
+      {
+        "id": "OPS-07",
+        "title": "Catalog paths have query-count growth",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "backend-go/internal/storage/materials.go:355-399",
+          "backend-go/internal/storage/projects.go:268-306",
+          "backend-go/internal/storage/projects.go:329-329",
+          "backend-go/internal/api/furniture.go:54-99",
+          "backend-go/db/migration/000001_init_schema.up.sql:83-86"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: representative catalog trace, query count, EXPLAIN ANALYZE and p50/p95 under concurrent requests. No DB queried."
+      },
+      {
+        "id": "OPS-08",
+        "title": "Projects list includes heavy payloads without pagination",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "backend-go/internal/storage/projects.go:359-366",
+          "backend-go/db/migration/000082_multi_org_scope_business_tables.up.sql:20-20",
+          "backend-go/db/migration/000087_project_org_ownership.up.sql:25-27",
+          "backend-go/internal/storage/postgres.go:63-66"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: realistic row counts/JSON sizes, endpoint bytes and execution plans; do not infer latency from code alone."
+      },
+      {
+        "id": "OPS-09",
+        "title": "Observability baseline exists but operational SLO evidence is missing",
+        "status": "PARTIAL",
+        "evidence": [
+          "backend-go/cmd/server/main.go:20-23",
+          "Caddyfile:8-12",
+          "backend-go/internal/api/request_id.go:41-50",
+          "backend-go/internal/storage/rls_metrics.go:10-24",
+          "docker-compose.prod.yml:3-115"
+        ],
+        "missingEvidence": "UNKNOWN: deployed dashboards, p95/error alerts, backup failure alerts, retention, incident response and on-call ownership."
+      },
+      {
+        "id": "OPS-10",
+        "title": "SketchUp root scans and complete furniture rerender need scale measurement",
+        "status": "STATIC_RISK",
+        "evidence": [
+          "apps/sketchup-extension/src/granete_for_sketchup/selection/resolver.rb:193-242",
+          "apps/sketchup-extension/src/granete_for_sketchup/connection/duplicate_resolver.rb:77-128",
+          "apps/sketchup-extension/src/granete_for_sketchup/connection/duplicate_resolver.rb:188-208",
+          "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb:466-485",
+          "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb:624-633",
+          "apps/sketchup-extension/src/granete_for_sketchup/migration/scanner.rb:88-100"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: licensed SketchUp profiling with 10/100/1000 units, selection/edit/copy/publish timings, UI-thread/redraw costs and save/reopen. Unit Ruby is insufficient."
+      },
+      {
+        "id": "OPS-11",
+        "title": "Backup gate can skip restore leg",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "scripts/pilot-gate.sh:111-114",
+          "backend-go/tests/pilotreadiness/backup_test.go:31-60",
+          ".github/workflows/ci.yml:176-187"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: inspect exact executed test log and confirm restore scenario PASS with zero skips; parent may hold relevant preflight evidence."
+      },
+      {
+        "id": "OPS-12",
+        "title": "Backend Docker builder differs from Go module minimum",
+        "status": "STATIC_CONFIRMED",
+        "evidence": [
+          "backend-go/Dockerfile:3-18",
+          "backend-go/go.mod:3-3",
+          ".github/workflows/ci.yml:170-174"
+        ],
+        "missingEvidence": "NEEDS VERIFICATION: clean container build and resulting go version/build metadata; no image pull/build performed."
+      }
+    ],
+    "securityBoundary": "Authorized same-organization project mutation risk; no cross-tenant attack or unauthorized actor claim.",
+    "nextProof": "Separate authorized implementation/verification session: exact routed HTTP+isolated PostgreSQL for same-status quote update, physical-field injection/stale writer, and UI rejection/rollback; isolated restore failure drill. Not executed in this audit synthesis."
+  },
+  "quoteVersionIntegration": {
+    "status": "CONFIRMED static control flow + root guest symptom; API/DB UNKNOWN",
+    "source": "data/quote-version-audit.json",
+    "finding": "QV-01",
+    "summary": "changeProjectStatus llama transitionProjectStatus(project,status), que devuelve status nuevo; después pasa ese resultado a snapshotOnStatusChange(withTransition,status). El helper ve status idéntico y retorna sin snapshot ni incremento de version. VersionHistoryPanel lee project.history vacío y muestra que las versiones se crean automáticamente al cambiar estado.",
+    "boundary": "Project.history legacy; Rev1(cerrada) is structureRevisionPin, not quote history. No claim against backend QuoteRevision/DesignRevision.",
+    "nextProof": "Store test old/new transition semantics + reload, then real API/PostgreSQL; not executed here."
+  },
+  "documentationSemanticReference": {
+    "source": "data/docs-semantic-audit.json",
+    "scope": "371 filas con extractos y contraste acotado por familia; no371 certificaciones completas ni reejecución histórica.",
+    "newFindings": [
+      "DOCS-01",
+      "DOCS-02",
+      "DOCS-03"
+    ]
+  },
+  "latestSemanticIntegration": {
+    "status": "CONFIRMED source review; runtime limits retained",
+    "canonicalFindings": [
+      "FM-01",
+      "FM-03",
+      "FM-05",
+      "EPS-F01",
+      "QV-01",
+      "FM-02",
+      "FM-04"
+    ],
+    "mapping": {
+      "template": "T02 / R12",
+      "drillingCache": "T05 / R02",
+      "gizmo": "T03 / R11",
+      "legacyWorkflow": "T06 / R04",
+      "quoteHistory": "T02 / existing quoteVersionIntegration",
+      "csvScope": "T01",
+      "oversizePreview": "T04 / R02"
+    },
+    "deduplication": "Canonical findings remain only in feature-matrix, endpoint-supplement and quote-version-audit; synthesis references them, not duplicate finding rows.",
+    "proofBoundary": "Integration itself executed no browser/DB/product mutation. Separately, template-roundtrip-proof3/3 reproduces actual pure-domain field loss; other limits preserved. Ordinal values unchanged. FM-03 adicional1/1reproduce first-owner/orderdependence en dominio puro, sin export/máquina."
+  },
+  "contractDrift": [
+    {
+      "id": "DRIFT-AUTH-EXPIRY",
+      "title": "SessionScope expiry no coincide con deadline absoluto del registro",
+      "status": "CONFIRMED_STATIC",
+      "severity": "MEDIUM",
+      "evidence": [
+        "AUTH-CONTRACT-01",
+        "data/session-scope-expiry-audit.json"
+      ],
+      "actual": "/auth/me asigna expiración de access token a absolute_expires_at; cliente la incorpora a sessionScopeKey.",
+      "impact": "Posible cambio redundante de identidad de cache si se rehidrata /auth/me tras refresh. Refresh habitual de misma identidad no rehidrata scope automáticamente.",
+      "notDemonstrated": "No logout prematuro, extensión de sesión, bypass ni fuga cross-tenant demostrados.",
+      "recommendation": "Usar deadline absoluto autoritativo y probar mismo sid/epochs con access token corto antes/después de refresh."
+    }
+  ],
+  "templateProofIntegration": {
+    "finding": "FM-01",
+    "proof": "data/template-roundtrip-proof.json",
+    "status": "CONFIRMED_PURE_DOMAIN_REPRODUCTION",
+    "description": "3/3 assertions reproduce loss of six modern fields through actual template converters; item-ID remapping preserved. PASS means defect reproduced, not fixed.",
+    "boundary": "No UI/store/server persistence/API/DB/native execution."
+  },
+  "drillingProofIntegration": {
+    "finding": "FM-03",
+    "proof": "data/drilling-context-proof.json",
+    "status": "CONFIRMED_PURE_DOMAIN_REPRODUCTION",
+    "description": "Large-door independent3cups; combinedA→B2, reversedB→A3 and exactholes restored.1/1test reproduces first-part-owner reuse across distinct customDims cachekeys.",
+    "boundary": "Missing preset/options key dimensions not independently isolated; no UI/API/DB/DXF/host/machine execution."
+  },
+  "top10Coverage": {
+    "requestedPerCategory": 10,
+    "meaning": "Ocho listas editoriales de10entradas sustentadas. Oportunidades son PROPOSED, no roadmap comprometido ni ROI medido; correcciones de integridad no se posponen como oportunidades.",
+    "categories": {
+      "strengths": {
+        "identified": 10,
+        "requested": 10,
+        "status": "TEN_DOCUMENTED"
+      },
+      "weaknesses": {
+        "identified": 10,
+        "requested": 10,
+        "status": "TEN_DOCUMENTED"
+      },
+      "demoRisks": {
+        "identified": 10,
+        "requested": 10,
+        "status": "TEN_DOCUMENTED"
+      },
+      "technicalRisks": {
+        "identified": 10,
+        "requested": 10,
+        "status": "TEN_DOCUMENTED"
+      },
+      "uxProblems": {
+        "identified": 10,
+        "requested": 10,
+        "status": "TEN_DOCUMENTED"
+      },
+      "quickWins": {
+        "identified": 10,
+        "requested": 10,
+        "status": "TEN_DOCUMENTED"
+      },
+      "mvpTasks": {
+        "identified": 10,
+        "requested": 10,
+        "status": "TEN_DOCUMENTED"
+      },
+      "futureOpportunities": {
+        "identified": 10,
+        "requested": 10,
+        "status": "TEN_DOCUMENTED"
+      }
+    }
+  }
+}

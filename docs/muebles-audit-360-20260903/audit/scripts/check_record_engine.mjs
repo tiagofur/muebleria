@@ -1,0 +1,25 @@
+// Report-only data normalization test. No browser, DOM, network or product execution.
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const sources = Object.fromEntries(fs.readdirSync(path.join(root, 'data')).filter(f=>f.endsWith('.json')).map(f=>[f.slice(0,-5),JSON.parse(fs.readFileSync(path.join(root,'data',f),'utf8'))]));
+const source = fs.readFileSync(path.join(root,'js/app.js'),'utf8');
+const stop = source.indexOf("  let current = 'dashboard'");
+assert.ok(stop>0,'Normalization boundary must remain identifiable');
+const context = {window:{AUDIT_DATA:{sources,evidenceFiles:[]}}};
+vm.runInNewContext(source.slice(0,stop)+'window.NORMALIZED_RECORDS = records;})();',context);
+const records=context.window.NORMALIZED_RECORDS;
+const visible=records.filter(r=>!r.duplicateOf);
+const counts=Object.fromEntries(['features','screens','documents','endpoints','tables'].map(group=>[group,visible.filter(r=>r.group===group).length]));
+assert.equal(counts.features, sources['feature-matrix'].features.length+sources['sketchup-audit'].features.length);
+assert.equal(counts.screens,sources['web-semantic-audit'].screens.length);
+assert.equal(counts.documents,sources['docs-semantic-audit'].documents.length);
+assert.equal(counts.endpoints,sources['backend-audit'].endpoints.length);
+assert.equal(counts.tables,sources['database-deep-audit'].tables.length);
+for(const record of visible.filter(r=>r.source==='feature-matrix'&&r.group==='features'))assert.notEqual(record.mvp,'[object Object]');
+const result={status:'PASS',capturedAt:new Date().toISOString(),counts,scope:'Executed report normalization code against current JSON only; not browser rendering, event interaction, source semantics or product behavior.'};
+fs.writeFileSync(path.join(root,'evidence/portal-record-engine-qa.json'),JSON.stringify(result,null,2)+'\n');
+console.log(JSON.stringify(result,null,2));

@@ -1,0 +1,51 @@
+{
+  "capturedAt": "2026-09-04T12:37:52.724545+00:00",
+  "syntax": [
+    {
+      "check": "node --check js/app.js",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "check": "node --check data/bundle.js",
+      "exitCode": 0,
+      "output": ""
+    }
+  ],
+  "htmlLocalReferences": [
+    {
+      "ref": "css/main.css",
+      "exists": true
+    },
+    {
+      "ref": "css/print.css",
+      "exists": true
+    },
+    {
+      "ref": "data/bundle.js",
+      "exists": true
+    },
+    {
+      "ref": "js/app.js",
+      "exists": true
+    },
+    {
+      "ref": "evidence/request.md",
+      "exists": true
+    },
+    {
+      "ref": "CHECKPOINT.md",
+      "exists": true
+    },
+    {
+      "ref": "README.md",
+      "exists": true
+    },
+    {
+      "ref": "evidence/main-readback-final.json",
+      "exists": true
+    }
+  ],
+  "missingExactDataReferences": [],
+  "scope": "Exact local path strings only; prose-embedded refs, GitHub line contents, browser interactions and file:// are not certified."
+}

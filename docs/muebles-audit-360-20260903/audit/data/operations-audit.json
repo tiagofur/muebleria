@@ -1,0 +1,276 @@
+{
+  "baseline": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "generatedAt": "2026-09-04T05:10:07.761763+00:00",
+  "method": "Read-only source snapshot inspection. No install, DB connection, production connection, runtime incident simulation, dependency vulnerability scan or product modification.",
+  "findings": [
+    {
+      "id": "OPS-01",
+      "title": "Production frontend build toolchain drifts from CI",
+      "priority": "P1",
+      "status": "STATIC_CONFIRMED",
+      "observation": "Dockerfile.web uses Node20 and prepares pnpm10.29; packageManager selects pnpm11.1.2; CI explicitly uses Node22 and records pnpm11 requires Node>=22.13. No Docker build gate exists in the inspected CI file.",
+      "evidence": [
+        "Dockerfile.web:2-17",
+        "package.json:6-9",
+        ".github/workflows/ci.yml:62-81"
+      ],
+      "impact": "A green host build/CI does not prove documented production container can rebuild.",
+      "missingEvidence": "NEEDS VERIFICATION: clean Docker build with exact lockfile; no build/install performed here. Do not assert observed Docker failure."
+    },
+    {
+      "id": "OPS-02",
+      "title": "Restore swallows pg_restore failure and health timeout",
+      "priority": "P1",
+      "status": "STATIC_CONFIRMED",
+      "observation": "restore.sh converts any failing restore pipeline into a warning, then prints restored; subsequent healthcheck timeout breaks rather than exits. Table count is printed without expected integrity threshold.",
+      "evidence": [
+        "scripts/restore.sh:133-141",
+        "scripts/restore.sh:180-203"
+      ],
+      "impact": "Operator can receive positive recovery messages after incomplete restore. Health/table existence cannot prove data completeness.",
+      "missingEvidence": "NEEDS VERIFICATION: isolated failing-restore fixture and actual recovery drill; script NOT executed (destructive)."
+    },
+    {
+      "id": "OPS-03",
+      "title": "Full backup may omit missing media and still announce completion",
+      "priority": "P1",
+      "status": "STATIC_CONFIRMED",
+      "observation": "Missing media volume sets DO_MEDIA=false with a warning; summary still prints Backup complete and expected media filename. Local backup offsite transfer is only an echoed suggestion.",
+      "evidence": [
+        "scripts/backup.sh:112-131",
+        "scripts/backup.sh:142-156"
+      ],
+      "impact": "A DB-only artifact could be mistaken for full recoverability; local host loss threatens same-host backups.",
+      "missingEvidence": "UNKNOWN: production scheduled job, media volume presence, offsite copy, retention, encryption and restore history. No production access."
+    },
+    {
+      "id": "OPS-04",
+      "title": "Health endpoint measures liveness, not database readiness",
+      "priority": "P2",
+      "status": "STATIC_CONFIRMED",
+      "observation": "GET /api/health always returns 200 status ok without touching dependencies; Docker backend healthcheck and restore verification use this endpoint. Startup pool Ping/runtime-role verification exists but is not ongoing readiness.",
+      "evidence": [
+        "backend-go/internal/api/routes.go:104-109",
+        "docker-compose.prod.yml:55-60",
+        "backend-go/internal/storage/postgres.go:73-80",
+        "backend-go/cmd/server/main.go:52-59"
+      ],
+      "impact": "A database outage after boot need not turn HTTP health unhealthy.",
+      "missingEvidence": "NEEDS VERIFICATION: isolated post-start DB outage; no outage induced."
+    },
+    {
+      "id": "OPS-05",
+      "title": "Deployment operations snippet omits newly mandatory credentials",
+      "priority": "P2",
+      "status": "STATIC_CONFIRMED",
+      "observation": "Canonical deployment env snippet omits APP_DATABASE_PASSWORD and MFA_ENCRYPTION_KEYS required by compose. The copied .env.production.example does include both, so following the full template can avoid this documentation trap.",
+      "evidence": [
+        "docs/deployment.md:119-132",
+        "docker-compose.prod.yml:13-40",
+        ".env.production.example:26-26",
+        ".env.production.example:53-53"
+      ],
+      "impact": "Using only the shown snippet cannot start production compose; operator documentation drifts.",
+      "missingEvidence": "NEEDS VERIFICATION: operator deployment dry run; not proof a current production deployment is broken."
+    },
+    {
+      "id": "OPS-06",
+      "title": "CI coverage does not include production build, dependency scanning or host SketchUp proof",
+      "priority": "P2",
+      "status": "STATIC_CONFIRMED",
+      "observation": "Inspected ci.yml runs ledger/OpenAPI, TS tests/typecheck, Foundation Gate A, Ruby/RBZ on three OSes and Go tests with PostgreSQL. It has no Docker/web production build or advisory scan step; licensed SketchUp smoke is explicitly manual. Actions use version tags rather than immutable commit SHAs.",
+      "evidence": [
+        ".github/workflows/ci.yml:18-187",
+        ".github/workflows/ci.yml:118-144"
+      ],
+      "impact": "Passing this workflow is strong tested-scope evidence, not deployment reproducibility, vulnerability-free dependencies or native-host UI proof.",
+      "missingEvidence": "UNKNOWN: repository protection settings, external CI scanners, actual current remote runs and manual host evidence (not queried in this subtask). No CVE claim."
+    },
+    {
+      "id": "OPS-07",
+      "title": "Catalog paths have query-count growth",
+      "priority": "P2",
+      "status": "STATIC_CONFIRMED",
+      "observation": "ListOptionGroups reads all groups then queries members once per group (1+N); GetFullCatalog module loop calls detail loader per module, which loads component/board/hardware relations. Furniture definitions handler sequentially loads several complete catalog families. Member relation PK starts with option_group_id, so this is NOT a missing-index claim.",
+      "evidence": [
+        "backend-go/internal/storage/materials.go:355-399",
+        "backend-go/internal/storage/projects.go:268-306",
+        "backend-go/internal/storage/projects.go:329-329",
+        "backend-go/internal/api/furniture.go:54-99",
+        "backend-go/db/migration/000001_init_schema.up.sql:83-86"
+      ],
+      "impact": "Higher catalog size adds database round trips and repeated hydration; backend pool fixed at max10 can amplify contention but no saturation measured.",
+      "missingEvidence": "NEEDS VERIFICATION: representative catalog trace, query count, EXPLAIN ANALYZE and p50/p95 under concurrent requests. No DB queried."
+    },
+    {
+      "id": "OPS-08",
+      "title": "Projects list includes heavy payloads without pagination",
+      "priority": "P2",
+      "status": "STATIC_CONFIRMED",
+      "observation": "ListProjects selects cut_plan, design_revisions, approvals, change_orders and other JSON data for all visible projects; OR across owning/sales/manufacturing org and ORDER BY updated_at, no LIMIT. Single-column org indexes exist; this does not prove planner regression or missing useful index.",
+      "evidence": [
+        "backend-go/internal/storage/projects.go:359-366",
+        "backend-go/db/migration/000082_multi_org_scope_business_tables.up.sql:20-20",
+        "backend-go/db/migration/000087_project_org_ownership.up.sql:25-27",
+        "backend-go/internal/storage/postgres.go:63-66"
+      ],
+      "impact": "Payload and query cost grow with tenant project history; potential list-screen latency/memory risk.",
+      "missingEvidence": "NEEDS VERIFICATION: realistic row counts/JSON sizes, endpoint bytes and execution plans; do not infer latency from code alone."
+    },
+    {
+      "id": "OPS-09",
+      "title": "Observability baseline exists but operational SLO evidence is missing",
+      "priority": "P2",
+      "status": "PARTIAL",
+      "observation": "JSON slog startup/error logs, Caddy JSON access logs, request IDs and process-local RLS denial counter exist. Inspected production compose and dependency manifests do not configure metrics/tracing/alert backends or centralized retention. This is a scoped absence, not a claim that no external monitoring exists.",
+      "evidence": [
+        "backend-go/cmd/server/main.go:20-23",
+        "Caddyfile:8-12",
+        "backend-go/internal/api/request_id.go:41-50",
+        "backend-go/internal/storage/rls_metrics.go:10-24",
+        "docker-compose.prod.yml:3-115"
+      ],
+      "impact": "Request identity helps investigation but does not establish alert routing, latency/error SLOs, durable metric retention or recoverability.",
+      "missingEvidence": "UNKNOWN: deployed dashboards, p95/error alerts, backup failure alerts, retention, incident response and on-call ownership."
+    },
+    {
+      "id": "OPS-10",
+      "title": "SketchUp root scans and complete furniture rerender need scale measurement",
+      "priority": "P2",
+      "status": "STATIC_RISK",
+      "observation": "Selection fallback scans model.entities after active-path recovery fails. Duplicate rescan performs separate top-level passes for duplicates/unresolved/unsynced. Furniture edit clears/rebuilds its definition and scans orphan generated definitions, inside an undo operation; make_unique and abort handling protect scope. Migration scanner explicitly handles active top-level entities, not arbitrary nested legacy content.",
+      "evidence": [
+        "apps/sketchup-extension/src/granete_for_sketchup/selection/resolver.rb:193-242",
+        "apps/sketchup-extension/src/granete_for_sketchup/connection/duplicate_resolver.rb:77-128",
+        "apps/sketchup-extension/src/granete_for_sketchup/connection/duplicate_resolver.rb:188-208",
+        "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb:466-485",
+        "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb:624-633",
+        "apps/sketchup-extension/src/granete_for_sketchup/migration/scanner.rb:88-100"
+      ],
+      "impact": "Work scales with root entity/definition counts; risk in large models. No measured freeze/FPS or explicit redraw-loop defect established.",
+      "missingEvidence": "NEEDS VERIFICATION: licensed SketchUp profiling with 10/100/1000 units, selection/edit/copy/publish timings, UI-thread/redraw costs and save/reopen. Unit Ruby is insufficient."
+    },
+    {
+      "id": "OPS-11",
+      "title": "Backup gate can skip restore leg",
+      "priority": "P2",
+      "status": "STATIC_CONFIRMED",
+      "observation": "Pilot wrapper warns and allows missing pg_dump/pg_restore. Go backup test skips when clients absent and also when pg_restore returns error. CI installs a PostgreSQL client, but that alone does not assert this specific leg ran without skip.",
+      "evidence": [
+        "scripts/pilot-gate.sh:111-114",
+        "backend-go/tests/pilotreadiness/backup_test.go:31-60",
+        ".github/workflows/ci.yml:176-187"
+      ],
+      "impact": "Generic green pilot/Go suite does not necessarily prove backup restore capability; need exact test outcome.",
+      "missingEvidence": "NEEDS VERIFICATION: inspect exact executed test log and confirm restore scenario PASS with zero skips; parent may hold relevant preflight evidence."
+    },
+    {
+      "id": "OPS-12",
+      "title": "Backend Docker builder differs from Go module minimum",
+      "priority": "P2",
+      "status": "STATIC_CONFIRMED",
+      "observation": "Builder image is golang1.22, module declares Go1.25, CI uses1.25.x. Go toolchain auto-download may bridge this, so it is build-network/reproducibility drift rather than a proven failure.",
+      "evidence": [
+        "backend-go/Dockerfile:3-18",
+        "backend-go/go.mod:3-3",
+        ".github/workflows/ci.yml:170-174"
+      ],
+      "impact": "Container build depends on behavior not covered by CI container gates; mutable image tags and unpinned toolchain retrieval weaken reproducibility.",
+      "missingEvidence": "NEEDS VERIFICATION: clean container build and resulting go version/build metadata; no image pull/build performed."
+    }
+  ],
+  "positiveControls": [
+    {
+      "title": "Production network and credential baseline",
+      "evidence": [
+        "docker-compose.prod.yml:9-46",
+        "docker-compose.prod.yml:99-115",
+        "backend-go/Dockerfile:25-37",
+        "Caddyfile:17-30"
+      ],
+      "observation": "Explicit required secrets, distinct runtime/migration URLs, production secure-cookie policy, internal network, nonroot backend and reverse-proxy security headers are present. Deployed effective state not verified."
+    },
+    {
+      "title": "Server request bounds and startup safety",
+      "evidence": [
+        "backend-go/cmd/server/main.go:29-59",
+        "backend-go/cmd/server/main.go:95-105"
+      ],
+      "observation": "Fail-fast config/migration/runtime-role checks, read/header/write/idle timeouts and max header size exist."
+    },
+    {
+      "title": "Index baseline is real",
+      "evidence": [
+        "backend-go/db/migration/000094_tenant_rls.up.sql:131-131",
+        "backend-go/db/migration/000083_multi_org_scope_catalog_tables.up.sql:13-13",
+        "backend-go/db/migration/000083_multi_org_scope_catalog_tables.up.sql:64-64"
+      ],
+      "observation": "Tenant indexes and option membership PK exist; report does not claim absent indexing globally."
+    }
+  ],
+  "coverage": [
+    {
+      "area": "Deployment",
+      "level": "SOURCE_INSPECTED",
+      "unknown": "Clean Docker build and live VPS configuration"
+    },
+    {
+      "area": "CI/supply chain",
+      "level": "SOURCE_INSPECTED",
+      "unknown": "Remote checks/protection/external scanners; no advisory database lookup"
+    },
+    {
+      "area": "Backup/restore",
+      "level": "SOURCE_INSPECTED",
+      "unknown": "Real production artifacts and isolated drill; scripts not run"
+    },
+    {
+      "area": "Observability",
+      "level": "SOURCE_INSPECTED",
+      "unknown": "Live dashboards, alert routing and retention"
+    },
+    {
+      "area": "Backend query/index risk",
+      "level": "SOURCE_INSPECTED",
+      "unknown": "No SQL execution, plans or benchmark"
+    },
+    {
+      "area": "SketchUp traversal/redraw",
+      "level": "SOURCE_INSPECTED",
+      "unknown": "No native host performance run"
+    }
+  ],
+  "sourceHashes": {
+    ".env.production.example": "2631f24bc3b1a401a4ef315288aa9afaed45be56b5318028f46718e2351c8342",
+    ".github/workflows/ci.yml": "152903322012eca1dd495d5d340e12043a336bac7d759983427665b100e810fa",
+    "Caddyfile": "ec8d8d46b032afba604919a1e8c88d99687781eaef22a3e3b3f1d84c5a9cfb6c",
+    "Dockerfile.web": "c1a500200e9ff8467f8652a277471922cdfe753fc3a46492b116655ca3116290",
+    "apps/sketchup-extension/src/granete_for_sketchup/connection/duplicate_resolver.rb": "49fe1801d50ec38dc8b4c40d9d8993a1ceabb9398dc8a51911156d4a80ac9c4d",
+    "apps/sketchup-extension/src/granete_for_sketchup/migration/scanner.rb": "36ee5661f5f3a3a3e79af0caef15e880ca854efe05b1d625c4e0a626dc9c793d",
+    "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb": "c0ee4f61505d00484963621dd6e932f8f38421e3ad9ac61adc4e3afb67ea715d",
+    "apps/sketchup-extension/src/granete_for_sketchup/selection/resolver.rb": "697e53222b612e7a5f9d5ed29ca18386f32588fc96d88079ff72ca5ea9a7a97a",
+    "backend-go/Dockerfile": "17864697204ff5465e60ce721965055c5173228d7055ab0cc457dffb27fa2fb9",
+    "backend-go/cmd/server/main.go": "9c44bed13a44bfe6079f813ae5427c0dc0c8fedcac3455825e8a557c4f32dfcb",
+    "backend-go/db/migration/000001_init_schema.up.sql": "a9282077d12e848c021c0f6e3707da8294ba77a12dbd7d436a6bab4e223b7ec4",
+    "backend-go/db/migration/000082_multi_org_scope_business_tables.up.sql": "7dc5ef89812b65b19da536a1b4c864449c7a5cd0bac16d71641ab3e73a384031",
+    "backend-go/db/migration/000083_multi_org_scope_catalog_tables.up.sql": "c67bb537ea00440823f90b4e643d25d686b8ca27fa58432ea0d87657aed9f07a",
+    "backend-go/db/migration/000087_project_org_ownership.up.sql": "c57f0837d1ca5108f7730ccff7cdf0aab1dbaa5d521117ccdabdabf979aa22d5",
+    "backend-go/db/migration/000094_tenant_rls.up.sql": "1ba1504b3a9d9b42bc7a4a125bbccf407244f8facc120a1c1a283dc36b00384b",
+    "backend-go/go.mod": "5996639f5159dd365ed4c24a72c53d88542b71e66fa6f0d7e694afe37de3f417",
+    "backend-go/internal/api/furniture.go": "49d91694a89f4a9a3c09b4a83ae7e811d0214289c37b696dbe4437a61d71336e",
+    "backend-go/internal/api/request_id.go": "b926b6c8fc681611e2e66b36a633d0ec9599f3361756bd6fefaca176339cc734",
+    "backend-go/internal/api/routes.go": "851d7a04d5f299a4b3771976714a997e2b0a5de4325198901f932059596dc4d4",
+    "backend-go/internal/storage/materials.go": "ea8494709d2421139b7c3fee7f739929a2852dd48eff602045b41c185fc1be90",
+    "backend-go/internal/storage/postgres.go": "424cb2ec880bbf36389d14820dc5931a843cc6ba6729309e60f4d21f78409591",
+    "backend-go/internal/storage/projects.go": "6fa71cd9c4f13f2c5c7c29c2615627a1e115e5fb9a178a0adb2091833b65269d",
+    "backend-go/internal/storage/rls_metrics.go": "bb153a27f842e7b124dc7e5a6cdd47fc484bb596aacab90e5d1879e2c9557aa1",
+    "backend-go/tests/pilotreadiness/backup_test.go": "1bc3c4bf6f743badd8d2838120e0f62493f3846286c5a64febbac7f2ebe0a436",
+    "docker-compose.prod.yml": "70d02da2b83578a422c5ddf6d3eff4edfa85efa7ea9b10da43ab834c7a7f95c7",
+    "docs/deployment.md": "2efba966b1fb92aae8cacd9a0f26617d4c05aa5029b52c7b58d09bb1a7a67ba4",
+    "package.json": "0fc5d64e2d236a85a4c4377639e098453876f54688350a0e40b8b216fe6c0b5e",
+    "scripts/backup.sh": "f5c79e8ca953ea556f5eff526550527a3cfebbf69f6a172770e260939ac151ff",
+    "scripts/pilot-gate.sh": "5588e046634ff76ff863dec4ed25a19a8d60df9b744042d00ee2bb5085ca9fbb",
+    "scripts/restore.sh": "4b489683d66054582f052e69c208ad7c23f575b77225160397fc6f26ff69b34f"
+  },
+  "overallStatus": "SOURCE_AUDIT_COMPLETE_RUNTIME_OPERATIONS_NEEDS_VERIFICATION"
+}

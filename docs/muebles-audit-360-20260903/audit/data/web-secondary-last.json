@@ -1,0 +1,228 @@
+{
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "scope": "Six final unique secondary/inline files; static only; no new global findings",
+  "fragments": [
+    {
+      "file": "apps/web/src/components/BoardEditor.tsx",
+      "claim": "Resolves BOM into editorStore scratch state on module ID/composition fingerprint/preset changes; optionChoices/catalog are read through latest refs but are not effect dependencies. Resolution errors load an empty editor. Original resolved parts underpin override derivation; pose/dimension/duplicate/remove controls call editorStore and optional onOverridesChange bridges edits to parent draft. Cleanup clears editor.",
+      "scope": "Named local handlers and rendering read manually; consumer integration remains UNKNOWN; no runtime or security testing",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "apps/web/src/components/BoardEditor.tsx",
+          "startLine": 79,
+          "endLine": 96,
+          "excerpt": "  // Gap #1: snapshot the originally-resolved parts so we can diff on change.\n  const originalPartsRef = useRef<readonly ResolvedBoardPart[]>([]);\n  // Always resolve the latest module when composition fingerprint changes\n  // (without reloading on every boardOverrides / pose-only prop update).\n  const moduleRef = useRef(module);\n  moduleRef.current = module;\n  const catalogRef = useRef(catalog);\n  catalogRef.current = catalog;\n  const optionChoicesRef = useRef(optionChoices);\n  optionChoicesRef.current = optionChoices;\n\n  const compositionKey = useMemo(\n    () => compositionKeyProp ?? moduleCompositionKey(module),\n    [compositionKeyProp, module],\n  );\n\n  // F074: keyboard shortcuts (d=duplicate, r=rotate, del=remove, v=toggle).\n  useBoardShortcuts(true);"
+        },
+        {
+          "file": "apps/web/src/components/BoardEditor.tsx",
+          "startLine": 104,
+          "endLine": 136,
+          "excerpt": "  // Resolve BOM when id or composition (structure / components / dims) changes.\n  useEffect(() => {\n    const mod = moduleRef.current;\n    try {\n      const bom = resolveBom(\n        mod,\n        optionChoicesRef.current,\n        catalogRef.current,\n        measurePresetId,\n      );\n      originalPartsRef.current = bom.boardParts;\n      loadModule(mod.id, bom.boardParts);\n    } catch {\n      // Resolution may fail if options are incomplete — load empty.\n      originalPartsRef.current = [];\n      loadModule(mod.id, []);\n    }\n    return () => {\n      clearEditor();\n    };\n    // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, [module.id, compositionKey, measurePresetId]);\n\n  // Gap #1: when parts change, derive overrides and notify the shell.\n  useEffect(() => {\n    if (!onOverridesChange) return;\n    if (originalPartsRef.current.length === 0) return;\n    const overrides = deriveOverridesFromParts(\n      resolvedParts,\n      originalPartsRef.current,\n    );\n    onOverridesChange(overrides);\n  }, [resolvedParts, onOverridesChange]);"
+        },
+        {
+          "file": "apps/web/src/components/BoardEditor.tsx",
+          "startLine": 172,
+          "endLine": 210,
+          "excerpt": "        {viewMode === '3d' ? (\n          <Furniture3DViewer\n            parts={resolvedParts}\n            width={moduleWidth ?? 600}\n            height={moduleHeight ?? 720}\n            depth={moduleDepth ?? 580}\n            materialColors={materialColors}\n            className=\"board-editor__3d\"\n            /* BoardEditor already has canvas selection + properties panel. */\n            showPartInspector={false}\n          />\n        ) : (\n          <BoardCanvas\n            parts={visuals}\n            selectedPartId={selectedPartId}\n            onSelectPart={selectPart}\n            onDragPart={(id, pose) => updatePartPose(id, pose)}\n            moduleWidth={moduleWidth}\n            moduleHeight={moduleHeight}\n            moduleDepth={moduleDepth}\n          />\n        )}\n        <BoardCostSummary parts={resolvedParts} catalog={catalog} />\n      </div>\n      <BoardPropertiesPanel\n        part={selectedVisual}\n        onClose={() => selectPart(null)}\n        onUpdatePose={(pose) => {\n          if (selectedPartId) updatePartPose(selectedPartId, pose);\n        }}\n        onUpdateDimensions={(dims) => {\n          if (selectedPartId) updatePartDimensions(selectedPartId, dims);\n        }}\n        onDuplicate={() => {\n          if (selectedPartId) duplicatePart(selectedPartId);\n        }}\n        onRemove={() => {\n          if (selectedPartId) removePart(selectedPartId);\n        }}"
+        }
+      ],
+      "missingProof": "Whether compositionKey includes all relevant option/catalog changes, parent override persistence and exact occurrence identity require caller/store review and tests; no inference that duplicate/remove persist merely because scratch changes. 3D/2D interaction/undo and resolution error distinction remain UNKNOWN.",
+      "reusedPattern": "Existing editorStore + BoardCanvas/BoardPropertiesPanel/Furniture3DViewer composition; reusing child names does not certify their full behavior.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "ceb173bb993acca75d347cc7000031b257059ee8ab33019fdd893a69116cef57"
+    },
+    {
+      "file": "packages/ui/src/optionGroups/PricePreviewGate.tsx",
+      "claim": "Calls canShowPricePreview using required group codes and chosen options. Missing groups become polite live-status list with label-or-code fallback; children render only when gate.ok. No price calculation, role check or persistent mutation.",
+      "scope": "Named local handlers and rendering read manually; consumer integration remains UNKNOWN; no runtime or security testing",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/optionGroups/PricePreviewGate.tsx",
+          "startLine": 20,
+          "endLine": 50,
+          "excerpt": "export function PricePreviewGate({\n  requiredGroupCodes,\n  optionChoices,\n  groupLabels,\n  blockedMessage = 'Preview de precio bloqueado: faltan opciones obligatorias.',\n  children,\n}: PricePreviewGateProps): ReactNode {\n  const gate = canShowPricePreview(requiredGroupCodes, optionChoices);\n\n  if (!gate.ok) {\n    const labels = gate.missingGroups.map(\n      (code) => groupLabels?.[code] ?? code,\n    );\n    return (\n      <div\n        className=\"price-preview-gate price-preview-gate--blocked\"\n        role=\"status\"\n        aria-live=\"polite\"\n      >\n        <p className=\"price-preview-gate__message\">{blockedMessage}</p>\n        <ul className=\"price-preview-gate__missing\">\n          {labels.map((label, i) => (\n            <li key={gate.missingGroups[i]}>{label}</li>\n          ))}\n        </ul>\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"price-preview-gate price-preview-gate--ok\">{children}</div>"
+        }
+      ],
+      "missingProof": "Helper validity versus retired choices, caller required-group completeness, stale prices and assistive announcements remain UNKNOWN.",
+      "reusedPattern": "Reused presentation gate; readiness is not authoritative price/release validation.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "492c86056c420340b26c2a2cd4d839a7172bcfb143750541ad60422310de4043"
+    },
+    {
+      "file": "packages/ui/src/placeholder.tsx",
+      "claim": "Placeholder returns provided children or null; contains no route, workflow, data loading or feature implementation.",
+      "scope": "Named local handlers and rendering read manually; consumer integration remains UNKNOWN; no runtime or security testing",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/placeholder.tsx",
+          "startLine": 1,
+          "endLine": 6,
+          "excerpt": "import type { ReactNode } from 'react';\n\n/** Minimal React placeholder so the UI package typechecks. */\nexport function Placeholder({ children }: { children?: ReactNode }): ReactNode {\n  return children ?? null;\n}"
+        }
+      ],
+      "missingProof": "Consumer routing and any business capability inferred from this export are UNKNOWN; no functional feature coverage follows from placeholder existence.",
+      "reusedPattern": "Passthrough React wrapper only.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "82c6e22e4771474e92b828d7ded2cd042415f9015acd4208f9573178cf14d72c"
+    },
+    {
+      "file": "packages/ui/src/purchasing/MaterialPlanningPanel.tsx",
+      "claim": "Displays derived material coverage and estimated board counts; released state short-circuits to badge. Capability defaults true and must be set by shell. Derive/reserve/shortage PO dispatch supplied callbacks. Regular release button is not disabled by releaseReady; incomplete checks display separate reason-required override action whose draft clears immediately after callback dispatch.",
+      "scope": "Named local handlers and rendering read manually; consumer integration remains UNKNOWN; no runtime or security testing",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/purchasing/MaterialPlanningPanel.tsx",
+          "startLine": 19,
+          "endLine": 33,
+          "excerpt": "export type MaterialPlanningHandlers = {\n  readonly onDerive?: (projectId: string) => void | Promise<void>;\n  readonly onReserve?: (projectId: string) => void | Promise<void>;\n  readonly onCreateShortagePO?: (projectId: string) => void | Promise<void>;\n  readonly onRelease?: (projectId: string, overrideReason?: string) => void | Promise<void>;\n};\n\nexport type MaterialPlanningPanelProps = {\n  readonly view: MaterialPlanningCardView;\n  readonly handlers: MaterialPlanningHandlers;\n  readonly unitByMaterial?: Readonly<Record<string, string>>;\n  /** `${kind}:${materialId}` → human label from the catalog (never raw ids). */\n  readonly labelsByMaterial?: Readonly<Record<string, string>>;\n  readonly canManage?: boolean;\n  readonly testId?: string;"
+        },
+        {
+          "file": "packages/ui/src/purchasing/MaterialPlanningPanel.tsx",
+          "startLine": 46,
+          "endLine": 88,
+          "excerpt": "export function MaterialPlanningPanel({\n  view,\n  handlers,\n  unitByMaterial = {},\n  labelsByMaterial = {},\n  canManage = true,\n  testId,\n}: MaterialPlanningPanelProps): ReactNode {\n  const [overrideReason, setOverrideReason] = useState('');\n  const hasPending = view.coverage.some((line) => line.pendingReserve > 0);\n  const hasShortage = view.shortageLines.length > 0;\n\n  if (view.released) {\n    return (\n      <div className=\"purch-plan\" data-testid={testId ?? `purch-plan-${view.projectId}`}>\n        <span className=\"status-badge status-badge--done\">\n          <PackageCheck size={12} strokeWidth={1.5} aria-hidden />\n          Material liberado a producción\n        </span>\n      </div>\n    );\n  }\n\n  return (\n    <div className=\"purch-plan\" data-testid={testId ?? `purch-plan-${view.projectId}`}>\n      {!view.requirementsDerived ? (\n        <div className=\"purch-plan__empty\">\n          <p className=\"purch-plan__hint\">\n            {view.canDerive\n              ? 'Derivá los requerimientos del BOM liberado para ver reservas y faltantes.'\n              : 'Esta obra no tiene liberación de producción: los requerimientos sólo se derivan del BOM liberado.'}\n          </p>\n          {canManage && view.canDerive && handlers.onDerive ? (\n            <button\n              type=\"button\"\n              className=\"btn btn--primary btn--small\"\n              onClick={() => handlers.onDerive?.(view.projectId)}\n              data-testid={`purch-plan-derive-${view.projectId}`}\n            >\n              <ClipboardCheck size={14} strokeWidth={1.5} aria-hidden />\n              Derivar requerimientos\n            </button>\n          ) : null}"
+        },
+        {
+          "file": "packages/ui/src/purchasing/MaterialPlanningPanel.tsx",
+          "startLine": 104,
+          "endLine": 135,
+          "excerpt": "              {view.coverage.map((line) => {\n                const unit = unitByMaterial[`${line.kind}:${line.materialId}`] ?? 'u';\n                return (\n                  <tr key={`${line.kind}:${line.materialId}`}>\n                    <td>{labelFor(line.kind, line.materialId, labelsByMaterial)}</td>\n                    <td\n                      title={\n                        line.kind === 'tableros'\n                          ? 'Planchas estimadas del BOM liberado'\n                          : undefined\n                      }\n                    >\n                      {line.kind === 'tableros' ? '≈ ' : ''}\n                      {line.required} {unit}\n                    </td>\n                    <td>\n                      {line.reserved} {unit}\n                      {line.pendingReserve > 0 ? (\n                        <span className=\"purch-plan__pending\"> · faltan {line.pendingReserve}</span>\n                      ) : null}\n                    </td>\n                    <td>{line.available}</td>\n                    <td>{line.incomingAllocated}</td>\n                    <td>\n                      {line.shortage > 0 ? (\n                        <span className=\"status-badge status-badge--open\">\n                          <AlertTriangle size={12} strokeWidth={1.5} aria-hidden />\n                          {line.shortage} {unit}\n                        </span>\n                      ) : (\n                        <span className=\"status-badge status-badge--done\">Cubierto</span>\n                      )}"
+        },
+        {
+          "file": "packages/ui/src/purchasing/MaterialPlanningPanel.tsx",
+          "startLine": 143,
+          "endLine": 175,
+          "excerpt": "          {canManage ? (\n            <div className=\"purch-plan__actions\">\n              {hasPending && handlers.onReserve ? (\n                <button\n                  type=\"button\"\n                  className=\"btn btn--secondary btn--small\"\n                  onClick={() => handlers.onReserve?.(view.projectId)}\n                  data-testid={`purch-plan-reserve-${view.projectId}`}\n                >\n                  Reservar disponible\n                </button>\n              ) : null}\n              {hasShortage && handlers.onCreateShortagePO ? (\n                <button\n                  type=\"button\"\n                  className=\"btn btn--secondary btn--small\"\n                  onClick={() => handlers.onCreateShortagePO?.(view.projectId)}\n                  data-testid={`purch-plan-po-${view.projectId}`}\n                >\n                  Crear OC del faltante ({view.shortageLines.length} líneas)\n                </button>\n              ) : null}\n              {handlers.onRelease ? (\n                <button\n                  type=\"button\"\n                  className=\"btn btn--primary btn--small\"\n                  onClick={() => handlers.onRelease?.(view.projectId)}\n                  data-testid={`purch-plan-release-${view.projectId}`}\n                >\n                  <PackageCheck size={14} strokeWidth={1.5} aria-hidden />\n                  Liberar material\n                </button>\n              ) : null}"
+        },
+        {
+          "file": "packages/ui/src/purchasing/MaterialPlanningPanel.tsx",
+          "startLine": 179,
+          "endLine": 230,
+          "excerpt": "          {!view.releaseReady ? (\n            <div className=\"purch-plan__gates\" data-testid={`purch-plan-gates-${view.projectId}`}>\n              <h5 className=\"purch-plan__gates-title\">\n                <ShieldAlert size={14} strokeWidth={1.5} aria-hidden />\n                Evidencia de liberación incompleta\n              </h5>\n              <ul className=\"purch-plan__gate-list\">\n                {view.releaseChecks.map((check) => (\n                  <li\n                    key={check.code}\n                    className={check.passed ? 'purch-plan__gate--ok' : 'purch-plan__gate--fail'}\n                  >\n                    <span className=\"purch-plan__gate-label\">\n                      {check.label ?? MATERIALS_RELEASE_CHECK_LABELS_ES[check.code]}\n                    </span>\n                    <span className=\"purch-plan__gate-details\">{check.details}</span>\n                  </li>\n                ))}\n              </ul>\n              {canManage && handlers.onRelease ? (\n                <div className=\"purch-plan__override\">\n                  <label\n                    className=\"purch-plan__override-label\"\n                    htmlFor={`purch-plan-override-${view.projectId}`}\n                  >\n                    Motivo del override (queda auditado)\n                  </label>\n                  <div className=\"purch-plan__override-row\">\n                    <input\n                      id={`purch-plan-override-${view.projectId}`}\n                      type=\"text\"\n                      className=\"input\"\n                      value={overrideReason}\n                      onChange={(e) => setOverrideReason(e.target.value)}\n                      placeholder=\"Ej.: el cliente provee los herrajes\"\n                      data-testid={`purch-plan-override-input-${view.projectId}`}\n                    />\n                    <button\n                      type=\"button\"\n                      className=\"btn btn--secondary btn--small\"\n                      disabled={!overrideReason.trim()}\n                      onClick={() => {\n                        handlers.onRelease?.(view.projectId, overrideReason.trim());\n                        setOverrideReason('');\n                      }}\n                      data-testid={`purch-plan-override-release-${view.projectId}`}\n                    >\n                      Liberar con override\n                    </button>\n                  </div>\n                </div>\n              ) : null}"
+        },
+        {
+          "file": "packages/ui/src/purchasing/MaterialPlanningPanel.tsx",
+          "startLine": 239,
+          "endLine": 248,
+          "excerpt": "/** Unit label helper exposed for the shell (resolves catalog units). */\nexport function planUnitLabel(\n  kind: string,\n  hardwareUnit?: string,\n): string {\n  if (kind === 'tableros' || kind === 'cintillas' || kind === 'herrajes') {\n    return stockUnitLabel(kind, hardwareUnit);\n  }\n  return 'u';\n}"
+        }
+      ],
+      "missingProof": "Authoritative release/override rejection and durable audit, callback pending/error behavior, shell canManage assignment and unit/label completeness remain UNKNOWN. No bypass claim: regular command may be rejected server-side.",
+      "reusedPattern": "Reused callback-owned mutation boundary; draft reset/absence of busy is same pattern as InstallationJobPanel, not a new global finding.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "d0b56833955da8092538b268b13898619d4f23c8064620ce829c5967a94e0c7d"
+    },
+    {
+      "file": "packages/ui/src/security/SecurityScreen.tsx",
+      "claim": "Inline enrollment/management actions use shared stepUp.run security_admin; await API result before clearing enrollment/showing recovery codes or reloading factors. Verify distinguishes invalid/expired errors; loading and management errors render alerts. Copy recovery codes catches clipboard failures and leaves codes readable; acknowledgment clears local codes. QR cancellation ignores late generation, manual secret derives from in-memory enrollment URI; failed QR generation stays null and UI presents generating placeholder.",
+      "scope": "Named local handlers and rendering read manually; consumer integration remains UNKNOWN; no runtime or security testing",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/security/SecurityScreen.tsx",
+          "startLine": 55,
+          "endLine": 98,
+          "excerpt": "  const load = useCallback(async () => {\n    setLoadError(null);\n    try {\n      const directory = await api.listMFAFactors(token);\n      setFactors(directory.factors);\n    } catch {\n      setLoadError('No se pudo cargar la configuración de seguridad. Reintentá en unos segundos.');\n    }\n  }, [api, token]);\n\n  useEffect(() => {\n    void load();\n  }, [load]);\n\n  // The QR is derived in memory from the one-time URI; it never persists.\n  useEffect(() => {\n    if (!enrollment) {\n      setQrDataUrl(null);\n      return;\n    }\n    let cancelled = false;\n    QRCode.toDataURL(enrollment.uri, { errorCorrectionLevel: 'M', margin: 1 })\n      .then((url) => {\n        if (!cancelled) setQrDataUrl(url);\n      })\n      .catch(() => {\n        if (!cancelled) setQrDataUrl(null);\n      });\n    return () => {\n      cancelled = true;\n    };\n  }, [enrollment]);\n\n  // Manual entry key for users who cannot scan the QR — same one-time window,\n  // same in-memory lifecycle.\n  const manualSecret = useMemo(() => {\n    if (!enrollment) return '';\n    try {\n      const parsed = new URL(enrollment.uri);\n      return parsed.searchParams.get('secret') ?? '';\n    } catch {\n      return '';\n    }\n  }, [enrollment]);"
+        },
+        {
+          "file": "packages/ui/src/security/SecurityScreen.tsx",
+          "startLine": 100,
+          "endLine": 181,
+          "excerpt": "  const begin = async () => {\n    setBeginBusy(true);\n    setManagementError(null);\n    setVerifyError(null);\n    try {\n      const begun = await stepUp.run('security_admin', 'agregar una app de autenticación', () =>\n        api.beginMFAEnrollment(token, { label: 'App de autenticación' })\n      );\n      if (begun) {\n        setEnrollment({ phase: 'qr', factorId: begun.factor_id, uri: begun.provisioning_uri, expiresAt: begun.expires_at });\n        setVerifyCode('');\n      }\n    } catch {\n      setManagementError('No se pudo iniciar la configuración. Reintentá en unos segundos.');\n    } finally {\n      setBeginBusy(false);\n    }\n  };\n\n  const confirmEnrollment = async (e: FormEvent) => {\n    e.preventDefault();\n    if (!enrollment || verifyBusy) return;\n    const clean = verifyCode.trim();\n    if (clean.length !== 6) {\n      setVerifyError('Ingresá el código completo de 6 dígitos.');\n      return;\n    }\n    setVerifyBusy(true);\n    setVerifyError(null);\n    try {\n      const verified = await stepUp.run('security_admin', 'activar la app de autenticación', () =>\n        api.verifyMFAEnrollment(token, enrollment.factorId, { code: clean })\n      );\n      if (verified) {\n        setEnrollment(null);\n        setVerifyCode('');\n        setRecoveryCodes(verified.recovery_codes);\n        await load();\n      }\n    } catch (err: any) {\n      const code = err?.code ?? null;\n      if (code === 'MFA_INVALID') {\n        setVerifyError('Código inválido. Revisá que tu app muestre la cuenta \"Granete\" y probá de nuevo.');\n      } else if (code === 'MFA_ENROLLMENT_EXPIRED') {\n        setVerifyError('La configuración expiró por inactividad. Volvé a empezar.');\n        setEnrollment(null);\n      } else {\n        setVerifyError('No se pudo verificar el código. Reintentá en unos segundos.');\n      }\n    } finally {\n      setVerifyBusy(false);\n    }\n  };\n\n  const regenerate = async () => {\n    setRecoveryBusy(true);\n    setManagementError(null);\n    try {\n      const result = await stepUp.run('security_admin', 'regenerar tus códigos de recuperación', (key) =>\n        api.regenerateMFARecoveryCodes(token, key));\n      if (result) {\n        setRecoveryCodes(result.recovery_codes);\n        await load();\n      }\n    } catch {\n      setManagementError('No se pudo regenerar los códigos. Reintentá en unos segundos.');\n    } finally {\n      setRecoveryBusy(false);\n    }\n  };\n\n  const removeFactor = async (factorId: string) => {\n    setRemovingId(factorId);\n    setManagementError(null);\n    try {\n      const removed = await stepUp.run('security_admin', 'eliminar este factor de autenticación', (key) =>\n        api.removeMFAFactor(token, factorId, key));\n      if (removed) await load();\n    } catch {\n      setManagementError('No se pudo eliminar el factor. Reintentá en unos segundos.');\n    } finally {\n      setRemovingId(null);"
+        },
+        {
+          "file": "packages/ui/src/security/SecurityScreen.tsx",
+          "startLine": 185,
+          "endLine": 194,
+          "excerpt": "  const enabled = factors?.filter((f) => f.status === 'enabled') ?? [];\n  const hasFactors = enabled.length > 0;\n  const copyCodes = async () => {\n    if (!recoveryCodes) return;\n    try {\n      await navigator.clipboard.writeText(recoveryCodes.join('\\n'));\n    } catch {\n      // Clipboard may be unavailable; the codes remain readable on screen.\n    }\n  };"
+        },
+        {
+          "file": "packages/ui/src/security/SecurityScreen.tsx",
+          "startLine": 215,
+          "endLine": 264,
+          "excerpt": "        {managementError ? (\n          <div role=\"alert\" style={{ padding: 12, backgroundColor: 'var(--destructive-50)', color: 'var(--destructive-700)', borderRadius: 4, fontSize: 14, marginBottom: 16 }}>\n            {managementError}\n          </div>\n        ) : null}\n        {loadError ? (\n          <div role=\"alert\" style={{ padding: 12, backgroundColor: 'var(--destructive-50)', color: 'var(--destructive-700)', borderRadius: 4, fontSize: 14, marginBottom: 16 }}>\n            {loadError}\n          </div>\n        ) : null}\n\n        {recoveryCodes ? (\n          <div\n            data-testid=\"recovery-codes-panel\"\n            className=\"catalog-form__section\"\n            style={{ border: '1px solid var(--warning-200, #fde68a)', backgroundColor: 'var(--warning-50, #fffbeb)' }}\n          >\n            <h2 style={{ fontSize: 'var(--text-lg)', margin: 0 }}>Códigos de recuperación</h2>\n            <p className=\"settings-hint\">\n              Guardalos ahora en un lugar seguro: <strong>es la única vez que se muestran</strong>. Cada código se usa una\n              sola vez para confirmar tu identidad si perdés tu app de autenticación.\n            </p>\n            <div\n              style={{\n                display: 'grid',\n                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',\n                gap: 8,\n                margin: '12px 0',\n                fontFamily: 'monospace',\n                letterSpacing: 1,\n              }}\n            >\n              {recoveryCodes.map((code) => (\n                <code key={code} data-testid=\"recovery-code\" style={{ padding: '6px 10px', background: 'var(--surface-sunken)', borderRadius: 4 }}>\n                  {code}\n                </code>\n              ))}\n            </div>\n            <div style={{ display: 'flex', gap: 8 }}>\n              <button type=\"button\" className=\"btn btn--secondary\" onClick={copyCodes}>\n                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>\n                  <Copy size={14} /> Copiar códigos\n                </span>\n              </button>\n              <button type=\"button\" className=\"btn btn--primary\" onClick={() => setRecoveryCodes(null)}>\n                Ya los guardé\n              </button>\n            </div>\n          </div>\n        ) : null}"
+        },
+        {
+          "file": "packages/ui/src/security/SecurityScreen.tsx",
+          "startLine": 293,
+          "endLine": 328,
+          "excerpt": "        {enrollment ? (\n          <div className=\"catalog-form__section\" data-testid=\"mfa-enroll-wizard\">\n            <h2 style={{ fontSize: 'var(--text-lg)', margin: 0 }}>Configurar tu app de autenticación</h2>\n            {enrollment.phase === 'qr' ? (\n              <>\n                <p className=\"settings-hint\">\n                  Escaneá este código con tu app (Google Authenticator, Authy, 1Password, Aegis…). El código de\n                  configuración se muestra <strong>una sola vez</strong>.\n                </p>\n                <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>\n                  {qrDataUrl ? (\n                    <img\n                      src={qrDataUrl}\n                      alt=\"Código QR de configuración de autenticación\"\n                      data-testid=\"mfa-qr\"\n                      width={192}\n                      height={192}\n                      style={{ borderRadius: 8, border: '1px solid var(--border-subtle)' }}\n                    />\n                  ) : (\n                    <p className=\"settings-hint\">Generando código QR…</p>\n                  )}\n                </div>\n                <details style={{ marginBottom: 12 }}>\n                  <summary className=\"settings-hint\" style={{ cursor: 'pointer' }}>\n                    ¿No podés escanear el código?\n                  </summary>\n                  <p className=\"settings-hint\" style={{ margin: '8px 0 0' }}>\n                    Ingresá esta clave manualmente en tu app (tipo: basada en tiempo, 6 dígitos, 30 segundos):\n                  </p>\n                  <code\n                    data-testid=\"mfa-manual-secret\"\n                    style={{ display: 'block', marginTop: 6, padding: '6px 10px', background: 'var(--surface-sunken)', borderRadius: 4, fontFamily: 'monospace', wordBreak: 'break-all' }}\n                  >\n                    {manualSecret}\n                  </code>"
+        },
+        {
+          "file": "packages/ui/src/security/SecurityScreen.tsx",
+          "startLine": 339,
+          "endLine": 372,
+          "excerpt": "              <form onSubmit={confirmEnrollment} style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>\n                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, maxWidth: 220 }}>\n                  <label htmlFor=\"mfaVerifyCode\" style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>\n                    Código de 6 dígitos\n                  </label>\n                  <input\n                    id=\"mfaVerifyCode\"\n                    data-testid=\"mfa-verify-input\"\n                    type=\"text\"\n                    inputMode=\"numeric\"\n                    autoComplete=\"one-time-code\"\n                    className=\"catalog-input\"\n                    style={{ letterSpacing: 2, fontFamily: 'monospace' }}\n                    value={verifyCode}\n                    maxLength={7}\n                    spellCheck={false}\n                    disabled={verifyBusy}\n                    onChange={(e) => {\n                      setVerifyCode(e.target.value.replace(/\\D/g, ''));\n                      if (verifyError) setVerifyError(null);\n                    }}\n                  />\n                </div>\n                <button type=\"submit\" className=\"btn btn--primary\" disabled={verifyBusy || verifyCode.length !== 6}>\n                  {submitBusyLabel(verifyBusy, 'Verificar y activar', 'Verificando...')}\n                </button>\n                <button type=\"button\" className=\"btn btn--secondary\" onClick={() => setEnrollment(null)} disabled={verifyBusy}>\n                  Cancelar\n                </button>\n                {verifyError ? (\n                  <p role=\"alert\" data-testid=\"mfa-verify-error\" style={{ color: 'var(--destructive-700)', fontSize: 13, margin: 0, width: '100%' }}>\n                    {verifyError}\n                  </p>\n                ) : null}"
+        },
+        {
+          "file": "packages/ui/src/security/SecurityScreen.tsx",
+          "startLine": 416,
+          "endLine": 425,
+          "excerpt": "                  <button\n                    type=\"button\"\n                    className=\"btn btn--secondary\"\n                    data-testid=\"mfa-remove-factor\"\n                    disabled={removingId === factor.id}\n                    onClick={() => removeFactor(factor.id)}\n                  >\n                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>\n                      <Trash2 size={14} /> {removingId === factor.id ? 'Eliminando...' : 'Eliminar'}\n                    </span>"
+        }
+      ],
+      "missingProof": "This supplements existing primary-screen review only: shared step-up modal behavior, cross-session unmount/reset, clipboard denial feedback and concurrent commands remain UNKNOWN here. No MFA/security probing or new security finding; existing backend/API evidence applies only to its named scope.",
+      "reusedPattern": "Existing shared useStepUp/MFAEnrollmentHint and primary SecurityScreen fragment reused; inline source does not certify server MFA enforcement.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "d983909955aa162d6f8443eddb0eadb3d3ce83a14f34d7e9e60303247b053d05"
+    },
+    {
+      "file": "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx",
+      "claim": "Flag is captured on mount; disabled returns null and no refresh interval runs. Enabled panel refreshes every500ms with cleanup, derives latest open task from event history and provides facilitator start/complete/abandon/help/error/session-close/reset actions. Export downloads JSON; clipboard path awaits result and provides fallback. These are facilitator annotations, not automatic proof participants completed workflows.",
+      "scope": "Named local handlers and rendering read manually; consumer integration remains UNKNOWN; no runtime or security testing",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx",
+          "startLine": 39,
+          "endLine": 77,
+          "excerpt": "function statusOf(session: UsabilitySession | null, taskId: string): TaskStatus {\n  const state = session?.tasks[taskId];\n  if (!state || state.startedAt == null) return 'pending';\n  if (state.completedAt != null) return 'completed';\n  if (state.abandonedAt != null) return 'abandoned';\n  return 'active';\n}\n\nconst STATUS_LABEL: Record<TaskStatus, string> = {\n  pending: 'Pendiente',\n  active: 'En curso',\n  completed: 'Completada',\n  abandoned: 'Abandonada',\n};\n\nfunction currentTaskId(session: UsabilitySession | null): string | null {\n  if (!session) return null;\n  const open: string[] = [];\n  for (const event of session.events) {\n    if (event.type === 'task_start') {\n      if (!open.includes(event.taskId ?? '')) open.push(event.taskId ?? '');\n    } else if (event.type === 'task_complete' || event.type === 'task_abandon') {\n      const idx = open.indexOf(event.taskId ?? '');\n      if (idx >= 0) open.splice(idx, 1);\n    }\n  }\n  return open.at(-1) ?? null;\n}\n\nfunction elapsedLabel(from: number, to: number | null): string {\n  const secs = Math.max(0, Math.floor(((to ?? Date.now()) - from) / 1000));\n  const m = Math.floor(secs / 60);\n  const s = secs % 60;\n  return `${m}:${String(s).padStart(2, '0')}`;\n}\n\nfunction completedCount(session: UsabilitySession): number {\n  return USABILITY_TASKS.filter((t) => statusOf(session, t.id) === 'completed')\n    .length;"
+        },
+        {
+          "file": "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx",
+          "startLine": 80,
+          "endLine": 120,
+          "excerpt": "export function UsabilityBenchmarkPanel() {\n  const [enabled] = useState(isUsabilityBenchmarkEnabled);\n  const [expanded, setExpanded] = useState(true);\n  const [participant, setParticipant] = useState('');\n  const [manualTaskId, setManualTaskId] = useState<string | null>(null);\n  const [status, setStatus] = useState<string | null>(null);\n  const [, setTick] = useState(0);\n  const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);\n\n  // El módulo no emite eventos: refresco liviano del panel (sólo con flag).\n  useEffect(() => {\n    if (!enabled) return;\n    const id = setInterval(() => setTick((t) => t + 1), 500);\n    return () => clearInterval(id);\n  }, [enabled]);\n\n  useEffect(\n    () => () => {\n      if (statusTimer.current) clearTimeout(statusTimer.current);\n    },\n    [],\n  );\n\n  if (!enabled) return null;\n\n  const session = getUsabilitySession();\n  const refresh = () => setTick((t) => t + 1);\n  const flash = (message: string) => {\n    setStatus(message);\n    if (statusTimer.current) clearTimeout(statusTimer.current);\n    statusTimer.current = setTimeout(() => setStatus(null), 2500);\n  };\n\n  const derivedTaskId =\n    currentTaskId(session) ??\n    USABILITY_TASKS.find((t) => statusOf(session, t.id) === 'pending')?.id ??\n    USABILITY_TASKS.at(-1)!.id;\n  const effectiveTaskId =\n    manualTaskId && session?.tasks[manualTaskId] ? manualTaskId : derivedTaskId;\n  const effectiveTask = USABILITY_TASKS.find((t) => t.id === effectiveTaskId)!;\n  const effectiveStatus = statusOf(session, effectiveTaskId);"
+        },
+        {
+          "file": "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx",
+          "startLine": 122,
+          "endLine": 147,
+          "excerpt": "  const exportJson = () => {\n    const json = exportUsabilitySessionJson();\n    if (!json) return;\n    const blob = new Blob([json], { type: 'application/json' });\n    const url = URL.createObjectURL(blob);\n    const anchor = document.createElement('a');\n    const day = new Date(session?.startedAt ?? Date.now())\n      .toISOString()\n      .slice(0, 10);\n    anchor.href = url;\n    anchor.download = `usabilidad-${session?.participant ?? 'sesion'}-${day}.json`;\n    anchor.click();\n    URL.revokeObjectURL(url);\n    flash('JSON descargado');\n  };\n\n  const copyJson = async () => {\n    const json = exportUsabilitySessionJson();\n    if (!json) return;\n    try {\n      await navigator.clipboard.writeText(json);\n      flash('JSON copiado al portapapeles');\n    } catch {\n      flash('No se pudo copiar — usá Exportar');\n    }\n  };"
+        },
+        {
+          "file": "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx",
+          "startLine": 197,
+          "endLine": 220,
+          "excerpt": "      {!session ? (\n        <div className=\"usability-panel__body\">\n          <label className=\"usability-panel__field\">\n            <span>Participante</span>\n            <input\n              type=\"text\"\n              value={participant}\n              onChange={(e) => setParticipant(e.target.value)}\n              placeholder=\"P1, P2… (anónimo para el reporte)\"\n              data-testid=\"usability-participant\"\n            />\n          </label>\n          <button\n            type=\"button\"\n            className=\"btn btn--primary btn--small\"\n            onClick={() => {\n              beginUsabilitySession(participant || 'P?', 'real');\n              setManualTaskId(null);\n              refresh();\n            }}\n            data-testid=\"usability-start-session\"\n          >\n            Iniciar sesión\n          </button>"
+        },
+        {
+          "file": "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx",
+          "startLine": 249,
+          "endLine": 316,
+          "excerpt": "          {effectiveStatus === 'pending' ? (\n            <button\n              type=\"button\"\n              className=\"btn btn--primary btn--small\"\n              onClick={() => {\n                startUsabilityTask(effectiveTaskId);\n                refresh();\n              }}\n              data-testid=\"usability-task-start\"\n            >\n              Iniciar «{effectiveTask.label}»\n            </button>\n          ) : effectiveStatus === 'active' ? (\n            <div className=\"usability-panel__actions\">\n              <button\n                type=\"button\"\n                className=\"btn btn--primary btn--small\"\n                onClick={() => {\n                  completeUsabilityTask(effectiveTaskId);\n                  setManualTaskId(null);\n                  refresh();\n                }}\n                data-testid=\"usability-task-complete\"\n              >\n                <CheckCircle2 size={14} strokeWidth={1.5} aria-hidden />{' '}\n                Completada\n              </button>\n              <button\n                type=\"button\"\n                className=\"btn btn--danger btn--small\"\n                onClick={() => {\n                  abandonUsabilityTask(effectiveTaskId, 'abandonada por el facilitador');\n                  setManualTaskId(null);\n                  refresh();\n                }}\n                data-testid=\"usability-task-abandon\"\n              >\n                Abandonada\n              </button>\n              <div className=\"usability-panel__counters\">\n                <button\n                  type=\"button\"\n                  className=\"btn btn--small\"\n                  onClick={() => {\n                    noteUsabilityHelp(effectiveTaskId);\n                    refresh();\n                  }}\n                  data-testid=\"usability-help\"\n                >\n                  + Ayuda{' '}\n                  {session.tasks[effectiveTaskId]?.helpCount\n                    ? `(${session.tasks[effectiveTaskId]!.helpCount})`\n                    : ''}\n                </button>\n                <button\n                  type=\"button\"\n                  className=\"btn btn--small\"\n                  onClick={() => {\n                    noteUsabilityError(effectiveTaskId);\n                    refresh();\n                  }}\n                  data-testid=\"usability-error\"\n                >\n                  + Error{' '}\n                  {session.tasks[effectiveTaskId]?.errorCount\n                    ? `(${session.tasks[effectiveTaskId]!.errorCount})`\n                    : ''}\n                </button>"
+        },
+        {
+          "file": "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx",
+          "startLine": 349,
+          "endLine": 359,
+          "excerpt": "            <button\n              type=\"button\"\n              className=\"btn btn--danger btn--small\"\n              onClick={() => {\n                endUsabilitySession();\n                refresh();\n              }}\n              data-testid=\"usability-end-session\"\n            >\n              Terminar sesión\n            </button>"
+        },
+        {
+          "file": "packages/ui/src/usability/UsabilityBenchmarkPanel.tsx",
+          "startLine": 362,
+          "endLine": 405,
+          "excerpt": "      ) : (\n        <div className=\"usability-panel__body\">\n          <p className=\"usability-panel__hint\">\n            Sesión de {session.participant} cerrada ·{' '}\n            {completedCount(session)}/11 tareas completadas ·{' '}\n            {elapsedLabel(session.startedAt, session.endedAt)} en total.\n          </p>\n          <div className=\"usability-panel__footer\">\n            <button\n              type=\"button\"\n              className=\"btn btn--small\"\n              onClick={exportJson}\n              data-testid=\"usability-export\"\n            >\n              <Download size={14} strokeWidth={1.5} aria-hidden /> Exportar\n            </button>\n            <button\n              type=\"button\"\n              className=\"btn btn--small\"\n              onClick={copyJson}\n              data-testid=\"usability-copy\"\n            >\n              <ClipboardCopy size={14} strokeWidth={1.5} aria-hidden /> Copiar\n            </button>\n            <button\n              type=\"button\"\n              className=\"btn btn--primary btn--small\"\n              onClick={() => {\n                clearUsabilitySession();\n                setParticipant('');\n                setManualTaskId(null);\n                refresh();\n              }}\n              data-testid=\"usability-new-session\"\n            >\n              Nueva sesión\n            </button>\n          </div>\n        </div>\n      )}\n\n      {status ? (\n        <p className=\"usability-panel__status\" aria-live=\"polite\" data-testid=\"usability-status\">\n          {status}"
+        }
+      ],
+      "missingProof": "Recorder storage/telemetry privacy, interaction capture coverage, real-participant observation and performance/benchmark validity remain UNKNOWN; the real label on beginUsabilitySession is caller metadata, not evidence a study happened.",
+      "reusedPattern": "Existing usabilityBenchmark recorder helpers; panel is local facilitator control and must not inflate product UX acceptance metrics.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "66f4569ce15527b60b08ee148528c197980d15adc87bc76e504d36c01e11829b"
+    }
+  ]
+}
