@@ -62,6 +62,35 @@ func RoleCanMutateProjects(role UserRole) bool {
 	}
 }
 
+// RoleCanApproveDesignRevisions — explicit DesignRevision approval for
+// production (#395 / digital-thread §22 `design:approve`). Publishing
+// (RoleCanMutateProjects: admin, gerente_ventas, vendedor) and approving are
+// deliberately different capabilities: vendedor sells and publishes design
+// history, but authorizing production is a commercial/technical sign-off
+// (admin, gerente_ventas, ingeniero) — least privilege, never "editor ⇒
+// approver".
+func RoleCanApproveDesignRevisions(role UserRole) bool {
+	switch role {
+	case RoleAdmin, RoleGerenteVentas, RoleIngeniero:
+		return true
+	default:
+		return false
+	}
+}
+
+// RoleCanReleaseProduction — create ProductionReleases (#395 /
+// digital-thread §22 `production:release`). Mirrors the legacy
+// production_released event policy: releasing to the floor is a plant call
+// (admin, gerente_produccion, ingeniero), separate from design approval.
+func RoleCanReleaseProduction(role UserRole) bool {
+	switch role {
+	case RoleAdmin, RoleGerenteProduccion, RoleIngeniero:
+		return true
+	default:
+		return false
+	}
+}
+
 // RoleCanDeleteProject — hard delete; gerente/admin only (F036 reopen pairs with this).
 func RoleCanDeleteProject(role UserRole) bool {
 	return role == RoleAdmin || role == RoleGerenteVentas

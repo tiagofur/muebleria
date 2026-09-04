@@ -165,7 +165,7 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 	var view materialsViewResponse
 	_, err := s.Store.MutateProjectMaterialPlanning(r.Context(), projectID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
 		release := snap.ProductionRelease
-		if release == nil || release.ID == "" {
+		if release == nil || release.ReleaseID == "" {
 			return nil, fmt.Errorf("CONFLICT:los requerimientos se derivan del BOM liberado: la obra no tiene liberación de producción")
 		}
 		if snap.Planning != nil && snap.Planning.Release != nil {
@@ -185,8 +185,8 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 			ID:        planning.ID,
 			ProjectID: planning.ProjectID,
 			Requirements: &domain.MaterialRequirementsSnapshot{
-				ReleaseID:      release.ID,
-				BomFingerprint: release.BOMFingerprint,
+				ReleaseID:      release.ReleaseID,
+				BomFingerprint: release.ManufacturingFingerprint,
 				DerivedAt:      now,
 				DerivedBy:      actorID(claims),
 				Lines:          lines,
@@ -203,7 +203,7 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 			ID: newProjectEventID(), ProjectID: projectID,
 			Type: "materials_required", At: now, ByUserID: byUserIDFromClaims(claims), Source: domain.ProjectEventSourceAPI,
 			Note:    fmt.Sprintf("Requerimientos derivados del BOM liberado (%d líneas)", len(lines)),
-			Payload: materialsPayload(map[string]interface{}{"release_id": release.ID, "bom_fingerprint": release.BOMFingerprint, "line_count": len(lines)}),
+			Payload: materialsPayload(map[string]interface{}{"release_id": release.ReleaseID, "bom_fingerprint": release.ManufacturingFingerprint, "line_count": len(lines)}),
 		}
 		view = buildMaterialsViewWithPlanning(snap, planning)
 		return &domain.MaterialPlanningMutation{Planning: planning, Events: []domain.ProjectEvent{event}}, nil

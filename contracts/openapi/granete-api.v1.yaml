@@ -2741,6 +2741,171 @@
         }
       }
     },
+    "/designs/{designId}/revisions/{revisionId}:approve": {
+      "post": {
+        "operationId": "approveDesignRevision",
+        "summary": "Approve an exact published DesignRevision for production (#395, explicit lifecycle transition)",
+        "description": "Explicit published→approved transition on the exact revisionId (never latest). Server-authoritative: actor and timestamp come from the session, never the body. The snapshot stays immutable — only status/approved_by/approved_at change, exactly once. Re-approving an already-approved revision is an idempotent no-op returning the current state; any other status rejects. Requires an Idempotency-Key.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The approved revision (or the already-approved state on idempotent replay)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignRevision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/production-releases": {
+      "get": {
+        "operationId": "listProjectProductionReleases",
+        "summary": "List the project's immutable ProductionReleases with staleness projection (#395)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Releases in descending release order, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductionRelease"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProductionRelease",
+        "summary": "Create a ProductionRelease pinned to an exact approved DesignRevision (#395)",
+        "description": "Runs the whole §17 gate server-side in one transaction against the exact revisions: approved DesignRevision (never latest, never a working copy), exact accepted QuoteRevision baseline when provided, #393/#394 reconciliation without conflicts or pending commercial changes, and the authoritative manufacturing preflight over the organization catalog. The manufacturing fingerprint is computed server-side from the same immutable items the preflight validated. The created row is immutable history: publishing newer revisions never mutates it; new production requires a new release. Requires an Idempotency-Key: a retry replays the same release.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductionReleaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The immutable release with its exact pins and derived staleness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductionRelease"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/production-releases/{releaseId}": {
+      "get": {
+        "operationId": "getProjectProductionRelease",
+        "summary": "Read one exact ProductionRelease with its staleness projection (#395)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The release with its exact pins and derived staleness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductionRelease"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}": {
       "get": {
         "operationId": "getDesign",
@@ -6379,7 +6544,9 @@
       "DesignRevisionStatus": {
         "type": "string",
         "enum": [
-          "published"
+          "published",
+          "approved",
+          "superseded"
         ]
       },
       "Transform3D": {
@@ -6532,6 +6699,19 @@
             "type": "string",
             "format": "date-time"
           },
+          "approved_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "approved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
           "items": {
             "type": "array",
             "items": {
@@ -6543,6 +6723,129 @@
             "items": {
               "$ref": "#/components/schemas/DesignRevisionArtifact"
             }
+          }
+        }
+      },
+      "CreateProductionReleaseRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "design_revision_id"
+        ],
+        "properties": {
+          "design_revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Exact approved DesignRevision to pin (#395: never latest, never a working copy)."
+          },
+          "quote_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional exact accepted QuoteRevision commercial baseline to pin."
+          }
+        }
+      },
+      "ProductionReleaseStatus": {
+        "type": "string",
+        "enum": [
+          "active"
+        ]
+      },
+      "ProductionReleaseStaleness": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "manufacturing_stale",
+          "current_design_revision_id",
+          "current_design_revision_number"
+        ],
+        "properties": {
+          "manufacturing_stale": {
+            "type": "boolean",
+            "description": "True when the latest revision of the same design carries a different manufacturing fingerprint (spatial-only newer revisions never flag stale)."
+          },
+          "current_design_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "current_design_revision_number": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "ProductionRelease": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "project_id",
+          "release_number",
+          "design_revision_id",
+          "design_revision_number",
+          "manufacturing_fingerprint",
+          "status",
+          "released_by",
+          "released_at",
+          "staleness"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "release_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "design_revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Immutable pin to the exact approved DesignRevision released (#395 / I6)."
+          },
+          "design_revision_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "quote_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Immutable pin to the exact accepted QuoteRevision commercial baseline, when one grounded the release."
+          },
+          "manufacturing_fingerprint": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$",
+            "description": "Server-computed fingerprint of the exact manufacturing inputs validated at release time."
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProductionReleaseStatus"
+          },
+          "released_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "released_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "staleness": {
+            "$ref": "#/components/schemas/ProductionReleaseStaleness",
+            "description": "Derived read-only projection against current authoring state; stale never mutates the release."
           }
         }
       },

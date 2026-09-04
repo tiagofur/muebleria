@@ -42,7 +42,7 @@ type MaterialRequirementLine struct {
 }
 
 // MaterialRequirementsSnapshot is materialized from the released BOM (OC-050):
-// bound to the ProductionRelease it was derived from.
+// bound to the legacy OC-022 ProductionRelease it was derived from.
 type MaterialRequirementsSnapshot struct {
 	ReleaseID     string                   `json:"release_id,omitempty"`
 	BomFingerprint string                  `json:"bom_fingerprint,omitempty"`
@@ -409,7 +409,9 @@ type MaterialPlanningSnapshot struct {
 	AllPlannings              []*MaterialPlanning
 	Stock                     []MaterialStock
 	PurchaseOrders            []PurchaseOrder
-	ProductionRelease         *ProductionRelease
+	// ProductionRelease is the resolved release authority (#395): canonical
+	// when one exists, legacy-adapted otherwise. Never the raw blob.
+	ProductionRelease         *ResolvedProductionRelease
 	MaterialsReleased         bool
 	HasMaterialsReservedEvent bool
 }

@@ -930,7 +930,9 @@ const (
 type DesignRevisionStatus string
 
 const (
-	DesignRevisionStatusPublished DesignRevisionStatus = "published"
+	DesignRevisionStatusPublished  DesignRevisionStatus = "published"
+	DesignRevisionStatusApproved   DesignRevisionStatus = "approved"
+	DesignRevisionStatusSuperseded DesignRevisionStatus = "superseded"
 )
 
 type Transform3D struct {
@@ -966,8 +968,41 @@ type DesignRevision struct {
 	Status           DesignRevisionStatus     `json:"status"`
 	CreatedBy        *string                  `json:"created_by,omitempty"`
 	CreatedAt        string                   `json:"created_at"`
+	ApprovedBy       *string                  `json:"approved_by,omitempty"`
+	ApprovedAt       *string                  `json:"approved_at,omitempty"`
 	Items            []DesignRevisionItem     `json:"items"`
 	Artifacts        []DesignRevisionArtifact `json:"artifacts,omitempty"`
+}
+
+type CreateProductionReleaseRequest struct {
+	DesignRevisionID string  `json:"design_revision_id"`
+	QuoteRevisionID  *string `json:"quote_revision_id,omitempty"`
+}
+
+type ProductionReleaseStatus string
+
+const (
+	ProductionReleaseStatusActive ProductionReleaseStatus = "active"
+)
+
+type ProductionReleaseStaleness struct {
+	ManufacturingStale          bool    `json:"manufacturing_stale"`
+	CurrentDesignRevisionID     *string `json:"current_design_revision_id"`
+	CurrentDesignRevisionNumber *int64  `json:"current_design_revision_number"`
+}
+
+type ProductionRelease struct {
+	ID                       string                     `json:"id"`
+	ProjectID                string                     `json:"project_id"`
+	ReleaseNumber            int64                      `json:"release_number"`
+	DesignRevisionID         string                     `json:"design_revision_id"`
+	DesignRevisionNumber     int64                      `json:"design_revision_number"`
+	QuoteRevisionID          *string                    `json:"quote_revision_id,omitempty"`
+	ManufacturingFingerprint string                     `json:"manufacturing_fingerprint"`
+	Status                   ProductionReleaseStatus    `json:"status"`
+	ReleasedBy               string                     `json:"released_by"`
+	ReleasedAt               string                     `json:"released_at"`
+	Staleness                ProductionReleaseStaleness `json:"staleness"`
 }
 
 type PublishDesignRevisionItem struct {

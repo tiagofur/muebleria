@@ -168,28 +168,28 @@ type Approval struct {
 	CreatedAt        time.Time      `json:"created_at"`
 }
 
-type ProductionReleaseCheckCode string
+type LegacyProductionReleaseCheckCode string
 
 const (
-	CheckCodeCommercialWon     ProductionReleaseCheckCode = "commercial_won"
-	CheckCodeDepositReceived   ProductionReleaseCheckCode = "deposit_received"
-	CheckCodeSurveyVerified    ProductionReleaseCheckCode = "survey_verified"
-	CheckCodeCustomerApproved  ProductionReleaseCheckCode = "customer_approved"
-	CheckCodeTechnicalApproved ProductionReleaseCheckCode = "technical_approved"
-	CheckCodeBOMValid          ProductionReleaseCheckCode = "bom_valid"
+	CheckCodeCommercialWon     LegacyProductionReleaseCheckCode = "commercial_won"
+	CheckCodeDepositReceived   LegacyProductionReleaseCheckCode = "deposit_received"
+	CheckCodeSurveyVerified    LegacyProductionReleaseCheckCode = "survey_verified"
+	CheckCodeCustomerApproved  LegacyProductionReleaseCheckCode = "customer_approved"
+	CheckCodeTechnicalApproved LegacyProductionReleaseCheckCode = "technical_approved"
+	CheckCodeBOMValid          LegacyProductionReleaseCheckCode = "bom_valid"
 )
 
-// ProductionReleaseCheck records the outcome of a single release gate.
-type ProductionReleaseCheck struct {
-	Code     ProductionReleaseCheckCode `json:"code"`
+// LegacyProductionReleaseCheck records the outcome of a single release gate.
+type LegacyProductionReleaseCheck struct {
+	Code     LegacyProductionReleaseCheckCode `json:"code"`
 	Label    string                     `json:"label"`
 	Passed   bool                       `json:"passed"`
 	Required bool                       `json:"required"`
 	Details  string                     `json:"details,omitempty"`
 }
 
-// ProductionRelease is the explicit, auditable production release record (OC-022).
-type ProductionRelease struct {
+// LegacyProductionRelease is the legacy OC-022 client-authored release blob on projects. The canonical Digital Thread ProductionRelease (#395 / I6) is the immutable production_releases row pinned to exact revisions.
+type LegacyProductionRelease struct {
 	ID               string                   `json:"id"`
 	ProjectID        string                   `json:"project_id"`
 	ProjectVersion   int                      `json:"project_version"`
@@ -197,7 +197,7 @@ type ProductionRelease struct {
 	BOMFingerprint   string                   `json:"bom_fingerprint"`
 	ReleasedBy       string                   `json:"released_by"`
 	ReleasedAt       time.Time                `json:"released_at"`
-	Checks           []ProductionReleaseCheck `json:"checks"`
+	Checks           []LegacyProductionReleaseCheck `json:"checks"`
 	Note             string                   `json:"note,omitempty"`
 }
 

@@ -74,6 +74,9 @@ var (
 	ErrDesignNotActive                      = errors.New("design is not active")
 	ErrWorkingCopyNotFound                  = errors.New("design working copy not found")
 	ErrSerializationFailed                  = errors.New("snapshot serialization failed")
+	// #395: approval is an explicit, permission-protected lifecycle decision
+	// on an exact revision — publishing alone never authorizes production.
+	ErrDesignRevisionApprovalInvalid = errors.New("design revision cannot transition to approved from its current status")
 )
 
 // Design represents a logical, client-agnostic design aggregate owned by a Project (ADR-0003 §3, digital-thread §7).
@@ -133,13 +136,34 @@ type DesignRevision struct {
 	Status           DesignRevisionStatus     `json:"status"`
 	CreatedBy        string                   `json:"created_by,omitempty"`
 	CreatedAt        time.Time                `json:"created_at"`
-	Items            []DesignRevisionItem     `json:"items,omitempty"`
+	// Approval metadata (#395 / §17): written exactly once by the explicit
+	// published→approved transition, never by publish and never from client
+	// input. The snapshot itself stays immutable (I4 / I12).
+	ApprovedBy string     `json:"approved_by,omitempty"`
+	ApprovedAt *time.Time `json:"approved_at,omitempty"`
+	Items      []DesignRevisionItem `json:"items,omitempty"`
 	// Artifacts carries the #392 published artifact metadata (model/manifest/
 	// preview). Nil for legacy artifact-less publishes; readers treat nil as
 	// "no artifacts".
 	Artifacts []DesignRevisionArtifact `json:"artifacts,omitempty"`
 
 	OrganizationID string `json:"-"`
+}
+
+// ValidateDesignRevisionApproval returns whether the explicit approval command
+// applies to a revision in the given status. Approval targets an exact
+// revisionId (#395 §6): published→approved is the only transition; an already
+// approved revision is an idempotent no-op handled by the caller, and any
+// other status rejects the command (superseded history is terminal).
+func ValidateDesignRevisionApproval(status DesignRevisionStatus) error {
+	switch status {
+	case DesignRevisionStatusPublished:
+		return nil
+	case DesignRevisionStatusApproved:
+		return nil // idempotent replay: no new transition, no metadata rewrite
+	default:
+		return ErrDesignRevisionApprovalInvalid
+	}
 }
 
 // DesignWorkingItem represents a mutable draft item in a design's working copy.

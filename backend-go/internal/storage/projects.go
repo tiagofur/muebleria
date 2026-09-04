@@ -461,7 +461,7 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 			_ = json.Unmarshal(approvals, &p.Approvals)
 		}
 		if len(productionRelease) > 0 && string(productionRelease) != "null" {
-			var pr domain.ProductionRelease
+			var pr domain.LegacyProductionRelease
 			if err := json.Unmarshal(productionRelease, &pr); err == nil {
 				p.ProductionRelease = &pr
 			}
@@ -855,7 +855,7 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		_ = json.Unmarshal(approvals, &p.Approvals)
 	}
 	if len(productionRelease) > 0 && string(productionRelease) != "null" {
-		var pr domain.ProductionRelease
+		var pr domain.LegacyProductionRelease
 		if err := json.Unmarshal(productionRelease, &pr); err == nil {
 			p.ProductionRelease = &pr
 		}

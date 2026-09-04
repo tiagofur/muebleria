@@ -1427,6 +1427,18 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		// RBAC and audit). A client-sent copy is ignored, never persisted.
 		p.Installation = existing.Installation
 
+		// #395: once a canonical ProductionRelease exists it is the ONE
+		// release authority — immutable history created only through
+		// POST /api/projects/{id}/production-releases. The client blob can
+		// no longer create or rewrite release truth: the stored copy is
+		// preserved exactly like the installation job above.
+		if canonicalRelease, crErr := s.Store.GetLatestProjectProductionRelease(r.Context(), id); crErr != nil {
+			respondWithInternalError(w, crErr, "resolver la liberación de producción")
+			return
+		} else if canonicalRelease != nil {
+			p.ProductionRelease = existing.ProductionRelease
+		}
+
 		// #327: organization ownership is server-authoritative. It is
 		// assigned once at create (validated against the caller's
 		// memberships); reassignment requires a dedicated audited flow. A

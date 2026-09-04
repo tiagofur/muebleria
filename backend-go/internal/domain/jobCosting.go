@@ -95,8 +95,11 @@ type CostBaseline struct {
 	ExpectedMarginPercent float64 `json:"expected_margin_percent"`
 }
 
-// CostBaselineSource keeps the traceable inputs of the baseline: which quote
-// snapshot and which release were used.
+// CostBaselineSource freezes what the baseline was captured against: which
+// quote snapshot and which release. The persisted fingerprint field keeps its
+// historical OC-080 name (bom_fingerprint); since #395 its value is the
+// resolved authority's ManufacturingFingerprint — the canonical sha256
+// baseline, or the legacy token for pre-DT captures.
 type CostBaselineSource struct {
 	QuoteSnapshotCapturedAt time.Time `json:"quote_snapshot_captured_at"`
 	ProjectVersion          int       `json:"project_version"`
@@ -438,7 +441,7 @@ func jobCostingRandomSuffix() string {
 func BuildCostBaseline(
 	costing *JobCosting,
 	snapshot *QuotePriceSnapshot,
-	release *ProductionRelease,
+	release *ResolvedProductionRelease,
 	projectID string,
 	byUserID string,
 	at time.Time,
@@ -449,7 +452,7 @@ func BuildCostBaseline(
 	if release == nil {
 		return nil, errors.New("BAD_REQUEST:falta liberar la revisión de ingeniería a producción")
 	}
-	if costing != nil && costing.Baseline != nil && costing.Baseline.Source.ReleaseID == release.ID {
+	if costing != nil && costing.Baseline != nil && costing.Baseline.Source.ReleaseID == release.ReleaseID {
 		return nil, errors.New("CONFLICT:el baseline ya fue capturado para esta liberación; capture de nuevo sólo tras una nueva liberación")
 	}
 
@@ -470,8 +473,8 @@ func BuildCostBaseline(
 		Source: CostBaselineSource{
 			QuoteSnapshotCapturedAt: snapshot.CapturedAt,
 			ProjectVersion:          release.ProjectVersion,
-			ReleaseID:               release.ID,
-			BOMFingerprint:          release.BOMFingerprint,
+			ReleaseID:               release.ReleaseID,
+			BOMFingerprint:          release.ManufacturingFingerprint,
 		},
 		Revenue:               revenue,
 		MaterialsCost:         bd.MaterialsCost,
@@ -494,7 +497,9 @@ func BuildCostBaseline(
 type JobCostingSnapshot struct {
 	Costing           *JobCosting
 	PriceSnapshot     *QuotePriceSnapshot
-	ProductionRelease *ProductionRelease
+	// ProductionRelease is the resolved release authority (#395): canonical
+	// when one exists, legacy-adapted otherwise. Never the raw blob.
+	ProductionRelease *ResolvedProductionRelease
 	Quality           *QualityJob
 	Consumption       []MaterialConsumptionInput
 }

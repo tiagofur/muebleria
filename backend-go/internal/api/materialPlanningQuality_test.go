@@ -20,10 +20,10 @@ import (
 
 func materialsFixtures() (*stubStore, *Server) {
 	releasedAt := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
-	release := &domain.ProductionRelease{
+	release := domain.ResolveLegacyProductionRelease(&domain.LegacyProductionRelease{
 		ID: "rel-1", ProjectID: "p1", ProjectVersion: 1, DesignRevisionID: "dr-1",
 		BOMFingerprint: "fp-abc123", ReleasedBy: "ing-1", ReleasedAt: releasedAt,
-	}
+	})
 	store := &stubStore{
 		productionRelease: release,
 		materialStock: []domain.MaterialStock{

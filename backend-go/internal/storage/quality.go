@@ -63,10 +63,19 @@ func (s *PostgresStore) MutateProjectQuality(
 		}
 	}
 	if len(releaseRaw) > 0 && string(releaseRaw) != "null" {
-		var release domain.ProductionRelease
+		var release domain.LegacyProductionRelease
 		if err := json.Unmarshal(releaseRaw, &release); err == nil && release.ID != "" {
 			snap.ReleasedRevision = release.ID
 		}
+	}
+	// #395: ONE release authority — the canonical ProductionRelease wins over
+	// the legacy blob for every production consumer.
+	authority, err := s.resolveProjectReleaseAuthorityTx(ctx, tx, projectID, &domain.LegacyProductionRelease{ID: snap.ReleasedRevision})
+	if err != nil {
+		return nil, fmt.Errorf("error resolving release authority: %w", err)
+	}
+	if authority != nil {
+		snap.ReleasedRevision = authority.ReleaseID
 	}
 
 	rows, err := tx.Query(ctx, `
