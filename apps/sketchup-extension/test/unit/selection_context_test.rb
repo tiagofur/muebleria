@@ -152,13 +152,12 @@ class SelectionContextTest < Minitest::Test
     # Hardware keeps its OWN occurrence namespace: a part's
     # componentInstanceId is never fabricated for a placement.
     assert_nil context.component_instance_id
-    # Manual-edit capabilities are not available yet, and the reason is the
-    # manual one — not a derived claim.
-    %w[canMove canRotate canChangeHandedness canReplaceDefinition].each do |name|
-      refute context.capabilities[name].supported?
-      assert context.capabilities[name].reason
-    end
-    assert_includes context.capabilities['canMove'].reason, 'manual'
+    # Manual hardware supports move and replacement; rotation and handedness
+    # are derived automatically.
+    assert context.capabilities['canMove'].supported?
+    assert context.capabilities['canReplaceDefinition'].supported?
+    refute context.capabilities['canRotate'].supported?
+    refute context.capabilities['canChangeHandedness'].supported?
   end
 
   def test_derived_hardware_explains_correction_through_its_source

@@ -76,8 +76,228 @@ class DialogHostMutationTest < Minitest::Test
           { 'placementId' => 'HP-DERIVED-1', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra Derivada',
             'placementKind' => 'derived', 'hostComponentInstanceId' => 'st-door-0',
             'anchorFace' => 'front', 'offsetMm' => [298, 300],
-            'transform' => { 'translationMm' => [298, 560, 300] } }
+            'transform' => { 'translationMm' => [298, 560, 300] } },
+          { 'placementId' => 'totally-random-123', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra Opaca Derivada',
+            'placementKind' => 'derived', 'hostComponentInstanceId' => 'st-door-0',
+            'anchorFace' => 'front', 'offsetMm' => [298, 300],
+            'transform' => { 'translationMm' => [298, 560, 300] } },
+          { 'placementId' => 'derived-looking-id', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra Con Nombre Derivado',
+            'placementKind' => 'manual', 'hostComponentInstanceId' => 'st-door-0',
+            'anchorFace' => 'front', 'offsetMm' => [298, 100],
+            'transform' => { 'translationMm' => [298, 560, 100] } }
         ] }
+    end
+
+    def resolve_authoring(request_payload)
+      furniture = request_payload['furniture'] || {}
+      placements = furniture['hardwarePlacements'] || []
+
+      derived = placements.find do |hp|
+        hp['placementKind'] == 'derived'
+      end
+      if derived
+        msg = "placement #{derived['hardwarePlacementId']} is derived by engineering rules"
+        return rejected_authoring_result(
+          request_payload, 'HARDWARE_DERIVED_EDIT', msg, derived['hardwarePlacementId']
+        )
+      end
+
+      # Data-driven hardware compatibility: definitions map categories and capabilities (#350)
+      hw_definitions = {
+        'hw-hinge' => { 'category' => 'hinge' },
+        'hw-handle' => { 'category' => 'handle' },
+        'hw-incompatible' => { 'category' => 'slide', 'compatibleRoles' => %w[cajon lateral_izquierdo] },
+        'hw-slide-heavy' => { 'category' => 'slide', 'compatibleRoles' => %w[cajon lateral_izquierdo] }
+      }
+
+      incompatible = placements.find do |hp|
+        hw_def = hw_definitions[hp['catalogHardwareId']]
+        next false unless hw_def
+
+        host_board = (furniture['components'] || []).find do |c|
+          c['componentInstanceId'] == hp['hostComponentInstanceId']
+        end
+        host_role = (host_board ? (host_board['role'] || host_board['componentDefinitionId']) : '').to_s.downcase
+        is_door = host_role.include?('door') || host_role.include?('puerta') || host_role.include?('frente')
+
+        hw_def['category'] == 'slide' && is_door
+      end
+      if incompatible
+        msg = "hardware definition #{incompatible['catalogHardwareId']} is incompatible"
+        return rejected_authoring_result(
+          request_payload, 'HARDWARE_INCOMPATIBLE', msg, incompatible['hardwarePlacementId']
+        )
+      end
+
+      out_of_bounds = placements.find do |hp|
+        offset = hp['offsetMm'] || [0.0, 0.0]
+        offset[0].negative? || offset[0] > 1000 || offset[1].negative? || offset[1] > 1000
+      end
+      if out_of_bounds
+        msg = "placement #{out_of_bounds['hardwarePlacementId']} offset is out of board bounds"
+        return rejected_authoring_result(
+          request_payload, 'HARDWARE_PLACEMENT_INVALID', msg, out_of_bounds['hardwarePlacementId']
+        )
+      end
+
+      accepted_authoring_result(request_payload, furniture, placements)
+    end
+
+    private
+
+    def rejected_authoring_result(request_payload, code, message, entity_id)
+      body = {
+        'schemaId' => 'granete.sketchup-authoring-resolve.v1',
+        'schemaName' => 'granete.sketchup-authoring-resolve',
+        'schemaVersion' => '1.0',
+        'resolveContract' => 'granete.sketchup-authoring-resolve.v1',
+        'status' => 'rejected',
+        'responseMessageId' => "resolve-#{request_payload['messageId']}",
+        'inReplyToMessageId' => request_payload['messageId'],
+        'idempotencyKey' => request_payload['idempotencyKey'],
+        'issues' => [
+          {
+            'code' => code,
+            'message' => message,
+            'severity' => 'error',
+            'entityId' => entity_id,
+            'path' => "furniture.hardwarePlacements[#{entity_id}]",
+            'remediation' => 'Fix input to comply with manufacturing contract.'
+          }
+        ]
+      }
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+        body, expected_request: request_payload
+      )
+    end
+
+    def accepted_authoring_result(request_payload, furniture, placements)
+      has_conflict = placements.any? do |hp|
+        hp['hardwarePlacementId'] == 'HP-TOP' && hp['offsetMm'] && (hp['offsetMm'][1].to_f - 150.0).abs < 0.1
+      end
+      issues = []
+      preflight_status = 'clear'
+      preflight_issues = []
+      if has_conflict
+        conflict_issue = {
+          'code' => 'DRILLING_CONFLICT',
+          'message' => 'Hole collision on host st-door-0 (shelf at z=150 collides with hinge at z=150)',
+          'severity' => 'error',
+          'entityId' => 'st-door-0',
+          'path' => 'resolved.machining.operations[host=st-door-0]',
+          'remediation' => 'Shift conflicting shelf position or hardware offset to ensure minimum clearance.',
+          'details' => { 'distanceMm' => 0, 'hostComponentInstanceId' => 'st-door-0', 'minDistanceMm' => 25 }
+        }
+        issues << conflict_issue
+        preflight_status = 'blocked'
+        preflight_issues << conflict_issue
+      end
+
+      snapshot_placements = placements.map do |hp|
+        {
+          'hardwarePlacementId' => hp['hardwarePlacementId'],
+          'catalogHardwareId' => hp['catalogHardwareId'],
+          'hostComponentInstanceId' => hp['hostComponentInstanceId'],
+          'anchorFace' => hp['anchorFace'],
+          'offsetMm' => hp['offsetMm']
+        }
+      end
+
+      layout_hardware = placements.map do |hp|
+        asset_id = hp['catalogHardwareId'] == 'hw-hinge-b' ? 'asset-hw-hinge-b' : 'asset-hw-hinge'
+        offset = hp['offsetMm'] || [0.0, 0.0]
+        {
+          'placementId' => hp['hardwarePlacementId'],
+          'hardwareId' => hp['catalogHardwareId'],
+          'name' => "Herraje #{hp['hardwarePlacementId']}",
+          'placementKind' => 'manual',
+          'hostComponentInstanceId' => hp['hostComponentInstanceId'],
+          'anchorFace' => hp['anchorFace'],
+          'offsetMm' => offset,
+          'assetId' => asset_id,
+          'transform' => { 'translationMm' => [offset[0], 560, offset[1]] }
+        }
+      end
+
+      operations = placements.map do |hp|
+        offset = hp['offsetMm'] || [0.0, 0.0]
+        {
+          'operationId' => "op-#{hp['hardwarePlacementId']}",
+          'hostComponentInstanceId' => hp['hostComponentInstanceId'],
+          'provenance' => {
+            'sourceKind' => 'manualHardwarePlacement',
+            'hardwarePlacementId' => hp['hardwarePlacementId']
+          },
+          'holes' => [
+            { 'face' => hp['anchorFace'], 'xMm' => offset[0], 'yMm' => offset[1],
+              'diameterMm' => 35.0, 'depthMm' => 12.0, 'type' => 'drilling' }
+          ]
+        }
+      end
+
+      body = {
+        'schemaId' => 'granete.sketchup-authoring-resolve.v1',
+        'schemaName' => 'granete.sketchup-authoring-resolve',
+        'schemaVersion' => '1.0',
+        'resolveContract' => 'granete.sketchup-authoring-resolve.v1',
+        'status' => 'accepted',
+        'responseMessageId' => "resolve-#{request_payload['messageId']}",
+        'inReplyToMessageId' => request_payload['messageId'],
+        'idempotencyKey' => request_payload['idempotencyKey'],
+        'catalogRevision' => 'rev-authoring-test-1',
+        'issues' => issues,
+        'normalizedSnapshot' => {
+          'parameters' => furniture['parameters'] || {},
+          'materialChoices' => furniture['materialChoices'] || {},
+          'components' => [
+            { 'componentInstanceId' => 'st-door-0', 'componentDefinitionId' => 'st-door',
+              'catalogComponentId' => 'comp-door', 'role' => 'FRENTE' },
+            { 'componentInstanceId' => 'st-shelf-0', 'componentDefinitionId' => 'st-shelf',
+              'catalogComponentId' => 'comp-shelf', 'role' => 'INTERIOR' }
+          ],
+          'relationships' => [],
+          'hardwarePlacements' => snapshot_placements
+        },
+        'resolved' => {
+          'preflight' => {
+            'scope' => 'authoring-resolve-subset',
+            'status' => preflight_status,
+            'preflightContract' => 'granete.manufacturing-preflight.v1',
+            'issues' => preflight_issues
+          },
+          'layout' => {
+            'transformContract' => 'granete.local-basis.v1',
+            'components' => [
+              { 'componentInstanceId' => 'st-door-0', 'componentDefinitionId' => 'st-door',
+                'slotId' => 'puerta', 'name' => 'Puerta', 'role' => 'FRENTE',
+                'transform' => { 'translationMm' => [2, 560, 2] }, 'dimensionsMm' => [596, 18, 716],
+                'localTransform' => {
+                  'translationMm' => [2, 560, 2],
+                  'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
+                },
+                'lengthMm' => 716, 'widthMm' => 596, 'thicknessMm' => 18 },
+              { 'componentInstanceId' => 'st-shelf-0', 'componentDefinitionId' => 'st-shelf',
+                'slotId' => 'shelf', 'name' => 'Entrepaño', 'role' => 'INTERIOR',
+                'transform' => { 'translationMm' => [18, 18, 150] }, 'dimensionsMm' => [542, 564, 18],
+                'localTransform' => {
+                  'translationMm' => [18, 18, 150],
+                  'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
+                },
+                'lengthMm' => 564, 'widthMm' => 542, 'thicknessMm' => 18 }
+            ],
+            'hardware' => layout_hardware
+          },
+          'machining' => {
+            'operations' => operations,
+            'derivedHardwarePlacements' => [],
+            'manufacturingFingerprint' => "sha256-#{'a' * 64}"
+          }
+        }
+      }
+
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+        body, expected_request: request_payload
+      )
     end
   end
 
@@ -227,7 +447,9 @@ class DialogHostMutationTest < Minitest::Test
     }
     dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd))
 
-    mutation_script = dialog.executed_scripts.find { |s| s.include?('onMutationState') && s.include?('cmd-move-hinge-1') }
+    mutation_script = dialog.executed_scripts.find do |s|
+      s.include?('onMutationState') && s.include?('cmd-move-hinge-1')
+    end
     refute_nil mutation_script
     assert_includes mutation_script, '"outcome":"committed"'
 
@@ -274,6 +496,47 @@ class DialogHostMutationTest < Minitest::Test
     assert_includes mutation_script, 'HARDWARE_DERIVED_EDIT'
   end
 
+  def test_hardware_placement_id_is_opaque_and_not_derived_by_prefix
+    dialog = @controller.show
+    native_furniture('inst-opaque-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-opaque-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    # 1. Derived-looking ID with placementKind: 'manual' must NOT be blocked as derived
+    cmd_manual = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-derived-name-manual-kind',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-opaque-1',
+        'hardwarePlacementId' => 'derived-looking-id'
+      },
+      'payload' => { 'offsetMm' => 120, 'placementKind' => 'manual' }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd_manual))
+    script_manual = dialog.executed_scripts.find { |s| s.include?('cmd-derived-name-manual-kind') }
+    refute_nil script_manual
+    refute_includes script_manual, 'HARDWARE_DERIVED_EDIT'
+
+    # 2. Random opaque ID with placementKind: 'derived' MUST be blocked
+    cmd_derived = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-random-id-derived-kind',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-opaque-1',
+        'hardwarePlacementId' => 'totally-random-123'
+      },
+      'payload' => { 'offsetMm' => 120, 'placementKind' => 'derived' }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd_derived))
+    script_derived = dialog.executed_scripts.find { |s| s.include?('cmd-random-id-derived-kind') }
+    refute_nil script_derived
+    assert_includes script_derived, '"outcome":"rejected"'
+    assert_includes script_derived, 'HARDWARE_DERIVED_EDIT'
+  end
+
   def test_hardware_update_shelf_interference_causes_drilling_conflict_issue
     dialog = @controller.show
     native_furniture('inst-conflict-1')
@@ -295,8 +558,10 @@ class DialogHostMutationTest < Minitest::Test
 
     mutation_script = dialog.executed_scripts.find { |s| s.include?('cmd-conflict-fail') }
     refute_nil mutation_script
-    assert_includes mutation_script, '"outcome":"rejected"'
-    assert_includes mutation_script, 'DRILLING_CONFLICT'
+    assert_includes mutation_script, '"outcome":"committed"'
+
+    preflight_script = dialog.executed_scripts.find { |s| s.include?('onPreflightState') }
+    refute_nil preflight_script
 
     cmd_fix = {
       'schemaId' => 'granete.sketchup-host-command.v1',

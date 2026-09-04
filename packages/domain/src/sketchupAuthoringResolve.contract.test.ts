@@ -262,7 +262,9 @@ describe('#477 shared authoring resolve contract fixture', () => {
 
   test('TS client-side validation agrees with the Go gateway on every scenario', () => {
     for (const scenario of fixture.scenarios) {
-      const tsIssues = validateAuthoringResolveRequest(scenario.request);
+      const tsIssues = validateAuthoringResolveRequest(scenario.request, {
+        hardwareCatalog: fixture.joinery.hardware,
+      });
       const parameterIssues = evaluateFurnitureParameters(
         fixture.parameterDefinitions,
         scenario.request.furniture.parameters ?? {},

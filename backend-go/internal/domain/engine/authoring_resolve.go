@@ -84,6 +84,7 @@ type AuthoringRelationship struct {
 // #468 adds them together with their resolution semantics.
 type AuthoringManualPlacement struct {
 	HardwarePlacementID     string     `json:"hardwarePlacementId"`
+	PlacementKind           string     `json:"placementKind,omitempty"`
 	CatalogHardwareID       string     `json:"catalogHardwareId"`
 	HostComponentInstanceID string     `json:"hostComponentInstanceId"`
 	AnchorFace              string     `json:"anchorFace"`
@@ -602,9 +603,72 @@ type effectiveManualPlacement struct {
 	board  *layoutBoard
 }
 
-// effectiveManualPlacements computes the complete manual placement set: the
-// authored set when present, or the definition defaults materialized as
-// intents (with their deterministic server-issued placement IDs).
+// isHardwareCompatibleWithHost evaluates data-driven hardware compatibility (#350).
+// Compatibility is derived exclusively from explicit structural/capability data:
+//   - Hardware.CompatibleRoles matched against the host's canonical optionRole only.
+//   - Component.CompatibleHardwareCategories matched against Hardware.Category.
+//
+// No inference is made from display names, component definition IDs, placement
+// strings, hardware IDs, hardware codes, or any other opaque identifier.
+func isHardwareCompatibleWithHost(hw domain.Hardware, board *layoutBoard, catalog domain.Catalog) bool {
+	// 1. If hardware explicitly declares CompatibleRoles, verify the host's
+	// canonical optionRole is among them. Exact normalized equality only — no
+	// substring or name matching.
+	if len(hw.CompatibleRoles) > 0 {
+		matched := false
+		for _, role := range hw.CompatibleRoles {
+			r := strings.TrimSpace(role)
+			if r == "" {
+				continue
+			}
+			if strings.EqualFold(r, board.optionRole) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+
+	// 2. Resolve hardware category from Category or PreviewShape
+	hwCategory := strings.ToLower(strings.TrimSpace(hw.Category))
+	if hwCategory == "" && hw.PreviewShape != nil {
+		shape := strings.ToLower(strings.TrimSpace(*hw.PreviewShape))
+		switch shape {
+		case "hinge":
+			hwCategory = "hinge"
+		case "bar-pull", "handle", "knob":
+			hwCategory = "handle"
+		case "slide":
+			hwCategory = "slide"
+		default:
+			hwCategory = shape
+		}
+	}
+
+	// 3. If the host component in catalog declares compatible categories and the
+	// hardware has a known category, enforce category membership. Hardware without
+	// a declared category (hwCategory == "") cannot be evaluated by category alone;
+	// if it already satisfied CompatibleRoles (block 1), it passes through here.
+	if hwCategory != "" && (board.catalogComponentID != "" || board.defID != "") {
+		comp, ok := findComponent(catalog, board.catalogComponentID)
+		if !ok {
+			comp, ok = findComponent(catalog, board.defID)
+		}
+		if ok && len(comp.CompatibleHardwareCategories) > 0 {
+			for _, cat := range comp.CompatibleHardwareCategories {
+				if strings.EqualFold(cat, hwCategory) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
+	return true
+}
+
 func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualPlacement, present bool, catalog domain.Catalog) ([]effectiveManualPlacement, []domain.ContractIssue) {
 	issues := []domain.ContractIssue{}
 	boardIndex := make(map[string]*layoutBoard, len(boards))
@@ -613,8 +677,6 @@ func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualP
 	}
 
 	if !present {
-		// Materialize the definition defaults: every placement rides a board
-		// copy; formula offsets resolve against that board's environment.
 		out := make([]effectiveManualPlacement, 0)
 		for i := range boards {
 			board := &boards[i]
@@ -653,6 +715,18 @@ func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualP
 		}
 		seen[intent.HardwarePlacementID] = true
 
+		if intent.PlacementKind == "derived" {
+			issues = append(issues, domain.ContractIssue{
+				Code:        "HARDWARE_DERIVED_EDIT",
+				Message:     fmt.Sprintf("placement %s is derived by engineering rules and does not support manual editing", intent.HardwarePlacementID),
+				Severity:    domain.IssueSeverityError,
+				EntityID:    intent.HardwarePlacementID,
+				Path:        path,
+				Remediation: "Only manual hardware placements can be edited directly.",
+			})
+			continue
+		}
+
 		hw, ok := findHardware(catalog, intent.CatalogHardwareID)
 		if !ok || !hw.Active {
 			issues = append(issues, domain.ContractIssue{
@@ -673,6 +747,19 @@ func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualP
 			})
 			continue
 		}
+
+		if !isHardwareCompatibleWithHost(hw, board, catalog) {
+			issues = append(issues, domain.ContractIssue{
+				Code:        "HARDWARE_INCOMPATIBLE",
+				Message:     fmt.Sprintf("hardware definition %s is incompatible with this placement", intent.CatalogHardwareID),
+				Severity:    domain.IssueSeverityError,
+				EntityID:    intent.HardwarePlacementID,
+				Path:        path + ".catalogHardwareId",
+				Remediation: "Choose a compatible hardware definition.",
+			})
+			continue
+		}
+
 		if !validHardwareAnchorFace(intent.AnchorFace) {
 			issues = append(issues, domain.ContractIssue{
 				Code:     "HARDWARE_PLACEMENT_INVALID",

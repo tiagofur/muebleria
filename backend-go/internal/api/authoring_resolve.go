@@ -327,6 +327,7 @@ type authoringTransformWire struct {
 
 type authoringPlacementWire struct {
 	HardwarePlacementID     string    `json:"hardwarePlacementId"`
+	PlacementKind           string    `json:"placementKind,omitempty"`
 	CatalogHardwareID       string    `json:"catalogHardwareId"`
 	HostComponentInstanceID string    `json:"hostComponentInstanceId"`
 	AnchorFace              string    `json:"anchorFace"`
@@ -734,6 +735,7 @@ func authoringPlacementsFromWire(wire []authoringPlacementWire) ([]engine.Author
 		}
 		out = append(out, engine.AuthoringManualPlacement{
 			HardwarePlacementID:     placement.HardwarePlacementID,
+			PlacementKind:           placement.PlacementKind,
 			CatalogHardwareID:       placement.CatalogHardwareID,
 			HostComponentInstanceID: placement.HostComponentInstanceID,
 			AnchorFace:              placement.AnchorFace,

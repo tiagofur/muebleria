@@ -257,6 +257,7 @@
         "id": "hw-handle",
         "code": "MAN-160",
         "name": "Manija 160",
+        "category": "handle",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -265,6 +266,7 @@
         "id": "hw-hinge",
         "code": "BIS-CL110",
         "name": "Bisagra CL110",
+        "category": "hinge",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -273,6 +275,7 @@
         "id": "hw-hinge-b",
         "code": "BIS-CL100",
         "name": "Bisagra CL100",
+        "category": "hinge",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -281,6 +284,7 @@
         "id": "hw-minifix",
         "code": "HER-MIN-15",
         "name": "Minifix 15",
+        "category": "connector",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -289,6 +293,21 @@
         "id": "hw-dowel",
         "code": "HER-TAQ-8X30",
         "name": "Tarugo 8x30",
+        "category": "connector",
+        "unit": "piece",
+        "costPerUnit": 0,
+        "active": true
+      },
+      {
+        "id": "hw-incompatible",
+        "code": "CORR-450",
+        "name": "Corredera Telescópica 450",
+        "category": "slide",
+        "compatibleRoles": [
+          "lateral_izquierdo",
+          "lateral_derecho",
+          "cajon"
+        ],
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -14461,6 +14480,2128 @@
               "receivedType": "string",
               "receivedValue": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…"
             }
+          }
+        ]
+      }
+    },
+    {
+      "id": "17-hardware-drilling-conflict",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-8588028751d3",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "hardwarePlacements": [
+            {
+              "anchorFace": "front",
+              "catalogHardwareId": "hw-hinge",
+              "hardwarePlacementId": "hp-hinge-01",
+              "hostComponentInstanceId": "side-left-01",
+              "offsetMm": [
+                50,
+                150
+              ]
+            }
+          ],
+          "relationships": [
+            {
+              "kind": "shelf-support",
+              "relationshipId": "rel-shelf-01",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-8588028751d3",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "hasBackPanel": true,
+            "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "side-left-01",
+              "componentDefinitionId": "st-comp-side",
+              "catalogComponentId": "comp-side",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "side-right-01",
+              "componentDefinitionId": "st-comp-side-r",
+              "catalogComponentId": "comp-side-r",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "floor-01",
+              "componentDefinitionId": "st-comp-base",
+              "catalogComponentId": "comp-base",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "top-01",
+              "componentDefinitionId": "st-comp-top",
+              "catalogComponentId": "comp-top",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "back-01",
+              "componentDefinitionId": "mod-comp-back",
+              "catalogComponentId": "comp-back",
+              "role": "FONDO"
+            },
+            {
+              "componentInstanceId": "shelf-01",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "door-01",
+              "componentDefinitionId": "mod-comp-door",
+              "catalogComponentId": "comp-door",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [
+            {
+              "relationshipId": "rel-shelf-01",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
+          "hardwarePlacements": [
+            {
+              "hardwarePlacementId": "hp-hinge-01",
+              "catalogHardwareId": "hw-hinge",
+              "hostComponentInstanceId": "side-left-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                50,
+                150
+              ]
+            }
+          ]
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+            "definitionName": "Gabinete Authoring 600",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "side-left-01",
+                "componentDefinitionId": "st-comp-side",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "side-right-01",
+                "componentDefinitionId": "st-comp-side-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    582,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    582,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "floor-01",
+                "componentDefinitionId": "st-comp-base",
+                "slotId": "base",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "top-01",
+                "componentDefinitionId": "st-comp-top",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "back-01",
+                "componentDefinitionId": "mod-comp-back",
+                "slotId": "trasera",
+                "role": "FONDO",
+                "name": "Fondo",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ]
+                },
+                "dimensionsMm": [
+                  690,
+                  15,
+                  570
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 570,
+                "widthMm": 690,
+                "thicknessMm": 15,
+                "optionRole": "FONDO",
+                "materialColorHex": "#8b7355"
+              },
+              {
+                "componentInstanceId": "shelf-01",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    150
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  564,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    150
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "door-01",
+                "componentDefinitionId": "mod-comp-door",
+                "slotId": "puerta",
+                "role": "FRENTE",
+                "name": "Puerta",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  716
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 716,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": [
+              {
+                "placementId": "hp-hinge-01",
+                "hardwareId": "hw-hinge",
+                "name": "Bisagra CL110",
+                "shape": "hinge",
+                "sizeMm": 96,
+                "diameterMm": 35,
+                "projectionMm": 25,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "side-left-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    32.5,
+                    102
+                  ]
+                },
+                "dimensionsMm": [
+                  25,
+                  35,
+                  96
+                ]
+              }
+            ]
+          },
+          "machining": {
+            "operations": [
+              {
+                "operationId": "rel-shelf-01:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-shelf-01:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-shelf-01:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-shelf-01:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-shelf-01:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "hp-hinge-01:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "manualHardwarePlacement",
+                  "hardwarePlacementId": "hp-hinge-01"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 35,
+                    "depthMm": 12.5,
+                    "type": "hinge"
+                  }
+                ]
+              }
+            ],
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-1d9e8724cb0b8b2e1dd13f83ed2f6e80171903f967ba05c9b4de0d8fdee06136"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "blocked",
+            "issues": [
+              {
+                "code": "DRILLING_CONFLICT",
+                "message": "Hole collision on host side-left-01 (minifix Ø15.0 at [50.0, 150.0] collides with hinge Ø35.0 at [50.0, 150.0])",
+                "severity": "error",
+                "entityId": "side-left-01",
+                "path": "resolved.machining.operations[host=side-left-01]",
+                "remediation": "Shift conflicting shelf position or hardware offset to ensure minimum clearance.",
+                "details": {
+                  "distanceMm": 0,
+                  "hostComponentInstanceId": "side-left-01",
+                  "minDistanceMm": 25,
+                  "operationId1": "rel-shelf-01:op-1",
+                  "operationId2": "hp-hinge-01:op-1"
+                }
+              }
+            ],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": [
+          {
+            "code": "DRILLING_CONFLICT",
+            "message": "Hole collision on host side-left-01 (minifix Ø15.0 at [50.0, 150.0] collides with hinge Ø35.0 at [50.0, 150.0])",
+            "severity": "error",
+            "entityId": "side-left-01",
+            "path": "resolved.machining.operations[host=side-left-01]",
+            "remediation": "Shift conflicting shelf position or hardware offset to ensure minimum clearance.",
+            "details": {
+              "distanceMm": 0,
+              "hostComponentInstanceId": "side-left-01",
+              "minDistanceMm": 25,
+              "operationId1": "rel-shelf-01:op-1",
+              "operationId2": "hp-hinge-01:op-1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "18-hardware-conflict-cleared",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-8588028751d3",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "hardwarePlacements": [
+            {
+              "anchorFace": "front",
+              "catalogHardwareId": "hw-hinge",
+              "hardwarePlacementId": "hp-hinge-01",
+              "hostComponentInstanceId": "side-left-01",
+              "offsetMm": [
+                50,
+                500
+              ]
+            }
+          ],
+          "relationships": [
+            {
+              "kind": "shelf-support",
+              "relationshipId": "rel-shelf-01",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-8588028751d3",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "hasBackPanel": true,
+            "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "side-left-01",
+              "componentDefinitionId": "st-comp-side",
+              "catalogComponentId": "comp-side",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "side-right-01",
+              "componentDefinitionId": "st-comp-side-r",
+              "catalogComponentId": "comp-side-r",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "floor-01",
+              "componentDefinitionId": "st-comp-base",
+              "catalogComponentId": "comp-base",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "top-01",
+              "componentDefinitionId": "st-comp-top",
+              "catalogComponentId": "comp-top",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "back-01",
+              "componentDefinitionId": "mod-comp-back",
+              "catalogComponentId": "comp-back",
+              "role": "FONDO"
+            },
+            {
+              "componentInstanceId": "shelf-01",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "door-01",
+              "componentDefinitionId": "mod-comp-door",
+              "catalogComponentId": "comp-door",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [
+            {
+              "relationshipId": "rel-shelf-01",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
+          "hardwarePlacements": [
+            {
+              "hardwarePlacementId": "hp-hinge-01",
+              "catalogHardwareId": "hw-hinge",
+              "hostComponentInstanceId": "side-left-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                50,
+                500
+              ]
+            }
+          ]
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+            "definitionName": "Gabinete Authoring 600",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "side-left-01",
+                "componentDefinitionId": "st-comp-side",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "side-right-01",
+                "componentDefinitionId": "st-comp-side-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    582,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    582,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "floor-01",
+                "componentDefinitionId": "st-comp-base",
+                "slotId": "base",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "top-01",
+                "componentDefinitionId": "st-comp-top",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "back-01",
+                "componentDefinitionId": "mod-comp-back",
+                "slotId": "trasera",
+                "role": "FONDO",
+                "name": "Fondo",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ]
+                },
+                "dimensionsMm": [
+                  690,
+                  15,
+                  570
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 570,
+                "widthMm": 690,
+                "thicknessMm": 15,
+                "optionRole": "FONDO",
+                "materialColorHex": "#8b7355"
+              },
+              {
+                "componentInstanceId": "shelf-01",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    150
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  564,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    150
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "door-01",
+                "componentDefinitionId": "mod-comp-door",
+                "slotId": "puerta",
+                "role": "FRENTE",
+                "name": "Puerta",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  716
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 716,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": [
+              {
+                "placementId": "hp-hinge-01",
+                "hardwareId": "hw-hinge",
+                "name": "Bisagra CL110",
+                "shape": "hinge",
+                "sizeMm": 96,
+                "diameterMm": 35,
+                "projectionMm": 25,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "side-left-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    32.5,
+                    452
+                  ]
+                },
+                "dimensionsMm": [
+                  25,
+                  35,
+                  96
+                ]
+              }
+            ]
+          },
+          "machining": {
+            "operations": [
+              {
+                "operationId": "rel-shelf-01:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-shelf-01:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-shelf-01:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-shelf-01:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-shelf-01:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "hp-hinge-01:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "manualHardwarePlacement",
+                  "hardwarePlacementId": "hp-hinge-01"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 500,
+                    "diameterMm": 35,
+                    "depthMm": 12.5,
+                    "type": "hinge"
+                  }
+                ]
+              }
+            ],
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "rel-shelf-01:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-shelf-01"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-a41aa15a0a9fc53e6922f240ae639924551ba87418e1e82278c541403b76747b"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
+            "issues": [],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "neg-hardware-derived-edit",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-8588028751d3",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "hardwarePlacements": [
+            {
+              "anchorFace": "front",
+              "catalogHardwareId": "hw-hinge",
+              "hardwarePlacementId": "hp-shelf-joint-01",
+              "hostComponentInstanceId": "door-01",
+              "offsetMm": [
+                298,
+                300
+              ],
+              "placementKind": "derived"
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-8588028751d3",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "HARDWARE_DERIVED_EDIT",
+            "message": "placement hp-shelf-joint-01 is derived by engineering rules and does not support manual editing",
+            "severity": "error",
+            "entityId": "hp-shelf-joint-01",
+            "path": "furniture.hardwarePlacements[hardwarePlacementId=hp-shelf-joint-01]",
+            "remediation": "Only manual hardware placements can be edited directly."
+          }
+        ]
+      }
+    },
+    {
+      "id": "neg-hardware-out-of-range",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-8588028751d3",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "hardwarePlacements": [
+            {
+              "anchorFace": "front",
+              "catalogHardwareId": "hw-hinge",
+              "hardwarePlacementId": "hp-hinge-01",
+              "hostComponentInstanceId": "door-01",
+              "offsetMm": [
+                298,
+                1500
+              ]
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-8588028751d3",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "HARDWARE_PLACEMENT_INVALID",
+            "message": "placement hp-hinge-01 offset [298.0, 1500.0] is outside host board boundaries [596.0, 716.0]",
+            "severity": "error",
+            "entityId": "hp-hinge-01",
+            "path": "furniture.hardwarePlacements[hardwarePlacementId=hp-hinge-01].offsetMm",
+            "remediation": "Position the hardware within the dimensions of the host board."
+          }
+        ]
+      }
+    },
+    {
+      "id": "neg-hardware-incompatible",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-8588028751d3",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01",
+              "role": "LATERAL"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01",
+              "role": "LATERAL"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01",
+              "role": "INTERIOR"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01",
+              "role": "INTERIOR"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01",
+              "role": "FONDO"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01",
+              "role": "INTERIOR"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01",
+              "role": "FRENTE"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "hardwarePlacements": [
+            {
+              "anchorFace": "front",
+              "catalogHardwareId": "hw-incompatible",
+              "hardwarePlacementId": "hp-hinge-01",
+              "hostComponentInstanceId": "door-01",
+              "offsetMm": [
+                298,
+                100
+              ],
+              "placementKind": "manual"
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-8588028751d3",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "HARDWARE_INCOMPATIBLE",
+            "message": "hardware definition hw-incompatible is incompatible with this placement",
+            "severity": "error",
+            "entityId": "hp-hinge-01",
+            "path": "furniture.hardwarePlacements[hardwarePlacementId=hp-hinge-01].catalogHardwareId",
+            "remediation": "Choose a compatible hardware definition."
           }
         ]
       }

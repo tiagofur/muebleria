@@ -134,14 +134,17 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 		Structures: []domain.Structure{structure},
 		Components: []domain.Component{right, lateral, floor, top, back, door, shelf},
 		Hardware: []domain.Hardware{
-			{ID: "hw-handle", Code: "MAN-160", Name: "Manija 160", Unit: domain.UnitPiece, Active: true,
+			{ID: "hw-handle", Code: "MAN-160", Name: "Manija 160", Category: "handle", Unit: domain.UnitPiece, Active: true,
 				PreviewShape: authoringStrPtr("bar-pull"), PreviewSizeMm: authoringFloatPtr(160), PreviewProjectionMm: authoringFloatPtr(37), PreviewDiameterMm: authoringFloatPtr(32)},
-			{ID: "hw-hinge", Code: "BIS-CL110", Name: "Bisagra CL110", Unit: domain.UnitPiece, Active: true,
+			{ID: "hw-hinge", Code: "BIS-CL110", Name: "Bisagra CL110", Category: "hinge", Unit: domain.UnitPiece, Active: true,
 				PreviewShape: authoringStrPtr("hinge"), PreviewSizeMm: authoringFloatPtr(96), PreviewProjectionMm: authoringFloatPtr(25), PreviewDiameterMm: authoringFloatPtr(35)},
-			{ID: "hw-hinge-b", Code: "BIS-CL100", Name: "Bisagra CL100", Unit: domain.UnitPiece, Active: true,
+			{ID: "hw-hinge-b", Code: "BIS-CL100", Name: "Bisagra CL100", Category: "hinge", Unit: domain.UnitPiece, Active: true,
 				PreviewShape: authoringStrPtr("hinge"), PreviewSizeMm: authoringFloatPtr(80), PreviewProjectionMm: authoringFloatPtr(22), PreviewDiameterMm: authoringFloatPtr(32)},
-			{ID: "hw-minifix", Code: "HER-MIN-15", Name: "Minifix 15", Unit: domain.UnitPiece, Active: true},
-			{ID: "hw-dowel", Code: "HER-TAQ-8X30", Name: "Tarugo 8x30", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-minifix", Code: "HER-MIN-15", Name: "Minifix 15", Category: "connector", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-dowel", Code: "HER-TAQ-8X30", Name: "Tarugo 8x30", Category: "connector", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-incompatible", Code: "CORR-450", Name: "Corredera Telescópica 450", Category: "slide", Unit: domain.UnitPiece, Active: true,
+				PreviewShape: authoringStrPtr("slide"),
+				CompatibleRoles: []string{"lateral_izquierdo", "lateral_derecho", "cajon"}},
 		},
 	}
 	return &module, catalog
@@ -183,6 +186,14 @@ func occurrenceJSON(instanceID, defID string, translation []float64) authoringOc
 	return occ
 }
 
+func occurrenceWithRoleJSON(instanceID, defID, role string) authoringOccurrenceWire {
+	return authoringOccurrenceWire{
+		ComponentInstanceID:   instanceID,
+		ComponentDefinitionID: defID,
+		Role:                  role,
+	}
+}
+
 func defaultOccurrencesJSON() []authoringOccurrenceWire {
 	return []authoringOccurrenceWire{
 		occurrenceJSON("side-left-01", "st-comp-side", nil),
@@ -192,6 +203,22 @@ func defaultOccurrencesJSON() []authoringOccurrenceWire {
 		occurrenceJSON("back-01", "mod-comp-back", nil),
 		occurrenceJSON("shelf-01", "mod-comp-shelf", nil),
 		occurrenceJSON("door-01", "mod-comp-door", nil),
+	}
+}
+
+// defaultOccurrencesWithRolesJSON returns the standard occurrence set with the
+// canonical optionRole populated on each component. Required for scenarios that
+// test hardware compatibility via CompatibleRoles so the TS validator can
+// evaluate the check without falling back to name/ID heuristics.
+func defaultOccurrencesWithRolesJSON() []authoringOccurrenceWire {
+	return []authoringOccurrenceWire{
+		occurrenceWithRoleJSON("side-left-01", "st-comp-side", "LATERAL"),
+		occurrenceWithRoleJSON("side-right-01", "st-comp-side-r", "LATERAL"),
+		occurrenceWithRoleJSON("floor-01", "st-comp-base", "INTERIOR"),
+		occurrenceWithRoleJSON("top-01", "st-comp-top", "INTERIOR"),
+		occurrenceWithRoleJSON("back-01", "mod-comp-back", "FONDO"),
+		occurrenceWithRoleJSON("shelf-01", "mod-comp-shelf", "INTERIOR"),
+		occurrenceWithRoleJSON("door-01", "mod-comp-door", "FRENTE"),
 	}
 }
 
@@ -253,12 +280,14 @@ type authoringFixtureGeometry struct {
 }
 
 type authoringFixtureHardware struct {
-	ID          string  `json:"id"`
-	Code        string  `json:"code"`
-	Name        string  `json:"name"`
-	Unit        string  `json:"unit"`
-	CostPerUnit float64 `json:"costPerUnit"`
-	Active      bool    `json:"active"`
+	ID              string   `json:"id"`
+	Code            string   `json:"code"`
+	Name            string   `json:"name"`
+	Category        string   `json:"category,omitempty"`
+	CompatibleRoles []string `json:"compatibleRoles,omitempty"`
+	Unit            string   `json:"unit"`
+	CostPerUnit     float64  `json:"costPerUnit"`
+	Active          bool     `json:"active"`
 }
 
 type authoringFixtureCase struct {
@@ -506,6 +535,57 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 		run("neg-parameter-string-too-long", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Parameters = map[string]any{"label": strings.Repeat("x", 200)}
 		})), http.StatusUnprocessableEntity),
+
+		// 17. Move manual hinge into shelf interference zone → real DRILLING_CONFLICT issue.
+		run("17-hardware-drilling-conflict", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-01")}
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "side-left-01",
+					AnchorFace: "front", OffsetMm: []float64{50, 150}},
+			}
+		})), http.StatusOK),
+
+		// 18. Move manual hinge away from shelf interference zone → conflict cleared.
+		run("18-hardware-conflict-cleared", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-01")}
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "side-left-01",
+					AnchorFace: "front", OffsetMm: []float64{50, 500}},
+			}
+		})), http.StatusOK),
+
+		// Negative proof: derived placement edit blocked (explicit in canonical data via PlacementKind, not encoded only in ID).
+		run("neg-hardware-derived-edit", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-shelf-joint-01", PlacementKind: "derived", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "door-01",
+					AnchorFace: "front", OffsetMm: []float64{298, 300}},
+			}
+		})), http.StatusUnprocessableEntity),
+
+		// Negative proof: hardware placement offset out of bounds.
+		run("neg-hardware-out-of-range", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "door-01",
+					AnchorFace: "front", OffsetMm: []float64{298, 1500}},
+			}
+		})), http.StatusUnprocessableEntity),
+
+		// Negative proof: incompatible hardware substitution rejected via data-driven capabilities.
+		// The slide hardware declares CompatibleRoles=[lateral_izquierdo, lateral_derecho, cajon];
+		// door-01 has canonical role FRENTE — not in that list → HARDWARE_INCOMPATIBLE.
+		// Occurrences include canonical roles so the TS validator can evaluate this
+		// without falling back to name/ID heuristics.
+		run("neg-hardware-incompatible", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesWithRolesJSON()
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-hinge-01", PlacementKind: "manual", CatalogHardwareID: "hw-incompatible", HostComponentInstanceID: "door-01",
+					AnchorFace: "front", OffsetMm: []float64{298, 100}},
+			}
+		})), http.StatusUnprocessableEntity),
 	}
 }
 
@@ -548,6 +628,7 @@ func buildAuthoringFixtureJoinery(t *testing.T, scenarios []authoringFixtureCase
 	for _, hw := range catalog.Hardware {
 		hardware = append(hardware, authoringFixtureHardware{
 			ID: hw.ID, Code: hw.Code, Name: hw.Name,
+			Category: hw.Category, CompatibleRoles: hw.CompatibleRoles,
 			Unit: string(hw.Unit), CostPerUnit: hw.CostPerUnit, Active: hw.Active,
 		})
 	}

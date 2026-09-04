@@ -183,6 +183,12 @@
           "minLength": 1,
           "maxLength": 256
         },
+        "placementKind": {
+          "enum": [
+            "manual",
+            "derived"
+          ]
+        },
         "catalogHardwareId": {
           "type": "string",
           "minLength": 1,
@@ -265,6 +271,8 @@
             "HARDWARE_HOST_INVALID",
             "HARDWARE_REFERENCE_INVALID",
             "HARDWARE_PLACEMENT_INVALID",
+            "HARDWARE_DERIVED_EDIT",
+            "HARDWARE_INCOMPATIBLE",
             "DRILLING_CONFLICT"
           ]
         },
