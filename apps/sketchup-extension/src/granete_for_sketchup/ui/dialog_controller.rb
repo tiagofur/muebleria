@@ -373,8 +373,190 @@ module Granete
         end
       end
 
+      # #498 / SU-HOST-1 shared host mutation bridge: every managed
+      # authoring mutation from the dialog — the legacy update_furniture
+      # command and the new versioned authoring_mutation channel — runs
+      # through ONE Host::AuthoringMutationCoordinator. This bridge only
+      # adapts dialog payloads into MutationCommand seams; correlation,
+      # late-response rejection, one-operation atomicity, rollback, selection
+      # restore and degraded semantics live in the coordinator so #466–#471
+      # plug in without cloning any of it.
+      module HostMutationBridge
+        def handle_authoring_mutation(dialog, payload_json)
+          envelope = Host::CommandContract.parse_command!(payload_json)
+          case envelope['mutation']
+          when 'update_furniture'
+            payload = envelope['payload'].merge(
+              'instanceId' => envelope['semanticTarget']['furnitureInstanceRef'] ||
+                              envelope['payload']['instanceId']
+            )
+            execute_coordinated_update(dialog, payload, semantic_target: envelope['semanticTarget'],
+                                                        command_message_id: envelope['messageId'])
+          end
+        rescue Host::CommandContract::ContractError => e
+          @logger.error('authoring_mutation_contract_rejected', error: e)
+          outcome = Host::MutationOutcome.new(outcome: 'rejected', category: 'invalid_authoring_input',
+                                              reason: e.message).with_mutation_name('authoring_mutation')
+          push_mutation_outcome(dialog, outcome, in_reply_to: nil)
+        end
+
+        def execute_coordinated_update(dialog, payload, semantic_target: nil, command_message_id: nil)
+          command = build_update_command(payload, semantic_target)
+          outcome = if command
+                      mutation_coordinator.execute(command, command_message_id: command_message_id)
+                    else
+                      invalid_update_outcome(payload, semantic_target)
+                    end
+          legacy = legacy_update_payload(outcome)
+          execute_bridge(dialog, 'onUpdateResult', legacy)
+          push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
+          log_operation_result('furniture_updated', payload['definitionId'] || payload[:definitionId], legacy)
+          outcome
+        rescue StandardError => e
+          @logger.error('furniture_update_failed', error: e)
+          failure = { 'success' => false, 'error' => e.message }
+          execute_bridge(dialog, 'onUpdateResult', failure)
+          outcome = Host::MutationOutcome.new(outcome: 'aborted', category: 'host_apply_failure',
+                                              reason: e.message,
+                                              semantic_target: semantic_target || {})
+                                         .with_mutation_name('update_furniture')
+          push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
+          outcome
+        end
+
+        private
+
+        # Command adapter for the furniture update flow. The full #477
+        # authoring snapshot capture arrives with #467/#468; today the
+        # authoritative resolve rides the server layout channel (nil layout
+        # under offline catalogs stays an explicit generic preview).
+        def build_update_command(payload, semantic_target)
+          definition_id = payload['definitionId'] || payload[:definitionId]
+          definition = @catalog_provider.find_definition(definition_id)
+          return nil if definition.nil?
+
+          target = update_semantic_target(payload, semantic_target)
+          entity = if target['furnitureInstanceId'] || target['furnitureInstanceRef']
+                     find_target_furniture_entity(target['furnitureInstanceRef'])
+                   else
+                     find_target_furniture_entity(nil)
+                   end
+          # Selection-first flows still capture an explicit semantic target:
+          # the captured entity's own identity, never `selection.first` as
+          # lasting truth.
+          if entity && target['furnitureInstanceRef'].nil?
+            identity = @metadata_store_factory.call(active_model).read(entity)&.dig('identity')
+            target['furnitureInstanceRef'] = identity && identity['instanceRef']
+          end
+          return nil if entity.nil? || active_model.nil? ||
+                        Host::CommandContract.semantic_target_key(target).empty?
+
+          params = payload['parameters'] || payload[:parameters] || {}
+          choices = merged_material_choices(entity, payload)
+          Host::MutationCommand.new(
+            name: 'update_furniture',
+            semantic_target: target,
+            build_furniture_request: nil,
+            resolve: ->(ctx) { resolve_update_result(definition, params, choices, ctx) },
+            context_valid: -> { update_context_valid?(entity, target) },
+            apply: ->(result, journal) { apply_update_result(journal, entity, definition, params, choices, result) }
+          )
+        end
+
+        def update_semantic_target(payload, semantic_target)
+          base = semantic_target || {}
+          ref = base['furnitureInstanceRef'] || payload['instanceId'] || payload[:instanceId]
+          target = base.dup
+          target['furnitureInstanceRef'] = ref.to_s if ref && !base.key?('furnitureInstanceRef')
+          target.reject { |_key, value| value.to_s.strip.empty? }
+        end
+
+        def resolve_update_result(definition, params, choices, request_context)
+          layout = resolve_layout_for(definition, params, choices)
+          Host::LayoutResolveResult.new(
+            layout: layout,
+            message_id: request_context[:message_id],
+            idempotency_key: request_context[:idempotency_key],
+            resolve_kind: layout ? 'native_layout' : 'generic_preview'
+          )
+        end
+
+        def apply_update_result(journal, entity, definition, params, choices, result)
+          outcome = furniture_builder_for(active_model).update_furniture(
+            journal, entity, definition, params,
+            resolved_layout: result.layout, material_choices: choices
+          )
+          return outcome if outcome['success'] == true
+
+          error = outcome['error'].to_s
+          raise Host::MutationCommand::ApplyRefused, error if journal.started_count.zero?
+
+          raise Host::MutationCommand::ApplyFailed, error
+        end
+
+        # Wrong-selection guard: the response may only apply while the exact
+        # captured furniture still carries the same semantic identity.
+        def update_context_valid?(entity, target)
+          return false if entity.respond_to?(:valid?) && !entity.valid?
+
+          metadata = @metadata_store_factory.call(active_model).read(entity)
+          identity = metadata && metadata['identity']
+          expected = target['furnitureInstanceId'] ? identity && identity['furnitureInstanceId']
+                                                  : identity && identity['instanceRef']
+          expected == (target['furnitureInstanceId'] || target['furnitureInstanceRef'])
+        rescue JSON::ParserError, Metadata::InvalidMetadataError
+          false
+        end
+
+        def invalid_update_outcome(payload, semantic_target)
+          definition_id = payload['definitionId'] || payload[:definitionId]
+          reason = @catalog_provider.find_definition(definition_id).nil? ? 'Definición no encontrada' : 'Instancia no encontrada en el modelo'
+          Host::MutationOutcome.new(outcome: 'rejected', category: 'invalid_authoring_input',
+                                    reason: reason, semantic_target: semantic_target || {})
+                               .with_mutation_name('update_furniture')
+        end
+
+        # Legacy onUpdateResult shape so the existing inspector UX keeps
+        # working; the versioned truth rides onMutationState.
+        def legacy_update_payload(outcome)
+          result = outcome.result if outcome.committed?
+          return result if result.is_a?(Hash) && result['success'] == true
+
+          payload = { 'success' => false, 'error' => outcome.reason || 'No se pudo actualizar el mueble' }
+          issues = outcome.issues.to_a.map do |issue|
+            { 'code' => issue.code, 'message' => issue.message,
+              'severity' => issue.respond_to?(:severity) ? issue.severity : nil,
+              'path' => issue.respond_to?(:path) ? issue.path : nil }.compact
+          end
+          payload['issues'] = issues unless issues.empty?
+          payload
+        end
+
+        def push_mutation_outcome(dialog, outcome, in_reply_to:)
+          execute_bridge(dialog, 'onMutationState', outcome.to_envelope(in_reply_to: in_reply_to))
+          return unless outcome.committed? && mutation_coordinator.preflight_tracker
+
+          key = Host::CommandContract.semantic_target_key(outcome.semantic_target)
+          execute_bridge(dialog, 'onPreflightState',
+                         Host::CommandContract.preflight_state_envelope(
+                           mutation_coordinator.preflight_tracker.payload_for(key)
+                         ))
+        end
+
+        # Honest dialog-level degraded state derived from catalog/session
+        # provenance (#498 minimum; #474 owns the full offline product).
+        def push_degraded_state(dialog)
+          return unless @catalog_provider.respond_to?(:last_source)
+
+          state = Host::DegradedState.for_catalog_source(@catalog_provider.last_source)
+          execute_bridge(dialog, 'onDegradedState', Host::CommandContract.degraded_state_envelope(state))
+        rescue StandardError => e
+          @logger.error('dialog_degraded_state_failed', error: e)
+        end
+      end
+
       # Insert/update callback handlers, extracted to keep DialogController
-      # within the class-length budget. Both resolve the furniture's real
+      # within its class-length budget. Both resolve the furniture's real
       # composition server-side before touching the model.
       module FurnitureBridge # rubocop:disable Metrics/ModuleLength
         # Shared texture cache for furniture builders: lives in the bridge so
@@ -417,36 +599,7 @@ module Granete
 
         def handle_update(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
-          definition_id = payload['definitionId'] || payload[:definitionId]
-          definition = @catalog_provider.find_definition(definition_id)
-          target_entity = find_target_furniture_entity(payload['instanceId'] || payload[:instanceId])
-
-          result = execute_furniture_update(definition, target_entity, payload)
-
-          execute_bridge(dialog, 'onUpdateResult', result)
-          log_operation_result('furniture_updated', definition_id, result)
-        rescue StandardError => e
-          @logger.error('furniture_update_failed', error: e)
-          payload = e.respond_to?(:issues) ? authoring_error_payload(e) : { 'success' => false, 'error' => e.message }
-          execute_bridge(dialog, 'onUpdateResult', payload)
-        end
-
-        def execute_furniture_update(definition, target_entity, payload)
-          if definition.nil?
-            { 'success' => false, 'error' => 'Definición no encontrada' }
-          elsif target_entity
-            params = payload['parameters'] || payload[:parameters] || {}
-            choices = merged_material_choices(target_entity, payload)
-            layout = resolve_layout_for(definition, params, choices)
-            furniture_builder_for(active_model).update_furniture(
-              active_model, target_entity, definition, params,
-              resolved_layout: layout, material_choices: choices
-            )
-          elsif active_model.nil?
-            mock_result(definition['name'], payload['parameters'], payload['instanceId'])
-          else
-            { 'success' => false, 'error' => 'Instancia no encontrada en el modelo' }
-          end
+          execute_coordinated_update(dialog, payload, command_message_id: payload['messageId'])
         end
 
         # A selector changes one role, while the server must resolve the whole
@@ -820,6 +973,7 @@ module Granete
         include ModelBindingBridge
         include ProjectFurnitureBridge
         include FurnitureBridge
+        include HostMutationBridge
         include OptionSelectorBridge
         include InspectorBridge
         include ObserverBridge
@@ -827,12 +981,18 @@ module Granete
 
         attr_reader :selection_observer, :entities_observer, :duplicate_resolver
 
+        # #498: the shared coordinator is injectable (application/tests)
+        # and lazily built when absent — one construction shape everywhere.
+        def mutation_coordinator
+          @mutation_coordinator ||= build_default_mutation_coordinator
+        end
+
         # rubocop:disable Metrics/ParameterLists
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
                        migration_review_controller: nil, model_binding_connector: nil,
                        project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil,
-                       design_publisher: nil)
+                       design_publisher: nil, mutation_coordinator: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -841,6 +1001,7 @@ module Granete
           @duplicate_resolver = duplicate_resolver
           @entities_observer = entities_observer
           @design_publisher = design_publisher
+          @mutation_coordinator = mutation_coordinator
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store
@@ -886,6 +1047,21 @@ module Granete
         end
 
         private
+
+        # #498 shared coordinator: built lazily when not injected so tests
+        # and the application wiring share one construction shape.
+        def build_default_mutation_coordinator
+          Host::AuthoringMutationCoordinator.new(
+            model_provider: method(:active_model),
+            logger: @logger,
+            selection_restorer: Host::SelectionRestore.new(
+              metadata_store_factory: @metadata_store_factory,
+              model_provider: method(:active_model),
+              logger: @logger
+            ),
+            preflight_tracker: Host::PreflightTracker.new
+          )
+        end
 
         def option_selector
           @option_selector ||= OptionSelectorController.new(logger: @logger)
@@ -933,6 +1109,7 @@ module Granete
           dialog.add_action_callback('get_catalog') { send_catalog(dialog) }
           dialog.add_action_callback('insert_furniture') { |_c, p| handle_insert(dialog, p) }
           dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
+          dialog.add_action_callback('authoring_mutation') { |_c, p| handle_authoring_mutation(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(p) }
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
@@ -953,6 +1130,7 @@ module Granete
           check_current_selection(dialog)
           refresh_binding_status
           refresh_project_furniture
+          push_degraded_state(dialog)
           @logger.info('dialog_ready')
         end
 

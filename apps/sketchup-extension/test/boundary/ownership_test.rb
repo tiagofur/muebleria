@@ -12,6 +12,8 @@ class OwnershipTest < Minitest::Test
   # The plural "parts" and the resolved-parts family stay banned. `preflight`
   # is deliberately not banned: #477 makes its server-authored subset/link a
   # required wire response that Ruby validates but never computes.
+  # `stale` is deliberately absent: since #498 it is the canonical host
+  # interaction/degraded state for superseded or 409 conflict responses.
   FORBIDDEN_RUNTIME_TERMS = %w[
     bom
     cutlist
@@ -29,7 +31,6 @@ class OwnershipTest < Minitest::Test
     releases
     releasing
     resolvedparts
-    stale
     toolpath
   ].freeze
   FORBIDDEN_FIXTURE_KEYS = %w[
@@ -46,7 +47,7 @@ class OwnershipTest < Minitest::Test
     resolvedParts
     toolpath
   ].freeze
-  ALLOWED_REQUIRES = %w[base64 digest extensions fileutils json net/http sketchup time uri].freeze
+  ALLOWED_REQUIRES = %w[base64 digest extensions fileutils json net/http securerandom sketchup time uri].freeze
   # Matches require('x'), require "x", Kernel.require 'x', require_relative
   # 'x', gem 'x', and ::require 'x' — not just the plain single-line form.
   RUNTIME_DEPENDENCY_PATTERN = /

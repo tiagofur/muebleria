@@ -1,28 +1,23 @@
-# Feature activa: F211 (#398 / DT-14) — End-to-End Digital Thread Contract & Regression Gate
+# Feature activa: #498 (SU-HOST-1) — Shared host interaction orchestration for atomic authoring and degraded states
 
 - Actualizado: 2026-09-04 America/Mexico_City
-- Feature: F211 — `Add end-to-end Digital Thread contract and regression suite (#398 / DT-14)`
-- Rama: `feat/398-digital-thread-e2e-regression-gate`
-- Estado: `done` (review round 1 corregido y APPROVED; host TestUp **ejecutado en
-  SketchUp 2026 real: 3/3, 47 assertions, evidencia
-  `progress/host_smoke_F211_testup_ci.json`** — cierre host completo)
+- Feature: #498 — `[P0][SU-HOST-1] Shared host interaction orchestration for atomic authoring and degraded states`
+- Rama: `feat/498-shared-host-interaction-orchestration`
+- Estado: `ready_for_review`
 - Resultados y verificación:
-  1. Fixture canónico unificado en `contracts/digitalThreadE2E.json` (invariantes C1–C9).
-  2. Suite Go `backend-go/internal/storage/digital_thread_e2e_test.go` (9/9 tests pasando con PostgreSQL real, app-role `granete_app` RLS y triggers de inmutabilidad).
-  3. Suite Ruby `apps/sketchup-extension/test/unit/digital_thread_contract_test.rb` (403 tests, 0 fallos, `rake verify` verde). Smoke host `TC_DigitalThreadE2ESmoke.rb`
-     **ejecutado en host real** (SketchUp 26.2.242 / macOS 26.6.2 / RBZ `2e8765fa…`):
-     placement+exclusión unmanaged, **DuplicateResolver real** (original conserva FI-001,
-     copia recibe FI-NEW `origin=duplicate`, colisión resuelta, save/reopen) — 3/3 PASS.
-  4. Documentación arquitectónica canónica en `docs/architecture/digital-thread-e2e-regression-gate.md`
-     (tabla de capas con host PASS+evidencia, boundary del path de artefactos, política de fixtures sin snapshot-blessing).
-  5. Gates completos del repositorio: `go test ./...` verde, `bundle exec rake verify` verde, `pnpm openapi:check && pnpm test` verde (411 tests pasando). Detalle: `progress/implementation_398_dt14.md`.
-  6. Review independiente (`progress/review_398.md`): round 1 CHANGES_REQUESTED (7 fixes
-     aplicados) + round 2 APPROVED; cierre host final con DuplicateResolver real en §3 de las notas.
+  1. Shared State Store: `apps/sketchup-extension/src/granete_for_sketchup/resources/js/granete-state.js` centraliza las 6 slices reactivas (`session`, `catalog`, `selection`, `mutation`, `preflight`, `degraded`) con re-ejecución idempotente y desacoplada del DOM.
+  2. Versioned Bridge: `granete-bridge.js` + `Host::CommandContract` con esquema `granete.sketchup-host-command.v1`, correlation id estable (`messageId` / `inReplyTo`), validación fail-closed y targets semánticos neutrales (`furnitureInstanceId`, `componentInstanceId`, `hardwarePlacementId`).
+  3. AuthoringMutationCoordinator: `Host::AuthoringMutationCoordinator` agnóstico al dominio (orquesta sin `if hinge/shelf/Blum`), ejecuta el pipeline atómico completo: validate target -> editing_intent -> allocate correlation -> resolving -> authoritative resolve -> reject stale/late/wrong-context -> ONE SketchUp operation (`OperationJournal`) -> apply accepted hierarchy -> metadata written inside operation -> restore semantic selection -> invalidate preflight -> committed.
+  4. Failure Taxonomy y Degraded States: `Host::ErrorTaxonomy` diferencia `authentication`, `license_capability`, `network_unavailable`, `stale_conflict`, `invalid_authoring_input`, etc. Degraded states (`resolved_current`, `resolved_stale`, `unresolved_preview`, `offline_cached`, `sync_required`, `blocked_incompatible`) con honest Spanish UI feedback y regla de que previews genéricos nunca se marcan productivos.
+  5. Negative Proofs y Real-Host TestUp:
+     - `TC_HostMutationSmoke.rb` implementado para host real: mutation atómica exitosa + Undo restituye H1 con identidad semántica intacta, rechazo de resolve genera 0 operaciones y conserva H1, excepción durante apply aborta la operación y conserva H1, respuestas tardías son rechazadas como supersedidas, save/reopen persiste sin flags de UI transient.
+     - Tests unitarios y boundary: `bundle exec rake unit` (455 runs, 3496 assertions, 0 failures), `bundle exec rake boundary` (3 runs, 1911 assertions, 0 failures), `bundle exec rake syntax` y `bundle exec rake package:verify` (RBZ deterministic sha256) todos pasando en verde.
+     - Monorepo: `pnpm openapi:check`, `pnpm typecheck`, `pnpm test` (33 files, 411 tests) 100% verde.
 
-## Historial previo — #395 DT-11
+## Historial previo — F211 (#398 / DT-14)
 
-- #395 implementada y mergeada a main (PR #551, merge `03e8c77b`):
-  aprobación de DesignRevision y ProductionRelease pinneado a revisiones exactas.
+- #398 implementada y mergeada a main (PR #554, merge `77b1ead8`):
+  End-to-End Digital Thread Contract & Regression Gate.
 
 
 ## Historial previo — #393 DT-9

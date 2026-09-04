@@ -78,7 +78,8 @@ module Granete
           project_furniture_placer: @project_furniture_placer,
           duplicate_resolver: @duplicate_resolver,
           entities_observer: @entities_observer,
-          design_publisher: @design_publisher
+          design_publisher: @design_publisher,
+          mutation_coordinator: build_mutation_coordinator(logger)
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
@@ -123,6 +124,21 @@ module Granete
       attr_reader :model_binding_connector, :duplicate_resolver, :entities_observer
 
       private
+
+      # #498 / SU-HOST-1: the ONE shared host mutation coordinator every
+      # managed authoring mutation flows through (#466–#471 plug commands
+      # into it; they never clone it).
+      def build_mutation_coordinator(logger)
+        Host::AuthoringMutationCoordinator.new(
+          model_provider: method(:active_model),
+          logger: logger,
+          selection_restorer: Host::SelectionRestore.new(
+            metadata_store_factory: method(:metadata_store),
+            model_provider: method(:active_model),
+            logger: logger
+          )
+        )
+      end
 
       # #389 / DT-5: Place existing project units. The placer reuses the
       # binding connector's service for base revalidation and the same

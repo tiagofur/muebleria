@@ -21,6 +21,7 @@ require_relative '../../src/granete_for_sketchup/selection/resolver'
 require_relative '../../src/granete_for_sketchup/observers/selection_observer'
 require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
+require_relative '../support/host_runtime'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
 
@@ -200,7 +201,9 @@ class DialogControllerTest < Minitest::Test
     end
   end
 
-  # Builder double capturing the resolved layout kwarg.
+  # Builder double capturing the resolved layout kwarg. Mirrors the real
+  # builder's host contract (#498): an update runs as exactly ONE SketchUp
+  # operation through the coordinator's journal.
   class BuilderSpy
     attr_reader :insert_layout, :update_layout, :material_choices
 
@@ -211,9 +214,11 @@ class DialogControllerTest < Minitest::Test
         'board_count' => 1, 'hardware_count' => 0 }
     end
 
-    def update_furniture(_model, _group, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil)
+    def update_furniture(model, _group, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil)
       @update_layout = resolved_layout
       @material_choices = material_choices
+      model.start_operation('Editar Mueble', true)
+      model.commit_operation
       { 'success' => true, 'name' => 'Base Una Puerta', 'component_count' => 1 }
     end
   end

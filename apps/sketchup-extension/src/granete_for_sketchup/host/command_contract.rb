@@ -1,0 +1,200 @@
+# frozen_string_literal: true
+
+require 'json'
+require 'securerandom'
+
+module Granete
+  module SketchUpExtension
+    module Host
+      # Versioned Ruby↔JavaScript bridge contract of the shared host runtime
+      # (#498 / integration excellence §6.2: "typed/validated messages at the
+      # Ruby↔JavaScript boundary"). Every mutation-channel message carries
+      # schema identity, correlation (messageId / inReplyTo) and an explicit
+      # semantic target; unknown schema, unknown mutation or unknown fields
+      # fail closed BEFORE any host state is touched. The legacy dialog
+      # callbacks keep their reviewed shapes — this contract owns the new
+      # mutation/preflight/degraded channel.
+      module CommandContract
+        class ContractError < StandardError; end
+
+        SCHEMA_ID = 'granete.sketchup-host-command.v1'
+        MESSAGE_TYPES = %w[mutation_command mutation_state preflight_state degraded_state].freeze
+        KNOWN_MUTATIONS = %w[update_furniture].freeze
+
+        SEMANTIC_TARGET_KEYS = %w[furnitureInstanceId furnitureInstanceRef componentInstanceId
+                                  hardwarePlacementId].freeze
+        # A child/hardware occurrence is only addressable together with its
+        # owning furniture identity (authoring contract §3): sharing a
+        # componentDefinitionId must never collapse two occurrences.
+        CHILD_TARGET_KEYS = %w[componentInstanceId hardwarePlacementId].freeze
+
+        OUTCOME_MESSAGE_PREFIX = 'mut-out'
+        MAX_ID_LENGTH = 128
+
+        module_function
+
+        # Parses and validates a JS→Ruby mutation command envelope.
+        # Raises ContractError on any violation; never touches the model.
+        def parse_command!(raw)
+          envelope = parse_json(raw)
+          assert_schema(envelope)
+          assert_type(envelope, 'mutation_command')
+
+          message_id = bounded_string(envelope['messageId'], 'messageId')
+          mutation = envelope['mutation'].to_s
+          unless KNOWN_MUTATIONS.include?(mutation)
+            raise ContractError, "Mutación desconocida en el contrato del host: #{mutation.inspect}"
+          end
+
+          target = parse_semantic_target(envelope['semanticTarget'])
+          payload = envelope['payload']
+          raise ContractError, 'payload debe ser un objeto' unless payload.is_a?(Hash)
+
+          {
+            'messageId' => message_id,
+            'mutation' => mutation,
+            'semanticTarget' => target,
+            'payload' => payload
+          }
+        end
+
+        # Closed-shape semantic target: only Granete identity namespaces, at
+        # least one non-empty value, and child targets anchored to their
+        # owning furniture. Nothing here derives identity from names/GUIDs.
+        def parse_semantic_target(raw)
+          raise ContractError, 'semanticTarget debe ser un objeto' unless raw.is_a?(Hash)
+
+          unknown = raw.keys - SEMANTIC_TARGET_KEYS
+          unless unknown.empty?
+            raise ContractError, "semanticTarget con campos desconocidos: #{unknown.join(', ')}"
+          end
+
+          target = {}
+          SEMANTIC_TARGET_KEYS.each do |key|
+            value = raw[key]
+            target[key] = value if value.is_a?(String) && !value.strip.empty?
+          end
+          raise ContractError, 'semanticTarget sin identidad semántica' if target.empty?
+
+          if (target.keys & CHILD_TARGET_KEYS).any? &&
+             (target.keys & %w[furnitureInstanceId furnitureInstanceRef]).empty?
+            raise ContractError,
+                  'un objetivo componentInstanceId/hardwarePlacementId requiere el mueble dueño'
+          end
+
+          target
+        end
+
+        # Stable key of a semantic target (double-submit guard + preflight
+        # invalidation scope). Sorted so key order never matters.
+        def semantic_target_key(target)
+          SEMANTIC_TARGET_KEYS.filter_map { |key| "#{key}=#{target[key]}" if target[key] }.sort.join('|')
+        end
+
+        # Ruby→JS mutation outcome envelope. `outcome.result` is the legacy
+        # result hash (kept for the existing UI); behavior-relevant truth is
+        # outcome/category/issues/resolveKind/degraded.
+        def mutation_state_envelope(message_id:, in_reply_to:, mutation:, outcome:, category: nil,
+                                    reason: nil, issues: [], result: nil, resolve_kind: nil,
+                                    degraded: nil, semantic_target: {})
+          assert_outcome(outcome)
+          assert_category(category)
+          {
+            'schemaId' => SCHEMA_ID,
+            'type' => 'mutation_state',
+            'messageId' => bounded_string(message_id, 'messageId'),
+            'inReplyTo' => in_reply_to.nil? || in_reply_to.to_s.empty? ? nil : in_reply_to.to_s,
+            'mutation' => mutation.to_s,
+            'outcome' => outcome,
+            'category' => category,
+            'reason' => reason,
+            'issues' => compact_issues(issues),
+            'resolveKind' => resolve_kind,
+            'degraded' => degraded,
+            'semanticTarget' => semantic_target.is_a?(Hash) ? semantic_target : {}
+          }.merge(result.nil? ? {} : { 'result' => result })
+        end
+
+        def preflight_state_envelope(entries)
+          {
+            'schemaId' => SCHEMA_ID,
+            'type' => 'preflight_state',
+            'messageId' => "#{OUTCOME_MESSAGE_PREFIX}-preflight-#{SecureRandom.hex(6)}",
+            'entries' => entries
+          }
+        end
+
+        def degraded_state_envelope(state, category: nil)
+          raise ContractError, "estado degradado desconocido: #{state.inspect}" unless DegradedState::STATES.include?(state)
+
+          {
+            'schemaId' => SCHEMA_ID,
+            'type' => 'degraded_state',
+            'messageId' => "#{OUTCOME_MESSAGE_PREFIX}-degraded-#{SecureRandom.hex(6)}",
+            'state' => state,
+            'category' => category
+          }
+        end
+
+        def next_outcome_message_id
+          "#{OUTCOME_MESSAGE_PREFIX}-#{SecureRandom.hex(8)}"
+        end
+
+        def assert_outcome(outcome)
+          return if Granete::SketchUpExtension::Host::MutationOutcome::OUTCOMES.include?(outcome)
+
+          raise ContractError, "outcome desconocido: #{outcome.inspect}"
+        end
+
+        def assert_category(category)
+          return if category.nil? || ErrorTaxonomy::CATEGORIES.include?(category)
+
+          raise ContractError, "categoría de error desconocida: #{category.inspect}"
+        end
+
+        def parse_json(raw)
+          envelope = raw.is_a?(String) ? JSON.parse(raw) : raw
+          raise ContractError, 'envelope debe ser un objeto' unless envelope.is_a?(Hash)
+
+          envelope
+        rescue JSON::ParserError
+          raise ContractError, 'envelope no es JSON válido'
+        end
+
+        def assert_schema(envelope)
+          return if envelope['schemaId'] == SCHEMA_ID
+
+          raise ContractError,
+                "Schema del host no soportado: #{envelope['schemaId'].inspect} " \
+                "(esta extensión entiende #{SCHEMA_ID})"
+        end
+
+        def assert_type(envelope, expected)
+          return if envelope['type'] == expected || (expected == 'mutation_command' && envelope['type'].nil? && envelope['mutation'])
+
+          raise ContractError, "Tipo de mensaje inesperado: #{envelope['type'].inspect}"
+        end
+
+        def bounded_string(value, field)
+          unless value.is_a?(String) && !value.strip.empty? && value.length <= MAX_ID_LENGTH
+            raise ContractError, "#{field} debe ser un string no vacío"
+          end
+
+          value
+        end
+
+        def compact_issues(issues)
+          issues.to_a.map do |issue|
+            next { 'code' => issue.to_s } unless issue.respond_to?(:code)
+
+            {
+              'code' => issue.code,
+              'message' => issue.message,
+              'severity' => issue.respond_to?(:severity) ? issue.severity : nil
+            }.compact
+          end
+        end
+      end
+    end
+  end
+end
