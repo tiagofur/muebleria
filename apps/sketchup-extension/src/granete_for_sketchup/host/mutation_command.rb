@@ -14,8 +14,8 @@ module Granete
       #                                this command resolves another way)
       #   resolve_intent(ctx)     -> accepted-result object (raises on failure)
       #   context_still_valid?    -> bool (exact semantic context unchanged)
-      #   apply_accepted_state(result, journal) -> Hash (ONE operation through
-      #                                the journal; MUST raise on failure)
+      #   apply_accepted_state(result, host_context) -> Hash (receives
+      #                                host_context; MUST raise on failure)
       #   restore_selection(result) -> entity|nil (view state, optional)
       #   manufacturing_affecting? -> bool
       class MutationCommand
@@ -58,8 +58,8 @@ module Granete
           @manufacturing_affecting
         end
 
-        def apply_accepted_state(result, journal)
-          return @apply.call(result, journal) if @apply
+        def apply_accepted_state(result, host_context)
+          return @apply.call(result, host_context) if @apply
 
           raise NotImplementedError, "#{self.class}#apply_accepted_state not implemented"
         end
