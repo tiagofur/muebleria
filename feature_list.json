@@ -5537,6 +5537,47 @@
       ],
       "completedAt": "2026-09-03",
       "evidence": "go test ./... green against real PostgreSQL incl. TestFurnitureInstances_ListSummariesDisplay (quoted dims win, module fallback, no invented display) and TestExtensionClientBoundaryProjectFurniture + updated TestExtensionTokenDenyByDefault (PUT working-copy granted; POST furniture-instances/reset/publish denied); rake verify green (rubocop 0, 342 unit runs incl. 18 project_furniture tests covering proofs A-I, boundary, RBZ sha256 verified); dialog_project_furniture JS harness 10/10; pnpm openapi:check / typecheck / test green; pilot-gate.sh Gate A PASS; git diff --check clean; TC_ProjectFurnitureSmoke added for the installed-RBZ host (identity survives save/close/reopen, duplicates fail loud)."
+    },
+    {
+      "id": "F209",
+      "title": "Classify reconciliation impact and explicit re-quote (#394 / DT-10)",
+      "description": "Digital Thread slice on top of the exact #393 reconciliation (ADR-0003, digital-thread \u00a7\u00a715-16): the deterministic ReconciliationResult evolves into actionable, NON-exclusive semantic impact groups per FurnitureInstance - commercial, manufacturing and spatial - classified by a single central policy (difference path to impact) that fails closed on unknown paths. requiresRequote derives strictly from commercial impacts (never a user flag), conflicts set requiresResolution and block the requote (canRequote=false), and spatial-only changes (pure move/rotation with explicit two-sided evidence) never justify a new commercial revision; quote snapshots without spatial evidence never invent differences (#393 \u00a742 preserved). The explicit workflow POST /api/projects/{projectId}/quote-revisions:requote (generated OpenAPI contract, durable Idempotency-Key, RoleCanMutateProjects) recomputes reconciliation+classification server-side from exact revisions - the client only selects which FurnitureInstances incorporate design truth - and creates the next DRAFT QuoteRevision through the single #393 writer with requote provenance columns base_quote_revision_id/source_design_revision_id (migration 000117, composite same-project FKs, immutable by trigger). The accepted source revision stays byte-identical; identities are preserved (modeled_not_quoted units join with the same FurnitureInstanceID, quoted_not_modeled units are never deleted, removed units keep their terminal lifecycle); the commercial snapshot never receives transform/room/technical locators.",
+      "tags": [
+        "digital-thread",
+        "backend",
+        "domain",
+        "openapi",
+        "rls",
+        "projects",
+        "quotes",
+        "reconciliation",
+        "requote",
+        "p0"
+      ],
+      "created": "2026-09-03",
+      "status": "done",
+      "acceptance": [
+        "Moving FI-001 only classifies as spatial-only (with two-sided spatial evidence) and never requires a requote",
+        "Width/material/definition changes affecting price or BOM are never spatial-only",
+        "Manufacturing staleness is surfaced independently from commercial status (non-exclusive impact groups)",
+        "The accepted quote stays byte-identical after the requote (row, status and items)",
+        "The user explicitly creates the new draft QuoteRevision from chosen differences (includeFurnitureInstanceIds selection); nothing is created automatically",
+        "Comparison outputs are deterministic and contract-tested (contracts/reconciliationImpact.json + Go contract test with determinism proof)",
+        "Backend and surfaces share ONE classification authority: the reconciliation response embeds per-difference, per-item and summary impact; no parallel rules"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/394",
+        "https://github.com/tiagofur/muebleria/issues/384",
+        "docs/architecture/project-design-digital-thread.md",
+        "docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md",
+        "contracts/reconciliationImpact.json",
+        "progress/implementation_394_dt10.md"
+      ],
+      "depends_on": [
+        "F208"
+      ],
+      "completedAt": "2026-09-03",
+      "evidence": "go test ./... green against real PostgreSQL (incl. TestRequote_AcceptedQuoteStaysIntact, TestRequote_StaleBaseRejected_FailClosed, TestRequote_PureMove_NeverCreatesCommercialRevision, TestRequote_MultiOrgRLS_OwnerOrganizationOnly, TestRequote_ProvenanceMigration_FreshAndUpgrade); domain classification + requote suites and API handler tests green; deterministic contract fixture contracts/reconciliationImpact.json pinned by TestReconciliationImpactContract; pnpm openapi:check / typecheck / test green (3524 tests); go vet clean."
     }
   ]
 }

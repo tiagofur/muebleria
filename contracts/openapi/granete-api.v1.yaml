@@ -2686,6 +2686,61 @@
         }
       }
     },
+    "/projects/{projectId}/quote-revisions:requote": {
+      "post": {
+        "operationId": "requoteProjectQuote",
+        "summary": "Create a new draft QuoteRevision from an exact source quote revision and an exact design revision (#394, explicit user decision)",
+        "description": "Explicit re-quote workflow. The server re-runs the exact reconciliation and impact classification server-side (client classifications are never trusted), rejects conflicts fail-closed and rejects inputs without commercial changes (spatial-only moves never create a commercial revision). The new draft is written through the single #393 writer with exact base revision concurrency: a stale base returns 409. The source revision — accepted or not — is never rewritten, and the new revision keeps the same FurnitureInstance identities. Requires an Idempotency-Key: a retry replays the same created revision. Every explicitly supplied includeFurnitureInstanceIds entry must be an incorporable design-driven commercial change of this exact reconciliation (modified with commercial impact or modeled_not_quoted); unknown, synced, spatial-only, quoted_not_modeled, removed or conflict identities are rejected without creating anything. An omitted or empty includeFurnitureInstanceIds means incorporate all eligible changes.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequoteProjectQuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Draft quote revision created from the design revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectQuoteRequoteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}": {
       "get": {
         "operationId": "getDesign",
@@ -7164,14 +7219,42 @@
         "type": "object",
         "additionalProperties": true,
         "required": [
-          "path"
+          "path",
+          "impact"
         ],
         "properties": {
           "path": {
             "type": "string"
           },
           "quoteValue": {},
-          "designValue": {}
+          "designValue": {},
+          "impact": {
+            "$ref": "#/components/schemas/ChangeImpact"
+          }
+        }
+      },
+      "ChangeImpact": {
+        "type": "object",
+        "description": "Non-exclusive semantic impact groups of one difference or reconciliation item (#394 / DT-10). An item may carry several impacts at once.",
+        "additionalProperties": false,
+        "required": [
+          "commercial",
+          "manufacturing",
+          "spatial"
+        ],
+        "properties": {
+          "commercial": {
+            "type": "boolean",
+            "description": "May change what is sold, how much is sold, or what should be charged."
+          },
+          "manufacturing": {
+            "type": "boolean",
+            "description": "May change what will eventually have to be fabricated."
+          },
+          "spatial": {
+            "type": "boolean",
+            "description": "Placement-only change (transform/room); never requires a requote by itself."
+          }
         }
       },
       "ReconciliationItem": {
@@ -7180,7 +7263,8 @@
         "required": [
           "furnitureInstanceId",
           "status",
-          "differences"
+          "differences",
+          "impact"
         ],
         "properties": {
           "furnitureInstanceId": {
@@ -7194,6 +7278,9 @@
             "items": {
               "$ref": "#/components/schemas/StructuredDifference"
             }
+          },
+          "impact": {
+            "$ref": "#/components/schemas/ChangeImpact"
           },
           "notes": {
             "type": "string"
@@ -7244,7 +7331,8 @@
           "quoteRevisionId",
           "designRevisionId",
           "summary",
-          "items"
+          "items",
+          "impact"
         ],
         "properties": {
           "projectId": {
@@ -7267,6 +7355,155 @@
             "items": {
               "$ref": "#/components/schemas/ReconciliationItem"
             }
+          },
+          "impact": {
+            "$ref": "#/components/schemas/ReconciliationImpactSummary"
+          }
+        }
+      },
+      "ReconciliationImpactSummary": {
+        "type": "object",
+        "description": "Derived requote decision over a reconciliation (#394 / DT-10). requiresRequote derives strictly from commercial impacts and is never user-set.",
+        "additionalProperties": false,
+        "required": [
+          "requiresRequote",
+          "requiresResolution",
+          "canRequote",
+          "commercialChanges",
+          "manufacturingChanges",
+          "spatialChanges"
+        ],
+        "properties": {
+          "requiresRequote": {
+            "type": "boolean",
+            "description": "True exactly when at least one item has commercial impact; the user should explicitly decide whether to create a new draft QuoteRevision."
+          },
+          "requiresResolution": {
+            "type": "boolean",
+            "description": "True when reconciliation reported conflicts: no reliable truth to quote from until they are resolved."
+          },
+          "canRequote": {
+            "type": "boolean",
+            "description": "False exactly when conflicts block the explicit requote flow (fail-closed)."
+          },
+          "commercialChanges": {
+            "type": "integer"
+          },
+          "manufacturingChanges": {
+            "type": "integer"
+          },
+          "spatialChanges": {
+            "type": "integer"
+          }
+        }
+      },
+      "QuoteRevisionStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "published",
+          "accepted",
+          "superseded"
+        ]
+      },
+      "QuoteRevisionSourceType": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "imported",
+          "requote",
+          "system"
+        ]
+      },
+      "QuoteRevision": {
+        "type": "object",
+        "description": "Immutable commercial revision snapshot of a project (#393 / DT-9, #394 / DT-10).",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "projectId",
+          "revisionNumber",
+          "status",
+          "sourceType"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revisionNumber": {
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteRevisionStatus"
+          },
+          "sourceType": {
+            "$ref": "#/components/schemas/QuoteRevisionSourceType"
+          },
+          "baseQuoteRevisionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Exact source quote revision when this revision was created by the explicit requote workflow."
+          },
+          "sourceDesignRevisionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Exact DesignRevision whose commercial state this requote incorporates."
+          },
+          "notes": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "RequoteProjectQuoteRequest": {
+        "type": "object",
+        "description": "Explicit re-quote decision (#394 / DT-10): both revisions must be exact IDs — 'latest' is never implicit. Values for the new draft derive server-side from these exact revisions; the client only decides which design-driven changes to incorporate.",
+        "additionalProperties": false,
+        "required": [
+          "baseQuoteRevisionId",
+          "designRevisionId"
+        ],
+        "properties": {
+          "baseQuoteRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "includeFurnitureInstanceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Optional explicit selection of the FurnitureInstances whose design-driven commercial changes are incorporated. Omitted or empty means incorporate all eligible changes. Fail-closed: every supplied ID must exist in this exact reconciliation and be an incorporable design-driven commercial change (modified with commercial impact or modeled_not_quoted); unknown, synced, spatial-only, quoted_not_modeled, removed or conflict identities reject the whole command without creating anything. Sold units are carried over regardless."
+          }
+        }
+      },
+      "ProjectQuoteRequoteResult": {
+        "type": "object",
+        "description": "Result of the explicit requote command: the created draft revision plus the server-side classification that justified it.",
+        "additionalProperties": false,
+        "required": [
+          "quoteRevision",
+          "impact"
+        ],
+        "properties": {
+          "quoteRevision": {
+            "$ref": "#/components/schemas/QuoteRevision"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/ReconciliationImpactSummary"
           }
         }
       }

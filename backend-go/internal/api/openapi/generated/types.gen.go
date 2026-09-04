@@ -1160,15 +1160,23 @@ const (
 )
 
 type StructuredDifference struct {
-	Path        string `json:"path"`
-	QuoteValue  *any   `json:"quoteValue,omitempty"`
-	DesignValue *any   `json:"designValue,omitempty"`
+	Path        string       `json:"path"`
+	QuoteValue  *any         `json:"quoteValue,omitempty"`
+	DesignValue *any         `json:"designValue,omitempty"`
+	Impact      ChangeImpact `json:"impact"`
+}
+
+type ChangeImpact struct {
+	Commercial    bool `json:"commercial"`
+	Manufacturing bool `json:"manufacturing"`
+	Spatial       bool `json:"spatial"`
 }
 
 type ReconciliationItem struct {
 	FurnitureInstanceId string                 `json:"furnitureInstanceId"`
 	Status              ReconciliationStatus   `json:"status"`
 	Differences         []StructuredDifference `json:"differences"`
+	Impact              ChangeImpact           `json:"impact"`
 	Notes               *string                `json:"notes,omitempty"`
 }
 
@@ -1183,9 +1191,60 @@ type ReconciliationSummary struct {
 }
 
 type ProjectDesignReconciliationResult struct {
-	ProjectId        string                `json:"projectId"`
-	QuoteRevisionId  string                `json:"quoteRevisionId"`
-	DesignRevisionId string                `json:"designRevisionId"`
-	Summary          ReconciliationSummary `json:"summary"`
-	Items            []ReconciliationItem  `json:"items"`
+	ProjectId        string                      `json:"projectId"`
+	QuoteRevisionId  string                      `json:"quoteRevisionId"`
+	DesignRevisionId string                      `json:"designRevisionId"`
+	Summary          ReconciliationSummary       `json:"summary"`
+	Items            []ReconciliationItem        `json:"items"`
+	Impact           ReconciliationImpactSummary `json:"impact"`
+}
+
+type ReconciliationImpactSummary struct {
+	RequiresRequote      bool  `json:"requiresRequote"`
+	RequiresResolution   bool  `json:"requiresResolution"`
+	CanRequote           bool  `json:"canRequote"`
+	CommercialChanges    int64 `json:"commercialChanges"`
+	ManufacturingChanges int64 `json:"manufacturingChanges"`
+	SpatialChanges       int64 `json:"spatialChanges"`
+}
+
+type QuoteRevisionStatus string
+
+const (
+	QuoteRevisionStatusDraft      QuoteRevisionStatus = "draft"
+	QuoteRevisionStatusPublished  QuoteRevisionStatus = "published"
+	QuoteRevisionStatusAccepted   QuoteRevisionStatus = "accepted"
+	QuoteRevisionStatusSuperseded QuoteRevisionStatus = "superseded"
+)
+
+type QuoteRevisionSourceType string
+
+const (
+	QuoteRevisionSourceTypeManual   QuoteRevisionSourceType = "manual"
+	QuoteRevisionSourceTypeImported QuoteRevisionSourceType = "imported"
+	QuoteRevisionSourceTypeRequote  QuoteRevisionSourceType = "requote"
+	QuoteRevisionSourceTypeSystem   QuoteRevisionSourceType = "system"
+)
+
+type QuoteRevision struct {
+	ID                     string                  `json:"id"`
+	ProjectId              string                  `json:"projectId"`
+	RevisionNumber         int64                   `json:"revisionNumber"`
+	Status                 QuoteRevisionStatus     `json:"status"`
+	SourceType             QuoteRevisionSourceType `json:"sourceType"`
+	BaseQuoteRevisionId    *string                 `json:"baseQuoteRevisionId,omitempty"`
+	SourceDesignRevisionId *string                 `json:"sourceDesignRevisionId,omitempty"`
+	Notes                  *string                 `json:"notes,omitempty"`
+	CreatedBy              *string                 `json:"createdBy,omitempty"`
+}
+
+type RequoteProjectQuoteRequest struct {
+	BaseQuoteRevisionId         string   `json:"baseQuoteRevisionId"`
+	DesignRevisionId            string   `json:"designRevisionId"`
+	IncludeFurnitureInstanceIds []string `json:"includeFurnitureInstanceIds,omitempty"`
+}
+
+type ProjectQuoteRequoteResult struct {
+	QuoteRevision QuoteRevision               `json:"quoteRevision"`
+	Impact        ReconciliationImpactSummary `json:"impact"`
 }

@@ -59,6 +59,12 @@ type QuoteRevision struct {
 	SourceType     string `json:"source_type"`
 	Notes          string `json:"notes,omitempty"`
 	CreatedBy      string `json:"created_by,omitempty"`
+	// Requote provenance (#394 / DT-10): a revision born from the explicit
+	// re-quote workflow records the exact source quote revision and the exact
+	// DesignRevision whose commercial state it incorporates. Empty for
+	// revisions with other origins.
+	BaseQuoteRevisionID    string `json:"baseQuoteRevisionId,omitempty"`
+	SourceDesignRevisionID string `json:"sourceDesignRevisionId,omitempty"`
 }
 
 // StructuredDifference captures a specific property difference between quote and design.
@@ -104,6 +110,16 @@ type CommercialItemSnapshot struct {
 	Parameters            map[string]any    `json:"parameters,omitempty"`
 	MaterialChoices       map[string]string `json:"materialChoices,omitempty"`
 	LifecycleStatus       string            `json:"lifecycleStatus,omitempty"`
+
+	// Spatial evidence is OPTIONAL and is never persisted in
+	// quote_revision_items (#394 / digital-thread §20: a QuoteRevision stores
+	// only commercially relevant state). It exists so a snapshot consumer that
+	// legitimately knows the placement the quote was made against (e.g. a
+	// future ChangeOrder provenance) can have pure spatial moves classified
+	// as spatial-only. Reconcile only compares spatial data when BOTH sides
+	// carry explicit evidence; absence is never a difference (#393 §42).
+	Transform *Transform3D `json:"transform,omitempty"`
+	RoomID    string       `json:"roomId,omitempty"`
 }
 
 // QuoteRevisionSnapshot is the exact commercial revision input.
@@ -359,11 +375,16 @@ func compareItems(quote CommercialItemSnapshot, design DesignRevisionItem) []Str
 	matDiffs := compareMaterialChoices(quote.MaterialChoices, design.MaterialChoices)
 	diffs = append(diffs, matDiffs...)
 
-	// Note on spatial / transform:
-	// Digital-thread §15 and #393 requirement §42:
-	// If QuoteRevision does not contain commercial transform, absence of transform in quote
-	// is NOT treated as a modification. Only if quote specifically includes transform and it differs,
-	// would it be reported. Technical locators (e.g. SketchUp persistent_id) are excluded (rule §37).
+	// 4. Spatial comparison — evidence-gated (#394 / DT-10).
+	// Digital-thread §15 and #393 requirement §42: spatial data is compared
+	// ONLY when BOTH sides carry explicit evidence. A quote snapshot without
+	// transform/room never produces a difference — absence of spatial
+	// evidence is not a modification, and spatial presence is never promoted
+	// to commercial truth. When both sides carry it, a pure move/rotation
+	// surfaces as transform/room differences that classify as spatial-only.
+	diffs = append(diffs, compareSpatialEvidence(quote, design)...)
+
+	// Technical locators (e.g. SketchUp persistent_id) are excluded (rule §37).
 
 	// Sort differences deterministically by path
 	sort.Slice(diffs, func(i, j int) bool {
@@ -371,6 +392,55 @@ func compareItems(quote CommercialItemSnapshot, design DesignRevisionItem) []Str
 	})
 
 	return diffs
+}
+
+// compareSpatialEvidence compares placement data only when both snapshots
+// carry explicit spatial evidence. One-sided evidence is a no-op.
+func compareSpatialEvidence(quote CommercialItemSnapshot, design DesignRevisionItem) []StructuredDifference {
+	var diffs []StructuredDifference
+	if quote.Transform != nil && design.Transform != nil {
+		if !vectorsEqual(quote.Transform.TranslationMm, design.Transform.TranslationMm) {
+			diffs = append(diffs, StructuredDifference{
+				Path:        "transform.translationMm",
+				QuoteValue:  normalizeVector(quote.Transform.TranslationMm),
+				DesignValue: normalizeVector(design.Transform.TranslationMm),
+			})
+		}
+		if !vectorsEqual(quote.Transform.RotationDeg, design.Transform.RotationDeg) {
+			diffs = append(diffs, StructuredDifference{
+				Path:        "transform.rotationDeg",
+				QuoteValue:  normalizeVector(quote.Transform.RotationDeg),
+				DesignValue: normalizeVector(design.Transform.RotationDeg),
+			})
+		}
+	}
+	qRoom := strings.TrimSpace(quote.RoomID)
+	dRoom := strings.TrimSpace(design.RoomID)
+	if qRoom != "" && dRoom != "" && qRoom != dRoom {
+		diffs = append(diffs, StructuredDifference{
+			Path:        "room",
+			QuoteValue:  qRoom,
+			DesignValue: dRoom,
+		})
+	}
+	return diffs
+}
+
+func vectorsEqual(a, b [3]float64) bool {
+	for i := range a {
+		if !valuesEqual(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeVector(v [3]float64) []float64 {
+	out := make([]float64, len(v))
+	for i, x := range v {
+		out[i] = x
+	}
+	return out
 }
 
 func compareParameters(qParams, dParams map[string]any) []StructuredDifference {
