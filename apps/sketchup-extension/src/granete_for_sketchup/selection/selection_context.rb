@@ -36,6 +36,7 @@ module Granete
         ATTRIBUTES = %i[furniture_instance_id furniture_instance_ref furniture_definition_id
                         component_instance_id component_definition_id catalog_component_id
                         hardware_placement_id hardware_definition_id host_component_instance_id
+                        anchor_face offset_mm
                         project_id project_ref design_id design_ref base_revision_id
                         source_revision_ref host_locator semantic_path representation
                         placement_kind owner_recovery display definition parameters
@@ -53,6 +54,8 @@ module Granete
           'hardwarePlacementId' => :hardware_placement_id,
           'hardwareDefinitionId' => :hardware_definition_id,
           'hostComponentInstanceId' => :host_component_instance_id,
+          'anchorFace' => :anchor_face,
+          'offsetMm' => :offset_mm,
           'projectId' => :project_id,
           'projectRef' => :project_ref,
           'designId' => :design_id,

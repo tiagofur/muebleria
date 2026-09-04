@@ -140,6 +140,64 @@
       return "sent";
     },
 
+    submitHardwarePlacementUpdate: function (offsetMm, selectedContext) {
+      if (isBusy()) return "busy";
+      var host = window.sketchup;
+      if (!host || typeof host.authoring_mutation !== "function") return "unavailable";
+      var context = selectedContext || (store() ? store().get("selection") : null) || {};
+      var target = {};
+      if (context.furnitureInstanceRef) target.furnitureInstanceRef = context.furnitureInstanceRef;
+      if (context.furnitureInstanceId) target.furnitureInstanceId = context.furnitureInstanceId;
+      if (context.componentInstanceId) target.componentInstanceId = context.componentInstanceId;
+      if (context.hardwarePlacementId) target.hardwarePlacementId = context.hardwarePlacementId;
+      if (Object.keys(target).length === 0 || !target.hardwarePlacementId) return "unavailable";
+
+      setPhase("editing_intent", { target: target });
+      setPhase("resolving", { target: target });
+      pendingMessageId = window.GraneteBridge ? window.GraneteBridge.nextMessageId() : ("cmd-" + Date.now());
+      var envelope = {
+        schemaId: "granete.sketchup-host-command.v1",
+        messageId: pendingMessageId,
+        mutation: "update_hardware_placement",
+        semanticTarget: target,
+        payload: {
+          offsetMm: offsetMm,
+          placementKind: context.placementKind
+        }
+      };
+      host.authoring_mutation(JSON.stringify(envelope));
+      return "sent";
+    },
+
+    submitHardwareSubstitution: function (targetHardwareDefinitionId, selectedContext) {
+      if (isBusy()) return "busy";
+      var host = window.sketchup;
+      if (!host || typeof host.authoring_mutation !== "function") return "unavailable";
+      var context = selectedContext || (store() ? store().get("selection") : null) || {};
+      var target = {};
+      if (context.furnitureInstanceRef) target.furnitureInstanceRef = context.furnitureInstanceRef;
+      if (context.furnitureInstanceId) target.furnitureInstanceId = context.furnitureInstanceId;
+      if (context.componentInstanceId) target.componentInstanceId = context.componentInstanceId;
+      if (context.hardwarePlacementId) target.hardwarePlacementId = context.hardwarePlacementId;
+      if (Object.keys(target).length === 0 || !target.hardwarePlacementId) return "unavailable";
+
+      setPhase("editing_intent", { target: target });
+      setPhase("resolving", { target: target });
+      pendingMessageId = window.GraneteBridge ? window.GraneteBridge.nextMessageId() : ("cmd-" + Date.now());
+      var envelope = {
+        schemaId: "granete.sketchup-host-command.v1",
+        messageId: pendingMessageId,
+        mutation: "substitute_hardware",
+        semanticTarget: target,
+        payload: {
+          targetHardwareDefinitionId: targetHardwareDefinitionId,
+          placementKind: context.placementKind
+        }
+      };
+      host.authoring_mutation(JSON.stringify(envelope));
+      return "sent";
+    },
+
     // Ruby→JS mutation outcome. Validated envelope + correlation guard: a
     // late outcome for an older command (inReplyTo mismatch) is discarded
     // and can never overwrite the newer state.
@@ -162,6 +220,7 @@
         outcome: envelope.outcome,
         category: machine.category,
         reason: envelope.reason || null,
+        issues: envelope.issues || [],
         degraded: envelope.degraded || null
       });
       pendingMessageId = null;

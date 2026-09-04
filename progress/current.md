@@ -1,27 +1,22 @@
-# Feature activa: #498 (SU-HOST-1) — Shared host interaction orchestration for atomic authoring and degraded states
+# Feature activa: F213 (#468 / SU-AUTH-2) — Interactive HardwarePlacement editing and smart hardware substitution
 
-- Actualizado: 2026-09-04 America/Mexico_City
-- Feature: #498 — `[P0][SU-HOST-1] Shared host interaction orchestration for atomic authoring and degraded states`
-- Rama: `feat/498-shared-host-interaction-orchestration`
-- Estado: `ready_for_review`
-- Resultados y verificación:
-  1. Shared State Store: `apps/sketchup-extension/src/granete_for_sketchup/resources/js/granete-state.js` centraliza las 6 slices reactivas (`session`, `catalog`, `selection`, `mutation`, `preflight`, `degraded`) con re-ejecución idempotente y desacoplada del DOM.
-  2. Versioned Bridge: `granete-bridge.js` + `Host::CommandContract` con esquema `granete.sketchup-host-command.v1`, correlation id estable (`messageId` / `inReplyTo`), validación fail-closed y targets semánticos neutrales (`furnitureInstanceId`, `componentInstanceId`, `hardwarePlacementId`).
-  3. AuthoringMutationCoordinator & Operation Ownership: `Host::AuthoringMutationCoordinator` es el único owner del ciclo de vida de la transacción SketchUp (`start_operation`, `commit_operation`, `abort_operation`). Los comandos reciben `CommandHostContext` que prohíbe terminantemente crear o cerrar transacciones anidadas.
-  4. Failure Taxonomy y Degraded States: `Host::ErrorTaxonomy` diferencia `authentication`, `license_capability`, `network_unavailable`, `stale_conflict`, `invalid_authoring_input`, etc. Degraded states (`resolved_current`, `resolved_stale`, `unresolved_preview`, `offline_cached`, `sync_required`, `blocked_incompatible`) con honest Spanish UI feedback y regla de que previews genéricos nunca se marcan productivos.
-  5. Real Supersession Semantics: `supersede_pending!(command)` y `cancel_current!(reason:)`. Si una mutación B superseda a A en vuelo, A queda cancelada; cualquier respuesta tardía para A es rechazada (`SupersededResponseError`) con cero operaciones sobre el host, mientras B se resuelve y commitea limpiamente.
-  6. Real-Host TestUp en SketchUp 2026 (macOS Darwin arm64, Apple M5 Pro):
-     - `TC_HostMutationSmoke.rb` ejecutado contra el RBZ empaquetado e instalado: 6 tests, 47 aserciones, 0 fallos, 0 errores (`progress/host_smoke_F498_testup_ci.json` status `Success`).
-     - A. Mutación exitosa H1 -> H2 (1 start, 1 commit) + Undo restaura H1.
-     - B. Resolve rechazado genera 0 operaciones y conserva H1 intacto.
-     - C. Excepción en apply dispara `abort_operation`, revierte geometría transitoria y conserva H1 con 0 commits.
-     - D. Supersession real: B superseda a A, respuesta tardía de A rechazada, 0 host ops para A, B commitea 1 operación.
-     - E. Intento malicioso de dos operaciones por el comando: bloqueado con fail-closed, 0 commits, H1 intacto.
-     - F. Save y reopen: estado commiteado sobrevive intacto sin metadata transitoria de UI.
-  7. Verificaciones completas:
-     - Ruby: `bundle exec rake verify` (457 unit tests, 3532 assertions, 3 boundary golden, sha256 RBZ verify, 123 rubocop files clean).
-     - JS/Monorepo: `pnpm openapi:check`, `pnpm typecheck`, `pnpm test` (33 files, 411 tests) 100% verde.
-     - Go backend: `go test ./...` 100% verde.
+- Actualizado: 2026-09-04 14:02 America/Mexico_City
+- Feature: F213 — `[P0][SU-AUTH-2] Interactive HardwarePlacement editing and smart hardware substitution`
+- Rama: `feat/468-interactive-hardware-placement-editing`
+- Estado: `completed`
+- Logros:
+  1. `CommandContract` extendido con mutaciones canónicas `update_hardware_placement` y `substitute_hardware`.
+  2. `CapabilityPolicy` restringe edición (`canMove`, `canReplaceDefinition`) exclusivamente a placements `manual`; placements `derived` bloqueados con `HARDWARE_DERIVED_EDIT`.
+  3. `HostMutationBridge` / `DialogController` orquesta mutaciones a través del `AuthoringMutationCoordinator` (#498), garantizando operaciones atómicas de SketchUp, preservación de `hardwarePlacementId` exacto y restauración semántica de selección.
+  4. Backend Go engine (`authoring_machining.go`, `authoring_resolve.go`) implementa validación de límites de offset y detección de colisiones de agujeros (`detectHoleCollisions`), emitiendo `DRILLING_CONFLICT` y `HARDWARE_PLACEMENT_INVALID` autoritativos con aislamiento completo de mecanizado de entrepaños.
+  5. UI en `dialog.html` y `granete-mutation.js`: inspector contextual de herrajes (`#hw-placement-card`) con edición precisa en mm, selector de sustitución clasificado (`[Compatible]`, `[Incompatible]`), y banner reactivo `#hw-conflict-banner` ante `DRILLING_CONFLICT`.
+  6. Suite de verificación completa: tests unitarios Ruby (11 tests / 74 assertions), tests unitarios JS (9 suites / 148 tests), tests Go (`internal/domain/engine`), TestUp real-host smoke suite (`TC_HardwareAuthoringSmoke.rb`), y typecheck / openapi check / pnpm test monorepo en verde.
+
+## Historial previo — #498 (SU-HOST-1)
+
+- #498 implementada y mergeada a main (PR #555, merge `dfa6f348`):
+  Shared host interaction orchestration for atomic authoring and degraded states.
+
 
 ## Historial previo — F211 (#398 / DT-14)
 

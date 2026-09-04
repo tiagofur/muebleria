@@ -135,6 +135,8 @@ module Granete
             hardware_placement_id: placement_id,
             hardware_definition_id: intent['hardwareDefinitionId'],
             host_component_instance_id: intent[LEGACY_HARDWARE_SIGNAL],
+            anchor_face: intent['anchorFace'],
+            offset_mm: intent['offsetMm'],
             # Real #350 provenance from the layout contract; anything absent
             # or unrecognized stays 'unknown' and fails closed — the context
             # never guesses 'derived'.

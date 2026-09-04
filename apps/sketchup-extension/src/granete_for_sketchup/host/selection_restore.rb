@@ -55,13 +55,25 @@ module Granete
           child_id = target['componentInstanceId'] || target['hardwarePlacementId']
           return nil unless child_id && root.respond_to?(:definition)
 
-          root.definition.entities.find do |child|
-            next false unless child.respond_to?(:definition)
+          find_child_recursive(root, child_id)
+        rescue StandardError
+          nil
+        end
+
+        def find_child_recursive(entity, child_id)
+          return nil unless entity.respond_to?(:definition) && entity.definition.respond_to?(:entities)
+
+          entity.definition.entities.each do |child|
+            next unless child.respond_to?(:definition)
 
             identity = read_identity(child)
-            identity&.dig('componentInstanceId') == child_id || identity&.dig('hardwarePlacementId') == child_id
+            if identity&.dig('componentInstanceId') == child_id || identity&.dig('hardwarePlacementId') == child_id
+              return child
+            end
+
+            nested = find_child_recursive(child, child_id)
+            return nested if nested
           end
-        rescue StandardError
           nil
         end
 

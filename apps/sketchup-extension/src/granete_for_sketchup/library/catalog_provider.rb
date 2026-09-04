@@ -50,6 +50,14 @@ module Granete
           []
         end
 
+        def all_hardware
+          []
+        end
+
+        def find_hardware(hardware_id)
+          all_hardware.find { |hw| hw['id'] == hardware_id || hw['code'] == hardware_id }
+        end
+
         # Resolved furniture layout (complete composition: boards + visible
         # hardware) for a definition at concrete parameters and board choices
         # (role == option group code → material id). nil = this provider
@@ -160,6 +168,53 @@ module Granete
           }
         ].freeze
 
+        HARDWARE_DEFINITIONS = [
+          {
+            'id' => 'hw-hinge',
+            'code' => 'BIS-CL110',
+            'name' => 'Bisagra CL110',
+            'category' => 'hinge',
+            'kind' => 'hinge',
+            'cup_diameter_mm' => 35,
+            'cup_depth_mm' => 12.5,
+            'compatible_roles' => %w[FRENTE PUERTA door],
+            'active' => true
+          },
+          {
+            'id' => 'hw-hinge-b',
+            'code' => 'BIS-CL100',
+            'name' => 'Bisagra CL100',
+            'category' => 'hinge',
+            'kind' => 'hinge',
+            'cup_diameter_mm' => 32,
+            'cup_depth_mm' => 12.5,
+            'compatible_roles' => %w[FRENTE PUERTA door],
+            'active' => true
+          },
+          {
+            'id' => 'hw-handle',
+            'code' => 'MAN-160',
+            'name' => 'Manija 160',
+            'category' => 'handle',
+            'kind' => 'handle',
+            'compatible_roles' => %w[FRENTE PUERTA door drawer_front],
+            'active' => true
+          },
+          {
+            'id' => 'hw-slide-heavy',
+            'code' => 'COR-PES-500',
+            'name' => 'Corredera Oculta Pesada 500mm',
+            'category' => 'slide',
+            'kind' => 'slide',
+            'compatible_roles' => %w[LATERAL drawer_box],
+            'active' => true
+          }
+        ].freeze
+
+        def all_hardware
+          HARDWARE_DEFINITIONS
+        end
+
         def all_definitions
           DEFINITIONS
         end
@@ -239,6 +294,13 @@ module Granete
           return remote.fetch('materials', []) if remote
 
           serve_from_fallback(&:all_materials) || []
+        end
+
+        def all_hardware(force: false)
+          remote = fetch_contract(force: force)
+          return remote.fetch('hardware', []) if remote && remote['hardware']
+
+          serve_from_fallback(&:all_hardware) || StaticCatalogProvider::HARDWARE_DEFINITIONS
         end
 
         def find_definition(definition_id)

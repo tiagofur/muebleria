@@ -393,6 +393,14 @@ module Granete
             )
             execute_coordinated_update(dialog, payload, semantic_target: envelope['semanticTarget'],
                                                         command_message_id: envelope['messageId'])
+          when 'update_hardware_placement'
+            execute_coordinated_hardware_update(dialog, envelope['payload'],
+                                                semantic_target: envelope['semanticTarget'],
+                                                command_message_id: envelope['messageId'])
+          when 'substitute_hardware'
+            execute_coordinated_hardware_substitution(dialog, envelope['payload'],
+                                                      semantic_target: envelope['semanticTarget'],
+                                                      command_message_id: envelope['messageId'])
           end
         rescue Host::CommandContract::ContractError => e
           @logger.error('authoring_mutation_contract_rejected', error: e)
@@ -421,6 +429,44 @@ module Granete
                                               reason: e.message,
                                               semantic_target: semantic_target || {})
                                          .with_mutation_name('update_furniture')
+          push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
+          outcome
+        end
+
+        def execute_coordinated_hardware_update(dialog, payload, semantic_target: nil, command_message_id: nil)
+          command = build_hardware_update_command(payload, semantic_target)
+          outcome = if command
+                      mutation_coordinator.execute(command, command_message_id: command_message_id)
+                    else
+                      invalid_hardware_update_outcome(payload, semantic_target)
+                    end
+          push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
+          outcome
+        rescue StandardError => e
+          @logger.error('hardware_update_failed', error: e)
+          outcome = Host::MutationOutcome.new(outcome: 'aborted', category: 'host_apply_failure',
+                                              reason: e.message,
+                                              semantic_target: semantic_target || {})
+                                         .with_mutation_name('update_hardware_placement')
+          push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
+          outcome
+        end
+
+        def execute_coordinated_hardware_substitution(dialog, payload, semantic_target: nil, command_message_id: nil)
+          command = build_hardware_substitution_command(payload, semantic_target)
+          outcome = if command
+                      mutation_coordinator.execute(command, command_message_id: command_message_id)
+                    else
+                      invalid_hardware_substitution_outcome(payload, semantic_target)
+                    end
+          push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
+          outcome
+        rescue StandardError => e
+          @logger.error('hardware_substitution_failed', error: e)
+          outcome = Host::MutationOutcome.new(outcome: 'aborted', category: 'host_apply_failure',
+                                              reason: e.message,
+                                              semantic_target: semantic_target || {})
+                                         .with_mutation_name('substitute_hardware')
           push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
           outcome
         end
@@ -532,6 +578,225 @@ module Granete
                                     reason: reason, semantic_target: semantic_target || {})
                                .with_mutation_name('update_furniture')
         end
+
+        def invalid_hardware_update_outcome(_payload, semantic_target)
+          Host::MutationOutcome.new(outcome: 'rejected', category: 'invalid_authoring_input',
+                                    reason: 'Colocación de herraje o mueble no encontrado',
+                                    semantic_target: semantic_target || {})
+                               .with_mutation_name('update_hardware_placement')
+        end
+
+        def invalid_hardware_substitution_outcome(_payload, semantic_target)
+          Host::MutationOutcome.new(outcome: 'rejected', category: 'invalid_authoring_input',
+                                    reason: 'Colocación de herraje o mueble no encontrado',
+                                    semantic_target: semantic_target || {})
+                               .with_mutation_name('substitute_hardware')
+        end
+
+        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+        def build_hardware_update_command(payload, semantic_target)
+          target = update_semantic_target(payload, semantic_target)
+          hw_placement_id = target['hardwarePlacementId']
+          return nil if hw_placement_id.to_s.strip.empty?
+
+          entity = find_target_furniture_entity(target['furnitureInstanceRef'] || target['furnitureInstanceId'])
+          return nil if entity.nil? || active_model.nil?
+
+          store = @metadata_store_factory.call(active_model)
+          furniture_meta = store.read(entity)
+          definition_id = payload['definitionId'] ||
+                          furniture_meta&.dig('intent', 'furnitureDefinitionId') ||
+                          furniture_meta&.dig('identity', 'furnitureDefinitionId') ||
+                          furniture_meta&.dig('definition', 'furniture_definition_id')
+          definition = @catalog_provider.find_definition(definition_id)
+          return nil if definition.nil?
+
+          params = furniture_meta&.dig('intent', 'parameters') || {}
+          choices = merged_material_choices(entity, furniture_meta)
+          new_offset = payload['offsetMm']
+
+          Host::MutationCommand.new(
+            name: 'update_hardware_placement',
+            operation_name: "Editar Colocación de Herraje #{hw_placement_id}",
+            semantic_target: target,
+            build_furniture_request: nil,
+            resolve: lambda { |ctx|
+              resolve_hardware_mutation(entity, definition, params, choices, target,
+                                         new_offset: new_offset, ctx: ctx)
+            },
+            context_valid: -> { update_context_valid?(entity, target) },
+            apply: lambda { |result, host_context|
+              apply_update_result(host_context, entity, definition, params, choices, result)
+            }
+          )
+        end
+
+        def build_hardware_substitution_command(payload, semantic_target)
+          target = update_semantic_target(payload, semantic_target)
+          hw_placement_id = target['hardwarePlacementId']
+          return nil if hw_placement_id.to_s.strip.empty?
+
+          entity = find_target_furniture_entity(target['furnitureInstanceRef'] || target['furnitureInstanceId'])
+          return nil if entity.nil? || active_model.nil?
+
+          store = @metadata_store_factory.call(active_model)
+          furniture_meta = store.read(entity)
+          definition_id = payload['definitionId'] ||
+                          furniture_meta&.dig('intent', 'furnitureDefinitionId') ||
+                          furniture_meta&.dig('identity', 'furnitureDefinitionId') ||
+                          furniture_meta&.dig('definition', 'furniture_definition_id')
+          definition = @catalog_provider.find_definition(definition_id)
+          return nil if definition.nil?
+
+          params = furniture_meta&.dig('intent', 'parameters') || {}
+          choices = merged_material_choices(entity, furniture_meta)
+          target_hw_id = payload['targetHardwareDefinitionId'] || payload['hardwareDefinitionId']
+
+          Host::MutationCommand.new(
+            name: 'substitute_hardware',
+            operation_name: "Sustituir Herraje #{hw_placement_id}",
+            semantic_target: target,
+            build_furniture_request: nil,
+            resolve: lambda { |ctx|
+              resolve_hardware_mutation(entity, definition, params, choices, target,
+                                         target_hardware_id: target_hw_id, ctx: ctx)
+            },
+            context_valid: -> { update_context_valid?(entity, target) },
+            apply: lambda { |result, host_context|
+              apply_update_result(host_context, entity, definition, params, choices, result)
+            }
+          )
+        end
+
+        # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        def resolve_hardware_mutation(entity, definition, params, choices, target,
+                                      new_offset: nil, target_hardware_id: nil, ctx:)
+          store = @metadata_store_factory.call(active_model)
+          child = Host::SelectionRestore.new(metadata_store_factory: @metadata_store_factory,
+                                             model_provider: -> { active_model }).send(:locate_child, entity, target)
+          hw_meta = child ? store.read(child) : nil
+          hw_intent = hw_meta&.dig('intent') || {}
+          hw_kind = hw_intent['placementKind']
+
+          if hw_kind == 'derived'
+            issue = Library::AuthoringResolveIssue.new(
+              'code' => 'HARDWARE_DERIVED_EDIT',
+              'message' => 'Los herrajes derivados se calculan por regla de ingeniería y no admiten edición manual',
+              'severity' => 'error'
+            )
+            raise Library::AuthoringResolveError.new(issue.message, issues: [issue])
+          end
+
+          if target_hardware_id
+            target_def = @catalog_provider.find_hardware(target_hardware_id)
+            if target_def.nil?
+              issue = Library::AuthoringResolveIssue.new(
+                'code' => 'HARDWARE_DEFINITION_NOT_FOUND',
+                'message' => "Definición de herraje #{target_hardware_id} no encontrada",
+                'severity' => 'error'
+              )
+              raise Library::AuthoringResolveError.new(issue.message, issues: [issue])
+            end
+
+            current_def_id = hw_intent['hardwareDefinitionId']
+            current_def = current_def_id ? @catalog_provider.find_hardware(current_def_id) : nil
+            if current_def && target_def['category'] != current_def['category']
+              issue = Library::AuthoringResolveIssue.new(
+                'code' => 'HARDWARE_INCOMPATIBLE',
+                'message' => "El herraje #{target_def['name']} (#{target_def['category']}) no es compatible con #{current_def['name']} (#{current_def['category']})",
+                'severity' => 'error',
+                'remediation' => "Elegir un herraje de categoría #{current_def['category']}"
+              )
+              raise Library::AuthoringResolveError.new(issue.message, issues: [issue])
+            end
+          end
+
+          base_layout = resolve_layout_for(definition, params, choices)
+          raise Library::AuthoringResolveError, 'No se pudo resolver el layout del mueble' if base_layout.nil?
+
+          target_placement_id = target['hardwarePlacementId']
+          door_board = base_layout.boards.find { |b| b.role == 'FRENTE' || b.name.to_s.downcase.include?('puerta') }
+          max_board_len = door_board ? door_board.length_mm : 720.0
+
+          if new_offset
+            offset_val = new_offset.is_a?(Array) ? (new_offset[1] || new_offset[0]).to_f : new_offset.to_f
+
+            if offset_val.negative? || offset_val > max_board_len
+              issue = Library::AuthoringResolveIssue.new(
+                'code' => 'HARDWARE_PLACEMENT_INVALID',
+                'message' => "Offset #{offset_val}mm fuera del rango permitido (0 - #{max_board_len}mm)",
+                'severity' => 'error'
+              )
+              raise Library::AuthoringResolveError.new(issue.message, issues: [issue])
+            end
+
+            shelves = base_layout.boards.select do |b|
+              b.slot_id.to_s.downcase.include?('shelf') || b.name.to_s.downcase.include?('entrepaño')
+            end
+            shelves.each do |shelf|
+              shelf_z = shelf.translation ? shelf.translation[2].to_f : 150.0
+              if (offset_val - shelf_z).abs <= 25.0
+                issue = Library::AuthoringResolveIssue.new(
+                  'code' => 'DRILLING_CONFLICT',
+                  'message' => "Conflicto de perforación en #{offset_val}mm: colisión con zona de fijación del entrepaño a #{shelf_z}mm",
+                  'severity' => 'error',
+                  'remediation' => 'Mover la bisagra a una posición libre de perforaciones de entrepaño'
+                )
+                raise Library::AuthoringResolveError.new(issue.message, issues: [issue])
+              end
+            end
+          end
+
+          updated_hardware = base_layout.hardware.map do |hp|
+            if hp.placement_id == target_placement_id
+              next_hw_id = target_hardware_id || hp.hardware_id
+              next_def = @catalog_provider.find_hardware(next_hw_id)
+              next_name = next_def ? next_def['name'] : hp.name
+              next_trans = hp.translation ? hp.translation.dup : [0.0, 0.0, 0.0]
+              if new_offset
+                offset_val = new_offset.is_a?(Array) ? (new_offset[1] || new_offset[0]).to_f : new_offset.to_f
+                next_trans[2] = offset_val
+              end
+              next_offset = if new_offset
+                              new_offset.is_a?(Array) ? new_offset : [next_trans[0], offset_val]
+                            else
+                              hp.offset_mm
+                            end
+              Library::LayoutHardwarePlacement.new(
+                placement_id: hp.placement_id,
+                hardware_id: next_hw_id,
+                asset_id: hp.asset_id,
+                name: next_name,
+                placement_kind: hp.placement_kind,
+                host_component_instance_id: hp.host_component_instance_id,
+                translation: next_trans,
+                dimensions: hp.dimensions,
+                color_hex: hp.color_hex,
+                anchor_face: hp.anchor_face,
+                offset_mm: next_offset
+              )
+            else
+              hp
+            end
+          end
+
+          updated_layout = Library::NativeLayout.new(
+            base_layout.transform_contract,
+            base_layout.boards,
+            updated_hardware,
+            furniture_definition_id: base_layout.furniture_definition_id,
+            definition_name: base_layout.definition_name,
+            dimensions_mm: base_layout.dimensions_mm
+          )
+
+          Host::LayoutResolveResult.new(
+            layout: updated_layout,
+            message_id: ctx[:message_id],
+            idempotency_key: ctx[:idempotency_key],
+            resolve_kind: 'native_layout'
+          )
+        end
+        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
         # Legacy onUpdateResult shape so the existing inspector UX keeps
         # working; the versioned truth rides onMutationState.
@@ -1171,6 +1436,7 @@ module Granete
             'categories' => @catalog_provider.respond_to?(:all_categories) ? @catalog_provider.all_categories : [],
             'materialCategories' => material_categories,
             'materials' => @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : [],
+            'hardware' => @catalog_provider.respond_to?(:all_hardware) ? @catalog_provider.all_hardware : [],
             'source' => @catalog_provider.respond_to?(:last_source) ? @catalog_provider.last_source : 'local',
             'licenseBlocked' => @catalog_provider.respond_to?(:last_license_blocked) &&
                                 @catalog_provider.last_license_blocked

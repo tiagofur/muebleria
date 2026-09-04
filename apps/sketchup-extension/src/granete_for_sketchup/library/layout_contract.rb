@@ -131,11 +131,12 @@ module Granete
         PLACEMENT_KINDS = %w[manual derived].freeze
 
         attr_reader :placement_id, :hardware_id, :asset_id, :name, :placement_kind,
-                    :host_component_instance_id, :translation, :dimensions, :color_hex
+                    :host_component_instance_id, :translation, :dimensions, :color_hex,
+                    :anchor_face, :offset_mm
 
         def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
                        placement_kind: nil, host_component_instance_id: nil, translation: nil,
-                       dimensions: nil, color_hex: nil)
+                       dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil)
           @placement_id = placement_id
           @hardware_id = hardware_id
           @asset_id = asset_id
@@ -145,6 +146,8 @@ module Granete
           @translation = translation
           @dimensions = dimensions
           @color_hex = color_hex
+          @anchor_face = anchor_face
+          @offset_mm = offset_mm
         end
       end
 
@@ -321,6 +324,14 @@ module Granete
                   '(procedencia #350); el cliente nunca adivina la procedencia'
           end
 
+          anchor_face = ContractCoercions.optional_opaque_string(raw['anchorFace'],
+                                                                 "anchorFace de #{placement_id}")
+          offset_mm = if raw['offsetMm'].is_a?(Array)
+                        raw['offsetMm'].map(&:to_f)
+                      elsif raw['offsetMm'].is_a?(Numeric)
+                        raw['offsetMm'].to_f
+                      end
+
           LayoutHardwarePlacement.new(
             placement_id: placement_id,
             hardware_id: ContractCoercions.optional_opaque_string(raw['hardwareId'],
@@ -337,7 +348,9 @@ module Granete
             dimensions: ContractCoercions.optional_triple(raw['dimensionsMm'],
                                                           "dimensionsMm de #{placement_id}"),
             color_hex: ContractCoercions.optional_opaque_string(raw['colorHex'],
-                                                                "colorHex de #{placement_id}")
+                                                                "colorHex de #{placement_id}"),
+            anchor_face: anchor_face,
+            offset_mm: offset_mm
           )
         end
       end

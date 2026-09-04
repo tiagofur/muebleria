@@ -395,12 +395,31 @@ module SketchupStub
   end
 
   class SelectionStub
+    include Enumerable
+
     attr_reader :items, :observers
 
     def initialize
       @items = []
       @observers = []
     end
+
+    def each(&block)
+      @items.each(&block)
+    end
+
+    def to_a
+      @items.dup
+    end
+
+    def empty?
+      @items.empty?
+    end
+
+    def length
+      @items.length
+    end
+    alias size length
 
     def add(entity)
       @items << entity

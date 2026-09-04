@@ -5693,6 +5693,41 @@
       "depends_on": [
         "F211"
       ]
+    },
+    {
+      "id": "F213",
+      "title": "Interactive HardwarePlacement editing and smart hardware substitution (#468 / SU-AUTH-2)",
+      "description": "Interactive SketchUp host authoring and smart hardware substitution consuming the shared #498 coordinator: manual hardware selection, precise mm offset editing, smart catalog substitution with compatibility classification (compatible, conditionally compatible, incompatible), authoritative resolve and machining isolation via granete.sketchup-authoring-resolve.v1, drilling conflict detection and correction loop with preflight, and atomic single-operation rebuild with persistent hardwarePlacementId identity.",
+      "tags": [
+        "sketchup-extension",
+        "authoring",
+        "hardware",
+        "manufacturing",
+        "p0"
+      ],
+      "created": "2026-09-04",
+      "status": "completed",
+      "acceptance": [
+        "Selecting a manual hinge resolves exact hardwarePlacementId and host componentInstanceId",
+        "Moving the hinge updates placement intent, not drilling coordinates directly",
+        "Only hinge-dependent machining changes when shelf intent is unchanged",
+        "A derived hardware placement cannot be edited as if it were a manual placement",
+        "Replacing a hardware definition recalculates visual asset/BOM/machining as returned by Granete",
+        "Incompatible substitutions are blocked with actionable reason",
+        "Failed resolution keeps previous hierarchy/metadata intact",
+        "Successful edit/substitution is one undoable action",
+        "Preflight issue/navigation integrates with #466 / DRILLING_CONFLICT",
+        "Real-host smoke covers move + conflict + fix and one substitution"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/468",
+        "docs/architecture/sketchup-plugin-excellence.md",
+        "docs/architecture/sketchup-authoring-interaction-contract.md",
+        "docs/sketchup-manufacturing-contract.md"
+      ],
+      "depends_on": [
+        "F212"
+      ]
     }
   ]
 }
