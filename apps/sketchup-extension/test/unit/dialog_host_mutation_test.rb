@@ -76,7 +76,15 @@ class DialogHostMutationTest < Minitest::Test
           { 'placementId' => 'HP-DERIVED-1', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra Derivada',
             'placementKind' => 'derived', 'hostComponentInstanceId' => 'st-door-0',
             'anchorFace' => 'front', 'offsetMm' => [298, 300],
-            'transform' => { 'translationMm' => [298, 560, 300] } }
+            'transform' => { 'translationMm' => [298, 560, 300] } },
+          { 'placementId' => 'totally-random-123', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra Opaca Derivada',
+            'placementKind' => 'derived', 'hostComponentInstanceId' => 'st-door-0',
+            'anchorFace' => 'front', 'offsetMm' => [298, 300],
+            'transform' => { 'translationMm' => [298, 560, 300] } },
+          { 'placementId' => 'derived-looking-id', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra Con Nombre Derivado',
+            'placementKind' => 'manual', 'hostComponentInstanceId' => 'st-door-0',
+            'anchorFace' => 'front', 'offsetMm' => [298, 100],
+            'transform' => { 'translationMm' => [298, 560, 100] } }
         ] }
     end
 
@@ -85,8 +93,7 @@ class DialogHostMutationTest < Minitest::Test
       placements = furniture['hardwarePlacements'] || []
 
       derived = placements.find do |hp|
-        id = hp['hardwarePlacementId'].to_s.downcase
-        id.start_with?('derived-', 'hp-derived', 'dhp-')
+        hp['placementKind'] == 'derived'
       end
       if derived
         msg = "placement #{derived['hardwarePlacementId']} is derived by engineering rules"
@@ -95,8 +102,25 @@ class DialogHostMutationTest < Minitest::Test
         )
       end
 
+      # Data-driven hardware compatibility: definitions map categories and capabilities (#350)
+      hw_definitions = {
+        'hw-hinge' => { 'category' => 'hinge' },
+        'hw-handle' => { 'category' => 'handle' },
+        'hw-incompatible' => { 'category' => 'slide', 'compatibleRoles' => %w[cajon lateral_izquierdo] },
+        'hw-slide-heavy' => { 'category' => 'slide', 'compatibleRoles' => %w[cajon lateral_izquierdo] }
+      }
+
       incompatible = placements.find do |hp|
-        %w[hw-incompatible hw-slide-heavy].include?(hp['catalogHardwareId'])
+        hw_def = hw_definitions[hp['catalogHardwareId']]
+        next false unless hw_def
+
+        host_board = (furniture['components'] || []).find do |c|
+          c['componentInstanceId'] == hp['hostComponentInstanceId']
+        end
+        host_role = (host_board ? (host_board['role'] || host_board['componentDefinitionId']) : '').to_s.downcase
+        is_door = host_role.include?('door') || host_role.include?('puerta') || host_role.include?('frente')
+
+        hw_def['category'] == 'slide' && is_door
       end
       if incompatible
         msg = "hardware definition #{incompatible['catalogHardwareId']} is incompatible"
@@ -470,6 +494,47 @@ class DialogHostMutationTest < Minitest::Test
     refute_nil mutation_script
     assert_includes mutation_script, '"outcome":"rejected"'
     assert_includes mutation_script, 'HARDWARE_DERIVED_EDIT'
+  end
+
+  def test_hardware_placement_id_is_opaque_and_not_derived_by_prefix
+    dialog = @controller.show
+    native_furniture('inst-opaque-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-opaque-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    # 1. Derived-looking ID with placementKind: 'manual' must NOT be blocked as derived
+    cmd_manual = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-derived-name-manual-kind',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-opaque-1',
+        'hardwarePlacementId' => 'derived-looking-id'
+      },
+      'payload' => { 'offsetMm' => 120, 'placementKind' => 'manual' }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd_manual))
+    script_manual = dialog.executed_scripts.find { |s| s.include?('cmd-derived-name-manual-kind') }
+    refute_nil script_manual
+    refute_includes script_manual, 'HARDWARE_DERIVED_EDIT'
+
+    # 2. Random opaque ID with placementKind: 'derived' MUST be blocked
+    cmd_derived = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-random-id-derived-kind',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-opaque-1',
+        'hardwarePlacementId' => 'totally-random-123'
+      },
+      'payload' => { 'offsetMm' => 120, 'placementKind' => 'derived' }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd_derived))
+    script_derived = dialog.executed_scripts.find { |s| s.include?('cmd-random-id-derived-kind') }
+    refute_nil script_derived
+    assert_includes script_derived, '"outcome":"rejected"'
+    assert_includes script_derived, 'HARDWARE_DERIVED_EDIT'
   end
 
   def test_hardware_update_shelf_interference_causes_drilling_conflict_issue

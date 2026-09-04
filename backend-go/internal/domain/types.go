@@ -231,6 +231,10 @@ type Hardware struct {
 	// PartFinishes maps a structural part role (body/base/grip) to a finish
 	// preset id (F080). Nil/empty = every part uses the global preview finish.
 	PartFinishes map[string]string `json:"part_finishes,omitempty"`
+	// Category is the HardwareCategory from #350 ("hinge", "slide", "handle", "connector", "shelf_pin", "leg", etc.).
+	Category string `json:"category,omitempty"`
+	// CompatibleRoles optionally lists component roles or placements this hardware can mount on.
+	CompatibleRoles []string `json:"compatible_roles,omitempty"`
 	// Machining is the CNC drilling footprint (F127): operations per structural
 	// part, in the part-local frame of the placement anchor. Nil = cost-only.
 	Machining *HardwareMachiningProfile `json:"machining,omitempty"`
@@ -570,6 +574,8 @@ type Component struct {
 	ThicknessMm   int                `json:"thickness_mm"`
 	DefaultEdges  []EdgeAssignment   `json:"default_edges"`
 	OptionRoles   []string           `json:"option_roles,omitempty"`
+	// CompatibleHardwareCategories optionally lists the hardware categories this component can host (#350).
+	CompatibleHardwareCategories []string `json:"compatible_hardware_categories,omitempty"`
 	LengthFormula string             `json:"length_formula,omitempty"`
 	WidthFormula  string             `json:"width_formula,omitempty"`
 	XFormula      string             `json:"x_formula,omitempty"`

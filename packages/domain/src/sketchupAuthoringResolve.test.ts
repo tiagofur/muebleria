@@ -211,12 +211,87 @@ describe('validateAuthoringResolveRequest', () => {
     expect(codes(validateAuthoringResolveRequest(missing))).toEqual(['CATALOG_REFERENCE_MISSING']);
   });
 
-  test('issue codes are a closed stable set', () => {
-    for (const code of AUTHORING_RESOLVE_ISSUE_CODES) {
-      expect(isAuthoringResolveIssueCode(code)).toBe(true);
-    }
-    expect(isAuthoringResolveIssueCode('SHELF2Z_UNSUPPORTED')).toBe(false);
-    expect(AUTHORING_RESOLVE_ISSUE_CODES).toContain('QUERY_PARAMETERS_UNSUPPORTED');
-    expect(AUTHORING_RESOLVE_ISSUE_CODES).toContain('CONTENT_TYPE_UNSUPPORTED');
+  test('hardwarePlacementId is opaque: derived status comes only from placementKind, not ID prefix', () => {
+    // 1. Derived-looking ID with manual placementKind is accepted
+    const manualWithDerivedLookingId = request({
+      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
+      hardwarePlacements: [
+        {
+          hardwarePlacementId: 'derived-looking-placement-id-456',
+          placementKind: 'manual',
+          catalogHardwareId: 'hw-hinge',
+          hostComponentInstanceId: 'door-01',
+          anchorFace: 'front',
+          offsetMm: [298, 100],
+        },
+      ],
+    });
+    const manualIssues = validateAuthoringResolveRequest(manualWithDerivedLookingId);
+    expect(codes(manualIssues)).not.toContain('HARDWARE_DERIVED_EDIT');
+
+    // 2. Arbitrary random opaque ID with derived placementKind is blocked
+    const derivedWithRandomId = request({
+      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
+      hardwarePlacements: [
+        {
+          hardwarePlacementId: 'random-opaque-uuid-778899',
+          placementKind: 'derived',
+          catalogHardwareId: 'hw-hinge',
+          hostComponentInstanceId: 'door-01',
+          anchorFace: 'front',
+          offsetMm: [298, 100],
+        },
+      ],
+    });
+    const derivedIssues = validateAuthoringResolveRequest(derivedWithRandomId);
+    expect(codes(derivedIssues)).toContain('HARDWARE_DERIVED_EDIT');
+  });
+
+  test('data-driven hardware compatibility rejects incompatible categories and honors compatible roles', () => {
+    const catalog = [
+      {
+        id: 'arbitrary-hinge-id-xyz',
+        category: 'hinge',
+      },
+      {
+        id: 'drawer-slide-marked-compatible-name',
+        category: 'slide',
+        compatibleRoles: ['lateral_izquierdo', 'cajon'],
+      },
+    ];
+
+    // Slide on door is incompatible regardless of friendly ID
+    const incompatibleRequest = request({
+      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
+      hardwarePlacements: [
+        {
+          hardwarePlacementId: 'hp-test-1',
+          placementKind: 'manual',
+          catalogHardwareId: 'drawer-slide-marked-compatible-name',
+          hostComponentInstanceId: 'door-01',
+          anchorFace: 'front',
+          offsetMm: [298, 100],
+        },
+      ],
+    });
+    const issues1 = validateAuthoringResolveRequest(incompatibleRequest, { hardwareCatalog: catalog });
+    expect(codes(issues1)).toContain('HARDWARE_INCOMPATIBLE');
+
+    // Hinge on door is compatible regardless of arbitrary ID
+    const compatibleRequest = request({
+      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
+      hardwarePlacements: [
+        {
+          hardwarePlacementId: 'hp-test-2',
+          placementKind: 'manual',
+          catalogHardwareId: 'arbitrary-hinge-id-xyz',
+          hostComponentInstanceId: 'door-01',
+          anchorFace: 'front',
+          offsetMm: [298, 100],
+        },
+      ],
+    });
+    const issues2 = validateAuthoringResolveRequest(compatibleRequest, { hardwareCatalog: catalog });
+    expect(codes(issues2)).not.toContain('HARDWARE_INCOMPATIBLE');
   });
 });

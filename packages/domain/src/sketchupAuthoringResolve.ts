@@ -135,6 +135,7 @@ export type AuthoringOccurrenceTransformV1 = {
  */
 export type AuthoringHardwarePlacementV1 = {
   readonly hardwarePlacementId: StableEntityId;
+  readonly placementKind?: 'manual' | 'derived';
   readonly catalogHardwareId: string;
   readonly hostComponentInstanceId: StableEntityId;
   readonly anchorFace: string;
@@ -327,7 +328,19 @@ export function isAuthoringResolveIssueCode(code: string): code is AuthoringReso
  * issue codes before spending a round-trip. Catalog-existence checks stay
  * server-side: this never decides manufacturability or catalog membership.
  */
-export function validateAuthoringResolveRequest(request: AuthoringResolveRequestV1): readonly ContractIssue[] {
+export type AuthoringResolveValidationContext = {
+  readonly hardwareCatalog?: readonly {
+    readonly id?: string;
+    readonly hardwareId?: string;
+    readonly category?: string;
+    readonly compatibleRoles?: readonly string[];
+  }[];
+};
+
+export function validateAuthoringResolveRequest(
+  request: AuthoringResolveRequestV1,
+  context?: AuthoringResolveValidationContext,
+): readonly ContractIssue[] {
   const issues: ContractIssue[] = [];
   const push = (code: AuthoringResolveIssueCode, message: string, path?: string, remediation?: string) =>
     issues.push({ code, message, severity: 'error', path, remediation });
@@ -506,8 +519,10 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
         `${path}.hardwarePlacementId`);
     }
     seenPlacementIds.add(placement.hardwarePlacementId);
-    const idLower = placement.hardwarePlacementId.toLowerCase();
-    if (idLower.startsWith('derived-') || idLower.startsWith('hp-derived') || idLower.startsWith('dhp-')) {
+    if (placement.placementKind !== undefined && placement.placementKind !== 'manual' && placement.placementKind !== 'derived') {
+      push('REQUEST_INVALID', `placement ${placement.hardwarePlacementId}: placementKind must be manual or derived`, `${path}.placementKind`);
+    }
+    if (placement.placementKind === 'derived') {
       push('HARDWARE_DERIVED_EDIT',
         `placement ${placement.hardwarePlacementId} is derived by engineering rules and does not support manual editing`,
         path, 'Only manual hardware placements can be edited directly.');
@@ -515,9 +530,31 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
     if (!isNonEmptyString(placement.catalogHardwareId)) {
       push('HARDWARE_REFERENCE_INVALID', `placement ${placement.hardwarePlacementId} has no catalogHardwareId`,
         `${path}.catalogHardwareId`);
-    } else if (placement.catalogHardwareId === 'hw-incompatible') {
-      push('HARDWARE_INCOMPATIBLE', `hardware definition ${placement.catalogHardwareId} is incompatible with this placement`,
-        `${path}.catalogHardwareId`);
+    } else if (context?.hardwareCatalog) {
+      const hwDef = context.hardwareCatalog.find((h) => (h.id ?? h.hardwareId) === placement.catalogHardwareId);
+      if (hwDef) {
+        const hostBoard = components.find((c) => c.componentInstanceId === placement.hostComponentInstanceId);
+        const hostRole = (hostBoard?.role ?? hostBoard?.componentDefinitionId ?? '').toLowerCase();
+        const isDoor = hostRole.includes('door') || hostRole.includes('puerta');
+        const isDrawer = hostRole.includes('drawer') || hostRole.includes('cajon');
+        const hwCategory = (hwDef.category ?? '').toLowerCase();
+
+        let incompatible = false;
+        if (hwDef.compatibleRoles && hwDef.compatibleRoles.length > 0) {
+          const matched = hwDef.compatibleRoles.some((r) => {
+            const roleLower = r.toLowerCase();
+            return hostRole.includes(roleLower) || roleLower.includes(hostRole);
+          });
+          if (!matched) incompatible = true;
+        }
+        if (hwCategory === 'slide' && isDoor) incompatible = true;
+        if (hwCategory === 'hinge' && isDrawer) incompatible = true;
+
+        if (incompatible) {
+          push('HARDWARE_INCOMPATIBLE', `hardware definition ${placement.catalogHardwareId} is incompatible with this placement`,
+            `${path}.catalogHardwareId`, 'Choose a compatible hardware definition.');
+        }
+      }
     }
     if (!isNonEmptyString(placement.hostComponentInstanceId)) {
       push('HARDWARE_HOST_INVALID', `placement ${placement.hardwarePlacementId} has no host component instance`,
@@ -745,7 +782,10 @@ function validatePlacements(value: unknown, componentIds: ReadonlyMap<string, st
     const placement = asRecord(item);
     const path = `normalizedSnapshot.hardwarePlacements[${index}]`;
     if (!placement) { problems.push(`${path} must be an object`); continue; }
-    rejectUnknownRecordKeys(placement, new Set(['hardwarePlacementId', 'catalogHardwareId', 'hostComponentInstanceId', 'anchorFace', 'offsetMm']), path, problems);
+    rejectUnknownRecordKeys(placement, new Set(['hardwarePlacementId', 'placementKind', 'catalogHardwareId', 'hostComponentInstanceId', 'anchorFace', 'offsetMm']), path, problems);
+    if (placement.placementKind !== undefined && placement.placementKind !== 'manual' && placement.placementKind !== 'derived') {
+      problems.push(`${path}.placementKind must be manual or derived`);
+    }
     if (!isBoundedString(placement.hardwarePlacementId) || !isBoundedString(placement.catalogHardwareId) ||
       !isBoundedString(placement.hostComponentInstanceId) || !componentIds.has(placement.hostComponentInstanceId) ||
       !HARDWARE_ANCHOR_FACES.has(String(placement.anchorFace)) || !isFiniteTuple(placement.offsetMm, 2)) {

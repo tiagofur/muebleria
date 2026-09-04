@@ -134,15 +134,17 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 		Structures: []domain.Structure{structure},
 		Components: []domain.Component{right, lateral, floor, top, back, door, shelf},
 		Hardware: []domain.Hardware{
-			{ID: "hw-handle", Code: "MAN-160", Name: "Manija 160", Unit: domain.UnitPiece, Active: true,
+			{ID: "hw-handle", Code: "MAN-160", Name: "Manija 160", Category: "handle", Unit: domain.UnitPiece, Active: true,
 				PreviewShape: authoringStrPtr("bar-pull"), PreviewSizeMm: authoringFloatPtr(160), PreviewProjectionMm: authoringFloatPtr(37), PreviewDiameterMm: authoringFloatPtr(32)},
-			{ID: "hw-hinge", Code: "BIS-CL110", Name: "Bisagra CL110", Unit: domain.UnitPiece, Active: true,
+			{ID: "hw-hinge", Code: "BIS-CL110", Name: "Bisagra CL110", Category: "hinge", Unit: domain.UnitPiece, Active: true,
 				PreviewShape: authoringStrPtr("hinge"), PreviewSizeMm: authoringFloatPtr(96), PreviewProjectionMm: authoringFloatPtr(25), PreviewDiameterMm: authoringFloatPtr(35)},
-			{ID: "hw-hinge-b", Code: "BIS-CL100", Name: "Bisagra CL100", Unit: domain.UnitPiece, Active: true,
+			{ID: "hw-hinge-b", Code: "BIS-CL100", Name: "Bisagra CL100", Category: "hinge", Unit: domain.UnitPiece, Active: true,
 				PreviewShape: authoringStrPtr("hinge"), PreviewSizeMm: authoringFloatPtr(80), PreviewProjectionMm: authoringFloatPtr(22), PreviewDiameterMm: authoringFloatPtr(32)},
-			{ID: "hw-minifix", Code: "HER-MIN-15", Name: "Minifix 15", Unit: domain.UnitPiece, Active: true},
-			{ID: "hw-dowel", Code: "HER-TAQ-8X30", Name: "Tarugo 8x30", Unit: domain.UnitPiece, Active: true},
-			{ID: "hw-incompatible", Code: "INCOMPATIBLE", Name: "Corredera Incompatible", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-minifix", Code: "HER-MIN-15", Name: "Minifix 15", Category: "connector", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-dowel", Code: "HER-TAQ-8X30", Name: "Tarugo 8x30", Category: "connector", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-incompatible", Code: "CORR-450", Name: "Corredera Telescópica 450", Category: "slide", Unit: domain.UnitPiece, Active: true,
+				PreviewShape: authoringStrPtr("slide"),
+				CompatibleRoles: []string{"lateral_izquierdo", "lateral_derecho", "cajon"}},
 		},
 	}
 	return &module, catalog
@@ -254,12 +256,14 @@ type authoringFixtureGeometry struct {
 }
 
 type authoringFixtureHardware struct {
-	ID          string  `json:"id"`
-	Code        string  `json:"code"`
-	Name        string  `json:"name"`
-	Unit        string  `json:"unit"`
-	CostPerUnit float64 `json:"costPerUnit"`
-	Active      bool    `json:"active"`
+	ID              string   `json:"id"`
+	Code            string   `json:"code"`
+	Name            string   `json:"name"`
+	Category        string   `json:"category,omitempty"`
+	CompatibleRoles []string `json:"compatibleRoles,omitempty"`
+	Unit            string   `json:"unit"`
+	CostPerUnit     float64  `json:"costPerUnit"`
+	Active          bool     `json:"active"`
 }
 
 type authoringFixtureCase struct {
@@ -528,11 +532,11 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			}
 		})), http.StatusOK),
 
-		// Negative proof: derived placement edit blocked.
+		// Negative proof: derived placement edit blocked (explicit in canonical data via PlacementKind, not encoded only in ID).
 		run("neg-hardware-derived-edit", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = defaultOccurrencesJSON()
 			f.HardwarePlacements = []authoringPlacementWire{
-				{HardwarePlacementID: "hp-derived-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "door-01",
+				{HardwarePlacementID: "hp-shelf-joint-01", PlacementKind: "derived", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "door-01",
 					AnchorFace: "front", OffsetMm: []float64{298, 300}},
 			}
 		})), http.StatusUnprocessableEntity),
@@ -546,11 +550,11 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			}
 		})), http.StatusUnprocessableEntity),
 
-		// Negative proof: incompatible hardware substitution rejected.
+		// Negative proof: incompatible hardware substitution rejected via data-driven capabilities (slide on door host).
 		run("neg-hardware-incompatible", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = defaultOccurrencesJSON()
 			f.HardwarePlacements = []authoringPlacementWire{
-				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-incompatible", HostComponentInstanceID: "door-01",
+				{HardwarePlacementID: "hp-hinge-01", PlacementKind: "manual", CatalogHardwareID: "hw-incompatible", HostComponentInstanceID: "door-01",
 					AnchorFace: "front", OffsetMm: []float64{298, 100}},
 			}
 		})), http.StatusUnprocessableEntity),
@@ -596,6 +600,7 @@ func buildAuthoringFixtureJoinery(t *testing.T, scenarios []authoringFixtureCase
 	for _, hw := range catalog.Hardware {
 		hardware = append(hardware, authoringFixtureHardware{
 			ID: hw.ID, Code: hw.Code, Name: hw.Name,
+			Category: hw.Category, CompatibleRoles: hw.CompatibleRoles,
 			Unit: string(hw.Unit), CostPerUnit: hw.CostPerUnit, Active: hw.Active,
 		})
 	}

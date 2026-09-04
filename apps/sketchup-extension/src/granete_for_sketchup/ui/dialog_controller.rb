@@ -675,10 +675,9 @@ module Granete
                                              model_provider: -> { active_model }).send(:locate_child, entity, target)
           hw_meta = child ? store.read(child) : nil
           hw_intent = hw_meta&.dig('intent') || {}
-          hw_kind = hw_intent['placementKind']
+          hw_kind = hw_intent['placementKind'] || target['placementKind']
 
-          return unless hw_kind == 'derived' ||
-                        target['hardwarePlacementId'].to_s.downcase.start_with?('hp-derived', 'derived-', 'dhp-')
+          return unless hw_kind == 'derived'
 
           issue = Library::AuthoringResolveIssue.new(
             'code' => 'HARDWARE_DERIVED_EDIT',
@@ -753,6 +752,7 @@ module Granete
             offset = is_target ? next_hardware_offset(hp, new_offset) : (hp.offset_mm || [0.0, 0.0])
             {
               'hardwarePlacementId' => hp.placement_id,
+              'placementKind' => hp.placement_kind || 'manual',
               'catalogHardwareId' => next_hw_id,
               'hostComponentInstanceId' => hp.host_component_instance_id,
               'anchorFace' => hp.anchor_face || 'front',

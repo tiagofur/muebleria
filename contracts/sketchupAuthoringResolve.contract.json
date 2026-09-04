@@ -257,6 +257,7 @@
         "id": "hw-handle",
         "code": "MAN-160",
         "name": "Manija 160",
+        "category": "handle",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -265,6 +266,7 @@
         "id": "hw-hinge",
         "code": "BIS-CL110",
         "name": "Bisagra CL110",
+        "category": "hinge",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -273,6 +275,7 @@
         "id": "hw-hinge-b",
         "code": "BIS-CL100",
         "name": "Bisagra CL100",
+        "category": "hinge",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -281,6 +284,7 @@
         "id": "hw-minifix",
         "code": "HER-MIN-15",
         "name": "Minifix 15",
+        "category": "connector",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -289,14 +293,21 @@
         "id": "hw-dowel",
         "code": "HER-TAQ-8X30",
         "name": "Tarugo 8x30",
+        "category": "connector",
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
       },
       {
         "id": "hw-incompatible",
-        "code": "INCOMPATIBLE",
-        "name": "Corredera Incompatible",
+        "code": "CORR-450",
+        "name": "Corredera Telescópica 450",
+        "category": "slide",
+        "compatibleRoles": [
+          "lateral_izquierdo",
+          "lateral_derecho",
+          "cajon"
+        ],
         "unit": "piece",
         "costPerUnit": 0,
         "active": true
@@ -16346,12 +16357,13 @@
             {
               "anchorFace": "front",
               "catalogHardwareId": "hw-hinge",
-              "hardwarePlacementId": "hp-derived-01",
+              "hardwarePlacementId": "hp-shelf-joint-01",
               "hostComponentInstanceId": "door-01",
               "offsetMm": [
                 298,
                 300
-              ]
+              ],
+              "placementKind": "derived"
             }
           ]
         },
@@ -16387,10 +16399,10 @@
         "issues": [
           {
             "code": "HARDWARE_DERIVED_EDIT",
-            "message": "placement hp-derived-01 is derived by engineering rules and does not support manual editing",
+            "message": "placement hp-shelf-joint-01 is derived by engineering rules and does not support manual editing",
             "severity": "error",
-            "entityId": "hp-derived-01",
-            "path": "furniture.hardwarePlacements[hardwarePlacementId=hp-derived-01]",
+            "entityId": "hp-shelf-joint-01",
+            "path": "furniture.hardwarePlacements[hardwarePlacementId=hp-shelf-joint-01]",
             "remediation": "Only manual hardware placements can be edited directly."
           }
         ]
@@ -16541,7 +16553,8 @@
               "offsetMm": [
                 298,
                 100
-              ]
+              ],
+              "placementKind": "manual"
             }
           ]
         },
