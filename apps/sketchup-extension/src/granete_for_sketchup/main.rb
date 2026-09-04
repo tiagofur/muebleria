@@ -29,6 +29,17 @@ module Granete
         library/catalog_provider
         library/layout_contract
         library/authoring_resolve_contract
+        host/message_identity
+        host/interaction_state
+        host/error_taxonomy
+        host/degraded_state
+        host/command_contract
+        host/operation_journal
+        host/preflight_tracker
+        host/selection_restore
+        host/mutation_outcome
+        host/mutation_command
+        host/authoring_mutation_coordinator
         assets/asset_resolver
         assets/asset_loader
         assets/texture_cache

@@ -1,2 +1,5 @@
 Path: "%CONFIG_DIR%/test/testup"
+Output: "%CONFIG_DIR%/../../progress/host_smoke_F498_testup_ci.json"
+Tests:
+  - "Granete::SketchUpExtension::TC_HostMutationSmoke#"
 KeepOpen: false

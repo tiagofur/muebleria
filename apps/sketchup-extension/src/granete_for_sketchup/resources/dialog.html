@@ -1869,6 +1869,12 @@
           <div id="inspector-multi-note" class="subhead" style="display: none; margin-bottom: var(--space-3); font-size: var(--text-xs); text-align: center;">
             Selección múltiple: se muestra el primer elemento sólo para inspección; la edición queda deshabilitada hasta que exista edición por lote.
           </div>
+
+          <!-- #498 shared runtime status: honest mutation/degraded feedback so
+               the user never faces an infinite spinner. Never claims ready. -->
+          <div id="mutation-status" class="card subhead" hidden
+               style="margin: 0 0 var(--space-3) 0; padding: var(--space-2) var(--space-3); font-size: var(--text-xs); text-align: center; font-style: normal;"
+               role="status" aria-live="polite"></div>
         </section>
 
         <!-- Tab 4: Status -->
@@ -3746,6 +3752,12 @@
 
           onSelectionChange: function (context) {
             selectedContext = context || null;
+            // #498: the shared store owns selection truth for downstream
+            // runtime surfaces (#466–#468); the legacy variable stays as the
+            // inspector's working copy.
+            if (window.GraneteMutation) {
+              window.GraneteMutation.publishSelection(selectedContext);
+            }
             renderInspector();
 
             // Preserve active tab context: do not hijack the user away from
@@ -4512,9 +4524,17 @@
             materialChoices: inspectorMaterialChoices
           };
 
-          if (window.sketchup && window.sketchup.update_furniture) {
+          // #498: managed edits ride the shared mutation controller —
+          // explicit state machine, one correlated command, double-submit
+          // guard. The legacy direct call remains as fallback when the
+          // runtime modules are not loaded.
+          var submitted = "unavailable";
+          if (window.GraneteMutation) {
+            submitted = window.GraneteMutation.submitUpdate(payload, selectedContext);
+          }
+          if (submitted === "unavailable" && window.sketchup && window.sketchup.update_furniture) {
             window.sketchup.update_furniture(JSON.stringify(payload));
-          } else {
+          } else if (submitted === "unavailable") {
             setTimeout(function () {
               window.GraneteDialog.onUpdateResult({ success: true, name: selectedContext.display ? selectedContext.display.name : "" });
             }, 500);
@@ -5272,5 +5292,14 @@
         }
       })();
     </script>
+
+    <!-- #498 / SU-HOST-1 shared host runtime modules: single dialog state
+         authority, versioned/validated bridge, mutation controller. Loaded
+         after the legacy script so the existing UI keeps working; each
+         module is idempotent under re-execution and independently
+         testable from the Node harness without the whole dialog HTML. -->
+    <script src="js/granete-state.js"></script>
+    <script src="js/granete-bridge.js"></script>
+    <script src="js/granete-mutation.js"></script>
   </body>
 </html>

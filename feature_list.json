@@ -5657,6 +5657,42 @@
       "depends_on": [
         "F210"
       ]
+    },
+    {
+      "id": "F212",
+      "title": "Shared host interaction orchestration for atomic authoring and degraded states (#498 / SU-HOST-1)",
+      "description": "Unified host interaction orchestration providing one domain-neutral AuthoringMutationCoordinator, a single reactive HtmlDialog state authority (GraneteState), a schema-validated versioned bridge (GraneteBridge / CommandContract granete.sketchup-host-command.v1) with correlation IDs, atomic single-operation transactions with automatic rollback on failure, semantic selection restoration, preflight invalidation, honest degraded states (resolved_current, resolved_stale, unresolved_preview, offline_cached, sync_required, blocked_incompatible), and fail-closed late-response rejection.",
+      "tags": [
+        "sketchup-extension",
+        "authoring",
+        "host-runtime",
+        "p0"
+      ],
+      "created": "2026-09-04",
+      "status": "done",
+      "completedAt": "2026-09-04",
+      "evidence": "Ruby unit suite (455 runs, 3496 assertions, 0 failures); Ruby boundary suite (3 runs, 1911 assertions, 0 failures); package build and verification clean (RBZ deterministic sha256); real-host smoke suite TC_HostMutationSmoke.rb added covering successful mutation + Undo restoration, resolve rejection with zero operations, host apply exception abort, late response rejection and save/reopen clean metadata; Node tests for state store, bridge and mutation controller green; pnpm openapi:check, typecheck and test green.",
+      "acceptance": [
+        "One shared dialog state authority (GraneteState) with reactive slices (session, catalog, selection, mutation, preflight, degraded) and idempotent re-execution",
+        "Modular versioned Ruby<->JS bridge (GraneteBridge / CommandContract) validating schema, correlation, and semantic targets (furnitureInstanceId, componentInstanceId, hardwarePlacementId)",
+        "Domain-neutral AuthoringMutationCoordinator executing atomic authoring pipeline without domain-specific branching",
+        "Resolve-before-destructive-mutation rule enforced: geometry is never deleted before authoritative resolve succeeds",
+        "Exactly ONE SketchUp operation per accepted mutation with automatic abort and previous state survival on failure",
+        "Selection restoration by semantic identity rather than volatile entity IDs",
+        "Late and superseded responses rejected without host mutation",
+        "Preflight invalidation on manufacturing-affecting mutations",
+        "Degraded state model with honest Spanish copy and no productive generic fallback",
+        "TestUp host smoke TC_HostMutationSmoke.rb and comprehensive unit/boundary suites passing"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/498",
+        "docs/architecture/sketchup-backend-web-integration-excellence.md",
+        "docs/architecture/sketchup-plugin-excellence.md",
+        "docs/architecture/sketchup-authoring-interaction-contract.md"
+      ],
+      "depends_on": [
+        "F211"
+      ]
     }
   ]
 }
