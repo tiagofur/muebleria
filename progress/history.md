@@ -1926,3 +1926,45 @@ no reproduce en CI del PR.
 - **CI final:** run `33444928121` SUCCESS sobre el SHA exacto.
 - **Merge:** PR #493 merged a `main` como `35bbfc07544b458485518a0a99dc0fd74d04d1e8`
   (2026-08-31). F199 = `done`; issue #458 cerrada como completed.
+
+## Cierre de F211 — End-to-End Digital Thread Contract & Regression Gate (#398 / DT-14) — 2026-09-04
+
+- **Rama:** `feat/398-digital-thread-e2e-regression-gate` (PR #554). Gate de regresión E2E
+  que prueba los contratos de #385–#395 como UN sistema, sin código de producción nuevo.
+- **Entregado:** suite Go `TestDigitalThreadE2E` (9 tests, escenarios A–G + negative
+  proofs + fingerprint determinista) contra PostgreSQL real con rol app `granete_app`
+  (NOBYPASSRLS, RLS, tenant tx, triggers de inmutabilidad); suite Ruby
+  `digital_thread_contract_test.rb`; smoke TestUp `TC_DigitalThreadE2ESmoke.rb`;
+  fixture canónico `contracts/digitalThreadE2E.json` (invariantes C1–C9);
+  doc canónico `docs/architecture/digital-thread-e2e-regression-gate.md` con tabla de
+  capas y política de fixtures sin snapshot-blessing.
+- **Review independiente round 1** (`progress/review_398.md`): CHANGES_REQUESTED con 7
+  cambios; todos aplicados — smoke TestUp ejecutable (`Model::FurnitureBuilder` +
+  `metadata_store`), Scenario F con conflicto tipado `ErrDesignRevisionConflict` +
+  prueba de no-huérfanos (head R2, sin R3, cero artefactos finalizados), Scenario C
+  con prueba negativa de no-alocación de identidad (nunca FI-E), atribución honesta
+  (idempotency/estabilidad histórica/join-por-ID se consumen de #385/#392/#393/#395),
+  numeración de invariantes desambiguada (canónica I1–I14 vs gate G1–G9 vs contract C1–C9).
+- **Capa host real:** queda `REAL_HOST_REQUIRED` — CI no puede correr SketchUp; el smoke
+  es el escenario ejecutable y la evidencia (`progress/host_smoke_F211_testup_ci.json`)
+  debe producirse en TestUp contra el RBZ instalado antes de reportar esa capa verde.
+- **Verificación:** `go test ./...` verde; `rake verify` verde (403 unit + 3 boundary);
+  `pnpm openapi:check`/`pnpm typecheck`/`pnpm test` verde (411).
+
+### F211 — addendum cierre host real (2026-09-04)
+
+Cierre final del host-proof de #398: el smoke TestUp `TC_DigitalThreadE2ESmoke` ahora
+ejecuta el **DuplicateResolver REAL dentro de SketchUp** (no sólo detección): copia
+nativa → colisión (duplicates=2) → `rescan_and_resolve` con doubles controlados del
+boundary de servidor (sin red en TestUp) → original conserva FI-001, copia recibe
+FI-NEW con `origin=duplicate`/`originFurnitureInstanceId=FI-001`, exactamente un
+comando duplicate con idempotency-key `dup:project:design:FI-001:<persistent_id>`,
+colisión resuelta (duplicates=1 ambas) y ambas identidades sobreviven save/reopen.
+Ejecutado en host real SketchUp 2026 (26.2.242, macOS 26.6.2, arm64, Ruby 3.2.2)
+contra RBZ instalado sha256 `2e8765fa…` vía `-RubyStartupArg TestUp:CI:Config`:
+**3/3 tests, 47 assertions, 0 fallos**, evidencia
+`progress/host_smoke_F211_testup_ci.json` (+stdout; paths sanitizados). El host real
+expuso y se corrigieron 2 defectos latentes del smoke (shape del `catalog_definition`
+— `furniture_definition_id`→`intent.furnitureDefinitionId` — y `Binding#valid?` en
+vez de `bound?`). CI no puede correr SketchUp: la capa sigue `REAL_HOST_REQUIRED`
+para CI y se re-ejecuta manualmente al tocar código host.

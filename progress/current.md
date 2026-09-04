@@ -1,18 +1,29 @@
-# Feature activa: #394 DT-10 — Classify reconciliation impact + explicit re-quote
+# Feature activa: F211 (#398 / DT-14) — End-to-End Digital Thread Contract & Regression Gate
 
-- Actualizado: 2026-09-03 America/Mexico_City
-- F202 (#460) sigue abierta en paralelo (SEC-8/SEC-9); esta sesión ejecutó el
-  slice DT-10 en modo Demo Commercial Rescue sobre `feat/394-impact-classification-requote`.
-- #394 implementada COMPLETE: clasificación semántica no-exclusiva
-  (`commercial`/`manufacturing`/`spatial`) sobre el ReconciliationResult exacto
-  de #393 (política central path→impacto, fail-closed ante paths desconocidos),
-  con `requiresRequote` derivado sólo de impactos comerciales y `conflict`
-  bloqueando el requote. Flujo explícito `POST /api/projects/{projectId}/quote-revisions:requote`
-  (idempotente, RBAC mutate, base exacta fail-closed) que crea la nueva
-  QuoteRevision draft con provenance (`base_quote_revision_id`,
-  `source_design_revision_id`, migration 000117) dejando la cotización aceptada
-  byte-idéntica. Espacial-only nunca provoca requote (negative proof persistido).
-  Detalle: `progress/implementation_394_dt10.md`.
+- Actualizado: 2026-09-04 America/Mexico_City
+- Feature: F211 — `Add end-to-end Digital Thread contract and regression suite (#398 / DT-14)`
+- Rama: `feat/398-digital-thread-e2e-regression-gate`
+- Estado: `done` (review round 1 corregido y APPROVED; host TestUp **ejecutado en
+  SketchUp 2026 real: 3/3, 47 assertions, evidencia
+  `progress/host_smoke_F211_testup_ci.json`** — cierre host completo)
+- Resultados y verificación:
+  1. Fixture canónico unificado en `contracts/digitalThreadE2E.json` (invariantes C1–C9).
+  2. Suite Go `backend-go/internal/storage/digital_thread_e2e_test.go` (9/9 tests pasando con PostgreSQL real, app-role `granete_app` RLS y triggers de inmutabilidad).
+  3. Suite Ruby `apps/sketchup-extension/test/unit/digital_thread_contract_test.rb` (403 tests, 0 fallos, `rake verify` verde). Smoke host `TC_DigitalThreadE2ESmoke.rb`
+     **ejecutado en host real** (SketchUp 26.2.242 / macOS 26.6.2 / RBZ `2e8765fa…`):
+     placement+exclusión unmanaged, **DuplicateResolver real** (original conserva FI-001,
+     copia recibe FI-NEW `origin=duplicate`, colisión resuelta, save/reopen) — 3/3 PASS.
+  4. Documentación arquitectónica canónica en `docs/architecture/digital-thread-e2e-regression-gate.md`
+     (tabla de capas con host PASS+evidencia, boundary del path de artefactos, política de fixtures sin snapshot-blessing).
+  5. Gates completos del repositorio: `go test ./...` verde, `bundle exec rake verify` verde, `pnpm openapi:check && pnpm test` verde (411 tests pasando). Detalle: `progress/implementation_398_dt14.md`.
+  6. Review independiente (`progress/review_398.md`): round 1 CHANGES_REQUESTED (7 fixes
+     aplicados) + round 2 APPROVED; cierre host final con DuplicateResolver real en §3 de las notas.
+
+## Historial previo — #395 DT-11
+
+- #395 implementada y mergeada a main (PR #551, merge `03e8c77b`):
+  aprobación de DesignRevision y ProductionRelease pinneado a revisiones exactas.
+
 
 ## Historial previo — #393 DT-9
 

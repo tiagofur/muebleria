@@ -1,0 +1,72 @@
+{
+ "status": {
+  "code": "Success",
+  "color": "green"
+ },
+ "metadata": {
+  "generated_by": "TestUp::CIJsonReporter",
+  "version": "1.0.0",
+  "ruby_version": "3.2.2",
+  "ruby_patchlevel": 53,
+  "ruby_platform": "arm64-darwin",
+  "time": "2026-09-04T15:59:21Z",
+  "options": {
+   "io": "TestUp::Console",
+   "filter": " /^(Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke#test_digital_thread_host_placement_and_unmanaged_exclusion|Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke#test_digital_thread_duplicate_detection_and_resolution_in_host|Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke#test_digital_thread_persistence_across_save_and_reopen)$/",
+   "verbose": true,
+   "testup_ci": true,
+   "testup_ci_out": "progress/host_smoke_F211_testup_ci.json",
+   "seed": 16413,
+   "args": "\"-n /^(Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke#test_digital_thread_host_placement_and_unmanaged_exclusion|Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke#test_digital_thread_duplicate_detection_and_resolution_in_host|Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke#test_digital_thread_persistence_across_save_and_reopen)$/\" --verbose --testup_ci --testup_ci_out=progress/host_smoke_F211_testup_ci.json --seed 16413"
+  }
+ },
+ "statistics": {
+  "total": 3,
+  "assertions": 47,
+  "failures": 0,
+  "errors": 0,
+  "skips": 0,
+  "passes": 3
+ },
+ "timings": {
+  "total_seconds": 2.3908919999958016,
+  "runs_per_second": 1.25476182111332,
+  "assertions_per_second": 19.657935197442015
+ },
+ "fails": [],
+ "skips": [],
+ "passes": [
+  {
+   "type": "passed",
+   "class": "Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke",
+   "name": "test_digital_thread_duplicate_detection_and_resolution_in_host",
+   "assertions": 31,
+   "time": 0.8042600000044331
+  },
+  {
+   "type": "passed",
+   "class": "Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke",
+   "name": "test_digital_thread_persistence_across_save_and_reopen",
+   "assertions": 11,
+   "time": 0.6760559999966063
+  },
+  {
+   "type": "passed",
+   "class": "Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke",
+   "name": "test_digital_thread_host_placement_and_unmanaged_exclusion",
+   "assertions": 5,
+   "time": 0.42805499996757135
+  }
+ ],
+ "_context": {
+  "note": "added by Granete host evidence convention; TestUp output above is pristine",
+  "sketchup_version": "26.2.242 (SketchUp 2026)",
+  "os": "macOS 26.6.2 (arm64)",
+  "extension_version": "0.1.0",
+  "installed_rbz_sha256": "2e8765fa9f43871ff98a2c9a4f523b0aab317fb7d72fde44c9184ff314220c85",
+  "suite": "Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke",
+  "tests": 3,
+  "result": "Success",
+  "timestamp": "2026-09-04T15:59:21Z"
+ }
+}
