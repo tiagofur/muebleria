@@ -1,15 +1,27 @@
-# Feature activa: #393 DT-9 — QuoteRevision ↔ DesignRevision Reconciliation by FurnitureInstance
+# Feature activa: #394 DT-10 — Classify reconciliation impact + explicit re-quote
 
 - Actualizado: 2026-09-03 America/Mexico_City
 - F202 (#460) sigue abierta en paralelo (SEC-8/SEC-9); esta sesión ejecutó el
-  slice DT-9 en modo Demo Commercial Rescue sobre `feat/393-quote-design-reconciliation`.
-- #393 implementada COMPLETE: reconciliación pura y determinística entre QuoteRevision
-  y DesignRevision unidas estrictamente por `FurnitureInstance.id`.
-  Reporta estados canónicos: `synced`, `quoted_not_modeled`, `modeled_not_quoted`,
-  `modified`, `removed`, `conflict`. Genera diferencias estructuradas normalizadas
-  sin mutar la cotización ni el diseño (operación puramente read-only con negative proof
-  de inmutabilidad). Pruebas de dominio, API HTTP y PostgreSQL con RLS completas.
-  Detalle: `progress/implementation_393_dt9.md`.
+  slice DT-10 en modo Demo Commercial Rescue sobre `feat/394-impact-classification-requote`.
+- #394 implementada COMPLETE: clasificación semántica no-exclusiva
+  (`commercial`/`manufacturing`/`spatial`) sobre el ReconciliationResult exacto
+  de #393 (política central path→impacto, fail-closed ante paths desconocidos),
+  con `requiresRequote` derivado sólo de impactos comerciales y `conflict`
+  bloqueando el requote. Flujo explícito `POST /api/projects/{projectId}/quote-revisions:requote`
+  (idempotente, RBAC mutate, base exacta fail-closed) que crea la nueva
+  QuoteRevision draft con provenance (`base_quote_revision_id`,
+  `source_design_revision_id`, migration 000117) dejando la cotización aceptada
+  byte-idéntica. Espacial-only nunca provoca requote (negative proof persistido).
+  Detalle: `progress/implementation_394_dt10.md`.
+
+## Historial previo — #393 DT-9
+
+- #393 implementada y mergeada a main (PR #549, merge `316df57c`):
+  reconciliación pura y determinística entre QuoteRevision y DesignRevision
+  unidas estrictamente por `FurnitureInstance.id` con estados canónicos
+  `synced`, `quoted_not_modeled`, `modeled_not_quoted`, `modified`, `removed`,
+  `conflict`, diferencias estructuradas normalizadas y writer atómico con
+  optimistic concurrency fail-closed. Detalle: `progress/implementation_393_dt9.md`.
 
 ## Historial previo — #392 DT-8
 

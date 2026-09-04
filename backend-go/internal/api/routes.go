@@ -388,6 +388,12 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Pure deterministic comparison returning structured differences and summary counts.
 	mux.Handle("POST /api/projects/{projectId}/reconciliation", authMW(http.HandlerFunc(server.HandleProjectReconciliation)))
 
+	// #394 / DT-10: explicit re-quote workflow. The response of a lost
+	// request is replayed by the durable idempotency receipt — a retry never
+	// mints a second revision. Classification is computed server-side; the
+	// accepted source revision is never rewritten.
+	mux.Handle("POST /api/projects/{projectId}/quote-revisions:requote", authMW(server.RequireIdempotency("quote.requote", http.HandlerFunc(server.HandleProjectQuoteRequote))))
+
 	// #392 / DT-8: staged publication of an immutable DesignRevision with
 	// manifest + artifacts. prepare and finalize are durable commands behind
 	// the idempotency receipt (retry of a lost finalize response replays the

@@ -1,0 +1,178 @@
+{
+  "contract": "reconciliationImpact",
+  "version": 1,
+  "description": "Deterministic impact-classification contract for the #394 / DT-10 demo scenario: an accepted QuoteRevision Q3 reconciled against a published DesignRevision R5. FI-001 is unchanged, FI-002 widens 600→650mm (commercial+manufacturing), FI-003 is a pure 1200mm move with explicit spatial evidence on both snapshots (spatial-only, never requires a requote), FI-004 was modeled in SketchUp but never quoted (pending quote). Any change to statuses, structured differences, impact groups or the derived summary breaks this contract.",
+  "input": {
+    "project": {
+      "projectId": "11111111-1111-4111-8111-111111111111"
+    },
+    "quote": {
+      "projectId": "11111111-1111-4111-8111-111111111111",
+      "quoteRevisionId": "33333333-3333-4333-8333-333333333333",
+      "items": [
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000001",
+          "furnitureDefinitionId": "d0000000-0000-4000-8000-00000000000d",
+          "definitionVersion": 2,
+          "parameters": { "widthMm": 600, "heightMm": 720, "depthMm": 560 },
+          "materialChoices": { "carcass": "mat-blanco", "frente": "mat-roble" },
+          "lifecycleStatus": "active"
+        },
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000002",
+          "furnitureDefinitionId": "d0000000-0000-4000-8000-00000000000d",
+          "definitionVersion": 2,
+          "parameters": { "widthMm": 600, "heightMm": 720, "depthMm": 560 },
+          "materialChoices": { "carcass": "mat-blanco", "frente": "mat-roble" },
+          "lifecycleStatus": "active"
+        },
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000003",
+          "furnitureDefinitionId": "d0000000-0000-4000-8000-00000000000e",
+          "definitionVersion": 1,
+          "parameters": { "widthMm": 900, "heightMm": 720, "depthMm": 560 },
+          "materialChoices": { "carcass": "mat-blanco" },
+          "lifecycleStatus": "active",
+          "transform": { "translationMm": [1000, 0, 0], "rotationDeg": [0, 0, 0] },
+          "roomId": "r0000000-0000-4000-8000-000000000001"
+        }
+      ]
+    },
+    "design": {
+      "projectId": "11111111-1111-4111-8111-111111111111",
+      "designRevisionId": "55555555-5555-4555-8555-555555555555",
+      "items": [
+        {
+          "id": "b0000000-0000-4000-8000-000000000001",
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "design_revision_id": "55555555-5555-4555-8555-555555555555",
+          "furniture_instance_id": "a0000000-0000-4000-8000-000000000001",
+          "furniture_definition_id": "d0000000-0000-4000-8000-00000000000d",
+          "definition_version": 2,
+          "parameters": { "widthMm": 600, "heightMm": 720, "depthMm": 560 },
+          "material_choices": { "carcass": "mat-blanco", "frente": "mat-roble" },
+          "transform": { "translationMm": [0, 0, 0], "rotationDeg": [0, 0, 0] }
+        },
+        {
+          "id": "b0000000-0000-4000-8000-000000000002",
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "design_revision_id": "55555555-5555-4555-8555-555555555555",
+          "furniture_instance_id": "a0000000-0000-4000-8000-000000000002",
+          "furniture_definition_id": "d0000000-0000-4000-8000-00000000000d",
+          "definition_version": 2,
+          "parameters": { "widthMm": 650, "heightMm": 720, "depthMm": 560 },
+          "material_choices": { "carcass": "mat-blanco", "frente": "mat-roble" },
+          "transform": { "translationMm": [0, 0, 0], "rotationDeg": [0, 0, 0] }
+        },
+        {
+          "id": "b0000000-0000-4000-8000-000000000003",
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "design_revision_id": "55555555-5555-4555-8555-555555555555",
+          "furniture_instance_id": "a0000000-0000-4000-8000-000000000003",
+          "furniture_definition_id": "d0000000-0000-4000-8000-00000000000e",
+          "definition_version": 1,
+          "parameters": { "widthMm": 900, "heightMm": 720, "depthMm": 560 },
+          "material_choices": { "carcass": "mat-blanco" },
+          "transform": { "translationMm": [2200, 0, 0], "rotationDeg": [0, 0, 0] },
+          "room_id": "r0000000-0000-4000-8000-000000000001"
+        },
+        {
+          "id": "b0000000-0000-4000-8000-000000000004",
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "design_revision_id": "55555555-5555-4555-8555-555555555555",
+          "furniture_instance_id": "a0000000-0000-4000-8000-000000000004",
+          "furniture_definition_id": "d0000000-0000-4000-8000-00000000000f",
+          "definition_version": 1,
+          "parameters": { "widthMm": 450, "heightMm": 1400, "depthMm": 560 },
+          "material_choices": { "carcass": "mat-blanco", "frente": "mat-negro" },
+          "transform": { "translationMm": [3000, 0, 0], "rotationDeg": [0, 0, 0] }
+        }
+      ]
+    }
+  },
+  "expected": {
+    "reconciliation": {
+      "projectId": "11111111-1111-4111-8111-111111111111",
+      "quoteRevisionId": "33333333-3333-4333-8333-333333333333",
+      "designRevisionId": "55555555-5555-4555-8555-555555555555",
+      "summary": {
+        "total": 4,
+        "synced": 1,
+        "quotedNotModeled": 0,
+        "modeledNotQuoted": 1,
+        "modified": 2,
+        "removed": 0,
+        "conflict": 0
+      },
+      "items": [
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000001",
+          "status": "synced",
+          "differences": []
+        },
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000002",
+          "status": "modified",
+          "differences": [
+            {
+              "path": "parameters.widthMm",
+              "quoteValue": 600,
+              "designValue": 650
+            }
+          ]
+        },
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000003",
+          "status": "modified",
+          "differences": [
+            {
+              "path": "transform.translationMm",
+              "quoteValue": [1000, 0, 0],
+              "designValue": [2200, 0, 0]
+            }
+          ]
+        },
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000004",
+          "status": "modeled_not_quoted",
+          "differences": []
+        }
+      ]
+    },
+    "classification": {
+      "projectId": "11111111-1111-4111-8111-111111111111",
+      "quoteRevisionId": "33333333-3333-4333-8333-333333333333",
+      "designRevisionId": "55555555-5555-4555-8555-555555555555",
+      "summary": {
+        "requiresRequote": true,
+        "requiresResolution": false,
+        "canRequote": true,
+        "commercialChanges": 2,
+        "manufacturingChanges": 2,
+        "spatialChanges": 1
+      },
+      "items": [
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000001",
+          "status": "synced",
+          "impact": { "commercial": false, "manufacturing": false, "spatial": false }
+        },
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000002",
+          "status": "modified",
+          "impact": { "commercial": true, "manufacturing": true, "spatial": false }
+        },
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000003",
+          "status": "modified",
+          "impact": { "commercial": false, "manufacturing": false, "spatial": true }
+        },
+        {
+          "furnitureInstanceId": "a0000000-0000-4000-8000-000000000004",
+          "status": "modeled_not_quoted",
+          "impact": { "commercial": true, "manufacturing": true, "spatial": false }
+        }
+      ]
+    }
+  }
+}

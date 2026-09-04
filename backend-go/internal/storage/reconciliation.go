@@ -26,6 +26,9 @@ type CreateQuoteRevisionCommand struct {
 	Notes          string
 	CreatedBy      string
 	Items          []CreateQuoteRevisionItemCommand
+	// Requote provenance (#394 / DT-10): recorded verbatim when SourceType is
+	// "requote" (and tolerated empty otherwise).
+	SourceDesignRevisionID string
 }
 
 // CreateQuoteRevisionItemCommand holds parameters for one physical furniture unit snapshot.
@@ -139,11 +142,32 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 	if sourceType == "" {
 		sourceType = "manual"
 	}
+	sourceDesignRevisionID := strings.TrimSpace(cmd.SourceDesignRevisionID)
+	if sourceDesignRevisionID != "" && !isValidUUID(sourceDesignRevisionID) {
+		return nil, domain.ErrInvalidRevisionID
+	}
+	if sourceType == "requote" {
+		// A requote without exact provenance would break the commercial
+		// traceability contract (#394 §36) — fail closed.
+		if cmd.BaseRevisionID == "" || sourceDesignRevisionID == "" {
+			return nil, fmt.Errorf("%w: requote revisions require baseQuoteRevisionId and sourceDesignRevisionId", domain.ErrInvalidRevisionSnapshot)
+		}
+	}
 
 	var createdBy *string
 	if isValidUUID(cmd.CreatedBy) {
 		cb := cmd.CreatedBy
 		createdBy = &cb
+	}
+	var baseRevisionID *string
+	if cmd.BaseRevisionID != "" {
+		b := cmd.BaseRevisionID
+		baseRevisionID = &b
+	}
+	var sourceDesignRevID *string
+	if sourceDesignRevisionID != "" {
+		d := sourceDesignRevisionID
+		sourceDesignRevID = &d
 	}
 
 	var rev domain.QuoteRevision
@@ -153,22 +177,26 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 		insertQuery = `
 			INSERT INTO quote_revisions (
 				id, organization_id, project_id, revision_number,
-				status, source_type, notes, created_by
+				status, source_type, notes, created_by,
+				base_quote_revision_id, source_design_revision_id
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, '')
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
+				COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
 		`
-		args = []any{quoteRevID, orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy}
+		args = []any{quoteRevID, orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy, baseRevisionID, sourceDesignRevID}
 	} else {
 		insertQuery = `
 			INSERT INTO quote_revisions (
 				organization_id, project_id, revision_number,
-				status, source_type, notes, created_by
+				status, source_type, notes, created_by,
+				base_quote_revision_id, source_design_revision_id
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, '')
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
+				COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
 		`
-		args = []any{orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy}
+		args = []any{orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy, baseRevisionID, sourceDesignRevID}
 	}
 
 	err = s.db(txCtx).QueryRow(txCtx, insertQuery, args...).Scan(
@@ -179,6 +207,8 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 		&rev.Status,
 		&rev.SourceType,
 		&rev.Notes,
+		&rev.BaseQuoteRevisionID,
+		&rev.SourceDesignRevisionID,
 	)
 	if err != nil {
 		return nil, err
@@ -267,7 +297,8 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 
 	var rev domain.QuoteRevision
 	err = s.db(txCtx).QueryRow(txCtx, `
-		SELECT id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, '')
+		SELECT id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
+			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
 		FROM quote_revisions
 		WHERE id = $1
 		FOR UPDATE
@@ -279,6 +310,8 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		&rev.Status,
 		&rev.SourceType,
 		&rev.Notes,
+		&rev.BaseQuoteRevisionID,
+		&rev.SourceDesignRevisionID,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -320,7 +353,8 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		UPDATE quote_revisions
 		SET status = $2
 		WHERE id = $1
-		RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, '')
+		RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
+			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
 	`, cmd.QuoteRevisionID, targetStatus).Scan(
 		&rev.ID,
 		&rev.OrganizationID,
@@ -329,6 +363,8 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		&rev.Status,
 		&rev.SourceType,
 		&rev.Notes,
+		&rev.BaseQuoteRevisionID,
+		&rev.SourceDesignRevisionID,
 	)
 	if err != nil {
 		return nil, err
@@ -343,20 +379,29 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 	return &rev, nil
 }
 
-// ReconcileProject performs a pure deterministic comparison between an exact
-// QuoteRevision and an exact DesignRevision for the specified project.
-// Both sides must belong to projectID and to the caller's tenant scope.
-// It is strictly READ-ONLY: neither quote nor design records are mutated.
-func (s *PostgresStore) ReconcileProject(ctx context.Context, projectID, quoteRevisionID, designRevisionID string) (*domain.ReconciliationResult, error) {
-	if !isValidUUID(projectID) || !isValidUUID(quoteRevisionID) || !isValidUUID(designRevisionID) {
-		return nil, domain.ErrInvalidRevisionID
-	}
+// reconciliationInputs carries the exact loaded revision snapshots plus the
+// metadata the readers need. Loaded fail-closed: corrupt JSON snapshots are
+// rejected instead of guessed.
+type reconciliationInputs struct {
+	ProjectID        string
+	OrganizationID   string
+	QuoteRevisionID  string
+	DesignRevisionID string
+	QuoteStatus      string
+	DesignStatus     string
+	Quote            domain.QuoteRevisionSnapshot
+	Design           domain.DesignRevisionSnapshot
+}
 
+// loadReconciliationInputs loads and validates the exact QuoteRevision and
+// DesignRevision snapshots for a project under tenant RLS. Both revisions
+// must belong to projectID. Read-only.
+func (s *PostgresStore) loadReconciliationInputs(ctx context.Context, projectID, quoteRevisionID, designRevisionID string) (*reconciliationInputs, error) {
 	// 1. Verify project exists and is accessible under tenant RLS.
-	var projectOrgID, projectStatus string
+	var projectOrgID string
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT organization_id, status FROM projects WHERE id = $1
-	`, projectID).Scan(&projectOrgID, &projectStatus)
+		SELECT organization_id FROM projects WHERE id = $1
+	`, projectID).Scan(&projectOrgID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignNotFound
@@ -516,17 +561,40 @@ func (s *PostgresStore) ReconcileProject(ctx context.Context, projectID, quoteRe
 		return nil, err
 	}
 
-	// 6. Run pure domain reconciliation
-	quoteSnapshot := domain.QuoteRevisionSnapshot{
-		ProjectID:       projectID,
-		QuoteRevisionID: quoteRevisionID,
-		Items:           commercialItems,
-	}
-	designSnapshot := domain.DesignRevisionSnapshot{
+	return &reconciliationInputs{
 		ProjectID:        projectID,
+		OrganizationID:   projectOrgID,
+		QuoteRevisionID:  quoteRevisionID,
 		DesignRevisionID: designRevisionID,
-		Items:            designItems,
+		QuoteStatus:      qrStatus,
+		DesignStatus:     drStatus,
+		Quote: domain.QuoteRevisionSnapshot{
+			ProjectID:       projectID,
+			QuoteRevisionID: quoteRevisionID,
+			Items:           commercialItems,
+		},
+		Design: domain.DesignRevisionSnapshot{
+			ProjectID:        projectID,
+			DesignRevisionID: designRevisionID,
+			Items:            designItems,
+		},
+	}, nil
+}
+
+// ReconcileProject performs a pure deterministic comparison between an exact
+// QuoteRevision and an exact DesignRevision for the specified project.
+// Both sides must belong to projectID and to the caller's tenant scope.
+// It is strictly READ-ONLY: neither quote nor design records are mutated.
+func (s *PostgresStore) ReconcileProject(ctx context.Context, projectID, quoteRevisionID, designRevisionID string) (*domain.ReconciliationResult, error) {
+	if !isValidUUID(projectID) || !isValidUUID(quoteRevisionID) || !isValidUUID(designRevisionID) {
+		return nil, domain.ErrInvalidRevisionID
 	}
 
-	return domain.Reconcile(quoteSnapshot, designSnapshot)
+	inputs, err := s.loadReconciliationInputs(ctx, projectID, quoteRevisionID, designRevisionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 6. Run pure domain reconciliation
+	return domain.Reconcile(inputs.Quote, inputs.Design)
 }

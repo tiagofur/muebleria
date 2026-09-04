@@ -98,6 +98,11 @@ type stubStore struct {
 	reconcileProjectResult *domain.ReconciliationResult
 	reconcileProjectErr    error
 	reconcileProjectCalls  int
+	// Requote (#394 / DT-10)
+	requoteProjectQuoteResult *storage.RequoteProjectQuoteResult
+	requoteProjectQuoteErr    error
+	requoteProjectQuoteCalls  int
+	requoteProjectQuoteCmd    *storage.RequoteProjectQuoteCommand
 	materialReturnedByID   *domain.MaterialBoard
 	materialGetByIDErr                  error
 	// Ambient materials (presentation-only floor/wall, #4150)
@@ -1725,6 +1730,39 @@ func (s *stubStore) ReconcileProject(_ context.Context, projectID, quoteRevision
 				FurnitureInstanceID: "FI-001",
 				Status:              domain.ReconciliationStatusSynced,
 				Differences:         []domain.StructuredDifference{},
+			},
+		},
+	}, nil
+}
+
+func (s *stubStore) RequoteProjectQuote(_ context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error) {
+	s.requoteProjectQuoteCalls++
+	cmdCopy := cmd
+	s.requoteProjectQuoteCmd = &cmdCopy
+	if s.requoteProjectQuoteErr != nil {
+		return nil, s.requoteProjectQuoteErr
+	}
+	if s.requoteProjectQuoteResult != nil {
+		return s.requoteProjectQuoteResult, nil
+	}
+	return &storage.RequoteProjectQuoteResult{
+		Revision: &domain.QuoteRevision{
+			ID:                     "8f7b6c5d-0000-4000-8000-000000000004",
+			ProjectID:              cmd.ProjectID,
+			RevisionNumber:         4,
+			Status:                 "draft",
+			SourceType:             "requote",
+			BaseQuoteRevisionID:    cmd.BaseQuoteRevisionID,
+			SourceDesignRevisionID: cmd.DesignRevisionID,
+		},
+		Classification: &domain.ImpactClassificationResult{
+			ProjectID:        cmd.ProjectID,
+			QuoteRevisionID:  cmd.BaseQuoteRevisionID,
+			DesignRevisionID: cmd.DesignRevisionID,
+			Summary: domain.ImpactClassificationSummary{
+				RequiresRequote:   true,
+				CanRequote:        true,
+				CommercialChanges: 1,
 			},
 		},
 	}, nil

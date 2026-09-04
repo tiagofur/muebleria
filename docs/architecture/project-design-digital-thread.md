@@ -668,6 +668,17 @@ manufacturing_changed
 spatially_changed
 ```
 
+Implementado en #394 / DT-10 como grupos de impacto NO exclusivos por instancia
+(`commercial`, `manufacturing`, `spatial`): un mismo cambio puede ser comercial y
+de manufactura a la vez (p. ej. ancho 600→650). La clasificación consume el
+`ReconciliationResult` exacto de #393 — nunca recompara snapshots — mediante una
+política central y testeada por contrato
+(`contracts/reconciliationImpact.json`); `requiresRequote` se deriva
+estrictamente de impactos comerciales y `conflict` bloquea el requote
+(fail-closed). El impacto espacial sólo se clasifica cuando AMBOS snapshots
+llevan evidencia espacial explícita; la ausencia de transform en la
+cotización nunca se inventa como diferencia.
+
 ### Reglas
 
 - comparar snapshots/revisiones, no estado mutable “actual” sin revision ID;

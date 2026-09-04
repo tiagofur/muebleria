@@ -296,6 +296,9 @@ type Store interface {
 	ListDesignRevisionItems(ctx context.Context, revisionID string) ([]domain.DesignRevisionItem, error)
 	// #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance
 	ReconcileProject(ctx context.Context, projectID, quoteRevisionID, designRevisionID string) (*domain.ReconciliationResult, error)
+	// #394 / DT-10: explicit re-quote — creates the next draft QuoteRevision
+	// from an exact base quote revision and an exact design revision.
+	RequoteProjectQuote(ctx context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error)
 	// Authoritative Project/Design working context for SketchUp model
 	// binding validation (#388 / DT-4).
 	GetModelBindingContext(ctx context.Context, projectID, designID string, baseRevisionID *string) (*storage.ModelBindingContext, error)

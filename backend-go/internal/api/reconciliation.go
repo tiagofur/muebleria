@@ -68,10 +68,43 @@ func (s *Server) HandleProjectReconciliation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, toReconciliationResultDTO(result))
+	// #394 / DT-10: classify the exact reconciliation server-side so backend
+	// and every surface share ONE classification authority — UI conditionals
+	// never fork the policy.
+	classification, err := domain.ClassifyReconciliation(result)
+	if err != nil {
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "invalid revision snapshot: corrupt or malformed payload", nil)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, toReconciliationResultDTO(result, classification))
 }
 
-func toReconciliationResultDTO(r *domain.ReconciliationResult) openapi.ProjectDesignReconciliationResult {
+func toChangeImpactDTO(impact domain.ChangeImpact) openapi.ChangeImpact {
+	return openapi.ChangeImpact{
+		Commercial:    impact.Commercial,
+		Manufacturing: impact.Manufacturing,
+		Spatial:       impact.Spatial,
+	}
+}
+
+func toImpactSummaryDTO(summary domain.ImpactClassificationSummary) openapi.ReconciliationImpactSummary {
+	return openapi.ReconciliationImpactSummary{
+		RequiresRequote:      summary.RequiresRequote,
+		RequiresResolution:   summary.RequiresResolution,
+		CanRequote:           summary.CanRequote,
+		CommercialChanges:    int64(summary.CommercialChanges),
+		ManufacturingChanges: int64(summary.ManufacturingChanges),
+		SpatialChanges:       int64(summary.SpatialChanges),
+	}
+}
+
+func toReconciliationResultDTO(r *domain.ReconciliationResult, classification *domain.ImpactClassificationResult) openapi.ProjectDesignReconciliationResult {
+	impactsByID := make(map[string]domain.ChangeImpact, len(classification.Items))
+	for _, item := range classification.Items {
+		impactsByID[item.FurnitureInstanceID] = item.Impact
+	}
+
 	items := make([]openapi.ReconciliationItem, len(r.Items))
 	for i, it := range r.Items {
 		diffs := make([]openapi.StructuredDifference, len(it.Differences))
@@ -89,6 +122,7 @@ func toReconciliationResultDTO(r *domain.ReconciliationResult) openapi.ProjectDe
 				Path:        diff.Path,
 				QuoteValue:  qVal,
 				DesignValue: dVal,
+				Impact:      toChangeImpactDTO(domain.ClassifyDifferencePath(diff.Path)),
 			}
 		}
 		var notes *string
@@ -100,6 +134,7 @@ func toReconciliationResultDTO(r *domain.ReconciliationResult) openapi.ProjectDe
 			FurnitureInstanceId: it.FurnitureInstanceID,
 			Status:              openapi.ReconciliationStatus(it.Status),
 			Differences:         diffs,
+			Impact:              toChangeImpactDTO(impactsByID[it.FurnitureInstanceID]),
 			Notes:               notes,
 		}
 	}
@@ -117,6 +152,7 @@ func toReconciliationResultDTO(r *domain.ReconciliationResult) openapi.ProjectDe
 			Removed:          int64(r.Summary.Removed),
 			Conflict:         int64(r.Summary.Conflict),
 		},
-		Items: items,
+		Items:  items,
+		Impact: toImpactSummaryDTO(classification.Summary),
 	}
 }

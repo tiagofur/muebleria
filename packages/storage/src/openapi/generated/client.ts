@@ -66,11 +66,13 @@ import type {
   PlatformUser,
   PrepareDesignPublishRequest,
   ProjectDesignReconciliationResult,
+  ProjectQuoteRequoteResult,
   ProvisionOrganizationRequest,
   PublishDesignRevisionRequest,
   QuoteLineFurnitureInstance,
   ReconcileProjectDesignRequest,
   RefreshRequest,
+  RequoteProjectQuoteRequest,
   ResendInvitationResponse,
   ResetDesignWorkingCopyRequest,
   RevokeInvitationRequest,
@@ -185,6 +187,7 @@ export abstract class GeneratedGraneteApiClient {
   createProjectDesign(token: string, projectId: string, body: CreateDesignRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<Design> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs`, { schema: "Design", token, bodySchema: "CreateDesignRequest", body, idempotencyKey: key, signal }); }
   validateProjectDesignModelBinding(token: string, projectId: string, designId: string, body: ValidateModelBindingRequest, signal?: AbortSignal): Promise<ModelBindingValidation> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/binding:validate`, { schema: "ModelBindingValidation", token, bodySchema: "ValidateModelBindingRequest", body, signal }); }
   reconcileProjectDesign(token: string, projectId: string, body: ReconcileProjectDesignRequest, signal?: AbortSignal): Promise<ProjectDesignReconciliationResult> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/reconciliation`, { schema: "ProjectDesignReconciliationResult", token, bodySchema: "ReconcileProjectDesignRequest", body, signal }); }
+  requoteProjectQuote(token: string, projectId: string, body: RequoteProjectQuoteRequest, signal?: AbortSignal): Promise<ProjectQuoteRequoteResult> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions:requote`, { schema: "ProjectQuoteRequoteResult", token, bodySchema: "RequoteProjectQuoteRequest", body, signal }); }
   getDesign(token: string, designId: string, signal?: AbortSignal): Promise<Design> { return this.request("GET", `/designs/${encodeURIComponent(designId)}`, { schema: "Design", token, signal }); }
   getDesignWorkingCopy(token: string, designId: string, signal?: AbortSignal): Promise<DesignWorkingCopy> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/working-copy`, { schema: "DesignWorkingCopy", token, signal }); }
   updateDesignWorkingCopy(token: string, designId: string, body: UpdateDesignWorkingCopyRequest, signal?: AbortSignal): Promise<DesignWorkingCopy> { return this.request("PUT", `/designs/${encodeURIComponent(designId)}/working-copy`, { schema: "DesignWorkingCopy", token, bodySchema: "UpdateDesignWorkingCopyRequest", body, signal }); }
