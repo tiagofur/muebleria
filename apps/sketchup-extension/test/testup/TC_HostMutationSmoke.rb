@@ -24,13 +24,12 @@ module Granete
   module SketchUpExtension
     class TC_HostMutationSmoke < TestUp::TestCase
       class TransactionObserver < Sketchup::ModelObserver
-        attr_reader :starts, :commits, :aborts
+        attr_reader :starts, :commits
 
         def initialize
           super
           @starts = 0
           @commits = 0
-          @aborts = 0
         end
 
         def onTransactionStart(_model)
@@ -39,10 +38,6 @@ module Granete
 
         def onTransactionCommit(_model)
           @commits += 1
-        end
-
-        def onTransactionAbort(_model)
-          @aborts += 1
         end
       end
 
@@ -130,11 +125,11 @@ module Granete
         initial_metadata = metadata_store.read(initial_entity)
 
         coordinator = build_coordinator
-        rejected_response = scenario_response('06-unknown-material-role-rejected')
+        rejected_response = scenario_response('07-orphan-anchor-rejection')
         command = build_command(
           target_entity: initial_entity,
           response: rejected_response,
-          request: scenario_request('06-unknown-material-role-rejected'),
+          request: scenario_request('07-orphan-anchor-rejection'),
           params: { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 }
         )
 
@@ -164,49 +159,108 @@ module Granete
           raise_during_apply: true
         )
 
-        aborts_before = @transaction_observer.aborts
+        starts_before = @transaction_observer.starts
+        commits_before = @transaction_observer.commits
         outcome = coordinator.execute(command)
 
         assert outcome.aborted?, 'outcome must be aborted'
         assert_equal 'host_apply_failure', outcome.category
-        assert_equal 1, @transaction_observer.aborts - aborts_before, 'must abort the open host operation'
+        assert_equal 1, @transaction_observer.starts - starts_before, 'coordinator must start ONE host operation'
+        assert_equal 0, @transaction_observer.commits - commits_before, 'must NOT commit the failed operation'
+
+        # Construction point added before raise must be rolled back by abort_operation
+        cpoints = model.entities.grep(Sketchup::ConstructionPoint)
+        assert_empty cpoints, 'aborted operation must roll back uncommitted transient geometry'
 
         current_entity = granete_furniture_instances.first
         refute_nil current_entity
         assert_equal initial_metadata, metadata_store.read(current_entity), 'H1 must survive host exception'
       end
 
-      # D. Late response: rejected and does not mutate host
-      def test_late_response_rejected_and_does_not_mutate_host
+      # D. Supersession & late response: older request arrives after newer one -> superseded ->
+      #    no stale host apply, newer command commits cleanly
+      def test_supersession_rejects_older_response_and_commits_newer_mutation
         initial_entity = place_initial_furniture
         coordinator = build_coordinator
 
-        cmd_a = build_command(target_entity: initial_entity, name: 'cmd_a')
-        cmd_b = build_command(target_entity: initial_entity, name: 'cmd_b')
+        response_a = scenario_response('02-move-shelf')
+        response_b = scenario_response('13-definition-driven-typed-parameters')
+
+        cmd_a = build_command(target_entity: initial_entity, response: response_a,
+                              request: scenario_request('02-move-shelf'), name: 'cmd_a')
+        cmd_b = build_command(target_entity: initial_entity, response: response_b,
+                              request: scenario_request('13-definition-driven-typed-parameters'),
+                              params: { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560, 'shelfCount' => 3 },
+                              name: 'cmd_b')
 
         ctx_a = coordinator.begin_resolve(cmd_a)
         assert_equal 'resolving', coordinator.state
 
-        # Command B supersedes Command A
-        ctx_b = coordinator.begin_resolve(cmd_b)
+        # Command B supersedes Command A BEFORE A response arrives
+        ctx_b = coordinator.supersede_pending!(cmd_b)
         assert_equal 'resolving', coordinator.state
         refute_equal ctx_a[:message_id], ctx_b[:message_id]
 
-        # Delivery for Command A arrives late
-        late_envelope = {
-          'schemaId' => 'granete.sketchup-authoring-resolve.v1',
-          'responseMessageId' => 'resp-a',
-          'inReplyToMessageId' => ctx_a[:message_id],
-          'idempotencyKey' => ctx_a[:idempotency_key],
-          'status' => 'accepted'
-        }
+        # Delivery for Command A arrives late -> rejected
+        late_envelope = JSON.parse(JSON.generate(response_a))
+        late_envelope['inReplyToMessageId'] = ctx_a[:message_id]
+        late_envelope['responseMessageId'] = "resolve-#{ctx_a[:message_id]}"
+        late_envelope['idempotencyKey'] = ctx_a[:idempotency_key]
 
         assert_raises(Granete::SketchUpExtension::Host::SupersededResponseError) do
           coordinator.deliver_response(late_envelope)
         end
+
+        # Calling complete on stale command A performs zero host operations
+        starts_before = @transaction_observer.starts
+        outcome_a = coordinator.complete(cmd_a, ctx_a, nil)
+        assert_equal 'stale', outcome_a.outcome
+        assert_equal 0, @transaction_observer.starts - starts_before,
+                     'superseded command A must touch ZERO host operations'
+
+        # Command B response arrives and commits
+        commits_before = @transaction_observer.commits
+        b_envelope = JSON.parse(JSON.generate(response_b))
+        b_envelope['inReplyToMessageId'] = ctx_b[:message_id]
+        b_envelope['responseMessageId'] = "resolve-#{ctx_b[:message_id]}"
+        b_envelope['idempotencyKey'] = ctx_b[:idempotency_key]
+        result_b = coordinator.deliver_response(b_envelope)
+        outcome_b = coordinator.complete(cmd_b, ctx_b, result_b)
+
+        assert outcome_b.committed?, "outcome B must commit, got: #{outcome_b.outcome}"
+        assert_equal 1, @transaction_observer.commits - commits_before, 'command B must commit exactly ONE operation'
       end
 
-      # E. Save and reopen retains committed state without transient UI flags
+      # E. Malicious command attempting two operations: fail closed, H1 intact
+      def test_two_operations_attempt_fails_and_preserves_h1
+        initial_entity = place_initial_furniture
+        initial_metadata = metadata_store.read(initial_entity)
+
+        coordinator = build_coordinator
+        response = scenario_response('13-definition-driven-typed-parameters')
+        command = build_command(
+          target_entity: initial_entity,
+          response: response,
+          request: scenario_request('13-definition-driven-typed-parameters'),
+          attempt_two_operations: true
+        )
+
+        starts_before = @transaction_observer.starts
+        commits_before = @transaction_observer.commits
+
+        outcome = coordinator.execute(command)
+
+        assert outcome.aborted?, 'outcome must be aborted'
+        assert_equal 'host_apply_failure', outcome.category
+        assert_equal 1, @transaction_observer.starts - starts_before, 'coordinator starts ONE operation'
+        assert_equal 0, @transaction_observer.commits - commits_before, 'must NOT commit any operation'
+
+        current_entity = granete_furniture_instances.first
+        refute_nil current_entity
+        assert_equal initial_metadata, metadata_store.read(current_entity), 'H1 metadata must survive two-op attempt'
+      end
+
+      # F. Save and reopen retains committed state without transient UI flags
       def test_save_and_reopen_retains_committed_hierarchy_and_clean_metadata
         initial_entity = place_initial_furniture
         coordinator = build_coordinator
@@ -245,14 +299,18 @@ module Granete
 
       private
 
+      def quiet_logger
+        @quiet_logger ||= Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+      end
+
       def build_coordinator
         Granete::SketchUpExtension::Host::AuthoringMutationCoordinator.new(
           model_provider: method(:model),
-          logger: Granete::SketchUpExtension::Logging.logger,
+          logger: quiet_logger,
           selection_restorer: Granete::SketchUpExtension::Host::SelectionRestore.new(
             metadata_store_factory: method(:metadata_store),
             model_provider: method(:model),
-            logger: Granete::SketchUpExtension::Logging.logger
+            logger: quiet_logger
           ),
           preflight_tracker: Granete::SketchUpExtension::Host::PreflightTracker.new
         )
@@ -273,30 +331,38 @@ module Granete
       end
 
       def build_command(target_entity:, response: nil, request: nil, params: {},
-                        raise_during_apply: false, name: 'update_furniture')
+                        raise_during_apply: false, attempt_two_operations: false,
+                        name: 'update_furniture', operation_name: 'Actualizar mueble')
         builder = @builder
         metadata_store_inst = metadata_store
         active_model = model
 
         Class.new(Granete::SketchUpExtension::Host::MutationCommand) do
           define_method(:initialize) do
+            ref = metadata_store_inst.read(target_entity)&.dig('identity', 'instanceRef')
             super(name: name,
-                  semantic_target: { 'furnitureInstanceRef' => metadata_store_inst.read(target_entity)&.dig('identity', 'instanceRef') })
+                  operation_name: operation_name,
+                  semantic_target: { 'furnitureInstanceRef' => ref },
+                  resolve: nil, apply: nil, context_valid: nil)
             @target = target_entity
             @response = response
             @request = request
             @params = params
             @raise_apply = raise_during_apply
+            @attempt_two_operations = attempt_two_operations
           end
 
-          define_method(:context_still_valid?) { @target && @target.valid? }
+          define_method(:context_still_valid?) { @target&.valid? }
           define_method(:manufacturing_affecting?) { true }
 
           define_method(:resolve_intent) do |request_context|
-            return Granete::SketchUpExtension::Host::MutationOutcome.new(outcome: 'rejected', reason: 'mocked') unless @response
+            unless @response
+              return Granete::SketchUpExtension::Host::MutationOutcome.new(outcome: 'rejected', reason: 'mocked')
+            end
 
             parsed_response = JSON.parse(JSON.generate(@response))
             parsed_response['inReplyToMessageId'] = request_context[:message_id]
+            parsed_response['responseMessageId'] = "resolve-#{request_context[:message_id]}"
             parsed_response['idempotencyKey'] = request_context[:idempotency_key]
             expected_req = @request ? JSON.parse(JSON.generate(@request)) : {}
             expected_req['messageId'] = request_context[:message_id]
@@ -307,15 +373,19 @@ module Granete
             )
           end
 
-          define_method(:apply_accepted_state) do |result, journal|
-            raise 'host exception simulated during apply' if @raise_apply
-
-            journal.record_operation('Actualizar mueble') do
-              builder.update_furniture(
-                active_model, @target, TC_HostMutationSmoke::DEFINITION, @params,
-                resolved_layout: result.layout, material_choices: {}
-              )
+          define_method(:apply_accepted_state) do |result, host_context|
+            if @raise_apply
+              active_model.entities.add_cpoint(Geom::Point3d.new(9999, 9999, 9999))
+              raise 'host exception simulated during apply'
             end
+
+            host_context.start_operation('segunda_operacion_maliciosa', true) if @attempt_two_operations
+
+            builder.update_furniture(
+              active_model, @target, TC_HostMutationSmoke::DEFINITION, @params,
+              resolved_layout: result.layout, material_choices: {},
+              transaction: false
+            )
           end
         end.new
       end

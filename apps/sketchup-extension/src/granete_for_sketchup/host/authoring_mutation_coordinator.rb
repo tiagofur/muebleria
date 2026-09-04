@@ -24,6 +24,7 @@ module Granete
       # valid hierarchy/metadata survives. Current geometry is NEVER deleted
       # before an authoritative resolve succeeds. #execute never raises for
       # resolve/apply failures — it returns the terminal MutationOutcome.
+      # rubocop:disable-next Metrics/ClassLength
       class AuthoringMutationCoordinator
         RESOLVE_ERROR_CLASSES = [
           Library::AuthoringResolveError,
@@ -112,9 +113,41 @@ module Granete
           )
         end
 
+        # Deliberately cancels the currently in-flight request so the coordinator
+        # returns to idle. An accidental second submit still raises or returns
+        # duplicate_outcome; this method is for intentional user cancellations or
+        # supersession by a newer command.
+        def cancel_current!(reason: 'cancelled')
+          return unless busy?
+
+          if @interaction_state.can_transition?('cancelled')
+            @interaction_state.transition!('cancelled')
+            log_event('mutation_cancelled', @pending[:command], @pending[:context], reason: reason) if @pending
+            @interaction_state.finish!
+          end
+          @pending = nil
+          @pending_request_context = nil
+        end
+
+        # Intentional supersession (#498 / BLOCKER 3): parks command B as current
+        # after superseding any pending command A before A's resolve returns.
+        # When A's response arrives later, #deliver_response rejects it as
+        # SupersededResponseError, and #complete discards it with zero host ops.
+        def supersede_pending!(command)
+          if busy?
+            if @pending
+              log_event('mutation_superseded', @pending[:command], @pending[:context],
+                        superseded_by: command.name)
+            end
+            cancel_current!(reason: 'superseded_by_newer_command')
+          end
+          begin_resolve(command)
+        end
+
         # Applies an accepted result for the CURRENT pending command. A
         # complete() for a superseded command returns a stale outcome without
         # touching the newer command's state or the host.
+        # rubocop:disable-next Metrics/MethodLength, Metrics/AbcSize, Lint/UnusedMethodArgument
         def complete(command, request_context, result, command_message_id: nil)
           unless pending_matches?(command, request_context)
             # A late completion for a superseded command returns a stale
@@ -134,8 +167,11 @@ module Granete
 
           @interaction_state.transition!('applying_host_mutation')
           journal = OperationJournal.new(@model_provider.call)
+          op_name = operation_name_for(command)
           begin
-            apply_result = command.apply_accepted_state(result, journal)
+            journal.start_operation(op_name, true)
+            apply_result = command.apply_accepted_state(result, journal.host_context)
+            journal.commit_operation
             verify_atomicity!(journal)
             restore_selection(command, result)
             invalidate_preflight(command, result, request_context)
@@ -167,12 +203,25 @@ module Granete
 
         private
 
+        def operation_name_for(command)
+          if command.respond_to?(:operation_name) && command.operation_name
+            command.operation_name
+          else
+            "Granete · #{command.name}"
+          end
+        end
+
         # Resolve stage: authoritative answer, or a terminal outcome when
         # the resolve was rejected/unavailable/stale/cancelled.
         def resolve_phase(command, request_context)
           result = command.resolve_intent(request_context)
           unless result.respond_to?(:accepted?) && result.accepted?
-            raise Library::AuthoringResolveError, 'el resolve no devolvió un resultado aceptado'
+            issues = result.respond_to?(:issues) ? result.issues : []
+            raise Library::AuthoringResolveError.new(
+              'el resolve no devolvió un resultado aceptado',
+              status: 422,
+              issues: issues
+            )
           end
 
           result
@@ -192,7 +241,7 @@ module Granete
                     category: category, error: e.message)
           finish_with(
             build_outcome(command, outcome_name, category: category, reason: e.message,
-                                                  issues: issues_of(e), request_context: request_context)
+                                                 issues: issues_of(e), request_context: request_context)
           )
         end
 
@@ -270,7 +319,7 @@ module Granete
             outcome: name, category: category, reason: reason, issues: issues, result: result,
             resolve_kind: resolve_kind_of(resolved),
             degraded: DegradedState.for_mutation(name, category: category,
-                                                   resolve_kind: resolve_kind_of(resolved)),
+                                                       resolve_kind: resolve_kind_of(resolved)),
             semantic_target: command.semantic_target,
             correlation: {
               'messageId' => request_context[:message_id],
@@ -315,11 +364,11 @@ module Granete
 
         def log_event(event, command, request_context, extra = {})
           @logger&.info(event, {
-                          mutation: command.name,
-                          correlation_id: request_context && request_context[:message_id],
-                          semantic_target: command.semantic_target,
-                          state: @interaction_state.state
-                        }.merge(extra))
+            mutation: command.name,
+            correlation_id: request_context && request_context[:message_id],
+            semantic_target: command.semantic_target,
+            state: @interaction_state.state
+          }.merge(extra))
         end
       end
     end

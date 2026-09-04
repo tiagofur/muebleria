@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'securerandom'
-
 module Granete
   module SketchUpExtension
     module Host
@@ -18,9 +16,11 @@ module Granete
         module_function
 
         def allocate
+          entropy = format('%012x', rand(0...(16**12)))
+          seq = sequence
           {
-            message_id: "#{MESSAGE_ID_PREFIX}-#{sequence}-#{SecureRandom.hex(6)}",
-            idempotency_key: "#{IDEMPOTENCY_PREFIX}:#{sequence}-#{SecureRandom.hex(6)}"
+            message_id: "#{MESSAGE_ID_PREFIX}-#{seq}-#{entropy}",
+            idempotency_key: "#{IDEMPOTENCY_PREFIX}:#{seq}-#{entropy}"
           }
         end
 

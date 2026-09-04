@@ -45,11 +45,10 @@ module Granete
           end
           return nil unless target['furnitureInstanceRef'] && model.respond_to?(:entities)
 
-          # rubocop:disable SketchupSuggestions/ModelEntities
+          # rubocop:disable-next SketchupSuggestions/ModelEntities
           model.entities.find do |entity|
             read_identity(entity)&.dig('instanceRef') == target['furnitureInstanceRef']
           end
-          # rubocop:enable SketchupSuggestions/ModelEntities
         end
 
         def locate_child(root, target)
@@ -74,7 +73,7 @@ module Granete
         def read_identity(entity)
           store = store(entity.respond_to?(:model) && entity.model ? entity.model : @model_provider.call)
           store.read(entity)&.[]('identity')
-        rescue JSON::ParserError, Metadata::InvalidMetadataError, StandardError
+        rescue StandardError
           nil
         end
 

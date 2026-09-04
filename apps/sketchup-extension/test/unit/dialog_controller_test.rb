@@ -214,11 +214,14 @@ class DialogControllerTest < Minitest::Test
         'board_count' => 1, 'hardware_count' => 0 }
     end
 
-    def update_furniture(model, _group, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil)
+    def update_furniture(model, _group, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil,
+                         transaction: true)
       @update_layout = resolved_layout
       @material_choices = material_choices
-      model.start_operation('Editar Mueble', true)
-      model.commit_operation
+      if transaction
+        model.start_operation('Editar Mueble', true)
+        model.commit_operation
+      end
       { 'success' => true, 'name' => 'Base Una Puerta', 'component_count' => 1 }
     end
   end

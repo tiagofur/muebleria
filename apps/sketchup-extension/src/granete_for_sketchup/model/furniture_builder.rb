@@ -444,7 +444,7 @@ module Granete
         # replaced, only its definition's children are regenerated. Child
         # persistent_ids may change; Granete contract IDs are the durable link.
         def update_furniture(model, furniture, definition, raw_parameters = {}, resolved_layout: nil,
-                             material_choices: nil)
+                             material_choices: nil, transaction: true)
           # Host-accurate native check: in SketchUp a Group ALSO responds to
           # #definition, so entity type — not duck typing — is the only safe
           # discriminator. Legacy Group representations fail closed: use the
@@ -463,7 +463,7 @@ module Granete
             return { 'success' => false, 'error' => MATERIAL_RESOLUTION_REQUIRED_ERROR }
           end
 
-          model.start_operation("Editar Mueble #{definition['name']}", true)
+          model.start_operation("Editar Mueble #{definition['name']}", true) if transaction
           begin
             # A native copy/paste can temporarily leave two top-level furniture
             # instances sharing one host definition. Isolate the target before
@@ -479,10 +479,13 @@ module Granete
               @metadata_store, furniture, instance_id, definition, parameters,
               material_choices: merged_material_choices, existing_metadata: existing_meta
             )
-            model.commit_operation
+            model.commit_operation if transaction
           rescue StandardError => e
-            model.abort_operation
-            return { 'success' => false, 'error' => e.message }
+            if transaction
+              model.abort_operation
+              return { 'success' => false, 'error' => e.message }
+            end
+            raise
           end
 
           build_result(instance_id, definition, parameters, counts)

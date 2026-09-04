@@ -381,6 +381,7 @@ module Granete
       # late-response rejection, one-operation atomicity, rollback, selection
       # restore and degraded semantics live in the coordinator so #466–#471
       # plug in without cloning any of it.
+      # rubocop:disable-next Metrics/ModuleLength
       module HostMutationBridge
         def handle_authoring_mutation(dialog, payload_json)
           envelope = Host::CommandContract.parse_command!(payload_json)
@@ -430,6 +431,7 @@ module Granete
         # authoring snapshot capture arrives with #467/#468; today the
         # authoritative resolve rides the server layout channel (nil layout
         # under offline catalogs stays an explicit generic preview).
+        # rubocop:disable-next Metrics/AbcSize
         def build_update_command(payload, semantic_target)
           definition_id = payload['definitionId'] || payload[:definitionId]
           definition = @catalog_provider.find_definition(definition_id)
@@ -455,11 +457,14 @@ module Granete
           choices = merged_material_choices(entity, payload)
           Host::MutationCommand.new(
             name: 'update_furniture',
+            operation_name: "Editar Mueble #{definition['name']}",
             semantic_target: target,
             build_furniture_request: nil,
             resolve: ->(ctx) { resolve_update_result(definition, params, choices, ctx) },
             context_valid: -> { update_context_valid?(entity, target) },
-            apply: ->(result, journal) { apply_update_result(journal, entity, definition, params, choices, result) }
+            apply: lambda { |result, host_context|
+              apply_update_result(host_context, entity, definition, params, choices, result)
+            }
           )
         end
 
@@ -481,15 +486,20 @@ module Granete
           )
         end
 
-        def apply_update_result(journal, entity, definition, params, choices, result)
-          outcome = furniture_builder_for(active_model).update_furniture(
-            journal, entity, definition, params,
-            resolved_layout: result.layout, material_choices: choices
+        def apply_update_result(_host_context, entity, definition, params, choices, result)
+          model = entity.respond_to?(:model) && entity.model ? entity.model : active_model
+          outcome = furniture_builder_for(model).update_furniture(
+            model, entity, definition, params,
+            resolved_layout: result.layout, material_choices: choices,
+            transaction: false
           )
           return outcome if outcome['success'] == true
 
           error = outcome['error'].to_s
-          raise Host::MutationCommand::ApplyRefused, error if journal.started_count.zero?
+          if [Model::FurnitureBuilder::LEGACY_REPRESENTATION_ERROR,
+              Model::FurnitureBuilder::MATERIAL_RESOLUTION_REQUIRED_ERROR].include?(error)
+            raise Host::MutationCommand::ApplyRefused, error
+          end
 
           raise Host::MutationCommand::ApplyFailed, error
         end
@@ -497,12 +507,15 @@ module Granete
         # Wrong-selection guard: the response may only apply while the exact
         # captured furniture still carries the same semantic identity.
         def update_context_valid?(entity, target)
-          return false if entity.respond_to?(:valid?) && !entity.valid?
+          return false unless entity&.valid?
 
           metadata = @metadata_store_factory.call(active_model).read(entity)
           identity = metadata && metadata['identity']
-          expected = target['furnitureInstanceId'] ? identity && identity['furnitureInstanceId']
-                                                  : identity && identity['instanceRef']
+          expected = if target['furnitureInstanceId']
+                       identity && identity['furnitureInstanceId']
+                     else
+                       identity && identity['instanceRef']
+                     end
           expected == (target['furnitureInstanceId'] || target['furnitureInstanceRef'])
         rescue JSON::ParserError, Metadata::InvalidMetadataError
           false
@@ -510,7 +523,11 @@ module Granete
 
         def invalid_update_outcome(payload, semantic_target)
           definition_id = payload['definitionId'] || payload[:definitionId]
-          reason = @catalog_provider.find_definition(definition_id).nil? ? 'Definición no encontrada' : 'Instancia no encontrada en el modelo'
+          reason = if @catalog_provider.find_definition(definition_id).nil?
+                     'Definición no encontrada'
+                   else
+                     'Instancia no encontrada en el modelo'
+                   end
           Host::MutationOutcome.new(outcome: 'rejected', category: 'invalid_authoring_input',
                                     reason: reason, semantic_target: semantic_target || {})
                                .with_mutation_name('update_furniture')
@@ -558,7 +575,7 @@ module Granete
       # Insert/update callback handlers, extracted to keep DialogController
       # within its class-length budget. Both resolve the furniture's real
       # composition server-side before touching the model.
-      module FurnitureBridge # rubocop:disable Metrics/ModuleLength
+      module FurnitureBridge
         # Shared texture cache for furniture builders: lives in the bridge so
         # the controller class stays within its length budget (file pattern).
         def texture_cache

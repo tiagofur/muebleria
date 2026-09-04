@@ -22,9 +22,12 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
   attr_reader :model, :coordinator, :restored_targets
 
   def setup
-    @model = FIXTURE::FakeHostModel.new(FIXTURE::H1)
+    @model = FIXTURE::FakeHostModel.new(FIXTURE::H1, FIXTURE::M1)
     @restored_targets = []
-    @selection_restorer = ->(target) { @restored_targets << target; :restored }
+    @selection_restorer = lambda { |target|
+      @restored_targets << target
+      :restored
+    }
     @preflight_tracker = HOST::PreflightTracker.new
     @coordinator = HOST::AuthoringMutationCoordinator.new(
       model_provider: -> { @model },
@@ -50,10 +53,11 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
   end
 
   def command(semantic_target: FIXTURE::FI_1, resolve: golden_resolve('02-move-shelf'),
-              apply_mode: :commit, context_valid: -> { true }, manufacturing_affecting: true)
+              apply_mode: :commit, context_valid: -> { true }, manufacturing_affecting: true,
+              name: 'fake_mutation')
     FIXTURE.build_command(model: model, semantic_target: semantic_target, resolve: resolve,
                           apply_mode: apply_mode, context_valid: context_valid,
-                          manufacturing_affecting: manufacturing_affecting)
+                          manufacturing_affecting: manufacturing_affecting, name: name)
   end
 
   def test_successful_mutation_commits_one_operation_and_invalidates_preflight
@@ -63,11 +67,12 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
     assert_equal 'committed', outcome.outcome
     assert_equal 'authoring_resolve', outcome.resolve_kind
     assert_equal 'resolved_current', outcome.degraded
-    assert_equal 1, model.operations.count { |entry| entry.first == :start }
-    assert_equal 1, model.operations.count { |entry| entry.first == :commit }
+    assert_equal(1, model.operations.count { |entry| entry.first == :start })
+    assert_equal(1, model.operations.count { |entry| entry.first == :commit })
     assert_equal ['Editar Mueble (fixture)'], model.operation_names
     # The accepted boards replaced H1 inside that single operation.
     assert_equal %w[side-left-01 side-right-01 floor-01 top-01 back-01 shelf-01 door-01], model.hierarchy
+    assert_equal FIXTURE::M2, model.metadata
     assert_match(/\Asha256-[0-9a-f]{64}\z/, outcome.fingerprint)
     refute_nil outcome.catalog_revision
     assert_equal 'idle', coordinator.state
@@ -76,14 +81,16 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
   end
 
   def test_rejected_resolve_starts_zero_operations_and_preserves_previous_hierarchy
-    outcome = coordinator.execute(command(resolve: golden_resolve('07-orphan-anchor-rejection',
-                                                                  fail_with: reject_with_fixture('07-orphan-anchor-rejection'))))
+    rejection = reject_with_fixture('07-orphan-anchor-rejection')
+    resolve = golden_resolve('07-orphan-anchor-rejection', fail_with: rejection)
+    outcome = coordinator.execute(command(resolve: resolve))
 
     assert_equal 'rejected', outcome.outcome
     assert_equal 'manufacturing_blocker', outcome.category
     assert_includes outcome.issues.map(&:code), 'RELATIONSHIP_ORPHANED'
     assert_empty model.operations
     assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
     assert_equal 'idle', coordinator.state
     assert_empty restored_targets
   end
@@ -110,6 +117,7 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
     assert_equal 'offline_cached', outcome.degraded
     assert_empty model.operations
     assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
   end
 
   def test_auth_and_license_failures_stay_distinct_from_offline
@@ -145,6 +153,7 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
     assert_equal 'blocked_incompatible', outcome.degraded
     assert_empty model.operations
     assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
   end
 
   def test_host_exception_mid_operation_aborts_and_previous_hierarchy_and_metadata_survive
@@ -154,10 +163,11 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
     assert_equal 'host_apply_failure', outcome.category
     # ONE operation started, aborted (never committed): H1 survives intact
     # and no partial new hierarchy remains.
-    assert_equal 1, model.operations.count { |entry| entry.first == :start }
-    assert_equal 1, model.operations.count { |entry| entry.first == :abort }
-    assert_equal 0, model.operations.count { |entry| entry.first == :commit }
+    assert_equal(1, model.operations.count { |entry| entry.first == :start })
+    assert_equal(1, model.operations.count { |entry| entry.first == :abort })
+    assert_equal(0, model.operations.count { |entry| entry.first == :commit })
     assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
     refute_includes model.hierarchy, 'board:partial'
     assert_equal 'idle', coordinator.state
   end
@@ -167,21 +177,54 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
 
     assert_equal 'aborted', outcome.outcome
     assert_equal 'invalid_authoring_input', outcome.category
-    assert_empty model.operations
+    assert_equal(1, model.operations.count { |entry| entry.first == :start })
+    assert_equal(1, model.operations.count { |entry| entry.first == :abort })
+    assert_equal(0, model.operations.count { |entry| entry.first == :commit })
     assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
   end
 
   def test_two_operations_violate_atomicity_and_abort
     outcome = coordinator.execute(command(apply_mode: :two_operations))
 
-    # The journal detects the violation (a mutation must be exactly ONE
-    # operation) and the outcome aborts. Truly NESTED operations are
-    # already impossible: the journal raises on the second start while one
-    # is open, so the mid-operation failure path keeps H1 intact (proved
-    # by the host-exception test).
+    # Malicious/buggy command attempts transaction operations:
+    # CommandHostContext raises NestedOperationError and the coordinator aborts.
+    # Exactly ONE host operation started, ZERO committed, ONE aborted.
+    # Model remains H1 for hierarchy and metadata.
     assert_equal 'aborted', outcome.outcome
     assert_equal 'host_apply_failure', outcome.category
-    assert_equal 2, model.operations.count { |entry| entry.first == :start }
+    assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
+    assert_equal(1, model.operations.count { |entry| entry.first == :start })
+    assert_equal(0, model.operations.count { |entry| entry.first == :commit })
+    assert_equal(1, model.operations.count { |entry| entry.first == :abort })
+  end
+
+  def test_start_operation_host_failure_leaves_model_untouched
+    model.fail_start = true
+    outcome = coordinator.execute(command)
+
+    assert_equal 'aborted', outcome.outcome
+    assert_equal 'host_apply_failure', outcome.category
+    assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
+    assert_equal(0, model.operations.count { |entry| entry.first == :commit })
+    assert_equal(0, model.operations.count { |entry| entry.first == :abort })
+    assert_equal 'idle', coordinator.state
+  end
+
+  def test_commit_operation_host_failure_aborts_and_preserves_previous_state
+    model.fail_commit = true
+    outcome = coordinator.execute(command)
+
+    assert_equal 'aborted', outcome.outcome
+    assert_equal 'host_apply_failure', outcome.category
+    assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
+    assert_equal(1, model.operations.count { |entry| entry.first == :start })
+    assert_equal(1, model.operations.count { |entry| entry.first == :abort })
+    assert_equal(0, model.operations.count { |entry| entry.first == :commit })
+    assert_equal 'idle', coordinator.state
   end
 
   def test_wrong_context_result_never_applies
@@ -192,6 +235,7 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
     assert_equal 'stale_conflict', outcome.category
     assert_empty model.operations
     assert_equal FIXTURE::H1, model.hierarchy
+    assert_equal FIXTURE::M1, model.metadata
     assert_empty restored_targets
   end
 
@@ -217,40 +261,52 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
     context = coordinator.pending_request_context
     result = coordinator.deliver_response(
       FIXTURE.response_for('02-move-shelf', message_id: context[:message_id],
-                                             idempotency_key: context[:idempotency_key])
+                                            idempotency_key: context[:idempotency_key])
     )
     assert coordinator.complete(first, context, result).committed?
     # The cancelled duplicate never reached resolve OR the host: exactly one
     # operation for the whole interaction.
     assert_equal 0, resolve_calls # async pair: resolve ran via deliver_response, not the proc
-    assert_equal 1, model.operations.count { |entry| entry.first == :start }
+    assert_equal(1, model.operations.count { |entry| entry.first == :start })
   end
 
-  def test_late_response_cannot_overwrite_a_newer_command
-    first = command
-    first_context = coordinator.begin_resolve(first)
-    first_result = coordinator.deliver_response(
-      FIXTURE.response_for('02-move-shelf', message_id: first_context[:message_id],
-                                             idempotency_key: first_context[:idempotency_key])
-    )
-    outcome = coordinator.complete(first, first_context, first_result)
-    assert outcome.committed?
+  def test_real_supersession_rejects_older_response_and_commits_newer_command
+    cmd_a = command(name: 'command_a')
+    cmd_b = command(name: 'command_b', semantic_target: FIXTURE::C_1_TARGET)
 
-    # Command B starts; A's (already-consumed) response envelope arrives
-    # again — correlation mismatch against the CURRENT pending request.
-    second = command(semantic_target: FIXTURE::C_1_TARGET)
-    second_context = coordinator.begin_resolve(second)
-    late = FIXTURE.response_for('02-move-shelf', message_id: first_context[:message_id],
-                                                idempotency_key: first_context[:idempotency_key])
-    assert_raises(HOST::SupersededResponseError) { coordinator.deliver_response(late) }
+    ctx_a = coordinator.begin_resolve(cmd_a)
+    assert_equal 'resolving', coordinator.state
+    assert_equal ctx_a[:message_id], coordinator.pending_request_context[:message_id]
 
-    # B still completes normally; the late A envelope never mutated the host.
-    second_result = coordinator.deliver_response(
-      FIXTURE.response_for('02-move-shelf', message_id: second_context[:message_id],
-                                             idempotency_key: second_context[:idempotency_key])
-    )
-    assert coordinator.complete(second, second_context, second_result).committed?
-    assert_equal 2, model.operations.count { |entry| entry.first == :start }
+    # B supersedes A BEFORE A response
+    ctx_b = coordinator.supersede_pending!(cmd_b)
+    assert_equal 'resolving', coordinator.state
+    assert_equal ctx_b[:message_id], coordinator.pending_request_context[:message_id]
+    refute_equal ctx_a[:message_id], ctx_b[:message_id]
+
+    # A late response arrives -> SupersededResponseError
+    resp_a = FIXTURE.response_for('02-move-shelf', message_id: ctx_a[:message_id],
+                                                   idempotency_key: ctx_a[:idempotency_key])
+    assert_raises(HOST::SupersededResponseError) do
+      coordinator.deliver_response(resp_a)
+    end
+
+    # Completing A yields stale outcome with zero host operations
+    outcome_a = coordinator.complete(cmd_a, ctx_a, nil)
+    assert_equal 'stale', outcome_a.outcome
+    assert_equal(0, model.operations.count { |entry| entry.first == :start })
+
+    # B response arrives -> delivers cleanly and commits
+    resp_b = FIXTURE.response_for('02-move-shelf', message_id: ctx_b[:message_id],
+                                                   idempotency_key: ctx_b[:idempotency_key])
+    result_b = coordinator.deliver_response(resp_b)
+    outcome_b = coordinator.complete(cmd_b, ctx_b, result_b)
+
+    assert outcome_b.committed?
+    assert_equal(1, model.operations.count { |entry| entry.first == :start })
+    assert_equal(1, model.operations.count { |entry| entry.first == :commit })
+    assert_equal(0, model.operations.count { |entry| entry.first == :abort })
+    assert_equal 'idle', coordinator.state
   end
 
   def test_deliver_response_without_pending_request_fails_closed
@@ -272,7 +328,7 @@ class HostAuthoringMutationCoordinatorTest < Minitest::Test
   end
 
   def test_cancelled_resolve_performs_no_host_work
-    cancelled = lambda { |_ctx| raise HOST::CancelledError, 'usuario canceló' }
+    cancelled = ->(_ctx) { raise HOST::CancelledError, 'usuario canceló' }
     outcome = coordinator.execute(command(resolve: cancelled))
 
     assert_equal 'cancelled', outcome.outcome

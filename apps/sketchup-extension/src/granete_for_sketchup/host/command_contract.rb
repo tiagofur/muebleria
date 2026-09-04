@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'json'
-require 'securerandom'
 
 module Granete
   module SketchUpExtension
@@ -14,7 +13,7 @@ module Granete
       # fail closed BEFORE any host state is touched. The legacy dialog
       # callbacks keep their reviewed shapes — this contract owns the new
       # mutation/preflight/degraded channel.
-      module CommandContract
+      module CommandContract # rubocop:disable Metrics/ModuleLength
         class ContractError < StandardError; end
 
         SCHEMA_ID = 'granete.sketchup-host-command.v1'
@@ -65,9 +64,7 @@ module Granete
           raise ContractError, 'semanticTarget debe ser un objeto' unless raw.is_a?(Hash)
 
           unknown = raw.keys - SEMANTIC_TARGET_KEYS
-          unless unknown.empty?
-            raise ContractError, "semanticTarget con campos desconocidos: #{unknown.join(', ')}"
-          end
+          raise ContractError, "semanticTarget con campos desconocidos: #{unknown.join(', ')}" unless unknown.empty?
 
           target = {}
           SEMANTIC_TARGET_KEYS.each do |key|
@@ -76,8 +73,8 @@ module Granete
           end
           raise ContractError, 'semanticTarget sin identidad semántica' if target.empty?
 
-          if (target.keys & CHILD_TARGET_KEYS).any? &&
-             (target.keys & %w[furnitureInstanceId furnitureInstanceRef]).empty?
+          if target.keys.intersect?(CHILD_TARGET_KEYS) &&
+             !target.keys.intersect?(%w[furnitureInstanceId furnitureInstanceRef])
             raise ContractError,
                   'un objetivo componentInstanceId/hardwarePlacementId requiere el mueble dueño'
           end
@@ -94,6 +91,7 @@ module Granete
         # Ruby→JS mutation outcome envelope. `outcome.result` is the legacy
         # result hash (kept for the existing UI); behavior-relevant truth is
         # outcome/category/issues/resolveKind/degraded.
+        # rubocop:disable-next Metrics/ParameterLists
         def mutation_state_envelope(message_id:, in_reply_to:, mutation:, outcome:, category: nil,
                                     reason: nil, issues: [], result: nil, resolve_kind: nil,
                                     degraded: nil, semantic_target: {})
@@ -125,7 +123,9 @@ module Granete
         end
 
         def degraded_state_envelope(state, category: nil)
-          raise ContractError, "estado degradado desconocido: #{state.inspect}" unless DegradedState::STATES.include?(state)
+          unless DegradedState::STATES.include?(state)
+            raise ContractError, "estado degradado desconocido: #{state.inspect}"
+          end
 
           {
             'schemaId' => SCHEMA_ID,
@@ -170,7 +170,10 @@ module Granete
         end
 
         def assert_type(envelope, expected)
-          return if envelope['type'] == expected || (expected == 'mutation_command' && envelope['type'].nil? && envelope['mutation'])
+          if envelope['type'] == expected ||
+             (expected == 'mutation_command' && envelope['type'].nil? && envelope['mutation'])
+            return
+          end
 
           raise ContractError, "Tipo de mensaje inesperado: #{envelope['type'].inspect}"
         end

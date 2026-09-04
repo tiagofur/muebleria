@@ -23,6 +23,8 @@ module MutationOrchestrationFixture
   H1 = ['board:left', 'board:right', 'board:base', 'board:top', 'board:back', 'board:shelf@520'].freeze
   H2 = ['board:left', 'board:right', 'board:base', 'board:top', 'board:back', 'board:shelf@640',
         'board:shelf@760'].freeze
+  M1 = { 'identity' => { 'instanceRef' => 'inst-fi-1' }, 'intent' => { 'shelfCount' => 1 } }.freeze
+  M2 = { 'identity' => { 'instanceRef' => 'inst-fi-1' }, 'intent' => { 'shelfCount' => 2 } }.freeze
 
   module_function
 
@@ -53,27 +55,42 @@ module MutationOrchestrationFixture
   # snapshots, abort restores the snapshot (like SketchUp rollback), commit
   # drops it. Operation order is journaled for atomicity assertions.
   class FakeHostModel
-    attr_reader :operations, :hierarchy
+    attr_reader :operations, :hierarchy, :metadata
+    attr_accessor :fail_start, :fail_commit
 
-    def initialize(hierarchy = [])
+    def initialize(hierarchy = [], metadata = {})
       @hierarchy = hierarchy.dup
+      @metadata = JSON.parse(JSON.generate(metadata))
       @operations = []
       @snapshot = nil
+      @fail_start = false
+      @fail_commit = false
     end
 
+    # rubocop:disable-next Style/OptionalBooleanParameter
     def start_operation(name = 'Granete', _disable_ui = true)
-      @snapshot = @hierarchy.dup
+      raise 'host start_operation simulated failure' if @fail_start
+
+      @snapshot = {
+        hierarchy: @hierarchy.dup,
+        metadata: JSON.parse(JSON.generate(@metadata))
+      }
       @operations << [:start, name]
     end
 
     def commit_operation
+      raise 'host commit_operation simulated failure' if @fail_commit
+
       @operations << [:commit]
       @snapshot = nil
     end
 
     def abort_operation
       @operations << [:abort]
-      @hierarchy = @snapshot.dup if @snapshot
+      if @snapshot
+        @hierarchy = @snapshot[:hierarchy].dup
+        @metadata = JSON.parse(JSON.generate(@snapshot[:metadata]))
+      end
       @snapshot = nil
     end
 
@@ -82,7 +99,15 @@ module MutationOrchestrationFixture
     end
 
     def append_hierarchy!(board)
-      @hierarchy = @hierarchy + [board]
+      @hierarchy += [board]
+    end
+
+    def set_metadata!(key, value)
+      @metadata[key] = value
+    end
+
+    def replace_metadata!(meta)
+      @metadata = JSON.parse(JSON.generate(meta))
     end
 
     def operation_names
@@ -101,38 +126,39 @@ module MutationOrchestrationFixture
   end
 
   # Command factory: fake-but-contractual command over the fixture world.
-  # apply_commit! replaces the hierarchy inside ONE journal operation;
-  # failure modes simulate refuse-before-operation, host exception
-  # mid-operation and atomicity violations.
+  # Coordinator owns the single host operation; apply replaces hierarchy
+  # and metadata inside that already-open operation.
   def build_command(model:, semantic_target:, resolve:, apply_mode: :commit,
                     context_valid: -> { true }, restore_selection: nil,
-                    manufacturing_affecting: true, name: 'fake_mutation')
-    apply = lambda do |result, journal|
+                    manufacturing_affecting: true, name: 'fake_mutation',
+                    operation_name: 'Editar Mueble (fixture)')
+    apply = lambda do |result, host_context|
       case apply_mode
       when :commit
-        journal.start_operation('Editar Mueble (fixture)', true)
         boards = result.respond_to?(:layout) && result.layout ? result.layout.boards.map(&:component_instance_id) : []
         model.replace_hierarchy!(boards)
-        journal.commit_operation
+        model.replace_metadata!(M2)
         { 'success' => true, 'component_count' => boards.length }
       when :refuse
         raise Granete::SketchUpExtension::Host::MutationCommand::ApplyRefused, 'el layout resuelto no aplica'
       when :raise_mid_operation
-        journal.start_operation('Editar Mueble (fixture)', true)
         model.append_hierarchy!('board:partial')
+        model.set_metadata!('dirty', true)
         raise 'boom de host durante el rebuild'
       when :two_operations
-        journal.start_operation('borrar', true)
-        journal.commit_operation
-        journal.start_operation('recrear', true)
+        # Malicious/buggy command attempts to manage transactions directly
+        model.append_hierarchy!('board:dirty')
+        model.set_metadata!('dirty', true)
+        host_context.start_operation('segunda operación no autorizada', true)
         model.replace_hierarchy!(%w[board:new])
-        journal.commit_operation
+        host_context.commit_operation
         { 'success' => true }
       end
     end
 
     Granete::SketchUpExtension::Host::MutationCommand.new(
       name: name,
+      operation_name: operation_name,
       semantic_target: semantic_target,
       build_furniture_request: nil,
       resolve: resolve,

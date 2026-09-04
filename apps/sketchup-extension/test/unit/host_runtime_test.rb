@@ -147,6 +147,7 @@ class HostRuntimeTest < Minitest::Test
 
   def test_operation_journal_enforces_one_operation_and_safe_abort
     model = Object.new
+    # rubocop:disable-next Style/OptionalBooleanParameter
     def model.start_operation(_name, _flag = true); end
     journal = HOST::OperationJournal.new(model)
     assert_raises(HOST::NestedOperationError) do
@@ -186,8 +187,8 @@ class HostRuntimeTest < Minitest::Test
     tracker = HOST::PreflightTracker.new
     assert_equal 'unknown', tracker.state_for('furnitureInstanceRef=inst-1')
 
-    tracker.invalidate!('furnitureInstanceRef=inst-1', fingerprint: 'sha256-' + 'a' * 64,
-                                              catalog_revision: 'workshop-1', message_id: 'mut-1')
+    tracker.invalidate!('furnitureInstanceRef=inst-1', fingerprint: "sha256-#{'a' * 64}",
+                                                       catalog_revision: 'workshop-1', message_id: 'mut-1')
     assert_equal 'stale', tracker.state_for('furnitureInstanceRef=inst-1')
 
     tracker.mark_unavailable!('furnitureInstanceRef=inst-2')
@@ -198,7 +199,7 @@ class HostRuntimeTest < Minitest::Test
     refute_includes states, 'ready'
     assert_includes states, 'stale'
     stale = payload.find { |entry| entry['state'] == 'stale' }
-    assert_equal 'sha256-' + 'a' * 64, stale['fingerprint']
+    assert_equal "sha256-#{'a' * 64}", stale['fingerprint']
     assert_equal 'workshop-1', stale['catalogRevision']
     assert_equal 'mut-1', stale['messageId']
     assert_equal 1, tracker.payload_for('furnitureInstanceRef=inst-2').length

@@ -22,10 +22,11 @@ module Granete
         class ApplyRefused < StandardError; end
         class ApplyFailed < StandardError; end
 
-        def initialize(name:, semantic_target:, resolve:, apply:, context_valid:,
+        def initialize(name:, semantic_target:, resolve: nil, apply: nil, context_valid: nil,
                        build_furniture_request: nil, restore_selection: nil,
-                       manufacturing_affecting: true)
+                       manufacturing_affecting: true, operation_name: nil)
           @name = name.to_s
+          @operation_name = operation_name
           @semantic_target = semantic_target
           @build_furniture_request = build_furniture_request
           @resolve = resolve
@@ -37,12 +38,20 @@ module Granete
 
         attr_reader :name, :semantic_target, :build_furniture_request
 
+        def operation_name
+          @operation_name || "Granete · #{@name}"
+        end
+
         def resolve_intent(request_context)
-          @resolve.call(request_context)
+          return @resolve.call(request_context) if @resolve
+
+          raise NotImplementedError, "#{self.class}#resolve_intent not implemented"
         end
 
         def context_still_valid?
-          @context_valid.call
+          return @context_valid.call if @context_valid
+
+          true
         end
 
         def manufacturing_affecting?
@@ -50,7 +59,9 @@ module Granete
         end
 
         def apply_accepted_state(result, journal)
-          @apply.call(result, journal)
+          return @apply.call(result, journal) if @apply
+
+          raise NotImplementedError, "#{self.class}#apply_accepted_state not implemented"
         end
 
         def restore_selection(result)

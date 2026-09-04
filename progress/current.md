@@ -7,12 +7,21 @@
 - Resultados y verificación:
   1. Shared State Store: `apps/sketchup-extension/src/granete_for_sketchup/resources/js/granete-state.js` centraliza las 6 slices reactivas (`session`, `catalog`, `selection`, `mutation`, `preflight`, `degraded`) con re-ejecución idempotente y desacoplada del DOM.
   2. Versioned Bridge: `granete-bridge.js` + `Host::CommandContract` con esquema `granete.sketchup-host-command.v1`, correlation id estable (`messageId` / `inReplyTo`), validación fail-closed y targets semánticos neutrales (`furnitureInstanceId`, `componentInstanceId`, `hardwarePlacementId`).
-  3. AuthoringMutationCoordinator: `Host::AuthoringMutationCoordinator` agnóstico al dominio (orquesta sin `if hinge/shelf/Blum`), ejecuta el pipeline atómico completo: validate target -> editing_intent -> allocate correlation -> resolving -> authoritative resolve -> reject stale/late/wrong-context -> ONE SketchUp operation (`OperationJournal`) -> apply accepted hierarchy -> metadata written inside operation -> restore semantic selection -> invalidate preflight -> committed.
+  3. AuthoringMutationCoordinator & Operation Ownership: `Host::AuthoringMutationCoordinator` es el único owner del ciclo de vida de la transacción SketchUp (`start_operation`, `commit_operation`, `abort_operation`). Los comandos reciben `CommandHostContext` que prohíbe terminantemente crear o cerrar transacciones anidadas.
   4. Failure Taxonomy y Degraded States: `Host::ErrorTaxonomy` diferencia `authentication`, `license_capability`, `network_unavailable`, `stale_conflict`, `invalid_authoring_input`, etc. Degraded states (`resolved_current`, `resolved_stale`, `unresolved_preview`, `offline_cached`, `sync_required`, `blocked_incompatible`) con honest Spanish UI feedback y regla de que previews genéricos nunca se marcan productivos.
-  5. Negative Proofs y Real-Host TestUp:
-     - `TC_HostMutationSmoke.rb` implementado para host real: mutation atómica exitosa + Undo restituye H1 con identidad semántica intacta, rechazo de resolve genera 0 operaciones y conserva H1, excepción durante apply aborta la operación y conserva H1, respuestas tardías son rechazadas como supersedidas, save/reopen persiste sin flags de UI transient.
-     - Tests unitarios y boundary: `bundle exec rake unit` (455 runs, 3496 assertions, 0 failures), `bundle exec rake boundary` (3 runs, 1911 assertions, 0 failures), `bundle exec rake syntax` y `bundle exec rake package:verify` (RBZ deterministic sha256) todos pasando en verde.
-     - Monorepo: `pnpm openapi:check`, `pnpm typecheck`, `pnpm test` (33 files, 411 tests) 100% verde.
+  5. Real Supersession Semantics: `supersede_pending!(command)` y `cancel_current!(reason:)`. Si una mutación B superseda a A en vuelo, A queda cancelada; cualquier respuesta tardía para A es rechazada (`SupersededResponseError`) con cero operaciones sobre el host, mientras B se resuelve y commitea limpiamente.
+  6. Real-Host TestUp en SketchUp 2026 (macOS Darwin arm64, Apple M5 Pro):
+     - `TC_HostMutationSmoke.rb` ejecutado contra el RBZ empaquetado e instalado: 6 tests, 47 aserciones, 0 fallos, 0 errores (`progress/host_smoke_F498_testup_ci.json` status `Success`).
+     - A. Mutación exitosa H1 -> H2 (1 start, 1 commit) + Undo restaura H1.
+     - B. Resolve rechazado genera 0 operaciones y conserva H1 intacto.
+     - C. Excepción en apply dispara `abort_operation`, revierte geometría transitoria y conserva H1 con 0 commits.
+     - D. Supersession real: B superseda a A, respuesta tardía de A rechazada, 0 host ops para A, B commitea 1 operación.
+     - E. Intento malicioso de dos operaciones por el comando: bloqueado con fail-closed, 0 commits, H1 intacto.
+     - F. Save y reopen: estado commiteado sobrevive intacto sin metadata transitoria de UI.
+  7. Verificaciones completas:
+     - Ruby: `bundle exec rake verify` (457 unit tests, 3532 assertions, 3 boundary golden, sha256 RBZ verify, 123 rubocop files clean).
+     - JS/Monorepo: `pnpm openapi:check`, `pnpm typecheck`, `pnpm test` (33 files, 411 tests) 100% verde.
+     - Go backend: `go test ./...` 100% verde.
 
 ## Historial previo — F211 (#398 / DT-14)
 

@@ -14,12 +14,11 @@ module Granete
         attr_reader :outcome, :category, :reason, :issues, :result, :resolve_kind,
                     :degraded, :semantic_target, :correlation, :fingerprint, :catalog_revision
 
+        # rubocop:disable-next Metrics/ParameterLists
         def initialize(outcome:, category: nil, reason: nil, issues: [], result: nil,
                        resolve_kind: nil, degraded: nil, semantic_target: {}, correlation: {},
                        fingerprint: nil, catalog_revision: nil)
-          unless OUTCOMES.include?(outcome)
-            raise ArgumentError, "unknown mutation outcome #{outcome.inspect}"
-          end
+          raise ArgumentError, "unknown mutation outcome #{outcome.inspect}" unless OUTCOMES.include?(outcome)
           if category && !ErrorTaxonomy::CATEGORIES.include?(category)
             raise ArgumentError, "unknown error category #{category.inspect}"
           end
@@ -42,6 +41,26 @@ module Granete
 
         def committed?
           @outcome == 'committed'
+        end
+
+        def rejected?
+          @outcome == 'rejected'
+        end
+
+        def aborted?
+          @outcome == 'aborted'
+        end
+
+        def stale?
+          @outcome == 'stale'
+        end
+
+        def unavailable?
+          @outcome == 'unavailable'
+        end
+
+        def cancelled?
+          @outcome == 'cancelled'
         end
 
         # Versioned bridge envelope for the dialog mutation channel.
