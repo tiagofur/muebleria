@@ -534,21 +534,17 @@ export function validateAuthoringResolveRequest(
       const hwDef = context.hardwareCatalog.find((h) => (h.id ?? h.hardwareId) === placement.catalogHardwareId);
       if (hwDef) {
         const hostBoard = components.find((c) => c.componentInstanceId === placement.hostComponentInstanceId);
-        const hostRole = (hostBoard?.role ?? hostBoard?.componentDefinitionId ?? '').toLowerCase();
-        const isDoor = hostRole.includes('door') || hostRole.includes('puerta');
-        const isDrawer = hostRole.includes('drawer') || hostRole.includes('cajon');
-        const hwCategory = (hwDef.category ?? '').toLowerCase();
+        // Use only the canonical role field. Do NOT fall back to componentDefinitionId or
+        // any other opaque identifier — compatibility must not be inferred from names or IDs.
+        const hostRoleLower = (hostBoard?.role ?? '').toLowerCase();
 
         let incompatible = false;
-        if (hwDef.compatibleRoles && hwDef.compatibleRoles.length > 0) {
-          const matched = hwDef.compatibleRoles.some((r) => {
-            const roleLower = r.toLowerCase();
-            return hostRole.includes(roleLower) || roleLower.includes(hostRole);
-          });
+        // Hardware.compatibleRoles is matched against the canonical optionRole only,
+        // using exact normalized equality — no substring or contains() matching.
+        if (hwDef.compatibleRoles && hwDef.compatibleRoles.length > 0 && hostRoleLower !== '') {
+          const matched = hwDef.compatibleRoles.some((r) => r.trim().toLowerCase() === hostRoleLower);
           if (!matched) incompatible = true;
         }
-        if (hwCategory === 'slide' && isDoor) incompatible = true;
-        if (hwCategory === 'hinge' && isDrawer) incompatible = true;
 
         if (incompatible) {
           push('HARDWARE_INCOMPATIBLE', `hardware definition ${placement.catalogHardwareId} is incompatible with this placement`,

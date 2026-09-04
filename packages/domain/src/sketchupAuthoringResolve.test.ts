@@ -247,22 +247,25 @@ describe('validateAuthoringResolveRequest', () => {
     expect(codes(derivedIssues)).toContain('HARDWARE_DERIVED_EDIT');
   });
 
-  test('data-driven hardware compatibility rejects incompatible categories and honors compatible roles', () => {
+  test('data-driven hardware compatibility: CompatibleRoles matched against canonical role only', () => {
     const catalog = [
       {
         id: 'arbitrary-hinge-id-xyz',
         category: 'hinge',
+        // No compatibleRoles declared — accepted on any host.
       },
       {
         id: 'drawer-slide-marked-compatible-name',
         category: 'slide',
-        compatibleRoles: ['lateral_izquierdo', 'cajon'],
+        // Declares it is only compatible with lateral/drawer roles.
+        compatibleRoles: ['LATERAL_IZQUIERDO', 'CAJON'],
       },
     ];
 
-    // Slide on door is incompatible regardless of friendly ID
+    // Slide on FRENTE host: CompatibleRoles does not include FRENTE → incompatible.
+    // The component carries an explicit canonical role, NOT inferred from name or defID.
     const incompatibleRequest = request({
-      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
+      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door', role: 'FRENTE' }],
       hardwarePlacements: [
         {
           hardwarePlacementId: 'hp-test-1',
@@ -277,9 +280,9 @@ describe('validateAuthoringResolveRequest', () => {
     const issues1 = validateAuthoringResolveRequest(incompatibleRequest, { hardwareCatalog: catalog });
     expect(codes(issues1)).toContain('HARDWARE_INCOMPATIBLE');
 
-    // Hinge on door is compatible regardless of arbitrary ID
+    // Hinge on FRENTE host: no compatibleRoles constraint → compatible.
     const compatibleRequest = request({
-      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
+      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door', role: 'FRENTE' }],
       hardwarePlacements: [
         {
           hardwarePlacementId: 'hp-test-2',
@@ -293,5 +296,69 @@ describe('validateAuthoringResolveRequest', () => {
     });
     const issues2 = validateAuthoringResolveRequest(compatibleRequest, { hardwareCatalog: catalog });
     expect(codes(issues2)).not.toContain('HARDWARE_INCOMPATIBLE');
+  });
+
+  test('display name does not affect compatibility — only canonical role matters', () => {
+    const catalog = [
+      { id: 'hw-slide', category: 'slide', compatibleRoles: ['CAJON'] },
+    ];
+    // Two components: same role 'FRENTE', different display names (one says "Puerta", other "Anything").
+    // Both must yield the same compatibility result.
+    for (const name of ['Puerta', 'Anything Else']) {
+      const req = request({
+        components: [{ componentInstanceId: 'c-01', componentDefinitionId: 'def-01', role: 'FRENTE' }],
+        hardwarePlacements: [
+          { hardwarePlacementId: 'hp-1', placementKind: 'manual', catalogHardwareId: 'hw-slide',
+            hostComponentInstanceId: 'c-01', anchorFace: 'front', offsetMm: [100, 100] },
+        ],
+      });
+      const issues = validateAuthoringResolveRequest(req, { hardwareCatalog: catalog });
+      // name is unused but illustrates the invariant
+      void name;
+      expect(codes(issues)).toContain('HARDWARE_INCOMPATIBLE');
+    }
+  });
+
+  test('componentDefinitionId containing "door" does not grant door-compatibility', () => {
+    const catalog = [
+      { id: 'hw-slide', category: 'slide', compatibleRoles: ['CAJON'] },
+    ];
+    // defID looks like a door, but role is 'INTERIOR' — slides are still incompatible.
+    const req = request({
+      components: [{ componentInstanceId: 'c-01', componentDefinitionId: 'door-looking-def-id', role: 'INTERIOR' }],
+      hardwarePlacements: [
+        { hardwarePlacementId: 'hp-1', placementKind: 'manual', catalogHardwareId: 'hw-slide',
+          hostComponentInstanceId: 'c-01', anchorFace: 'front', offsetMm: [100, 100] },
+      ],
+    });
+    const issues = validateAuthoringResolveRequest(req, { hardwareCatalog: catalog });
+    // CAJON ≠ INTERIOR → incompatible regardless of defID
+    expect(codes(issues)).toContain('HARDWARE_INCOMPATIBLE');
+  });
+
+  test('explicit role: FRENTE hardware accepted on FRENTE host, rejected on LATERAL host', () => {
+    const catalog = [
+      { id: 'hw-frente-only', compatibleRoles: ['FRENTE'] },
+    ];
+
+    const frenteHost = request({
+      components: [{ componentInstanceId: 'c-01', componentDefinitionId: 'def-01', role: 'FRENTE' }],
+      hardwarePlacements: [
+        { hardwarePlacementId: 'hp-1', placementKind: 'manual', catalogHardwareId: 'hw-frente-only',
+          hostComponentInstanceId: 'c-01', anchorFace: 'front', offsetMm: [100, 100] },
+      ],
+    });
+    expect(codes(validateAuthoringResolveRequest(frenteHost, { hardwareCatalog: catalog })))
+      .not.toContain('HARDWARE_INCOMPATIBLE');
+
+    const lateralHost = request({
+      components: [{ componentInstanceId: 'c-01', componentDefinitionId: 'def-01', role: 'LATERAL' }],
+      hardwarePlacements: [
+        { hardwarePlacementId: 'hp-1', placementKind: 'manual', catalogHardwareId: 'hw-frente-only',
+          hostComponentInstanceId: 'c-01', anchorFace: 'front', offsetMm: [100, 100] },
+      ],
+    });
+    expect(codes(validateAuthoringResolveRequest(lateralHost, { hardwareCatalog: catalog })))
+      .toContain('HARDWARE_INCOMPATIBLE');
   });
 });

@@ -186,6 +186,14 @@ func occurrenceJSON(instanceID, defID string, translation []float64) authoringOc
 	return occ
 }
 
+func occurrenceWithRoleJSON(instanceID, defID, role string) authoringOccurrenceWire {
+	return authoringOccurrenceWire{
+		ComponentInstanceID:   instanceID,
+		ComponentDefinitionID: defID,
+		Role:                  role,
+	}
+}
+
 func defaultOccurrencesJSON() []authoringOccurrenceWire {
 	return []authoringOccurrenceWire{
 		occurrenceJSON("side-left-01", "st-comp-side", nil),
@@ -195,6 +203,22 @@ func defaultOccurrencesJSON() []authoringOccurrenceWire {
 		occurrenceJSON("back-01", "mod-comp-back", nil),
 		occurrenceJSON("shelf-01", "mod-comp-shelf", nil),
 		occurrenceJSON("door-01", "mod-comp-door", nil),
+	}
+}
+
+// defaultOccurrencesWithRolesJSON returns the standard occurrence set with the
+// canonical optionRole populated on each component. Required for scenarios that
+// test hardware compatibility via CompatibleRoles so the TS validator can
+// evaluate the check without falling back to name/ID heuristics.
+func defaultOccurrencesWithRolesJSON() []authoringOccurrenceWire {
+	return []authoringOccurrenceWire{
+		occurrenceWithRoleJSON("side-left-01", "st-comp-side", "LATERAL"),
+		occurrenceWithRoleJSON("side-right-01", "st-comp-side-r", "LATERAL"),
+		occurrenceWithRoleJSON("floor-01", "st-comp-base", "INTERIOR"),
+		occurrenceWithRoleJSON("top-01", "st-comp-top", "INTERIOR"),
+		occurrenceWithRoleJSON("back-01", "mod-comp-back", "FONDO"),
+		occurrenceWithRoleJSON("shelf-01", "mod-comp-shelf", "INTERIOR"),
+		occurrenceWithRoleJSON("door-01", "mod-comp-door", "FRENTE"),
 	}
 }
 
@@ -550,9 +574,13 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			}
 		})), http.StatusUnprocessableEntity),
 
-		// Negative proof: incompatible hardware substitution rejected via data-driven capabilities (slide on door host).
+		// Negative proof: incompatible hardware substitution rejected via data-driven capabilities.
+		// The slide hardware declares CompatibleRoles=[lateral_izquierdo, lateral_derecho, cajon];
+		// door-01 has canonical role FRENTE — not in that list → HARDWARE_INCOMPATIBLE.
+		// Occurrences include canonical roles so the TS validator can evaluate this
+		// without falling back to name/ID heuristics.
 		run("neg-hardware-incompatible", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
-			f.Components = defaultOccurrencesJSON()
+			f.Components = defaultOccurrencesWithRolesJSON()
 			f.HardwarePlacements = []authoringPlacementWire{
 				{HardwarePlacementID: "hp-hinge-01", PlacementKind: "manual", CatalogHardwareID: "hw-incompatible", HostComponentInstanceID: "door-01",
 					AnchorFace: "front", OffsetMm: []float64{298, 100}},

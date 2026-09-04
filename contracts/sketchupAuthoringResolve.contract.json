@@ -16516,31 +16516,38 @@
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
-              "componentInstanceId": "side-left-01"
+              "componentInstanceId": "side-left-01",
+              "role": "LATERAL"
             },
             {
               "componentDefinitionId": "st-comp-side-r",
-              "componentInstanceId": "side-right-01"
+              "componentInstanceId": "side-right-01",
+              "role": "LATERAL"
             },
             {
               "componentDefinitionId": "st-comp-base",
-              "componentInstanceId": "floor-01"
+              "componentInstanceId": "floor-01",
+              "role": "INTERIOR"
             },
             {
               "componentDefinitionId": "st-comp-top",
-              "componentInstanceId": "top-01"
+              "componentInstanceId": "top-01",
+              "role": "INTERIOR"
             },
             {
               "componentDefinitionId": "mod-comp-back",
-              "componentInstanceId": "back-01"
+              "componentInstanceId": "back-01",
+              "role": "FONDO"
             },
             {
               "componentDefinitionId": "mod-comp-shelf",
-              "componentInstanceId": "shelf-01"
+              "componentInstanceId": "shelf-01",
+              "role": "INTERIOR"
             },
             {
               "componentDefinitionId": "mod-comp-door",
-              "componentInstanceId": "door-01"
+              "componentInstanceId": "door-01",
+              "role": "FRENTE"
             }
           ],
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",

@@ -604,23 +604,24 @@ type effectiveManualPlacement struct {
 }
 
 // isHardwareCompatibleWithHost evaluates data-driven hardware compatibility (#350).
-// An item is compatible if its category and/or declared compatible roles align with
-// the host component's role and capability, without hardcoding names or IDs.
+// Compatibility is derived exclusively from explicit structural/capability data:
+//   - Hardware.CompatibleRoles matched against the host's canonical optionRole only.
+//   - Component.CompatibleHardwareCategories matched against Hardware.Category.
+//
+// No inference is made from display names, component definition IDs, placement
+// strings, hardware IDs, hardware codes, or any other opaque identifier.
 func isHardwareCompatibleWithHost(hw domain.Hardware, board *layoutBoard, catalog domain.Catalog) bool {
-	// 1. If hardware explicitly declares CompatibleRoles, verify host matches one of them
+	// 1. If hardware explicitly declares CompatibleRoles, verify the host's
+	// canonical optionRole is among them. Exact normalized equality only — no
+	// substring or name matching.
 	if len(hw.CompatibleRoles) > 0 {
 		matched := false
 		for _, role := range hw.CompatibleRoles {
-			r := strings.ToLower(strings.TrimSpace(role))
+			r := strings.TrimSpace(role)
 			if r == "" {
 				continue
 			}
-			if strings.EqualFold(r, board.defID) ||
-				strings.EqualFold(r, board.placement) ||
-				strings.EqualFold(r, board.name) ||
-				strings.EqualFold(r, board.optionRole) ||
-				strings.Contains(strings.ToLower(board.defID), r) ||
-				strings.Contains(strings.ToLower(board.placement), r) {
+			if strings.EqualFold(r, board.optionRole) {
 				matched = true
 				break
 			}
@@ -646,8 +647,11 @@ func isHardwareCompatibleWithHost(hw domain.Hardware, board *layoutBoard, catalo
 		}
 	}
 
-	// 3. If the host component in catalog declares compatible categories, enforce it
-	if board.catalogComponentID != "" || board.defID != "" {
+	// 3. If the host component in catalog declares compatible categories and the
+	// hardware has a known category, enforce category membership. Hardware without
+	// a declared category (hwCategory == "") cannot be evaluated by category alone;
+	// if it already satisfied CompatibleRoles (block 1), it passes through here.
+	if hwCategory != "" && (board.catalogComponentID != "" || board.defID != "") {
 		comp, ok := findComponent(catalog, board.catalogComponentID)
 		if !ok {
 			comp, ok = findComponent(catalog, board.defID)
@@ -658,20 +662,6 @@ func isHardwareCompatibleWithHost(hw domain.Hardware, board *layoutBoard, catalo
 					return true
 				}
 			}
-			return false
-		}
-	}
-
-	// 4. Inherent incompatibility rules by category and host role
-	if hwCategory != "" {
-		isDoor := strings.Contains(strings.ToLower(board.defID), "door") ||
-			strings.Contains(strings.ToLower(board.placement), "puerta")
-		if isDoor && hwCategory == "slide" {
-			return false
-		}
-		isDrawer := strings.Contains(strings.ToLower(board.defID), "drawer") ||
-			strings.Contains(strings.ToLower(board.placement), "cajon")
-		if isDrawer && hwCategory == "hinge" {
 			return false
 		}
 	}

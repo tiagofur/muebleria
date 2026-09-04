@@ -39,6 +39,9 @@ func authoringCabinetCatalog() (domain.Module, domain.Catalog) {
 		ID: "comp-door", Code: "PTA", Name: "Puerta", Placement: domain.PlacementPuerta,
 		GeometryKind: "rectangular_board", ThicknessMm: 18, OptionRoles: []string{"FRENTE"},
 		LengthFormula: "PH - 4", WidthFormula: "PW - 4", Active: true,
+		// Explicit hardware compatibility: hinges and handles only. Slides are not
+		// compatible. This is structural data, not inferred from "Puerta" name or ID.
+		CompatibleHardwareCategories: []string{"hinge", "handle"},
 	}
 	shelf := domain.Component{
 		ID: "comp-shelf", Code: "ENTRE", Name: "Entrepaño", Placement: domain.PlacementInterno,
@@ -1493,3 +1496,259 @@ func TestAuthoringResolveMachiningIsolationAndDrillingConflictClearance(t *testi
 	}
 }
 
+
+// TestAuthoringResolveNamesDoNotAffectCompatibility verifies that two host components
+// with different display names but identical canonical role/capability produce the same
+// compatibility outcome. The engine must not inspect names.
+func TestAuthoringResolveNamesDoNotAffectCompatibility(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+
+	// Add a slide hardware — incompatible with FRENTE role components.
+	catalog.Hardware = append(catalog.Hardware, domain.Hardware{
+		ID:       "hw-slide-test",
+		Code:     "SLIDE-TEST",
+		Name:     "Test Slide Runner",
+		Category: "slide",
+		Active:   true,
+	})
+
+	// Rename the door component to something neutral: "Anything Else".
+	// The canonical role (FRENTE) and CompatibleHardwareCategories are unchanged.
+	for i, comp := range catalog.Components {
+		if comp.ID == "comp-door" {
+			catalog.Components[i].Name = "Anything Else"
+			break
+		}
+	}
+
+	// Placing a slide on the renamed component must still be incompatible.
+	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences:         defaultAuthoringOccurrences(),
+		Relationships:       []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-name-test",
+				PlacementKind:           "manual",
+				CatalogHardwareID:       "hw-slide-test",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{298, 100},
+			},
+		},
+		ManualPlacementsPresent: true,
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	found := false
+	for _, issue := range res.StructuralIssues {
+		if issue.Code == "HARDWARE_INCOMPATIBLE" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("renaming the host component must not change compatibility: slide is still incompatible on FRENTE role")
+	}
+}
+
+// TestAuthoringResolveComponentDefIDDoesNotAffectCompatibility verifies that a component
+// whose definition ID contains "door" is NOT treated as door-capable because of that ID;
+// only its declared CompatibleHardwareCategories drives compatibility.
+func TestAuthoringResolveComponentDefIDDoesNotAffectCompatibility(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+
+	// A slide hardware — would be falsely accepted if we matched "door" in defID.
+	catalog.Hardware = append(catalog.Hardware, domain.Hardware{
+		ID:       "hw-slide-id-test",
+		Code:     "SLIDE-ID-TEST",
+		Name:     "ID Test Slide",
+		Category: "slide",
+		Active:   true,
+	})
+
+	// Confirm catalog component defID for door-01 occurrence contains "door".
+	// The engine must not use this to infer compatibility.
+	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences:         defaultAuthoringOccurrences(),
+		Relationships:       []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-defid-test",
+				PlacementKind:           "manual",
+				CatalogHardwareID:       "hw-slide-id-test",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{298, 100},
+			},
+		},
+		ManualPlacementsPresent: true,
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	found := false
+	for _, issue := range res.StructuralIssues {
+		if issue.Code == "HARDWARE_INCOMPATIBLE" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("component defID containing 'door' must NOT grant compatibility to slide: category data only")
+	}
+}
+
+// TestAuthoringResolveExplicitCategoryEnforced verifies that when a component declares
+// CompatibleHardwareCategories, only hardware whose Category is in that list is accepted.
+func TestAuthoringResolveExplicitCategoryEnforced(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+
+	// comp-door declares ["hinge", "handle"]. A slide is not in that list.
+	catalog.Hardware = append(catalog.Hardware, domain.Hardware{
+		ID: "hw-cat-slide", Code: "CAT-SLIDE", Name: "Category Slide",
+		Category: "slide", Active: true,
+	})
+
+	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences:         defaultAuthoringOccurrences(),
+		Relationships:       []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-cat-test",
+				PlacementKind:           "manual",
+				CatalogHardwareID:       "hw-cat-slide",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{298, 100},
+			},
+		},
+		ManualPlacementsPresent: true,
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	found := false
+	for _, issue := range res.StructuralIssues {
+		if issue.Code == "HARDWARE_INCOMPATIBLE" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("slide not in CompatibleHardwareCategories must be rejected as HARDWARE_INCOMPATIBLE")
+	}
+
+	// A hinge IS in the list — must be accepted.
+	catalog.Hardware = append(catalog.Hardware, domain.Hardware{
+		ID: "hw-cat-hinge", Code: "CAT-HINGE", Name: "Category Hinge",
+		Category: "hinge", Active: true,
+	})
+	resOK, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences:         defaultAuthoringOccurrences(),
+		Relationships:       []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-cat-hinge",
+				PlacementKind:           "manual",
+				CatalogHardwareID:       "hw-cat-hinge",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{298, 100},
+			},
+		},
+		ManualPlacementsPresent: true,
+	})
+	if err != nil {
+		t.Fatalf("resolve hinge: %v", err)
+	}
+	for _, issue := range resOK.StructuralIssues {
+		if issue.Code == "HARDWARE_INCOMPATIBLE" {
+			t.Fatalf("hinge in CompatibleHardwareCategories must be accepted, got HARDWARE_INCOMPATIBLE")
+		}
+	}
+}
+
+// TestAuthoringResolveExplicitRoleEnforced verifies that Hardware.CompatibleRoles is
+// matched against the host's canonical optionRole only — not name, defID, or placement.
+func TestAuthoringResolveExplicitRoleEnforced(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+
+	// Hardware that explicitly lists role FRENTE as compatible.
+	catalog.Hardware = append(catalog.Hardware, domain.Hardware{
+		ID:              "hw-role-frente",
+		Code:            "ROLE-FRENTE",
+		Name:            "Role FRENTE Hardware",
+		CompatibleRoles: []string{"FRENTE"},
+		Active:          true,
+	})
+	// Hardware that explicitly lists role LATERAL as compatible — incompatible with FRENTE host.
+	catalog.Hardware = append(catalog.Hardware, domain.Hardware{
+		ID:              "hw-role-lateral",
+		Code:            "ROLE-LATERAL",
+		Name:            "Role LATERAL Hardware",
+		CompatibleRoles: []string{"LATERAL"},
+		Active:          true,
+	})
+
+	// FRENTE hardware on FRENTE host (door-01) must be accepted.
+	resOK, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences:         defaultAuthoringOccurrences(),
+		Relationships:       []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-role-ok",
+				PlacementKind:           "manual",
+				CatalogHardwareID:       "hw-role-frente",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{298, 100},
+			},
+		},
+		ManualPlacementsPresent: true,
+	})
+	if err != nil {
+		t.Fatalf("resolve FRENTE: %v", err)
+	}
+	for _, issue := range resOK.StructuralIssues {
+		if issue.Code == "HARDWARE_INCOMPATIBLE" {
+			t.Fatalf("hardware with CompatibleRoles=[FRENTE] must be accepted on FRENTE host, got HARDWARE_INCOMPATIBLE")
+		}
+	}
+
+	// LATERAL hardware on FRENTE host (door-01) must be rejected.
+	resBad, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences:         defaultAuthoringOccurrences(),
+		Relationships:       []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-role-bad",
+				PlacementKind:           "manual",
+				CatalogHardwareID:       "hw-role-lateral",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{298, 100},
+			},
+		},
+		ManualPlacementsPresent: true,
+	})
+	if err != nil {
+		t.Fatalf("resolve LATERAL: %v", err)
+	}
+	found := false
+	for _, issue := range resBad.StructuralIssues {
+		if issue.Code == "HARDWARE_INCOMPATIBLE" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("hardware with CompatibleRoles=[LATERAL] must be rejected as HARDWARE_INCOMPATIBLE on FRENTE host")
+	}
+}
