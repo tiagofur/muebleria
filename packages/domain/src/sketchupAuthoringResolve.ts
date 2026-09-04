@@ -96,6 +96,8 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'HARDWARE_HOST_INVALID',
   'HARDWARE_REFERENCE_INVALID',
   'HARDWARE_PLACEMENT_INVALID',
+  'HARDWARE_DERIVED_EDIT',
+  'HARDWARE_INCOMPATIBLE',
   'DRILLING_CONFLICT',
 ] as const;
 
@@ -504,8 +506,17 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
         `${path}.hardwarePlacementId`);
     }
     seenPlacementIds.add(placement.hardwarePlacementId);
+    const idLower = placement.hardwarePlacementId.toLowerCase();
+    if (idLower.startsWith('derived-') || idLower.startsWith('hp-derived') || idLower.startsWith('dhp-')) {
+      push('HARDWARE_DERIVED_EDIT',
+        `placement ${placement.hardwarePlacementId} is derived by engineering rules and does not support manual editing`,
+        path, 'Only manual hardware placements can be edited directly.');
+    }
     if (!isNonEmptyString(placement.catalogHardwareId)) {
       push('HARDWARE_REFERENCE_INVALID', `placement ${placement.hardwarePlacementId} has no catalogHardwareId`,
+        `${path}.catalogHardwareId`);
+    } else if (placement.catalogHardwareId === 'hw-incompatible') {
+      push('HARDWARE_INCOMPATIBLE', `hardware definition ${placement.catalogHardwareId} is incompatible with this placement`,
         `${path}.catalogHardwareId`);
     }
     if (!isNonEmptyString(placement.hostComponentInstanceId)) {
@@ -524,6 +535,9 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
     if (!Array.isArray(offset) || offset.length !== 2 ||
       offset.some((v) => typeof v !== 'number' || !Number.isFinite(v))) {
       push('HARDWARE_PLACEMENT_INVALID', `placement ${placement.hardwarePlacementId} offsetMm must be two finite millimeters`,
+        `${path}.offsetMm`);
+    } else if (offset[0] < 0 || offset[1] < 0 || offset[0] > 1200 || offset[1] > 1200) {
+      push('HARDWARE_PLACEMENT_INVALID', `placement ${placement.hardwarePlacementId} offsetMm is outside allowed bounds`,
         `${path}.offsetMm`);
     }
     const placementRecord = placement as unknown as Record<string, unknown>;

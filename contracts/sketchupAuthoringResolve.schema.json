@@ -265,6 +265,8 @@
             "HARDWARE_HOST_INVALID",
             "HARDWARE_REFERENCE_INVALID",
             "HARDWARE_PLACEMENT_INVALID",
+            "HARDWARE_DERIVED_EDIT",
+            "HARDWARE_INCOMPATIBLE",
             "DRILLING_CONFLICT"
           ]
         },

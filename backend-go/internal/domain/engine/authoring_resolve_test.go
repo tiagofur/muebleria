@@ -1155,3 +1155,191 @@ func TestAuthoringResolveRejectsOutOfRangeHardwareOffset(t *testing.T) {
 	}
 }
 
+func TestAuthoringResolveRejectsDerivedHardwarePlacementEdit(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	input := AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences: defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "HP-DERIVED-1",
+				CatalogHardwareID:       "hw-hinge",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{298, 100},
+			},
+		},
+		ManualPlacementsPresent: true,
+	}
+
+	result, err := ResolveAuthoringLayout(input)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(result.StructuralIssues) == 0 {
+		t.Fatal("expected structural issues for derived hardware placement edit")
+	}
+	if result.StructuralIssues[0].Code != "HARDWARE_DERIVED_EDIT" {
+		t.Fatalf("issue code = %s, want HARDWARE_DERIVED_EDIT", result.StructuralIssues[0].Code)
+	}
+}
+
+func TestAuthoringResolveRejectsIncompatibleHardwareSubstitution(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	catalog.Hardware = append(catalog.Hardware, domain.Hardware{
+		ID:     "hw-incompatible",
+		Code:   "INCOMPATIBLE",
+		Name:   "Incompatible Hardware",
+		Active: true,
+	})
+
+	input := AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences: defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-hinge-01",
+				CatalogHardwareID:       "hw-incompatible",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{298, 100},
+			},
+		},
+		ManualPlacementsPresent: true,
+	}
+
+	result, err := ResolveAuthoringLayout(input)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(result.StructuralIssues) == 0 {
+		t.Fatal("expected structural issues for incompatible hardware substitution")
+	}
+	if result.StructuralIssues[0].Code != "HARDWARE_INCOMPATIBLE" {
+		t.Fatalf("issue code = %s, want HARDWARE_INCOMPATIBLE", result.StructuralIssues[0].Code)
+	}
+}
+
+func TestAuthoringResolveMachiningIsolationAndDrillingConflictClearance(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	// Initial state: shelf at z=150 on side-left-01, hinge at y=150 on side-left-01 -> collision!
+	conflictInput := AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences: defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{
+			shelfRelationship("rel-shelf-1", "shelf-01"),
+		},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-hinge-top",
+				CatalogHardwareID:       "hw-hinge",
+				HostComponentInstanceID: "side-left-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{50, 150}, // Collides with shelf hole at [50, 150]
+			},
+			{
+				HardwarePlacementID:     "hp-hinge-bottom",
+				CatalogHardwareID:       "hw-hinge",
+				HostComponentInstanceID: "side-left-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{50, 500},
+			},
+		},
+		ManualPlacementsPresent: true,
+	}
+
+	resultConflict, err := ResolveAuthoringLayout(conflictInput)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	hasConflict := false
+	for _, issue := range resultConflict.ValidationIssues {
+		if issue.Code == "DRILLING_CONFLICT" {
+			hasConflict = true
+			break
+		}
+	}
+	if !hasConflict {
+		t.Fatal("expected DRILLING_CONFLICT when hinge hole overlaps shelf hole")
+	}
+
+	// Move hinge away: offset changes 50 -> 200 (clear of shelf at 50)
+	clearInput := conflictInput
+	clearInput.ManualPlacements = []AuthoringManualPlacement{
+		{
+			HardwarePlacementID:     "hp-hinge-top",
+			CatalogHardwareID:       "hw-hinge",
+			HostComponentInstanceID: "side-left-01",
+			AnchorFace:              "front",
+			OffsetMm:                [2]float64{50, 200}, // Clear of shelf
+		},
+		{
+			HardwarePlacementID:     "hp-hinge-bottom",
+			CatalogHardwareID:       "hw-hinge",
+			HostComponentInstanceID: "side-left-01",
+			AnchorFace:              "front",
+			OffsetMm:                [2]float64{50, 500},
+		},
+	}
+
+	resultClear, err := ResolveAuthoringLayout(clearInput)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	for _, issue := range resultClear.ValidationIssues {
+		if issue.Code == "DRILLING_CONFLICT" {
+			t.Fatalf("DRILLING_CONFLICT should have cleared after moving hinge away: %v", issue)
+		}
+	}
+
+	// Verify machining isolation:
+	// Shelf operations must remain identical before and after moving hp-hinge-top!
+	var shelfOpConflict, shelfOpClear *ResolvedMachiningOperation
+	for _, op := range resultConflict.Machining.Operations {
+		if op.Provenance.SourceKind == "relationship" && op.Provenance.RelationshipID == "rel-shelf-1" {
+			shelfOpConflict = &op
+			break
+		}
+	}
+	for _, op := range resultClear.Machining.Operations {
+		if op.Provenance.SourceKind == "relationship" && op.Provenance.RelationshipID == "rel-shelf-1" {
+			shelfOpClear = &op
+			break
+		}
+	}
+	if shelfOpConflict == nil || shelfOpClear == nil {
+		t.Fatal("expected shelf operations to exist in both results")
+	}
+	if len(shelfOpConflict.Holes) != len(shelfOpClear.Holes) {
+		t.Fatalf("shelf hole count changed: %d vs %d", len(shelfOpConflict.Holes), len(shelfOpClear.Holes))
+	}
+	for i := range shelfOpConflict.Holes {
+		if shelfOpConflict.Holes[i] != shelfOpClear.Holes[i] {
+			t.Fatalf("shelf hole %d changed after hinge move: %+v vs %+v", i, shelfOpConflict.Holes[i], shelfOpClear.Holes[i])
+		}
+	}
+
+	// Bottom hinge operation must also remain identical
+	var bottomHingeOpConflict, bottomHingeOpClear *ResolvedMachiningOperation
+	for _, op := range resultConflict.Machining.Operations {
+		if op.Provenance.HardwarePlacementID == "hp-hinge-bottom" {
+			bottomHingeOpConflict = &op
+			break
+		}
+	}
+	for _, op := range resultClear.Machining.Operations {
+		if op.Provenance.HardwarePlacementID == "hp-hinge-bottom" {
+			bottomHingeOpClear = &op
+			break
+		}
+	}
+	if bottomHingeOpConflict == nil || bottomHingeOpClear == nil {
+		t.Fatal("expected bottom hinge operation in both results")
+	}
+	if bottomHingeOpConflict.Holes[0] != bottomHingeOpClear.Holes[0] {
+		t.Fatalf("bottom hinge hole changed: %+v vs %+v", bottomHingeOpConflict.Holes[0], bottomHingeOpClear.Holes[0])
+	}
+}
+

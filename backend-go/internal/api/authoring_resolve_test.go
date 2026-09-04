@@ -142,6 +142,7 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 				PreviewShape: authoringStrPtr("hinge"), PreviewSizeMm: authoringFloatPtr(80), PreviewProjectionMm: authoringFloatPtr(22), PreviewDiameterMm: authoringFloatPtr(32)},
 			{ID: "hw-minifix", Code: "HER-MIN-15", Name: "Minifix 15", Unit: domain.UnitPiece, Active: true},
 			{ID: "hw-dowel", Code: "HER-TAQ-8X30", Name: "Tarugo 8x30", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-incompatible", Code: "INCOMPATIBLE", Name: "Corredera Incompatible", Unit: domain.UnitPiece, Active: true},
 		},
 	}
 	return &module, catalog
@@ -505,6 +506,53 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 		})), http.StatusUnprocessableEntity),
 		run("neg-parameter-string-too-long", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Parameters = map[string]any{"label": strings.Repeat("x", 200)}
+		})), http.StatusUnprocessableEntity),
+
+		// 17. Move manual hinge into shelf interference zone → real DRILLING_CONFLICT issue.
+		run("17-hardware-drilling-conflict", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-01")}
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "side-left-01",
+					AnchorFace: "front", OffsetMm: []float64{50, 150}},
+			}
+		})), http.StatusOK),
+
+		// 18. Move manual hinge away from shelf interference zone → conflict cleared.
+		run("18-hardware-conflict-cleared", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-01")}
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "side-left-01",
+					AnchorFace: "front", OffsetMm: []float64{50, 500}},
+			}
+		})), http.StatusOK),
+
+		// Negative proof: derived placement edit blocked.
+		run("neg-hardware-derived-edit", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-derived-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "door-01",
+					AnchorFace: "front", OffsetMm: []float64{298, 300}},
+			}
+		})), http.StatusUnprocessableEntity),
+
+		// Negative proof: hardware placement offset out of bounds.
+		run("neg-hardware-out-of-range", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "door-01",
+					AnchorFace: "front", OffsetMm: []float64{298, 1500}},
+			}
+		})), http.StatusUnprocessableEntity),
+
+		// Negative proof: incompatible hardware substitution rejected.
+		run("neg-hardware-incompatible", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-incompatible", HostComponentInstanceID: "door-01",
+					AnchorFace: "front", OffsetMm: []float64{298, 100}},
+			}
 		})), http.StatusUnprocessableEntity),
 	}
 }

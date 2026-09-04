@@ -29,6 +29,8 @@ module Granete
           'JOINERY_SYSTEM_UNSUPPORTED' => 'manufacturing_blocker',
           'HARDWARE_HOST_INVALID' => 'manufacturing_blocker',
           'HARDWARE_PLACEMENT_INVALID' => 'manufacturing_blocker',
+          'HARDWARE_DERIVED_EDIT' => 'invalid_authoring_input',
+          'HARDWARE_INCOMPATIBLE' => 'invalid_authoring_input',
           'DRILLING_CONFLICT' => 'manufacturing_blocker',
           'OCCURRENCE_DUPLICATE_ID' => 'invalid_authoring_input',
           'OCCURRENCE_COUNT_UNSUPPORTED' => 'invalid_authoring_input',

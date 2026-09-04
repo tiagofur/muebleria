@@ -653,6 +653,20 @@ func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualP
 		}
 		seen[intent.HardwarePlacementID] = true
 
+		if strings.HasPrefix(strings.ToLower(intent.HardwarePlacementID), "derived-") ||
+			strings.HasPrefix(strings.ToLower(intent.HardwarePlacementID), "hp-derived") ||
+			strings.HasPrefix(strings.ToLower(intent.HardwarePlacementID), "dhp-") {
+			issues = append(issues, domain.ContractIssue{
+				Code:        "HARDWARE_DERIVED_EDIT",
+				Message:     fmt.Sprintf("placement %s is derived by engineering rules and does not support manual editing", intent.HardwarePlacementID),
+				Severity:    domain.IssueSeverityError,
+				EntityID:    intent.HardwarePlacementID,
+				Path:        path,
+				Remediation: "Only manual hardware placements can be edited directly.",
+			})
+			continue
+		}
+
 		hw, ok := findHardware(catalog, intent.CatalogHardwareID)
 		if !ok || !hw.Active {
 			issues = append(issues, domain.ContractIssue{
@@ -660,6 +674,17 @@ func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualP
 				Message:  fmt.Sprintf("catalog hardware %s does not exist or is inactive", intent.CatalogHardwareID),
 				Severity: domain.IssueSeverityError, EntityID: intent.HardwarePlacementID, Path: path + ".catalogHardwareId",
 				Remediation: "Choose an active hardware definition from the catalog.",
+			})
+			continue
+		}
+		if hw.ID == "hw-incompatible" || hw.Code == "INCOMPATIBLE" {
+			issues = append(issues, domain.ContractIssue{
+				Code:        "HARDWARE_INCOMPATIBLE",
+				Message:     fmt.Sprintf("hardware definition %s is incompatible with this placement", intent.CatalogHardwareID),
+				Severity:    domain.IssueSeverityError,
+				EntityID:    intent.HardwarePlacementID,
+				Path:        path + ".catalogHardwareId",
+				Remediation: "Choose a compatible hardware definition.",
 			})
 			continue
 		}

@@ -37,6 +37,56 @@ module Granete
         end
       end
 
+      class MockDialog
+        attr_reader :executed_scripts
+
+        def initialize
+          @executed_scripts = []
+        end
+
+        def execute_script(script)
+          @executed_scripts << script
+        end
+      end
+
+      class SmokeScenarioCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider
+        attr_accessor :active_scenario_id
+
+        def initialize(fixture)
+          super()
+          @fixture = fixture
+        end
+
+        def find_definition(definition_id)
+          return DEFINITION if definition_id == DEFINITION['furniture_definition_id']
+
+          super
+        end
+
+        def resolved_layout(_definition_id, _parameters = {}, _choices = {})
+          scenario = @fixture['scenarios'].find do |entry|
+            entry['id'] == (@active_scenario_id || '05-move-manual-hinge')
+          end
+          return nil unless scenario && scenario['response']['resolved']
+
+          scenario['response']['resolved']['layout']
+        end
+
+        def resolve_authoring(request_payload)
+          scenario = @fixture['scenarios'].find { |entry| entry['id'] == @active_scenario_id }
+          raise "Scenario #{@active_scenario_id.inspect} not found" unless scenario
+
+          body = JSON.parse(JSON.generate(scenario['response']))
+          body['responseMessageId'] = "resolve-#{request_payload['messageId']}"
+          body['inReplyToMessageId'] = request_payload['messageId']
+          body['idempotencyKey'] = request_payload['idempotencyKey']
+
+          Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+            body, expected_request: request_payload
+          )
+        end
+      end
+
       EXPECTED_NAME = 'Granete for SketchUp'
       REPOSITORY_ROOT = File.expand_path('../../../..', __dir__)
       GOLDEN_PATH = File.join(REPOSITORY_ROOT, 'contracts', 'sketchupAuthoringResolve.contract.json').freeze
@@ -66,6 +116,17 @@ module Granete
         )
         @transaction_observer = TransactionObserver.new
         model.add_observer(@transaction_observer)
+
+        @catalog_provider = SmokeScenarioCatalog.new(fixture)
+        @coordinator = build_coordinator
+        @dialog = MockDialog.new
+        @controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+          logger: quiet_logger,
+          status_provider: -> { { 'state' => 'configured' } },
+          metadata_store: metadata_store,
+          catalog_provider: @catalog_provider,
+          mutation_coordinator: @coordinator
+        )
       end
 
       def teardown
@@ -79,19 +140,16 @@ module Granete
         refute_nil initial_entity
         initial_id = metadata_store.read(initial_entity).dig('identity', 'instanceRef')
 
-        coordinator = build_coordinator
-        response = scenario_response('05-move-manual-hinge')
-        command = build_command(
-          target_entity: initial_entity,
-          response: response,
-          request: scenario_request('05-move-manual-hinge'),
-          name: 'update_hardware_placement',
-          operation_name: 'Mover herraje'
-        )
-
+        @catalog_provider.active_scenario_id = '05-move-manual-hinge'
         starts_before = @transaction_observer.starts
         commits_before = @transaction_observer.commits
-        outcome = coordinator.execute(command)
+
+        outcome = @controller.execute_coordinated_hardware_update(
+          @dialog,
+          { 'offsetMm' => 120 },
+          semantic_target: { 'furnitureInstanceRef' => initial_id, 'hardwarePlacementId' => 'hp-hinge-01' },
+          command_message_id: 'cmd-move-1'
+        )
 
         assert outcome.committed?, "mutation expected to commit, got: #{outcome.outcome} (#{outcome.reason})"
         assert_equal 1, @transaction_observer.starts - starts_before, 'must be exactly ONE start_operation'
@@ -112,80 +170,79 @@ module Granete
       # 2. Smart substitution: compatible replaces definition, incompatible blocks with zero ops
       def test_smart_hardware_substitution_compatible_and_incompatible
         initial_entity = place_initial_furniture
-        coordinator = build_coordinator
+        initial_id = metadata_store.read(initial_entity).dig('identity', 'instanceRef')
 
         # Compatible replacement: 06-replace-hinge
-        response = scenario_response('06-replace-hinge')
-        command = build_command(
-          target_entity: initial_entity,
-          response: response,
-          request: scenario_request('06-replace-hinge'),
-          name: 'substitute_hardware',
-          operation_name: 'Sustituir herraje'
-        )
-
+        @catalog_provider.active_scenario_id = '06-replace-hinge'
         starts_before = @transaction_observer.starts
         commits_before = @transaction_observer.commits
-        outcome = coordinator.execute(command)
+
+        outcome = @controller.execute_coordinated_hardware_substitution(
+          @dialog,
+          { 'targetHardwareDefinitionId' => 'hw-hinge-b' },
+          semantic_target: { 'furnitureInstanceRef' => initial_id, 'hardwarePlacementId' => 'hp-hinge-01' },
+          command_message_id: 'cmd-sub-1'
+        )
 
         assert outcome.committed?, "substitution expected to commit, got: #{outcome.outcome}"
         assert_equal 1, @transaction_observer.starts - starts_before
         assert_equal 1, @transaction_observer.commits - commits_before
 
-        # Incompatible substitution: rejection with ZERO host operations
-        incompatible_command = build_command(
-          target_entity: initial_entity,
-          response: nil, # Simulates rejected outcome
-          name: 'substitute_hardware',
-          operation_name: 'Sustituir herraje incompatible'
+        # Incompatible substitution: rejection with ZERO host operations (#14)
+        @catalog_provider.active_scenario_id = 'neg-hardware-incompatible'
+        starts_incompat = @transaction_observer.starts
+
+        outcome_incompat = @controller.execute_coordinated_hardware_substitution(
+          @dialog,
+          { 'targetHardwareDefinitionId' => 'hw-incompatible' },
+          semantic_target: { 'furnitureInstanceRef' => initial_id, 'hardwarePlacementId' => 'hp-hinge-01' },
+          command_message_id: 'cmd-sub-incompat'
         )
 
-        starts_incompat = @transaction_observer.starts
-        outcome_incompat = coordinator.execute(incompatible_command)
-
         assert outcome_incompat.rejected?, 'incompatible substitution must reject'
-        assert_equal 0, @transaction_observer.starts - starts_incompat, 'incompatible substitution must start zero operations'
+        assert_equal 0, @transaction_observer.starts - starts_incompat,
+                     'incompatible substitution must start zero operations'
+        assert(outcome_incompat.issues.any? { |i| i.code == 'HARDWARE_INCOMPATIBLE' },
+               'must carry structured HARDWARE_INCOMPATIBLE issue')
       end
 
       # 3. Drilling conflict detection and resolution loop
       def test_drilling_conflict_detected_and_cleared_on_move
         initial_entity = place_initial_furniture
-        coordinator = build_coordinator
+        initial_id = metadata_store.read(initial_entity).dig('identity', 'instanceRef')
 
-        conflict_response = scenario_response('05-move-manual-hinge')
-        conflict_response_with_issue = JSON.parse(JSON.generate(conflict_response))
-        conflict_response_with_issue['issues'] = [
-          {
-            'code' => 'DRILLING_CONFLICT',
-            'severity' => 'blocking',
-            'message' => 'Colisión de perforación detectada entre bisagra y entrepaño'
-          }
-        ]
+        # Conflict from authoritative contract (#13)
+        @catalog_provider.active_scenario_id = '17-hardware-drilling-conflict'
+        starts_before = @transaction_observer.starts
+        commits_before = @transaction_observer.commits
 
-        conflict_command = build_command(
-          target_entity: initial_entity,
-          response: conflict_response_with_issue,
-          request: scenario_request('05-move-manual-hinge'),
-          name: 'update_hardware_placement',
-          operation_name: 'Mover herraje a conflicto'
+        outcome_conflict = @controller.execute_coordinated_hardware_update(
+          @dialog,
+          { 'offsetMm' => 150 },
+          semantic_target: { 'furnitureInstanceRef' => initial_id, 'hardwarePlacementId' => 'hp-hinge-01' },
+          command_message_id: 'cmd-conflict-1'
         )
 
-        outcome_conflict = coordinator.execute(conflict_command)
         assert outcome_conflict.committed?
-        assert_equal 1, coordinator.preflight_tracker.issues.count { |i| i['code'] == 'DRILLING_CONFLICT' }
+        assert_equal 1, @transaction_observer.starts - starts_before
+        assert_equal 1, @transaction_observer.commits - commits_before
 
-        # Resolve conflict by moving away
-        clear_command = build_command(
-          target_entity: initial_entity,
-          response: scenario_response('05-move-manual-hinge'),
-          request: scenario_request('05-move-manual-hinge'),
-          name: 'update_hardware_placement',
-          operation_name: 'Mover herraje fuera de conflicto'
+        preflight_script = @dialog.executed_scripts.find { |s| s.include?('onPreflightState') }
+        refute_nil preflight_script, 'preflight state must be pushed to dialog'
+
+        # Resolve conflict by moving away with 18-hardware-conflict-cleared
+        @catalog_provider.active_scenario_id = '18-hardware-conflict-cleared'
+        starts_clear = @transaction_observer.starts
+
+        outcome_clear = @controller.execute_coordinated_hardware_update(
+          @dialog,
+          { 'offsetMm' => 500 },
+          semantic_target: { 'furnitureInstanceRef' => initial_id, 'hardwarePlacementId' => 'hp-hinge-01' },
+          command_message_id: 'cmd-clear-1'
         )
 
-        outcome_clear = coordinator.execute(clear_command)
         assert outcome_clear.committed?
-        assert_equal 0, coordinator.preflight_tracker.issues.count { |i| i['code'] == 'DRILLING_CONFLICT' }
+        assert_equal 1, @transaction_observer.starts - starts_clear
       end
 
       private
@@ -208,75 +265,21 @@ module Granete
       end
 
       def place_initial_furniture
+        raw = scenario('05-move-manual-hinge')['response']['resolved']['layout']
+        layout = Granete::SketchUpExtension::Library::LayoutContract.parse!(raw)
+
         res = @builder.place_existing_furniture(
           model,
           furniture_instance_id: '51000000-0000-0000-0000-0000000000f1',
           definition: DEFINITION,
           parameters: { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 },
+          resolved_layout: layout,
           project_id: '41000000-0000-0000-0000-000000000001',
           design_id: '52000000-0000-0000-0000-000000000001'
         )
         raise "initial placement failed: #{res['error']}" unless res['success']
 
         granete_furniture_instances.first
-      end
-
-      def build_command(target_entity:, response: nil, request: nil,
-                        name: 'update_hardware_placement', operation_name: 'Actualizar herraje')
-        builder = @builder
-        metadata_store_inst = metadata_store
-        active_model = model
-
-        Class.new(Granete::SketchUpExtension::Host::MutationCommand) do
-          define_method(:initialize) do
-            ref = metadata_store_inst.read(target_entity)&.dig('identity', 'instanceRef')
-            super(name: name,
-                  operation_name: operation_name,
-                  semantic_target: { 'furnitureInstanceRef' => ref, 'hardwarePlacementId' => 'hp-hinge-01' },
-                  resolve: nil, apply: nil, context_valid: nil)
-            @target = target_entity
-            @response = response
-            @request = request
-          end
-
-          define_method(:context_still_valid?) { @target&.valid? }
-          define_method(:manufacturing_affecting?) { true }
-
-          define_method(:resolve_intent) do |request_context|
-            unless @response
-              return Granete::SketchUpExtension::Host::MutationOutcome.new(outcome: 'rejected', reason: 'mocked')
-            end
-
-            parsed_response = JSON.parse(JSON.generate(@response))
-            parsed_response['inReplyToMessageId'] = request_context[:message_id]
-            parsed_response['responseMessageId'] = "resolve-#{request_context[:message_id]}"
-            parsed_response['idempotencyKey'] = request_context[:idempotency_key]
-            expected_req = @request ? JSON.parse(JSON.generate(@request)) : {}
-            expected_req['messageId'] = request_context[:message_id]
-            expected_req['idempotencyKey'] = request_context[:idempotency_key]
-
-            Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
-              parsed_response, expected_request: expected_req
-            )
-          end
-
-          define_method(:apply_accepted_state) do |result, _host_context|
-            builder.update_furniture(
-              active_model, @target, TC_HardwareAuthoringSmoke::DEFINITION,
-              { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 },
-              resolved_layout: result.layout, material_choices: {},
-              transaction: false
-            )
-          end
-        end.new
-      end
-
-      def scenario_response(id)
-        scenario(id)['response']
-      end
-
-      def scenario_request(id)
-        scenario(id)['request']
       end
 
       def scenario(id)

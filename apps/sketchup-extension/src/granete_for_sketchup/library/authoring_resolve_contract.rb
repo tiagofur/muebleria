@@ -250,6 +250,8 @@ module Granete
           HARDWARE_HOST_INVALID
           HARDWARE_REFERENCE_INVALID
           HARDWARE_PLACEMENT_INVALID
+          HARDWARE_DERIVED_EDIT
+          HARDWARE_INCOMPATIBLE
           DRILLING_CONFLICT
         ].freeze
         ISSUE_SEVERITIES = %w[error warning info].freeze
@@ -758,6 +760,11 @@ module Granete
         # (occurrences/relationships/hardware placements) rides the body;
         # the transport never accepts query parameters for it.
         def build_request(message_id:, idempotency_key:, furniture:, source: {})
+          default_version = if defined?(Granete::SketchUpExtension::EXTENSION_VERSION)
+                              Granete::SketchUpExtension::EXTENSION_VERSION
+                            else
+                              '0.1.0'
+                            end
           {
             'schemaId' => AuthoringResolveContract::SUPPORTED_SCHEMA_ID,
             'schemaName' => 'granete.sketchup-authoring-resolve',
@@ -767,8 +774,7 @@ module Granete
             'sentAt' => Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'source' => {
               'client' => 'granete-for-sketchup',
-              'clientVersion' => source.fetch(:client_version,
-                                              Granete::SketchUpExtension::EXTENSION_VERSION),
+              'clientVersion' => source.fetch(:client_version, default_version),
               'host' => 'sketchup',
               'hostVersion' => source.fetch(:host_version, 'unknown')
             },

@@ -98,9 +98,12 @@ module Granete
                              CapabilityReasons::HARDWARE_UNKNOWN_EDIT.call
                            end
 
+          rotate_reason = move_reason || 'La rotación de herrajes se deriva automáticamente.'
+          handedness_reason = move_reason || 'La mano del herraje se deriva automáticamente.'
+
           set.declare('canMove', supported: is_manual, reason: move_reason)
-          set.declare('canRotate', supported: false, reason: move_reason || 'La rotación de herrajes se deriva automáticamente.')
-          set.declare('canChangeHandedness', supported: false, reason: move_reason || 'La mano del herraje se deriva automáticamente.')
+          set.declare('canRotate', supported: false, reason: rotate_reason)
+          set.declare('canChangeHandedness', supported: false, reason: handedness_reason)
           set.declare('canReplaceDefinition', supported: is_manual, reason: replace_reason)
           set.declare('canInspectMachining', supported: false, reason: CapabilityReasons::INSPECT_MACHINING.call)
         end

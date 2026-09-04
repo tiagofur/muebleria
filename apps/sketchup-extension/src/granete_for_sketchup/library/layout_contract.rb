@@ -134,6 +134,7 @@ module Granete
                     :host_component_instance_id, :translation, :dimensions, :color_hex,
                     :anchor_face, :offset_mm
 
+        # rubocop:disable-next Metrics/ParameterLists
         def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
                        placement_kind: nil, host_component_instance_id: nil, translation: nil,
                        dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil)
@@ -309,6 +310,7 @@ module Granete
           raw.map { |entry| parse_placement(entry) }
         end
 
+        # rubocop:disable-next Metrics/AbcSize
         def parse_placement(raw)
           raise LayoutContract::ContractError, 'Herraje de composición inválido' unless raw.is_a?(Hash)
 
