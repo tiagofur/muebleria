@@ -262,6 +262,8 @@ func deriveAuthoringMachining(
 		deriveManualPlacementMachining(placement, catalog, &operations, &issues)
 	}
 
+	detectHoleCollisions(operations, &issues)
+
 	return AuthoringMachining{
 		Operations:                operations,
 		DerivedHardwarePlacements: derived,
@@ -667,4 +669,54 @@ func AuthoringJoinerySystems() map[string]ShelfSupportJoineryRule {
 		out[id] = rule
 	}
 	return out
+}
+
+// detectHoleCollisions checks for physical overlap between hole pairs on the same host board face
+// (parity with TS sketchupPreflight §5 and sketchupHardwareSync).
+func detectHoleCollisions(operations []ResolvedMachiningOperation, issues *[]domain.ContractIssue) {
+	type holeWithOp struct {
+		hostID      string
+		operationID string
+		hole        ResolveHole
+	}
+	byHost := make(map[string][]holeWithOp)
+	for _, op := range operations {
+		for _, hole := range op.Holes {
+			byHost[op.HostComponentInstanceID] = append(byHost[op.HostComponentInstanceID], holeWithOp{
+				hostID:      op.HostComponentInstanceID,
+				operationID: op.OperationID,
+				hole:        hole,
+			})
+		}
+	}
+	for hostID, holes := range byHost {
+		for i := 0; i < len(holes); i++ {
+			for j := i + 1; j < len(holes); j++ {
+				h1 := holes[i].hole
+				h2 := holes[j].hole
+				if h1.Face != h2.Face {
+					continue
+				}
+				dist := math.Hypot(h1.XMm-h2.XMm, h1.YMm-h2.YMm)
+				minDist := (h1.DiameterMm + h2.DiameterMm) / 2
+				if dist < minDist {
+					*issues = append(*issues, domain.ContractIssue{
+						Code:        "DRILLING_CONFLICT",
+						Message:     fmt.Sprintf("Hole collision on host %s (%s Ø%.1f at [%.1f, %.1f] collides with %s Ø%.1f at [%.1f, %.1f])", hostID, h1.Type, h1.DiameterMm, h1.XMm, h1.YMm, h2.Type, h2.DiameterMm, h2.XMm, h2.YMm),
+						Severity:    domain.IssueSeverityError,
+						EntityID:    hostID,
+						Path:        fmt.Sprintf("resolved.machining.operations[host=%s]", hostID),
+						Remediation: "Shift conflicting shelf position or hardware offset to ensure minimum clearance.",
+						Details: map[string]any{
+							"hostComponentInstanceId": hostID,
+							"operationId1":            holes[i].operationID,
+							"operationId2":            holes[j].operationID,
+							"distanceMm":              dist,
+							"minDistanceMm":           minDist,
+						},
+					})
+				}
+			}
+		}
+	}
 }

@@ -80,22 +80,29 @@ module Granete
                       supported: false, reason: CapabilityReasons::INSPECT_MANUFACTURING.call)
         end
 
-        # Provenance-aware (#350): only a real contract discriminator decides
-        # which explanation applies — 'unknown' fails closed with its own
-        # remediation instead of being treated as derived or manual.
+        # Provenance-aware (#350, #468): manual placements are editable and
+        # substitutable; derived placements are controlled by definition rules
+        # and locked against manual edits. Unknown fails closed.
         def hardware_capabilities(context, set)
-          move_reason = case context.placement_kind
-                        when 'manual' then CapabilityReasons::HARDWARE_MANUAL_EDIT.call
-                        when 'derived' then CapabilityReasons::HARDWARE_DERIVED_EDIT.call
-                        else CapabilityReasons::HARDWARE_UNKNOWN_EDIT.call
+          is_manual = context.placement_kind == 'manual'
+          is_derived = context.placement_kind == 'derived'
+
+          move_reason = if is_derived
+                          CapabilityReasons::HARDWARE_DERIVED_EDIT.call
+                        elsif !is_manual
+                          CapabilityReasons::HARDWARE_UNKNOWN_EDIT.call
                         end
-          set.declare('canMove', supported: false, reason: move_reason)
-          set.declare('canRotate', supported: false, reason: move_reason)
-          set.declare('canChangeHandedness', supported: false, reason: move_reason)
-          set.declare('canReplaceDefinition',
-                      supported: false, reason: CapabilityReasons::HARDWARE_REPLACE.call)
-          set.declare('canInspectMachining',
-                      supported: false, reason: CapabilityReasons::INSPECT_MACHINING.call)
+          replace_reason = if is_derived
+                             CapabilityReasons::HARDWARE_DERIVED_EDIT.call
+                           elsif !is_manual
+                             CapabilityReasons::HARDWARE_UNKNOWN_EDIT.call
+                           end
+
+          set.declare('canMove', supported: is_manual, reason: move_reason)
+          set.declare('canRotate', supported: false, reason: move_reason || 'La rotación de herrajes se deriva automáticamente.')
+          set.declare('canChangeHandedness', supported: false, reason: move_reason || 'La mano del herraje se deriva automáticamente.')
+          set.declare('canReplaceDefinition', supported: is_manual, reason: replace_reason)
+          set.declare('canInspectMachining', supported: false, reason: CapabilityReasons::INSPECT_MACHINING.call)
         end
 
         def material_roles_reason(legacy, definition_available)

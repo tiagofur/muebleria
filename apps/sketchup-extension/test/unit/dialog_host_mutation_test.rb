@@ -43,14 +43,41 @@ class DialogHostMutationTest < Minitest::Test
         'components' => [
           { 'componentInstanceId' => 'st-door-0', 'componentDefinitionId' => 'st-door',
             'slotId' => 'puerta', 'name' => 'Puerta',
+            'role' => 'FRENTE',
             'transform' => { 'translationMm' => [2, 560, 2] }, 'dimensionsMm' => [596, 18, 716],
             'localTransform' => {
               'translationMm' => [2, 560, 2],
               'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
             },
-            'lengthMm' => 716, 'widthMm' => 596, 'thicknessMm' => 18 }
+            'lengthMm' => 716, 'widthMm' => 596, 'thicknessMm' => 18 },
+          { 'componentInstanceId' => 'st-shelf-0', 'componentDefinitionId' => 'st-shelf',
+            'slotId' => 'shelf', 'name' => 'Entrepaño',
+            'role' => 'INTERIOR',
+            'transform' => { 'translationMm' => [18, 18, 150] }, 'dimensionsMm' => [542, 564, 18],
+            'localTransform' => {
+              'translationMm' => [18, 18, 150],
+              'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
+            },
+            'lengthMm' => 564, 'widthMm' => 542, 'thicknessMm' => 18 }
         ],
-        'hardware' => [] }
+        'hardware' => [
+          { 'placementId' => 'HP-TOP', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra TOP',
+            'placementKind' => 'manual', 'hostComponentInstanceId' => 'st-door-0',
+            'anchorFace' => 'front', 'offsetMm' => [298, 100],
+            'transform' => { 'translationMm' => [298, 560, 100] } },
+          { 'placementId' => 'HP-BOTTOM', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra BOTTOM',
+            'placementKind' => 'manual', 'hostComponentInstanceId' => 'st-door-0',
+            'anchorFace' => 'front', 'offsetMm' => [298, 600],
+            'transform' => { 'translationMm' => [298, 560, 600] } },
+          { 'placementId' => 'HP-HANDLE', 'hardwareId' => 'hw-handle', 'name' => 'Manija',
+            'placementKind' => 'manual', 'hostComponentInstanceId' => 'st-door-0',
+            'anchorFace' => 'front', 'offsetMm' => [40, 360],
+            'transform' => { 'translationMm' => [40, 560, 360] } },
+          { 'placementId' => 'HP-DERIVED-1', 'hardwareId' => 'hw-hinge', 'name' => 'Bisagra Derivada',
+            'placementKind' => 'derived', 'hostComponentInstanceId' => 'st-door-0',
+            'anchorFace' => 'front', 'offsetMm' => [298, 300],
+            'transform' => { 'translationMm' => [298, 560, 300] } }
+        ] }
     end
   end
 
@@ -179,5 +206,195 @@ class DialogHostMutationTest < Minitest::Test
     mutation_states = emissions.count { |s| s.include?('onMutationState') }
     assert_equal 1, update_results, 'one command → exactly one Ruby→JS onUpdateResult'
     assert_equal 1, mutation_states, 'one command → exactly one Ruby→JS onMutationState'
+  end
+
+  def test_hardware_update_moves_hinge_and_preserves_identity_and_selection
+    dialog = @controller.show
+    furniture = native_furniture('inst-hw-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-hw-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    cmd = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-move-hinge-1',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-hw-1',
+        'hardwarePlacementId' => 'HP-TOP'
+      },
+      'payload' => { 'offsetMm' => 120 }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd))
+
+    mutation_script = dialog.executed_scripts.find { |s| s.include?('onMutationState') && s.include?('cmd-move-hinge-1') }
+    refute_nil mutation_script
+    assert_includes mutation_script, '"outcome":"committed"'
+
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    top_instance = Granete::SketchUpExtension::Host::SelectionRestore
+                   .new(metadata_store_factory: ->(_) { store }, model_provider: -> { @model })
+                   .send(:locate_child, furniture, 'hardwarePlacementId' => 'HP-TOP')
+    refute_nil top_instance, 'HP-TOP placement must survive rebuild'
+    meta = store.read(top_instance)
+    assert_equal 'HP-TOP', meta.dig('identity', 'hardwarePlacementId')
+    assert_equal 120, meta.dig('intent', 'offsetMm', 1)
+
+    bottom_instance = Granete::SketchUpExtension::Host::SelectionRestore
+                      .new(metadata_store_factory: ->(_) { store }, model_provider: -> { @model })
+                      .send(:locate_child, furniture, 'hardwarePlacementId' => 'HP-BOTTOM')
+    refute_nil bottom_instance
+    assert_equal 600, store.read(bottom_instance).dig('intent', 'offsetMm', 1), 'HP-BOTTOM must remain unchanged'
+
+    assert_equal [top_instance], @model.selection.to_a
+  end
+
+  def test_hardware_update_derived_placement_is_blocked_without_mutation
+    dialog = @controller.show
+    native_furniture('inst-derived-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-derived-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    cmd = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-derived-fail',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-derived-1',
+        'hardwarePlacementId' => 'HP-DERIVED-1'
+      },
+      'payload' => { 'offsetMm' => 320, 'placementKind' => 'derived' }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd))
+
+    mutation_script = dialog.executed_scripts.find { |s| s.include?('cmd-derived-fail') }
+    refute_nil mutation_script
+    assert_includes mutation_script, '"outcome":"rejected"'
+    assert_includes mutation_script, 'HARDWARE_DERIVED_EDIT'
+  end
+
+  def test_hardware_update_shelf_interference_causes_drilling_conflict_issue
+    dialog = @controller.show
+    native_furniture('inst-conflict-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-conflict-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    cmd = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-conflict-fail',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-conflict-1',
+        'hardwarePlacementId' => 'HP-TOP'
+      },
+      'payload' => { 'offsetMm' => 150 }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd))
+
+    mutation_script = dialog.executed_scripts.find { |s| s.include?('cmd-conflict-fail') }
+    refute_nil mutation_script
+    assert_includes mutation_script, '"outcome":"rejected"'
+    assert_includes mutation_script, 'DRILLING_CONFLICT'
+
+    cmd_fix = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-conflict-fix',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-conflict-1',
+        'hardwarePlacementId' => 'HP-TOP'
+      },
+      'payload' => { 'offsetMm' => 110 }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd_fix))
+
+    fix_script = dialog.executed_scripts.find { |s| s.include?('cmd-conflict-fix') }
+    refute_nil fix_script
+    assert_includes fix_script, '"outcome":"committed"'
+  end
+
+  def test_hardware_update_out_of_range_rejected_without_mutation
+    dialog = @controller.show
+    native_furniture('inst-range-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-range-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    cmd = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-range-fail',
+      'mutation' => 'update_hardware_placement',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-range-1',
+        'hardwarePlacementId' => 'HP-TOP'
+      },
+      'payload' => { 'offsetMm' => 1500 }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd))
+
+    mutation_script = dialog.executed_scripts.find { |s| s.include?('cmd-range-fail') }
+    refute_nil mutation_script
+    assert_includes mutation_script, '"outcome":"rejected"'
+    assert_includes mutation_script, 'HARDWARE_PLACEMENT_INVALID'
+  end
+
+  def test_hardware_substitute_compatible_preserves_placement_id
+    dialog = @controller.show
+    furniture = native_furniture('inst-sub-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-sub-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    cmd = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-sub-comp',
+      'mutation' => 'substitute_hardware',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-sub-1',
+        'hardwarePlacementId' => 'HP-TOP'
+      },
+      'payload' => { 'targetHardwareDefinitionId' => 'hw-hinge-b' }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd))
+
+    mutation_script = dialog.executed_scripts.find { |s| s.include?('cmd-sub-comp') }
+    refute_nil mutation_script
+    assert_includes mutation_script, '"outcome":"committed"'
+
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    top_instance = Granete::SketchUpExtension::Host::SelectionRestore
+                   .new(metadata_store_factory: ->(_) { store }, model_provider: -> { @model })
+                   .send(:locate_child, furniture, 'hardwarePlacementId' => 'HP-TOP')
+    refute_nil top_instance
+    meta = store.read(top_instance)
+    assert_equal 'HP-TOP', meta.dig('identity', 'hardwarePlacementId'), 'placementId must survive substitution'
+    assert_equal 'hw-hinge-b', meta.dig('intent', 'hardwareDefinitionId'), 'hardwareDefinitionId must be updated'
+  end
+
+  def test_hardware_substitute_incompatible_rejected_without_mutation
+    dialog = @controller.show
+    native_furniture('inst-sub-incomp-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-sub-incomp-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    cmd = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-sub-incomp',
+      'mutation' => 'substitute_hardware',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-sub-incomp-1',
+        'hardwarePlacementId' => 'HP-TOP'
+      },
+      'payload' => { 'targetHardwareDefinitionId' => 'hw-slide-heavy' }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd))
+
+    mutation_script = dialog.executed_scripts.find { |s| s.include?('cmd-sub-incomp') }
+    refute_nil mutation_script
+    assert_includes mutation_script, '"outcome":"rejected"'
+    assert_includes mutation_script, 'HARDWARE_INCOMPATIBLE'
   end
 end

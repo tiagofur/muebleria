@@ -839,6 +839,98 @@ func TestAuthoringResolveDrillingConflictBlocksPreflight(t *testing.T) {
 	}
 }
 
+// Real drilling collision (#468): placing a hardware hole (e.g. hinge on side-left-01)
+// into the shelf-joint drilling zone produces DRILLING_CONFLICT and blocks preflight.
+// Moving the hinge away clears the conflict, leaving shelf machining untouched.
+func TestAuthoringResolveHoleCollisionBetweenHingeAndShelfBlocksPreflight(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	collidingInput := AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences: defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{
+			shelfRelationship("rel-shelf-1", "shelf-01"),
+		},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-hinge-top",
+				CatalogHardwareID:       "hw-hinge",
+				HostComponentInstanceID: "side-left-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{50, 150},
+			},
+		},
+		ManualPlacementsPresent: true,
+	}
+	result, err := ResolveAuthoringLayout(collidingInput)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if result.ValidationStatus != AuthoringValidationBlocked {
+		t.Fatalf("validation status = %s, want blocked", result.ValidationStatus)
+	}
+	var conflictIssue *domain.ContractIssue
+	for i := range result.ValidationIssues {
+		if result.ValidationIssues[i].Code == "DRILLING_CONFLICT" {
+			conflictIssue = &result.ValidationIssues[i]
+			break
+		}
+	}
+	if conflictIssue == nil {
+		t.Fatalf("expected DRILLING_CONFLICT issue, got: %+v", result.ValidationIssues)
+	}
+
+	var shelfOpsUnderCollision []ResolvedMachiningOperation
+	for _, op := range result.Machining.Operations {
+		if op.Provenance.SourceKind == "relationship" {
+			shelfOpsUnderCollision = append(shelfOpsUnderCollision, op)
+		}
+	}
+	if len(shelfOpsUnderCollision) == 0 {
+		t.Fatalf("shelf machining must not be deleted under collision")
+	}
+
+	// Move hinge away to offset [50, 300] (away from the shelf at y=150)
+	resolvedInput := collidingInput
+	resolvedInput.ManualPlacements = []AuthoringManualPlacement{
+		{
+			HardwarePlacementID:     "hp-hinge-top",
+			CatalogHardwareID:       "hw-hinge",
+			HostComponentInstanceID: "side-left-01",
+			AnchorFace:              "front",
+			OffsetMm:                [2]float64{50, 300},
+		},
+	}
+	clearedResult, err := ResolveAuthoringLayout(resolvedInput)
+	if err != nil {
+		t.Fatalf("resolve cleared: %v", err)
+	}
+	if clearedResult.ValidationStatus != AuthoringValidationClear {
+		t.Fatalf("validation status = %s, want clear; issues: %+v", clearedResult.ValidationStatus, clearedResult.ValidationIssues)
+	}
+	for _, issue := range clearedResult.ValidationIssues {
+		if issue.Code == "DRILLING_CONFLICT" {
+			t.Fatalf("unexpected DRILLING_CONFLICT in cleared result")
+		}
+	}
+
+	// Machining isolation check: shelf operations must be preserved untouched
+	var shelfOpsAfterClear []ResolvedMachiningOperation
+	for _, op := range clearedResult.Machining.Operations {
+		if op.Provenance.SourceKind == "relationship" {
+			shelfOpsAfterClear = append(shelfOpsAfterClear, op)
+		}
+	}
+	if len(shelfOpsAfterClear) != len(shelfOpsUnderCollision) {
+		t.Fatalf("shelf ops count changed: got %d, want %d", len(shelfOpsAfterClear), len(shelfOpsUnderCollision))
+	}
+	for i := range shelfOpsUnderCollision {
+		if shelfOpsUnderCollision[i].OperationID != shelfOpsAfterClear[i].OperationID ||
+			len(shelfOpsUnderCollision[i].Holes) != len(shelfOpsAfterClear[i].Holes) {
+			t.Fatalf("shelf op %d changed collaterally", i)
+		}
+	}
+}
+
 // Parity anchors for the shared fixture math.
 func TestJointFastenerPositionsParityAnchors(t *testing.T) {
 	// span 542, margin 50, max 512, grid 32 → [50, 492]
@@ -1032,3 +1124,34 @@ func TestAuthoringResolveRejectsMultiEntryTemplates(t *testing.T) {
 		t.Fatalf("code = %s, want OCCURRENCE_COUNT_UNSUPPORTED", result.StructuralIssues[0].Code)
 	}
 }
+
+func TestAuthoringResolveRejectsOutOfRangeHardwareOffset(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	outOfRangeInput := AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences: defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
+		ManualPlacements: []AuthoringManualPlacement{
+			{
+				HardwarePlacementID:     "hp-hinge-out-of-range",
+				CatalogHardwareID:       "hw-hinge",
+				HostComponentInstanceID: "door-01",
+				AnchorFace:              "front",
+				OffsetMm:                [2]float64{1500, 100}, // Door width is 596mm
+			},
+		},
+		ManualPlacementsPresent: true,
+	}
+
+	result, err := ResolveAuthoringLayout(outOfRangeInput)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(result.StructuralIssues) == 0 {
+		t.Fatal("expected structural issues for out-of-range hardware offset")
+	}
+	if result.StructuralIssues[0].Code != "HARDWARE_PLACEMENT_INVALID" {
+		t.Fatalf("issue code = %s, want HARDWARE_PLACEMENT_INVALID", result.StructuralIssues[0].Code)
+	}
+}
+

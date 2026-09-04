@@ -18,7 +18,7 @@ module Granete
 
         SCHEMA_ID = 'granete.sketchup-host-command.v1'
         MESSAGE_TYPES = %w[mutation_command mutation_state preflight_state degraded_state].freeze
-        KNOWN_MUTATIONS = %w[update_furniture].freeze
+        KNOWN_MUTATIONS = %w[update_furniture update_hardware_placement substitute_hardware].freeze
 
         SEMANTIC_TARGET_KEYS = %w[furnitureInstanceId furnitureInstanceRef componentInstanceId
                                   hardwarePlacementId].freeze

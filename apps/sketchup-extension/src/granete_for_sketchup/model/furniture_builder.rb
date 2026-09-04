@@ -601,7 +601,9 @@ module Granete
             furniture_ref: furniture_instance_id,
             hardware_definition_id: placement.hardware_id,
             host_component_instance_id: placement.host_component_instance_id,
-            placement_kind: placement.placement_kind
+            placement_kind: placement.placement_kind,
+            anchor_face: placement.anchor_face,
+            offset_mm: placement.offset_mm
           )
           instance
         end
@@ -669,7 +671,7 @@ module Granete
         # are stored data — selection never infers them from names.
         def write_hardware(store, entity, placement_id, furniture_ref:,
                            hardware_definition_id: nil, host_component_instance_id: nil,
-                           placement_kind: nil)
+                           placement_kind: nil, anchor_face: nil, offset_mm: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -687,6 +689,8 @@ module Granete
           # Only the contract's #350 provenance is stored; a missing/legacy
           # value stays absent so the resolver reports 'unknown' fail-closed.
           intent['placementKind'] = placement_kind if placement_kind
+          intent['anchorFace'] = anchor_face if anchor_face
+          intent['offsetMm'] = offset_mm if offset_mm
 
           write_child(store, entity, identity, intent)
         end

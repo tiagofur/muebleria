@@ -1853,6 +1853,63 @@
 
             <p id="child-owner-note" class="subhead" style="display: none; margin-bottom: var(--space-3); font-size: var(--text-xs);"></p>
 
+            <!-- Hardware Drilling Conflict Banner (#468 §24) -->
+            <div id="hw-conflict-banner" class="card" style="display: none; border-left: 4px solid var(--state-danger, #ef4444); background: var(--surface-card); margin-bottom: var(--space-3);">
+              <div class="card-header-row">
+                <strong style="color: var(--state-danger, #ef4444); font-size: var(--text-sm);">Conflicto de perforación</strong>
+                <span class="status-badge error">Bloqueado</span>
+              </div>
+              <p id="hw-conflict-message" class="subhead" style="margin: var(--space-1) 0; font-size: var(--text-xs); color: var(--text-primary);"></p>
+              <p id="hw-conflict-remediation" class="subhead" style="margin: 0; font-size: var(--text-xs); color: var(--text-secondary); font-style: italic;"></p>
+            </div>
+
+            <!-- Interactive Hardware Placement Card (#468) -->
+            <div id="hw-placement-card" class="card" style="display: none; margin-bottom: var(--space-3);">
+              <div class="card-title">Herraje</div>
+              <div class="card-header-row" style="margin-top: var(--space-2); margin-bottom: var(--space-2);">
+                <h3 id="hw-def-name" style="font-size: var(--text-sm); margin: 0;">--</h3>
+                <span id="hw-provenance-badge" class="status-badge">--</span>
+              </div>
+              <div class="kv-row">
+                <span class="k">Colocación</span>
+                <span id="hw-placement-id-val" class="v">--</span>
+              </div>
+              <div class="kv-row">
+                <span class="k">Pieza anfitriona</span>
+                <span id="hw-host-val" class="v">--</span>
+              </div>
+              <div class="kv-row">
+                <span class="k">Cara anclaje</span>
+                <span id="hw-face-val" class="v">--</span>
+              </div>
+
+              <!-- Offset Edit Field -->
+              <div id="hw-offset-group" style="margin-top: var(--space-3);">
+                <label for="hw-offset-input" style="font-size: var(--text-xs); font-weight: var(--weight-medium); display: block; margin-bottom: var(--space-1);">Posición / Offset (mm)</label>
+                <div style="display: flex; gap: var(--space-2); align-items: center;">
+                  <input id="hw-offset-input" type="number" step="1" style="flex: 1;" placeholder="mm">
+                  <button id="btn-apply-hw-offset" type="button" class="btn btn-primary" style="white-space: nowrap;">
+                    <span>Aplicar</span>
+                  </button>
+                </div>
+                <div id="hw-derived-locked-note" class="subhead" style="display: none; color: var(--text-muted); font-size: var(--text-xs); margin-top: var(--space-1);">
+                  Los herrajes derivados se calculan por regla de ingeniería y no admiten edición manual.
+                </div>
+              </div>
+
+              <!-- Smart Hardware Substitution (#468 §26, §27) -->
+              <div id="hw-substitution-group" style="margin-top: var(--space-4); border-top: 1px solid var(--border-default); padding-top: var(--space-3);">
+                <div class="card-title" style="margin-bottom: var(--space-2);">Sustituir herraje</div>
+                <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                  <select id="hw-replacement-select" style="width: 100%;"></select>
+                  <button id="btn-replace-hw" type="button" class="btn btn-secondary" style="width: 100%;">
+                    <span>Sustituir</span>
+                  </button>
+                </div>
+                <div id="hw-substitution-feedback" class="subhead" style="display: none; font-size: var(--text-xs); margin-top: var(--space-1);"></div>
+              </div>
+            </div>
+
             <div class="card">
               <div class="card-title">Acciones disponibles</div>
               <div id="child-capabilities" style="margin-top: var(--space-2);"></div>
@@ -2082,6 +2139,7 @@
         var catalogCategories = [];
         var catalogMaterialCategories = [];
         var catalogMaterials = [];
+        var catalogHardware = [];
         var catalogSource = "loading";
         var licenseBlocked = false;
         var catalogMedia = null;
@@ -2219,6 +2277,23 @@
         var btnGotoFurniture = document.getElementById("btn-goto-furniture");
         var btnUpdate = document.getElementById("btn-update");
         var btnDelete = document.getElementById("btn-delete");
+
+        // Hardware placement & conflict DOM elements (#468)
+        var hwConflictBanner = document.getElementById("hw-conflict-banner");
+        var hwConflictMessage = document.getElementById("hw-conflict-message");
+        var hwConflictRemediation = document.getElementById("hw-conflict-remediation");
+        var hwPlacementCard = document.getElementById("hw-placement-card");
+        var hwDefName = document.getElementById("hw-def-name");
+        var hwProvenanceBadge = document.getElementById("hw-provenance-badge");
+        var hwPlacementIdVal = document.getElementById("hw-placement-id-val");
+        var hwHostVal = document.getElementById("hw-host-val");
+        var hwFaceVal = document.getElementById("hw-face-val");
+        var hwOffsetInput = document.getElementById("hw-offset-input");
+        var btnApplyHwOffset = document.getElementById("btn-apply-hw-offset");
+        var hwDerivedLockedNote = document.getElementById("hw-derived-locked-note");
+        var hwReplacementSelect = document.getElementById("hw-replacement-select");
+        var btnReplaceHw = document.getElementById("btn-replace-hw");
+        var hwSubstitutionFeedback = document.getElementById("hw-substitution-feedback");
 
         // Category UI mapping dictionary
         var CATEGORY_LABELS = {
@@ -3675,9 +3750,18 @@
               catalogCategories = payload.categories || [];
               catalogMaterialCategories = payload.materialCategories || [];
               catalogMaterials = payload.materials || [];
+              catalogHardware = payload.hardware || [];
               catalogSource = payload.source || "local";
               licenseBlocked = !!payload.licenseBlocked;
               catalogMedia = payload.media || null;
+              if (window.GraneteState) {
+                window.GraneteState.set("catalog", {
+                  definitions: catalog,
+                  hardware: catalogHardware,
+                  materials: catalogMaterials,
+                  categories: catalogCategories
+                });
+              }
             }
 
             libLicenseBlocker.style.display = licenseBlocked ? "block" : "none";
@@ -4338,6 +4422,85 @@
           var ownerResolved = context.ownerRecovery === "path" || context.ownerRecovery === "scan";
           btnGotoFurniture.style.display = ownerResolved && context.furnitureInstanceRef ? "inline-flex" : "none";
 
+          if (context.kind === "hardware") {
+            if (hwPlacementCard) {
+              hwPlacementCard.style.display = "block";
+              var hardwareList = catalogHardware || [];
+              var currentDef = hardwareList.find(function (h) {
+                return h.id === context.hardwareDefinitionId || h.code === context.hardwareDefinitionId;
+              });
+              if (hwDefName) hwDefName.textContent = currentDef ? currentDef.name : (context.hardwareDefinitionId || "--");
+              if (hwPlacementIdVal) hwPlacementIdVal.textContent = context.hardwarePlacementId || "--";
+              if (hwHostVal) hwHostVal.textContent = context.hostComponentInstanceId || "--";
+              if (hwFaceVal) hwFaceVal.textContent = context.anchorFace || "front";
+
+              var isManual = context.placementKind === "manual";
+              var isDerived = context.placementKind === "derived";
+              if (hwProvenanceBadge) {
+                if (isManual) {
+                  hwProvenanceBadge.textContent = "Manual";
+                  hwProvenanceBadge.className = "status-badge success";
+                } else if (isDerived) {
+                  hwProvenanceBadge.textContent = "Derivado";
+                  hwProvenanceBadge.className = "status-badge pending";
+                } else {
+                  hwProvenanceBadge.textContent = "Desconocido";
+                  hwProvenanceBadge.className = "status-badge";
+                }
+              }
+
+              var currentOffset = 0;
+              if (Array.isArray(context.offsetMm)) {
+                currentOffset = context.offsetMm.length > 1 ? context.offsetMm[1] : context.offsetMm[0];
+              } else if (typeof context.offsetMm === "number") {
+                currentOffset = context.offsetMm;
+              }
+              if (hwOffsetInput) {
+                hwOffsetInput.value = currentOffset;
+                hwOffsetInput.disabled = !isManual;
+              }
+              if (btnApplyHwOffset) btnApplyHwOffset.disabled = !isManual;
+              if (hwDerivedLockedNote) hwDerivedLockedNote.style.display = isDerived ? "block" : "none";
+
+              if (hwReplacementSelect) {
+                hwReplacementSelect.disabled = !isManual;
+                hwReplacementSelect.innerHTML = "";
+                hardwareList.forEach(function (candidate) {
+                  var opt = document.createElement("option");
+                  opt.value = candidate.id;
+                  var isComp = currentDef && candidate.category === currentDef.category;
+                  opt.textContent = candidate.name + (isComp ? " [Compatible]" : " [Incompatible]");
+                  if (candidate.id === context.hardwareDefinitionId || candidate.code === context.hardwareDefinitionId) {
+                    opt.selected = true;
+                  }
+                  hwReplacementSelect.appendChild(opt);
+                });
+              }
+              if (btnReplaceHw) btnReplaceHw.disabled = !isManual;
+            }
+
+            // Conflict banner: check recent mutation issues or preflight issues
+            if (hwConflictBanner) {
+              var mutState = window.GraneteState ? window.GraneteState.get("mutation") : null;
+              var conflictIssue = null;
+              if (mutState && mutState.issues && Array.isArray(mutState.issues)) {
+                conflictIssue = mutState.issues.find(function (iss) {
+                  return iss.code === "DRILLING_CONFLICT";
+                });
+              }
+              if (conflictIssue) {
+                hwConflictBanner.style.display = "block";
+                if (hwConflictMessage) hwConflictMessage.textContent = conflictIssue.message;
+                if (hwConflictRemediation) hwConflictRemediation.textContent = conflictIssue.remediation || "Mover la bisagra a una posición libre de perforaciones de entrepaño.";
+              } else {
+                hwConflictBanner.style.display = "none";
+              }
+            }
+          } else {
+            if (hwPlacementCard) hwPlacementCard.style.display = "none";
+            if (hwConflictBanner) hwConflictBanner.style.display = "none";
+          }
+
           renderChildFacts(context);
           renderCapabilityList(childCapabilities, context.capabilities);
         }
@@ -4584,6 +4747,37 @@
             window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceRef: selectedContext.furnitureInstanceRef }));
           }
         });
+
+        // Interactive hardware placement editing (#468)
+        if (btnApplyHwOffset) {
+          btnApplyHwOffset.addEventListener("click", function () {
+            if (!selectedContext || selectedContext.kind !== "hardware") return;
+            if (selectedContext.placementKind === "derived") {
+              alert("Los herrajes derivados no admiten edición manual.");
+              return;
+            }
+            var val = parseFloat(hwOffsetInput.value);
+            if (isNaN(val)) return;
+            if (window.GraneteMutation && typeof window.GraneteMutation.submitHardwarePlacementUpdate === "function") {
+              window.GraneteMutation.submitHardwarePlacementUpdate(val, selectedContext);
+            }
+          });
+        }
+
+        if (btnReplaceHw) {
+          btnReplaceHw.addEventListener("click", function () {
+            if (!selectedContext || selectedContext.kind !== "hardware") return;
+            if (selectedContext.placementKind === "derived") {
+              alert("Los herrajes derivados no admiten sustitución manual.");
+              return;
+            }
+            var targetId = hwReplacementSelect.value;
+            if (!targetId) return;
+            if (window.GraneteMutation && typeof window.GraneteMutation.submitHardwareSubstitution === "function") {
+              window.GraneteMutation.submitHardwareSubstitution(targetId, selectedContext);
+            }
+          });
+        }
 
         // ------------------------------------------------------------------
         // Model ↔ Project/Design binding (#388). Self-contained state + view:

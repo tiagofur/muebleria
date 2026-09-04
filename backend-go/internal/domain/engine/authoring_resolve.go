@@ -681,6 +681,18 @@ func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualP
 			})
 			continue
 		}
+		if intent.OffsetMm[0] < 0 || intent.OffsetMm[0] > board.widthMm ||
+			intent.OffsetMm[1] < 0 || intent.OffsetMm[1] > board.lengthMm {
+			issues = append(issues, domain.ContractIssue{
+				Code:        "HARDWARE_PLACEMENT_INVALID",
+				Message:     fmt.Sprintf("placement %s offset [%.1f, %.1f] is outside host board boundaries [%.1f, %.1f]", intent.HardwarePlacementID, intent.OffsetMm[0], intent.OffsetMm[1], board.widthMm, board.lengthMm),
+				Severity:    domain.IssueSeverityError,
+				EntityID:    intent.HardwarePlacementID,
+				Path:        path + ".offsetMm",
+				Remediation: "Position the hardware within the dimensions of the host board.",
+			})
+			continue
+		}
 		out = append(out, effectiveManualPlacement{intent: intent, board: board})
 	}
 	return out, issues
