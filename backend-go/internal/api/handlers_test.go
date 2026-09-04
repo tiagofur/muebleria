@@ -94,7 +94,11 @@ type stubStore struct {
 	listDesignRevisionArtifactsErr      error
 	getDesignRevisionArtifactResult     *domain.DesignRevisionArtifact
 	getDesignRevisionArtifactErr        error
-	materialReturnedByID                *domain.MaterialBoard
+	// Reconciliation (#393 / DT-9)
+	reconcileProjectResult *domain.ReconciliationResult
+	reconcileProjectErr    error
+	reconcileProjectCalls  int
+	materialReturnedByID   *domain.MaterialBoard
 	materialGetByIDErr                  error
 	// Ambient materials (presentation-only floor/wall, #4150)
 	listAmbientMaterials      []domain.AmbientMaterial
@@ -1698,6 +1702,32 @@ func (s *stubStore) GetDesignRevisionArtifact(_ context.Context, designID, revis
 		return s.getDesignRevisionArtifactResult, nil
 	}
 	return nil, domain.ErrDesignRevisionNotFound
+}
+
+func (s *stubStore) ReconcileProject(_ context.Context, projectID, quoteRevisionID, designRevisionID string) (*domain.ReconciliationResult, error) {
+	s.reconcileProjectCalls++
+	if s.reconcileProjectErr != nil {
+		return nil, s.reconcileProjectErr
+	}
+	if s.reconcileProjectResult != nil {
+		return s.reconcileProjectResult, nil
+	}
+	return &domain.ReconciliationResult{
+		ProjectID:        projectID,
+		QuoteRevisionID:  quoteRevisionID,
+		DesignRevisionID: designRevisionID,
+		Summary: domain.ReconciliationSummary{
+			Total:  1,
+			Synced: 1,
+		},
+		Items: []domain.ReconciliationItem{
+			{
+				FurnitureInstanceID: "FI-001",
+				Status:              domain.ReconciliationStatusSynced,
+				Differences:         []domain.StructuredDifference{},
+			},
+		},
+	}, nil
 }
 
 func (s *stubStore) GetDesignWorkingCopy(_ context.Context, designID string) (*domain.DesignWorkingCopy, error) {
