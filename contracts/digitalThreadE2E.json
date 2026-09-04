@@ -1,0 +1,99 @@
+{
+  "contract": "digitalThreadE2E",
+  "version": 1,
+  "description": "Deterministic canonical contract and regression fixture for #398 / DT-14 End-to-End Digital Thread. Defines canonical identities, module definitions, parameters, transitions and invariants across QuoteLine -> FurnitureInstance -> Design -> SketchUp -> WorkingCopy -> DesignRevision -> Reconciliation -> Requote -> Approval -> ProductionRelease.",
+  "canonicalEntities": {
+    "organizationId": "00000000-0000-0000-0000-000000000001",
+    "projectId": "11111111-0000-4000-8000-000000000001",
+    "definitions": {
+      "gabinete1p": {
+        "id": "d1000000-0000-4000-8000-000000000001",
+        "version": 1,
+        "name": "Gabinete 1 Puerta",
+        "defaultParameters": { "widthMm": 600, "heightMm": 720, "depthMm": 560 },
+        "defaultMaterials": { "carcass": "mat-blanco", "frente": "mat-roble" }
+      },
+      "cajonero3c": {
+        "id": "d2000000-0000-4000-8000-000000000002",
+        "version": 1,
+        "name": "Cajonero 3 Cajones",
+        "defaultParameters": { "widthMm": 600, "heightMm": 720, "depthMm": 560 },
+        "defaultMaterials": { "carcass": "mat-blanco", "frente": "mat-roble" }
+      }
+    }
+  },
+  "scenarios": {
+    "scenarioA_quoteFirst": {
+      "description": "Quote has 1-door cabinet + 3-drawer unit; Design created from Q1; drawer modified 600->650; R1 published; reconciled; requoted Q2; R1 approved and released; R2 published afterwards leaving release pinned to R1",
+      "furnitureInstances": [
+        {
+          "id": "f1000000-0000-4000-8000-000000000001",
+          "definitionKey": "gabinete1p",
+          "initialWidthMm": 600,
+          "modifiedWidthMm": 600,
+          "expectedReconciliation": "synced"
+        },
+        {
+          "id": "f2000000-0000-4000-8000-000000000002",
+          "definitionKey": "cajonero3c",
+          "initialWidthMm": 600,
+          "modifiedWidthMm": 650,
+          "expectedReconciliation": "modified",
+          "expectedImpact": {
+            "commercial": true,
+            "manufacturing": true,
+            "spatial": false,
+            "requiresRequote": true
+          }
+        }
+      ],
+      "postRequoteReconciliation": "synced",
+      "expectedReleasePin": {
+        "designRevision": 1,
+        "quoteRevision": 2
+      }
+    },
+    "scenarioB_quantityMultiple": {
+      "description": "QuoteLine quantity=3 produces 3 distinct FIs; placing only 2 in design marks the 3rd as quoted_not_modeled",
+      "quoteQuantity": 3,
+      "modeledCount": 2,
+      "expectedStatuses": {
+        "placed": "synced",
+        "unplaced": "quoted_not_modeled"
+      }
+    },
+    "scenarioC_designFirst": {
+      "description": "Catalog insertion creates FI-D directly in project; reconciliation against initial quote reports modeled_not_quoted; explicit requote incorporates FI-D preserving same identity",
+      "expectedInitialStatus": "modeled_not_quoted",
+      "expectedPostRequoteStatus": "synced"
+    },
+    "scenarioD_duplicateIdentity": {
+      "description": "Duplicating a managed root produces a copy with origin=duplicate; unresolved duplicate fails publish preflight closed",
+      "expectedPreflightStatusOnDuplicate": "blocked",
+      "expectedPreflightStatusOnResolved": "passed"
+    },
+    "scenarioE_semanticScope": {
+      "description": "Unmanaged entities (walls, plants, lights, decor) are excluded from publication manifest, DesignRevisionItems, and production fingerprint",
+      "excludedCategories": ["wall", "plant", "light", "decoration", "appliance"]
+    },
+    "scenarioF_staleConcurrency": {
+      "description": "Publishing against a stale base revision returns 409 conflict and creates no revision or orphaned artifacts",
+      "expectedStatusCode": 409
+    },
+    "scenarioG_releaseDurability": {
+      "description": "ProductionRelease remains pinned to approved R3 and fingerprint F3 even after R4 and R5 are published",
+      "pinnedRevision": 3
+    }
+  },
+  "invariants": {
+    "I1": "QuoteLine.id != FurnitureInstance.id",
+    "I2": "SketchUp persistent_id != FurnitureInstance.id",
+    "I3": "No invented local FurnitureInstance IDs without backend authority",
+    "I4": "Exact QuoteRevision and DesignRevision IDs are strictly required for reconciliation",
+    "I5": "Accepted QuoteRevision and published DesignRevision are immutable",
+    "I6": "ProductionRelease is immutable and pinned to exact revisions + fingerprint",
+    "I7": "Publishing R(N+1) never mutates or retargets existing ProductionRelease",
+    "I8": "Cross-project linking is strictly rejected at database and service boundary",
+    "I9": "Multi-tenant RLS prevents foreign organizations from mutating Digital Thread state"
+  }
+}

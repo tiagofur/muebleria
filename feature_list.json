@@ -5619,6 +5619,44 @@
       ],
       "completedAt": "2026-09-04",
       "evidence": "go test ./... green against real PostgreSQL (incl. TestProductionRelease_CanonicalPinningNegativeProof, TestProductionRelease_SpatialOnlyRevisionIsNotManufacturingStale, TestProductionRelease_Gates, TestProductionRelease_ApprovalLifecycleAndIdempotency, TestProductionRelease_ReleaseRowsAreImmutableHistory, TestProductionRelease_MultiOrgRLS, TestProductionRelease_ConcurrentCreationNumbering, TestProductionRelease_MigrationFreshAndUpgrade); domain fingerprint/preflight/gate suites and API handler tests green (approve + release permissions, gate error mapping, idempotent replay); pnpm openapi:check / typecheck / test green; go vet clean. Added TestProductionRelease_AuthorityFeedsProductionConsumers (consumers resolve the SAME P1/F3), TestPartExec_RevisionGuardUsesCanonicalReleaseAuthority and TestProjectUpdate_CannotRewriteReleaseOnceCanonicalExists."
+    },
+    {
+      "id": "F211",
+      "title": "Add end-to-end Digital Thread contract and regression suite (#398 / DT-14)",
+      "description": "Comprehensive end-to-end contract and regression gate proving the full Digital Thread lifecycle operates deterministically as ONE unified system across QuoteLine -> FurnitureInstance -> Design -> SketchUp -> WorkingCopy -> DesignRevision -> Reconciliation -> Explicit Requote -> Approval -> ProductionRelease. Covers canonical scenarios A-G (Quote-first, Quantity > 1, Design-first, Duplicate identity, Managed-only semantic scope, Stale-base concurrency, Release durability) with negative proofs (no join by name/geometry/array, fake UUID fails closed, exact revision compare stability, cross-project rejection, DB immutability triggers, idempotency, and multi-tenant RLS isolation).",
+      "tags": [
+        "digital-thread",
+        "backend",
+        "storage",
+        "sketchup-extension",
+        "regression",
+        "e2e",
+        "p0"
+      ],
+      "created": "2026-09-04",
+      "status": "done",
+      "completedAt": "2026-09-04",
+      "evidence": "Go backend E2E suite TestDigitalThreadE2E (9 scenarios) green against real PostgreSQL with granete_app RLS, immutability DB triggers, concurrency conflict handling, and deterministic fingerprint parity; Ruby client contract suite (digital_thread_contract_test.rb) and TestUp host smoke (TC_DigitalThreadE2ESmoke.rb) green in apps/sketchup-extension (403 tests, 0 failures, rake verify green); go test ./... green; pnpm openapi:check and pnpm test green (33 test files, 411 tests passed); canonical documentation added to docs/architecture/digital-thread-e2e-regression-gate.md.",
+      "acceptance": [
+        "Canonical Scenario A (Quote-first): Full lifecycle QuoteLine -> FI-001/FI-002 -> Design -> WorkingCopy -> Publish R1 -> Reconcile -> Requote Q2 -> Approve R1 -> ProductionRelease P1 -> Publish R2 post-release leaves P1 byte-identical",
+        "Canonical Scenario B (Quantity > 1): QuoteLine qty=3 materializes 3 unique FIs; partial placement produces quoted_not_modeled; QuoteLine ID != physical unit identity",
+        "Canonical Scenario C (Design-first): Catalog creation yields FI-D, working copy placement, publish R, reconciliation modeled_not_quoted, and explicit requote preserves same FI-D without creating FI-E",
+        "Canonical Scenario D (Duplicate): Host duplicate resolves to new FI with origin=duplicate; unresolved duplicate fails publish preflight closed",
+        "Canonical Scenario E (Semantic Scope): Non-managed geometry (walls/plants/decorations) is strictly excluded from publish manifest, DesignRevisionItems, and ProductionRelease fingerprint",
+        "Canonical Scenario F (Concurrency): Stale base revision publish fails with 409 conflict, leaves current revision intact and creates no orphaned artifacts",
+        "Canonical Scenario G (Release Durability): Released design revision and manufacturing fingerprint remain pinned after subsequent revisions R4/R5 are published",
+        "Negative proofs: No join by name/geometry, unknown UUID fails closed, exact revision compare stability, cross-project rejection, and multi-org RLS mutation denial",
+        "Regression documentation explains test matrix, execution commands, and golden fixture conventions"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/398",
+        "https://github.com/tiagofur/muebleria/issues/384",
+        "docs/architecture/project-design-digital-thread.md",
+        "docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md"
+      ],
+      "depends_on": [
+        "F210"
+      ]
     }
   ]
 }
