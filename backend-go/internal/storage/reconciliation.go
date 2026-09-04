@@ -40,7 +40,10 @@ type CreateQuoteRevisionItemCommand struct {
 
 // CreateQuoteRevision persists an immutable historical commercial revision snapshot and its items.
 // It executes atomically within a transaction and acquires a row lock on the parent project
-// to serialize revision numbering and enforce optimistic concurrency against stale base revisions.
+// to serialize revision numbering. Optimistic concurrency is mandatory and fail-closed
+// (digital-thread §18): when previous revisions exist, BaseRevisionID must reference the
+// exact latest revision; an omitted or stale base returns ErrQuoteRevisionConflict instead
+// of creating a new revision.
 func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuoteRevisionCommand) (*domain.QuoteRevision, error) {
 	if !isValidUUID(cmd.ProjectID) {
 		return nil, domain.ErrInvalidRevisionID
@@ -109,8 +112,13 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 			return nil, err
 		}
 	} else {
-		// Previous revision exists
-		if cmd.BaseRevisionID != "" && cmd.BaseRevisionID != latestRevID {
+		// Previous revision exists: optimistic concurrency is mandatory (fail-closed,
+		// digital-thread §18). The caller must base the new revision on the exact
+		// latest revision; omitting or staleness is a conflict, never a silent overwrite.
+		if cmd.BaseRevisionID == "" {
+			return nil, fmt.Errorf("%w: base revision is required when the project already has quote revisions; latest is %s (Q%d)", domain.ErrQuoteRevisionConflict, latestRevID, latestRevNum)
+		}
+		if cmd.BaseRevisionID != latestRevID {
 			return nil, fmt.Errorf("%w: base revision %s is stale; latest is %s (Q%d)", domain.ErrQuoteRevisionConflict, cmd.BaseRevisionID, latestRevID, latestRevNum)
 		}
 		if cmd.RevisionNumber <= 0 {
@@ -279,15 +287,33 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		return nil, err
 	}
 
-	// Validate status transition rules server-side before execution
-	if rev.Status == "superseded" {
-		return nil, fmt.Errorf("%w: superseded quote_revision cannot transition to %s", domain.ErrQuoteRevisionConflict, targetStatus)
+	// Validate status transition rules server-side before execution.
+	// Canonical commercial lifecycle (mirrors the protect_quote_revision_immutability
+	// DB trigger): draft → published → accepted|superseded → superseded → terminal.
+	// No other transition is allowed, including same-status no-ops.
+	transitionErr := func(allowed string) error {
+		return fmt.Errorf("%w: %s quote_revision can only transition to %s, not %s", domain.ErrQuoteRevisionConflict, rev.Status, allowed, targetStatus)
 	}
-	if rev.Status == "accepted" && targetStatus != "superseded" {
-		return nil, fmt.Errorf("%w: accepted quote_revision can only transition to superseded, not %s", domain.ErrQuoteRevisionConflict, targetStatus)
+	if rev.Status == targetStatus {
+		return nil, fmt.Errorf("%w: quote_revision status %s cannot transition to itself", domain.ErrQuoteRevisionConflict, rev.Status)
 	}
-	if rev.Status == "published" && targetStatus != "accepted" && targetStatus != "superseded" {
-		return nil, fmt.Errorf("%w: published quote_revision can only transition to accepted or superseded, not %s", domain.ErrQuoteRevisionConflict, targetStatus)
+	switch rev.Status {
+	case "draft":
+		if targetStatus != "published" {
+			return nil, transitionErr("published")
+		}
+	case "published":
+		if targetStatus != "accepted" && targetStatus != "superseded" {
+			return nil, transitionErr("accepted or superseded")
+		}
+	case "accepted":
+		if targetStatus != "superseded" {
+			return nil, transitionErr("superseded")
+		}
+	case "superseded":
+		return nil, transitionErr("nothing (terminal)")
+	default:
+		return nil, fmt.Errorf("%w: unknown current status %s", domain.ErrInvalidRevisionSnapshot, rev.Status)
 	}
 
 	err = s.db(txCtx).QueryRow(txCtx, `

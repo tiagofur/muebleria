@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -751,10 +752,11 @@ func TestReconciliation_HistoricalQuote_OldQuoteRevisionStaysOld(t *testing.T) {
 		}
 		q1ID = q1.ID
 
-		// 3. Q2: FI-001 width = 800
+		// 3. Q2: FI-001 width = 800 (based on the exact current latest Q1)
 		q2, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
-			ProjectID: fiSharedProject,
-			Notes:     "Quote Q2 - width 800",
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: q1ID,
+			Notes:          "Quote Q2 - width 800",
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{
 					FurnitureInstanceID:   fiID,
@@ -840,11 +842,12 @@ func TestReconciliation_HistoricalQuote_OldQuoteRevisionStaysOld(t *testing.T) {
 		t.Fatalf("expected difference on parameters.widthMm, got %+v", resQ2R1.Items[0].Differences)
 	}
 
-	// 7. Mutate current draft / create Q3 with width = 999
+	// 7. Mutate current draft / create Q3 with width = 999 (based on the exact current latest Q2)
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
-			ProjectID: fiSharedProject,
-			Notes:     "Quote Q3 - current edits",
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: q2ID,
+			Notes:          "Quote Q3 - current edits",
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{
 					FurnitureInstanceID:   fiID,
@@ -917,9 +920,10 @@ func TestReconciliation_HistoricalRemoval_LaterCancellationDoesNotRewriteOld(t *
 		}
 		q1ID = q1.ID
 
-		// Q_removed explicitly records FI-001 as cancelled
+		// Q_removed explicitly records FI-001 as cancelled (based on the exact current latest Q1)
 		qRem, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
-			ProjectID: fiSharedProject,
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: q1ID,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{
 					FurnitureInstanceID:   fiID,
@@ -1355,7 +1359,10 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 		t.Fatalf("q1 revision number = %d, want 1", q1.RevisionNumber)
 	}
 
-	// 1. Concurrent creates without BaseRevisionID: both must succeed sequentially and allocate Q2 and Q3.
+	// 1. Concurrent creates based on the SAME latest revision (Q1): the project row
+	// lock serializes revision numbering and the mandatory BaseRevisionID check makes
+	// optimistic concurrency fail-closed — exactly ONE worker wins (Q2) while the
+	// other receives a typed ErrQuoteRevisionConflict. No skipped numbers, no Q3.
 	type result struct {
 		rev *domain.QuoteRevision
 		err error
@@ -1371,9 +1378,10 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 			err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 				var err error
 				r, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
-					ProjectID: fiSharedProject,
-					Notes:     fmt.Sprintf("Concurrent worker %d", workerID),
-					CreatedBy: rlsUserA,
+					ProjectID:      fiSharedProject,
+					BaseRevisionID: q1.ID, // Both workers author from the same Q1.
+					Notes:          fmt.Sprintf("Concurrent worker %d", workerID),
+					CreatedBy:      rlsUserA,
 					Items: []storage.CreateQuoteRevisionItemCommand{
 						{FurnitureInstanceID: fiID, LifecycleStatus: "active"},
 					},
@@ -1389,18 +1397,26 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 	res1 := <-ch
 	res2 := <-ch
 
-	if res1.err != nil {
-		t.Fatalf("worker 1 failed: %v", res1.err)
+	var winner *domain.QuoteRevision
+	var loserErr error
+	switch {
+	case res1.err == nil && res2.err == nil:
+		t.Fatal("both concurrent same-base creates succeeded; expected exactly one conflict")
+	case res1.err == nil:
+		winner, loserErr = res1.rev, res2.err
+	case res2.err == nil:
+		winner, loserErr = res2.rev, res1.err
+	default:
+		t.Fatalf("both concurrent same-base creates failed: %v / %v", res1.err, res2.err)
 	}
-	if res2.err != nil {
-		t.Fatalf("worker 2 failed: %v", res2.err)
+	if winner.RevisionNumber != 2 {
+		t.Fatalf("winner revision number = %d, want 2", winner.RevisionNumber)
 	}
-
-	numbers := []int{res1.rev.RevisionNumber, res2.rev.RevisionNumber}
-	if (numbers[0] == 2 && numbers[1] == 3) || (numbers[0] == 3 && numbers[1] == 2) {
-		// OK: Q2 and Q3 created cleanly and sequentially without unique constraint collision
-	} else {
-		t.Fatalf("expected Q2 and Q3, got %d and %d", numbers[0], numbers[1])
+	if !errors.Is(loserErr, domain.ErrQuoteRevisionConflict) {
+		t.Fatalf("expected loser to receive ErrQuoteRevisionConflict, got %v", loserErr)
+	}
+	if count, latest := quoteRevisionState(t, fx.admin, fiSharedProject); count != 2 || latest != 2 {
+		t.Fatalf("after concurrent same-base race: count=%d latest=Q%d, want count=2 latest=Q2", count, latest)
 	}
 
 	// 2. Concurrent creates with Stale BaseRevisionID: must return clean typed domain.ErrQuoteRevisionConflict.
@@ -1415,7 +1431,7 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 				var err error
 				r, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
 					ProjectID:      fiSharedProject,
-					BaseRevisionID: q1.ID, // Stale! Latest is already Q3.
+					BaseRevisionID: q1.ID, // Stale! Latest is already Q2.
 					Notes:          fmt.Sprintf("Conflict worker %d", workerID),
 					CreatedBy:      rlsUserA,
 					Items: []storage.CreateQuoteRevisionItemCommand{
@@ -1436,6 +1452,37 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 	}
 	if !errors.Is(cRes2.err, domain.ErrQuoteRevisionConflict) {
 		t.Fatalf("expected ErrQuoteRevisionConflict on stale base revision, got %v", cRes2.err)
+	}
+	if count, latest := quoteRevisionState(t, fx.admin, fiSharedProject); count != 2 || latest != 2 {
+		t.Fatalf("after stale-base attempts: count=%d latest=Q%d, want count=2 latest=Q2", count, latest)
+	}
+
+	// 3. The losing client reloads and bases the new revision on the exact current
+	// latest (Q2): the retry succeeds and allocates Q3.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		q3, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: winner.ID,
+			Notes:          "Reloaded retry after conflict",
+			CreatedBy:      rlsUserA,
+			Items: []storage.CreateQuoteRevisionItemCommand{
+				{FurnitureInstanceID: fiID, LifecycleStatus: "active"},
+			},
+		})
+		if err != nil {
+			return err
+		}
+		if q3.RevisionNumber != 3 {
+			t.Fatalf("retry revision number = %d, want 3", q3.RevisionNumber)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("reload-and-retry create failed: %v", err)
+	}
+	if count, latest := quoteRevisionState(t, fx.admin, fiSharedProject); count != 3 || latest != 3 {
+		t.Fatalf("after retry: count=%d latest=Q%d, want count=3 latest=Q3", count, latest)
 	}
 }
 
@@ -1583,3 +1630,364 @@ func TestQuoteRevision_Immutability_EnforcedAtDatabaseAndServer(t *testing.T) {
 		t.Fatal("invalid transition superseded -> accepted succeeded, want error")
 	}
 }
+
+// quoteRevisionState returns (count, latestRevisionNumber) for a project via the
+// admin pool, so tests can prove that rejected creates left no rows behind.
+func quoteRevisionState(t *testing.T, pool *pgxpool.Pool, projectID string) (int, int) {
+	t.Helper()
+	var count, latest int
+	if err := pool.QueryRow(context.Background(), `
+		SELECT COUNT(*), COALESCE(MAX(revision_number), 0)
+		FROM quote_revisions
+		WHERE project_id = $1
+	`, projectID).Scan(&count, &latest); err != nil {
+		t.Fatalf("read quote revision state: %v", err)
+	}
+	return count, latest
+}
+
+// Final optimistic-concurrency hardening: BaseRevisionID is MANDATORY once any
+// revision exists (fail-closed, digital-thread §18). Required negative proof:
+//
+//	Client A reads Q7 → Client B creates Q8 from Q7 →
+//	Client A attempts create without base or with Q7 →
+//	conflict and NO Q9 — unless Client A explicitly reloads and
+//	bases the new revision on Q8.
+func TestQuoteRevision_BaseRevision_FailClosed(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+	actorA := fiActorA()
+
+	fiID := "50000000-0000-0000-0000-0000000000c2"
+	if _, err := fx.admin.Exec(context.Background(), `
+		INSERT INTO furniture_instances (id, organization_id, project_id, origin, lifecycle_status)
+		VALUES ($1, $2, $3, 'manual', 'active')
+	`, fiID, rlsOrgA, fiSharedProject); err != nil {
+		t.Fatalf("seed FI: %v", err)
+	}
+
+	items := func() []storage.CreateQuoteRevisionItemCommand {
+		return []storage.CreateQuoteRevisionItemCommand{
+			{FurnitureInstanceID: fiID, LifecycleStatus: "active"},
+		}
+	}
+
+	// 0. No previous revision + base specified → conflict: the FIRST revision must be baseless.
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: "51000000-0000-0000-0000-0000000000e1",
+			Items:          items(),
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrQuoteRevisionConflict) {
+		t.Fatalf("expected ErrQuoteRevisionConflict when base is specified but no previous revision exists, got %v", err)
+	}
+	if count, latest := quoteRevisionState(t, fx.admin, fiSharedProject); count != 0 || latest != 0 {
+		t.Fatalf("after rejected first create: count=%d latest=Q%d, want 0/0", count, latest)
+	}
+
+	// 1. First revision with empty base → Q1 allowed.
+	var q1 *domain.QuoteRevision
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		q1, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID: fiSharedProject,
+			Notes:     "Q1",
+			Items:     items(),
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create Q1 without base: %v", err)
+	}
+	if q1.RevisionNumber != 1 {
+		t.Fatalf("Q1 revision number = %d, want 1", q1.RevisionNumber)
+	}
+
+	// 2. Client B authors from the current latest Q1 → Q2 allowed.
+	var q2 *domain.QuoteRevision
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		q2, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: q1.ID,
+			Notes:          "Q2 by client B",
+			Items:          items(),
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create Q2 from Q1: %v", err)
+	}
+	if q2.RevisionNumber != 2 {
+		t.Fatalf("Q2 revision number = %d, want 2", q2.RevisionNumber)
+	}
+
+	// 3. Client A still holds Q1 (stale): create WITHOUT base → conflict, no Q3.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID: fiSharedProject,
+			Notes:     "Q3 attempted without base",
+			Items:     items(),
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrQuoteRevisionConflict) {
+		t.Fatalf("expected ErrQuoteRevisionConflict when base omitted with existing revisions, got %v", err)
+	}
+	if count, latest := quoteRevisionState(t, fx.admin, fiSharedProject); count != 2 || latest != 2 {
+		t.Fatalf("after base-omitted attempt: count=%d latest=Q%d, want 2/Q2 (no Q3)", count, latest)
+	}
+
+	// 4. Client A creates WITH stale base Q1 → conflict, still no Q3.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: q1.ID,
+			Notes:          "Q3 attempted from stale Q1",
+			Items:          items(),
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrQuoteRevisionConflict) {
+		t.Fatalf("expected ErrQuoteRevisionConflict on stale base, got %v", err)
+	}
+	if count, latest := quoteRevisionState(t, fx.admin, fiSharedProject); count != 2 || latest != 2 {
+		t.Fatalf("after stale-base attempt: count=%d latest=Q%d, want 2/Q2 (no Q3)", count, latest)
+	}
+
+	// 5. Client A explicitly reloads and bases the new revision on Q2 → Q3 allowed.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		q3, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: q2.ID,
+			Notes:          "Q3 after explicit reload",
+			Items:          items(),
+		})
+		if err != nil {
+			return err
+		}
+		if q3.RevisionNumber != 3 {
+			t.Fatalf("Q3 revision number = %d, want 3", q3.RevisionNumber)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("create Q3 from reloaded Q2: %v", err)
+	}
+	if count, latest := quoteRevisionState(t, fx.admin, fiSharedProject); count != 3 || latest != 3 {
+		t.Fatalf("after reload-based create: count=%d latest=Q%d, want 3/Q3", count, latest)
+	}
+}
+
+// Exact canonical commercial lifecycle enforcement (server + DB backstop):
+//
+//	draft → published
+//	published → accepted | superseded
+//	accepted → superseded
+//	superseded → terminal
+//
+// draft previously had no explicit guard and could transition arbitrarily.
+func TestQuoteRevision_StatusTransitions_ExactLifecycle(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+	actorA := fiActorA()
+	ctx := context.Background()
+
+	fiID := "50000000-0000-0000-0000-0000000000c3"
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO furniture_instances (id, organization_id, project_id, origin, lifecycle_status)
+		VALUES ($1, $2, $3, 'manual', 'active')
+	`, fiID, rlsOrgA, fiSharedProject); err != nil {
+		t.Fatalf("seed FI: %v", err)
+	}
+
+	// Q1 born as draft.
+	var draftRev *domain.QuoteRevision
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		draftRev, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID: fiSharedProject,
+			Status:    "draft",
+			Items: []storage.CreateQuoteRevisionItemCommand{
+				{FurnitureInstanceID: fiID, LifecycleStatus: "active"},
+			},
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create draft quote revision: %v", err)
+	}
+	if draftRev.Status != "draft" {
+		t.Fatalf("status = %s, want draft", draftRev.Status)
+	}
+
+	updateStatus := func(status string) error {
+		return fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+			_, err := fx.store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{
+				QuoteRevisionID: draftRev.ID,
+				Status:          status,
+			})
+			return err
+		})
+	}
+
+	// 1. Negative Proof: invalid target status strings are rejected before any transition.
+	if err := updateStatus("bogus"); !errors.Is(err, domain.ErrInvalidRevisionSnapshot) {
+		t.Fatalf("expected ErrInvalidRevisionSnapshot for bogus target status, got %v", err)
+	}
+
+	// 2. Negative Proof: draft cannot transition arbitrarily. Same-status no-op,
+	// draft → accepted and draft → superseded are NOT canonical.
+	for _, target := range []string{"draft", "accepted", "superseded"} {
+		if err := updateStatus(target); !errors.Is(err, domain.ErrQuoteRevisionConflict) {
+			t.Fatalf("expected ErrQuoteRevisionConflict for draft -> %s, got %v", target, err)
+		}
+	}
+	var statusAfter string
+	if err := fx.admin.QueryRow(ctx, `SELECT status FROM quote_revisions WHERE id = $1`, draftRev.ID).Scan(&statusAfter); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if statusAfter != "draft" {
+		t.Fatalf("status after rejected transitions = %s, want draft (unchanged)", statusAfter)
+	}
+
+	// 3. Legitimate transition: draft -> published.
+	publishedRev, err := func() (*domain.QuoteRevision, error) {
+		var rev *domain.QuoteRevision
+		err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+			var err error
+			rev, err = fx.store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{
+				QuoteRevisionID: draftRev.ID,
+				Status:          "published",
+			})
+			return err
+		})
+		return rev, err
+	}()
+	if err != nil {
+		t.Fatalf("legitimate transition draft -> published failed: %v", err)
+	}
+	if publishedRev.Status != "published" {
+		t.Fatalf("status = %s, want published", publishedRev.Status)
+	}
+
+	// 4. Same-status no-op is not a transition: published -> published rejected.
+	if err := updateStatus("published"); !errors.Is(err, domain.ErrQuoteRevisionConflict) {
+		t.Fatalf("expected ErrQuoteRevisionConflict for published -> published no-op, got %v", err)
+	}
+
+	// 5. Direct SQL Negative Proof (DB trigger backstop): a fresh draft revision
+	// cannot skip publication even bypassing the storage layer.
+	var draft2 *domain.QuoteRevision
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		draft2, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			ProjectID:      fiSharedProject,
+			BaseRevisionID: draftRev.ID,
+			Status:         "draft",
+			Items: []storage.CreateQuoteRevisionItemCommand{
+				{FurnitureInstanceID: fiID, LifecycleStatus: "active"},
+			},
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create second draft revision: %v", err)
+	}
+	for _, target := range []string{"accepted", "superseded"} {
+		if _, err := fx.admin.Exec(ctx, `
+			UPDATE quote_revisions SET status = $2 WHERE id = $1
+		`, draft2.ID, target); err == nil {
+			t.Fatalf("direct SQL draft -> %s succeeded, want trigger rejection", target)
+		}
+	}
+	if _, err := fx.admin.Exec(ctx, `
+		UPDATE quote_revisions SET status = 'published' WHERE id = $1
+	`, draft2.ID); err != nil {
+		t.Fatalf("direct SQL draft -> published failed, want success: %v", err)
+	}
+}
+
+// Migration 000116 hardens the DB trigger with the exact draft guard on both
+// fresh databases and upgrades from the 000115 schema.
+func TestQuoteRevision_LifecycleMigration_FreshAndUpgrade(t *testing.T) {
+	ctx := context.Background()
+
+	lifecycleMigrationSQL := func(t *testing.T) string {
+		t.Helper()
+		contents, err := os.ReadFile("../../db/migration/000116_quote_revision_lifecycle.up.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(contents)
+	}
+
+	assertLifecycleTrigger := func(t *testing.T, pool *pgxpool.Pool) {
+		t.Helper()
+
+		// Minimal org + customer + project seed (mirrors the RLS fixture; the
+		// organization stays in provisioning — the lifecycle CHECK requires an
+		// active admin membership to activate, which this seed does not need).
+		for _, statement := range []string{
+			`INSERT INTO organizations (id, name, slug, status) VALUES
+			 ('` + rlsOrgA + `', 'RLS A', 'rls-a-lifecycle', 'provisioning')`,
+			`INSERT INTO customers (id, name, organization_id) VALUES
+			 ('30000000-0000-0000-0000-0000000000aa', 'Customer Lifecycle', '` + rlsOrgA + `')`,
+			`INSERT INTO projects (
+			 id, name, customer_id, status, organization_id, sales_organization_id, manufacturing_organization_id
+			) VALUES (
+			 '40000000-0000-0000-0000-0000000000aa', 'Lifecycle migration test',
+			 '30000000-0000-0000-0000-0000000000aa', 'draft',
+			 '` + rlsOrgA + `', '` + rlsOrgA + `', '` + rlsOrgA + `'
+			)`,
+		} {
+			if _, err := pool.Exec(ctx, statement); err != nil {
+				t.Fatalf("seed lifecycle migration db: %v\n%s", err, statement)
+			}
+		}
+
+		revID := "52000000-0000-0000-0000-0000000000aa"
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status)
+			VALUES ($1, $2, '40000000-0000-0000-0000-0000000000aa', 1, 'draft')
+		`, revID, rlsOrgA); err != nil {
+			t.Fatalf("seed draft revision: %v", err)
+		}
+
+		// draft → accepted / superseded rejected by the hardened trigger.
+		for _, target := range []string{"accepted", "superseded"} {
+			if _, err := pool.Exec(ctx, `UPDATE quote_revisions SET status=$2 WHERE id=$1`, revID, target); err == nil {
+				t.Fatalf("draft -> %s succeeded, want trigger rejection", target)
+			}
+		}
+		// draft → published is the only canonical draft transition.
+		if _, err := pool.Exec(ctx, `UPDATE quote_revisions SET status='published' WHERE id=$1`, revID); err != nil {
+			t.Fatalf("draft -> published failed, want success: %v", err)
+		}
+
+		// The installed function body carries the draft guard.
+		var prosrc string
+		if err := pool.QueryRow(ctx,
+			`SELECT prosrc FROM pg_proc WHERE proname='protect_quote_revision_immutability'`,
+		).Scan(&prosrc); err != nil {
+			t.Fatalf("read trigger function: %v", err)
+		}
+		if !strings.Contains(prosrc, "draft quote_revision can only transition to published") {
+			t.Fatal("protect_quote_revision_immutability body lacks the draft transition guard")
+		}
+	}
+
+	fresh := multiOrgFreshDB(t)
+	identityApplyThrough(t, fresh, 116)
+	assertLifecycleTrigger(t, fresh)
+
+	upgrade := multiOrgFreshDB(t)
+	identityApplyThrough(t, upgrade, 115)
+	if _, err := upgrade.Exec(ctx, lifecycleMigrationSQL(t)); err != nil {
+		t.Fatalf("upgrade apply 00116: %v", err)
+	}
+	assertLifecycleTrigger(t, upgrade)
+}
+
