@@ -3,13 +3,20 @@
 - Actualizado: 2026-09-04 America/Mexico_City
 - Feature: F211 — `Add end-to-end Digital Thread contract and regression suite (#398 / DT-14)`
 - Rama: `feat/398-digital-thread-e2e-regression-gate`
-- Estado: `done`
+- Estado: `done` (review round 1 CHANGES_REQUESTED → correcciones aplicadas; host TestUp
+  queda `REAL_HOST_REQUIRED` hasta producir evidencia en SketchUp real)
 - Resultados y verificación:
-  1. Fixture canónico unificado en `contracts/digitalThreadE2E.json`.
+  1. Fixture canónico unificado en `contracts/digitalThreadE2E.json` (invariantes C1–C9).
   2. Suite Go `backend-go/internal/storage/digital_thread_e2e_test.go` (9/9 tests pasando con PostgreSQL real, app-role `granete_app` RLS y triggers de inmutabilidad).
-  3. Suite Ruby `apps/sketchup-extension/test/unit/digital_thread_contract_test.rb` (403 tests, 0 fallos, `rake verify` verde) y smoke host `TC_DigitalThreadE2ESmoke.rb`.
-  4. Documentación arquitectónica canónica en `docs/architecture/digital-thread-e2e-regression-gate.md`.
+  3. Suite Ruby `apps/sketchup-extension/test/unit/digital_thread_contract_test.rb` (403 tests, 0 fallos, `rake verify` verde). Smoke host `TC_DigitalThreadE2ESmoke.rb`
+     corregido y ejecutable, pero **pendiente de ejecución en SketchUp real**
+     (`REAL_HOST_REQUIRED`; evidencia: `progress/host_smoke_F211_testup_ci.json`).
+  4. Documentación arquitectónica canónica en `docs/architecture/digital-thread-e2e-regression-gate.md`
+     (tabla de capas, boundary del path de artefactos, política de fixtures sin snapshot-blessing).
   5. Gates completos del repositorio: `go test ./...` verde, `bundle exec rake verify` verde, `pnpm openapi:check && pnpm test` verde (411 tests pasando). Detalle: `progress/implementation_398_dt14.md`.
+  6. Review independiente (`progress/review_398.md`): 7 cambios requeridos aplicados
+     (smoke ejecutable, Scenario F tipado + sin huérfanos, Scenario C sin FI-E, docs,
+     atribución honesta, numeración G/C vs canónica I1–I14, history).
 
 ## Historial previo — #395 DT-11
 

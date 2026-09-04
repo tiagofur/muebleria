@@ -147,7 +147,11 @@ module Granete
       end
 
       def builder
-        Library::FurnitureBuilder.new
+        # Without metadata_store the placement never stamps Granete identity
+        # metadata (MetadataWriter returns early), so ManagedFurniture.locate
+        # and ManifestBuilder would find nothing and every assertion in this
+        # smoke would fail. Same pattern as TC_ProjectFurnitureSmoke.
+        Model::FurnitureBuilder.new(metadata_store: metadata_store)
       end
 
       def add_unmanaged_decoration

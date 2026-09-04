@@ -69,12 +69,12 @@ func TestDigitalThreadE2E_ScenarioA_QuoteFirst(t *testing.T) {
 		}
 		fi002 = mat2.Instances[0].FurnitureInstanceID
 
-		// Invariant I1: Distinct physical units, never using QuoteLine ID.
+		// Contract invariant C1: distinct physical units, never using QuoteLine ID.
 		if fi001 == fi002 {
 			t.Fatalf("invariant violation: distinct physical units materialized identical ID %s", fi001)
 		}
 		if lineID1 == fi001 || lineID2 == fi002 {
-			t.Fatalf("invariant violation I1: QuoteLine ID used as physical unit identity")
+			t.Fatalf("contract invariant C1 violated: QuoteLine ID used as physical unit identity")
 		}
 
 		qRev, err := fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
@@ -364,7 +364,7 @@ func TestDigitalThreadE2E_ScenarioA_QuoteFirst(t *testing.T) {
 	// Publishing R2 post-release leaves P1 byte-identical, STILL pinned to R1 and F1.
 	p1AfterJSON := releaseRowJSON(t, fx.admin, releaseP1ID)
 	if p1BeforeJSON != p1AfterJSON {
-		t.Fatalf("invariant violation I7: ProductionRelease row mutated after R2 publish!\nBefore: %s\nAfter: %s",
+		t.Fatalf("contract invariant C7 violated: ProductionRelease row mutated after R2 publish!\nBefore: %s\nAfter: %s",
 			p1BeforeJSON, p1AfterJSON)
 	}
 
@@ -424,11 +424,11 @@ func TestDigitalThreadE2E_ScenarioB_QuantityGreaterThanOne(t *testing.T) {
 		fiC := matRes.Instances[2].FurnitureInstanceID
 
 		if fiA == fiB || fiB == fiC || fiA == fiC {
-			t.Fatalf("Digital Thread invariant I1 violated: QuoteLine qty=3 collapsed into duplicate identities: %s, %s, %s",
+			t.Fatalf("Digital Thread contract invariant C1 violated: QuoteLine qty=3 collapsed into duplicate identities: %s, %s, %s",
 				fiA, fiB, fiC)
 		}
 		if fiA == lineID || fiB == lineID || fiC == lineID {
-			t.Fatalf("Digital Thread invariant I1 violated: QuoteLine ID used as physical unit identity")
+			t.Fatalf("Digital Thread contract invariant C1 violated: QuoteLine ID used as physical unit identity")
 		}
 
 		qRev, err := fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
@@ -607,8 +607,17 @@ func TestDigitalThreadE2E_ScenarioC_DesignFirst(t *testing.T) {
 	}
 
 	var requoteRevisionID string
-	// Step 2: Explicit requote incorporates FI-D.
+	// Step 2: Explicit requote incorporates FI-D — and ONLY existing instances.
 	err = fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
+		before, err := fx.store.ListFurnitureInstancesByProject(txCtx, fiSharedProject, false)
+		if err != nil {
+			return err
+		}
+		beforeIDs := make(map[string]struct{}, len(before))
+		for _, fi := range before {
+			beforeIDs[fi.ID] = struct{}{}
+		}
+
 		requoteRes, err := fx.store.RequoteProjectQuote(txCtx, storage.RequoteProjectQuoteCommand{
 			ProjectID:           fiSharedProject,
 			BaseQuoteRevisionID: qRev1ID,
@@ -619,6 +628,23 @@ func TestDigitalThreadE2E_ScenarioC_DesignFirst(t *testing.T) {
 			return err
 		}
 		requoteRevisionID = requoteRes.Revision.ID
+
+		// Scenario C invariant: re-quote incorporates existing FurnitureInstances and
+		// never allocates a new physical identity (no FI-E) for the
+		// modeled_not_quoted unit it absorbs.
+		after, err := fx.store.ListFurnitureInstancesByProject(txCtx, fiSharedProject, false)
+		if err != nil {
+			return err
+		}
+		if len(after) != len(beforeIDs) {
+			t.Fatalf("Digital Thread Scenario C invariant violated: re-quote must not create FurnitureInstances; project had %d before re-quote, %d after",
+				len(beforeIDs), len(after))
+		}
+		for _, fi := range after {
+			if _, present := beforeIDs[fi.ID]; !present {
+				t.Fatalf("Digital Thread Scenario C invariant violated: re-quote allocated new identity %s; re-quote must reuse existing identities, never create FI-E", fi.ID)
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -821,6 +847,9 @@ func TestDigitalThreadE2E_ScenarioF_Concurrency_StaleBaseRejected(t *testing.T) 
 	fx := setupDesignsTestFixture(t)
 	actorA := fiActorA()
 
+	var errConflict error
+	var revR2ID, designFID string
+
 	err := fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
 		d, err := fx.store.CreateDesign(txCtx, storage.CreateDesignCommand{
 			ProjectID:   fiSharedProject,
@@ -887,25 +916,69 @@ func TestDigitalThreadE2E_ScenarioF_Concurrency_StaleBaseRejected(t *testing.T) 
 			t.Fatalf("expected R2 revision number 2, got %d", revR2.RevisionNumber)
 		}
 
+		revR2ID = revR2.ID
+		designFID = d.ID
+
 		// Client A now attempts to publish with baseRevisionId = R1 (stale).
-		// Must return 409 conflict and abort without mutating server state.
-		_, errConflict := fx.store.PublishDesignRevision(txCtx, storage.PublishDesignRevisionCommand{
+		// Must return 409 conflict and abort without mutating server state. The
+		// error is captured (not returned) so the R1+R2 state commits and the
+		// post-rejection state can be asserted below.
+		_, errConflict = fx.store.PublishDesignRevision(txCtx, storage.PublishDesignRevisionCommand{
 			DesignID:       d.ID,
 			SourceType:     domain.DesignRevisionSourceSketchup,
 			BaseRevisionID: revR1.ID,
 			ActorUserID:    rlsUserA,
 		})
-		if errConflict == nil {
-			t.Fatalf("expected 409 conflict when publishing against stale base revision R1, got nil")
-		}
-		if !errors.Is(errConflict, domain.ErrDesignRevisionConflict) && !strings.Contains(errConflict.Error(), "conflict") && !strings.Contains(errConflict.Error(), "stale") {
-			t.Logf("concurrency rejection error received as expected: %v", errConflict)
-		}
 
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("Scenario F failed: %v", err)
+	}
+
+	// Scenario F invariant: the rejection must be the typed 409 conflict — not any
+	// opaque error that happens to mention "conflict"/"stale".
+	if !errors.Is(errConflict, domain.ErrDesignRevisionConflict) {
+		t.Fatalf("Digital Thread Scenario F invariant violated: stale-base publish must fail with %v, got %v",
+			domain.ErrDesignRevisionConflict, errConflict)
+	}
+
+	// Scenario F invariant: the rejection must leave no trace — server head stays R2,
+	// no R3 was created from the stale base, and no artifact was finalized from
+	// the failed attempt.
+	err = fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
+		revs, err := fx.store.ListDesignRevisions(txCtx, designFID)
+		if err != nil {
+			return err
+		}
+		if len(revs) != 2 {
+			t.Fatalf("Digital Thread Scenario F invariant violated: stale-base publish must create no revision; design has %d revisions (want exactly R1+R2)", len(revs))
+		}
+		head := revs[len(revs)-1]
+		if head.ID != revR2ID || head.RevisionNumber != 2 {
+			t.Fatalf("Digital Thread Scenario F invariant violated: head must remain R2 (%s, number 2), got %s (number %d)",
+				revR2ID, head.ID, head.RevisionNumber)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Scenario F post-state check failed: %v", err)
+	}
+
+	// The direct snapshot publish path (#387) must not finalize artifacts; if a
+	// future change finalized artifacts before the conflict check, this catches
+	// the orphan. Artifact lifecycle itself is consumed from #392 (see gate doc).
+	var finalizedArtifacts int
+	if err := fx.admin.QueryRow(context.Background(), `
+	SELECT count(*)
+	FROM design_revision_artifacts a
+	JOIN design_revisions r ON r.id = a.design_revision_id
+	WHERE r.design_id = $1`, designFID).Scan(&finalizedArtifacts); err != nil {
+		t.Fatal(err)
+	}
+	if finalizedArtifacts != 0 {
+		t.Fatalf("Digital Thread Scenario F invariant violated: stale-base publish finalized %d artifacts (want 0)",
+			finalizedArtifacts)
 	}
 }
 

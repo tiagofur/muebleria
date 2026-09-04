@@ -85,15 +85,16 @@
       "pinnedRevision": 3
     }
   },
+  "invariantsNumbering": "The IDs below are CONTRACT-FIXTURE-LOCAL (C1..C9). They intentionally do NOT reuse the canonical Digital Thread invariant numbering I1..I14, whose authority is docs/architecture/project-design-digital-thread.md §3 (e.g. C5 here is NOT spec I5).",
   "invariants": {
-    "I1": "QuoteLine.id != FurnitureInstance.id",
-    "I2": "SketchUp persistent_id != FurnitureInstance.id",
-    "I3": "No invented local FurnitureInstance IDs without backend authority",
-    "I4": "Exact QuoteRevision and DesignRevision IDs are strictly required for reconciliation",
-    "I5": "Accepted QuoteRevision and published DesignRevision are immutable",
-    "I6": "ProductionRelease is immutable and pinned to exact revisions + fingerprint",
-    "I7": "Publishing R(N+1) never mutates or retargets existing ProductionRelease",
-    "I8": "Cross-project linking is strictly rejected at database and service boundary",
-    "I9": "Multi-tenant RLS prevents foreign organizations from mutating Digital Thread state"
+    "C1": "QuoteLine.id != FurnitureInstance.id",
+    "C2": "SketchUp persistent_id != FurnitureInstance.id",
+    "C3": "No invented local FurnitureInstance IDs without backend authority",
+    "C4": "Exact QuoteRevision and DesignRevision IDs are strictly required for reconciliation",
+    "C5": "Accepted QuoteRevision and published DesignRevision are immutable",
+    "C6": "ProductionRelease is immutable and pinned to exact revisions + fingerprint",
+    "C7": "Publishing R(N+1) never mutates or retargets existing ProductionRelease",
+    "C8": "Cross-project linking is strictly rejected at database and service boundary",
+    "C9": "Multi-tenant RLS prevents foreign organizations from mutating Digital Thread state"
   }
 }

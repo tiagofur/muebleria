@@ -111,31 +111,67 @@ Every scenario in this gate executes under server authority, row-level security 
   1. Release `P1` created pinning `R3` and `Q3`.
   2. Engineering publishes `R4` and `R5`.
   3. Querying `P1` proves `design_revision_id` remains `R3` and `quote_revision_id` remains `Q3`.
-  4. Database trigger `protect_production_release_immutability` blocks any `UPDATE` or `DELETE` on `production_releases` at the SQL level.
+  4. SQL-level immutability of `production_releases` (trigger `protect_production_release_immutability` blocking `UPDATE`/`DELETE`) is proven by the #395 suite (`TestProductionRelease_ReleaseRowsAreImmutableHistory`); this gate consumes that proof and re-proves only the durability of the pins after `R4`/`R5`.
 
 ---
 
 ## 3. Invariants Matrix
 
+> **Numbering scope:** the IDs below are gate-local (**G1–G9**). The canonical Digital Thread
+> invariant numbering is **I1–I14** in `docs/architecture/project-design-digital-thread.md` §3
+> and must remain the normative reference; the shared fixture
+> `contracts/digitalThreadE2E.json` prefixes its own contract invariants as **C1–C9**.
+> Gate-local IDs, spec IDs and contract IDs are deliberately distinct so a test
+> failure message can never be mistaken for a canonical spec invariant (or vice versa).
+
 | ID | Invariant Name | Enforcement Layer | Automated Proof |
 |---|---|---|---|
-| **I1** | Exact Identity Persistence | DB / Go / Ruby | `TestDigitalThreadE2E_ScenarioA_QuoteFirst`, `test_scenario_a_quote_first_contract_conformance` |
-| **I2** | Qty > 1 Physical Individuation | Go Storage / Domain | `TestDigitalThreadE2E_ScenarioB_QuantityGreaterThanOne`, `test_scenario_b_quantity_multiple_manifest_filtering` |
-| **I3** | Design-First Provenance | Go Storage / Domain | `TestDigitalThreadE2E_ScenarioC_DesignFirst` |
-| **I4** | No Implicit Latest | DB Foreign Keys / Go | `TestDigitalThreadE2E_ScenarioF_Concurrency_StaleBaseRejected` |
-| **I5** | Server-Authoritative UUIDs | DB / Ruby Resolver | `TestDigitalThreadE2E_ScenarioD_DuplicateIdentity`, `test_scenario_d_duplicate_identity_preflight_and_resolution` |
-| **I6** | Managed-Only Scope | Go / Ruby ManifestBuilder | `TestDigitalThreadE2E_ScenarioE_SemanticScope_UnmanagedExclusion`, `test_scenario_e_unmanaged_geometry_exclusion` |
-| **I7** | Top-Level ComponentInstance Hierarchy | Ruby Native Model | `test_invariant_i7_nested_subcomponents_do_not_produce_root_instances` |
-| **I8** | Deterministic Hashing & Parity | Go Storage / JSON Hashing | `TestDigitalThreadE2E_DeterministicFingerprintParity`, `test_invariant_i8_deterministic_manifest_serialization` |
-| **I9** | Multi-Org RLS & Fail-Closed Isolation | PostgreSQL RLS / DB Triggers | `TestDigitalThreadE2E_NegativeProofs`, `test_invariant_i9_fail_closed_session_parser` |
+| **G1** | Exact Identity Persistence | DB / Go / Ruby | `TestDigitalThreadE2E_ScenarioA_QuoteFirst`, `test_scenario_a_quote_first_contract_conformance` |
+| **G2** | Qty > 1 Physical Individuation | Go Storage / Domain | `TestDigitalThreadE2E_ScenarioB_QuantityGreaterThanOne`, `test_scenario_b_quantity_multiple_manifest_filtering` |
+| **G3** | Design-First Provenance | Go Storage / Domain | `TestDigitalThreadE2E_ScenarioC_DesignFirst` |
+| **G4** | No Implicit Latest | DB Foreign Keys / Go | `TestDigitalThreadE2E_ScenarioF_Concurrency_StaleBaseRejected` |
+| **G5** | Server-Authoritative UUIDs | DB / Ruby Resolver | `TestDigitalThreadE2E_ScenarioD_DuplicateIdentity`, `test_scenario_d_duplicate_identity_preflight_and_resolution` |
+| **G6** | Managed-Only Scope | Go / Ruby ManifestBuilder | `TestDigitalThreadE2E_ScenarioE_SemanticScope_UnmanagedExclusion`, `test_scenario_e_unmanaged_geometry_exclusion` |
+| **G7** | Top-Level ComponentInstance Hierarchy | Ruby Native Model | `test_invariant_g7_nested_subcomponents_do_not_produce_root_instances` |
+| **G8** | Deterministic Hashing & Parity | Go Storage / JSON Hashing | `TestDigitalThreadE2E_DeterministicFingerprintParity`, `test_invariant_g8_deterministic_manifest_serialization` |
+| **G9** | Multi-Org RLS & Fail-Closed Isolation | PostgreSQL RLS / DB Triggers | `TestDigitalThreadE2E_NegativeProofs`, `test_invariant_g9_fail_closed_session_parser` |
 
 ---
 
-## 4. Execution Commands
+## 4. Proof-Layer Status & Boundaries
+
+### Layer status
+
+| Layer | Status | How it runs |
+|---|---|---|
+| Domain (classification, reconciliation, fingerprint) | **CI green** | Exercised through the Go E2E suite via real storage commands |
+| Backend / PostgreSQL E2E (RLS `granete_app` NOBYPASSRLS, tenant tx, immutability triggers) | **CI green (required)** | Job `backend-go` runs `go test -p 1 ./...` with a postgres:16 service container and a mandatory `DATABASE_URL` (anti-false-green, OC-002). Locally without `DATABASE_URL` the shared fixture **skips** — set `DATABASE_URL` to run the gate against real PostgreSQL |
+| Ruby client contract (SketchupStub) | **CI green (required)** | Job `sketchup-extension` runs `bundle exec rake verify` on 3 OS |
+| Shared contract fixture (`contracts/digitalThreadE2E.json`) | **CI green** | Pinned by the Ruby contract suite; invariants C1–C9 |
+| Real SketchUp host (TestUp) | **`REAL_HOST_REQUIRED`** | `TC_DigitalThreadE2ESmoke.rb` is the executable scenario; CI cannot run SketchUp, so this layer must NEVER be reported green from stubs. Evidence convention: run the suite in SketchUp TestUp against the installed RBZ and record `progress/host_smoke_F211_testup_ci.json` (TestUp::CIJsonReporter). Until that artifact exists, report this layer as pending |
+
+### Consumed from focused suites (not re-proved by this gate)
+
+This gate composes real production paths; it deliberately does not duplicate proofs that live in the focused suites of #385–#395:
+
+- **Idempotency** of create/duplicate/publish/requote/approve/release → #385 (materialize convergence), #392 (finalize idempotent per session), #395 (`TestProductionRelease_ApprovalLifecycleAndIdempotency`).
+- **Historical reconciliation stability** (reconcile(Q1,R1) unchanged when Q2/R2 exist) → #393 (`TestReconciliation_HistoricalQuote_OldQuoteRevisionStaysOld`).
+- **Join strictly by `FurnitureInstance.id`** (never name/definition/geometry/transform) → #385/#393 identity suites.
+- **`.skp` / `manifest.json` / preview artifact lifecycle and immutability** → #392 (`FinalizeDesignPublish` suite).
+
+### Publish-path boundary
+
+The Go E2E scenarios publish via the direct snapshot path (`PublishDesignRevision`, #387): the revision is the immutable working-copy snapshot. The staged artifact path — upload session, `model.skp` + manifest + preview, `FinalizeDesignPublish` — belongs to #392 and its immutability is consumed, not re-proved, by this gate (Scenario F additionally pins that a rejected stale publish finalizes zero `design_revision_artifacts` rows).
+
+---
+
+## 5. Execution Commands
 
 ### Go Backend E2E Suite
 ```bash
 cd backend-go
+# Requires a real PostgreSQL (the suite skips without it):
+export DATABASE_URL='postgres://... '
 go test -v -run "TestDigitalThreadE2E" ./internal/storage
 ```
 
@@ -146,10 +182,12 @@ eval "$(rbenv init - zsh)"
 bundle exec rake verify
 ```
 
-### Host Smoke in TestUp
+### Host Smoke in TestUp — `REAL_HOST_REQUIRED`
 ```bash
-# Executed in SketchUp TestUp runner:
+# Executed in SketchUp TestUp runner against the INSTALLED RBZ
+# (not the repo checkout — the smoke fails closed if loaded from checkout):
 # Suite: Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke
+# Record evidence as progress/host_smoke_F211_testup_ci.json
 ```
 
 ### Full Repository Verification
@@ -164,3 +202,21 @@ cd apps/sketchup-extension && bundle exec rake verify
 pnpm openapi:check
 pnpm test
 ```
+
+---
+
+## 6. Fixtures & Golden Policy (no snapshot blessing)
+
+Every canonical fixture in this gate is **deterministic and explicit**:
+
+- Stable, explicit UUIDs for `projectId`, definitions, and expected `furnitureInstanceIds` come from `contracts/digitalThreadE2E.json`.
+- Server-generated IDs (e.g. `revR1ID`, release fingerprint) are **captured from the real command result** and then compared explicitly — never predicted, never randomized into an assertion.
+- Assertions compare **semantic values** (statuses, exact pins, counts, byte-identical serializations of the same row), not opaque blobs.
+
+Rules for adding or updating fixtures:
+
+1. **Add identities to the contract fixture first** (`contracts/digitalThreadE2E.json`), then reference them from the Go/Ruby suites. Do not inline new magic UUIDs into tests.
+2. **Never bless a failing golden blindly.** If an expected value changes, the PR must document *why the contract changed* (which slice, which spec section) in the test/commit message. A golden update without a semantic explanation is a review blocker.
+3. **No random business identities in assertions.** If a test needs a server-generated ID, capture it from the authoritative response and compare it across steps (e.g. before/after serialization of the same row).
+4. **Failure messages must name the broken contract** (scenario + invariant), following the existing style: `"Digital Thread Scenario F invariant violated: stale-base publish must create no revision…"`.
+5. New unmanaged-geometry variants for Scenario E belong in the Ruby manifest suite; the Go gate proves the storage-side consequence (only managed items reach `design_revision_items`).

@@ -20,12 +20,15 @@ require_relative '../../src/granete_for_sketchup/connection/design_publish'
 # Validates client-side compliance with contracts/digitalThreadE2E.json:
 # - Scenario A (Quote-first): Root placement, parameter fidelity, transform preservation
 # - Scenario B (Quantity > 1): Placed subset in manifest, unplaced excluded
-# - Scenario C (Design-first): Catalog placement identity
 # - Scenario D (Duplicate identity): In-host duplicate detection and resolution (origin: duplicate)
 # - Scenario E (Unmanaged exclusion): Raw geometry and unmanaged groups excluded from manifest
-# - Invariant I7: Component Definition is not identity; nested sub-parts are not top-level roots
-# - Invariant I8: Deterministic manifest serialization
-# - Invariant I9: Fail-closed verification
+# - Invariant G7: Component Definition is not identity; nested sub-parts are not top-level roots
+# - Invariant G8: Deterministic manifest serialization
+# - Invariant G9: Fail-closed verification
+#
+# Catalog placement identity (Scenario C, design-first) is covered by
+# project_furniture_test.rb (#389), which pins the placer against the real
+# backend contract; this suite does not duplicate it.
 class DigitalThreadContractTest < Minitest::Test
   CONTRACT_PATH = File.expand_path('../../../../contracts/digitalThreadE2E.json', __dir__)
 
@@ -300,8 +303,8 @@ class DigitalThreadContractTest < Minitest::Test
     assert_equal managed_id, manifest['items'][0]['furnitureInstanceId']
   end
 
-  # Invariant I7: ComponentDefinition is not identity; nested subcomponents are not top-level roots
-  def test_invariant_i7_nested_subcomponents_do_not_produce_root_instances
+  # Invariant G7: ComponentDefinition is not identity; nested subcomponents are not top-level roots
+  def test_invariant_g7_nested_subcomponents_do_not_produce_root_instances
     def_id = @contract['canonicalEntities']['definitions']['gabinete1p']['id']
     root_id = 'f1000000-0000-4000-8000-000000000001'
 
@@ -351,8 +354,8 @@ class DigitalThreadContractTest < Minitest::Test
     assert_equal root_id, manifest['items'][0]['furnitureInstanceId']
   end
 
-  # Invariant I8: Deterministic manifest serialization
-  def test_invariant_i8_deterministic_manifest_serialization
+  # Invariant G8: Deterministic manifest serialization
+  def test_invariant_g8_deterministic_manifest_serialization
     def_id = @contract['canonicalEntities']['definitions']['gabinete1p']['id']
     create_managed(id: 'f2000000-0000-4000-8000-000000000002', def_id: def_id, name: 'B')
     create_managed(id: 'f1000000-0000-4000-8000-000000000001', def_id: def_id, name: 'A')
@@ -371,8 +374,8 @@ class DigitalThreadContractTest < Minitest::Test
     assert_equal 2, manifest1['items'].length
   end
 
-  # Invariant I9: Fail-closed on corrupted or unknown server session responses
-  def test_invariant_i9_fail_closed_session_parser
+  # Invariant G9: Fail-closed on corrupted or unknown server session responses
+  def test_invariant_g9_fail_closed_session_parser
     # Missing required keys
     assert_raises(ArgumentError) do
       DP::Contract.parse_session!('id' => '54000000-0000-0000-0000-000000000001')
