@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -11,7 +12,168 @@ import (
 
 // #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance
 // (ADR-0003, digital-thread §§15–16, 25, 26, 28, 30–31).
-//
+
+// CreateQuoteRevisionCommand holds parameters to record an immutable QuoteRevision snapshot.
+type CreateQuoteRevisionCommand struct {
+	ID             string
+	OrganizationID string
+	ProjectID      string
+	RevisionNumber int
+	Status         string
+	SourceType     string
+	Notes          string
+	CreatedBy      string
+	Items          []CreateQuoteRevisionItemCommand
+}
+
+// CreateQuoteRevisionItemCommand holds parameters for one physical furniture unit snapshot.
+type CreateQuoteRevisionItemCommand struct {
+	FurnitureInstanceID   string
+	FurnitureDefinitionID string
+	DefinitionVersion     *int
+	Parameters            map[string]any
+	MaterialChoices       map[string]string
+	LifecycleStatus       string
+}
+
+// CreateQuoteRevision persists an immutable historical commercial revision snapshot and its items.
+func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuoteRevisionCommand) (*domain.QuoteRevision, error) {
+	if !isValidUUID(cmd.ProjectID) {
+		return nil, domain.ErrInvalidRevisionID
+	}
+
+	var projectOrgID string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT organization_id FROM projects WHERE id = $1
+	`, cmd.ProjectID).Scan(&projectOrgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignNotFound
+		}
+		return nil, err
+	}
+
+	orgID := cmd.OrganizationID
+	if orgID == "" {
+		orgID = projectOrgID
+	}
+
+	status := strings.TrimSpace(cmd.Status)
+	if status == "" {
+		status = "published"
+	}
+	sourceType := strings.TrimSpace(cmd.SourceType)
+	if sourceType == "" {
+		sourceType = "manual"
+	}
+
+	revNum := cmd.RevisionNumber
+	if revNum <= 0 {
+		err = s.db(ctx).QueryRow(ctx, `
+			SELECT COALESCE(MAX(revision_number), 0) + 1
+			FROM quote_revisions
+			WHERE project_id = $1
+		`, cmd.ProjectID).Scan(&revNum)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	quoteRevID := strings.TrimSpace(cmd.ID)
+	if quoteRevID != "" && !isValidUUID(quoteRevID) {
+		return nil, domain.ErrInvalidRevisionID
+	}
+
+	var createdBy *string
+	if isValidUUID(cmd.CreatedBy) {
+		cb := cmd.CreatedBy
+		createdBy = &cb
+	}
+
+	var rev domain.QuoteRevision
+	var insertQuery string
+	var args []any
+	if quoteRevID != "" {
+		insertQuery = `
+			INSERT INTO quote_revisions (
+				id, organization_id, project_id, revision_number,
+				status, source_type, notes, created_by
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, '')
+		`
+		args = []any{quoteRevID, orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy}
+	} else {
+		insertQuery = `
+			INSERT INTO quote_revisions (
+				organization_id, project_id, revision_number,
+				status, source_type, notes, created_by
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, '')
+		`
+		args = []any{orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy}
+	}
+
+	err = s.db(ctx).QueryRow(ctx, insertQuery, args...).Scan(
+		&rev.ID,
+		&rev.OrganizationID,
+		&rev.ProjectID,
+		&rev.RevisionNumber,
+		&rev.Status,
+		&rev.SourceType,
+		&rev.Notes,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, item := range cmd.Items {
+		if !isValidUUID(item.FurnitureInstanceID) {
+			return nil, domain.ErrInvalidRevisionID
+		}
+		var defID *string
+		if isValidUUID(item.FurnitureDefinitionID) {
+			d := item.FurnitureDefinitionID
+			defID = &d
+		}
+		paramsJSON := []byte("{}")
+		if item.Parameters != nil {
+			p, err := json.Marshal(item.Parameters)
+			if err != nil {
+				return nil, err
+			}
+			paramsJSON = p
+		}
+		matJSON := []byte("{}")
+		if item.MaterialChoices != nil {
+			m, err := json.Marshal(item.MaterialChoices)
+			if err != nil {
+				return nil, err
+			}
+			matJSON = m
+		}
+		lifecycle := strings.TrimSpace(item.LifecycleStatus)
+		if lifecycle == "" {
+			lifecycle = "active"
+		}
+
+		_, err = s.db(ctx).Exec(ctx, `
+			INSERT INTO quote_revision_items (
+				organization_id, project_id, quote_revision_id,
+				furniture_instance_id, furniture_definition_id,
+				definition_version, parameters, material_choices, lifecycle_status
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`, orgID, cmd.ProjectID, rev.ID, item.FurnitureInstanceID, defID, item.DefinitionVersion, paramsJSON, matJSON, lifecycle)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &rev, nil
+}
+
 // ReconcileProject performs a pure deterministic comparison between an exact
 // QuoteRevision and an exact DesignRevision for the specified project.
 // Both sides must belong to projectID and to the caller's tenant scope.
@@ -48,164 +210,74 @@ func (s *PostgresStore) ReconcileProject(ctx context.Context, projectID, quoteRe
 		return nil, domain.ErrCrossProjectReconciliation
 	}
 
-	// 3. Verify QuoteRevision. In current compatibility mode, verify that quoteRevisionID
-	// does not belong to another project.
-	var otherProjectID string
+	// 3. Load QuoteRevision and verify same-project invariant.
+	var qrProjectID, qrStatus string
 	err = s.db(ctx).QueryRow(ctx, `
-		SELECT id FROM projects WHERE id = $1 AND id != $2
-	`, quoteRevisionID, projectID).Scan(&otherProjectID)
-	if err == nil {
-		return nil, domain.ErrCrossProjectReconciliation
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+		SELECT project_id, status FROM quote_revisions WHERE id = $1
+	`, quoteRevisionID).Scan(&qrProjectID, &qrStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrQuoteRevisionNotFound
+		}
 		return nil, err
 	}
-
-	err = s.db(ctx).QueryRow(ctx, `
-		SELECT project_id FROM quote_snapshots WHERE id = $1 AND project_id != $2
-	`, quoteRevisionID, projectID).Scan(&otherProjectID)
-	if err == nil {
+	if qrProjectID != projectID {
 		return nil, domain.ErrCrossProjectReconciliation
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
 	}
 
-	err = s.db(ctx).QueryRow(ctx, `
-		SELECT project_id FROM designs WHERE source_quote_revision_id = $1 AND project_id != $2
-	`, quoteRevisionID, projectID).Scan(&otherProjectID)
-	if err == nil {
-		return nil, domain.ErrCrossProjectReconciliation
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
-	}
-
-	// 4. Load Commercial Items Snapshot from quote_line_furniture_instances
-	commercialItems := []domain.CommercialItemSnapshot{}
-	commercialItemsByID := make(map[string]domain.CommercialItemSnapshot)
-
-	rows, err := s.db(ctx).Query(ctx, `
+	// 4. Load Commercial Items Snapshot from quote_revision_items
+	// Historical commercial snapshot is immutable and scoped strictly to this QuoteRevision.
+	commercialRows, err := s.db(ctx).Query(ctx, `
 		SELECT
-			fi.id,
-			COALESCE(fi.furniture_definition_id::text, ''),
-			fi.lifecycle_status,
-			COALESCE(pi.module_id::text, ''),
-			pi.custom_dims,
-			COALESCE(m.width_mm, 0),
-			COALESCE(m.height_mm, 0),
-			COALESCE(m.depth_mm, 0)
-		FROM quote_line_furniture_instances ql
-		JOIN furniture_instances fi ON fi.id = ql.furniture_instance_id
-		JOIN project_items pi ON pi.id = ql.quote_line_id
-		LEFT JOIN modules m ON m.id = COALESCE(fi.furniture_definition_id, pi.module_id)
-		WHERE ql.project_id = $1
-		  AND ql.state = 'current'
-		ORDER BY fi.created_at, fi.id
-	`, projectID)
+			furniture_instance_id,
+			COALESCE(furniture_definition_id::text, ''),
+			definition_version,
+			parameters,
+			material_choices,
+			lifecycle_status
+		FROM quote_revision_items
+		WHERE quote_revision_id = $1
+		ORDER BY furniture_instance_id
+	`, quoteRevisionID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer commercialRows.Close()
 
-	for rows.Next() {
-		var fiID, fiDefID, fiLifecycle, piModuleID string
-		var customDimsJSON []byte
-		var mW, mH, mD int
-		if err := rows.Scan(&fiID, &fiDefID, &fiLifecycle, &piModuleID, &customDimsJSON, &mW, &mH, &mD); err != nil {
+	commercialItems := []domain.CommercialItemSnapshot{}
+	for commercialRows.Next() {
+		var fiID, defID, lifecycle string
+		var defVersion *int
+		var paramsJSON, matJSON []byte
+		if err := commercialRows.Scan(&fiID, &defID, &defVersion, &paramsJSON, &matJSON, &lifecycle); err != nil {
 			return nil, err
 		}
 
-		defID := fiDefID
-		if defID == "" {
-			defID = piModuleID
-		}
-
 		params := make(map[string]any)
-		if len(customDimsJSON) > 0 && string(customDimsJSON) != "null" {
-			var dims map[string]any
-			if err := json.Unmarshal(customDimsJSON, &dims); err == nil {
-				for k, v := range dims {
-					params[k] = v
-				}
+		if len(paramsJSON) > 0 && string(paramsJSON) != "null" {
+			if err := json.Unmarshal(paramsJSON, &params); err != nil {
+				return nil, domain.ErrInvalidRevisionSnapshot
 			}
 		}
-		// Fallback to module defaults for widthMm, heightMm, depthMm if not set
-		if _, ok := params["widthMm"]; !ok && mW > 0 {
-			params["widthMm"] = mW
-		}
-		if _, ok := params["heightMm"]; !ok && mH > 0 {
-			params["heightMm"] = mH
-		}
-		if _, ok := params["depthMm"]; !ok && mD > 0 {
-			params["depthMm"] = mD
+
+		matChoices := make(map[string]string)
+		if len(matJSON) > 0 && string(matJSON) != "null" {
+			if err := json.Unmarshal(matJSON, &matChoices); err != nil {
+				return nil, domain.ErrInvalidRevisionSnapshot
+			}
 		}
 
-		item := domain.CommercialItemSnapshot{
+		commercialItems = append(commercialItems, domain.CommercialItemSnapshot{
 			FurnitureInstanceID:   fiID,
 			FurnitureDefinitionID: defID,
+			DefinitionVersion:     defVersion,
 			Parameters:            params,
-			MaterialChoices:       make(map[string]string),
-			LifecycleStatus:       fiLifecycle,
-		}
-		commercialItemsByID[fiID] = item
+			MaterialChoices:       matChoices,
+			LifecycleStatus:       lifecycle,
+		})
 	}
-	if err := rows.Err(); err != nil {
+	if err := commercialRows.Err(); err != nil {
 		return nil, err
-	}
-
-	// Load material choices for the linked quote lines
-	matRows, err := s.db(ctx).Query(ctx, `
-		SELECT
-			ql.furniture_instance_id,
-			pic.option_group_code,
-			pic.choice_entity_id::text
-		FROM quote_line_furniture_instances ql
-		JOIN project_item_choices pic ON pic.project_item_id = ql.quote_line_id
-		WHERE ql.project_id = $1
-		  AND ql.state = 'current'
-	`, projectID)
-	if err == nil {
-		defer matRows.Close()
-		for matRows.Next() {
-			var fiID, groupCode, choiceID string
-			if err := matRows.Scan(&fiID, &groupCode, &choiceID); err == nil {
-				if item, ok := commercialItemsByID[fiID]; ok {
-					item.MaterialChoices[groupCode] = choiceID
-					commercialItemsByID[fiID] = item
-				}
-			}
-		}
-	}
-
-	// Also load terminal furniture instances (removed or cancelled) for this project
-	termRows, err := s.db(ctx).Query(ctx, `
-		SELECT id, COALESCE(furniture_definition_id::text, ''), lifecycle_status
-		FROM furniture_instances
-		WHERE project_id = $1
-		  AND lifecycle_status IN ('removed', 'cancelled')
-		ORDER BY created_at, id
-	`, projectID)
-	if err == nil {
-		defer termRows.Close()
-		for termRows.Next() {
-			var fiID, defID, status string
-			if err := termRows.Scan(&fiID, &defID, &status); err == nil {
-				if item, ok := commercialItemsByID[fiID]; ok {
-					item.LifecycleStatus = status
-					commercialItemsByID[fiID] = item
-				} else {
-					commercialItemsByID[fiID] = domain.CommercialItemSnapshot{
-						FurnitureInstanceID:   fiID,
-						FurnitureDefinitionID: defID,
-						Parameters:            make(map[string]any),
-						MaterialChoices:       make(map[string]string),
-						LifecycleStatus:       status,
-					}
-				}
-			}
-		}
-	}
-
-	for _, item := range commercialItemsByID {
-		commercialItems = append(commercialItems, item)
 	}
 
 	// 5. Load DesignRevision items
@@ -252,17 +324,22 @@ func (s *PostgresStore) ReconcileProject(ctx context.Context, projectID, quoteRe
 		item.DefinitionVersion = defVersion
 		item.Parameters = make(map[string]any)
 		if len(paramsJSON) > 0 && string(paramsJSON) != "null" {
-			_ = json.Unmarshal(paramsJSON, &item.Parameters)
+			if err := json.Unmarshal(paramsJSON, &item.Parameters); err != nil {
+				return nil, domain.ErrInvalidRevisionSnapshot
+			}
 		}
 		item.MaterialChoices = make(map[string]string)
 		if len(matJSON) > 0 && string(matJSON) != "null" {
-			_ = json.Unmarshal(matJSON, &item.MaterialChoices)
+			if err := json.Unmarshal(matJSON, &item.MaterialChoices); err != nil {
+				return nil, domain.ErrInvalidRevisionSnapshot
+			}
 		}
 		if len(transformJSON) > 0 && string(transformJSON) != "null" {
 			var tf domain.Transform3D
-			if err := json.Unmarshal(transformJSON, &tf); err == nil {
-				item.Transform = &tf
+			if err := json.Unmarshal(transformJSON, &tf); err != nil {
+				return nil, domain.ErrInvalidRevisionSnapshot
 			}
+			item.Transform = &tf
 		}
 		designItems = append(designItems, item)
 	}

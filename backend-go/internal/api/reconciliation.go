@@ -13,13 +13,6 @@ import (
 // #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance
 // (ADR-0003, digital-thread §§15–16, 25, 26, 28, 30–31).
 
-type reconcileRequestPayload struct {
-	QuoteRevisionID       string `json:"quoteRevisionId"`
-	QuoteRevisionIDSnake  string `json:"quote_revision_id"`
-	DesignRevisionID      string `json:"designRevisionId"`
-	DesignRevisionIDSnake string `json:"design_revision_id"`
-}
-
 // HandleProjectReconciliation handles POST /api/projects/{projectId}/reconciliation.
 // It performs a pure, read-only deterministic comparison between an exact QuoteRevision
 // and an exact DesignRevision.
@@ -40,20 +33,14 @@ func (s *Server) HandleProjectReconciliation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var payload reconcileRequestPayload
+	var payload openapi.ReconcileProjectDesignRequest
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "cuerpo de solicitud inválido", nil)
 		return
 	}
 
-	quoteRevID := strings.TrimSpace(payload.QuoteRevisionID)
-	if quoteRevID == "" {
-		quoteRevID = strings.TrimSpace(payload.QuoteRevisionIDSnake)
-	}
-	designRevID := strings.TrimSpace(payload.DesignRevisionID)
-	if designRevID == "" {
-		designRevID = strings.TrimSpace(payload.DesignRevisionIDSnake)
-	}
+	quoteRevID := strings.TrimSpace(payload.QuoteRevisionId)
+	designRevID := strings.TrimSpace(payload.DesignRevisionId)
 
 	if !isValidUUID(quoteRevID) || !isValidUUID(designRevID) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "quoteRevisionId y designRevisionId deben ser UUID válidos", nil)
@@ -69,6 +56,10 @@ func (s *Server) HandleProjectReconciliation(w http.ResponseWriter, r *http.Requ
 			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "proyecto no encontrado", nil)
 		case errors.Is(err, domain.ErrDesignRevisionNotFound):
 			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "revisión de diseño no encontrada", nil)
+		case errors.Is(err, domain.ErrQuoteRevisionNotFound):
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "revisión comercial no encontrada", nil)
+		case errors.Is(err, domain.ErrInvalidRevisionSnapshot):
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "invalid revision snapshot: corrupt or malformed payload", nil)
 		case errors.Is(err, domain.ErrInvalidRevisionID):
 			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "revision ID inválido", nil)
 		default:

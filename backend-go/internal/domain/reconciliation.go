@@ -44,7 +44,21 @@ var (
 	ErrCrossProjectReconciliation = errors.New("cross-project reconciliation rejected")
 	ErrInvalidRevisionID          = errors.New("invalid revision ID")
 	ErrMissingProjectID           = errors.New("missing project ID")
+	ErrQuoteRevisionNotFound      = errors.New("quote revision not found")
+	ErrInvalidRevisionSnapshot    = errors.New("invalid revision snapshot: corrupt or malformed payload")
 )
+
+// QuoteRevision represents an immutable commercial revision snapshot entity.
+type QuoteRevision struct {
+	ID             string `json:"id"`
+	OrganizationID string `json:"organization_id"`
+	ProjectID      string `json:"project_id"`
+	RevisionNumber int    `json:"revision_number"`
+	Status         string `json:"status"`
+	SourceType     string `json:"source_type"`
+	Notes          string `json:"notes,omitempty"`
+	CreatedBy      string `json:"created_by,omitempty"`
+}
 
 // StructuredDifference captures a specific property difference between quote and design.
 type StructuredDifference struct {
@@ -85,6 +99,7 @@ type ReconciliationResult struct {
 type CommercialItemSnapshot struct {
 	FurnitureInstanceID   string            `json:"furnitureInstanceId"`
 	FurnitureDefinitionID string            `json:"furnitureDefinitionId,omitempty"`
+	DefinitionVersion     *int              `json:"definitionVersion,omitempty"`
 	Parameters            map[string]any    `json:"parameters,omitempty"`
 	MaterialChoices       map[string]string `json:"materialChoices,omitempty"`
 	LifecycleStatus       string            `json:"lifecycleStatus,omitempty"`
@@ -323,6 +338,15 @@ func compareItems(quote CommercialItemSnapshot, design DesignRevisionItem) []Str
 			Path:        "furnitureDefinitionId",
 			QuoteValue:  qDef,
 			DesignValue: dDef,
+		})
+	}
+
+	// 1b. Definition version comparison (if specified in both)
+	if quote.DefinitionVersion != nil && design.DefinitionVersion != nil && *quote.DefinitionVersion != *design.DefinitionVersion {
+		diffs = append(diffs, StructuredDifference{
+			Path:        "definitionVersion",
+			QuoteValue:  *quote.DefinitionVersion,
+			DesignValue: *design.DefinitionVersion,
 		})
 	}
 

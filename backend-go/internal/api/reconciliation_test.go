@@ -141,6 +141,32 @@ func TestHandleProjectReconciliation_NotFound(t *testing.T) {
 	if w2.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for design revision not found, got %d", w2.Code)
 	}
+
+	// QuoteRevision not found
+	storeQuoteNotFound := &stubStore{reconcileProjectErr: domain.ErrQuoteRevisionNotFound}
+	server3 := &Server{Store: storeQuoteNotFound}
+
+	req3 := httptest.NewRequest(http.MethodPost, "/api/projects/10000000-0000-0000-0000-000000000001/reconciliation", bytes.NewBufferString(`{"quoteRevisionId":"20000000-0000-0000-0000-000000000001","designRevisionId":"30000000-0000-0000-0000-000000000001"}`))
+	req3.SetPathValue("projectId", "10000000-0000-0000-0000-000000000001")
+	req3 = withTestClaims(req3, "user-1", []domain.UserRole{domain.RoleAdmin})
+	w3 := httptest.NewRecorder()
+	server3.HandleProjectReconciliation(w3, req3)
+	if w3.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for quote revision not found, got %d", w3.Code)
+	}
+
+	// Corrupt revision snapshot (fails closed)
+	storeCorrupt := &stubStore{reconcileProjectErr: domain.ErrInvalidRevisionSnapshot}
+	server4 := &Server{Store: storeCorrupt}
+
+	req4 := httptest.NewRequest(http.MethodPost, "/api/projects/10000000-0000-0000-0000-000000000001/reconciliation", bytes.NewBufferString(`{"quoteRevisionId":"20000000-0000-0000-0000-000000000001","designRevisionId":"30000000-0000-0000-0000-000000000001"}`))
+	req4.SetPathValue("projectId", "10000000-0000-0000-0000-000000000001")
+	req4 = withTestClaims(req4, "user-1", []domain.UserRole{domain.RoleAdmin})
+	w4 := httptest.NewRecorder()
+	server4.HandleProjectReconciliation(w4, req4)
+	if w4.Code != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict for corrupt snapshot, got %d", w4.Code)
+	}
 }
 
 func TestHandleProjectReconciliation_Success(t *testing.T) {
@@ -184,7 +210,7 @@ func TestHandleProjectReconciliation_Success(t *testing.T) {
 	}
 	server := &Server{Store: store}
 
-	// Test with camelCase payload
+	// Test with generated OpenAPI request payload (camelCase)
 	body := `{"quoteRevisionId":"` + quoteRevID + `","designRevisionId":"` + designRevID + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+projID+"/reconciliation", bytes.NewBufferString(body))
 	req.SetPathValue("projectId", projID)
@@ -222,17 +248,5 @@ func TestHandleProjectReconciliation_Success(t *testing.T) {
 	}
 	if len(resp.Items[1].Differences) != 1 || resp.Items[1].Differences[0].Path != "parameters.widthMm" {
 		t.Errorf("unexpected differences: %+v", resp.Items[1].Differences)
-	}
-
-	// Test with snake_case payload compatibility
-	bodySnake := `{"quote_revision_id":"` + quoteRevID + `","design_revision_id":"` + designRevID + `"}`
-	reqSnake := httptest.NewRequest(http.MethodPost, "/api/projects/"+projID+"/reconciliation", bytes.NewBufferString(bodySnake))
-	reqSnake.SetPathValue("projectId", projID)
-	reqSnake = withTestClaims(reqSnake, "user-1", []domain.UserRole{domain.RoleVendedor})
-	wSnake := httptest.NewRecorder()
-
-	server.HandleProjectReconciliation(wSnake, reqSnake)
-	if wSnake.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for snake_case payload, got %d: %s", wSnake.Code, wSnake.Body.String())
 	}
 }

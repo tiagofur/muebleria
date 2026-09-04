@@ -34,6 +34,7 @@ func TestMigrations_NoBusinessData(t *testing.T) {
 		"customers", "projects", "project_items", "project_item_choices",
 		"project_events", "project_photos", "project_templates",
 		"project_internal_messages", "project_level_choices",
+		"quote_revisions", "quote_revision_items",
 		"warranty_tickets", "warranty_ticket_photos",
 		// Compras / almacén / producción
 		"suppliers", "purchase_orders", "purchase_order_items",

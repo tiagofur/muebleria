@@ -473,3 +473,52 @@ func TestReconcile_RemovedStatus(t *testing.T) {
 		t.Errorf("expected FI-REMOVED-001 removed, got %s", result.Items[1].Status)
 	}
 }
+
+func TestReconcile_DefinitionVersion(t *testing.T) {
+	projID := "10000000-0000-0000-0000-000000000001"
+	quoteRevID := "20000000-0000-0000-0000-000000000001"
+	designRevID := "30000000-0000-0000-0000-000000000001"
+
+	vQuote := 4
+	vDesign := 5
+
+	quote := domain.QuoteRevisionSnapshot{
+		ProjectID:       projID,
+		QuoteRevisionID: quoteRevID,
+		Items: []domain.CommercialItemSnapshot{
+			{
+				FurnitureInstanceID:   "FI-001",
+				FurnitureDefinitionID: "MOD-BASE-600",
+				DefinitionVersion:     &vQuote,
+			},
+		},
+	}
+
+	design := domain.DesignRevisionSnapshot{
+		ProjectID:        projID,
+		DesignRevisionID: designRevID,
+		Items: []domain.DesignRevisionItem{
+			{
+				FurnitureInstanceID:   "FI-001",
+				FurnitureDefinitionID: "MOD-BASE-600",
+				DefinitionVersion:     &vDesign,
+			},
+		},
+	}
+
+	result, err := domain.Reconcile(quote, design)
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	if result.Summary.Modified != 1 {
+		t.Fatalf("expected 1 modified item, got %d", result.Summary.Modified)
+	}
+	if len(result.Items[0].Differences) != 1 {
+		t.Fatalf("expected 1 difference, got %d", len(result.Items[0].Differences))
+	}
+	diff := result.Items[0].Differences[0]
+	if diff.Path != "definitionVersion" || diff.QuoteValue != 4 || diff.DesignValue != 5 {
+		t.Fatalf("expected definitionVersion 4 -> 5, got %+v", diff)
+	}
+}
