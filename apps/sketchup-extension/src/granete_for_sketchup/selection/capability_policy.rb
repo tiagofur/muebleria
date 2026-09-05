@@ -50,8 +50,11 @@ module Granete
           set.declare('canDelete',
                       supported: !legacy,
                       reason: legacy ? CapabilityReasons::LEGACY_MIGRATION.call : nil)
-          set.declare('canReviewPreflight',
-                      supported: false, reason: CapabilityReasons::TECHNICAL_REVIEW.call)
+          # #466 review / #470 inspection: managed furniture with an
+          # authoritative resolve; legacy groups carry none to review.
+          legacy_reason = legacy ? CapabilityReasons::LEGACY_MIGRATION.call : nil
+          set.declare('canReviewPreflight', supported: definition_available,
+                                            reason: legacy_reason || CapabilityReasons::DEFINITION_MISSING.call)
           # #470 read-only manufacturing inspection: the resolved machining
           # overlay is available for managed furniture. Legacy group
           # representation carries no authoritative resolve to inspect.

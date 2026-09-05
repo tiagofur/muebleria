@@ -40,6 +40,9 @@ module Granete
         host/mutation_outcome
         host/mutation_command
         host/authoring_mutation_coordinator
+        host/preflight_review_copy
+        host/preflight_review
+        host/preflight_review_session
         overlay/manufacturing_feature_view
         overlay/feature_projector
         overlay/screen_picker
@@ -47,6 +50,7 @@ module Granete
         overlay/inspection_resolver
         overlay/entity_locator
         overlay/provenance_navigation
+        overlay/issue_navigation
         overlay/inspection_tool
         overlay/manager
         assets/asset_resolver

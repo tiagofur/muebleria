@@ -73,7 +73,8 @@ module Granete
         }.freeze
 
         attr_reader :kind, *ATTRIBUTES
-        attr_accessor :selection_count, :capabilities
+        attr_accessor :selection_count
+        attr_writer :capabilities
 
         def initialize(kind:, **fields)
           raise ArgumentError, "kind must be one of #{KINDS.join(', ')}" unless KINDS.include?(kind)

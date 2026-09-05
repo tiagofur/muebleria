@@ -1927,6 +1927,38 @@
             Selección múltiple: se muestra el primer elemento sólo para inspección; la edición queda deshabilitada hasta que exista edición por lote.
           </div>
 
+          <!-- #466 / SU-VIS-1: authoritative preflight review. The panel
+               NEVER derives readiness locally: ready/warning/blocked arrive
+               exclusively from Granete's authoritative resolve pushed by
+               Ruby; stale/unavailable stay distinct from success. -->
+          <style>
+            .preflight-issue { border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: var(--space-2); margin-top: var(--space-2); font-size: var(--text-xs); }
+            .preflight-issue-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+            .preflight-issue-source { margin: var(--space-1) 0 0 0; color: var(--text-secondary); }
+            .preflight-issue-detail { margin: var(--space-1) 0; color: var(--text-primary); }
+            .preflight-issue-remediation { margin: 0 0 var(--space-2) 0; color: var(--text-secondary); font-style: italic; }
+            .preflight-issue-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+          </style>
+          <div id="preflight-review-card" class="card" style="display: none; margin-bottom: var(--space-3);">
+            <div class="card-header-row">
+              <div class="card-title" style="margin: 0;">Revisión de fabricación</div>
+              <span id="preflight-review-badge" class="status-badge pending">Pendiente</span>
+            </div>
+            <button id="btn-preflight-run" type="button" class="btn btn-primary" style="margin-top: var(--space-2); width: 100%;">
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <span>Verificar fabricación</span>
+            </button>
+            <div id="preflight-review-body" style="display: none; margin-top: var(--space-3);">
+              <p id="preflight-review-summary" class="subhead" style="margin: 0 0 var(--space-2) 0; font-size: var(--text-xs); color: var(--text-primary);"></p>
+              <p id="preflight-review-stale-note" class="subhead" style="display: none; margin: 0 0 var(--space-2) 0; font-size: var(--text-xs); color: var(--danger-600);">
+                La revisión quedó desactualizada tras un cambio y puede no reflejar el estado actual.
+              </p>
+              <p id="preflight-review-unavailable-note" class="subhead" style="display: none; margin: 0 0 var(--space-2) 0; font-size: var(--text-xs);"></p>
+              <div id="preflight-review-groups"></div>
+              <p id="preflight-review-navigation-note" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs); color: var(--text-secondary);"></p>
+            </div>
+          </div>
+
           <!-- #470 / SU-VIS-1: read-only manufacturing inspection. Machining
                truth comes exclusively from the authoritative resolve; this
                card never computes holes. Shown for managed parts (and managed
@@ -4416,14 +4448,9 @@
           inspectorInteractiveBadge.textContent = "✓ Medidas válidas";
           inspectorInteractiveBadge.className = "status-badge valid";
 
-          // Authoritative preflight reset (must NOT claim ready without real domain preflight)
-          if (context.manufacturingPreflightPassed) {
-            inspectorManufacturingBadge.textContent = "✓ Aprobado para fabricación";
-            inspectorManufacturingBadge.className = "status-badge passed";
-          } else {
-            inspectorManufacturingBadge.textContent = "Revisión técnica pendiente";
-            inspectorManufacturingBadge.className = "status-badge pending";
-          }
+          // The authoritative preflight badge is owned by
+          // GraneteMutation.renderPreflight (#466): only Ruby-pushed tracker
+          // states decide ready/warning/blocked — never local validity.
 
           // Each control obeys its OWN capability, and a multi-selection
           // fail-closes every mutation until batch editing exists.
@@ -4904,6 +4931,18 @@
           }
         })();
 
+        // #466 authoritative preflight review (`Verificar fabricación`).
+        // The run button submits the read-only preflight_command channel;
+        // rendering comes exclusively from the Ruby-pushed review state.
+        (function () {
+          var runBtn = document.getElementById("btn-preflight-run");
+          if (runBtn) {
+            runBtn.addEventListener("click", function () {
+              if (window.GranetePreflightReview) window.GranetePreflightReview.run(selectedContext);
+            });
+          }
+        })();
+
         // ------------------------------------------------------------------
         // Model ↔ Project/Design binding (#388). Self-contained state + view:
         // every action goes to Ruby (connector); the panel never invents or
@@ -5013,13 +5052,35 @@
         function renderPublishAvailability(status) {
           if (!bindingPublishBtn || !bindingPublishProgress) return;
           var idle = !publishInFlight && lastPublishOutcome === null;
+          // #466: an authoritative server `blocked` preflight verdict
+          // prevents publish while the button surface exists. stale and
+          // unavailable are NOT blocked claims and never fake a verdict.
+          var preflightBlocked = window.GranetePreflightReview &&
+            window.GranetePreflightReview.publishBlocked();
           bindingPublishBtn.style.display = canPublish(status) ? "block" : "none";
-          bindingPublishBtn.disabled = publishInFlight || !idle;
+          bindingPublishBtn.disabled = publishInFlight || !idle || preflightBlocked;
           bindingPublishBtn.textContent = publishInFlight ? "Publicando…" : "Publicar diseño";
-          if (!publishInFlight && lastPublishOutcome === null) {
+          if (preflightBlocked && !publishInFlight) {
+            bindingPublishProgress.style.display = "block";
+            bindingPublishProgress.textContent =
+              "La publicación está bloqueada: hay muebles con revisión de fabricación bloqueada. " +
+              "Revisalos desde el inspector y volvé a verificar.";
+          } else if (!publishInFlight && lastPublishOutcome === null) {
             bindingPublishProgress.style.display = "none";
             bindingPublishProgress.textContent = "";
           }
+        }
+
+        // #466: a preflight state change (e.g. a new authoritative blocked
+        // verdict) re-evaluates the publish gate with the last binding
+        // status — the server keeps being the authority for every other
+        // precondition.
+        if (window.GraneteState) {
+          window.GraneteState.subscribe(function (slice) {
+            if (slice === "preflight" && modelBindingState.status) {
+              renderPublishAvailability(modelBindingState.status);
+            }
+          });
         }
 
         function renderPublishProgress(payload) {
@@ -5621,5 +5682,6 @@
     <script src="js/granete-bridge.js"></script>
     <script src="js/granete-mutation.js"></script>
     <script src="js/granete-manufacturing.js"></script>
+    <script src="js/granete-preflight-review.js"></script>
   </body>
 </html>

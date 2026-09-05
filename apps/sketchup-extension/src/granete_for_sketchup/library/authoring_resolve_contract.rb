@@ -56,14 +56,18 @@ module Granete
       # The parsed authoring resolve result. Ruby is a CONSUMER: identity,
       # geometry, machining and fingerprints are Granete-resolved truth; this
       # object never recomputes them and the normalized snapshot is the only
-      # input the next authoring request may echo.
+      # input the next authoring request may echo. `preflight_status` /
+      # `preflight_issues` keep the authoritative manufacturing preflight
+      # subset (#466 review): a pure passthrough of what Granete returned —
+      # ready/warning can never be derived from local parameter validity.
       class AuthoringResolveResult
         attr_reader :status, :issues, :layout, :operations, :derived_hardware_placements,
                     :manufacturing_fingerprint, :catalog_revision, :correlation,
-                    :normalized_snapshot
+                    :normalized_snapshot, :preflight_status, :preflight_issues
 
         def initialize(status:, issues:, layout: nil, machining: {},
-                       correlation: {}, normalized_snapshot: nil, catalog_revision: nil)
+                       correlation: {}, normalized_snapshot: nil, catalog_revision: nil,
+                       preflight_status: nil, preflight_issues: [])
           @status = status
           @issues = issues
           @layout = layout
@@ -73,6 +77,8 @@ module Granete
           @catalog_revision = catalog_revision
           @correlation = correlation
           @normalized_snapshot = normalized_snapshot
+          @preflight_status = preflight_status
+          @preflight_issues = preflight_issues
         end
 
         def accepted?
@@ -708,7 +714,7 @@ module Granete
           end
 
           snapshot = AuthoringSnapshotParsing.parse(body['normalizedSnapshot'])
-          preflight(resolved['preflight'])
+          preflight_issues, preflight_status = preflight(resolved['preflight'])
           layout = LayoutContract.parse!(resolved['layout'])
           operations = AuthoringResolveWireParsing.operations(machining['operations'])
           derived_placements = AuthoringResolveWireParsing.derived_placements(
@@ -717,9 +723,7 @@ module Granete
           AuthoringResolvedCoherence.validate!(snapshot, layout, operations, derived_placements)
 
           AuthoringResolveResult.new(
-            status: 'accepted',
-            issues: issues,
-            layout: layout,
+            status: 'accepted', issues: issues, layout: layout,
             machining: {
               operations: operations,
               derived_hardware_placements: derived_placements,
@@ -729,10 +733,12 @@ module Granete
             correlation: AuthoringResolveCorrelation.parse(
               body, expected_request: expected_request, issues: issues
             ),
-            normalized_snapshot: snapshot
+            normalized_snapshot: snapshot,
+            preflight_status: preflight_status, preflight_issues: preflight_issues
           )
         end
 
+        # Returns [issues, status] of the authoritative preflight subset (#466).
         def preflight(raw)
           unless raw.is_a?(Hash) && raw['scope'] == 'authoring-resolve-subset' &&
                  %w[clear blocked].include?(raw['status']) &&
@@ -740,7 +746,7 @@ module Granete
             raise ContractError, 'Preflight de resolve ausente o no soportado'
           end
 
-          AuthoringIssueParsing.issues(raw['issues'])
+          [AuthoringIssueParsing.issues(raw['issues']), raw['status']]
         end
 
         def ensure_unique!(values, context)

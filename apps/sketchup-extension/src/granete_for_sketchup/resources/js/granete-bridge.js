@@ -11,7 +11,7 @@
 
   var SCHEMA_ID = "granete.sketchup-host-command.v1";
   var MESSAGE_TYPES = ["mutation_command", "mutation_state", "preflight_state", "degraded_state",
-    "manufacturing_command", "manufacturing_state"];
+    "manufacturing_command", "manufacturing_state", "preflight_command"];
   var MAX_ID_LENGTH = 128;
   var sequence = 0;
 
