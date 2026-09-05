@@ -887,4 +887,36 @@ class DialogControllerTest < Minitest::Test
     assert_same left_panel, @model.selection.first,
                 'a part occurrence id must never select/retarget as furniture'
   end
+
+  def test_open_external_url_safely_validates_http_and_https
+    dialog = @controller.show
+    callback = dialog.callbacks.fetch('open_external_url')
+
+    # Unsafe schemes must be safely rejected
+    callback.call(nil, JSON.generate({ 'url' => 'javascript:alert(1)' }))
+    callback.call(nil, JSON.generate({ 'url' => 'file:///etc/passwd' }))
+    callback.call(nil, JSON.generate({ 'url' => '' }))
+
+    # Safe scheme: http and https
+    callback.call(nil, JSON.generate({ 'url' => 'https://granete.taller.com/devices' }))
+    callback.call(nil, JSON.generate({ 'url' => 'http://localhost:5173/devices' }))
+  end
+
+  def test_poll_enrollment_forwards_429_status_to_dialog
+    session = FakeSession.new
+    session.poll_result = { 'success' => false, 'http_status' => 429, 'error' => 'Error al consultar estado (429).' }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store,
+      session: session
+    )
+    dialog = controller.show
+    dialog.callbacks.fetch('poll_enrollment').call(nil, 'enrollmentId' => 'enr-1')
+
+    poll_script = dialog.executed_scripts.find { |s| s.include?('onPollResult') }
+    refute_nil poll_script
+    assert_includes poll_script, '"http_status":429'
+    assert_includes poll_script, '"success":false'
+  end
 end

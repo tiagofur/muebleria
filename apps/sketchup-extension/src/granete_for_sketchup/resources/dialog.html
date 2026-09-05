@@ -2102,9 +2102,23 @@
             </div>
             <div id="enroll-code-area" style="display: none; text-align: center;">
               <p style="font-size: var(--text-sm); margin-bottom: var(--space-2);">Ingresá este código en <strong>Taller &gt; Dispositivos</strong>:</p>
-              <div id="enroll-code-display" style="font-size: 2rem; font-weight: bold; letter-spacing: 0.2em; color: var(--brand-600); margin-bottom: var(--space-3);">--</div>
-              <p style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-3);">Esperando aprobación...</p>
-              <button id="btn-cancel-enroll" class="btn btn-secondary">Cancelar</button>
+              <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-bottom: var(--space-2);">
+                <div id="enroll-code-display" style="font-size: 2.2rem; font-weight: bold; letter-spacing: 0.25em; color: var(--brand-600); font-family: monospace;">--</div>
+                <button id="btn-copy-enroll-code" class="btn btn-secondary" title="Copiar código al portapapeles" style="padding: 6px 12px; font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 4px;">
+                  <span id="copy-enroll-code-icon">📋</span>
+                  <span id="copy-enroll-code-text">Copiar</span>
+                </button>
+              </div>
+              <div id="enroll-countdown-area" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-2);">
+                Expira en <strong id="enroll-countdown-display" style="color: var(--text-primary, #1e293b);">--:--</strong>
+              </div>
+              <p id="enroll-status-text" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-3);">Esperando aprobación en la web...</p>
+              <div style="display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-2);">
+                <button id="btn-open-web-devices" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;">
+                  <span>🌐</span> Abrir Dispositivos en la web
+                </button>
+                <button id="btn-cancel-enroll" class="btn btn-secondary btn-sm">Cancelar</button>
+              </div>
             </div>
           </div>
 
@@ -2363,9 +2377,16 @@
         var loginFormArea = document.getElementById("login-form-area");
         var enrollCodeArea = document.getElementById("enroll-code-area");
         var enrollCodeDisplay = document.getElementById("enroll-code-display");
+        var btnCopyEnrollCode = document.getElementById("btn-copy-enroll-code");
+        var copyEnrollCodeIcon = document.getElementById("copy-enroll-code-icon");
+        var copyEnrollCodeText = document.getElementById("copy-enroll-code-text");
+        var enrollCountdownDisplay = document.getElementById("enroll-countdown-display");
+        var enrollStatusText = document.getElementById("enroll-status-text");
+        var btnOpenWebDevices = document.getElementById("btn-open-web-devices");
         var btnCancelEnroll = document.getElementById("btn-cancel-enroll");
         var currentEnrollmentId = null;
         var enrollPollInterval = null;
+        var enrollCountdownInterval = null;
         var sessionUserName = document.getElementById("session-user-name");
         var sessionUserEmail = document.getElementById("session-user-email");
         var sessionServer = document.getElementById("session-server");
@@ -3825,21 +3846,75 @@
             }
           },
 
+          clearEnrollmentTimers: function () {
+            if (enrollPollInterval) {
+              clearInterval(enrollPollInterval);
+              enrollPollInterval = null;
+            }
+            if (enrollCountdownInterval) {
+              clearInterval(enrollCountdownInterval);
+              enrollCountdownInterval = null;
+            }
+          },
+
+          startEnrollCountdown: function (expiresAtStr) {
+            if (enrollCountdownInterval) clearInterval(enrollCountdownInterval);
+            if (!expiresAtStr) {
+              if (enrollCountdownDisplay) enrollCountdownDisplay.textContent = "--:--";
+              return;
+            }
+            var targetMs = new Date(expiresAtStr).getTime();
+            if (isNaN(targetMs)) {
+              if (enrollCountdownDisplay) enrollCountdownDisplay.textContent = "--:--";
+              return;
+            }
+
+            var self = this;
+            var updateTick = function () {
+              var diffMs = targetMs - Date.now();
+              if (diffMs <= 0) {
+                self.clearEnrollmentTimers();
+                if (enrollCountdownDisplay) enrollCountdownDisplay.textContent = "00:00";
+                if (enrollStatusText) {
+                  enrollStatusText.textContent = "El código expiró. Generá uno nuevo.";
+                  enrollStatusText.style.color = "var(--danger-600, #dc2626)";
+                }
+                return;
+              }
+              var totalSec = Math.floor(diffMs / 1000);
+              var m = Math.floor(totalSec / 60);
+              var s = totalSec % 60;
+              if (enrollCountdownDisplay) {
+                enrollCountdownDisplay.textContent = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+              }
+            };
+
+            updateTick();
+            enrollCountdownInterval = setInterval(updateTick, 1000);
+          },
+
           onEnrollResult: function (result) {
             btnLogin.disabled = false;
             btnLogin.textContent = "Generar código";
             if (result && result.success) {
               currentEnrollmentId = result.id || result.enrollment_id;
-              enrollCodeDisplay.textContent = result.code;
+              if (enrollCodeDisplay) enrollCodeDisplay.textContent = result.code;
+              if (enrollStatusText) {
+                enrollStatusText.textContent = "Esperando aprobación en la web...";
+                enrollStatusText.style.color = "var(--text-muted)";
+              }
               loginFormArea.style.display = "none";
               enrollCodeArea.style.display = "block";
-              
-              if (enrollPollInterval) clearInterval(enrollPollInterval);
+
+              this.clearEnrollmentTimers();
+              this.startEnrollCountdown(result.expires_at);
+
+              // #563: 5s polling interval aligned with backend rate limits
               enrollPollInterval = setInterval(function() {
                 if (window.sketchup && window.sketchup.poll_enrollment && currentEnrollmentId) {
                   window.sketchup.poll_enrollment(JSON.stringify({ enrollmentId: currentEnrollmentId }));
                 }
-              }, 2000);
+              }, 5000);
             } else {
               showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar vinculación"));
             }
@@ -3848,21 +3923,34 @@
           onPollResult: function (result) {
             if (result && result.success) {
               if (result.status === 'rejected' || result.status === 'expired') {
-                if (enrollPollInterval) clearInterval(enrollPollInterval);
+                this.clearEnrollmentTimers();
                 loginFormArea.style.display = "block";
                 enrollCodeArea.style.display = "none";
                 showToast("error", "La vinculación fue " + (result.status === 'rejected' ? 'rechazada' : 'expirada') + ".");
+              } else {
+                // Still pending: keep status normal
+                if (enrollStatusText) {
+                  enrollStatusText.textContent = "Esperando aprobación en la web...";
+                  enrollStatusText.style.color = "var(--text-muted)";
+                }
               }
             } else {
-              if (enrollPollInterval) clearInterval(enrollPollInterval);
-              loginFormArea.style.display = "block";
-              enrollCodeArea.style.display = "none";
-              showToast("error", "Error consultando estado: " + ((result && result.error) || "Desconocido"));
+              // #563: Resilient polling: if 429 or transient error, do NOT abort the enrollment flow.
+              var isRateLimited = result && (result.http_status === 429 || (result.error && result.error.indexOf('429') !== -1));
+              if (enrollStatusText) {
+                if (isRateLimited) {
+                  enrollStatusText.textContent = "Servidor ocupado (429), reintentando...";
+                  enrollStatusText.style.color = "var(--warning-600, #d97706)";
+                } else {
+                  enrollStatusText.textContent = "Reintentando verificación...";
+                  enrollStatusText.style.color = "var(--text-muted)";
+                }
+              }
             }
           },
 
           onLoginResult: function (result) {
-            if (enrollPollInterval) clearInterval(enrollPollInterval);
+            this.clearEnrollmentTimers();
             loginFormArea.style.display = "block";
             enrollCodeArea.style.display = "none";
             if (result && result.success) {
@@ -5873,11 +5961,79 @@
         });
 
         btnCancelEnroll.addEventListener("click", function () {
-          if (enrollPollInterval) clearInterval(enrollPollInterval);
+          if (window.GraneteDialog && window.GraneteDialog.clearEnrollmentTimers) {
+            window.GraneteDialog.clearEnrollmentTimers();
+          } else {
+            if (enrollPollInterval) clearInterval(enrollPollInterval);
+            if (enrollCountdownInterval) clearInterval(enrollCountdownInterval);
+          }
           currentEnrollmentId = null;
           loginFormArea.style.display = "block";
           enrollCodeArea.style.display = "none";
         });
+
+        if (btnCopyEnrollCode) {
+          btnCopyEnrollCode.addEventListener("click", function () {
+            var code = (enrollCodeDisplay ? enrollCodeDisplay.textContent : "").trim();
+            if (!code || code === "--") return;
+
+            var setCopiedUI = function () {
+              if (copyEnrollCodeIcon) copyEnrollCodeIcon.textContent = "✓";
+              if (copyEnrollCodeText) copyEnrollCodeText.textContent = "¡Copiado!";
+              btnCopyEnrollCode.classList.remove("btn-secondary");
+              btnCopyEnrollCode.classList.add("btn-primary");
+              setTimeout(function () {
+                if (copyEnrollCodeIcon) copyEnrollCodeIcon.textContent = "📋";
+                if (copyEnrollCodeText) copyEnrollCodeText.textContent = "Copiar";
+                btnCopyEnrollCode.classList.remove("btn-primary");
+                btnCopyEnrollCode.classList.add("btn-secondary");
+              }, 2000);
+              showToast("success", "Código " + code + " copiado al portapapeles.");
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(code).then(setCopiedUI).catch(function () {
+                fallbackCopy(code, setCopiedUI);
+              });
+            } else {
+              fallbackCopy(code, setCopiedUI);
+            }
+          });
+        }
+
+        function fallbackCopy(text, onSuccess) {
+          try {
+            var ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            var ok = document.execCommand("copy");
+            document.body.removeChild(ta);
+            if (ok) {
+              onSuccess();
+            } else {
+              showToast("error", "No se pudo copiar automáticamente: " + text);
+            }
+          } catch (e) {
+            showToast("error", "No se pudo copiar: " + e.message);
+          }
+        }
+
+        if (btnOpenWebDevices) {
+          btnOpenWebDevices.addEventListener("click", function () {
+            var server = (loginServer ? loginServer.value : "").trim();
+            // Derive web URL by stripping trailing slashes, stripping /api, and appending /devices
+            var webUrl = server.replace(/\/+$/, "").replace(/\/api\/?$/i, "") + "/devices";
+            if (window.sketchup && window.sketchup.open_external_url) {
+              window.sketchup.open_external_url(JSON.stringify({ url: webUrl }));
+            } else {
+              window.open(webUrl, "_blank");
+            }
+          });
+        }
 
         btnLogout.addEventListener("click", function () {
           if (window.sketchup && window.sketchup.logout) {
