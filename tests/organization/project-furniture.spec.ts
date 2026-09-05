@@ -43,6 +43,7 @@ async function prepareProjectFurniture(): Promise<SeededProjectFurniture> {
   });
 
   // 1. Create Project in Org A with 1 QuoteLine of quantity=3
+  const now = new Date().toISOString();
   const project: Project = {
     id: PROJECT_A_ID,
     name: 'Obra Cocina Muebles Gate',
@@ -51,6 +52,8 @@ async function prepareProjectFurniture(): Promise<SeededProjectFurniture> {
     marginFactor: 1.3,
     laborFixedCost: 0,
     status: 'draft',
+    createdAt: now,
+    updatedAt: now,
     items: [
       {
         id: QUOTE_LINE_ID,
