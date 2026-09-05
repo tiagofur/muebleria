@@ -5052,9 +5052,8 @@
         function renderPublishAvailability(status) {
           if (!bindingPublishBtn || !bindingPublishProgress) return;
           var idle = !publishInFlight && lastPublishOutcome === null;
-          // #466: an authoritative server `blocked` preflight verdict
-          // prevents publish while the button surface exists. stale and
-          // unavailable are NOT blocked claims and never fake a verdict.
+          // #466: fail-closed preflight publish gate. Publication is NOT
+          // allowed unless an authoritative preflight exists in ready or warning.
           var preflightBlocked = window.GranetePreflightReview &&
             window.GranetePreflightReview.publishBlocked();
           bindingPublishBtn.style.display = canPublish(status) ? "block" : "none";
@@ -5062,9 +5061,28 @@
           bindingPublishBtn.textContent = publishInFlight ? "Publicando…" : "Publicar diseño";
           if (preflightBlocked && !publishInFlight) {
             bindingPublishProgress.style.display = "block";
-            bindingPublishProgress.textContent =
-              "La publicación está bloqueada: hay muebles con revisión de fabricación bloqueada. " +
-              "Revisalos desde el inspector y volvé a verificar.";
+            var preflightEntries = (window.GraneteState &&
+                                    window.GraneteState.get("preflight") &&
+                                    window.GraneteState.get("preflight").entries) || {};
+            var hasBlocked = Object.keys(preflightEntries).some(function (k) {
+              return preflightEntries[k] && preflightEntries[k].state === "blocked";
+            });
+            var hasStale = Object.keys(preflightEntries).some(function (k) {
+              return preflightEntries[k] && preflightEntries[k].state === "stale";
+            });
+            if (hasBlocked) {
+              bindingPublishProgress.textContent =
+                "La publicación está bloqueada: hay muebles con problemas técnicos de fabricación. " +
+                "Revisalos desde el inspector y volvé a verificar.";
+            } else if (hasStale) {
+              bindingPublishProgress.textContent =
+                "La publicación está bloqueada: la revisión de fabricación quedó desactualizada tras una modificación. " +
+                "Volvé a verificar desde el inspector antes de publicar.";
+            } else {
+              bindingPublishProgress.textContent =
+                "La publicación requiere una revisión de fabricación autoritativa actual (ready o warning). " +
+                "Verificá los muebles desde el inspector antes de publicar.";
+            }
           } else if (!publishInFlight && lastPublishOutcome === null) {
             bindingPublishProgress.style.display = "none";
             bindingPublishProgress.textContent = "";

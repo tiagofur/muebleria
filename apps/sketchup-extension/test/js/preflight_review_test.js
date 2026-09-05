@@ -144,7 +144,8 @@ test('initial state renders as pending without green badge', () => {
 
   const summary = sandbox.__registry['preflight-review-summary'];
   assert(summary.textContent.includes('Ejecutá la verificación'));
-  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), false);
+  // Fail-closed (#466): without current authoritative preflight, publish is blocked
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
 });
 
 // 2. Run preflight command submission
@@ -280,6 +281,7 @@ test('stale and unavailable states render honestly without claiming ready', () =
   assert.equal(badge.textContent, 'Desactualizada');
   assert.equal(badge.className, 'status-badge pending');
   assert.equal(sandbox.__registry['preflight-review-stale-note'].style.display, 'block');
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
 
   pushPreflight(sandbox, { 'inst-1': { state: 'unavailable' } }, {
     scope: { furnitureInstanceRef: 'inst-1' },
@@ -290,6 +292,7 @@ test('stale and unavailable states render honestly without claiming ready', () =
   assert.equal(badge.textContent, 'No disponible');
   assert.equal(sandbox.__registry['preflight-review-unavailable-note'].style.display, 'block');
   assert.equal(sandbox.__registry['preflight-review-unavailable-note'].textContent, 'Sin conexión');
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
 });
 
 // 8. Warning state rendering
@@ -337,6 +340,57 @@ test('re-running runtime does not register duplicate controllers', () => {
   const sandbox = buildSandbox();
   runRuntime(sandbox, 3);
   assert.equal(typeof sandbox.window.GranetePreflightReview.run, 'function');
+});
+
+// 10. Fail-closed publish gate comprehensive states
+test('publish gate fails closed unless authoritative preflight is ready or warning', () => {
+  const sandbox = buildSandbox();
+  runRuntime(sandbox);
+
+  // Empty entries -> blocked
+  pushPreflight(sandbox, {}, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // Single ready -> allowed
+  pushPreflight(sandbox, { 'inst-1': { state: 'ready' } }, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), false);
+
+  // Single warning -> allowed
+  pushPreflight(sandbox, { 'inst-1': { state: 'warning' } }, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), false);
+
+  // Single blocked -> blocked
+  pushPreflight(sandbox, { 'inst-1': { state: 'blocked' } }, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // Single stale -> blocked
+  pushPreflight(sandbox, { 'inst-1': { state: 'stale' } }, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // Single unavailable -> blocked
+  pushPreflight(sandbox, { 'inst-1': { state: 'unavailable' } }, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // Mixed: ready + stale -> blocked
+  pushPreflight(sandbox, {
+    'inst-1': { state: 'ready' },
+    'inst-2': { state: 'stale' }
+  }, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // Mixed: ready + blocked -> blocked
+  pushPreflight(sandbox, {
+    'inst-1': { state: 'ready' },
+    'inst-2': { state: 'blocked' }
+  }, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // Mixed: ready + warning -> allowed
+  pushPreflight(sandbox, {
+    'inst-1': { state: 'ready' },
+    'inst-2': { state: 'warning' }
+  }, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), false);
 });
 
 console.log(JSON.stringify({ success: true, testsPassed }));

@@ -87,13 +87,18 @@
     return review;
   }
 
-  // Publish gate (#466): an authoritative server `blocked` verdict prevents
-  // publish/release. stale/unavailable are NOT blocked claims — they stay
-  // honest and never fake a green light either.
+  // Publish gate (#466): fail-closed. Publication is NOT allowed unless
+  // an authoritative preflight currently exists in `ready` or `warning`.
+  // If there are no entries, or any entry is `blocked`, `stale`,
+  // `unavailable`, `unknown`, or `pending`, publication remains blocked.
   function publishBlocked() {
     var entries = preflightSlice().entries;
-    return Object.keys(entries).some(function (key) {
-      return entries[key] && entries[key].state === "blocked";
+    var keys = Object.keys(entries);
+    if (keys.length === 0) return true;
+    return keys.some(function (key) {
+      var entry = entries[key];
+      var state = entry && entry.state;
+      return state !== "ready" && state !== "warning";
     });
   }
 
