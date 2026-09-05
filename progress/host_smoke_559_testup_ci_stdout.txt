@@ -1,0 +1,43 @@
+objc[28366]: Class SKTextPath is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/SketchUpAPI.framework/Versions/A/SketchUpAPI (0x107fe0390) and /Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp (0x1014eb830). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-09-04 23:17:19.823 SketchUp[28366:6534637] BugSplat start...
+2026-09-04 23:17:19.823 SketchUp[28366:6534637] BugSplat BugSplatDatabase set as [SU26Mac]
+2026-09-04 23:17:19.823 SketchUp[28366:6534637] BugSplat setServerURL: [https://SU26Mac.bugsplat.com/]
+objc[28366]: Class SkpTimerCaller is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp (0x1014eb7b8) and /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/LayOutAPI.framework/Versions/A/Libraries/libSketchUpViewerAPI.dylib (0x131f3cea0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[28366]: Class SKTextPath is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/SketchUpAPI.framework/Versions/A/SketchUpAPI (0x107fe0390) and /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/LayOutAPI.framework/Versions/A/Libraries/libSketchUpViewerAPI.dylib (0x131f3cf18). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-09-04 23:17:21.315 SketchUp[28366:6534637] INFO: Start CrashManager processing
+Device Manufacturer: Apple Inc.
+       Device Model: Mac17,9
+         OS Version: 26.6
+WGLUtils::UtilsState::ctor: Max GPU perf is 0
+Renderer information:
+  Graphics Engine Name: New Graphics Engine
+  Graphics API: Metal
+  GPU Name: Apple M5 Pro
+2026-09-04 23:17:21.931 SketchUp[28366:6534637] [HockeySDK] -[BITCrashManager invokeDelayedProcessing]/900 [HockeySDK] WARNING: Another exception handler was added. If this invokes any kind exit() after processing the exception, which causes any subsequent error handler not to be invoked, these crashes will NOT be reported to HockeyApp!
+ValidateGraphicsPreferences: Starting up.
+SaveUserRendererSettingsToPreferences: Saving graphics preferences: MSAA: 4 FF: 1
+ValidateGraphicsPreferences: All done.
+2026-09-04 23:17:30.459 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:30.749 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:35.662 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:35.765 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:35.952 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:36.074 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:36.180 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:36.284 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:36.560 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:36.669 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:36.879 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:37.070 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+Cleanup document: 
+2026-09-04 23:17:37.303 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:37.386 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+Application terminating
+2026-09-04 23:17:42.770 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:42.788 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:42.799 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:42.807 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+2026-09-04 23:17:42.821 SketchUp[28366:6534637] BugSplat [setValue:off forKey:rtv]
+Closing application
+Application requests completed
+Exit notification
