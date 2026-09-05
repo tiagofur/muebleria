@@ -6,16 +6,14 @@ import {
   GraneteApiError,
   type Design,
   type DesignRevision,
-  type FurnitureInstance,
-  type ProductionRelease,
-  type ProjectDesignReconciliationResult,
+  type FurnitureWorkspaceReleaseContext,
+  type ProjectFurnitureWorkspace,
   type QuoteRevisionDetail,
   type ReconciliationStatus,
 } from '@granete/storage';
 import { EmptyState, Modal, PageHeader, PageLoading, SearchInput, StatusChips } from '../common';
 import {
   buildFurnitureMatrix,
-  currentReleaseReference,
   defaultDesignContext,
   defaultQuoteRevisionId,
   EMPTY_MATRIX_FILTERS,
@@ -28,6 +26,7 @@ import {
   type DesignPresence,
   type FurnitureLifecycle,
   type FurnitureMatrixRow,
+  type FurnitureMatrixSummary,
   type FurnitureOrigin,
   type MatrixFilters,
 } from './furnitureMatrix';
@@ -41,10 +40,9 @@ import './digitalThread.css';
  *
  * Authority contract (tracker #396 / #384):
  * - every read comes from the generated client with runtime validation;
- * - pending/placed derives from the selected design context joined by
- *   furnitureInstanceId (#389 semantics, shared with the SketchUp panel);
- * - reconciliation badges mirror the server `reconcileProjectDesign` result
- *   only — the view never invents `quoted_not_modeled`-style states;
+ * - pending/placed and actionRequired derive strictly from the server read model
+ *   (POST /projects/{projectId}/furniture-workspace); React never does local joins;
+ * - reconciliation badges mirror the server reconciliation result only;
  * - read-only: no local operation pretends to mutate physical identity;
  * - the exact context is pinned through onContextChange so a newer revision
  *   can never silently retarget what the user is viewing.
@@ -59,13 +57,14 @@ export interface ProjectFurnitureContextState {
 
 export interface ProjectFurnitureQueryKeys {
   readonly root: QueryKey;
-  readonly furniture: QueryKey;
+  readonly workspace: (context: ProjectFurnitureContextState) => QueryKey;
   readonly quoteRevisions: QueryKey;
   readonly designs: QueryKey;
-  readonly productionReleases: QueryKey;
-  readonly designWorkingCopy: (designId: string) => QueryKey;
   readonly designRevisions: (designId: string) => QueryKey;
-  readonly reconciliation: (quoteRevisionId: string, designRevisionId: string) => QueryKey;
+  readonly furniture?: QueryKey;
+  readonly productionReleases?: QueryKey;
+  readonly designWorkingCopy?: (designId: string) => QueryKey;
+  readonly reconciliation?: (quoteRevisionId: string, designRevisionId: string) => QueryKey;
 }
 
 /** Tenant/session-scoped key factory: every key carries the scope so an
@@ -78,6 +77,14 @@ export function projectFurnitureQueryKeys(
   const root: QueryKey = ['project-furniture', ...scopeKey, projectId];
   return {
     root,
+    workspace: (context: ProjectFurnitureContextState) => [
+      ...root,
+      'workspace',
+      context.quoteRevisionId,
+      context.designId,
+      context.designContextKind,
+      context.designRevisionId,
+    ],
     furniture: [...root, 'furniture-instances'],
     quoteRevisions: [...root, 'quote-revisions'],
     designs: [...root, 'designs'],
@@ -121,11 +128,28 @@ const RECONCILIATION_BADGES: Readonly<
   Record<ReconciliationStatus, { label: string; className: string }>
 > = {
   synced: { label: 'Sincronizada', className: 'status-badge status-badge--done' },
-  quoted_not_modeled: { label: 'Cotizada sin modelar', className: 'status-badge status-badge--warning' },
-  modeled_not_quoted: { label: 'Modelada sin cotizar', className: 'status-badge status-badge--warning' },
+  quoted_not_modeled: {
+    label: 'Cotizada sin modelar',
+    className: 'status-badge status-badge--warning',
+  },
+  modeled_not_quoted: {
+    label: 'Modelada sin cotizar',
+    className: 'status-badge status-badge--warning',
+  },
   modified: { label: 'Modificada', className: 'status-badge status-badge--warning' },
   removed: { label: 'Retirada del diseño', className: 'status-badge status-badge--danger' },
   conflict: { label: 'Conflicto', className: 'status-badge status-badge--danger' },
+};
+
+const EMPTY_SUMMARY: FurnitureMatrixSummary = {
+  total: 0,
+  activeUnits: 0,
+  quotedActive: 0,
+  placedInDesign: 0,
+  pendingPlacement: 0,
+  requireAttention: 0,
+  removed: 0,
+  cancelled: 0,
 };
 
 function presenceBadgeClass(presence: DesignPresence): string {
@@ -194,10 +218,6 @@ export function ProjectFurnitureScreen({
     designRevisionId: initialContext?.designRevisionId ?? null,
   }));
 
-  const furnitureQuery = useQuery({
-    queryKey: queryKeys.furniture,
-    queryFn: ({ signal }) => api.listProjectFurnitureInstances(token, projectId, signal),
-  });
   const quoteRevisionsQuery = useQuery({
     queryKey: queryKeys.quoteRevisions,
     queryFn: ({ signal }) => api.listProjectQuoteRevisions(token, projectId, signal),
@@ -206,15 +226,9 @@ export function ProjectFurnitureScreen({
     queryKey: queryKeys.designs,
     queryFn: ({ signal }) => api.listProjectDesigns(token, projectId, signal),
   });
-  const releasesQuery = useQuery({
-    queryKey: queryKeys.productionReleases,
-    queryFn: ({ signal }) => api.listProjectProductionReleases(token, projectId, signal),
-  });
 
-  const instances: readonly FurnitureInstance[] = furnitureQuery.data ?? [];
   const quoteRevisions: readonly QuoteRevisionDetail[] = quoteRevisionsQuery.data ?? [];
   const designs: readonly Design[] = designsQuery.data ?? [];
-  const releases: readonly ProductionRelease[] = releasesQuery.data ?? [];
 
   // Apply view defaults exactly once, when the authoritative lists arrive and
   // no pinned context exists. Every applied default is re-pinned through
@@ -234,14 +248,10 @@ export function ProjectFurnitureScreen({
   }, [designsQuery.isSuccess, designs, designContext.kind]);
 
   const selectedDesignId = designContext.designId;
-  const workingCopyQuery = useQuery({
-    queryKey: selectedDesignId ? queryKeys.designWorkingCopy(selectedDesignId) : ['project-furniture', 'working-copy', 'none'],
-    queryFn: ({ signal }) =>
-      api.getDesignWorkingCopy(token, selectedDesignId as string, signal),
-    enabled: designContext.kind === 'working' && selectedDesignId !== null,
-  });
   const designRevisionsQuery = useQuery({
-    queryKey: selectedDesignId ? queryKeys.designRevisions(selectedDesignId) : ['project-furniture', 'revisions', 'none'],
+    queryKey: selectedDesignId
+      ? queryKeys.designRevisions(selectedDesignId)
+      : ['project-furniture', 'revisions', 'none'],
     queryFn: ({ signal }) => api.listDesignRevisions(token, selectedDesignId as string, signal),
     enabled: selectedDesignId !== null,
   });
@@ -249,75 +259,79 @@ export function ProjectFurnitureScreen({
   const selectedDesignRevision =
     designRevisions.find((revision) => revision.id === designContext.designRevisionId) ?? null;
 
-  // Reconciliation is a server-computed projection of TWO exact revisions;
-  // a working-copy context has no reconciliation (honest '—' in the matrix).
-  const canReconcile =
-    quoteRevisionId !== null &&
-    designContext.kind === 'revision' &&
-    designContext.designRevisionId !== null;
-  const reconciliationQuery = useQuery({
-    queryKey: canReconcile
-      ? queryKeys.reconciliation(quoteRevisionId as string, designContext.designRevisionId as string)
-      : ['project-furniture', 'reconciliation', 'none'],
-    queryFn: () =>
-      api.reconcileProjectDesign(token, projectId, {
-        quoteRevisionId: quoteRevisionId as string,
-        designRevisionId: designContext.designRevisionId as string,
-      }),
-    enabled: canReconcile,
+  // Single authoritative backend read-model query: POST /projects/{projectId}/furniture-workspace
+  const currentContextState: ProjectFurnitureContextState = useMemo(
+    () => ({
+      quoteRevisionId,
+      designId: designContext.designId,
+      designContextKind: designContext.kind,
+      designRevisionId: designContext.designRevisionId,
+    }),
+    [quoteRevisionId, designContext],
+  );
+
+  const workspaceQueryKey = useMemo(
+    () =>
+      queryKeys.workspace
+        ? queryKeys.workspace(currentContextState)
+        : [
+            ...queryKeys.root,
+            'workspace',
+            quoteRevisionId,
+            designContext.designId,
+            designContext.kind,
+            designContext.designRevisionId,
+          ],
+    [queryKeys, currentContextState, quoteRevisionId, designContext],
+  );
+
+  const workspaceQuery = useQuery({
+    queryKey: workspaceQueryKey,
+    queryFn: ({ signal }) =>
+      api.getProjectFurnitureWorkspace(
+        token,
+        projectId,
+        {
+          quoteRevisionId,
+          designId: designContext.designId,
+          designContextKind: designContext.kind,
+          designRevisionId: designContext.designRevisionId,
+        },
+        signal,
+      ),
   });
-  const reconciliation: ProjectDesignReconciliationResult | null =
-    reconciliationQuery.data ?? null;
+
+  const workspace: ProjectFurnitureWorkspace | null = workspaceQuery.data ?? null;
 
   // Keep the URL pinned to the exact context being viewed. The ref guard
   // keeps inline callbacks from re-firing navigation on every render.
   const lastEmittedContext = useRef<ProjectFurnitureContextState | null>(null);
   useEffect(() => {
-    const context: ProjectFurnitureContextState = {
-      quoteRevisionId,
-      designId: designContext.designId,
-      designContextKind: designContext.kind,
-      designRevisionId: designContext.designRevisionId,
-    };
     const previous = lastEmittedContext.current;
     if (
       previous !== null &&
-      previous.quoteRevisionId === context.quoteRevisionId &&
-      previous.designId === context.designId &&
-      previous.designContextKind === context.designContextKind &&
-      previous.designRevisionId === context.designRevisionId
+      previous.quoteRevisionId === currentContextState.quoteRevisionId &&
+      previous.designId === currentContextState.designId &&
+      previous.designContextKind === currentContextState.designContextKind &&
+      previous.designRevisionId === currentContextState.designRevisionId
     ) {
       return;
     }
-    lastEmittedContext.current = context;
-    onContextChange?.(context);
-  }, [onContextChange, quoteRevisionId, designContext]);
+    lastEmittedContext.current = currentContextState;
+    onContextChange?.(currentContextState);
+  }, [onContextChange, currentContextState]);
 
   const { rows, summary } = useMemo(
-    () =>
-      buildFurnitureMatrix({
-        instances,
-        quoteRevisions,
-        selectedQuoteRevisionId: quoteRevisionId,
-        designContext,
-        workingCopy: workingCopyQuery.data ?? null,
-        designRevision: selectedDesignRevision,
-        reconciliation,
-      }),
-    [
-      instances,
-      quoteRevisions,
-      quoteRevisionId,
-      designContext,
-      workingCopyQuery.data,
-      selectedDesignRevision,
-      reconciliation,
-    ],
+    () => (workspace ? buildFurnitureMatrix({ workspace }) : { rows: [], summary: EMPTY_SUMMARY }),
+    [workspace],
   );
 
   const visibleRows = useMemo(() => filterMatrixRows(rows, filters), [rows, filters]);
   const hasActiveFilters = filtersAreActive(filters);
-  const releaseReference = currentReleaseReference(releases);
+
+  const contextualRelease = workspace?.release ?? null;
+  const latestProjectRelease = workspace?.latestProjectRelease ?? null;
+
   const selectedQuoteRevision =
     quoteRevisions.find((revision) => revision.id === quoteRevisionId) ?? null;
 
@@ -349,8 +363,7 @@ export function ProjectFurnitureScreen({
     }
   };
 
-  const contextBusy =
-    workingCopyQuery.isFetching || designRevisionsQuery.isFetching || reconciliationQuery.isFetching;
+  const contextBusy = workspaceQuery.isFetching || designRevisionsQuery.isFetching;
 
   return (
     <section className="catalog-page" aria-label="Muebles de la obra">
@@ -370,20 +383,20 @@ export function ProjectFurnitureScreen({
             type="button"
             className="btn btn--primary"
             onClick={reloadAll}
-            disabled={furnitureQuery.isFetching || quoteRevisionsQuery.isFetching}
+            disabled={workspaceQuery.isFetching || quoteRevisionsQuery.isFetching}
           >
             <RefreshCw size={14} aria-hidden /> Actualizar
           </button>
         }
       />
 
-      {furnitureQuery.isPending ? (
+      {workspaceQuery.isPending ? (
         <PageLoading label="Cargando muebles de la obra…" />
-      ) : furnitureQuery.isError ? (
+      ) : workspaceQuery.isError ? (
         <EmptyState
           variant="empty"
           title="No se pudo cargar la matriz de muebles"
-          description={loadErrorMessage(furnitureQuery.error)}
+          description={loadErrorMessage(workspaceQuery.error)}
           actionLabel="Reintentar"
           onAction={reloadAll}
         />
@@ -406,7 +419,8 @@ export function ProjectFurnitureScreen({
               })
             }
             quoteRevisionsError={quoteRevisionsQuery.isError}
-            releases={releases}
+            contextualRelease={contextualRelease}
+            latestProjectRelease={latestProjectRelease}
             busy={contextBusy}
           />
 
@@ -479,8 +493,10 @@ export function ProjectFurnitureScreen({
             />
           </div>
 
-          {furnitureQuery.isFetching ? (
-            <p className="pf-stale-hint" role="status">Actualizando datos del servidor…</p>
+          {workspaceQuery.isFetching ? (
+            <p className="pf-stale-hint" role="status">
+              Actualizando datos del servidor…
+            </p>
           ) : null}
 
           {rows.length === 0 ? (
@@ -523,9 +539,9 @@ export function ProjectFurnitureScreen({
                       <td>
                         <div className="pf-cell-title">
                           <span className="pf-label">{row.label}</span>
-                          <span className="meta-chip">
-                            Unidad {row.unitIndex} de {row.unitTotal}
-                          </span>
+                          {row.unitProvenanceLabel ? (
+                            <span className="meta-chip">{row.unitProvenanceLabel}</span>
+                          ) : null}
                         </div>
                         <span className="pf-dims">{formatDimensions(row)}</span>
                       </td>
@@ -558,13 +574,19 @@ export function ProjectFurnitureScreen({
                         )}
                       </td>
                       <td>
-                        <span className={lifecycleBadgeClass(row.lifecycle)}>{row.lifecycleLabel}</span>
+                        <span className={lifecycleBadgeClass(row.lifecycle)}>
+                          {row.lifecycleLabel}
+                        </span>
                       </td>
                       <td>
                         <button
                           type="button"
                           className="btn btn--secondary btn--sm"
-                          aria-label={`Ver detalle de ${row.label} (unidad ${row.unitIndex} de ${row.unitTotal})`}
+                          aria-label={
+                            row.unitProvenanceLabel
+                              ? `Ver detalle de ${row.label} (${row.unitProvenanceLabel.toLowerCase()})`
+                              : `Ver detalle de ${row.label}`
+                          }
                           onClick={() => setDetailRow(row)}
                         >
                           Detalle
@@ -583,10 +605,10 @@ export function ProjectFurnitureScreen({
         <ProjectFurnitureDetailDrawer
           row={detailRow}
           selectedQuoteRevision={selectedQuoteRevision}
-          reconciliation={reconciliation}
           designContext={designContext}
           designRevision={selectedDesignRevision}
-          release={releaseReference}
+          contextualRelease={contextualRelease}
+          latestProjectRelease={latestProjectRelease}
           onClose={() => setDetailRow(null)}
         />
       ) : null}
@@ -605,7 +627,8 @@ interface ContextBarProps {
   readonly designRevisions: readonly DesignRevision[];
   readonly onDesignRevisionChange: (revisionId: string) => void;
   readonly quoteRevisionsError: boolean;
-  readonly releases: readonly ProductionRelease[];
+  readonly contextualRelease: FurnitureWorkspaceReleaseContext | null;
+  readonly latestProjectRelease: FurnitureWorkspaceReleaseContext | null;
   readonly busy: boolean;
 }
 
@@ -620,12 +643,12 @@ function ProjectFurnitureContextBar({
   designRevisions,
   onDesignRevisionChange,
   quoteRevisionsError,
-  releases,
+  contextualRelease,
+  latestProjectRelease,
   busy,
 }: ContextBarProps): ReactNode {
-  const release = currentReleaseReference(releases);
-  const releaseQuote = release?.quote_revision_id
-    ? quoteRevisions.find((revision) => revision.id === release.quote_revision_id)
+  const releaseQuote = contextualRelease?.quoteRevisionId
+    ? quoteRevisions.find((revision) => revision.id === contextualRelease.quoteRevisionId)
     : null;
 
   return (
@@ -683,7 +706,11 @@ function ProjectFurnitureContextBar({
           <span>Contexto de diseño</span>
           <select
             data-testid="pf-design-context-select"
-            value={designContext.kind === 'revision' ? designContext.designRevisionId ?? '' : designContext.kind}
+            value={
+              designContext.kind === 'revision'
+                ? (designContext.designRevisionId ?? '')
+                : designContext.kind
+            }
             onChange={(event) => {
               const value = event.target.value;
               if (value === 'working' || value === 'none') {
@@ -708,7 +735,9 @@ function ProjectFurnitureContextBar({
         </label>
 
         {busy ? (
-          <span className="pf-stale-hint" role="status">Actualizando contexto…</span>
+          <span className="pf-stale-hint" role="status">
+            Actualizando contexto…
+          </span>
         ) : null}
       </div>
 
@@ -719,16 +748,39 @@ function ProjectFurnitureContextBar({
             trabajo en curso muestra presencia, no reconciliación.
           </p>
         )}
-        {release ? (
+        {contextualRelease ? (
           <p className="pf-context__release" data-testid="pf-release-reference">
             <ClipboardCheck size={14} aria-hidden />
-            Release #{release.release_number} fijado a R{release.design_revision_number}
-            {releaseQuote ? ` y Q${releaseQuote.revisionNumber}` : ''}
-            {release.staleness.manufacturing_stale ? (
-              <span className="status-badge status-badge--warning" title="Una revisión más reciente cambió la huella de manufactura">
+            Release #{contextualRelease.releaseNumber} fijado a R{contextualRelease.designRevisionNumber}
+            {contextualRelease.quoteRevisionId && releaseQuote
+              ? ` y Q${releaseQuote.revisionNumber}`
+              : ''}
+            {contextualRelease.manufacturingStale ? (
+              <span
+                className="status-badge status-badge--warning"
+                title="Una revisión más reciente cambió la huella de manufactura"
+              >
                 <TriangleAlert size={12} aria-hidden /> desactualizado
               </span>
             ) : null}
+          </p>
+        ) : designContext.kind === 'working' ? (
+          <p className="pf-context__release pf-context__release--none" data-testid="pf-release-reference">
+            <ClipboardCheck size={14} aria-hidden />
+            <span>Release del contexto: Ninguno (trabajo en curso)</span>
+            {latestProjectRelease ? (
+              <span className="pf-muted">
+                {' '}· Último release del proyecto: #{latestProjectRelease.releaseNumber} (fijado a R{latestProjectRelease.designRevisionNumber})
+              </span>
+            ) : null}
+          </p>
+        ) : latestProjectRelease ? (
+          <p className="pf-context__release pf-context__release--none" data-testid="pf-release-reference">
+            <ClipboardCheck size={14} aria-hidden />
+            <span>Release del contexto: Ninguno</span>
+            <span className="pf-muted">
+              {' '}· Último release del proyecto: #{latestProjectRelease.releaseNumber} (fijado a R{latestProjectRelease.designRevisionNumber})
+            </span>
           </p>
         ) : null}
       </div>
@@ -739,14 +791,39 @@ function ProjectFurnitureContextBar({
 function ProjectFurnitureSummaryCards({
   summary,
 }: {
-  readonly summary: ReturnType<typeof buildFurnitureMatrix>['summary'];
+  readonly summary: FurnitureMatrixSummary;
 }): ReactNode {
   const cards = [
-    { id: 'active', label: 'Unidades activas', value: summary.activeUnits, hint: `de ${summary.total} unidades históricas` },
-    { id: 'quoted', label: 'Cotizadas', value: summary.quotedActive, hint: 'en la revisión seleccionada' },
-    { id: 'placed', label: 'En el diseño', value: summary.placedInDesign, hint: 'contexto seleccionado' },
-    { id: 'pending', label: 'Pendientes de colocar', value: summary.pendingPlacement, hint: 'contexto seleccionado' },
-    { id: 'attention', label: 'Requieren atención', value: summary.requireAttention, hint: 'acción sugerida' },
+    {
+      id: 'active',
+      label: 'Unidades activas',
+      value: summary.activeUnits,
+      hint: `de ${summary.total} unidades históricas`,
+    },
+    {
+      id: 'quoted',
+      label: 'Cotizadas',
+      value: summary.quotedActive,
+      hint: 'en la revisión seleccionada',
+    },
+    {
+      id: 'placed',
+      label: 'En el diseño',
+      value: summary.placedInDesign,
+      hint: 'contexto seleccionado',
+    },
+    {
+      id: 'pending',
+      label: 'Pendientes de colocar',
+      value: summary.pendingPlacement,
+      hint: 'contexto seleccionado',
+    },
+    {
+      id: 'attention',
+      label: 'Requieren atención',
+      value: summary.requireAttention,
+      hint: 'acción sugerida',
+    },
     {
       id: 'terminal',
       label: 'Retiradas / canceladas',
@@ -770,40 +847,46 @@ function ProjectFurnitureSummaryCards({
 interface DetailDrawerProps {
   readonly row: FurnitureMatrixRow;
   readonly selectedQuoteRevision: QuoteRevisionDetail | null;
-  readonly reconciliation: ProjectDesignReconciliationResult | null;
   readonly designContext: DesignContextSelection;
   readonly designRevision: DesignRevision | null;
-  readonly release: ProductionRelease | null;
+  readonly contextualRelease: FurnitureWorkspaceReleaseContext | null;
+  readonly latestProjectRelease: FurnitureWorkspaceReleaseContext | null;
   readonly onClose: () => void;
 }
 
 function ProjectFurnitureDetailDrawer({
   row,
   selectedQuoteRevision,
-  reconciliation,
   designContext,
   designRevision,
-  release,
+  contextualRelease,
+  latestProjectRelease,
   onClose,
 }: DetailDrawerProps): ReactNode {
   const quoteItem =
     selectedQuoteRevision?.items.find((item) => item.furnitureInstanceId === row.instance.id) ?? null;
-  const reconciliationItem =
-    reconciliation?.items.find((item) => item.furnitureInstanceId === row.instance.id) ?? null;
   const designLabel =
     designContext.kind === 'revision' && designRevision
       ? `R${designRevision.revision_number}`
       : 'Trabajo en curso';
 
   return (
-    <Modal open onClose={onClose} title={`Detalle de ${row.label}`} size="lg" dataTestId="pf-detail-modal">
+    <Modal
+      open
+      onClose={onClose}
+      title={`Detalle de ${row.label}`}
+      size="lg"
+      dataTestId="pf-detail-modal"
+    >
       <div className="pf-detail">
         <section className="pf-detail__section">
           <h4>Identidad física</h4>
           <dl className="pf-detail__grid">
             <dt>Unidad</dt>
             <dd>
-              {row.label} · Unidad {row.unitIndex} de {row.unitTotal} · {formatDimensions(row)}
+              {row.label}
+              {row.unitProvenanceLabel ? ` · ${row.unitProvenanceLabel}` : ''}
+              {row.dimensionsLabel ? ` · ${row.dimensionsLabel}` : ''}
             </dd>
             <dt>Estado físico</dt>
             <dd>
@@ -839,6 +922,12 @@ function ProjectFurnitureDetailDrawer({
                 <dd className="pf-tech-id">{row.duplicateOfInstanceId}</dd>
               </>
             ) : null}
+            {row.commercialGrouping ? (
+              <>
+                <dt>Línea de cotización</dt>
+                <dd className="pf-tech-id">{row.commercialGrouping.quoteLineId}</dd>
+              </>
+            ) : null}
           </dl>
         </section>
 
@@ -847,7 +936,8 @@ function ProjectFurnitureDetailDrawer({
             Contexto comercial
             {selectedQuoteRevision
               ? ` — Q${selectedQuoteRevision.revisionNumber} (${
-                  QUOTE_REVISION_STATUS_LABELS[selectedQuoteRevision.status] ?? selectedQuoteRevision.status
+                  QUOTE_REVISION_STATUS_LABELS[selectedQuoteRevision.status] ??
+                  selectedQuoteRevision.status
                 })`
               : ''}
           </h4>
@@ -890,38 +980,45 @@ function ProjectFurnitureDetailDrawer({
           <dl className="pf-detail__grid">
             <dt>Presencia</dt>
             <dd>
-              <span className={presenceBadgeClass(row.presence)}>{PRESENCE_LABELS[row.presence]}</span>
+              <span className={presenceBadgeClass(row.presence)}>
+                {PRESENCE_LABELS[row.presence]}
+              </span>
             </dd>
           </dl>
         </section>
 
         <section className="pf-detail__section">
           <h4>Reconciliación</h4>
-          {reconciliationItem ? (
+          {row.reconciliationItem ? (
             <>
               <p>
-                <span className={RECONCILIATION_BADGES[reconciliationItem.status].className}>
-                  {RECONCILIATION_BADGES[reconciliationItem.status].label}
+                <span className={RECONCILIATION_BADGES[row.reconciliationItem.status].className}>
+                  {RECONCILIATION_BADGES[row.reconciliationItem.status].label}
                 </span>
               </p>
-              {row.nextStep ? <p className="pf-detail__next-step">Próximo paso: {row.nextStep}</p> : null}
-              {reconciliationItem.differences.length > 0 ? (
+              {row.nextStep ? (
+                <p className="pf-detail__next-step">Próximo paso: {row.nextStep}</p>
+              ) : null}
+              {row.reconciliationItem.differences.length > 0 ? (
                 <ul className="pf-kv-list">
-                  {reconciliationItem.differences.map((difference, index) => (
+                  {row.reconciliationItem.differences.map((difference, index) => (
                     <li key={`${difference.path}-${index}`}>
                       <span>{difference.path}</span>
                       <span>
-                        {formatScalar(difference.quoteValue)} → {formatScalar(difference.designValue)}
+                        {formatScalar(difference.quoteValue)} →{' '}
+                        {formatScalar(difference.designValue)}
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : null}
-              {reconciliationItem.notes ? <p className="pf-muted">{reconciliationItem.notes}</p> : null}
+              {row.reconciliationItem.notes ? (
+                <p className="pf-muted">{row.reconciliationItem.notes}</p>
+              ) : null}
             </>
           ) : (
             <p className="pf-muted">
-              {reconciliation
+              {designContext.kind === 'revision'
                 ? 'Sin diferencias reportadas por el servidor para esta unidad.'
                 : 'Elegí revisiones exactas (cotización + diseño publicado) para ver la reconciliación del servidor.'}
             </p>
@@ -930,15 +1027,27 @@ function ProjectFurnitureDetailDrawer({
 
         <section className="pf-detail__section">
           <h4>Producción</h4>
-          {release ? (
+          {contextualRelease ? (
             <p>
-              Release #{release.release_number} fijado a R{release.design_revision_number}
-              {release.staleness.manufacturing_stale
+              Release #{contextualRelease.releaseNumber} fijado a R{contextualRelease.designRevisionNumber}
+              {contextualRelease.manufacturingStale
                 ? ' — el release está desactualizado respecto de la última revisión de diseño.'
                 : ''}
             </p>
+          ) : designContext.kind === 'working' ? (
+            <p className="pf-muted">
+              El trabajo en curso no cuenta con un release de producción.
+              {latestProjectRelease
+                ? ` El último release del proyecto es el #${latestProjectRelease.releaseNumber} (fijado a R${latestProjectRelease.designRevisionNumber}).`
+                : ' Todavía no hay releases de producción para esta obra.'}
+            </p>
           ) : (
-            <p className="pf-muted">Todavía no hay releases de producción para esta obra.</p>
+            <p className="pf-muted">
+              Esta revisión no cuenta con un release de producción contextual.
+              {latestProjectRelease
+                ? ` El último release del proyecto es el #${latestProjectRelease.releaseNumber} (fijado a R${latestProjectRelease.designRevisionNumber}).`
+                : ' Todavía no hay releases de producción para esta obra.'}
+            </p>
           )}
         </section>
       </div>

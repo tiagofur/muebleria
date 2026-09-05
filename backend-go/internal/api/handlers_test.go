@@ -102,6 +102,11 @@ type stubStore struct {
 	quoteRevisionsList  []domain.QuoteRevisionDetail
 	quoteRevisionsErr   error
 	quoteRevisionsCalls int
+
+	furnitureWorkspaceResult *domain.FurnitureWorkspace
+	furnitureWorkspaceErr    error
+	furnitureWorkspaceCalls  int
+	furnitureWorkspaceQuery  *storage.FurnitureWorkspaceQuery
 	// Requote (#394 / DT-10)
 	requoteProjectQuoteResult *storage.RequoteProjectQuoteResult
 	requoteProjectQuoteErr    error
@@ -1783,6 +1788,26 @@ func (s *stubStore) ListQuoteRevisionsByProject(_ context.Context, projectID str
 				},
 			},
 		},
+	}, nil
+}
+
+func (s *stubStore) GetProjectFurnitureWorkspace(_ context.Context, projectID string, query storage.FurnitureWorkspaceQuery) (*domain.FurnitureWorkspace, error) {
+	s.furnitureWorkspaceCalls++
+	qCopy := query
+	s.furnitureWorkspaceQuery = &qCopy
+	if s.furnitureWorkspaceErr != nil {
+		return nil, s.furnitureWorkspaceErr
+	}
+	if s.furnitureWorkspaceResult != nil {
+		return s.furnitureWorkspaceResult, nil
+	}
+	return &domain.FurnitureWorkspace{
+		ProjectID: projectID,
+		DesignContext: domain.FurnitureWorkspaceDesignHeader{
+			Kind: query.DesignContextKind,
+		},
+		Summary: domain.FurnitureWorkspaceSummary{},
+		Units:   []domain.FurnitureWorkspaceUnit{},
 	}, nil
 }
 

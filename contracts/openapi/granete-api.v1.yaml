@@ -2686,6 +2686,49 @@
         }
       }
     },
+    "/projects/{projectId}/furniture-workspace": {
+      "post": {
+        "operationId": "getProjectFurnitureWorkspace",
+        "summary": "Authoritative contextual projection of every physical furniture unit for the Project Furniture matrix (#500 / WEB-DT-1)",
+        "description": "Read-only deterministic projection: the client sends the SELECTED exact context (exact QuoteRevision, design and working/exact DesignRevision) and the server owns every contextual semantic — design presence (none|placed|pending joined strictly by furnitureInstanceId), per-unit action-required code + message, quantity grouping (unitIndex/unitTotal by definition, origin fallback — the same #389 semantics the SketchUp panel uses), commercial presence from the immutable revision snapshot, the server-computed reconciliation statuses when an exact published revision pair is selected, server-derived summary counts and the exact contextual ProductionRelease reference. React (and later surfaces) only render, filter and detail. POST is a read: the generated client boundary does not model query parameters, mirroring the read-only reconcileProjectDesign precedent. Foreign or cross-project contexts answer a uniform 404; contradictory context shapes answer 400.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectFurnitureWorkspaceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative per-unit contextual projection with summary and release reference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectFurnitureWorkspace"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/quote-revisions": {
       "get": {
         "operationId": "listProjectQuoteRevisions",
@@ -7901,6 +7944,401 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/QuoteRevisionItem"
+            }
+          }
+        }
+      },
+      "FurnitureWorkspaceContextKind": {
+        "type": "string",
+        "enum": [
+          "none",
+          "working",
+          "revision"
+        ]
+      },
+      "FurnitureWorkspaceDesignPresence": {
+        "type": "string",
+        "enum": [
+          "none",
+          "placed",
+          "pending"
+        ]
+      },
+      "FurnitureWorkspaceActionCode": {
+        "type": "string",
+        "enum": [
+          "pending_placement",
+          "quoted_not_modeled",
+          "modeled_not_quoted",
+          "modified",
+          "removed",
+          "conflict"
+        ]
+      },
+      "FurnitureWorkspaceAction": {
+        "type": "object",
+        "description": "Server-derived read-model action projection. Never a persisted FurnitureInstance status.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceActionCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human reason (es)."
+          },
+          "remediation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Suggested next step (es)."
+          }
+        }
+      },
+      "FurnitureWorkspaceCommercial": {
+        "type": "object",
+        "description": "Commercial presence derived strictly from the selected immutable QuoteRevision snapshot.",
+        "additionalProperties": false,
+        "required": [
+          "present"
+        ],
+        "properties": {
+          "present": {
+            "type": "boolean"
+          },
+          "lifecycleStatus": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "enum": [
+              null,
+              "active",
+              "removed",
+              "cancelled"
+            ]
+          }
+        }
+      },
+      "FurnitureWorkspaceDesign": {
+        "type": "object",
+        "description": "Design presence derived from the selected design context (working copy or exact DesignRevision) joined strictly by furnitureInstanceId.",
+        "additionalProperties": false,
+        "required": [
+          "presence",
+          "contextKind"
+        ],
+        "properties": {
+          "presence": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceDesignPresence"
+          },
+          "contextKind": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceContextKind"
+          },
+          "designId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "designRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "FurnitureWorkspaceCommercialGrouping": {
+        "type": "object",
+        "description": "Commercial quantity grouping provenance (#386 / QuoteLine↔FurnitureInstance): Unidad i de N within the exact QuoteLine. Never grouped by definition or origin.",
+        "additionalProperties": false,
+        "required": [
+          "quoteLineId",
+          "unitIndex",
+          "unitTotal"
+        ],
+        "properties": {
+          "quoteRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "quoteLineId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "unitIndex": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unitTotal": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "FurnitureWorkspaceUnit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furnitureInstance",
+          "commercial",
+          "design"
+        ],
+        "properties": {
+          "furnitureInstance": {
+            "$ref": "#/components/schemas/FurnitureInstance"
+          },
+          "commercial": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceCommercial"
+          },
+          "design": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceDesign"
+          },
+          "commercialGrouping": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceCommercialGrouping"
+          },
+          "actionRequired": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceAction"
+          },
+          "reconciliation": {
+            "$ref": "#/components/schemas/ReconciliationItem",
+            "description": "Server-computed reconciliation for the exact selected revision pair (absent for working-copy or no-context views)."
+          }
+        }
+      },
+      "FurnitureWorkspaceSummary": {
+        "type": "object",
+        "description": "Server-derived counts tied to the exact selected context.",
+        "additionalProperties": false,
+        "required": [
+          "total",
+          "activeUnits",
+          "quoted",
+          "placed",
+          "pending",
+          "actionRequired",
+          "removed",
+          "cancelled"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "activeUnits": {
+            "type": "integer"
+          },
+          "quoted": {
+            "type": "integer"
+          },
+          "placed": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "actionRequired": {
+            "type": "integer"
+          },
+          "removed": {
+            "type": "integer"
+          },
+          "cancelled": {
+            "type": "integer"
+          }
+        }
+      },
+      "FurnitureWorkspaceQuoteRevisionContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revisionNumber",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revisionNumber": {
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteRevisionStatus"
+          }
+        }
+      },
+      "FurnitureWorkspaceDesignContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceContextKind"
+          },
+          "designId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "designRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "designRevisionNumber": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "FurnitureWorkspaceReleaseContext": {
+        "type": "object",
+        "description": "Exact contextual release authority: the newest ProductionRelease pin with its derived staleness. No manufacturing internals.",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "releaseNumber",
+          "designRevisionId",
+          "designRevisionNumber",
+          "manufacturingStale"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "releaseNumber": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "designRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designRevisionNumber": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "quoteRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "manufacturingStale": {
+            "type": "boolean"
+          },
+          "currentDesignRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "currentDesignRevisionNumber": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "ProjectFurnitureWorkspaceRequest": {
+        "type": "object",
+        "description": "Selected exact context for the workspace projection. designContextKind defaults to 'working' when designId is present and the kind is omitted; 'revision' requires designRevisionId; a designRevisionId with kind 'working' is rejected.",
+        "additionalProperties": false,
+        "properties": {
+          "quoteRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "designId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "designContextKind": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "enum": [
+              null,
+              "none",
+              "working",
+              "revision"
+            ]
+          },
+          "designRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "ProjectFurnitureWorkspace": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "designContext",
+          "summary",
+          "units"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quoteRevision": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceQuoteRevisionContext"
+          },
+          "designContext": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceDesignContext"
+          },
+          "release": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceReleaseContext",
+            "description": "Exact contextual release: newest ProductionRelease whose immutable pins match the selected exact revisions. Absent for working-copy or revision mismatch."
+          },
+          "latestProjectRelease": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceReleaseContext",
+            "description": "Information-only reference to the newest ProductionRelease of the project. Never implied to belong to the selected context."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/FurnitureWorkspaceSummary"
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FurnitureWorkspaceUnit"
             }
           }
         }

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type {
   Design,
-  DesignWorkingCopy,
   FurnitureInstance,
+  FurnitureWorkspaceUnit,
   ProductionRelease,
-  ProjectDesignReconciliationResult,
+  ProjectFurnitureWorkspace,
   QuoteRevisionDetail,
 } from '@granete/storage';
 import {
@@ -29,7 +29,9 @@ function instance(overrides: Partial<FurnitureInstance> & { id: string }): Furni
   };
 }
 
-function quoteRevision(overrides: Partial<QuoteRevisionDetail> & { id: string }): QuoteRevisionDetail {
+function quoteRevision(
+  overrides: Partial<QuoteRevisionDetail> & { id: string },
+): QuoteRevisionDetail {
   return {
     projectId: 'p-1',
     revisionNumber: 1,
@@ -41,307 +43,275 @@ function quoteRevision(overrides: Partial<QuoteRevisionDetail> & { id: string })
   };
 }
 
-describe('buildFurnitureMatrix — physical-unit traceability (#500)', () => {
-  it('quantity=3 renders three distinct physical units with Unidad i de N provenance', () => {
-    const definitionId = 'def-1';
-    const instances = [
-      instance({ id: 'fi-a', furniture_definition_id: definitionId, created_at: '2026-09-01T10:00:01Z' }),
-      instance({ id: 'fi-b', furniture_definition_id: definitionId, created_at: '2026-09-01T10:00:02Z' }),
-      instance({ id: 'fi-c', furniture_definition_id: definitionId, created_at: '2026-09-01T10:00:03Z' }),
-    ];
+function workspaceUnit(overrides: Partial<FurnitureWorkspaceUnit> & { id: string }): FurnitureWorkspaceUnit {
+  const { id, ...rest } = overrides;
+  return {
+    furnitureInstance: instance({ id }),
+    commercial: { present: true, lifecycleStatus: 'active' },
+    design: { presence: 'none', contextKind: 'none' },
+    ...rest,
+  };
+}
 
-    const { rows, summary } = buildFurnitureMatrix({
-      instances,
-      quoteRevisions: [],
-      selectedQuoteRevisionId: null,
-      designContext: { kind: 'none', designId: null, designRevisionId: null },
-      workingCopy: null,
-      designRevision: null,
-      reconciliation: null,
-    });
-
-    expect(rows).toHaveLength(3);
-    // Identity is the server id, never the QuoteLine or the array index.
-    expect(new Set(rows.map((row) => row.instance.id))).toEqual(new Set(['fi-a', 'fi-b', 'fi-c']));
-    expect(rows.map((row) => row.unitIndex)).toEqual([1, 2, 3]);
-    expect(rows.every((row) => row.unitTotal === 3)).toBe(true);
-    expect(summary.total).toBe(3);
-    expect(summary.activeUnits).toBe(3);
-    // No design selected: nobody is pending, the state is honest no-design.
-    expect(summary.pendingPlacement).toBe(0);
-    expect(rows.every((row) => row.presence === 'no-design')).toBe(true);
-  });
-
-  it('partial placement derives placed/pending strictly from the selected design context items', () => {
-    const workingCopy: DesignWorkingCopy = {
-      design_id: 'd-1',
-      project_id: 'p-1',
-      source_type: 'sketchup',
-      items: [
-        {
-          id: 'wi-1',
-          design_id: 'd-1',
-          furniture_instance_id: 'fi-a',
-          parameters: {},
-          material_choices: {},
-          created_at: '2026-09-01T12:00:00Z',
-          updated_at: '2026-09-01T12:00:00Z',
+describe('buildFurnitureMatrix — physical-unit traceability & server authority (#500)', () => {
+  it('renders distinct physical units with QuoteLine provenance and preserves non-commercial units without false 1 of 1', () => {
+    const units: FurnitureWorkspaceUnit[] = [
+      // Line 1: 3 units
+      workspaceUnit({
+        id: 'fi-1',
+        commercialGrouping: {
+          quoteLineId: 'ql-1',
+          unitIndex: 1,
+          unitTotal: 3,
+          quoteRevisionId: 'qr-1',
         },
-        {
-          id: 'wi-2',
-          design_id: 'd-1',
-          furniture_instance_id: 'fi-b',
-          parameters: {},
-          material_choices: {},
-          created_at: '2026-09-01T12:00:00Z',
-          updated_at: '2026-09-01T12:00:00Z',
-        },
-      ],
-      updated_at: '2026-09-01T12:00:00Z',
-    };
-    const instances = [
-      instance({ id: 'fi-a', furniture_definition_id: 'def-1' }),
-      instance({ id: 'fi-b', furniture_definition_id: 'def-1' }),
-      instance({ id: 'fi-c', furniture_definition_id: 'def-1' }),
-    ];
-
-    const { rows, summary } = buildFurnitureMatrix({
-      instances,
-      quoteRevisions: [],
-      selectedQuoteRevisionId: null,
-      designContext: { kind: 'working', designId: 'd-1', designRevisionId: null },
-      workingCopy,
-      designRevision: null,
-      reconciliation: null,
-    });
-
-    const byId = new Map(rows.map((row) => [row.instance.id, row]));
-    expect(byId.get('fi-a')?.presence).toBe('placed');
-    expect(byId.get('fi-b')?.presence).toBe('placed');
-    expect(byId.get('fi-c')?.presence).toBe('pending');
-    expect(summary.placedInDesign).toBe(2);
-    expect(summary.pendingPlacement).toBe(1);
-    // Pending carries a next step; it is a view state, not a persisted status.
-    expect(byId.get('fi-c')?.actionRequired).toBe('Pendiente de colocar en el diseño');
-  });
-
-  it('mixed origins keep server provenance verbatim, including duplicate parent identity', () => {
-    const instances = [
-      instance({ id: 'fi-quote', origin: 'quote', furniture_definition_id: 'def-1' }),
-      instance({ id: 'fi-design', origin: 'design' }),
-      instance({ id: 'fi-manual', origin: 'manual' }),
-      instance({ id: 'fi-import', origin: 'import' }),
-      instance({ id: 'fi-dup', origin: 'duplicate', origin_furniture_instance_id: 'fi-quote' }),
-    ];
-
-    const { rows } = buildFurnitureMatrix({
-      instances,
-      quoteRevisions: [],
-      selectedQuoteRevisionId: null,
-      designContext: { kind: 'none', designId: null, designRevisionId: null },
-      workingCopy: null,
-      designRevision: null,
-      reconciliation: null,
-    });
-
-    const byId = new Map(rows.map((row) => [row.instance.id, row]));
-    expect(byId.get('fi-quote')?.originLabel).toBe('Cotización');
-    expect(byId.get('fi-design')?.originLabel).toBe('Diseño');
-    expect(byId.get('fi-manual')?.originLabel).toBe('Manual');
-    expect(byId.get('fi-import')?.originLabel).toBe('Importado');
-    expect(byId.get('fi-dup')?.originLabel).toBe('Duplicado');
-    expect(byId.get('fi-dup')?.duplicateOfInstanceId).toBe('fi-quote');
-  });
-
-  it('commercial presence derives from the exact selected QuoteRevision snapshot only', () => {
-    const instances = [
-      instance({ id: 'fi-a', furniture_definition_id: 'def-1' }),
-      instance({ id: 'fi-b', furniture_definition_id: 'def-1' }),
-    ];
-    const quoteRevisions = [
-      quoteRevision({
-        id: 'qr-1',
-        revisionNumber: 1,
-        items: [
-          {
-            furnitureInstanceId: 'fi-a',
-            parameters: { widthMm: 600 },
-            materialChoices: {},
-            lifecycleStatus: 'active',
-          },
-          {
-            furnitureInstanceId: 'fi-b',
-            parameters: { widthMm: 600 },
-            materialChoices: {},
-            lifecycleStatus: 'active',
-          },
-        ],
       }),
-      quoteRevision({
-        id: 'qr-2',
-        revisionNumber: 2,
-        items: [
-          {
-            furnitureInstanceId: 'fi-a',
-            parameters: { widthMm: 650 },
-            materialChoices: {},
-            lifecycleStatus: 'active',
-          },
-        ],
+      workspaceUnit({
+        id: 'fi-2',
+        commercialGrouping: {
+          quoteLineId: 'ql-1',
+          unitIndex: 2,
+          unitTotal: 3,
+          quoteRevisionId: 'qr-1',
+        },
+      }),
+      workspaceUnit({
+        id: 'fi-3',
+        commercialGrouping: {
+          quoteLineId: 'ql-1',
+          unitIndex: 3,
+          unitTotal: 3,
+          quoteRevisionId: 'qr-1',
+        },
+      }),
+      // Line 2: 2 units with same definition, kept strictly distinct
+      workspaceUnit({
+        id: 'fi-4',
+        commercialGrouping: {
+          quoteLineId: 'ql-2',
+          unitIndex: 1,
+          unitTotal: 2,
+          quoteRevisionId: 'qr-1',
+        },
+      }),
+      workspaceUnit({
+        id: 'fi-5',
+        commercialGrouping: {
+          quoteLineId: 'ql-2',
+          unitIndex: 2,
+          unitTotal: 2,
+          quoteRevisionId: 'qr-1',
+        },
+      }),
+      // Unit from design origin: NO commercial grouping
+      workspaceUnit({
+        id: 'fi-design',
+        furnitureInstance: instance({ id: 'fi-design', origin: 'design' }),
+        commercial: { present: false },
+        commercialGrouping: undefined,
       }),
     ];
 
-    const base = {
-      instances,
-      quoteRevisions,
-      designContext: { kind: 'none' as const, designId: null, designRevisionId: null },
-      workingCopy: null,
-      designRevision: null,
-      reconciliation: null,
-    };
-
-    const viewingR2 = buildFurnitureMatrix({ ...base, selectedQuoteRevisionId: 'qr-2' });
-    const byIdR2 = new Map(viewingR2.rows.map((row) => [row.instance.id, row]));
-    expect(byIdR2.get('fi-a')?.quotedInSelectedRevision).toBe(true);
-    expect(byIdR2.get('fi-b')?.quotedInSelectedRevision).toBe(false);
-    expect(viewingR2.summary.quotedActive).toBe(1);
-
-    // Switching to the historical revision retargets the view explicitly.
-    const viewingR1 = buildFurnitureMatrix({ ...base, selectedQuoteRevisionId: 'qr-1' });
-    expect(viewingR1.summary.quotedActive).toBe(2);
-  });
-
-  it('mirrors reconciliation statuses from the server result only — never invents quoted_not_modeled', () => {
-    const instances = [instance({ id: 'fi-a' }), instance({ id: 'fi-b' })];
-    const reconciliation = {
+    const workspace: ProjectFurnitureWorkspace = {
       projectId: 'p-1',
-      quoteRevisionId: 'qr-1',
-      designRevisionId: 'dr-1',
+      designContext: { kind: 'none' },
+      summary: {
+        total: 6,
+        activeUnits: 6,
+        quoted: 5,
+        placed: 0,
+        pending: 0,
+        actionRequired: 0,
+        removed: 0,
+        cancelled: 0,
+      },
+      units,
+    };
+
+    const { rows, summary } = buildFurnitureMatrix({ workspace });
+
+    expect(rows).toHaveLength(6);
+    const byId = new Map(rows.map((r) => [r.instance.id, r]));
+
+    // Line 1 provenance
+    expect(byId.get('fi-1')?.unitProvenanceLabel).toBe('Unidad 1 de 3');
+    expect(byId.get('fi-2')?.unitProvenanceLabel).toBe('Unidad 2 de 3');
+    expect(byId.get('fi-3')?.unitProvenanceLabel).toBe('Unidad 3 de 3');
+
+    // Line 2 provenance (never merged with Line 1 into 1..5)
+    expect(byId.get('fi-4')?.unitProvenanceLabel).toBe('Unidad 1 de 2');
+    expect(byId.get('fi-5')?.unitProvenanceLabel).toBe('Unidad 2 de 2');
+
+    // Design-origin unit: no false "Unidad 1 de 1"
+    expect(byId.get('fi-design')?.unitProvenanceLabel).toBeNull();
+    expect(byId.get('fi-design')?.commercialGrouping).toBeNull();
+
+    expect(summary.total).toBe(6);
+    expect(summary.quotedActive).toBe(5);
+  });
+
+  it('projects placed/pending and actionRequired verbatim from backend read model', () => {
+    const units: FurnitureWorkspaceUnit[] = [
+      workspaceUnit({
+        id: 'fi-placed',
+        design: {
+          presence: 'placed',
+          contextKind: 'working',
+          designId: 'd-1',
+        },
+      }),
+      workspaceUnit({
+        id: 'fi-pending',
+        design: {
+          presence: 'pending',
+          contextKind: 'working',
+          designId: 'd-1',
+        },
+        actionRequired: {
+          code: 'pending_placement',
+          message: 'Pendiente de colocar en el diseño',
+          remediation: 'Colocá la unidad desde el panel de muebles',
+        },
+      }),
+    ];
+
+    const workspace: ProjectFurnitureWorkspace = {
+      projectId: 'p-1',
+      designContext: { kind: 'working', designId: 'd-1' },
       summary: {
         total: 2,
-        synced: 0,
-        quotedNotModeled: 1,
-        modeledNotQuoted: 0,
-        modified: 1,
+        activeUnits: 2,
+        quoted: 2,
+        placed: 1,
+        pending: 1,
+        actionRequired: 1,
         removed: 0,
-        conflict: 0,
+        cancelled: 0,
       },
-      items: [
-        {
-          furnitureInstanceId: 'fi-a',
-          status: 'quoted_not_modeled',
+      units,
+    };
+
+    const { rows, summary } = buildFurnitureMatrix({ workspace });
+    const byId = new Map(rows.map((r) => [r.instance.id, r]));
+
+    expect(byId.get('fi-placed')?.presence).toBe('placed');
+    expect(byId.get('fi-placed')?.actionRequired).toBeNull();
+
+    expect(byId.get('fi-pending')?.presence).toBe('pending');
+    expect(byId.get('fi-pending')?.actionRequired).toBe('Pendiente de colocar en el diseño');
+    expect(byId.get('fi-pending')?.nextStep).toBe('Colocá la unidad desde el panel de muebles');
+
+    expect(summary.placedInDesign).toBe(1);
+    expect(summary.pendingPlacement).toBe(1);
+    expect(summary.requireAttention).toBe(1);
+  });
+
+  it('negative proof: React does NOT join design items and does NOT invent actionRequired', () => {
+    // We construct a unit marked pending by backend
+    const unit = workspaceUnit({
+      id: 'fi-x',
+      design: { presence: 'pending', contextKind: 'working' },
+      actionRequired: {
+        code: 'pending_placement',
+        message: 'Pendiente de colocar',
+        remediation: 'Colocá la unidad',
+      },
+    });
+
+    const workspace: ProjectFurnitureWorkspace = {
+      projectId: 'p-1',
+      designContext: { kind: 'working', designId: 'd-1' },
+      summary: {
+        total: 1,
+        activeUnits: 1,
+        quoted: 1,
+        placed: 0,
+        pending: 1,
+        actionRequired: 1,
+        removed: 0,
+        cancelled: 0,
+      },
+      units: [unit],
+    };
+
+    // Even if extraneous client-side properties (like design items) are passed,
+    // buildFurnitureMatrix relies strictly on workspace.units and ignores them.
+    const inputWithExtraneousItems = {
+      workspace,
+      workingCopy: {
+        items: [{ furniture_instance_id: 'fi-x' }], // claiming fi-x is placed in working copy
+      },
+      designRevision: {
+        items: [{ furniture_instance_id: 'fi-x' }],
+      },
+    };
+
+    const { rows } = buildFurnitureMatrix(inputWithExtraneousItems);
+
+    // Presence remains pending as authorized by backend, proving React never joins design items
+    expect(rows[0]?.presence).toBe('pending');
+    expect(rows[0]?.actionRequired).toBe('Pendiente de colocar');
+  });
+
+  it('mirrors reconciliation verbatim from backend read model', () => {
+    const units: FurnitureWorkspaceUnit[] = [
+      workspaceUnit({
+        id: 'fi-synced',
+        reconciliation: {
+          furnitureInstanceId: 'fi-synced',
+          status: 'synced',
           differences: [],
           impact: { commercial: false, manufacturing: false, spatial: false },
         },
-        {
-          furnitureInstanceId: 'fi-b',
+      }),
+      workspaceUnit({
+        id: 'fi-mod',
+        reconciliation: {
+          furnitureInstanceId: 'fi-mod',
           status: 'modified',
           differences: [
-            { path: 'parameters.widthMm', quoteValue: 600, designValue: 650, impact: { commercial: true, manufacturing: true, spatial: false } },
+            {
+              path: 'parameters.widthMm',
+              quoteValue: 600,
+              designValue: 700,
+              impact: { commercial: true, manufacturing: true, spatial: false },
+            },
           ],
           impact: { commercial: true, manufacturing: true, spatial: false },
         },
-      ],
-      impact: {
-        requiresRequote: true,
-        requiresResolution: false,
-        canRequote: true,
-        commercialChanges: 1,
-        manufacturingChanges: 1,
-        spatialChanges: 0,
-      },
-    } as unknown as ProjectDesignReconciliationResult;
-
-    const withServerResult = buildFurnitureMatrix({
-      instances,
-      quoteRevisions: [],
-      selectedQuoteRevisionId: 'qr-1',
-      designContext: { kind: 'revision', designId: 'd-1', designRevisionId: 'dr-1' },
-      workingCopy: null,
-      designRevision: null,
-      reconciliation,
-    });
-    const byId = new Map(withServerResult.rows.map((row) => [row.instance.id, row]));
-    expect(byId.get('fi-a')?.reconciliation).toBe('quoted_not_modeled');
-    expect(byId.get('fi-b')?.reconciliation).toBe('modified');
-    expect(byId.get('fi-b')?.nextStep).toContain('revisión de cotización');
-    expect(withServerResult.summary.requireAttention).toBe(2);
-
-    // Without a server reconciliation result (e.g. working-copy context) the
-    // view stays honest: no invented statuses even for pending units.
-    const withoutServerResult = buildFurnitureMatrix({
-      instances,
-      quoteRevisions: [],
-      selectedQuoteRevisionId: null,
-      designContext: { kind: 'none', designId: null, designRevisionId: null },
-      workingCopy: null,
-      designRevision: null,
-      reconciliation: null,
-    });
-    expect(withoutServerResult.rows.every((row) => row.reconciliation === null)).toBe(true);
-  });
-
-  it('terminal units stay visible and historically understandable', () => {
-    const instances = [
-      instance({ id: 'fi-live' }),
-      instance({ id: 'fi-gone', lifecycle_status: 'removed' }),
-      instance({ id: 'fi-cancelled', lifecycle_status: 'cancelled' }),
+        actionRequired: {
+          code: 'modified',
+          message: 'Modificada respecto de la cotización',
+          remediation: 'Generá una nueva revisión de cotización para incorporar el cambio',
+        },
+      }),
     ];
 
-    const { rows, summary } = buildFurnitureMatrix({
-      instances,
-      quoteRevisions: [],
-      selectedQuoteRevisionId: null,
-      designContext: { kind: 'none', designId: null, designRevisionId: null },
-      workingCopy: null,
-      designRevision: null,
-      reconciliation: null,
-    });
-
-    expect(rows).toHaveLength(3);
-    const byId = new Map(rows.map((row) => [row.instance.id, row]));
-    expect(byId.get('fi-gone')?.lifecycleLabel).toBe('Retirada');
-    expect(byId.get('fi-cancelled')?.lifecycleLabel).toBe('Cancelada');
-    expect(summary.activeUnits).toBe(1);
-    expect(summary.removed).toBe(1);
-    expect(summary.cancelled).toBe(1);
-  });
-
-  it('derives presence from an exact published DesignRevision when selected', () => {
-    const instances = [instance({ id: 'fi-a' }), instance({ id: 'fi-b' })];
-    const designRevision = {
-      id: 'dr-1',
-      design_id: 'd-1',
-      revision_number: 1,
-      source_type: 'sketchup',
-      status: 'published',
-      created_at: '2026-09-01T13:00:00Z',
-      items: [
-        {
-          id: 'dri-1',
-          design_revision_id: 'dr-1',
-          furniture_instance_id: 'fi-b',
-          parameters: {},
-          material_choices: {},
-          created_at: '2026-09-01T13:00:00Z',
-        },
-      ],
+    const workspace: ProjectFurnitureWorkspace = {
+      projectId: 'p-1',
+      designContext: { kind: 'revision', designRevisionId: 'dr-1' },
+      summary: {
+        total: 2,
+        activeUnits: 2,
+        quoted: 2,
+        placed: 2,
+        pending: 0,
+        actionRequired: 1,
+        removed: 0,
+        cancelled: 0,
+      },
+      units,
     };
 
-    const { rows, summary } = buildFurnitureMatrix({
-      instances,
-      quoteRevisions: [],
-      selectedQuoteRevisionId: null,
-      designContext: { kind: 'revision', designId: 'd-1', designRevisionId: 'dr-1' },
-      workingCopy: null,
-      designRevision: designRevision as never,
-      reconciliation: null,
-    });
+    const { rows } = buildFurnitureMatrix({ workspace });
+    const byId = new Map(rows.map((r) => [r.instance.id, r]));
 
-    const byId = new Map(rows.map((row) => [row.instance.id, row]));
-    expect(byId.get('fi-a')?.presence).toBe('pending');
-    expect(byId.get('fi-b')?.presence).toBe('placed');
-    expect(summary.placedInDesign).toBe(1);
+    expect(byId.get('fi-synced')?.reconciliation).toBe('synced');
+    expect(byId.get('fi-synced')?.actionRequired).toBeNull();
+
+    expect(byId.get('fi-mod')?.reconciliation).toBe('modified');
+    expect(byId.get('fi-mod')?.actionRequired).toBe('Modificada respecto de la cotización');
+    expect(byId.get('fi-mod')?.nextStep).toContain('revisión de cotización');
   });
 });
 
@@ -357,13 +327,17 @@ describe('matrix filters', () => {
       lifecycle: 'active',
       lifecycleLabel: 'Activa',
       isActive: true,
+      commercialGrouping: { quoteLineId: 'ql-1', unitIndex: 1, unitTotal: 1 },
       unitIndex: 1,
       unitTotal: 1,
+      unitProvenanceLabel: 'Unidad 1 de 1',
       presence: 'placed',
       quotedInSelectedRevision: true,
       reconciliation: null,
+      reconciliationItem: null,
       actionRequired: null,
       nextStep: null,
+      actionCode: null,
     },
     {
       instance: instance({ id: 'fi-b' }),
@@ -375,13 +349,17 @@ describe('matrix filters', () => {
       lifecycle: 'active',
       lifecycleLabel: 'Activa',
       isActive: true,
-      unitIndex: 1,
-      unitTotal: 1,
+      commercialGrouping: null,
+      unitIndex: null,
+      unitTotal: null,
+      unitProvenanceLabel: null,
       presence: 'pending',
       quotedInSelectedRevision: false,
       reconciliation: null,
+      reconciliationItem: null,
       actionRequired: 'Pendiente de colocar en el diseño',
       nextStep: 'Colocá la unidad desde el panel de muebles',
+      actionCode: 'pending_placement',
     },
   ] as never[];
 
@@ -442,7 +420,11 @@ describe('context defaults and release reference', () => {
       designId: 'd-1',
       designRevisionId: null,
     });
-    expect(defaultDesignContext([])).toEqual({ kind: 'none', designId: null, designRevisionId: null });
+    expect(defaultDesignContext([])).toEqual({
+      kind: 'none',
+      designId: null,
+      designRevisionId: null,
+    });
   });
 
   it('release reference is the newest release of the project', () => {

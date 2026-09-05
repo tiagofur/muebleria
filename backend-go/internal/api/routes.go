@@ -432,6 +432,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	// commercial items) that powers the exact commercial context selector of
 	// the Project Furniture matrix. Read-only.
 	mux.Handle("GET /api/projects/{projectId}/quote-revisions", authMW(http.HandlerFunc(server.HandleProjectQuoteRevisions)))
+	// #500 / WEB-DT-1: authoritative contextual projection of the Project
+	// Furniture matrix (placed/pending, commercial grouping provenance,
+	// server actions and exact contextual release). Read-only.
+	mux.Handle("POST /api/projects/{projectId}/furniture-workspace", authMW(http.HandlerFunc(server.HandleProjectFurnitureWorkspace)))
 
 	// #395 / DT-11: DesignRevision approval and ProductionRelease pinned to
 	// the exact approved revision + manufacturing fingerprint. Approval is an

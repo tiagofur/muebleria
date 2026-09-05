@@ -6,6 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type {
+  FurnitureWorkspaceUnit,
+  ProjectFurnitureWorkspace,
+  ProjectFurnitureWorkspaceRequest,
+} from '@granete/storage';
 import {
   ProjectFurnitureScreen,
   projectFurnitureQueryKeys,
@@ -15,18 +20,16 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 
 interface FetchRoutes {
-  furniture: unknown[];
+  workspace?: ProjectFurnitureWorkspace;
+  workspaceHandler?: (body: ProjectFurnitureWorkspaceRequest) => ProjectFurnitureWorkspace;
+  furniture?: unknown[];
   quoteRevisions?: unknown[];
   designs?: unknown[];
-  releases?: unknown[];
-  workingCopy?: Record<string, unknown> | null;
   designRevisions?: unknown[];
-  reconciliation?: Record<string, unknown>;
 }
 
 const API = 'http://api.test';
 const PROJECT = '11111111-0000-4000-8000-000000000001';
-const FINGERPRINT = `sha256-${'a'.repeat(64)}`;
 
 function apiErrorEnvelope(code: string, message: string): string {
   return JSON.stringify({
@@ -39,6 +42,54 @@ function apiErrorEnvelope(code: string, message: string): string {
   });
 }
 
+function defaultWorkspaceFromFurniture(
+  furniture: unknown[],
+  body: ProjectFurnitureWorkspaceRequest = {},
+): ProjectFurnitureWorkspace {
+  const units: FurnitureWorkspaceUnit[] = (furniture as any[]).map((f, idx) => ({
+    furnitureInstance: f,
+    commercial: {
+      present: body.quoteRevisionId !== null && body.quoteRevisionId !== undefined,
+      lifecycleStatus: f.lifecycle_status,
+    },
+    commercialGrouping:
+      f.origin === 'quote'
+        ? {
+            quoteLineId: '00000000-0000-4000-8000-000000000001',
+            unitIndex: idx + 1,
+            unitTotal: furniture.length,
+            quoteRevisionId: body.quoteRevisionId ?? null,
+          }
+        : undefined,
+    design: {
+      presence: body.designContextKind === 'none' || !body.designContextKind ? 'none' : 'pending',
+      contextKind: body.designContextKind ?? 'none',
+      designId: body.designId ?? null,
+      designRevisionId: body.designRevisionId ?? null,
+    },
+  }));
+
+  return {
+    projectId: PROJECT,
+    designContext: {
+      kind: body.designContextKind ?? 'none',
+      designId: body.designId ?? null,
+      designRevisionId: body.designRevisionId ?? null,
+    },
+    summary: {
+      total: units.length,
+      activeUnits: units.filter((u) => u.furnitureInstance.lifecycle_status === 'active').length,
+      quoted: units.filter((u) => u.commercial.present).length,
+      placed: units.filter((u) => u.design.presence === 'placed').length,
+      pending: units.filter((u) => u.design.presence === 'pending').length,
+      actionRequired: units.filter((u) => u.actionRequired !== undefined).length,
+      removed: units.filter((u) => u.furnitureInstance.lifecycle_status === 'removed').length,
+      cancelled: units.filter((u) => u.furnitureInstance.lifecycle_status === 'cancelled').length,
+    },
+    units,
+  };
+}
+
 function stubFetch(
   routes: FetchRoutes,
   overrides: Record<string, { status: number; body: string }> = {},
@@ -47,9 +98,7 @@ function stubFetch(
     const url = String(input instanceof Request ? input.url : input);
     const parsed = new URL(url);
     const path = parsed.pathname + parsed.search;
-    const method = (
-      init?.method ?? (input instanceof Request ? input.method : 'GET')
-    ).toUpperCase();
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
 
     for (const [prefix, override] of Object.entries(overrides)) {
       if (path.startsWith(prefix)) {
@@ -66,8 +115,17 @@ function stubFetch(
         headers: { 'Content-Type': 'application/json' },
       });
 
-    if (path === `/projects/${PROJECT}/furniture-instances` && method === 'GET') {
-      return json(routes.furniture);
+    if (path === `/projects/${PROJECT}/furniture-workspace` && method === 'POST') {
+      const body: ProjectFurnitureWorkspaceRequest = init?.body
+        ? JSON.parse(String(init.body))
+        : {};
+      if (routes.workspaceHandler) {
+        return json(routes.workspaceHandler(body));
+      }
+      if (routes.workspace) {
+        return json(routes.workspace);
+      }
+      return json(defaultWorkspaceFromFurniture(routes.furniture ?? [], body));
     }
     if (path === `/projects/${PROJECT}/quote-revisions` && method === 'GET') {
       return json(routes.quoteRevisions ?? []);
@@ -75,25 +133,8 @@ function stubFetch(
     if (path === `/projects/${PROJECT}/designs` && method === 'GET') {
       return json(routes.designs ?? []);
     }
-    if (path === `/projects/${PROJECT}/production-releases` && method === 'GET') {
-      return json(routes.releases ?? []);
-    }
-    if (path === '/designs/d-1/working-copy' && method === 'GET') {
-      return json(
-        routes.workingCopy ?? {
-          design_id: 'd-1',
-          project_id: PROJECT,
-          source_type: 'sketchup',
-          items: [],
-          updated_at: '2026-09-01T12:00:00Z',
-        },
-      );
-    }
     if (path === '/designs/d-1/revisions' && method === 'GET') {
       return json(routes.designRevisions ?? []);
-    }
-    if (path === `/projects/${PROJECT}/reconciliation` && method === 'POST') {
-      return json(routes.reconciliation ?? {});
     }
     return new Response(apiErrorEnvelope('NOT_FOUND', `unrouted ${method} ${path}`), {
       status: 404,
@@ -168,9 +209,8 @@ afterEach(() => {
 describe('ProjectFurnitureScreen — generated contract & tenant scope', () => {
   it('consumes only generated client reads (no handwritten fetch/DTO)', () => {
     const src = readFileSync(join(here, 'ProjectFurnitureScreen.tsx'), 'utf8');
-    expect(src).toContain('api.listProjectFurnitureInstances');
+    expect(src).toContain('api.getProjectFurnitureWorkspace');
     expect(src).toContain('api.listProjectQuoteRevisions');
-    expect(src).toContain('api.reconcileProjectDesign');
     // Pending/placed and reconciliation derive from the pure view-model over
     // server projections; the screen holds no status policy of its own.
     expect(src).toContain("from './furnitureMatrix'");
@@ -182,14 +222,23 @@ describe('ProjectFurnitureScreen — generated contract & tenant scope', () => {
 
   it('query keys carry the session scope and the project id (tenant isolation)', () => {
     const keys = projectFurnitureQueryKeys(['session', 'scope-a'], PROJECT);
-    expect(keys.furniture).toEqual([
+    const testContext: ProjectFurnitureContextState = {
+      quoteRevisionId: 'qr-1',
+      designId: 'd-1',
+      designContextKind: 'working',
+      designRevisionId: null,
+    };
+    expect(keys.workspace(testContext)).toEqual([
       'project-furniture',
       'session',
       'scope-a',
       PROJECT,
-      'furniture-instances',
+      'workspace',
+      'qr-1',
+      'd-1',
+      'working',
+      null,
     ]);
-    expect(keys.reconciliation('q', 'd')).toContain('reconciliation');
     expect(JSON.stringify(keys.root)).toContain(PROJECT);
   });
 });
@@ -212,20 +261,50 @@ describe('ProjectFurnitureScreen — matrix behavior (#500 acceptance)', () => {
     expect(screen.getByTestId('pf-summary-pending').textContent).toContain('0');
   });
 
-  it('derives placed/pending from the working copy of the selected design', async () => {
-    stubFetch({
-      furniture: [instance('fi-1'), instance('fi-2'), instance('fi-3')],
-      designs: [design],
-      workingCopy: {
-        design_id: 'd-1',
-        project_id: PROJECT,
-        source_type: 'sketchup',
-        updated_at: '2026-09-01T12:00:00Z',
-        items: [
-          { id: 'w-1', design_id: 'd-1', furniture_instance_id: 'fi-1', parameters: {}, material_choices: {}, created_at: '2026-09-01T12:00:00Z', updated_at: '2026-09-01T12:00:00Z' },
-          { id: 'w-2', design_id: 'd-1', furniture_instance_id: 'fi-2', parameters: {}, material_choices: {}, created_at: '2026-09-01T12:00:00Z', updated_at: '2026-09-01T12:00:00Z' },
-        ],
+  it('projects placed/pending and actionRequired verbatim from backend workspace read model', async () => {
+    const workspace: ProjectFurnitureWorkspace = {
+      projectId: PROJECT,
+      designContext: { kind: 'working', designId: 'd-1' },
+      summary: {
+        total: 3,
+        activeUnits: 3,
+        quoted: 3,
+        placed: 2,
+        pending: 1,
+        actionRequired: 1,
+        removed: 0,
+        cancelled: 0,
       },
+      units: [
+        {
+          furnitureInstance: instance('fi-1') as any,
+          commercial: { present: true, lifecycleStatus: 'active' },
+          commercialGrouping: { quoteLineId: 'ql-1', unitIndex: 1, unitTotal: 3 },
+          design: { presence: 'placed', contextKind: 'working', designId: 'd-1' },
+        },
+        {
+          furnitureInstance: instance('fi-2') as any,
+          commercial: { present: true, lifecycleStatus: 'active' },
+          commercialGrouping: { quoteLineId: 'ql-1', unitIndex: 2, unitTotal: 3 },
+          design: { presence: 'placed', contextKind: 'working', designId: 'd-1' },
+        },
+        {
+          furnitureInstance: instance('fi-3') as any,
+          commercial: { present: true, lifecycleStatus: 'active' },
+          commercialGrouping: { quoteLineId: 'ql-1', unitIndex: 3, unitTotal: 3 },
+          design: { presence: 'pending', contextKind: 'working', designId: 'd-1' },
+          actionRequired: {
+            code: 'pending_placement',
+            message: 'Pendiente de colocar en el diseño',
+            remediation: 'Colocá la unidad desde el panel de muebles',
+          },
+        },
+      ],
+    };
+
+    stubFetch({
+      designs: [design],
+      workspace,
     });
     renderScreen({});
 
@@ -240,21 +319,49 @@ describe('ProjectFurnitureScreen — matrix behavior (#500 acceptance)', () => {
   });
 
   it('shows the exact QuoteRevision context and pins the selected revision through onContextChange', async () => {
-    const fetchMock = stubFetch({
-      furniture: [instance('fi-1')],
+    stubFetch({
       quoteRevisions: [
-        quoteRevision('qr-1', 1, [
-          { furnitureInstanceId: 'fi-1', parameters: {}, materialChoices: {}, lifecycleStatus: 'active' },
-        ]),
+        quoteRevision('qr-1', 1, []),
         quoteRevision('qr-2', 2, []),
       ],
+      workspaceHandler: (body) => {
+        const isQr1 = body.quoteRevisionId === 'qr-1';
+        return {
+          projectId: PROJECT,
+          designContext: { kind: 'none' },
+          summary: {
+            total: 1,
+            activeUnits: 1,
+            quoted: isQr1 ? 1 : 0,
+            placed: 0,
+            pending: 0,
+            actionRequired: 0,
+            removed: 0,
+            cancelled: 0,
+          },
+          units: [
+            {
+              furnitureInstance: instance('fi-1') as any,
+              commercial: { present: isQr1, lifecycleStatus: 'active' },
+              commercialGrouping: isQr1
+                ? { quoteLineId: 'ql-1', unitIndex: 1, unitTotal: 1, quoteRevisionId: 'qr-1' }
+                : undefined,
+              design: { presence: 'none', contextKind: 'none' },
+            },
+          ],
+        };
+      },
     });
     const onContextChange = vi.fn();
     renderScreen({ onContextChange });
 
     const select = await screen.findByTestId('pf-quote-revision-select');
     // View default = newest revision, pinned once selected.
-    await waitFor(() => expect((select as HTMLSelectElement).value).toBe('qr-2'));
+    await waitFor(() =>
+      expect(
+        (screen.getByTestId('pf-quote-revision-select') as HTMLSelectElement).value,
+      ).toBe('qr-2'),
+    );
     await waitFor(() =>
       expect(onContextChange).toHaveBeenLastCalledWith(
         expect.objectContaining({ quoteRevisionId: 'qr-2' }),
@@ -265,21 +372,19 @@ describe('ProjectFurnitureScreen — matrix behavior (#500 acceptance)', () => {
 
     // The user explicitly selects the historical revision: the view retargets
     // through the pinned URL context, never silently.
-    await userEvent.selectOptions(select, 'qr-1');
+    await userEvent.selectOptions(screen.getByTestId('pf-quote-revision-select'), 'qr-1');
     await waitFor(() =>
       expect(onContextChange).toHaveBeenLastCalledWith(
         expect.objectContaining({ quoteRevisionId: 'qr-1' }),
       ),
     );
-    expect(screen.getByTestId('pf-cell-quote-fi-1').textContent).toContain('En Q1');
-    // Reconciliation is never called without an exact published design revision.
-    const calls = fetchMock.mock.calls.map((call) => String(call[0]));
-    expect(calls.some((url) => url.includes('/reconciliation'))).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId('pf-cell-quote-fi-1').textContent).toContain('En Q1');
+    });
   });
 
   it('mirrors reconciliation statuses from the server for exact revisions', async () => {
     stubFetch({
-      furniture: [instance('fi-1'), instance('fi-2')],
       quoteRevisions: [quoteRevision('qr-1', 1, [])],
       designs: [design],
       designRevisions: [
@@ -290,33 +395,83 @@ describe('ProjectFurnitureScreen — matrix behavior (#500 acceptance)', () => {
           source_type: 'sketchup',
           status: 'published',
           created_at: '2026-09-01T13:00:00Z',
-          items: [
-            { id: 'dri-1', design_revision_id: 'dr-1', furniture_instance_id: 'fi-1', parameters: {}, material_choices: {}, created_at: '2026-09-01T13:00:00Z' },
-          ],
+          items: [],
         },
       ],
-      reconciliation: {
-        projectId: PROJECT,
-        quoteRevisionId: 'qr-1',
-        designRevisionId: 'dr-1',
-        summary: { total: 2, synced: 0, quotedNotModeled: 1, modeledNotQuoted: 0, modified: 0, removed: 1, conflict: 0 },
-        items: [
-          { furnitureInstanceId: 'fi-1', status: 'quoted_not_modeled', differences: [], impact: { commercial: false, manufacturing: false, spatial: false } },
-          { furnitureInstanceId: 'fi-2', status: 'removed', differences: [], impact: { commercial: false, manufacturing: false, spatial: false } },
-        ],
-        impact: { requiresRequote: false, requiresResolution: false, canRequote: true, commercialChanges: 0, manufacturingChanges: 0, spatialChanges: 0 },
+      workspaceHandler: (body) => {
+        const isRevisionContext = body.designContextKind === 'revision';
+        return {
+          projectId: PROJECT,
+          designContext: {
+            kind: body.designContextKind ?? 'none',
+            designId: body.designId ?? null,
+            designRevisionId: body.designRevisionId ?? null,
+          },
+          summary: {
+            total: 2,
+            activeUnits: 2,
+            quoted: 2,
+            placed: 2,
+            pending: 0,
+            actionRequired: isRevisionContext ? 2 : 0,
+            removed: 0,
+            cancelled: 0,
+          },
+          units: [
+            {
+              furnitureInstance: instance('fi-1') as any,
+              commercial: { present: true },
+              design: { presence: 'placed', contextKind: body.designContextKind ?? 'none' },
+              reconciliation: isRevisionContext
+                ? {
+                    furnitureInstanceId: 'fi-1',
+                    status: 'quoted_not_modeled',
+                    differences: [],
+                    impact: { commercial: false, manufacturing: false, spatial: false },
+                  }
+                : undefined,
+              actionRequired: isRevisionContext
+                ? {
+                    code: 'quoted_not_modeled',
+                    message: 'Cotizada sin modelar',
+                    remediation: 'Colocá la unidad en el diseño',
+                  }
+                : undefined,
+            },
+            {
+              furnitureInstance: instance('fi-2') as any,
+              commercial: { present: true },
+              design: { presence: 'placed', contextKind: body.designContextKind ?? 'none' },
+              reconciliation: isRevisionContext
+                ? {
+                    furnitureInstanceId: 'fi-2',
+                    status: 'removed',
+                    differences: [],
+                    impact: { commercial: false, manufacturing: false, spatial: false },
+                  }
+                : undefined,
+              actionRequired: isRevisionContext
+                ? {
+                    code: 'removed',
+                    message: 'Retirada del diseño',
+                    remediation: 'Confirmá la baja o reincorporá la unidad',
+                  }
+                : undefined,
+            },
+          ],
+        };
       },
     });
     renderScreen({});
 
-    const contextSelect = await screen.findByTestId('pf-design-context-select');
     // The revision options arrive asynchronously; wait for the exact R1
     // option to exist before selecting it.
     await waitFor(() => {
-      const option = (contextSelect as HTMLSelectElement).querySelector('option[value="dr-1"]');
+      const select = screen.getByTestId('pf-design-context-select') as HTMLSelectElement;
+      const option = select.querySelector('option[value="dr-1"]');
       expect(option).not.toBeNull();
     });
-    await userEvent.selectOptions(contextSelect, 'dr-1');
+    await userEvent.selectOptions(screen.getByTestId('pf-design-context-select'), 'dr-1');
     await waitFor(() => {
       expect(within(screen.getByTestId('pf-row-fi-1')).getByText('Cotizada sin modelar')).toBeTruthy();
     });
@@ -357,12 +512,15 @@ describe('ProjectFurnitureScreen — matrix behavior (#500 acceptance)', () => {
   });
 
   it('surfaces a forbidden projection with a distinct message', async () => {
-    stubFetch({ furniture: [] }, {
-      [`/projects/${PROJECT}/furniture-instances`]: {
-        status: 403,
-        body: apiErrorEnvelope('FORBIDDEN', 'no tenés permiso para ver los muebles del proyecto'),
+    stubFetch(
+      { furniture: [] },
+      {
+        [`/projects/${PROJECT}/furniture-workspace`]: {
+          status: 403,
+          body: apiErrorEnvelope('FORBIDDEN', 'no tenés permiso para ver los muebles del proyecto'),
+        },
       },
-    });
+    );
     renderScreen({});
 
     expect(await screen.findByText('No se pudo cargar la matriz de muebles')).toBeTruthy();
@@ -370,43 +528,68 @@ describe('ProjectFurnitureScreen — matrix behavior (#500 acceptance)', () => {
   });
 
   it('surfaces a cross-tenant project as a uniform not-found', async () => {
-    stubFetch({ furniture: [] }, {
-      [`/projects/${PROJECT}/furniture-instances`]: {
-        status: 404,
-        body: apiErrorEnvelope('NOT_FOUND', 'proyecto no encontrado'),
+    stubFetch(
+      { furniture: [] },
+      {
+        [`/projects/${PROJECT}/furniture-workspace`]: {
+          status: 404,
+          body: apiErrorEnvelope('NOT_FOUND', 'proyecto no encontrado'),
+        },
       },
-    });
+    );
     renderScreen({});
 
-    expect(await screen.findByText('La obra no existe o no es accesible desde tu organización.')).toBeTruthy();
+    expect(
+      await screen.findByText('La obra no existe o no es accesible desde tu organización.'),
+    ).toBeTruthy();
   });
 
-  it('shows the release reference pinned to the exact revisions', async () => {
-    stubFetch({
-      furniture: [instance('fi-1')],
-      releases: [
+  it('shows the release reference pinned to the exact revisions and distinguishes working copy', async () => {
+    const workspaceWithRelease: ProjectFurnitureWorkspace = {
+      projectId: PROJECT,
+      designContext: { kind: 'revision', designRevisionId: 'dr-1' },
+      release: {
+        id: 'rel-1',
+        releaseNumber: 1,
+        designRevisionId: 'dr-1',
+        designRevisionNumber: 1,
+        quoteRevisionId: 'qr-1',
+        manufacturingStale: false,
+      },
+      latestProjectRelease: {
+        id: 'rel-1',
+        releaseNumber: 1,
+        designRevisionId: 'dr-1',
+        designRevisionNumber: 1,
+        quoteRevisionId: 'qr-1',
+        manufacturingStale: false,
+      },
+      summary: {
+        total: 1,
+        activeUnits: 1,
+        quoted: 1,
+        placed: 1,
+        pending: 0,
+        actionRequired: 0,
+        removed: 0,
+        cancelled: 0,
+      },
+      units: [
         {
-          id: 'rel-1',
-          project_id: PROJECT,
-          release_number: 1,
-          design_revision_id: 'dr-1',
-          design_revision_number: 1,
-          quote_revision_id: 'qr-1',
-          manufacturing_fingerprint: FINGERPRINT,
-          status: 'active',
-          released_by: 'u-1',
-          released_at: '2026-09-01T10:00:00Z',
-          staleness: {
-            manufacturing_stale: false,
-            current_design_revision_id: null,
-            current_design_revision_number: null,
-          },
+          furnitureInstance: instance('fi-1') as any,
+          commercial: { present: true },
+          design: { presence: 'placed', contextKind: 'revision' },
         },
       ],
+    };
+
+    stubFetch({
+      quoteRevisions: [quoteRevision('qr-1', 1, [])],
+      workspace: workspaceWithRelease,
     });
     renderScreen({});
 
     const reference = await screen.findByTestId('pf-release-reference');
-    expect(reference.textContent).toContain('Release #1 fijado a R1');
+    expect(reference.textContent).toContain('Release #1 fijado a R1 y Q1');
   });
 });

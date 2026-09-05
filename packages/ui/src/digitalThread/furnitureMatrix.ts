@@ -3,30 +3,27 @@
  * matrix.
  *
  * Authority rules (issue #500, tracker #396, #389 / DT-5):
- * - Physical identity, origin and lifecycle come verbatim from the generated
+ * - Physical identity, origin, and lifecycle come verbatim from the generated
  *   `FurnitureInstance` read model. Nothing here derives identity from name,
- *   definition, position or array index.
- * - Pending/placed derives from the SELECTED design context items joined by
- *   `furnitureInstanceId` — the exact same semantics the SketchUp Project
- *   Furniture panel uses (#389). No persisted global status exists.
- * - Reconciliation statuses (`quoted_not_modeled`, `modified`, …) are ONLY
- *   mirrored from the server `reconcileProjectDesign` result. This module
- *   never invents them.
- * - Commercial presence derives from the exact selected QuoteRevision items.
- *
- * Quantity > 1 keeps one row per physical unit; the visual grouping
- * (`unidad i de N`) groups by definition (fallback origin) exactly like the
- * plugin panel, so Web and SketchUp cannot drift apart.
+ *   definition, position, or array index.
+ * - Contextual placed/pending and action-required status derive strictly from
+ *   the backend read model (`POST /projects/{projectId}/furniture-workspace`).
+ *   React NEVER joins design items or invents next-step remediations locally.
+ * - Commercial quantity grouping provenance (`Unidad i de N`) comes strictly
+ *   from `quote_line_furniture_instances` truth (via `commercialGrouping`).
+ *   Units without commercial line provenance do NOT render artificial 1 of 1.
+ * - Reconciliation badges mirror server truth only; React never invents them.
  */
 
 import type {
   Design,
-  DesignRevision,
-  DesignWorkingCopy,
   FurnitureInstance,
+  FurnitureWorkspaceCommercialGrouping,
+  FurnitureWorkspaceDesignPresence,
   ProductionRelease,
-  ProjectDesignReconciliationResult,
+  ProjectFurnitureWorkspace,
   QuoteRevisionDetail,
+  ReconciliationItem,
   ReconciliationStatus,
 } from '@granete/storage';
 
@@ -68,17 +65,21 @@ export interface FurnitureMatrixRow {
   readonly lifecycle: FurnitureLifecycle;
   readonly lifecycleLabel: string;
   readonly isActive: boolean;
-  /** Quantity grouping provenance: `Unidad i de N` within the group. */
-  readonly unitIndex: number;
-  readonly unitTotal: number;
+  /** Commercial quantity grouping provenance (#386 / QuoteLine ↔ FurnitureInstance). */
+  readonly commercialGrouping: FurnitureWorkspaceCommercialGrouping | null;
+  readonly unitIndex: number | null;
+  readonly unitTotal: number | null;
+  readonly unitProvenanceLabel: string | null;
   readonly presence: DesignPresence;
   /** Membership in the exact selected QuoteRevision snapshot. */
   readonly quotedInSelectedRevision: boolean;
   /** Server-derived reconciliation status for the exact revisions, if any. */
   readonly reconciliation: ReconciliationStatus | null;
-  /** Read-model reason + next step; never a persisted FurnitureInstance status. */
+  readonly reconciliationItem: ReconciliationItem | null;
+  /** Read-model reason + next step; server-projected, never persisted status. */
   readonly actionRequired: string | null;
   readonly nextStep: string | null;
+  readonly actionCode: string | null;
 }
 
 export interface FurnitureMatrixSummary {
@@ -93,13 +94,7 @@ export interface FurnitureMatrixSummary {
 }
 
 export interface FurnitureMatrixInput {
-  readonly instances: readonly FurnitureInstance[];
-  readonly quoteRevisions: readonly QuoteRevisionDetail[];
-  readonly selectedQuoteRevisionId: string | null;
-  readonly designContext: DesignContextSelection;
-  readonly workingCopy: DesignWorkingCopy | null;
-  readonly designRevision: DesignRevision | null;
-  readonly reconciliation: ProjectDesignReconciliationResult | null;
+  readonly workspace: ProjectFurnitureWorkspace;
 }
 
 const ORIGIN_LABELS: Readonly<Record<FurnitureOrigin, string>> = {
@@ -114,32 +109,6 @@ const LIFECYCLE_LABELS: Readonly<Record<FurnitureLifecycle, string>> = {
   active: 'Activa',
   removed: 'Retirada',
   cancelled: 'Cancelada',
-};
-
-const RECONCILIATION_ACTIONS: Readonly<
-  Record<ReconciliationStatus, { reason: string; nextStep: string | null }>
-> = {
-  synced: { reason: 'Sincronizada con la cotización y el diseño', nextStep: null },
-  conflict: {
-    reason: 'Conflicto entre cotización y diseño',
-    nextStep: 'Resolví el conflicto antes de cotizar o producir',
-  },
-  modified: {
-    reason: 'Modificada respecto de la cotización',
-    nextStep: 'Generá una nueva revisión de cotización para incorporar el cambio',
-  },
-  quoted_not_modeled: {
-    reason: 'Cotizada pero no modelada',
-    nextStep: 'Colocá la unidad en el diseño',
-  },
-  modeled_not_quoted: {
-    reason: 'Modelada pero no cotizada',
-    nextStep: 'Incorporá la unidad en una nueva revisión de cotización',
-  },
-  removed: {
-    reason: 'Retirada del diseño',
-    nextStep: 'Confirmá la baja o reincorporá la unidad',
-  },
 };
 
 function instanceLabel(instance: FurnitureInstance): string {
@@ -157,149 +126,86 @@ function dimensionsLabel(instance: FurnitureInstance): string | null {
   return `${parts.join(' × ')} mm`;
 }
 
-/** Grouping key mirrors the SketchUp panel (#389): definition first, origin
- * fallback when the unit carries no definition. */
-function groupingKey(instance: FurnitureInstance): string {
-  return instance.furniture_definition_id ?? `origin:${instance.origin}`;
-}
-
-function designPresenceOf(
-  instanceId: string,
-  placedInstanceIds: ReadonlySet<string>,
-  hasDesignContext: boolean,
-): DesignPresence {
-  if (!hasDesignContext) return 'no-design';
-  return placedInstanceIds.has(instanceId) ? 'placed' : 'pending';
-}
-
-function actionFor(
-  presence: DesignPresence,
-  reconciliation: ReconciliationStatus | null,
-): { actionRequired: string | null; nextStep: string | null } {
-  if (reconciliation !== null && reconciliation !== 'synced') {
-    const action = RECONCILIATION_ACTIONS[reconciliation];
-    return { actionRequired: action.reason, nextStep: action.nextStep };
-  }
-  if (presence === 'pending') {
-    return {
-      actionRequired: 'Pendiente de colocar en el diseño',
-      nextStep: 'Colocá la unidad desde el panel de muebles',
-    };
-  }
-  return { actionRequired: null, nextStep: null };
+function mapPresence(presence: FurnitureWorkspaceDesignPresence): DesignPresence {
+  if (presence === 'placed') return 'placed';
+  if (presence === 'pending') return 'pending';
+  return 'no-design';
 }
 
 /**
- * Derive the per-unit matrix rows and summary from authoritative generated
- * read models. Deterministic: rows sort by label, then unit index, then id.
+ * Derive the per-unit matrix rows and summary from authoritative backend
+ * read model (`POST /projects/{projectId}/furniture-workspace`).
+ * Deterministic: rows sort by label, then unit index, then id.
  */
 export function buildFurnitureMatrix(input: FurnitureMatrixInput): {
   rows: readonly FurnitureMatrixRow[];
   summary: FurnitureMatrixSummary;
 } {
-  const {
-    instances,
-    quoteRevisions,
-    selectedQuoteRevisionId,
-    designContext,
-    workingCopy,
-    designRevision,
-    reconciliation,
-  } = input;
+  const { workspace } = input;
 
-  // Exact commercial context: per-unit membership comes from the immutable
-  // snapshot of the selected revision only.
-  const selectedQuoteRevision =
-    quoteRevisions.find((revision) => revision.id === selectedQuoteRevisionId) ?? null;
-  const quoteItemByInstanceId = new Map<string, QuoteRevisionDetail['items'][number]>();
-  for (const item of selectedQuoteRevision?.items ?? []) {
-    quoteItemByInstanceId.set(item.furnitureInstanceId, item);
-  }
+  const rows: FurnitureMatrixRow[] = (workspace.units ?? []).map((unit) => {
+    const instance = unit.furnitureInstance;
+    const grouping = unit.commercialGrouping ?? null;
+    const unitIndex = grouping?.unitIndex ?? null;
+    const unitTotal = grouping?.unitTotal ?? null;
+    const unitProvenanceLabel =
+      unitIndex !== null && unitTotal !== null ? `Unidad ${unitIndex} de ${unitTotal}` : null;
 
-  // Selected design context items (working copy OR exact published revision).
-  const hasDesignContext =
-    designContext.kind === 'working'
-      ? workingCopy !== null
-      : designContext.kind === 'revision'
-        ? designRevision !== null
-        : false;
-  const placedInstanceIds = new Set<string>();
-  if (designContext.kind === 'working') {
-    for (const item of workingCopy?.items ?? []) placedInstanceIds.add(item.furniture_instance_id);
-  } else if (designContext.kind === 'revision') {
-    for (const item of designRevision?.items ?? []) placedInstanceIds.add(item.furniture_instance_id);
-  }
-
-  // Server-derived reconciliation statuses for the exact revision pair.
-  const reconciliationByInstanceId = new Map<string, ReconciliationStatus>();
-  for (const item of reconciliation?.items ?? []) {
-    reconciliationByInstanceId.set(item.furnitureInstanceId, item.status);
-  }
-
-  // Quantity grouping: index within definition/origin group, plugin parity.
-  const groupTotals = new Map<string, number>();
-  for (const instance of instances) {
-    const key = groupingKey(instance);
-    groupTotals.set(key, (groupTotals.get(key) ?? 0) + 1);
-  }
-  const groupCounters = new Map<string, number>();
-  // Stable within-group ordering: creation, then identity.
-  const ordered = [...instances].sort((a, b) =>
-    a.created_at === b.created_at
-      ? a.id.localeCompare(b.id)
-      : a.created_at.localeCompare(b.created_at),
-  );
-
-  const rows: FurnitureMatrixRow[] = ordered.map((instance) => {
-    const key = groupingKey(instance);
-    const unitIndex = (groupCounters.get(key) ?? 0) + 1;
-    groupCounters.set(key, unitIndex);
-
-    const presence = designPresenceOf(instance.id, placedInstanceIds, hasDesignContext);
-    const quoteItem = quoteItemByInstanceId.get(instance.id) ?? null;
-    const reconciliationStatus = reconciliationByInstanceId.get(instance.id) ?? null;
-    const { actionRequired, nextStep } = actionFor(presence, reconciliationStatus);
+    const presence = mapPresence(unit.design?.presence ?? 'none');
+    const reconciliationStatus = unit.reconciliation?.status ?? null;
+    const actionRequired = unit.actionRequired?.message ?? null;
+    const nextStep = unit.actionRequired?.remediation ?? null;
+    const actionCode = unit.actionRequired?.code ?? null;
 
     return {
       instance,
       label: instanceLabel(instance),
       dimensionsLabel: dimensionsLabel(instance),
       origin: instance.origin,
-      originLabel: ORIGIN_LABELS[instance.origin],
+      originLabel: ORIGIN_LABELS[instance.origin] ?? instance.origin,
       duplicateOfInstanceId: instance.origin_furniture_instance_id ?? null,
       lifecycle: instance.lifecycle_status,
-      lifecycleLabel: LIFECYCLE_LABELS[instance.lifecycle_status],
+      lifecycleLabel: LIFECYCLE_LABELS[instance.lifecycle_status] ?? instance.lifecycle_status,
       isActive: instance.lifecycle_status === 'active',
+      commercialGrouping: grouping,
       unitIndex,
-      unitTotal: groupTotals.get(key) ?? 1,
+      unitTotal,
+      unitProvenanceLabel,
       presence,
-      quotedInSelectedRevision: quoteItem !== null,
+      quotedInSelectedRevision: unit.commercial?.present ?? false,
       reconciliation: reconciliationStatus,
+      reconciliationItem: unit.reconciliation ?? null,
       actionRequired,
       nextStep,
+      actionCode,
     };
   });
 
-  rows.sort((a, b) =>
-    a.label === b.label
-      ? a.unitIndex === b.unitIndex
-        ? a.instance.id.localeCompare(b.instance.id)
-        : a.unitIndex - b.unitIndex
-      : a.label.localeCompare(b.label, 'es'),
-  );
+  rows.sort((a, b) => {
+    const labelCmp = a.label.localeCompare(b.label, 'es');
+    if (labelCmp !== 0) return labelCmp;
+    const aIndex = a.unitIndex ?? 0;
+    const bIndex = b.unitIndex ?? 0;
+    if (aIndex !== bIndex) return aIndex - bIndex;
+    return a.instance.id.localeCompare(b.instance.id);
+  });
 
   const summary: FurnitureMatrixSummary = {
-    total: rows.length,
-    activeUnits: rows.filter((row) => row.isActive).length,
-    quotedActive: rows.filter(
-      (row) => row.quotedInSelectedRevision,
-    ).length,
-    placedInDesign: rows.filter((row) => row.presence === 'placed').length,
-    pendingPlacement: rows.filter((row) => row.presence === 'pending').length,
-    requireAttention: rows.filter((row) => row.actionRequired !== null).length,
-    removed: rows.filter((row) => row.lifecycle === 'removed').length,
-    cancelled: rows.filter((row) => row.lifecycle === 'cancelled').length,
+    total: workspace.summary?.total ?? rows.length,
+    activeUnits: workspace.summary?.activeUnits ?? rows.filter((r) => r.isActive).length,
+    quotedActive:
+      workspace.summary?.quoted ?? rows.filter((r) => r.quotedInSelectedRevision).length,
+    placedInDesign:
+      workspace.summary?.placed ?? rows.filter((r) => r.presence === 'placed').length,
+    pendingPlacement:
+      workspace.summary?.pending ?? rows.filter((r) => r.presence === 'pending').length,
+    requireAttention:
+      workspace.summary?.actionRequired ?? rows.filter((r) => r.actionRequired !== null).length,
+    removed: workspace.summary?.removed ?? rows.filter((r) => r.lifecycle === 'removed').length,
+    cancelled:
+      workspace.summary?.cancelled ?? rows.filter((r) => r.lifecycle === 'cancelled').length,
   };
+
   return { rows, summary };
 }
 
@@ -363,10 +269,12 @@ export function defaultDesignContext(
       : a.created_at.localeCompare(b.created_at),
   );
   const first = sorted[0];
-  return first ? { kind: 'working', designId: first.id, designRevisionId: null } : { kind: 'none', designId: null, designRevisionId: null };
+  return first
+    ? { kind: 'working', designId: first.id, designRevisionId: null }
+    : { kind: 'none', designId: null, designRevisionId: null };
 }
 
-/** The release authority reference for the context header: newest release. */
+/** Kept for backwards compatibility; preferred release authority is workspace.release. */
 export function currentReleaseReference(
   releases: readonly ProductionRelease[],
 ): ProductionRelease | null {

@@ -1296,6 +1296,119 @@ type QuoteRevisionDetail struct {
 	Items                  []QuoteRevisionItem     `json:"items"`
 }
 
+type FurnitureWorkspaceContextKind string
+
+const (
+	FurnitureWorkspaceContextKindNone     FurnitureWorkspaceContextKind = "none"
+	FurnitureWorkspaceContextKindWorking  FurnitureWorkspaceContextKind = "working"
+	FurnitureWorkspaceContextKindRevision FurnitureWorkspaceContextKind = "revision"
+)
+
+type FurnitureWorkspaceDesignPresence string
+
+const (
+	FurnitureWorkspaceDesignPresenceNone    FurnitureWorkspaceDesignPresence = "none"
+	FurnitureWorkspaceDesignPresencePlaced  FurnitureWorkspaceDesignPresence = "placed"
+	FurnitureWorkspaceDesignPresencePending FurnitureWorkspaceDesignPresence = "pending"
+)
+
+type FurnitureWorkspaceActionCode string
+
+const (
+	FurnitureWorkspaceActionCodePendingPlacement FurnitureWorkspaceActionCode = "pending_placement"
+	FurnitureWorkspaceActionCodeQuotedNotModeled FurnitureWorkspaceActionCode = "quoted_not_modeled"
+	FurnitureWorkspaceActionCodeModeledNotQuoted FurnitureWorkspaceActionCode = "modeled_not_quoted"
+	FurnitureWorkspaceActionCodeModified         FurnitureWorkspaceActionCode = "modified"
+	FurnitureWorkspaceActionCodeRemoved          FurnitureWorkspaceActionCode = "removed"
+	FurnitureWorkspaceActionCodeConflict         FurnitureWorkspaceActionCode = "conflict"
+)
+
+type FurnitureWorkspaceAction struct {
+	Code        FurnitureWorkspaceActionCode `json:"code"`
+	Message     string                       `json:"message"`
+	Remediation *string                      `json:"remediation,omitempty"`
+}
+
+type FurnitureWorkspaceCommercial struct {
+	Present         bool    `json:"present"`
+	LifecycleStatus *string `json:"lifecycleStatus,omitempty"`
+}
+
+type FurnitureWorkspaceDesign struct {
+	Presence         FurnitureWorkspaceDesignPresence `json:"presence"`
+	ContextKind      FurnitureWorkspaceContextKind    `json:"contextKind"`
+	DesignId         *string                          `json:"designId,omitempty"`
+	DesignRevisionId *string                          `json:"designRevisionId,omitempty"`
+}
+
+type FurnitureWorkspaceCommercialGrouping struct {
+	QuoteRevisionId *string `json:"quoteRevisionId,omitempty"`
+	QuoteLineId     string  `json:"quoteLineId"`
+	UnitIndex       int64   `json:"unitIndex"`
+	UnitTotal       int64   `json:"unitTotal"`
+}
+
+type FurnitureWorkspaceUnit struct {
+	FurnitureInstance  FurnitureInstance                     `json:"furnitureInstance"`
+	Commercial         FurnitureWorkspaceCommercial          `json:"commercial"`
+	Design             FurnitureWorkspaceDesign              `json:"design"`
+	CommercialGrouping *FurnitureWorkspaceCommercialGrouping `json:"commercialGrouping,omitempty"`
+	ActionRequired     *FurnitureWorkspaceAction             `json:"actionRequired,omitempty"`
+	Reconciliation     *ReconciliationItem                   `json:"reconciliation,omitempty"`
+}
+
+type FurnitureWorkspaceSummary struct {
+	Total          int64 `json:"total"`
+	ActiveUnits    int64 `json:"activeUnits"`
+	Quoted         int64 `json:"quoted"`
+	Placed         int64 `json:"placed"`
+	Pending        int64 `json:"pending"`
+	ActionRequired int64 `json:"actionRequired"`
+	Removed        int64 `json:"removed"`
+	Cancelled      int64 `json:"cancelled"`
+}
+
+type FurnitureWorkspaceQuoteRevisionContext struct {
+	ID             string              `json:"id"`
+	RevisionNumber int64               `json:"revisionNumber"`
+	Status         QuoteRevisionStatus `json:"status"`
+}
+
+type FurnitureWorkspaceDesignContext struct {
+	Kind                 FurnitureWorkspaceContextKind `json:"kind"`
+	DesignId             *string                       `json:"designId,omitempty"`
+	DesignRevisionId     *string                       `json:"designRevisionId,omitempty"`
+	DesignRevisionNumber *int64                        `json:"designRevisionNumber,omitempty"`
+}
+
+type FurnitureWorkspaceReleaseContext struct {
+	ID                          string  `json:"id"`
+	ReleaseNumber               int64   `json:"releaseNumber"`
+	DesignRevisionId            string  `json:"designRevisionId"`
+	DesignRevisionNumber        int64   `json:"designRevisionNumber"`
+	QuoteRevisionId             *string `json:"quoteRevisionId,omitempty"`
+	ManufacturingStale          bool    `json:"manufacturingStale"`
+	CurrentDesignRevisionId     *string `json:"currentDesignRevisionId,omitempty"`
+	CurrentDesignRevisionNumber *int64  `json:"currentDesignRevisionNumber,omitempty"`
+}
+
+type ProjectFurnitureWorkspaceRequest struct {
+	QuoteRevisionId   *string `json:"quoteRevisionId,omitempty"`
+	DesignId          *string `json:"designId,omitempty"`
+	DesignContextKind *string `json:"designContextKind,omitempty"`
+	DesignRevisionId  *string `json:"designRevisionId,omitempty"`
+}
+
+type ProjectFurnitureWorkspace struct {
+	ProjectId            string                                  `json:"projectId"`
+	QuoteRevision        *FurnitureWorkspaceQuoteRevisionContext `json:"quoteRevision,omitempty"`
+	DesignContext        FurnitureWorkspaceDesignContext         `json:"designContext"`
+	Release              *FurnitureWorkspaceReleaseContext       `json:"release,omitempty"`
+	LatestProjectRelease *FurnitureWorkspaceReleaseContext       `json:"latestProjectRelease,omitempty"`
+	Summary              FurnitureWorkspaceSummary               `json:"summary"`
+	Units                []FurnitureWorkspaceUnit                `json:"units"`
+}
+
 type RequoteProjectQuoteRequest struct {
 	BaseQuoteRevisionId         string   `json:"baseQuoteRevisionId"`
 	DesignRevisionId            string   `json:"designRevisionId"`
