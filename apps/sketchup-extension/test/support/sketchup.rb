@@ -13,6 +13,19 @@ module Geom
     def to_a
       [x, y, z]
     end
+
+    # Host-faithful API shape: Point3d#transform(transformation) returns a
+    # NEW transformed point. SketchUp's Geom::Transformation has no #transform
+    # instance method — modeling only the real surface keeps phantom-method
+    # bugs from passing unit tests.
+    def transform(transformation)
+      m = transformation.to_a
+      Point3d.new(
+        (m[0] * x) + (m[1] * y) + (m[2] * z) + m[3],
+        (m[4] * x) + (m[5] * y) + (m[6] * z) + m[7],
+        (m[8] * x) + (m[9] * y) + (m[10] * z) + m[11]
+      )
+    end
   end
 
   Vector3d = Struct.new(:x, :y, :z) do
@@ -100,13 +113,6 @@ module Geom
         end
       end
       product
-    end
-
-    def transform(point)
-      x = (self[0, 0] * point.x) + (self[0, 1] * point.y) + (self[0, 2] * point.z) + self[0, 3]
-      y = (self[1, 0] * point.x) + (self[1, 1] * point.y) + (self[1, 2] * point.z) + self[1, 3]
-      z = (self[2, 0] * point.x) + (self[2, 1] * point.y) + (self[2, 2] * point.z) + self[2, 3]
-      Point3d.new(x, y, z)
     end
 
     def ==(other)

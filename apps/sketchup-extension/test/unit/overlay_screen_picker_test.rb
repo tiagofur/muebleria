@@ -3,14 +3,15 @@
 require_relative '../test_helper'
 require_relative '../support/overlay_runtime'
 
-# #470: viewport picking works on projected markers + view.project — screen
-# proximity only, no picking geometry ever enters the model.
+# #470: viewport picking works on projected markers + view.screen_coords —
+# screen proximity only, no picking geometry ever enters the model.
 class OverlayScreenPickerTest < Minitest::Test
   Overlay = Granete::SketchUpExtension::Overlay
 
-  # Minimal view double: project() maps world points to screen coordinates.
+  # Minimal view double: screen_coords() maps world points to real-API
+  # screen points (Geom::Point3d; negative z = behind the camera).
   FakeView = Struct.new(:projection) do
-    def project(point)
+    def screen_coords(point)
       projection.call(point)
     end
   end
@@ -29,7 +30,7 @@ class OverlayScreenPickerTest < Minitest::Test
   end
 
   def identity_projection(point)
-    [point.x, point.y]
+    Geom::Point3d.new(point.x, point.y, 1)
   end
 
   def test_click_on_ring_picks_the_feature
@@ -63,7 +64,7 @@ class OverlayScreenPickerTest < Minitest::Test
   end
 
   def test_marker_behind_the_camera_is_not_pickable
-    view = FakeView.new(->(_point) {})
+    view = FakeView.new(->(point) { Geom::Point3d.new(point.x, point.y, -1) })
     features = [marker(visual_id: 'a', center: Geom::Point3d.new(1, 1, 1))]
     assert_nil Overlay::ScreenPicker.pick(10, 10, features, view)
   end

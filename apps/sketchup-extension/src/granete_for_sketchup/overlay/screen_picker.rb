@@ -5,16 +5,17 @@ module Granete
     module Overlay
       # Screen-space proximity picking for overlay markers (#470 §18). Works
       # exclusively on the projected markers (world points) and the view's
-      # project() — it never creates picking geometry in the model. A click
-      # hits a feature when it lands near the projected ring or inside it;
-      # the nearest feature wins.
+      # screen_coords() — it never creates picking geometry in the model. A
+      # click hits a feature when it lands near the projected ring or inside
+      # it; the nearest feature wins.
       module ScreenPicker
         DEFAULT_THRESHOLD_PX = 14
 
         module_function
 
-        # view must respond to project(point) → [x, y] (SketchUp semantics;
-        # returns nil for points behind the camera).
+        # view must respond to screen_coords(point) → Geom::Point3d (real
+        # SketchUp API: x/y are logical screen pixels; a negative z flags a
+        # point behind the camera and therefore not pickable).
         def pick(click_x, click_y, projected_features, view, threshold: DEFAULT_THRESHOLD_PX)
           best = nil
           best_score = nil
@@ -34,17 +35,27 @@ module Granete
         end
 
         def screen_geometry(feature, view)
-          center = view.project(feature.center)
-          return nil unless center.is_a?(Array) && center.length >= 2
+          center = screen_point(view, feature.center)
+          return nil if center.nil?
 
-          ring = feature.ring_points.filter_map { |point| view.project(point) }
-          ring.select! { |point| point.is_a?(Array) && point.length >= 2 }
+          ring = feature.ring_points.filter_map { |point| screen_point(view, point) }
           return nil if ring.empty?
 
           radius = ring.map do |point|
             Math.sqrt(((point[0] - center[0])**2) + ((point[1] - center[1])**2))
           end.max
           { center: center, ring: ring, radius: radius }
+        end
+
+        # View#screen_coords is the real API world→screen projection (there
+        # is no View#project/p2s). Normalizes to an [x, y] pair; points
+        # behind the camera are dropped.
+        def screen_point(view, point)
+          screen = view.screen_coords(point)
+          return nil unless screen.respond_to?(:x) && screen.respond_to?(:y)
+          return nil if screen.respond_to?(:z) && screen.z.negative?
+
+          [screen.x, screen.y]
         end
 
         # 0 when the click falls inside the projected circle; otherwise the

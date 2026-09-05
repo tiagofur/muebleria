@@ -89,9 +89,9 @@ module Granete
           world = furniture_transform * part_transform
           ProjectedFeature.new(
             visual_id: feature.visual_id,
-            center: world.transform(mm_to_inches(local_center_mm)),
-            ring_points: ring_mm.map { |point| world.transform(mm_to_inches(point)) },
-            depth_end: world.transform(mm_to_inches(depth_end_mm)),
+            center: mm_to_inches(local_center_mm).transform(world),
+            ring_points: ring_mm.map { |point| mm_to_inches(point).transform(world) },
+            depth_end: mm_to_inches(depth_end_mm).transform(world),
             radius_in: radius_mm * MM_TO_INCHES,
             conflict: feature.conflict?
           )

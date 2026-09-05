@@ -9,8 +9,9 @@ require_relative '../support/overlay_fixture'
 class OverlayInspectionToolTest < Minitest::Test
   Overlay = Granete::SketchUpExtension::Overlay
 
-  # Records every draw call; project() maps world→screen with an offset so
-  # picking coordinates are derivable in tests.
+  # Records every draw call; screen_coords() maps world→screen with an
+  # offset so picking coordinates are derivable in tests (real-API
+  # Geom::Point3d, negative z = behind the camera).
   class DrawSpyView
     attr_reader :draw_calls, :texts, :invalidations
 
@@ -38,8 +39,8 @@ class OverlayInspectionToolTest < Minitest::Test
       @texts << text
     end
 
-    def project(point)
-      [(point.x * 10) + 50, (point.y * 10) + 40]
+    def screen_coords(point)
+      Geom::Point3d.new((point.x * 10) + 50, (point.y * 10) + 40, 1)
     end
   end
 
@@ -96,9 +97,9 @@ class OverlayInspectionToolTest < Minitest::Test
 
   def test_click_on_a_marker_selects_the_feature
     marker = @manager.projected_features.first
-    screen_x, screen_y = @view.project(marker.center)
+    screen = @view.screen_coords(marker.center)
 
-    handled = @tool.onLButtonDown(0, screen_x, screen_y, @view)
+    handled = @tool.onLButtonDown(0, screen.x, screen.y, @view)
 
     assert handled
     assert_equal marker.visual_id, @manager.active_feature_id
@@ -117,8 +118,8 @@ class OverlayInspectionToolTest < Minitest::Test
 
     @tool.draw(@view)
     marker = @manager.projected_features.first
-    screen_x, screen_y = @view.project(marker.center)
-    @tool.onLButtonDown(0, screen_x, screen_y, @view)
+    screen = @view.screen_coords(marker.center)
+    @tool.onLButtonDown(0, screen.x, screen.y, @view)
 
     assert_equal operations_before, @model.operations.length
     assert_equal entities_before, @model.active_entities.to_a.length

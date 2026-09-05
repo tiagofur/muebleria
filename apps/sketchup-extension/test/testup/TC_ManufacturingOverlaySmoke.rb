@@ -73,10 +73,15 @@ module Granete
         tool.draw(view) # a raise here fails the test — drawing must be safe
 
         # Project a marker to real screen space and click on it.
-        screen = view.project(markers.first.center)
-        flunk 'active view cannot project the marker (camera pointing away)' unless screen.is_a?(Array)
+        # screen_coords is the real API (there is no View#project/p2s); it
+        # returns a Geom::Point3d whose negative z flags a point behind the
+        # camera — not clickable.
+        screen = view.screen_coords(markers.first.center)
+        unless screen.respond_to?(:x) && screen.respond_to?(:y) && !screen.z.negative?
+          flunk 'active view cannot project the marker (camera pointing away)'
+        end
 
-        handled = tool.onLButtonDown(0, screen[0], screen[1], view)
+        handled = tool.onLButtonDown(0, screen.x, screen.y, view)
         assert handled, 'clicking the projected marker must select the feature'
         assert_equal markers.first.visual_id, manager.active_feature_id
       ensure
@@ -90,7 +95,7 @@ module Granete
         before = manager.projected_features.map(&:center).map { |p| [p.x, p.y, p.z] }
 
         furniture = granete_furniture_instances.first
-        furniture.transform = Geom::Transformation.translation(
+        furniture.transformation = Geom::Transformation.translation(
           Geom::Vector3d.new(1200 * MM, 300 * MM, 50 * MM)
         )
         model.active_view.invalidate
@@ -118,7 +123,7 @@ module Granete
                         before.depth_end.z - before.center.z]
 
         furniture = granete_furniture_instances.first
-        furniture.transform = Geom::Transformation.rotation(
+        furniture.transformation = Geom::Transformation.rotation(
           ORIGIN, Z_AXIS, Math::PI / 2
         )
         model.active_view.invalidate

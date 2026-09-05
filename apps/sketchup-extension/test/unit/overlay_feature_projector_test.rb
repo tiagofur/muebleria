@@ -139,7 +139,7 @@ class OverlayFeatureProjectorTest < Minitest::Test
     furniture = Geom::Transformation.translation(Geom::Vector3d.new(100 * MM, 200 * MM, 0))
     board = board_side_left
     world = furniture * part_transform(board)
-    manual = world.transform(Overlay::FeatureProjector.mm_to_inches([50, 18, 150]))
+    manual = Overlay::FeatureProjector.mm_to_inches([50, 18, 150]).transform(world)
     marker = project(feature(face: 'front', x_mm: 50, y_mm: 150), furniture: furniture)
     assert_in_delta manual.x, marker.center.x, 1e-9
     assert_in_delta manual.y, marker.center.y, 1e-9
