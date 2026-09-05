@@ -1,0 +1,75 @@
+{
+  "status": {
+    "code": "Success",
+    "color": "green"
+  },
+  "metadata": {
+    "generated_by": "TestUp::CIJsonReporter",
+    "version": "1.0.0",
+    "ruby_version": "3.2.2",
+    "ruby_patchlevel": 53,
+    "ruby_platform": "arm64-darwin",
+    "time": "2026-09-05T17:34:15Z",
+    "options": {
+      "io": "TestUp::Console",
+      "filter": " /^(Granete::SketchUpExtension::TC_ComponentAuthoringSmoke#.+)$/",
+      "verbose": true,
+      "testup_ci": true,
+      "testup_ci_out": "/dev/carpinteria/muebles/apps/sketchup-extension/../../progress/host_smoke_467_testup_ci.json",
+      "seed": 11185,
+      "args": "\"-n /^(Granete::SketchUpExtension::TC_ComponentAuthoringSmoke#.+)$/\" --verbose --testup_ci --testup_ci_out=/dev/carpinteria/muebles/apps/sketchup-extension/../../progress/host_smoke_467_testup_ci.json --seed 11185"
+    }
+  },
+  "statistics": {
+    "total": 5,
+    "assertions": 48,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "passes": 5
+  },
+  "timings": {
+    "total_seconds": 2.1723470000433736,
+    "runs_per_second": 2.3016580683933867,
+    "assertions_per_second": 22.095917456576515
+  },
+  "fails": [],
+  "skips": [],
+  "passes": [
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
+      "name": "test_move_shelf_resolves_authoritatively_and_undo_restores",
+      "assertions": 13,
+      "time": 0.4239830000442453
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
+      "name": "test_move_structural_part_rejected_with_zero_operations",
+      "assertions": 3,
+      "time": 0.24607799999648705
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
+      "name": "test_add_second_shelf_shares_definition_with_distinct_identity",
+      "assertions": 13,
+      "time": 0.4119249999639578
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
+      "name": "test_remove_shelf_drops_occurrence_and_dependent_relationships",
+      "assertions": 9,
+      "time": 0.2656100000021979
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
+      "name": "test_duplicate_shelf_allocates_distinct_occurrence_identity",
+      "assertions": 10,
+      "time": 0.38472600001841784
+    }
+  ]
+}

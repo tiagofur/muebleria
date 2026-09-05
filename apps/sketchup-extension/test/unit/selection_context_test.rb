@@ -318,6 +318,77 @@ class SelectionContextTest < Minitest::Test
     assert_nil context.hardware_placement_id
   end
 
+  # --- #467 direct internal authoring: movability comes from the published
+  # domain placement (layout slotId stored as intent `placement`), never
+  # from names; missing placement data fails closed. ---
+
+  def test_movable_internal_part_exposes_authoring_capabilities
+    shelf_board = board('shelf-a', 'st-comp-shelf', 'interno', 'Entrepaño 1')
+                  # The persisted pose is the #414 authoritative localTransform translation
+                  # ([18,18,150]) - never the AABB min corner ([0,0,0] here).
+                  .merge('transform' => { 'translationMm' => [0, 0, 0] },
+                         'localTransform' => {
+                           'translationMm' => [18, 18, 150], 'basis' => IDENTITY_BASIS
+                         },
+                         'authoringCapability' => { 'movable' => true, 'axis' => 'z' })
+    layout = native_layout(shelf_board)
+    @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
+    furniture = @model.active_entities.instances.first
+    shelf = furniture.definition.entities.instances.first
+
+    context = @resolver.resolve(shelf)
+
+    assert_equal 'part', context.kind
+    assert_equal 'interno', context.component_placement
+    assert_equal({ 'movable' => true, 'axis' => 'z' }, context.authoring_capability)
+    assert_equal [18.0, 18.0, 150.0], context.assembly_translation_mm
+    refute_equal [0.0, 0.0, 0.0], context.assembly_translation_mm
+    assert context.capabilities.supported?('canMoveWithinConstraint')
+    assert context.capabilities.supported?('canDuplicate')
+    assert context.capabilities.supported?('canAddRelated')
+    assert context.capabilities.supported?('canRemove')
+    refute context.capabilities.supported?('canChangeJoinery')
+    assert context.capabilities.supported?('canInspectManufacturing')
+  end
+
+  def test_structural_part_keeps_authoring_capabilities_disabled_with_reason
+    # The engine publishes NO authoring capability for structural parts —
+    # the plugin fails closed on absence instead of inferring rights.
+    layout = native_layout(board('door-a', 'st-comp-door', 'puerta', 'Puerta'))
+    @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
+    furniture = @model.active_entities.instances.first
+    door = furniture.definition.entities.instances.first
+
+    context = @resolver.resolve(door)
+
+    assert_equal 'part', context.kind
+    assert_equal 'puerta', context.component_placement
+    assert_nil context.authoring_capability
+    refute context.capabilities.supported?('canMoveWithinConstraint')
+    refute context.capabilities.supported?('canRemove')
+    reason = context.capabilities['canMoveWithinConstraint'].reason
+    assert reason, 'structural parts explain why direct authoring is off'
+    assert_includes reason, 'estructurales'
+  end
+
+  def test_part_without_published_capability_fails_closed
+    layout = native_layout(board('shelf-a', 'st-comp-shelf', 'interno', 'Entrepaño 1'))
+    @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
+    furniture = @model.active_entities.instances.first
+    shelf = furniture.definition.entities.instances.first
+    payload = @store.read(shelf)
+    payload['intent'].delete('placement')
+    @store.write(shelf, payload)
+
+    context = @resolver.resolve(shelf)
+
+    assert_equal 'part', context.kind
+    assert_nil context.component_placement
+    assert_nil context.authoring_capability
+    refute context.capabilities.supported?('canMoveWithinConstraint')
+    assert context.capabilities['canMoveWithinConstraint'].reason
+  end
+
   def test_aggregate_metadata_resolves_aggregate_kind
     layout = native_layout(board('agg-1', 'st-comp-drawer', 'cajon', 'Cajón'))
     @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)

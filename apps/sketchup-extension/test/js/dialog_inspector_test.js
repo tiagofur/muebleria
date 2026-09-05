@@ -363,6 +363,35 @@ function runTests() {
     'capability denial shows its reason');
   check(el(sandbox, 'child-facts').children.length > 0, 'technical facts render inside the collapsible detail');
 
+  // --- #467: structural part keeps the internal authoring card hidden ---
+  check(!visible(el(sandbox, 'part-authoring-card')),
+    'structural part does not offer internal authoring');
+
+  // --- #467: movable internal renders the authoring card prefilled + gated ---
+  const movablePart = partContext({
+    componentPlacement: 'interno',
+    assemblyTranslationMm: [18, 18, 150],
+    capabilities: {
+      canMoveWithinConstraint: { supported: true, reason: null },
+      canDuplicate: { supported: true, reason: null },
+      canAddRelated: { supported: true, reason: null },
+      canRemove: { supported: true, reason: null },
+      canChangeJoinery: { supported: false, reason: 'unión desde parámetros' },
+      canInspectManufacturing: { supported: true, reason: null }
+    }
+  });
+  dialog.onSelectionChange(movablePart);
+  check(visible(el(sandbox, 'part-authoring-card')), 'movable internal shows the authoring card');
+  check(el(sandbox, 'part-occurrence-val').textContent === 'shelf-a', 'card shows the exact occurrence id');
+  check(el(sandbox, 'part-pos-x').value === 18 && el(sandbox, 'part-pos-y').value === 18 &&
+    el(sandbox, 'part-pos-z').value === 150, 'position inputs prefilled with the resolved pose');
+  check(el(sandbox, 'btn-apply-part-move').disabled === false, 'move enabled for movable internal');
+  check(el(sandbox, 'btn-part-remove').disabled === false, 'remove enabled for movable internal');
+
+  // hardware selection never shows the component card
+  dialog.onSelectionChange(hardwareContext('manual'));
+  check(!visible(el(sandbox, 'part-authoring-card')), 'hardware keeps the component card hidden');
+
   // breadcrumb crumb click navigates via the ref
   const crumb = el(sandbox, 'child-breadcrumb').children.find((c) => c.classList.contains('crumb-link'));
   check(!!crumb, 'owner breadcrumb crumb exists');

@@ -40,6 +40,7 @@ module Granete
                         project_id project_ref design_id design_ref base_revision_id
                         source_revision_ref host_locator semantic_path representation
                         placement_kind owner_recovery display definition parameters
+                        component_placement assembly_translation_mm authoring_capability
                         material_choices capabilities].freeze
 
         # JSON name → context attribute; the payload never invents fields and
@@ -69,6 +70,9 @@ module Granete
           'ownerRecovery' => :owner_recovery,
           'definition' => :definition,
           'parameters' => :parameters,
+          'componentPlacement' => :component_placement,
+          'assemblyTranslationMm' => :assembly_translation_mm,
+          'authoringCapability' => :authoring_capability,
           'materialChoices' => :material_choices
         }.freeze
 

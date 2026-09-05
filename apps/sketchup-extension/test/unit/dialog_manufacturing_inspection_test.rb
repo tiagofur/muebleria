@@ -13,6 +13,8 @@ require_relative '../../src/granete_for_sketchup/selection/capability_policy'
 require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
 require_relative '../../src/granete_for_sketchup/selection/resolver'
 require_relative '../../src/granete_for_sketchup/observers/selection_observer'
+require_relative '../../src/granete_for_sketchup/tools/internal_component_move_tool'
+require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 
 # #470 dialog wiring: `Ver fabricación` rides the versioned inspection

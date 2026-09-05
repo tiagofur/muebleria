@@ -387,15 +387,17 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 		})), http.StatusOK),
 
 		// 7. Invalid/orphan identity → structured rejection, no partial result.
+		// 7. Ghost anchors reject WITHOUT an occurrence snapshot: there is no
+		// full-state echo to interpret, so the anchor cannot be a removal —
+		// it is a bogus reference (#467: WITH a snapshot the server prunes
+		// stale anchors authoritatively instead).
 		run("07-orphan-anchor-rejection", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
-			f.Components = defaultOccurrencesJSON()
 			f.Relationships = []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-ghost")}
 		})), http.StatusUnprocessableEntity),
 
 		// 7b. One valid + one orphaned target still rejects: partial target
 		// sets are never silently dropped.
 		run("neg-orphan-target-among-valid", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
-			f.Components = defaultOccurrencesJSON()
 			f.Relationships = []engine.AuthoringRelationship{{
 				RelationshipID: "rel-shelf-01",
 				Kind:           "shelf-support",
@@ -451,6 +453,7 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			}
 			return run("neg-wrong-length-translation", "", request, http.StatusBadRequest)
 		}(),
+
 
 		// Complete empty manual set: definition placements fully replaced.
 		run("09-empty-manual-placement-set", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {

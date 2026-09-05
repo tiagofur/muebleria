@@ -185,6 +185,18 @@ func (idx *authoringTemplateIndex) note(defID, catalogComponentID, placement str
 	info.entryCount++
 }
 
+// movableInternal is the single #467 direct-authoring rule: a non-agregado
+// template placed `interno` and backed by exactly one definition entry. It
+// governs both occurrence-count authoring (planOccurrences) and the
+// authoring-capability publication on every resolved layout. Nil-safe: an
+// unknown template is never authorable.
+func (t *authoringTemplateInfo) movableInternal() bool {
+	if t == nil {
+		return false
+	}
+	return !t.agregado && t.placement == string(domain.PlacementInterno) && t.entryCount <= 1
+}
+
 // ResolveAuthoringLayout resolves a rich authoring snapshot against the
 // authoritative module definition. Pure and deterministic: the same input
 // always produces the same result; no business records are created.
@@ -235,6 +247,14 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	if err != nil {
 		return nil, err
 	}
+
+	// 3b. Position range authority (#467): an authored translation must stay
+	// inside the furniture envelope the layout itself resolved. Deeper
+	// manufacturing constraints (clearances, interference, relationship
+	// limits) stay with the machining/preflight stages — the client never
+	// pre-decides any of them.
+	structural = append(structural, validateOccurrenceRanges(input.Occurrences, layout.DimensionsMm)...)
+
 	if len(structural) > 0 {
 		return &AuthoringResolveResult{Layout: layout, StructuralIssues: structural}, nil
 	}
@@ -245,8 +265,19 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	effectivePlacements, placementIssues := effectiveManualPlacements(boards, input.ManualPlacements, input.ManualPlacementsPresent, input.Catalog)
 	structural = append(structural, placementIssues...)
 
-	// 5. Declarative relationship templates turn every bound quantity into
-	// manufacturing intent. Authored equivalents win by source+kind.
+	// 5. Authoritative relationship interpretation (#467): under the full
+	// occurrence-snapshot contract the client echoes its last-accepted
+	// relationship intent VERBATIM — it never filters or constructs topology.
+	// The server owns dependency semantics: relationships anchored on
+	// occurrences the snapshot dropped are stale-by-removal and are pruned
+	// here; every other relationship survives exactly. Without a snapshot
+	// (params/materials-only resolve) relationships are not part of a full
+	// state echo, so orphaned anchors still reject below. Declarative
+	// relationship templates then turn every bound quantity into
+	// manufacturing intent (authored equivalents win by source+kind).
+	if plan.active {
+		input.Relationships = pruneRemovedAnchorRelationships(input.Relationships, boards)
+	}
 	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, boards, input.Relationships)
 	relationshipIssues := validateRelationships(input.Relationships, boards)
 	structural = append(structural, relationshipIssues...)
@@ -443,6 +474,76 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 	return result
 }
 
+// validateOccurrenceRanges keeps position validity server-authoritative
+// (#467): an authored assembly translation must stay inside the furniture
+// envelope [0,width]×[0,depth]×[0,height] on axes X/Y/Z (DimensionsMm is
+// [width,height,depth]). Structural rejections use the canonical
+// TRANSFORM_INVALID code so clients can surface the allowed range; anything
+// beyond the envelope (clearance, interference, relationship limits) belongs
+// to machining/preflight, never to the client.
+func validateOccurrenceRanges(occurrences []AuthoringOccurrence, dimensionsMm [3]int) []domain.ContractIssue {
+	axisBounds := [3]float64{float64(dimensionsMm[0]), float64(dimensionsMm[2]), float64(dimensionsMm[1])}
+	axisNames := [3]string{"width", "depth", "height"}
+	issues := []domain.ContractIssue{}
+	for i, occurrence := range occurrences {
+		if occurrence.Transform == nil {
+			continue
+		}
+		for axis, value := range occurrence.Transform.TranslationMm {
+			if value < 0 || value > axisBounds[axis] {
+				issues = append(issues, domain.ContractIssue{
+					Code:     "TRANSFORM_INVALID",
+					Message:  fmt.Sprintf("occurrence %s translation on %s (%g mm) is outside the furniture envelope (0–%g mm)", occurrence.ComponentInstanceID, axisNames[axis], value, axisBounds[axis]),
+					Severity: domain.IssueSeverityError, EntityID: occurrence.ComponentInstanceID,
+					Path:        fmt.Sprintf("furniture.components[%d].transform.translationMm", i),
+					Remediation: "Author the position inside the furniture envelope; Granete owns position validity.",
+				})
+			}
+		}
+	}
+	return issues
+}
+
+// pruneRemovedAnchorRelationships is the server's authoritative relationship
+// cleanup (#467). Under the full occurrence-snapshot contract the client
+// echoes its last-accepted relationship intent verbatim; when the snapshot
+// drops an occurrence, relationships anchored on it are stale-by-removal and
+// the server removes them, while every other relationship survives exactly
+// (same identity, anchors and kind). Anchors on identities that never existed
+// are indistinguishable from removals in a stateless resolve, so the server —
+// not the client — owns the decision.
+func pruneRemovedAnchorRelationships(relationships []AuthoringRelationship, boards []layoutBoard) []AuthoringRelationship {
+	if len(relationships) == 0 {
+		return relationships
+	}
+	existing := make(map[string]bool, len(boards))
+	for i := range boards {
+		existing[boards[i].id] = true
+	}
+	kept := make([]AuthoringRelationship, 0, len(relationships))
+	for _, relationship := range relationships {
+		if anchorMissing(relationship.Source, existing) {
+			continue
+		}
+		stale := false
+		for _, anchor := range relationship.Targets {
+			if anchorMissing(anchor, existing) {
+				stale = true
+				break
+			}
+		}
+		if stale {
+			continue
+		}
+		kept = append(kept, relationship)
+	}
+	return kept
+}
+
+func anchorMissing(anchor AuthoringRelationshipAnchor, existing map[string]bool) bool {
+	return anchor.ComponentInstanceID != "" && !existing[anchor.ComponentInstanceID]
+}
+
 // planOccurrences validates the snapshot against the template index and
 // builds the deterministic copy plan.
 func planOccurrences(plan *authoringPlan, occurrences []AuthoringOccurrence, index *authoringTemplateIndex, issues *[]domain.ContractIssue) {
@@ -530,9 +631,8 @@ func planOccurrences(plan *authoringPlan, occurrences []AuthoringOccurrence, ind
 	// working copies exist, the stricter #346 tombstone policy takes over.
 	for defID, template := range index.entries {
 		count := len(grouped[defID])
-		movable := !template.agregado && template.placement == string(domain.PlacementInterno) && template.entryCount <= 1
 		if count == 0 {
-			if movable {
+			if template.movableInternal() {
 				continue
 			}
 			*issues = append(*issues, domain.ContractIssue{
@@ -555,7 +655,7 @@ func planOccurrences(plan *authoringPlan, occurrences []AuthoringOccurrence, ind
 			})
 			continue
 		}
-		if count != template.defaultCount && !movable {
+		if count != template.defaultCount && !template.movableInternal() {
 			*issues = append(*issues, domain.ContractIssue{
 				Code:     "OCCURRENCE_COUNT_UNSUPPORTED",
 				Message:  fmt.Sprintf("template %s authors %d occurrences, the definition instantiates %d", defID, count, template.defaultCount),

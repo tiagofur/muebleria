@@ -25,6 +25,8 @@ require_relative '../../src/granete_for_sketchup/assets/asset_loader'
 require_relative '../../src/granete_for_sketchup/assets/texture_cache'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 require_relative '../support/host_runtime'
+require_relative '../../src/granete_for_sketchup/tools/internal_component_move_tool'
+require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 require_relative '../../src/granete_for_sketchup/lifecycle'
 require_relative '../../src/granete_for_sketchup/application'
@@ -153,7 +155,8 @@ class ApplicationTest < Minitest::Test
     first_dialog = @application.open_dialog
 
     expected_callbacks = %w[
-      adopt_binding_base authoring_mutation cancel_placement_instance close_dialog confirm_placement_instance
+      adopt_binding_base authoring_mutation cancel_placement_instance close_dialog component_viewport_move
+      confirm_placement_instance
       connect_model create_project_furniture delete_selected_furniture dialog_ready enroll
       get_catalog get_model_binding get_project_furniture insert_furniture
       list_binding_designs list_binding_projects logout manufacturing_inspection open_material_selector

@@ -1,5 +1,5 @@
 Path: "%CONFIG_DIR%/test/testup"
-Output: "%CONFIG_DIR%/../../progress/host_smoke_559_testup_ci.json"
+Output: "%CONFIG_DIR%/../../progress/host_smoke_467_testup_ci.json"
 Tests:
-  - "Granete::SketchUpExtension::TC_PreflightReviewSmoke#"
+  - "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke#"
 KeepOpen: false

@@ -768,6 +768,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -1716,6 +1720,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -2702,6 +2710,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -2751,6 +2763,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -4519,6 +4535,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -5422,6 +5442,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -5835,36 +5859,6 @@
         },
         "furniture": {
           "catalogRevision": "workshop-8588028751d3",
-          "components": [
-            {
-              "componentDefinitionId": "st-comp-side",
-              "componentInstanceId": "side-left-01"
-            },
-            {
-              "componentDefinitionId": "st-comp-side-r",
-              "componentInstanceId": "side-right-01"
-            },
-            {
-              "componentDefinitionId": "st-comp-base",
-              "componentInstanceId": "floor-01"
-            },
-            {
-              "componentDefinitionId": "st-comp-top",
-              "componentInstanceId": "top-01"
-            },
-            {
-              "componentDefinitionId": "mod-comp-back",
-              "componentInstanceId": "back-01"
-            },
-            {
-              "componentDefinitionId": "mod-comp-shelf",
-              "componentInstanceId": "shelf-01"
-            },
-            {
-              "componentDefinitionId": "mod-comp-door",
-              "componentInstanceId": "door-01"
-            }
-          ],
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "relationships": [
             {
@@ -5938,36 +5932,6 @@
         },
         "furniture": {
           "catalogRevision": "workshop-8588028751d3",
-          "components": [
-            {
-              "componentDefinitionId": "st-comp-side",
-              "componentInstanceId": "side-left-01"
-            },
-            {
-              "componentDefinitionId": "st-comp-side-r",
-              "componentInstanceId": "side-right-01"
-            },
-            {
-              "componentDefinitionId": "st-comp-base",
-              "componentInstanceId": "floor-01"
-            },
-            {
-              "componentDefinitionId": "st-comp-top",
-              "componentInstanceId": "top-01"
-            },
-            {
-              "componentDefinitionId": "mod-comp-back",
-              "componentInstanceId": "back-01"
-            },
-            {
-              "componentDefinitionId": "mod-comp-shelf",
-              "componentInstanceId": "shelf-01"
-            },
-            {
-              "componentDefinitionId": "mod-comp-door",
-              "componentInstanceId": "door-01"
-            }
-          ],
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "relationships": [
             {
@@ -6022,11 +5986,11 @@
         "issues": [
           {
             "code": "RELATIONSHIP_ORPHANED",
-            "message": "anchor references componentInstanceId side-ghost that is not part of this snapshot",
+            "message": "anchor references componentInstanceId shelf-01 that is not part of this snapshot",
             "severity": "error",
             "entityId": "rel-shelf-01",
             "path": "furniture.relationships[relationshipId=rel-shelf-01]",
-            "remediation": "Anchor the relationship to component instances present in the snapshot."
+            "remediation": "Anchor the relationship to a component instance present in the snapshot."
           }
         ]
       }
@@ -6910,6 +6874,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -7827,6 +7795,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -8733,6 +8705,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -9647,6 +9623,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -10505,6 +10485,10 @@
                 "lengthMm": 614,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -10554,6 +10538,10 @@
                 "lengthMm": 614,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -10603,6 +10591,10 @@
                 "lengthMm": 614,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -12051,6 +12043,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -12870,6 +12866,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -13744,6 +13744,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -14979,6 +14983,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -15909,6 +15917,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },

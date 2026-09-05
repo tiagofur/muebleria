@@ -80,6 +80,22 @@ type LayoutLocalTransform struct {
 	Basis         LayoutBasis `json:"basis"`
 }
 
+// LayoutAuthoringAxisZ is the vertical assembly axis: the axis a movable
+// internal may be authored along (#467 first authoring slice — shelves).
+const LayoutAuthoringAxisZ = "z"
+
+// LayoutAuthoringCapability publishes the direct-authoring capability of a
+// resolved component (#467). Only the engine decides it (same movable-internal
+// rule the occurrence plan enforces); clients must consume this explicit
+// capability and fail closed when it is absent — never infer authoring rights
+// from slot, role or names.
+type LayoutAuthoringCapability struct {
+	// Movable marks a movable internal occurrence the client may move.
+	Movable bool `json:"movable"`
+	// Axis is the assembly axis the client may author along (x|y|z).
+	Axis string `json:"axis"`
+}
+
 // LayoutComponent is one resolved board. The contract separates three
 // concerns (#414):
 //
@@ -100,30 +116,31 @@ type LayoutComponent struct {
 	// never the host-generated SketchUp definition GUID and never implicitly
 	// the catalog component ID (catalogComponentId, when a schema publishes
 	// it, stays a separate field).
-	ComponentDefinitionID       string               `json:"componentDefinitionId"`
-	SlotID                      string               `json:"slotId"`
-	Role                        string               `json:"role,omitempty"`
-	Name                        string               `json:"name"`
-	Kind                        string               `json:"kind"`
-	Transform                   LayoutTransform      `json:"transform"`
-	DimensionsMm                [3]float64           `json:"dimensionsMm"`
-	LocalTransform              LayoutLocalTransform `json:"localTransform"`
-	LengthMm                    int                  `json:"lengthMm"`
-	WidthMm                     int                  `json:"widthMm"`
-	ThicknessMm                 int                  `json:"thicknessMm"`
-	OptionRole                  string               `json:"optionRole,omitempty"`
-	MaterialID                  string               `json:"materialId,omitempty"`
-	MaterialCode                string               `json:"materialCode,omitempty"`
-	MaterialName                string               `json:"materialName,omitempty"`
-	MaterialColorHex            string               `json:"materialColorHex,omitempty"`
-	MaterialImageURL            string               `json:"materialImageUrl,omitempty"`
-	MaterialTextureURL          string               `json:"materialTextureUrl,omitempty"`
-	MaterialTextureTileWidthMm  float64              `json:"materialTextureTileWidthMm,omitempty"`
-	MaterialTextureTileLengthMm float64              `json:"materialTextureTileLengthMm,omitempty"`
-	MaterialRoughness           *float64             `json:"materialRoughness,omitempty"`
-	MaterialMetalness           *float64             `json:"materialMetalness,omitempty"`
-	MaterialClearcoat           *float64             `json:"materialClearcoat,omitempty"`
-	MaterialGrain               bool                 `json:"materialGrain,omitempty"`
+	ComponentDefinitionID       string                       `json:"componentDefinitionId"`
+	SlotID                      string                       `json:"slotId"`
+	Role                        string                       `json:"role,omitempty"`
+	Name                        string                       `json:"name"`
+	Kind                        string                       `json:"kind"`
+	Transform                   LayoutTransform              `json:"transform"`
+	DimensionsMm                [3]float64                   `json:"dimensionsMm"`
+	LocalTransform              LayoutLocalTransform         `json:"localTransform"`
+	LengthMm                    int                          `json:"lengthMm"`
+	WidthMm                     int                          `json:"widthMm"`
+	ThicknessMm                 int                          `json:"thicknessMm"`
+	AuthoringCapability         *LayoutAuthoringCapability   `json:"authoringCapability,omitempty"`
+	OptionRole                  string                       `json:"optionRole,omitempty"`
+	MaterialID                  string                       `json:"materialId,omitempty"`
+	MaterialCode                string                       `json:"materialCode,omitempty"`
+	MaterialName                string                       `json:"materialName,omitempty"`
+	MaterialColorHex            string                       `json:"materialColorHex,omitempty"`
+	MaterialImageURL            string                       `json:"materialImageUrl,omitempty"`
+	MaterialTextureURL          string                       `json:"materialTextureUrl,omitempty"`
+	MaterialTextureTileWidthMm  float64                      `json:"materialTextureTileWidthMm,omitempty"`
+	MaterialTextureTileLengthMm float64                      `json:"materialTextureTileLengthMm,omitempty"`
+	MaterialRoughness           *float64                     `json:"materialRoughness,omitempty"`
+	MaterialMetalness           *float64                     `json:"materialMetalness,omitempty"`
+	MaterialClearcoat           *float64                     `json:"materialClearcoat,omitempty"`
+	MaterialGrain               bool                         `json:"materialGrain,omitempty"`
 }
 
 // LayoutHardware is one visible hardware placement (handle, hinge, …) resolved
@@ -232,6 +249,13 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 		return FurnitureLayout{}, nil, err
 	}
 
+	// The template index feeds the #467 authoring-capability publication on
+	// every path (GET layout included): the engine — never the client —
+	// decides which occurrences are directly authorable.
+	if opts.templateCollector == nil {
+		opts.templateCollector = &authoringTemplateIndex{}
+	}
+
 	dims := LayoutDims{WidthMm: module.WidthMm, HeightMm: module.HeightMm, DepthMm: module.DepthMm}
 	if dimsOverride != nil {
 		dims = *dimsOverride
@@ -283,6 +307,15 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			ThicknessMm:           int(math.Round(board.thicknessMm)),
 			OptionRole:            board.optionRole,
 			MaterialColorHex:      colorForOptionRole(board.optionRole),
+		}
+		// #467: publish the direct-authoring capability the engine itself
+		// derives from the template shape; every other occurrence stays
+		// without one (clients fail closed on absence).
+		if template := opts.templateCollector.entries[board.defID]; template.movableInternal() {
+			component.AuthoringCapability = &LayoutAuthoringCapability{
+				Movable: true,
+				Axis:    LayoutAuthoringAxisZ,
+			}
 		}
 		if material, err := resolveSelectedBoard(board.optionRole, optionChoices, catalog.Materials); err != nil {
 			return FurnitureLayout{}, nil, err

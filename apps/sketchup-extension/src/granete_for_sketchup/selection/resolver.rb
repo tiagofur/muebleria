@@ -120,6 +120,13 @@ module Granete
               component_instance_id: identity['instanceRef'],
               component_definition_id: identity['componentDefinitionId'],
               catalog_component_id: identity['catalogComponentId'],
+              # #467: domain placement, resolved pose and the ENGINE-published
+              # authoring capability of the occurrence, as stored at the last
+              # rebuild. Affordance/display seeds only — the authoring
+              # resolve re-reads the fresh authoritative layout.
+              component_placement: intent['placement'],
+              assembly_translation_mm: intent['assemblyTranslationMm'],
+              authoring_capability: intent['authoringCapability'],
               **common
             )
           end

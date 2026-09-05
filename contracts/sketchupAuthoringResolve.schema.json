@@ -615,6 +615,29 @@
         "thicknessMm": {
           "type": "number"
         },
+        "authoringCapability": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "movable": {
+              "type": "boolean",
+              "const": true
+            },
+            "axis": {
+              "type": "string",
+              "enum": [
+                "x",
+                "y",
+                "z"
+              ]
+            }
+          },
+          "required": [
+            "movable",
+            "axis"
+          ],
+          "description": "#467 direct-authoring capability published by the engine for movable internals only; absent = not directly authorable and clients fail closed."
+        },
         "materialId": {
           "type": "string",
           "minLength": 1,

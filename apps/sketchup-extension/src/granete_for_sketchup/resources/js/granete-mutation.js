@@ -76,6 +76,12 @@
         status.hidden = true;
       }
     }
+    // Page-level surfaces (e.g. the #467 component editor feedback) listen
+    // to this event instead of the module reaching into their DOM.
+    if (typeof document !== "undefined" && typeof document.dispatchEvent === "function" &&
+        typeof CustomEvent === "function") {
+      document.dispatchEvent(new CustomEvent("granete-mutation-state", { detail: { phase: machine.phase } }));
+    }
   }
 
   function statusCopy() {
@@ -199,6 +205,62 @@
         }
       };
       host.authoring_mutation(JSON.stringify(envelope));
+      return "sent";
+    },
+
+    // #467 / SU-AUTH-1: internal-component authoring on the same neutral
+    // channel. `operation` selects the semantic mutation; precise mm ride
+    // the payload as assembly-frame translationMm (remove carries none).
+    // No shelf/hinge logic here — the Ruby bridge resolves movability and
+    // consequences against the authoritative layout.
+    submitComponentMutation: function (operation, translationMm, selectedContext) {
+      if (isBusy()) return "busy";
+      var MUTATIONS = {
+        move: "move_component",
+        add: "add_component",
+        duplicate: "duplicate_component",
+        remove: "remove_component"
+      };
+      var mutation = MUTATIONS[operation];
+      var host = window.sketchup;
+      if (!mutation || !host || typeof host.authoring_mutation !== "function") return "unavailable";
+      var context = selectedContext || (store() ? store().get("selection") : null) || {};
+      var target = {};
+      if (context.furnitureInstanceRef) target.furnitureInstanceRef = context.furnitureInstanceRef;
+      if (context.furnitureInstanceId) target.furnitureInstanceId = context.furnitureInstanceId;
+      if (context.componentInstanceId) target.componentInstanceId = context.componentInstanceId;
+      if (Object.keys(target).length === 0 || !target.componentInstanceId) return "unavailable";
+
+      setPhase("editing_intent", { target: target });
+      setPhase("resolving", { target: target });
+      pendingMessageId = window.GraneteBridge ? window.GraneteBridge.nextMessageId() : ("cmd-" + Date.now());
+      var payload = {};
+      if (translationMm && mutation !== "remove_component") payload.translationMm = translationMm;
+      var envelope = {
+        schemaId: "granete.sketchup-host-command.v1",
+        messageId: pendingMessageId,
+        mutation: mutation,
+        semanticTarget: target,
+        payload: payload
+      };
+      host.authoring_mutation(JSON.stringify(envelope));
+      return "sent";
+    },
+
+    // Constrained viewport gesture (#467): Ruby activates the vertical-axis
+    // drag tool; its commit re-enters through submitComponentMutation's Ruby
+    // path. View state only — no geometry is touched from JS.
+    startComponentViewportMove: function (selectedContext) {
+      var host = window.sketchup;
+      if (!host || typeof host.component_viewport_move !== "function") return "unavailable";
+      var context = selectedContext || (store() ? store().get("selection") : null) || {};
+      if (!context.componentInstanceId) return "unavailable";
+      var target = {};
+      if (context.furnitureInstanceRef) target.furnitureInstanceRef = context.furnitureInstanceRef;
+      if (context.furnitureInstanceId) target.furnitureInstanceId = context.furnitureInstanceId;
+      if (context.componentInstanceId) target.componentInstanceId = context.componentInstanceId;
+      if (!target.furnitureInstanceRef && !target.furnitureInstanceId) return "unavailable";
+      host.component_viewport_move(JSON.stringify({ semanticTarget: target }));
       return "sent";
     },
 
