@@ -97,6 +97,110 @@ func TestAuthDevices_MigrationFreshAndUpgrade(t *testing.T) {
 	}
 }
 
+func reconciliationMigrationSQL(t *testing.T, suffix string) string {
+	t.Helper()
+	contents, err := os.ReadFile("../../db/migration/000120_auth_devices_rls_reconciliation." + suffix + ".sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(contents)
+}
+
+// #560: Migration 000120 reconciles environments that applied the initial
+// SELECT-only version of migration 108 (commit 2eab774f), restoring the
+// canonical policies, constraints and current_session_id column. It must also
+// apply idempotently on a fresh database that already applied 108-119.
+func TestAuthDevices_Migration120Reconciliation(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Fresh database through 120 (idempotency proof)
+	fresh := multiOrgFreshDB(t)
+	identityApplyThrough(t, fresh, 120)
+	assertDevicesPolicies(t, fresh)
+
+	// 2. Legacy pre-3a0854cf upgrade: simulate the original migration 108
+	legacy := multiOrgFreshDB(t)
+	identityApplyThrough(t, legacy, 107)
+
+	legacySQL := `
+		CREATE TABLE auth_devices (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			client_type TEXT NOT NULL,
+			display_name TEXT NOT NULL,
+			credential_hash BYTEA NOT NULL,
+			last_seen_at TIMESTAMPTZ,
+			revoked_at TIMESTAMPTZ,
+			credential_version BIGINT NOT NULL DEFAULT 1,
+			metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			version BIGINT NOT NULL DEFAULT 1
+		);
+		CREATE INDEX idx_auth_devices_user_id ON auth_devices(user_id);
+
+		CREATE TABLE auth_device_enrollments (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			code TEXT NOT NULL UNIQUE,
+			user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+			client_type TEXT NOT NULL,
+			display_name TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			expires_at TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			version BIGINT NOT NULL DEFAULT 1
+		);
+		CREATE INDEX idx_auth_device_enrollments_code ON auth_device_enrollments(code);
+		CREATE INDEX idx_auth_device_enrollments_user_id ON auth_device_enrollments(user_id);
+
+		ALTER TABLE auth_devices ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE auth_devices FORCE ROW LEVEL SECURITY;
+		ALTER TABLE auth_device_enrollments ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE auth_device_enrollments FORCE ROW LEVEL SECURITY;
+
+		CREATE POLICY select_own_auth_devices ON auth_devices
+			FOR SELECT TO PUBLIC
+			USING (user_id = current_setting('app.current_user_id', true)::UUID);
+
+		CREATE POLICY select_own_auth_device_enrollments ON auth_device_enrollments
+			FOR SELECT TO PUBLIC
+			USING (user_id = current_setting('app.current_user_id', true)::UUID);
+
+		INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale, policy_version, updated_at)
+		VALUES 
+		('auth_devices', 'tenant-owned', 'self', 'self', 'Devices belong globally to a user, RLS restricts to the owner', 1, NOW()),
+		('auth_device_enrollments', 'tenant-owned', 'self', 'self', 'Enrollments belong globally to a user, RLS restricts to the owner', 1, NOW());
+	`
+	if _, err := legacy.Exec(ctx, legacySQL); err != nil {
+		t.Fatalf("setup legacy schema: %v", err)
+	}
+
+	// Apply migration 120 reconciliation
+	if _, err := legacy.Exec(ctx, reconciliationMigrationSQL(t, "up")); err != nil {
+		t.Fatalf("apply 000120 reconciliation: %v", err)
+	}
+	assertDevicesPolicies(t, legacy)
+
+	// Verify current_session_id exists on legacy after reconciliation
+	var hasCol bool
+	if err := legacy.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = 'auth_devices' AND column_name = 'current_session_id'
+		)`).Scan(&hasCol); err != nil {
+		t.Fatal(err)
+	}
+	if !hasCol {
+		t.Fatalf("auth_devices lacks current_session_id column after 000120")
+	}
+
+	// Down migration
+	if _, err := legacy.Exec(ctx, reconciliationMigrationSQL(t, "down")); err != nil {
+		t.Fatalf("down 000120: %v", err)
+	}
+}
+
 // Full lifecycle under the app role: enroll anonymously, poll by the minted
 // id, approve by PIN as the enrolling user, exchange once (single-use), then
 // resolve a transport token that is backed by a REAL registry session.
