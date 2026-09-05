@@ -28,6 +28,7 @@
   var ACTION_COPY = {
     navigate: "Ir al origen",
     edit_hardware: "Editar herraje",
+    edit_component: "Editar componente",
     select_part: "Seleccionar pieza",
     edit_material: "Editar material",
     select_furniture: "Seleccionar mueble"
@@ -37,6 +38,7 @@
   var ACTION_TARGETS = {
     navigate: "primary",
     edit_hardware: "hardware",
+    edit_component: "part",
     select_part: "part"
   };
 

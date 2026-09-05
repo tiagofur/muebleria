@@ -433,6 +433,11 @@ module Granete
             execute_coordinated_hardware_substitution(dialog, envelope['payload'],
                                                       semantic_target: envelope['semanticTarget'],
                                                       command_message_id: envelope['messageId'])
+          when *ComponentAuthoringBridge::COMPONENT_MUTATIONS
+            execute_coordinated_component_mutation(dialog, envelope['payload'],
+                                                   semantic_target: envelope['semanticTarget'],
+                                                   command_message_id: envelope['messageId'],
+                                                   mutation: envelope['mutation'])
           end
         rescue Host::CommandContract::ContractError => e
           @logger.error('authoring_mutation_contract_rejected', error: e)
@@ -570,8 +575,17 @@ module Granete
         def apply_update_result(_host_context, entity, definition, params, choices, result)
           model = entity.respond_to?(:model) && entity.model ? entity.model : active_model
           relationships = result.normalized_snapshot.is_a?(Hash) ? result.normalized_snapshot['relationships'] : nil
+          # The server-normalized echo is the authoritative parameter intent
+          # (defaults filled, quantity bindings consistent, #467): persisting
+          # it keeps the next full-snapshot echo self-consistent.
+          normalized_params = if result.normalized_snapshot.is_a?(Hash) &&
+                                 result.normalized_snapshot['parameters'].is_a?(Hash)
+                                result.normalized_snapshot['parameters']
+                              else
+                                params
+                              end
           outcome = furniture_builder_for(model).update_furniture(
-            model, entity, definition, params,
+            model, entity, definition, normalized_params,
             resolved_layout: result.layout, material_choices: choices,
             transaction: false, relationships: relationships
           )
@@ -748,13 +762,13 @@ module Granete
         end
 
         def build_hardware_mutation_request(definition, params, choices, base_layout,
-                                            hardware_placements, relationships)
+                                            hardware_placements, relationships, components: nil)
           req = {
             'furnitureDefinitionId' => definition['furniture_definition_id'] || definition['id'],
             'catalogRevision' => current_catalog_revision,
             'parameters' => params || {},
             'materialChoices' => choices || {},
-            'components' => layout_components(base_layout),
+            'components' => components || layout_components(base_layout),
             'hardwarePlacements' => hardware_placements
           }
           req['relationships'] = relationships if relationships.is_a?(Array) && !relationships.empty?
@@ -1516,6 +1530,7 @@ module Granete
         include ProjectFurnitureBridge
         include FurnitureBridge
         include HostMutationBridge
+        include ComponentAuthoringBridge
         include OptionSelectorBridge
         include InspectorBridge
         include ObserverBridge
@@ -1660,7 +1675,7 @@ module Granete
           dialog.add_action_callback('get_catalog') { send_catalog(dialog) }
           dialog.add_action_callback('insert_furniture') { |_c, p| handle_insert(dialog, p) }
           dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
-          dialog.add_action_callback('authoring_mutation') { |_c, p| handle_authoring_mutation(dialog, p) }
+          register_authoring_callbacks(dialog)
           dialog.add_action_callback('manufacturing_inspection') { |_c, p| handle_manufacturing_inspection(dialog, p) }
           dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
@@ -1675,6 +1690,13 @@ module Granete
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.
           dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }
+        end
+
+        # #467/#498 authoring channels: the versioned mutation bridge plus
+        # the constrained viewport gesture activation.
+        def register_authoring_callbacks(dialog)
+          dialog.add_action_callback('authoring_mutation') { |_c, p| handle_authoring_mutation(dialog, p) }
+          dialog.add_action_callback('component_viewport_move') { |_c, p| handle_component_viewport_move(dialog, p) }
         end
 
         def handle_dialog_ready(dialog)

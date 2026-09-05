@@ -18,6 +18,8 @@ require_relative '../../src/granete_for_sketchup/selection/resolver'
 require_relative '../../src/granete_for_sketchup/observers/selection_observer'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
+require_relative '../../src/granete_for_sketchup/tools/internal_component_move_tool'
+require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 
 class DialogLibraryViewTest < Minitest::Test

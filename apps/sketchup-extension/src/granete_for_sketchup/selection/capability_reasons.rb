@@ -40,19 +40,14 @@ module Granete
         AGGREGATE_REMOVE = lambda do
           'La eliminación de agregados llegará con la autoría interna.'
         end
-        PART_MOVE = lambda do
-          'Las posiciones internas las resuelve Granete; la edición directa llegará con ' \
-            'la autoría interna.'
+        PART_STRUCTURAL = lambda do
+          'Las piezas estructurales mantienen la posición y cantidad definidas por la ' \
+            'definición del mueble; la autoría directa aplica a los internos movibles ' \
+            '(p. ej. entrepaños).'
         end
-        PART_DUPLICATE = lambda do
-          'Duplicar una pieza exige una nueva ocurrencia con identidad propia resuelta ' \
-            'por Granete.'
-        end
-        PART_ADD_RELATED = lambda do
-          'Agregar piezas relacionadas llegará con la autoría interna.'
-        end
-        PART_REMOVE = lambda do
-          'Quitar una pieza llegará con la autoría interna.'
+        PART_PLACEMENT_UNKNOWN = lambda do
+          'Falta el dato de colocación de esta pieza (modelo anterior a la autoría ' \
+            'interna). Reinsertá el mueble desde la biblioteca o actualizá la extensión.'
         end
         PART_CHANGE_JOINERY = lambda do
           'El sistema de unión se cambia desde los parámetros del mueble.'

@@ -315,4 +315,78 @@ test('attachToDialog registers the runtime callbacks exactly once', () => {
   assert.strictEqual(api.onMutationState, first);
 });
 
+// --- #467 / SU-AUTH-1: internal component authoring on the neutral channel ---
+
+function partContext() {
+  return {
+    kind: 'part', furnitureInstanceRef: 'inst-467', componentInstanceId: 'shelf-01',
+    componentDefinitionId: 'mod-comp-shelf', componentPlacement: 'interno',
+    assemblyTranslationMm: [18, 18, 150]
+  };
+}
+
+test('component move submits a move_component command with mm translation and exact target', () => {
+  const sandbox = fresh();
+  const mutation = sandbox.window.GraneteMutation;
+  const result = mutation.submitComponentMutation('move', [18, 18, 520], partContext());
+  assert.strictEqual(result, 'sent');
+  assert.strictEqual(sandbox.__bridge.length, 1);
+  const call = sandbox.__bridge[0];
+  assert.strictEqual(call.action, 'authoring_mutation');
+  assert.strictEqual(call.payload.mutation, 'move_component');
+  assert.strictEqual(call.payload.semanticTarget.componentInstanceId, 'shelf-01');
+  assert.strictEqual(call.payload.semanticTarget.furnitureInstanceRef, 'inst-467');
+  assert.strictEqual(JSON.stringify(call.payload.payload.translationMm), JSON.stringify([18, 18, 520]));
+  assert.ok(call.payload.messageId, 'component command carries correlation');
+  assert.strictEqual(mutation.phase(), 'resolving');
+});
+
+test('component remove carries no translation and requires the occurrence identity', () => {
+  const sandbox = fresh();
+  const mutation = sandbox.window.GraneteMutation;
+  assert.strictEqual(mutation.submitComponentMutation('remove', null, partContext()), 'sent');
+  const call = sandbox.__bridge[0];
+  assert.strictEqual(call.payload.mutation, 'remove_component');
+  assert.strictEqual(call.payload.payload.translationMm, undefined);
+
+  // Without a concrete componentInstanceId the channel refuses (never the
+  // furniture root, never a guess).
+  const other = fresh();
+  assert.strictEqual(
+    other.window.GraneteMutation.submitComponentMutation('remove', null, { kind: 'part', furnitureInstanceRef: 'inst-467' }),
+    'unavailable'
+  );
+  assert.strictEqual(other.__bridge.length, 0);
+});
+
+test('component mutations respect the shared double-submit guard', () => {
+  const sandbox = fresh();
+  const mutation = sandbox.window.GraneteMutation;
+  assert.strictEqual(mutation.submitComponentMutation('add', [18, 18, 420], partContext()), 'sent');
+  assert.strictEqual(mutation.submitComponentMutation('duplicate', [18, 18, 300], partContext()), 'busy');
+  assert.strictEqual(mutation.submitComponentMutation('move', [1, 2, 3], partContext()), 'busy');
+  assert.strictEqual(sandbox.__bridge.length, 1);
+});
+
+test('unknown component operation never reaches the host', () => {
+  const sandbox = fresh();
+  const mutation = sandbox.window.GraneteMutation;
+  assert.strictEqual(mutation.submitComponentMutation('rotate', [1, 2, 3], partContext()), 'unavailable');
+  assert.strictEqual(sandbox.__bridge.length, 0);
+});
+
+test('viewport move asks Ruby to activate the constrained drag tool', () => {
+  const sandbox = buildSandbox();
+  const viewportCalls = [];
+  sandbox.window.sketchup.component_viewport_move = (payload) => viewportCalls.push(JSON.parse(payload));
+  runRuntime(sandbox);
+  const mutation = sandbox.window.GraneteMutation;
+  assert.strictEqual(mutation.startComponentViewportMove(partContext()), 'sent');
+  assert.strictEqual(viewportCalls.length, 1);
+  assert.strictEqual(viewportCalls[0].semanticTarget.componentInstanceId, 'shelf-01');
+  assert.strictEqual(viewportCalls[0].semanticTarget.furnitureInstanceRef, 'inst-467');
+  assert.strictEqual(mutation.startComponentViewportMove({ kind: 'part' }), 'unavailable');
+  assert.strictEqual(viewportCalls.length, 1);
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

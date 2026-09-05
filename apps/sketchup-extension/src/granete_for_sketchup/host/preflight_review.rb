@@ -122,14 +122,19 @@ module Granete
 
         # Fix-loop actions exposed for an issue, derived from authoritative
         # provenance: editing hardware is only offered when the conflict's
-        # provenance is a MANUAL placement (#468 editor); relationship
-        # review stays out until #467 exists.
+        # provenance is a MANUAL placement (#468 editor); editing a component
+        # is offered when the issue is anchored on a component relationship
+        # (#467 internal authoring — the source occurrence is the fix point).
         def actions_for(issue)
           candidates = navigation_candidates(issue)
+          relationship_source = relationship_source_id(issue)
           actions = []
           actions << 'navigate' unless candidates.empty?
           actions << 'edit_hardware' if candidates.any? do |candidate|
             candidate['kind'] == 'hardware' && manual_placement?(candidate['id'])
+          end
+          actions << 'edit_component' if relationship_source && candidates.any? do |candidate|
+            candidate['kind'] == 'part' && candidate['id'] == relationship_source
           end
           actions << 'select_part' if candidates.any? { |candidate| candidate['kind'] == 'part' }
           actions << 'edit_material' if PreflightReviewCopy.category_of(issue.code) == 'materials'

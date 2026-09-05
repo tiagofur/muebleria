@@ -19,7 +19,8 @@ module Granete
         SCHEMA_ID = 'granete.sketchup-host-command.v1'
         MESSAGE_TYPES = %w[mutation_command mutation_state preflight_state degraded_state
                            manufacturing_command manufacturing_state preflight_command].freeze
-        KNOWN_MUTATIONS = %w[update_furniture update_hardware_placement substitute_hardware].freeze
+        KNOWN_MUTATIONS = %w[update_furniture update_hardware_placement substitute_hardware
+                             move_component add_component duplicate_component remove_component].freeze
         # Read-only inspection channel (#470): commands never mutate the
         # model; they steer the overlay (mode/scope/filter/selection) or ask
         # for provenance navigation.

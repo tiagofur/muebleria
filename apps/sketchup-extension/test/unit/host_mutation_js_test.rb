@@ -21,7 +21,8 @@ class HostMutationJsTest < Minitest::Test
     json_line = stdout.lines.reverse.find { |line| line.strip.start_with?('{') }
     result = JSON.parse(json_line || stdout)
     assert_equal true, result['success']
-    assert_operator result['testsPassed'], :>=, 16,
-                    'host-mutation harness must keep covering the state machine, guards and copy'
+    assert_operator result['testsPassed'], :>=, 21,
+                    'host-mutation harness must keep covering the state machine, guards, copy ' \
+                    'and the #467 component authoring channel'
   end
 end

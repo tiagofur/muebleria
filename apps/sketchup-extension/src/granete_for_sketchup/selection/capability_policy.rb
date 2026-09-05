@@ -11,6 +11,7 @@ module Granete
       # unsupported ones stay present-but-disabled with a Spanish explanation
       # of how to resolve them. Downstream issues (#466/#467/#468/#470/#471)
       # extend or consume this policy — they must not re-derive legality.
+      # rubocop:disable-next Metrics/ModuleLength
       module CapabilityPolicy
         module_function
 
@@ -22,7 +23,7 @@ module Granete
           when 'aggregate'
             aggregate_capabilities(set)
           when 'part'
-            part_capabilities(set)
+            part_capabilities(context, set)
           when 'hardware'
             hardware_capabilities(context, set)
           end
@@ -72,15 +73,27 @@ module Granete
                       supported: false, reason: CapabilityReasons::INSPECT_MANUFACTURING.call)
         end
 
-        def part_capabilities(set)
-          set.declare('canMoveWithinConstraint',
-                      supported: false, reason: CapabilityReasons::PART_MOVE.call)
-          set.declare('canDuplicate',
-                      supported: false, reason: CapabilityReasons::PART_DUPLICATE.call)
-          set.declare('canAddRelated',
-                      supported: false, reason: CapabilityReasons::PART_ADD_RELATED.call)
-          set.declare('canRemove',
-                      supported: false, reason: CapabilityReasons::PART_REMOVE.call)
+        # #467 direct internal authoring: only occurrences whose published
+        # domain placement (layout slotId, stored as part intent `placement`)
+        # is `interno` are movable internals. Structural/agregado templates
+        # keep the definition-driven pose; a missing placement (metadata from
+        # before #467) fails closed. This is an affordance over server-published
+        # data — Granete's resolve stays the sole authority for every
+        # manufacturing consequence.
+        def part_capabilities(context, set)
+          movable = context.component_placement == Library::MOVABLE_INTERNAL_PLACEMENT
+          reason = if movable
+                     nil
+                   elsif context.component_placement.nil?
+                     CapabilityReasons::PART_PLACEMENT_UNKNOWN.call
+                   else
+                     CapabilityReasons::PART_STRUCTURAL.call
+                   end
+
+          set.declare('canMoveWithinConstraint', supported: movable, reason: reason)
+          set.declare('canDuplicate', supported: movable, reason: reason)
+          set.declare('canAddRelated', supported: movable, reason: reason)
+          set.declare('canRemove', supported: movable, reason: reason)
           set.declare('canChangeJoinery',
                       supported: false, reason: CapabilityReasons::PART_CHANGE_JOINERY.call)
           # #470: board-level inspection of Granete-resolved machining is

@@ -69,14 +69,41 @@ class HostPreflightReviewTest < Minitest::Test
     issue_payload = review.issue_by_id('issue-0')
 
     # The conflict provenance is a MANUAL placement → the #468 editor may
-    # fix it; part and furniture navigation are always offered. Relationship
-    # review stays out until #467 exists.
+    # fix it; part and furniture navigation are always offered.
     actions = issue_payload['actions']
     assert_includes actions, 'navigate'
     assert_includes actions, 'edit_hardware'
     assert_includes actions, 'select_part'
     assert_includes actions, 'select_furniture'
     refute_includes actions, 'review_relationship'
+  end
+
+  # #467: an issue anchored on a component relationship offers the internal
+  # authoring editor — the relationship's source occurrence is the fix point.
+  def test_relationship_anchored_issue_offers_component_editing
+    relationship = {
+      'relationshipId' => 'rel-shelf-01', 'kind' => 'shelf-support',
+      'source' => { 'componentInstanceId' => 'shelf-01', 'role' => 'shelf-edge' },
+      'targets' => [{ 'componentInstanceId' => 'side-left-01', 'role' => 'inside-face' }]
+    }
+    issue = Library::AuthoringResolveIssue.new(
+      'code' => 'RESOLVE_GEOMETRY_INVALID', 'message' => 'unsupported shelf pose',
+      'severity' => 'error', 'entityId' => 'shelf-01',
+      'details' => { 'relationshipId' => 'rel-shelf-01' },
+      'remediation' => 'Move the shelf to a supported position'
+    )
+    review = Host::PreflightReview.new(
+      scope: SCOPE, status: 'blocked', issues: [issue], message_id: 'msg-review-467',
+      relationships: [relationship]
+    )
+
+    issue_payload = review.issue_by_id('issue-0')
+    actions = issue_payload['actions']
+    assert_includes actions, 'edit_component'
+    assert_includes actions, 'select_part'
+    assert_equal 'part', issue_payload['source']['kind']
+    assert_equal 'shelf-01', issue_payload['source']['id']
+    refute_includes actions, 'edit_hardware', 'no manual provenance → no hardware editor'
   end
 
   def test_clear_scenario_without_issues_projects_ready

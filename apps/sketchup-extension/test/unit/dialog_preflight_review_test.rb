@@ -20,6 +20,8 @@ require_relative '../../src/granete_for_sketchup/host/preflight_review_copy'
 require_relative '../../src/granete_for_sketchup/host/preflight_review'
 require_relative '../../src/granete_for_sketchup/host/preflight_review_session'
 require_relative '../../src/granete_for_sketchup/overlay/issue_navigation'
+require_relative '../../src/granete_for_sketchup/tools/internal_component_move_tool'
+require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 
 # #466 dialog wiring: `Verificar fabricación` rides the versioned

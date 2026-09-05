@@ -68,8 +68,10 @@ module Granete
         selection/resolver
         observers/selection_observer
         observers/entities_observer
+        tools/internal_component_move_tool
         ui/option_selector_controller
         ui/migration_review_controller
+        ui/component_authoring_bridge
         ui/dialog_controller
         lifecycle
         application

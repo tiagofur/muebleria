@@ -3,6 +3,14 @@
 module Granete
   module SketchUpExtension
     module Library
+      # Domain placement vocabulary (backend ComponentPlacement) published by
+      # the authoritative layout through each board's slotId. It is data, not
+      # a name guess: only occurrences whose published placement is `interno`
+      # are movable internals for direct authoring (#467); the resolve-time
+      # guard re-reads it from the fresh layout and Granete stays the
+      # authority for every consequence.
+      MOVABLE_INTERNAL_PLACEMENT = 'interno'
+
       # One resolved board with its authoritative local→furniture transform
       # (#414). AABB accessors are convenience/preview passthrough and may
       # be nil — orientation lives exclusively in basis/translation.
