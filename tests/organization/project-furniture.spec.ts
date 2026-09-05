@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { Project } from '@granete/domain';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import {
   GATE_MODULE_A_ID,
@@ -44,14 +43,14 @@ async function prepareProjectFurniture(): Promise<SeededProjectFurniture> {
 
   // 1. Create Project in Org A with 1 QuoteLine of quantity=3
   const now = new Date().toISOString();
-  const project: Project = {
+  const project = {
     id: PROJECT_A_ID,
     name: 'Obra Cocina Muebles Gate',
     customerId,
     currency: 'MXN',
     marginFactor: 1.3,
     laborFixedCost: 0,
-    status: 'draft',
+    status: 'draft' as const,
     createdAt: now,
     updatedAt: now,
     items: [
