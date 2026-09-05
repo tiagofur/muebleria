@@ -283,7 +283,9 @@ describe('project furniture matrix route (WEB-DT-1 / #500)', () => {
       designContextKind: 'working',
       designRevisionId: null,
     });
-    const [pathname, search = ''] = built.split('?');
+    const questionIndex = built.indexOf('?');
+    const pathname = questionIndex === -1 ? built : built.slice(0, questionIndex);
+    const search = questionIndex === -1 ? '' : built.slice(questionIndex + 1);
     const context = projectFurnitureFromPath(pathname, search)?.context;
     expect(context).toEqual({
       quoteRevisionId: 'qr-2',
