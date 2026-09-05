@@ -121,6 +121,15 @@ class DeviceProviderTest < Minitest::Test
     assert_equal 'enr-1', poll_request['body']['id']
   end
 
+  def test_poll_rate_limit_includes_http_status
+    @transport.respond_with('/auth/devices/enroll/poll', 429, 'error' => 'too many requests, slow down')
+
+    result = @provider.poll_enrollment('enr-1')
+    assert_equal false, result['success']
+    assert_equal 429, result['http_status']
+    assert_includes result['error'], '429'
+  end
+
   def test_exchange_stores_secret_and_first_token
     @transport.respond_with('/auth/devices/exchange', 200, 'device_secret' => "dev-1:#{'a1' * 32}")
     @transport.respond_with('/auth/devices/token', 200, 'access_token' => 'token-1')
