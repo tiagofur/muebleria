@@ -17,8 +17,13 @@ module Granete
         class ContractError < StandardError; end
 
         SCHEMA_ID = 'granete.sketchup-host-command.v1'
-        MESSAGE_TYPES = %w[mutation_command mutation_state preflight_state degraded_state].freeze
+        MESSAGE_TYPES = %w[mutation_command mutation_state preflight_state degraded_state
+                           manufacturing_command manufacturing_state].freeze
         KNOWN_MUTATIONS = %w[update_furniture update_hardware_placement substitute_hardware].freeze
+        # Read-only inspection channel (#470): commands never mutate the
+        # model; they steer the overlay (mode/scope/filter/selection) or ask
+        # for provenance navigation.
+        KNOWN_INSPECTIONS = %w[set_mode select_feature set_filter navigate_to_source refresh].freeze
 
         SEMANTIC_TARGET_KEYS = %w[furnitureInstanceId furnitureInstanceRef componentInstanceId
                                   hardwarePlacementId].freeze
@@ -111,6 +116,44 @@ module Granete
             'degraded' => degraded,
             'semanticTarget' => semantic_target.is_a?(Hash) ? semantic_target : {}
           }.merge(result.nil? ? {} : { 'result' => result })
+        end
+
+        # Parses and validates a JS→Ruby read-only inspection command (#470).
+        # Raises ContractError on any violation; never touches the model.
+        def parse_manufacturing_command!(raw)
+          envelope = parse_json(raw)
+          assert_schema(envelope)
+          assert_type(envelope, 'manufacturing_command')
+
+          command = envelope['command'].to_s
+          unless KNOWN_INSPECTIONS.include?(command)
+            raise ContractError, "Comando de inspección desconocido: #{command.inspect}"
+          end
+
+          target = envelope['semanticTarget']
+          payload = envelope['payload']
+          raise ContractError, 'payload debe ser un objeto' unless payload.is_a?(Hash)
+
+          {
+            'messageId' => bounded_string(envelope['messageId'], 'messageId'),
+            'command' => command,
+            'semanticTarget' => target.is_a?(Hash) ? parse_semantic_target(target) : {},
+            'payload' => payload
+          }
+        end
+
+        # Ruby→JS inspection state envelope (#470): the overlay manager
+        # payload (mode/status/scope/fingerprint/features) under the same
+        # versioned schema as the mutation channel.
+        def manufacturing_state_envelope(message_id:, state:)
+          raise ContractError, 'state debe ser un objeto' unless state.is_a?(Hash)
+
+          {
+            'schemaId' => SCHEMA_ID,
+            'type' => 'manufacturing_state',
+            'messageId' => bounded_string(message_id, 'messageId'),
+            'state' => state
+          }
         end
 
         def preflight_state_envelope(entries)

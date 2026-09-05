@@ -415,10 +415,14 @@ func deriveRelationshipOperations(
 	}
 
 	// Shelf ends: bolts and dowels along the shelf's length-axis end faces.
+	// Length-axis ends are the board-local bottom/top faces (the face plane
+	// is width×thickness, matching xMm=position and yMm=half-thickness; TS
+	// F129 uses the same pair) — left/right would place the holes outside
+	// the resolved board under the #414 local-basis frame (#470 3D proof).
 	shelfEndHoles := []ResolveHole{}
 	halfThickness := source.thicknessMm / 2
 	for _, x := range positions {
-		for _, face := range [2]string{"left", "right"} {
+		for _, face := range [2]string{"bottom", "top"} {
 			if minifixID != "" {
 				shelfEndHoles = append(shelfEndHoles, ResolveHole{
 					Face: face, XMm: x, YMm: halfThickness,

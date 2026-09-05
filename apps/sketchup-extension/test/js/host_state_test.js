@@ -26,10 +26,10 @@ function runModule(times = 1) {
   return sandbox;
 }
 
-test('exposes the six shared slices with their initial shapes', () => {
+test('exposes the shared slices with their initial shapes', () => {
   const { window } = runModule();
   const store = window.GraneteState;
-  assert.strictEqual(JSON.stringify(store.SLICES), JSON.stringify(['session', 'catalog', 'selection', 'mutation', 'preflight', 'degraded']));
+  assert.strictEqual(JSON.stringify(store.SLICES), JSON.stringify(['session', 'catalog', 'selection', 'mutation', 'preflight', 'degraded', 'manufacturing']));
   assert.strictEqual(store.get('mutation').phase, 'idle');
   assert.strictEqual(store.get('degraded'), null);
 });

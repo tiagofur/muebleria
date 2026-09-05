@@ -34,6 +34,7 @@ import {
   isFingerprintStale,
   type ResolvedRelationshipOperation,
 } from "./sketchupRelationshipMachining";
+import { getFaceDimensions } from "./partDrillingResolver";
 
 export interface ManufacturingPreflightResult {
   readonly identity: ManufacturingIdentity;
@@ -163,11 +164,20 @@ export function runManufacturingPreflight(
               remediation: "Fix the joinery rule or hardware profile: diameter and depth must be positive millimeters.",
             });
           }
-          // Depth check: blind hole depth cannot exceed host thickness
-          if (hole.depthMm > geometry.thicknessMm && hole.face !== "left" && hole.face !== "right") {
+          // Depth check: blind hole depth cannot exceed the dimension along
+          // the hole's normal axis — thickness for front/back, width for
+          // left/right, length for top/bottom (getFaceDimensions is the one
+          // canonical face table; a hard-coded left/right exemption cannot
+          // track the face pair a rule actually uses).
+          const faceMaxDepthMm = getFaceDimensions(hole.face, {
+            lengthMm: geometry.lengthMm,
+            widthMm: geometry.widthMm,
+            thicknessMm: geometry.thicknessMm,
+          }).maxDepthMm;
+          if (hole.depthMm > faceMaxDepthMm) {
             issues.push({
               code: "DRILLING_INVALID",
-              message: `Hole depth ${hole.depthMm}mm exceeds panel thickness ${geometry.thicknessMm}mm on ${hostId}`,
+              message: `Hole depth ${hole.depthMm}mm exceeds the ${hole.face} face limit ${faceMaxDepthMm}mm on ${hostId}`,
               severity: "error",
               entityId: hostId,
               path: componentPaths.get(hostId),

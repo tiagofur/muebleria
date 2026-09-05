@@ -198,7 +198,7 @@ unzip -o dist/granete_for_sketchup.rbz -d "$HOME/Library/Application Support/Ske
 
 # 3. Run headless (self-quits when done):
 "/Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp" \
-  -RubyStartupArg "TestUp:CI:Config=<config.yml>" \
+  -RubyStartupArg "TestUp:CI:Config:<config.yml>" \
   > progress/host_smoke_F211_testup_ci_stdout.txt 2>&1
 
 # Recorded closure evidence (2026-09-04): Success, 3/3 tests, 47 assertions,

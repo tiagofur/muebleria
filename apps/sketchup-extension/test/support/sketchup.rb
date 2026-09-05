@@ -13,6 +13,19 @@ module Geom
     def to_a
       [x, y, z]
     end
+
+    # Host-faithful API shape: Point3d#transform(transformation) returns a
+    # NEW transformed point. SketchUp's Geom::Transformation has no #transform
+    # instance method — modeling only the real surface keeps phantom-method
+    # bugs from passing unit tests.
+    def transform(transformation)
+      m = transformation.to_a
+      Point3d.new(
+        (m[0] * x) + (m[1] * y) + (m[2] * z) + m[3],
+        (m[4] * x) + (m[5] * y) + (m[6] * z) + m[7],
+        (m[8] * x) + (m[9] * y) + (m[10] * z) + m[11]
+      )
+    end
   end
 
   Vector3d = Struct.new(:x, :y, :z) do
@@ -100,13 +113,6 @@ module Geom
         end
       end
       product
-    end
-
-    def transform(point)
-      x = (self[0, 0] * point.x) + (self[0, 1] * point.y) + (self[0, 2] * point.z) + self[0, 3]
-      y = (self[1, 0] * point.x) + (self[1, 1] * point.y) + (self[1, 2] * point.z) + self[1, 3]
-      z = (self[2, 0] * point.x) + (self[2, 1] * point.y) + (self[2, 2] * point.z) + self[2, 3]
-      Point3d.new(x, y, z)
     end
 
     def ==(other)
@@ -556,10 +562,18 @@ module SketchupStub
   end
 
   class ViewStub < Sketchup::View
-    attr_reader :images_written
+    attr_reader :images_written, :invalidations
 
     def initialize
       @images_written = []
+      @invalidations = 0
+    end
+
+    # Overlay tool surface (#470): invalidations are observable so tests can
+    # prove the tool refreshes the viewport without touching the model.
+    def invalidate
+      @invalidations += 1
+      true
     end
 
     def write_image(filename_or_options, width = 640, height = 480, antialias = false, _compression = 0.0)
@@ -583,7 +597,8 @@ module SketchupStub
   end
 
   class ModelStub
-    attr_reader :active_entities, :selection, :definitions, :materials, :operations
+    attr_reader :active_entities, :selection, :definitions, :materials, :operations,
+                :selected_tools
     attr_accessor :active_view
 
     def initialize
@@ -592,11 +607,19 @@ module SketchupStub
       @definitions = DefinitionListStub.new
       @materials = MaterialsStub.new
       @operations = []
+      @selected_tools = []
       @active_view = ViewStub.new
     end
 
     def entities
       @active_entities
+    end
+
+    # #470 overlay tool lifecycle: selecting tools is recorded (never a
+    # structural mutation — no undo frame, no entity change).
+    def select_tool(tool)
+      @selected_tools << tool
+      true
     end
 
     def start_operation(name, disable_ui = true)
@@ -699,6 +722,17 @@ module Sketchup
   end
 
   class EntitiesObserver
+  end
+
+  # Minimal color for overlay drawing tests (#470).
+  class Color
+    attr_reader :red, :green, :blue
+
+    def initialize(red = 0, green = 0, blue = 0, _alpha = 255)
+      @red = red
+      @green = green
+      @blue = blue
+    end
   end
 
   def self.register_extension(extension, enabled)
@@ -831,3 +865,10 @@ module UI
     end
   end
 end
+
+# OpenGL draw-mode constants for overlay tool tests (#470): SketchUp exposes
+# these at top level; the values match the host.
+GL_POINTS = 0x0001 unless defined?(GL_POINTS)
+GL_LINES = 0x0002 unless defined?(GL_LINES)
+GL_LINE_LOOP = 0x0003 unless defined?(GL_LINE_LOOP)
+GL_LINE_STRIP = 0x0004 unless defined?(GL_LINE_STRIP)

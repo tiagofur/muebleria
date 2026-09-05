@@ -411,6 +411,7 @@ module Granete
 
         def execute_coordinated_update(dialog, payload, semantic_target: nil, command_message_id: nil)
           command = build_update_command(payload, semantic_target)
+          overlay_mutation_started(command&.semantic_target || semantic_target)
           outcome = if command
                       mutation_coordinator.execute(command, command_message_id: command_message_id)
                     else
@@ -435,6 +436,7 @@ module Granete
 
         def execute_coordinated_hardware_update(dialog, payload, semantic_target: nil, command_message_id: nil)
           command = build_hardware_update_command(payload, semantic_target)
+          overlay_mutation_started(command&.semantic_target || semantic_target)
           outcome = if command
                       mutation_coordinator.execute(command, command_message_id: command_message_id)
                     else
@@ -454,6 +456,7 @@ module Granete
 
         def execute_coordinated_hardware_substitution(dialog, payload, semantic_target: nil, command_message_id: nil)
           command = build_hardware_substitution_command(payload, semantic_target)
+          overlay_mutation_started(command&.semantic_target || semantic_target)
           outcome = if command
                       mutation_coordinator.execute(command, command_message_id: command_message_id)
                     else
@@ -534,10 +537,11 @@ module Granete
 
         def apply_update_result(_host_context, entity, definition, params, choices, result)
           model = entity.respond_to?(:model) && entity.model ? entity.model : active_model
+          relationships = result.normalized_snapshot.is_a?(Hash) ? result.normalized_snapshot['relationships'] : nil
           outcome = furniture_builder_for(model).update_furniture(
             model, entity, definition, params,
             resolved_layout: result.layout, material_choices: choices,
-            transaction: false
+            transaction: false, relationships: relationships
           )
           return outcome if outcome['success'] == true
 
@@ -687,6 +691,44 @@ module Granete
           raise Library::AuthoringResolveError.new(issue.message, issues: [issue])
         end
 
+        def layout_components(layout)
+          layout.boards.map do |b|
+            {
+              'componentInstanceId' => b.component_instance_id,
+              'componentDefinitionId' => b.component_definition_id,
+              'role' => b.role
+            }
+          end
+        end
+
+        def current_catalog_revision
+          if @catalog_provider.respond_to?(:catalog_revision) && @catalog_provider.catalog_revision
+            @catalog_provider.catalog_revision
+          else
+            'workshop-current'
+          end
+        end
+
+        def persisted_furniture_relationships(entity)
+          store = @metadata_store_factory.call(active_model)
+          furniture_meta = store.read(entity)
+          furniture_meta.is_a?(Hash) ? furniture_meta['relationships'] : nil
+        end
+
+        def build_hardware_mutation_request(definition, params, choices, base_layout,
+                                            hardware_placements, relationships)
+          req = {
+            'furnitureDefinitionId' => definition['furniture_definition_id'] || definition['id'],
+            'catalogRevision' => current_catalog_revision,
+            'parameters' => params || {},
+            'materialChoices' => choices || {},
+            'components' => layout_components(base_layout),
+            'hardwarePlacements' => hardware_placements
+          }
+          req['relationships'] = relationships if relationships.is_a?(Array) && !relationships.empty?
+          req
+        end
+
         def resolve_hardware_mutation(entity, definition, params, choices, target,
                                       ctx:, new_offset: nil, target_hardware_id: nil)
           guard_against_derived_hardware_edit!(entity, target)
@@ -694,32 +736,13 @@ module Granete
           base_layout = resolve_layout_for(definition, params, choices)
           raise Library::AuthoringResolveError, 'No se pudo resolver el layout del mueble' if base_layout.nil?
 
-          target_placement_id = target['hardwarePlacementId']
-          hardware_placements = build_hardware_authoring_intents(base_layout, target_placement_id,
-                                                                 new_offset, target_hardware_id)
-
-          components = base_layout.boards.map do |b|
-            {
-              'componentInstanceId' => b.component_instance_id,
-              'componentDefinitionId' => b.component_definition_id,
-              'role' => b.role
-            }
-          end
-
-          cat_rev = if @catalog_provider.respond_to?(:catalog_revision) && @catalog_provider.catalog_revision
-                      @catalog_provider.catalog_revision
-                    else
-                      'workshop-current'
-                    end
-
-          furniture_req = {
-            'furnitureDefinitionId' => definition['furniture_definition_id'] || definition['id'],
-            'catalogRevision' => cat_rev,
-            'parameters' => params || {},
-            'materialChoices' => choices || {},
-            'components' => components,
-            'hardwarePlacements' => hardware_placements
-          }
+          relationships = persisted_furniture_relationships(entity)
+          hardware_placements = build_hardware_authoring_intents(
+            base_layout, target['hardwarePlacementId'], new_offset, target_hardware_id
+          )
+          furniture_req = build_hardware_mutation_request(
+            definition, params, choices, base_layout, hardware_placements, relationships
+          )
 
           req_payload = Library::AuthoringResolveRequest.build_request(
             message_id: ctx[:message_id] || "msg-#{SecureRandom.hex(4)}",
@@ -779,13 +802,17 @@ module Granete
 
         def push_mutation_outcome(dialog, outcome, in_reply_to:)
           execute_bridge(dialog, 'onMutationState', outcome.to_envelope(in_reply_to: in_reply_to))
-          return unless outcome.committed? && mutation_coordinator.preflight_tracker
-
-          key = Host::CommandContract.semantic_target_key(outcome.semantic_target)
-          execute_bridge(dialog, 'onPreflightState',
-                         Host::CommandContract.preflight_state_envelope(
-                           mutation_coordinator.preflight_tracker.payload_for(key)
-                         ))
+          if outcome.committed? && mutation_coordinator.preflight_tracker
+            key = Host::CommandContract.semantic_target_key(outcome.semantic_target)
+            execute_bridge(dialog, 'onPreflightState',
+                           Host::CommandContract.preflight_state_envelope(
+                             mutation_coordinator.preflight_tracker.payload_for(key)
+                           ))
+          end
+          # #470: a manufacturing-affecting mutation refreshes the overlay
+          # from the NEW accepted fingerprint or leaves it honestly stale.
+          overlay_mutation_outcome(outcome)
+          push_manufacturing_state(dialog) if @manufacturing_overlay&.mode_on?
         end
 
         # Honest dialog-level degraded state derived from catalog/session
@@ -1093,6 +1120,9 @@ module Granete
 
           payload = context.respond_to?(:to_payload) ? context.to_payload : context
           execute_bridge(@dialog, 'onSelectionChange', payload)
+          # #470: a live inspection overlay follows the selection — a part
+          # change re-scopes it, an unmanaged selection clears it honestly.
+          rescope_overlay_from_selection(payload)
         rescue StandardError => e
           @logger.error('selection_change_failed', error: e)
         end
@@ -1148,6 +1178,145 @@ module Granete
 
           ::Sketchup.remove_observer(@app_observer)
           @app_observer = nil
+        end
+      end
+
+      # Read-only manufacturing inspection bridge (#470 / SU-VIS-1): the
+      # `Ver fabricación` mode. Commands arrive through the versioned
+      # inspection channel (CommandContract manufacturing_command) and state
+      # leaves through manufacturing_state envelopes. The overlay itself is
+      # view state only — no operation, no entity, no metadata write — and
+      # its only machining truth is the accepted authoring resolve.
+      # rubocop:disable-next Metrics/ModuleLength
+      module ManufacturingInspectionBridge
+        # Lazy, injectable overlay manager: built on first inspection use so
+        # sessions that never inspect pay nothing.
+        def manufacturing_overlay
+          @manufacturing_overlay ||= Overlay::Manager.new(
+            resolver: Overlay::InspectionResolver.new(
+              catalog_provider: @catalog_provider,
+              metadata_store_factory: @metadata_store_factory,
+              logger: @logger
+            ),
+            locator: Overlay::EntityLocator.new(
+              metadata_store_factory: @metadata_store_factory,
+              model_provider: method(:active_model)
+            ),
+            model_provider: method(:active_model),
+            preflight_tracker: mutation_coordinator.preflight_tracker,
+            logger: @logger,
+            on_state_change: ->(_payload) { push_manufacturing_state(@dialog) if @dialog&.visible? },
+            on_viewport_selection: ->(entity) { handle_viewport_selection(entity) }
+          )
+        end
+
+        def handle_manufacturing_inspection(dialog, payload_json)
+          envelope = Host::CommandContract.parse_manufacturing_command!(payload_json)
+          case envelope['command']
+          when 'set_mode'
+            apply_inspection_mode(envelope)
+          when 'select_feature'
+            manufacturing_overlay.select_feature(envelope['payload']['visualId'].to_s)
+          when 'set_filter'
+            manufacturing_overlay.set_filter(envelope['payload']['filter'].to_s)
+          when 'refresh'
+            manufacturing_overlay.refresh
+          when 'navigate_to_source'
+            navigate_inspection_source(envelope)
+          end
+          push_manufacturing_state(dialog)
+        rescue Host::CommandContract::ContractError => e
+          @logger.error('manufacturing_inspection_contract_rejected', error: e)
+          push_manufacturing_state(dialog)
+        rescue StandardError => e
+          @logger.error('manufacturing_inspection_failed', error: e)
+          push_manufacturing_state(dialog)
+        end
+
+        def push_manufacturing_state(dialog)
+          overlay = @manufacturing_overlay
+          return unless overlay && dialog&.visible?
+
+          execute_bridge(dialog, 'onManufacturingState',
+                         Host::CommandContract.manufacturing_state_envelope(
+                           message_id: Host::CommandContract.next_outcome_message_id,
+                           state: overlay.to_payload
+                         ))
+        rescue StandardError => e
+          @logger.error('manufacturing_state_push_failed', error: e)
+        end
+
+        private
+
+        def apply_inspection_mode(envelope)
+          if envelope['payload']['mode'] == 'on'
+            manufacturing_overlay.enable(envelope['semanticTarget'])
+          else
+            manufacturing_overlay.disable
+          end
+        end
+
+        def navigate_inspection_source(envelope)
+          overlay = manufacturing_overlay
+          snapshot = overlay.snapshot
+          feature = snapshot&.feature_by_visual_id(envelope['payload']['visualId'].to_s)
+          return if feature.nil?
+
+          navigation = Overlay::ProvenanceNavigation.new(
+            locator: Overlay::EntityLocator.new(
+              metadata_store_factory: @metadata_store_factory,
+              model_provider: method(:active_model)
+            ),
+            model_provider: method(:active_model)
+          ).navigate_to_source(feature, snapshot)
+          @logger&.info('manufacturing_provenance_navigation',
+                        source_kind: feature.source_kind, located: !navigation.nil?)
+          navigation
+        end
+
+        # Viewport pick fell through to a model entity: resolve its semantic
+        # context and run the normal selection flow (dialog update + overlay
+        # re-scope) — identical to clicking it in the model.
+        def handle_viewport_selection(entity)
+          model = active_model
+          return unless model
+
+          context = @selection_observer.resolve(entity, selection: model.selection)
+          handle_selection_change(context)
+        end
+
+        # Selection changed: re-scope the active overlay to the managed
+        # part/furniture context, or clear it honestly for unmanaged
+        # selections (#470 §44/#45).
+        def rescope_overlay_from_selection(payload)
+          overlay = @manufacturing_overlay
+          return unless overlay&.mode_on?
+
+          overlay.rescope(scope_of_selection(payload))
+        end
+
+        def scope_of_selection(payload)
+          return {} unless payload.is_a?(Hash)
+
+          scope = {}
+          scope['furnitureInstanceId'] = payload['furnitureInstanceId'] if payload['furnitureInstanceId']
+          scope['furnitureInstanceRef'] = payload['furnitureInstanceRef'] if payload['furnitureInstanceRef']
+          scope['componentInstanceId'] = payload['componentInstanceId'] if payload['componentInstanceId']
+          scope
+        end
+
+        def overlay_mutation_started(semantic_target)
+          overlay = @manufacturing_overlay
+          return unless overlay&.mode_on?
+
+          overlay.mutation_started(semantic_target || {})
+        end
+
+        def overlay_mutation_outcome(outcome)
+          overlay = @manufacturing_overlay
+          return unless overlay&.mode_on?
+
+          overlay.handle_mutation_outcome(outcome)
         end
       end
 
@@ -1222,6 +1391,7 @@ module Granete
         include OptionSelectorBridge
         include InspectorBridge
         include ObserverBridge
+        include ManufacturingInspectionBridge
         include MigrationBridge
 
         attr_reader :selection_observer, :entities_observer, :duplicate_resolver
@@ -1237,7 +1407,7 @@ module Granete
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
                        migration_review_controller: nil, model_binding_connector: nil,
                        project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil,
-                       design_publisher: nil, mutation_coordinator: nil)
+                       design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -1247,6 +1417,7 @@ module Granete
           @entities_observer = entities_observer
           @design_publisher = design_publisher
           @mutation_coordinator = mutation_coordinator
+          @manufacturing_overlay = manufacturing_overlay
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store
@@ -1282,6 +1453,9 @@ module Granete
 
         def close
           detach_selection_observer
+          # Overlay lifecycle (#470 §43): closing the dialog turns the
+          # inspection mode off — no orphan markers, zero model impact.
+          @manufacturing_overlay&.disable
           @option_selector&.close
           @migration_review_controller&.close
           @dialog&.close
@@ -1342,6 +1516,7 @@ module Granete
           bind_callbacks(dialog)
           dialog.set_on_closed do
             detach_selection_observer
+            @manufacturing_overlay&.disable
             @option_selector&.close
             @migration_review_controller&.close
             @dialog = nil if @dialog.equal?(dialog)
@@ -1355,6 +1530,7 @@ module Granete
           dialog.add_action_callback('insert_furniture') { |_c, p| handle_insert(dialog, p) }
           dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
           dialog.add_action_callback('authoring_mutation') { |_c, p| handle_authoring_mutation(dialog, p) }
+          dialog.add_action_callback('manufacturing_inspection') { |_c, p| handle_manufacturing_inspection(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(p) }
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }

@@ -1037,7 +1037,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -1045,7 +1045,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1053,7 +1053,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1061,7 +1061,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -1069,7 +1069,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1077,7 +1077,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1085,7 +1085,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -1093,7 +1093,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1101,7 +1101,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1109,7 +1109,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -1117,7 +1117,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1125,7 +1125,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1195,7 +1195,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-ab91542a1d3efd5653958fb7e9e7788dc3c6e43bb40126157352344faf72ff8f"
+            "manufacturingFingerprint": "sha256-d1136a23117338f88a351ad48222a8ff699ecf496c8e4cc204e3a12f0c6e7694"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -1974,7 +1974,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -1982,7 +1982,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1990,7 +1990,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -1998,7 +1998,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -2006,7 +2006,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -2014,7 +2014,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -2022,7 +2022,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -2030,7 +2030,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -2038,7 +2038,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -2046,7 +2046,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -2054,7 +2054,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -2062,7 +2062,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -2132,7 +2132,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-a3f977d3c753fd3d3fb5625d3ca9b11a37dc9d523a4e8c82fef36b3559a3d253"
+            "manufacturingFingerprint": "sha256-decb0431283cd5243567251125a0a8e71538e29608aab2a7a0b2858d918a3a83"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -3009,7 +3009,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -3017,7 +3017,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3025,7 +3025,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3033,7 +3033,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -3041,7 +3041,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3049,7 +3049,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3057,7 +3057,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -3065,7 +3065,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3073,7 +3073,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3081,7 +3081,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -3089,7 +3089,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3097,7 +3097,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3256,7 +3256,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -3264,7 +3264,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3272,7 +3272,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3280,7 +3280,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -3288,7 +3288,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3296,7 +3296,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3304,7 +3304,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -3312,7 +3312,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3320,7 +3320,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3328,7 +3328,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -3336,7 +3336,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3344,7 +3344,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -3454,7 +3454,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-3b49b11fe4544958d883ecb1316dc8a3ff4f52314461e1667e0ee41b3d1be6df"
+            "manufacturingFingerprint": "sha256-e2648f075783705d4080de2a0b9abc148ddef3ed924baa5398ce3a85d9610c31"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -4777,7 +4777,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -4785,7 +4785,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -4793,7 +4793,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -4801,7 +4801,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -4809,7 +4809,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -4817,7 +4817,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -4825,7 +4825,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -4833,7 +4833,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -4841,7 +4841,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -4849,7 +4849,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -4857,7 +4857,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -4865,7 +4865,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -4935,7 +4935,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-bcac23600ead4f01b9e3cb43d79fa3c3cf9e38075f5329f0b47f3b8e060640a5"
+            "manufacturingFingerprint": "sha256-fdaab8fbf0a4a7393a6f87793a1e76757c3f443086a02bd102f1b8ca43fdbebf"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -5655,7 +5655,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -5663,7 +5663,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -5671,7 +5671,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -5679,7 +5679,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -5687,7 +5687,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -5695,7 +5695,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -5703,7 +5703,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -5711,7 +5711,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -5719,7 +5719,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -5727,7 +5727,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -5735,7 +5735,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -5743,7 +5743,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -5813,7 +5813,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-cfc01fc243670dfb2efaaba3875adf03edc2653c43a8359c974491de4e85ca65"
+            "manufacturingFingerprint": "sha256-c0a0c9b8a5caf8f4bb277c36f676618186a0af1f8c7f2433d9dc633e6f2ed2b8"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -7168,7 +7168,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -7176,7 +7176,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -7184,7 +7184,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -7192,7 +7192,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -7200,7 +7200,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -7208,7 +7208,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -7216,7 +7216,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -7224,7 +7224,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -7232,7 +7232,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -7240,7 +7240,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -7248,7 +7248,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -7256,7 +7256,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -7326,7 +7326,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-f7f952eb06b4ee70bebbe41363673b9edfb7537bc4cf5acb46d14b817d2e2e24"
+            "manufacturingFingerprint": "sha256-cf3ffdbfbe932a0e9db47ad926bf32f7a8471b8e21f478c037d2bd20af1a52c0"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -8085,7 +8085,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -8093,7 +8093,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -8101,7 +8101,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -8109,7 +8109,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -8117,7 +8117,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -8125,7 +8125,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -8133,7 +8133,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -8141,7 +8141,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -8149,7 +8149,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -8157,7 +8157,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -8165,7 +8165,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -8173,7 +8173,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -8243,7 +8243,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-1b414bfdba26a673ea2d8234fac106bad66cbc2f1e010bb6fca3db3b4b6cf928"
+            "manufacturingFingerprint": "sha256-9a790a9e0c3d0cb1b87515c8e5e91d8d3d22d8fd4686defcc91c6b80a4310d26"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -9002,7 +9002,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -9010,7 +9010,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9018,7 +9018,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9026,7 +9026,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -9034,7 +9034,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9042,7 +9042,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9050,7 +9050,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -9058,7 +9058,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9066,7 +9066,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9074,7 +9074,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -9082,7 +9082,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9090,7 +9090,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9160,7 +9160,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-a6ccc2fefa4dd0a5f70d369898b7ec75743fe72bb2810569d0df770291e36aa7"
+            "manufacturingFingerprint": "sha256-814ddd80f2458c997104b60fa715e7571d8c86a9ff0777560e74dbb1c25fd097"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -9854,7 +9854,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -9862,7 +9862,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9870,7 +9870,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9878,7 +9878,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -9886,7 +9886,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9894,7 +9894,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9902,7 +9902,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -9910,7 +9910,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9918,7 +9918,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9926,7 +9926,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -9934,7 +9934,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9942,7 +9942,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -9994,7 +9994,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-ea2ddd60d538006803c44adf24442ad749fe13556aaaecd60b522499384aa882"
+            "manufacturingFingerprint": "sha256-0090fa4520614a21f56cf4b951f68bff8c0cc2cd9331e6fc2937fc9761710045"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -10861,7 +10861,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -10869,7 +10869,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -10877,7 +10877,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -10885,7 +10885,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -10893,7 +10893,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -10901,7 +10901,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -10909,7 +10909,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -10917,7 +10917,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -10925,7 +10925,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -10933,7 +10933,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -10941,7 +10941,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -10949,7 +10949,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11108,7 +11108,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -11116,7 +11116,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11124,7 +11124,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11132,7 +11132,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -11140,7 +11140,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11148,7 +11148,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11156,7 +11156,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -11164,7 +11164,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11172,7 +11172,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11180,7 +11180,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -11188,7 +11188,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11196,7 +11196,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11355,7 +11355,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -11363,7 +11363,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11371,7 +11371,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11379,7 +11379,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -11387,7 +11387,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11395,7 +11395,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11403,7 +11403,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -11411,7 +11411,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11419,7 +11419,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11427,7 +11427,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -11435,7 +11435,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11443,7 +11443,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -11593,7 +11593,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-9abcc9290c29686d4d9abd493add2a95e52837edd25b797a76fe077cd56cb8ac"
+            "manufacturingFingerprint": "sha256-ab0a15af158a22f19ae8c626a3d0a62efa070d5990c646f8a82f081aca7f1b8d"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -12309,7 +12309,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -12317,7 +12317,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -12325,7 +12325,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -12333,7 +12333,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -12341,7 +12341,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -12349,7 +12349,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -12357,7 +12357,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -12365,7 +12365,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -12373,7 +12373,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -12381,7 +12381,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -12389,7 +12389,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -12397,7 +12397,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -12467,7 +12467,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-23443cc9d3d988aad2a8d4d2fd9dc5b5879f2ebe583efaf39a012a213b0176ab"
+            "manufacturingFingerprint": "sha256-5d137e32a4c154bc1af2eb7371c7b7705e9f02465761bb8b3e7e6cac66dc3fe0"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -13128,7 +13128,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -13136,7 +13136,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -13144,7 +13144,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -13152,7 +13152,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -13160,7 +13160,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -13168,7 +13168,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -13176,7 +13176,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -13184,7 +13184,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -13192,7 +13192,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -13200,7 +13200,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -13208,7 +13208,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -13216,7 +13216,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -13286,7 +13286,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-a629e7986fea42bf52f11cee357aa42c127bbec5a6ff46d73b1b86418f5c1885"
+            "manufacturingFingerprint": "sha256-4036911d2695e10b2f35031e5fc0617b9e1ccf4fdfae1c69a83da7258a1fcc77"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -14002,7 +14002,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -14010,7 +14010,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -14018,7 +14018,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -14026,7 +14026,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -14034,7 +14034,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -14042,7 +14042,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -14050,7 +14050,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -14058,7 +14058,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -14066,7 +14066,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -14074,7 +14074,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -14082,7 +14082,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -14090,7 +14090,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -14160,7 +14160,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-23443cc9d3d988aad2a8d4d2fd9dc5b5879f2ebe583efaf39a012a213b0176ab"
+            "manufacturingFingerprint": "sha256-5d137e32a4c154bc1af2eb7371c7b7705e9f02465761bb8b3e7e6cac66dc3fe0"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -15212,7 +15212,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -15220,7 +15220,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -15228,7 +15228,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -15236,7 +15236,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -15244,7 +15244,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -15252,7 +15252,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -15260,7 +15260,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -15268,7 +15268,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -15276,7 +15276,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -15284,7 +15284,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -15292,7 +15292,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -15300,7 +15300,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -15370,7 +15370,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-1d9e8724cb0b8b2e1dd13f83ed2f6e80171903f967ba05c9b4de0d8fdee06136"
+            "manufacturingFingerprint": "sha256-c6b73c0e8f32f68042dfdf8327206307628a3e4823e608e2dca7ad19fcb3ea58"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -16142,7 +16142,7 @@
                 },
                 "holes": [
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -16150,7 +16150,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -16158,7 +16158,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -16166,7 +16166,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 50,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -16174,7 +16174,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 18,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -16182,7 +16182,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 82,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -16190,7 +16190,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -16198,7 +16198,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -16206,7 +16206,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "left",
+                    "face": "bottom",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -16214,7 +16214,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 492,
                     "yMm": 9,
                     "diameterMm": 15,
@@ -16222,7 +16222,7 @@
                     "type": "minifix"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 460,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -16230,7 +16230,7 @@
                     "type": "dowel"
                   },
                   {
-                    "face": "right",
+                    "face": "top",
                     "xMm": 524,
                     "yMm": 9,
                     "diameterMm": 8,
@@ -16300,7 +16300,7 @@
                 }
               }
             ],
-            "manufacturingFingerprint": "sha256-a41aa15a0a9fc53e6922f240ae639924551ba87418e1e82278c541403b76747b"
+            "manufacturingFingerprint": "sha256-b45a4d2b763411f9b7c22db166f81f773dc5089a0d77ff632c42ea034fbc1a91"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",

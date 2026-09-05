@@ -205,7 +205,7 @@ class DialogControllerTest < Minitest::Test
   # builder's host contract (#498): an update runs as exactly ONE SketchUp
   # operation through the coordinator's journal.
   class BuilderSpy
-    attr_reader :insert_layout, :update_layout, :material_choices
+    attr_reader :insert_layout, :update_layout, :material_choices, :relationships
 
     def insert_furniture(_model, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil)
       @insert_layout = resolved_layout
@@ -215,9 +215,10 @@ class DialogControllerTest < Minitest::Test
     end
 
     def update_furniture(model, _group, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil,
-                         transaction: true)
+                         transaction: true, relationships: nil)
       @update_layout = resolved_layout
       @material_choices = material_choices
+      @relationships = relationships
       if transaction
         model.start_operation('Editar Mueble', true)
         model.commit_operation

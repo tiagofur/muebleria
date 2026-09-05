@@ -1927,6 +1927,71 @@
             Selección múltiple: se muestra el primer elemento sólo para inspección; la edición queda deshabilitada hasta que exista edición por lote.
           </div>
 
+          <!-- #470 / SU-VIS-1: read-only manufacturing inspection. Machining
+               truth comes exclusively from the authoritative resolve; this
+               card never computes holes. Shown for managed parts (and managed
+               furniture); unmanaged geometry gets no manufacturing surface. -->
+          <style>
+            .manufacturing-feature-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+            .manufacturing-feature { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-xs); }
+            .manufacturing-feature:hover { background: var(--surface-hover); }
+            .manufacturing-feature.active { border-color: var(--brand-500); box-shadow: 0 0 0 1px var(--brand-500); }
+            .manufacturing-feature.conflict { border-color: var(--danger-600); }
+            .manufacturing-feature-source { color: var(--text-secondary); margin-left: auto; font-size: var(--text-xs); }
+            .manufacturing-detail-grid { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); margin: var(--space-2) 0; }
+            .manufacturing-detail-grid dt { color: var(--text-secondary); }
+            .manufacturing-detail-grid dd { margin: 0; }
+          </style>
+          <div id="manufacturing-card" class="card" style="display: none; margin-bottom: var(--space-3);">
+            <div class="card-header-row">
+              <div class="card-title" style="margin: 0;">Fabricación</div>
+              <span id="manufacturing-status-badge" class="status-badge pending">No disponible</span>
+            </div>
+            <button id="btn-manufacturing-toggle" type="button" class="btn btn-secondary" style="margin-top: var(--space-2); width: 100%;">
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="3" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="21" y2="12"/></svg>
+              <span>Ver fabricación</span>
+            </button>
+            <div id="manufacturing-body" style="display: none; margin-top: var(--space-3);">
+              <p id="manufacturing-stale-note" class="subhead" style="display: none; margin: 0 0 var(--space-2) 0; font-size: var(--text-xs); color: var(--danger-600);">
+                La fabricación mostrada quedó desactualizada y puede no reflejar el estado actual.
+              </p>
+              <p id="manufacturing-unavailable-note" class="subhead" style="display: none; margin: 0 0 var(--space-2) 0; font-size: var(--text-xs);"></p>
+              <div style="display: flex; gap: var(--space-2); margin-bottom: var(--space-2);">
+                <button id="manufacturing-filter-all" type="button" class="btn btn-secondary" style="flex: 1;"><span>Todos</span></button>
+                <button id="manufacturing-filter-holes" type="button" class="btn btn-secondary" style="flex: 1;"><span>Perforaciones</span></button>
+              </div>
+              <p id="manufacturing-empty-note" class="subhead" style="display: none; margin: 0 0 var(--space-2) 0; font-size: var(--text-xs);">
+                La selección no tiene operaciones de fabricación resueltas para mostrar.
+              </p>
+              <ul id="manufacturing-feature-list" class="manufacturing-feature-list"></ul>
+              <div id="manufacturing-detail" class="summary-box" style="display: none; margin-top: var(--space-3);">
+                <div class="card-title">Detalle</div>
+                <dl class="manufacturing-detail-grid">
+                  <dt>Tipo</dt><dd id="manufacturing-detail-type">--</dd>
+                  <dt>Diámetro</dt><dd id="manufacturing-detail-diameter">--</dd>
+                  <dt>Profundidad</dt><dd id="manufacturing-detail-depth">--</dd>
+                  <dt>Cara</dt><dd id="manufacturing-detail-face">--</dd>
+                  <dt>Posición</dt><dd id="manufacturing-detail-position">--</dd>
+                  <dt>Host</dt><dd id="manufacturing-detail-host">--</dd>
+                  <dt>Origen</dt><dd id="manufacturing-detail-source-kind">--</dd>
+                  <dt>ID origen</dt><dd id="manufacturing-detail-source-id">--</dd>
+                </dl>
+                <div id="manufacturing-detail-conflict" style="display: none; border-left: 4px solid var(--danger-600); padding-left: var(--space-2); margin-bottom: var(--space-2);">
+                  <strong style="color: var(--danger-600); font-size: var(--text-xs);">Conflicto de perforación</strong>
+                  <p id="manufacturing-detail-conflict-message" style="margin: var(--space-1) 0; font-size: var(--text-xs);"></p>
+                  <p id="manufacturing-detail-conflict-remediation" style="margin: 0; font-size: var(--text-xs); color: var(--text-secondary); font-style: italic;"></p>
+                </div>
+                <button id="btn-manufacturing-goto-source" type="button" class="btn btn-primary" style="width: 100%;">
+                  <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+                  <span>Ir al origen</span>
+                </button>
+                <button id="btn-manufacturing-refresh" type="button" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-2);">
+                  <span>Actualizar fabricación</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- #498 shared runtime status: honest mutation/degraded feedback so
                the user never faces an infinite spinner. Never claims ready. -->
           <div id="mutation-status" class="card subhead" hidden
@@ -4294,6 +4359,7 @@
 
           if (!context) {
             inspectorEmpty.style.display = "block";
+            renderManufacturingCard(null);
             return;
           }
 
@@ -4303,13 +4369,31 @@
 
           if (context.kind === "unmanaged") {
             inspectorUnmanaged.style.display = "block";
+            renderManufacturingCard(context);
             return;
           }
           if (context.kind === "furniture") {
             renderFurnitureInspector(context);
+            renderManufacturingCard(context);
             return;
           }
           renderChildInspector(context);
+          renderManufacturingCard(context);
+        }
+
+        // #470: the Fabricación card is the inspection entry point. Only
+        // managed parts/furniture carry it — arbitrary geometry never gets a
+        // manufacturing surface. Rendering is driven by the Ruby overlay
+        // state; this side never computes machining.
+        function renderManufacturingCard(context) {
+          var card = document.getElementById("manufacturing-card");
+          if (!card) return;
+          var multi = context && context.selectionCount && context.selectionCount > 1;
+          var eligible = context && !multi &&
+            (context.kind === "part" ||
+             (context.kind === "furniture" && capabilityEnabled(context, "canInspectManufacturing")));
+          card.style.display = eligible ? "block" : "none";
+          if (window.GraneteManufacturing) window.GraneteManufacturing.render();
         }
 
         function renderFurnitureInspector(context) {
@@ -4778,6 +4862,47 @@
             }
           });
         }
+
+        // #470 read-only manufacturing inspection (`Ver fabricación`).
+        // Commands go through the versioned inspection channel; the view
+        // never derives machining from anything local.
+        (function () {
+          var toggleBtn = document.getElementById("btn-manufacturing-toggle");
+          var filterAll = document.getElementById("manufacturing-filter-all");
+          var filterHoles = document.getElementById("manufacturing-filter-holes");
+          var refreshBtn = document.getElementById("btn-manufacturing-refresh");
+          var gotoBtn = document.getElementById("btn-manufacturing-goto-source");
+
+          if (toggleBtn) {
+            toggleBtn.addEventListener("click", function () {
+              if (window.GraneteManufacturing) window.GraneteManufacturing.toggle(selectedContext);
+            });
+          }
+          if (filterAll) {
+            filterAll.addEventListener("click", function () {
+              if (window.GraneteManufacturing) window.GraneteManufacturing.setFilter("all");
+            });
+          }
+          if (filterHoles) {
+            filterHoles.addEventListener("click", function () {
+              if (window.GraneteManufacturing) window.GraneteManufacturing.setFilter("holes");
+            });
+          }
+          if (refreshBtn) {
+            refreshBtn.addEventListener("click", function () {
+              if (window.GraneteManufacturing) window.GraneteManufacturing.refresh();
+            });
+          }
+          if (gotoBtn) {
+            gotoBtn.addEventListener("click", function () {
+              var state = window.GraneteManufacturing ? window.GraneteManufacturing.state() : null;
+              var activeId = state && state.activeFeatureId;
+              if (activeId && window.GraneteManufacturing) {
+                window.GraneteManufacturing.navigateToSource(activeId);
+              }
+            });
+          }
+        })();
 
         // ------------------------------------------------------------------
         // Model ↔ Project/Design binding (#388). Self-contained state + view:
@@ -5495,5 +5620,6 @@
     <script src="js/granete-state.js"></script>
     <script src="js/granete-bridge.js"></script>
     <script src="js/granete-mutation.js"></script>
+    <script src="js/granete-manufacturing.js"></script>
   </body>
 </html>
