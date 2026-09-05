@@ -249,6 +249,43 @@ module Granete
         assert_nil locate_child(restored, 'shelf-02'), 'undo removes exactly the addition'
       end
 
+      # 2b. Duplicate: a distinct occurrence identity for the same reusable
+      #     definition; undo removes exactly the duplicate.
+      def test_duplicate_shelf_allocates_distinct_occurrence_identity
+        initial_entity = place_initial_furniture
+        initial_id = metadata_store.read(initial_entity).dig('identity', 'instanceRef')
+
+        @catalog_provider.active_scenario_id = '03-add-shelf-shared-definition'
+        starts_before = @transaction_observer.starts
+
+        outcome = @controller.execute_coordinated_component_mutation(
+          @dialog,
+          { 'translationMm' => [18, 18, 300] },
+          semantic_target: { 'furnitureInstanceRef' => initial_id,
+                             'componentInstanceId' => 'mod-comp-shelf-copy-0' },
+          command_message_id: 'cmd-duplicate-shelf-1',
+          mutation: 'duplicate_component'
+        )
+
+        assert outcome.committed?, "duplicate expected to commit, got: #{outcome.outcome} (#{outcome.reason})"
+        assert_equal 1, @transaction_observer.starts - starts_before
+
+        furniture_req = @catalog_provider.last_authoring_request['furniture']
+        shelves = furniture_req['components'].select { |c| c['componentDefinitionId'] == 'mod-comp-shelf' }
+        assert_equal 2, shelves.length
+        ids = shelves.map { |c| c['componentInstanceId'] }
+        assert_equal 2, ids.uniq.length, 'the duplicate never reuses the source identity'
+        assert ids.one? { |id| id.start_with?('ci-') },
+               'a fresh ci-* occurrence identity rides alongside the echoed source'
+
+        current = granete_furniture_instances.first
+        refute_nil locate_child(current, 'shelf-02'), 'the duplicated occurrence renders'
+
+        Sketchup.send_action('editUndo:')
+        restored = granete_furniture_instances.first
+        assert_nil locate_child(restored, 'shelf-02'), 'undo removes exactly the duplicate'
+      end
+
       # 3. Remove: the occurrence disappears, unrelated components stay, and
       #    the dependent relationship/machining state clears with it.
       def test_remove_shelf_drops_occurrence_and_dependent_relationships
