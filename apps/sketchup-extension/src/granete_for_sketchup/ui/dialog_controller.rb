@@ -691,6 +691,44 @@ module Granete
           raise Library::AuthoringResolveError.new(issue.message, issues: [issue])
         end
 
+        def layout_components(layout)
+          layout.boards.map do |b|
+            {
+              'componentInstanceId' => b.component_instance_id,
+              'componentDefinitionId' => b.component_definition_id,
+              'role' => b.role
+            }
+          end
+        end
+
+        def current_catalog_revision
+          if @catalog_provider.respond_to?(:catalog_revision) && @catalog_provider.catalog_revision
+            @catalog_provider.catalog_revision
+          else
+            'workshop-current'
+          end
+        end
+
+        def persisted_furniture_relationships(entity)
+          store = @metadata_store_factory.call(active_model)
+          furniture_meta = store.read(entity)
+          furniture_meta.is_a?(Hash) ? furniture_meta['relationships'] : nil
+        end
+
+        def build_hardware_mutation_request(definition, params, choices, base_layout,
+                                            hardware_placements, relationships)
+          req = {
+            'furnitureDefinitionId' => definition['furniture_definition_id'] || definition['id'],
+            'catalogRevision' => current_catalog_revision,
+            'parameters' => params || {},
+            'materialChoices' => choices || {},
+            'components' => layout_components(base_layout),
+            'hardwarePlacements' => hardware_placements
+          }
+          req['relationships'] = relationships if relationships.is_a?(Array) && !relationships.empty?
+          req
+        end
+
         def resolve_hardware_mutation(entity, definition, params, choices, target,
                                       ctx:, new_offset: nil, target_hardware_id: nil)
           guard_against_derived_hardware_edit!(entity, target)
@@ -698,37 +736,13 @@ module Granete
           base_layout = resolve_layout_for(definition, params, choices)
           raise Library::AuthoringResolveError, 'No se pudo resolver el layout del mueble' if base_layout.nil?
 
-          store = @metadata_store_factory.call(active_model)
-          furniture_meta = store.read(entity)
-          relationships = furniture_meta.is_a?(Hash) ? furniture_meta['relationships'] : nil
-
-          target_placement_id = target['hardwarePlacementId']
-          hardware_placements = build_hardware_authoring_intents(base_layout, target_placement_id,
-                                                                 new_offset, target_hardware_id)
-
-          components = base_layout.boards.map do |b|
-            {
-              'componentInstanceId' => b.component_instance_id,
-              'componentDefinitionId' => b.component_definition_id,
-              'role' => b.role
-            }
-          end
-
-          cat_rev = if @catalog_provider.respond_to?(:catalog_revision) && @catalog_provider.catalog_revision
-                      @catalog_provider.catalog_revision
-                    else
-                      'workshop-current'
-                    end
-
-          furniture_req = {
-            'furnitureDefinitionId' => definition['furniture_definition_id'] || definition['id'],
-            'catalogRevision' => cat_rev,
-            'parameters' => params || {},
-            'materialChoices' => choices || {},
-            'components' => components,
-            'hardwarePlacements' => hardware_placements
-          }
-          furniture_req['relationships'] = relationships if relationships.is_a?(Array) && !relationships.empty?
+          relationships = persisted_furniture_relationships(entity)
+          hardware_placements = build_hardware_authoring_intents(
+            base_layout, target['hardwarePlacementId'], new_offset, target_hardware_id
+          )
+          furniture_req = build_hardware_mutation_request(
+            definition, params, choices, base_layout, hardware_placements, relationships
+          )
 
           req_payload = Library::AuthoringResolveRequest.build_request(
             message_id: ctx[:message_id] || "msg-#{SecureRandom.hex(4)}",
