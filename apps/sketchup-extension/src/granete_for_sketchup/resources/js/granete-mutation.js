@@ -249,7 +249,12 @@
         if (!furnitureRef && !furnitureId) entries[entry.furniture] = entry;
       });
       var review = envelope.review && envelope.review.status ? envelope.review : null;
-      if (store()) store().set("preflight", { entries: entries, review: review });
+      // #466 design-wide publish gate projection: composed Ruby-side from
+      // the canonical #392 publication scope + tracker states. JS never
+      // rebuilds the scope; a missing projection keeps the gate closed.
+      var gate = envelope.publicationGate && typeof envelope.publicationGate === "object"
+        ? envelope.publicationGate : null;
+      if (store()) store().set("preflight", { entries: entries, review: review, gate: gate });
       renderPreflight(entries);
       if (window.GranetePreflightReview) window.GranetePreflightReview.handleRunningReset();
       return { applied: true };

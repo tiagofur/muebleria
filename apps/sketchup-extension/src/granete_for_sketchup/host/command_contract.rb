@@ -214,8 +214,11 @@ module Granete
         # Ruby→JS preflight state envelope (#498 invalidation entries;
         # #466 adds the optional review payload — grouped issues, Spanish
         # remediation and navigation context of the last authoritative
-        # preflight for a furniture scope).
-        def preflight_state_envelope(entries, review: nil)
+        # preflight for a furniture scope — and the optional design-wide
+        # publication gate projection, composed Ruby-side from the
+        # canonical #392 publication scope + tracker states; JS never
+        # rebuilds the scope).
+        def preflight_state_envelope(entries, review: nil, publication_gate: nil)
           envelope = {
             'schemaId' => SCHEMA_ID,
             'type' => 'preflight_state',
@@ -223,6 +226,7 @@ module Granete
             'entries' => entries
           }
           envelope['review'] = review if review.is_a?(Hash)
+          envelope['publicationGate'] = publication_gate if publication_gate.is_a?(Hash)
           envelope
         end
 

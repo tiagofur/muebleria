@@ -48,7 +48,7 @@
 
   function preflightSlice() {
     var slice = store() ? store().get("preflight") : null;
-    return slice || { entries: {}, review: null };
+    return slice || { entries: {}, review: null, gate: null };
   }
 
   function selection() {
@@ -87,19 +87,27 @@
     return review;
   }
 
-  // Publish gate (#466): fail-closed. Publication is NOT allowed unless
-  // an authoritative preflight currently exists in `ready` or `warning`.
-  // If there are no entries, or any entry is `blocked`, `stale`,
-  // `unavailable`, `unknown`, or `pending`, publication remains blocked.
+  // Publish gate (#466, design-wide): the universe evaluated is the FULL
+  // #392 publication scope — every managed FurnitureInstance the design
+  // publish will manifest — composed AUTHORITATIVELY on the Ruby side
+  // (canonical ManifestBuilder scope + PreflightTracker states). This view
+  // never rebuilds that scope from entries, selection or names: it only
+  // consumes the Ruby projection and fails closed. Publication is allowed
+  // exclusively when the projection says every scope furniture holds a
+  // current authoritative `ready`/`warning`; a missing projection, an
+  // unavailable scope, or any blocked/stale/unavailable/never-verified
+  // furniture keeps it blocked.
+  function publicationGate() {
+    var slice = preflightSlice();
+    return slice.gate || null;
+  }
+
   function publishBlocked() {
-    var entries = preflightSlice().entries;
-    var keys = Object.keys(entries);
-    if (keys.length === 0) return true;
-    return keys.some(function (key) {
-      var entry = entries[key];
-      var state = entry && entry.state;
-      return state !== "ready" && state !== "warning";
-    });
+    var gate = publicationGate();
+    if (!gate) return true;
+    if (gate.scopeAvailable === false) return true;
+    if (typeof gate.allowed !== "boolean") return true;
+    return !gate.allowed;
   }
 
   function submit(command, payload, context) {
@@ -284,6 +292,7 @@
   window.GranetePreflightReview = {
     state: function () { return running ? "running" : effectiveState(); },
     review: function () { return currentReview(); },
+    publicationGate: publicationGate,
     publishBlocked: publishBlocked,
 
     run: function (context) {

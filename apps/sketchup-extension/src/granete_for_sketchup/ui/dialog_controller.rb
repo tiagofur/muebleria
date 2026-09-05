@@ -106,6 +106,9 @@ module Granete
 
         def handle_get_model_binding(dialog)
           execute_bridge(dialog, 'onModelBindingStatus', model_binding_connector.status)
+          # A binding change changes the #392 publication scope: refresh the
+          # design-wide publish gate projection with it (#466).
+          push_preflight_state(dialog)
         rescue StandardError => e
           @logger.error('model_binding_status_failed', error: e)
           execute_bridge(dialog, 'onModelBindingStatus', { 'state' => 'invalid', 'reason' => e.message })
@@ -341,11 +344,25 @@ module Granete
         # with model/manifest/preview artifacts. The dialog never builds
         # business payloads — the publisher owns the sequence, reuses the
         # #391 precheck, and reports honest progress steps.
+        #
+        # #466 design-wide gate: publication requires EVERY managed
+        # FurnitureInstance of the canonical #392 publication scope to hold
+        # a current authoritative ready/warning. Enforced here (fail
+        # closed, scope composed Ruby-side) so the disabled button is UX,
+        # never the only barrier.
         def handle_publish_design_revision(dialog)
           unless @design_publisher
             execute_bridge(dialog, 'onPublishResult',
                            { 'ok' => false, 'code' => 'publisher_unavailable',
                              'reason' => 'la publicación de diseños no está disponible' })
+            return
+          end
+
+          gate = publication_gate_projection
+          if gate.nil? || gate['allowed'] != true
+            execute_bridge(dialog, 'onPublishResult',
+                           { 'ok' => false, 'code' => 'preflight_incomplete',
+                             'reason' => publish_gate_reason(gate) })
             return
           end
 
@@ -363,6 +380,21 @@ module Granete
         end
 
         private
+
+        # Honest Spanish reason for a blocked publication gate, in the same
+        # priority the dialog renders (blocked > stale > unavailable >
+        # unverified).
+        def publish_gate_reason(gate)
+          scope_unknown = 'no se pudo confirmar el alcance de publicación del diseño'
+          return scope_unknown if gate.nil? || !gate['scopeAvailable']
+          return 'hay muebles con problemas de fabricación' if gate['blocked'].to_i.positive?
+          return 'la revisión de fabricación quedó desactualizada' if gate['stale'].to_i.positive?
+          if gate['unavailable'].to_i.positive?
+            return 'no se pudo confirmar el estado de fabricación de todos los muebles'
+          end
+
+          "faltan verificar #{gate['pending']} de #{gate['total']} muebles del diseño"
+        end
 
         def project_furniture_placer
           @project_furniture_placer
@@ -813,7 +845,8 @@ module Granete
             execute_bridge(dialog, 'onPreflightState',
                            Host::CommandContract.preflight_state_envelope(
                              mutation_coordinator.preflight_tracker.payload,
-                             review: review && preflight_review_session.payload_for(scope)
+                             review: review && preflight_review_session.payload_for(scope),
+                             publication_gate: publication_gate_projection
                            ))
           end
           # #470: a manufacturing-affecting mutation refreshes the overlay
@@ -1357,7 +1390,9 @@ module Granete
         end
 
         # Pushes tracker entries plus the review of the scope (or the most
-        # recent one) with its honest effective status.
+        # recent one) with its honest effective status, and the design-wide
+        # publication gate projection (#466) composed Ruby-side — JS never
+        # rebuilds the #392 publication scope.
         def push_preflight_state(dialog, scope_or_key = nil)
           return unless dialog&.visible?
 
@@ -1368,13 +1403,26 @@ module Granete
           end
           execute_bridge(dialog, 'onPreflightState',
                          Host::CommandContract.preflight_state_envelope(
-                           mutation_coordinator.preflight_tracker.payload, review: payload
+                           mutation_coordinator.preflight_tracker.payload,
+                           review: payload,
+                           publication_gate: publication_gate_projection
                          ))
         rescue StandardError => e
           @logger.error('preflight_state_push_failed', error: e)
         end
 
         private
+
+        # Design-wide publish gate projection (#466). nil when no gate is
+        # wired or its evaluation fails — the dialog then stays fail-closed.
+        def publication_gate_projection
+          return nil unless @publication_gate
+
+          @publication_gate.projection
+        rescue StandardError => e
+          @logger.error('publication_gate_projection_failed', error: e)
+          nil
+        end
 
         # Lazy shared session: same resolver/locator seams as #470, one
         # tracker, one review store per dialog controller.
@@ -1488,7 +1536,8 @@ module Granete
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
                        migration_review_controller: nil, model_binding_connector: nil,
                        project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil,
-                       design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil)
+                       design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil,
+                       publication_gate: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -1499,6 +1548,7 @@ module Granete
           @design_publisher = design_publisher
           @mutation_coordinator = mutation_coordinator
           @manufacturing_overlay = manufacturing_overlay
+          @publication_gate = publication_gate
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store

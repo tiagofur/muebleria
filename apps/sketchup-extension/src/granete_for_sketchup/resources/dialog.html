@@ -5029,6 +5029,7 @@
         };
         var PUBLISH_ERROR_COPY = {
           unbound: "El modelo no está conectado a un diseño.",
+          preflight_incomplete: "La publicación requiere verificar todos los muebles del diseño.",
           stale_base: "La base del diseño cambió en el servidor; actualizá la base de trabajo y volvé a publicar.",
           duplicate_furniture_identity: "Hay copias con la misma identidad física; resolvé los duplicados antes de publicar.",
           unresolved_duplicate_identity: "Hay un mueble copiado cuya identidad no pudo resolverse.",
@@ -5049,11 +5050,40 @@
           return status.state === "connected" && caps.can_publish_revision === true;
         }
 
+        // #466 design-wide preflight publish gate. The universe is the FULL
+        // #392 publication scope — composed Ruby-side (canonical manifest
+        // inventory + tracker states) and received as the publicationGate
+        // projection; this view never rebuilds the scope from tracker
+        // entries, selection or names. Counts' denominator is the scope.
+        function publishGateCountsLine(gate) {
+          if (!gate || gate.scopeAvailable === false) return "";
+          if (typeof gate.total !== "number") return "";
+          return gate.total + " muebles · " + (gate.verified || 0) + " verificados · " +
+                 (gate.pending || 0) + (gate.pending === 1 ? " pendiente" : " pendientes");
+        }
+
+        function publishGateBlockedCopy(gate) {
+          var base;
+          if (!gate || gate.scopeAvailable === false) {
+            base = "No se pudo confirmar el alcance de publicación del diseño. " +
+                   "Verificá los muebles del diseño antes de publicar.";
+          } else if ((gate.blocked || 0) > 0) {
+            base = "La publicación está bloqueada porque existen problemas de fabricación.";
+          } else if ((gate.stale || 0) > 0) {
+            base = "La revisión de fabricación quedó desactualizada después de una modificación. " +
+                   "Volvé a verificar antes de publicar.";
+          } else if ((gate.unavailable || 0) > 0) {
+            base = "No se pudo confirmar el estado de fabricación de todos los muebles.";
+          } else {
+            base = "La publicación requiere verificar todos los muebles del diseño.";
+          }
+          var counts = publishGateCountsLine(gate);
+          return counts ? base + " " + counts : base;
+        }
+
         function renderPublishAvailability(status) {
           if (!bindingPublishBtn || !bindingPublishProgress) return;
           var idle = !publishInFlight && lastPublishOutcome === null;
-          // #466: fail-closed preflight publish gate. Publication is NOT
-          // allowed unless an authoritative preflight exists in ready or warning.
           var preflightBlocked = window.GranetePreflightReview &&
             window.GranetePreflightReview.publishBlocked();
           bindingPublishBtn.style.display = canPublish(status) ? "block" : "none";
@@ -5061,28 +5091,9 @@
           bindingPublishBtn.textContent = publishInFlight ? "Publicando…" : "Publicar diseño";
           if (preflightBlocked && !publishInFlight) {
             bindingPublishProgress.style.display = "block";
-            var preflightEntries = (window.GraneteState &&
-                                    window.GraneteState.get("preflight") &&
-                                    window.GraneteState.get("preflight").entries) || {};
-            var hasBlocked = Object.keys(preflightEntries).some(function (k) {
-              return preflightEntries[k] && preflightEntries[k].state === "blocked";
-            });
-            var hasStale = Object.keys(preflightEntries).some(function (k) {
-              return preflightEntries[k] && preflightEntries[k].state === "stale";
-            });
-            if (hasBlocked) {
-              bindingPublishProgress.textContent =
-                "La publicación está bloqueada: hay muebles con problemas técnicos de fabricación. " +
-                "Revisalos desde el inspector y volvé a verificar.";
-            } else if (hasStale) {
-              bindingPublishProgress.textContent =
-                "La publicación está bloqueada: la revisión de fabricación quedó desactualizada tras una modificación. " +
-                "Volvé a verificar desde el inspector antes de publicar.";
-            } else {
-              bindingPublishProgress.textContent =
-                "La publicación requiere una revisión de fabricación autoritativa actual (ready o warning). " +
-                "Verificá los muebles desde el inspector antes de publicar.";
-            }
+            bindingPublishProgress.textContent = publishGateBlockedCopy(
+              window.GranetePreflightReview ? window.GranetePreflightReview.publicationGate() : null
+            );
           } else if (!publishInFlight && lastPublishOutcome === null) {
             bindingPublishProgress.style.display = "none";
             bindingPublishProgress.textContent = "";
@@ -5282,6 +5293,10 @@
         if (bindingPublishBtn) {
           bindingPublishBtn.addEventListener("click", function () {
             if (publishInFlight) return;
+            // #466 design-wide gate: the disabled state is UX — the handler
+            // re-checks the Ruby projection fail-closed before reaching the
+            // host (the Ruby publish callback enforces the same gate again).
+            if (window.GranetePreflightReview && window.GranetePreflightReview.publishBlocked()) return;
             lastPublishOutcome = null;
             renderPublishProgress({ step: "validating" });
             if (window.sketchup && window.sketchup.publish_design_revision) {

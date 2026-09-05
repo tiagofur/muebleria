@@ -93,9 +93,25 @@ function setSelection(sandbox, ctx) {
   sandbox.window.GraneteState.set('selection', ctx);
 }
 
-function pushPreflight(sandbox, entries, review) {
-  sandbox.window.GraneteState.set('preflight', { entries: entries || {}, review: review || null });
+function pushPreflight(sandbox, entries, review, gate) {
+  sandbox.window.GraneteState.set('preflight', { entries: entries || {}, review: review || null, gate: gate || null });
   sandbox.window.GranetePreflightReview.render();
+}
+
+// Ruby-composed design-wide publication gate projection (#466): the
+// universe is the canonical #392 publication scope, never these entries.
+function gateProjection(overrides) {
+  return Object.assign({
+    scopeAvailable: true,
+    allowed: true,
+    total: 1,
+    verified: 1,
+    pending: 0,
+    blocked: 0,
+    stale: 0,
+    unavailable: 0,
+    unverified: 0
+  }, overrides || {});
 }
 
 function blockedReviewPayload() {
@@ -245,7 +261,7 @@ test('navigation note differentiates direct from fallback', () => {
 });
 
 // 6. Ready state rendering
-test('ready state renders green badge and allows publication', () => {
+test('ready state renders green badge and allows publication when the design-wide gate allows', () => {
   const sandbox = buildSandbox();
   runRuntime(sandbox);
   setSelection(sandbox, { kind: 'furniture', furnitureInstanceRef: 'inst-1' });
@@ -259,7 +275,7 @@ test('ready state renders green badge and allows publication', () => {
     issueCount: 0,
     groups: []
   };
-  pushPreflight(sandbox, { 'inst-1': { state: 'ready' } }, readyReview);
+  pushPreflight(sandbox, { 'inst-1': { state: 'ready' } }, readyReview, gateProjection());
 
   const badge = sandbox.__registry['preflight-review-badge'];
   assert.equal(badge.textContent, '✓ Listo para fabricar');
@@ -327,7 +343,7 @@ test('warning state renders pending-style badge and unblocks publish', () => {
       }
     ]
   };
-  pushPreflight(sandbox, { 'inst-1': { state: 'warning' } }, warningReview);
+  pushPreflight(sandbox, { 'inst-1': { state: 'warning' } }, warningReview, gateProjection());
 
   const badge = sandbox.__registry['preflight-review-badge'];
   assert.equal(badge.textContent, 'Aprobado con avisos');
@@ -342,55 +358,86 @@ test('re-running runtime does not register duplicate controllers', () => {
   assert.equal(typeof sandbox.window.GranetePreflightReview.run, 'function');
 });
 
-// 10. Fail-closed publish gate comprehensive states
-test('publish gate fails closed unless authoritative preflight is ready or warning', () => {
+// 10. Design-wide publish gate: JS consumes ONLY the Ruby-composed
+// projection (canonical #392 scope + tracker states) and fails closed.
+test('publish gate fails closed without a Ruby gate projection', () => {
   const sandbox = buildSandbox();
   runRuntime(sandbox);
 
-  // Empty entries -> blocked
-  pushPreflight(sandbox, {}, null);
+  // Empty everything -> blocked
+  pushPreflight(sandbox, {}, null, null);
   assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
 
-  // Single ready -> allowed
-  pushPreflight(sandbox, { 'inst-1': { state: 'ready' } }, null);
+  // Tracker entries alone are NOT the scope authority anymore: even an
+  // all-ready entries map stays blocked without the design-wide
+  // projection (unverified furniture must not slip through).
+  pushPreflight(sandbox, { 'inst-1': { state: 'ready' } }, null, null);
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // Malformed projection -> blocked
+  pushPreflight(sandbox, { 'inst-1': { state: 'ready' } }, null, { scopeAvailable: true });
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+});
+
+// 11. The gate mirrors the Ruby projection verbatim: every blocking
+// reason (blocked/stale/unavailable/unverified furniture in the #392
+// scope) keeps publication blocked; only an explicit allowed projection
+// unblocks it.
+test('publish gate mirrors the Ruby design-wide projection', () => {
+  const sandbox = buildSandbox();
+  runRuntime(sandbox);
+
+  // allowed: ready + warning across the scope (Case 1)
+  pushPreflight(sandbox, {}, null, gateProjection({ total: 2, verified: 2, allowed: true }));
   assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), false);
 
-  // Single warning -> allowed
-  pushPreflight(sandbox, { 'inst-1': { state: 'warning' } }, null);
+  // missing furniture preflight (Case 2)
+  pushPreflight(sandbox, { 'inst-1': { state: 'ready' } }, null,
+    gateProjection({ allowed: false, total: 2, verified: 1, pending: 1, unverified: 1 }));
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // stale (Case 3)
+  pushPreflight(sandbox, {}, null, gateProjection({ allowed: false, stale: 1, pending: 1 }));
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // unavailable (Case 4)
+  pushPreflight(sandbox, {}, null, gateProjection({ allowed: false, unavailable: 1, pending: 1 }));
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // blocked (Case 5)
+  pushPreflight(sandbox, {}, null, gateProjection({ allowed: false, blocked: 1, pending: 1 }));
+  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+
+  // Case 6: an unrelated blocked tracker entry outside the publication
+  // scope is invisible to the design-wide projection — allowed stays true.
+  pushPreflight(sandbox, { 'inst-x': { state: 'blocked' } }, null,
+    gateProjection({ total: 1, verified: 1, allowed: true }));
   assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), false);
+});
 
-  // Single blocked -> blocked
-  pushPreflight(sandbox, { 'inst-1': { state: 'blocked' } }, null);
+// 12. Scope unavailable (no computable #392 scope) blocks even with a
+// fully verified tracker: JS never falls back to a guessed scope.
+test('publish gate blocks when the publication scope is unavailable', () => {
+  const sandbox = buildSandbox();
+  runRuntime(sandbox);
+
+  pushPreflight(sandbox, { 'inst-1': { state: 'ready' } }, null, {
+    scopeAvailable: false, allowed: false, total: 0, verified: 0, pending: 0
+  });
   assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+});
 
-  // Single stale -> blocked
-  pushPreflight(sandbox, { 'inst-1': { state: 'stale' } }, null);
-  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+// 13. The gate projection is exposed for the dialog's honest counts
+// (denominator = canonical scope).
+test('publicationGate exposes the Ruby projection for UX counts', () => {
+  const sandbox = buildSandbox();
+  runRuntime(sandbox);
 
-  // Single unavailable -> blocked
-  pushPreflight(sandbox, { 'inst-1': { state: 'unavailable' } }, null);
-  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
+  assert.equal(sandbox.window.GranetePreflightReview.publicationGate(), null);
 
-  // Mixed: ready + stale -> blocked
-  pushPreflight(sandbox, {
-    'inst-1': { state: 'ready' },
-    'inst-2': { state: 'stale' }
-  }, null);
-  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
-
-  // Mixed: ready + blocked -> blocked
-  pushPreflight(sandbox, {
-    'inst-1': { state: 'ready' },
-    'inst-2': { state: 'blocked' }
-  }, null);
-  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), true);
-
-  // Mixed: ready + warning -> allowed
-  pushPreflight(sandbox, {
-    'inst-1': { state: 'ready' },
-    'inst-2': { state: 'warning' }
-  }, null);
-  assert.equal(sandbox.window.GranetePreflightReview.publishBlocked(), false);
+  const gate = gateProjection({ total: 3, verified: 2, pending: 1, allowed: false, stale: 1 });
+  pushPreflight(sandbox, {}, null, gate);
+  assert.deepStrictEqual(sandbox.window.GranetePreflightReview.publicationGate(), gate);
 });
 
 console.log(JSON.stringify({ success: true, testsPassed }));

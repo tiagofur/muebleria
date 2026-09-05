@@ -92,8 +92,16 @@ function runDialog() {
   const htmlPath = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html');
   const html = fs.readFileSync(htmlPath, 'utf8');
   const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
+  const resources = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/js');
+  // The real dialog loads the shared runtime state + the #466 review
+  // controller before the inline script: load them so the publish gate is
+  // exercised exactly as in the HtmlDialog.
+  const stateSource = fs.readFileSync(path.join(resources, 'granete-state.js'), 'utf8');
+  const preflightSource = fs.readFileSync(path.join(resources, 'granete-preflight-review.js'), 'utf8');
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
+  vm.runInContext(stateSource, sandbox, { filename: 'granete-state.js' });
+  vm.runInContext(preflightSource, sandbox, { filename: 'granete-preflight-review.js' });
   vm.runInContext(scriptMatch[1], sandbox);
   return sandbox;
 }
@@ -104,6 +112,26 @@ function el(sandbox, id) {
 
 function visible(elm) {
   return elm.style.display !== 'none';
+}
+
+// Pushes a Ruby-composed design-wide publication gate projection (#466)
+// into the preflight slice — the only shape that may unblock publication.
+// `null` clears the projection (fail-closed state).
+function pushGate(sandbox, overrides) {
+  var gate = overrides === null
+    ? null
+    : Object.assign({
+        scopeAvailable: true,
+        allowed: true,
+        total: 1,
+        verified: 1,
+        pending: 0,
+        blocked: 0,
+        stale: 0,
+        unavailable: 0,
+        unverified: 0
+      }, overrides || {});
+  sandbox.window.GraneteState.set('preflight', { entries: {}, review: null, gate: gate });
 }
 
 const PROJECT_ID = '41000000-0000-0000-0000-000000000001';
@@ -149,15 +177,73 @@ function runTests() {
     assert.ok(!visible(el(sandbox, 'btn-binding-publish')));
   });
 
-  test('publish button available when connected with capability', (sandbox) => {
+  test('publish button available when connected with capability and the design-wide gate allows', (sandbox) => {
+    pushGate(sandbox);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const btn = el(sandbox, 'btn-binding-publish');
     assert.ok(visible(btn));
     assert.ok(!btn.disabled);
     assert.equal(btn.textContent, 'Publicar diseño');
+    assert.ok(!visible(el(sandbox, 'binding-publish-progress')));
+  });
+
+  // #466 design-wide gate: without a Ruby gate projection the button stays
+  // fail-closed — tracker entries alone can never unblock publication.
+  test('publish button disabled without a gate projection', (sandbox) => {
+    pushGate(sandbox, null);
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    const btn = el(sandbox, 'btn-binding-publish');
+    assert.ok(visible(btn));
+    assert.ok(btn.disabled);
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.ok(visible(progress));
+    assert.ok(progress.textContent.indexOf('alcance de publicación') >= 0);
+  });
+
+  test('unverified scope furniture blocks with honest scope counts', (sandbox) => {
+    pushGate(sandbox, { allowed: false, total: 3, verified: 2, pending: 1, unverified: 1 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    assert.ok(el(sandbox, 'btn-binding-publish').disabled);
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.ok(progress.textContent.indexOf('requiere verificar todos los muebles') >= 0);
+    assert.ok(progress.textContent.indexOf('3 muebles · 2 verificados · 1 pendiente') >= 0,
+      'counts denominator is the canonical #392 scope: ' + progress.textContent);
+  });
+
+  test('blocked scope furniture explains manufacturing problems', (sandbox) => {
+    pushGate(sandbox, { allowed: false, blocked: 1, pending: 1 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.ok(progress.textContent.indexOf('problemas de fabricación') >= 0);
+  });
+
+  test('stale scope furniture explains the outdated review', (sandbox) => {
+    pushGate(sandbox, { allowed: false, stale: 1, pending: 1 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.ok(progress.textContent.indexOf('quedó desactualizada') >= 0);
+    assert.ok(progress.textContent.indexOf('Volvé a verificar') >= 0);
+  });
+
+  test('unavailable scope furniture explains the unconfirmed state', (sandbox) => {
+    pushGate(sandbox, { allowed: false, unavailable: 1, pending: 1 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.ok(progress.textContent.indexOf('No se pudo confirmar el estado de fabricación') >= 0);
+  });
+
+  test('a blocked gate swallows the click before the host callback', (sandbox) => {
+    pushGate(sandbox, { allowed: false, total: 2, verified: 1, pending: 1 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    const baseline = sandbox.__bridge.length;
+    el(sandbox, 'btn-binding-publish').click();
+    const publishCalls = sandbox.__bridge.slice(baseline)
+      .filter((c) => c.action === 'publish_design_revision');
+    assert.equal(publishCalls.length, 0, 'a closed gate must not reach the publisher');
   });
 
   test('click publishes and shows the validating step', (sandbox) => {
+    pushGate(sandbox);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const baseline = sandbox.__bridge.length;
     el(sandbox, 'btn-binding-publish').click();
@@ -185,6 +271,7 @@ function runTests() {
   });
 
   test('success renders the published revision and refreshes the binding', (sandbox) => {
+    pushGate(sandbox);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     el(sandbox, 'btn-binding-publish').click();
     sandbox.window.GraneteDialog.onPublishResult({ ok: true, revisionNumber: 8, baseRevisionId: 'r8' });
@@ -197,6 +284,7 @@ function runTests() {
   });
 
   test('failure renders the specific duplicate-identity blocker', (sandbox) => {
+    pushGate(sandbox);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     el(sandbox, 'btn-binding-publish').click();
     sandbox.window.GraneteDialog.onPublishResult({
@@ -209,6 +297,7 @@ function runTests() {
   });
 
   test('in-flight publish blocks a second click', (sandbox) => {
+    pushGate(sandbox);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     // The bridge journal is cumulative across tests: count from this test's
     // own baseline instead of filtering the whole log.

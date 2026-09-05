@@ -43,6 +43,7 @@ module Granete
         host/preflight_review_copy
         host/preflight_review
         host/preflight_review_session
+        host/publication_preflight_gate
         overlay/manufacturing_feature_view
         overlay/feature_projector
         overlay/screen_picker

@@ -83,11 +83,16 @@ module Granete
         def build_review(furniture, scope, _message_id)
           resolved = @resolver.resolve(furniture_entity: furniture, model: @model_provider.call)
           result = resolved[:result]
-          @tracker.record!(CommandContract.semantic_target_key(scope),
-                           PreflightReview.review_status_from(result),
-                           fingerprint: result.manufacturing_fingerprint,
-                           catalog_revision: result.catalog_revision,
-                           message_id: resolved[:message_id])
+          # record_furniture! (not the raw-key record!) so a fresh
+          # authoritative result supersedes the sibling alias entries of
+          # the SAME unit — the #466 design-wide publish gate reads the
+          # tracker per furniture and must never see a fresh ready
+          # contradicted by an older stale alias.
+          @tracker.record_furniture!(scope,
+                                     PreflightReview.review_status_from(result),
+                                     fingerprint: result.manufacturing_fingerprint,
+                                     catalog_revision: result.catalog_revision,
+                                     message_id: resolved[:message_id])
           PreflightReview.from_accepted_result(
             result: result, scope: scope, message_id: resolved[:message_id]
           )
@@ -98,7 +103,7 @@ module Granete
           if error.issues && !error.issues.empty?
             # A rejected authoring intent is an authoritative NOT-ready: its
             # structured issues are reviewable like any other.
-            @tracker.record!(key, 'blocked', message_id: message_id)
+            @tracker.record_furniture!(scope, 'blocked', message_id: message_id)
             PreflightReview.from_rejection(issues: error.issues, scope: scope,
                                            message_id: message_id, reason: error.message)
           else

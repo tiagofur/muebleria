@@ -68,6 +68,16 @@ module Granete
           metadata_store_factory: method(:metadata_store),
           logger: logger
         )
+        # #466 design-wide publish gate: canonical #392 publication scope
+        # (the SAME ManifestBuilder inventory the publisher manifests)
+        # composed with the shared tracker's authoritative states. Ruby owns
+        # the scope; the dialog only receives the projection.
+        mutation_coordinator = build_mutation_coordinator(logger)
+        @publication_preflight_gate = Host::PublicationPreflightGate.new(
+          scope_provider: method(:publication_scope_items),
+          tracker: mutation_coordinator.preflight_tracker,
+          logger: logger
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
@@ -79,7 +89,8 @@ module Granete
           duplicate_resolver: @duplicate_resolver,
           entities_observer: @entities_observer,
           design_publisher: @design_publisher,
-          mutation_coordinator: build_mutation_coordinator(logger)
+          mutation_coordinator: mutation_coordinator,
+          publication_gate: @publication_preflight_gate
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
@@ -117,6 +128,27 @@ module Granete
 
       def metadata_store(model)
         Metadata::Store.new(model)
+      end
+
+      # Canonical #392 publication scope for the design-wide publish gate
+      # (#466): the SAME ManifestBuilder inventory the publisher will put
+      # in the manifest — exclusively managed FurnitureInstances bound to
+      # the model's project. nil whenever the scope cannot be established
+      # (no model, no binding, unreadable metadata): the gate then fails
+      # closed instead of guessing a scope.
+      def publication_scope_items
+        model = active_model
+        return nil unless model
+
+        binding = Connection::ModelBinding::Store.new(model).read
+        return nil unless binding
+
+        manifest = Connection::DesignPublish::ManifestBuilder.build(
+          model, binding, metadata_store(model),
+          sketchup_version: Sketchup.respond_to?(:version) ? Sketchup.version : 'unknown',
+          plugin_version: Granete::SketchUpExtension::EXTENSION_VERSION
+        )
+        manifest['items']
       end
 
       # The model binding always resolves against whichever document is
