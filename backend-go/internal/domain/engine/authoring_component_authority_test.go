@@ -251,14 +251,15 @@ func TestAuthoringAuthorityMoveChangesOnlyDependentMachining(t *testing.T) {
 	}
 }
 
-// Position range validity is server-side: an authored translation outside the
-// furniture envelope (height 720) rejects with the canonical TRANSFORM_INVALID
-// code even though the shape (3 finite mm) is valid.
+// Position range validity is server-side: the shared TS transport validator
+// accepts any finite magnitude (5000 mm here passes every client check), and
+// Go/domain evaluates it against the ACTUAL furniture envelope (height 720),
+// rejecting with the canonical TRANSFORM_INVALID code.
 func TestAuthoringAuthorityRejectsPositionOutsideFurnitureEnvelope(t *testing.T) {
 	module, catalog := cabinetWithShelfCountBinding(t)
 
 	occ := defaultAuthoringOccurrences()
-	occ[5] = occurrence("shelf-01", "mod-comp-shelf", &[3]float64{18, 18, 900})
+	occ[5] = occurrence("shelf-01", "mod-comp-shelf", &[3]float64{18, 18, 5000})
 	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
 		EvaluatedParameters: map[string]any{"shelfCount": 1},

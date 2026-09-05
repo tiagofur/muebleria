@@ -139,6 +139,23 @@ describe('validateAuthoringResolveRequest', () => {
     expect(codes(validateAuthoringResolveRequest(nonFinite))).toContain('TRANSFORM_INVALID');
   });
 
+  // #467 final cleanup: transport validation proves SHAPE only — exactly 3
+  // finite numbers, NO furniture-range assumption. A coordinate above any
+  // plausible furniture size passes to the server, where Go/domain evaluates
+  // it against the ACTUAL resolved envelope.
+  test('positions of any magnitude pass transport shape validation', () => {
+    const large = request({
+      components: [
+        {
+          componentInstanceId: 'shelf-01',
+          componentDefinitionId: 'mod-comp-shelf',
+          transform: { frame: 'assembly', translationMm: [5000, 5000, 5000] },
+        },
+      ],
+    });
+    expect(validateAuthoringResolveRequest(large)).toEqual([]);
+  });
+
   test('relationships: orphaned anchors and missing targets are structural', () => {
     const orphaned = request({
       components: [{ componentInstanceId: 'shelf-01', componentDefinitionId: 'mod-comp-shelf' }],

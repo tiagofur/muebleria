@@ -55,12 +55,6 @@ export const AUTHORING_RESOLVE_LIMITS = {
   relationshipTargetCount: 256,
   hardwarePlacementCount: 10_000,
   issueCount: 10_000,
-  /**
-   * Coarse transport ceiling for authored assembly translations (mm). It only
-   * rejects positions no furniture could ever carry; the exact envelope is
-   * #467 SERVER authority and clients must not pre-decide it.
-   */
-  translationCeilingMm: 2_400,
 } as const;
 
 /**
@@ -462,13 +456,13 @@ export function validateAuthoringResolveRequest(
       if (transform?.frame !== 'assembly') {
         push('TRANSFORM_INVALID', 'occurrence transform frame must be assembly', `${path}.transform.frame`);
       }
+      // Transport shape only: three finite numbers. Positional validity is
+      // SERVER authority (#467) — Go/domain evaluates the position against
+      // the ACTUAL resolved furniture envelope and semantic constraints;
+      // clients never pre-decide any furniture range here.
       const t = transform?.translationMm;
       if (!Array.isArray(t) || t.length !== 3 || t.some((v) => typeof v !== 'number' || !Number.isFinite(v))) {
         push('TRANSFORM_INVALID', 'translationMm must be three finite millimeters', `${path}.transform.translationMm`);
-      } else if (t.some((v) => v < 0 || v > AUTHORING_RESOLVE_LIMITS.translationCeilingMm)) {
-        // Coarse transport sanity only (no furniture could carry this); the
-        // exact envelope stays with the authoritative resolve (#467).
-        push('TRANSFORM_INVALID', 'translationMm is outside any plausible furniture envelope', `${path}.transform.translationMm`);
       }
     }
   }

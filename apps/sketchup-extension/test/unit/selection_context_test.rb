@@ -324,7 +324,12 @@ class SelectionContextTest < Minitest::Test
 
   def test_movable_internal_part_exposes_authoring_capabilities
     shelf_board = board('shelf-a', 'st-comp-shelf', 'interno', 'Entrepaño 1')
-                  .merge('transform' => { 'translationMm' => [18, 18, 150] },
+                  # The persisted pose is the #414 authoritative localTransform translation
+                  # ([18,18,150]) - never the AABB min corner ([0,0,0] here).
+                  .merge('transform' => { 'translationMm' => [0, 0, 0] },
+                         'localTransform' => {
+                           'translationMm' => [18, 18, 150], 'basis' => IDENTITY_BASIS
+                         },
                          'authoringCapability' => { 'movable' => true, 'axis' => 'z' })
     layout = native_layout(shelf_board)
     @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
@@ -337,6 +342,7 @@ class SelectionContextTest < Minitest::Test
     assert_equal 'interno', context.component_placement
     assert_equal({ 'movable' => true, 'axis' => 'z' }, context.authoring_capability)
     assert_equal [18.0, 18.0, 150.0], context.assembly_translation_mm
+    refute_equal [0.0, 0.0, 0.0], context.assembly_translation_mm
     assert context.capabilities.supported?('canMoveWithinConstraint')
     assert context.capabilities.supported?('canDuplicate')
     assert context.capabilities.supported?('canAddRelated')

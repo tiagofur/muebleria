@@ -24,16 +24,27 @@ module Granete
         LABEL_SIZE = 14
 
         STATUS_HINT = 'Arrastrá para mover a lo largo del eje de autoría; clic confirma, Esc cancela.'
+        # Explicit axis mapping: the committed semantic intent modifies
+        # EXACTLY the assembly axis Granete published — never a guess from
+        # slot, name or geometry.
         AXIS_VECTORS = {
           'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1]
         }.freeze
+        AXIS_INDEX = { 'x' => 0, 'y' => 1, 'z' => 2 }.freeze
 
         def initialize(furniture:, child:, base_translation_mm:, authoring_axis:,
                        logger: nil, &on_commit)
+          unless AXIS_INDEX.key?(authoring_axis)
+            raise ArgumentError,
+                  "eje de autoría no soportado: #{authoring_axis.inspect}"
+          end
+
           @furniture = furniture
           @child = child
           @base_translation_mm = base_translation_mm
-          @authoring_axis = AXIS_VECTORS.fetch(authoring_axis, [0, 0, 1])
+          @axis_letter = authoring_axis
+          @axis_index = AXIS_INDEX.fetch(authoring_axis)
+          @authoring_axis = AXIS_VECTORS.fetch(authoring_axis)
           @logger = logger
           @on_commit = on_commit
           @delta_mm = 0.0
@@ -92,7 +103,7 @@ module Granete
 
           @committed = true
           translation = @base_translation_mm.dup
-          translation[2] = (@base_translation_mm[2] + @delta_mm).round(1)
+          translation[@axis_index] = (@base_translation_mm[@axis_index] + @delta_mm).round(1)
           model = @furniture.respond_to?(:model) ? @furniture.model : nil
           model.select_tool(nil) if model.respond_to?(:select_tool)
           @on_commit.call(translation)
@@ -189,9 +200,9 @@ module Granete
         end
 
         def draw_delta_label(view, bounds)
-          height_mm = @base_translation_mm[2] + @delta_mm
+          axis_value_mm = @base_translation_mm[@axis_index] + @delta_mm
           view.draw_text(Geom::Point3d.new(bounds.min.x, bounds.max.y, bounds.max.z),
-                         "Z #{format('%.1f', height_mm)} mm",
+                         "#{@axis_letter.upcase} #{format('%.1f', axis_value_mm)} mm",
                          size: LABEL_SIZE, color: color_for(view, COLOR_PREVIEW), bold: true)
         rescue StandardError => e
           @logger&.warn('component_viewport_move_label_failed', error: e)

@@ -9,15 +9,15 @@
     "ruby_version": "3.2.2",
     "ruby_patchlevel": 53,
     "ruby_platform": "arm64-darwin",
-    "time": "2026-09-05T16:14:01Z",
+    "time": "2026-09-05T16:53:36Z",
     "options": {
       "io": "TestUp::Console",
       "filter": " /^(Granete::SketchUpExtension::TC_ComponentAuthoringSmoke#.+)$/",
       "verbose": true,
       "testup_ci": true,
       "testup_ci_out": "progress/host_smoke_467_testup_ci.json",
-      "seed": 58600,
-      "args": "\"-n /^(Granete::SketchUpExtension::TC_ComponentAuthoringSmoke#.+)$/\" --verbose --testup_ci --testup_ci_out=progress/host_smoke_467_testup_ci.json --seed 58600"
+      "seed": 8716,
+      "args": "\"-n /^(Granete::SketchUpExtension::TC_ComponentAuthoringSmoke#.+)$/\" --verbose --testup_ci --testup_ci_out=progress/host_smoke_467_testup_ci.json --seed 8716"
     }
   },
   "statistics": {
@@ -29,9 +29,9 @@
     "passes": 5
   },
   "timings": {
-    "total_seconds": 2.052086000039708,
-    "runs_per_second": 2.436545057031357,
-    "assertions_per_second": 23.39083254750103
+    "total_seconds": 2.1447879999759607,
+    "runs_per_second": 2.33123273724771,
+    "assertions_per_second": 22.379834277578016
   },
   "fails": [],
   "skips": [],
@@ -39,37 +39,37 @@
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
-      "name": "test_move_structural_part_rejected_with_zero_operations",
-      "assertions": 3,
-      "time": 0.32761400000890717
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
-      "name": "test_remove_shelf_drops_occurrence_and_dependent_relationships",
-      "assertions": 9,
-      "time": 0.4068320000078529
+      "name": "test_move_shelf_resolves_authoritatively_and_undo_restores",
+      "assertions": 13,
+      "time": 0.26585800002794713
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
       "name": "test_add_second_shelf_shares_definition_with_distinct_identity",
       "assertions": 13,
-      "time": 0.356988999992609
+      "time": 0.4574570000404492
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
       "name": "test_duplicate_shelf_allocates_distinct_occurrence_identity",
       "assertions": 10,
-      "time": 0.3502630000002682
+      "time": 0.28759800002444535
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
-      "name": "test_move_shelf_resolves_authoritatively_and_undo_restores",
-      "assertions": 13,
-      "time": 0.2681919999886304
+      "name": "test_remove_shelf_drops_occurrence_and_dependent_relationships",
+      "assertions": 9,
+      "time": 0.42216800001915544
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke",
+      "name": "test_move_structural_part_rejected_with_zero_operations",
+      "assertions": 3,
+      "time": 0.27151699998648837
     }
   ]
 }

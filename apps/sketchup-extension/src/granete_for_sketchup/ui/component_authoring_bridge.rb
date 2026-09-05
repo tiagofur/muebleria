@@ -231,8 +231,11 @@ module Granete
             if b.component_instance_id == board.component_instance_id &&
                mutation == 'move_component'
               intent['transform'] = requested_transform(payload)
-            elsif b.aabb_min
-              intent['transform'] = { 'frame' => 'assembly', 'translationMm' => b.aabb_min.map(&:to_f) }
+            elsif b.translation
+              # #414: the authoritative POSE is localTransform.translationMm
+              # (board.translation); the AABB is preview convenience and is
+              # never echoed as authoring truth.
+              intent['transform'] = { 'frame' => 'assembly', 'translationMm' => b.translation.map(&:to_f) }
             end
             intent
           end

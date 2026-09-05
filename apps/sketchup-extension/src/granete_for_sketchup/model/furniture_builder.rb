@@ -570,7 +570,9 @@ module Granete
             furniture_ref: furniture_instance_id,
             role: board.role,
             material_binding_role: board.option_role,
-            assembly_translation_mm: board.aabb_min,
+            # #414: persist the authoritative localTransform pose, never the
+            # AABB min (preview convenience only).
+            assembly_translation_mm: board.translation,
             authoring_capability: board.authoring_capability
           )
           instance

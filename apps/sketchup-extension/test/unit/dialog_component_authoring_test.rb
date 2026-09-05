@@ -137,8 +137,14 @@ class DialogComponentAuthoringTest < Minitest::Test
       { 'componentInstanceId' => 'door-01', 'componentDefinitionId' => 'mod-comp-door',
         'catalogComponentId' => 'comp-door', 'slotId' => 'puerta',
         'name' => 'Puerta', 'role' => 'FRENTE',
-        'transform' => { 'translationMm' => [2, 560, 2] }, 'dimensionsMm' => [596, 18, 716],
-        'localTransform' => { 'translationMm' => [2, 560, 2], 'basis' => IDENTITY_BASIS },
+        # #414 negative fixture: rotated basis with AABB min != authoritative
+        # pose — proves echoes/persistence use localTransform.translationMm,
+        # never the AABB convenience corner.
+        'transform' => { 'translationMm' => [2, 44, 2] }, 'dimensionsMm' => [596, 18, 716],
+        'localTransform' => {
+          'translationMm' => [2, 560, 2],
+          'basis' => { 'x' => [0, 1, 0], 'y' => [0, 0, 1], 'z' => [1, 0, 0] }
+        },
         'widthMm' => 596, 'thicknessMm' => 18, 'lengthMm' => 716 },
       { 'componentInstanceId' => 'shelf-01', 'componentDefinitionId' => 'mod-comp-shelf',
         'catalogComponentId' => 'comp-shelf', 'slotId' => 'interno',
@@ -514,6 +520,18 @@ class DialogComponentAuthoringTest < Minitest::Test
     assert_equal [18, 18, 520], meta.dig('intent', 'assemblyTranslationMm')
     refute_nil child_by_component_id(furniture, 'door-01'), 'door must remain'
 
+    # #414 negative proof: echoes and persisted poses carry the
+    # AUTHORITATIVE localTransform translation — never the AABB min corner.
+    echoed_door = request['components'].find { |c| c['componentInstanceId'] == 'door-01' }
+    assert_equal [2.0, 560.0, 2.0], echoed_door['transform']['translationMm'],
+                 'the authoring echo uses localTransform.translationMm'
+    refute_equal [2.0, 44.0, 2.0], echoed_door['transform']['translationMm'],
+                 'the AABB min never becomes authoring truth'
+    door_meta = @store.read(child_by_component_id(furniture, 'door-01'))
+    assert_equal [2.0, 560.0, 2.0], door_meta.dig('intent', 'assemblyTranslationMm'),
+                 'the persisted pose is the authoritative localTransform translation'
+    refute_equal [2.0, 44.0, 2.0], door_meta.dig('intent', 'assemblyTranslationMm')
+
     assert_equal [rebuilt_shelf], @model.selection.to_a,
                  'selection must restore to the exact occurrence by identity'
   end
@@ -726,6 +744,26 @@ class DialogComponentAuthoringTest < Minitest::Test
     assert_includes mutation_script, 'Mutación desconocida'
     assert_equal children_before, child_ids(furniture),
                  'an unknown mutation never touches the productive hierarchy'
+  end
+
+  def test_viewport_move_with_invalid_capability_fails_closed_before_the_tool
+    furniture = place_canonical_cabinet('inst-axis-guard')
+    shelf = child_by_component_id(furniture, 'shelf-01')
+    payload = @store.read(shelf)
+    payload['intent']['authoringCapability'] = { 'movable' => true, 'axis' => 'w' }
+    @store.write(shelf, payload)
+    dialog = @controller.show
+
+    @controller.handle_component_viewport_move(
+      dialog,
+      JSON.generate('semanticTarget' => { 'furnitureInstanceRef' => 'inst-axis-guard',
+                                          'componentInstanceId' => 'shelf-01' })
+    )
+
+    script = dialog.executed_scripts.reverse.find { |s| s.include?('onMutationState') }
+    refute_nil script
+    assert_includes script, '"outcome":"rejected"'
+    assert_includes script, 'componente interno movible'
   end
 
   def test_committed_mutation_invalidates_preflight_for_both_lookup_keys
