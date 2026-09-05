@@ -5636,7 +5636,7 @@
       "created": "2026-09-04",
       "status": "done",
       "completedAt": "2026-09-04",
-      "evidence": "Go backend E2E suite TestDigitalThreadE2E (9 scenarios) green against real PostgreSQL with granete_app RLS, immutability DB triggers, typed concurrency conflict (ErrDesignRevisionConflict) with no-orphan-artifact proof, and deterministic fingerprint parity; Ruby client contract suite (digital_thread_contract_test.rb) green via rake verify (403 tests, 0 failures); TestUp host smoke (TC_DigitalThreadE2ESmoke.rb) EXECUTED in real SketchUp 2026 (26.2.242, macOS 26.6.2) against installed RBZ sha256 2e8765fa...: 3/3 tests, 47 assertions, 0 failures, including REAL DuplicateResolver execution (original keeps FI-001, copy gets FI-NEW origin=duplicate, collision resolved, save/reopen persistence) — evidence progress/host_smoke_F211_testup_ci.json; CI cannot run SketchUp so the host layer remains REAL_HOST_REQUIRED for CI runs and must be re-run manually when host-touching code changes; go test ./... green; pnpm openapi:check and pnpm test green (33 test files, 411 tests passed); canonical documentation with layer-status table and fixtures policy in docs/architecture/digital-thread-e2e-regression-gate.md; independent review round 1 corrections applied (progress/implementation_398_dt14.md §4).",
+      "evidence": "Go backend E2E suite TestDigitalThreadE2E (9 scenarios) green against real PostgreSQL with granete_app RLS, immutability DB triggers, typed concurrency conflict (ErrDesignRevisionConflict) with no-orphan-artifact proof, and deterministic fingerprint parity; Ruby client contract suite (digital_thread_contract_test.rb) green via rake verify (403 tests, 0 failures); TestUp host smoke (TC_DigitalThreadE2ESmoke.rb) EXECUTED in real SketchUp 2026 (26.2.242, macOS 26.6.2) against installed RBZ sha256 2e8765fa...: 3/3 tests, 47 assertions, 0 failures, including REAL DuplicateResolver execution (original keeps FI-001, copy gets FI-NEW origin=duplicate, collision resolved, save/reopen persistence) \u2014 evidence progress/host_smoke_F211_testup_ci.json; CI cannot run SketchUp so the host layer remains REAL_HOST_REQUIRED for CI runs and must be re-run manually when host-touching code changes; go test ./... green; pnpm openapi:check and pnpm test green (33 test files, 411 tests passed); canonical documentation with layer-status table and fixtures policy in docs/architecture/digital-thread-e2e-regression-gate.md; independent review round 1 corrections applied (progress/implementation_398_dt14.md \u00a74).",
       "acceptance": [
         "Canonical Scenario A (Quote-first): Full lifecycle QuoteLine -> FI-001/FI-002 -> Design -> WorkingCopy -> Publish R1 -> Reconcile -> Requote Q2 -> Approve R1 -> ProductionRelease P1 -> Publish R2 post-release leaves P1 byte-identical",
         "Canonical Scenario B (Quantity > 1): QuoteLine qty=3 materializes 3 unique FIs; partial placement produces quoted_not_modeled; QuoteLine ID != physical unit identity",
@@ -5764,6 +5764,45 @@
       ],
       "depends_on": [
         "F212"
+      ]
+    },
+    {
+      "id": "F215",
+      "title": "Direct internal component authoring with semantic constraints (#467 / SU-AUTH-1)",
+      "description": "Semantic authoring of movable internal components in SketchUp through the shared #498 coordinator and the #477 resolve contract: selecting an internal (e.g. a shelf) exposes its exact componentInstanceId with data-driven movability (placement `interno` published by the authoritative layout), and move by precise mm or a vertical-axis constrained viewport gesture, add, duplicate and remove submit full occurrence-snapshot authoring intent that Granete re-resolves (relationships + dependent machining) before the atomic one-operation native rebuild. Add/duplicate allocate distinct componentInstanceId and relationship identities, sync quantity-bound parameters with the occurrence set, remove drops only the anchored relationships/machining, structural parts are rejected fail-closed, and preflight/overlay invalidate through the shared runtime.",
+      "tags": [
+        "sketchup-extension",
+        "authoring",
+        "components",
+        "p0"
+      ],
+      "created": "2026-09-05",
+      "status": "done",
+      "completedAt": "2026-09-05",
+      "evidence": "Ruby unit suite (599 runs, 4218 assertions, 0 failures) incl. DialogComponentAuthoringTest (11 tests: move/add/duplicate/remove identity + parameter sync + machining dependency, structural rejection, out-of-range rejection, failed-resolve preservation, channel contract, preflight invalidation) and SelectionContextTest interno/structural/unknown placement capabilities; boundary suite (6 runs, 2531 assertions) with no manufacturing vocabulary in the plugin; Node harness host_mutation_test.js (21 tests) and dialog_inspector_test.js (58 checks) over the real modules/dialog.html; real-host TestUp TC_ComponentAuthoringSmoke.rb against the installed RBZ in SketchUp 2026: Success 4/4 tests, 33 assertions (move 1-op atomic rebuild + pose by identity + undo restore; add second shelf shared definition distinct identity + undo; remove drops occurrence/dependent relationships only + undo; structural move zero operations) - progress/host_smoke_467_testup_ci.json; RuboCop clean (161 files, 0 offenses); deterministic RBZ sha256 cde00b68.",
+      "acceptance": [
+        "Selecting a shelf shows that shelf, its owning furniture and allowed actions without confusing componentDefinitionId with componentInstanceId",
+        "Moving a shelf updates authoring intent and causes only dependent relationship/machining changes server-side",
+        "Adding a second shelf may share componentDefinitionId but has a distinct non-colliding componentInstanceId",
+        "Removing one shelf removes only its dependent relationships/machining",
+        "Duplicating one shelf does not duplicate the first shelf's occurrence identity or relationship IDs",
+        "Unsupported movement axis/range is prevented or rejected with actionable feedback",
+        "A failed resolve leaves previous hierarchy/metadata intact",
+        "A successful edit is one undoable action",
+        "Ruby/JavaScript contains no joint/drilling formula table",
+        "Real-host smoke covers select -> move -> rebuild and add -> undo"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/467",
+        "docs/architecture/sketchup-authoring-interaction-contract.md",
+        "docs/architecture/sketchup-plugin-excellence.md",
+        "docs/sketchup-manufacturing-contract.md",
+        "contracts/sketchupAuthoringResolve.contract.json"
+      ],
+      "depends_on": [
+        "F195",
+        "F212",
+        "F213"
       ]
     }
   ]
