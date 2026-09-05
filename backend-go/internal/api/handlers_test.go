@@ -98,6 +98,10 @@ type stubStore struct {
 	reconcileProjectResult *domain.ReconciliationResult
 	reconcileProjectErr    error
 	reconcileProjectCalls  int
+
+	quoteRevisionsList  []domain.QuoteRevisionDetail
+	quoteRevisionsErr   error
+	quoteRevisionsCalls int
 	// Requote (#394 / DT-10)
 	requoteProjectQuoteResult *storage.RequoteProjectQuoteResult
 	requoteProjectQuoteErr    error
@@ -1750,8 +1754,39 @@ func (s *stubStore) ReconcileProject(_ context.Context, projectID, quoteRevision
 	}, nil
 }
 
-func (s *stubStore) RequoteProjectQuote(_ context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error) {
-	s.requoteProjectQuoteCalls++
+func (s *stubStore) ListQuoteRevisionsByProject(_ context.Context, projectID string) ([]domain.QuoteRevisionDetail, error) {
+	s.quoteRevisionsCalls++
+	if s.quoteRevisionsErr != nil {
+		return nil, s.quoteRevisionsErr
+	}
+	if s.quoteRevisionsList != nil {
+		return s.quoteRevisionsList, nil
+	}
+	return []domain.QuoteRevisionDetail{
+		{
+			QuoteRevision: domain.QuoteRevision{
+				ID:             "3f7b6c5d-0000-4000-8000-000000000010",
+				OrganizationID: "00000000-0000-4000-8000-000000000001",
+				ProjectID:      projectID,
+				RevisionNumber: 1,
+				Status:         "accepted",
+				SourceType:     "manual",
+			},
+			CreatedAt: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
+			Items: []domain.QuoteRevisionItem{
+				{
+					FurnitureInstanceID:   "f1000000-0000-4000-8000-000000000001",
+					FurnitureDefinitionID: "d1000000-0000-4000-8000-000000000001",
+					Parameters:            map[string]any{"widthMm": 600},
+					MaterialChoices:       map[string]string{"carcass": "mat-blanco"},
+					LifecycleStatus:       "active",
+				},
+			},
+		},
+	}, nil
+}
+
+func (s *stubStore) RequoteProjectQuote(_ context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error) {	s.requoteProjectQuoteCalls++
 	cmdCopy := cmd
 	s.requoteProjectQuoteCmd = &cmdCopy
 	if s.requoteProjectQuoteErr != nil {

@@ -296,6 +296,9 @@ type Store interface {
 	ListDesignRevisionItems(ctx context.Context, revisionID string) ([]domain.DesignRevisionItem, error)
 	// #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance
 	ReconcileProject(ctx context.Context, projectID, quoteRevisionID, designRevisionID string) (*domain.ReconciliationResult, error)
+	// #500 / WEB-DT-1: immutable QuoteRevision read model with per-unit
+	// commercial items for the Project Furniture matrix exact context.
+	ListQuoteRevisionsByProject(ctx context.Context, projectID string) ([]domain.QuoteRevisionDetail, error)
 	// #394 / DT-10: explicit re-quote — creates the next draft QuoteRevision
 	// from an exact base quote revision and an exact design revision.
 	RequoteProjectQuote(ctx context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error)

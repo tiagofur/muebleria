@@ -1,4 +1,51 @@
-# Feature activa: F215 (#467 / SU-AUTH-1) — Direct internal component authoring with semantic constraints
+# Feature activa: F216 (#500 / WEB-DT-1) — Project Furniture matrix and physical-unit traceability
+
+- Actualizado: 2026-09-05 America/Mexico_City
+- Feature: F216 — `[P0][WEB-DT-1] Project Furniture matrix and physical-unit traceability`
+- Rama: `feat/500-web-dt1-project-furniture-matrix` (base `main@587961fd`)
+- Estado: `completed` (verificación completa; ver `progress/implementation_500_web_dt1.md`)
+- Qué se entregó:
+  1. **Boundary #496 mínimo**: verificado que el generated boundary para #500
+     era suficiente salvo UN gap — no existía lectura de QuoteRevisions por
+     proyecto. Se agregó exactamente ese read model generado:
+     `GET /api/projects/{projectId}/quote-revisions` → `QuoteRevisionDetail[]`
+     (header inmutable + createdAt + items por unidad con join key
+     `furnitureInstanceId`). `QuoteRevision` existente intacto (cero ripple a
+     `:requote`). #496 queda ABIERTO.
+  2. **Backend**: `ListQuoteRevisionsByProject` (storage, tenant-safe con
+     espejo SQL de la política RLS + fail-closed JSON corrupto + 404 uniforme
+     sin oráculo), handler con guard `RoleCanAccessProjects`, ruta read-only.
+  3. **React**: pantalla `Muebles` server-backed en `/quotes/:id/muebles`
+     (entrada: menú "Hilo digital → Muebles del proyecto" del detalle de
+     cotización). Matriz una fila por unidad física con origen/lifecycle
+     verbatim del servidor, `Unidad i de N` (agrupamiento por definición,
+     paridad con el panel #389), presencia comercial sólo del snapshot de la
+     QuoteRevision seleccionada, placed/pending por join
+     `furnitureInstanceId` contra el contexto de diseño seleccionado (working
+     copy o revisión publicada exacta), badges de reconciliación SOLO espejo
+     de `reconcileProjectDesign` (exclusivos de revisiones publicadas
+     exactas), referencia de release con staleness. Read-only.
+  4. **Contexto exacto pineado en URL** (`?qrev=&design=&rev=work|<id>`): una
+     revisión más nueva jamás retargetea silenciosamente una vista histórica.
+     Query keys session/tenant-scoped + remount por switch de organización.
+  5. **Estados distintos y accesibles**: loading/stale/empty/no-results/
+     forbidden/cross-tenant(404)/error.
+- Verificación: `pnpm openapi:generate/check` sin drift; `pnpm typecheck`
+  verde; `pnpm test` verde (ui+web, 24 tests nuevos de digitalThread + 4 de
+  rutas); `GOFLAGS='-p=1' go test ./... -count=1` verde con PostgreSQL real
+  (handler unit + storage RLS/cross-tenant/fail-closed).
+- Fuera de alcance: #501/#502, mutaciones desde la matriz, nacimiento HTTP de
+  la primera QuoteRevision.
+
+## Historial previo — Regression pass Demo Golden Path (2026-09-05)
+
+- Ejecutado sobre `main` `587961fd` (clean, con merges #559/#562/#564). Reporte: `docs/demo-golden-path-readiness-20260905.md`.
+- Resultado: **0 demo blockers**; Digital Thread E2E 9/9, Foundation browser gate 17/17, engine/golden authoring verde, `pnpm test`/typecheck/openapi verde. Los 3 defectos históricos de la auditoría 360 (DXF rotado, FM-03 order-dependence, template roundtrip) siguen reproduciéndose en el resolver TS legacy — POST-DEMO, no tocan la ruta autoritativa Go/SketchUp.
+- Primary gap: superficies React #500/#501/#502 (backend completo, sin UI). **Recommended next issue: #500.**
+
+---
+
+# Historial previo — F215 (#467 / SU-AUTH-1) — Direct internal component authoring with semantic constraints
 
 - Actualizado: 2026-09-05 10:30 America/Mexico_City
 - Feature: F215 — `[P0][SU-AUTH-1] Direct internal component authoring with semantic constraints`

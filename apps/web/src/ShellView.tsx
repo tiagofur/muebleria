@@ -151,6 +151,8 @@ import {
   SecurityScreen,
   UsersScreen,
   PlatformScreen,
+  ProjectFurnitureScreen,
+  projectFurnitureQueryKeys,
   Modal,
   OnboardingTourModal,
   UsabilityBenchmarkPanel,
@@ -256,6 +258,8 @@ import {
   pathForNav,
   productionOrderFromPath,
   productionOrderPath,
+  projectFurnitureFromPath,
+  projectFurniturePath,
   shipmentDetailFromPath,
   installationDetailPath,
   shipmentDetailPath,
@@ -264,6 +268,7 @@ import {
   type EntitySection,
 } from './routes';
 import { organizationKeys } from './shared/query/queryKeys';
+import { sessionScopeKey } from './shared/query/sessionScope';
 import type { SessionScope } from './shared/query/sessionScope';
 import {
   DEFAULT_API_BASE,
@@ -890,6 +895,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     roleCanAppendProjectEvent(r, 'client_signed_off'),
   );
   const canExportProductionUnion = anyRole(actorRoles, roleCanExportProduction);
+
+  // WEB-DT-1 (#500): the Project Furniture matrix route pins its exact
+  // commercial/design context in the URL query string.
+  const projectFurnitureRoute = useMemo(
+    () => projectFurnitureFromPath(location.pathname, location.search),
+    [location.pathname, location.search],
+  );
 
   return (
 
@@ -1851,7 +1863,41 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           resolveImageUrl={resolveMediaUrl}
         />
       ) : null}
-      {navId === 'quotes' ? (
+      {navId === 'quotes' && projectFurnitureRoute ? (
+        authToken ? (
+          sessionScope ? (
+            <ProjectFurnitureScreen
+              key={`pf-${projectFurnitureRoute.projectId}-${JSON.stringify(
+                organizationKeys.all(sessionScope),
+              )}`}
+              baseUrl={DEFAULT_API_BASE}
+              token={authToken}
+              projectId={projectFurnitureRoute.projectId}
+              queryKeys={projectFurnitureQueryKeys(
+                sessionScopeKey(sessionScope),
+                projectFurnitureRoute.projectId,
+              )}
+              initialContext={projectFurnitureRoute.context}
+              onContextChange={(context) => {
+                const target = projectFurniturePath(projectFurnitureRoute.projectId, context);
+                if (location.pathname + location.search !== target) {
+                  navigate(target, { replace: true });
+                }
+              }}
+              onBack={() => {
+                const target = projectPath(projectFurnitureRoute.projectId);
+                if (location.pathname !== target) navigate(target);
+              }}
+            />
+          ) : (
+            <PageLoading label="Validando sesión del taller…" />
+          )
+        ) : (
+          <p className="settings-hint">Iniciá sesión para ver los muebles de la obra.</p>
+        )
+      ) : null}
+
+      {navId === 'quotes' && !projectFurnitureRoute ? (
         <ProjectsScreen
           projects={projectsForRole}
           modules={modules}
@@ -1947,6 +1993,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                 }
               : undefined
           }
+          onOpenFurnitureMatrix={(projectId) => {
+            const target = projectFurniturePath(projectId);
+            if (location.pathname + location.search !== target) navigate(target);
+          }}
           onExportCommercialQuote={
             filterProjectsToPlant ? undefined : handleExportCommercialQuote
           }

@@ -124,6 +124,8 @@ export interface ProjectDetailViewProps {
   readonly onExportProductionPack?: () => void | Promise<void>;
   /** Navigate to production order hub (PROD-0.1). Only when plant-ready. */
   readonly onOpenInProduction?: (projectId: string) => void;
+  /** WEB-DT-1 (#500): open the server-backed Project Furniture matrix. */
+  readonly onOpenFurnitureMatrix?: (projectId: string) => void;
 
   // --- Item handlers + inline-remove confirm ---
   readonly itemHandlers: ProjectDetailItemHandlers;
@@ -412,6 +414,7 @@ function ProjectDetailViewInner(): ReactNode {
     exportMenu,
     productionExportOk,
     onOpenInProduction,
+    onOpenFurnitureMatrix,
     onOpenPresentation,
     onDuplicate,
     onSaveAsTemplate,
@@ -485,6 +488,23 @@ function ProjectDetailViewInner(): ReactNode {
             label: 'Abrir en Producción',
             hint: 'Pack, corte, checklist de fábrica',
             onSelect: () => onOpenInProduction(project.id),
+          },
+        ],
+      });
+    }
+
+    // WEB-DT-1 (#500): the physical-unit matrix is a server-backed Digital
+    // Thread view; available to any session that can open the project.
+    if (onOpenFurnitureMatrix) {
+      sections.push({
+        id: 'digital-thread',
+        label: 'Hilo digital',
+        items: [
+          {
+            id: 'open-furniture-matrix',
+            label: 'Muebles del proyecto',
+            hint: 'Unidades físicas, cotización y diseño',
+            onSelect: () => onOpenFurnitureMatrix(project.id),
           },
         ],
       });
@@ -571,6 +591,7 @@ function ProjectDetailViewInner(): ReactNode {
     onChangeStatus,
     onDuplicate,
     onOpenInProduction,
+    onOpenFurnitureMatrix,
     onRequestDelete,
     onRequestReopen,
     onSaveAsTemplate,
@@ -748,6 +769,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onExport,
     onExportProductionPack,
     onOpenInProduction,
+    onOpenFurnitureMatrix,
     itemHandlers,
     removeConfirm,
     updateProjectLevelChoice,
@@ -868,6 +890,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onExport,
       onExportProductionPack,
       onOpenInProduction,
+      onOpenFurnitureMatrix,
       itemHandlers,
       removeConfirm,
       updateProjectLevelChoice,
@@ -965,6 +988,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onExport,
       onExportProductionPack,
       onOpenInProduction,
+      onOpenFurnitureMatrix,
       itemHandlers,
       removeConfirm,
       updateProjectLevelChoice,

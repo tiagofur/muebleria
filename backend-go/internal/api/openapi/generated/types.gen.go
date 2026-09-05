@@ -1273,6 +1273,29 @@ type QuoteRevision struct {
 	CreatedBy              *string                 `json:"createdBy,omitempty"`
 }
 
+type QuoteRevisionItem struct {
+	FurnitureInstanceId   string                           `json:"furnitureInstanceId"`
+	FurnitureDefinitionId *string                          `json:"furnitureDefinitionId,omitempty"`
+	DefinitionVersion     *int64                           `json:"definitionVersion,omitempty"`
+	Parameters            map[string]any                   `json:"parameters"`
+	MaterialChoices       map[string]string                `json:"materialChoices"`
+	LifecycleStatus       FurnitureInstanceLifecycleStatus `json:"lifecycleStatus"`
+}
+
+type QuoteRevisionDetail struct {
+	ID                     string                  `json:"id"`
+	ProjectId              string                  `json:"projectId"`
+	RevisionNumber         int64                   `json:"revisionNumber"`
+	Status                 QuoteRevisionStatus     `json:"status"`
+	SourceType             QuoteRevisionSourceType `json:"sourceType"`
+	BaseQuoteRevisionId    *string                 `json:"baseQuoteRevisionId,omitempty"`
+	SourceDesignRevisionId *string                 `json:"sourceDesignRevisionId,omitempty"`
+	Notes                  *string                 `json:"notes,omitempty"`
+	CreatedBy              *string                 `json:"createdBy,omitempty"`
+	CreatedAt              string                  `json:"createdAt"`
+	Items                  []QuoteRevisionItem     `json:"items"`
+}
+
 type RequoteProjectQuoteRequest struct {
 	BaseQuoteRevisionId         string   `json:"baseQuoteRevisionId"`
 	DesignRevisionId            string   `json:"designRevisionId"`

@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 )
 
 // #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance
@@ -65,6 +66,27 @@ type QuoteRevision struct {
 	// revisions with other origins.
 	BaseQuoteRevisionID    string `json:"baseQuoteRevisionId,omitempty"`
 	SourceDesignRevisionID string `json:"sourceDesignRevisionId,omitempty"`
+}
+
+// QuoteRevisionItem is the immutable commercial snapshot of ONE physical
+// furniture unit inside an exact QuoteRevision (#393 / DT-9). Join key is
+// strictly FurnitureInstance.id.
+type QuoteRevisionItem struct {
+	FurnitureInstanceID   string
+	FurnitureDefinitionID string
+	DefinitionVersion     *int
+	Parameters            map[string]any
+	MaterialChoices       map[string]string
+	LifecycleStatus       string
+}
+
+// QuoteRevisionDetail is the #500 / WEB-DT-1 read model: the immutable
+// revision header plus its per-unit items, so commercial presence derives
+// from the exact selected revision instead of the live mutable quote.
+type QuoteRevisionDetail struct {
+	QuoteRevision
+	CreatedAt time.Time
+	Items     []QuoteRevisionItem
 }
 
 // StructuredDifference captures a specific property difference between quote and design.

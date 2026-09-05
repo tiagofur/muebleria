@@ -16,6 +16,8 @@ import {
   navFromPath,
   pathForNav,
   productionOrderFromPath,
+  projectFurnitureFromPath,
+  projectFurniturePath,
   productionOrderPath,
   projectIdFromPath,
   projectPath,
@@ -210,5 +212,88 @@ describe('plant board route (F093)', () => {
       expect(navBlockedForSession('auth', 'admin', 'platform', true)).toBe(false);
       expect(navBlockedForSession('auth', 'user', 'platform', true)).toBe(false);
     });
+  });
+});
+
+describe('project furniture matrix route (WEB-DT-1 / #500)', () => {
+  const id = '11111111-0000-4000-8000-000000000001';
+
+  it('parses the matrix route and pins the exact context from query params', () => {
+    expect(projectFurnitureFromPath(`/quotes/${id}/muebles`)).toEqual({
+      projectId: id,
+      context: {
+        quoteRevisionId: null,
+        designId: null,
+        designContextKind: 'none',
+        designRevisionId: null,
+      },
+    });
+
+    const pinned = projectFurnitureFromPath(
+      `/quotes/${id}/muebles`,
+      `?qrev=qr-1&design=d-1&rev=dr-9`,
+    );
+    expect(pinned?.projectId).toBe(id);
+    expect(pinned?.context).toEqual({
+      quoteRevisionId: 'qr-1',
+      designId: 'd-1',
+      designContextKind: 'revision',
+      designRevisionId: 'dr-9',
+    });
+
+    const working = projectFurnitureFromPath(
+      `/quotes/${id}/muebles`,
+      `?qrev=qr-1&design=d-1&rev=work`,
+    );
+    expect(working?.context.designContextKind).toBe('working');
+    expect(working?.context.designRevisionId).toBeNull();
+  });
+
+  it('rejects lookalike paths', () => {
+    expect(projectFurnitureFromPath('/quotes')).toBeNull();
+    expect(projectFurnitureFromPath(`/quotes/${id}`)).toBeNull();
+    expect(projectFurnitureFromPath(`/quotes/${id}/edit`)).toBeNull();
+    expect(projectFurnitureFromPath(`/orders/${id}/muebles`)).toBeNull();
+    // A second unknown segment is not a matrix route.
+    expect(projectFurnitureFromPath(`/quotes/${id}/otra-cosa`)).toBeNull();
+  });
+
+  it('builds the path with the exact pinned context (never latest)', () => {
+    expect(projectFurniturePath(id)).toBe(`/quotes/${id}/muebles`);
+    expect(
+      projectFurniturePath(id, {
+        quoteRevisionId: 'qr-1',
+        designId: 'd-1',
+        designContextKind: 'revision',
+        designRevisionId: 'dr-9',
+      }),
+    ).toBe(`/quotes/${id}/muebles?qrev=qr-1&design=d-1&rev=dr-9`);
+    expect(
+      projectFurniturePath(id, {
+        quoteRevisionId: null,
+        designId: 'd-1',
+        designContextKind: 'working',
+        designRevisionId: null,
+      }),
+    ).toBe(`/quotes/${id}/muebles?design=d-1&rev=work`);
+    // Round-trip stability keeps historical views pinned.
+    const built = projectFurniturePath(id, {
+      quoteRevisionId: 'qr-2',
+      designId: 'd-1',
+      designContextKind: 'working',
+      designRevisionId: null,
+    });
+    const [pathname, search = ''] = built.split('?');
+    const context = projectFurnitureFromPath(pathname, search)?.context;
+    expect(context).toEqual({
+      quoteRevisionId: 'qr-2',
+      designId: 'd-1',
+      designContextKind: 'working',
+      designRevisionId: null,
+    });
+  });
+
+  it('maps the matrix route to the quotes nav section', () => {
+    expect(navFromPath(`/quotes/${id}/muebles`)).toBe('quotes');
   });
 });

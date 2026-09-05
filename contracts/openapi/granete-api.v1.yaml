@@ -2686,6 +2686,36 @@
         }
       }
     },
+    "/projects/{projectId}/quote-revisions": {
+      "get": {
+        "operationId": "listProjectQuoteRevisions",
+        "summary": "List the immutable QuoteRevision snapshots of a project with their per-unit commercial items (#500 / WEB-DT-1)",
+        "description": "Read model for the exact commercial context of the Project Furniture matrix. Each revision carries its immutable per-FurnitureInstance item snapshot, so clients derive commercial presence from the exact selected revision instead of a live mutable quote. Ordered by revision number ascending. Missing, foreign or cross-project objects answer a uniform 404. No cost or manufacturing internals are exposed.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quote revisions of the project with their per-unit commercial items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuoteRevisionDetail"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/quote-revisions:requote": {
       "post": {
         "operationId": "requoteProjectQuote",
@@ -7763,6 +7793,115 @@
           "createdBy": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "QuoteRevisionItem": {
+        "type": "object",
+        "description": "Immutable commercial snapshot of ONE physical furniture unit inside an exact QuoteRevision (#393 / DT-9). Join key is strictly FurnitureInstance.id.",
+        "additionalProperties": false,
+        "required": [
+          "furnitureInstanceId",
+          "parameters",
+          "materialChoices",
+          "lifecycleStatus"
+        ],
+        "properties": {
+          "furnitureInstanceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furnitureDefinitionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "definitionVersion": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "materialChoices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "lifecycleStatus": {
+            "$ref": "#/components/schemas/FurnitureInstanceLifecycleStatus"
+          }
+        }
+      },
+      "QuoteRevisionDetail": {
+        "type": "object",
+        "description": "QuoteRevision read model for the Project Furniture matrix (#500 / WEB-DT-1): the immutable revision header plus its per-unit commercial items, so commercial presence always derives from the exact selected revision.",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "projectId",
+          "revisionNumber",
+          "status",
+          "sourceType",
+          "createdAt",
+          "items"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revisionNumber": {
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteRevisionStatus"
+          },
+          "sourceType": {
+            "$ref": "#/components/schemas/QuoteRevisionSourceType"
+          },
+          "baseQuoteRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "sourceDesignRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteRevisionItem"
+            }
           }
         }
       },
