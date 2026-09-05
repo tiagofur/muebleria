@@ -615,7 +615,12 @@ func TestAuthoringResolveReplaceHinge(t *testing.T) {
 
 // Scenario 7: invalid/orphan identity → structured rejection, no partial
 // accepted result.
-func TestAuthoringResolveOrphanAnchorRejected(t *testing.T) {
+// #467: under the full occurrence-snapshot contract the client echoes its
+// last-accepted relationship intent verbatim — it never filters topology.
+// A relationship anchored on an occurrence the snapshot dropped is
+// stale-by-removal: the server authoritatively prunes it and the resolve
+// ACCEPTS without it. The client never has to decide dependencies.
+func TestAuthoringResolveSnapshotPrunesStaleAnchoredRelationships(t *testing.T) {
 	module, catalog := authoringCabinetCatalog()
 
 	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
@@ -628,8 +633,33 @@ func TestAuthoringResolveOrphanAnchorRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
+	if len(result.StructuralIssues) != 0 {
+		t.Fatalf("the server must authoritatively prune stale anchors: %+v", result.StructuralIssues)
+	}
+	for _, relationship := range result.Normalized.Relationships {
+		if relationship.RelationshipID == "rel-shelf-01" {
+			t.Fatalf("the stale-anchored relationship must not survive: %+v", relationship)
+		}
+	}
+}
+
+// Without an occurrence snapshot there is no full-state echo to interpret:
+// relationships are validated against the default expansion and a ghost
+// anchor still rejects with the canonical code.
+func TestAuthoringResolveOrphanAnchorRejectedWithoutSnapshot(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+
+	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Relationships: []AuthoringRelationship{
+			shelfRelationship("rel-shelf-01", "shelf-ghost"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
 	if len(result.StructuralIssues) == 0 {
-		t.Fatal("orphan anchor must reject")
+		t.Fatal("orphan anchor without a snapshot must reject")
 	}
 	if result.StructuralIssues[0].Code != "RELATIONSHIP_ORPHANED" {
 		t.Fatalf("orphan anchor code = %s", result.StructuralIssues[0].Code)
@@ -1082,9 +1112,10 @@ func TestAuthoringResolveFingerprintCoversFullManufacturingIdentity(t *testing.T
 func TestAuthoringResolveRejectsPartialTargetSets(t *testing.T) {
 	module, catalog := authoringCabinetCatalog()
 
+	// No occurrence snapshot: relationships are not part of a full-state
+	// echo, so a ghost target still rejects instead of being pruned.
 	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences: defaultAuthoringOccurrences(),
 		Relationships: []AuthoringRelationship{{
 			RelationshipID: "rel-shelf-01",
 			Kind:           "shelf-support",

@@ -59,7 +59,7 @@ module Granete
       class SmokeScenarioCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider
         BASE_SCENARIO_ID = '01-params-materials-parity'
 
-        attr_accessor :active_scenario_id, :last_authoring_request
+        attr_accessor :active_scenario_id, :last_authoring_request, :accepted_relationships
 
         def initialize(fixture)
           super()
@@ -89,8 +89,14 @@ module Granete
           components = furniture['components'] || []
           relationships = furniture['relationships'] || []
 
-          if relationships.any? { |r| r['relationshipId'].to_s.start_with?('rel-') }
-            raise 'client-minted relationshipId found: topology must be server-authored'
+          # Every echoed relationship must belong to the last-accepted state:
+          # ids outside it would be client-CONSTRUCTED topology.
+          accepted_ids = (accepted_relationships || []).to_h do |r|
+            [r['relationshipId'], true]
+          end
+          if relationships.any? { |r| !accepted_ids[r['relationshipId']] }
+            raise 'client-constructed relationship found: topology must come from the ' \
+                  'last-accepted state verbatim'
           end
 
           shelves = components.select { |c| c['componentDefinitionId'] == 'mod-comp-shelf' }
@@ -115,7 +121,20 @@ module Granete
             raise 'shelfCount must stay consistent (2)' unless furniture.dig('parameters', 'shelfCount') == 2
           when '04-remove-shelf'
             raise 'remove intent must drop the shelf occurrence' unless shelves.empty?
-            raise 'remove must send NO relationship topology (server-owned cleanup)' unless relationships.empty?
+
+            # The removal echo must be the last-accepted set VERBATIM — the
+            # stale shelf-anchored relationship included (unfiltered, no
+            # client-constructed topology). Server prunes stale anchors.
+            expected = accepted_relationships || []
+            unless relationships == expected
+              raise 'remove must echo the last-accepted relationship set verbatim ' \
+                    '(unfiltered, no client-constructed topology)'
+            end
+            stale = expected.any? do |r|
+              r.dig('source', 'componentInstanceId') == 'shelf-01' ||
+                r['targets'].to_a.any? { |t| t['componentInstanceId'] == 'shelf-01' }
+            end
+            raise 'guard fixture error: expected a stale shelf-anchored relationship' unless stale
             raise 'shelfCount must reach 0' unless furniture.dig('parameters', 'shelfCount').to_i.zero?
           end
         end
@@ -350,6 +369,23 @@ module Granete
         initial_entity = place_initial_furniture
         initial_id = metadata_store.read(initial_entity).dig('identity', 'instanceRef')
 
+        # Seed the last-accepted relationship state: the shelf-anchored
+        # relationship. The removal echo must carry it VERBATIM — Ruby never
+        # filters topology; the server prunes stale anchors authoritatively.
+        accepted = [{
+          'relationshipId' => 'rel-shelf-01', 'kind' => 'shelf-support',
+          'source' => { 'componentInstanceId' => 'shelf-01', 'role' => 'shelf-edge' },
+          'targets' => [
+            { 'componentInstanceId' => 'side-left-01', 'role' => 'inside-face' },
+            { 'componentInstanceId' => 'side-right-01', 'role' => 'inside-face' }
+          ]
+        }]
+        entity = granete_furniture_instances.first
+        payload = metadata_store.read(entity)
+        payload['relationships'] = accepted
+        metadata_store.write(entity, payload)
+        @catalog_provider.accepted_relationships = accepted
+
         @catalog_provider.active_scenario_id = '04-remove-shelf'
         starts_before = @transaction_observer.starts
 
@@ -368,8 +404,9 @@ module Granete
         furniture_req = @catalog_provider.last_authoring_request['furniture']
         assert_equal 0, furniture_req['parameters']['shelfCount'],
                      'the bound parameter reaches zero with the occurrence set'
-        assert_nil furniture_req['relationships'],
-                   'the removal sends NO relationship topology: cleanup is server-owned'
+        assert_equal accepted, furniture_req['relationships'],
+                     'the removal echo is the last-accepted set VERBATIM — Ruby never filters; ' \
+                     'the golden response owns the cleanup'
 
         current = granete_furniture_instances.first
         assert_nil locate_child(current, 'shelf-01'), 'the shelf occurrence is gone'

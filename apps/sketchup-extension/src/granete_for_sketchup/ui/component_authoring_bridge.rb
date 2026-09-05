@@ -160,11 +160,11 @@ module Granete
                                                     new_component_id)
           synced_params = component_quantity_parameters(definition, params, board, components,
                                                         mutation)
-          # Relationship topology is Granete's: the last ACCEPTED set echoes
-          # verbatim on move/add/duplicate, and a removal sends none — the
-          # server materializes/cleans relationships, their identities and
-          # dependent machining from its own bindings.
-          relationships = mutation == 'remove_component' ? nil : persisted_furniture_relationships(entity)
+          # Relationship topology is Granete's: EVERY mutation echoes the
+          # last ACCEPTED set verbatim — including removals, whose stale
+          # anchors the server prunes authoritatively. Ruby never filters
+          # relationships and never decides dependencies.
+          relationships = persisted_furniture_relationships(entity)
           hardware_placements = build_hardware_authoring_intents(base_layout, nil, nil, nil)
           furniture_req = build_hardware_mutation_request(
             definition, synced_params, choices, base_layout, hardware_placements, relationships,

@@ -207,10 +207,7 @@ class DialogComponentAuthoringTest < Minitest::Test
       accepted_components = components.map do |component|
         component.merge('componentInstanceId' => rename.call(component['componentInstanceId']))
       end
-      accepted_shelves = accepted_components.select do |component|
-        component['componentDefinitionId'] == 'mod-comp-shelf'
-      end
-      relationships = effective_relationships(authored_rels, accepted_shelves)
+      relationships = effective_relationships(authored_rels, accepted_components)
 
       snapshot_components = accepted_components.map do |component|
         base = BASE_BOARDS.find { |board| board['componentInstanceId'] == component['componentInstanceId'] }
@@ -305,8 +302,11 @@ class DialogComponentAuthoringTest < Minitest::Test
         'catalogRevision' => 'rev-component-authoring-1',
         'issues' => [],
         'normalizedSnapshot' => {
-          'parameters' => { 'shelfCount' => accepted_shelves.length }
-                               .merge(furniture['parameters'] || {}),
+          'parameters' => {
+            'shelfCount' => accepted_components.count do |component|
+              component['componentDefinitionId'] == 'mod-comp-shelf'
+            end
+          }.merge(furniture['parameters'] || {}),
           'materialChoices' => furniture['materialChoices'] || {},
           'components' => snapshot_components,
           'relationships' => relationships,
@@ -368,11 +368,22 @@ class DialogComponentAuthoringTest < Minitest::Test
     # Mirror of the server's bound-relationship materialization: every shelf
     # occurrence keeps a shelf-support relationship (authored identity wins,
     # missing ones materialize with deterministic parameter-* identities).
-    def effective_relationships(authored, shelf_occurrences)
-      result = authored.select { |relationship| relationship['kind'] == 'shelf-support' }
+    def effective_relationships(authored, accepted_components)
+      # Server-authoritative pruning (#467): relationships anchored on
+      # occurrences the accepted snapshot dropped are stale-by-removal and
+      # are removed HERE — the client echoed them verbatim.
+      ids = accepted_components.map { |c| c['componentInstanceId'] }
+      result = authored.select do |relationship|
+        next false unless relationship['kind'] == 'shelf-support'
+
+        ids.include?(relationship.dig('source', 'componentInstanceId')) &&
+          relationship['targets'].is_a?(Array) &&
+          relationship['targets'].all? { |t| ids.include?(t['componentInstanceId']) }
+      end
       has = result.to_h { |relationship| [relationship.dig('source', 'componentInstanceId'), true] }
-      shelf_occurrences.each_with_index do |occurrence, index|
+      accepted_components.each_with_index do |occurrence, index|
         next if has[occurrence['componentInstanceId']]
+        next unless occurrence['componentDefinitionId'] == 'mod-comp-shelf'
 
         result += [{
           'relationshipId' => "parameter-shelfCount-#{index + 1}",
@@ -688,6 +699,25 @@ class DialogComponentAuthoringTest < Minitest::Test
 
   def test_remove_shelf_drops_only_its_dependent_relationships_and_machining
     furniture = place_canonical_cabinet('inst-remove')
+    # Seed the last-accepted relationship state: the shelf-anchored
+    # relationship plus an independent one (what a previous accepted resolve
+    # would have persisted). The removal echo must carry BOTH verbatim.
+    persisted = [
+      { 'relationshipId' => 'rel-shelf-01', 'kind' => 'shelf-support',
+        'source' => { 'componentInstanceId' => 'shelf-01', 'role' => 'shelf-edge' },
+        'targets' => [
+          { 'componentInstanceId' => 'side-left-01', 'role' => 'inside-face' },
+          { 'componentInstanceId' => 'side-right-01', 'role' => 'inside-face' }
+        ] },
+      { 'relationshipId' => 'rel-door-support', 'kind' => 'shelf-support',
+        'source' => { 'componentInstanceId' => 'door-01', 'role' => 'shelf-edge' },
+        'targets' => [
+          { 'componentInstanceId' => 'side-left-01', 'role' => 'inside-face' }
+        ] }
+    ]
+    payload = @store.read(furniture)
+    payload['relationships'] = persisted
+    @store.write(furniture, payload)
     dialog = @controller.show
 
     script = submit_component_command(dialog, component_command('remove_component', {}))
@@ -697,21 +727,51 @@ class DialogComponentAuthoringTest < Minitest::Test
     request = @catalog.last_authoring_request['furniture']
     assert_equal 3, request['components'].length, 'the shelf occurrence is dropped'
     assert_equal 0, request['parameters']['shelfCount']
-    assert_nil request['relationships'],
-               'a removal sends no relationship topology — cleanup is server-owned'
+    # The removal echo carries the LAST-ACCEPTED relationship set VERBATIM —
+    # including the shelf-anchored relationship. Ruby never filters topology:
+    # the server prunes stale anchors authoritatively.
+    anchored = persisted.any? { |r| r.dig('source', 'componentInstanceId') == 'shelf-01' }
+    assert anchored, 'the persisted set contains the shelf-anchored relationship'
+    assert_equal persisted, request['relationships'],
+                 'the removal echo is the last-accepted set verbatim, unfiltered'
 
     assert_nil child_by_component_id(furniture, 'shelf-01'), 'the occurrence is gone'
     refute_nil child_by_component_id(furniture, 'door-01'), 'unrelated components stay'
     refute_nil child_by_component_id(furniture, 'side-left-01')
 
-    assert_equal 0, @catalog.last_authoring_result.operations.count { |op|
-      op.provenance['sourceKind'] == 'relationship'
-    }, 'dependent relationship machining is removed with the occurrence'
-    assert_equal 1, @catalog.last_authoring_result.operations.length,
-                 'unrelated manual machining survives'
+    # Server-owned cleanup: the stale shelf-anchored relationship is pruned
+    # while the INDEPENDENT relationship survives EXACTLY (identity, source,
+    # targets) — with its derived machining and provenance.
+    survived = @catalog.last_authoring_result.normalized_snapshot['relationships']
+    assert_equal %w[rel-door-support], survived.map { |r| r['relationshipId'] },
+                 'only the independent relationship survives'
+    expected = persisted.find { |r| r['relationshipId'] == 'rel-door-support' }
+    assert_equal [expected], survived, 'the independent relationship survives exactly'
+    survived.each do |relationship|
+      refute references_component?(relationship, 'shelf-01'),
+             'no orphan reference to the removed shelf may survive'
+    end
 
-    assert_nil @store.read(furniture)['relationships'],
-               'the cleared relationship state removes the persisted set'
+    ops = @catalog.last_authoring_result.operations
+    assert_equal 1, ops.count { |op|
+      op.provenance['sourceKind'] == 'relationship' &&
+        op.provenance['relationshipId'] == 'rel-door-support'
+    }, 'the independent relationship keeps its derived machining'
+    assert_equal 0, ops.count { |op|
+      op.provenance['sourceKind'] == 'relationship' &&
+        op.provenance['relationshipId'] == 'rel-shelf-01'
+    }, 'shelf-dependent machining is removed with the occurrence'
+    assert_equal 1, ops.count { |op|
+      op.provenance['sourceKind'] == 'manualHardwarePlacement'
+    }, 'unrelated manual machining survives'
+
+    assert_equal %w[rel-door-support], @store.read(furniture)['relationships'].map { |r| r['relationshipId'] },
+                 'the persisted state keeps exactly the surviving relationship'
+  end
+
+  def references_component?(relationship, component_id)
+    relationship.dig('source', 'componentInstanceId') == component_id ||
+      relationship['targets'].any? { |t| t['componentInstanceId'] == component_id }
   end
 
   def test_failed_resolve_leaves_previous_hierarchy_and_metadata_intact

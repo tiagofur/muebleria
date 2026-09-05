@@ -265,8 +265,19 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	effectivePlacements, placementIssues := effectiveManualPlacements(boards, input.ManualPlacements, input.ManualPlacementsPresent, input.Catalog)
 	structural = append(structural, placementIssues...)
 
-	// 5. Declarative relationship templates turn every bound quantity into
-	// manufacturing intent. Authored equivalents win by source+kind.
+	// 5. Authoritative relationship interpretation (#467): under the full
+	// occurrence-snapshot contract the client echoes its last-accepted
+	// relationship intent VERBATIM — it never filters or constructs topology.
+	// The server owns dependency semantics: relationships anchored on
+	// occurrences the snapshot dropped are stale-by-removal and are pruned
+	// here; every other relationship survives exactly. Without a snapshot
+	// (params/materials-only resolve) relationships are not part of a full
+	// state echo, so orphaned anchors still reject below. Declarative
+	// relationship templates then turn every bound quantity into
+	// manufacturing intent (authored equivalents win by source+kind).
+	if plan.active {
+		input.Relationships = pruneRemovedAnchorRelationships(input.Relationships, boards)
+	}
 	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, boards, input.Relationships)
 	relationshipIssues := validateRelationships(input.Relationships, boards)
 	structural = append(structural, relationshipIssues...)
@@ -491,6 +502,46 @@ func validateOccurrenceRanges(occurrences []AuthoringOccurrence, dimensionsMm [3
 		}
 	}
 	return issues
+}
+
+// pruneRemovedAnchorRelationships is the server's authoritative relationship
+// cleanup (#467). Under the full occurrence-snapshot contract the client
+// echoes its last-accepted relationship intent verbatim; when the snapshot
+// drops an occurrence, relationships anchored on it are stale-by-removal and
+// the server removes them, while every other relationship survives exactly
+// (same identity, anchors and kind). Anchors on identities that never existed
+// are indistinguishable from removals in a stateless resolve, so the server —
+// not the client — owns the decision.
+func pruneRemovedAnchorRelationships(relationships []AuthoringRelationship, boards []layoutBoard) []AuthoringRelationship {
+	if len(relationships) == 0 {
+		return relationships
+	}
+	existing := make(map[string]bool, len(boards))
+	for i := range boards {
+		existing[boards[i].id] = true
+	}
+	kept := make([]AuthoringRelationship, 0, len(relationships))
+	for _, relationship := range relationships {
+		if anchorMissing(relationship.Source, existing) {
+			continue
+		}
+		stale := false
+		for _, anchor := range relationship.Targets {
+			if anchorMissing(anchor, existing) {
+				stale = true
+				break
+			}
+		}
+		if stale {
+			continue
+		}
+		kept = append(kept, relationship)
+	}
+	return kept
+}
+
+func anchorMissing(anchor AuthoringRelationshipAnchor, existing map[string]bool) bool {
+	return anchor.ComponentInstanceID != "" && !existing[anchor.ComponentInstanceID]
 }
 
 // planOccurrences validates the snapshot against the template index and

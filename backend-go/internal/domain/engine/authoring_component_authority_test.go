@@ -314,3 +314,144 @@ func TestLayoutPublishesAuthoringCapabilityForMovableInternalsOnly(t *testing.T)
 		}
 	}
 }
+
+// RemoveComponent must preserve unrelated relationships: the client echoes
+// its last-accepted relationship intent VERBATIM (including the relationship
+// anchored on the removed occurrence) and the server authoritatively prunes
+// ONLY the stale-by-removal relationships while every independent
+// relationship — and its machining/provenance — survives exactly.
+func TestAuthoringAuthorityRemovePreservesUnrelatedRelationships(t *testing.T) {
+	module, catalog := cabinetWithShelfCountBinding(t)
+
+	// Last-accepted relationship state: the shelf-anchored relationship PLUS
+	// an independent one anchored on the door (inside the side span, so its
+	// machining derives) between boards that are not being removed.
+	independent := AuthoringRelationship{
+		RelationshipID: "rel-door-support",
+		Kind:           "shelf-support",
+		Source:         AuthoringRelationshipAnchor{ComponentInstanceID: "door-01", Role: "shelf-edge"},
+		Targets: []AuthoringRelationshipAnchor{
+			{ComponentInstanceID: "side-left-01", Role: "inside-face"},
+			{ComponentInstanceID: "side-right-01", Role: "inside-face"},
+		},
+	}
+	acceptedEcho := []AuthoringRelationship{
+		shelfRelationship("rel-shelf-01", "shelf-01"),
+		independent,
+	}
+	// Unrelated manual hardware machining on the door (full placement set).
+	manualPlacements := []AuthoringManualPlacement{
+		{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge",
+			HostComponentInstanceID: "door-01", AnchorFace: "front", OffsetMm: [2]float64{298, 100}},
+		{HardwarePlacementID: "hp-handle-01", CatalogHardwareID: "hw-handle",
+			HostComponentInstanceID: "door-01", AnchorFace: "front", OffsetMm: [2]float64{40, 360}},
+	}
+	resolve := func(count float64, occurrences []AuthoringOccurrence) *AuthoringResolveResult {
+		t.Helper()
+		result, err := ResolveAuthoringLayout(AuthoringResolveInput{
+			Module: module, Catalog: catalog, PrecisionMm: 0.01,
+			EvaluatedParameters: map[string]any{"shelfCount": count},
+			Occurrences:         occurrences,
+			Relationships:       acceptedEcho,
+			ManualPlacements:    manualPlacements, ManualPlacementsPresent: true,
+		})
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		if len(result.StructuralIssues) != 0 {
+			t.Fatalf("the server must authoritatively interpret the echoed intent: %+v", result.StructuralIssues)
+		}
+		return result
+	}
+
+	before := resolve(1, defaultAuthoringOccurrences())
+	if len(before.Normalized.Relationships) != 2 {
+		t.Fatalf("base state must carry both relationships: %+v", before.Normalized.Relationships)
+	}
+
+	removed := make([]AuthoringOccurrence, 0, len(defaultAuthoringOccurrences()))
+	for _, occ := range defaultAuthoringOccurrences() {
+		if occ.ComponentInstanceID != "shelf-01" {
+			removed = append(removed, occ)
+		}
+	}
+	// The removal echo carries the FULL last-accepted set — the client does
+	// NOT filter the shelf-anchored relationship out.
+	after := resolve(0, removed)
+
+	if findBoard(after.Layout, "shelf-01") != nil {
+		t.Fatal("removed shelf must not materialize")
+	}
+
+	// The independent relationship survives EXACTLY: same identity, source
+	// and targets.
+	var survived *AuthoringRelationship
+	for i := range after.Normalized.Relationships {
+		relationship := &after.Normalized.Relationships[i]
+		if relationship.RelationshipID == "rel-door-support" {
+			survived = relationship
+			continue
+		}
+		if relationship.RelationshipID == "rel-shelf-01" {
+			t.Fatal("the shelf-dependent relationship must be removed by the server")
+		}
+	}
+	if survived == nil {
+		t.Fatalf("the independent relationship must survive: %+v", after.Normalized.Relationships)
+	}
+	if survived.Kind != independent.Kind ||
+		survived.Source != independent.Source ||
+		len(survived.Targets) != len(independent.Targets) {
+		t.Fatalf("the independent relationship must survive exactly: %+v", survived)
+	}
+	for i, anchor := range independent.Targets {
+		if survived.Targets[i] != anchor {
+			t.Fatalf("independent target %d changed: %+v", i, survived.Targets[i])
+		}
+	}
+	for _, relationship := range after.Normalized.Relationships {
+		if referencesOccurrence(relationship, "shelf-01") {
+			t.Fatalf("orphan reference to the removed shelf survived: %+v", relationship)
+		}
+	}
+
+	// Machining: the independent relationship keeps its derived operations
+	// and provenance; no shelf-dependent operation or manual hinge survives.
+	independentOps, shelfOps := 0, 0
+	for _, op := range after.Machining.Operations {
+		switch op.Provenance.RelationshipID {
+		case "rel-door-support":
+			independentOps++
+		case "rel-shelf-01":
+			shelfOps++
+		}
+	}
+	if independentOps == 0 {
+		t.Fatal("the independent relationship must keep its derived machining")
+	}
+	if shelfOps != 0 {
+		t.Fatalf("shelf-dependent machining survived the removal: %d ops", shelfOps)
+	}
+	hingeOps := 0
+	for _, op := range after.Machining.Operations {
+		if op.Provenance.SourceKind == "manualHardwarePlacement" &&
+			op.Provenance.HardwarePlacementID == "hp-hinge-01" {
+			hingeOps++
+		}
+	}
+	if hingeOps != 1 {
+		t.Fatalf("the unrelated hinge machining must survive: got %d ops", hingeOps)
+	}
+}
+
+func referencesOccurrence(relationship AuthoringRelationship, occurrenceID string) bool {
+	if relationship.Source.ComponentInstanceID == occurrenceID {
+		return true
+	}
+	for _, anchor := range relationship.Targets {
+		if anchor.ComponentInstanceID == occurrenceID {
+			return true
+		}
+	}
+	return false
+}

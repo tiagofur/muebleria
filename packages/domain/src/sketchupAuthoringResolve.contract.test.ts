@@ -287,7 +287,14 @@ describe('#477 shared authoring resolve contract fixture', () => {
         if (!scenario.query) {
           // The transport validator checks scalar shape; the shared typed
           // definition evaluator checks membership/defaults/rules.
-          if (!goCodes.every((code) => code === 'PARAMETER_INVALID')) {
+          // RELATIONSHIP_ORPHANED on a component-less request is gateway
+          // authority (#467): only the server knows the definition's
+          // composition, so a client cannot reproduce this rejection.
+          const gatewayOnly =
+            goCodes.every((code) => code === 'PARAMETER_INVALID') ||
+            (goCodes.every((code) => code === 'RELATIONSHIP_ORPHANED') &&
+              !(scenario.request.furniture.components ?? []).length);
+          if (!gatewayOnly) {
             expect(goCodes.some((code) => tsCodes.has(code)), `${scenario.id}: go=${goCodes} ts=${[...tsCodes]}`).toBe(true);
           }
         }
