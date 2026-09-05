@@ -23,6 +23,7 @@
   host/mutation_outcome
   host/mutation_command
   host/authoring_mutation_coordinator
+  host/publication_preflight_gate
 ].each do |relative_path|
   require_relative "../../src/granete_for_sketchup/#{relative_path}"
 end

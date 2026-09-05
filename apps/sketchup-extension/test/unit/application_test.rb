@@ -157,7 +157,8 @@ class ApplicationTest < Minitest::Test
       connect_model create_project_furniture delete_selected_furniture dialog_ready enroll
       get_catalog get_model_binding get_project_furniture insert_furniture
       list_binding_designs list_binding_projects logout manufacturing_inspection open_material_selector
-      place_furniture_instance poll_enrollment publish_design_revision refresh_media_url refresh_model_binding
+      place_furniture_instance poll_enrollment preflight_review publish_design_revision
+      refresh_media_url refresh_model_binding
       rescan_duplicates select_furniture select_project_furniture update_furniture
       validate_managed_furniture_identity
     ]

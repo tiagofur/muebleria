@@ -61,7 +61,9 @@
   }
 
   // Renders the shared status line + the authoritative manufacturing badge.
-  // The badge NEVER claims ready: only Granete's preflight may (#466).
+  // The badge reflects ONLY what Ruby pushed: tracker entry states
+  // (#498 invalidation + #466 authoritative ready/warning/blocked). This
+  // side never infers ready from local parameter validity.
   function render() {
     var status = document.getElementById("mutation-status");
     if (status) {
@@ -83,27 +85,29 @@
     return PHASE_COPY[machine.phase] || null;
   }
 
+  var PREFLIGHT_BADGE_COPY = {
+    ready: { text: "✓ Aprobado para fabricación", className: "status-badge passed" },
+    warning: { text: "Aprobado con avisos", className: "status-badge pending" },
+    blocked: { text: "Bloqueado para fabricación", className: "status-badge error" },
+    stale: { text: "Revisión técnica desactualizada", className: "status-badge pending" },
+    unavailable: { text: "Revisión técnica no disponible", className: "status-badge pending" },
+    unknown: { text: "Revisión técnica pendiente", className: "status-badge pending" }
+  };
+
   function renderPreflight(entries) {
     var badge = document.getElementById("inspector-manufacturing-badge");
     if (!badge) return;
     var state = preflightStateForSelection(entries);
-    if (state === "stale") {
-      badge.textContent = "Revisión técnica desactualizada";
-      badge.className = "status-badge pending";
-    } else if (state === "unavailable") {
-      badge.textContent = "Revisión técnica no disponible";
-      badge.className = "status-badge pending";
-    } else {
-      badge.textContent = "Revisión técnica pendiente";
-      badge.className = "status-badge pending";
-    }
+    var copy = PREFLIGHT_BADGE_COPY[state] || PREFLIGHT_BADGE_COPY.unknown;
+    badge.textContent = copy.text;
+    badge.className = copy.className;
   }
 
   function preflightStateForSelection(entries) {
     var selection = store() ? store().get("selection") : null;
-    var ref = selection && selection.furnitureInstanceRef;
-    if (!ref || !entries) return "unknown";
-    var entry = entries[ref];
+    if (!selection || !entries) return "unknown";
+    var entry = entries[selection.furnitureInstanceRef] ||
+      (selection.furnitureInstanceId ? entries[selection.furnitureInstanceId] : null);
     return entry ? entry.state : "unknown";
   }
 
@@ -234,14 +238,25 @@
       if (!check.ok) return { applied: false, reason: check.reason };
       var entries = {};
       (envelope.entries || []).forEach(function (entry) {
-        var ref = entry.furniture || "";
+        if (!entry || !entry.furniture) return;
         // The Ruby key is the full sorted target string; the furniture ref
-        // prefix addresses the inspector badge.
-        var furnitureRef = ref.match(/furnitureInstanceRef=([^|]+)/);
-        entries[furnitureRef ? furnitureRef[1] : ref] = entry;
+        // (and instance id, for project-placed units) address the badge and
+        // the #466 review panel.
+        var furnitureRef = String(entry.furniture).match(/furnitureInstanceRef=([^|]+)/);
+        var furnitureId = String(entry.furniture).match(/furnitureInstanceId=([^|]+)/);
+        if (furnitureRef) entries[furnitureRef[1]] = entry;
+        if (furnitureId) entries[furnitureId[1]] = entry;
+        if (!furnitureRef && !furnitureId) entries[entry.furniture] = entry;
       });
-      if (store()) store().set("preflight", { entries: entries });
+      var review = envelope.review && envelope.review.status ? envelope.review : null;
+      // #466 design-wide publish gate projection: composed Ruby-side from
+      // the canonical #392 publication scope + tracker states. JS never
+      // rebuilds the scope; a missing projection keeps the gate closed.
+      var gate = envelope.publicationGate && typeof envelope.publicationGate === "object"
+        ? envelope.publicationGate : null;
+      if (store()) store().set("preflight", { entries: entries, review: review, gate: gate });
       renderPreflight(entries);
+      if (window.GranetePreflightReview) window.GranetePreflightReview.handleRunningReset();
       return { applied: true };
     },
 
@@ -258,6 +273,8 @@
     // onSelectionChange so every consumer sees the same selection truth.
     publishSelection: function (payload) {
       if (store()) store().set("selection", payload);
+      renderPreflight(store() ? store().get("preflight").entries : null);
+      if (window.GranetePreflightReview) window.GranetePreflightReview.render();
       if (machine.phase !== "idle" && BUSY_PHASES.indexOf(machine.phase) === -1) {
         setPhase("idle");
       }

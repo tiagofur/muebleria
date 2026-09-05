@@ -18,12 +18,17 @@ module Granete
 
         SCHEMA_ID = 'granete.sketchup-host-command.v1'
         MESSAGE_TYPES = %w[mutation_command mutation_state preflight_state degraded_state
-                           manufacturing_command manufacturing_state].freeze
+                           manufacturing_command manufacturing_state preflight_command].freeze
         KNOWN_MUTATIONS = %w[update_furniture update_hardware_placement substitute_hardware].freeze
         # Read-only inspection channel (#470): commands never mutate the
         # model; they steer the overlay (mode/scope/filter/selection) or ask
         # for provenance navigation.
         KNOWN_INSPECTIONS = %w[set_mode select_feature set_filter navigate_to_source refresh].freeze
+        # Read-only preflight review channel (#466): `run` re-runs the
+        # AUTHORITATIVE resolve (never a local validation) and `navigate_issue`
+        # selects/frames the exact managed context of an issue in the
+        # viewport. No command here mutates the model.
+        KNOWN_PREFLIGHT_COMMANDS = %w[run navigate_issue].freeze
 
         SEMANTIC_TARGET_KEYS = %w[furnitureInstanceId furnitureInstanceRef componentInstanceId
                                   hardwarePlacementId].freeze
@@ -31,6 +36,7 @@ module Granete
         # owning furniture identity (authoring contract §3): sharing a
         # componentDefinitionId must never collapse two occurrences.
         CHILD_TARGET_KEYS = %w[componentInstanceId hardwarePlacementId].freeze
+        FURNITURE_TARGET_KEYS = %w[furnitureInstanceId furnitureInstanceRef].freeze
 
         OUTCOME_MESSAGE_PREFIX = 'mut-out'
         MAX_ID_LENGTH = 128
@@ -93,6 +99,22 @@ module Granete
           SEMANTIC_TARGET_KEYS.filter_map { |key| "#{key}=#{target[key]}" if target[key] }.sort.join('|')
         end
 
+        # Furniture-scoped slice of a target: the review/preflight identity of
+        # the OWNING furniture, dropping child occurrence keys.
+        def furniture_scope(target)
+          target.to_h.slice(*FURNITURE_TARGET_KEYS)
+        end
+
+        # Canonical target key plus the furniture-scoped alias when the target
+        # addresses a child occurrence: invalidations stay reachable from
+        # every lookup key the overlays (#470) and the review (#466) use.
+        def target_keys_for(target)
+          keys = [semantic_target_key(target)]
+          scoped = furniture_scope(target)
+          keys << semantic_target_key(scoped) unless scoped.empty?
+          keys.uniq
+        end
+
         # Ruby→JS mutation outcome envelope. `outcome.result` is the legacy
         # result hash (kept for the existing UI); behavior-relevant truth is
         # outcome/category/issues/resolveKind/degraded.
@@ -142,6 +164,39 @@ module Granete
           }
         end
 
+        # Parses and validates a JS→Ruby read-only preflight review command
+        # (#466). The review always targets the OWNING furniture. Raises
+        # ContractError on any violation; never touches the model.
+        def parse_preflight_command!(raw)
+          envelope = parse_json(raw)
+          assert_schema(envelope)
+          assert_type(envelope, 'preflight_command')
+
+          command = envelope['command'].to_s
+          unless KNOWN_PREFLIGHT_COMMANDS.include?(command)
+            raise ContractError, "Comando de revisión de preflight desconocido: #{command.inspect}"
+          end
+
+          target = parse_semantic_target(envelope['semanticTarget'])
+          if furniture_scope(target).empty?
+            raise ContractError, 'la revisión de preflight requiere identidad del mueble dueño'
+          end
+
+          payload = envelope['payload']
+          raise ContractError, 'payload debe ser un objeto' unless payload.is_a?(Hash)
+          if command == 'navigate_issue' &&
+             !(payload['issueId'].is_a?(String) && !payload['issueId'].strip.empty?)
+            raise ContractError, 'navigate_issue requiere issueId'
+          end
+
+          {
+            'messageId' => bounded_string(envelope['messageId'], 'messageId'),
+            'command' => command,
+            'semanticTarget' => target,
+            'payload' => payload
+          }
+        end
+
         # Ruby→JS inspection state envelope (#470): the overlay manager
         # payload (mode/status/scope/fingerprint/features) under the same
         # versioned schema as the mutation channel.
@@ -156,13 +211,23 @@ module Granete
           }
         end
 
-        def preflight_state_envelope(entries)
-          {
+        # Ruby→JS preflight state envelope (#498 invalidation entries;
+        # #466 adds the optional review payload — grouped issues, Spanish
+        # remediation and navigation context of the last authoritative
+        # preflight for a furniture scope — and the optional design-wide
+        # publication gate projection, composed Ruby-side from the
+        # canonical #392 publication scope + tracker states; JS never
+        # rebuilds the scope).
+        def preflight_state_envelope(entries, review: nil, publication_gate: nil)
+          envelope = {
             'schemaId' => SCHEMA_ID,
             'type' => 'preflight_state',
             'messageId' => "#{OUTCOME_MESSAGE_PREFIX}-preflight-#{SecureRandom.hex(6)}",
             'entries' => entries
           }
+          envelope['review'] = review if review.is_a?(Hash)
+          envelope['publicationGate'] = publication_gate if publication_gate.is_a?(Hash)
+          envelope
         end
 
         def degraded_state_envelope(state, category: nil)

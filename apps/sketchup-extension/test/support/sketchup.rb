@@ -562,17 +562,25 @@ module SketchupStub
   end
 
   class ViewStub < Sketchup::View
-    attr_reader :images_written, :invalidations
+    attr_reader :images_written, :invalidations, :zoomed_entities
 
     def initialize
       @images_written = []
       @invalidations = 0
+      @zoomed_entities = []
     end
 
     # Overlay tool surface (#470): invalidations are observable so tests can
     # prove the tool refreshes the viewport without touching the model.
     def invalidate
       @invalidations += 1
+      true
+    end
+
+    # #466 viewport framing: camera zoom calls are observable so tests can
+    # prove issue navigation frames the exact entity (view state only).
+    def zoom(entity_or_entities)
+      @zoomed_entities << entity_or_entities
       true
     end
 

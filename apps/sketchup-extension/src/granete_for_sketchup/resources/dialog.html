@@ -1927,6 +1927,38 @@
             Selección múltiple: se muestra el primer elemento sólo para inspección; la edición queda deshabilitada hasta que exista edición por lote.
           </div>
 
+          <!-- #466 / SU-VIS-1: authoritative preflight review. The panel
+               NEVER derives readiness locally: ready/warning/blocked arrive
+               exclusively from Granete's authoritative resolve pushed by
+               Ruby; stale/unavailable stay distinct from success. -->
+          <style>
+            .preflight-issue { border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: var(--space-2); margin-top: var(--space-2); font-size: var(--text-xs); }
+            .preflight-issue-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+            .preflight-issue-source { margin: var(--space-1) 0 0 0; color: var(--text-secondary); }
+            .preflight-issue-detail { margin: var(--space-1) 0; color: var(--text-primary); }
+            .preflight-issue-remediation { margin: 0 0 var(--space-2) 0; color: var(--text-secondary); font-style: italic; }
+            .preflight-issue-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+          </style>
+          <div id="preflight-review-card" class="card" style="display: none; margin-bottom: var(--space-3);">
+            <div class="card-header-row">
+              <div class="card-title" style="margin: 0;">Revisión de fabricación</div>
+              <span id="preflight-review-badge" class="status-badge pending">Pendiente</span>
+            </div>
+            <button id="btn-preflight-run" type="button" class="btn btn-primary" style="margin-top: var(--space-2); width: 100%;">
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <span>Verificar fabricación</span>
+            </button>
+            <div id="preflight-review-body" style="display: none; margin-top: var(--space-3);">
+              <p id="preflight-review-summary" class="subhead" style="margin: 0 0 var(--space-2) 0; font-size: var(--text-xs); color: var(--text-primary);"></p>
+              <p id="preflight-review-stale-note" class="subhead" style="display: none; margin: 0 0 var(--space-2) 0; font-size: var(--text-xs); color: var(--danger-600);">
+                La revisión quedó desactualizada tras un cambio y puede no reflejar el estado actual.
+              </p>
+              <p id="preflight-review-unavailable-note" class="subhead" style="display: none; margin: 0 0 var(--space-2) 0; font-size: var(--text-xs);"></p>
+              <div id="preflight-review-groups"></div>
+              <p id="preflight-review-navigation-note" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs); color: var(--text-secondary);"></p>
+            </div>
+          </div>
+
           <!-- #470 / SU-VIS-1: read-only manufacturing inspection. Machining
                truth comes exclusively from the authoritative resolve; this
                card never computes holes. Shown for managed parts (and managed
@@ -4416,14 +4448,9 @@
           inspectorInteractiveBadge.textContent = "✓ Medidas válidas";
           inspectorInteractiveBadge.className = "status-badge valid";
 
-          // Authoritative preflight reset (must NOT claim ready without real domain preflight)
-          if (context.manufacturingPreflightPassed) {
-            inspectorManufacturingBadge.textContent = "✓ Aprobado para fabricación";
-            inspectorManufacturingBadge.className = "status-badge passed";
-          } else {
-            inspectorManufacturingBadge.textContent = "Revisión técnica pendiente";
-            inspectorManufacturingBadge.className = "status-badge pending";
-          }
+          // The authoritative preflight badge is owned by
+          // GraneteMutation.renderPreflight (#466): only Ruby-pushed tracker
+          // states decide ready/warning/blocked — never local validity.
 
           // Each control obeys its OWN capability, and a multi-selection
           // fail-closes every mutation until batch editing exists.
@@ -4904,6 +4931,18 @@
           }
         })();
 
+        // #466 authoritative preflight review (`Verificar fabricación`).
+        // The run button submits the read-only preflight_command channel;
+        // rendering comes exclusively from the Ruby-pushed review state.
+        (function () {
+          var runBtn = document.getElementById("btn-preflight-run");
+          if (runBtn) {
+            runBtn.addEventListener("click", function () {
+              if (window.GranetePreflightReview) window.GranetePreflightReview.run(selectedContext);
+            });
+          }
+        })();
+
         // ------------------------------------------------------------------
         // Model ↔ Project/Design binding (#388). Self-contained state + view:
         // every action goes to Ruby (connector); the panel never invents or
@@ -4990,6 +5029,7 @@
         };
         var PUBLISH_ERROR_COPY = {
           unbound: "El modelo no está conectado a un diseño.",
+          preflight_incomplete: "La publicación requiere verificar todos los muebles del diseño.",
           stale_base: "La base del diseño cambió en el servidor; actualizá la base de trabajo y volvé a publicar.",
           duplicate_furniture_identity: "Hay copias con la misma identidad física; resolvé los duplicados antes de publicar.",
           unresolved_duplicate_identity: "Hay un mueble copiado cuya identidad no pudo resolverse.",
@@ -5010,16 +5050,66 @@
           return status.state === "connected" && caps.can_publish_revision === true;
         }
 
+        // #466 design-wide preflight publish gate. The universe is the FULL
+        // #392 publication scope — composed Ruby-side (canonical manifest
+        // inventory + tracker states) and received as the publicationGate
+        // projection; this view never rebuilds the scope from tracker
+        // entries, selection or names. Counts' denominator is the scope.
+        function publishGateCountsLine(gate) {
+          if (!gate || gate.scopeAvailable === false) return "";
+          if (typeof gate.total !== "number") return "";
+          return gate.total + " muebles · " + (gate.verified || 0) + " verificados · " +
+                 (gate.pending || 0) + (gate.pending === 1 ? " pendiente" : " pendientes");
+        }
+
+        function publishGateBlockedCopy(gate) {
+          var base;
+          if (!gate || gate.scopeAvailable === false) {
+            base = "No se pudo confirmar el alcance de publicación del diseño. " +
+                   "Verificá los muebles del diseño antes de publicar.";
+          } else if ((gate.blocked || 0) > 0) {
+            base = "La publicación está bloqueada porque existen problemas de fabricación.";
+          } else if ((gate.stale || 0) > 0) {
+            base = "La revisión de fabricación quedó desactualizada después de una modificación. " +
+                   "Volvé a verificar antes de publicar.";
+          } else if ((gate.unavailable || 0) > 0) {
+            base = "No se pudo confirmar el estado de fabricación de todos los muebles.";
+          } else {
+            base = "La publicación requiere verificar todos los muebles del diseño.";
+          }
+          var counts = publishGateCountsLine(gate);
+          return counts ? base + " " + counts : base;
+        }
+
         function renderPublishAvailability(status) {
           if (!bindingPublishBtn || !bindingPublishProgress) return;
           var idle = !publishInFlight && lastPublishOutcome === null;
+          var preflightBlocked = window.GranetePreflightReview &&
+            window.GranetePreflightReview.publishBlocked();
           bindingPublishBtn.style.display = canPublish(status) ? "block" : "none";
-          bindingPublishBtn.disabled = publishInFlight || !idle;
+          bindingPublishBtn.disabled = publishInFlight || !idle || preflightBlocked;
           bindingPublishBtn.textContent = publishInFlight ? "Publicando…" : "Publicar diseño";
-          if (!publishInFlight && lastPublishOutcome === null) {
+          if (preflightBlocked && !publishInFlight) {
+            bindingPublishProgress.style.display = "block";
+            bindingPublishProgress.textContent = publishGateBlockedCopy(
+              window.GranetePreflightReview ? window.GranetePreflightReview.publicationGate() : null
+            );
+          } else if (!publishInFlight && lastPublishOutcome === null) {
             bindingPublishProgress.style.display = "none";
             bindingPublishProgress.textContent = "";
           }
+        }
+
+        // #466: a preflight state change (e.g. a new authoritative blocked
+        // verdict) re-evaluates the publish gate with the last binding
+        // status — the server keeps being the authority for every other
+        // precondition.
+        if (window.GraneteState) {
+          window.GraneteState.subscribe(function (slice) {
+            if (slice === "preflight" && modelBindingState.status) {
+              renderPublishAvailability(modelBindingState.status);
+            }
+          });
         }
 
         function renderPublishProgress(payload) {
@@ -5203,6 +5293,10 @@
         if (bindingPublishBtn) {
           bindingPublishBtn.addEventListener("click", function () {
             if (publishInFlight) return;
+            // #466 design-wide gate: the disabled state is UX — the handler
+            // re-checks the Ruby projection fail-closed before reaching the
+            // host (the Ruby publish callback enforces the same gate again).
+            if (window.GranetePreflightReview && window.GranetePreflightReview.publishBlocked()) return;
             lastPublishOutcome = null;
             renderPublishProgress({ step: "validating" });
             if (window.sketchup && window.sketchup.publish_design_revision) {
@@ -5621,5 +5715,6 @@
     <script src="js/granete-bridge.js"></script>
     <script src="js/granete-mutation.js"></script>
     <script src="js/granete-manufacturing.js"></script>
+    <script src="js/granete-preflight-review.js"></script>
   </body>
 </html>

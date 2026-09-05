@@ -1,16 +1,22 @@
-# Feature activa: F213 (#468 / SU-AUTH-2) — Interactive HardwarePlacement editing and smart hardware substitution
+# Feature activa: F214 (#466 / SU-UX-1) — Authoritative preflight review with viewport problem navigation
 
-- Actualizado: 2026-09-04 14:02 America/Mexico_City
-- Feature: F213 — `[P0][SU-AUTH-2] Interactive HardwarePlacement editing and smart hardware substitution`
-- Rama: `feat/468-interactive-hardware-placement-editing`
+- Actualizado: 2026-09-05 08:15 America/Mexico_City
+- Feature: F214 — `[P0][SU-UX-1] Authoritative preflight review with viewport problem navigation`
+- Rama: `feat/466-authoritative-preflight-review`
 - Estado: `completed`
 - Logros:
-  1. `CommandContract` extendido con mutaciones canónicas `update_hardware_placement` y `substitute_hardware`.
-  2. `CapabilityPolicy` restringe edición (`canMove`, `canReplaceDefinition`) exclusivamente a placements `manual`; placements `derived` bloqueados con `HARDWARE_DERIVED_EDIT`.
-  3. `HostMutationBridge` / `DialogController` orquesta mutaciones a través del `AuthoringMutationCoordinator` (#498), garantizando operaciones atómicas de SketchUp, preservación de `hardwarePlacementId` exacto y restauración semántica de selección.
-  4. Backend Go engine (`authoring_machining.go`, `authoring_resolve.go`) implementa validación de límites de offset y detección de colisiones de agujeros (`detectHoleCollisions`), emitiendo `DRILLING_CONFLICT` y `HARDWARE_PLACEMENT_INVALID` autoritativos con aislamiento completo de mecanizado de entrepaños.
-  5. UI en `dialog.html` y `granete-mutation.js`: inspector contextual de herrajes (`#hw-placement-card`) con edición precisa en mm, selector de sustitución clasificado (`[Compatible]`, `[Incompatible]`), y banner reactivo `#hw-conflict-banner` ante `DRILLING_CONFLICT`.
-  6. Suite de verificación completa: tests unitarios Ruby (11 tests / 74 assertions), tests unitarios JS (9 suites / 148 tests), tests Go (`internal/domain/engine`), TestUp real-host smoke suite (`TC_HardwareAuthoringSmoke.rb`), y typecheck / openapi check / pnpm test monorepo en verde.
+  1. `PreflightReview`: proyección pura del subset de preflight autoritativo del backend (`ready|warning|blocked|stale|unavailable`), agrupación semántica por categorías, títulos y copy de remediación accionable en español (`PreflightReviewCopy`).
+  2. `Overlay::IssueNavigation`: navegación en el viewport resolviendo identidades semánticas exactas (`hp-hinge-01`, `side-left-01`) mediante `EntityLocator`, encuadre de cámara (`view.zoom`) sin abrir operaciones de SketchUp (zero productive mutation invariant), y fallback honesto al mueble dueño si el hijo fue regenerado y el localizador está desactualizado.
+  3. `Host::PreflightReviewSession`: coordinación desacoplada de preflight que reutiliza `InspectionResolver` (#470 / #477) y registra estados en el `PreflightTracker` (#498) con correlación de fingerprint obligatoria.
+  4. `CommandContract` & `DialogController` (`PreflightReviewBridge`): comandos `run` y `navigate_issue` sobre el canal tipado `preflight_command`, y emisión de eventos `onPreflightState`.
+  5. UI en `dialog.html` y `granete-preflight-review.js`: panel contextual `Revisión de fabricación` con badge de estado, resumen, lista de problemas agrupados, botones de acción contextuales (`Ir al origen`, `Editar herraje`, `Seleccionar pieza`, `Seleccionar mueble`) y compuerta de publicación fail-closed.
+  6. **Cierre final — design-wide publish gate**: `Host::PublicationPreflightGate` compone el alcance canónico de publicación de #392 (el MISMO `DesignPublish::ManifestBuilder` que el publisher manifiesta; jamás el tracker, la selección ni nombres) con los estados autoritativos del `PreflightTracker`. Publicar exige que TODOS los `FurnitureInstance` del scope tengan resultado autoritativo actual `ready|warning`; `blocked|stale|unavailable|sin entry` bloquean; entries fuera del scope se ignoran; los aliases `furnitureInstanceId`/`furnitureInstanceRef` de una misma unidad no duplican conteo (`record_furniture!` supersede aliases hermanos; las keys hijo de #470 no son verdad a nivel mueble); sin scope computable el gate falla cerrado. La proyección viaja en `preflight_state.publicationGate` (JS nunca reconstruye el scope), el callback Ruby `publish_design_revision` la aplica fail-closed (`preflight_incomplete`) y la UX explica pendientes con denominador del scope canónico ("N muebles · V verificados · P pendientes").
+  7. Suite de verificación completa: tests unitarios Ruby (`host_preflight_review_test.rb`, `dialog_preflight_review_test.rb` con wiring del gate + callback, `publication_preflight_gate_test.rb` con casos 1–6, aliases y fail-closed, `overlay_issue_navigation_test.rb`), suites Node en JS (`preflight_review_test.js` 13 pruebas, `dialog_publish_test.js` 15 pruebas con gate end-to-end sobre el dialog.html real), suite real-host TestUp (`TC_PreflightReviewSmoke.rb`) re-ejecutada en SketchUp 2026 real contra el RBZ final, con evidencia sanitizada (`progress/host_smoke_559_testup_ci.json`: 5/5 tests, 31 assertions, 0 failures, sin paths privados, RBZ SHA-256 `1981f97f…`), RuboCop en verde (157 archivos, 0 ofensas), y `rake verify` limpio.
+
+## Historial previo — F213 (#468 / SU-AUTH-2)
+
+- #468 implementada y verificada:
+  Interactive HardwarePlacement editing and smart hardware substitution.
 
 ## Historial previo — #498 (SU-HOST-1)
 

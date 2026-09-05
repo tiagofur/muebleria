@@ -56,7 +56,9 @@ class SelectionContextTest < Minitest::Test
     assert context.capabilities.supported?('canEditParameters')
     assert context.capabilities.supported?('canDelete')
     refute context.capabilities.supported?('canDuplicate')
-    refute context.capabilities.supported?('canReviewPreflight')
+    # #466: the preflight review is available for managed furniture with a
+    # resolvable definition — it runs the AUTHORITATIVE resolve.
+    assert context.capabilities.supported?('canReviewPreflight')
   end
 
   # NEGATIVE PROOF: no ID namespace may collapse into another. Every key

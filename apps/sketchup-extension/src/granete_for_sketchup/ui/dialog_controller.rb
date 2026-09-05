@@ -106,6 +106,9 @@ module Granete
 
         def handle_get_model_binding(dialog)
           execute_bridge(dialog, 'onModelBindingStatus', model_binding_connector.status)
+          # A binding change changes the #392 publication scope: refresh the
+          # design-wide publish gate projection with it (#466).
+          push_preflight_state(dialog)
         rescue StandardError => e
           @logger.error('model_binding_status_failed', error: e)
           execute_bridge(dialog, 'onModelBindingStatus', { 'state' => 'invalid', 'reason' => e.message })
@@ -341,11 +344,25 @@ module Granete
         # with model/manifest/preview artifacts. The dialog never builds
         # business payloads — the publisher owns the sequence, reuses the
         # #391 precheck, and reports honest progress steps.
+        #
+        # #466 design-wide gate: publication requires EVERY managed
+        # FurnitureInstance of the canonical #392 publication scope to hold
+        # a current authoritative ready/warning. Enforced here (fail
+        # closed, scope composed Ruby-side) so the disabled button is UX,
+        # never the only barrier.
         def handle_publish_design_revision(dialog)
           unless @design_publisher
             execute_bridge(dialog, 'onPublishResult',
                            { 'ok' => false, 'code' => 'publisher_unavailable',
                              'reason' => 'la publicación de diseños no está disponible' })
+            return
+          end
+
+          gate = publication_gate_projection
+          if gate.nil? || gate['allowed'] != true
+            execute_bridge(dialog, 'onPublishResult',
+                           { 'ok' => false, 'code' => 'preflight_incomplete',
+                             'reason' => publish_gate_reason(gate) })
             return
           end
 
@@ -363,6 +380,21 @@ module Granete
         end
 
         private
+
+        # Honest Spanish reason for a blocked publication gate, in the same
+        # priority the dialog renders (blocked > stale > unavailable >
+        # unverified).
+        def publish_gate_reason(gate)
+          scope_unknown = 'no se pudo confirmar el alcance de publicación del diseño'
+          return scope_unknown if gate.nil? || !gate['scopeAvailable']
+          return 'hay muebles con problemas de fabricación' if gate['blocked'].to_i.positive?
+          return 'la revisión de fabricación quedó desactualizada' if gate['stale'].to_i.positive?
+          if gate['unavailable'].to_i.positive?
+            return 'no se pudo confirmar el estado de fabricación de todos los muebles'
+          end
+
+          "faltan verificar #{gate['pending']} de #{gate['total']} muebles del diseño"
+        end
 
         def project_furniture_placer
           @project_furniture_placer
@@ -803,10 +835,18 @@ module Granete
         def push_mutation_outcome(dialog, outcome, in_reply_to:)
           execute_bridge(dialog, 'onMutationState', outcome.to_envelope(in_reply_to: in_reply_to))
           if outcome.committed? && mutation_coordinator.preflight_tracker
-            key = Host::CommandContract.semantic_target_key(outcome.semantic_target)
+            # #466: the post-mutation invalidation push carries entries AND
+            # the review of the owning furniture, so the review panel shows
+            # the honest stale state instead of the pre-mutation verdict.
+            scope = Host::CommandContract.furniture_scope(outcome.semantic_target)
+            review = preflight_review_session.reviews[
+              Host::CommandContract.semantic_target_key(scope)
+            ]
             execute_bridge(dialog, 'onPreflightState',
                            Host::CommandContract.preflight_state_envelope(
-                             mutation_coordinator.preflight_tracker.payload_for(key)
+                             mutation_coordinator.preflight_tracker.payload,
+                             review: review && preflight_review_session.payload_for(scope),
+                             publication_gate: publication_gate_projection
                            ))
           end
           # #470: a manufacturing-affecting mutation refreshes the overlay
@@ -1320,6 +1360,94 @@ module Granete
         end
       end
 
+      # #466 / SU-UX-1 authoritative preflight review bridge: `Verificar
+      # fabricación` runs the SAME #477 authoring resolve as the mutation and
+      # inspection flows (never a local validation), projects the resolve's
+      # preflight subset into a review (grouped issues, Spanish remediation)
+      # and navigates each issue to its exact managed context in the
+      # viewport. Commands arrive through the versioned preflight_command
+      # channel; state leaves through preflight_state envelopes (entries +
+      # review). Read-only: no coordinator, no SketchUp operation, no
+      # metadata write. Orchestration lives in Host::PreflightReviewSession.
+      module PreflightReviewBridge
+        def handle_preflight_review(dialog, payload_json)
+          envelope = Host::CommandContract.parse_preflight_command!(payload_json)
+          case envelope['command']
+          when 'run'
+            preflight_review_session.run(review_scope(envelope), message_id: envelope['messageId'])
+          when 'navigate_issue'
+            preflight_review_session.navigate(review_scope(envelope),
+                                              issue_id: envelope['payload']['issueId'],
+                                              target: envelope['payload']['target'])
+          end
+          push_preflight_state(dialog, review_scope(envelope))
+        rescue Host::CommandContract::ContractError => e
+          @logger.error('preflight_review_contract_rejected', error: e)
+          push_preflight_state(dialog)
+        rescue StandardError => e
+          @logger.error('preflight_review_failed', error: e)
+          push_preflight_state(dialog)
+        end
+
+        # Pushes tracker entries plus the review of the scope (or the most
+        # recent one) with its honest effective status, and the design-wide
+        # publication gate projection (#466) composed Ruby-side — JS never
+        # rebuilds the #392 publication scope.
+        def push_preflight_state(dialog, scope_or_key = nil)
+          return unless dialog&.visible?
+
+          session = preflight_review_session
+          payload = scope_or_key && session.payload_for(scope_or_key)
+          payload ||= session.reviews.values.last&.then do |review|
+            session.payload_for(review.target_key)
+          end
+          execute_bridge(dialog, 'onPreflightState',
+                         Host::CommandContract.preflight_state_envelope(
+                           mutation_coordinator.preflight_tracker.payload,
+                           review: payload,
+                           publication_gate: publication_gate_projection
+                         ))
+        rescue StandardError => e
+          @logger.error('preflight_state_push_failed', error: e)
+        end
+
+        private
+
+        # Design-wide publish gate projection (#466). nil when no gate is
+        # wired or its evaluation fails — the dialog then stays fail-closed.
+        def publication_gate_projection
+          return nil unless @publication_gate
+
+          @publication_gate.projection
+        rescue StandardError => e
+          @logger.error('publication_gate_projection_failed', error: e)
+          nil
+        end
+
+        # Lazy shared session: same resolver/locator seams as #470, one
+        # tracker, one review store per dialog controller.
+        def preflight_review_session
+          @preflight_review_session ||= Host::PreflightReviewSession.new(
+            tracker: mutation_coordinator.preflight_tracker,
+            resolver: Overlay::InspectionResolver.new(
+              catalog_provider: @catalog_provider,
+              metadata_store_factory: @metadata_store_factory,
+              logger: @logger
+            ),
+            locator: Overlay::EntityLocator.new(
+              metadata_store_factory: @metadata_store_factory,
+              model_provider: method(:active_model)
+            ),
+            model_provider: method(:active_model),
+            logger: @logger
+          )
+        end
+
+        def review_scope(envelope)
+          Host::CommandContract.furniture_scope(envelope['semanticTarget'])
+        end
+      end
+
       # Migration review wiring (#416): bridges the scanner/migrator with
       # the review HtmlDialog. Included by DialogController so the migration
       # flow reuses the same catalog provider, metadata store factory and
@@ -1392,6 +1520,7 @@ module Granete
         include InspectorBridge
         include ObserverBridge
         include ManufacturingInspectionBridge
+        include PreflightReviewBridge
         include MigrationBridge
 
         attr_reader :selection_observer, :entities_observer, :duplicate_resolver
@@ -1407,7 +1536,8 @@ module Granete
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
                        migration_review_controller: nil, model_binding_connector: nil,
                        project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil,
-                       design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil)
+                       design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil,
+                       publication_gate: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -1418,6 +1548,7 @@ module Granete
           @design_publisher = design_publisher
           @mutation_coordinator = mutation_coordinator
           @manufacturing_overlay = manufacturing_overlay
+          @publication_gate = publication_gate
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store
@@ -1531,6 +1662,7 @@ module Granete
           dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
           dialog.add_action_callback('authoring_mutation') { |_c, p| handle_authoring_mutation(dialog, p) }
           dialog.add_action_callback('manufacturing_inspection') { |_c, p| handle_manufacturing_inspection(dialog, p) }
+          dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(p) }
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }

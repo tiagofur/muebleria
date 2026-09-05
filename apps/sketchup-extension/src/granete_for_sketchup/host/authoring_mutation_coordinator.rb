@@ -275,13 +275,16 @@ module Granete
 
           if resolve_kind_of(result) == 'generic_preview'
             # A generic preview carries no manufacturing truth at all.
-            @preflight_tracker.mark_unavailable!(command.target_key,
-                                                 message_id: request_context[:message_id])
+            @preflight_tracker.mark_unavailable_target!(command.semantic_target,
+                                                        message_id: request_context[:message_id])
           else
-            @preflight_tracker.invalidate!(command.target_key,
-                                           fingerprint: fingerprint_of(result),
-                                           catalog_revision: revision_of(result),
-                                           message_id: request_context[:message_id])
+            # #466: invalidation rides the semantic target (canonical key +
+            # furniture-scoped alias) so the review stays coherent when the
+            # mutation addressed a child occurrence.
+            @preflight_tracker.invalidate_target!(command.semantic_target,
+                                                  fingerprint: fingerprint_of(result),
+                                                  catalog_revision: revision_of(result),
+                                                  message_id: request_context[:message_id])
           end
         rescue StandardError => e
           @logger&.warn('mutation_preflight_invalidation_failed', error: e)

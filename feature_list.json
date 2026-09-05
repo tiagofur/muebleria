@@ -5728,6 +5728,43 @@
       "depends_on": [
         "F212"
       ]
+    },
+    {
+      "id": "F214",
+      "title": "Authoritative preflight review with viewport problem navigation (#466 / SU-UX-1)",
+      "description": "Authoritative manufacturing preflight review and viewport problem navigation in SketchUp consuming the shared #498 runtime and #496 contract: structured review projection (ready, warning, blocked, stale, unavailable) with grouped categories and Spanish titles/remediation, viewport navigation by semantic identity to exact hardware and part instances with camera framing and owning-furniture fallback, fix-loop context actions (navigate, edit_hardware, select_part, edit_material, select_furniture), preflight invalidation on mutations, and publish gating preventing publication when manufacturing is blocked.",
+      "tags": [
+        "sketchup-extension",
+        "authoring",
+        "preflight",
+        "manufacturing",
+        "p0"
+      ],
+      "created": "2026-09-04",
+      "status": "done",
+      "completedAt": "2026-09-04",
+      "evidence": "Ruby unit suite (562 runs, 4021 assertions, 0 failures); Ruby boundary suite (6 runs, 2423 assertions, 0 failures); package build and verification clean (RBZ deterministic sha256); Node test harness test/js/preflight_review_test.js (9 suites passed) run via Minitest; real-host smoke suite TC_PreflightReviewSmoke.rb added covering blocked preflight review, publish gating, viewport problem navigation to hardware and board with zero mutation, complete rescue loop reaching ready via authoritative re-resolve, regenerated child fallback, and unavailable server mapping; RuboCop clean (155 files, 0 offenses).",
+      "acceptance": [
+        "Local parameter validation can never mark manufacturing ready",
+        "A server blocked result is shown as blocking and prevents publish/release actions when those surfaces exist",
+        "Every issue with a valid componentInstanceId navigates to that managed child or its current regenerated equivalent",
+        "Hardware/relationship issues navigate to their host context without using names as identity",
+        "remediation is visible and actionable in Spanish",
+        "Stale/unavailable/offline are not rendered as green/ready",
+        "Rebuild that changes child persistent_id does not permanently break issue navigation when Granete identity remains valid",
+        "Re-running preflight refreshes issue state without duplicating business logic in the client",
+        "Selection/highlight/navigation itself does not mutate authoring/manufacturing state",
+        "Real-host TestUp covers at least one board issue and one hardware/relationship issue"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/466",
+        "docs/architecture/sketchup-plugin-excellence.md",
+        "docs/architecture/sketchup-authoring-interaction-contract.md",
+        "docs/sketchup-manufacturing-contract.md"
+      ],
+      "depends_on": [
+        "F212"
+      ]
     }
   ]
 }
