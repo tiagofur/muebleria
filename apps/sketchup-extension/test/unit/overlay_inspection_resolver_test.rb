@@ -47,7 +47,7 @@ class OverlayInspectionResolverTest < Minitest::Test
     assert_equal 'rev-overlay-test', furniture['catalogRevision']
     assert_equal OverlayFixture::PARAMETERS, furniture['parameters']
     assert_equal 7, furniture['components'].length
-    assert furniture['components'].all? { |component| component.key?('componentInstanceId') }
+    assert(furniture['components'].all? { |component| component.key?('componentInstanceId') })
   end
 
   def test_derived_placements_are_never_echoed_as_manual_intent
@@ -85,5 +85,37 @@ class OverlayInspectionResolverTest < Minitest::Test
       @resolver.resolve(furniture_entity: @root, model: @model)
     end
     assert_match 'composición', error.message
+  end
+
+  def test_request_includes_relationships_from_metadata_when_present
+    stored_relationships = [
+      {
+        'relationshipId' => 'parameter-shelfCount-1',
+        'kind' => 'shelf-support',
+        'source' => { 'componentInstanceId' => 'shelf-01', 'role' => 'shelf-board' },
+        'targets' => [
+          { 'componentInstanceId' => 'side-left-01', 'role' => 'inside-face' },
+          { 'componentInstanceId' => 'side-right-01', 'role' => 'inside-face' }
+        ]
+      }
+    ]
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    existing = store.read(@root) || {}
+    existing['relationships'] = stored_relationships
+    store.write(@root, existing)
+
+    @resolver.resolve(furniture_entity: @root, model: @model)
+    furniture = @provider.requests.last['furniture']
+
+    assert_equal stored_relationships, furniture['relationships'],
+                 'inspection request must echo persisted relationships from metadata'
+  end
+
+  def test_request_omits_relationships_when_metadata_has_none
+    @resolver.resolve(furniture_entity: @root, model: @model)
+    furniture = @provider.requests.last['furniture']
+
+    refute furniture.key?('relationships'),
+           'inspection request must not include relationships key when metadata has none'
   end
 end

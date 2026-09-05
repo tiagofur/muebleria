@@ -29,9 +29,8 @@ module Granete
           ref = scope['furnitureInstanceRef']
           return nil unless ref
 
-          # rubocop:disable SketchupSuggestions/ModelEntities
+          # rubocop:disable-next SketchupSuggestions/ModelEntities
           model.entities.find { |entity| read_identity(entity)&.dig('instanceRef') == ref }
-          # rubocop:enable SketchupSuggestions/ModelEntities
         end
 
         def locate_child(root, child_id)

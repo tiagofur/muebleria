@@ -81,12 +81,11 @@ module OverlayFixture
   end
 
   def furniture_root(model)
-    # rubocop:disable SketchupSuggestions/ModelEntities
+    store = Granete::SketchUpExtension::Metadata::Store.new(model)
     model.entities.find do |entity|
       entity.respond_to?(:definition) &&
-        Granete::SketchUpExtension::Metadata::Store.new(model).read(entity)&.dig('identity', 'instanceRef') == FURNITURE_INSTANCE_ID
+        store.read(entity)&.dig('identity', 'instanceRef') == FURNITURE_INSTANCE_ID
     end
-    # rubocop:enable SketchupSuggestions/ModelEntities
   end
 
   # Catalog provider double for the InspectionResolver: serves the scenario
@@ -109,9 +108,7 @@ module OverlayFixture
     def resolved_native_layout(_definition_id, _parameters = {}, _choices = {})
       @resolved_layout_calls += 1
       layout = OverlayFixture.native_layout
-      unless @extra_hardware.empty?
-        layout.hardware.concat(@extra_hardware.map { |entry| build_placement(entry) })
-      end
+      layout.hardware.concat(@extra_hardware.map { |entry| build_placement(entry) }) unless @extra_hardware.empty?
       layout
     end
 

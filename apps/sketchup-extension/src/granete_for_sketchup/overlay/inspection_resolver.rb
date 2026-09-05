@@ -34,6 +34,7 @@ module Granete
 
           params = metadata&.dig('intent', 'parameters') || {}
           choices = metadata&.dig('intent', 'materialChoices') || {}
+          relationships = metadata.is_a?(Hash) ? metadata['relationships'] : nil
 
           base_layout = resolve_layout_for(definition, params, choices)
           if base_layout.nil?
@@ -46,7 +47,7 @@ module Granete
           request = Library::AuthoringResolveRequest.build_request(
             message_id: identity[:message_id],
             idempotency_key: identity[:idempotency_key],
-            furniture: furniture_request(definition, params, choices, base_layout)
+            furniture: furniture_request(definition, params, choices, base_layout, relationships)
           )
 
           result = @catalog_provider.resolve_authoring(request)
@@ -68,8 +69,8 @@ module Granete
         # Mirrors the mutation request shape (#468): occurrence identities +
         # the manual hardware placement set echoed from the resolved layout;
         # derived placements are re-derived server-side and never sent.
-        def furniture_request(definition, params, choices, base_layout)
-          {
+        def furniture_request(definition, params, choices, base_layout, relationships = nil)
+          req = {
             'furnitureDefinitionId' => definition['furniture_definition_id'] || definition['id'],
             'catalogRevision' => catalog_revision,
             'parameters' => params,
@@ -94,6 +95,8 @@ module Granete
               }
             end.compact
           }
+          req['relationships'] = relationships if relationships.is_a?(Array) && !relationships.empty?
+          req
         end
 
         def catalog_revision

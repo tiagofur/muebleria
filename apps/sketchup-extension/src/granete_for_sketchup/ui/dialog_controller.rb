@@ -537,10 +537,11 @@ module Granete
 
         def apply_update_result(_host_context, entity, definition, params, choices, result)
           model = entity.respond_to?(:model) && entity.model ? entity.model : active_model
+          relationships = result.normalized_snapshot.is_a?(Hash) ? result.normalized_snapshot['relationships'] : nil
           outcome = furniture_builder_for(model).update_furniture(
             model, entity, definition, params,
             resolved_layout: result.layout, material_choices: choices,
-            transaction: false
+            transaction: false, relationships: relationships
           )
           return outcome if outcome['success'] == true
 
@@ -697,6 +698,10 @@ module Granete
           base_layout = resolve_layout_for(definition, params, choices)
           raise Library::AuthoringResolveError, 'No se pudo resolver el layout del mueble' if base_layout.nil?
 
+          store = @metadata_store_factory.call(active_model)
+          furniture_meta = store.read(entity)
+          relationships = furniture_meta.is_a?(Hash) ? furniture_meta['relationships'] : nil
+
           target_placement_id = target['hardwarePlacementId']
           hardware_placements = build_hardware_authoring_intents(base_layout, target_placement_id,
                                                                  new_offset, target_hardware_id)
@@ -723,6 +728,7 @@ module Granete
             'components' => components,
             'hardwarePlacements' => hardware_placements
           }
+          furniture_req['relationships'] = relationships if relationships.is_a?(Array) && !relationships.empty?
 
           req_payload = Library::AuthoringResolveRequest.build_request(
             message_id: ctx[:message_id] || "msg-#{SecureRandom.hex(4)}",
@@ -1167,6 +1173,7 @@ module Granete
       # leaves through manufacturing_state envelopes. The overlay itself is
       # view state only — no operation, no entity, no metadata write — and
       # its only machining truth is the accepted authoring resolve.
+      # rubocop:disable-next Metrics/ModuleLength
       module ManufacturingInspectionBridge
         # Lazy, injectable overlay manager: built on first inspection use so
         # sessions that never inspect pay nothing.

@@ -10,19 +10,19 @@ class OverlayBoundaryTest < Minitest::Test
 
   # Host mutation surfaces the overlay must never touch: turning inspection
   # ON/OFF must leave the productive model byte/semantically unchanged.
-  FORBIDDEN_OVERLAY_CALLS = %r{
+  FORBIDDEN_OVERLAY_CALLS = /
     start_operation|commit_operation|abort_operation|
     erase_entities|add_face|pushpull|add_instance|
     \.write\(|MetadataWriter|definition\.entities\.add
-  }x.freeze
+  /x
 
   # Scanning vocabulary: overlay geometry may never flow back into
   # manufacturing truth (#470 §41) — no extraction/inference functions may
   # even exist.
-  FORBIDDEN_SCANNING_PATTERNS = %r{
+  FORBIDDEN_SCANNING_PATTERNS = /
     machining_from|holes_from|from_faces|from_geometry|from_entity|
     infer_hole|scan_face|extract_.*machining|detect_.*hole
-  }x.freeze
+  /x
 
   def test_overlay_sources_never_mutate_the_host_model
     each_overlay_source do |path, source|
@@ -41,7 +41,7 @@ class OverlayBoundaryTest < Minitest::Test
   def test_overlay_feature_sources_come_only_from_the_resolve_contract
     source = File.read(File.join(OVERLAY_DIR, 'manufacturing_feature_view.rb'))
     assert_includes source, 'from_operations'
-    refute_match(/AuthoringMachiningOperation\.new/, source.sub(/Factory/, ''),
+    refute_match(/AuthoringMachiningOperation\.new/, source.sub('Factory', ''),
                  'the view factory only consumes parsed contract operations')
   end
 

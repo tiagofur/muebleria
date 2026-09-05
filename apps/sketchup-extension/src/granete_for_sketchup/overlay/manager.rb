@@ -19,12 +19,13 @@ module Granete
       #   - after a manufacturing-affecting mutation of the scoped furniture
       #     the overlay refreshes from the new accepted fingerprint or shows
       #     STALE — never the old truth as current.
+      # rubocop:disable-next Metrics/ClassLength
       class Manager
         MODES = %w[off on].freeze
         STATUSES = %w[off current stale unavailable].freeze
         FILTERS = %w[all holes].freeze
 
-        attr_reader :mode, :scope, :active_feature_id, :filter, :unavailable_reason
+        attr_reader :mode, :scope, :active_feature_id, :filter, :unavailable_reason, :snapshot
 
         def initialize(resolver:, locator:, model_provider:, preflight_tracker:,
                        logger: nil, on_state_change: nil, on_viewport_selection: nil)
@@ -67,7 +68,7 @@ module Granete
           return 'stale' if @stale_reason
 
           tracker_entry = tracker_entry_for_scope
-          if tracker_entry && tracker_entry.fingerprint &&
+          if tracker_entry&.fingerprint &&
              tracker_entry.fingerprint != @snapshot.manufacturing_fingerprint
             return 'stale'
           end
@@ -139,6 +140,7 @@ module Granete
           notify_state_change
         end
 
+        # rubocop:disable-next Naming/AccessorMethodName
         def set_filter(filter)
           return unless FILTERS.include?(filter)
 
@@ -245,10 +247,6 @@ module Granete
           features
         end
 
-        def snapshot
-          @snapshot
-        end
-
         def feature_by_projected_id(visual_id)
           @snapshot&.feature_by_visual_id(visual_id)
         end
@@ -264,9 +262,11 @@ module Granete
             transforms = world_transforms_for(feature.host_component_instance_id)
             next nil unless board && transforms
 
-            FeatureProjector.project(feature, board: board,
-                                            part_transform: transforms[:part],
-                                            furniture_transform: transforms[:furniture])
+            FeatureProjector.project(
+              feature, board: board,
+                       part_transform: transforms[:part],
+                       furniture_transform: transforms[:furniture]
+            )
           end
         end
 
@@ -277,7 +277,7 @@ module Granete
             'staleReason' => @stale_reason,
             'unavailableReason' => @unavailable_reason,
             'filter' => @filter,
-            'scope' => @scope ? @scope.dup : nil,
+            'scope' => @scope&.dup,
             'fingerprint' => @snapshot&.manufacturing_fingerprint,
             'catalogRevision' => @snapshot&.catalog_revision,
             'messageId' => @snapshot&.message_id,
@@ -332,7 +332,7 @@ module Granete
           root = cached ? cached[:root] : @locator.locate_furniture(@scope || {})
           return nil unless root.respond_to?(:transformation)
 
-          part = if cached && cached[:part]&.respond_to?(:transformation)
+          part = if cached && cached[:part].respond_to?(:transformation)
                    cached[:part]
                  else
                    located = @locator.locate_child(root, component_instance_id)

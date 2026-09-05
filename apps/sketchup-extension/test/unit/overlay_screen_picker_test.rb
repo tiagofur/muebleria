@@ -63,7 +63,7 @@ class OverlayScreenPickerTest < Minitest::Test
   end
 
   def test_marker_behind_the_camera_is_not_pickable
-    view = FakeView.new(->(_point) { nil })
+    view = FakeView.new(->(_point) {})
     features = [marker(visual_id: 'a', center: Geom::Point3d.new(1, 1, 1))]
     assert_nil Overlay::ScreenPicker.pick(10, 10, features, view)
   end

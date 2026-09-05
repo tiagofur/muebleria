@@ -45,9 +45,11 @@ class OverlayFeatureProjectorTest < Minitest::Test
   end
 
   def project(feature, board: board_side_left, furniture: Geom::Transformation.new)
-    Overlay::FeatureProjector.project(feature, board: board,
-                                      part_transform: part_transform(board),
-                                      furniture_transform: furniture)
+    Overlay::FeatureProjector.project(
+      feature, board: board,
+               part_transform: part_transform(board),
+               furniture_transform: furniture
+    )
   end
 
   def assert_mm_point(world_point, expected_mm, delta: 1e-6)

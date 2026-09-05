@@ -444,7 +444,7 @@ module Granete
         # replaced, only its definition's children are regenerated. Child
         # persistent_ids may change; Granete contract IDs are the durable link.
         def update_furniture(model, furniture, definition, raw_parameters = {}, resolved_layout: nil,
-                             material_choices: nil, transaction: true)
+                             material_choices: nil, transaction: true, relationships: nil)
           # Host-accurate native check: in SketchUp a Group ALSO responds to
           # #definition, so entity type — not duck typing — is the only safe
           # discriminator. Legacy Group representations fail closed: use the
@@ -477,7 +477,8 @@ module Granete
             purge_orphan_generated_definitions(model)
             MetadataWriter.write_furniture(
               @metadata_store, furniture, instance_id, definition, parameters,
-              material_choices: merged_material_choices, existing_metadata: existing_meta
+              material_choices: merged_material_choices, existing_metadata: existing_meta,
+              relationships: relationships
             )
             model.commit_operation if transaction
           rescue StandardError => e
@@ -736,7 +737,7 @@ module Granete
         # stored server identity through rebuilds with no flag.
         def write_furniture(store, furniture, instance_id, definition, parameters,
                             material_choices: nil, existing_metadata: nil, migrated_from: nil,
-                            identity: nil)
+                            identity: nil, relationships: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -747,6 +748,11 @@ module Granete
                                                             rev_ref, identity: identity)
           metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
           metadata_payload['provenance'] = representation_migration(migrated_from) if migrated_from
+          if relationships.is_a?(Array) && !relationships.empty?
+            metadata_payload['relationships'] = relationships
+          elsif metadata_payload.key?('relationships')
+            metadata_payload.delete('relationships')
+          end
           store.write(furniture, metadata_payload)
         end
 

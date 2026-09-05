@@ -93,6 +93,6 @@ class OverlayManufacturingFeatureViewTest < Minitest::Test
     # features from SketchUp entities (enforced by absence — see the
     # boundary test for the full-module scan).
     assert_equal 6, @result.operations.length
-    assert @result.operations.all? { |operation| operation.is_a?(Granete::SketchUpExtension::Library::AuthoringMachiningOperation) }
+    assert(@result.operations.all?(Granete::SketchUpExtension::Library::AuthoringMachiningOperation))
   end
 end

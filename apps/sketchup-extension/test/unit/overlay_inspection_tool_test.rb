@@ -12,7 +12,7 @@ class OverlayInspectionToolTest < Minitest::Test
   # Records every draw call; project() maps world→screen with an offset so
   # picking coordinates are derivable in tests.
   class DrawSpyView
-    attr_reader :draw_calls, :texts
+    attr_reader :draw_calls, :texts, :invalidations
 
     def initialize
       @draw_calls = []
@@ -23,8 +23,6 @@ class OverlayInspectionToolTest < Minitest::Test
     def invalidate
       @invalidations += 1
     end
-
-    attr_reader :invalidations
 
     def drawing_color=(_color); end
 
@@ -41,7 +39,7 @@ class OverlayInspectionToolTest < Minitest::Test
     end
 
     def project(point)
-      [point.x * 10 + 50, point.y * 10 + 40]
+      [(point.x * 10) + 50, (point.y * 10) + 40]
     end
   end
 

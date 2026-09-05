@@ -215,7 +215,7 @@ class DialogControllerTest < Minitest::Test
     end
 
     def update_furniture(model, _group, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil,
-                         transaction: true)
+                         transaction: true, relationships: nil)
       @update_layout = resolved_layout
       @material_choices = material_choices
       if transaction

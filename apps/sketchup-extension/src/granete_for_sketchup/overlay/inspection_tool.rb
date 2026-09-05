@@ -19,6 +19,7 @@ module Granete
       #
       # Colors mirror the dialog design tokens (dialog.html :root):
       #   brand-500 / warning-700 / danger-600 / neutral-700.
+      # rubocop:disable-next SketchupSuggestions/ToolInvalidate
       class InspectionTool
         COLOR_NORMAL = [77, 67, 193].freeze      # --brand-500 hsl(245 58% 51%)
         COLOR_ACTIVE = [147, 64, 16].freeze      # --warning-700 hsl(38 80% 32%)
@@ -40,6 +41,7 @@ module Granete
         end
 
         # Keeps markers visible when the camera frustum excludes them.
+        # rubocop:disable-next Naming/MethodName
         def getExtents
           return unless defined?(Geom::BoundingBox)
 
@@ -61,6 +63,7 @@ module Granete
           draw_stale_banner(view) if stale && @manager.mode_on?
         end
 
+        # rubocop:disable-next Naming/PredicateMethod, Naming/MethodParameterName
         def onLButtonDown(_flags, x, y, view)
           feature = ScreenPicker.pick(x, y, @manager.projected_features, view)
           if feature
@@ -122,12 +125,13 @@ module Granete
                          size: LABEL_SIZE, color: color_for(view, COLOR_STALE), bold: true)
         end
 
+        # rubocop:disable-next Naming/MethodParameterName
         def select_under_cursor(x, y, view)
           return unless view.respond_to?(:pickhelper)
 
           ph = view.pickhelper(x, y)
           picked = ph.best_path if ph.respond_to?(:best_path)
-          entity = picked && picked.last
+          entity = picked&.last
           @manager.on_viewport_selection(entity) if entity
         rescue StandardError
           nil

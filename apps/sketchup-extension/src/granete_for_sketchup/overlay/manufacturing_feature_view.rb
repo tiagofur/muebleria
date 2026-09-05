@@ -32,6 +32,7 @@ module Granete
                     :face, :face_label, :x_mm, :y_mm, :diameter_mm, :depth_mm,
                     :hole_type, :type_label, :provenance, :conflict_issue
 
+        # rubocop:disable-next Metrics/ParameterLists
         def initialize(visual_id:, operation_id:, kind:, host_component_instance_id:,
                        face:, x_mm:, y_mm:, diameter_mm:, depth_mm:, hole_type:,
                        provenance:, conflict_issue: nil)

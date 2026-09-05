@@ -68,7 +68,7 @@ class OverlayManagerTest < Minitest::Test
     mm = 1.0 / 25.4
     markers.each do |marker|
       assert_in_delta 18.0, marker.center.x / mm, 1e-3
-      assert(marker.center.y / mm >= 0.0 && marker.center.y / mm <= 560.0,
+      assert((marker.center.y / mm).between?(0.0, 560.0),
              'hole must project inside the side panel depth span')
     end
   end
@@ -150,7 +150,7 @@ class OverlayManagerTest < Minitest::Test
 
   def test_tracker_fingerprint_mismatch_is_stale_even_without_a_signal
     manager.enable(scope)
-    other = 'sha256-' + ('f' * 64)
+    other = "sha256-#{'f' * 64}"
     tracker.invalidate!(Host::CommandContract.semantic_target_key(scope.except('componentInstanceId')),
                         fingerprint: other)
 

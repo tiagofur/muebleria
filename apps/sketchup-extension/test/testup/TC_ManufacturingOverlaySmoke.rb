@@ -154,7 +154,7 @@ module Granete
         assert_equal 'hardware', result['kind']
         assert_equal 'hp-hinge-01', result['id']
         assert_equal 'hp-hinge-01', metadata_store.read(model.selection.first)
-                                           .dig('identity', 'hardwarePlacementId')
+                                                  .dig('identity', 'hardwarePlacementId')
 
         shelf = manager.snapshot.features.find do |feature|
           feature.source_kind == 'relationship' && feature.host_component_instance_id == 'shelf-01'
@@ -163,7 +163,7 @@ module Granete
         assert_equal 'part', result['kind']
         assert_equal 'shelf-01', result['id']
         assert_equal 'shelf-01', metadata_store.read(model.selection.first)
-                                             .dig('identity', 'componentInstanceId')
+                                               .dig('identity', 'componentInstanceId')
       ensure
         manager&.disable
       end
@@ -240,6 +240,21 @@ module Granete
 
         def resolve_authoring(request_payload)
           @requests << request_payload
+          assert_includes request_payload['furniture'].keys, 'components',
+                          'authoring resolve must carry component identities'
+          assert_includes request_payload['furniture'].keys, 'hardwarePlacements',
+                          'authoring resolve must carry hardware placements'
+          # Relationships from metadata must be echoed when present (DT-1 #470 contract).
+          furniture = request_payload['furniture']
+          if furniture['relationships']
+            assert furniture['relationships'].is_a?(Array), 'relationships must be an array'
+            furniture['relationships'].each do |rel|
+              assert rel.key?('relationshipId'), 'each relationship must have a relationshipId'
+              assert rel.key?('kind'), 'each relationship must have a kind'
+              assert rel.key?('source'), 'each relationship must have a source'
+              assert rel.key?('targets'), 'each relationship must have targets'
+            end
+          end
           body = JSON.parse(JSON.generate(@scenario_body))
           body['responseMessageId'] = "resolve-#{request_payload['messageId']}"
           body['inReplyToMessageId'] = request_payload['messageId']
@@ -287,12 +302,10 @@ module Granete
       end
 
       def granete_furniture_instances
-        # rubocop:disable SketchupSuggestions/ModelEntities
         model.entities.grep(Sketchup::ComponentInstance).select do |entity|
           name = entity.definition.name.to_s
           name.start_with?('Granete · Mueble · ')
         end
-        # rubocop:enable SketchupSuggestions/ModelEntities
       end
 
       def cleanup_granete_entities

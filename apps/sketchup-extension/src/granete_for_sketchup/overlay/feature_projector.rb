@@ -26,7 +26,7 @@ module Granete
         MM_TO_INCHES = 1.0 / 25.4
 
         FACE_GEOMETRY = {
-          'front' => { 'center' => ->(w, t, l, x, y) { [x, t, y] },
+          'front' => { 'center' => ->(_w, t, _l, x, y) { [x, t, y] },
                        'normal' => [0, 1, 0], 'u' => [1, 0, 0], 'v' => [0, 0, 1] },
           'back' => { 'center' => ->(_w, _t, _l, x, y) { [x, 0, y] },
                       'normal' => [0, -1, 0], 'u' => [1, 0, 0], 'v' => [0, 0, 1] },
@@ -34,13 +34,13 @@ module Granete
                       'normal' => [-1, 0, 0], 'u' => [0, 1, 0], 'v' => [0, 0, 1] },
           'right' => { 'center' => ->(w, _t, _l, x, y) { [w, x, y] },
                        'normal' => [1, 0, 0], 'u' => [0, 1, 0], 'v' => [0, 0, 1] },
-          'top' => { 'center' => ->(w, _t, l, x, y) { [x, y, l] },
+          'top' => { 'center' => ->(_w, _t, l, x, y) { [x, y, l] },
                      'normal' => [0, 0, 1], 'u' => [1, 0, 0], 'v' => [0, 1, 0] },
           'bottom' => { 'center' => ->(_w, _t, _l, x, y) { [x, y, 0] },
                         'normal' => [0, 0, -1], 'u' => [1, 0, 0], 'v' => [0, 1, 0] }
         }.freeze
 
-        RingSegmentCount = 24
+        RING_SEGMENT_COUNT = 24
 
         # One projected marker, expressed entirely in world POINTS (inches):
         # no vector-transform ambiguity, no host entities.
@@ -81,24 +81,10 @@ module Granete
           radius_mm = feature.diameter_mm / 2.0
           u = entry['u']
           v = entry['v']
-          inward_mm = entry['normal'].map { |component| -component }
+          inward_mm = entry['normal'].map(&:-@)
 
-          ring_mm = Array.new(RingSegmentCount) do |i|
-            angle = (2 * Math::PI * i) / RingSegmentCount
-            along_u = radius_mm * Math.cos(angle)
-            along_v = radius_mm * Math.sin(angle)
-            [
-              local_center_mm[0] + (along_u * u[0]) + (along_v * v[0]),
-              local_center_mm[1] + (along_u * u[1]) + (along_v * v[1]),
-              local_center_mm[2] + (along_u * u[2]) + (along_v * v[2])
-            ]
-          end
-          depth_mm = feature.depth_mm
-          depth_end_mm = [
-            local_center_mm[0] + (depth_mm * inward_mm[0]),
-            local_center_mm[1] + (depth_mm * inward_mm[1]),
-            local_center_mm[2] + (depth_mm * inward_mm[2])
-          ]
+          ring_mm = build_ring_mm(local_center_mm, radius_mm, u, v)
+          depth_end_mm = build_depth_end_mm(local_center_mm, feature.depth_mm, inward_mm)
 
           world = furniture_transform * part_transform
           ProjectedFeature.new(
@@ -109,6 +95,27 @@ module Granete
             radius_in: radius_mm * MM_TO_INCHES,
             conflict: feature.conflict?
           )
+        end
+
+        def build_ring_mm(center_mm, radius_mm, u_vec, v_vec)
+          Array.new(RING_SEGMENT_COUNT) do |i|
+            angle = (2 * Math::PI * i) / RING_SEGMENT_COUNT
+            along_u = radius_mm * Math.cos(angle)
+            along_v = radius_mm * Math.sin(angle)
+            [
+              center_mm[0] + (along_u * u_vec[0]) + (along_v * v_vec[0]),
+              center_mm[1] + (along_u * u_vec[1]) + (along_v * v_vec[1]),
+              center_mm[2] + (along_u * u_vec[2]) + (along_v * v_vec[2])
+            ]
+          end
+        end
+
+        def build_depth_end_mm(center_mm, depth_mm, inward_mm)
+          [
+            center_mm[0] + (depth_mm * inward_mm[0]),
+            center_mm[1] + (depth_mm * inward_mm[1]),
+            center_mm[2] + (depth_mm * inward_mm[2])
+          ]
         end
 
         def mm_to_inches(point_mm)

@@ -27,8 +27,6 @@ module Granete
             navigate_hardware_placement(feature, snapshot)
           when 'relationship'
             navigate_relationship(feature, snapshot)
-          else
-            nil
           end
         end
 
