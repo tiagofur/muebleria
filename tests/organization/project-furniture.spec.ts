@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { APIWorkspaceRepository, GraneteApiClient, type Project } from '@granete/storage';
+import type { Project } from '@granete/domain';
+import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import {
   GATE_MODULE_A_ID,
   required,
