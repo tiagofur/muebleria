@@ -768,6 +768,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -1716,6 +1720,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -2702,6 +2710,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -2751,6 +2763,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -4519,6 +4535,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -5422,6 +5442,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -6438,6 +6462,97 @@
       }
     },
     {
+      "id": "neg-shelf-out-of-range",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-8588028751d3",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  18,
+                  18,
+                  5000
+                ]
+              }
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222"
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-8588028751d3",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "TRANSFORM_INVALID",
+            "message": "occurrence shelf-01 translation on height (5000 mm) is outside the furniture envelope (0–720 mm)",
+            "severity": "error",
+            "entityId": "shelf-01",
+            "path": "furniture.components[5].transform.translationMm",
+            "remediation": "Author the position inside the furniture envelope; Granete owns position validity."
+          }
+        ]
+      }
+    },
+    {
       "id": "09-empty-manual-placement-set",
       "request": {
         "coordinateSystem": {
@@ -6910,6 +7025,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -7827,6 +7946,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -8733,6 +8856,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -9647,6 +9774,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -10505,6 +10636,10 @@
                 "lengthMm": 614,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -10554,6 +10689,10 @@
                 "lengthMm": 614,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -10603,6 +10742,10 @@
                 "lengthMm": 614,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -12051,6 +12194,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -12870,6 +13017,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -13744,6 +13895,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -14979,6 +15134,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },
@@ -15909,6 +16068,10 @@
                 "lengthMm": 564,
                 "widthMm": 542,
                 "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
                 "optionRole": "INTERIOR",
                 "materialColorHex": "#d4c4a8"
               },

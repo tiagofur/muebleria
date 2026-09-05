@@ -40,7 +40,8 @@ class DialogComponentAuthoringTest < Minitest::Test
   # machining follows every shelf occurrence (auto-materialized like the
   # server does when the authored echo carries no relationship for a copy).
   class ComponentAuthoringCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider
-    attr_accessor :last_authoring_request, :last_authoring_result, :authoring_rejection
+    attr_accessor :last_authoring_request, :last_authoring_result, :authoring_rejection,
+                  :rename_proposed_ids
 
     def last_source
       'local'
@@ -64,6 +65,19 @@ class DialogComponentAuthoringTest < Minitest::Test
       if authoring_rejection
         code, message = authoring_rejection
         return rejected_result(request_payload, code, message)
+      end
+
+      # Server-side position range authority (#467): the envelope belongs to
+      # Granete, never to the plugin.
+      out_of_range = (furniture['components'] || []).any? do |c|
+        t = c['transform'] && c['transform']['translationMm']
+        t.is_a?(Array) && t.length == 3 &&
+          (t[0].negative? || t[0] > 600 || t[1].negative? || t[1] > 560 ||
+           t[2].negative? || t[2] > 720)
+      end
+      if out_of_range
+        return rejected_result(request_payload, 'TRANSFORM_INVALID',
+                               'la posición queda fuera del mueble (0-720 mm de alto)')
       end
 
       ids = components.map { |component| component['componentInstanceId'] }
@@ -129,6 +143,7 @@ class DialogComponentAuthoringTest < Minitest::Test
       { 'componentInstanceId' => 'shelf-01', 'componentDefinitionId' => 'mod-comp-shelf',
         'catalogComponentId' => 'comp-shelf', 'slotId' => 'interno',
         'name' => 'Entrepaño', 'role' => 'INTERIOR',
+        'authoringCapability' => { 'movable' => true, 'axis' => 'z' },
         'transform' => { 'translationMm' => [18, 18, 150] }, 'dimensionsMm' => [542, 18, 564],
         'localTransform' => { 'translationMm' => [18, 18, 150], 'basis' => IDENTITY_BASIS },
         'widthMm' => 542, 'thicknessMm' => 18, 'lengthMm' => 564 }
@@ -175,11 +190,23 @@ class DialogComponentAuthoringTest < Minitest::Test
       )
     end
 
-    def accepted_result(request_payload, furniture, components, shelf_occurrences)
+    def accepted_result(request_payload, furniture, components, _shelf_occurrences)
       authored_rels = furniture['relationships'] || []
-      relationships = effective_relationships(authored_rels, shelf_occurrences)
+      # Optional server-settled identity: with rename_proposed_ids the echo
+      # settles a DIFFERENT id than the client proposal, proving the host is
+      # driven by the ACCEPTED identity (design-A robustness proof).
+      rename = lambda do |id|
+        rename_proposed_ids && id.start_with?('ci-') ? 'shelf-accepted-01' : id
+      end
+      accepted_components = components.map do |component|
+        component.merge('componentInstanceId' => rename.call(component['componentInstanceId']))
+      end
+      accepted_shelves = accepted_components.select do |component|
+        component['componentDefinitionId'] == 'mod-comp-shelf'
+      end
+      relationships = effective_relationships(authored_rels, accepted_shelves)
 
-      snapshot_components = components.map do |component|
+      snapshot_components = accepted_components.map do |component|
         base = BASE_BOARDS.find { |board| board['componentInstanceId'] == component['componentInstanceId'] }
         entry = {
           'componentInstanceId' => component['componentInstanceId'],
@@ -191,7 +218,7 @@ class DialogComponentAuthoringTest < Minitest::Test
         entry
       end
 
-      layout_boards = components.map do |component|
+      layout_boards = accepted_components.map do |component|
         board_for(component, BASE_BOARDS.find do |b|
           b['componentInstanceId'] == component['componentInstanceId']
         end)
@@ -212,7 +239,7 @@ class DialogComponentAuthoringTest < Minitest::Test
       end
 
       source_z = lambda do |relationship|
-        source = components.find do |component|
+        source = accepted_components.find do |component|
           component['componentInstanceId'] == relationship.dig('source', 'componentInstanceId')
         end
         z = source && source['transform'] ? source['transform']['translationMm'][2] : 150
@@ -272,7 +299,7 @@ class DialogComponentAuthoringTest < Minitest::Test
         'catalogRevision' => 'rev-component-authoring-1',
         'issues' => [],
         'normalizedSnapshot' => {
-          'parameters' => { 'shelfCount' => shelf_occurrences.length }
+          'parameters' => { 'shelfCount' => accepted_shelves.length }
                                .merge(furniture['parameters'] || {}),
           'materialChoices' => furniture['materialChoices'] || {},
           'components' => snapshot_components,
@@ -430,6 +457,7 @@ class DialogComponentAuthoringTest < Minitest::Test
     assert_equal 'shelf-01', context.component_instance_id
     assert_equal 'mod-comp-shelf', context.component_definition_id
     assert_equal 'interno', context.component_placement
+    assert_equal({ 'movable' => true, 'axis' => 'z' }, context.authoring_capability)
     assert context.capabilities.supported?('canMoveWithinConstraint')
     assert context.capabilities.supported?('canDuplicate')
     assert context.capabilities.supported?('canAddRelated')
@@ -506,18 +534,35 @@ class DialogComponentAuthoringTest < Minitest::Test
     assert_equal children_before, child_ids(furniture), 'hierarchy must stay intact'
   end
 
-  def test_move_out_of_furniture_bounds_is_rejected_with_actionable_feedback
+  def test_move_out_of_furniture_bounds_is_rejected_by_the_server_not_locally
     furniture = place_canonical_cabinet('inst-range')
     children_before = child_ids(furniture)
     dialog = @controller.show
 
+    # The request LEAVES the plugin (no local envelope decision) and only the
+    # authoritative resolve rejects it with the canonical code + range.
     script = submit_component_command(dialog,
-                                      component_command('move_component', { 'translationMm' => [18, 18, 5000] }))
+                                      component_command('move_component', { 'translationMm' => [18, 18, 900] }))
     refute_nil script
     assert_includes script, '"outcome":"rejected"'
     assert_includes script, 'TRANSFORM_INVALID'
-    assert_includes script, 'queda fuera del mueble'
+    assert_includes script, 'fuera del mueble'
+    refute_nil @catalog.last_authoring_request,
+               'range validity is server authority: the request must leave the plugin'
     assert_equal children_before, child_ids(furniture)
+  end
+
+  def test_move_with_malformed_position_is_rejected_locally_as_transport_shape
+    place_canonical_cabinet('inst-shape')
+    dialog = @controller.show
+
+    script = submit_component_command(dialog,
+                                      component_command('move_component', { 'translationMm' => [18, 'x', 200] }))
+    refute_nil script
+    assert_includes script, '"outcome":"rejected"'
+    assert_includes script, 'TRANSFORM_INVALID'
+    assert_nil @catalog.last_authoring_request,
+               'malformed transport shape never reaches the server'
   end
 
   def test_add_second_shelf_shares_definition_with_distinct_identity
@@ -538,23 +583,33 @@ class DialogComponentAuthoringTest < Minitest::Test
     assert_equal 2, request['parameters']['shelfCount'],
                  'the quantity-bound parameter must stay consistent'
 
-    new_relationships = request['relationships'].select do |relationship|
-      relationship.dig('source', 'componentInstanceId') == shelves.last['componentInstanceId']
+    # The client NEVER authors relationship topology: no relationship for the
+    # new occurrence rides the request — the server materializes it.
+    proposed_new = (shelves.map { |c| c['componentInstanceId'] } - ['shelf-01']).first
+    authored_for_new = (request['relationships'] || []).select do |relationship|
+      relationship.dig('source', 'componentInstanceId') == proposed_new
     end
-    assert_equal 1, new_relationships.length,
-                 'the new occurrence carries its own relationship identity'
-    assert_match(/\Arel-/, new_relationships.first['relationshipId'])
+    assert_empty authored_for_new,
+                 'relationship topology must be server-authored, never client-constructed'
 
     refute_nil child_by_component_id(furniture, 'shelf-01')
-    refute_nil child_by_component_id(furniture, shelves.last['componentInstanceId']),
+    refute_nil child_by_component_id(furniture, proposed_new),
                'the new occurrence must render after the atomic rebuild'
 
     assert_equal 2, @catalog.last_authoring_result.operations.count { |op|
       op.provenance['sourceKind'] == 'relationship'
     }, 'each shelf drives its dependent machining'
 
+    # The persisted relationship set is the server-materialized echo with
+    # server-owned identities (one per occurrence, non-colliding).
     furniture_relationships = @store.read(furniture)['relationships']
     assert_equal 2, furniture_relationships.length
+    sources = furniture_relationships.map { |r| r.dig('source', 'componentInstanceId') }
+    assert_equal sources.uniq.length, sources.length
+    furniture_relationships.each do |relationship|
+      refute_match(/\Arel-/, relationship['relationshipId'],
+                   'no client-minted relationship identity may persist')
+    end
   end
 
   def test_duplicate_allocates_new_occurrence_and_relationship_identities
@@ -575,17 +630,42 @@ class DialogComponentAuthoringTest < Minitest::Test
     refute_nil duplicate_id, 'duplicate never reuses the source identity'
     assert_match(/\Aci-/, duplicate_id)
 
-    new_relationships = request['relationships'].reject do |relationship|
-      relationship.dig('source', 'componentInstanceId') == 'shelf-01'
+    # No client-authored relationship for the duplicate — server topology.
+    authored_for_new = (request['relationships'] || []).select do |relationship|
+      relationship.dig('source', 'componentInstanceId') == duplicate_id
     end
-    assert_equal 1, new_relationships.length,
-                 'the duplicate carries its own relationship identity'
-    assert_match(/\Arel-/, new_relationships.first['relationshipId'])
-    refute_equal new_relationships.first['relationshipId'], 'rel-shelf-01'
+    assert_empty authored_for_new,
+                 'the duplicate relationship is server-materialized, never client-built'
 
     refute_nil child_by_component_id(furniture, new_ids.first)
     refute_nil child_by_component_id(furniture, new_ids.last),
                'both occurrences render after the rebuild'
+  end
+
+  # Required proof (#467 final correction): the draft/proposal id may differ
+  # from the ACCEPTED id — the host renders, stamps and SELECTS the accepted
+  # occurrence.
+  def test_accepted_identity_drives_host_rendering_metadata_and_selection
+    furniture = place_canonical_cabinet('inst-accepted')
+    @catalog.rename_proposed_ids = true
+    dialog = @controller.show
+
+    script = submit_component_command(dialog, component_command('add_component', { 'translationMm' => [18, 18, 420] }))
+    refute_nil script
+    assert_includes script, '"outcome":"committed"'
+
+    request = @catalog.last_authoring_request['furniture']
+    proposed = (request['components'].map { |c| c['componentInstanceId'] } - child_ids(furniture)).first
+    assert_match(/\Aci-/, proposed, 'the client proposed a draft occurrence id')
+
+    accepted = child_by_component_id(furniture, 'shelf-accepted-01')
+    refute_nil accepted, 'the host renders the ACCEPTED occurrence identity'
+    assert_equal 'shelf-accepted-01', @store.read(accepted).dig('identity', 'componentInstanceId')
+    assert_nil child_by_component_id(furniture, proposed),
+               'the draft id never becomes productive truth'
+
+    assert_equal [accepted], @model.selection.to_a,
+                 'selection restores to the ACCEPTED new occurrence by identity'
   end
 
   def test_remove_shelf_drops_only_its_dependent_relationships_and_machining
@@ -599,6 +679,8 @@ class DialogComponentAuthoringTest < Minitest::Test
     request = @catalog.last_authoring_request['furniture']
     assert_equal 3, request['components'].length, 'the shelf occurrence is dropped'
     assert_equal 0, request['parameters']['shelfCount']
+    assert_nil request['relationships'],
+               'a removal sends no relationship topology — cleanup is server-owned'
 
     assert_nil child_by_component_id(furniture, 'shelf-01'), 'the occurrence is gone'
     refute_nil child_by_component_id(furniture, 'door-01'), 'unrelated components stay'

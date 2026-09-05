@@ -324,7 +324,8 @@ class SelectionContextTest < Minitest::Test
 
   def test_movable_internal_part_exposes_authoring_capabilities
     shelf_board = board('shelf-a', 'st-comp-shelf', 'interno', 'Entrepaño 1')
-                  .merge('transform' => { 'translationMm' => [18, 18, 150] })
+                  .merge('transform' => { 'translationMm' => [18, 18, 150] },
+                         'authoringCapability' => { 'movable' => true, 'axis' => 'z' })
     layout = native_layout(shelf_board)
     @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
     furniture = @model.active_entities.instances.first
@@ -334,6 +335,7 @@ class SelectionContextTest < Minitest::Test
 
     assert_equal 'part', context.kind
     assert_equal 'interno', context.component_placement
+    assert_equal({ 'movable' => true, 'axis' => 'z' }, context.authoring_capability)
     assert_equal [18.0, 18.0, 150.0], context.assembly_translation_mm
     assert context.capabilities.supported?('canMoveWithinConstraint')
     assert context.capabilities.supported?('canDuplicate')
@@ -344,6 +346,8 @@ class SelectionContextTest < Minitest::Test
   end
 
   def test_structural_part_keeps_authoring_capabilities_disabled_with_reason
+    # The engine publishes NO authoring capability for structural parts —
+    # the plugin fails closed on absence instead of inferring rights.
     layout = native_layout(board('door-a', 'st-comp-door', 'puerta', 'Puerta'))
     @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
     furniture = @model.active_entities.instances.first
@@ -353,6 +357,7 @@ class SelectionContextTest < Minitest::Test
 
     assert_equal 'part', context.kind
     assert_equal 'puerta', context.component_placement
+    assert_nil context.authoring_capability
     refute context.capabilities.supported?('canMoveWithinConstraint')
     refute context.capabilities.supported?('canRemove')
     reason = context.capabilities['canMoveWithinConstraint'].reason
@@ -360,7 +365,7 @@ class SelectionContextTest < Minitest::Test
     assert_includes reason, 'estructurales'
   end
 
-  def test_part_without_placement_data_fails_closed
+  def test_part_without_published_capability_fails_closed
     layout = native_layout(board('shelf-a', 'st-comp-shelf', 'interno', 'Entrepaño 1'))
     @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
     furniture = @model.active_entities.instances.first
@@ -373,6 +378,7 @@ class SelectionContextTest < Minitest::Test
 
     assert_equal 'part', context.kind
     assert_nil context.component_placement
+    assert_nil context.authoring_capability
     refute context.capabilities.supported?('canMoveWithinConstraint')
     assert context.capabilities['canMoveWithinConstraint'].reason
   end

@@ -7,17 +7,26 @@ module Granete
       # duplicate/remove of a movable internal occurrence is expressed as
       # component authoring intent on the #477 resolve contract and runs
       # through the ONE #498 Host::AuthoringMutationCoordinator — this bridge
-      # only adapts dialog payloads into MutationCommand seams. It owns no
-      # shelf-specific transport, journal, fallback state or error taxonomy:
-      # identity comes from Granete contract IDs, movability from the
-      # server-published placement, and every geometric/manufacturing
-      # consequence from the authoritative resolve.
+      # only adapts dialog payloads into MutationCommand seams.
+      #
+      # Authority boundary (final #467 correction):
+      #   - the client proposes occurrence identity (canonical #477: the
+      #     occurrence set carries client-authored componentInstanceIds and
+      #     the server validates collisions and echoes the ACCEPTED set);
+      #   - the client NEVER constructs relationship topology — it echoes the
+      #     last accepted relationship set verbatim on move/add/duplicate and
+      #     OMITS it on remove; Granete materializes/cleans relationships,
+      #     their identities and every manufacturing consequence;
+      #   - movability comes exclusively from the engine-published
+      #     authoringCapability {movable, axis}; the viewport gesture authors
+      #     along that published axis;
+      #   - position RANGE validity is server authority: the plugin validates
+      #     only transport shape (three finite millimetres).
       # rubocop:disable Metrics/ModuleLength
       module ComponentAuthoringBridge
         COMPONENT_MUTATIONS = %w[move_component add_component duplicate_component
                                  remove_component].freeze
         COUNT_CHANGING_MUTATIONS = %w[add_component duplicate_component remove_component].freeze
-        AXIS_LABELS = ['X (ancho)', 'Y (fondo)', 'Z (alto)'].freeze
 
         def execute_coordinated_component_mutation(dialog, payload, semantic_target: nil,
                                                    command_message_id: nil,
@@ -41,11 +50,11 @@ module Granete
           outcome
         end
 
-        # Constrained viewport gesture (#467 interaction contract §7): a
-        # vertical-axis drag previews the target pose as pure viewport pixels
-        # and commits the SAME semantic move intent on click. The tool never
-        # mutates entities/metadata — the coordinator's atomic rebuild is the
-        # only productive change.
+        # Constrained viewport gesture (#467 interaction contract §7): a drag
+        # along the ENGINE-PUBLISHED authoring axis previews the target pose
+        # as pure viewport pixels and commits the SAME semantic move intent on
+        # click. The tool never mutates entities/metadata — the coordinator's
+        # atomic rebuild is the only productive change.
         def handle_component_viewport_move(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           target = Host::CommandContract.parse_semantic_target(payload['semanticTarget'] || payload)
@@ -53,12 +62,13 @@ module Granete
           furniture = find_target_furniture_entity(target['furnitureInstanceRef'] ||
                                                    target['furnitureInstanceId'])
           child = locate_component_occurrence(furniture, target['componentInstanceId'])
+          axis = component_authoring_axis(child)
           base_translation = component_base_translation(child)
-          if furniture.nil? || child.nil? || base_translation.nil?
+          if furniture.nil? || child.nil? || axis.nil? || base_translation.nil?
             outcome = Host::MutationOutcome.new(
               outcome: 'rejected', category: 'invalid_authoring_input',
-              reason: 'No se pudo localizar el componente interno para mover en el viewport; ' \
-                      'verificá la selección y volví a intentarlo',
+              reason: 'No se pudo localizar un componente interno movible para mover en el ' \
+                      'viewport; verificá la selección y volvé a intentarlo',
               semantic_target: target
             ).with_mutation_name('move_component')
             push_mutation_outcome(dialog, outcome, in_reply_to: nil)
@@ -67,7 +77,7 @@ module Granete
 
           tool = Tools::InternalComponentMoveTool.new(
             furniture: furniture, child: child, base_translation_mm: base_translation,
-            logger: @logger
+            authoring_axis: axis, logger: @logger
           ) do |translation_mm|
             execute_coordinated_component_mutation(
               dialog, { 'translationMm' => translation_mm },
@@ -102,12 +112,14 @@ module Granete
 
           params = furniture_meta&.dig('intent', 'parameters') || {}
           choices = merged_material_choices(entity, furniture_meta)
-          # Occurrence/relationship intent identities are allocated per
-          # command (contract §8: a new concrete occurrence needs its own
-          # componentInstanceId; the server rejects collisions and owns the
-          # authoritative echo).
+          # Client-proposed occurrence identity is canonical #477 contract
+          # shape (the server validates collisions and echoes the ACCEPTED
+          # id); everything else — relationships, machining — is server
+          # authority. The base occurrence set travels in a box so the
+          # post-rebuild selection can find the ACCEPTED new occurrence even
+          # when the server settles a different identity.
           new_component_id = "ci-#{SecureRandom.hex(8)}"
-          new_relationship_id = "rel-#{SecureRandom.hex(8)}"
+          base_ids = {}
 
           Host::MutationCommand.new(
             name: mutation_name,
@@ -117,37 +129,42 @@ module Granete
             resolve: lambda { |ctx|
               resolve_component_mutation(entity, definition, params, choices, target,
                                          ctx: ctx, mutation: mutation_name, payload: payload,
-                                         new_component_id: new_component_id,
-                                         new_relationship_id: new_relationship_id)
+                                         new_component_id: new_component_id, base_ids: base_ids)
             },
             context_valid: -> { update_context_valid?(entity, target) },
             apply: lambda { |result, host_context|
               apply_update_result(host_context, entity, definition, params, choices, result)
             },
             restore_selection: lambda { |result|
-              restore_component_selection(result, target, mutation_name, new_component_id)
+              restore_component_selection(result, target, mutation_name, base_ids,
+                                          draft_id: new_component_id,
+                                          requested: payload['translationMm'])
             }
           )
         end
 
         def resolve_component_mutation(entity, definition, params, choices, target,
                                        ctx:, mutation:, payload:, new_component_id:,
-                                       new_relationship_id:)
+                                       base_ids:)
           base_layout = resolve_layout_for(definition, params, choices)
           raise Library::AuthoringResolveError, 'No se pudo resolver el layout del mueble' if base_layout.nil?
 
+          base_ids[:ids] = base_layout.boards.map(&:component_instance_id)
           board = base_layout.boards.find do |b|
             b.component_instance_id == target['componentInstanceId']
           end
           guard_against_non_authorable_component!(board, target['componentInstanceId'])
+          base_ids[:target_def] = board.component_definition_id
 
           components = component_occurrence_intents(base_layout, board, mutation, payload,
                                                     new_component_id)
           synced_params = component_quantity_parameters(definition, params, board, components,
                                                         mutation)
-          relationships = component_relationship_intents(entity, definition, base_layout, board,
-                                                         mutation, new_component_id,
-                                                         new_relationship_id)
+          # Relationship topology is Granete's: the last ACCEPTED set echoes
+          # verbatim on move/add/duplicate, and a removal sends none — the
+          # server materializes/cleans relationships, their identities and
+          # dependent machining from its own bindings.
+          relationships = mutation == 'remove_component' ? nil : persisted_furniture_relationships(entity)
           hardware_placements = build_hardware_authoring_intents(base_layout, nil, nil, nil)
           furniture_req = build_hardware_mutation_request(
             definition, synced_params, choices, base_layout, hardware_placements, relationships,
@@ -168,11 +185,11 @@ module Granete
           result
         end
 
-        # Fail-closed authoring boundary: only occurrences whose placement
-        # published by the FRESH authoritative layout is a movable internal
-        # (`interno`) accept direct authoring. Structural/agregado templates
-        # keep the definition-driven pose/count; Granete's resolve is the
-        # authority behind this affordance, never a plugin formula.
+        # Fail-closed authoring boundary: only occurrences carrying the
+        # engine-published authoring capability ({movable, axis}) accept
+        # direct authoring. Structural/agregado templates and legacy layouts
+        # publish none — Granete's resolve is the authority behind this
+        # affordance, never a plugin formula.
         def guard_against_non_authorable_component!(board, target_id)
           if board.nil?
             raise non_authorable_issue(
@@ -181,13 +198,13 @@ module Granete
               'Reinsertá el mueble o volvé a seleccionar el componente antes de editar.'
             )
           end
-          return if board.slot_id == Library::MOVABLE_INTERNAL_PLACEMENT
+          return if board.movable_internal?
 
           raise non_authorable_issue(
             'OCCURRENCE_COUNT_UNSUPPORTED',
-            "El componente #{target_id} no es un interno movible",
-            'La autoría directa aplica a internos movibles (p. ej. entrepaños); las piezas ' \
-            'estructurales mantienen la posición definida por la definición.'
+            "El componente #{target_id} no publica capacidad de autoría directa",
+            'Granete define qué internos son movibles; las piezas estructurales mantienen la ' \
+            'posición definida por la definición.'
           )
         end
 
@@ -199,10 +216,12 @@ module Granete
           Library::AuthoringResolveError.new(message, issues: [issue])
         end
 
-        # Full occurrence echo of the base layout with the authoring edit
-        # applied. Every occurrence echoes its CURRENT authoritative assembly
-        # translation so a previously moved occurrence never resets to the
-        # default pose, and only the edited occurrence changes.
+        # Occurrence snapshot echo with the semantic edit applied: every
+        # occurrence keeps its CURRENT authoritative assembly translation so
+        # a previously moved occurrence never resets to the default pose, a
+        # move overrides the target's transform with the requested position,
+        # add/duplicate append the proposed occurrence and remove drops the
+        # target. The server plans the result and owns every consequence.
         def component_occurrence_intents(base_layout, board, mutation, payload, new_component_id)
           intents = base_layout.boards.map do |b|
             intent = {
@@ -211,7 +230,7 @@ module Granete
             }
             if b.component_instance_id == board.component_instance_id &&
                mutation == 'move_component'
-              intent['transform'] = requested_transform(payload, base_layout)
+              intent['transform'] = requested_transform(payload)
             elsif b.aabb_min
               intent['transform'] = { 'frame' => 'assembly', 'translationMm' => b.aabb_min.map(&:to_f) }
             end
@@ -225,43 +244,29 @@ module Granete
             intents + [{
               'componentInstanceId' => new_component_id,
               'componentDefinitionId' => board.component_definition_id,
-              'transform' => requested_transform(payload, base_layout)
+              'transform' => requested_transform(payload)
             }]
           else
             intents
           end
         end
 
-        # Precise-mm position: three finite numbers within the furniture's
-        # authoritative dimensions (local parseability/min-max only — §5;
-        # manufacturing consequences stay with the authoritative resolve).
-        # Furniture dimensionsMm is [ancho, alto, fondo]; assembly axes are
-        # X=ancho, Y=fondo, Z=alto.
-        def requested_transform(payload, base_layout)
+        # Transport shape only: three finite numeric millimetres. Whether the
+        # requested POSITION is allowed (envelope, clearances, interference,
+        # relationship limits) is Granete's decision — the resolve rejects
+        # with TRANSFORM_INVALID and the allowed range.
+        def requested_transform(payload)
           raw = payload['translationMm']
           unless raw.is_a?(Array) && raw.length == 3 &&
                  raw.all? { |value| value.is_a?(Numeric) && value.to_f.finite? }
             raise non_authorable_issue(
               'TRANSFORM_INVALID',
               'La posición debe ser tres valores numéricos en mm (X, Y, Z)',
-              'Ingresá la posición del componente en milímetros dentro del mueble.'
+              'Ingresá la posición del componente en milímetros.'
             )
           end
 
-          translation = raw.map(&:to_f)
-          dims = base_layout.dimensions_mm
-          axis_bounds = dims.is_a?(Array) && dims.length == 3 ? [dims[0], dims[2], dims[1]] : nil
-          axis_bounds&.each_with_index do |bound, axis|
-            next unless translation[axis].negative? || translation[axis] > bound
-
-            raise non_authorable_issue(
-              'TRANSFORM_INVALID',
-              "La posición en #{AXIS_LABELS[axis]} (#{translation[axis]} mm) queda fuera del mueble",
-              "Elegí una posición dentro del rango 0–#{bound} mm."
-            )
-          end
-
-          { 'frame' => 'assembly', 'translationMm' => translation }
+          { 'frame' => 'assembly', 'translationMm' => raw.map(&:to_f) }
         end
 
         # Keeps the occurrence snapshot consistent with every evaluated
@@ -305,58 +310,6 @@ module Granete
             "mod-#{component_id}" == board.component_definition_id
         end
 
-        # Relationship intent echo: a removal drops ONLY the relationships
-        # anchored to the removed occurrence (others survive verbatim); an
-        # addition allocates a DISTINCT relationship identity for the new
-        # occurrence from the definition's published binding template.
-        def component_relationship_intents(entity, definition, base_layout, board, mutation,
-                                           new_component_id, new_relationship_id)
-          persisted = persisted_furniture_relationships(entity) || []
-          case mutation
-          when 'remove_component'
-            removed = board.component_instance_id
-            persisted.reject do |relationship|
-              relationship.dig('source', 'componentInstanceId') == removed ||
-                (relationship['targets'] || []).any? { |t| t['componentInstanceId'] == removed }
-            end
-          when 'add_component', 'duplicate_component'
-            template = relationship_binding_template(definition, board)
-            fresh = new_relationship_intent(template, base_layout, new_component_id,
-                                            new_relationship_id)
-            fresh ? persisted + [fresh] : persisted
-          else
-            persisted
-          end
-        end
-
-        def relationship_binding_template(definition, board)
-          quantity_bound_parameters(definition, board)
-            .map { |param| param['binding']['relationship'] }
-            .find do |relationship|
-              relationship.is_a?(Hash) && relationship['kind'] && relationship['sourceRole'] &&
-                relationship['targets'].is_a?(Array)
-            end
-        end
-
-        def new_relationship_intent(template, base_layout, source_id, relationship_id)
-          targets = template['targets'].filter_map do |target|
-            occurrence = base_layout.boards.find do |b|
-              bound_component?(target['componentId'], b)
-            end
-            next unless occurrence
-
-            { 'componentInstanceId' => occurrence.component_instance_id, 'role' => target['role'] }
-          end
-          return nil if targets.empty?
-
-          {
-            'relationshipId' => relationship_id,
-            'kind' => template['kind'],
-            'source' => { 'componentInstanceId' => source_id, 'role' => template['sourceRole'] },
-            'targets' => targets
-          }
-        end
-
         def component_operation_name(mutation, comp_id)
           case mutation
           when 'move_component' then "Mover Componente Interno #{comp_id}"
@@ -373,18 +326,52 @@ module Granete
                                .with_mutation_name(mutation)
         end
 
-        # Post-rebuild selection: add/duplicate re-select the NEW occurrence
-        # (when the authoritative echo kept it), remove falls back to the
-        # owning furniture. Granete identity only — never persistent_id/name.
-        def restore_component_selection(result, target, mutation_name, new_component_id)
+        # Post-rebuild selection by ACCEPTED identity (#467 final
+        # correction). The accepted new occurrence is resolved from the
+        # AUTHORITATIVE echo, in descending contract certainty:
+        #   1. the echoed draft id (canonical design A: the server validates
+        #      and echoes the client-proposed occurrence identity);
+        #   2. the accepted occurrence of the same definition at the REQUESTED
+        #      transform (the settled identity when the echo re-identifies);
+        #   3. the single id the echo added on top of the base set.
+        # Never the local draft as truth, never names/persistent_id. Remove
+        # falls back to the owning furniture.
+        def restore_component_selection(result, target, mutation_name, base_ids, draft_id:, requested:)
           wanted = target['componentInstanceId']
           if %w[add_component duplicate_component].include?(mutation_name)
-            snapshot_components(result).each do |component|
-              wanted = new_component_id if component['componentInstanceId'] == new_component_id
+            components = snapshot_components(result)
+            draft = components.find do |component|
+              component['componentInstanceId'] == draft_id
+            end
+            if draft
+              wanted = draft_id
+            else
+              at_requested_position = components.select do |component|
+                component['componentDefinitionId'] == base_ids[:target_def] &&
+                  translation_matches?(component['transform'], requested)
+              end
+              added = components.map { |component| component['componentInstanceId'] }
+                                .reject { |id| base_ids[:ids].to_a.include?(id) }
+              wanted = if at_requested_position.length == 1
+                         at_requested_position.first['componentInstanceId']
+                       elsif added.length == 1
+                         added.first
+                       else
+                         wanted
+                       end
             end
           end
 
           restorer.restore(target.merge('componentInstanceId' => wanted))
+        end
+
+        def translation_matches?(transform, requested)
+          return false unless transform.is_a?(Hash) && requested.is_a?(Array)
+
+          translation = transform['translationMm']
+          translation.is_a?(Array) && translation.length == 3 &&
+            requested.length == 3 &&
+            translation.each_with_index.all? { |value, index| (value - requested[index].to_f).abs < 0.01 }
         end
 
         def snapshot_components(result)
@@ -415,6 +402,19 @@ module Granete
           metadata = @metadata_store_factory.call(active_model).read(child)
           translation = metadata&.dig('intent', 'assemblyTranslationMm')
           translation.is_a?(Array) && translation.length == 3 ? translation.map(&:to_f) : nil
+        end
+
+        # The gesture authors along the axis the ENGINE published with the
+        # capability — never a client-side axis decision.
+        def component_authoring_axis(child)
+          return nil unless child
+
+          metadata = @metadata_store_factory.call(active_model).read(child)
+          capability = metadata&.dig('intent', 'authoringCapability')
+          if capability.is_a?(Hash) && capability['movable'] == true &&
+             Library::AUTHORING_AXES.include?(capability['axis'])
+            capability['axis']
+          end
         end
       end
     end

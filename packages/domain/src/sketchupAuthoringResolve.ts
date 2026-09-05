@@ -55,6 +55,12 @@ export const AUTHORING_RESOLVE_LIMITS = {
   relationshipTargetCount: 256,
   hardwarePlacementCount: 10_000,
   issueCount: 10_000,
+  /**
+   * Coarse transport ceiling for authored assembly translations (mm). It only
+   * rejects positions no furniture could ever carry; the exact envelope is
+   * #467 SERVER authority and clients must not pre-decide it.
+   */
+  translationCeilingMm: 2_400,
 } as const;
 
 /**
@@ -188,6 +194,12 @@ export type ResolvedLayoutWireV1 = {
     readonly lengthMm: number;
     readonly widthMm: number;
     readonly thicknessMm: number;
+    /** #467: engine-published direct-authoring capability (movable internals
+     *  only); absent = not directly authorable and clients fail closed. */
+    readonly authoringCapability?: {
+      readonly movable: boolean;
+      readonly axis: "x" | "y" | "z";
+    };
     readonly materialId?: string;
     readonly materialCode?: string;
     readonly materialName?: string;
@@ -453,6 +465,10 @@ export function validateAuthoringResolveRequest(
       const t = transform?.translationMm;
       if (!Array.isArray(t) || t.length !== 3 || t.some((v) => typeof v !== 'number' || !Number.isFinite(v))) {
         push('TRANSFORM_INVALID', 'translationMm must be three finite millimeters', `${path}.transform.translationMm`);
+      } else if (t.some((v) => v < 0 || v > AUTHORING_RESOLVE_LIMITS.translationCeilingMm)) {
+        // Coarse transport sanity only (no furniture could carry this); the
+        // exact envelope stays with the authoritative resolve (#467).
+        push('TRANSFORM_INVALID', 'translationMm is outside any plausible furniture envelope', `${path}.transform.translationMm`);
       }
     }
   }
@@ -616,11 +632,13 @@ const RESPONSE_KEYS = new Set([
 const ISSUE_KEYS = new Set(['code', 'message', 'severity', 'entityId', 'path', 'remediation', 'details']);
 const RESOLVED_LAYOUT_COMPONENT_KEYS = new Set([
   'componentInstanceId', 'componentDefinitionId', 'slotId', 'role', 'lengthMm', 'widthMm',
-  'thicknessMm', 'materialId', 'transform', 'name', 'kind', 'dimensionsMm', 'localTransform',
-  'optionRole', 'materialCode', 'materialName', 'materialColorHex', 'materialImageUrl',
-  'materialTextureUrl', 'materialTextureTileWidthMm', 'materialTextureTileLengthMm',
+  'thicknessMm', 'authoringCapability', 'materialId', 'transform', 'name', 'kind', 'dimensionsMm',
+  'localTransform', 'optionRole', 'materialCode', 'materialName', 'materialColorHex',
+  'materialImageUrl', 'materialTextureUrl', 'materialTextureTileWidthMm', 'materialTextureTileLengthMm',
   'materialRoughness', 'materialMetalness', 'materialClearcoat', 'materialGrain',
 ]);
+const AUTHORING_CAPABILITY_KEYS = new Set(['movable', 'axis']);
+const AUTHORING_CAPABILITY_AXES = new Set(['x', 'y', 'z']);
 const LAYOUT_MATERIAL_STRING_KEYS = [
   'materialId', 'materialCode', 'materialName', 'materialColorHex',
 ] as const;
@@ -817,6 +835,20 @@ function validateResolvedLayout(
     layoutIds.add(component.componentInstanceId);
     if (snapshotComponents.get(component.componentInstanceId) !== component.componentDefinitionId) {
       problems.push(`${path} does not match normalizedSnapshot identity`);
+    }
+    if (component.authoringCapability !== undefined) {
+      const capability = asRecord(component.authoringCapability);
+      if (!capability) {
+        problems.push(`${path}.authoringCapability must be an object`);
+      } else {
+        rejectUnknownRecordKeys(capability, AUTHORING_CAPABILITY_KEYS, `${path}.authoringCapability`, problems);
+        if (capability.movable !== true) {
+          problems.push(`${path}.authoringCapability.movable must be true when published`);
+        }
+        if (typeof capability.axis !== 'string' || !AUTHORING_CAPABILITY_AXES.has(capability.axis)) {
+          problems.push(`${path}.authoringCapability.axis must be x, y or z`);
+        }
+      }
     }
     if (![component.lengthMm, component.widthMm, component.thicknessMm].every(isFiniteNumber) || !isOccurrenceLayoutTransform(component.transform)) {
       problems.push(`${path} geometry is invalid`);

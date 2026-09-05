@@ -73,15 +73,17 @@ module Granete
                       supported: false, reason: CapabilityReasons::INSPECT_MANUFACTURING.call)
         end
 
-        # #467 direct internal authoring: only occurrences whose published
-        # domain placement (layout slotId, stored as part intent `placement`)
-        # is `interno` are movable internals. Structural/agregado templates
-        # keep the definition-driven pose; a missing placement (metadata from
-        # before #467) fails closed. This is an affordance over server-published
-        # data — Granete's resolve stays the sole authority for every
-        # manufacturing consequence.
+        # #467 direct internal authoring: movability is the EXPLICIT
+        # engine-published authoring capability (layout
+        # authoringCapability {movable, axis}, stored as part intent) — never
+        # inferred from placement, slot, role or names. Structural/agregado
+        # templates and metadata from before #467 publish no capability and
+        # fail closed. This is an affordance over server-published data —
+        # Granete's resolve stays the sole authority for every manufacturing
+        # consequence.
         def part_capabilities(context, set)
-          movable = context.component_placement == Library::MOVABLE_INTERNAL_PLACEMENT
+          capability = context.authoring_capability
+          movable = capability.is_a?(Hash) && capability['movable'] == true
           reason = if movable
                      nil
                    elsif context.component_placement.nil?

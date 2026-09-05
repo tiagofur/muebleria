@@ -79,10 +79,53 @@ module Granete
           scenario['response']['resolved']['layout']
         end
 
+        # Controlled backend boundary: the golden response may ONLY answer a
+        # request that itself carries the correct semantic intent. A request
+        # violating the authority boundary (client-built relationship
+        # topology, missing occurrence intent, inconsistent count parameter)
+        # raises here instead of passing silently.
+        def validate_request_semantics!(request_payload, scenario_id)
+          furniture = request_payload['furniture'] || {}
+          components = furniture['components'] || []
+          relationships = furniture['relationships'] || []
+
+          if relationships.any? { |r| r['relationshipId'].to_s.start_with?('rel-') }
+            raise 'client-minted relationshipId found: topology must be server-authored'
+          end
+
+          shelves = components.select { |c| c['componentDefinitionId'] == 'mod-comp-shelf' }
+          case scenario_id
+          when '02-move-shelf'
+            moved = components.find { |c| c['componentInstanceId'] == 'mod-comp-shelf-copy-0' }
+            unless moved&.dig('transform', 'translationMm') == [18, 18, 520]
+              raise 'move intent must carry the target transform'
+            end
+            raise 'move must not change the occurrence count' unless shelves.length == 1
+          when '03-add-shelf-shared-definition'
+            raise 'add/duplicate intent must carry two shelf occurrences' unless shelves.length == 2
+
+            ids = shelves.map { |c| c['componentInstanceId'] }
+            raise 'occurrences collapsed into one identity' unless ids.uniq.length == 2
+
+            proposed = ids.find { |id| id.start_with?('ci-') }
+            raise 'the new occurrence must ride a client-proposed ci-* draft id' unless proposed
+            if relationships.any? { |r| r.dig('source', 'componentInstanceId') == proposed }
+              raise 'client-authored relationship for the new occurrence: topology is server-owned'
+            end
+            raise 'shelfCount must stay consistent (2)' unless furniture.dig('parameters', 'shelfCount') == 2
+          when '04-remove-shelf'
+            raise 'remove intent must drop the shelf occurrence' unless shelves.empty?
+            raise 'remove must send NO relationship topology (server-owned cleanup)' unless relationships.empty?
+            raise 'shelfCount must reach 0' unless furniture.dig('parameters', 'shelfCount').to_i.zero?
+          end
+        end
+
         def resolve_authoring(request_payload)
           @last_authoring_request = request_payload
           scenario = @fixture['scenarios'].find { |entry| entry['id'] == @active_scenario_id }
           raise "Scenario #{@active_scenario_id.inspect} not found" unless scenario
+
+          validate_request_semantics!(request_payload, @active_scenario_id)
 
           body = JSON.parse(JSON.generate(scenario['response']))
           body['responseMessageId'] = "resolve-#{request_payload['messageId']}"
@@ -244,6 +287,16 @@ module Granete
                      both.map { |meta| meta.dig('identity', 'componentDefinitionId') },
                      'both occurrences share the reusable definition'
 
+        # ACCEPTED identity drives the host: the request proposed a ci-* draft
+        # and the authoritative echo settled shelf-02 — the host renders,
+        # stamps and SELECTS the accepted occurrence, never the draft.
+        proposed = shelves.map { |c| c['componentInstanceId'] }.find { |id| id.start_with?('ci-') }
+        refute_nil proposed, 'the request carried the client-proposed draft'
+        assert_equal 'shelf-02', metadata_store.read(shelf_two).dig('identity', 'componentInstanceId')
+        assert_nil locate_child(current, proposed), 'the draft id never becomes productive truth'
+        assert_equal 'shelf-02', selected_component_instance_id,
+                     'the ACCEPTED new occurrence is selected after the rebuild'
+
         Sketchup.send_action('editUndo:')
         restored = granete_furniture_instances.first
         assert_nil locate_child(restored, 'shelf-02'), 'undo removes exactly the addition'
@@ -260,7 +313,7 @@ module Granete
 
         outcome = @controller.execute_coordinated_component_mutation(
           @dialog,
-          { 'translationMm' => [18, 18, 300] },
+          { 'translationMm' => [18, 18, 560] },
           semantic_target: { 'furnitureInstanceRef' => initial_id,
                              'componentInstanceId' => 'mod-comp-shelf-copy-0' },
           command_message_id: 'cmd-duplicate-shelf-1',
@@ -279,7 +332,12 @@ module Granete
                'a fresh ci-* occurrence identity rides alongside the echoed source'
 
         current = granete_furniture_instances.first
-        refute_nil locate_child(current, 'shelf-02'), 'the duplicated occurrence renders'
+        duplicated = locate_child(current, 'shelf-02')
+        refute_nil duplicated, 'the duplicated occurrence renders'
+        assert_equal 'shelf-02', metadata_store.read(duplicated).dig('identity', 'componentInstanceId')
+        refute_nil locate_child(current, 'shelf-01'), 'the source occurrence survives untouched'
+        assert_equal 'shelf-02', selected_component_instance_id,
+                     'the ACCEPTED duplicate is selected after the rebuild'
 
         Sketchup.send_action('editUndo:')
         restored = granete_furniture_instances.first
@@ -310,6 +368,8 @@ module Granete
         furniture_req = @catalog_provider.last_authoring_request['furniture']
         assert_equal 0, furniture_req['parameters']['shelfCount'],
                      'the bound parameter reaches zero with the occurrence set'
+        assert_nil furniture_req['relationships'],
+                   'the removal sends NO relationship topology: cleanup is server-owned'
 
         current = granete_furniture_instances.first
         assert_nil locate_child(current, 'shelf-01'), 'the shelf occurrence is gone'
@@ -385,6 +445,15 @@ module Granete
         raise "initial placement failed: #{res['error']}" unless res['success']
 
         granete_furniture_instances.first
+      end
+
+      # Selection identity of the CURRENT selection (SketchUp entity wrappers
+      # are not comparable with ==; Granete identity is the proof surface).
+      def selected_component_instance_id
+        selected = model.selection.first
+        return nil unless selected
+
+        metadata_store.read(selected)&.dig('identity', 'componentInstanceId')
       end
 
       def locate_child(furniture, component_id)

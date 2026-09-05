@@ -46,8 +46,9 @@ module Granete
             '(p. ej. entrepaños).'
         end
         PART_PLACEMENT_UNKNOWN = lambda do
-          'Falta el dato de colocación de esta pieza (modelo anterior a la autoría ' \
-            'interna). Reinsertá el mueble desde la biblioteca o actualizá la extensión.'
+          'Falta la capacidad de autoría publicada por Granete para esta pieza (modelo o layout ' \
+            'anterior a la autoría interna). Reinsertá el mueble desde la biblioteca o ' \
+            'actualizá la extensión.'
         end
         PART_CHANGE_JOINERY = lambda do
           'El sistema de unión se cambia desde los parámetros del mueble.'

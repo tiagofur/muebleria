@@ -452,6 +452,17 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			return run("neg-wrong-length-translation", "", request, http.StatusBadRequest)
 		}(),
 
+		// Negative proof (#467): position range validity is server-side — an
+		// authored translation outside the furniture envelope (height 720)
+		// rejects with TRANSFORM_INVALID even though the shape is valid. The
+		// fixture also exceeds the clients' coarse transport ceiling so every
+		// runtime agrees on the rejection.
+		run("neg-shelf-out-of-range", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			occ := defaultOccurrencesJSON()
+			occ[5] = occurrenceJSON("shelf-01", "mod-comp-shelf", []float64{18, 18, 5000})
+			f.Components = occ
+		})), http.StatusUnprocessableEntity),
+
 		// Complete empty manual set: definition placements fully replaced.
 		run("09-empty-manual-placement-set", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = defaultOccurrencesJSON()

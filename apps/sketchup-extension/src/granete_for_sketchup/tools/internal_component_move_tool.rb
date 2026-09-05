@@ -4,8 +4,10 @@ module Granete
   module SketchUpExtension
     module Tools
       # #467 / SU-AUTH-1: constrained viewport gesture for moving a movable
-      # internal component. The drag is locked to the furniture's vertical
-      # axis, the preview is drawn with the 2D view API as PURE viewport
+      # internal component. The drag is locked to the AUTHORING AXIS the
+      # engine published with the occurrence's capability
+      # (authoringCapability {movable, axis}) — never a client-side axis
+      # decision. The preview is drawn with the 2D view API as PURE viewport
       # pixels, and a click submits the same semantic move intent the
       # inspector's precise-mm path uses — Granete re-resolves and the #498
       # coordinator rebuilds atomically. The tool itself never mutates
@@ -21,12 +23,17 @@ module Granete
         LINE_WIDTH = 2
         LABEL_SIZE = 14
 
-        STATUS_HINT = 'Arrastrá para mover a lo alto; clic confirma, Esc cancela.'
+        STATUS_HINT = 'Arrastrá para mover a lo largo del eje de autoría; clic confirma, Esc cancela.'
+        AXIS_VECTORS = {
+          'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1]
+        }.freeze
 
-        def initialize(furniture:, child:, base_translation_mm:, logger: nil, &on_commit)
+        def initialize(furniture:, child:, base_translation_mm:, authoring_axis:,
+                       logger: nil, &on_commit)
           @furniture = furniture
           @child = child
           @base_translation_mm = base_translation_mm
+          @authoring_axis = AXIS_VECTORS.fetch(authoring_axis, [0, 0, 1])
           @logger = logger
           @on_commit = on_commit
           @delta_mm = 0.0
@@ -101,7 +108,7 @@ module Granete
           return 0.0 unless ray.is_a?(Array) && ray.length == 2
 
           anchor = axis_anchor
-          direction = vertical_direction
+          direction = axis_direction
           point = Geom.intersect_line_line(ray, [anchor, direction])
           return 0.0 unless point.is_a?(Geom::Point3d)
 
@@ -116,16 +123,14 @@ module Granete
                            (@child.respond_to?(:bounds) ? @child.bounds.center : Geom::Point3d.new)
         end
 
-        # Vertical axis of the furniture in world space (its world transform
-        # applied to the assembly Z axis) — the constrained authoring axis.
-        def vertical_direction
-          @vertical_direction ||= begin
+        # The constrained authoring axis in world space: the furniture's
+        # world transform applied to the ENGINE-PUBLISHED assembly axis of
+        # the occurrence's authoring capability.
+        def axis_direction
+          @axis_direction ||= begin
+            axis = Geom::Vector3d.new(@authoring_axis[0], @authoring_axis[1], @authoring_axis[2])
             transform = @furniture.respond_to?(:transformation) ? @furniture.transformation : nil
-            direction = if transform.respond_to?(:*)
-                          transform * Geom::Vector3d.new(0, 0, 1)
-                        else
-                          Geom::Vector3d.new(0, 0, 1)
-                        end
+            direction = transform.respond_to?(:*) ? transform * axis : axis
             direction.normalize
           end
         end
@@ -137,7 +142,7 @@ module Granete
           return nil unless bounds
 
           translation = Geom::Transformation.translation(
-            vertical_direction * (@delta_mm / MM_PER_INCH)
+            axis_direction * (@delta_mm / MM_PER_INCH)
           )
           translated = Geom::BoundingBox.new
           bounds_corners(bounds).each do |corner|

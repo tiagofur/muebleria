@@ -4,12 +4,16 @@ module Granete
   module SketchUpExtension
     module Library
       # Domain placement vocabulary (backend ComponentPlacement) published by
-      # the authoritative layout through each board's slotId. It is data, not
-      # a name guess: only occurrences whose published placement is `interno`
-      # are movable internals for direct authoring (#467); the resolve-time
-      # guard re-reads it from the fresh layout and Granete stays the
-      # authority for every consequence.
+      # the authoritative layout through each board's slotId. Display/identity
+      # data only: direct-authoring rights come exclusively from the
+      # #467 `authoringCapability` the engine publishes per board — the
+      # resolve-time guard reads it from the fresh layout and Granete stays
+      # the authority for every consequence.
       MOVABLE_INTERNAL_PLACEMENT = 'interno'
+
+      # #467 authoring capability vocabulary: the assembly axes a movable
+      # internal may be authored along. Closed set mirroring the wire schema.
+      AUTHORING_AXES = %w[x y z].freeze
 
       # One resolved board with its authoritative local→furniture transform
       # (#414). AABB accessors are convenience/preview passthrough and may
@@ -20,10 +24,11 @@ module Granete
       # catalogComponentId is the optional, separately-namespaced catalog
       # reference — the two identities never alias each other.
       class LayoutBoardTransform
-        attr_reader :component_instance_id, :slot_id, :name
+        attr_reader :component_instance_id, :slot_id, :name, :authoring_capability
 
         def initialize(component_instance_id:, slot_id:, name:, dims:,
-                       local_transform:, identity: {}, material: {}, aabb: {})
+                       local_transform:, identity: {}, material: {}, aabb: {},
+                       authoring_capability: nil)
           @component_instance_id = component_instance_id
           @slot_id = slot_id
           @name = name
@@ -32,6 +37,18 @@ module Granete
           @identity = identity
           @material = material
           @aabb = aabb
+          @authoring_capability = authoring_capability
+        end
+
+        # Explicit direct-authoring affordance published by the engine for
+        # movable internals (#467). Nil = not directly authorable — callers
+        # fail closed instead of inferring from slot/role/name.
+        def movable_internal?
+          @authoring_capability.is_a?(Hash) && @authoring_capability['movable'] == true
+        end
+
+        def authoring_axis
+          movable_internal? ? @authoring_capability['axis'] : nil
         end
 
         def width_mm
@@ -451,8 +468,24 @@ module Granete
             },
             identity: parse_identity_fields(raw, id),
             material: parse_material_fields(raw, id),
-            aabb: parse_aabb_fields(raw, id)
+            aabb: parse_aabb_fields(raw, id),
+            authoring_capability: parse_authoring_capability(raw['authoringCapability'], id)
           )
+        end
+
+        # #467: closed-shape authoring capability published by the engine.
+        # Anything malformed fails closed (contract error) — the plugin never
+        # repairs or infers authoring rights.
+        def parse_authoring_capability(raw, id)
+          return nil if raw.nil?
+
+          unless raw.is_a?(Hash) && raw.keys.sort == %w[axis movable] &&
+                 raw['movable'] == true && AUTHORING_AXES.include?(raw['axis'])
+            raise ContractError,
+                  "authoringCapability de #{id} inválida (se espera {movable: true, axis: x|y|z})"
+          end
+
+          { 'movable' => true, 'axis' => raw['axis'] }
         end
 
         def parse_identity_fields(raw, id)

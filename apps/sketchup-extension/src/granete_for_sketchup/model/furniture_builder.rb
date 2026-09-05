@@ -570,7 +570,8 @@ module Granete
             furniture_ref: furniture_instance_id,
             role: board.role,
             material_binding_role: board.option_role,
-            assembly_translation_mm: board.aabb_min
+            assembly_translation_mm: board.aabb_min,
+            authoring_capability: board.authoring_capability
           )
           instance
         end
@@ -650,15 +651,16 @@ module Granete
         # write_part: managed physical part/aggregate occurrence.
         # component_definition_id is the #346 stable authoring-definition ID
         # (Granete-owned); catalog_component_id is a separate optional
-        # catalog reference namespace that never aliases it. placement and
-        # assembly_translation_mm carry the server-resolved placement/pose of
-        # the occurrence (#467): display/affordance seeds only — the authoring
-        # resolve re-reads the fresh authoritative layout before mutating.
+        # catalog reference namespace that never aliases it. placement,
+        # assembly_translation_mm and authoring_capability carry the
+        # server-resolved state of the occurrence (#467): display/affordance
+        # seeds only — the authoring resolve re-reads the fresh authoritative
+        # layout before mutating.
         # rubocop:disable-next Metrics/ParameterLists
         def write_part(store, entity, comp_id, slot_id, component_definition_id: nil,
                        catalog_component_id: nil, furniture_ref: nil, role: nil,
                        material_binding_role: nil, entity_class: 'part',
-                       assembly_translation_mm: nil)
+                       assembly_translation_mm: nil, authoring_capability: nil)
           return unless store
 
           identity = child_identity(store, comp_id, furniture_ref)
@@ -671,6 +673,7 @@ module Granete
           intent['role'] = role if role
           intent['materialBindingRole'] = material_binding_role if material_binding_role
           intent['assemblyTranslationMm'] = assembly_translation_mm if assembly_translation_mm
+          intent['authoringCapability'] = authoring_capability if authoring_capability
 
           write_child(store, entity, identity, intent)
         end
