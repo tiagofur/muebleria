@@ -257,7 +257,7 @@ module Granete
           if response['status'] == 200
             { 'success' => true, 'status' => body['status'] }
           else
-            { 'success' => false, 'error' => "Error al consultar estado (#{response['status']})." }
+            { 'success' => false, 'http_status' => response['status'], 'error' => "Error al consultar estado (#{response['status']})." }
           end
         rescue Transport::RequestError, Transport::NotConfiguredError => e
           { 'success' => false, 'error' => e.message }

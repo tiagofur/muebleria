@@ -84,6 +84,22 @@ module Granete
         rescue StandardError => e
           @logger.error('session_logout_failed', error: e)
         end
+
+        def handle_open_external_url(payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          raw_url = payload['url'].to_s.strip
+          return if raw_url.empty?
+
+          uri = URI.parse(raw_url)
+          if uri.is_a?(URI::HTTP) || uri.is_a?(URI::HTTPS)
+            UI.openURL(uri.to_s) if defined?(UI) && UI.respond_to?(:openURL)
+            @logger.info('open_external_url', url: uri.to_s)
+          else
+            @logger.warn('open_external_url_rejected', scheme: uri.scheme)
+          end
+        rescue StandardError => e
+          @logger.warn('open_external_url_failed', error: e.message)
+        end
       end
 
       # #388 / DT-4 model binding callback handlers: the dialog never touches
@@ -1685,6 +1701,7 @@ module Granete
           dialog.add_action_callback('enroll') { |_c, p| handle_enroll(dialog, p) }
           dialog.add_action_callback('poll_enrollment') { |_c, p| handle_poll_enrollment(dialog, p) }
           dialog.add_action_callback('logout') { handle_logout(dialog) }
+          dialog.add_action_callback('open_external_url') { |_c, p| handle_open_external_url(p) }
           register_model_binding_callbacks(dialog)
           register_project_furniture_callbacks(dialog)
           # #460 SEC-3: webviews re-mint expired media grants on demand; the

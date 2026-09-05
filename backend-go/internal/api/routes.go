@@ -157,8 +157,21 @@ func RegisterRoutes(server *Server) http.Handler {
 	// a fresh device_enrollment step-up — the boundary runs BEFORE the
 	// idempotency wrapper so a STEP_UP_REQUIRED challenge never consumes the
 	// command's Idempotency-Key (the retried command reuses it).
+	//
+	// #563: Decouple enrollment polling rate limiter so continuous polling
+	// during a pending enrollment does not drain the sensitive login/enroll bucket.
+	devicePollRPS := server.rateLimitRPS
+	if devicePollRPS < 0.5 {
+		devicePollRPS = 0.5
+	}
+	devicePollBurst := server.rateLimitBurst
+	if devicePollBurst < 10 {
+		devicePollBurst = 10
+	}
+	devicePollRL := RateLimitMiddleware(devicePollRPS, devicePollBurst)
+
 	mux.Handle("POST /api/auth/devices/enroll", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceEnroll))))
-	mux.Handle("POST /api/auth/devices/enroll/poll", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceEnrollPoll))))
+	mux.Handle("POST /api/auth/devices/enroll/poll", noStoreMiddleware(devicePollRL(http.HandlerFunc(server.HandleDeviceEnrollPoll))))
 	mux.Handle("POST /api/auth/devices/approve", noStoreMiddleware(authMW(server.RequireStepUp(domain.StepUpScopeDeviceEnrollment, server.RequireIdempotency("auth.approve-device", http.HandlerFunc(server.HandleDeviceApprove))))))
 	mux.Handle("POST /api/auth/devices/exchange", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceExchange))))
 	mux.Handle("POST /api/auth/devices/token", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceToken))))
