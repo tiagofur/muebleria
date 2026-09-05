@@ -351,6 +351,110 @@ class FurnitureBuilderTest < Minitest::Test
     FileUtils.rm_f(fake_texture_file)
   end
 
+  # --- #558 relationship persistence tri-state --------------------------------
+  #
+  # nil preserves the stored relationship state verbatim (caller supplied no
+  # relationship state), [] clears authoritatively, and a non-empty Array
+  # replaces with the authoritative resolve output.
+
+  SHELF_RELATIONSHIPS = [
+    {
+      'relationshipId' => 'rel-shelf-01',
+      'kind' => 'shelf-support',
+      'source' => { 'componentInstanceId' => 'shelf-01', 'role' => 'shelf-edge' },
+      'targets' => [
+        { 'componentInstanceId' => 'side-left-01', 'role' => 'inside-face' },
+        { 'componentInstanceId' => 'side-right-01', 'role' => 'inside-face' }
+      ]
+    }
+  ].freeze
+
+  REPLACEMENT_RELATIONSHIPS = [
+    {
+      'relationshipId' => 'rel-new-02',
+      'kind' => 'shelf-support',
+      'source' => { 'componentInstanceId' => 'shelf-02', 'role' => 'shelf-edge' },
+      'targets' => [{ 'componentInstanceId' => 'side-left-01', 'role' => 'inside-face' }]
+    }
+  ].freeze
+
+  def catalog_definition
+    @provider.find_definition('kitchen-base-standard')
+  end
+
+  def furniture_with_stored_relationships
+    @builder.insert_furniture(@model, catalog_definition,
+                              { 'widthMm' => 600, 'shelfCount' => 1, 'doorCount' => 1 })
+    result = @builder.update_furniture(@model, furniture_instance, catalog_definition, {},
+                                       relationships: SHELF_RELATIONSHIPS)
+    assert result['success']
+    assert_equal SHELF_RELATIONSHIPS, @store.read(furniture_instance)['relationships']
+    furniture_instance
+  end
+
+  def test_update_with_nil_relationships_preserves_stored_ones
+    furniture_with_stored_relationships
+
+    result = @builder.update_furniture(@model, furniture_instance, catalog_definition,
+                                       { 'shelfCount' => 2 }, relationships: nil)
+
+    assert result['success']
+    assert_equal SHELF_RELATIONSHIPS, @store.read(furniture_instance)['relationships'],
+                 'relationships: nil means "caller supplied no relationship state" and must preserve'
+  end
+
+  def test_update_with_empty_relationships_clears_stored_ones
+    furniture_with_stored_relationships
+
+    result = @builder.update_furniture(@model, furniture_instance, catalog_definition,
+                                       {}, relationships: [])
+
+    assert result['success']
+    metadata = @store.read(furniture_instance)
+    refute metadata.key?('relationships'), 'relationships: [] is the authoritative empty set and must clear'
+  end
+
+  def test_update_with_new_relationships_replaces_stored_ones
+    furniture_with_stored_relationships
+
+    result = @builder.update_furniture(@model, furniture_instance, catalog_definition,
+                                       {}, relationships: REPLACEMENT_RELATIONSHIPS)
+
+    assert result['success']
+    metadata = @store.read(furniture_instance)
+    assert_equal REPLACEMENT_RELATIONSHIPS, metadata['relationships']
+    relationship_ids = metadata['relationships'].map { |rel| rel['relationshipId'] }
+    refute_includes relationship_ids, 'rel-shelf-01'
+  end
+
+  def test_place_existing_furniture_persists_supplied_relationships
+    result = @builder.place_existing_furniture(
+      @model,
+      furniture_instance_id: '51000000-0000-0000-0000-0000000004f0',
+      definition: catalog_definition,
+      parameters: {},
+      resolved_layout: native_layout,
+      relationships: SHELF_RELATIONSHIPS
+    )
+
+    assert result['success']
+    assert_equal SHELF_RELATIONSHIPS, @store.read(furniture_instance)['relationships']
+  end
+
+  def test_relationship_state_of_unexpected_type_fails_closed
+    furniture_with_stored_relationships
+
+    error = assert_raises ArgumentError do
+      Granete::SketchUpExtension::Model::MetadataWriter.write_furniture(
+        @store, furniture_instance, 'inst-x', catalog_definition, {},
+        relationships: 'rel-shelf-01'
+      )
+    end
+    assert_match(/relationships/, error.message)
+    # Fail-closed: the invalid call changed nothing.
+    assert_equal SHELF_RELATIONSHIPS, @store.read(furniture_instance)['relationships']
+  end
+
   def test_resolved_hardware_uses_asset_loader_when_asset_available
     definition = @provider.find_definition('kitchen-base-standard')
     loaded = []

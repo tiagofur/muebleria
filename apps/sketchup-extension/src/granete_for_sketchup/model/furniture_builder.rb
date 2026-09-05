@@ -232,10 +232,10 @@ module Granete
         # reused from any local ref. Returns the placed entity handle so the
         # caller can read the final transform and sync the design working
         # copy; on any host error the operation aborts leaving no partial
-        # hierarchy.
+        # hierarchy. relationships follows the MetadataWriter tri-state.
         def place_existing_furniture(model, furniture_instance_id:, definition:, parameters: {},
                                      resolved_layout: nil, material_choices: nil,
-                                     project_id: nil, design_id: nil)
+                                     project_id: nil, design_id: nil, relationships: nil)
           unless furniture_instance_id.is_a?(String) && !furniture_instance_id.strip.empty?
             return { 'success' => false,
                      'error' => 'Se requiere la identidad (furnitureInstanceId) del mueble del proyecto' }
@@ -260,7 +260,8 @@ module Granete
                                            definition, params,
                                            material_choices: material_choices,
                                            identity: { server: true, project_id: project_id,
-                                                       design_id: design_id })
+                                                       design_id: design_id },
+                                           relationships: relationships)
             model.commit_operation
           rescue StandardError => e
             model.abort_operation
@@ -748,12 +749,28 @@ module Granete
                                                             rev_ref, identity: identity)
           metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
           metadata_payload['provenance'] = representation_migration(migrated_from) if migrated_from
-          if relationships.is_a?(Array) && !relationships.empty?
-            metadata_payload['relationships'] = relationships
-          elsif metadata_payload.key?('relationships')
-            metadata_payload.delete('relationships')
-          end
+          apply_relationship_state(metadata_payload, relationships)
           store.write(furniture, metadata_payload)
+        end
+
+        # Relationship persistence is tri-state (#558): nil means the caller
+        # supplied NO relationship state and the existing metadata must survive
+        # verbatim; [] is the authoritative empty set and clears; a non-empty
+        # Array replaces with the authoritative resolve output. Anything else
+        # is a programming error, never a silent guess.
+        def apply_relationship_state(payload, relationships)
+          case relationships
+          when nil
+            nil
+          when Array
+            if relationships.empty?
+              payload.delete('relationships')
+            else
+              payload['relationships'] = relationships
+            end
+          else
+            raise ArgumentError, 'relationships debe ser nil o un Array de relaciones resueltas'
+          end
         end
 
         # #389 identity convergence: with a server identity the

@@ -189,6 +189,10 @@ module Granete
 
       private
 
+      def model
+        Sketchup.active_model
+      end
+
       def quiet_logger
         @quiet_logger ||= Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
       end
@@ -240,21 +244,16 @@ module Granete
 
         def resolve_authoring(request_payload)
           @requests << request_payload
-          assert_includes request_payload['furniture'].keys, 'components',
-                          'authoring resolve must carry component identities'
-          assert_includes request_payload['furniture'].keys, 'hardwarePlacements',
-                          'authoring resolve must carry hardware placements'
-          # Relationships from metadata must be echoed when present (DT-1 #470 contract).
           furniture = request_payload['furniture']
-          if furniture['relationships']
-            assert furniture['relationships'].is_a?(Array), 'relationships must be an array'
-            furniture['relationships'].each do |rel|
-              assert rel.key?('relationshipId'), 'each relationship must have a relationshipId'
-              assert rel.key?('kind'), 'each relationship must have a kind'
-              assert rel.key?('source'), 'each relationship must have a source'
-              assert rel.key?('targets'), 'each relationship must have targets'
-            end
-          end
+          verify_key_present!(furniture, 'components', 'component identities')
+          verify_key_present!(furniture, 'hardwarePlacements', 'hardware placements')
+          # Fail-closed relationship proof (#558): the inspection request MUST
+          # carry the canonical persisted relationship set. Absence or drift
+          # from the golden accepted snapshot raises here and fails the
+          # smoke — there is no green without the relationship state. Plain
+          # raises (not minitest asserts) because this provider is a plain
+          # object without the testcase's assertion module.
+          verify_relationship_echo!(furniture['relationships'])
           body = JSON.parse(JSON.generate(@scenario_body))
           body['responseMessageId'] = "resolve-#{request_payload['messageId']}"
           body['inReplyToMessageId'] = request_payload['messageId']
@@ -266,6 +265,46 @@ module Granete
               'idempotencyKey' => request_payload['idempotencyKey']
             }
           )
+        end
+
+        private
+
+        def verify_key_present!(furniture, key, label)
+          return if furniture.is_a?(Hash) && furniture.key?(key)
+
+          raise "inspection request must carry #{label} (#{key})"
+        end
+
+        # The echoed relationships must be EXACTLY the golden ones (same
+        # relationshipId/kind/source/targets): no invented IDs, no dropped or
+        # extra entries. Comparison data comes from the scenario's canonical
+        # normalized snapshot, never from hand-written expectations.
+        def verify_relationship_echo!(relationships)
+          golden = @scenario_body.dig('normalizedSnapshot', 'relationships')
+          unless golden.is_a?(Array) && !golden.empty?
+            raise 'golden scenario 17-hardware-drilling-conflict must define relationships'
+          end
+
+          unless relationships.is_a?(Array) && !relationships.empty?
+            raise 'InspectionResolver did NOT echo the persisted canonical relationship ' \
+                  "in the request (got: #{relationships.inspect}) — missing = FAIL"
+          end
+          if relationships.length != golden.length
+            raise "relationship count mismatch: request #{relationships.length} " \
+                  "vs golden #{golden.length} (invented or dropped relationships)"
+          end
+
+          golden.each do |golden_rel|
+            echoed = relationships.find { |rel| rel['relationshipId'] == golden_rel['relationshipId'] }
+            raise "request missing golden relationship #{golden_rel['relationshipId']}" if echoed.nil?
+
+            %w[kind source targets].each do |field|
+              next if echoed[field] == golden_rel[field]
+
+              raise "relationship #{golden_rel['relationshipId']} #{field} mismatch: " \
+                    "#{echoed[field].inspect} vs golden #{golden_rel[field].inspect}"
+            end
+          end
         end
       end
 
@@ -296,9 +335,24 @@ module Granete
           furniture_instance_id: FURNITURE_INSTANCE_ID,
           definition: DEFINITION,
           parameters: { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560, 'shelfCount' => 1 },
-          resolved_layout: native_layout
+          resolved_layout: native_layout,
+          relationships: canonical_relationships
         )
         raise "initial placement failed: #{result['error']}" unless result['entity']
+      end
+
+      # Canonical relationship state for the smoke (#558): the SAME
+      # relationships contained in the golden accepted semantic snapshot,
+      # read from normalizedSnapshot — never invented from names — and
+      # persisted on the furniture root through the production metadata
+      # contract (place_existing_furniture → MetadataWriter).
+      def canonical_relationships
+        relationships = @scenario_body.dig('normalizedSnapshot', 'relationships')
+        unless relationships.is_a?(Array) && !relationships.empty?
+          raise 'golden scenario 17-hardware-drilling-conflict must supply normalizedSnapshot.relationships'
+        end
+
+        relationships
       end
 
       def granete_furniture_instances
