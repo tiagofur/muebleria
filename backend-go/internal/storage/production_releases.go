@@ -455,3 +455,50 @@ func (s *PostgresStore) releaseStaleness(ctx context.Context, release domain.Pro
 	staleness.ManufacturingStale = latestFingerprint != release.ManufacturingFingerprint
 	return staleness, nil
 }
+
+// GetContextualProductionRelease finds the exact ProductionRelease whose
+// immutable pins match the selected design revision (and quote revision when
+// pinned). It returns nil without error when no release matches the context.
+func (s *PostgresStore) GetContextualProductionRelease(ctx context.Context, projectID, designRevisionID, quoteRevisionID string) (*domain.ProductionRelease, error) {
+	if !isValidUUID(projectID) || !isValidUUID(designRevisionID) {
+		return nil, domain.ErrInvalidReleaseCommand
+	}
+	if quoteRevisionID != "" && !isValidUUID(quoteRevisionID) {
+		return nil, domain.ErrInvalidReleaseCommand
+	}
+
+	var query string
+	var args []any
+	if quoteRevisionID != "" {
+		query = `
+			SELECT ` + productionReleaseColumns + `
+			FROM production_releases
+			WHERE project_id = $1
+			  AND design_revision_id = $2
+			  AND (quote_revision_id = $3::uuid OR quote_revision_id IS NULL)
+			ORDER BY CASE WHEN quote_revision_id = $3::uuid THEN 0 ELSE 1 END, release_number DESC
+			LIMIT 1
+		`
+		args = []any{projectID, designRevisionID, quoteRevisionID}
+	} else {
+		query = `
+			SELECT ` + productionReleaseColumns + `
+			FROM production_releases
+			WHERE project_id = $1
+			  AND design_revision_id = $2
+			  AND quote_revision_id IS NULL
+			ORDER BY release_number DESC
+			LIMIT 1
+		`
+		args = []any{projectID, designRevisionID}
+	}
+
+	release, err := scanProductionRelease(s.db(ctx).QueryRow(ctx, query, args...))
+	if err != nil {
+		if errors.Is(err, domain.ErrReleaseNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return release, nil
+}

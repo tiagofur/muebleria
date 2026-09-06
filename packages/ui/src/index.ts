@@ -143,6 +143,13 @@ export {
   type ProjectOverviewNav,
 } from './projects';
 
+export {
+  ProjectFurnitureScreen,
+  projectFurnitureQueryKeys,
+  type ProjectFurnitureContextState,
+  type ProjectFurnitureQueryKeys,
+  type ProjectFurnitureScreenProps,
+} from './digitalThread';
 
 export {
   ShowcaseScreen,

@@ -255,6 +255,8 @@ export interface ProjectsScreenProps {
    * Shell navigates to `/production/:id`.
    */
   readonly onOpenInProduction?: (projectId: string) => void;
+  /** WEB-DT-1 (#500): opens the server-backed Project Furniture matrix. */
+  readonly onOpenFurnitureMatrix?: (projectId: string) => void;
   /**
    * Commercial quote export for client (F030 / #36).
    * Shell owns breakdown → xlsx → download.
@@ -503,6 +505,7 @@ export function ProjectsScreen({
   onExport,
   onExportProductionPack,
   onOpenInProduction,
+  onOpenFurnitureMatrix,
   onExportCommercialQuote,
   onExportCommercialQuotePdf,
   exportErrors = [],
@@ -722,6 +725,7 @@ export function ProjectsScreen({
           onExport={onExport}
           onExportProductionPack={onExportProductionPack}
           onOpenInProduction={onOpenInProduction}
+          onOpenFurnitureMatrix={onOpenFurnitureMatrix}
           itemHandlers={{
             onUpdateItemQuantity: state.updateItemQuantity,
             onUpdateItemMeasurePreset: state.updateItemMeasurePreset,

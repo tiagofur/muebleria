@@ -68,10 +68,13 @@ import type {
   PrepareDesignPublishRequest,
   ProductionRelease,
   ProjectDesignReconciliationResult,
+  ProjectFurnitureWorkspace,
+  ProjectFurnitureWorkspaceRequest,
   ProjectQuoteRequoteResult,
   ProvisionOrganizationRequest,
   PublishDesignRevisionRequest,
   QuoteLineFurnitureInstance,
+  QuoteRevisionDetail,
   ReconcileProjectDesignRequest,
   RefreshRequest,
   RequoteProjectQuoteRequest,
@@ -189,6 +192,8 @@ export abstract class GeneratedGraneteApiClient {
   createProjectDesign(token: string, projectId: string, body: CreateDesignRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<Design> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs`, { schema: "Design", token, bodySchema: "CreateDesignRequest", body, idempotencyKey: key, signal }); }
   validateProjectDesignModelBinding(token: string, projectId: string, designId: string, body: ValidateModelBindingRequest, signal?: AbortSignal): Promise<ModelBindingValidation> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/binding:validate`, { schema: "ModelBindingValidation", token, bodySchema: "ValidateModelBindingRequest", body, signal }); }
   reconcileProjectDesign(token: string, projectId: string, body: ReconcileProjectDesignRequest, signal?: AbortSignal): Promise<ProjectDesignReconciliationResult> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/reconciliation`, { schema: "ProjectDesignReconciliationResult", token, bodySchema: "ReconcileProjectDesignRequest", body, signal }); }
+  getProjectFurnitureWorkspace(token: string, projectId: string, body: ProjectFurnitureWorkspaceRequest, signal?: AbortSignal): Promise<ProjectFurnitureWorkspace> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-workspace`, { schema: "ProjectFurnitureWorkspace", token, bodySchema: "ProjectFurnitureWorkspaceRequest", body, signal }); }
+  listProjectQuoteRevisions(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<QuoteRevisionDetail>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/quote-revisions`, { arrayOf: "QuoteRevisionDetail", token, signal }); }
   requoteProjectQuote(token: string, projectId: string, body: RequoteProjectQuoteRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProjectQuoteRequoteResult> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions:requote`, { schema: "ProjectQuoteRequoteResult", token, bodySchema: "RequoteProjectQuoteRequest", body, idempotencyKey: key, signal }); }
   approveDesignRevision(token: string, designId: string, revisionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}:approve`, { schema: "DesignRevision", token, idempotencyKey: key, signal }); }
   listProjectProductionReleases(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<ProductionRelease>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases`, { arrayOf: "ProductionRelease", token, signal }); }

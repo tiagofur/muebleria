@@ -99,6 +99,39 @@ func toImpactSummaryDTO(summary domain.ImpactClassificationSummary) openapi.Reco
 	}
 }
 
+func toReconciliationItemDTO(it domain.ReconciliationItem, impact domain.ChangeImpact) openapi.ReconciliationItem {
+	diffs := make([]openapi.StructuredDifference, len(it.Differences))
+	for d, diff := range it.Differences {
+		var qVal, dVal *any
+		if diff.QuoteValue != nil {
+			v := diff.QuoteValue
+			qVal = &v
+		}
+		if diff.DesignValue != nil {
+			v := diff.DesignValue
+			dVal = &v
+		}
+		diffs[d] = openapi.StructuredDifference{
+			Path:        diff.Path,
+			QuoteValue:  qVal,
+			DesignValue: dVal,
+			Impact:      toChangeImpactDTO(domain.ClassifyDifferencePath(diff.Path)),
+		}
+	}
+	var notes *string
+	if it.Notes != "" {
+		n := it.Notes
+		notes = &n
+	}
+	return openapi.ReconciliationItem{
+		FurnitureInstanceId: it.FurnitureInstanceID,
+		Status:              openapi.ReconciliationStatus(it.Status),
+		Differences:         diffs,
+		Impact:              toChangeImpactDTO(impact),
+		Notes:               notes,
+	}
+}
+
 func toReconciliationResultDTO(r *domain.ReconciliationResult, classification *domain.ImpactClassificationResult) openapi.ProjectDesignReconciliationResult {
 	impactsByID := make(map[string]domain.ChangeImpact, len(classification.Items))
 	for _, item := range classification.Items {
@@ -107,36 +140,7 @@ func toReconciliationResultDTO(r *domain.ReconciliationResult, classification *d
 
 	items := make([]openapi.ReconciliationItem, len(r.Items))
 	for i, it := range r.Items {
-		diffs := make([]openapi.StructuredDifference, len(it.Differences))
-		for d, diff := range it.Differences {
-			var qVal, dVal *any
-			if diff.QuoteValue != nil {
-				v := diff.QuoteValue
-				qVal = &v
-			}
-			if diff.DesignValue != nil {
-				v := diff.DesignValue
-				dVal = &v
-			}
-			diffs[d] = openapi.StructuredDifference{
-				Path:        diff.Path,
-				QuoteValue:  qVal,
-				DesignValue: dVal,
-				Impact:      toChangeImpactDTO(domain.ClassifyDifferencePath(diff.Path)),
-			}
-		}
-		var notes *string
-		if it.Notes != "" {
-			n := it.Notes
-			notes = &n
-		}
-		items[i] = openapi.ReconciliationItem{
-			FurnitureInstanceId: it.FurnitureInstanceID,
-			Status:              openapi.ReconciliationStatus(it.Status),
-			Differences:         diffs,
-			Impact:              toChangeImpactDTO(impactsByID[it.FurnitureInstanceID]),
-			Notes:               notes,
-		}
+		items[i] = toReconciliationItemDTO(it, impactsByID[it.FurnitureInstanceID])
 	}
 
 	return openapi.ProjectDesignReconciliationResult{

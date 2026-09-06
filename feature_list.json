@@ -5804,6 +5804,21 @@
         "F212",
         "F213"
       ]
+    },
+    {
+      "id": "F216",
+      "title": "Project Furniture matrix and physical-unit traceability (#500 / WEB-DT-1)",
+      "description": "First visible React surface of the Digital Thread: a server-backed Project Furniture matrix at /quotes/:id/muebles ('Muebles', entry from the project detail menu) that shows every Project-owned physical FurnitureInstance across an exact commercial context and an exact design context. The exact QuoteRevision selector is powered by a new generated read model (GET /api/projects/{projectId}/quote-revisions -> QuoteRevisionDetail[] with per-unit immutable commercial items); commercial presence derives only from the selected revision snapshot. Pending/placed derives from the selected design context (working copy or exact published DesignRevision) joined strictly by furnitureInstanceId - the same #389 semantics the SketchUp panel uses; quantity>1 renders one row per physical unit with 'Unidad i de N' grouping by definition/origin. Reconciliation badges (synced/quoted_not_modeled/modeled_not_quoted/modified/removed/conflict) mirror the server reconcileProjectDesign result only and are available exclusively against exact published revisions; the release reference shows the newest ProductionRelease pin and manufacturing staleness. Read-only: no local operation mutates physical identity. Context ids travel pinned in the URL query (?qrev=&design=&rev=work|<id>) so a newer revision never silently retargets a historical view; query keys are session/tenant-scoped and the shell remounts on organization switch.",
+      "tags": [
+        "web",
+        "digital-thread",
+        "frontend",
+        "p0"
+      ],
+      "created": "2026-09-05",
+      "status": "done",
+      "completedAt": "2026-09-05",
+      "evidence": "Generated contract: pnpm openapi:generate + openapi:check green (new listProjectQuoteRevisions operation, QuoteRevisionDetail/QuoteRevisionItem schemas in client.ts/types.ts/types.gen.go). Backend: go test ./... green incl. handler unit tests (role guard, DTO round-trip with per-unit items, uniform 404, empty list, invalid uuid) and real-PostgreSQL storage tests (revision ordering, snapshot round-trip, manufacturing-org shared read, unrelated-org and cross-tenant uniform ErrQuoteRevisionNotFound, fail-closed corrupt JSON, empty-visible-project). Web: pnpm test green (ui + web suites) incl. furnitureMatrix.test.ts (13 tests: qty>1 unit identity, partial placement, mixed origins, exact revision switching, server-only reconciliation mirroring, terminal history, filters, defaults, release reference) and ProjectFurnitureScreen.test.tsx (11 tests: generated-client-only source proof, tenant-scoped keys, qty=3 rows 'Unidad i de N', working-copy placed/pending, pinned exact revision via onContextChange with no reconciliation POST without an exact published revision, server reconciliation badges, no-design honesty, empty/no-results/forbidden/cross-tenant distinct states, release pin). pnpm typecheck green."
     }
   ]
 }

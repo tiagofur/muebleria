@@ -120,6 +120,8 @@ export interface ProjectDetailContextValue {
   readonly onExport?: () => void | Promise<void>;
   readonly onExportProductionPack?: () => void | Promise<void>;
   readonly onOpenInProduction?: (projectId: string) => void;
+  /** WEB-DT-1 (#500): open the server-backed Project Furniture matrix. */
+  readonly onOpenFurnitureMatrix?: (projectId: string) => void;
 
   // --- Item handlers ---
   readonly itemHandlers: ProjectDetailItemHandlers;
