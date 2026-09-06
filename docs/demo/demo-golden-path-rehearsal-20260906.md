@@ -160,11 +160,18 @@ evidence; sin implementación de features. Predecesores:
 
 ## Quote lifecycle verdict
 
-- Q1 create/publish/accept: **NO disponible por HTTP/UI** (sólo requote existe).
-- Q2 accept: **NO disponible** (E2E usa SQL por rol migration).
+> **Actualizado tras #571 (2026-09-06, post-rehearsal)**: el P0-1 fue cerrado —
+> ver la sección P0-1 de arriba. El verdict original del rehearsal se conserva
+> como evidencia histórica.
+
+- Q1 create/publish/accept: **NO disponible por HTTP/UI** (sólo requote existe)
+  — *hallazgo original; RESUELTO en #571*.
+- Q2 accept: **NO disponible** (E2E usa SQL por rol migration) — *hallazgo
+  original; RESUELTO en #571 (E2E sin SQL lifecycle mutations)*.
 - Demo viability: contable con fixture; **no ejecutable en vivo** el momento de
-  aceptación del cliente. `COMMERCIAL REVISION LIFECYCLE DEMO READY: NO`.
-- Next action: issue S (P0-1).
+  aceptación del cliente — *hallazgo original*. Estado actual:
+  `COMMERCIAL REVISION LIFECYCLE DEMO READY: YES (#571)`.
+- Next action: issue S (P0-1) — *ejecutada como #571*.
 
 ## Hardware verdict
 
