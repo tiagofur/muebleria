@@ -8,7 +8,7 @@ import urllib.request
 TYPES = {"type:" + name for name in
          ("bug", "feature", "docs", "refactor", "chore", "breaking-change")}
 REFERENCE = re.compile(r"(?:Closes|Fixes|Resolves|Refs) #([1-9][0-9]*)", re.I)
-TARGET = re.compile(r"\b(?:clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed)|refs)\b\s*:?\s*(?:#|https?://|[\w.-]+/|[0-9])", re.I)
+TARGET = re.compile(r"\b(?:clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed)|refs)\b\s*:?\s*(?:#|https?://|[\w.-]+/[\w.-]+\s*#|[0-9]+(?![0-9/]))", re.I)
 
 
 def require(condition, message):
@@ -29,7 +29,7 @@ def linked_issue(body):
     lines = [line.strip() for line in body.splitlines() if line.strip()]
     match = REFERENCE.fullmatch(lines[0]) if lines else None
     require(match is not None, "First nonempty line must be Closes/Fixes/Resolves/Refs #N")
-    require(not any(TARGET.search(line) for line in lines[1:]),
+    require(TARGET.search("\n".join(lines[1:])) is None,
             "Additional issue-link targets are not allowed")
     return int(match[1])
 
