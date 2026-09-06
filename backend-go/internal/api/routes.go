@@ -446,6 +446,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/designs/{designId}/revisions/{revisionCommand...}", noStoreMiddleware(authMW(server.RequireIdempotency("design.approve-revision", designRevisionCommandRouter(map[string]http.Handler{
 		"approve": http.HandlerFunc(server.HandleDesignRevisionApprove),
 	})))))
+	// #502 / WEB-DT-3: read-only authoritative preflight evaluation for the
+	// exact revision — POST mirrors the reconcileProjectDesign compute-read
+	// precedent; no idempotency key because nothing mutates.
+	mux.Handle("POST /api/designs/{designId}/revisions/{revisionId}/preflight", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleDesignRevisionPreflight))))
 	mux.Handle("GET /api/projects/{projectId}/production-releases", authMW(http.HandlerFunc(server.HandleProjectProductionReleases)))
 	mux.Handle("POST /api/projects/{projectId}/production-releases", noStoreMiddleware(authMW(server.RequireIdempotency("production.release", http.HandlerFunc(server.HandleProjectProductionReleases)))))
 	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}", authMW(http.HandlerFunc(server.HandleProjectProductionRelease)))

@@ -121,6 +121,12 @@ type stubStore struct {
 	createProductionReleaseErr    error
 	createProductionReleaseCalls  int
 	createProductionReleaseCmd    *storage.CreateProductionReleaseCommand
+	// Read-only preflight evaluation (#502 / WEB-DT-3)
+	evaluatePreflightResult     *domain.ManufacturingPreflightResult
+	evaluatePreflightErr        error
+	evaluatePreflightCalls      int
+	evaluatePreflightDesignID   string
+	evaluatePreflightRevisionID string
 	listProductionReleasesResult  []storage.ProductionReleaseReadback
 	listProductionReleasesErr     error
 	getProductionReleaseResult    *storage.ProductionReleaseReadback
@@ -3259,6 +3265,25 @@ func (s *stubStore) ApproveDesignRevision(_ context.Context, cmd storage.Approve
 		Status:         domain.DesignRevisionStatusApproved,
 		ApprovedBy:     cmd.ActorUserID,
 		ApprovedAt:     &[]time.Time{time.Now()}[0],
+	}, nil
+}
+
+func (s *stubStore) EvaluateDesignRevisionPreflight(_ context.Context, designID, revisionID string) (*domain.ManufacturingPreflightResult, error) {
+	s.evaluatePreflightCalls++
+	s.evaluatePreflightDesignID = designID
+	s.evaluatePreflightRevisionID = revisionID
+	if s.evaluatePreflightErr != nil {
+		return nil, s.evaluatePreflightErr
+	}
+	if s.evaluatePreflightResult != nil {
+		return s.evaluatePreflightResult, nil
+	}
+	return &domain.ManufacturingPreflightResult{
+		DesignRevisionID: revisionID,
+		Scope:            domain.ManufacturingPreflightScope,
+		Status:           domain.ManufacturingPreflightReady,
+		Items:            []domain.ManufacturingPreflightItem{},
+		Issues:           []domain.ManufacturingPreflightIssue{},
 	}, nil
 }
 

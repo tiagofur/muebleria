@@ -2862,6 +2862,48 @@
         }
       }
     },
+    "/designs/{designId}/revisions/{revisionId}/preflight": {
+      "post": {
+        "operationId": "evaluateDesignRevisionPreflight",
+        "summary": "Evaluate the authoritative release manufacturing preflight for an exact DesignRevision (#502 / WEB-DT-3, read-only)",
+        "description": "Runs the exact same authoritative release-scoped manufacturing preflight (#395 / #466: scope production-release-v1) that gates createProductionRelease, as a read-only evaluation over the immutable revision snapshot and the organization catalog. No second engine: identical inputs, identical issue codes, identical verdict the release command will enforce. POST is a read mirroring the reconcileProjectDesign precedent. Does not mutate anything and does not create a release.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative manufacturing preflight result for the exact revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManufacturingPreflightResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/production-releases": {
       "get": {
         "operationId": "listProjectProductionReleases",
@@ -6470,6 +6512,125 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ManufacturingPreflightStatus": {
+        "type": "string",
+        "description": "Authoritative release preflight verdict (#395 / #466, scope production-release-v1).",
+        "enum": [
+          "ready",
+          "blocked"
+        ]
+      },
+      "ManufacturingPreflightItemStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "blocked"
+        ]
+      },
+      "ManufacturingPreflightIssueCode": {
+        "type": "string",
+        "description": "Canonical blocker codes of the release manufacturing preflight. No other taxonomy.",
+        "enum": [
+          "empty_revision",
+          "duplicate_instance",
+          "missing_definition",
+          "invalid_parameters",
+          "invalid_material_choice"
+        ]
+      },
+      "ManufacturingPreflightIssue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ManufacturingPreflightIssueCode"
+          },
+          "furnitureInstanceId": {
+            "type": "string",
+            "description": "Exact physical unit the issue refers to, when applicable."
+          },
+          "furnitureDefinitionId": {
+            "type": "string",
+            "description": "Catalog definition the issue refers to, when applicable."
+          },
+          "parameter": {
+            "type": "string",
+            "description": "Parameter name involved, when applicable."
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ManufacturingPreflightItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furnitureInstanceId",
+          "furnitureDefinitionId",
+          "status",
+          "issues"
+        ],
+        "properties": {
+          "furnitureInstanceId": {
+            "type": "string"
+          },
+          "furnitureDefinitionId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManufacturingPreflightItemStatus"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingPreflightIssue"
+            }
+          }
+        }
+      },
+      "ManufacturingPreflightResult": {
+        "type": "object",
+        "description": "The exact result the release command enforces, evaluated read-only over the immutable revision snapshot.",
+        "additionalProperties": false,
+        "required": [
+          "designRevisionId",
+          "scope",
+          "status",
+          "items",
+          "issues"
+        ],
+        "properties": {
+          "designRevisionId": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "production-release-v1"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManufacturingPreflightStatus"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingPreflightItem"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingPreflightIssue"
+            }
           }
         }
       },

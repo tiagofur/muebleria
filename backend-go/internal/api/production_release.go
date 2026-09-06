@@ -67,6 +67,87 @@ func respondWithDesignApprovalError(w http.ResponseWriter, err error) {
 	}
 }
 
+// HandleDesignRevisionPreflight serves POST
+// /api/designs/{designId}/revisions/{revisionId}/preflight (#502 / WEB-DT-3).
+// Read-only evaluation of the authoritative release manufacturing preflight
+// over the exact immutable revision — the same verdict createProductionRelease
+// enforces, surfaced so Web can show it WITHOUT a second engine and without
+// attempting a release to discover blockers.
+func (s *Server) HandleDesignRevisionPreflight(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanAccessProjects), "no tenés permiso para ver el preflight de la revisión") {
+		return
+	}
+
+	designID := r.PathValue("designId")
+	revisionID := r.PathValue("revisionId")
+	if !isValidUUID(designID) || !isValidUUID(revisionID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "IDs inválidos", nil)
+		return
+	}
+
+	result, err := s.Store.EvaluateDesignRevisionPreflight(r.Context(), designID, revisionID)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrDesignRevisionNotFound):
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "La revisión de diseño no existe", nil)
+		case errors.Is(err, domain.ErrInvalidReleaseCommand):
+			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "IDs inválidos", nil)
+		default:
+			respondWithInternalError(w, err, "evaluate design revision preflight")
+		}
+		return
+	}
+	respondWithJSON(w, http.StatusOK, toManufacturingPreflightDTO(result))
+}
+
+func toManufacturingPreflightIssueDTO(issues []domain.ManufacturingPreflightIssue) []openapi.ManufacturingPreflightIssue {
+	out := make([]openapi.ManufacturingPreflightIssue, 0, len(issues))
+	for _, issue := range issues {
+		dto := openapi.ManufacturingPreflightIssue{
+			Code:    openapi.ManufacturingPreflightIssueCode(issue.Code),
+			Message: issue.Message,
+		}
+		if issue.FurnitureInstanceID != "" {
+			id := issue.FurnitureInstanceID
+			dto.FurnitureInstanceId = &id
+		}
+		if issue.FurnitureDefinitionID != "" {
+			id := issue.FurnitureDefinitionID
+			dto.FurnitureDefinitionId = &id
+		}
+		if issue.Parameter != "" {
+			p := issue.Parameter
+			dto.Parameter = &p
+		}
+		out = append(out, dto)
+	}
+	return out
+}
+
+func toManufacturingPreflightDTO(result *domain.ManufacturingPreflightResult) openapi.ManufacturingPreflightResult {
+	items := make([]openapi.ManufacturingPreflightItem, 0, len(result.Items))
+	for _, item := range result.Items {
+		items = append(items, openapi.ManufacturingPreflightItem{
+			FurnitureInstanceId:   item.FurnitureInstanceID,
+			FurnitureDefinitionId: item.FurnitureDefinitionID,
+			Status:                openapi.ManufacturingPreflightItemStatus(item.Status),
+			Issues:                toManufacturingPreflightIssueDTO(item.Issues),
+		})
+	}
+	return openapi.ManufacturingPreflightResult{
+		DesignRevisionId: result.DesignRevisionID,
+		Scope:            result.Scope,
+		Status:           openapi.ManufacturingPreflightStatus(result.Status),
+		Items:            items,
+		Issues:           toManufacturingPreflightIssueDTO(result.Issues),
+	}
+}
+
 // HandleProjectProductionReleases serves GET (list) and POST (create) for
 // /api/projects/{projectId}/production-releases.
 func (s *Server) HandleProjectProductionReleases(w http.ResponseWriter, r *http.Request) {

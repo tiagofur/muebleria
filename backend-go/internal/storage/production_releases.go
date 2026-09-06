@@ -246,6 +246,55 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 	return &ProductionReleaseReadback{Release: release, Staleness: *staleness}, nil
 }
 
+// EvaluateDesignRevisionPreflight (#502 / WEB-DT-3) evaluates the exact same
+// authoritative release manufacturing preflight that gates
+// CreateProductionRelease — read-only, over the immutable revision snapshot
+// and the organization catalog. There is deliberately no second engine: the
+// same loaders, the same domain function, the same verdict a release command
+// would enforce. Nothing is persisted and no release is created.
+func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, designID, revisionID string) (*domain.ManufacturingPreflightResult, error) {
+	if !isValidUUID(designID) || !isValidUUID(revisionID) {
+		return nil, domain.ErrInvalidReleaseCommand
+	}
+
+	// 1. Load the exact revision pinned to its design (cross-design answers
+	// the uniform revision 404, mirroring GetDesignRevision semantics) and
+	// resolve the owning organization for the catalog lookup.
+	var drDesignID, projectOrgID string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT design_id::text, organization_id::text
+		FROM design_revisions WHERE id = $1
+	`, revisionID).Scan(&drDesignID, &projectOrgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignRevisionNotFound
+		}
+		return nil, err
+	}
+	if drDesignID != designID {
+		return nil, domain.ErrDesignRevisionNotFound
+	}
+
+	// 2. Immutable snapshot items: the exact preflight inputs a release
+	// would validate.
+	items, err := s.ListDesignRevisionItems(ctx, revisionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Catalog parameter contracts for the referenced definitions — the
+	// identical loader the release path uses.
+	definitions, err := s.loadReferencedFurnitureDefinitionParameters(ctx, projectOrgID, items)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. The ONE authoritative verdict. RLS scopes the revision read to the
+	// organizations that can access the project, so a foreign revision never
+	// reaches this point.
+	return domain.RunManufacturingPreflight(revisionID, items, definitions), nil
+}
+
 // loadReferencedFurnitureDefinitionParameters loads the persisted parameter
 // contracts for exactly the definitions the revision references. A definition
 // whose contract fails to decode fail-closes its items (ContractInvalid)
