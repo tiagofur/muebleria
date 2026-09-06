@@ -188,56 +188,73 @@ func TestHandleDesignRevisionPreflight_BlockedIssuesEchoed(t *testing.T) {
 	}
 }
 
-func TestHandleDesignRevisionApprove_ForwardsExactQuotePin(t *testing.T) {
-	// #502 production approval: the optional body pin travels verbatim to the
-	// command; an invalid pin rejects 400 before any store call.
+func TestHandleDesignRevisionApproveForProduction_RequiresAndForwardsExactPin(t *testing.T) {
+	// #502 production approval: the exact quote pin is REQUIRED — there is no
+	// body-less mode — and travels verbatim to the always-gated command.
 	stub := &stubStore{}
 	server := &Server{Store: stub}
+	projectID := "11111111-0000-4000-8000-000000000001"
 	designID := "30000000-0000-4000-8000-000000000005"
 	revisionID := "40000000-0000-4000-8000-000000000007"
 	quoteID := "aaaaaaa1-0000-4000-8000-000000000001"
 
-	req := httptest.NewRequest(http.MethodPost,
-		"/api/designs/"+designID+"/revisions/"+revisionID+":approve",
-		bytes.NewBufferString(`{"quoteRevisionId":"`+quoteID+`"}`))
-	req.SetPathValue("designId", designID)
-	req.SetPathValue("revisionId", revisionID)
-	req = withTestClaims(req, "user-1", []domain.UserRole{domain.RoleAdmin})
+	newReq := func(body string) *http.Request {
+		var reader *bytes.Reader
+		if body == "" {
+			reader = bytes.NewReader(nil)
+		} else {
+			reader = bytes.NewReader([]byte(body))
+		}
+		req := httptest.NewRequest(http.MethodPost,
+			"/api/projects/"+projectID+"/designs/"+designID+"/revisions/"+revisionID+":approve-for-production",
+			reader)
+		req.SetPathValue("projectId", projectID)
+		req.SetPathValue("designId", designID)
+		req.SetPathValue("revisionId", revisionID)
+		return withTestClaims(req, "user-1", []domain.UserRole{domain.RoleAdmin})
+	}
+
+	// Exact pin forwarded verbatim.
 	w := httptest.NewRecorder()
-	server.HandleDesignRevisionApprove(w, req)
+	server.HandleProjectDesignRevisionApproveForProduction(w, newReq(`{"quoteRevisionId":"`+quoteID+`"}`))
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	if stub.approveDesignRevisionCmd == nil || stub.approveDesignRevisionCmd.QuoteRevisionID != quoteID {
-		t.Fatalf("exact quote pin must be forwarded to the command")
+	if stub.approveForProductionCmd == nil || stub.approveForProductionCmd.QuoteRevisionID != quoteID ||
+		stub.approveForProductionCmd.ProjectID != projectID {
+		t.Fatalf("exact quote pin + project must be forwarded to the command, got %+v", stub.approveForProductionCmd)
 	}
 
-	// Empty body keeps the legacy bare transition.
-	req = httptest.NewRequest(http.MethodPost,
-		"/api/designs/"+designID+"/revisions/"+revisionID+":approve", nil)
-	req.SetPathValue("designId", designID)
-	req.SetPathValue("revisionId", revisionID)
-	req = withTestClaims(req, "user-1", []domain.UserRole{domain.RoleAdmin})
+	// Missing body / empty pin: NO skip mode — 400 before any store call.
+	before := stub.approveForProductionCalls
 	w = httptest.NewRecorder()
-	server.HandleDesignRevisionApprove(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("body-less approval must keep working, got %d", w.Code)
+	server.HandleProjectDesignRevisionApproveForProduction(w, newReq(``))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("body-less production approval must reject 400, got %d", w.Code)
 	}
-	if stub.approveDesignRevisionCmd.QuoteRevisionID != "" {
-		t.Fatalf("body-less approval must not pin a quote")
+	if stub.approveForProductionCalls != before {
+		t.Fatalf("invalid pin must not reach the store")
 	}
 
 	// Invalid pin UUID rejects 400.
-	req = httptest.NewRequest(http.MethodPost,
-		"/api/designs/"+designID+"/revisions/"+revisionID+":approve",
-		bytes.NewBufferString(`{"quoteRevisionId":"nope"}`))
-	req.SetPathValue("designId", designID)
-	req.SetPathValue("revisionId", revisionID)
-	req = withTestClaims(req, "user-1", []domain.UserRole{domain.RoleAdmin})
 	w = httptest.NewRecorder()
-	server.HandleDesignRevisionApprove(w, req)
+	server.HandleProjectDesignRevisionApproveForProduction(w, newReq(`{"quoteRevisionId":"nope"}`))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("invalid quoteRevisionId must 400, got %d", w.Code)
+	}
+
+	// Read-only roles cannot call the production approval at all.
+	vendedorReq := httptest.NewRequest(http.MethodPost,
+		"/api/projects/"+projectID+"/designs/"+designID+"/revisions/"+revisionID+":approve-for-production",
+		bytes.NewBufferString(`{"quoteRevisionId":"`+quoteID+`"}`))
+	vendedorReq.SetPathValue("projectId", projectID)
+	vendedorReq.SetPathValue("designId", designID)
+	vendedorReq.SetPathValue("revisionId", revisionID)
+	vendedorReq = withTestClaims(vendedorReq, "user-1", []domain.UserRole{domain.RoleVendedor})
+	w = httptest.NewRecorder()
+	server.HandleProjectDesignRevisionApproveForProduction(w, vendedorReq)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("vendedor must not approve for production, got %d", w.Code)
 	}
 }
 

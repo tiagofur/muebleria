@@ -884,8 +884,8 @@ type QuoteLineFurnitureInstance struct {
 	CreatedAt           string            `json:"created_at"`
 }
 
-type ApproveDesignRevisionRequest struct {
-	QuoteRevisionId *string `json:"quoteRevisionId,omitempty"`
+type ApproveDesignRevisionForProductionRequest struct {
+	QuoteRevisionId string `json:"quoteRevisionId"`
 }
 
 type ManufacturingPreflightStatus string

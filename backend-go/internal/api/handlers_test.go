@@ -121,6 +121,10 @@ type stubStore struct {
 	createProductionReleaseErr    error
 	createProductionReleaseCalls  int
 	createProductionReleaseCmd    *storage.CreateProductionReleaseCommand
+	// Always-gated production approval (#502 / WEB-DT-3)
+	approveForProductionCalls int
+	approveForProductionCmd   *storage.ApproveDesignRevisionForProductionCommand
+	approveForProductionErr   error
 	// Read-only preflight evaluation (#502 / WEB-DT-3)
 	evaluatePreflightResult     *domain.ManufacturingPreflightResult
 	evaluatePreflightErr        error
@@ -3266,6 +3270,22 @@ func (s *stubStore) ApproveDesignRevision(_ context.Context, cmd storage.Approve
 		ApprovedBy:     cmd.ActorUserID,
 		ApprovedAt:     &[]time.Time{time.Now()}[0],
 	}, nil
+}
+
+func (s *stubStore) ApproveDesignRevisionForProduction(_ context.Context, cmd storage.ApproveDesignRevisionForProductionCommand) (*domain.DesignRevision, error) {
+	s.approveForProductionCalls++
+	cmdCopy := cmd
+	s.approveForProductionCmd = &cmdCopy
+	if s.approveForProductionErr != nil {
+		return nil, s.approveForProductionErr
+	}
+	return s.ApproveDesignRevision(context.Background(), storage.ApproveDesignRevisionCommand{
+		DesignID:         cmd.DesignID,
+		DesignRevisionID: cmd.DesignRevisionID,
+		ActorUserID:      cmd.ActorUserID,
+		IP:               cmd.IP,
+		RequestID:        cmd.RequestID,
+	})
 }
 
 func (s *stubStore) EvaluateDesignRevisionPreflight(_ context.Context, designID, revisionID string) (*domain.ManufacturingPreflightResult, error) {

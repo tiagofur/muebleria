@@ -76,7 +76,8 @@ func TestApproveDesignRevision_ProductionGateHappyPath(t *testing.T) {
 	var approved *domain.DesignRevision
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		approved, err = fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
+		approved, err = fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
+			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
 			DesignRevisionID: revID,
 			QuoteRevisionID:  fx.quoteQ3,
@@ -93,7 +94,8 @@ func TestApproveDesignRevision_ProductionGateHappyPath(t *testing.T) {
 
 	// Idempotent replay with the same pin keeps returning the approved state.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
+		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
+			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
 			DesignRevisionID: revID,
 			QuoteRevisionID:  fx.quoteQ3,
@@ -116,7 +118,8 @@ func TestApproveDesignRevision_ProductionGateBlocksOnCommercialChange(t *testing
 	width := 650.0
 	revID := publishRevisionFromWorkingCopy(t, fx, fx.revR3, cleanWorkingItems(fx, &width))
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
+		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
+			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
 			DesignRevisionID: revID,
 			QuoteRevisionID:  fx.quoteQ3,
@@ -129,8 +132,10 @@ func TestApproveDesignRevision_ProductionGateBlocksOnCommercialChange(t *testing
 		t.Fatalf("gated approval must reject unincorporated commercial change, got %v", err)
 	}
 
-	// The same revision still approves through the legacy body-less form
-	// (non-production flows keep the bare lifecycle transition).
+	// The generic lifecycle approval (a SEPARATE concept: design-first flows
+	// without a commercial baseline) still transitions the revision — but the
+	// commercial Digital Thread stays protected at its own boundary: a
+	// quote-pinned release over this revision is rejected by the same gate.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
 			DesignID:         fx.designID,
@@ -140,7 +145,19 @@ func TestApproveDesignRevision_ProductionGateBlocksOnCommercialChange(t *testing
 		return err
 	})
 	if err != nil {
-		t.Fatalf("legacy body-less approval must keep working: %v", err)
+		t.Fatalf("generic lifecycle approval must keep working: %v", err)
+	}
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
+			ProjectID:        fx.projectID,
+			DesignRevisionID: revID,
+			QuoteRevisionID:  fx.quoteQ3,
+			ActorUserID:      rlsUserA,
+		})
+		return err
+	})
+	if !errors.As(err, &commercial) {
+		t.Fatalf("quote-pinned release must still enforce the commercial gate, got %v", err)
 	}
 }
 
@@ -162,7 +179,8 @@ func TestApproveDesignRevision_ProductionGateBlocksOnPreflight(t *testing.T) {
 	}
 
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
+		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
+			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
 			DesignRevisionID: revID,
 			QuoteRevisionID:  fx.quoteQ3,
@@ -216,7 +234,8 @@ func TestApproveDesignRevision_ProductionGateRejectsNonAcceptedBaseline(t *testi
 
 	revID := publishRevisionFromWorkingCopy(t, fx, fx.revR3, cleanWorkingItems(fx, nil))
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
+		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
+			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
 			DesignRevisionID: revID,
 			QuoteRevisionID:  draftQuoteID,
@@ -230,7 +249,8 @@ func TestApproveDesignRevision_ProductionGateRejectsNonAcceptedBaseline(t *testi
 
 	// Cross-project baseline answers the typed cross-project error.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
+		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
+			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
 			DesignRevisionID: revID,
 			QuoteRevisionID:  "7eeeeeee-0000-0000-0000-00000000000e",
@@ -240,5 +260,20 @@ func TestApproveDesignRevision_ProductionGateRejectsNonAcceptedBaseline(t *testi
 	})
 	if !errors.Is(err, domain.ErrQuoteRevisionNotFound) && !errors.Is(err, domain.ErrCrossProjectRelease) {
 		t.Fatalf("foreign baseline must reject with the typed cross-project/not-found error, got %v", err)
+	}
+
+	// The production command has NO skip mode: an empty pin rejects as an
+	// invalid command before anything runs.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
+			ProjectID:        fx.projectID,
+			DesignID:         fx.designID,
+			DesignRevisionID: revID,
+			ActorUserID:      rlsUserA,
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrInvalidDesignCommand) {
+		t.Fatalf("production approval without the exact quote pin must reject, got %v", err)
 	}
 }

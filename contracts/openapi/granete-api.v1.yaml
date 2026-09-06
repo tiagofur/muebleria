@@ -2817,8 +2817,8 @@
     "/designs/{designId}/revisions/{revisionId}:approve": {
       "post": {
         "operationId": "approveDesignRevision",
-        "summary": "Approve an exact published DesignRevision for production (#395/#502, explicit lifecycle transition)",
-        "description": "Explicit published→approved transition on the exact revisionId (never latest). Server-authoritative: actor and timestamp come from the session, never the body. The snapshot stays immutable — only status/approved_by/approved_at change, exactly once. Re-approving an already-approved revision is an idempotent no-op returning the current state; any other status rejects. Requires an Idempotency-Key. When the optional body pins an exact quoteRevisionId (#502 production approval), the server re-runs the SAME authoritative gates the release command enforces — accepted commercial baseline, reconciliation commercial gate and manufacturing preflight over the exact pair — and rejects with typed 409 blockers before transitioning; the body-less legacy form keeps the bare lifecycle transition for non-production flows.",
+        "summary": "Generic published→approved lifecycle transition on an exact DesignRevision (#395)",
+        "description": "Explicit published→approved transition on the exact revisionId (never latest). Server-authoritative: actor and timestamp come from the session. The snapshot stays immutable — only status/approved_by/approved_at change, exactly once. Re-approving an already-approved revision is an idempotent no-op returning the current state; any other status rejects. Requires an Idempotency-Key. This is the GENERIC design-lifecycle approval (design-first flows without a commercial baseline); production approval for the commercial Digital Thread is a SEPARATE always-gated command: approveProjectDesignRevisionForProduction.",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
@@ -2830,16 +2830,6 @@
             "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApproveDesignRevisionRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "The approved revision (or the already-approved state on idempotent replay)",
@@ -2906,6 +2896,67 @@
             "$ref": "#/components/responses/ApiError"
           },
           "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/designs/{designId}/revisions/{revisionId}:approve-for-production": {
+      "post": {
+        "operationId": "approveProjectDesignRevisionForProduction",
+        "summary": "Production approval of an exact DesignRevision against an exact accepted QuoteRevision (#502 / WEB-DT-3, always gated)",
+        "description": "The production-grade approval of the commercial Digital Thread: ALWAYS pins the exact accepted QuoteRevision and the exact DesignRevision (projectId + designId + revisionId + quoteRevisionId — never latest), and ALWAYS runs the same authoritative gate chain the release command enforces — accepted commercial baseline, reconciliation commercial gate (#393/#394) and manufacturing preflight (#466 scope production-release-v1) over the exact pair — BEFORE the published→approved transition. Any blocker rejects with the same typed 409 payloads createProductionRelease returns; the revision stays published. Re-approving an already-approved revision is an idempotent no-op returning the current state. The generic body-less approveDesignRevision command is a DIFFERENT concept (design-lifecycle without commercial baseline) and never represents production approval.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveDesignRevisionForProductionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The approved revision (or the already-approved state on idempotent replay)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignRevision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "default": {
@@ -6525,15 +6576,17 @@
           }
         }
       },
-      "ApproveDesignRevisionRequest": {
+      "ApproveDesignRevisionForProductionRequest": {
         "type": "object",
-        "description": "Optional body for approveDesignRevision (#502). Pinning the exact accepted QuoteRevision turns the approval into a production approval gated by the same authoritative commercial + preflight verdicts the release command enforces.",
+        "description": "Body for approveProjectDesignRevisionForProduction (#502): the exact accepted commercial baseline is REQUIRED — production approval cannot exist without it.",
         "additionalProperties": false,
-        "maxProperties": 1,
+        "required": [
+          "quoteRevisionId"
+        ],
         "properties": {
           "quoteRevisionId": {
             "type": "string",
-            "description": "Exact accepted commercial baseline to gate the approval against."
+            "description": "Exact accepted QuoteRevision the approval is gated against."
           }
         }
       },

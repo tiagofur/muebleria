@@ -400,12 +400,25 @@ export function ProjectReconciliationScreen({
     setApproveError(null);
     setApproveResult(null);
     try {
-      // #502 production approval: pin the exact selected QuoteRevision so the
-      // server enforces the same authoritative commercial + preflight gates
-      // as the release command (typed 409 blockers on any violation).
-      const revision = await api.approveDesignRevision(token, activeDesignId, designRevisionId, {
-        quoteRevisionId: quoteRevisionId ?? undefined,
-      });
+      // #502 production approval: the always-gated command REQUIRES the
+      // exact QuoteRevision — the server enforces the same authoritative
+      // commercial + preflight gates as the release command (typed 409
+      // blockers on any violation; there is no skip mode).
+      if (!quoteRevisionId) {
+        setApproveError({
+          kind: 'validation',
+          title: 'Cotización exacta requerida',
+          message: 'Seleccioná la cotización exacta que aprueba esta revisión para producción.',
+        });
+        return;
+      }
+      const revision = await api.approveProjectDesignRevisionForProduction(
+        token,
+        projectId,
+        activeDesignId,
+        designRevisionId,
+        { quoteRevisionId },
+      );
       await queryClient.invalidateQueries({ queryKey: queryKeys.designRevisions(activeDesignId) });
       setApproveResult({ revision });
     } catch (err) {

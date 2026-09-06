@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -24,10 +23,10 @@ import (
 // results, no fingerprints (§§32–33).
 
 // HandleDesignRevisionApprove serves POST
-// /api/designs/{designId}/revisions/{revisionId}:approve. The optional body
-// pins an exact QuoteRevision (#502 production approval): the server then
-// enforces the same authoritative commercial + preflight gates the release
-// command enforces before transitioning.
+// /api/designs/{designId}/revisions/{revisionId}:approve — the GENERIC
+// design-lifecycle transition (#395, design-first flows without a
+// commercial baseline). Production approval is the separate always-gated
+// HandleProjectDesignRevisionApproveForProduction.
 func (s *Server) HandleDesignRevisionApprove(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
 	if claims == nil {
@@ -45,23 +44,57 @@ func (s *Server) HandleDesignRevisionApprove(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var payload openapi.ApproveDesignRevisionRequest
-	if r.Body != nil {
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
-			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "cuerpo de solicitud inválido", nil)
-			return
-		}
+	rev, err := s.Store.ApproveDesignRevision(r.Context(), storage.ApproveDesignRevisionCommand{
+		DesignID:         designID,
+		DesignRevisionID: revisionID,
+		ActorUserID:      claims.UserID,
+		IP:               clientIP(r),
+		RequestID:        RequestIDFromContext(r.Context()),
+	})
+	if err != nil {
+		respondWithDesignApprovalError(w, err)
+		return
 	}
-	quoteRevisionID := ""
-	if payload.QuoteRevisionId != nil {
-		quoteRevisionID = strings.TrimSpace(*payload.QuoteRevisionId)
+	respondWithJSON(w, http.StatusOK, toDesignRevisionDTO(*rev))
+}
+
+// HandleProjectDesignRevisionApproveForProduction serves POST
+// /api/projects/{projectId}/designs/{designId}/revisions/{revisionId}:approve-for-production
+// (#502 / WEB-DT-3). The exact accepted QuoteRevision is REQUIRED: the
+// server always runs the same authoritative commercial + preflight gate
+// chain the release command enforces over the exact pair before the
+// published→approved transition — there is no skip mode.
+func (s *Server) HandleProjectDesignRevisionApproveForProduction(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
 	}
-	if quoteRevisionID != "" && !isValidUUID(quoteRevisionID) {
-		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "quoteRevisionId inválido", nil)
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanApproveDesignRevisions), "no tenés permiso para aprobar revisiones de diseño") {
 		return
 	}
 
-	rev, err := s.Store.ApproveDesignRevision(r.Context(), storage.ApproveDesignRevisionCommand{
+	projectID := r.PathValue("projectId")
+	designID := r.PathValue("designId")
+	revisionID := r.PathValue("revisionId")
+	if !isValidUUID(projectID) || !isValidUUID(designID) || !isValidUUID(revisionID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "IDs inválidos", nil)
+		return
+	}
+
+	var payload openapi.ApproveDesignRevisionForProductionRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "cuerpo de solicitud inválido", nil)
+		return
+	}
+	quoteRevisionID := strings.TrimSpace(payload.QuoteRevisionId)
+	if quoteRevisionID == "" || !isValidUUID(quoteRevisionID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "quoteRevisionId exacto es obligatorio para la aprobación de producción", nil)
+		return
+	}
+
+	rev, err := s.Store.ApproveDesignRevisionForProduction(r.Context(), storage.ApproveDesignRevisionForProductionCommand{
+		ProjectID:        projectID,
 		DesignID:         designID,
 		DesignRevisionID: revisionID,
 		QuoteRevisionID:  quoteRevisionID,

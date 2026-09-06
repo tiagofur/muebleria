@@ -18,14 +18,27 @@ import (
 // from the request body (§32). The snapshot columns are untouched — the DB
 // trigger only ever accepts the published→approved lifecycle transition.
 
-// ApproveDesignRevisionCommand is the durable approval command. When
-// QuoteRevisionID pins an exact commercial baseline (#502 production
-// approval), the server re-runs the SAME authoritative gate chain the
+// ApproveDesignRevisionCommand is the GENERIC design-lifecycle approval
+// command (#395: published→approved for design-first flows without a
+// commercial baseline). It never represents production approval — that is a
+// SEPARATE always-gated command (ApproveDesignRevisionForProductionCommand).
+type ApproveDesignRevisionCommand struct {
+	DesignID         string
+	DesignRevisionID string
+	ActorUserID      string
+	IP               string
+	RequestID        string
+}
+
+// ApproveDesignRevisionForProductionCommand is the production approval of
+// the commercial Digital Thread (#502): it REQUIRES the exact accepted
+// QuoteRevision and always runs the SAME authoritative gate chain the
 // release command enforces — accepted baseline, reconciliation commercial
 // gate and manufacturing preflight over the exact pair — BEFORE the
-// transition; any blocker rejects with the typed domain error. The empty
-// form keeps the bare lifecycle transition for non-production flows.
-type ApproveDesignRevisionCommand struct {
+// published→approved transition. There is no skip mode: production approval
+// cannot exist without the exact commercial pin.
+type ApproveDesignRevisionForProductionCommand struct {
+	ProjectID        string
 	DesignID         string
 	DesignRevisionID string
 	QuoteRevisionID  string
@@ -35,14 +48,38 @@ type ApproveDesignRevisionCommand struct {
 }
 
 // ApproveDesignRevision transitions an exact published DesignRevision to
-// approved exactly once. Re-approving an already-approved revision is an
-// idempotent no-op returning the current state: approval metadata is history
-// and is never rewritten. Any other status rejects the command.
+// approved exactly once (generic design lifecycle). Re-approving an
+// already-approved revision is an idempotent no-op returning the current
+// state: approval metadata is history and is never rewritten. Any other
+// status rejects the command.
 func (s *PostgresStore) ApproveDesignRevision(ctx context.Context, cmd ApproveDesignRevisionCommand) (*domain.DesignRevision, error) {
-	if !isValidUUID(cmd.DesignID) || !isValidUUID(cmd.DesignRevisionID) {
+	return s.approveDesignRevision(ctx, cmd.DesignID, cmd.DesignRevisionID, "", "", cmd.ActorUserID, cmd.IP, cmd.RequestID)
+}
+
+// ApproveDesignRevisionForProduction is the always-gated production
+// approval (#502): exact accepted QuoteRevision + exact DesignRevision of
+// the exact project, enforced by the release gate chain before the
+// transition. Any blocker rejects with the typed domain error and leaves
+// the revision published.
+func (s *PostgresStore) ApproveDesignRevisionForProduction(ctx context.Context, cmd ApproveDesignRevisionForProductionCommand) (*domain.DesignRevision, error) {
+	if !isValidUUID(cmd.DesignID) || !isValidUUID(cmd.DesignRevisionID) || !isValidUUID(cmd.ProjectID) {
 		return nil, domain.ErrInvalidDesignCommand
 	}
-	if cmd.QuoteRevisionID != "" && !isValidUUID(cmd.QuoteRevisionID) {
+	if !isValidUUID(cmd.QuoteRevisionID) {
+		return nil, domain.ErrInvalidDesignCommand
+	}
+	return s.approveDesignRevision(ctx, cmd.DesignID, cmd.DesignRevisionID, cmd.QuoteRevisionID, cmd.ProjectID, cmd.ActorUserID, cmd.IP, cmd.RequestID)
+}
+
+func (s *PostgresStore) approveDesignRevision(ctx context.Context, designID, revisionID, quoteRevisionID, expectedProjectID, actorOverride, ip, requestID string) (*domain.DesignRevision, error) {
+	cmd := ApproveDesignRevisionCommand{
+		DesignID:         designID,
+		DesignRevisionID: revisionID,
+		ActorUserID:      actorOverride,
+		IP:               ip,
+		RequestID:        requestID,
+	}
+	if !isValidUUID(cmd.DesignID) || !isValidUUID(cmd.DesignRevisionID) {
 		return nil, domain.ErrInvalidDesignCommand
 	}
 	actor := nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx))
@@ -81,13 +118,16 @@ func (s *PostgresStore) ApproveDesignRevision(ctx context.Context, cmd ApproveDe
 		return nil, err
 	}
 
-	// 2b. #502 production approval gate: with an exact accepted quote pinned,
-	// the server enforces the SAME authoritative commercial + preflight
-	// verdicts the release command enforces — an approval can never bypass
+	// 2b. Production approval gate: with an exact accepted quote pinned the
+	// server enforces the SAME authoritative commercial + preflight verdicts
+	// the release command enforces — production approval can never bypass
 	// blocking state. Idempotent replays of an already-approved revision keep
 	// returning the current state (history is never rewritten).
-	if rev.Status == domain.DesignRevisionStatusPublished && cmd.QuoteRevisionID != "" {
-		if _, _, err := s.enforceProductionGates(txCtx, rev.OrganizationID, rev.ProjectID, cmd.QuoteRevisionID, cmd.DesignRevisionID); err != nil {
+	if expectedProjectID != "" && rev.ProjectID != expectedProjectID {
+		return nil, domain.ErrCrossProjectRelease
+	}
+	if rev.Status == domain.DesignRevisionStatusPublished && quoteRevisionID != "" {
+		if _, _, err := s.enforceProductionGates(txCtx, rev.OrganizationID, rev.ProjectID, quoteRevisionID, cmd.DesignRevisionID); err != nil {
 			return nil, err
 		}
 	}

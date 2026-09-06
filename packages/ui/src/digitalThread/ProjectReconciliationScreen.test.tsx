@@ -367,10 +367,20 @@ function setupFetchMock(options: FetchMockOptions = {}) {
       return json(created, 201);
     }
 
-    const approveRegex = /^\/designs\/([^/]+)\/revisions\/([^/]+):approve$/;
-    if (approveRegex.test(path) && method === 'POST') {
+    const approveForProductionRegex =
+      /^\/projects\/([^/]+)\/designs\/([^/]+)\/revisions\/([^/]+):approve-for-production$/;
+    if (approveForProductionRegex.test(path) && method === 'POST') {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { quoteRevisionId?: string };
+      if (!body.quoteRevisionId) {
+        return apiError(400, 'BAD_REQUEST', 'quoteRevisionId exacto es obligatorio');
+      }
       if (options.approveResponse) return options.approveResponse();
       return json({ ...mockRevision1, status: 'approved', approved_at: '2026-09-05T10:00:00Z' });
+    }
+    // The generic lifecycle approve must NEVER be called by this workspace.
+    const approveRegex = /^\/designs\/([^/]+)\/revisions\/([^/]+):approve$/;
+    if (approveRegex.test(path) && method === 'POST') {
+      return apiError(404, 'NOT_FOUND', 'generic approve must not be used by #502');
     }
 
     if (path === `/projects/${PROJECT_ID}/production-releases` && method === 'POST') {

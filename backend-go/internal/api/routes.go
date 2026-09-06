@@ -450,6 +450,15 @@ func RegisterRoutes(server *Server) http.Handler {
 	// exact revision — POST mirrors the reconcileProjectDesign compute-read
 	// precedent; no idempotency key because nothing mutates.
 	mux.Handle("POST /api/designs/{designId}/revisions/{revisionId}/preflight", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleDesignRevisionPreflight))))
+	// #502 / WEB-DT-3: always-gated production approval — exact accepted
+	// QuoteRevision + exact DesignRevision, enforced by the release gate
+	// chain. The generic body-less design approve stays a separate concept.
+	// The wildcard must occupy an entire segment (same reason as the
+	// designRevisionCommandRouter above), so the revisionId:command segment
+	// is captured and split by the same router.
+	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/revisions/{revisionCommand...}", noStoreMiddleware(authMW(server.RequireIdempotency("design.approve-revision-for-production", designRevisionCommandRouter(map[string]http.Handler{
+		"approve-for-production": http.HandlerFunc(server.HandleProjectDesignRevisionApproveForProduction),
+	})))))
 	mux.Handle("GET /api/projects/{projectId}/production-releases", authMW(http.HandlerFunc(server.HandleProjectProductionReleases)))
 	mux.Handle("POST /api/projects/{projectId}/production-releases", noStoreMiddleware(authMW(server.RequireIdempotency("production.release", http.HandlerFunc(server.HandleProjectProductionReleases)))))
 	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}", authMW(http.HandlerFunc(server.HandleProjectProductionRelease)))
