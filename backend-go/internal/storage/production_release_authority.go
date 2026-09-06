@@ -65,6 +65,16 @@ func (s *PostgresStore) ResolveProjectReleaseAuthority(ctx context.Context, proj
 	return domain.ResolvedFromCanonicalRelease(canonical), nil
 }
 
+// resolveReleaseProjection maps the batch-loaded latest canonical release (or
+// the legacy blob when none exists) onto the project read-model authority
+// projection (#577 / OPS-DT-1). Canonical ALWAYS wins when both exist.
+func resolveReleaseProjection(canonical *domain.ProductionRelease, legacy *domain.LegacyProductionRelease) *domain.ResolvedProductionRelease {
+	if canonical != nil {
+		return domain.ResolvedFromCanonicalRelease(canonical)
+	}
+	return domain.ResolveLegacyProductionRelease(legacy)
+}
+
 // resolveProjectReleaseAuthorityTx is the same resolution on an explicit
 // transaction, used by the snapshot loaders that already own one.
 func (s *PostgresStore) resolveProjectReleaseAuthorityTx(ctx context.Context, tx pgx.Tx, projectID string, legacyBlob *domain.LegacyProductionRelease) (*domain.ResolvedProductionRelease, error) {
@@ -81,4 +91,56 @@ func (s *PostgresStore) resolveProjectReleaseAuthorityTx(ctx context.Context, tx
 		return nil, err
 	}
 	return domain.ResolvedFromCanonicalRelease(canonical), nil
+}
+
+// getProjectProductionReleaseTx loads one EXACT canonical release of the
+// project on an explicit transaction (#577 / OPS-DT-1). Missing and
+// cross-project are the same not-found answer so no foreign release id can
+// ever be stamped as an authority.
+func (s *PostgresStore) getProjectProductionReleaseTx(ctx context.Context, tx pgx.Tx, projectID, releaseID string) (*domain.ProductionRelease, error) {
+	if !isValidUUID(projectID) || !isValidUUID(releaseID) {
+		return nil, domain.ErrReleaseNotFound
+	}
+	return scanProductionRelease(tx.QueryRow(ctx, `
+		SELECT `+productionReleaseColumns+productionReleaseFrom+`
+		WHERE pr.id = $1 AND pr.project_id = $2
+	`, releaseID, projectID))
+}
+
+// LatestCanonicalReleasesByProject loads each project's newest canonical
+// release in ONE query (#577 / OPS-DT-1) so the project list read model can
+// expose the resolved authority projection without per-project lookups.
+func (s *PostgresStore) LatestCanonicalReleasesByProject(ctx context.Context, projectIDs []string) (map[string]*domain.ProductionRelease, error) {
+	out := make(map[string]*domain.ProductionRelease, len(projectIDs))
+	valid := make([]string, 0, len(projectIDs))
+	for _, id := range projectIDs {
+		if isValidUUID(id) {
+			valid = append(valid, id)
+		}
+	}
+	if len(valid) == 0 {
+		return out, nil
+	}
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT `+productionReleaseColumns+productionReleaseFrom+`
+		WHERE pr.project_id = ANY($1)
+		ORDER BY pr.project_id, pr.release_number DESC
+	`, valid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		release, err := scanProductionRelease(rows)
+		if err != nil {
+			return nil, err
+		}
+		// Rows are ordered oldest-release-first per project, so the LAST row
+		// seen per project is its newest release.
+		out[release.ProjectID] = release
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

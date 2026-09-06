@@ -1279,6 +1279,9 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &p) {
 			return
 		}
+		// #577: the resolved release authority projection is computed on read;
+		// a client-sent copy is never persisted.
+		p.ResolvedProductionRelease = nil
 
 		if claims != nil {
 			p.CreatedBy = claims.UserID
@@ -1422,6 +1425,9 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &p) {
 			return
 		}
+		// #577: the resolved release authority projection is computed on read;
+		// a client-sent copy is never persisted.
+		p.ResolvedProductionRelease = nil
 		// OC-070..OC-074: the installation job is server-authoritative — it
 		// only changes through the dedicated installation endpoints (gates,
 		// RBAC and audit). A client-sent copy is ignored, never persisted.

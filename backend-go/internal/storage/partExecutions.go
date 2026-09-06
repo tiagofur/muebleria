@@ -84,6 +84,26 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		return nil, fmt.Errorf("error iterating item floor statuses: %w", err)
 	}
 
+	// #577 / OPS-DT-1: For projects with materialized quote line furniture
+	// instances (Digital Thread), the authoritative unit count per line comes
+	// from the materialized instances, not from mutable project_items.quantity.
+	qlRows, err := tx.Query(ctx, `
+		SELECT quote_line_id::text, count(*)
+		FROM quote_line_furniture_instances
+		WHERE project_id = $1 AND state = 'current'
+		GROUP BY quote_line_id;
+	`, projectID)
+	if err == nil {
+		defer qlRows.Close()
+		for qlRows.Next() {
+			var lineID string
+			var count int
+			if err := qlRows.Scan(&lineID, &count); err == nil && count > 0 {
+				snap.ItemQuantities[lineID] = count
+			}
+		}
+	}
+
 	mutation, err := mutate(snap)
 	if err != nil {
 		return nil, err

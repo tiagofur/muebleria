@@ -13,6 +13,7 @@ import { ValidationError } from './errors';
 import type { MaterialStock, StockMaterialKind } from './stock';
 import type { PurchaseOrder } from './purchasingOrders';
 import { poRemaining } from './purchasingOrders';
+import { releaseAuthorityOf } from './releaseAuthority';
 import type { Project } from './types';
 import {
   appendProjectEvent,
@@ -60,6 +61,15 @@ export interface MaterialRequirementLine {
 export interface MaterialRequirementsSnapshot {
   readonly releaseId?: string;
   readonly bomFingerprint?: string;
+  /**
+   * Exact provenance pins of the release authority the requirements were
+   * derived from (#577 / OPS-DT-1). Set for canonical releases; absent for
+   * pre-DT legacy derivations.
+   */
+  readonly sourceProductionReleaseNumber?: number;
+  readonly sourceDesignRevisionId?: string;
+  readonly sourceDesignRevisionNumber?: number;
+  readonly sourceQuoteRevisionId?: string;
   readonly derivedAt: string;
   readonly derivedBy?: string;
   readonly lines: readonly MaterialRequirementLine[];
@@ -156,8 +166,9 @@ export function buildMaterialRequirements(
 
 /**
  * Materialize the requirements snapshot on a project. OC-050: only a released
- * project (ProductionRelease with bomFingerprint) can materialize requirements
- * — there is no heuristic path.
+ * project — canonical ProductionRelease (#577) or legacy OC-022 blob through
+ * the release authority — can materialize requirements; there is no heuristic
+ * path.
  */
 export function materializeRequirements(
   project: Project,
@@ -168,8 +179,8 @@ export function materializeRequirements(
     readonly source?: ProjectEventSource;
   },
 ): { project: Project; planning: MaterialPlanning; events: readonly ProjectEvent[] } {
-  const release = project.productionRelease;
-  if (!release) {
+  const authority = releaseAuthorityOf(project);
+  if (!authority) {
     throw new ValidationError(
       'Los requerimientos se derivan del BOM liberado: la obra no tiene liberación de producción',
     );
@@ -201,8 +212,12 @@ export function materializeRequirements(
   const next: MaterialPlanning = {
     ...planning,
     requirements: {
-      releaseId: release.id,
-      bomFingerprint: release.bomFingerprint,
+      releaseId: authority.releaseId,
+      bomFingerprint: authority.manufacturingFingerprint,
+      sourceProductionReleaseNumber: authority.releaseNumber,
+      sourceDesignRevisionId: authority.designRevisionId,
+      sourceDesignRevisionNumber: authority.designRevisionNumber,
+      sourceQuoteRevisionId: authority.quoteRevisionId,
       derivedAt: at,
       derivedBy: params.derivedBy,
       lines,
@@ -214,7 +229,7 @@ export function materializeRequirements(
     at,
     source: params.source,
     note: `Requerimientos derivados del BOM liberado (${lines.length} líneas)`,
-    payload: { releaseId: release.id, bomFingerprint: release.bomFingerprint, lineCount: lines.length },
+    payload: { releaseId: authority.releaseId, bomFingerprint: authority.manufacturingFingerprint, lineCount: lines.length },
   });
   const updatedProject = appendProjectEvent(withPlanning(project, next), event);
   return { project: updatedProject, planning: next, events: [event] };

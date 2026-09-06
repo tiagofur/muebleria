@@ -225,6 +225,7 @@ function ProjectCard({
   qualityView,
   qualityHandlers,
   canOverrideQc = false,
+  onGeneratePartExecutions,
 }: {
   readonly card: FabricProjectCard;
   readonly station: FabricStation;
@@ -258,6 +259,8 @@ function ProjectCard({
     activityId: string,
     piecesCount: number,
   ) => Promise<void>;
+  /** #577 / OPS-DT-1: generate the physical executions from the release authority. */
+  readonly onGeneratePartExecutions?: (projectId: string) => void;
 }): ReactNode {
   const target = TARGET_STATUS[station];
   const stationLabel = TAB_LABELS[station].toLowerCase();
@@ -313,7 +316,26 @@ function ProjectCard({
           {card.customerLabel ? (
             <p className="fabric-card__customer">{card.customerLabel}</p>
           ) : null}
+          {card.releaseLabel ? (
+            <p
+              className="fabric-card__customer"
+              data-testid={`fabric-release-${card.projectId}`}
+            >
+              {card.releaseLabel}
+            </p>
+          ) : null}
         </div>
+        {canAdvance && card.needsPhysicalGeneration && onGeneratePartExecutions ? (
+          <button
+            type="button"
+            className="btn btn--primary btn--small"
+            onClick={() => onGeneratePartExecutions(card.projectId)}
+            data-testid={`fabric-generate-parts-${card.projectId}`}
+            title="Genera las piezas y unidades físicas desde la liberación de producción"
+          >
+            <Factory size={14} strokeWidth={1.5} aria-hidden /> Generar piezas físicas
+          </button>
+        ) : null}
         {canAdvance &&
           (hasClaims ? (
             <div className="fabric-card__claim-actions">
@@ -568,6 +590,7 @@ export function FabricScreen({
   confirmBatchMessage,
   metrics = null,
   testId,
+  onGeneratePartExecutions,
 }: {
   readonly projects: readonly Project[];
   readonly assignedSectors: readonly string[] | null;
@@ -577,6 +600,9 @@ export function FabricScreen({
     itemId: string,
     target: ItemFloorStatus,
   ) => void;
+  /** #577 / OPS-DT-1: generate the physical executions from the release
+   * authority (canonical ProductionRelease first — no legacy liberation). */
+  readonly onGeneratePartExecutions?: (projectId: string) => void;
   /** Physical mode (#301): advance one PIECE's current operation. When
    * absent, physical rows render without an advance action (the legacy
    * item-level advance would 409 on unit-tracked lines). */
@@ -815,6 +841,7 @@ export function FabricScreen({
                     qualityView={qualityByProject?.[card.projectId]}
                     qualityHandlers={qualityHandlers}
                     canOverrideQc={canOverrideQc}
+                    onGeneratePartExecutions={onGeneratePartExecutions}
                   />
                 ))}
               </ul>

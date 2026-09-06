@@ -11,6 +11,7 @@
 import type { EdgeAssignment, Grain, Project, ProjectItem, ResolvedBoardPart } from './types';
 import type { ProductionSector } from './productionSectors';
 import { type ItemFloorStatus, ITEM_FLOOR_STATUSES } from './productionFloor';
+import { releaseAuthorityOf } from './releaseAuthority';
 
 export const PART_OPERATION_TYPES = [
   'cut',
@@ -215,7 +216,7 @@ export function derivePartInstancesForProject(
   resolvedBoardPartsByItem: Readonly<Record<string, readonly ResolvedBoardPart[]>>,
   opts: DerivePartInstancesOptions = {},
 ): readonly PartInstance[] {
-  const revision = opts.productionRevision ?? (project.productionRelease?.id || 'rev-1');
+  const revision = opts.productionRevision ?? releaseAuthorityOf(project)?.releaseId ?? '';
   const result: PartInstance[] = [];
 
   for (const item of project.items) {
@@ -265,7 +266,7 @@ export function deriveModuleUnitsForProject(
   project: Project,
   opts: { readonly productionRevision?: string } = {},
 ): readonly ModuleUnitExecution[] {
-  const revision = opts.productionRevision ?? (project.productionRelease?.id || 'rev-1');
+  const revision = opts.productionRevision ?? releaseAuthorityOf(project)?.releaseId ?? '';
   const result: ModuleUnitExecution[] = [];
 
   for (const item of project.items) {

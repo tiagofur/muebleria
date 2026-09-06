@@ -1,6 +1,8 @@
 import {
   describeMissingPieces,
   deriveLegacyItemFloorStatus,
+  releaseAuthorityLabel,
+  releaseAuthorityOf,
   type AssemblyReadiness,
   itemsWaitingForSector,
   normalizeItemFloorStatus,
@@ -73,6 +75,10 @@ export type FabricProjectCard = {
   readonly projectId: string;
   readonly projectName: string;
   readonly customerLabel: string;
+  /** Human-readable release authority label (#577): `Liberación #1 · Diseño R2`, '' when never released. */
+  readonly releaseLabel: string;
+  /** True when a release authority exists but no physical executions were generated yet (#577). */
+  readonly needsPhysicalGeneration: boolean;
   readonly items: readonly FabricStationRow[];
   readonly materials: readonly (ProductionMaterialTotal & {
     readonly estimatedSheets?: number;
@@ -118,6 +124,7 @@ export function fabricProjectCards({
     // Physical mode (#301): pieces at cutting/edge, units at assembly/packaging.
     const hasPhysicalExecutions =
       (project.partInstances?.length ?? 0) > 0 && (project.moduleUnits?.length ?? 0) > 0;
+
     if (hasPhysicalExecutions) {
       const moduleIdByItem = new Map(project.items.map((i) => [i.id, i.moduleId]));
       const legacyByItem = new Map(
@@ -217,10 +224,19 @@ function buildCard(
   const edgesPickingState = input.pickingStates.find(
     (state) => state.projectId === project.id && state.material === 'cintillas',
   );
+  // #577 / OPS-DT-1: the card recognizes the release authority (canonical
+  // ProductionRelease first) — `Liberación #1 · Diseño R2` — and offers
+  // physical generation when a release exists but no executions were
+  // generated yet (no legacy "send to production" round-trip required).
+  const releaseLabel = releaseAuthorityLabel(project);
   return {
     projectId: project.id,
     projectName: project.name,
     customerLabel: input.customerLabelFor?.(project.customerId) ?? '',
+    releaseLabel,
+    needsPhysicalGeneration:
+      releaseAuthorityOf(project) !== undefined &&
+      (project.partInstances?.length ?? 0) === 0,
     items,
     materials: (metrics?.materials ?? []).map((material) => ({
       ...material,

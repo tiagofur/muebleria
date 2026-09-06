@@ -33,6 +33,7 @@ const (
 type ProductionRelease struct {
 	ID                       string                  `json:"id"`
 	ProjectID                string                  `json:"project_id"`
+	DesignID                 string                  `json:"design_id,omitempty"`
 	DesignRevisionID         string                  `json:"design_revision_id"`
 	QuoteRevisionID          string                  `json:"quote_revision_id,omitempty"`
 	ReleaseNumber            int                     `json:"release_number"`
@@ -421,9 +422,20 @@ func EvaluateReleaseCommercialGate(classification *ImpactClassificationResult) e
 	return nil
 }
 
+// ProductionReleaseAuthoritySource names which side of the compatibility
+// seam resolved as the release authority (#577 / OPS-DT-1): the canonical
+// #395 row, or the legacy OC-022 blob for pre-Digital-Thread projects.
+type ProductionReleaseAuthoritySource string
+
+const (
+	ProductionReleaseAuthorityCanonical ProductionReleaseAuthoritySource = "canonical"
+	ProductionReleaseAuthorityLegacy    ProductionReleaseAuthoritySource = "legacy"
+)
+
 // ResolvedProductionRelease is the ONE release-authority shape the productive
 // subsystems consume (material planning, job costing, quality and the part
-// execution guards). The canonical #395 ProductionRelease maps onto it
+// execution guards) and the server-owned project read projection exposes to
+// the operational Web. The canonical #395 ProductionRelease maps onto it
 // directly — its ManufacturingFingerprint travels under its own name, never
 // through a legacy BOMFingerprint field. The pre-DT OC-022 blob maps onto it
 // ONLY inside ResolveLegacyProductionRelease, the single adapter where the
@@ -431,15 +443,20 @@ func EvaluateReleaseCommercialGate(classification *ImpactClassificationResult) e
 // ManufacturingFingerprint. Productive code beyond that adapter never reads
 // BOMFingerprint.
 type ResolvedProductionRelease struct {
-	ReleaseID                string
-	DesignRevisionID         string
-	ManufacturingFingerprint string
-	ReleasedBy               string
-	ReleasedAt               time.Time
+	Source                   ProductionReleaseAuthoritySource `json:"source"`
+	ReleaseID                string                           `json:"release_id,omitempty"`
+	ReleaseNumber            int                              `json:"release_number,omitempty"`
+	DesignRevisionID         string                           `json:"design_revision_id,omitempty"`
+	DesignRevisionNumber     int                              `json:"design_revision_number,omitempty"`
+	QuoteRevisionID          string                           `json:"quote_revision_id,omitempty"`
+	ManufacturingFingerprint string                           `json:"manufacturing_fingerprint,omitempty"`
+	Status                   ProductionReleaseStatus          `json:"status,omitempty"`
+	ReleasedBy               string                           `json:"released_by,omitempty"`
+	ReleasedAt               time.Time                        `json:"released_at,omitempty"`
 	// ProjectVersion survives only as a legacy-origin attribute so pre-DT
 	// costing baselines keep freezing it; the canonical authority pins
 	// identity by ReleaseID + ManufacturingFingerprint and carries 0.
-	ProjectVersion int
+	ProjectVersion int `json:"-"`
 }
 
 // ResolvedFromCanonicalRelease maps the canonical release onto the consumer
@@ -447,9 +464,14 @@ type ResolvedProductionRelease struct {
 // field.
 func ResolvedFromCanonicalRelease(canonical *ProductionRelease) *ResolvedProductionRelease {
 	return &ResolvedProductionRelease{
+		Source:                   ProductionReleaseAuthorityCanonical,
 		ReleaseID:                canonical.ID,
+		ReleaseNumber:            canonical.ReleaseNumber,
 		DesignRevisionID:         canonical.DesignRevisionID,
+		DesignRevisionNumber:     canonical.DesignRevisionNumber,
+		QuoteRevisionID:          canonical.QuoteRevisionID,
 		ManufacturingFingerprint: canonical.ManufacturingFingerprint,
+		Status:                   canonical.Status,
 		ReleasedBy:               canonical.ReleasedBy,
 		ReleasedAt:               canonical.ReleasedAt,
 	}
@@ -464,6 +486,7 @@ func ResolveLegacyProductionRelease(legacy *LegacyProductionRelease) *ResolvedPr
 		return nil
 	}
 	return &ResolvedProductionRelease{
+		Source:                   ProductionReleaseAuthorityLegacy,
 		ReleaseID:                legacy.ID,
 		DesignRevisionID:         legacy.DesignRevisionID,
 		ManufacturingFingerprint: legacy.BOMFingerprint,

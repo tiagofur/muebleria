@@ -767,6 +767,14 @@ export interface ItemCustomDims {
   readonly depthMm: number;
 }
 
+/**
+ * Structural slice of Project the BOM engine aggregates consume (#577). A
+ * canonical release derivation builds this context from the immutable
+ * DesignRevision snapshot instead of the mutable project quote state — the
+ * full Project structurally satisfies it.
+ */
+export type BomProjectContext = Pick<Project, 'id' | 'items' | 'projectLevelChoices' | 'kitchenLayout'>;
+
 export interface ProjectItem {
   readonly id: string;
   readonly moduleId: string;
@@ -1227,6 +1235,13 @@ export interface Project {
    * Auditable production release gate (OC-022).
    */
   readonly productionRelease?: import('./projectLifecycle').ProductionRelease;
+  /**
+   * Server-owned projection of the ONE release authority (#577 / OPS-DT-1):
+   * the canonical ProductionRelease when one exists (source "canonical"),
+   * else the legacy OC-022 blob (source "legacy"). Computed on read by the
+   * API; operational gates must prefer this over `productionRelease`.
+   */
+  readonly resolvedProductionRelease?: import('./releaseAuthority').ProductionReleaseAuthority;
   /**
    * Formal change orders for post-approval/post-release scope modifications (OC-024).
    */

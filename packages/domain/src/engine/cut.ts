@@ -9,6 +9,7 @@ import { ResolutionError, ValidationError } from '../errors';
 import { effectiveOptionChoices } from '../optionChoices';
 import { baseContextForItem } from '../plinth';
 import type {
+  BomProjectContext,
   Catalog,
   EdgeAssignment,
   PieceLabel,
@@ -119,7 +120,7 @@ export interface CutRowPieceLink {
 }
 
 export function generateCutRowsWithLinks(
-  project: Project,
+  project: BomProjectContext,
   catalog: Catalog,
 ): { rows: ProductionCutRow[]; links: CutRowPieceLink[] } {
   const sortable: SortableCutRow[] = [];
@@ -254,7 +255,7 @@ export function generateCutRowsWithLinks(
 }
 
 export function generateCutRows(
-  project: Project,
+  project: BomProjectContext,
   catalog: Catalog,
 ): ProductionCutRow[] {
   return generateCutRowsWithLinks(project, catalog).rows;

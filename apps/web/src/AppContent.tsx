@@ -114,6 +114,10 @@ import {
   transitionProjectStatus,
   type WarehouseProjectInput,
   deriveProjectPartExecutions,
+  releaseAuthorityOf,
+  buildReleaseBomContext,
+  releaseBomItemsToProjectItems,
+  requirementLinesFromContext,
   scheduleInstallationVisit,
   startInstallationVisit,
   completeInstallationVisit,
@@ -1681,7 +1685,12 @@ export function AppContent({
   const handleGeneratePartExecutions = useCallback(
     (projectId: string) => {
       const project = projectActions.projects.find((p) => p.id === projectId);
-      if (!project || !project.productionRelease || !catalog) return;
+      // #577 / OPS-DT-1: the gate is the release authority (canonical
+      // ProductionRelease first — no legacy liberation required), and the
+      // executions are stamped with its exact release id (the server guard
+      // 409s any other token).
+      const authority = project ? releaseAuthorityOf(project) : undefined;
+      if (!project || !authority || !catalog) return;
       if (project.partInstances?.length) {
         const hasProgress =
           project.partInstances.some((p) =>
@@ -1690,34 +1699,42 @@ export function AppContent({
           project.moduleUnits?.some((u) => u.status !== 'awaiting_parts');
         if (hasProgress) return; // regeneration is a supervised action, never automatic
       }
-      const derived = deriveProjectPartExecutions(project, catalog);
-      if (!derived.ok) {
-        toast({
-          type: 'error',
-          message: `No se pudieron generar las piezas físicas (línea ${derived.error.projectItemId}): ${derived.error.message}`,
-        });
-        return;
-      }
-      const { parts, units } = derived.executions;
       const repo = getRepository();
-      if (repo.generatePartExecutions) {
-        void repo
-          .generatePartExecutions(projectId, { partInstances: parts, moduleUnits: units })
-          .then(() => {
-            projectActions.setPartExecutions(projectId, parts, units);
-          })
-          .catch((err) => {
-            toast({
-              type: 'error',
-              message:
-                err instanceof Error && err.message
-                  ? err.message
-                  : 'No se pudo generar la ejecución física',
-            });
+      const generate = (derivationProject: Project, revision: string): void => {
+        const derived = deriveProjectPartExecutions(derivationProject, catalog, {
+          productionRevision: revision,
+        });
+        if (!derived.ok) {
+          toast({
+            type: 'error',
+            message: `No se pudieron generar las piezas físicas (línea ${derived.error.projectItemId}): ${derived.error.message}`,
           });
-      } else {
-        projectActions.setPartExecutions(projectId, parts, units);
-      }
+          return;
+        }
+        const { parts, units } = derived.executions;
+        if (repo.generatePartExecutions) {
+          void repo
+            .generatePartExecutions(projectId, { partInstances: parts, moduleUnits: units })
+            .then(() => {
+              projectActions.setPartExecutions(projectId, parts, units);
+            })
+            .catch((err) => {
+              toast({
+                type: 'error',
+                message:
+                  err instanceof Error && err.message
+                    ? err.message
+                    : 'No se pudo generar la ejecución física',
+              });
+            });
+        } else {
+          projectActions.setPartExecutions(projectId, parts, units);
+        }
+      };
+      // #577 / OPS-DT-1: physical executions derive stamped with the EXACT
+      // release authority id (canonical ProductionRelease first), eliminating
+      // the legacy 'rev-1' token and any implicit current-revision fallback.
+      generate(project, authority.releaseId);
     },
     [catalog, getRepository, projectActions, toast],
   );
@@ -1971,6 +1988,82 @@ export function AppContent({
   const planningHandlers = useMemo<MaterialPlanningHandlers>(
     () => ({
       onDerive: (projectId) => {
+        const project = projectActions.projects.find((p) => p.id === projectId);
+        const authority = project ? releaseAuthorityOf(project) : undefined;
+        const repo = getRepository();
+        // #577 / OPS-DT-1 — canonical authority: the requirement lines come
+        // from the EXACT immutable DesignRevision snapshot the release pins
+        // (loaded through the generated client), never from the mutable
+        // project quote state; the derive command targets the exact release
+        // id and the server binds + audits the provenance.
+        if (
+          authority?.source === 'canonical' &&
+          repo.getLatestReleaseBomContext &&
+          repo.deriveMaterialRequirements &&
+          catalog
+        ) {
+          void repo
+            .getLatestReleaseBomContext(projectId)
+            .then((context) => {
+              if (!context || context.items.length === 0) {
+                toast({
+                  type: 'error',
+                  message: 'No se pudo leer el snapshot de diseño de la liberación canónica',
+                });
+                return;
+              }
+              let lines: readonly MaterialRequirementLine[];
+              try {
+                lines = requirementLinesFromContext(
+                  buildReleaseBomContext(projectId, context.items),
+                  catalog,
+                  materials,
+                  stockCatalog.edgeIdByCode,
+                );
+              } catch (err) {
+                toast({
+                  type: 'error',
+                  message:
+                    err instanceof Error && err.message
+                      ? err.message
+                      : 'El BOM de la liberación no pudo resolverse',
+                });
+                return;
+              }
+              if (lines.length === 0) {
+                toast({ type: 'error', message: 'El BOM liberado no produjo líneas de requerimiento' });
+                return;
+              }
+              return repo
+                .deriveMaterialRequirements!(projectId, lines, {
+                  productionReleaseId: context.release.id,
+                })
+                .then((view) => {
+                  const current =
+                    projectActions.projects.find((p) => p.id === projectId) ?? project;
+                  if (!current) return;
+                  projectActions.applyMaterialPlanningProject(projectId, {
+                    ...current,
+                    materialPlanning:
+                      (view.planning as Project['materialPlanning']) ?? current.materialPlanning,
+                  });
+                  toast({
+                    type: 'success',
+                    message: '✓ Requerimientos derivados de la liberación canónica',
+                  });
+                });
+            })
+            .catch((err: unknown) => {
+              toast({
+                type: 'error',
+                message:
+                  err instanceof Error && err.message
+                    ? err.message
+                    : 'No se pudo completar la acción de materiales',
+              });
+            });
+          return;
+        }
         const lines = requirementLinesFor(projectId);
         if (lines.length === 0) {
           toast({ type: 'error', message: 'El BOM liberado no produjo líneas de requerimiento' });
@@ -2040,7 +2133,19 @@ export function AppContent({
           });
       },
     }),
-    [runMaterialPlanningAction, requirementLinesFor, stockRows, projectActions.projects, authUser?.id, planningByProject],
+    [
+      runMaterialPlanningAction,
+      requirementLinesFor,
+      stockRows,
+      projectActions.projects,
+      authUser?.id,
+      planningByProject,
+      catalog,
+      materials,
+      stockCatalog,
+      getRepository,
+      toast,
+    ],
   );
 
   /**
@@ -2154,7 +2259,7 @@ export function AppContent({
     const entries: [string, CostingPanelView][] = [];
     for (const project of projectActions.projects) {
       const costing = project.costing;
-      const hasSource = Boolean(project.priceSnapshot || project.productionRelease);
+      const hasSource = Boolean(project.priceSnapshot || releaseAuthorityOf(project));
       if (!costing && !hasSource) continue;
       const serverView = costingServerViews[project.id];
       if (serverView) {

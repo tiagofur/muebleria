@@ -130,6 +130,7 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 	// database boundary.
 	release := domain.ProductionRelease{
 		ProjectID:                cmd.ProjectID,
+		DesignID:                 drDesignID,
 		DesignRevisionID:         cmd.DesignRevisionID,
 		QuoteRevisionID:          quoteRevisionID,
 		ReleaseNumber:            releaseNumber,
@@ -369,11 +370,12 @@ func (s *PostgresStore) loadReferencedFurnitureDefinitionParameters(ctx context.
 	return definitions, nil
 }
 
-// productionReleaseColumns derives design_revision_number from the pinned
-// revision row (the release table stores only the exact id — §6).
+// productionReleaseColumns derives design_revision_number and the parent
+// design id from the pinned revision row (the release table stores only the
+// exact ids — §6).
 const productionReleaseColumns = `
 	pr.id, pr.organization_id, pr.project_id, pr.release_number,
-	pr.design_revision_id, dr.revision_number, COALESCE(pr.quote_revision_id::text, ''),
+	pr.design_revision_id, dr.design_id::text, dr.revision_number, COALESCE(pr.quote_revision_id::text, ''),
 	pr.manufacturing_fingerprint, pr.status, pr.released_by::text, pr.released_at`
 
 const productionReleaseFrom = `
@@ -384,7 +386,7 @@ func scanProductionRelease(row pgx.Row) (*domain.ProductionRelease, error) {
 	var r domain.ProductionRelease
 	if err := row.Scan(
 		&r.ID, &r.OrganizationID, &r.ProjectID, &r.ReleaseNumber,
-		&r.DesignRevisionID, &r.DesignRevisionNumber, &r.QuoteRevisionID,
+		&r.DesignRevisionID, &r.DesignID, &r.DesignRevisionNumber, &r.QuoteRevisionID,
 		&r.ManufacturingFingerprint, &r.Status, &r.ReleasedBy, &r.ReleasedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

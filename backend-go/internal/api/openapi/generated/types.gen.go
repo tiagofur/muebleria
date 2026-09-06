@@ -1049,6 +1049,7 @@ type ProductionRelease struct {
 	ID                       string                     `json:"id"`
 	ProjectID                string                     `json:"project_id"`
 	ReleaseNumber            int64                      `json:"release_number"`
+	DesignID                 *string                    `json:"design_id,omitempty"`
 	DesignRevisionID         string                     `json:"design_revision_id"`
 	DesignRevisionNumber     int64                      `json:"design_revision_number"`
 	QuoteRevisionID          *string                    `json:"quote_revision_id,omitempty"`

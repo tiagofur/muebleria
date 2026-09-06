@@ -26,6 +26,8 @@ import {
   openFieldIssues,
   openInstallationVisits,
   type Project,
+  releaseAuthorityLabel,
+  releaseAuthorityOf,
 } from '@granete/domain';
 import '../projects.css';
 import './projectOverview.css';
@@ -83,7 +85,9 @@ export function ProjectOverviewPanel({
   testId = 'project-overview-panel',
 }: ProjectOverviewPanelProps): ReactNode {
   const stage = deriveProjectStage(project);
+  // #577: release state from the resolved authority (canonical first).
   const release = project.productionRelease;
+  const authority = releaseAuthorityOf(project);
   const stale = getProductionStaleInfo(project);
   const nextVisit = openInstallationVisits(project.installation)[0];
   const installationDate = nextVisit?.date ?? project.installationScheduledDate;
@@ -94,8 +98,12 @@ export function ProjectOverviewPanel({
       id: 'engineering',
       label: 'Ingeniería / Release',
       icon: <Wrench strokeWidth={1.5} size={16} aria-hidden="true" />,
-      detail: release
-        ? `Liberada rev. ${release.projectVersion} · ${release.releasedAt.slice(0, 10)}`
+      detail: authority
+        ? authority.source === 'canonical'
+          ? `${releaseAuthorityLabel(project)} · ${authority.releasedAt?.slice(0, 10) ?? ''}`.trim()
+          : release
+            ? `Liberada rev. ${release.projectVersion} · ${release.releasedAt.slice(0, 10)}`
+            : 'Liberada (legacy)'
         : 'Sin liberación a producción',
       href: nav.onOpenEngineering,
     },

@@ -11,6 +11,7 @@
  */
 
 import { ValidationError } from './errors';
+import { releaseAuthorityOf } from './releaseAuthority';
 import type { Project } from './types';
 import {
   appendProjectEvent,
@@ -410,7 +411,9 @@ export function captureCostBaseline(
   params: CaptureCostBaselineParams = {},
 ): { project: Project; costing: JobCosting; baseline: CostBaseline; events: readonly ProjectEvent[] } {
   const snapshot = project.priceSnapshot;
-  const release = project.productionRelease;
+  // #577: the release authority (canonical first, legacy blob as pre-DT
+  // compatibility) grounds the baseline — mirroring the server's resolver.
+  const release = releaseAuthorityOf(project);
   const blockers: string[] = [];
   if (!snapshot) {
     blockers.push('capturar el snapshot de cotización (cerrar la cotización)');
@@ -423,7 +426,7 @@ export function captureCostBaseline(
   }
 
   const existing = project.costing?.baseline;
-  if (existing && existing.source.releaseId === release!.id) {
+  if (existing && existing.source.releaseId === release!.releaseId) {
     throw new ValidationError(
       'El baseline ya fue capturado para esta liberación; capture de nuevo sólo tras una nueva liberación',
     );
@@ -448,8 +451,8 @@ export function captureCostBaseline(
     source: {
       quoteSnapshotCapturedAt: snapshot!.capturedAt,
       projectVersion: project.version ?? 1,
-      releaseId: release!.id,
-      bomFingerprint: release!.bomFingerprint,
+      releaseId: release!.releaseId,
+      bomFingerprint: release!.manufacturingFingerprint ?? '',
     },
     revenue,
     materialsCost: breakdown.materialsCost,

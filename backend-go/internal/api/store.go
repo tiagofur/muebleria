@@ -235,6 +235,14 @@ type Store interface {
 		projectID string,
 		mutate func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
 	) (*domain.MaterialPlanningMutation, error)
+	// OPS-DT-1 (#577): the derive variant resolving the EXACT canonical
+	// ProductionRelease id the command targeted as the release authority —
+	// never an implicit latest, never the legacy blob.
+	MutateProjectMaterialPlanningForRelease(
+		ctx context.Context,
+		projectID, releaseID string,
+		mutate func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
+	) (*domain.MaterialPlanningMutation, error)
 	// Quality job (OC-060..062): locked read-modify-write of the quality JSONB
 	// (issues, rework actions, unit QC) plus the physical executions a rework
 	// action may touch, with audit events in the same transaction.

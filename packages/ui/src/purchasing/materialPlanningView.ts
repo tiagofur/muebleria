@@ -7,11 +7,13 @@
 import {
   computeProjectMaterialCoverage,
   evaluateMaterialsReleaseReadiness,
+  releaseAuthorityOf,
   type MaterialPlanning,
   type MaterialStock,
   type MaterialsReleaseCheck,
   type ProjectMaterialLineCoverage,
   type Project,
+  type ProductionReleaseAuthority,
   type PurchaseOrder,
   type StockMaterialKind,
 } from '@granete/domain';
@@ -22,8 +24,20 @@ export interface MaterialPlanningCardView {
   /** True when the processStage stamp (materialsRelease) is set. */
   readonly released: boolean;
   readonly requirementsDerived: boolean;
-  /** False when the obra has no production release → derive is impossible. */
+  /**
+   * False when the obra has no release authority → derive is impossible.
+   * Server-owned projection first (#577): a canonical ProductionRelease
+   * unlocks the derive without any legacy liberation.
+   */
   readonly canDerive: boolean;
+  /** Release authority backing the panel (canonical or legacy), when any. */
+  readonly releaseAuthority: ProductionReleaseAuthority | undefined;
+  /**
+   * Human-readable provenance of the derived requirements (#577): which
+   * exact release/revision the snapshot was bound to. Technical detail
+   * (fingerprint/ids) travels in `detail`.
+   */
+  readonly provenance: { readonly label: string; readonly detail: string } | undefined;
   readonly lineCount: number;
   readonly coverage: readonly ProjectMaterialLineCoverage[];
   readonly releaseChecks: readonly MaterialsReleaseCheck[];
@@ -48,11 +62,39 @@ export function materialPlanningCardView(
     stock,
     plannings,
   });
+  const releaseAuthority = releaseAuthorityOf(project);
+  const requirements = planning?.requirements;
+  let provenance: { label: string; detail: string } | undefined;
+  if (requirements && requirements.lines.length > 0) {
+    const releaseLabel =
+      requirements.sourceProductionReleaseNumber !== undefined
+        ? `Liberación #${requirements.sourceProductionReleaseNumber}`
+        : requirements.releaseId
+          ? `Liberación ${requirements.releaseId.slice(0, 8)}`
+          : 'BOM liberado';
+    const designLabel =
+      requirements.sourceDesignRevisionNumber !== undefined
+        ? `Diseño R${requirements.sourceDesignRevisionNumber}`
+        : undefined;
+    provenance = {
+      label: designLabel ? `Derivado de ${releaseLabel} · ${designLabel}` : `Derivado de ${releaseLabel}`,
+      detail: [
+        requirements.releaseId ? `release ${requirements.releaseId}` : undefined,
+        requirements.sourceDesignRevisionId ? `diseño ${requirements.sourceDesignRevisionId}` : undefined,
+        requirements.sourceQuoteRevisionId ? `cotización ${requirements.sourceQuoteRevisionId}` : undefined,
+        requirements.bomFingerprint ? `fingerprint ${requirements.bomFingerprint}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    };
+  }
   return {
     projectId: project.id,
     released: Boolean(project.materialsRelease),
     requirementsDerived: (planning?.requirements?.lines.length ?? 0) > 0,
-    canDerive: Boolean(project.productionRelease),
+    canDerive: releaseAuthority !== undefined,
+    releaseAuthority,
+    provenance,
     lineCount: planning?.requirements?.lines.length ?? 0,
     coverage,
     releaseChecks: checks,

@@ -861,12 +861,31 @@ func (s *stubStore) MutateProjectMaterialPlanning(
 	_ string,
 	mutate func(*domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
 ) (*domain.MaterialPlanningMutation, error) {
+	return s.mutateMaterialPlanning("", mutate)
+}
+
+func (s *stubStore) MutateProjectMaterialPlanningForRelease(
+	_ context.Context,
+	_, releaseID string,
+	mutate func(*domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
+) (*domain.MaterialPlanningMutation, error) {
+	return s.mutateMaterialPlanning(releaseID, mutate)
+}
+
+func (s *stubStore) mutateMaterialPlanning(
+	exactReleaseID string,
+	mutate func(*domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
+) (*domain.MaterialPlanningMutation, error) {
+	if exactReleaseID != "" && (s.productionRelease == nil || s.productionRelease.ReleaseID != exactReleaseID) {
+		return nil, errors.New("CONFLICT:la liberación indicada no existe en esta obra")
+	}
 	snap := &domain.MaterialPlanningSnapshot{
 		Planning:                  s.materialPlanning,
 		AllPlannings:              []*domain.MaterialPlanning{s.materialPlanning},
 		Stock:                     append([]domain.MaterialStock(nil), s.materialStock...),
 		PurchaseOrders:            append([]domain.PurchaseOrder(nil), s.purchaseOrders...),
 		ProductionRelease:         s.productionRelease,
+		CanonicalReleaseExists:    s.productionRelease != nil && s.productionRelease.Source == domain.ProductionReleaseAuthorityCanonical,
 		MaterialsReleased:         s.materialsReleased,
 		HasMaterialsReservedEvent: s.hasMaterialsReservedEvent,
 	}
