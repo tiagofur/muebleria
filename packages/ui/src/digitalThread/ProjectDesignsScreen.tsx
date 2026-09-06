@@ -597,10 +597,12 @@ export function ProjectDesignsScreen({
                     DESIGN_REVISION_STATUS_LABELS[node.status] ?? node.status;
                   const sourceLabel =
                     DESIGN_SOURCE_TYPE_LABELS[node.sourceType] ?? node.sourceType;
-                  // Next node's hasValidParent determines if the connector is authoritative.
-                  // If the next node's parent is not in the known set, show a broken connector.
+                  // A connector between currentNode and nextNode is authoritative ONLY
+                  // when nextNode explicitly references this currentNode as its parent.
                   const nextNode = lineage[index + 1];
-                  const connectorIsAuthoritative = nextNode ? nextNode.hasValidParent : false;
+                  const connectorIsAuthoritative = Boolean(
+                    nextNode && nextNode.parentRevisionId === node.revision.id,
+                  );
 
                   return (
                     <div key={node.revision.id} className="pd-lineage-step" role="listitem">

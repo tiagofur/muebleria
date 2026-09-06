@@ -719,5 +719,56 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
     expect(orphanConnector).toBeInTheDocument();
     expect(orphanConnector).toHaveAttribute('title', 'Parent no disponible');
   });
+
+  it('renders normal authoritative connectors for linear lineage chain R1->R2->R3', async () => {
+    // Linear mock: R1 (parent: null), R2 (parent: R1), R3 (parent: R2)
+    setupFetchMock();
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: null },
+    });
+
+    expect(await screen.findByTestId('revision-node-R1')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-node-R2')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-node-R3')).toBeInTheDocument();
+
+    const connectors = document.querySelectorAll('.pd-lineage-connector');
+    expect(connectors).toHaveLength(2);
+    expect(connectors[0]).not.toHaveClass('pd-lineage-connector--orphan');
+    expect(connectors[1]).not.toHaveClass('pd-lineage-connector--orphan');
+    expect(document.querySelector('.pd-lineage-connector--orphan')).toBeNull();
+  });
+
+  it('renders non-authoritative connector when revision parent branches or skips chronological predecessor', async () => {
+    // Branch mock: R1 (parent: null), R2 (parent: R1), R3 (parent: R1 instead of R2)
+    const branchedR3: DesignRevision = {
+      ...mockRevision3,
+      parent_revision_id: REV_1_ID,
+    };
+
+    setupFetchMock({
+      revisionsByDesign: {
+        [DESIGN_1_ID]: [mockRevision1, mockRevision2, branchedR3],
+      },
+    });
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: null },
+    });
+
+    expect(await screen.findByTestId('revision-node-R1')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-node-R2')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-node-R3')).toBeInTheDocument();
+
+    const connectors = document.querySelectorAll('.pd-lineage-connector');
+    expect(connectors).toHaveLength(2);
+
+    // R1 -> R2 connector is authoritative (R2 parent is R1)
+    expect(connectors[0]).not.toHaveClass('pd-lineage-connector--orphan');
+
+    // R2 -> R3 connector is NOT authoritative (R3 parent is R1, not R2)
+    expect(connectors[1]).toHaveClass('pd-lineage-connector--orphan');
+    expect(connectors[1]).toHaveAttribute('title', 'Parent no disponible');
+  });
 });
 
