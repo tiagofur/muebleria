@@ -189,3 +189,79 @@ func TestGetProjectFurnitureWorkspace_CrossTenantAndNotFound(t *testing.T) {
 		t.Fatalf("unknown project expected ErrDesignNotFound, got %v", err)
 	}
 }
+
+func TestGetProjectFurnitureWorkspace_HistoricalQuoteRevisionNoGrouping(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+
+	lineID := "51000000-0000-0000-0000-000000000099"
+	seedQuoteLines(t, fx, fiSharedProject, map[string]int{
+		lineID: 1,
+	})
+
+	var mat *domain.QuoteLineMaterialization
+	var qRev *domain.QuoteRevision
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		var txErr error
+		mat, txErr = fx.store.MaterializeQuoteLine(txCtx, storage.MaterializeQuoteLineCommand{
+			ProjectID:   fiSharedProject,
+			QuoteLineID: lineID,
+			ActorUserID: rlsUserA,
+			RequestID:   "ws-hist-mat",
+		})
+		if txErr != nil {
+			return txErr
+		}
+		instID := mat.Instances[0].FurnitureInstanceID
+
+		qRev, txErr = fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+			ProjectID: fiSharedProject,
+			CreatedBy: rlsUserA,
+			Items: []storage.CreateQuoteRevisionItemCommand{
+				{
+					FurnitureInstanceID:   instID,
+					FurnitureDefinitionID: fiModuleA,
+					LifecycleStatus:       "active",
+				},
+			},
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("setup line and quote revision: %v", err)
+	}
+
+	// Case 1: Live commercial state (QuoteRevisionID == "") -> loads grouping from quote_line_furniture_instances.
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		wsLive, err := fx.store.GetProjectFurnitureWorkspace(txCtx, fiSharedProject, storage.FurnitureWorkspaceQuery{})
+		if err != nil {
+			return err
+		}
+		if len(wsLive.Units) != 1 {
+			t.Fatalf("expected 1 unit in live workspace, got %d", len(wsLive.Units))
+		}
+		if wsLive.Units[0].CommercialGrouping == nil {
+			t.Fatalf("live workspace must load commercial grouping from current quote lines")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("live workspace query: %v", err)
+	}
+
+	// Case 2: Historical QuoteRevision selected -> must NOT fabricate grouping from current links.
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		wsHist, err := fx.store.GetProjectFurnitureWorkspace(txCtx, fiSharedProject, storage.FurnitureWorkspaceQuery{
+			QuoteRevisionID: qRev.ID,
+		})
+		if err != nil {
+			return err
+		}
+		if len(wsHist.Units) != 1 {
+			t.Fatalf("expected 1 unit in historical workspace, got %d", len(wsHist.Units))
+		}
+		if wsHist.Units[0].CommercialGrouping != nil {
+			t.Fatalf("historical quote revision must NOT fabricate grouping, got %+v", wsHist.Units[0].CommercialGrouping)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("historical workspace query: %v", err)
+	}
+}

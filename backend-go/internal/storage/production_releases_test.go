@@ -917,3 +917,142 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 		t.Fatalf("legacy fallback must resolve ReleaseID=LEGACY + ManufacturingFingerprint=OLD-FP, got %+v", controlSnap.ProductionRelease)
 	}
 }
+
+func TestGetContextualProductionRelease_HistoricalVsLatest(t *testing.T) {
+	fx := setupReleaseFixture(t)
+	actorA := fiActorA()
+
+	// 1. Create Release P1 pinned to (revR3, quoteQ3).
+	var p1 *storage.ProductionReleaseReadback
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
+			ProjectID:        fx.projectID,
+			DesignRevisionID: fx.revR3,
+			QuoteRevisionID:  fx.quoteQ3,
+			ActorUserID:      rlsUserA,
+			RequestID:        "p1-release",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create release P1: %v", err)
+	}
+
+	// 2. Modify working copy (width change on fiA), publish R4, requote to Q4, accept Q4, approve R4, and create P2.
+	var p2 *storage.ProductionReleaseReadback
+	var revR4, quoteQ4 string
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID:   fx.designID,
+			SourceType: domain.DesignRevisionSourceSketchup,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+			},
+			ActorUserID: rlsUserA,
+		}); err != nil {
+			return err
+		}
+
+		pubReadback, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:       fx.designID,
+			BaseRevisionID: fx.revR3,
+			SourceType:     domain.DesignRevisionSourceSketchup,
+			ActorUserID:    rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		revR4 = pubReadback.ID
+
+		requote, err := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID:           fx.projectID,
+			BaseQuoteRevisionID: fx.quoteQ3,
+			DesignRevisionID:    revR4,
+		})
+		if err != nil {
+			return err
+		}
+		quoteQ4 = requote.Revision.ID
+
+		if _, err := fx.store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{
+			QuoteRevisionID: quoteQ4,
+			Status:          "published",
+		}); err != nil {
+			return err
+		}
+
+		if _, err := fx.store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{
+			QuoteRevisionID: quoteQ4,
+			Status:          "accepted",
+		}); err != nil {
+			return err
+		}
+
+		if _, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
+			DesignID:         fx.designID,
+			DesignRevisionID: revR4,
+			ActorUserID:      rlsUserA,
+		}); err != nil {
+			return err
+		}
+
+		p2, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
+			ProjectID:        fx.projectID,
+			DesignRevisionID: revR4,
+			QuoteRevisionID:  quoteQ4,
+			ActorUserID:      rlsUserA,
+			RequestID:        "p2-release",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create release P2: %v", err)
+	}
+
+	// 3. Verifications:
+	// a. LatestProjectProductionRelease must be P2.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		latest, err := fx.store.GetLatestProjectProductionRelease(ctx, fx.projectID)
+		if err != nil {
+			return err
+		}
+		if latest == nil || latest.ID != p2.Release.ID || latest.ReleaseNumber != 2 {
+			t.Fatalf("expected latest release P2 (release #2), got %+v", latest)
+		}
+
+		// b. Contextual release for historical context (revR3, quoteQ3) MUST return P1!
+		// Even though P2 is newer in the project, P2 must NOT hide P1.
+		contextualP1, err := fx.store.GetContextualProductionRelease(ctx, fx.projectID, fx.revR3, fx.quoteQ3)
+		if err != nil {
+			return err
+		}
+		if contextualP1 == nil || contextualP1.ID != p1.Release.ID || contextualP1.ReleaseNumber != 1 {
+			t.Fatalf("expected contextual release P1 (release #1), got %+v", contextualP1)
+		}
+
+		// c. Contextual release for context (revR4, quoteQ4) returns P2.
+		contextualP2, err := fx.store.GetContextualProductionRelease(ctx, fx.projectID, revR4, quoteQ4)
+		if err != nil {
+			return err
+		}
+		if contextualP2 == nil || contextualP2.ID != p2.Release.ID || contextualP2.ReleaseNumber != 2 {
+			t.Fatalf("expected contextual release P2, got %+v", contextualP2)
+		}
+
+		// d. Mismatched pins (revR3, quoteQ4) returns nil without error.
+		mismatched, err := fx.store.GetContextualProductionRelease(ctx, fx.projectID, fx.revR3, quoteQ4)
+		if err != nil {
+			return err
+		}
+		if mismatched != nil {
+			t.Fatalf("expected nil for mismatched pins, got %+v", mismatched)
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("verification transaction: %v", err)
+	}
+}

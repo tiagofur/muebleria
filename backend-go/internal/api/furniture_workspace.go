@@ -216,7 +216,7 @@ func toProjectFurnitureWorkspaceDTO(ws *domain.FurnitureWorkspace) openapi.Proje
 		}
 
 		if u.Reconciliation != nil {
-			reconcileDTO := toReconciliationItemWorkspaceDTO(*u.Reconciliation)
+			reconcileDTO := toReconciliationItemDTO(u.Reconciliation.Item, u.Reconciliation.Impact)
 			unitDTO.Reconciliation = &reconcileDTO
 		}
 
@@ -265,37 +265,4 @@ func toWorkspaceReleaseContextDTO(rel *domain.FurnitureWorkspaceRelease) *openap
 		dto.CurrentDesignRevisionNumber = &cnum
 	}
 	return dto
-}
-
-func toReconciliationItemWorkspaceDTO(item domain.ReconciliationItem) openapi.ReconciliationItem {
-	diffs := make([]openapi.StructuredDifference, len(item.Differences))
-	for d, diff := range item.Differences {
-		var qVal, dVal *any
-		if diff.QuoteValue != nil {
-			v := diff.QuoteValue
-			qVal = &v
-		}
-		if diff.DesignValue != nil {
-			v := diff.DesignValue
-			dVal = &v
-		}
-		diffs[d] = openapi.StructuredDifference{
-			Path:        diff.Path,
-			QuoteValue:  qVal,
-			DesignValue: dVal,
-			Impact:      toChangeImpactDTO(domain.ClassifyDifferencePath(diff.Path)),
-		}
-	}
-	var notes *string
-	if item.Notes != "" {
-		n := item.Notes
-		notes = &n
-	}
-	return openapi.ReconciliationItem{
-		FurnitureInstanceId: item.FurnitureInstanceID,
-		Status:              openapi.ReconciliationStatus(item.Status),
-		Differences:         diffs,
-		Impact:              toChangeImpactDTO(domain.ClassifyDifferencePath("")),
-		Notes:               notes,
-	}
 }

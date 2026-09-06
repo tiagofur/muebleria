@@ -61,38 +61,43 @@ func (s *PostgresStore) GetProjectFurnitureWorkspace(ctx context.Context, projec
 
 	// 1b. Commercial quantity provenance from quote_line_furniture_instances (#386 / DT-2).
 	// One row per active/current link, ordered deterministically by creation and id.
-	linkRows, err := s.db(ctx).Query(ctx, `
-		SELECT qli.quote_line_id::text, qli.furniture_instance_id::text
-		FROM quote_line_furniture_instances qli
-		WHERE qli.project_id = $1
-		  AND qli.state = 'current'
-		ORDER BY qli.quote_line_id, qli.created_at, qli.furniture_instance_id
-	`, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer linkRows.Close()
-
-	linksByLine := make(map[string][]string)
-	for linkRows.Next() {
-		var lineID, instID string
-		if err := linkRows.Scan(&lineID, &instID); err != nil {
+	// Invariant: Only valid for live commercial state (when no historical QuoteRevision
+	// is selected). Historical QuoteRevisions do not invent QuoteLine membership from
+	// the live link.
+	commercialGroupingByInstance := make(map[string]domain.FurnitureWorkspaceCommercialGrouping)
+	if query.QuoteRevisionID == "" {
+		linkRows, err := s.db(ctx).Query(ctx, `
+			SELECT qli.quote_line_id::text, qli.furniture_instance_id::text
+			FROM quote_line_furniture_instances qli
+			WHERE qli.project_id = $1
+			  AND qli.state = 'current'
+			ORDER BY qli.quote_line_id, qli.created_at, qli.furniture_instance_id
+		`, projectID)
+		if err != nil {
 			return nil, err
 		}
-		linksByLine[lineID] = append(linksByLine[lineID], instID)
-	}
-	if err := linkRows.Err(); err != nil {
-		return nil, err
-	}
+		defer linkRows.Close()
 
-	commercialGroupingByInstance := make(map[string]domain.FurnitureWorkspaceCommercialGrouping)
-	for lineID, instIDs := range linksByLine {
-		total := len(instIDs)
-		for idx, instID := range instIDs {
-			commercialGroupingByInstance[instID] = domain.FurnitureWorkspaceCommercialGrouping{
-				QuoteLineID: lineID,
-				UnitIndex:   idx + 1,
-				UnitTotal:   total,
+		linksByLine := make(map[string][]string)
+		for linkRows.Next() {
+			var lineID, instID string
+			if err := linkRows.Scan(&lineID, &instID); err != nil {
+				return nil, err
+			}
+			linksByLine[lineID] = append(linksByLine[lineID], instID)
+		}
+		if err := linkRows.Err(); err != nil {
+			return nil, err
+		}
+
+		for lineID, instIDs := range linksByLine {
+			total := len(instIDs)
+			for idx, instID := range instIDs {
+				commercialGroupingByInstance[instID] = domain.FurnitureWorkspaceCommercialGrouping{
+					QuoteLineID: lineID,
+					UnitIndex:   idx + 1,
+					UnitTotal:   total,
+				}
 			}
 		}
 	}
@@ -160,21 +165,42 @@ func (s *PostgresStore) GetProjectFurnitureWorkspace(ctx context.Context, projec
 		}
 	}
 
-	// 5. Exact contextual release authority: newest pin + derived staleness.
-	var release *domain.ProductionRelease
-	var releaseStale bool
-	var releaseCurrent *domain.ProductionReleaseStaleness
-	release, err = s.GetLatestProjectProductionRelease(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	if release != nil {
-		staleness, err := s.releaseStaleness(ctx, *release, "")
+	// 5a. Exact contextual release authority: looked up by exact immutable pins.
+	var contextualRelease *domain.ProductionRelease
+	var contextualReleaseStale bool
+	var contextualReleaseCurrent *domain.ProductionReleaseStaleness
+	if kind == domain.FurnitureWorkspaceContextRevision && query.DesignRevisionID != "" {
+		rel, err := s.GetContextualProductionRelease(ctx, projectID, query.DesignRevisionID, query.QuoteRevisionID)
 		if err != nil {
 			return nil, err
 		}
-		releaseStale = staleness.ManufacturingStale
-		releaseCurrent = staleness
+		if rel != nil {
+			staleness, err := s.releaseStaleness(ctx, *rel, "")
+			if err != nil {
+				return nil, err
+			}
+			contextualRelease = rel
+			contextualReleaseStale = staleness.ManufacturingStale
+			contextualReleaseCurrent = staleness
+		}
+	}
+
+	// 5b. Latest project release: newest canonical release (informational).
+	var latestProjectRelease *domain.ProductionRelease
+	var latestProjectReleaseStale bool
+	var latestProjectReleaseCurrent *domain.ProductionReleaseStaleness
+	latest, err := s.GetLatestProjectProductionRelease(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if latest != nil {
+		staleness, err := s.releaseStaleness(ctx, *latest, "")
+		if err != nil {
+			return nil, err
+		}
+		latestProjectRelease = latest
+		latestProjectReleaseStale = staleness.ManufacturingStale
+		latestProjectReleaseCurrent = staleness
 	}
 
 	return domain.BuildFurnitureWorkspace(domain.FurnitureWorkspaceInputs{
@@ -188,9 +214,12 @@ func (s *PostgresStore) GetProjectFurnitureWorkspace(ctx context.Context, projec
 		DesignRevisionNumber:         designRevisionNumber,
 		DesignItemInstanceIDs:        designItemIDs,
 		Reconciliation:               reconciliation,
-		Release:                      release,
-		ReleaseStale:                 releaseStale,
-		ReleaseCurrent:               releaseCurrent,
+		ContextualRelease:            contextualRelease,
+		ContextualReleaseStale:       contextualReleaseStale,
+		ContextualReleaseCurrent:     contextualReleaseCurrent,
+		LatestProjectRelease:        latestProjectRelease,
+		LatestProjectReleaseStale:   latestProjectReleaseStale,
+		LatestProjectReleaseCurrent: latestProjectReleaseCurrent,
 	}), nil
 }
 

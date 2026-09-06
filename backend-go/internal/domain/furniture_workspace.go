@@ -95,14 +95,19 @@ type FurnitureWorkspaceCommercialGrouping struct {
 	UnitTotal       int
 }
 
-// FurnitureWorkspaceUnit is the authoritative per-unit projection.
+type FurnitureWorkspaceReconciliationItem struct {
+	Item   ReconciliationItem
+	Impact ChangeImpact
+}
+
+// FurnitureWorkspaceUnit represents one physical FurnitureInstance in the project.
 type FurnitureWorkspaceUnit struct {
 	Instance           FurnitureInstance
 	Commercial         FurnitureWorkspaceCommercial
 	Design             FurnitureWorkspaceDesign
 	CommercialGrouping *FurnitureWorkspaceCommercialGrouping
 	ActionRequired     *FurnitureWorkspaceAction
-	Reconciliation     *ReconciliationItem
+	Reconciliation     *FurnitureWorkspaceReconciliationItem
 }
 
 // FurnitureWorkspaceSummary aggregates the server-derived counts.
@@ -176,10 +181,15 @@ type FurnitureWorkspaceInputs struct {
 	// Reconciliation is the server-computed result for the exact revision
 	// pair (nil for working-copy or absent contexts).
 	Reconciliation *ReconciliationResult
-	// Release is the newest ProductionRelease pin (nil when none exists).
-	Release        *ProductionRelease
-	ReleaseStale   bool
-	ReleaseCurrent *ProductionReleaseStaleness
+	// ContextualRelease is the exact matching ProductionRelease for the selected context (nil when none exists or working copy).
+	ContextualRelease        *ProductionRelease
+	ContextualReleaseStale   bool
+	ContextualReleaseCurrent *ProductionReleaseStaleness
+
+	// LatestProjectRelease is the newest canonical release of the project (informational).
+	LatestProjectRelease        *ProductionRelease
+	LatestProjectReleaseStale   bool
+	LatestProjectReleaseCurrent *ProductionReleaseStaleness
 }
 
 // BuildFurnitureWorkspace derives the deterministic contextual projection.
@@ -191,10 +201,24 @@ func BuildFurnitureWorkspace(inputs FurnitureWorkspaceInputs) *FurnitureWorkspac
 	}
 	hasDesignContext := inputs.DesignContextKind != FurnitureWorkspaceContextNone
 
-	reconciliationByID := make(map[string]ReconciliationItem)
+	type reconciliationWithImpact struct {
+		item   ReconciliationItem
+		impact ChangeImpact
+	}
+	reconciliationByID := make(map[string]reconciliationWithImpact)
 	if inputs.Reconciliation != nil {
-		for _, item := range inputs.Reconciliation.Items {
-			reconciliationByID[item.FurnitureInstanceID] = item
+		classification, err := ClassifyReconciliation(inputs.Reconciliation)
+		if err == nil && classification != nil {
+			impactsByID := make(map[string]ChangeImpact, len(classification.Items))
+			for _, it := range classification.Items {
+				impactsByID[it.FurnitureInstanceID] = it.Impact
+			}
+			for _, item := range inputs.Reconciliation.Items {
+				reconciliationByID[item.FurnitureInstanceID] = reconciliationWithImpact{
+					item:   item,
+					impact: impactsByID[item.FurnitureInstanceID],
+				}
+			}
 		}
 	}
 
@@ -234,39 +258,38 @@ func BuildFurnitureWorkspace(inputs FurnitureWorkspaceInputs) *FurnitureWorkspac
 			Status:         inputs.Quote.Status,
 		}
 	}
-	if inputs.Release != nil {
+	// Defect 1: Contextual release is looked up and pinned strictly to the selected context.
+	if inputs.ContextualRelease != nil && inputs.DesignContextKind == FurnitureWorkspaceContextRevision {
 		releaseRef := &FurnitureWorkspaceRelease{
-			ID:                   inputs.Release.ID,
-			ReleaseNumber:        inputs.Release.ReleaseNumber,
-			DesignRevisionID:     inputs.Release.DesignRevisionID,
-			DesignRevisionNumber: inputs.Release.DesignRevisionNumber,
-			QuoteRevisionID:      inputs.Release.QuoteRevisionID,
-			ManufacturingStale:   inputs.ReleaseStale,
+			ID:                   inputs.ContextualRelease.ID,
+			ReleaseNumber:        inputs.ContextualRelease.ReleaseNumber,
+			DesignRevisionID:     inputs.ContextualRelease.DesignRevisionID,
+			DesignRevisionNumber: inputs.ContextualRelease.DesignRevisionNumber,
+			QuoteRevisionID:      inputs.ContextualRelease.QuoteRevisionID,
+			ManufacturingStale:   inputs.ContextualReleaseStale,
 		}
-		if inputs.ReleaseCurrent != nil {
-			releaseRef.CurrentDesignRevisionID = inputs.ReleaseCurrent.CurrentDesignRevisionID
-			releaseRef.CurrentDesignRevisionNumber = inputs.ReleaseCurrent.CurrentDesignRevisionNumber
+		if inputs.ContextualReleaseCurrent != nil {
+			releaseRef.CurrentDesignRevisionID = inputs.ContextualReleaseCurrent.CurrentDesignRevisionID
+			releaseRef.CurrentDesignRevisionNumber = inputs.ContextualReleaseCurrent.CurrentDesignRevisionNumber
 		}
-		workspace.LatestProjectRelease = releaseRef
+		workspace.Release = releaseRef
+	}
 
-		// Blocker 3: Release belongs to the selected context ONLY when pins match exact revisions:
-		// - DesignContextKind MUST be revision (working copy never claims a contextual release)
-		// - DesignRevisionID must match exactly
-		// - If Quote is selected, QuoteRevisionID must match (or release has no quoteRevisionId)
-		// - If Release specifies a QuoteRevisionID, Quote must be selected and match
-		isContextual := inputs.DesignContextKind == FurnitureWorkspaceContextRevision &&
-			inputs.DesignRevisionID != "" &&
-			inputs.Release.DesignRevisionID == inputs.DesignRevisionID
-
-		if isContextual && inputs.Release.QuoteRevisionID != "" {
-			if inputs.Quote == nil || inputs.Quote.ID != inputs.Release.QuoteRevisionID {
-				isContextual = false
-			}
+	// Defect 1: Latest project release is kept separate for informational display.
+	if inputs.LatestProjectRelease != nil {
+		latestRef := &FurnitureWorkspaceRelease{
+			ID:                   inputs.LatestProjectRelease.ID,
+			ReleaseNumber:        inputs.LatestProjectRelease.ReleaseNumber,
+			DesignRevisionID:     inputs.LatestProjectRelease.DesignRevisionID,
+			DesignRevisionNumber: inputs.LatestProjectRelease.DesignRevisionNumber,
+			QuoteRevisionID:      inputs.LatestProjectRelease.QuoteRevisionID,
+			ManufacturingStale:   inputs.LatestProjectReleaseStale,
 		}
-
-		if isContextual {
-			workspace.Release = releaseRef
+		if inputs.LatestProjectReleaseCurrent != nil {
+			latestRef.CurrentDesignRevisionID = inputs.LatestProjectReleaseCurrent.CurrentDesignRevisionID
+			latestRef.CurrentDesignRevisionNumber = inputs.LatestProjectReleaseCurrent.CurrentDesignRevisionNumber
 		}
+		workspace.LatestProjectRelease = latestRef
 	}
 
 	for _, instance := range ordered {
@@ -293,10 +316,10 @@ func BuildFurnitureWorkspace(inputs FurnitureWorkspaceInputs) *FurnitureWorkspac
 		// Action priority: a non-synced server reconciliation wins; otherwise
 		// a pending placement in the selected design context.
 		var action *FurnitureWorkspaceAction
-		if item, ok := reconciliationByID[instance.ID]; ok && item.Status != ReconciliationStatusSynced {
-			if actionCopy, found := furnitureWorkspaceActionCopy[string(item.Status)]; found {
+		if rec, ok := reconciliationByID[instance.ID]; ok && rec.item.Status != ReconciliationStatusSynced {
+			if actionCopy, found := furnitureWorkspaceActionCopy[string(rec.item.Status)]; found {
 				action = &FurnitureWorkspaceAction{
-					Code:        string(item.Status),
+					Code:        string(rec.item.Status),
 					Message:     actionCopy.Message,
 					Remediation: actionCopy.Remediation,
 				}
@@ -310,19 +333,20 @@ func BuildFurnitureWorkspace(inputs FurnitureWorkspaceInputs) *FurnitureWorkspac
 			}
 		}
 
-		var reconciliation *ReconciliationItem
-		if item, ok := reconciliationByID[instance.ID]; ok {
-			itemCopy := item
-			reconciliation = &itemCopy
+		// Defect 3: Reconciliation contains both the #393 item and the #394 classified impact.
+		var reconciliation *FurnitureWorkspaceReconciliationItem
+		if rec, ok := reconciliationByID[instance.ID]; ok {
+			reconciliation = &FurnitureWorkspaceReconciliationItem{
+				Item:   rec.item,
+				Impact: rec.impact,
+			}
 		}
 
-		// Blocker 2: commercialGrouping comes strictly from QuoteLine provenance.
+		// Defect 2: commercialGrouping comes strictly from authoritative persisted history.
+		// NEVER stamp or overwrite QuoteRevisionID from the selected quote revision.
 		var commercialGrouping *FurnitureWorkspaceCommercialGrouping
 		if g, ok := inputs.CommercialGroupingByInstance[instance.ID]; ok {
 			gCopy := g
-			if inputs.Quote != nil {
-				gCopy.QuoteRevisionID = inputs.Quote.ID
-			}
 			commercialGrouping = &gCopy
 		}
 

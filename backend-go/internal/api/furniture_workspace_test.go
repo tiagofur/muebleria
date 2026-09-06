@@ -215,6 +215,78 @@ func TestHandleProjectFurnitureWorkspace_SuccessDTO(t *testing.T) {
 	}
 }
 
+func TestHandleProjectFurnitureWorkspace_SuccessDTO_WithReconciliationImpact(t *testing.T) {
+	validProjectID := "00000000-0000-4000-8000-000000000010"
+	store := &stubStore{
+		furnitureWorkspaceResult: &domain.FurnitureWorkspace{
+			ProjectID: validProjectID,
+			DesignContext: domain.FurnitureWorkspaceDesignHeader{
+				Kind: "revision",
+			},
+			Units: []domain.FurnitureWorkspaceUnit{
+				{
+					Instance: domain.FurnitureInstance{
+						ID:              "fi-spatial-01",
+						ProjectID:       validProjectID,
+						Origin:          domain.FurnitureInstanceOriginQuote,
+						LifecycleStatus: domain.FurnitureInstanceLifecycleActive,
+					},
+					Reconciliation: &domain.FurnitureWorkspaceReconciliationItem{
+						Item: domain.ReconciliationItem{
+							FurnitureInstanceID: "fi-spatial-01",
+							Status:              domain.ReconciliationStatusModified,
+							Differences: []domain.StructuredDifference{
+								{Path: "transform.translationMm", QuoteValue: []float64{0, 0, 0}, DesignValue: []float64{100, 0, 0}},
+							},
+						},
+						Impact: domain.ChangeImpact{Spatial: true},
+					},
+				},
+			},
+		},
+	}
+	srv := &Server{Store: store}
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+validProjectID+"/furniture-workspace", bytes.NewReader([]byte("{}")))
+	req = withClaims(req, "user-1", "vendedor")
+	req.SetPathValue("projectId", validProjectID)
+	rec := httptest.NewRecorder()
+
+	srv.HandleProjectFurnitureWorkspace(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var res openapi.ProjectFurnitureWorkspace
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if len(res.Units) != 1 {
+		t.Fatalf("expected 1 unit, got %d", len(res.Units))
+	}
+	recon := res.Units[0].Reconciliation
+	if recon == nil {
+		t.Fatalf("expected reconciliation on unit, got nil")
+	}
+	if recon.Status != openapi.ReconciliationStatusModified {
+		t.Errorf("expected status modified, got %s", recon.Status)
+	}
+	if !recon.Impact.Spatial || recon.Impact.Commercial || recon.Impact.Manufacturing {
+		t.Errorf("expected unit impact spatial=true, commercial=false, manufacturing=false, got %+v", recon.Impact)
+	}
+	if len(recon.Differences) != 1 {
+		t.Fatalf("expected 1 difference, got %d", len(recon.Differences))
+	}
+	diff := recon.Differences[0]
+	if diff.Path != "transform.translationMm" {
+		t.Errorf("expected diff path transform.translationMm, got %s", diff.Path)
+	}
+	if !diff.Impact.Spatial || diff.Impact.Commercial || diff.Impact.Manufacturing {
+		t.Errorf("expected difference impact spatial=true, got %+v", diff.Impact)
+	}
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }
