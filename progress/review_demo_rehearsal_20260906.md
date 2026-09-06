@@ -45,3 +45,20 @@ Diff: docs-only (`docs/demo/demo-golden-path-rehearsal-20260906.md` nuevo,
    crea issues (respeta la regla del encargo: proponer, no crear).
 3. Regla "trabajo no pushed" satisfecha: rama
    `docs/demo-golden-path-rehearsal-20260906` pusheada antes de este veredicto.
+
+## Addendum — corrección documental post-feedback (2026-09-06)
+
+Feedback del review externo del PR #570 (dos puntos, aplicados):
+
+1. **P0-2 sin suavizar**: el verdict de manufacturing pasó de
+   `YES WITH MITIGATIONS` a `YES AS LEGACY DEMO CONTINUATION, NOT YET AS
+   END-TO-END CANONICAL DIGITAL THREAD`, con diagrama explícito: la doble
+   liberación abre/continúa el flujo legacy pero **no prueba provenancia exacta
+   P1/R2 → BOM**. Executive verdict, fila 23 de la tabla y mitigaciones
+   actualizadas en el mismo sentido.
+2. **Antigüedad de evidencia host**: filas 7/10 pasan a `PASS*` = por evidencia
+   previa vigente (código sin cambios desde PR #564); footnote aclara que el
+   único host fresco de la sesión fue `TC_ComponentAuthoringSmoke` y que
+   rehearsal host fresco de hardware/preflight/overlay queda pendiente.
+
+Docs-only; C1–C5 sin cambios. Veredicto se mantiene: APPROVED.

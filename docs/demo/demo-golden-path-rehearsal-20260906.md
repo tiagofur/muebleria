@@ -11,7 +11,10 @@ evidence; sin implementación de features. Predecesores:
 
 - El recorrido completo se puede **contar y ejecutar** con: fixture pre-sembrado
   (Q1 accepted + unidades físicas), handoff Web→SketchUp manual explícito, y
-  **doble liberación** (canónica #502 + legacy) para el tramo operacional.
+  **doble liberación** (canónica #502 + legacy) para el tramo operacional —
+  donde la continuación es **legacy**: demuestra que la obra sigue operable,
+  **no** que el BOM/operaciones deriven del snapshot exacto Q2+R2 de P1
+  (ver Manufacturing verdict).
 - El clímax comercial — *cliente acepta la Q2 en vivo → aprobar → liberar* —
   **no puede ejecutarse por un usuario** hoy: no existe superficie HTTP/UI para
   crear/publicar/aceptar una QuoteRevision. Si el guion exige ese momento en
@@ -42,10 +45,10 @@ evidence; sin implementación de features. Predecesores:
 | 4 Crear Design + workspace #501 | PASS | `create-design-btn` en ProjectDesignsScreen; E2E #501 ✓ | Working copy read-only en Web (authoring sólo SketchUp) | Guion SketchUp-céntrico |
 | 5/B — Handoff Web→SketchUp (QUESTION B) | FRICTION (P1-2) | Picker "Conectar modelo" (2 selects por nombre) + binding validado server-side (#388); sin copiar UUID; caliente ~30-60 s, frío ~1.5-3 min | Paso explicativo, no mágico | Pre-enrolar dispositivo + nombres únicos de design |
 | 6 Authoring SketchUp (mueble/mover/params) | PASS | TestUp real-host **5/5, 48 assertions, 0F/0E/0S** sobre este SHA (2026-09-06T14:11:40Z): move+undo, add, duplicate identidad, structural rejected | — | — |
-| 7 Herrajes 3D | PASS funcional (P1-8 visual Web) | Plugin #468 (`update_hardware_placement`, `substitute_hardware`); Go: colisión hinge↔shelf bloquea preflight; persistencia por identidad semántica | Web muestra preview estática (PNG artifact), no herraje interactivo | Mostrar herrajes en SketchUp |
-| 8 Perforaciones por herrajes | PASS | Resolve autoritativo Go (`authoring_machining.go`) verde; overlay #470 coincide (host 558: 5/5); defecto FM-03 sólo en resolver TS legacy de exports | — | Dims uniformes en documentos legacy |
+| 7 Herrajes 3D | PASS* funcional (P1-8 visual Web) | Plugin #468 (`update_hardware_placement`, `substitute_hardware`); Go: colisión hinge↔shelf bloquea preflight; persistencia por identidad semántica | Web muestra preview estática (PNG artifact), no herraje interactivo | Mostrar herrajes en SketchUp |
+| 8 Perforaciones por herrajes | PASS (Go fresco; overlay*) | Resolve autoritativo Go (`authoring_machining.go`) verde en esta sesión; overlay #470 coincide (host 558: 5/5, evidencia previa vigente); defecto FM-03 sólo en resolver TS legacy de exports | — | Dims uniformes en documentos legacy |
 | 9 Componentes internos (#467) | PASS | Host smoke 5/5 fresco (arriba); autoridad de topología server-side | — | — |
-| 10 Preflight SketchUp (#466) | PASS | Host 559 (5/5): blocked review, publish gate, rescue loop, stale locator, unreachable≠ready; Web usa el MISMO read model (#502) | — | — |
+| 10 Preflight SketchUp (#466) | PASS* | Host 559 (5/5, evidencia previa vigente): blocked review, publish gate, rescue loop, stale locator, unreachable≠ready; Web usa el MISMO read model (#502) | — | — |
 | 11 Publicar R1 | PASS por mitades (P1-4) | Endpoints publish probados (Go 9/9 E2E); plugin publisher probado contra fake — **sin prueba plugin↔backend real** | Riesgo de sorpresa en vivo | Ensayar publish real una vez pre-demo |
 | 12 Web revisiones/artifacts #501 | PASS | E2E #501 ✓: linaje R1→R2, pinneo histórico, reload estable, hashes, grants firmados | — | — |
 | 13 Cambio que requiere requote (R2) | PASS | E2E #502 ✓: width 600→650 → modified con impacto Comercial+Fabricación | — | — |
@@ -59,7 +62,7 @@ evidence; sin implementación de features. Predecesores:
 | 20 Durabilidad histórica (R3→P1 stale) | PASS | E2E ✓: P1 queda Stale pineado a R2; nunca retarget | — | — |
 | 21 BOM | PARTIAL (P0-2) | MRP derive exige release authority y binda ReleaseID+fingerprint; **el contenido sale de `project.items`** (motor TS), no de R2 | "¿El BOM corresponde a P1/R2?" — hoy no exactamente | Declarar límite en guion |
 | 22 Warehouse | PASS (legacy) | Stock/movimientos/reservas/picking/OC verdes con tests | — | — |
-| 23 Production (corte→…→instalación) | PASS (legacy, P0-2) | Part-executions + gates de revisión server-side; **UI bloqueada tras P1 canónico** (blob legacy null) | Doble liberación en guion | EngineeringWorkspace → modal legacy |
+| 23 Production (corte→…→instalación) | PASS como continuación legacy (P0-2) | Part-executions + gates de revisión server-side; **UI bloqueada tras P1 canónico** (blob legacy null) | Doble liberación en guion; **no presentar como derivado de P1/R2** | EngineeringWorkspace → modal legacy |
 | 24 Manufacturing outputs | PASS con límites | 13 documentos en ProductionOrderHub; PTX estructuralmente listo; sin claims de máquina | — | Sin claim "machine validated" |
 | 25 DXF rotado | STILL_REPRODUCIBLE (sin cambios) | Archivo sin cambios desde `706135f7` (ago-26); repro ayer sobre `587961fd` | Evitable | `DEMO MITIGATION`: no exportar piezas rotadas |
 | 26 FM-03 order-dependence TS | STILL_REPRODUCIBLE (sin cambios) | Resolver TS sin cambios desde `193beb4a` (ago-22); no toca ruta autoritativa Go | Evitable | Dims uniformes por módulo |
@@ -69,6 +72,11 @@ evidence; sin implementación de features. Predecesores:
 | 30 Offline/fallo de red | PASS (smoke) | Idempotency-Key durable, VERSION_CONFLICT tipado, failure-rollback spec (409 sin fila ni falso éxito) | — | — |
 | 31 Roles (Admin/Sales) | PASS parcial | E2E owner + aislamiento org B; preflight redactado por rol (Go) | Store/Partner fuera de este flujo (Gate B) | — |
 | 32 Consistencia Web↔SketchUp | PASS | Ambos consumen los mismos endpoints autoritativos; eco verbatim plugin; sin "dos verdades" | Publish real sin prueba cruzada (P1-4) | — |
+
+> `PASS*` = por **evidencia previa vigente** del mismo código de extensión (sin
+> cambios desde PR #564, `587961fd`); el único rehearsal host **fresco** de esta
+> sesión fue `TC_ComponentAuthoringSmoke` (5/5). Rehearsal host fresco de
+> hardware/preflight/overlay: pendiente (TC fuera del `testup-ci.yml`).
 
 ## P0 Demo Blockers
 
@@ -185,8 +193,9 @@ evidence; sin implementación de features. Predecesores:
   ruta autoritativa — el defecto TS es sólo de exports legacy).
 - BOM inclusion: PASS en la ruta legacy (hardware list); el BOM canónico desde R2
   no existe (P0-2 related).
-- `HARDWARE DEMO READY: YES` (funcional), con VISUAL POLISH pendiente en Web y
-  TC de host sin añadir al CI yml.
+- `HARDWARE DEMO READY: YES` (funcional) **por evidencia previa vigente** del
+  mismo código (sin cambios desde PR #564); **rehearsal host fresco pendiente**
+  (`TC_HardwareAuthoringSmoke` fuera del CI yml) y VISUAL POLISH pendiente en Web.
 
 ## Manufacturing verdict
 
@@ -198,8 +207,25 @@ evidence; sin implementación de features. Predecesores:
 - Outputs: PASS con límites (cut list CSV configurable, optimizer XLSX, PDFs,
   etiquetas ZPL, DXF, PTX, drilling, CNC pilot JSON; 13 docs descargables).
   Sin claims de máquina; DXF rotado mitigado por guion.
-- `PRODUCTION FLOW DEMO READY: YES WITH MITIGATIONS` (doble liberación + límites
-  declarados).
+- `PRODUCTION FLOW DEMO READY: YES AS LEGACY DEMO CONTINUATION, NOT YET AS
+  END-TO-END CANONICAL DIGITAL THREAD`. La doble liberación sólo permite
+  **abrir/continuar el flujo operativo legacy**; **no** prueba que el
+  BOM/operaciones deriven del snapshot exacto Q2+R2 de P1:
+
+```text
+P1 canonical (Q2+R2, #502)
+     ↓
+Digital Thread exactness (revisiones/approval/release/pins) ✅
+
+legacy operational continuation (doble liberación)
+     ↓
+BOM / warehouse / production ✅ demoable
+
+exact provenance to P1/R2 ❌ not yet proven
+```
+
+  No presentar al cliente que "la producción deriva exactamente de P1/R2"
+  hasta cerrar P0-2.
 
 ## Known mitigations
 
@@ -210,7 +236,8 @@ evidence; sin implementación de features. Predecesores:
   (+ aceptación de Q2 si el guion la necesita "ya hecha").
 - Handoff manual explícito Web→SketchUp (nombres únicos de diseño).
 - Pre-enrolar dispositivo SketchUp y sesión web antes del demo.
-- Doble liberación (canónica + legacy) para el tramo operacional.
+- Doble liberación (canónica + legacy) para el tramo operacional — la
+  continuación es legacy: **no afirmar provenancia exacta P1/R2 → BOM**.
 - Sin claim de compatibilidad con máquinas (PTX/DXF "salida preparada, validación
   pendiente").
 
