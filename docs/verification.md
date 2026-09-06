@@ -355,3 +355,39 @@ la UI real contra el seed demo y falla si un paso deja de ser completable o el
 kit de medición deja de capturar los eventos (detalle en
 `docs/proyectar-3d-usability-benchmark.md`). Los tiempos de esa corrida son
 `proxy` y no cuentan como evidencia de usuario.
+
+## PR publication metadata (partial #573 delivery)
+
+`PR Publication / Publication metadata` checks the current PR and issue through
+read-only GitHub API calls. Run its unit tests locally with:
+
+```sh
+python3 -m unittest discover -s scripts -p test_check_pr_metadata.py -v
+# Live check: requires GITHUB_EVENT_PATH, GITHUB_REPOSITORY and GITHUB_TOKEN.
+python3 scripts/check_pr_metadata.py
+```
+
+Start the body with exactly one standalone `Closes #N`, `Fixes #N`, `Resolves #N`
+or `Refs #N` line (case-insensitive; leading blank lines allowed). Foreign, malformed or multiple targets
+are rejected. The issue must be open, not a PR, and have only `status:approved`
+among status labels. Exactly one supported PR type is required: `type:bug`,
+`type:feature`, `type:docs`, `type:refactor`, `type:chore`, `type:breaking-change`.
+Issue submission never approves work; agents must not self-approve.
+
+This candidate-code workflow is self-validating/advisory, not tamper-proof approval.
+It changes no branch protections, existing product CI jobs, or merge permissions.
+PR metadata edits rerun only this workflow; issue approval changes do not trigger it.
+A human must reread the open approved issue, intended base, exact current head,
+all required CI/reviews and unmet scope immediately before any separately authorized
+merge. API errors or relevant PR metadata drift fail closed; head/base SHAs are pinned
+to the event. Reads are not atomic; unrelated volatile API fields are ignored.
+
+#573 remains incomplete; the autonomous product implementer remains disabled.
+Partial delivery uses non-closing `Refs #N`, with nonempty `## Delivered scope` and
+`## Remaining scope` sections, leaving the approved parent open. Section completeness
+and evidence are human acceptance criteria, not parsed by the metadata checker.
+Complete delivery uses a closing keyword only when all linked-issue criteria are met.
+This explicit partial-link policy permits separately authorized, verified partial PRs
+to merge without closing unfinished issues; passing this check never grants that authority.
+Queue ownership, bounded retries, independent validation, trusted enforcement and canary
+rollout remain pending.

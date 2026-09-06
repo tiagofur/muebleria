@@ -1,0 +1,32 @@
+name: PR Publication
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: pr-publication-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  publication-metadata:
+    name: Publication metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test publication contract
+        run: python3 -m unittest discover -s scripts -p test_check_pr_metadata.py -v
+      - name: Check current PR and approved issue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/check_pr_metadata.py
