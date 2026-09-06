@@ -25,7 +25,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Test publication contract
-        run: python3 -m unittest discover -s scripts -p test_check_pr_metadata.py -v
+        run: |
+          python3 -m unittest discover -s scripts -p test_check_pr_metadata.py -v
+          python3 -m unittest discover -s scripts -p test_factory_handoff.py -v
       - name: Check current PR and approved issue
         env:
           GITHUB_TOKEN: ${{ github.token }}
