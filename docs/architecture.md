@@ -3,7 +3,7 @@
 > Los agentes revisores evalúan código contra este archivo.
 > Si un criterio no está aquí, no es un requisito de arquitectura.
 >
-> **Actualizado 2026-08-28:** este contrato conserva la arquitectura original de
+> **Actualizado 2026-09-05:** este contrato conserva la arquitectura original de
 > paquetes, el Digital Thread Quote ↔ Project Furniture ↔ Design Revision ↔
 > Production Release y añade Organization Foundation v2: identidad, membresías,
 > RLS, relationships y ownership cross-org explícito.
@@ -66,6 +66,42 @@ Fuentes normativas:
   `docs/architecture/material-aware-furniture-resolution.md`;
 - principios 14–20:
   `docs/architecture/organization-foundation-v2.md` + ADR-0006.
+
+---
+
+## 1.1 Evolución industrial incorporada — objetivo y límites
+
+La [ruta DEMO → MVP](demo-mvp-plan-2026-09-05.md) conserva las foundations integradas.
+Gate A, identidad física, revisiones/publicación/reconciliación/release y el coordinador
+host no deben reconstruirse. Las ideas siguientes extienden contratos existentes; no
+afirman que todo el catálogo ni cada consumidor ya los implemente.
+
+```text
+definiciones/reglas versionadas + intención + materiales + unidad física
+→ resolución industrial autoritativa
+→ piezas + herrajes + relaciones + operaciones + incidencias + procedencia
+→ proyecciones React/SketchUp + BOM/costos + preparación/postprocesado
+```
+
+| Frontera | Contrato de evolución |
+|---|---|
+| Activo industrial | Separar geometría disponible, receta definida y receta validada para una combinación concreta. Proxy explícito; malla no genera maquinado. |
+| Reglas/operaciones | Extender HardwareDefinition/PartRelationship y perfiles existentes; revisión de regla, placement/relación, pieza y revisión de diseño conservan procedencia hasta el output. |
+| Cobertura | Ausencia explícita de operación no equivale a configuración faltante. Los estados propuestos `not_required/configured/missing/unsupported` deben formalizarse en la autoridad compartida antes de consumirlos. |
+| Agregado/receta | Simular diferencias y aplicar atómicamente piezas, comprados, operaciones y costo. Conservar identidades supervivientes; generar nuevas sólo cuando corresponde. |
+| Escena | Completar proyección existente con pertenencias/diagnósticos. Separar oculto por usuario, suprimido por regla, asset ausente y no participante industrial. |
+| Presentación | Pose abierta es transitoria; no cambia fingerprint/BOM/revisión. Actores fijos y móviles distintos (#529). No certifica recorrido mecánico. |
+| Exportación | Rotación/espejo/caras conservan operaciones; si no, bloquear o declarar salida incompleta. Un archivo válido sintácticamente no demuestra cobertura. |
+| Stock | Picking y movimiento requieren comando backend transaccional/idempotente; compensación local no cubre un commit posterior fallido. |
+| Evidencia | Fingerprint identifica bytes/contexto, no valida físicamente una receta. Máquina/controlador/software/herramientas/perfil/adaptador exactos + readback/operador. |
+
+La coexistencia TS/Go exige inventario de consumidores y fixtures de paridad; no crear
+una tercera tabla de maquinados. El resolver legacy usado por exports conserva riesgos
+RV-07/08 aunque la autoría Go sea correcta. El review estático y su riesgo de invalidación
+de preflight no sustituyen prueba de fallos con los consumidores reales.
+
+Fuentes especializadas: `architecture/domain-model.md`, `architecture/3d-asset-library.md`,
+`architecture/manufacturing-feature-model.md` y `architecture/machine-profiles-and-adapters.md`.
 
 ---
 

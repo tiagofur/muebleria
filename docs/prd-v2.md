@@ -1,7 +1,7 @@
 # PRD v2 — Plataforma operativa para talleres de muebles
 
 **Estado:** CANÓNICO para visión, alcance y modelo operativo actual  
-**Fecha:** 2026-08-24  
+**Fecha:** 2026-09-05
 **Producto:** Granete (antes Muebles / Mueblería — nombre de trabajo)  
 **Audiencia:** producto, agentes, implementación, QA y talleres piloto
 
@@ -19,7 +19,9 @@ muebles pequeños y medianos**. Conecta el trabajo comercial, técnico y físico
 una obra desde la cotización hasta la instalación y la rentabilidad real.
 
 La propuesta de valor ya no se limita a `cotización → BOM → Optimizer.xlsx`.
-El producto actual incluye y debe integrar coherentemente:
+El alcance de producto reúne las capacidades siguientes. Su presencia en esta lista no
+equivale a integración completa ni a certificación industrial; el estado por entrega
+está en [DEMO → MVP](demo-mvp-plan-2026-09-05.md). Deben integrarse coherentemente:
 
 - clientes, cartera comercial, cotizaciones y pricing;
 - catálogo técnico y comercial de muebles, materiales, cantos y herrajes;
@@ -35,6 +37,47 @@ El producto actual incluye y debe integrar coherentemente:
 - embarques e instalación;
 - postventa y garantía;
 - web, desktop y companion móvil de taller/campo.
+
+### Entrega inmediata: DEMO → MVP para dos clientes potenciales
+
+La prioridad es demostrar un **flujo completo y reproducible**, aprovechar la base ya
+integrada y convertirla en un MVP operable por los dos primeros clientes potenciales.
+No se reinicia el producto ni se presenta toda su amplitud como terminada.
+
+- **DEMO:** una obra de referencia conecta cotización, unidades físicas, autoría
+  SketchUp, preflight, revisión publicada, reconciliación, aprobación/release, BOM y
+  continuidad hacia taller e instalación. La web debe hacer visible ese hilo sin
+  comandos ocultos del presentador. La salida de máquina se muestra sólo con el nivel
+  de evidencia realmente disponible.
+- **MVP vendible:** el cliente repite sus trabajos prioritarios sin intervención del
+  desarrollador, conserva datos y revisiones, recupera errores y cuenta con una ruta de
+  fabricación cualificada para su combinación concreta de máquina y software.
+- **Expansión posterior:** más recetas, automatización, red comercial y amplitud CAD
+  sólo cuando el piloto demuestre su valor. Dos prospectos no son dos ventas confirmadas.
+
+La base reciente incluye Gate A, identidad física/Design/publicación/reconciliación/
+release y el runtime compartido de autoría. La integración web, la amplitud del catálogo
+industrial y las pruebas físicas pendientes no se deducen del cierre del backend.
+Ver [estado y aceptación por etapa](demo-mvp-plan-2026-09-05.md).
+
+### Conceptos industriales que gobiernan la evolución
+
+| Concepto | Significado de producto |
+|---|---|
+| Definición de biblioteca | Describe qué puede configurarse; no es una unidad física vendida. |
+| Agregado | Conjunto semántico existente; una receta puede cambiar sus piezas, herrajes y operaciones. No crear otra familia paralela. |
+| Herraje como activo industrial | Datos comerciales, representación, anclajes y receta técnica versionados; imagen disponible no significa maquinado validado. |
+| Resolución autoritativa | Convierte intención, materiales y reglas en piezas, herrajes, operaciones, incidencias y costo aplicable, con procedencia. |
+| Representación 3D | Proyección del resultado, no fuente de agujeros ni permiso de fabricación. Un proxy debe identificarse. |
+| Revisión y liberación | Fijan identidades y contexto exactos. Una revisión nueva no hereda aprobación ni modifica una liberación anterior. |
+| Evidencia industrial | Califica una combinación concreta de receta, material, máquina, herramientas, software y adaptador; un checksum no certifica viabilidad física. |
+
+Se incorporan como dirección de producto del review del 5 de septiembre: herrajes
+administrables y comprobables, ensambles configurables, sustitución de cajón por sistema
+box, frentes con perfil, representación coherente y flujo empresarial visible.
+**Son capacidades objetivo, no una afirmación de implementación actual.** La primera
+DEMO puede usar el catálogo conocido; cada receta nueva entra por un caso vertical
+probado, no por una reescritura del motor ni por dimensiones técnicas inventadas.
 
 ### 1.1 Categoría de producto
 
@@ -527,7 +570,8 @@ Integrar herramientas externas es preferible a recrearlas cuando no sea parte de
 | Arquitectura/boundaries | `docs/architecture.md` |
 | UX operacional | `docs/operational-ux.md` + `docs/design.md` |
 | Roadmap comercial | `docs/roadmap-comercial-v2.md` |
-| Programa SketchUp + Granete | `docs/sketchup-granete-strategy.md` + issue #290 |
+| Programa SketchUp + Granete | `docs/architecture/sketchup-backend-web-integration-excellence.md` + #465; #290 conserva contexto |
+| Etapas DEMO → MVP y evidencia | `docs/demo-mvp-plan-2026-09-05.md` |
 | Ownership SketchUp/Granete | `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md` |
 | Contract conceptual | `docs/sketchup-manufacturing-contract.md` |
 | Rutas | `apps/web/src/routes.ts` → `NAV_PATHS` |
@@ -557,8 +601,9 @@ Ante conflicto entre documentación y código:
 
 ### Comercial
 
-- 3–5 talleres piloto reales;
-- al menos 3 talleres usando el ciclo completo varias semanas;
+- primero, validar el trabajo real de los **dos clientes potenciales** y su disposición a pagar;
+- medir uso recurrente del ciclo acordado durante el piloto, sin asumir ventas ni fijar resultados inexistentes;
+- ampliar a otros talleres después de aprender de estos dos casos;
 - medir time-to-quote, tiempo de ingeniería, faltantes, retrabajo, retrasos y margen;
 - priorizar nuevas features profundas por demanda observada, no por fascinación técnica.
 
@@ -566,9 +611,12 @@ Ante conflicto entre documentación y código:
 
 ## 17. Regla de evolución
 
-Después de la feature CNC actualmente activa, la prioridad por defecto cambia de
-**profundidad técnica adicional** a **consolidación operacional y validación de campo**.
+La secuencia vigente es **documentación reconciliada → ajuste de issues existente →
+DEMO ensayada → integridad y recetas del piloto → fabricación cualificada → MVP
+vendible**. Esta actualización documental no crea ni cierra issues y no autoriza
+implementación automática.
 
-F129–F131 y postprocesadores específicos siguen siendo válidos, pero deben competir por
-prioridad contra los gaps del Operational Core y, salvo necesidad confirmada por un
-taller piloto, no desplazan los P0/P1 definidos en `docs/operational-core-v1.md`.
+Los programas existentes conservan ownership. Ninguna lista histórica reinicia Gate A,
+DesignRevision, publicación, reconciliación, release ni el coordinador de autoría ya
+integrados. El [roadmap comercial](roadmap-comercial-v2.md) ordena el trabajo y el
+[plan fechado](demo-mvp-plan-2026-09-05.md) distingue evidencia de intención.

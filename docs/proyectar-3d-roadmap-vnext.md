@@ -11,6 +11,14 @@
 
 ---
 
+## Actualización de prioridad — 2026-09-05
+
+La secuencia de producto vigente está en [DEMO → MVP](demo-mvp-plan-2026-09-05.md).
+Este roadmap conserva North Star, contratos y estados históricos fechados; sus olas
+no son una orden de reimplementar issues ya cerradas. Para la primera DEMO se aprovecha
+la biblioteca/editor existente; coherencia de escena, recetas y presentación #529
+entran por casos del piloto, sin rediseño total ni nueva manufacturing truth en React.
+
 ## 0. Regla de prioridad
 
 Proyectar es uno de los tres pilares de Granete y puede avanzar en paralelo con

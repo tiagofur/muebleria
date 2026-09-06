@@ -6,7 +6,7 @@ Umbrella: #290
 Digital Thread: #384  
 Foundation gates: #446/#462  
 Cross-surface contract: `docs/architecture/sketchup-backend-web-integration-excellence.md`  
-Reconciled: 2026-08-30 America/Mexico_City
+Reconciled: 2026-09-05 America/Mexico_City
 
 ## 1. Goal
 
@@ -43,23 +43,36 @@ Historical closure of #349/#350 proves domain/contract capability, not the compl
 
 ## 3. Current repository execution policy
 
-F199/#458 closed on 2026-08-31: tracker PR #493 merged as `35bbfc07` after exact-SHA review and green CI. No runtime feature is currently active.
+Current priority is **a rehearsed, visible DEMO, then a useful sellable MVP for the two
+prospects**, not another foundation restart. See the
+[dated evidence and delivery map](demo-mvp-plan-2026-09-05.md).
 
-Repository rule:
+| Status at publication readback | Reuse / next action |
+|---|---|
+| Gate A #537 merged; #462 remains open for Gate B | Preserve executable controls; do not block delivered Digital Thread as pre-Gate-A work. |
+| #385–#389, #392–#395, #398 closed with merged PRs | Reuse persistent identity, Design, publication, reconciliation and exact release. |
+| #498/#466/#467/#468 closed | Reuse shared host mutation, preflight/navigation and authoring. |
+| #390/#391/#470 open with merged PRs #546/#547/#558 | Reconcile remaining criteria/closure, not automatic reimplementation. |
+| #500 closed / PR #565 merged | Reuse the physical-unit matrix; continue with #501, then #502. |
+| #496/#497/#499/#501/#502 open | Complete applicable generated boundaries, typed administration, pairing and Web workflows. |
 
-- do not mark #496–#504 or another runtime feature `in_progress` without following the single-active-feature policy and program coordination;
-- documentation, review, contract design, fixtures and dependency preparation may proceed;
-- no new persistent business family starts before Gate A #462.
-
-Current immediate chain:
+Immediate product path:
 
 ```text
-correct/integrate #494
-→ complete remaining #458 slices in #493
-→ close #458
-→ critical #460/#461 portions
-→ execute Gate A #462
+documentation reconciliation → subsequent issue reconciliation
+→ reuse integrated #500/#565 → #501 → #502
+→ known catalog + real Web/SketchUp rehearsal with explicit exclusions
+→ pilot integrity + required industrial recipes
+→ qualified machine evidence for each prospect → supported MVP
 ```
+
+One active feature at a time unless explicitly coordinated. This documentation pass
+does not activate a feature or authorize GitHub mutations. Verify branch/PR state when
+implementation is authorized; do not infer the active feature from an old F199 paragraph.
+
+Sections below retain dependency and acceptance contracts. Their historical order does
+not mean all listed work remains pending. Physical evidence is never inferred from
+backend or mock-based host test success.
 
 ## 4. Completed historical Wave 0/1
 
@@ -74,12 +87,12 @@ No agent may continue treating #475 as a draft implementation blocker or recreat
 
 ## 5. New cross-surface foundations
 
-When active-feature governance permits the next implementation slices, start with the two independent foundations below.
+Maintain the following boundaries. #498 is delivered; #496 remains open for complete generated API coverage and #497 for typed administration. Do not rebuild delivered foundations.
 
 | Order | Issue | Delivery | Gate boundary |
 |---:|---:|---|---|
 | X0 | #496 | Generated furniture/catalog/layout/authoring/Design API authority | Current stateless endpoints may advance before Gate A; persistent Design operations after Gate A |
-| X1 | #498 | Shared modular HtmlDialog/host interaction runtime, atomic mutation, correlation, rollback/undo and minimum degraded guards | May advance before Gate A |
+| X1 (delivered) | #498 | Shared modular HtmlDialog/host interaction runtime, atomic mutation, correlation, rollback/undo and minimum degraded guards | May advance before Gate A |
 | X2 | #497 | React typed parameter-definition and semantic-binding editor | Final transport consumes #496; existing catalog persistence only before Gate A |
 
 ### Parallelism
@@ -121,7 +134,7 @@ select exact managed context
 
 ## 6. Professional correction and authoring loop
 
-After the applicable #496/#498 foundations:
+The #466/#467/#468 loop is delivered at the dated cut. Retain and extend these acceptance contracts rather than scheduling it again from zero:
 
 | Order | Issue | Delivery | Required reuse |
 |---:|---:|---|---|
@@ -195,75 +208,37 @@ Coordination:
 - #473 support claims require exact host evidence;
 - #504 consumes #460/#461/#496 correlation/security and never uploads automatically.
 
-## 9. Foundation Gate A boundary
+## 9. Foundation Gate A boundary — delivered, controls retained
 
-### May advance before Gate A
+Gate A #537 is merged. #462 remains open for Gate B. Preserve RLS/runtime-role,
+transactional audit, generated contracts and browser/session isolation for any extension.
+No shadow Project/Design store or temporary productive identity is permitted.
 
-Provided no new persistent business family is created:
+The former pre-Gate-A/post-Gate-A split explains delivery history, not the next schedule.
+Gate B remains a prerequisite for its cross-organization commercial workflows.
 
-- #496 current stateless furniture API contract;
-- #497 current catalog parameter administration;
-- #498 shared host runtime;
-- #466–#471 host/working-authoring UX;
-- #416 representation migration;
-- #472/#473 host evidence;
-- #474 degraded mechanics;
-- #504 local diagnostic schema/UX.
+## 10. Digital Thread — integrated core, remaining product surfaces
 
-### Must wait for Gate A #462
-
-- #385+ Project FurnitureInstance/Design persistent families;
-- runtime Project/Design model binding/pairing in #388/#499;
-- #500–#502 Project/Design React read models and commands;
-- durable Project/room defaults;
-- publication/reconciliation/approval/release persistence.
-
-Forbidden bypasses:
-
-- temporary SketchUp-only Project/Design tables;
-- local productive IDs later accepted as server truth;
-- a `SketchUpProject` aggregate;
-- React/localStorage shadow Project defaults presented as durable business state.
-
-## 10. Digital Thread after Gate A
-
-Follow #384 without shortcuts:
+#385–#389 and #392–#395 are closed; #390/#391 have merged implementations but open
+issues. #398/#554 supplies the delivered core regression evidence. Preserve ownership:
 
 ```text
-#385 stable Project FurnitureInstance
-→ #386 QuoteLine ↔ physical units
-   + #387 Design + immutable DesignRevision
-→ #388 SketchUp Project/Design binding
-→ #499 secure Web↔SketchUp pairing
-   + #389 Project Furniture panel/place existing
-→ #390 connected catalog insertion creates Project FI
-→ #391 duplicate managed identity handling
-→ #392 publish immutable revision + artifacts
-→ #393 reconciliation
-→ #394 impact classification + explicit requote
-→ #395 approval + exact ProductionRelease
-→ #397 existing SKP adoption
-→ #398 global E2E
+Project FurnitureInstance → quote physical units → Design/immutable revisions
+→ host binding/placement → publication/artifacts
+→ reconciliation → explicit requote → approval/exact release
 ```
 
-#396 is the React tracker, delivered progressively instead of one late oversized issue:
+The remaining React work uses this foundation:
 
-```text
-#385/#386
-→ #500 Project Furniture physical-unit matrix
+- #500/PR #565: integrated physical-unit matrix;
+- #501: Design/revision/artifact history;
+- #502: reconciliation/requote/approval and existing release UX;
+- #499: secure exact Project/Design handoff, not device enrollment.
 
-#387/#392
-→ #501 Designs/revision/artifact history
-
-#393/#394/#395
-→ #502 reconciliation/approval/release
-```
-
-### Pairing and binding
-
-#499 creates/exchanges a short-lived one-time exact-scope grant through the dedicated SketchUp client boundary. #388 validates and writes the model binding.
-
-Never place a reusable web/SketchUp credential in a custom URI/query. Deep-link invocation alone is not confirmed success.
+#397 adoption remains a separate acceptance scope, not a reason to invent IDs locally.
+#499 must not be retroactively treated as proof already supplied by #388 or as a reason
+to deny the value of the integrated core. Manual handoff can be explicit in the DEMO;
+a claimed secure browser handoff requires #499 evidence.
 
 ## 11. Cross-surface behavior after Digital Thread
 
@@ -394,17 +369,17 @@ Local, explicit-consent, previewable and allowlisted. Excludes credentials, cook
 
 Requires real #466/#467/#468 interactions, #498 rollback/undo, exact revisions/releases and real machine readback. #349/#350 helpers alone are insufficient.
 
-### #398 global Digital Thread gate
+### #398 delivered core gate versus complete product acceptance
 
-Consumes:
+#398/#554 is closed with Go/PostgreSQL, contract and real-host evidence (including
+controlled server doubles for host scenarios). Preserve that scope; do not relabel it
+as a failed unfinished gate because broader product work remains.
 
-- #354 host/output evidence;
-- #499 secure pairing;
-- #500 physical-unit Web behavior;
-- #501 revision/artifact Web behavior;
-- #502 reconciliation/release Web behavior.
-
-Avoid dependency cycle: #354 may close before #398; #398 consumes its evidence.
+The expanded DEMO adds real browser behavior for #500/#501/#502 and a rehearsed
+cross-surface flow. Secure pairing #499, if claimed, needs its own proof. Machine
+readback #354 and each client evidence pack remain separate requirements before
+manufacturing/support claims. These are additional acceptance layers, not a dependency
+cycle or automatic reopening of #398.
 
 ## 16. PR layering rule
 

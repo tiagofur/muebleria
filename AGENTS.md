@@ -15,18 +15,18 @@ También soporta organizaciones múltiples: fábricas, tiendas, distribuidores y
 como target de #446, partners de instalación/servicio conectados mediante
 relationships explícitas.
 
-### Prioridad P0 vigente — Organization Foundation v2
+### Prioridad vigente — DEMO integrada → MVP para dos prospectos
 
-Antes de ampliar nuevas familias persistentes de negocio, Granete debe cerrar
-Usuarios, Multi-Taller, RLS, Organization lifecycle y Team mediante **Gate A** de
-#462. Red de Ventas queda operable únicamente después de **Gate B**.
+Gate A fue integrado mediante PR #537. #462 sigue abierto por Gate B; no interpretar
+ese estado como ausencia de la foundation ni reiniciar el Digital Thread ya integrado.
+Conservar sus proofs y exigir Gate B para los workflows cross-org que gobierna.
 
-- Meta y orden: #446.
-- Contrato: `docs/architecture/organization-foundation-v2.md`.
-- Decisión: `docs/adr/0006-membership-lifecycle-and-organization-relationships.md`.
+- Producto y orden: `docs/prd-v2.md` + `docs/roadmap-comercial-v2.md`.
+- Estado, evidencia y aceptación DEMO/MVP: `docs/demo-mvp-plan-2026-09-05.md`.
+- Foundation: #446/#462, `docs/architecture/organization-foundation-v2.md` y ADR-0006.
 
-Discovery/documentación de otros programas puede continuar. No crear schema/API de una
-nueva familia persistente antes de Gate A, incluyendo DT-1 #385.
+La actualización documental precede al ajuste de issues. No crea autorización para
+implementar ni cerrar tickets. Primero aprovechar las entregas y PRs existentes.
 
 ### SketchUp como producto integrado
 
@@ -92,7 +92,8 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | UX visual | `docs/design.md` |
 | UX operacional | `docs/operational-ux.md` |
 | Roadmap comercial | `docs/roadmap-comercial-v2.md` |
-| Reconciliación docs↔código | `docs/documentation-sync-2026-08-21.md` |
+| Reconciliación actual y DEMO → MVP | `docs/demo-mvp-plan-2026-09-05.md` |
+| Review de evolución (snapshot inmutable) | `docs/Granete_review_plan_ejecucion_2026-09-05.md` |
 | Convenciones | `docs/conventions.md` |
 | Verificación | `docs/verification.md` |
 | Pilot readiness multi-org | `docs/pilot-readiness.md` + #462 |
@@ -146,7 +147,7 @@ Luego:
 4. revisa la GitHub issue, comentarios y hard prerequisites;
 5. confirma que la base/branch de la issue no pisa un programa P0;
 6. no tomes automáticamente el `pending` de menor ID si contradice prioridad vigente;
-7. no marques otra feature `in_progress` mientras F199/#458 siga activa salvo coordinación explícita.
+7. verifica la feature/PR realmente activa; no marques otra `in_progress` sin coordinación explícita ni reutilices F199/#458 como estado vigente histórico.
 
 ### Si la issue toca Users, Memberships, Organizations, Auth o Sales Network
 
@@ -172,15 +173,14 @@ Lee obligatoriamente:
 6. #396/#499–#503 si toca la superficie React correspondiente;
 7. `apps/sketchup-extension/AGENTS.md` si modifica la extensión.
 
-Antes de Gate A sólo se permite persistencia existente o trabajo que no cree una
-nueva familia de negocio. No inventes `SketchUpProject`, IDs locales productivos ni
-un shadow Design store.
+Gate A está integrado; conserva sus controles en toda extensión persistente. No
+inventes `SketchUpProject`, IDs locales productivos ni un shadow Design store.
 
 ### Si crea una tabla persistente
 
 Antes de migration:
 
-- confirma que Gate A permite iniciar esa familia;
+- confirma alcance/prerequisites y conserva los proofs de Gate A; Gate B cuando aplique;
 - clasifica `tenant-owned | explicitly shared | platform-global | ledger`;
 - registra RLS policy e índices desde la primera migration;
 - añade fresh + upgrade fixture;
@@ -398,45 +398,25 @@ Meta: #308.
 - trabajo futuro: GitHub issues;
 - ledger: `feature_list.json`.
 
-### Prioridad actual verificada
+### Prioridad reconciliada — corte 2026-09-05
 
-1. **F199/#458** — tracker #493 y slices como #494;
-2. completar Web Organization/session-scope y cerrar #458;
-3. critical portions de #460/#461;
-4. ejecutar **Gate A #462**;
-5. después de Gate A, #453–#459/Gate B y #385+ Digital Thread avanzan por sus
-   dependency graphs, sin absorber ownership entre programas.
+1. Documentación primero; después reconciliar issues existentes, sin duplicar trabajo.
+2. Aprovechar #500/PR #565 integrada; completar #501 y después #502 sobre esa base.
+3. Congelar catálogo conocido y ensayar DEMO web/SketchUp con revisión exacta y límites explícitos.
+4. Integridad de las rutas usadas + recetas mínimas del piloto; corregir o bloquear pérdidas silenciosas antes de producción.
+5. Dossiers/readback independiente de los dos prospectos, soporte y MVP operable.
 
-Cuando la política de una sola feature activa permita iniciar otro runtime slice:
+Base que **no se reinicia**: Gate A #537; #385–#389/#392–#395/#398; #498/#466/#467/#468.
+#390/#391/#470 tienen PRs fusionadas pero issues abiertas: revisar criterios antes de
+cerrar o reimplementar. #496 completo y #497/#499 siguen abiertos. Enrollment no es pairing.
 
-```text
-#496 generated furniture API
-+ #498 shared SketchUp host runtime
-→ #466/#467/#468 professional authoring loop
-→ #497 React typed parameter/binding editor
-```
+La ruta industrial conserva #348 → #351 → #352/#353 → #503/#354 → #355, con evidencia
+exacta y bloqueos vigentes. #462/Gate B sigue gobernando Red de Ventas, no un reinicio de
+Gate A. El plan fechado contiene URLs, corte y limitaciones; verificar estado remoto
+antes de iniciar implementación. #398 cerrado no certifica navegador→máquina completo.
 
-Después de Gate A:
-
-```text
-#385 → #386/#387
-→ #500 Project Furniture Web
-→ #388/#499/#389
-→ #390/#391/#392
-→ #501 revisions/artifacts Web
-→ #393/#394/#395
-→ #502 reconciliation/release Web
-→ #397/#398
-```
-
-Machine/commercial path:
-
-```text
-#348 → #351 → #352/#353 → #503 → #354 → #355
-```
-
-Discovery/documentación puede continuar sin marcar una segunda feature activa. No saltes
-prerequisites para “avanzar más rápido”: eso crea contratos, migrations y UX paralelos.
+Discovery/documentación no activa otra feature. No saltar hard prerequisites ni usar
+el menor ID pendiente del ledger como prioridad automática.
 
 ---
 

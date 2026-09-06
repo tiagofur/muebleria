@@ -1,7 +1,7 @@
 # Roadmap Comercial v2 — Prioridad vigente
 
 > **Estado:** ACTIVO  
-> **Actualizado:** 2026-08-24  
+> **Actualizado:** 2026-09-05
 > **Norte:** producto vendible y operable en talleres reales de LatAm.
 
 Este documento es la fuente narrativa de prioridad comercial. Se complementa con:
@@ -118,321 +118,109 @@ revisión, no que cada módulo tenga más botones.
 
 ---
 
-## 4. Estado real a 2026-08-21
+## 4. Estado reconciliado y siguiente entrega
 
-El producto ya superó el roadmap MVP original:
+El [plan DEMO → MVP del 5 de septiembre](demo-mvp-plan-2026-09-05.md) fija la evidencia:
+29 PRs integradas y 18 issues cerradas en la ventana ampliada del 2 de septiembre UTC
+al corte consultado. Gate A y el hilo Project/FurnitureInstance/Design/publicación/
+reconciliación/requote/aprobación/release son base aprovechable, no una nueva ola por
+reimplementar. #498/#466/#467/#468 también están integrados.
 
-- Proyectar/3D avanzado;
-- multi-space/ambientes;
-- herrajes y placements;
-- estructuras/agregados en evolución;
-- production workspace y estaciones;
-- mobile companion;
-- stock + purchase orders;
-- dashboards por área;
-- cut-plan 2D guillotina;
-- CNC nesting + DXF;
-- machining profiles;
-- drilling resolution en trabajo reciente;
-- warranty.
+El readback de publicación posterior integró #500/PR #565, sin alterar esos conteos
+históricos. Esto no significa que todas las superficies estén terminadas: #501/#502/#497/#499 siguen pendientes; #496 conserva alcance abierto. #390,
+#391 y #470 tienen PRs fusionadas pero sus issues continúan abiertas. Se revisan los
+criterios antes de tocar código o cerrar tickets. #462 continúa abierto por Gate B,
+no porque deba repetirse la fundación del Digital Thread desde cero.
 
-Por eso los roadmaps viejos no deben interpretarse como lista lineal pendiente. Código,
-tests y `feature_list.json` definen lo implementado; este doc define prioridad.
+## 5. Orden comercial vigente: DEMO → MVP → expansión
 
----
+| Etapa | Resultado vendible/demostrable | Trabajo prioritario y límite |
+|---|---|---|
+| 0. Documentación | Una narrativa que distingue capacidades, implementación y evidencia | Esta actualización; después reconciliar issues existentes, sin duplicarlos. |
+| 1. DEMO | Una obra comprensible desde venta hasta revisión liberada y continuidad operacional | Reutilizar #500/#565 integrado; completar #501 y después #502 sobre backend existente; catálogo conocido y ensayo web/host. No rediseño total de biblioteca. |
+| 2. Integridad del piloto | Ninguna salida, escritura o saldo parece correcto cuando está incompleto | RV-06–10/#443 y estados industriales explícitos según rutas usadas. Corregir o bloquear antes de exponer/fabricar; no aplazar silenciosamente por llamarlo demo. |
+| 3. Biblioteca industrial mínima | Los muebles prioritarios de los dos prospectos se configuran y fabrican sin recetas ocultas | #496/#497, herrajes administrables y recetas de ensamble/box/perfil seleccionadas por demanda; reutilizar Agregado/PartRelationship. |
+| 4. Fabricación cualificada | Cada cliente importa y valida su salida concreta | #348 → #351 → #352/#353 → #503/#354, sin saltar bloqueos de dossier/readback. |
+| 5. MVP operable y vendible | Cliente repite su trabajo, recupera errores y recibe soporte | #355 y dependencias de seguridad/host/update/rollback; medir uso y disposición a pagar, no asumir contratos. |
+| 6. Expansión | Más clientes/catálogos/canales con evidencia | Gate B para colaboración cross-org; amplitud de recetas, productividad y automatización según piloto. |
 
-## 5. Proyectar 3D — nueva North Star
+Son resultados, no un nuevo dependency graph competidor. Cada issue conserva su hard
+prerequisite; documentación o discovery independientes pueden avanzar sin declararlos
+resueltos. Una necesidad real de máquina puede adelantar su discovery, pero no elimina
+integridad, release exacto ni validación física.
 
-Fuente: `docs/proyectar-3d-north-star.md`.
-
-### Meta de calidad
-
-| Área | Target |
-|---|---:|
-| Encontrar muebles | ★★★★★ |
-| Insertar/drag | ★★★★★ |
-| Snap | ★★★★★ |
-| Dimensiones | ★★★★★ |
-| Materiales | ★★★★★ |
-| Agregados | ★★★★★ |
-| Herrajes | ★★★★★ |
-| Selección/contexto | ★★★★★ |
-| Undo/redo | ★★★★★ |
-| Mover/copiar/duplicar | ★★★★★ |
-| Multi-select/align | ★★★★★ |
-| Multi-ambiente | ★★★★★ |
-| Presentación | ★★★★☆ |
-| Fotorrealismo | ★★★☆☆ |
-| CAD libre | ★★☆☆☆ |
-| Parametrización ultra-compleja | ★★★☆☆ |
-| Diseño→producción | ★★★★★+ |
-
-### Modelo mental
+## 6. Experiencia DEMO
 
 ```text
-Biblioteca persistente → Canvas 3D → Inspector contextual
+Cotización → unidades físicas → SketchUp → conflicto y corrección → preflight vigente
+→ publicación → historia web → reconciliación/requote → aprobación/release exacto
+→ BOM/materiales → piezas en taller → unidad armada → instalación
 ```
 
-### Meta GitHub
-
-#308 coordina el plan.
-
-### Nuevos slices
-
-- #309 P3D-0 — workspace + bibliotecas;
-- #310 P3D-1 — selección/manipulación;
-- #311 P3D-4 — environment/multi-space;
-- #312 P3D-6 — performance budget;
-- #313 P3D-7 — contract tests diseño→BOM→producción;
-- #314 P3D-8 — benchmark/validación (no feature).
-
-### Issues existentes reutilizados
-
-- #277 drag insertion;
-- #278 inspector;
-- #279 materiales;
-- #280–#282 herrajes;
-- #266 ambient materials;
-- #260 presentation;
-- #294–#297 agregados.
-
-No duplicar estos issues sólo para adaptar naming.
-
----
-
-## 6. Orden recomendado de Proyectar
-
-Cuando haya capacidad dedicada al editor:
-
-1. #309 biblioteca/workspace;
-2. #277 insertion + #310 manipulation;
-3. #278 inspector + #279 materials;
-4. #294–#297 aggregates + #280–#282 hardware según dependencias;
-5. #311 environment/multi-space;
-6. #260 presentation;
-7. #312 performance hardening transversal;
-8. #313 integration contracts;
-9. #314 validation continua.
-
-Este orden puede cambiar con evidencia de piloto.
-
----
-
-## 7. Operational Core O0 — Guardrails y verdad (P0)
-
-Fuente: `docs/operational-core-v1.md` OC-001–006 / issue #299.
-
-- arreglar `init.sh`;
-- CI remoto;
-- reconciliar roadmap/issues/ledger;
-- roles canónicos;
-- auth DTO seguro;
-- Data Truth Contract.
-
-**Resultado:** “done”, “verde”, “rol” y “KPI real” tienen significado único.
-
----
-
-## 8. Operational Core O1 — Lifecycle + Release (P0)
-
-Issue #300.
-
-- `ProjectEvent[]`;
-- commercial status real;
-- stage derivado;
-- anticipo real;
-- DesignRevision;
-- Approval;
-- ProductionRelease;
-- stale detection;
-- ChangeOrder.
-
-**Resultado:** siempre sabemos qué se vendió, aprobó y fabricó.
-
-Dependencia importante para Proyectar y SketchUp: cambios post-release deben activar
-stale/release, no overwrite silencioso.
-
----
-
-## 9. Operational Core O2 — Producción pieza→mueble (P0)
-
-Issue #301 + `docs/production-flow-v2.md`.
-
-```text
-Corte → CNC → Enchape       (pieza)
-Armado → QC → Pack → Load   (mueble/unidad/bulto)
-```
-
-Esto conecta directamente con drilling/CNC derivado desde authoring/Ingeniería.
-
----
-
-## 10. Operational Core O3 — Materiales + QC (P1)
-
-Issue #302.
-
-- requirements desde BOM;
-- reservas;
-- shortage;
-- PO/receiving;
-- material-ready con evidencia;
-- QualityIssue;
-- rework/scrap;
-- QC gates.
-
----
-
-## 11. Operational Core O4 — Instalación/closeout (P1)
-
-Issue #303.
-
-- InstallationJob;
-- visitas;
-- crews;
-- field issues;
-- punch list;
-- sign-off/closeout.
-
----
-
-## 12. Operational Core O5 — Job Costing (P1)
-
-Issue #304.
-
-- CostBaseline;
-- TimeEntry;
-- material actual;
-- other actuals;
-- estimate vs actual;
-- actual margin.
-
----
-
-## 13. UX transversal y Survey
-
-Issue #305.
-
-- Site Survey estructurado;
-- Project Workspace transversal;
-- dashboards exception-first;
-- navegación pequeña vs mediana empresa.
-
----
-
-## 14. Pilotos
-
-Issue #306.
-
-No esperar a “terminar todo”. Pilotos validan:
-
-- quote flow;
-- Proyectar/SketchUp cuando aplique;
-- survey;
-- approvals;
-- materials;
-- Cut/CNC/Edge;
-- assembly/QC;
-- shipping/install;
-- costing.
-
-Cuando exista `type:validation`, #306 y #314 deben usarlo.
-
----
-
-## 15. CNC profundo F129–F132
-
-Sigue siendo válido:
-
-- joint drilling rules;
-- drilling DXF;
-- visual drilling editor;
-- postprocesador específico.
-
-Pero no desplaza automáticamente Operational Core o Proyectar UX.
-
-Se prioriza cuando:
-
-1. piloto real lo necesita;
-2. desbloquea venta concreta;
-3. completa cadena usada;
-4. producto asume explícitamente el tradeoff.
-
-Postprocesadores de marca requieren hardware/software confirmados.
-
----
-
-## 16. Lanzamiento/comercial
-
-Packaging, onboarding/demo, pricing/landing/script siguen siendo esenciales.
-
-No permitir que features técnicas pospongan indefinidamente:
-
-- instalador usable;
-- demo excelente;
-- onboarding;
-- materiales/catálogos semilla;
-- pricing validado;
-- ventas reales.
-
----
-
-## 17. Features condicionadas
-
-Por defecto necesitan demanda demostrada:
-
-- render premium backend;
-- acabados extremadamente complejos;
-- postprocesadores de marca;
-- CAD libre;
-- marketplace;
-- forecasting/multi-planta avanzado.
-
-### SketchUp — condición comercial activada
-
-El plugin SketchUp dejó de ser una idea genérica congelada porque existen pilotos y
-máquinas concretas por caracterizar. El programa activo es
-[#290](https://github.com/tiagofur/muebleria/issues/290) y se ejecuta mediante
-[`docs/sketchup-granete-strategy.md`](sketchup-granete-strategy.md).
-
-La activación autoriza contrato, dossiers, validación y trabajo por fases. No autoriza
-afirmar compatibilidad PTX/CNC sin import/readback y operator sign-off, ni mover BOM,
-relationship/joint resolution, drilling o postprocessing a Ruby/SketchUp.
-
-Este es un carril paralelo pilot-driven. Sus prioridades P0/P1/P2 ordenan el programa
-SketchUp, pero no desplazan los guardrails del Operational Core. En especial, #300/#301
-siguen siendo autoridades de lifecycle/release y producción física, y una entrega
-SketchUp no puede fabricar, liberar ni ocultar stale state mientras esos contratos no se
-cumplan. La fase documental #344 ya fue completada por PR #357.
-
-### Primer vertical slice demostrable
-
-```text
-contract approved
-→ initial machine dossiers collected
-→ extension skeleton
-→ semantic round-trip
-→ parametric part relationships / joints
-→ #347 minimum authoritative preflight milestone verified
-→ one cabinet passes minimum authoritative preflight
-→ hardware placement + machining sync
-→ commercial demo
-→ #347 full Definition of Done before PTX/machine validation
-```
-
-`Initial machine dossiers collected` es discovery sanitizado, no el cierre de
-#352/#353. El milestone mínimo de #347 corre sobre el fixture de #356 después de cerrar
-relationships/joints y antes de iniciar implementación dependiente de #349/#350,
-considerar un gabinete manufacturable o ejecutar el demo. Los fixtures posteriores
-vuelven a pasar el gate. El cierre completo de #347 es una hard prerequisite distinta
-para #348/#351.
-
-El primer hito mostrable debe probar que mover/agregar/eliminar un entrepaño recalcula
-sólo machining dependiente, mover una bisagra actualiza únicamente su machining y un
-cambio que afecte manufacturing truth actualiza fingerprint/revision y vuelve stale una
-release anterior.
-
-Las autoridades para este slice son #356 y el milestone mínimo de #347; los goldens
-correspondientes viven en #354.
+Mostrar las conexiones que realmente funcionan y declarar las que aún requieren
+asistencia. Enrollment de SketchUp no reemplaza pairing #499; sin este último se usa
+handoff manual explícito, no un botón que simula confirmación. Los exports de máquina
+no se presentan como validados sin readback de la combinación exacta.
+
+El [reporte de readiness anterior](demo-golden-path-readiness-20260905.md) se conserva
+como evidencia de un guion condicionado. No certifica por sí solo esta aceptación web
+ampliada ni autoriza usar rutas con pérdida silenciosa en producción.
+
+## 7. Conceptos e ideas incorporados del review
+
+El [review del 5 de septiembre](Granete_review_plan_ejecucion_2026-09-05.md) alimenta la
+evolución, no una reescritura:
+
+1. **Herraje industrial administrable:** representación, receta definida y receta
+   validada son estados independientes; banco de prueba sobre piezas reales.
+2. **Ensambles configurables:** reglas versionadas por taller y operaciones explícitas
+   por cara/pieza, sobre `PartRelationship` existente.
+3. **Recetas de Agregado:** cajón box y frente con perfil cambian componentes, compras,
+   perforaciones y costo juntos; simular diferencias y aplicar atómicamente.
+4. **3D coherente:** completar la escena común; proxies y ausencias visibles. #529
+   separa movimiento de presentación de verdad industrial y actores fijos/móviles.
+5. **Trabajo visible:** siguiente acción, bloqueo y revisión exacta en React; no
+   duplicar resolver/reconciliación para compensar APIs incompletas.
+
+La matriz RV-01–12 y el riesgo de invalidación de preflight del
+[plan de ejecución](demo-mvp-plan-2026-09-05.md) asignan exposición/aceptación. Estas ideas
+son objetivos; no se anuncian como features ya implementadas.
+
+## 8. Programas que se conservan, sin reiniciar entregas
+
+| Programa | Autoridad | Uso en la etapa actual |
+|---|---|---|
+| Proyectar 3D | North Star + `proyectar-3d-roadmap-vnext.md`, #308 | Biblioteca persistente → canvas → inspector; mantener capacidad actual. Gaps medidos por piloto, no repetir issues históricas cerradas. |
+| Operational Core | `operational-core-v1.md`, #299–#306 | Catálogo de criterios de verdad/lifecycle/pieza→mueble/material/QC/instalación/costos; comparar implementación antes de crear pendientes. |
+| Digital Thread | #384, ADR-0003, #396 | Reutilizar identidad/revisiones/release existentes y completar lectura/comandos web. |
+| SketchUp | #465 y contrato cross-surface; #290 contexto histórico | Reutilizar host runtime y autoría profesional; ampliar evidencia/consumidores. |
+| Organization Foundation | #446/#462 y ADR-0006 | Conservar Gate A; Gate B condiciona el alcance cross-org. |
+| Máquina/comercial | #348/#351–#355/#503 | Dossiers y evidencia independiente de los dos clientes potenciales. |
+
+Las antiguas olas “arreglar init → crear DesignRevision → crear release” y “extension
+skeleton → semantic roundtrip” no son la próxima secuencia completa: incluyen trabajo
+ya realizado. Mantener sus guardrails, no convertirlos otra vez en backlog desde cero.
+
+## 9. Lo que no debe retrasar la primera DEMO
+
+Salvo que una ruta mostrada lo necesite: rediseño completo de biblioteca, CAD libre,
+fotorrealismo premium, red comercial amplia, agentes de transferencia a máquina,
+productividad masiva #469/#471 y soporte offline completo #474. Se conservan en sus
+programas; no son descartes definitivos.
+
+Esto **no difiere** fallos de integridad de rutas usadas. Si el guion evita una ruta
+insegura, la exclusión se declara; si el piloto la necesita, se resuelve antes de producir.
+
+## 10. MVP para dos prospectos
+
+Confirmar por separado familia de muebles, tareas, biblioteca mínima, máquina,
+controlador/software/versión, herramientas, formatos y criterio de compra. Los dossiers
+#352/#353 no se completan por marca ni por copiar la evidencia del otro cliente.
+
+El MVP necesita uso repetible, seguridad, conservación de datos, instalación y soporte;
+no toda la amplitud de un ERP. Importación manual cualificada puede preceder a envío
+automático, con menor complejidad pero trabajo del operador explícito. No confundir
+archivo transferido con programa seguro ni con pieza fabricada correctamente.
 
 ---
 
@@ -467,7 +255,7 @@ Validar mediante #314; recalibrar con evidencia.
 
 ### Piloto operacional
 
-- 3–5 talleres reales;
+- primero los dos clientes potenciales, con alcance y fabricación cualificada por separado;
 - al menos una obra venta→producción→instalación;
 - ninguna revisión equivocada por falta de gate;
 - shortages visibles antes de corte;
