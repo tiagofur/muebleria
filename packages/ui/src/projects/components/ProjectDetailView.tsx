@@ -473,7 +473,7 @@ function ProjectDetailViewInner(): ReactNode {
   const requestStatus = (next: ProjectStatus, message: string) => {
     if (!onChangeStatus) return;
     setPendingConfirm({
-      title: next === 'quoted' ? 'Enviar cotización' : 'Aceptar cotización',
+      title: next === 'quoted' ? 'Enviar cotización' : 'Aceptar obra (flujo clásico)',
       message,
       confirmLabel: next === 'quoted' ? 'Enviar' : 'Aceptar',
       onConfirm: () => onChangeStatus(project.id, next),
@@ -567,7 +567,7 @@ function ProjectDetailViewInner(): ReactNode {
     ) {
       metaItems.push({
         id: 'accept-direct',
-        label: 'Aceptar cotización…',
+        label: 'Aceptar obra (flujo clásico)…',
         icon: <Check size={16} strokeWidth={1.5} aria-hidden />,
         onSelect: () => requestStatus('accepted', CONFIRM_ACCEPT),
       });

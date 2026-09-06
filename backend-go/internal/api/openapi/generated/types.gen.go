@@ -1463,6 +1463,10 @@ type ProjectFurnitureWorkspace struct {
 	Units                []FurnitureWorkspaceUnit                `json:"units"`
 }
 
+type CreateInitialQuoteRevisionRequest struct {
+	Notes *string `json:"notes,omitempty"`
+}
+
 type RequoteProjectQuoteRequest struct {
 	BaseQuoteRevisionId         string   `json:"baseQuoteRevisionId"`
 	DesignRevisionId            string   `json:"designRevisionId"`

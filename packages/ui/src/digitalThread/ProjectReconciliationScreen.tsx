@@ -7,6 +7,7 @@ import {
   FileText,
   GitCompareArrows,
   History,
+  Plus,
   RefreshCw,
   TriangleAlert,
 } from 'lucide-react';
@@ -23,9 +24,11 @@ import {
 } from '@granete/storage';
 import { EmptyState, PageHeader, PageLoading } from '../common';
 import {
+  AcceptQuoteModal,
   ApprovalPanel,
   CommandErrorAlert,
   PreflightPanel,
+  QuoteLifecyclePanel,
   ReleaseHistoryList,
   ReleasePanel,
   ReleaseReviewModal,
@@ -136,6 +139,8 @@ export interface ProjectReconciliationScreenProps {
   readonly canRequote?: boolean;
   readonly canApprove?: boolean;
   readonly canRelease?: boolean;
+  readonly canMutateQuote?: boolean;
+  readonly canAcceptQuote?: boolean;
 }
 
 function formatWhen(iso: string | null | undefined): string {
@@ -158,6 +163,8 @@ export function ProjectReconciliationScreen({
   canRequote = false,
   canApprove = false,
   canRelease = false,
+  canMutateQuote = false,
+  canAcceptQuote = false,
 }: ProjectReconciliationScreenProps): ReactNode {
   const queryClient = useQueryClient();
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
@@ -169,6 +176,18 @@ export function ProjectReconciliationScreen({
   const [designRevisionId, setDesignRevisionId] = useState<string | null>(
     () => initialContext?.designRevisionId ?? null,
   );
+
+  // Commercial QuoteRevision lifecycle state (#571 / WEB-DT-4)
+  const [createQuoteSubmitting, setCreateQuoteSubmitting] = useState(false);
+  const [createQuoteError, setCreateQuoteError] = useState<CommandErrorView | null>(null);
+
+  const [publishQuoteSubmitting, setPublishQuoteSubmitting] = useState(false);
+  const [publishQuoteError, setPublishQuoteError] = useState<CommandErrorView | null>(null);
+
+  const [acceptModalOpen, setAcceptModalOpen] = useState(false);
+  const [acceptQuoteSubmitting, setAcceptQuoteSubmitting] = useState(false);
+  const [acceptQuoteError, setAcceptQuoteError] = useState<CommandErrorView | null>(null);
+  const [quoteLifecycleNotice, setQuoteLifecycleNotice] = useState<string | null>(null);
 
   // Requote flow state
   const [requoteOpen, setRequoteOpen] = useState(false);
@@ -351,6 +370,86 @@ export function ProjectReconciliationScreen({
 
   // ---- Commands (no optimistic business success) ---------------------------------
 
+  // Commercial QuoteRevision lifecycle commands (#571 / WEB-DT-4)
+  const handleCreateInitialQuote = async () => {
+    setCreateQuoteSubmitting(true);
+    setCreateQuoteError(null);
+    setQuoteLifecycleNotice(null);
+    try {
+      const created = await api.createInitialProjectQuoteRevision(token, projectId, {});
+      await queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions });
+      await queryClient.invalidateQueries({
+        queryKey: [...queryKeys.root, 'reconciliation'],
+      });
+      setQuoteRevisionId(created.id);
+      onContextChange?.({
+        quoteRevisionId: created.id,
+        designId: activeDesignId,
+        designRevisionId,
+      });
+      setQuoteLifecycleNotice(`Revisión Q${created.revisionNumber} creada como borrador.`);
+    } catch (err) {
+      setCreateQuoteError(describeCommandError(err));
+    } finally {
+      setCreateQuoteSubmitting(false);
+    }
+  };
+
+  const handlePublishQuote = async () => {
+    if (!selectedQuoteRevision) return;
+    setPublishQuoteSubmitting(true);
+    setPublishQuoteError(null);
+    setQuoteLifecycleNotice(null);
+    try {
+      const published = await api.publishProjectQuoteRevision(
+        token,
+        projectId,
+        selectedQuoteRevision.id,
+      );
+      await queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions });
+      await queryClient.invalidateQueries({
+        queryKey: [...queryKeys.root, 'reconciliation'],
+      });
+      setQuoteLifecycleNotice(`Revisión Q${published.revisionNumber} publicada.`);
+    } catch (err) {
+      setPublishQuoteError(describeCommandError(err));
+    } finally {
+      setPublishQuoteSubmitting(false);
+    }
+  };
+
+  const handleConfirmAcceptQuote = async () => {
+    if (!selectedQuoteRevision) return;
+    setAcceptQuoteSubmitting(true);
+    setAcceptQuoteError(null);
+    try {
+      const accepted = await api.acceptProjectQuoteRevision(
+        token,
+        projectId,
+        selectedQuoteRevision.id,
+      );
+      await queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions });
+      await queryClient.invalidateQueries({
+        queryKey: [...queryKeys.root, 'reconciliation'],
+      });
+      if (activeDesignId && designRevisionId) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.preflight(activeDesignId, designRevisionId),
+        });
+      }
+      setAcceptModalOpen(false);
+      setApproveError(null);
+      setReleaseError(null);
+      setQuoteLifecycleNotice(
+        `Revisión Q${accepted.revisionNumber} aceptada y fijada como base comercial autoritativa.`,
+      );
+    } catch (err) {
+      setAcceptQuoteError(describeCommandError(err));
+    } finally {
+      setAcceptQuoteSubmitting(false);
+    }
+  };
+
   const handleOpenRequote = () => {
     // Pre-select every incorporable unit: the user reviews and may unselect —
     // the server revalidates the final selection fail-closed.
@@ -528,15 +627,37 @@ export function ProjectReconciliationScreen({
       />
 
       {designs.length === 0 || quoteRevisions.length === 0 ? (
-        <EmptyState
-          icon={GitCompareArrows}
-          title="Falta contexto para reconciliar"
-          description={
-            designs.length === 0
-              ? 'Esta obra no tiene diseños con revisiones publicadas todavía.'
-              : 'Esta obra no tiene revisiones de cotización todavía.'
-          }
-        />
+        <div className="pd-card pr-panel" style={{ padding: '2rem', alignItems: 'center' }}>
+          <EmptyState
+            icon={GitCompareArrows}
+            title="Falta contexto para reconciliar"
+            description={
+              quoteRevisions.length === 0
+                ? 'Esta obra no tiene revisiones de cotización todavía.'
+                : 'Esta obra no tiene diseños con revisiones publicadas todavía.'
+            }
+          />
+          {quoteRevisions.length === 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
+              <CommandErrorAlert error={createQuoteError} />
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-testid="create-initial-quote-btn"
+                disabled={createQuoteSubmitting || !canMutateQuote}
+                onClick={() => void handleCreateInitialQuote()}
+              >
+                {createQuoteSubmitting ? <RefreshCw size={14} className="spin" /> : <Plus size={14} />}
+                <span>{createQuoteSubmitting ? 'Creando Q1…' : 'Crear revisión de cotización (Q1)'}</span>
+              </button>
+              {!canMutateQuote && (
+                <p className="pr-panel__why" data-testid="create-quote-permission-hint">
+                  Tu rol no tiene permiso para crear revisiones de cotización.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       ) : (
         <>
           {/* Exact context selectors */}
@@ -857,6 +978,11 @@ export function ProjectReconciliationScreen({
                   </button>
                 </div>
               )}
+              {quoteLifecycleNotice && (
+                <div className="pd-alert pd-alert--success" data-testid="quote-lifecycle-success">
+                  <strong>{quoteLifecycleNotice}</strong>
+                </div>
+              )}
               {approveResult && (
                 <div className="pd-alert pd-alert--success" data-testid="approval-success">
                   <strong>
@@ -881,6 +1007,23 @@ export function ProjectReconciliationScreen({
 
               {/* Command panels */}
               <div className="pr-panels-grid">
+                <QuoteLifecyclePanel
+                  quoteRevision={selectedQuoteRevision}
+                  previousAcceptedRevision={quoteRevisions.find(
+                    (q) => q.status === 'accepted' && q.id !== selectedQuoteRevision?.id,
+                  )}
+                  canMutateQuote={canMutateQuote}
+                  canAcceptQuote={canAcceptQuote}
+                  publishing={publishQuoteSubmitting}
+                  accepting={acceptQuoteSubmitting}
+                  publishError={publishQuoteError}
+                  acceptError={acceptQuoteError}
+                  onPublish={() => void handlePublishQuote()}
+                  onOpenAccept={() => {
+                    setAcceptQuoteError(null);
+                    setAcceptModalOpen(true);
+                  }}
+                />
                 <PreflightPanel
                   preflight={preflight}
                   loading={preflightQuery.isLoading && designRevisionId !== null}
@@ -979,6 +1122,17 @@ export function ProjectReconciliationScreen({
         submitting={requoteSubmitting}
         error={requoteError}
         onSubmit={() => void handleRequote()}
+      />
+      <AcceptQuoteModal
+        open={acceptModalOpen}
+        onClose={() => setAcceptModalOpen(false)}
+        quoteRevision={selectedQuoteRevision}
+        previousAcceptedRevision={quoteRevisions.find(
+          (q) => q.status === 'accepted' && q.id !== selectedQuoteRevision?.id,
+        )}
+        submitting={acceptQuoteSubmitting}
+        error={acceptQuoteError}
+        onConfirm={() => void handleConfirmAcceptQuote()}
       />
       <ReleaseReviewModal
         open={releaseOpen}

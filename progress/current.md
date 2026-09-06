@@ -1,7 +1,23 @@
-# Feature activa: Ninguna (F218 completada)
+# Feature activa: Ninguna (F219 completada)
 
 - Actualizado: 2026-09-06 America/Mexico_City
-- Última feature: F218 — `[P0][WEB-DT-3] Reconciliation, approval and exact ProductionRelease workspace` (#502)
+- Última feature: F219 — `[P0][WEB-DT-4] Commercial QuoteRevision lifecycle — create, publish and accept exact revisions` (#571)
+- Rama: `feat/571-commercial-quote-revision-lifecycle`
+- Estado: `completed` (verificación completa; ver `progress/implementation_571_commercial_quote_revision_lifecycle.md`)
+- Logros:
+  1. Constraint DB y storage: migración `000121_quote_revision_accepted_uniqueness` (índice único parcial `uq_quote_revisions_one_accepted_per_project`). Endpoints de storage `CreateInitialQuoteRevision`, `PublishQuoteRevision`, y `AcceptQuoteRevision` con serialización transaccional, bloqueo pesimista por proyecto, superseding atómico de revisiones aceptadas previas y eventos de auditoría durables.
+  2. API Go generada: `POST /projects/{projectId}/quote-revisions` (creación de Q1 snapshotting estado comercial de quote lines y catálogo), `POST /projects/{projectId}/quote-revisions/{quoteRevisionId}:publish` (draft -> published) y `POST /projects/{projectId}/quote-revisions/{quoteRevisionId}:accept` (published -> accepted con superseding atómico). Gobernado por permiso RBAC `RoleCanAcceptQuoteRevisions`.
+  3. UI React: `QuoteLifecyclePanel` y modal de confirmación `AcceptQuoteModal` en `packages/ui/src/digitalThread/ReconciliationCommandPanels.tsx`, integrado en `ProjectReconciliationScreen.tsx`. Botón CTA en estado vacío cuando no existen revisiones, publicación explícita, modal de advertencia para aceptación de Q1/Q2, e histórico de revisiones inmutables.
+  4. Desambiguación de estado legacy: `ProjectDetailHeader.tsx` y `ProjectDetailView.tsx` diferencian "Enviar cotización (legacy)" de la autoridad de QuoteRevision del Digital Thread.
+  5. E2E browser + PostgreSQL real (`tests/organization/project-reconciliation.spec.ts`): eliminadas todas las mutaciones directas de SQL en el golden path comercial. El test ejecuta Q1 creación -> Q1 publicación -> Q1 aceptación -> requote Q2 -> Q2 publicación -> Q2 aceptación atómica -> aprobación -> release P1 mediante UI/API real sin SQL ni fixtures de bypass.
+  6. Rehearsal actualizado: `docs/demo/demo-golden-path-rehearsal-20260906.md` P0-1 cerrado con `PASS`. P0-2 permanece abierto.
+
+---
+
+# Historial previo — F218 (#502 / WEB-DT-3) — Reconciliation, approval and exact ProductionRelease workspace
+
+- Actualizado: 2026-09-06 America/Mexico_City
+- Feature: F218 — `[P0][WEB-DT-3] Reconciliation, approval and exact ProductionRelease workspace` (#502)
 - Rama: `feat/502-web-dt3-reconciliation-release`
 - Estado: `completed` (verificación completa; ver `progress/implementation_502_web_dt3.md`)
 - Logros:
@@ -16,10 +32,8 @@
 # Historial previo — Demo Golden Path Rehearsal post-#502 (2026-09-06)
 
 - Ejecutado sobre `main` `79f45b28` (post-PR #569; #500/#501/#502 integrados). Reporte completo: `docs/demo/demo-golden-path-rehearsal-20260906.md`.
-- Verdict: **DEMO READY: YES WITH MITIGATIONS**. 2 P0: (1) lifecycle comercial `quote_revisions` sin superficie HTTP/UI — imposible crear/publicar/aceptar Q1 y aceptar Q2 en vivo (sólo `requote` existe; `UpdateQuoteRevisionStatus` sin handler; el E2E siembra por SQL); (2) el ProductionRelease canónico no habilita el tramo operacional Web (blob legacy `project.productionRelease` gobierna `canDerive`/derivación → doble liberación legacy en guion).
-- Next recomendado: nueva issue child de #396 — commercial revision lifecycle API+Web (scope S), por delante de #499 (handoff actual es FRICTION mitigable, ~30-60 s caliente).
+- Verdict: **DEMO READY: YES WITH MITIGATIONS**. 2 P0: (1) lifecycle comercial `quote_revisions` sin superficie HTTP/UI (cerrado en F219); (2) el ProductionRelease canónico no habilita el tramo operacional Web (blob legacy `project.productionRelease` gobierna `canDerive`/derivación → doble liberación legacy en guion).
 - Evidencia fresca en este SHA: browser gate #500/#501/#502 **5/5 (40.3 s)** sobre Chromium+Go+PostgreSQL efímero; TestUp real host `TC_ComponentAuthoringSmoke` **5/5, 48 assertions, 0F/0E/0S** (`progress/host_smoke_467_testup_ci.json`, 2026-09-06T14:11:40Z); `GOFLAGS='-p=1' go test ./... -count=1` 11/11 packages `ok`; `pnpm openapi:check`/`typecheck`/`test` verde.
-- Clasificación: rehearsal/auditoría documental; sin implementación de features, ledger sin cambios.
 
 ---
 

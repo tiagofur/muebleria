@@ -112,11 +112,24 @@ type stubStore struct {
 	requoteProjectQuoteErr    error
 	requoteProjectQuoteCalls  int
 	requoteProjectQuoteCmd    *storage.RequoteProjectQuoteCommand
+	// Commercial QuoteRevision lifecycle (#571 / WEB-DT-4)
+	createInitialQuoteRevisionResult *storage.CreateInitialQuoteRevisionResult
+	createInitialQuoteRevisionErr    error
+	createInitialQuoteRevisionCalls  int
+	createInitialQuoteRevisionCmd    *storage.CreateInitialQuoteRevisionCommand
+	publishQuoteRevisionResult       *domain.QuoteRevision
+	publishQuoteRevisionErr          error
+	publishQuoteRevisionCalls        int
+	publishQuoteRevisionCmd          *storage.QuoteRevisionLifecycleCommand
+	acceptQuoteRevisionResult        *storage.AcceptQuoteRevisionResult
+	acceptQuoteRevisionErr           error
+	acceptQuoteRevisionCalls         int
+	acceptQuoteRevisionCmd           *storage.QuoteRevisionLifecycleCommand
 	// DesignRevision approval + ProductionRelease (#395 / DT-11)
-	approveDesignRevisionResult *domain.DesignRevision
-	approveDesignRevisionErr    error
-	approveDesignRevisionCalls  int
-	approveDesignRevisionCmd    *storage.ApproveDesignRevisionCommand
+	approveDesignRevisionResult   *domain.DesignRevision
+	approveDesignRevisionErr      error
+	approveDesignRevisionCalls    int
+	approveDesignRevisionCmd      *storage.ApproveDesignRevisionCommand
 	createProductionReleaseResult *storage.ProductionReleaseReadback
 	createProductionReleaseErr    error
 	createProductionReleaseCalls  int
@@ -126,19 +139,19 @@ type stubStore struct {
 	approveForProductionCmd   *storage.ApproveDesignRevisionForProductionCommand
 	approveForProductionErr   error
 	// Read-only preflight evaluation (#502 / WEB-DT-3)
-	evaluatePreflightResult     *domain.ManufacturingPreflightResult
-	evaluatePreflightErr        error
-	evaluatePreflightCalls      int
-	evaluatePreflightDesignID   string
-	evaluatePreflightRevisionID string
-	listProductionReleasesResult  []storage.ProductionReleaseReadback
-	listProductionReleasesErr     error
-	getProductionReleaseResult    *storage.ProductionReleaseReadback
-	getProductionReleaseErr       error
-	latestProductionRelease       *domain.ProductionRelease
-	latestProductionReleaseErr    error
-	materialReturnedByID   *domain.MaterialBoard
-	materialGetByIDErr                  error
+	evaluatePreflightResult      *domain.ManufacturingPreflightResult
+	evaluatePreflightErr         error
+	evaluatePreflightCalls       int
+	evaluatePreflightDesignID    string
+	evaluatePreflightRevisionID  string
+	listProductionReleasesResult []storage.ProductionReleaseReadback
+	listProductionReleasesErr    error
+	getProductionReleaseResult   *storage.ProductionReleaseReadback
+	getProductionReleaseErr      error
+	latestProductionRelease      *domain.ProductionRelease
+	latestProductionReleaseErr   error
+	materialReturnedByID         *domain.MaterialBoard
+	materialGetByIDErr           error
 	// Ambient materials (presentation-only floor/wall, #4150)
 	listAmbientMaterials      []domain.AmbientMaterial
 	ambientReturnedByID       *domain.AmbientMaterial
@@ -1821,7 +1834,8 @@ func (s *stubStore) GetProjectFurnitureWorkspace(_ context.Context, projectID st
 	}, nil
 }
 
-func (s *stubStore) RequoteProjectQuote(_ context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error) {	s.requoteProjectQuoteCalls++
+func (s *stubStore) RequoteProjectQuote(_ context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error) {
+	s.requoteProjectQuoteCalls++
 	cmdCopy := cmd
 	s.requoteProjectQuoteCmd = &cmdCopy
 	if s.requoteProjectQuoteErr != nil {
@@ -1850,6 +1864,70 @@ func (s *stubStore) RequoteProjectQuote(_ context.Context, cmd storage.RequotePr
 				CommercialChanges: 1,
 			},
 		},
+	}, nil
+}
+
+func (s *stubStore) CreateInitialQuoteRevision(_ context.Context, cmd storage.CreateInitialQuoteRevisionCommand) (*storage.CreateInitialQuoteRevisionResult, error) {
+	s.createInitialQuoteRevisionCalls++
+	cmdCopy := cmd
+	s.createInitialQuoteRevisionCmd = &cmdCopy
+	if s.createInitialQuoteRevisionErr != nil {
+		return nil, s.createInitialQuoteRevisionErr
+	}
+	if s.createInitialQuoteRevisionResult != nil {
+		return s.createInitialQuoteRevisionResult, nil
+	}
+	return &storage.CreateInitialQuoteRevisionResult{
+		Revision: &domain.QuoteRevision{
+			ID:             "8f7b6c5d-0000-4000-8000-000000000011",
+			ProjectID:      cmd.ProjectID,
+			RevisionNumber: 1,
+			Status:         "draft",
+			SourceType:     "manual",
+			Notes:          cmd.Notes,
+		},
+		CreatedInstanceIDs: []string{},
+	}, nil
+}
+
+func (s *stubStore) PublishQuoteRevision(_ context.Context, cmd storage.QuoteRevisionLifecycleCommand) (*domain.QuoteRevision, error) {
+	s.publishQuoteRevisionCalls++
+	cmdCopy := cmd
+	s.publishQuoteRevisionCmd = &cmdCopy
+	if s.publishQuoteRevisionErr != nil {
+		return nil, s.publishQuoteRevisionErr
+	}
+	if s.publishQuoteRevisionResult != nil {
+		return s.publishQuoteRevisionResult, nil
+	}
+	return &domain.QuoteRevision{
+		ID:             cmd.QuoteRevisionID,
+		ProjectID:      cmd.ProjectID,
+		RevisionNumber: 1,
+		Status:         "published",
+		SourceType:     "manual",
+	}, nil
+}
+
+func (s *stubStore) AcceptQuoteRevision(_ context.Context, cmd storage.QuoteRevisionLifecycleCommand) (*storage.AcceptQuoteRevisionResult, error) {
+	s.acceptQuoteRevisionCalls++
+	cmdCopy := cmd
+	s.acceptQuoteRevisionCmd = &cmdCopy
+	if s.acceptQuoteRevisionErr != nil {
+		return nil, s.acceptQuoteRevisionErr
+	}
+	if s.acceptQuoteRevisionResult != nil {
+		return s.acceptQuoteRevisionResult, nil
+	}
+	return &storage.AcceptQuoteRevisionResult{
+		Revision: &domain.QuoteRevision{
+			ID:             cmd.QuoteRevisionID,
+			ProjectID:      cmd.ProjectID,
+			RevisionNumber: 2,
+			Status:         "accepted",
+			SourceType:     "requote",
+		},
+		SupersededRevisions: []domain.QuoteRevision{},
 	}, nil
 }
 
@@ -3319,16 +3397,16 @@ func (s *stubStore) CreateProductionRelease(_ context.Context, cmd storage.Creat
 	}
 	return &storage.ProductionReleaseReadback{
 		Release: domain.ProductionRelease{
-			ID:                      "0a1b2c3d-0000-4000-8000-000000000001",
-			ProjectID:               cmd.ProjectID,
-			DesignRevisionID:        cmd.DesignRevisionID,
-			QuoteRevisionID:         cmd.QuoteRevisionID,
-			ReleaseNumber:           1,
-			DesignRevisionNumber:    3,
+			ID:                       "0a1b2c3d-0000-4000-8000-000000000001",
+			ProjectID:                cmd.ProjectID,
+			DesignRevisionID:         cmd.DesignRevisionID,
+			QuoteRevisionID:          cmd.QuoteRevisionID,
+			ReleaseNumber:            1,
+			DesignRevisionNumber:     3,
 			ManufacturingFingerprint: "sha256-a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-			Status:                  domain.ProductionReleaseStatusActive,
-			ReleasedBy:              cmd.ActorUserID,
-			ReleasedAt:              time.Now(),
+			Status:                   domain.ProductionReleaseStatusActive,
+			ReleasedBy:               cmd.ActorUserID,
+			ReleasedAt:               time.Now(),
 		},
 		Staleness: domain.ProductionReleaseStaleness{},
 	}, nil
@@ -3350,7 +3428,6 @@ func (s *stubStore) GetProjectProductionRelease(_ context.Context, _, _ string) 
 	}
 	return nil, domain.ErrReleaseNotFound
 }
-
 
 func (s *stubStore) GetLatestProjectProductionRelease(_ context.Context, _ string) (*domain.ProductionRelease, error) {
 	if s.latestProductionReleaseErr != nil {

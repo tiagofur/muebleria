@@ -92,6 +92,7 @@ import {
   roleCanMutateProjects,
   roleCanApproveDesignRevisions,
   roleCanReleaseProduction,
+  roleCanAcceptQuoteRevisions,
   roleCanReopenProject,
   roleCanViewCosts,
   roleCanViewPortfolioDashboard,
@@ -932,6 +933,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     session === 'auth' && anyRole(actorRoles, roleCanApproveDesignRevisions);
   const canReleaseProductionHint =
     session === 'auth' && anyRole(actorRoles, roleCanReleaseProduction);
+  const canMutateQuoteRevisionsHint =
+    session === 'auth' && anyRole(actorRoles, roleCanMutateProjects);
+  const canAcceptQuoteRevisionsHint =
+    session === 'auth' && anyRole(actorRoles, roleCanAcceptQuoteRevisions);
 
   return (
 
@@ -2030,6 +2035,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               canRequote={canRequoteDesignChanges}
               canApprove={canApproveDesignRevisionsHint}
               canRelease={canReleaseProductionHint}
+              canMutateQuote={canMutateQuoteRevisionsHint}
+              canAcceptQuote={canAcceptQuoteRevisionsHint}
               onBack={() => {
                 const target = projectPath(projectReconciliationRoute.projectId);
                 if (location.pathname !== target) navigate(target);

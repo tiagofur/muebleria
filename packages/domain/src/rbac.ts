@@ -170,6 +170,19 @@ export function roleCanReleaseProduction(role: string | null | undefined): boole
   return role === 'admin' || role === 'gerente_produccion' || role === 'ingeniero';
 }
 
+/**
+ * Explicit commercial acceptance of an exact QuoteRevision (#571 /
+ * digital-thread §16 `quote:accept`). Publishing (roleCanMutateProjects) and
+ * accepting are different capabilities, mirroring roleCanApproveDesignRevisions:
+ * vendedor sells and publishes quote history, but accepting the commercial
+ * baseline production will be released against is a commercial sign-off —
+ * least privilege, never "editor ⇒ acceptor". Parity with Go
+ * RoleCanAcceptQuoteRevisions.
+ */
+export function roleCanAcceptQuoteRevisions(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas';
+}
+
 export function roleCanDeleteProject(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'gerente_ventas';
 }

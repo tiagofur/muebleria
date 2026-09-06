@@ -78,6 +78,17 @@ func RoleCanApproveDesignRevisions(role UserRole) bool {
 	}
 }
 
+// RoleCanAcceptQuoteRevisions — explicit commercial acceptance of an exact
+// QuoteRevision (#571 / digital-thread §16 `quote:accept`). Publishing
+// (RoleCanMutateProjects: admin, gerente_ventas, vendedor) and accepting are
+// deliberately different capabilities, mirroring RoleCanApproveDesignRevisions:
+// vendedor sells and publishes quote history, but accepting the commercial
+// baseline that production will be released against is a commercial sign-off
+// (admin, gerente_ventas) — least privilege, never "editor ⇒ acceptor".
+func RoleCanAcceptQuoteRevisions(role UserRole) bool {
+	return role == RoleAdmin || role == RoleGerenteVentas
+}
+
 // RoleCanReleaseProduction — create ProductionReleases (#395 /
 // digital-thread §22 `production:release`). Mirrors the legacy
 // production_released event policy: releasing to the floor is a plant call
