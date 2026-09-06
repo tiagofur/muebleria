@@ -71,6 +71,7 @@ export interface ProjectDesignsQueryKeys {
   readonly designs: QueryKey;
   readonly designWorkingCopy: (designId: string) => QueryKey;
   readonly designRevisions: (designId: string) => QueryKey;
+  readonly designRevisionDetail: (designId: string, revisionId: string) => QueryKey;
   readonly designRevisionArtifacts: (designId: string, revisionId: string) => QueryKey;
   readonly productionReleases: QueryKey;
 }
@@ -85,6 +86,14 @@ export function projectDesignsQueryKeys(
     designs: [...root, 'designs'],
     designWorkingCopy: (designId: string) => [...root, 'designs', designId, 'working-copy'],
     designRevisions: (designId: string) => [...root, 'designs', designId, 'revisions'],
+    designRevisionDetail: (designId: string, revisionId: string) => [
+      ...root,
+      'designs',
+      designId,
+      'revisions',
+      revisionId,
+      'detail',
+    ],
     designRevisionArtifacts: (designId: string, revisionId: string) => [
       ...root,
       'designs',
@@ -181,7 +190,21 @@ export function ProjectDesignsScreen({
   });
   const designs: readonly Design[] = designsQuery.data ?? [];
 
-  // Default design selection
+  // 1. Resolve selectedDesign:
+  // Case A: designId == null -> default to first design if available
+  // Case B: designId != null -> resolve ONLY that exact ID; if not found, selectedDesign is null (never silently retarget)
+  const selectedDesign = useMemo(() => {
+    if (!designId) {
+      return designs[0] ?? null;
+    }
+    return designs.find((d) => d.id === designId) ?? null;
+  }, [designs, designId]);
+
+  const isInvalidExplicitDesign = Boolean(
+    designId && designsQuery.isSuccess && !designsQuery.isLoading && designs.length > 0 && !selectedDesign,
+  );
+
+  // Default design selection ONLY when designId was NOT explicitly provided
   useEffect(() => {
     if (designsQuery.isSuccess && designs.length > 0 && !designId) {
       const first = designs[0]!;
@@ -190,10 +213,6 @@ export function ProjectDesignsScreen({
     }
   }, [designsQuery.isSuccess, designs, designId, onContextChange]);
 
-  const selectedDesign = useMemo(
-    () => designs.find((d) => d.id === designId) ?? designs[0] ?? null,
-    [designs, designId],
-  );
   const activeDesignId = selectedDesign?.id ?? null;
 
   // 2. Revisions query for active design
@@ -206,12 +225,21 @@ export function ProjectDesignsScreen({
   });
   const revisions: readonly DesignRevision[] = revisionsQuery.data ?? [];
 
-  // 3. Working Copy query for active design
+  // 3. Working Copy query for active design (404-resilient: missing working copy is not a page failure)
   const workingCopyQuery = useQuery({
     queryKey: activeDesignId
       ? queryKeys.designWorkingCopy(activeDesignId)
       : ['project-designs', 'working-copy', 'none'],
-    queryFn: ({ signal }) => api.getDesignWorkingCopy(token, activeDesignId as string, signal),
+    queryFn: async ({ signal }) => {
+      try {
+        return await api.getDesignWorkingCopy(token, activeDesignId as string, signal);
+      } catch (err) {
+        if (err instanceof GraneteApiError && err.status === 404) {
+          return null;
+        }
+        throw err;
+      }
+    },
     enabled: activeDesignId !== null,
   });
   const workingCopy = workingCopyQuery.data ?? null;
@@ -223,29 +251,53 @@ export function ProjectDesignsScreen({
   });
   const releases: readonly ProductionRelease[] = releasesQuery.data ?? [];
 
-  // Lineage & selected revision
+  // Lineage & header-level selected revision (from list, items NOT included)
   const lineage = useMemo(() => buildDesignLineage(revisions), [revisions]);
 
-  const selectedRevision = useMemo(
+  const selectedRevisionHeader = useMemo(
     () => selectDesignRevision(revisions, revisionId),
     [revisions, revisionId],
   );
 
-  // Sync revisionId default when not specified
-  useEffect(() => {
-    if (revisionsQuery.isSuccess && revisions.length > 0 && !revisionId && selectedRevision) {
-      // Keep state pinned to selectedRevision
-      onContextChange?.({ designId: activeDesignId, revisionId: selectedRevision.id });
-    }
-  }, [revisionsQuery.isSuccess, revisions, revisionId, selectedRevision, activeDesignId, onContextChange]);
+  const isInvalidExplicitRevision = Boolean(
+    revisionId && revisionsQuery.isSuccess && !revisionsQuery.isLoading && !selectedRevisionHeader,
+  );
 
-  // ProductionRelease linked to this exact revision
+  // Sync revisionId default ONLY when revisionId was NOT specified
+  useEffect(() => {
+    if (revisionsQuery.isSuccess && revisions.length > 0 && !revisionId && selectedRevisionHeader) {
+      // Keep state pinned to selectedRevision
+      onContextChange?.({ designId: activeDesignId, revisionId: selectedRevisionHeader.id });
+    }
+  }, [revisionsQuery.isSuccess, revisions, revisionId, selectedRevisionHeader, activeDesignId, onContextChange]);
+
+  // 5. Full revision detail query: getDesignRevision returns items + artifacts (listDesignRevisions does NOT).
+  // This is the authoritative source for the inspector panel.
+  const revisionDetailQuery = useQuery({
+    queryKey:
+      activeDesignId && selectedRevisionHeader
+        ? queryKeys.designRevisionDetail(activeDesignId, selectedRevisionHeader.id)
+        : ['project-designs', 'revision-detail', 'none'],
+    queryFn: ({ signal }) =>
+      api.getDesignRevision(token, activeDesignId as string, selectedRevisionHeader!.id, signal),
+    enabled: activeDesignId !== null && selectedRevisionHeader !== null,
+  });
+
+  // The inspector uses the full detail (with items). Fall back to header while loading.
+  const selectedRevision = revisionDetailQuery.data ?? selectedRevisionHeader;
+
+  // ProductionRelease linked to this exact revision (canonical active release with highest release_number)
   const linkedRelease = useMemo(() => {
     if (!selectedRevision) return null;
-    return releases.find((rel) => rel.design_revision_id === selectedRevision.id) ?? null;
+    const matches = releases.filter(
+      (rel) => rel.design_revision_id === selectedRevision.id && rel.status === 'active',
+    );
+    if (matches.length === 0) return null;
+    return matches.sort((a, b) => b.release_number - a.release_number)[0] ?? null;
   }, [releases, selectedRevision]);
 
-  // Artifacts fallback query if not embedded in revision
+  // Artifacts: prefer embedded in revision detail (getDesignRevision already loads them).
+  // Only fall back to the artifact list endpoint if detail has no artifacts (legacy artifact-less publish).
   const artifactsQuery = useQuery({
     queryKey:
       activeDesignId && selectedRevision
@@ -256,6 +308,7 @@ export function ProjectDesignsScreen({
     enabled:
       activeDesignId !== null &&
       selectedRevision !== null &&
+      revisionDetailQuery.isSuccess &&
       (!selectedRevision.artifacts || selectedRevision.artifacts.length === 0),
   });
 
@@ -268,7 +321,7 @@ export function ProjectDesignsScreen({
 
   const availability = useMemo(() => getArtifactAvailability(artifacts), [artifacts]);
 
-  // Preview Grant Query
+  // Preview Grant Query: conservative cache bounded to 2m (less than MediaGrantTTL of 3m)
   const previewGrantQuery = useQuery({
     queryKey:
       activeDesignId && selectedRevision && availability.preview
@@ -283,7 +336,7 @@ export function ProjectDesignsScreen({
         signal,
       ),
     enabled: activeDesignId !== null && selectedRevision !== null && availability.preview !== null,
-    staleTime: 1000 * 60 * 5, // 5 minutes cache
+    staleTime: 1000 * 60 * 2, // 2 minutes cache (strictly within 3-minute backend MediaGrantTTL)
   });
 
   const handleSelectDesign = (newId: string) => {
@@ -451,7 +504,30 @@ export function ProjectDesignsScreen({
             />
           </div>
 
-          {/* Working Copy Banner */}
+          {isInvalidExplicitDesign ? (
+            <div className="pd-context-invalid" data-testid="invalid-design-notice" style={{ padding: '24px 0' }}>
+              <div className="pd-alert pd-alert--error" style={{ padding: '16px' }}>
+                <strong>Diseño no disponible</strong>
+                <p style={{ margin: '8px 0 12px 0' }}>
+                  El diseño seleccionado ya no está disponible en este proyecto.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  data-testid="view-available-designs-btn"
+                  onClick={() => {
+                    if (designs.length > 0) {
+                      handleSelectDesign(designs[0]!.id);
+                    }
+                  }}
+                >
+                  Ver diseños disponibles
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Working Copy Banner */}
           {workingCopy && (
             <div className="pd-working-copy-banner" data-testid="working-copy-banner">
               <div className="pd-working-copy-banner__info">
@@ -556,7 +632,16 @@ export function ProjectDesignsScreen({
           </div>
 
           {/* Selected Revision Inspector (Pinned View) */}
-          {selectedRevision ? (
+          {isInvalidExplicitRevision ? (
+            <div className="pd-context-invalid" data-testid="invalid-revision-notice" style={{ padding: '16px 0' }}>
+              <div className="pd-alert pd-alert--error" style={{ padding: '16px' }}>
+                <strong>Revisión no disponible</strong>
+                <p style={{ margin: '8px 0 0 0' }}>
+                  La revisión seleccionada no pertenece a este diseño o ya no está disponible.
+                </p>
+              </div>
+            </div>
+          ) : selectedRevision ? (
             <div className="pd-inspector" data-testid="revision-inspector">
               <div className="pd-inspector__header">
                 <div>
@@ -587,7 +672,7 @@ export function ProjectDesignsScreen({
                 {linkedRelease && (
                   <div className="pd-inspector__release-badge" data-testid="linked-release-badge">
                     <CheckCircle2 size={16} className="text-success" />
-                    <span>Liberación a producción vinculada</span>
+                    <span>Liberación a producción #{linkedRelease.release_number} vinculada</span>
                   </div>
                 )}
               </div>
@@ -729,7 +814,15 @@ export function ProjectDesignsScreen({
                       </div>
                     )}
 
-                    {artifacts.length === 0 ? (
+                    {artifactsQuery.isLoading && artifacts.length === 0 ? (
+                      <p className="pd-empty-hint" data-testid="artifacts-loading-hint">
+                        Cargando artefactos de la revisión…
+                      </p>
+                    ) : artifactsQuery.isError && artifacts.length === 0 ? (
+                      <div className="pd-alert pd-alert--error" data-testid="artifacts-error-hint">
+                        No se pudieron cargar los artefactos de la revisión.
+                      </div>
+                    ) : artifacts.length === 0 ? (
                       <p className="pd-empty-hint" data-testid="no-artifacts-hint">
                         Esta revisión no posee artefactos binarios registrados.
                       </p>
@@ -845,6 +938,8 @@ export function ProjectDesignsScreen({
             <div className="pd-no-revision-selected">
               <p>Seleccioná una revisión del linaje para inspeccionar sus contenidos.</p>
             </div>
+          )}
+            </>
           )}
         </>
       )}

@@ -199,8 +199,10 @@ const mockReleases: ProductionRelease[] = [
 interface FetchMockOptions {
   designs?: Design[];
   revisionsByDesign?: Record<string, DesignRevision[]>;
+  revisionDetailOverride?: Record<string, Record<string, DesignRevision>>; // designId → revisionId → revision
   workingCopyByDesign?: Record<string, DesignWorkingCopy | null>;
   releases?: ProductionRelease[];
+  artifactsFail?: boolean;
 }
 
 function setupFetchMock(options: FetchMockOptions = {}) {
@@ -209,6 +211,20 @@ function setupFetchMock(options: FetchMockOptions = {}) {
     [DESIGN_1_ID]: [mockRevision1, mockRevision2, mockRevision3],
     [DESIGN_2_ID]: [],
   };
+  // Build a detail map from the list map (GET /designs/:id/revisions/:revId)
+  const revisionDetailByDesign: Record<string, Record<string, DesignRevision>> = {};
+  for (const [dId, revs] of Object.entries(revisionsByDesign)) {
+    revisionDetailByDesign[dId] = {};
+    for (const rev of revs) {
+      revisionDetailByDesign[dId]![rev.id] = rev;
+    }
+  }
+  // Merge any explicit overrides (useful when tests need specific items/artifacts per revision)
+  if (options.revisionDetailOverride) {
+    for (const [dId, revMap] of Object.entries(options.revisionDetailOverride)) {
+      revisionDetailByDesign[dId] = { ...(revisionDetailByDesign[dId] ?? {}), ...revMap };
+    }
+  }
   const workingCopies = options.workingCopyByDesign ?? {
     [DESIGN_1_ID]: mockWorkingCopy,
     [DESIGN_2_ID]: null,
@@ -253,6 +269,21 @@ function setupFetchMock(options: FetchMockOptions = {}) {
       }
     }
 
+    // 3b. Revision detail: GET /designs/:id/revisions/:revId (includes items + artifacts)
+    const revDetailRegex = /^\/designs\/([^/]+)\/revisions\/([^/]+)$/;
+    const revDetailMatch = path.match(revDetailRegex);
+    if (revDetailMatch && method === 'GET') {
+      const [, dId, revId] = revDetailMatch;
+      const rev = revisionDetailByDesign[dId!]?.[revId!];
+      if (!rev) {
+        return new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'revision not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return json(rev);
+    }
+
     // 4. Working copy: GET /designs/:id/working-copy
     for (const dId of Object.keys(workingCopies)) {
       if (path === `/designs/${dId}/working-copy` && method === 'GET') {
@@ -280,6 +311,18 @@ function setupFetchMock(options: FetchMockOptions = {}) {
         expires_at: '2026-09-05T20:00:00Z',
       };
       return json(grant);
+    }
+
+    // 7. List artifacts: GET /designs/:id/revisions/:revId/artifacts
+    const artListRegex = /^\/designs\/([^/]+)\/revisions\/([^/]+)\/artifacts$/;
+    if (artListRegex.test(path) && method === 'GET') {
+      if (options.artifactsFail) {
+        return new Response(JSON.stringify({ code: 'INTERNAL_ERROR', message: 'Failed to list artifacts' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return json([]);
     }
 
     return new Response(JSON.stringify({ code: 'NOT_FOUND', message: `Unhandled ${method} ${path}` }), {
@@ -503,4 +546,93 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
       revisionId: REV_3_ID,
     });
   });
+
+  it('negative proof: invalid explicit design does not silently retarget or rewrite context', async () => {
+    setupFetchMock();
+    const handleContextChange = vi.fn();
+    const user = userEvent.setup();
+
+    renderScreen({
+      initialContext: { designId: '00000000-0000-4000-8000-000000000999', revisionId: null },
+      onContextChange: handleContextChange,
+    });
+
+    // Honest notice must be rendered
+    expect(await screen.findByTestId('invalid-design-notice')).toBeInTheDocument();
+    expect(
+      screen.getByText('El diseño seleccionado ya no está disponible en este proyecto.'),
+    ).toBeInTheDocument();
+
+    // Neither Design 1 nor Design 2 is automatically active
+    expect(screen.queryByTestId('working-copy-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('revision-inspector')).not.toBeInTheDocument();
+
+    // Context must NOT be silently rewritten on mount
+    expect(handleContextChange).not.toHaveBeenCalled();
+
+    // Explicit recovery button enables explicit user choice
+    const viewAvailableBtn = screen.getByTestId('view-available-designs-btn');
+    await user.click(viewAvailableBtn);
+    expect(handleContextChange).toHaveBeenCalledWith({ designId: DESIGN_1_ID, revisionId: null });
+  });
+
+  it('negative proof: cross-design revision fails closed and does not silently substitute', async () => {
+    setupFetchMock();
+    const handleContextChange = vi.fn();
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: '33333333-0000-4000-8000-000000000099' },
+      onContextChange: handleContextChange,
+    });
+
+    // Design 1 remains selected
+    expect(await screen.findByText('Cocina Principal')).toBeInTheDocument();
+
+    // Honest cross-design notice rendered
+    expect(await screen.findByTestId('invalid-revision-notice')).toBeInTheDocument();
+    expect(
+      screen.getByText('La revisión seleccionada no pertenece a este diseño o ya no está disponible.'),
+    ).toBeInTheDocument();
+
+    // Neither R1 nor R3 is silently substituted into the inspector
+    expect(screen.queryByTestId('revision-inspector')).not.toBeInTheDocument();
+    expect(handleContextChange).not.toHaveBeenCalled();
+  });
+
+  it('handles missing working copy (404) gracefully without page error', async () => {
+    setupFetchMock({
+      workingCopyByDesign: {
+        [DESIGN_1_ID]: null, // triggers 404 in fetchMock
+      },
+    });
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID },
+    });
+
+    // Screen loads normally without error
+    expect(await screen.findByText('Cocina Principal')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: /Revisión R1/i })).toBeInTheDocument();
+    // Working copy banner is omitted honestly
+    expect(screen.queryByTestId('working-copy-banner')).not.toBeInTheDocument();
+  });
+
+  it('displays error notice when artifact list query fails', async () => {
+    setupFetchMock({
+      revisionsByDesign: {
+        [DESIGN_1_ID]: [{ ...mockRevision1, artifacts: [] }],
+      },
+      artifactsFail: true,
+    });
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID },
+    });
+
+    expect(await screen.findByTestId('artifacts-error-hint')).toBeInTheDocument();
+    expect(
+      screen.getByText('No se pudieron cargar los artefactos de la revisión.'),
+    ).toBeInTheDocument();
+  });
 });
+
