@@ -1968,3 +1968,31 @@ expuso y se corrigieron 2 defectos latentes del smoke (shape del `catalog_defini
 — `furniture_definition_id`→`intent.furnitureDefinitionId` — y `Binding#valid?` en
 vez de `bound?`). CI no puede correr SketchUp: la capa sigue `REAL_HOST_REQUIRED`
 para CI y se re-ejecuta manualmente al tocar código host.
+
+## Demo Golden Path Rehearsal post-#502 (2026-09-06)
+
+Rehearsal + auditoría del demo completo sobre `main@79f45b28` (post-#500/#501/#502),
+sin implementación de features (regla CRITICAL RULE del encargo: documentar, no
+implementar). Reporte: `docs/demo/demo-golden-path-rehearsal-20260906.md`.
+
+- Verdict: **DEMO READY: YES WITH MITIGATIONS** — contable y ejecutable con fixture
+  pre-sembrado (Q1 accepted + unidades), handoff manual Web→SketchUp y doble
+  liberación legacy para el tramo operacional. El clímax comercial (cliente acepta
+  Q2 en vivo → aprobar → liberar) NO es ejecutable hoy: P0-1 lifecycle comercial sin
+  HTTP/UI (`routes.go` sólo GET + `:requote`; `UpdateQuoteRevisionStatus` sin
+  handler; E2E siembra Q1/Q2 por SQL con rol migration). P0-2: release canónico no
+  habilita Almacén/Producción en Web (blob legacy gobierna `canDerive`/derivación de
+  part-executions; el servidor sí consume el canónico).
+- Recommended next: nueva issue child de #396 — commercial revision lifecycle API+Web
+  (create/publish/accept QuoteRevision Q1 + accept de requote Q2; scope S, storage ya
+  existe). Después: demo-reset/fixture mínimo, continuidad P1→ops, #499,
+  host evidence (+`TC_HardwareAuthoringSmoke`, WOW path B, publish plugin↔backend real).
+- Verificación en este SHA: `go test ./... -count=1` 11/11 `ok` (storage 252 s,
+  pilotreadiness 245 s, PostgreSQL real); browser gate #500/#501/#502 **5/5 en 40.3 s**
+  (Chromium + Go + PostgreSQL 16 efímero); TestUp real host SketchUp 2026.2
+  `TC_ComponentAuthoringSmoke` **5/5, 48 assertions, 0F/0E/0S** —
+  `progress/host_smoke_467_testup_ci.json` refrescado (2026-09-06T14:11:40Z, misma
+  suite/estadísticas, reformateado pretty para matchear estilo trackeado);
+  `pnpm openapi:check` sin drift, `typecheck` 7/7, `pnpm test` exit 0.
+- Ledger `feature_list.json` sin cambios (no es feature); issues no tocadas (regla
+  del encargo: proponer, no crear/modificar automáticamente).

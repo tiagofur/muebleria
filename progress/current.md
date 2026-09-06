@@ -13,6 +13,16 @@
 
 ---
 
+# Historial previo — Demo Golden Path Rehearsal post-#502 (2026-09-06)
+
+- Ejecutado sobre `main` `79f45b28` (post-PR #569; #500/#501/#502 integrados). Reporte completo: `docs/demo/demo-golden-path-rehearsal-20260906.md`.
+- Verdict: **DEMO READY: YES WITH MITIGATIONS**. 2 P0: (1) lifecycle comercial `quote_revisions` sin superficie HTTP/UI — imposible crear/publicar/aceptar Q1 y aceptar Q2 en vivo (sólo `requote` existe; `UpdateQuoteRevisionStatus` sin handler; el E2E siembra por SQL); (2) el ProductionRelease canónico no habilita el tramo operacional Web (blob legacy `project.productionRelease` gobierna `canDerive`/derivación → doble liberación legacy en guion).
+- Next recomendado: nueva issue child de #396 — commercial revision lifecycle API+Web (scope S), por delante de #499 (handoff actual es FRICTION mitigable, ~30-60 s caliente).
+- Evidencia fresca en este SHA: browser gate #500/#501/#502 **5/5 (40.3 s)** sobre Chromium+Go+PostgreSQL efímero; TestUp real host `TC_ComponentAuthoringSmoke` **5/5, 48 assertions, 0F/0E/0S** (`progress/host_smoke_467_testup_ci.json`, 2026-09-06T14:11:40Z); `GOFLAGS='-p=1' go test ./... -count=1` 11/11 packages `ok`; `pnpm openapi:check`/`typecheck`/`test` verde.
+- Clasificación: rehearsal/auditoría documental; sin implementación de features, ledger sin cambios.
+
+---
+
 # Historial previo — F217 (#501 / WEB-DT-2) — Designs, immutable revisions and 3D artifact history
 - Logros:
   1. Pure model & algorithms: `designHistory.ts` + `designHistory.test.ts` (14/14 tests) con linaje inmutable $R1 \to R2 \to R3$, resolución de release activo, selección exacta de revisión snapshot, mapeo de artefactos y formateadores.
