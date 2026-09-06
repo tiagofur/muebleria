@@ -1,10 +1,33 @@
 # Operational Core v1 — Plan de consolidación del producto
 
 **Estado:** CANÓNICO para mejoras operativas post-review  
-**Fecha:** 2026-08-21  
+**Fecha:** 2026-09-05
 **Objetivo:** alinear el producto existente con el flujo real de una carpintería/empresa de muebles pequeña y mediana antes de seguir profundizando features especializadas.
 
 ---
+
+## Estado de uso — 5 de septiembre de 2026
+
+Este documento conserva **criterios de consolidación**, no una lista de features todas
+pendientes. Gate A está integrado por PR #537; el hilo de identidad física, Design,
+publicación, reconciliación, requote y aprobación/release avanzó mediante #538–#551.
+#398/#554 aporta regresión del hilo existente, no certificación navegador→máquina.
+
+La prioridad vigente es [DEMO → MVP](demo-mvp-plan-2026-09-05.md): completar visibilidad
+web #501 y después #502 sobre #500 integrado y la base existente, ensayar el flujo y resolver los riesgos de
+las rutas del piloto. #500/PR #565 se integró en el readback de publicación del plan fechado; no reiniciar ese slice.
+
+| Criterios históricos | Tratamiento actual |
+|---|---|
+| OC-001–006: harness, CI, roles, auth y verdad | Verificar regresiones y gaps concretos; Gate A no completa todo #460/#461 ni certifica todos los KPIs. |
+| OC-020–024: revisión, aprobación, release, stale/change | Reutilizar #387/#392–#395; completar consumidores y criterios residuales, no otro lifecycle paralelo. |
+| OC-030–034: pieza → unidad | Mantener ownership físico y comprobar continuidad desde release en el escenario. |
+| OC-050–054: materiales/stock | RV-09 exige picking/descuento atómicos ante fallo/retry; una pantalla verde no es prueba de stock. |
+| OC-070–084: instalación/costos | Verificar flujo y verdad de datos por cliente; no declarar uso autónomo ni rentabilidad medida sin evidencia. |
+
+Ningún texto imperativo de las fichas siguientes autoriza a reimplementar una entidad
+existente. Estado detallado: código/tests, PR exacta y matriz fechada; las fichas siguen
+sirviendo como aceptación conceptual.
 
 ## 1. Por qué existe este documento
 
@@ -615,37 +638,18 @@ La excepción es una necesidad real confirmada de un taller piloto que haga camb
 
 ---
 
-## 15. Orden recomendado de ejecución
+## 15. Orden de consolidación vigente
 
-### Ola 0 — documentación y guardrails
+1. Conservar Gate A y el Digital Thread integrado; reconciliar documentación e issues.
+2. Terminar el hilo visible de la DEMO con #501 y después #502 sobre #500 integrado, y ensayar las capas usadas.
+3. Cerrar integridad de exports/drilling/plantillas/picking/concurrencia en las rutas
+   del piloto; corregir o bloquear antes de producción, no ocultar con happy paths.
+4. Cualificar materiales, herrajes, recetas y máquinas de cada prospecto.
+5. Validar operación repetible, QC, instalación, recuperación y costos del caso vendido.
 
-OC-001 → 006
-
-### Ola 1 — lifecycle y release
-
-OC-010 → 024
-
-### Ola 2 — producción física pieza→mueble
-
-OC-030 → 034
-
-### Ola 3 — material + calidad
-
-OC-050 → 062
-
-### Ola 4 — instalación + cierre
-
-OC-070 → 074
-
-### Ola 5 — rentabilidad real
-
-OC-080 → 084
-
-### Continuo
-
-- Site Survey (OC-040/041)
-- UX/Project Workspace (OC-090+)
-- pilotos con talleres
+Las antiguas olas OC-001 → OC-084 no deben ejecutarse ciegamente: contienen foundations
+ya entregadas. [Roadmap comercial](roadmap-comercial-v2.md) ordena valor; el
+[plan fechado](demo-mvp-plan-2026-09-05.md) registra estado y límites de evidencia.
 
 ---
 

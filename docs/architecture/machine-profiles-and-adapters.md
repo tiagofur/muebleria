@@ -1,5 +1,10 @@
 # Machine Profiles & Postprocessor Adapters
 
+> **Execution status — 2026-09-05:** See the [DEMO → MVP evidence map](../demo-mvp-plan-2026-09-05.md).
+> #351 architecture/discovery does not imply completed implementation; #348 field
+> evidence and independent #352/#353 client dossiers remain required. This contract
+> is not a compatibility claim for any machine/controller/software combination.
+
 > **Estado:** discovery (#351) — diseño aprobado para implementación futura.
 > La implementación está hard-blocked hasta cerrar #348 (PTX field validation),
 > que requiere dossiers reales de máquina (ver `docs/templates/machine-dossier-template.md`).

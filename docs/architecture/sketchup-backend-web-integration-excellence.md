@@ -3,7 +3,7 @@
 Status: **Canonical cross-surface implementation contract**  
 Program: #465  
 Related authorities: #384, #446/#462, #413, #496–#504  
-Date: 2026-08-30 America/Mexico_City
+Date: 2026-09-05 America/Mexico_City
 
 ## 1. Purpose
 
@@ -130,7 +130,28 @@ The following are delivered foundations, not future aspirations:
 - rich versioned authoring resolve TS↔Go↔Ruby #477;
 - typed parameter definitions/bindings #483/#486.
 
-The remaining work is product interaction, generated API unification, Project/Design persistence, Web operations, security, evidence and commercial support.
+### Reconciled baseline — 2026-09-05
+
+The [dated DEMO → MVP map](../demo-mvp-plan-2026-09-05.md) records exact remote evidence.
+Gate A is delivered by #537; #462 remains open for Gate B. Project Furniture identity,
+quote materialization, Design revisions, binding, publication, reconciliation, requote,
+approval and exact release are integrated through #538–#551. #398/#554 preserves the
+Digital Thread regression proof; it is not full browser-to-machine certification.
+
+Shared host runtime #498/#555, hardware authoring #468/#556/#557, preflight #466/#559
+and internal component authoring #467/#562 are delivered. #390/#391/#470 have merged
+implementation PRs but remain open issues; reconcile acceptance before closing or
+reimplementing. Preserve their authority and the existing mutation coordinator.
+
+Remaining boundaries include #496 full generated contract completion, #497 typed
+administration, #501/#502 Web workflows and #499 exact Project/Design pairing.
+#500/PR #565 is merged in the dated plan's publication readback; reuse its physical-unit
+matrix and continue with #501, then #502.
+Device enrollment is not pairing. Security #460/#461 remains partially open, and machine
+readback/support claims still require independent evidence for each prospect.
+
+The execution diagrams below describe ownership/dependencies, not an assertion that
+all nodes remain unimplemented. The dated plan controls current delivery status.
 
 ## 5. Cross-surface identity model
 
@@ -389,36 +410,22 @@ Rules:
 
 ## 11. Foundation Gate A and persistent Digital Thread
 
-Gate A #462 must close before new persistent business families such as #385.
+Gate A was delivered through #537. Its controls remain mandatory regressions; an open
+#462 tracker for Gate B does not reset the already integrated persistent Digital Thread.
+Gate B is required for the cross-organization workflows it governs, not a reason to
+rebuild Project identity, publication or release.
 
-Before Gate A, allowed work includes:
-
-- stateless generated furniture API #496;
-- host runtime #498;
-- catalog editor #497 against existing catalog persistence;
-- professional host UX #466–#471;
-- migration/performance/compatibility/degraded/support work that invents no business identity.
-
-After Gate A, follow #384:
-
-```text
-#385 Project FurnitureInstance
-→ #386 QuoteLine ↔ physical units
-   + #387 Design/DesignRevision
-→ #388 SketchUp model binding
-→ #499 secure Web↔SketchUp pairing
-→ #389 Project Furniture panel/place existing
-→ #390 connected catalog insertion
-→ #391 duplicate identity handling
-→ #392 publication + artifacts
-→ #393 reconciliation
-→ #394 explicit requote/change classification
-→ #395 exact approval/ProductionRelease
-→ #397 existing SKP adoption
-→ #398 Digital Thread E2E
-```
+The integrated chain owns Project FurnitureInstance → quote materialization →
+Design/DesignRevision → model binding → publication/artifacts → reconciliation →
+explicit requote → approval/exact release. #390/#391 implementation is merged while
+issue closure remains unreconciled. Reuse this chain for React #500/#501/#502 and
+pairing #499; do not insert #499 retrospectively as an unmet prerequisite for the
+already delivered binding/publication contracts.
 
 No `SketchUpProject`, local shadow Project store or alternate identity is permitted.
+New schema still requires tenant ownership, RLS, generated contracts, concurrency,
+audit and fresh/upgrade/runtime-role evidence. See the
+[dated execution map](../demo-mvp-plan-2026-09-05.md) for current status and DEMO acceptance.
 
 ## 12. Secure Web-to-SketchUp pairing
 
@@ -451,7 +458,7 @@ Security requirements:
 
 ### 13.1 Project Furniture #500
 
-As soon as #385/#386 exist, React exposes physical-unit traceability:
+#385/#386 already provide the foundation; #500/PR #565 delivers the React surface, merged in the publication readback. Acceptance includes physical-unit traceability:
 
 - quantity > 1 as distinct units;
 - exact QuoteRevision context;
