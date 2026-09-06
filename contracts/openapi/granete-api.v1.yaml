@@ -2817,8 +2817,8 @@
     "/designs/{designId}/revisions/{revisionId}:approve": {
       "post": {
         "operationId": "approveDesignRevision",
-        "summary": "Approve an exact published DesignRevision for production (#395, explicit lifecycle transition)",
-        "description": "Explicit published→approved transition on the exact revisionId (never latest). Server-authoritative: actor and timestamp come from the session, never the body. The snapshot stays immutable — only status/approved_by/approved_at change, exactly once. Re-approving an already-approved revision is an idempotent no-op returning the current state; any other status rejects. Requires an Idempotency-Key.",
+        "summary": "Approve an exact published DesignRevision for production (#395/#502, explicit lifecycle transition)",
+        "description": "Explicit published→approved transition on the exact revisionId (never latest). Server-authoritative: actor and timestamp come from the session, never the body. The snapshot stays immutable — only status/approved_by/approved_at change, exactly once. Re-approving an already-approved revision is an idempotent no-op returning the current state; any other status rejects. Requires an Idempotency-Key. When the optional body pins an exact quoteRevisionId (#502 production approval), the server re-runs the SAME authoritative gates the release command enforces — accepted commercial baseline, reconciliation commercial gate and manufacturing preflight over the exact pair — and rejects with typed 409 blockers before transitioning; the body-less legacy form keeps the bare lifecycle transition for non-production flows.",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
@@ -2830,6 +2830,16 @@
             "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveDesignRevisionRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The approved revision (or the already-approved state on idempotent replay)",
@@ -6515,6 +6525,18 @@
           }
         }
       },
+      "ApproveDesignRevisionRequest": {
+        "type": "object",
+        "description": "Optional body for approveDesignRevision (#502). Pinning the exact accepted QuoteRevision turns the approval into a production approval gated by the same authoritative commercial + preflight verdicts the release command enforces.",
+        "additionalProperties": false,
+        "maxProperties": 1,
+        "properties": {
+          "quoteRevisionId": {
+            "type": "string",
+            "description": "Exact accepted commercial baseline to gate the approval against."
+          }
+        }
+      },
       "ManufacturingPreflightStatus": {
         "type": "string",
         "description": "Authoritative release preflight verdict (#395 / #466, scope production-release-v1).",
@@ -6598,12 +6620,15 @@
       },
       "ManufacturingPreflightResult": {
         "type": "object",
-        "description": "The exact result the release command enforces, evaluated read-only over the immutable revision snapshot.",
+        "description": "The exact verdict the release command enforces, evaluated read-only over the immutable revision snapshot. Server-projected per actor: every role sees the verdict, the business-safe message and the blocked-item count; the manufacturing internals (per-unit items and structured issues) are only included for roles with release/manufacturing capability (includesDetail=true).",
         "additionalProperties": false,
         "required": [
           "designRevisionId",
           "scope",
           "status",
+          "message",
+          "includesDetail",
+          "blockedItemCount",
           "items",
           "issues"
         ],
@@ -6619,6 +6644,19 @@
           },
           "status": {
             "$ref": "#/components/schemas/ManufacturingPreflightStatus"
+          },
+          "message": {
+            "type": "string",
+            "description": "Server-computed business-safe message (no manufacturing internals)."
+          },
+          "includesDetail": {
+            "type": "boolean",
+            "description": "Whether items/issues carry manufacturing detail for this actor."
+          },
+          "blockedItemCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Server-computed count of blocked physical units."
           },
           "items": {
             "type": "array",

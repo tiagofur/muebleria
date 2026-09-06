@@ -97,66 +97,15 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		return nil, domain.ErrDesignRevisionNotApproved
 	}
 
-	// 3. Load the immutable snapshot items: preflight and fingerprint inputs.
-	items, err := s.ListDesignRevisionItems(txCtx, cmd.DesignRevisionID)
+	// 3-6. The ONE authoritative gate chain (exact accepted quote →
+	// reconciliation commercial gate → manufacturing preflight), shared with
+	// the #502 production approval so both commands enforce identical
+	// verdicts over the exact pair.
+	items, preflight, err := s.enforceProductionGates(txCtx, projectOrgID, cmd.ProjectID, cmd.QuoteRevisionID, cmd.DesignRevisionID)
 	if err != nil {
 		return nil, err
 	}
-
-	// 4. Commercial baseline: exact, same-project, accepted (§12, §15). A
-	// draft or superseded quote never grounds production.
-	const quoteStatusAccepted = "accepted"
-	quoteRevisionID := ""
-	if cmd.QuoteRevisionID != "" {
-		var qrProjectID, qrStatus string
-		err = s.db(txCtx).QueryRow(txCtx, `
-			SELECT project_id, status FROM quote_revisions WHERE id = $1
-		`, cmd.QuoteRevisionID).Scan(&qrProjectID, &qrStatus)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, domain.ErrQuoteRevisionNotFound
-			}
-			return nil, err
-		}
-		if qrProjectID != cmd.ProjectID {
-			return nil, domain.ErrCrossProjectRelease
-		}
-		if qrStatus != quoteStatusAccepted {
-			return nil, domain.ErrReleaseQuoteNotAccepted
-		}
-		quoteRevisionID = cmd.QuoteRevisionID
-	}
-
-	// 5. Reconciliation gate over the exact revisions (#393/#394): the server
-	// recomputes; a client "no conflict" claim is never input (§13–§15).
-	if quoteRevisionID != "" {
-		inputs, err := s.loadReconciliationInputs(txCtx, cmd.ProjectID, quoteRevisionID, cmd.DesignRevisionID)
-		if err != nil {
-			return nil, err
-		}
-		reconciliation, err := domain.Reconcile(inputs.Quote, inputs.Design)
-		if err != nil {
-			return nil, err
-		}
-		classification, err := domain.ClassifyReconciliation(reconciliation)
-		if err != nil {
-			return nil, err
-		}
-		if err := domain.EvaluateReleaseCommercialGate(classification); err != nil {
-			return nil, err
-		}
-	}
-
-	// 6. Authoritative manufacturing preflight against the organization
-	// catalog (§16–§17). Any blocker rejects the whole release.
-	definitions, err := s.loadReferencedFurnitureDefinitionParameters(txCtx, projectOrgID, items)
-	if err != nil {
-		return nil, err
-	}
-	preflight := domain.RunManufacturingPreflight(cmd.DesignRevisionID, items, definitions)
-	if preflight.Status == domain.ManufacturingPreflightBlocked {
-		return nil, &domain.ReleasePreflightBlockedError{Result: preflight}
-	}
+	quoteRevisionID := cmd.QuoteRevisionID
 
 	// 7. Server-computed manufacturing fingerprint over the same immutable
 	// items the preflight validated (§18–§19). Because both derive from
@@ -244,6 +193,75 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		}
 	}
 	return &ProductionReleaseReadback{Release: release, Staleness: *staleness}, nil
+}
+
+// enforceProductionGates is the ONE authoritative gate chain shared by the
+// release command and the #502 production approval: exact accepted
+// commercial baseline (when pinned), reconciliation commercial gate over the
+// exact pair (#393/#394 — the server always recomputes) and the authoritative
+// manufacturing preflight against the organization catalog (§§12–17). Any
+// verdict rejects the whole command with the typed domain error the HTTP
+// layer maps to structured 409 blockers.
+func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID, projectID, quoteRevisionID, designRevisionID string) ([]domain.DesignRevisionItem, *domain.ManufacturingPreflightResult, error) {
+	// 1. Commercial baseline: exact, same-project, accepted. A draft or
+	// superseded quote never grounds production.
+	const quoteStatusAccepted = "accepted"
+	if quoteRevisionID != "" {
+		var qrProjectID, qrStatus string
+		err := s.db(ctx).QueryRow(ctx, `
+			SELECT project_id, status FROM quote_revisions WHERE id = $1
+		`, quoteRevisionID).Scan(&qrProjectID, &qrStatus)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, nil, domain.ErrQuoteRevisionNotFound
+			}
+			return nil, nil, err
+		}
+		if qrProjectID != projectID {
+			return nil, nil, domain.ErrCrossProjectRelease
+		}
+		if qrStatus != quoteStatusAccepted {
+			return nil, nil, domain.ErrReleaseQuoteNotAccepted
+		}
+	}
+
+	// 2. Immutable snapshot items: preflight and fingerprint inputs.
+	items, err := s.ListDesignRevisionItems(ctx, designRevisionID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 3. Reconciliation commercial gate over the exact revisions: a client
+	// "no conflict" claim is never input (§§13–§15).
+	if quoteRevisionID != "" {
+		inputs, err := s.loadReconciliationInputs(ctx, projectID, quoteRevisionID, designRevisionID)
+		if err != nil {
+			return nil, nil, err
+		}
+		reconciliation, err := domain.Reconcile(inputs.Quote, inputs.Design)
+		if err != nil {
+			return nil, nil, err
+		}
+		classification, err := domain.ClassifyReconciliation(reconciliation)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := domain.EvaluateReleaseCommercialGate(classification); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// 4. Authoritative manufacturing preflight against the organization
+	// catalog (§§16–§17). Any blocker rejects the whole command.
+	definitions, err := s.loadReferencedFurnitureDefinitionParameters(ctx, projectOrgID, items)
+	if err != nil {
+		return nil, nil, err
+	}
+	preflight := domain.RunManufacturingPreflight(designRevisionID, items, definitions)
+	if preflight.Status == domain.ManufacturingPreflightBlocked {
+		return nil, preflight, &domain.ReleasePreflightBlockedError{Result: preflight}
+	}
+	return items, preflight, nil
 }
 
 // EvaluateDesignRevisionPreflight (#502 / WEB-DT-3) evaluates the exact same

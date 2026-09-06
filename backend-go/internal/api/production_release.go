@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -22,7 +24,10 @@ import (
 // results, no fingerprints (§§32–33).
 
 // HandleDesignRevisionApprove serves POST
-// /api/designs/{designId}/revisions/{revisionId}:approve.
+// /api/designs/{designId}/revisions/{revisionId}:approve. The optional body
+// pins an exact QuoteRevision (#502 production approval): the server then
+// enforces the same authoritative commercial + preflight gates the release
+// command enforces before transitioning.
 func (s *Server) HandleDesignRevisionApprove(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
 	if claims == nil {
@@ -40,9 +45,26 @@ func (s *Server) HandleDesignRevisionApprove(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	var payload openapi.ApproveDesignRevisionRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "cuerpo de solicitud inválido", nil)
+			return
+		}
+	}
+	quoteRevisionID := ""
+	if payload.QuoteRevisionId != nil {
+		quoteRevisionID = strings.TrimSpace(*payload.QuoteRevisionId)
+	}
+	if quoteRevisionID != "" && !isValidUUID(quoteRevisionID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "quoteRevisionId inválido", nil)
+		return
+	}
+
 	rev, err := s.Store.ApproveDesignRevision(r.Context(), storage.ApproveDesignRevisionCommand{
 		DesignID:         designID,
 		DesignRevisionID: revisionID,
+		QuoteRevisionID:  quoteRevisionID,
 		ActorUserID:      claims.UserID,
 		IP:               clientIP(r),
 		RequestID:        RequestIDFromContext(r.Context()),
@@ -63,6 +85,17 @@ func respondWithDesignApprovalError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrDesignRevisionApprovalInvalid):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "la revisión no puede aprobarse desde su estado actual", nil)
 	default:
+		var preflightBlocked *domain.ReleasePreflightBlockedError
+		var commercialBlocked *domain.ReleaseCommercialGateError
+		if errors.As(err, &preflightBlocked) || errors.As(err, &commercialBlocked) ||
+			errors.Is(err, domain.ErrReleaseQuoteNotAccepted) ||
+			errors.Is(err, domain.ErrQuoteRevisionNotFound) ||
+			errors.Is(err, domain.ErrCrossProjectRelease) {
+			// #502 production approval gate: SAME typed 409 blocker vocabulary
+			// the release command exposes — one verdict, two commands.
+			respondWithProductionReleaseError(w, err)
+			return
+		}
 		respondWithInternalError(w, err, "approve design revision")
 	}
 }
@@ -102,7 +135,13 @@ func (s *Server) HandleDesignRevisionPreflight(w http.ResponseWriter, r *http.Re
 		}
 		return
 	}
-	respondWithJSON(w, http.StatusOK, toManufacturingPreflightDTO(result))
+	// Server-authoritative projection (#502 permissions): every project role
+	// sees the verdict, the business-safe message and the blocked-unit count;
+	// the manufacturing internals (per-unit items, structured issue codes and
+	// parameter diagnostics) only reach roles with release/manufacturing
+	// capability.
+	includesDetail := domain.AnyRole(actorRoles(claims), domain.RoleCanReleaseProduction)
+	respondWithJSON(w, http.StatusOK, toManufacturingPreflightDTO(result, includesDetail))
 }
 
 func toManufacturingPreflightIssueDTO(issues []domain.ManufacturingPreflightIssue) []openapi.ManufacturingPreflightIssue {
@@ -129,23 +168,47 @@ func toManufacturingPreflightIssueDTO(issues []domain.ManufacturingPreflightIssu
 	return out
 }
 
-func toManufacturingPreflightDTO(result *domain.ManufacturingPreflightResult) openapi.ManufacturingPreflightResult {
-	items := make([]openapi.ManufacturingPreflightItem, 0, len(result.Items))
+func toManufacturingPreflightDTO(result *domain.ManufacturingPreflightResult, includesDetail bool) openapi.ManufacturingPreflightResult {
+	blocked := 0
 	for _, item := range result.Items {
-		items = append(items, openapi.ManufacturingPreflightItem{
+		if item.Status == domain.ManufacturingPreflightItemBlocked {
+			blocked++
+		}
+	}
+	message := "El preflight de fabricación valida todas las unidades de la revisión contra el catálogo: listo."
+	if result.Status == domain.ManufacturingPreflightBlocked {
+		message = fmt.Sprintf("El preflight de fabricación bloquea la revisión: %d %s con problemas de fabricación.", blocked, pluralizeUnits(blocked))
+	}
+	dto := openapi.ManufacturingPreflightResult{
+		DesignRevisionId: result.DesignRevisionID,
+		Scope:            result.Scope,
+		Status:           openapi.ManufacturingPreflightStatus(result.Status),
+		Message:          message,
+		IncludesDetail:   includesDetail,
+		BlockedItemCount: int64(blocked),
+		Items:            []openapi.ManufacturingPreflightItem{},
+		Issues:           []openapi.ManufacturingPreflightIssue{},
+	}
+	if !includesDetail {
+		return dto
+	}
+	for _, item := range result.Items {
+		dto.Items = append(dto.Items, openapi.ManufacturingPreflightItem{
 			FurnitureInstanceId:   item.FurnitureInstanceID,
 			FurnitureDefinitionId: item.FurnitureDefinitionID,
 			Status:                openapi.ManufacturingPreflightItemStatus(item.Status),
 			Issues:                toManufacturingPreflightIssueDTO(item.Issues),
 		})
 	}
-	return openapi.ManufacturingPreflightResult{
-		DesignRevisionId: result.DesignRevisionID,
-		Scope:            result.Scope,
-		Status:           openapi.ManufacturingPreflightStatus(result.Status),
-		Items:            items,
-		Issues:           toManufacturingPreflightIssueDTO(result.Issues),
+	dto.Issues = toManufacturingPreflightIssueDTO(result.Issues)
+	return dto
+}
+
+func pluralizeUnits(count int) string {
+	if count == 1 {
+		return "unidad"
 	}
+	return "unidades"
 }
 
 // HandleProjectProductionReleases serves GET (list) and POST (create) for

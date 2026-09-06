@@ -884,6 +884,10 @@ type QuoteLineFurnitureInstance struct {
 	CreatedAt           string            `json:"created_at"`
 }
 
+type ApproveDesignRevisionRequest struct {
+	QuoteRevisionId *string `json:"quoteRevisionId,omitempty"`
+}
+
 type ManufacturingPreflightStatus string
 
 const (
@@ -927,6 +931,9 @@ type ManufacturingPreflightResult struct {
 	DesignRevisionId string                        `json:"designRevisionId"`
 	Scope            string                        `json:"scope"`
 	Status           ManufacturingPreflightStatus  `json:"status"`
+	Message          string                        `json:"message"`
+	IncludesDetail   bool                          `json:"includesDetail"`
+	BlockedItemCount int64                         `json:"blockedItemCount"`
 	Items            []ManufacturingPreflightItem  `json:"items"`
 	Issues           []ManufacturingPreflightIssue `json:"issues"`
 }

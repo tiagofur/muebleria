@@ -135,6 +135,7 @@ export interface PreflightPanelProps {
 }
 
 export function PreflightPanel({ preflight, loading, error, onRetry }: PreflightPanelProps): ReactNode {
+  const showIssues = preflight !== null && preflight.status === 'blocked' && preflight.includesDetail;
   return (
     <section className="pd-card pr-panel" data-testid="preflight-panel" aria-labelledby="preflight-title">
       <div className="pd-card__header">
@@ -169,17 +170,15 @@ export function PreflightPanel({ preflight, loading, error, onRetry }: Preflight
       ) : loading ? (
         <p className="pd-empty-hint">Evaluando el contrato de fabricación de la revisión exacta…</p>
       ) : preflight ? (
-        preflight.status === 'ready' ? (
-          <p className="pr-panel__hint" data-testid="preflight-ready-hint">
-            El preflight autoritativo ({preflight.scope}) valida todas las unidades de la revisión
-            contra el catálogo: listo para liberar.
+        <>
+          <p
+            className={`pr-panel__hint ${preflight.status === 'blocked' ? 'pr-panel__hint--danger' : ''}`}
+            data-testid="preflight-message"
+          >
+            {preflight.message}
           </p>
-        ) : (
-          <div data-testid="preflight-issues">
-            <p className="pr-panel__hint pr-panel__hint--danger">
-              El preflight autoritativo bloquea la liberación de esta revisión:
-            </p>
-            <ul className="pr-issue-list">
+          {showIssues ? (
+            <ul className="pr-issue-list" data-testid="preflight-issues">
               {preflight.issues.map((issue, index) => (
                 <li key={`${issue.code}-${index}`} className="pr-issue-list__item">
                   <span className="pr-issue-list__code">{issue.code}</span>
@@ -193,8 +192,14 @@ export function PreflightPanel({ preflight, loading, error, onRetry }: Preflight
                 </li>
               ))}
             </ul>
-          </div>
-        )
+          ) : preflight.status === 'blocked' && !preflight.includesDetail ? (
+            <p className="pr-panel__why" data-testid="preflight-detail-restricted">
+              El detalle técnico de fabricación está disponible para roles de fabricación (
+              {preflight.blockedItemCount}{' '}
+              {preflight.blockedItemCount === 1 ? 'unidad bloqueada' : 'unidades bloqueadas'}).
+            </p>
+          ) : null}
+        </>
       ) : (
         <p className="pd-empty-hint">Seleccioná una revisión publicada para evaluar su preflight.</p>
       )}
@@ -207,6 +212,11 @@ export interface ApprovalPanelProps {
   readonly revisionStatus: 'published' | 'approved' | 'superseded' | null;
   readonly approvedBy: string | null | undefined;
   readonly approvedAt: string | null | undefined;
+  /** Server context (#502): the gated command pins the exact accepted quote. */
+  readonly quoteAccepted: boolean;
+  readonly quoteLabel: string;
+  /** Server-owned preflight verdict over the exact revision. */
+  readonly preflightBlocked: boolean | null;
   readonly submitting: boolean;
   readonly error: CommandErrorView | null;
   readonly onApprove: () => void;
@@ -217,6 +227,9 @@ export function ApprovalPanel({
   revisionStatus,
   approvedBy,
   approvedAt,
+  quoteAccepted,
+  quoteLabel,
+  preflightBlocked,
   submitting,
   error,
   onApprove,
@@ -243,8 +256,14 @@ export function ApprovalPanel({
       ) : (
         <p className="pr-panel__hint" data-testid="approval-pending">
           {canSubmitFromStatus
-            ? 'La revisión publicada puede aprobarse de forma explícita.'
+            ? `La aprobación de producción se valida contra ${quoteLabel} y el preflight autoritativo del servidor.`
             : 'Seleccioná una revisión publicada para habilitar la aprobación.'}
+        </p>
+      )}
+      {canSubmitFromStatus && !quoteAccepted && (
+        <p className="pr-panel__why" data-testid="approval-quote-hint">
+          La cotización seleccionada ({quoteLabel}) no está aceptada: el servidor rechazará la
+          aprobación de producción hasta fijar una base comercial aceptada.
         </p>
       )}
 
@@ -254,12 +273,18 @@ export function ApprovalPanel({
         type="button"
         className="btn btn-primary"
         data-testid="approve-revision-btn"
-        disabled={submitting || !canSubmitFromStatus || !canApprove}
+        disabled={submitting || !canSubmitFromStatus || !canApprove || preflightBlocked === true}
         onClick={onApprove}
       >
         {submitting ? <RefreshCw size={14} className="spin" /> : <ShieldCheck size={14} />}
         <span>{submitting ? 'Aprobando…' : 'Aprobar revisión exacta'}</span>
       </button>
+      {canSubmitFromStatus && preflightBlocked === true && (
+        <p className="pr-panel__why" data-testid="approval-preflight-hint">
+          El preflight autoritativo bloquea esta revisión: la aprobación de producción está
+          bloqueada por el servidor.
+        </p>
+      )}
       {!canApprove && revisionStatus === 'published' && (
         <p className="pr-panel__why" data-testid="approval-permission-hint">
           Tu rol no incluye la capacidad de aprobar revisiones de diseño.
@@ -273,8 +298,7 @@ export interface ReleasePanelProps {
   readonly canRelease: boolean;
   readonly revisionApproved: boolean;
   readonly quoteAccepted: boolean;
-  readonly quotePinned: boolean;
-  readonly onToggleQuotePin: (pinned: boolean) => void;
+  readonly quoteLabel: string;
   readonly preflightReady: boolean | null;
   readonly submitting: boolean;
   readonly error: CommandErrorView | null;
@@ -286,15 +310,14 @@ export function ReleasePanel({
   canRelease,
   revisionApproved,
   quoteAccepted,
-  quotePinned,
-  onToggleQuotePin,
+  quoteLabel,
   preflightReady,
   submitting,
   error,
   preflightIssues,
   onOpenReview,
 }: ReleasePanelProps): ReactNode {
-  const canOpenReview = canRelease && revisionApproved;
+  const canOpenReview = canRelease && revisionApproved && quoteAccepted;
   return (
     <section className="pd-card pr-panel" data-testid="release-panel" aria-labelledby="release-title">
       <div className="pd-card__header">
@@ -312,22 +335,10 @@ export function ReleasePanel({
           : 'La liberación requiere primero la aprobación de la revisión exacta.'}
       </p>
 
-      <div className="pr-pin-toggle">
-        <label htmlFor="release-quote-pin" className="pr-pin-toggle__label">
-          <input
-            id="release-quote-pin"
-            type="checkbox"
-            checked={quotePinned}
-            disabled={!quoteAccepted || submitting}
-            onChange={(e) => onToggleQuotePin(e.target.checked)}
-            data-testid="release-quote-pin"
-          />
-          <span>
-            Fijar la cotización seleccionada como base comercial
-            {!quoteAccepted && ' (requiere una cotización aceptada)'}
-          </span>
-        </label>
-      </div>
+      <p className="pr-pin-note" data-testid="release-quote-pin-note">
+        Base comercial exacta: <strong>{quoteAccepted ? quoteLabel : `${quoteLabel} (no aceptada)`}</strong>{' '}
+        — la liberación siempre queda fijada a la cotización aceptada seleccionada.
+      </p>
 
       <CommandErrorAlert error={error} />
       {preflightIssues.length > 0 && (
@@ -359,6 +370,11 @@ export function ReleasePanel({
       {canRelease && !revisionApproved && (
         <p className="pr-panel__why" data-testid="release-approval-hint">
           Disponible después de la aprobación.
+        </p>
+      )}
+      {canRelease && revisionApproved && !quoteAccepted && (
+        <p className="pr-panel__why" data-testid="release-quote-hint">
+          Seleccioná una cotización aceptada como base comercial para liberar.
         </p>
       )}
     </section>
@@ -571,7 +587,6 @@ export interface ReleaseReviewModalProps {
   readonly onClose: () => void;
   readonly projectName: string | null;
   readonly quoteLabel: string;
-  readonly quotePinned: boolean;
   readonly quoteStatusLabel: string;
   readonly designRevisionLabel: string;
   readonly preflightStatus: string | null;
@@ -586,7 +601,6 @@ export function ReleaseReviewModal({
   onClose,
   projectName,
   quoteLabel,
-  quotePinned,
   quoteStatusLabel,
   designRevisionLabel,
   preflightStatus,
@@ -612,10 +626,8 @@ export function ReleaseReviewModal({
         <dl className="pd-audit-grid">
           <dt>Obra</dt>
           <dd>{projectName ?? '—'}</dd>
-          <dt>Cotización</dt>
-          <dd>
-            {quotePinned ? `${quoteLabel} · ${quoteStatusLabel}` : 'sin fijar (sin base comercial)'}
-          </dd>
+          <dt>Cotización (base comercial exacta)</dt>
+          <dd>{`${quoteLabel} · ${quoteStatusLabel}`}</dd>
           <dt>Revisión de diseño</dt>
           <dd>{designRevisionLabel}</dd>
           <dt>Preflight autoritativo</dt>

@@ -355,26 +355,15 @@ async function publishRevisionWithItemIds(options: {
     await expect(quoteSelect.locator('option')).toHaveCount(2);
 
     // ------------------------------------------------------------------
-    // 5. Accept Q2 + supersede Q1 is not exposed via API (documented demo
-    //    limitation), so the fixture drives the lifecycle directly (same
-    //    convention as Q1) before approval/release.
-    // ------------------------------------------------------------------
-    await seedAcceptanceForNewestRevision();
-    await page.reload();
-    await expect(page.getByTestId('exact-context-header')).toContainText('Q1');
-    await expect(page.getByTestId('historical-comparison-note')).toBeVisible();
-
-    const q2Option = quoteSelect.locator('option', { hasText: 'Q2 ·' });
-    const q2Value = await q2Option.first().getAttribute('value');
-    expect(q2Value).toBeTruthy();
-    await quoteSelect.selectOption(q2Value!);
-    await expect(page.getByTestId('exact-context-header')).toContainText('Q2');
-    await expect(page.getByTestId('exact-context-header')).toContainText('Aceptada');
+    // 5. Q2 stays DRAFT at this point on purpose: step 6b proves the
+    //    production-approval gate rejects a non-accepted baseline before
+    //    the fixture accepts it (no HTTP accept surface exists yet —
+    //    documented demo limitation).
 
     // ------------------------------------------------------------------
     // 6. Complete the modeling: publish R2 with FI-C modeled too (qty>1
     //    fully placed). The requote source stays R1; Q2/R2 reconciles clean
-    //    so the commercial gate allows the release.
+    //    so the commercial gate allows the approval/release.
     // ------------------------------------------------------------------
     const r2 = await publishRevisionWithItemIds({
       items: [0, 1, 2, 'design-first'],
@@ -387,7 +376,13 @@ async function publishRevisionWithItemIds(options: {
     // Reload keeps the pinned Q2/R1 comparison (historical snapshot).
     await expect(page.getByTestId('exact-context-header')).toContainText('R1');
 
-    // Select R2: everything incorporated/placed — no pending commercial work.
+    // Select the still-DRAFT Q2 + R2: everything incorporated/placed — the
+    // commercial content is complete even before acceptance.
+    const q2ValueDraft = await quoteSelect
+      .locator('option', { hasText: 'Q2 ·' })
+      .first()
+      .getAttribute('value');
+    await quoteSelect.selectOption(q2ValueDraft!);
     await page.getByTestId('design-revision-select').selectOption(seeded.r2Id);
     await expect(page.getByTestId('exact-context-header')).toContainText('R2');
     await expect(page.getByTestId('summary-synced')).toHaveText('4');
@@ -396,8 +391,31 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId('summary-modeled-not-quoted')).toHaveText('0');
 
     // ------------------------------------------------------------------
-    // 7. Approval of the exact R2 (published → approved).
+    // 6b. Production-approval gate negative proof: with Q2 still DRAFT, the
+    //     server must reject the approval with the typed quote-not-accepted
+    //     409 — proving the exact quote pin travels with the command (the
+    //     body-less legacy path would have approved it).
     // ------------------------------------------------------------------
+    await expect(page.getByTestId('approval-pending')).toBeVisible();
+    await expect(page.getByTestId('exact-context-header')).toContainText('Borrador');
+    await expect(page.getByTestId('approval-quote-hint')).toBeVisible();
+    await page.getByTestId('approve-revision-btn').click();
+    await expect(page.getByTestId('command-error-alert')).toContainText('aceptada');
+    await expect(page.getByTestId('approval-success')).toHaveCount(0);
+
+    // ------------------------------------------------------------------
+    // 7. Accept Q2 + supersede Q1 (fixture), then approve the exact R2 with
+    //    the accepted baseline pinned — the gate passes server-side.
+    // ------------------------------------------------------------------
+    await seedAcceptanceForNewestRevision();
+    await page.reload();
+    const q2ValueAfterAccept = await quoteSelect
+      .locator('option', { hasText: 'Q2 ·' })
+      .first()
+      .getAttribute('value');
+    await quoteSelect.selectOption(q2ValueAfterAccept!);
+    await expect(page.getByTestId('exact-context-header')).toContainText('Q2');
+    await expect(page.getByTestId('exact-context-header')).toContainText('Aceptada');
     await page.getByTestId('design-revision-select').selectOption(seeded.r2Id);
     await expect(page.getByTestId('approval-pending')).toBeVisible();
     await page.getByTestId('approve-revision-btn').click();
@@ -410,6 +428,7 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId('open-release-review-btn')).toBeEnabled();
     await page.getByTestId('open-release-review-btn').click();
     const releaseModal = page.getByTestId('release-review-modal');
+    await expect(releaseModal).toContainText('base comercial exacta');
     await expect(releaseModal).toContainText('Q2');
     await expect(releaseModal).toContainText('R2');
     await page.getByTestId('submit-release').click();

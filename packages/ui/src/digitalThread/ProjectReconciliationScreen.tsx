@@ -188,7 +188,6 @@ export function ProjectReconciliationScreen({
 
   // Release flow state
   const [releaseOpen, setReleaseOpen] = useState(false);
-  const [releaseQuotePinned, setReleaseQuotePinned] = useState(true);
   const [releaseSubmitting, setReleaseSubmitting] = useState(false);
   const [releaseError, setReleaseError] = useState<CommandErrorView | null>(null);
   const [releasePreflightIssues, setReleasePreflightIssues] = useState<
@@ -401,7 +400,12 @@ export function ProjectReconciliationScreen({
     setApproveError(null);
     setApproveResult(null);
     try {
-      const revision = await api.approveDesignRevision(token, activeDesignId, designRevisionId);
+      // #502 production approval: pin the exact selected QuoteRevision so the
+      // server enforces the same authoritative commercial + preflight gates
+      // as the release command (typed 409 blockers on any violation).
+      const revision = await api.approveDesignRevision(token, activeDesignId, designRevisionId, {
+        quoteRevisionId: quoteRevisionId ?? undefined,
+      });
       await queryClient.invalidateQueries({ queryKey: queryKeys.designRevisions(activeDesignId) });
       setApproveResult({ revision });
     } catch (err) {
@@ -417,10 +421,11 @@ export function ProjectReconciliationScreen({
     setReleaseError(null);
     setReleasePreflightIssues([]);
     try {
+      // #502: the release always pins the exact selected commercial baseline
+      // (the panel/review only allow accepted quotes; the server re-verifies).
       const release = await api.createProductionRelease(token, projectId, {
         design_revision_id: designRevisionId,
-        quote_revision_id:
-          releaseQuotePinned && selectedQuoteRevision?.status === 'accepted' ? quoteRevisionId : null,
+        quote_revision_id: quoteRevisionId,
       });
       await queryClient.invalidateQueries({ queryKey: queryKeys.productionReleases });
       setReleaseResult({ release });
@@ -874,6 +879,9 @@ export function ProjectReconciliationScreen({
                   revisionStatus={selectedDesignRevision?.status ?? null}
                   approvedBy={selectedDesignRevision?.approved_by}
                   approvedAt={selectedDesignRevision?.approved_at}
+                  quoteAccepted={selectedQuoteRevision?.status === 'accepted'}
+                  quoteLabel={quoteLabel}
+                  preflightBlocked={preflight ? preflight.status === 'blocked' : null}
                   submitting={approveSubmitting}
                   error={approveError}
                   onApprove={() => void handleApprove()}
@@ -882,8 +890,7 @@ export function ProjectReconciliationScreen({
                   canRelease={canRelease}
                   revisionApproved={selectedDesignRevision?.status === 'approved'}
                   quoteAccepted={selectedQuoteRevision?.status === 'accepted'}
-                  quotePinned={releaseQuotePinned && selectedQuoteRevision?.status === 'accepted'}
-                  onToggleQuotePin={setReleaseQuotePinned}
+                  quoteLabel={quoteLabel}
                   preflightReady={preflight ? preflight.status === 'ready' : null}
                   submitting={releaseSubmitting}
                   error={releaseError}
@@ -965,7 +972,6 @@ export function ProjectReconciliationScreen({
         onClose={() => setReleaseOpen(false)}
         projectName={selectedDesign?.name ?? null}
         quoteLabel={quoteLabel}
-        quotePinned={releaseQuotePinned && selectedQuoteRevision?.status === 'accepted'}
         quoteStatusLabel={quoteStatusLabelOf(selectedQuoteRevision)}
         designRevisionLabel={revLabel}
         preflightStatus={

@@ -18,10 +18,17 @@ import (
 // from the request body (§32). The snapshot columns are untouched — the DB
 // trigger only ever accepts the published→approved lifecycle transition.
 
-// ApproveDesignRevisionCommand is the durable approval command.
+// ApproveDesignRevisionCommand is the durable approval command. When
+// QuoteRevisionID pins an exact commercial baseline (#502 production
+// approval), the server re-runs the SAME authoritative gate chain the
+// release command enforces — accepted baseline, reconciliation commercial
+// gate and manufacturing preflight over the exact pair — BEFORE the
+// transition; any blocker rejects with the typed domain error. The empty
+// form keeps the bare lifecycle transition for non-production flows.
 type ApproveDesignRevisionCommand struct {
 	DesignID         string
 	DesignRevisionID string
+	QuoteRevisionID  string
 	ActorUserID      string
 	IP               string
 	RequestID        string
@@ -33,6 +40,9 @@ type ApproveDesignRevisionCommand struct {
 // and is never rewritten. Any other status rejects the command.
 func (s *PostgresStore) ApproveDesignRevision(ctx context.Context, cmd ApproveDesignRevisionCommand) (*domain.DesignRevision, error) {
 	if !isValidUUID(cmd.DesignID) || !isValidUUID(cmd.DesignRevisionID) {
+		return nil, domain.ErrInvalidDesignCommand
+	}
+	if cmd.QuoteRevisionID != "" && !isValidUUID(cmd.QuoteRevisionID) {
 		return nil, domain.ErrInvalidDesignCommand
 	}
 	actor := nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx))
@@ -69,6 +79,17 @@ func (s *PostgresStore) ApproveDesignRevision(ctx context.Context, cmd ApproveDe
 	// 2. Domain transition validation (fail-closed on superseded).
 	if err := domain.ValidateDesignRevisionApproval(rev.Status); err != nil {
 		return nil, err
+	}
+
+	// 2b. #502 production approval gate: with an exact accepted quote pinned,
+	// the server enforces the SAME authoritative commercial + preflight
+	// verdicts the release command enforces — an approval can never bypass
+	// blocking state. Idempotent replays of an already-approved revision keep
+	// returning the current state (history is never rewritten).
+	if rev.Status == domain.DesignRevisionStatusPublished && cmd.QuoteRevisionID != "" {
+		if _, _, err := s.enforceProductionGates(txCtx, rev.OrganizationID, rev.ProjectID, cmd.QuoteRevisionID, cmd.DesignRevisionID); err != nil {
+			return nil, err
+		}
 	}
 
 	// 3. The single lifecycle mutation. The immutability trigger and the

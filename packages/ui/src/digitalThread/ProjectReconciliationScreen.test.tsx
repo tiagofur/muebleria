@@ -194,6 +194,9 @@ export const mockPreflightReady: ManufacturingPreflightResult = {
   designRevisionId: REV_1_ID,
   scope: 'production-release-v1',
   status: 'ready',
+  message: 'El preflight de fabricación valida todas las unidades de la revisión contra el catálogo: listo.',
+  includesDetail: true,
+  blockedItemCount: 0,
   items: [
     {
       furnitureInstanceId: FI_SYNCED,
@@ -209,6 +212,9 @@ const mockPreflightBlocked: ManufacturingPreflightResult = {
   designRevisionId: REV_1_ID,
   scope: 'production-release-v1',
   status: 'blocked',
+  message: 'El preflight de fabricación bloquea la revisión: 1 unidad con problemas de fabricación.',
+  includesDetail: true,
+  blockedItemCount: 1,
   items: [
     {
       furnitureInstanceId: FI_MODIFIED,
@@ -832,6 +838,84 @@ describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
     });
     expect(screen.getByTestId('open-release-review-btn')).toBeDisabled();
     expect(screen.getByTestId('release-hint')).toHaveTextContent('bloquea');
+  });
+
+  it('preflight renders the server summary projection without manufacturing detail for non-manufacturing roles', async () => {
+    setupFetchMock({
+      preflight: {
+        [REV_1_ID]: {
+          ...mockPreflightBlocked,
+          includesDetail: false,
+          items: [],
+          issues: [],
+        },
+        [REV_2_ID]: mockPreflightReady,
+      },
+    });
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('preflight-status')).toHaveTextContent('Bloqueado');
+    });
+    // Business-safe server message + count; NO manufacturing internals leak.
+    expect(screen.getByTestId('preflight-message')).toHaveTextContent(/bloquea la revisión/);
+    expect(screen.getByTestId('preflight-detail-restricted')).toHaveTextContent(/roles de fabricación/);
+    expect(screen.queryByTestId('preflight-issues')).toBeNull();
+    expect(screen.queryByText('invalid_parameters')).toBeNull();
+  });
+
+  it('approval shows the exact-quote gate context and blocks on a non-accepted baseline hint', async () => {
+    setupFetchMock({
+      quoteRevisions: [
+        { ...mockQuoteRevisions[0]!, status: 'draft' },
+        { ...mockQuoteRevisions[1]! },
+      ],
+    });
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('exact-context-header')).toHaveTextContent('R1');
+    });
+    await expect(screen.getByTestId('exact-context-header')).toHaveTextContent(/Borrador/);
+    await expect(screen.getByTestId('approval-quote-hint')).toBeVisible();
+    // The approve command still runs (server authority); the hint explains
+    // the typed rejection that is coming — no client-side eligibility
+    // invention.
+    await expect(screen.getByTestId('approval-pending')).toHaveTextContent(/Q1/);
+  });
+
+  it('approval is disabled when the authoritative preflight is blocked', async () => {
+    setupFetchMock({
+      preflight: { [REV_1_ID]: mockPreflightBlocked, [REV_2_ID]: mockPreflightReady },
+    });
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('preflight-status')).toHaveTextContent('Bloqueado');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('exact-context-header')).toHaveTextContent('R1');
+    });
+    expect(screen.getByTestId('approve-revision-btn')).toBeDisabled();
+    await expect(screen.getByTestId('approval-preflight-hint')).toBeVisible();
+  });
+
+  it('release requires an accepted commercial baseline (mandatory exact pin)', async () => {
+    setupFetchMock({
+      quoteRevisions: [
+        { ...mockQuoteRevisions[0]!, status: 'draft' },
+      ],
+    });
+    // R2 is already approved, but the selected quote is a draft: the release
+    // must stay unavailable with the exact-baseline reason.
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_2_ID } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('exact-context-header')).toHaveTextContent('R2');
+    });
+    expect(screen.getByTestId('open-release-review-btn')).toBeDisabled();
+    await expect(screen.getByTestId('release-quote-hint')).toBeVisible();
+    await expect(screen.getByTestId('release-quote-pin-note')).toHaveTextContent(/no aceptada/);
   });
 
   it('release history keeps historical pins visible with server staleness, never collapsing to latest', async () => {
