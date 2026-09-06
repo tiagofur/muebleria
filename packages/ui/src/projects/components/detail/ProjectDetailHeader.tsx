@@ -215,9 +215,9 @@ export function ProjectDetailHeader({
             className="btn btn--primary"
             onClick={() => onRequestStatus('accepted', confirmAcceptText)}
             data-testid="project-accept-quote"
-            title="Acepta y congela diseño y precios (confirmación)"
+            title="Acepta y congela la obra (flujo clásico)"
           >
-            <Check size={16} strokeWidth={1.5} aria-hidden /> Aceptar cotización
+            <Check size={16} strokeWidth={1.5} aria-hidden /> Aceptar obra (flujo clásico)
           </button>
         ) : null}
         {primary === 'open-production' && onOpenInProduction ? (

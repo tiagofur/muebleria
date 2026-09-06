@@ -2,8 +2,10 @@ import type { ReactNode } from 'react';
 import {
   CheckCircle2,
   Factory,
+  FileText,
   History,
   RefreshCw,
+  Send,
   ShieldCheck,
   TriangleAlert,
 } from 'lucide-react';
@@ -666,4 +668,210 @@ export function ReleaseReviewModal({
 
 export function quoteStatusLabelOf(quote: QuoteRevisionDetail | null | undefined): string {
   return quote ? (QUOTE_REVISION_STATUS_LABELS[quote.status] ?? quote.status) : '—';
+}
+
+export interface QuoteLifecyclePanelProps {
+  readonly quoteRevision: QuoteRevisionDetail | null;
+  readonly previousAcceptedRevision?: QuoteRevisionDetail | null;
+  readonly canMutateQuote: boolean;
+  readonly canAcceptQuote: boolean;
+  readonly publishing: boolean;
+  readonly accepting: boolean;
+  readonly publishError: CommandErrorView | null;
+  readonly acceptError: CommandErrorView | null;
+  readonly onPublish: () => void;
+  readonly onOpenAccept: () => void;
+}
+
+export function QuoteLifecyclePanel({
+  quoteRevision,
+  previousAcceptedRevision,
+  canMutateQuote,
+  canAcceptQuote,
+  publishing,
+  accepting,
+  publishError,
+  acceptError,
+  onPublish,
+  onOpenAccept,
+}: QuoteLifecyclePanelProps): ReactNode {
+  if (!quoteRevision) {
+    return (
+      <section className="pd-card pr-panel" data-testid="quote-lifecycle-panel" aria-labelledby="quote-lifecycle-title">
+        <div className="pd-card__header">
+          <div className="pd-card__title">
+            <FileText size={18} />
+            <h3 id="quote-lifecycle-title">Ciclo comercial (QuoteRevision)</h3>
+          </div>
+        </div>
+        <p className="pd-empty-hint">Seleccioná una cotización para gestionar su ciclo comercial.</p>
+      </section>
+    );
+  }
+
+  const isDraft = quoteRevision.status === 'draft';
+  const isPublished = quoteRevision.status === 'published';
+  const isAccepted = quoteRevision.status === 'accepted';
+  const isSuperseded = quoteRevision.status === 'superseded';
+
+  const statusLabel =
+    isDraft ? 'Borrador' : isPublished ? 'Publicada' : isAccepted ? 'Aceptada' : 'Reemplazada';
+
+  const statusBadgeClass =
+    isAccepted ? 'status-badge--done' : isPublished ? 'status-badge--open' : isDraft ? 'status-badge--warning' : 'status-badge--neutral';
+
+  return (
+    <section className="pd-card pr-panel" data-testid="quote-lifecycle-panel" aria-labelledby="quote-lifecycle-title">
+      <div className="pd-card__header">
+        <div className="pd-card__title">
+          <FileText size={18} />
+          <h3 id="quote-lifecycle-title">Ciclo comercial (Q{quoteRevision.revisionNumber})</h3>
+        </div>
+        <span className={`status-badge ${statusBadgeClass}`} data-testid="quote-lifecycle-status">
+          {isAccepted ? <CheckCircle2 size={14} /> : null}
+          {statusLabel}
+        </span>
+      </div>
+
+      {isDraft && (
+        <p className="pr-panel__hint" data-testid="quote-draft-hint">
+          Esta revisión es un borrador comercial. Para que pueda ser aceptada o utilizada como base comercial de producción, debe publicarse.
+        </p>
+      )}
+      {isPublished && (
+        <p className="pr-panel__hint" data-testid="quote-published-hint">
+          Revisión publicada. Podés aceptarla como la base comercial autoritativa de la obra.
+        </p>
+      )}
+      {isAccepted && (
+        <p className="pr-panel__hint" data-testid="quote-accepted-hint">
+          Esta revisión es la base comercial aceptada de la obra. Es inmutable y habilita la aprobación de producción.
+        </p>
+      )}
+      {isSuperseded && (
+        <p className="pr-panel__hint" data-testid="quote-superseded-hint">
+          Esta revisión fue reemplazada por una cotización posterior y se conserva en el historial inmutable.
+        </p>
+      )}
+
+      {previousAcceptedRevision && isPublished && (
+        <p className="pr-panel__why" data-testid="quote-will-supersede-hint">
+          Al aceptar Q{quoteRevision.revisionNumber}, la cotización actual aceptada (Q{previousAcceptedRevision.revisionNumber}) pasará a estar reemplazada (superseded) automáticamente.
+        </p>
+      )}
+
+      <CommandErrorAlert error={publishError || acceptError} />
+
+      {isDraft && (
+        <button
+          type="button"
+          className="btn btn-primary"
+          data-testid="publish-quote-btn"
+          disabled={publishing || !canMutateQuote}
+          onClick={onPublish}
+        >
+          {publishing ? <RefreshCw size={14} className="spin" /> : <Send size={14} />}
+          <span>{publishing ? 'Publicando…' : `Publicar Q${quoteRevision.revisionNumber}`}</span>
+        </button>
+      )}
+
+      {isPublished && (
+        <button
+          type="button"
+          className="btn btn-primary"
+          data-testid="accept-quote-btn"
+          disabled={accepting || !canAcceptQuote}
+          onClick={onOpenAccept}
+        >
+          {accepting ? <RefreshCw size={14} className="spin" /> : <CheckCircle2 size={14} />}
+          <span>{accepting ? 'Aceptando…' : `Aceptar Q${quoteRevision.revisionNumber}`}</span>
+        </button>
+      )}
+
+      {isDraft && !canMutateQuote && (
+        <p className="pr-panel__why" data-testid="quote-publish-forbidden-hint">
+          Tu rol no tiene permiso para publicar revisiones de cotización.
+        </p>
+      )}
+      {isPublished && !canAcceptQuote && (
+        <p className="pr-panel__why" data-testid="quote-accept-forbidden-hint">
+          Tu rol no tiene permiso para aceptar revisiones de cotización (requiere administración o gerencia de ventas).
+        </p>
+      )}
+    </section>
+  );
+}
+
+export interface AcceptQuoteModalProps {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly quoteRevision: QuoteRevisionDetail | null;
+  readonly previousAcceptedRevision?: QuoteRevisionDetail | null;
+  readonly submitting: boolean;
+  readonly error: CommandErrorView | null;
+  readonly onConfirm: () => void;
+}
+
+export function AcceptQuoteModal({
+  open,
+  onClose,
+  quoteRevision,
+  previousAcceptedRevision,
+  submitting,
+  error,
+  onConfirm,
+}: AcceptQuoteModalProps): ReactNode {
+  if (!open || !quoteRevision) return null;
+  const revNum = quoteRevision.revisionNumber;
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Aceptar cotización Q${revNum}`}
+    >
+      <div className="pr-modal-flow" data-testid="accept-quote-modal">
+        <p className="pr-panel__hint">
+          Al confirmar, <strong>Q{revNum}</strong> quedará fijada como la cotización comercial
+          aceptada de la obra.
+        </p>
+        {previousAcceptedRevision ? (
+          <div className="pd-alert pd-alert--warning" data-testid="accept-quote-supersede-warning">
+            <strong>Reemplazo atómico:</strong> La cotización actualmente aceptada (
+            <strong>Q{previousAcceptedRevision.revisionNumber}</strong>) pasará a estar
+            reemplazada (<em>superseded</em>) en el mismo acto transaccional y se conservará
+            en el historial inmutable.
+          </div>
+        ) : (
+          <div className="pd-alert pd-alert--info" data-testid="accept-quote-initial-info">
+            Esta será la primera cotización aceptada de la obra y definirá la base comercial para diseño y producción.
+          </div>
+        )}
+        <p className="pr-pin-note">
+          El diseño y las aprobaciones de producción posteriores usarán Q{revNum} como base comercial exacta.
+        </p>
+        <CommandErrorAlert error={error} />
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            data-testid="cancel-accept-quote-btn"
+            disabled={submitting}
+            onClick={onClose}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-testid="confirm-accept-quote-btn"
+            disabled={submitting}
+            onClick={onConfirm}
+          >
+            {submitting ? <RefreshCw size={14} className="spin" /> : <CheckCircle2 size={14} />}
+            <span>{submitting ? 'Aceptando…' : `Confirmar aceptación de Q${revNum}`}</span>
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
 }

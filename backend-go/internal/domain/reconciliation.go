@@ -47,7 +47,11 @@ var (
 	ErrMissingProjectID           = errors.New("missing project ID")
 	ErrQuoteRevisionNotFound      = errors.New("quote revision not found")
 	ErrQuoteRevisionConflict      = errors.New("quote revision conflict: base revision is stale or concurrent modification detected")
-	ErrInvalidRevisionSnapshot    = errors.New("invalid revision snapshot: corrupt or malformed payload")
+	// ErrQuoteRevisionInvalidTransition: the exact revision cannot move to the
+	// requested lifecycle state from its current one (#571). Distinct from
+	// ErrQuoteRevisionConflict (stale base / concurrent modification).
+	ErrQuoteRevisionInvalidTransition = errors.New("quote revision invalid transition")
+	ErrInvalidRevisionSnapshot        = errors.New("invalid revision snapshot: corrupt or malformed payload")
 )
 
 // QuoteRevision represents an immutable commercial revision snapshot entity.

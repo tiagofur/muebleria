@@ -291,6 +291,26 @@ func TestRoleCanApproveDesignRevisions(t *testing.T) {
 	}
 }
 
+func TestRoleCanAcceptQuoteRevisions(t *testing.T) {
+	t.Parallel()
+	for _, role := range []UserRole{RoleAdmin, RoleGerenteVentas} {
+		if !RoleCanAcceptQuoteRevisions(role) {
+			t.Errorf("%s must accept quote revisions", role)
+		}
+	}
+	for _, role := range []UserRole{RoleVendedor, RoleProduccion, RoleAlmacen, RoleUser, RoleGerenteProduccion, RoleIngeniero} {
+		if RoleCanAcceptQuoteRevisions(role) {
+			t.Errorf("%s must not accept quote revisions", role)
+		}
+	}
+	// The sales editor (vendedor) creates and publishes quote revisions but
+	// never accepts the commercial baseline — the same sign-off split as
+	// design approval (#571, digital-thread §16 quote:accept).
+	if !RoleCanMutateProjects(RoleVendedor) {
+		t.Errorf("vendedor keeps quote editing/publishing")
+	}
+}
+
 func TestRoleCanReleaseProduction(t *testing.T) {
 	t.Parallel()
 	for _, role := range []UserRole{RoleAdmin, RoleGerenteProduccion, RoleIngeniero} {

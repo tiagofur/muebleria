@@ -273,6 +273,9 @@ interface FetchMockOptions {
   requoteResponse?: () => Response;
   approveResponse?: () => Response;
   releaseResponse?: () => Response;
+  createInitialQuoteResponse?: () => Response;
+  publishQuoteResponse?: () => Response;
+  acceptQuoteResponse?: () => Response;
 }
 
 function apiError(status: number, code: string, message: string, details?: unknown): Response {
@@ -296,6 +299,8 @@ function setupFetchMock(options: FetchMockOptions = {}) {
     options.revisionsByDesign ?? { [DESIGN_1_ID]: [mockRevision1, mockRevision2], [DESIGN_2_ID]: [] };
   const reconciliation = options.reconciliation ?? {
     [`${QUOTE_1_ID}:${REV_1_ID}`]: mockReconciliation,
+    [`${QUOTE_2_ID}:${REV_1_ID}`]: mockReconciliation,
+    [`${QUOTE_2_ID}:${REV_2_ID}`]: mockReconciliation,
   };
   const preflight = options.preflight ?? { [REV_1_ID]: mockPreflightReady, [REV_2_ID]: mockPreflightReady };
   const releases = options.releases ?? mockReleases;
@@ -393,6 +398,49 @@ function setupFetchMock(options: FetchMockOptions = {}) {
       return json(created, 201);
     }
 
+    if (path === `/projects/${PROJECT_ID}/quote-revisions` && method === 'POST') {
+      if (options.createInitialQuoteResponse) return options.createInitialQuoteResponse();
+      const created = {
+        id: QUOTE_1_ID,
+        projectId: PROJECT_ID,
+        revisionNumber: 1,
+        status: 'draft',
+        sourceType: 'manual',
+        createdBy: '66666666-0000-4000-8000-000000000001',
+      };
+      return json(created, 201);
+    }
+
+    const publishQuoteRegex = /^\/projects\/([^/]+)\/quote-revisions\/([^/]+):publish$/;
+    const publishQuoteMatch = path.match(publishQuoteRegex);
+    if (publishQuoteMatch && method === 'POST') {
+      if (options.publishQuoteResponse) return options.publishQuoteResponse();
+      const revId = publishQuoteMatch[2]!;
+      return json({
+        id: revId,
+        projectId: PROJECT_ID,
+        revisionNumber: 1,
+        status: 'published',
+        sourceType: 'manual',
+        createdBy: '66666666-0000-4000-8000-000000000001',
+      });
+    }
+
+    const acceptQuoteRegex = /^\/projects\/([^/]+)\/quote-revisions\/([^/]+):accept$/;
+    const acceptQuoteMatch = path.match(acceptQuoteRegex);
+    if (acceptQuoteMatch && method === 'POST') {
+      if (options.acceptQuoteResponse) return options.acceptQuoteResponse();
+      const revId = acceptQuoteMatch[2]!;
+      return json({
+        id: revId,
+        projectId: PROJECT_ID,
+        revisionNumber: 2,
+        status: 'accepted',
+        sourceType: 'requote',
+        createdBy: '66666666-0000-4000-8000-000000000001',
+      });
+    }
+
     return apiError(404, 'NOT_FOUND', `Unhandled ${method} ${path}`);
   });
 
@@ -406,6 +454,8 @@ function renderScreen(props: {
   canRequote?: boolean;
   canApprove?: boolean;
   canRelease?: boolean;
+  canMutateQuote?: boolean;
+  canAcceptQuote?: boolean;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -424,6 +474,8 @@ function renderScreen(props: {
         canRequote={props.canRequote ?? true}
         canApprove={props.canApprove ?? true}
         canRelease={props.canRelease ?? true}
+        canMutateQuote={props.canMutateQuote ?? true}
+        canAcceptQuote={props.canAcceptQuote ?? true}
       />
     </QueryClientProvider>,
   );
@@ -1040,5 +1092,129 @@ describe('reconciliationWorkspace pure model (#502)', () => {
       'step-up',
     );
     expect(describeCommandError(new TypeError('fetch failed')).kind).toBe('network');
+  });
+});
+
+describe('Quote revision lifecycle UI (#571 / WEB-DT-4)', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'open').mockImplementation(() => null);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('renders create-initial-quote-btn when project has no quote revisions and creates Q1', async () => {
+    const fetchMock = setupFetchMock({ quoteRevisions: [] });
+    renderScreen({ canMutateQuote: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-initial-quote-btn')).toBeVisible();
+    });
+    expect(screen.getByText('Esta obra no tiene revisiones de cotización todavía.')).toBeVisible();
+
+    await userEvent.click(screen.getByTestId('create-initial-quote-btn'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/projects/${PROJECT_ID}/quote-revisions`),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
+  it('disables create-initial-quote-btn with permission hint when canMutateQuote is false', async () => {
+    setupFetchMock({ quoteRevisions: [] });
+    renderScreen({ canMutateQuote: false });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-initial-quote-btn')).toBeDisabled();
+    });
+    expect(screen.getByTestId('create-quote-permission-hint')).toBeVisible();
+  });
+
+  it('renders QuoteLifecyclePanel with publish button for draft revision and publishes it', async () => {
+    const draftQuote: QuoteRevisionDetail = {
+      ...mockQuoteRevisions[1]!,
+      revisionNumber: 2,
+      status: 'draft',
+    };
+    const fetchMock = setupFetchMock({ quoteRevisions: [mockQuoteRevisions[0]!, draftQuote] });
+    renderScreen({
+      initialContext: { quoteRevisionId: draftQuote.id, designId: DESIGN_1_ID, designRevisionId: REV_1_ID },
+      canMutateQuote: true,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('quote-lifecycle-panel')).toBeVisible();
+    });
+    expect(screen.getByTestId('quote-draft-hint')).toBeVisible();
+    expect(screen.getByTestId('publish-quote-btn')).toBeEnabled();
+
+    await userEvent.click(screen.getByTestId('publish-quote-btn'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/projects/${PROJECT_ID}/quote-revisions/${draftQuote.id}:publish`),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
+  it('renders accept button for published revision, opens confirmation modal, and accepts', async () => {
+    const publishedQuote: QuoteRevisionDetail = {
+      ...mockQuoteRevisions[1]!,
+      revisionNumber: 2,
+      status: 'published',
+    };
+    const fetchMock = setupFetchMock({ quoteRevisions: [mockQuoteRevisions[0]!, publishedQuote] });
+    renderScreen({
+      initialContext: { quoteRevisionId: publishedQuote.id, designId: DESIGN_1_ID, designRevisionId: REV_1_ID },
+      canAcceptQuote: true,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('quote-lifecycle-panel')).toBeVisible();
+    });
+    expect(screen.getByTestId('quote-published-hint')).toBeVisible();
+    expect(screen.getByTestId('accept-quote-btn')).toBeEnabled();
+
+    // Open confirmation modal
+    await userEvent.click(screen.getByTestId('accept-quote-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('accept-quote-modal')).toBeVisible();
+    });
+    expect(screen.getByTestId('accept-quote-supersede-warning')).toHaveTextContent('Q1');
+
+    // Confirm acceptance
+    await userEvent.click(screen.getByTestId('confirm-accept-quote-btn'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/projects/${PROJECT_ID}/quote-revisions/${publishedQuote.id}:accept`),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
+  it('shows permission hint when role cannot accept quote revisions', async () => {
+    const publishedQuote: QuoteRevisionDetail = {
+      ...mockQuoteRevisions[1]!,
+      revisionNumber: 2,
+      status: 'published',
+    };
+    setupFetchMock({ quoteRevisions: [mockQuoteRevisions[0]!, publishedQuote] });
+    renderScreen({
+      initialContext: { quoteRevisionId: publishedQuote.id, designId: DESIGN_1_ID, designRevisionId: REV_1_ID },
+      canAcceptQuote: false,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('accept-quote-btn')).toBeDisabled();
+    });
+    expect(screen.getByTestId('quote-accept-forbidden-hint')).toBeVisible();
   });
 });

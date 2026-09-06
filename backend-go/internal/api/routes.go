@@ -432,6 +432,21 @@ func RegisterRoutes(server *Server) http.Handler {
 	// commercial items) that powers the exact commercial context selector of
 	// the Project Furniture matrix. Read-only.
 	mux.Handle("GET /api/projects/{projectId}/quote-revisions", authMW(http.HandlerFunc(server.HandleProjectQuoteRevisions)))
+	// #571 / WEB-DT-4: commercial QuoteRevision lifecycle. The canonical Q1
+	// entry converts the project's editable commercial state into the first
+	// immutable draft revision — the server builds the whole snapshot
+	// (materialization convergence included), the client sends no commercial
+	// payload. Q1-only by contract: subsequent revisions come from requote.
+	mux.Handle("POST /api/projects/{projectId}/quote-revisions", noStoreMiddleware(authMW(server.RequireIdempotency("quote.create-revision", http.HandlerFunc(server.HandleCreateInitialQuoteRevision)))))
+	// #571 / WEB-DT-4: explicit lifecycle commands on an EXACT revision —
+	// publish (draft→published) and accept (published→accepted, atomically
+	// superseding the previously accepted revision of the project in the same
+	// transaction). Exact IDs only; never "latest". Each command carries its
+	// own idempotency scope so a retry replays the same transition.
+	mux.Handle("POST /api/projects/{projectId}/quote-revisions/{quoteRevisionCommand...}", noStoreMiddleware(authMW(quoteRevisionCommandRouter(map[string]http.Handler{
+		"publish": server.RequireIdempotency("quote.publish-revision", http.HandlerFunc(server.HandleQuoteRevisionPublish)),
+		"accept":  server.RequireIdempotency("quote.accept-revision", http.HandlerFunc(server.HandleQuoteRevisionAccept)),
+	}))))
 	// #500 / WEB-DT-1: authoritative contextual projection of the Project
 	// Furniture matrix (placed/pending, commercial grouping provenance,
 	// server actions and exact contextual release). Read-only.

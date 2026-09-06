@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { Client } from 'pg';
 import { GATE_MODULE_A_ID, required } from './support/api';
 
 /**
@@ -10,21 +9,15 @@ import { GATE_MODULE_A_ID, required } from './support/api';
  * approval, authoritative preflight, exact ProductionRelease and release
  * durability after R2 exists.
  *
- * Demo-fixture note: the backend exposes no HTTP route today to create or
- * accept the FIRST QuoteRevision (only requote creates subsequent ones, and
- * quote acceptance has no API handler yet). The accepted baseline Q1 is
- * therefore seeded directly against the real PostgreSQL via the migration
- * role — the exact same fixture convention as the authoritative Go suite
- * (`digital_thread_e2e_test.go` seeds via the admin connection). No API is
- * mocked: every read, command and assertion below hits the real backend.
+ * #571 / WEB-DT-4: complete server-authoritative QuoteRevision commercial
+ * lifecycle executed through supported Web UI and APIs — creating Q1 draft,
+ * publishing Q1, accepting Q1, requoting Q2, publishing Q2, and accepting Q2
+ * (with atomic supersede of Q1) WITHOUT direct SQL mutations or fixture bypass.
  */
 
 const PROJECT_ID = '77777777-3333-4777-8777-333333333333';
 const QUOTE_LINE_ID = '88888888-3333-4888-8888-333333333333';
 const CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000003';
-const Q1_ID = '99999999-3333-4999-9999-333333333331';
-
-const PARAMS_BASE = JSON.stringify({ widthMm: 600, heightMm: 720 });
 
 interface SeededReconciliation {
   readonly projectId: string;
@@ -34,43 +27,9 @@ interface SeededReconciliation {
   r3Id: string;
   readonly instanceIds: readonly [string, string, string];
   readonly designFirstInstanceId: string;
-  readonly q1Id: string;
-  readonly orgId: string;
-}
-
-async function seedAcceptedQuoteRevision(seed: {
-  orgId: string;
   q1Id: string;
-  instanceIds: readonly string[];
-}): Promise<void> {
-  // Fixture preparation via the migration (superuser) connection, mirroring
-  // the Go storage suite's admin seeding. The immutability trigger allows
-  // the accepted status directly on INSERT (lifecycle transitions are only
-  // validated on UPDATE); RLS is enforced for the app role, not the
-  // migration role.
-  const client = new Client({ connectionString: required('MIGRATION_DATABASE_URL') });
-  await client.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, source_type, notes, created_by)
-       VALUES ($1, $2, $3, 1, 'accepted', 'manual', 'Q1 aceptada (fixture E2E #502)', NULL)`,
-      [seed.q1Id, seed.orgId, PROJECT_ID],
-    );
-    for (const instanceId of seed.instanceIds) {
-      await client.query(
-        `INSERT INTO quote_revision_items (organization_id, project_id, quote_revision_id, furniture_instance_id, furniture_definition_id, parameters, material_choices, lifecycle_status)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, '{}'::jsonb, 'active')`,
-        [seed.orgId, PROJECT_ID, seed.q1Id, instanceId, GATE_MODULE_A_ID, PARAMS_BASE],
-      );
-    }
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => undefined);
-    throw err;
-  } finally {
-    await client.end();
-  }
+  readonly orgId: string;
+  readonly depthMm: number;
 }
 
 async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
@@ -87,8 +46,20 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
     getAccessToken: () => aOwner.token,
   });
   const catalog = await repository.getCatalog();
+  const template = catalog.modules.find((m) => m.id === GATE_MODULE_A_ID) ?? catalog.modules[0]!;
+  const depthMm = template.depthMm || 590;
   await repository.saveCatalog({
     ...catalog,
+    modules: [
+      {
+        ...template,
+        id: GATE_MODULE_A_ID,
+        externalDims: { width: 600, height: 720, depth: depthMm },
+        widthMm: 600,
+        heightMm: 720,
+        depthMm,
+      },
+    ],
     customers: [
       {
         id: CUSTOMER_ID,
@@ -142,16 +113,8 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
     'gate-pr-create-design-first',
   );
 
-  // 3. Accepted baseline Q1 (direct fixture seeding, see note above).
-  const orgClient = new Client({ connectionString: required('MIGRATION_DATABASE_URL') });
-  await orgClient.connect();
-  const orgResult = await orgClient.query<{ id: string }>(
-    'SELECT id FROM organizations WHERE slug = $1',
-    [required('ORGANIZATION_GATE_ORG_A_SLUG')],
-  );
-  const orgId = orgResult.rows[0]!.id;
-  await orgClient.end();
-  await seedAcceptedQuoteRevision({ orgId, q1Id: Q1_ID, instanceIds });
+  // 3. Organization context (from authenticated session, no direct DB lookup)
+  const orgId = aOwner.organization.id;
 
   // 4. Design + working copy: FI-A synced (600), FI-B modified (650),
   // design-first unit added (700). FI-C deliberately not modeled.
@@ -163,9 +126,9 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
   );
   await client.updateDesignWorkingCopy(aOwner.token, design.id, {
     items: [
-      { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600, heightMm: 720 }, material_choices: {} },
-      { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 650, heightMm: 720 }, material_choices: {} },
-      { furniture_instance_id: designFirst.id, furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 700, heightMm: 720 }, material_choices: {} },
+      { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600, heightMm: 720, depthMm }, material_choices: {} },
+      { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 650, heightMm: 720, depthMm }, material_choices: {} },
+      { furniture_instance_id: designFirst.id, furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 700, heightMm: 720, depthMm }, material_choices: {} },
     ],
   });
   const r1 = await client.publishDesignRevision(
@@ -183,8 +146,9 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
     r3Id: '',
     instanceIds,
     designFirstInstanceId: designFirst.id,
-    q1Id: Q1_ID,
+    q1Id: '',
     orgId,
+    depthMm,
   };
 }
 
@@ -233,13 +197,13 @@ async function publishRevisionWithItemIds(options: {
       ? {
           furniture_instance_id: seeded.designFirstInstanceId,
           furniture_definition_id: GATE_MODULE_A_ID,
-          parameters: { widthMm: 700, heightMm: 720 },
+          parameters: { widthMm: 700, heightMm: 720, depthMm: seeded.depthMm },
           material_choices: {},
         }
       : {
           furniture_instance_id: seeded.instanceIds[selector]!,
           furniture_definition_id: GATE_MODULE_A_ID,
-          parameters: { widthMm: widthOf(selector), heightMm: 720 },
+          parameters: { widthMm: widthOf(selector), heightMm: 720, depthMm: seeded.depthMm },
           material_choices: {},
         };
   await client.updateDesignWorkingCopy(
@@ -262,20 +226,53 @@ async function publishRevisionWithItemIds(options: {
     test.setTimeout(120_000);
 
     // ------------------------------------------------------------------
-    // 1. Open the pinned reconciliation context Q1/R1.
+    // 1. Initial State: Open reconciliation workspace for the project.
+    //    No quote revisions exist yet. The workspace offers the explicit
+    //    "Crear revisión de cotización (Q1)" action.
     // ------------------------------------------------------------------
     await loginToA(page);
-    await page.goto(
-      `/quotes/${seeded.projectId}/reconciliacion?qrev=${seeded.q1Id}&design=${seeded.designId}&rev=${seeded.r1Id}`,
-    );
+    await page.goto(`/quotes/${seeded.projectId}/reconciliacion`);
 
     const workspace = page.getByTestId('project-reconciliation-workspace');
     await expect(workspace).toBeVisible();
+    await expect(page.getByTestId('create-initial-quote-btn')).toBeVisible();
 
-    // Exact header pins the selected revisions (never "current").
+    // ------------------------------------------------------------------
+    // 1b. Create, publish and accept Q1 through supported UI/API (no SQL).
+    // ------------------------------------------------------------------
+    await page.getByTestId('create-initial-quote-btn').click();
+    await expect(page.getByTestId('quote-lifecycle-panel')).toBeVisible();
+    await expect(page.getByTestId('quote-draft-hint')).toBeVisible();
+
+    const quoteSelect = page.getByTestId('quote-revision-select');
+    await expect(quoteSelect.locator('option')).toHaveCount(1);
+    const q1OptionValue = await quoteSelect.locator('option').first().getAttribute('value');
+    expect(q1OptionValue).toBeTruthy();
+    seeded.q1Id = q1OptionValue!;
+
+    // Header shows Q1 Draft
     const header = page.getByTestId('exact-context-header');
     await expect(header).toContainText('Q1');
+    await expect(header).toContainText('Borrador');
+
+    // Publish Q1
+    await expect(page.getByTestId('publish-quote-btn')).toBeEnabled();
+    await page.getByTestId('publish-quote-btn').click();
+    await expect(page.getByTestId('quote-lifecycle-success')).toContainText('Revisión Q1 publicada');
+    await expect(header).toContainText('Publicada');
+
+    // Accept Q1
+    await expect(page.getByTestId('accept-quote-btn')).toBeEnabled();
+    await page.getByTestId('accept-quote-btn').click();
+    const acceptModal = page.getByTestId('accept-quote-modal');
+    await expect(acceptModal).toBeVisible();
+    await page.getByTestId('confirm-accept-quote-btn').click();
+    await expect(page.getByTestId('quote-lifecycle-success')).toContainText('Revisión Q1 aceptada');
     await expect(header).toContainText('Aceptada');
+
+    // Select R1
+    await page.getByTestId('design-select').selectOption(seeded.designId);
+    await page.getByTestId('design-revision-select').selectOption(seeded.r1Id);
     await expect(header).toContainText('R1');
 
     // Backend classification, rendered verbatim: 1 synced, 1 modified
@@ -326,7 +323,6 @@ async function publishRevisionWithItemIds(options: {
     await expect(page).not.toHaveURL(new RegExp(`qrev=${seeded.q1Id}`));
 
     // Q1 remains in the revision list, untouched (server-owned status).
-    const quoteSelect = page.getByTestId('quote-revision-select');
     await expect(quoteSelect.locator('option')).toHaveCount(2);
     await expect(quoteSelect).toContainText('Q1');
 
@@ -357,8 +353,52 @@ async function publishRevisionWithItemIds(options: {
     // ------------------------------------------------------------------
     // 5. Q2 stays DRAFT at this point on purpose: step 6b proves the
     //    production-approval gate rejects a non-accepted baseline before
-    //    the fixture accepts it (no HTTP accept surface exists yet —
-    //    documented demo limitation).
+    //    the fixture accepts it.
+    // 5b. Lifecycle negative proofs through the generated client: a DRAFT
+    //     revision cannot be accepted directly (typed 409, no mutation) and
+    //     a revision reached through another project's path is a uniform 404
+    //     (no existence oracle, no data leak).
+    // ------------------------------------------------------------------
+    const q2DraftValue = await quoteSelect
+      .locator('option', { hasText: 'Q2 ·' })
+      .first()
+      .getAttribute('value');
+    expect(q2DraftValue).toBeTruthy();
+    const lifecycleClient = new GraneteApiClient(required('ORGANIZATION_API_BASE'));
+    const lifecycleOwner = await lifecycleClient.login({
+      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
+    });
+    let draftAcceptRejected = false;
+    try {
+      await lifecycleClient.acceptProjectQuoteRevision(
+        lifecycleOwner.token,
+        seeded.projectId,
+        q2DraftValue!,
+        'gate-pr-accept-draft-negative',
+      );
+    } catch (err) {
+      draftAcceptRejected = (err as { status?: number }).status === 409;
+    }
+    expect(draftAcceptRejected).toBe(true);
+
+    let foreignProjectAcceptRejected = false;
+    try {
+      await lifecycleClient.acceptProjectQuoteRevision(
+        lifecycleOwner.token,
+        '99999999-9999-4999-9999-999999999999',
+        q2DraftValue!,
+        'gate-pr-accept-foreign-negative',
+      );
+    } catch (err) {
+      foreignProjectAcceptRejected = (err as { status?: number }).status === 404;
+    }
+    expect(foreignProjectAcceptRejected).toBe(true);
+    // The failed commands mutated nothing: the Q2 option still reads Draft
+    // (the workspace may legitimately be displaying Q1 after step 4).
+    await expect(quoteSelect.locator('option', { hasText: 'Q2 ·' })).toContainText('Borrador');
 
     // ------------------------------------------------------------------
     // 6. Complete the modeling: publish R2 with FI-C modeled too (qty>1
@@ -404,18 +444,48 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId('approval-success')).toHaveCount(0);
 
     // ------------------------------------------------------------------
-    // 7. Accept Q2 + supersede Q1 (fixture), then approve the exact R2 with
-    //    the accepted baseline pinned — the gate passes server-side.
+    // 7. Commercial lifecycle: publish and accept Q2 through Web action,
+    //    atomically superseding Q1 server-side in one transaction (no SQL!).
     // ------------------------------------------------------------------
-    await seedAcceptanceForNewestRevision();
-    await page.reload();
-    const q2ValueAfterAccept = await quoteSelect
-      .locator('option', { hasText: 'Q2 ·' })
-      .first()
-      .getAttribute('value');
-    await quoteSelect.selectOption(q2ValueAfterAccept!);
+    await expect(page.getByTestId('quote-lifecycle-panel')).toBeVisible();
+    await expect(page.getByTestId('publish-quote-btn')).toBeEnabled();
+    await page.getByTestId('publish-quote-btn').click();
+    await expect(page.getByTestId('quote-lifecycle-success')).toContainText('Revisión Q2 publicada');
+    await expect(page.getByTestId('exact-context-header')).toContainText('Publicada');
+
+    // Accept Q2: opens confirmation modal warning that Q1 will be superseded
+    await expect(page.getByTestId('accept-quote-btn')).toBeEnabled();
+    await page.getByTestId('accept-quote-btn').click();
+    const acceptQ2Modal = page.getByTestId('accept-quote-modal');
+    await expect(acceptQ2Modal).toBeVisible();
+    await expect(page.getByTestId('accept-quote-supersede-warning')).toContainText('Q1');
+    await page.getByTestId('confirm-accept-quote-btn').click();
+
+    await expect(page.getByTestId('quote-lifecycle-success')).toContainText('Revisión Q2 aceptada');
     await expect(page.getByTestId('exact-context-header')).toContainText('Q2');
     await expect(page.getByTestId('exact-context-header')).toContainText('Aceptada');
+
+    // Verify Q1 in the select is now marked Superseded
+    await expect(quoteSelect.locator('option', { hasText: 'Q1' })).toContainText('Reemplazada');
+
+    // 7b. Double-accept negative: a retry with a NEW idempotency key hits
+    //     the typed same-status conflict — never a second transition and
+    //     never a second accepted revision (the HTTP receipt already covers
+    //     same-key idempotent replay).
+    let doubleAcceptRejected = false;
+    try {
+      await lifecycleClient.acceptProjectQuoteRevision(
+        lifecycleOwner.token,
+        seeded.projectId,
+        q2DraftValue!,
+        'gate-pr-accept-double-negative',
+      );
+    } catch (err) {
+      doubleAcceptRejected = (err as { status?: number }).status === 409;
+    }
+    expect(doubleAcceptRejected).toBe(true);
+
+    // Now approve exact R2 against accepted Q2:
     await page.getByTestId('design-revision-select').selectOption(seeded.r2Id);
     await expect(page.getByTestId('approval-pending')).toBeVisible();
     await page.getByTestId('approve-revision-btn').click();
@@ -535,36 +605,3 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId('release-history-table')).toHaveCount(0);
   });
 });
-
-
-/**
- * Demo-fixture helper: transitions the requote-created Q2 draft to accepted
- * through the same direct-DB fixture path (the commercial accept workflow
- * has no HTTP surface yet — documented as a #502 demo limitation, not a
- * commercial feature built here).
- */
-async function seedAcceptanceForNewestRevision(): Promise<void> {
-  const client = new Client({ connectionString: required('MIGRATION_DATABASE_URL') });
-  await client.connect();
-  try {
-    // Valid lifecycle through the trigger: draft → published → accepted,
-    // and the superseded baseline accepted → superseded (history kept).
-    await client.query(
-      `UPDATE quote_revisions SET status = 'published'
-       WHERE project_id = $1 AND revision_number = 2 AND status = 'draft'`,
-      [PROJECT_ID],
-    );
-    await client.query(
-      `UPDATE quote_revisions SET status = 'accepted'
-       WHERE project_id = $1 AND revision_number = 2 AND status = 'published'`,
-      [PROJECT_ID],
-    );
-    await client.query(
-      `UPDATE quote_revisions SET status = 'superseded'
-       WHERE project_id = $1 AND revision_number = 1 AND status = 'accepted'`,
-      [PROJECT_ID],
-    );
-  } finally {
-    await client.end();
-  }
-}

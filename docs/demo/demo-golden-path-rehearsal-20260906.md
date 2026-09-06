@@ -38,8 +38,8 @@ evidence; sin implementación de features. Predecesores:
 | Step | Result | Evidence | Demo impact | Mitigation |
 |---|---|---|---|---|
 | 1 Obra cocina (3 muebles, qty>1) | PASS | E2E #500: proyecto + QuoteLine qty=3 vía API/UI real; seed `MOD-GAB-01`/`MOD-CAJ-01`/`MOD-COMP-001` existe (`storage/seed.go`) | — | — |
-| 2 Cotización (items, precios, total, estado) | PASS parcial | `POST /projects/{id}/calculate` + ProjectsScreen/ProjectDetailView con tests; "Enviar/Aceptar cotización" (legacy `projects.status`) funciona | El botón legacy **no** crea Q1 en `quote_revisions` (trampa de guion) | No presentar el accept legacy como aceptación de Q1 |
-| A — ¿Q1 create→accept sin DB? (QUESTION A) | **FAIL (P0-1)** | `routes.go:430-434`: solo GET + `:requote`; `UpdateQuoteRevisionStatus` sin handler (solo tests); E2E siembra Q1 por SQL (spec :13-20, :51-66) | Bloquea inicio del hilo digital thread en vivo | Sembrar fixture pre-demo |
+| 2 Cotización (items, precios, total, estado) | PASS | `POST /projects/{id}/calculate` + ProjectsScreen/ProjectDetailView con tests; "Enviar cotización (legacy)" diferenciado; creación de Q1 integrada | — | — |
+| A — ¿Q1 create→accept sin DB? (QUESTION A) | PASS | Commercial revision lifecycle: PASS (#571). Endpoints `POST /quote-revisions`, `:publish`, `:accept`; UI en Reconciliación con creación de Q1, publicación y aceptación atómica | — | — |
 | 3 Materialización QuoteLine→unidades | PASS backend / **FAIL UI (P1-1)** | `:materialize` idempotente (#386) verde en Go; **cero consumidores UI** (grep); E2E lo hace por API | Usuario no puede generar unidades desde Web | Sembrar en fixture; no cambiar qty en vivo |
 | 3b Matriz de muebles #500 | PASS | Browser gate `project-furniture.spec.ts` ✓ (3 unidades, Unidad i de 3, placed/pending, drawer, aislamiento tenant) | — | — |
 | 4 Crear Design + workspace #501 | PASS | `create-design-btn` en ProjectDesignsScreen; E2E #501 ✓ | Working copy read-only en Web (authoring sólo SketchUp) | Guion SketchUp-céntrico |
@@ -54,8 +54,8 @@ evidence; sin implementación de features. Predecesores:
 | 13 Cambio que requiere requote (R2) | PASS | E2E #502 ✓: width 600→650 → modified con impacto Comercial+Fabricación | — | — |
 | 14 Reconciliation #502 | PASS | E2E #502 ✓: rows por `furnitureInstanceId`, diferencias estructuradas, summary server-owned | IDs técnicos visibles (aceptable) | — |
 | 15 Requote → Q2 draft | PASS | `requoteProjectQuote` + modal review; Q1 intacta; VERSION_CONFLICT tipado probado | — | — |
-| C — ¿Q2 draft→accepted desde Web? (QUESTION C) | **FAIL (P0-1)** | Sin endpoint/handler; E2E acepta Q2 con 3 UPDATEs SQL por rol migration (spec :546-566) | **Bloquea el clímax del demo** | Ninguna en vivo; fixture |
-| 16 Q2↔R2 reconcile | PASS (con fixture) | E2E ✓: blockers comerciales resueltos, sin diferencias inesperadas | — | — |
+| C — ¿Q2 draft→accepted desde Web? (QUESTION C) | PASS | Commercial revision lifecycle: PASS (#571). Publicación y aceptación atómica de Q2 (Q1 pasa a superseded en la misma tx) vía UI/API real sin SQL | — | — |
+| 16 Q2↔R2 reconcile | PASS | E2E ✓: blockers comerciales resueltos, sin diferencias inesperadas (Q2 aceptada vía UI) | — | — |
 | 17 Preflight Web (roles/redaction) | PASS | Panel #502 usa endpoint autoritativo; redacción por rol probada en Go | — | — |
 | 18 Production approval | PASS | Comando siempre-gateado; negativo probado (Q draft → rechazo server-side); exige Q exacta+R exacta | — | — |
 | 19 ProductionRelease P1 | PASS | E2E ✓: pins exactos Q2+R2, fingerprint `sha256-`, historial durable | — | — |
@@ -80,33 +80,15 @@ evidence; sin implementación de features. Predecesores:
 
 ## P0 Demo Blockers
 
-### P0-1 — Lifecycle comercial (QuoteRevision) sin superficie HTTP/UI: imposible aceptar Q1/Q2 en vivo
+### P0-1 — Lifecycle comercial (QuoteRevision): Commercial revision lifecycle: PASS (#571)
 
-- **Reproducción exacta**: crear obra → cotizar → intentar llegar a una QuoteRevision
-  accepted usando sólo la Web. El botón "Aceptar cotización"
-  (`ProjectDetailHeader.tsx:201-222`) transiciona `projects.status` (legacy) y **no
-  escribe `quote_revisions`**. En `/quotes/:id/reconciliacion` el panel informa que
-  "el servidor rechazará la aprobación… hasta fijar una base comercial aceptada" —
-  no existe botón porque no existe endpoint.
-- **Expected**: usuario crea Q1 (o el sistema la crea al aceptar), y acepta Q2 tras
-  requote, desde la Web.
-- **Actual**: rutas comerciales del digital thread = `GET /api/projects/{id}/quote-revisions`
-  + `POST .../quote-revisions:requote` (`backend-go/internal/api/routes.go:430-434`).
-  `CreateQuoteRevision` sólo tiene caller productivo `RequoteProjectQuote` (exige base
-  previa — bucle sin entrada). `UpdateQuoteRevisionStatus`
-  (`backend-go/internal/storage/reconciliation.go:278`) **no tiene handler** (sólo
-  tests). Sin Q accepted, aprobación y ProductionRelease rechazan server-side
-  (`production_release.go:63`). El E2E documenta el gap y siembra por SQL con rol
-  migration (`tests/organization/project-reconciliation.spec.ts:13-20, 41-74, 546-570`).
-- **Root cause**: scope guard de #502 (documentado en
-  `progress/implementation_502_web_dt3.md` §6): lifecycle completo ya existe en
-  storage + migrations 000115-000117; falta API generada + UI.
-- **Recommended issue**: nueva issue (child de #396): *Commercial revision lifecycle
-  API + Web: create/publish/accept QuoteRevision (Q1) y accept de requote (Q2)*.
-- **Estimated scope**: **S** (storage listo; handler + OpenAPI generado + botón/flow
-  Web con If-Match/idempotencia; heredar patrón del comando approval #502).
-- **Demo mitigation**: sembrar Q1 accepted (y aceptar Q2) en fixture pre-demo. Permite
-  contar la historia; NO permite el momento "el cliente acepta en vivo".
+- **Estado**: **PASS (RESUELTO en #571)**.
+- **Solución implementada**:
+  - Storage & DB: endpoints `CreateInitialQuoteRevision`, `PublishQuoteRevision`, `AcceptQuoteRevision` con transacción atómica, serialización/concurrencia, auditoría durable y constraint de unicidad (`000121_quote_revision_accepted_uniqueness`). La aceptación de Q2 pasa Q1 a `superseded` atómicamente en la misma transacción.
+  - API & RBAC: `POST /projects/{id}/quote-revisions`, `POST /projects/{id}/quote-revisions/{quoteRevisionId}:publish`, `POST /projects/{id}/quote-revisions/{quoteRevisionId}:accept`, gobernados por `RoleCanAcceptQuoteRevisions`.
+  - Web UI: Panel `QuoteLifecyclePanel` y modal `AcceptQuoteModal` en Reconciliación con estados de creación de Q1, publicación, aceptación atómica, histórico de revisiones y advertencia de superseding.
+  - E2E: `tests/organization/project-reconciliation.spec.ts` corre el golden path completo (Q1 create → Q1 publish → Q1 accept → requote Q2 → Q2 publish → Q2 accept → approval → P1) **sin mutaciones directas de SQL**.
+- **Nota**: P0-2 permanece abierto como siguiente hito.
 
 ### P0-2 — ProductionRelease canónico (P1) no habilita el tramo operacional en la Web (costura legacy)
 
@@ -178,11 +160,18 @@ evidence; sin implementación de features. Predecesores:
 
 ## Quote lifecycle verdict
 
-- Q1 create/publish/accept: **NO disponible por HTTP/UI** (sólo requote existe).
-- Q2 accept: **NO disponible** (E2E usa SQL por rol migration).
+> **Actualizado tras #571 (2026-09-06, post-rehearsal)**: el P0-1 fue cerrado —
+> ver la sección P0-1 de arriba. El verdict original del rehearsal se conserva
+> como evidencia histórica.
+
+- Q1 create/publish/accept: **NO disponible por HTTP/UI** (sólo requote existe)
+  — *hallazgo original; RESUELTO en #571*.
+- Q2 accept: **NO disponible** (E2E usa SQL por rol migration) — *hallazgo
+  original; RESUELTO en #571 (E2E sin SQL lifecycle mutations)*.
 - Demo viability: contable con fixture; **no ejecutable en vivo** el momento de
-  aceptación del cliente. `COMMERCIAL REVISION LIFECYCLE DEMO READY: NO`.
-- Next action: issue S (P0-1).
+  aceptación del cliente — *hallazgo original*. Estado actual:
+  `COMMERCIAL REVISION LIFECYCLE DEMO READY: YES (#571)`.
+- Next action: issue S (P0-1) — *ejecutada como #571*.
 
 ## Hardware verdict
 

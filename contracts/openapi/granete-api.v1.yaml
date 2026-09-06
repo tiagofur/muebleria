@@ -2757,6 +2757,59 @@
             "$ref": "#/components/responses/ApiError"
           }
         }
+      },
+      "post": {
+        "operationId": "createInitialProjectQuoteRevision",
+        "summary": "Create the initial (Q1) QuoteRevision from the project's editable commercial state (#571 / WEB-DT-4)",
+        "description": "Canonical entry of the commercial Digital Thread: converts the project's current EDITABLE commercial state (quote lines + their materialized physical units) into the FIRST immutable draft revision. The server builds the whole snapshot authoritatively — the client sends no commercial payload. Per unit: identity is the server-owned FurnitureInstance (qty > 1 stays distinct physical units, never collapsed); configuration comes from authored design truth when the instance is modeled (latest published DesignRevision item, falling back to the working item) and from the catalog definition dimensions otherwise; lifecycle status is the instance's own. Materialization convergence (#386) runs idempotently inside the same transaction, so no separate technical command is exposed. Fail-closed: rejects with a typed 409 when the project already has quote revisions (subsequent revisions are created by requoteProjectQuote only), when the legacy quote is already accepted (the editable state is pinned) or when there are no quote lines. Requires an Idempotency-Key: a retry replays the same created revision. Durable audit (quote_revision_created) is written in the same transaction.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInitialQuoteRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created initial draft revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
       }
     },
     "/projects/{projectId}/quote-revisions:requote": {
@@ -2789,6 +2842,102 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectQuoteRequoteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/quote-revisions/{quoteRevisionId}:publish": {
+      "post": {
+        "operationId": "publishProjectQuoteRevision",
+        "summary": "Publish an exact draft QuoteRevision (#571 / WEB-DT-4, explicit commercial decision)",
+        "description": "Explicit draft → published transition on the exact quoteRevisionId (never latest). The server owns the transition validation (canonical lifecycle draft → published → accepted|superseded, mirrored by the DB trigger) and rejects any other current status with a typed 409 without mutating anything. The snapshot stays immutable; only the status changes. The revision must belong to the projectId — a revision of another project answers the uniform 404. Requires an Idempotency-Key: a retry replays the same published revision. Durable audit (quote_revision_published) is written in the same transaction.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/QuoteRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The published revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/quote-revisions/{quoteRevisionId}:accept": {
+      "post": {
+        "operationId": "acceptProjectQuoteRevision",
+        "summary": "Accept an exact published QuoteRevision, atomically superseding the previous accepted one (#571 / WEB-DT-4)",
+        "description": "Explicit published → accepted transition on the exact quoteRevisionId (never latest). Acceptance is one server-side transaction: the target transitions to accepted AND every other accepted revision of the project transitions to superseded atomically — never two client calls, never two accepted revisions (partial unique index backstop). A draft revision rejects with a typed 409 telling the user to publish first; a superseded revision is terminal history. History stays immutable: the superseded revision is preserved read-only, never edited in place. The revision must belong to the projectId — a revision of another project answers the uniform 404. Requires an Idempotency-Key: a retry replays the same acceptance. Durable audit (quote_revision_accepted + quote_revision_superseded) is written in the same transaction.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/QuoteRevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The accepted revision (the previously accepted revision, if any, is now superseded)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevision"
                 }
               }
             }
@@ -3522,6 +3671,15 @@
       },
       "QuoteLineId": {
         "name": "quoteLineId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "QuoteRevisionId": {
+        "name": "quoteRevisionId",
         "in": "path",
         "required": true,
         "schema": {
@@ -8592,6 +8750,17 @@
             "items": {
               "$ref": "#/components/schemas/FurnitureWorkspaceUnit"
             }
+          }
+        }
+      },
+      "CreateInitialQuoteRevisionRequest": {
+        "type": "object",
+        "description": "Explicit decision to create the FIRST QuoteRevision of a project (#571 / WEB-DT-4). The server snapshots the project's current editable commercial state authoritatively — the client never sends commercial values, identities or quantities.",
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "type": "string",
+            "description": "Optional human note recorded with the revision. Immutable once the revision is published."
           }
         }
       },

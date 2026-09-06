@@ -19,6 +19,7 @@ import {
   roleCanMutateModules,
   roleCanMutateProjects,
   roleCanApproveDesignRevisions,
+  roleCanAcceptQuoteRevisions,
   roleCanReleaseProduction,
   roleCanReopenProject,
   roleCanViewCosts,
@@ -134,6 +135,19 @@ describe('rbac (F035 / OC-004)', () => {
     expect(roleCanReleaseProduction('gerente_produccion')).toBe(true);
     expect(roleCanReleaseProduction('ingeniero')).toBe(true);
     expect(roleCanReleaseProduction('admin')).toBe(true);
+  });
+
+  it('splits commercial acceptance from quote publishing (#571)', () => {
+    // Publishing (editing) and accepting the commercial baseline are
+    // different capabilities — the same sign-off split as design approval.
+    // Parity with Go RoleCanAcceptQuoteRevisions.
+    expect(roleCanAcceptQuoteRevisions('admin')).toBe(true);
+    expect(roleCanAcceptQuoteRevisions('gerente_ventas')).toBe(true);
+    expect(roleCanAcceptQuoteRevisions('vendedor')).toBe(false);
+    expect(roleCanAcceptQuoteRevisions('ingeniero')).toBe(false);
+    expect(roleCanAcceptQuoteRevisions('gerente_produccion')).toBe(false);
+    // The sales editor still publishes quote revisions.
+    expect(roleCanMutateProjects('vendedor')).toBe(true);
   });
 
   it('denies project delete to vendedor', () => {

@@ -9,6 +9,7 @@ import type {
   ChangeMembershipSectorsRequest,
   CreateDesignRequest,
   CreateFurnitureInstanceRequest,
+  CreateInitialQuoteRevisionRequest,
   CreateInvitationRequest,
   CreateInvitationResponse,
   CreateProductionReleaseRequest,
@@ -76,6 +77,7 @@ import type {
   ProvisionOrganizationRequest,
   PublishDesignRevisionRequest,
   QuoteLineFurnitureInstance,
+  QuoteRevision,
   QuoteRevisionDetail,
   ReconcileProjectDesignRequest,
   RefreshRequest,
@@ -196,7 +198,10 @@ export abstract class GeneratedGraneteApiClient {
   reconcileProjectDesign(token: string, projectId: string, body: ReconcileProjectDesignRequest, signal?: AbortSignal): Promise<ProjectDesignReconciliationResult> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/reconciliation`, { schema: "ProjectDesignReconciliationResult", token, bodySchema: "ReconcileProjectDesignRequest", body, signal }); }
   getProjectFurnitureWorkspace(token: string, projectId: string, body: ProjectFurnitureWorkspaceRequest, signal?: AbortSignal): Promise<ProjectFurnitureWorkspace> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-workspace`, { schema: "ProjectFurnitureWorkspace", token, bodySchema: "ProjectFurnitureWorkspaceRequest", body, signal }); }
   listProjectQuoteRevisions(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<QuoteRevisionDetail>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/quote-revisions`, { arrayOf: "QuoteRevisionDetail", token, signal }); }
+  createInitialProjectQuoteRevision(token: string, projectId: string, body: CreateInitialQuoteRevisionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<QuoteRevision> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions`, { schema: "QuoteRevision", token, bodySchema: "CreateInitialQuoteRevisionRequest", body, idempotencyKey: key, signal }); }
   requoteProjectQuote(token: string, projectId: string, body: RequoteProjectQuoteRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProjectQuoteRequoteResult> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions:requote`, { schema: "ProjectQuoteRequoteResult", token, bodySchema: "RequoteProjectQuoteRequest", body, idempotencyKey: key, signal }); }
+  publishProjectQuoteRevision(token: string, projectId: string, quoteRevisionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<QuoteRevision> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions/${encodeURIComponent(quoteRevisionId)}:publish`, { schema: "QuoteRevision", token, idempotencyKey: key, signal }); }
+  acceptProjectQuoteRevision(token: string, projectId: string, quoteRevisionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<QuoteRevision> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-revisions/${encodeURIComponent(quoteRevisionId)}:accept`, { schema: "QuoteRevision", token, idempotencyKey: key, signal }); }
   approveDesignRevision(token: string, designId: string, revisionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}:approve`, { schema: "DesignRevision", token, idempotencyKey: key, signal }); }
   evaluateDesignRevisionPreflight(token: string, designId: string, revisionId: string, signal?: AbortSignal): Promise<ManufacturingPreflightResult> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}/preflight`, { schema: "ManufacturingPreflightResult", token, signal }); }
   approveProjectDesignRevisionForProduction(token: string, projectId: string, designId: string, revisionId: string, body: ApproveDesignRevisionForProductionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}:approve-for-production`, { schema: "DesignRevision", token, bodySchema: "ApproveDesignRevisionForProductionRequest", body, idempotencyKey: key, signal }); }

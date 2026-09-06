@@ -349,6 +349,18 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		return nil, fmt.Errorf("%w: unknown current status %s", domain.ErrInvalidRevisionSnapshot, rev.Status)
 	}
 
+	if targetStatus == "accepted" {
+		// Enforce single-accepted invariant: supersede any previously accepted revision for this project.
+		_, err = s.db(txCtx).Exec(txCtx, `
+			UPDATE quote_revisions
+			SET status = 'superseded'
+			WHERE project_id = $1 AND id != $2 AND status = 'accepted'
+		`, rev.ProjectID, rev.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	err = s.db(txCtx).QueryRow(txCtx, `
 		UPDATE quote_revisions
 		SET status = $2
