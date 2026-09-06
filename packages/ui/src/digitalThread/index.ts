@@ -13,6 +13,27 @@ export {
 } from './ProjectFurnitureScreen';
 
 export {
+  ProjectDesignsScreen,
+  projectDesignsQueryKeys,
+  type ProjectDesignsContextState,
+  type ProjectDesignsQueryKeys,
+  type ProjectDesignsScreenProps,
+} from './ProjectDesignsScreen';
+
+export {
+  buildDesignLineage,
+  selectDesignRevision,
+  getArtifactAvailability,
+  formatArtifactSize,
+  formatSha256Digest,
+  ARTIFACT_KIND_LABELS,
+  DESIGN_REVISION_STATUS_LABELS,
+  DESIGN_SOURCE_TYPE_LABELS,
+  type ArtifactAvailability,
+  type DesignLineageNode,
+} from './designHistory';
+
+export {
   buildFurnitureMatrix,
   currentReleaseReference,
   defaultDesignContext,

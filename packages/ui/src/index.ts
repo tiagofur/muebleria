@@ -146,9 +146,14 @@ export {
 export {
   ProjectFurnitureScreen,
   projectFurnitureQueryKeys,
+  ProjectDesignsScreen,
+  projectDesignsQueryKeys,
   type ProjectFurnitureContextState,
   type ProjectFurnitureQueryKeys,
   type ProjectFurnitureScreenProps,
+  type ProjectDesignsContextState,
+  type ProjectDesignsQueryKeys,
+  type ProjectDesignsScreenProps,
 } from './digitalThread';
 
 export {

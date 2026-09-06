@@ -18,6 +18,8 @@ import {
   productionOrderFromPath,
   projectFurnitureFromPath,
   projectFurniturePath,
+  projectDesignsFromPath,
+  projectDesignsPath,
   productionOrderPath,
   projectIdFromPath,
   projectPath,
@@ -297,5 +299,60 @@ describe('project furniture matrix route (WEB-DT-1 / #500)', () => {
 
   it('maps the matrix route to the quotes nav section', () => {
     expect(navFromPath(`/quotes/${id}/muebles`)).toBe('quotes');
+  });
+
+  it('parses the designs route and pins the exact context from query params', () => {
+    expect(projectDesignsFromPath(`/quotes/${id}/disenos`)).toEqual({
+      projectId: id,
+      context: {
+        designId: null,
+        revisionId: null,
+      },
+    });
+
+    const pinned = projectDesignsFromPath(
+      `/quotes/${id}/disenos`,
+      `?design=d-1&rev=r-9`,
+    );
+    expect(pinned?.projectId).toBe(id);
+    expect(pinned?.context).toEqual({
+      designId: 'd-1',
+      revisionId: 'r-9',
+    });
+  });
+
+  it('rejects lookalike paths for designs', () => {
+    expect(projectDesignsFromPath('/quotes')).toBeNull();
+    expect(projectDesignsFromPath(`/quotes/${id}`)).toBeNull();
+    expect(projectDesignsFromPath(`/orders/${id}/disenos`)).toBeNull();
+    expect(projectDesignsFromPath(`/quotes/${id}/disenos/sub`)).toBeNull();
+  });
+
+  it('builds the designs path with the exact pinned context (never latest)', () => {
+    expect(projectDesignsPath(id)).toBe(`/quotes/${id}/disenos`);
+    expect(
+      projectDesignsPath(id, {
+        designId: 'd-1',
+        revisionId: 'r-9',
+      }),
+    ).toBe(`/quotes/${id}/disenos?design=d-1&rev=r-9`);
+
+    // Round-trip stability keeps historical views pinned.
+    const built = projectDesignsPath(id, {
+      designId: 'd-2',
+      revisionId: 'r-1',
+    });
+    const questionIndex = built.indexOf('?');
+    const pathname = questionIndex === -1 ? built : built.slice(0, questionIndex);
+    const search = questionIndex === -1 ? '' : built.slice(questionIndex + 1);
+    const context = projectDesignsFromPath(pathname, search)?.context;
+    expect(context).toEqual({
+      designId: 'd-2',
+      revisionId: 'r-1',
+    });
+  });
+
+  it('maps the designs route to the quotes nav section', () => {
+    expect(navFromPath(`/quotes/${id}/disenos`)).toBe('quotes');
   });
 });

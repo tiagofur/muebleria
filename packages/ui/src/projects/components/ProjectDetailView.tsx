@@ -126,6 +126,8 @@ export interface ProjectDetailViewProps {
   readonly onOpenInProduction?: (projectId: string) => void;
   /** WEB-DT-1 (#500): open the server-backed Project Furniture matrix. */
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
+  /** WEB-DT-2 (#501): open the server-backed Designs and revisions workspace. */
+  readonly onOpenDesigns?: (projectId: string) => void;
 
   // --- Item handlers + inline-remove confirm ---
   readonly itemHandlers: ProjectDetailItemHandlers;
@@ -415,6 +417,7 @@ function ProjectDetailViewInner(): ReactNode {
     productionExportOk,
     onOpenInProduction,
     onOpenFurnitureMatrix,
+    onOpenDesigns,
     onOpenPresentation,
     onDuplicate,
     onSaveAsTemplate,
@@ -495,18 +498,29 @@ function ProjectDetailViewInner(): ReactNode {
 
     // WEB-DT-1 (#500): the physical-unit matrix is a server-backed Digital
     // Thread view; available to any session that can open the project.
+    // Digital Thread menu items (#500, #501)
+    const dtItems: DropdownMenuItem[] = [];
     if (onOpenFurnitureMatrix) {
+      dtItems.push({
+        id: 'open-furniture-matrix',
+        label: 'Muebles del proyecto',
+        hint: 'Unidades físicas, cotización y diseño',
+        onSelect: () => onOpenFurnitureMatrix(project.id),
+      });
+    }
+    if (onOpenDesigns) {
+      dtItems.push({
+        id: 'open-designs',
+        label: 'Diseños 3D y revisiones',
+        hint: 'Historial inmutable de alternativas, revisiones y artefactos',
+        onSelect: () => onOpenDesigns(project.id),
+      });
+    }
+    if (dtItems.length > 0) {
       sections.push({
         id: 'digital-thread',
         label: 'Hilo digital',
-        items: [
-          {
-            id: 'open-furniture-matrix',
-            label: 'Muebles del proyecto',
-            hint: 'Unidades físicas, cotización y diseño',
-            onSelect: () => onOpenFurnitureMatrix(project.id),
-          },
-        ],
+        items: dtItems,
       });
     }
 
@@ -592,6 +606,7 @@ function ProjectDetailViewInner(): ReactNode {
     onDuplicate,
     onOpenInProduction,
     onOpenFurnitureMatrix,
+    onOpenDesigns,
     onRequestDelete,
     onRequestReopen,
     onSaveAsTemplate,
@@ -770,6 +785,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onExportProductionPack,
     onOpenInProduction,
     onOpenFurnitureMatrix,
+    onOpenDesigns,
     itemHandlers,
     removeConfirm,
     updateProjectLevelChoice,
@@ -891,6 +907,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onExportProductionPack,
       onOpenInProduction,
       onOpenFurnitureMatrix,
+      onOpenDesigns,
       itemHandlers,
       removeConfirm,
       updateProjectLevelChoice,
@@ -989,6 +1006,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onExportProductionPack,
       onOpenInProduction,
       onOpenFurnitureMatrix,
+      onOpenDesigns,
       itemHandlers,
       removeConfirm,
       updateProjectLevelChoice,

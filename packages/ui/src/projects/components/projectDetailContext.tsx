@@ -122,6 +122,8 @@ export interface ProjectDetailContextValue {
   readonly onOpenInProduction?: (projectId: string) => void;
   /** WEB-DT-1 (#500): open the server-backed Project Furniture matrix. */
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
+  /** WEB-DT-2 (#501): open the server-backed Designs and revisions workspace. */
+  readonly onOpenDesigns?: (projectId: string) => void;
 
   // --- Item handlers ---
   readonly itemHandlers: ProjectDetailItemHandlers;
