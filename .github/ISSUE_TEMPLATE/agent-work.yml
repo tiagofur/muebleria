@@ -1,0 +1,42 @@
+name: Bounded agent work
+description: Propose evidence-backed work; submission does not grant approval.
+body:
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and related issues
+      description: Describe observed behavior, reproduction, current revision, and existing issues or PRs searched.
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Proposed priority
+      options:
+        - P0 - Demo blocker
+        - P1 - Demo correctness
+        - P2 - MVP
+        - P3 - Secondary or post-MVP
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: State the bounded deliverable, impact, and what must not change.
+    validations:
+      required: true
+  - type: textarea
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Link hard dependencies and their evidence, or explain why none apply.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance and test proof
+      description: Define observable success, negative cases, exact-revision tests, and required runtime evidence.
+    validations:
+      required: true
