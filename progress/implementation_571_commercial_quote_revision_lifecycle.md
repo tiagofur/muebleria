@@ -25,9 +25,9 @@ As a consequence, the Playwright browser E2E test (#502) was relying on direct S
 ### A. Database Invariant & Storage
 - **Accepted Uniqueness**: Added migration `000121_quote_revision_accepted_uniqueness.up.sql` defining partial unique index `uq_quote_revisions_one_accepted_per_project` ON `quote_revisions (project_id) WHERE status = 'accepted'`.
 - **Atomic Acceptance & Supersede**:
-  - In `backend-go/internal/storage/quote_lifecycle.go`, `AcceptQuoteRevision` executes inside a tenant transaction with project row locking (`SELECT id FROM projects WHERE id = $1 FOR UPDATE`).
-  - When transitioning a revision to `accepted`, any previously accepted revision for the project is atomically updated to `status = 'superseded'` in the same transaction before updating the target row.
-  - `UpdateQuoteRevisionStatus` in `backend-go/internal/storage/reconciliation.go` was updated to mirror this atomic supersede invariant.
+  - In `backend-go/internal/storage/quote_lifecycle.go`, `AcceptQuoteRevision` executes inside a tenant transaction serialized by a per-project advisory xact lock (`pg_advisory_xact_lock(hashtextextended(projectId))`, the same convention as #386 materialization), so concurrent accepts can never interleave their supersede/accept updates.
+  - When transitioning a revision to `accepted`, any previously accepted revision for the project is atomically updated to `status = 'superseded'` in the same transaction BEFORE updating the target row (the partial unique index is immediate, so the order is mandatory).
+  - `UpdateQuoteRevisionStatus` in `backend-go/internal/storage/reconciliation.go` was hardened to enforce the same single-accepted invariant as defense in depth (any caller of the low-level transition gets it too).
 - **Initial Quote Snapshot Authority**:
   - `CreateInitialQuoteRevision` converges physical units per quote line (`MaterializeQuoteLine`, idempotent #386) and snapshots each unit's commercial definition and parameters (`custom_dims` or catalog module dimensions `widthMm`, `heightMm`, `depthMm`).
   - Strict separation of commercial and authoring truth: Q1 represents what was quoted, preserving physical unit identity (`FurnitureInstance.id`) for exact reconciliation against subsequent design revisions.
@@ -42,7 +42,7 @@ As a consequence, the Playwright browser E2E test (#502) was relying on direct S
   - `POST /projects/{projectId}/quote-revisions`: `createInitialQuoteRevision`
   - `POST /projects/{projectId}/quote-revisions/{quoteRevisionId}:publish`: `publishQuoteRevision`
   - `POST /projects/{projectId}/quote-revisions/{quoteRevisionId}:accept`: `acceptQuoteRevision`
-- Added RBAC capability `RoleCanAcceptQuoteRevisions` / `roleCanAcceptQuoteRevisions` assigned to owner, admin, and sales roles.
+- Added RBAC capability `RoleCanAcceptQuoteRevisions` / `roleCanAcceptQuoteRevisions` (admin + gerente_ventas): vendedor creates and publishes quote revisions, but accepting the commercial baseline production will be released against is a sign-off — the same split as design approval.
 - Handlers in `backend-go/internal/api/quote_lifecycle.go` and routes in `backend-go/internal/api/routes.go`.
 - OpenAPI client regenerated without drift (`pnpm openapi:generate` and `pnpm openapi:check`).
 

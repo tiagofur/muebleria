@@ -353,8 +353,51 @@ async function publishRevisionWithItemIds(options: {
     // ------------------------------------------------------------------
     // 5. Q2 stays DRAFT at this point on purpose: step 6b proves the
     //    production-approval gate rejects a non-accepted baseline before
-    //    the fixture accepts it (no HTTP accept surface exists yet —
-    //    documented demo limitation).
+    //    the fixture accepts it.
+    // 5b. Lifecycle negative proofs through the generated client: a DRAFT
+    //     revision cannot be accepted directly (typed 409, no mutation) and
+    //     a revision reached through another project's path is a uniform 404
+    //     (no existence oracle, no data leak).
+    // ------------------------------------------------------------------
+    const q2DraftValue = await quoteSelect
+      .locator('option', { hasText: 'Q2 ·' })
+      .first()
+      .getAttribute('value');
+    expect(q2DraftValue).toBeTruthy();
+    const lifecycleClient = new GraneteApiClient(required('ORGANIZATION_API_BASE'));
+    const lifecycleOwner = await lifecycleClient.login({
+      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
+    });
+    let draftAcceptRejected = false;
+    try {
+      await lifecycleClient.acceptProjectQuoteRevision(
+        lifecycleOwner.token,
+        seeded.projectId,
+        q2DraftValue!,
+        'gate-pr-accept-draft-negative',
+      );
+    } catch (err) {
+      draftAcceptRejected = (err as { status?: number }).status === 409;
+    }
+    expect(draftAcceptRejected).toBe(true);
+
+    let foreignProjectAcceptRejected = false;
+    try {
+      await lifecycleClient.acceptProjectQuoteRevision(
+        lifecycleOwner.token,
+        '99999999-9999-4999-9999-999999999999',
+        q2DraftValue!,
+        'gate-pr-accept-foreign-negative',
+      );
+    } catch (err) {
+      foreignProjectAcceptRejected = (err as { status?: number }).status === 404;
+    }
+    expect(foreignProjectAcceptRejected).toBe(true);
+    // The failed commands mutated nothing: Q2 is still draft in the selector.
+    await expect(page.getByTestId('exact-context-header')).toContainText('Borrador');
 
     // ------------------------------------------------------------------
     // 6. Complete the modeling: publish R2 with FI-C modeled too (qty>1
@@ -423,6 +466,23 @@ async function publishRevisionWithItemIds(options: {
 
     // Verify Q1 in the select is now marked Superseded
     await expect(quoteSelect.locator('option', { hasText: 'Q1' })).toContainText('Reemplazada');
+
+    // 7b. Double-accept negative: a retry with a NEW idempotency key hits
+    //     the typed same-status conflict — never a second transition and
+    //     never a second accepted revision (the HTTP receipt already covers
+    //     same-key idempotent replay).
+    let doubleAcceptRejected = false;
+    try {
+      await lifecycleClient.acceptProjectQuoteRevision(
+        lifecycleOwner.token,
+        seeded.projectId,
+        q2DraftValue!,
+        'gate-pr-accept-double-negative',
+      );
+    } catch (err) {
+      doubleAcceptRejected = (err as { status?: number }).status === 409;
+    }
+    expect(doubleAcceptRejected).toBe(true);
 
     // Now approve exact R2 against accepted Q2:
     await page.getByTestId('design-revision-select').selectOption(seeded.r2Id);
