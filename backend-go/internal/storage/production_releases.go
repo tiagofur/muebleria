@@ -351,16 +351,22 @@ func (s *PostgresStore) loadReferencedFurnitureDefinitionParameters(ctx context.
 	return definitions, nil
 }
 
+// productionReleaseColumns derives design_revision_number from the pinned
+// revision row (the release table stores only the exact id — §6).
 const productionReleaseColumns = `
-	id, organization_id, project_id, release_number,
-	design_revision_id, COALESCE(quote_revision_id::text, ''),
-	manufacturing_fingerprint, status, released_by::text, released_at`
+	pr.id, pr.organization_id, pr.project_id, pr.release_number,
+	pr.design_revision_id, dr.revision_number, COALESCE(pr.quote_revision_id::text, ''),
+	pr.manufacturing_fingerprint, pr.status, pr.released_by::text, pr.released_at`
+
+const productionReleaseFrom = `
+	FROM production_releases pr
+	JOIN design_revisions dr ON dr.id = pr.design_revision_id`
 
 func scanProductionRelease(row pgx.Row) (*domain.ProductionRelease, error) {
 	var r domain.ProductionRelease
 	if err := row.Scan(
 		&r.ID, &r.OrganizationID, &r.ProjectID, &r.ReleaseNumber,
-		&r.DesignRevisionID, &r.QuoteRevisionID,
+		&r.DesignRevisionID, &r.DesignRevisionNumber, &r.QuoteRevisionID,
 		&r.ManufacturingFingerprint, &r.Status, &r.ReleasedBy, &r.ReleasedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -382,29 +388,42 @@ func (s *PostgresStore) ListProjectProductionReleases(ctx context.Context, proje
 	}
 
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT `+productionReleaseColumns+`
-		FROM production_releases
-		WHERE project_id = $1
-		ORDER BY release_number DESC
+		SELECT `+productionReleaseColumns+productionReleaseFrom+`
+		WHERE pr.project_id = $1
+		ORDER BY pr.release_number DESC
 	`, projectID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	releases := []ProductionReleaseReadback{}
+	// Buffer every release row BEFORE deriving staleness: the staleness
+	// projection issues its own queries, and issuing them while this rows
+	// cursor is still open would collide on the pooled connection ("conn
+	// busy").
+	releases := make([]domain.ProductionRelease, 0, 8)
 	for rows.Next() {
 		release, err := scanProductionRelease(rows)
 		if err != nil {
+			rows.Close()
 			return nil, err
 		}
-		staleness, err := s.releaseStaleness(ctx, *release, "")
+		releases = append(releases, *release)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	readbacks := make([]ProductionReleaseReadback, 0, len(releases))
+	for _, release := range releases {
+		staleness, err := s.releaseStaleness(ctx, release, "")
 		if err != nil {
 			return nil, err
 		}
-		releases = append(releases, ProductionReleaseReadback{Release: *release, Staleness: *staleness})
+		readbacks = append(readbacks, ProductionReleaseReadback{Release: release, Staleness: *staleness})
 	}
-	return releases, rows.Err()
+	return readbacks, nil
 }
 
 // GetProjectProductionRelease returns one exact release with its staleness
@@ -419,9 +438,8 @@ func (s *PostgresStore) GetProjectProductionRelease(ctx context.Context, project
 	}
 
 	release, err := scanProductionRelease(s.db(ctx).QueryRow(ctx, `
-		SELECT `+productionReleaseColumns+`
-		FROM production_releases
-		WHERE id = $1 AND project_id = $2
+		SELECT `+productionReleaseColumns+productionReleaseFrom+`
+		WHERE pr.id = $1 AND pr.project_id = $2
 	`, releaseID, projectID))
 	if err != nil {
 		if errors.Is(err, domain.ErrReleaseNotFound) {
@@ -520,23 +538,21 @@ func (s *PostgresStore) GetContextualProductionRelease(ctx context.Context, proj
 	var args []any
 	if quoteRevisionID != "" {
 		query = `
-			SELECT ` + productionReleaseColumns + `
-			FROM production_releases
-			WHERE project_id = $1
-			  AND design_revision_id = $2
-			  AND (quote_revision_id = $3::uuid OR quote_revision_id IS NULL)
-			ORDER BY CASE WHEN quote_revision_id = $3::uuid THEN 0 ELSE 1 END, release_number DESC
+			SELECT ` + productionReleaseColumns + productionReleaseFrom + `
+			WHERE pr.project_id = $1
+			  AND pr.design_revision_id = $2
+			  AND (pr.quote_revision_id = $3::uuid OR pr.quote_revision_id IS NULL)
+			ORDER BY CASE WHEN pr.quote_revision_id = $3::uuid THEN 0 ELSE 1 END, pr.release_number DESC
 			LIMIT 1
 		`
 		args = []any{projectID, designRevisionID, quoteRevisionID}
 	} else {
 		query = `
-			SELECT ` + productionReleaseColumns + `
-			FROM production_releases
-			WHERE project_id = $1
-			  AND design_revision_id = $2
-			  AND quote_revision_id IS NULL
-			ORDER BY release_number DESC
+			SELECT ` + productionReleaseColumns + productionReleaseFrom + `
+			WHERE pr.project_id = $1
+			  AND pr.design_revision_id = $2
+			  AND pr.quote_revision_id IS NULL
+			ORDER BY pr.release_number DESC
 			LIMIT 1
 		`
 		args = []any{projectID, designRevisionID}

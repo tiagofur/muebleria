@@ -34,10 +34,9 @@ func (s *PostgresStore) GetLatestProjectProductionRelease(ctx context.Context, p
 		return nil, domain.ErrInvalidReleaseCommand
 	}
 	release, err := scanProductionRelease(s.db(ctx).QueryRow(ctx, `
-		SELECT `+productionReleaseColumns+`
-		FROM production_releases
-		WHERE project_id = $1
-		ORDER BY release_number DESC
+		SELECT `+productionReleaseColumns+productionReleaseFrom+`
+		WHERE pr.project_id = $1
+		ORDER BY pr.release_number DESC
 		LIMIT 1
 	`, projectID))
 	if err != nil {
@@ -70,10 +69,9 @@ func (s *PostgresStore) ResolveProjectReleaseAuthority(ctx context.Context, proj
 // transaction, used by the snapshot loaders that already own one.
 func (s *PostgresStore) resolveProjectReleaseAuthorityTx(ctx context.Context, tx pgx.Tx, projectID string, legacyBlob *domain.LegacyProductionRelease) (*domain.ResolvedProductionRelease, error) {
 	canonical, err := scanProductionRelease(tx.QueryRow(ctx, `
-		SELECT `+productionReleaseColumns+`
-		FROM production_releases
-		WHERE project_id = $1
-		ORDER BY release_number DESC
+		SELECT `+productionReleaseColumns+productionReleaseFrom+`
+		WHERE pr.project_id = $1
+		ORDER BY pr.release_number DESC
 		LIMIT 1
 	`, projectID))
 	if err != nil {
