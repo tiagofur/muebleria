@@ -200,6 +200,8 @@ interface FetchMockOptions {
   designs?: Design[];
   revisionsByDesign?: Record<string, DesignRevision[]>;
   revisionDetailOverride?: Record<string, Record<string, DesignRevision>>; // designId → revisionId → revision
+  revisionDetailFail?: boolean | ((designId: string, revId: string) => boolean);
+  revisionDetailPending?: boolean;
   workingCopyByDesign?: Record<string, DesignWorkingCopy | null>;
   releases?: ProductionRelease[];
   artifactsFail?: boolean;
@@ -274,6 +276,18 @@ function setupFetchMock(options: FetchMockOptions = {}) {
     const revDetailMatch = path.match(revDetailRegex);
     if (revDetailMatch && method === 'GET') {
       const [, dId, revId] = revDetailMatch;
+      if (options.revisionDetailPending) {
+        return new Promise(() => {}); // hangs/pending
+      }
+      if (
+        options.revisionDetailFail === true ||
+        (typeof options.revisionDetailFail === 'function' && options.revisionDetailFail(dId!, revId!))
+      ) {
+        return new Response(JSON.stringify({ code: 'INTERNAL', message: 'revision detail failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       const rev = revisionDetailByDesign[dId!]?.[revId!];
       if (!rev) {
         return new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'revision not found' }), {
@@ -633,6 +647,77 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
     expect(
       screen.getByText('No se pudieron cargar los artefactos de la revisión.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows loading indicator and prevents premature inspector render while revision detail is loading', async () => {
+    setupFetchMock({
+      revisionDetailPending: true,
+    });
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID },
+    });
+
+    expect(await screen.findByTestId('revision-node-R1')).toBeInTheDocument();
+    expect(await screen.findByTestId('revision-detail-loading')).toBeInTheDocument();
+    expect(screen.getByText(/Cargando snapshot exacto de R1/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('revision-inspector')).not.toBeInTheDocument();
+  });
+
+  it('shows error notice and retry button when revision detail fails, never falling back to header', async () => {
+    let shouldFail = true;
+    setupFetchMock({
+      revisionDetailFail: () => shouldFail,
+    });
+    const user = userEvent.setup();
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID },
+    });
+
+    expect(await screen.findByTestId('revision-node-R1')).toBeInTheDocument();
+    expect(await screen.findByTestId('revision-detail-error')).toBeInTheDocument();
+    expect(screen.getByText(/No se pudo cargar el snapshot exacto de R1/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('revision-inspector')).not.toBeInTheDocument();
+
+    shouldFail = false;
+    const retryBtn = screen.getByTestId('retry-revision-detail-btn');
+    await user.click(retryBtn);
+
+    expect(await screen.findByTestId('revision-inspector')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /Revisión R1/i })).toBeInTheDocument();
+  });
+
+  it('renders orphan lineage connector when a revision has an unknown parent revision id', async () => {
+    const orphanRevision: DesignRevision = {
+      id: '33333333-0000-4000-8000-000000000088',
+      design_id: DESIGN_1_ID,
+      revision_number: 2,
+      parent_revision_id: '99999999-9999-4999-8999-999999999999',
+      source_type: 'sketchup',
+      status: 'published',
+      created_by: 'Arquitecto Juan',
+      created_at: '2026-09-02T12:00:00Z',
+      items: [],
+      artifacts: [],
+    };
+
+    setupFetchMock({
+      revisionsByDesign: {
+        [DESIGN_1_ID]: [mockRevision1, orphanRevision],
+      },
+    });
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: null },
+    });
+
+    expect(await screen.findByTestId('revision-node-R1')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-node-R2')).toBeInTheDocument();
+
+    const orphanConnector = document.querySelector('.pd-lineage-connector--orphan');
+    expect(orphanConnector).toBeInTheDocument();
+    expect(orphanConnector).toHaveAttribute('title', 'Parent no disponible');
   });
 });
 

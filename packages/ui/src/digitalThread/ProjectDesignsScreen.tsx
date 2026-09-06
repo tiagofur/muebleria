@@ -272,7 +272,7 @@ export function ProjectDesignsScreen({
   }, [revisionsQuery.isSuccess, revisions, revisionId, selectedRevisionHeader, activeDesignId, onContextChange]);
 
   // 5. Full revision detail query: getDesignRevision returns items + artifacts (listDesignRevisions does NOT).
-  // This is the authoritative source for the inspector panel.
+  // This is the ONLY authoritative source for the inspector — never fall back to header data.
   const revisionDetailQuery = useQuery({
     queryKey:
       activeDesignId && selectedRevisionHeader
@@ -283,61 +283,75 @@ export function ProjectDesignsScreen({
     enabled: activeDesignId !== null && selectedRevisionHeader !== null,
   });
 
-  // The inspector uses the full detail (with items). Fall back to header while loading.
-  const selectedRevision = revisionDetailQuery.data ?? selectedRevisionHeader;
+  // Explicit states for the inspector. Never collapse detail into header:
+  // - loading: getDesignRevision is in flight
+  // - success: use revisionDetailQuery.data (has items + artifacts)
+  // - error: show honest error, never substitute header
+  const selectedRevisionDetail = revisionDetailQuery.data ?? null;
+  const revisionDetailLoading = revisionDetailQuery.isLoading && selectedRevisionHeader !== null;
+  const revisionDetailError = revisionDetailQuery.isError && selectedRevisionHeader !== null;
 
-  // ProductionRelease linked to this exact revision (canonical active release with highest release_number)
+
+  // ProductionRelease linked to this exact revision (canonical active release with highest release_number).
+  // Uses the detail object so release linkage is only shown after the exact snapshot is confirmed.
   const linkedRelease = useMemo(() => {
-    if (!selectedRevision) return null;
+    if (!selectedRevisionDetail) return null;
     const matches = releases.filter(
-      (rel) => rel.design_revision_id === selectedRevision.id && rel.status === 'active',
+      (rel) => rel.design_revision_id === selectedRevisionDetail.id && rel.status === 'active',
     );
     if (matches.length === 0) return null;
     return matches.sort((a, b) => b.release_number - a.release_number)[0] ?? null;
-  }, [releases, selectedRevision]);
+  }, [releases, selectedRevisionDetail]);
 
   // Artifacts: prefer embedded in revision detail (getDesignRevision already loads them).
-  // Only fall back to the artifact list endpoint if detail has no artifacts (legacy artifact-less publish).
+  // Only fall back to the artifact list endpoint if detail has no embedded artifacts (legacy artifact-less publish).
   const artifactsQuery = useQuery({
     queryKey:
-      activeDesignId && selectedRevision
-        ? queryKeys.designRevisionArtifacts(activeDesignId, selectedRevision.id)
+      activeDesignId && selectedRevisionDetail
+        ? queryKeys.designRevisionArtifacts(activeDesignId, selectedRevisionDetail.id)
         : ['project-designs', 'artifacts', 'none'],
     queryFn: ({ signal }) =>
-      api.listDesignRevisionArtifacts(token, activeDesignId as string, selectedRevision!.id, signal),
+      api.listDesignRevisionArtifacts(
+        token,
+        activeDesignId as string,
+        selectedRevisionDetail!.id,
+        signal,
+      ),
     enabled:
       activeDesignId !== null &&
-      selectedRevision !== null &&
+      selectedRevisionDetail !== null &&
       revisionDetailQuery.isSuccess &&
-      (!selectedRevision.artifacts || selectedRevision.artifacts.length === 0),
+      (!selectedRevisionDetail.artifacts || selectedRevisionDetail.artifacts.length === 0),
   });
 
   const artifacts: readonly DesignRevisionArtifact[] = useMemo(() => {
-    if (selectedRevision?.artifacts && selectedRevision.artifacts.length > 0) {
-      return selectedRevision.artifacts;
+    if (selectedRevisionDetail?.artifacts && selectedRevisionDetail.artifacts.length > 0) {
+      return selectedRevisionDetail.artifacts;
     }
     return artifactsQuery.data ?? [];
-  }, [selectedRevision, artifactsQuery.data]);
+  }, [selectedRevisionDetail, artifactsQuery.data]);
+
 
   const availability = useMemo(() => getArtifactAvailability(artifacts), [artifacts]);
 
   // Preview Grant Query: conservative cache bounded to 2m (less than MediaGrantTTL of 3m)
   const previewGrantQuery = useQuery({
     queryKey:
-      activeDesignId && selectedRevision && availability.preview
-        ? [...queryKeys.root, 'grant', activeDesignId, selectedRevision.id, 'preview']
+      activeDesignId && selectedRevisionDetail && availability.preview
+        ? [...queryKeys.root, 'grant', activeDesignId, selectedRevisionDetail.id, 'preview']
         : ['project-designs', 'grant', 'none'],
     queryFn: ({ signal }) =>
       api.authorizeDesignRevisionArtifact(
         token,
         activeDesignId as string,
-        selectedRevision!.id,
+        selectedRevisionDetail!.id,
         'preview',
         signal,
       ),
-    enabled: activeDesignId !== null && selectedRevision !== null && availability.preview !== null,
+    enabled: activeDesignId !== null && selectedRevisionDetail !== null && availability.preview !== null,
     staleTime: 1000 * 60 * 2, // 2 minutes cache (strictly within 3-minute backend MediaGrantTTL)
   });
+
 
   const handleSelectDesign = (newId: string) => {
     setDesignId(newId);
@@ -378,14 +392,14 @@ export function ProjectDesignsScreen({
   };
 
   const handleAuthorizeAndOpen = async (kind: DesignPublishArtifactKind) => {
-    if (!activeDesignId || !selectedRevision) return;
+    if (!activeDesignId || !selectedRevisionDetail) return;
     setAuthorizingKind(kind);
     setAuthorizeError(null);
     try {
       const grant = await api.authorizeDesignRevisionArtifact(
         token,
         activeDesignId,
-        selectedRevision.id,
+        selectedRevisionDetail.id,
         kind,
       );
       const cleanBase = baseUrl.replace(/\/+$/, '');
@@ -455,7 +469,7 @@ export function ProjectDesignsScreen({
                 onClick={() =>
                   onOpenFurnitureMatrix({
                     designId: activeDesignId,
-                    revisionId: selectedRevision?.id ?? null,
+                    revisionId: selectedRevisionDetail?.id ?? selectedRevisionHeader?.id ?? null,
                   })
                 }
               >
@@ -505,10 +519,10 @@ export function ProjectDesignsScreen({
           </div>
 
           {isInvalidExplicitDesign ? (
-            <div className="pd-context-invalid" data-testid="invalid-design-notice" style={{ padding: '24px 0' }}>
-              <div className="pd-alert pd-alert--error" style={{ padding: '16px' }}>
+            <div className="pd-context-invalid" data-testid="invalid-design-notice">
+              <div className="pd-alert pd-alert--error">
                 <strong>Diseño no disponible</strong>
-                <p style={{ margin: '8px 0 12px 0' }}>
+                <p>
                   El diseño seleccionado ya no está disponible en este proyecto.
                 </p>
                 <button
@@ -578,11 +592,15 @@ export function ProjectDesignsScreen({
             ) : (
               <div className="pd-lineage-track" role="list">
                 {lineage.map((node, index) => {
-                  const isSelected = selectedRevision?.id === node.revision.id;
+                  const isSelected = selectedRevisionHeader?.id === node.revision.id;
                   const statusLabel =
                     DESIGN_REVISION_STATUS_LABELS[node.status] ?? node.status;
                   const sourceLabel =
                     DESIGN_SOURCE_TYPE_LABELS[node.sourceType] ?? node.sourceType;
+                  // Next node's hasValidParent determines if the connector is authoritative.
+                  // If the next node's parent is not in the known set, show a broken connector.
+                  const nextNode = lineage[index + 1];
+                  const connectorIsAuthoritative = nextNode ? nextNode.hasValidParent : false;
 
                   return (
                     <div key={node.revision.id} className="pd-lineage-step" role="listitem">
@@ -620,7 +638,15 @@ export function ProjectDesignsScreen({
                         )}
                       </button>
                       {index < lineage.length - 1 && (
-                        <div className="pd-lineage-connector" aria-hidden="true">
+                        <div
+                          className={`pd-lineage-connector ${
+                            connectorIsAuthoritative
+                              ? ''
+                              : 'pd-lineage-connector--orphan'
+                          }`}
+                          aria-hidden="true"
+                          title={connectorIsAuthoritative ? undefined : 'Parent no disponible'}
+                        >
                           <ChevronRight size={18} />
                         </div>
                       )}
@@ -628,45 +654,74 @@ export function ProjectDesignsScreen({
                   );
                 })}
               </div>
+
             )}
           </div>
 
           {/* Selected Revision Inspector (Pinned View) */}
           {isInvalidExplicitRevision ? (
-            <div className="pd-context-invalid" data-testid="invalid-revision-notice" style={{ padding: '16px 0' }}>
-              <div className="pd-alert pd-alert--error" style={{ padding: '16px' }}>
+            <div className="pd-context-invalid" data-testid="invalid-revision-notice">
+              <div className="pd-alert pd-alert--error">
                 <strong>Revisión no disponible</strong>
-                <p style={{ margin: '8px 0 0 0' }}>
+                <p>
                   La revisión seleccionada no pertenece a este diseño o ya no está disponible.
                 </p>
               </div>
             </div>
-          ) : selectedRevision ? (
+          ) : revisionDetailLoading ? (
+            <div className="pd-detail-loading" data-testid="revision-detail-loading">
+              <RefreshCw size={20} className="spin" />
+              <span>
+                Cargando snapshot exacto de R{selectedRevisionHeader?.revision_number}…
+              </span>
+            </div>
+          ) : revisionDetailError ? (
+            <div className="pd-context-invalid" data-testid="revision-detail-error">
+              <div className="pd-alert pd-alert--error">
+                <strong>Error al cargar el snapshot exacto</strong>
+                <p>
+                  No se pudo cargar el snapshot exacto de R
+                  {selectedRevisionHeader?.revision_number}. Intentá de nuevo.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  data-testid="retry-revision-detail-btn"
+                  onClick={() => void revisionDetailQuery.refetch()}
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
+          ) : selectedRevisionDetail ? (
             <div className="pd-inspector" data-testid="revision-inspector">
+
               <div className="pd-inspector__header">
                 <div>
                   <h2 className="pd-inspector__title">
-                    Revisión R{selectedRevision.revision_number}
-                    {selectedRevision.status === 'approved' && (
+                    Revisión R{selectedRevisionDetail.revision_number}
+                    {selectedRevisionDetail.status === 'approved' && (
+
                       <span className="status-badge status-badge--done">
                         <ShieldCheck size={14} /> Aprobada
                       </span>
                     )}
-                    {selectedRevision.status === 'superseded' && (
+                    {selectedRevisionDetail.status === 'superseded' && (
                       <span className="status-badge status-badge--warning">
                         Reemplazada (Histórica)
                       </span>
                     )}
                   </h2>
                   <p className="pd-inspector__subtitle">
-                    Snapshot inmutable publicado el {formatWhen(selectedRevision.created_at)} por{' '}
-                    <strong>{selectedRevision.created_by ?? 'Sistema'}</strong> desde{' '}
+                    Snapshot inmutable publicado el {formatWhen(selectedRevisionDetail.created_at)} por{' '}
+                    <strong>{selectedRevisionDetail.created_by ?? 'Sistema'}</strong> desde{' '}
                     <strong>
-                      {DESIGN_SOURCE_TYPE_LABELS[selectedRevision.source_type] ??
-                        selectedRevision.source_type}
+                      {DESIGN_SOURCE_TYPE_LABELS[selectedRevisionDetail.source_type] ??
+                        selectedRevisionDetail.source_type}
                     </strong>
                     .
                   </p>
+
                 </div>
 
                 {linkedRelease && (
@@ -685,11 +740,11 @@ export function ProjectDesignsScreen({
                     <div className="pd-card__header">
                       <div className="pd-card__title">
                         <Box size={18} />
-                        <h3>Unidades físicas contenidas ({selectedRevision.items.length})</h3>
+                        <h3>Unidades físicas contenidas ({selectedRevisionDetail.items.length})</h3>
                       </div>
                     </div>
 
-                    {selectedRevision.items.length === 0 ? (
+                    {selectedRevisionDetail.items.length === 0 ? (
                       <p className="pd-empty-hint">Esta revisión no contiene unidades físicas.</p>
                     ) : (
                       <div className="pd-table-container">
@@ -697,6 +752,7 @@ export function ProjectDesignsScreen({
                           className="pd-items-table"
                           data-testid="revision-items-table"
                         >
+
                           <thead>
                             <tr>
                               <th>Unidad física (ID)</th>
@@ -707,7 +763,8 @@ export function ProjectDesignsScreen({
                             </tr>
                           </thead>
                           <tbody>
-                            {selectedRevision.items.map((item) => (
+                            {selectedRevisionDetail.items.map((item) => (
+
                               <tr key={item.id} data-testid={`revision-item-${item.id}`}>
                                 <td>
                                   <span
@@ -782,7 +839,7 @@ export function ProjectDesignsScreen({
                                     previewGrantQuery.data.url.startsWith('/') ? '' : '/'
                                   }${previewGrantQuery.data.url}`
                             }
-                            alt={`Vista previa 3D R${selectedRevision.revision_number}`}
+                            alt={`Vista previa 3D R${selectedRevisionDetail.revision_number}`}
                             className="pd-preview-image"
                             data-testid="preview-image"
                           />
@@ -911,21 +968,23 @@ export function ProjectDesignsScreen({
                     {showTechnicalAudit && (
                       <dl className="pd-audit-grid" data-testid="technical-audit-details">
                         <dt>Revision ID</dt>
-                        <dd>{selectedRevision.id}</dd>
+                        <dd>{selectedRevisionDetail.id}</dd>
                         <dt>Design ID</dt>
-                        <dd>{selectedRevision.design_id}</dd>
+                        <dd>{selectedRevisionDetail.design_id}</dd>
                         <dt>Parent Revision</dt>
-                        <dd>{selectedRevision.parent_revision_id ?? 'Raíz (null)'}</dd>
-                        {selectedRevision.approved_at && (
+                        <dd>{selectedRevisionDetail.parent_revision_id ?? 'Raíz (null)'}</dd>
+                        {selectedRevisionDetail.approved_at && (
                           <>
                             <dt>Aprobado el</dt>
-                            <dd>{formatWhen(selectedRevision.approved_at)}</dd>
+                            <dd>{formatWhen(selectedRevisionDetail.approved_at)}</dd>
                             <dt>Aprobado por</dt>
-                            <dd>{selectedRevision.approved_by ?? '—'}</dd>
+                            <dd>{selectedRevisionDetail.approved_by ?? '—'}</dd>
                           </>
                         )}
+
                         <dt>Cantidad ítems</dt>
-                        <dd>{selectedRevision.items.length}</dd>
+                        <dd>{selectedRevisionDetail.items.length}</dd>
+
                         <dt>Cantidad artefactos</dt>
                         <dd>{artifacts.length}</dd>
                       </dl>
@@ -939,6 +998,7 @@ export function ProjectDesignsScreen({
               <p>Seleccioná una revisión del linaje para inspeccionar sus contenidos.</p>
             </div>
           )}
+
             </>
           )}
         </>

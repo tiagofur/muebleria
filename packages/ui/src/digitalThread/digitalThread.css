@@ -468,6 +468,11 @@
   color: var(--text-muted);
 }
 
+.pd-lineage-connector--orphan {
+  opacity: 0.4;
+  color: var(--warning);
+}
+
 .pd-inspector {
   display: flex;
   flex-direction: column;
@@ -767,3 +772,26 @@
     transform: rotate(360deg);
   }
 }
+
+.pd-context-invalid {
+  padding: 24px 0;
+}
+
+.pd-context-invalid .pd-alert {
+  padding: 16px;
+}
+
+.pd-context-invalid p {
+  margin: 8px 0 12px 0;
+}
+
+.pd-detail-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 16px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
