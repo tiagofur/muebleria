@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { readFileSync } from 'node:fs';
@@ -137,6 +137,43 @@ describe('Modal close interactions (F018)', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });
+  });
+});
+
+describe('Modal close completion', () => {
+  it('notifies once after committed removal and cleanup, never for initial closed state', async () => {
+    vi.useFakeTimers();
+    document.body.style.overflow = 'auto';
+    const completed = vi.fn(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(document.body.style.overflow).toBe('auto');
+    });
+    const view = (open: boolean) => (
+      <Modal open={open} onClose={() => {}} onAfterClose={completed} title="Close completion">Body</Modal>
+    );
+    const { rerender } = render(view(false));
+    expect(completed).not.toHaveBeenCalled();
+    rerender(view(true));
+    rerender(view(false));
+    expect(completed).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(MODAL_CLOSE_MS));
+    expect(completed).toHaveBeenCalledTimes(1);
+    rerender(view(false));
+    expect(completed).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['reopen', 'unmount'])('cancels completion on %s during exit', async (action) => {
+    vi.useFakeTimers();
+    const completed = vi.fn();
+    const view = (open: boolean) => (
+      <Modal open={open} onClose={() => {}} onAfterClose={completed} title="Cancel completion">Body</Modal>
+    );
+    const { rerender, unmount } = render(view(true));
+    rerender(view(false));
+    if (action === 'reopen') rerender(view(true));
+    else unmount();
+    await act(() => vi.advanceTimersByTimeAsync(MODAL_CLOSE_MS));
+    expect(completed).not.toHaveBeenCalled();
   });
 });
 

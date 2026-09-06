@@ -5,8 +5,9 @@
  * invitaciones por enlace directo y estado de cuenta separado del estado de
  * membresía.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  hashKey,
   useMutation,
   useQuery,
   useQueryClient,
@@ -25,7 +26,6 @@ import {
   XCircle,
 } from 'lucide-react';
 import { EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
-import { MODAL_CLOSE_MS } from '../common/Modal';
 import { AdminTransferModal, RolePermissionPreview } from './TeamLifecyclePanels';
 import { TeamOffboardingModal } from './TeamOffboardingModal';
 import '../catalogs/catalogs.css';
@@ -181,6 +181,33 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
   const [offboardError, setOffboardError] = useState<string | null>(null);
   const [offboardLoading, setOffboardLoading] = useState(false);
 
+  const transferContext = useMemo(() => ({ active: true }),
+    [baseUrl, token, hashKey(queryKeys.root), hashKey(queryKeys.team)]);
+  const pendingTransfer = useRef<{
+    source: UserRow;
+    origin: 'roles' | 'suspension';
+    context: typeof transferContext;
+  } | null>(null);
+
+  const transferAttempt = useMemo(() => ({ active: true }),
+    [transferContext, roleEditUser, suspendMember]);
+  useEffect(() => {
+    transferAttempt.active = true;
+    if (roleEditUser || suspendMember) pendingTransfer.current = null;
+    return () => { transferAttempt.active = false; };
+  }, [transferAttempt, roleEditUser, suspendMember]);
+
+  useEffect(() => {
+    transferContext.active = true;
+    setRoleEditUser(null);
+    setSuspendMember(null);
+    setTransferSource(null);
+    return () => {
+      transferContext.active = false;
+      pendingTransfer.current = null;
+    };
+  }, [transferContext]);
+
   /** Roles this organization type may assign (#326): factories use the full
    * canonical set; store/dealer are commercial-only (server re-validates). */
   const assignableRoles = useMemo(
@@ -270,14 +297,24 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
 
   const openTransferForLastAdmin = (error: unknown, source: UserRow): boolean => {
     if (!(error instanceof GraneteApiError) || error.code !== 'LAST_ADMIN' || !canTransferAdmin) return false;
+    if (!transferContext.active || !transferAttempt.active) return true;
     setTransferTargetId('');
     setTransferReason('');
     setTransferError(null);
     setTransferNeedsReload(false);
+    pendingTransfer.current = {
+      source, origin: roleEditUser ? 'roles' : 'suspension', context: transferContext,
+    };
     setRoleEditUser(null);
     setSuspendMember(null);
-    window.setTimeout(() => setTransferSource(source), MODAL_CLOSE_MS);
     return true;
+  };
+
+  const completeTransferHandoff = (origin: 'roles' | 'suspension') => {
+    const pending = pendingTransfer.current;
+    if (!pending || pending.origin !== origin || pending.context !== transferContext) return;
+    pendingTransfer.current = null;
+    if (transferContext.active && canTransferAdmin) setTransferSource(pending.source);
   };
 
   const saveMultiRoles = async (membershipId: string, roles: ProductRole[]) => {
@@ -802,6 +839,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
       {/* MULTI-ROLE EDIT MODAL */}
       <Modal
         open={roleEditUser !== null}
+        onAfterClose={() => completeTransferHandoff('roles')}
         onClose={() => setRoleEditUser(null)}
         title={`Roles de ${roleEditUser?.name || 'Miembro'}`}
         size="sm"
@@ -1002,6 +1040,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
 
       <Modal
         open={suspendMember !== null}
+        onAfterClose={() => completeTransferHandoff('suspension')}
         onClose={() => setSuspendMember(null)}
         title="Suspender membresía"
         size="sm"

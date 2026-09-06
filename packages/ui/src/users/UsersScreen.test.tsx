@@ -3,11 +3,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { roleLabelEs } from '@granete/domain';
 import { UsersScreen } from './UsersScreen';
+import { MODAL_CLOSE_MS } from '../common/Modal';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -395,7 +396,7 @@ describe('UsersScreen (#451 safe team boundary)', () => {
     items: [member], summary: { active_members: 1, suspended_members: 0, left_members: 0, max_active_members: maxActiveMembers, team_version: 4, entitlements_version: 2, capabilities },
   });
 
-  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
   it('shows the authoritative seat summary, including an explicit unlimited limit', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
@@ -667,7 +668,7 @@ describe('UsersScreen (#458 last-admin transfer)', () => {
   });
   const transferResult = { source: { membership_id: source.membership_id, user_id: source.user_id, status: 'active', roles: ['admin'], version: 5 }, target: { membership_id: target.membership_id, user_id: target.user_id, status: 'active', roles: ['vendedor', 'admin'], version: 8 } };
 
-  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
   async function requestAdminRemoval(actor: ReturnType<typeof userEvent.setup>) {
     await actor.click(await screen.findByRole('button', { name: 'Modificar roles de Ana Admin' }));
@@ -680,7 +681,7 @@ describe('UsersScreen (#458 last-admin transfer)', () => {
     return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/org/memberships')) return response(directory(canTransfer));
-      if (url.includes(':change-roles')) return apiError('LAST_ADMIN');
+      if (url.includes(':change-roles') || url.includes(':suspend')) return apiError('LAST_ADMIN');
       if (url.includes(':transfer-admin')) return transfer();
       return response([]);
     });
@@ -692,6 +693,111 @@ describe('UsersScreen (#458 last-admin transfer)', () => {
     renderUsers();
     await requestAdminRemoval(actor);
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('Transferí ese rol'));
+    expect(screen.queryByRole('dialog', { name: 'Transferir administración' })).toBeNull();
+  });
+
+  function captureCloseTimers() {
+    const timers = new Map<number, () => void>();
+    let nextId = -1;
+    const browserTimers: {
+      setTimeout: (callback: TimerHandler, delay?: number, ...args: unknown[]) => number;
+      clearTimeout: (id?: number) => void;
+    } = window;
+    const setTimeout = browserTimers.setTimeout.bind(window);
+    const clearTimeout = browserTimers.clearTimeout.bind(window);
+    vi.spyOn(browserTimers, 'setTimeout').mockImplementation((callback, delay, ...args) => {
+      if (delay !== MODAL_CLOSE_MS) return setTimeout(callback, delay, ...args);
+      const id = nextId--;
+      timers.set(id, () => { if (typeof callback === 'function') callback(...args); });
+      return id;
+    });
+    vi.spyOn(browserTimers, 'clearTimeout').mockImplementation((id) => {
+      if (id !== undefined && timers.delete(id)) return;
+      clearTimeout(id);
+    });
+    return timers;
+  }
+
+  it.each(['roles', 'suspension'])('finishes %s teardown before transfer mounts', async (entry) => {
+    const timers = captureCloseTimers();
+    vi.stubGlobal('fetch', stubTransfer(true, () => response(transferResult)));
+    document.body.style.overflow = 'auto';
+    const actor = userEvent.setup();
+    renderUsers();
+    const trigger = await screen.findByRole('button', {
+      name: entry === 'roles' ? 'Modificar roles de Ana Admin' : 'Suspender membresía de Ana Admin',
+    });
+    if (entry === 'roles') await requestAdminRemoval(actor);
+    else {
+      await actor.click(trigger);
+      await actor.type(screen.getByLabelText('Motivo *'), 'Cambio de responsable');
+      await actor.click(screen.getByRole('button', { name: 'Suspender membresía' }));
+    }
+    await waitFor(() => expect(timers.size).toBeGreaterThan(0));
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(screen.queryByRole('dialog', { name: 'Transferir administración' })).toBeNull();
+    // Execute equal-deadline callbacks separately: batching them hides the race.
+    while (timers.size > 0) {
+      const [id, callback] = timers.entries().next().value!;
+      timers.delete(id);
+      await act(async () => callback());
+      expect(screen.queryAllByRole('dialog').length).toBeLessThanOrEqual(1);
+    }
+    const dialog = screen.getByRole('dialog', { name: 'Transferir administración' });
+    expect(document.body.style.overflow).toBe('hidden');
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    await actor.keyboard('{Escape}');
+    for (const callback of [...timers.values()]) await act(async () => callback());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.body.style.overflow).toBe('auto');
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it.each(['unmount', 'organization', 'session'])('cancels pending handoff on %s change', async (change) => {
+    const timers = captureCloseTimers();
+    vi.stubGlobal('fetch', stubTransfer(true, () => response(transferResult)));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (scope: string, token: string) => (
+      <QueryClientProvider client={client}>
+        <UsersScreen baseUrl="http://api.test" token={token} queryKeys={{
+          root: [scope], team: [scope, 'team'], invitations: [scope, 'invitations'],
+        }} />
+      </QueryClientProvider>
+    );
+    const rendered = render(view('organization-a', 'session-a'));
+    await requestAdminRemoval(userEvent.setup());
+    await waitFor(() => expect(timers.size).toBeGreaterThan(0));
+    if (change === 'unmount') rendered.unmount();
+    else rendered.rerender(view(change === 'organization' ? 'organization-b' : 'organization-a', change === 'session' ? 'session-b' : 'session-a'));
+    for (const callback of [...timers.values()]) await act(async () => callback());
+    expect(screen.queryByRole('dialog', { name: 'Transferir administración' })).toBeNull();
+    expect(screen.queryByText(/Administración transferida/)).toBeNull();
+  });
+
+  it.each(['organization', 'session', 'cancel', 'unmount'])('ignores a late LAST_ADMIN after %s change', async (change) => {
+    const timers = captureCloseTimers();
+    let rejectRequest!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes(':change-roles')) return new Promise<Response>((resolve) => { rejectRequest = resolve; });
+      return response(directory(true));
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (scope: string, token: string) => (
+      <QueryClientProvider client={client}>
+        <UsersScreen baseUrl="http://api.test" token={token} queryKeys={{
+          root: [scope], team: [scope, 'team'], invitations: [scope, 'invitations'],
+        }} />
+      </QueryClientProvider>
+    );
+    const rendered = render(view('organization-a', 'session-a'));
+    const actor = userEvent.setup();
+    await requestAdminRemoval(actor);
+    expect(rejectRequest).toBeTypeOf('function');
+    if (change === 'unmount') rendered.unmount();
+    else if (change === 'cancel') await actor.keyboard('{Escape}');
+    else rendered.rerender(view(change === 'organization' ? 'organization-b' : 'organization-a', change === 'session' ? 'session-b' : 'session-a'));
+    await act(async () => rejectRequest(apiError('LAST_ADMIN')));
+    for (const callback of [...timers.values()]) await act(async () => callback());
     expect(screen.queryByRole('dialog', { name: 'Transferir administración' })).toBeNull();
   });
 
@@ -771,7 +877,7 @@ describe('UsersScreen (#458 authoritative offboarding)', () => {
   const directory = (capabilities: string[], left = false) => ({ items: [{ ...source, membership_status: left ? 'left' : 'active', version: left ? 5 : 4 }, target, ineligible], summary: { active_members: left ? 2 : 3, suspended_members: 0, left_members: left ? 1 : 0, max_active_members: null, team_version: 1, entitlements_version: 1, capabilities } });
   const apiError = (code: string) => response({ code, message: code, fieldErrors: {}, requestId: 'request-1', retryable: false, details: {} }, 409);
 
-  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
   it('does not expose offboarding without an authoritative management capability', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => response(directory(['team:view']))));

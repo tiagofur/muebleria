@@ -21,6 +21,8 @@ export type ModalSize = 'sm' | 'md' | 'lg' | 'fullscreen';
 export type ModalProps = {
   readonly open: boolean;
   readonly onClose: () => void;
+  /** Runs once after the closing portal is removed and its effects cleaned up. */
+  readonly onAfterClose?: () => void;
   readonly title: string;
   readonly size?: ModalSize;
   readonly children: ReactNode;
@@ -55,6 +57,7 @@ function getFocusable(container: HTMLElement): HTMLElement[] {
 export function Modal({
   open,
   onClose,
+  onAfterClose,
   title,
   size = 'md',
   children,
@@ -65,6 +68,7 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const [rendered, setRendered] = useState(open);
+  const wasRendered = useRef(open);
   const [phase, setPhase] = useState<'open' | 'closing'>(
     open ? 'open' : 'closing',
   );
@@ -131,6 +135,13 @@ export function Modal({
       }
     };
   }, [open, rendered]);
+
+  // Observe committed removal, not the timer that merely requests it.
+  useEffect(() => {
+    const closed = wasRendered.current && !rendered && !open;
+    wasRendered.current = rendered;
+    if (closed) onAfterClose?.();
+  }, [open, rendered, onAfterClose]);
 
   // Esc closes
   useEffect(() => {

@@ -730,6 +730,11 @@ Estructura:
 └───────────────────────────────┘
 ```
 
+Los traspasos entre modales esperan `Modal.onAfterClose`: se emite tras retirar
+el portal y limpiar sus efectos, no al solicitar el cierre. No coordinar dos
+modales con temporizadores paralelos. En Equipo, el traspaso por `LAST_ADMIN`
+se cancela al salir, cambiar de contexto o reabrir el diálogo de origen.
+
 ### 4.4 Toasts
 
 Position: **top-right**. Auto-dismiss: 4s. Máximo 3 simultáneos.
