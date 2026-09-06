@@ -308,6 +308,14 @@ type Store interface {
 	// #395 / DT-11: explicit DesignRevision approval (published→approved
 	// exactly once; replay is an idempotent no-op).
 	ApproveDesignRevision(ctx context.Context, cmd storage.ApproveDesignRevisionCommand) (*domain.DesignRevision, error)
+	// #502 / WEB-DT-3: always-gated production approval — exact accepted
+	// QuoteRevision required, release gate chain enforced before the
+	// transition (no skip mode).
+	ApproveDesignRevisionForProduction(ctx context.Context, cmd storage.ApproveDesignRevisionForProductionCommand) (*domain.DesignRevision, error)
+	// #502 / WEB-DT-3: read-only evaluation of the authoritative release
+	// manufacturing preflight (#466 parity: the exact gate the release
+	// command enforces, without creating anything).
+	EvaluateDesignRevisionPreflight(ctx context.Context, designID, revisionID string) (*domain.ManufacturingPreflightResult, error)
 	// #395 / DT-11: immutable ProductionRelease pinned to the exact approved
 	// DesignRevision (+ optional exact accepted QuoteRevision) and the
 	// server-computed manufacturing fingerprint; readback derives staleness.

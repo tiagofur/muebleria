@@ -884,6 +884,60 @@ type QuoteLineFurnitureInstance struct {
 	CreatedAt           string            `json:"created_at"`
 }
 
+type ApproveDesignRevisionForProductionRequest struct {
+	QuoteRevisionId string `json:"quoteRevisionId"`
+}
+
+type ManufacturingPreflightStatus string
+
+const (
+	ManufacturingPreflightStatusReady   ManufacturingPreflightStatus = "ready"
+	ManufacturingPreflightStatusBlocked ManufacturingPreflightStatus = "blocked"
+)
+
+type ManufacturingPreflightItemStatus string
+
+const (
+	ManufacturingPreflightItemStatusOk      ManufacturingPreflightItemStatus = "ok"
+	ManufacturingPreflightItemStatusBlocked ManufacturingPreflightItemStatus = "blocked"
+)
+
+type ManufacturingPreflightIssueCode string
+
+const (
+	ManufacturingPreflightIssueCodeEmptyRevision         ManufacturingPreflightIssueCode = "empty_revision"
+	ManufacturingPreflightIssueCodeDuplicateInstance     ManufacturingPreflightIssueCode = "duplicate_instance"
+	ManufacturingPreflightIssueCodeMissingDefinition     ManufacturingPreflightIssueCode = "missing_definition"
+	ManufacturingPreflightIssueCodeInvalidParameters     ManufacturingPreflightIssueCode = "invalid_parameters"
+	ManufacturingPreflightIssueCodeInvalidMaterialChoice ManufacturingPreflightIssueCode = "invalid_material_choice"
+)
+
+type ManufacturingPreflightIssue struct {
+	Code                  ManufacturingPreflightIssueCode `json:"code"`
+	FurnitureInstanceId   *string                         `json:"furnitureInstanceId,omitempty"`
+	FurnitureDefinitionId *string                         `json:"furnitureDefinitionId,omitempty"`
+	Parameter             *string                         `json:"parameter,omitempty"`
+	Message               string                          `json:"message"`
+}
+
+type ManufacturingPreflightItem struct {
+	FurnitureInstanceId   string                           `json:"furnitureInstanceId"`
+	FurnitureDefinitionId string                           `json:"furnitureDefinitionId"`
+	Status                ManufacturingPreflightItemStatus `json:"status"`
+	Issues                []ManufacturingPreflightIssue    `json:"issues"`
+}
+
+type ManufacturingPreflightResult struct {
+	DesignRevisionId string                        `json:"designRevisionId"`
+	Scope            string                        `json:"scope"`
+	Status           ManufacturingPreflightStatus  `json:"status"`
+	Message          string                        `json:"message"`
+	IncludesDetail   bool                          `json:"includesDetail"`
+	BlockedItemCount int64                         `json:"blockedItemCount"`
+	Items            []ManufacturingPreflightItem  `json:"items"`
+	Issues           []ManufacturingPreflightIssue `json:"issues"`
+}
+
 type MaterializeQuoteLineFurniture struct {
 	ProjectID                     string                       `json:"project_id"`
 	QuoteLineID                   string                       `json:"quote_line_id"`

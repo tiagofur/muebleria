@@ -2817,8 +2817,8 @@
     "/designs/{designId}/revisions/{revisionId}:approve": {
       "post": {
         "operationId": "approveDesignRevision",
-        "summary": "Approve an exact published DesignRevision for production (#395, explicit lifecycle transition)",
-        "description": "Explicit published→approved transition on the exact revisionId (never latest). Server-authoritative: actor and timestamp come from the session, never the body. The snapshot stays immutable — only status/approved_by/approved_at change, exactly once. Re-approving an already-approved revision is an idempotent no-op returning the current state; any other status rejects. Requires an Idempotency-Key.",
+        "summary": "Generic published→approved lifecycle transition on an exact DesignRevision (#395)",
+        "description": "Explicit published→approved transition on the exact revisionId (never latest). Server-authoritative: actor and timestamp come from the session. The snapshot stays immutable — only status/approved_by/approved_at change, exactly once. Re-approving an already-approved revision is an idempotent no-op returning the current state; any other status rejects. Requires an Idempotency-Key. This is the GENERIC design-lifecycle approval (design-first flows without a commercial baseline); production approval for the commercial Digital Thread is a SEPARATE always-gated command: approveProjectDesignRevisionForProduction.",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
@@ -2830,6 +2830,109 @@
             "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "responses": {
+          "200": {
+            "description": "The approved revision (or the already-approved state on idempotent replay)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignRevision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/revisions/{revisionId}/preflight": {
+      "post": {
+        "operationId": "evaluateDesignRevisionPreflight",
+        "summary": "Evaluate the authoritative release manufacturing preflight for an exact DesignRevision (#502 / WEB-DT-3, read-only)",
+        "description": "Runs the exact same authoritative release-scoped manufacturing preflight (#395 / #466: scope production-release-v1) that gates createProductionRelease, as a read-only evaluation over the immutable revision snapshot and the organization catalog. No second engine: identical inputs, identical issue codes, identical verdict the release command will enforce. POST is a read mirroring the reconcileProjectDesign precedent. Does not mutate anything and does not create a release.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative manufacturing preflight result for the exact revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManufacturingPreflightResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/designs/{designId}/revisions/{revisionId}:approve-for-production": {
+      "post": {
+        "operationId": "approveProjectDesignRevisionForProduction",
+        "summary": "Production approval of an exact DesignRevision against an exact accepted QuoteRevision (#502 / WEB-DT-3, always gated)",
+        "description": "The production-grade approval of the commercial Digital Thread: ALWAYS pins the exact accepted QuoteRevision and the exact DesignRevision (projectId + designId + revisionId + quoteRevisionId — never latest), and ALWAYS runs the same authoritative gate chain the release command enforces — accepted commercial baseline, reconciliation commercial gate (#393/#394) and manufacturing preflight (#466 scope production-release-v1) over the exact pair — BEFORE the published→approved transition. Any blocker rejects with the same typed 409 payloads createProductionRelease returns; the revision stays published. Re-approving an already-approved revision is an idempotent no-op returning the current state. The generic body-less approveDesignRevision command is a DIFFERENT concept (design-lifecycle without commercial baseline) and never represents production approval.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveDesignRevisionForProductionRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The approved revision (or the already-approved state on idempotent replay)",
@@ -6470,6 +6573,155 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ApproveDesignRevisionForProductionRequest": {
+        "type": "object",
+        "description": "Body for approveProjectDesignRevisionForProduction (#502): the exact accepted commercial baseline is REQUIRED — production approval cannot exist without it.",
+        "additionalProperties": false,
+        "required": [
+          "quoteRevisionId"
+        ],
+        "properties": {
+          "quoteRevisionId": {
+            "type": "string",
+            "description": "Exact accepted QuoteRevision the approval is gated against."
+          }
+        }
+      },
+      "ManufacturingPreflightStatus": {
+        "type": "string",
+        "description": "Authoritative release preflight verdict (#395 / #466, scope production-release-v1).",
+        "enum": [
+          "ready",
+          "blocked"
+        ]
+      },
+      "ManufacturingPreflightItemStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "blocked"
+        ]
+      },
+      "ManufacturingPreflightIssueCode": {
+        "type": "string",
+        "description": "Canonical blocker codes of the release manufacturing preflight. No other taxonomy.",
+        "enum": [
+          "empty_revision",
+          "duplicate_instance",
+          "missing_definition",
+          "invalid_parameters",
+          "invalid_material_choice"
+        ]
+      },
+      "ManufacturingPreflightIssue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ManufacturingPreflightIssueCode"
+          },
+          "furnitureInstanceId": {
+            "type": "string",
+            "description": "Exact physical unit the issue refers to, when applicable."
+          },
+          "furnitureDefinitionId": {
+            "type": "string",
+            "description": "Catalog definition the issue refers to, when applicable."
+          },
+          "parameter": {
+            "type": "string",
+            "description": "Parameter name involved, when applicable."
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ManufacturingPreflightItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furnitureInstanceId",
+          "furnitureDefinitionId",
+          "status",
+          "issues"
+        ],
+        "properties": {
+          "furnitureInstanceId": {
+            "type": "string"
+          },
+          "furnitureDefinitionId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManufacturingPreflightItemStatus"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingPreflightIssue"
+            }
+          }
+        }
+      },
+      "ManufacturingPreflightResult": {
+        "type": "object",
+        "description": "The exact verdict the release command enforces, evaluated read-only over the immutable revision snapshot. Server-projected per actor: every role sees the verdict, the business-safe message and the blocked-item count; the manufacturing internals (per-unit items and structured issues) are only included for roles with release/manufacturing capability (includesDetail=true).",
+        "additionalProperties": false,
+        "required": [
+          "designRevisionId",
+          "scope",
+          "status",
+          "message",
+          "includesDetail",
+          "blockedItemCount",
+          "items",
+          "issues"
+        ],
+        "properties": {
+          "designRevisionId": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "production-release-v1"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManufacturingPreflightStatus"
+          },
+          "message": {
+            "type": "string",
+            "description": "Server-computed business-safe message (no manufacturing internals)."
+          },
+          "includesDetail": {
+            "type": "boolean",
+            "description": "Whether items/issues carry manufacturing detail for this actor."
+          },
+          "blockedItemCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Server-computed count of blocked physical units."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingPreflightItem"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingPreflightIssue"
+            }
           }
         }
       },

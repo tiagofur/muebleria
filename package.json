@@ -22,9 +22,10 @@
     "smoke:perf": "playwright test --config=playwright.config.ts tests/smoke/proyectar-perf.spec.ts",
     "smoke:usability": "playwright test --config=playwright.config.ts tests/smoke/proyectar-usability.spec.ts"
   },
-
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },

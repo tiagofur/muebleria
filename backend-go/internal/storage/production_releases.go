@@ -97,66 +97,15 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		return nil, domain.ErrDesignRevisionNotApproved
 	}
 
-	// 3. Load the immutable snapshot items: preflight and fingerprint inputs.
-	items, err := s.ListDesignRevisionItems(txCtx, cmd.DesignRevisionID)
+	// 3-6. The ONE authoritative gate chain (exact accepted quote →
+	// reconciliation commercial gate → manufacturing preflight), shared with
+	// the #502 production approval so both commands enforce identical
+	// verdicts over the exact pair.
+	items, preflight, err := s.enforceProductionGates(txCtx, projectOrgID, cmd.ProjectID, cmd.QuoteRevisionID, cmd.DesignRevisionID)
 	if err != nil {
 		return nil, err
 	}
-
-	// 4. Commercial baseline: exact, same-project, accepted (§12, §15). A
-	// draft or superseded quote never grounds production.
-	const quoteStatusAccepted = "accepted"
-	quoteRevisionID := ""
-	if cmd.QuoteRevisionID != "" {
-		var qrProjectID, qrStatus string
-		err = s.db(txCtx).QueryRow(txCtx, `
-			SELECT project_id, status FROM quote_revisions WHERE id = $1
-		`, cmd.QuoteRevisionID).Scan(&qrProjectID, &qrStatus)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, domain.ErrQuoteRevisionNotFound
-			}
-			return nil, err
-		}
-		if qrProjectID != cmd.ProjectID {
-			return nil, domain.ErrCrossProjectRelease
-		}
-		if qrStatus != quoteStatusAccepted {
-			return nil, domain.ErrReleaseQuoteNotAccepted
-		}
-		quoteRevisionID = cmd.QuoteRevisionID
-	}
-
-	// 5. Reconciliation gate over the exact revisions (#393/#394): the server
-	// recomputes; a client "no conflict" claim is never input (§13–§15).
-	if quoteRevisionID != "" {
-		inputs, err := s.loadReconciliationInputs(txCtx, cmd.ProjectID, quoteRevisionID, cmd.DesignRevisionID)
-		if err != nil {
-			return nil, err
-		}
-		reconciliation, err := domain.Reconcile(inputs.Quote, inputs.Design)
-		if err != nil {
-			return nil, err
-		}
-		classification, err := domain.ClassifyReconciliation(reconciliation)
-		if err != nil {
-			return nil, err
-		}
-		if err := domain.EvaluateReleaseCommercialGate(classification); err != nil {
-			return nil, err
-		}
-	}
-
-	// 6. Authoritative manufacturing preflight against the organization
-	// catalog (§16–§17). Any blocker rejects the whole release.
-	definitions, err := s.loadReferencedFurnitureDefinitionParameters(txCtx, projectOrgID, items)
-	if err != nil {
-		return nil, err
-	}
-	preflight := domain.RunManufacturingPreflight(cmd.DesignRevisionID, items, definitions)
-	if preflight.Status == domain.ManufacturingPreflightBlocked {
-		return nil, &domain.ReleasePreflightBlockedError{Result: preflight}
-	}
+	quoteRevisionID := cmd.QuoteRevisionID
 
 	// 7. Server-computed manufacturing fingerprint over the same immutable
 	// items the preflight validated (§18–§19). Because both derive from
@@ -246,6 +195,124 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 	return &ProductionReleaseReadback{Release: release, Staleness: *staleness}, nil
 }
 
+// enforceProductionGates is the ONE authoritative gate chain shared by the
+// release command and the #502 production approval: exact accepted
+// commercial baseline (when pinned), reconciliation commercial gate over the
+// exact pair (#393/#394 — the server always recomputes) and the authoritative
+// manufacturing preflight against the organization catalog (§§12–17). Any
+// verdict rejects the whole command with the typed domain error the HTTP
+// layer maps to structured 409 blockers.
+func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID, projectID, quoteRevisionID, designRevisionID string) ([]domain.DesignRevisionItem, *domain.ManufacturingPreflightResult, error) {
+	// 1. Commercial baseline: exact, same-project, accepted. A draft or
+	// superseded quote never grounds production.
+	const quoteStatusAccepted = "accepted"
+	if quoteRevisionID != "" {
+		var qrProjectID, qrStatus string
+		err := s.db(ctx).QueryRow(ctx, `
+			SELECT project_id, status FROM quote_revisions WHERE id = $1
+		`, quoteRevisionID).Scan(&qrProjectID, &qrStatus)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, nil, domain.ErrQuoteRevisionNotFound
+			}
+			return nil, nil, err
+		}
+		if qrProjectID != projectID {
+			return nil, nil, domain.ErrCrossProjectRelease
+		}
+		if qrStatus != quoteStatusAccepted {
+			return nil, nil, domain.ErrReleaseQuoteNotAccepted
+		}
+	}
+
+	// 2. Immutable snapshot items: preflight and fingerprint inputs.
+	items, err := s.ListDesignRevisionItems(ctx, designRevisionID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 3. Reconciliation commercial gate over the exact revisions: a client
+	// "no conflict" claim is never input (§§13–§15).
+	if quoteRevisionID != "" {
+		inputs, err := s.loadReconciliationInputs(ctx, projectID, quoteRevisionID, designRevisionID)
+		if err != nil {
+			return nil, nil, err
+		}
+		reconciliation, err := domain.Reconcile(inputs.Quote, inputs.Design)
+		if err != nil {
+			return nil, nil, err
+		}
+		classification, err := domain.ClassifyReconciliation(reconciliation)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := domain.EvaluateReleaseCommercialGate(classification); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// 4. Authoritative manufacturing preflight against the organization
+	// catalog (§§16–§17). Any blocker rejects the whole command.
+	definitions, err := s.loadReferencedFurnitureDefinitionParameters(ctx, projectOrgID, items)
+	if err != nil {
+		return nil, nil, err
+	}
+	preflight := domain.RunManufacturingPreflight(designRevisionID, items, definitions)
+	if preflight.Status == domain.ManufacturingPreflightBlocked {
+		return nil, preflight, &domain.ReleasePreflightBlockedError{Result: preflight}
+	}
+	return items, preflight, nil
+}
+
+// EvaluateDesignRevisionPreflight (#502 / WEB-DT-3) evaluates the exact same
+// authoritative release manufacturing preflight that gates
+// CreateProductionRelease — read-only, over the immutable revision snapshot
+// and the organization catalog. There is deliberately no second engine: the
+// same loaders, the same domain function, the same verdict a release command
+// would enforce. Nothing is persisted and no release is created.
+func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, designID, revisionID string) (*domain.ManufacturingPreflightResult, error) {
+	if !isValidUUID(designID) || !isValidUUID(revisionID) {
+		return nil, domain.ErrInvalidReleaseCommand
+	}
+
+	// 1. Load the exact revision pinned to its design (cross-design answers
+	// the uniform revision 404, mirroring GetDesignRevision semantics) and
+	// resolve the owning organization for the catalog lookup.
+	var drDesignID, projectOrgID string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT design_id::text, organization_id::text
+		FROM design_revisions WHERE id = $1
+	`, revisionID).Scan(&drDesignID, &projectOrgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignRevisionNotFound
+		}
+		return nil, err
+	}
+	if drDesignID != designID {
+		return nil, domain.ErrDesignRevisionNotFound
+	}
+
+	// 2. Immutable snapshot items: the exact preflight inputs a release
+	// would validate.
+	items, err := s.ListDesignRevisionItems(ctx, revisionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Catalog parameter contracts for the referenced definitions — the
+	// identical loader the release path uses.
+	definitions, err := s.loadReferencedFurnitureDefinitionParameters(ctx, projectOrgID, items)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. The ONE authoritative verdict. RLS scopes the revision read to the
+	// organizations that can access the project, so a foreign revision never
+	// reaches this point.
+	return domain.RunManufacturingPreflight(revisionID, items, definitions), nil
+}
+
 // loadReferencedFurnitureDefinitionParameters loads the persisted parameter
 // contracts for exactly the definitions the revision references. A definition
 // whose contract fails to decode fail-closes its items (ContractInvalid)
@@ -302,16 +369,22 @@ func (s *PostgresStore) loadReferencedFurnitureDefinitionParameters(ctx context.
 	return definitions, nil
 }
 
+// productionReleaseColumns derives design_revision_number from the pinned
+// revision row (the release table stores only the exact id — §6).
 const productionReleaseColumns = `
-	id, organization_id, project_id, release_number,
-	design_revision_id, COALESCE(quote_revision_id::text, ''),
-	manufacturing_fingerprint, status, released_by::text, released_at`
+	pr.id, pr.organization_id, pr.project_id, pr.release_number,
+	pr.design_revision_id, dr.revision_number, COALESCE(pr.quote_revision_id::text, ''),
+	pr.manufacturing_fingerprint, pr.status, pr.released_by::text, pr.released_at`
+
+const productionReleaseFrom = `
+	FROM production_releases pr
+	JOIN design_revisions dr ON dr.id = pr.design_revision_id`
 
 func scanProductionRelease(row pgx.Row) (*domain.ProductionRelease, error) {
 	var r domain.ProductionRelease
 	if err := row.Scan(
 		&r.ID, &r.OrganizationID, &r.ProjectID, &r.ReleaseNumber,
-		&r.DesignRevisionID, &r.QuoteRevisionID,
+		&r.DesignRevisionID, &r.DesignRevisionNumber, &r.QuoteRevisionID,
 		&r.ManufacturingFingerprint, &r.Status, &r.ReleasedBy, &r.ReleasedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -333,29 +406,42 @@ func (s *PostgresStore) ListProjectProductionReleases(ctx context.Context, proje
 	}
 
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT `+productionReleaseColumns+`
-		FROM production_releases
-		WHERE project_id = $1
-		ORDER BY release_number DESC
+		SELECT `+productionReleaseColumns+productionReleaseFrom+`
+		WHERE pr.project_id = $1
+		ORDER BY pr.release_number DESC
 	`, projectID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	releases := []ProductionReleaseReadback{}
+	// Buffer every release row BEFORE deriving staleness: the staleness
+	// projection issues its own queries, and issuing them while this rows
+	// cursor is still open would collide on the pooled connection ("conn
+	// busy").
+	releases := make([]domain.ProductionRelease, 0, 8)
 	for rows.Next() {
 		release, err := scanProductionRelease(rows)
 		if err != nil {
+			rows.Close()
 			return nil, err
 		}
-		staleness, err := s.releaseStaleness(ctx, *release, "")
+		releases = append(releases, *release)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	readbacks := make([]ProductionReleaseReadback, 0, len(releases))
+	for _, release := range releases {
+		staleness, err := s.releaseStaleness(ctx, release, "")
 		if err != nil {
 			return nil, err
 		}
-		releases = append(releases, ProductionReleaseReadback{Release: *release, Staleness: *staleness})
+		readbacks = append(readbacks, ProductionReleaseReadback{Release: release, Staleness: *staleness})
 	}
-	return releases, rows.Err()
+	return readbacks, nil
 }
 
 // GetProjectProductionRelease returns one exact release with its staleness
@@ -370,9 +456,8 @@ func (s *PostgresStore) GetProjectProductionRelease(ctx context.Context, project
 	}
 
 	release, err := scanProductionRelease(s.db(ctx).QueryRow(ctx, `
-		SELECT `+productionReleaseColumns+`
-		FROM production_releases
-		WHERE id = $1 AND project_id = $2
+		SELECT `+productionReleaseColumns+productionReleaseFrom+`
+		WHERE pr.id = $1 AND pr.project_id = $2
 	`, releaseID, projectID))
 	if err != nil {
 		if errors.Is(err, domain.ErrReleaseNotFound) {
@@ -471,23 +556,21 @@ func (s *PostgresStore) GetContextualProductionRelease(ctx context.Context, proj
 	var args []any
 	if quoteRevisionID != "" {
 		query = `
-			SELECT ` + productionReleaseColumns + `
-			FROM production_releases
-			WHERE project_id = $1
-			  AND design_revision_id = $2
-			  AND (quote_revision_id = $3::uuid OR quote_revision_id IS NULL)
-			ORDER BY CASE WHEN quote_revision_id = $3::uuid THEN 0 ELSE 1 END, release_number DESC
+			SELECT ` + productionReleaseColumns + productionReleaseFrom + `
+			WHERE pr.project_id = $1
+			  AND pr.design_revision_id = $2
+			  AND (pr.quote_revision_id = $3::uuid OR pr.quote_revision_id IS NULL)
+			ORDER BY CASE WHEN pr.quote_revision_id = $3::uuid THEN 0 ELSE 1 END, pr.release_number DESC
 			LIMIT 1
 		`
 		args = []any{projectID, designRevisionID, quoteRevisionID}
 	} else {
 		query = `
-			SELECT ` + productionReleaseColumns + `
-			FROM production_releases
-			WHERE project_id = $1
-			  AND design_revision_id = $2
-			  AND quote_revision_id IS NULL
-			ORDER BY release_number DESC
+			SELECT ` + productionReleaseColumns + productionReleaseFrom + `
+			WHERE pr.project_id = $1
+			  AND pr.design_revision_id = $2
+			  AND pr.quote_revision_id IS NULL
+			ORDER BY pr.release_number DESC
 			LIMIT 1
 		`
 		args = []any{projectID, designRevisionID}

@@ -90,6 +90,8 @@ import {
   roleCanManagePurchasing,
   roleCanMutateModules,
   roleCanMutateProjects,
+  roleCanApproveDesignRevisions,
+  roleCanReleaseProduction,
   roleCanReopenProject,
   roleCanViewCosts,
   roleCanViewPortfolioDashboard,
@@ -155,6 +157,8 @@ import {
   projectFurnitureQueryKeys,
   ProjectDesignsScreen,
   projectDesignsQueryKeys,
+  ProjectReconciliationScreen,
+  projectReconciliationQueryKeys,
   Modal,
   OnboardingTourModal,
   UsabilityBenchmarkPanel,
@@ -264,6 +268,8 @@ import {
   projectFurniturePath,
   projectDesignsFromPath,
   projectDesignsPath,
+  projectReconciliationFromPath,
+  projectReconciliationPath,
   shipmentDetailFromPath,
   installationDetailPath,
   shipmentDetailPath,
@@ -913,6 +919,19 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     () => projectDesignsFromPath(location.pathname, location.search),
     [location.pathname, location.search],
   );
+
+  // WEB-DT-3 (#502): the reconciliation/approval/release workspace route
+  // pins its exact QuoteRevision + DesignRevision context in the URL query
+  // string. Role hints only — the server stays the command authority.
+  const projectReconciliationRoute = useMemo(
+    () => projectReconciliationFromPath(location.pathname, location.search),
+    [location.pathname, location.search],
+  );
+  const canRequoteDesignChanges = session === 'auth' && anyRole(actorRoles, roleCanMutateProjects);
+  const canApproveDesignRevisionsHint =
+    session === 'auth' && anyRole(actorRoles, roleCanApproveDesignRevisions);
+  const canReleaseProductionHint =
+    session === 'auth' && anyRole(actorRoles, roleCanReleaseProduction);
 
   return (
 
@@ -1950,6 +1969,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                   navigate(target);
                 }
               }}
+              onOpenReconciliation={(context) => {
+                const target = projectReconciliationPath(projectDesignsRoute.projectId, {
+                  quoteRevisionId: null,
+                  designId: context.designId,
+                  designRevisionId: context.revisionId,
+                });
+                if (location.pathname + location.search !== target) navigate(target);
+              }}
               onBack={() => {
                 const target = projectPath(projectDesignsRoute.projectId);
                 if (location.pathname !== target) navigate(target);
@@ -1963,7 +1990,63 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         )
       ) : null}
 
-      {navId === 'quotes' && !projectFurnitureRoute && !projectDesignsRoute ? (
+      {navId === 'quotes' && projectReconciliationRoute ? (
+        authToken ? (
+          sessionScope ? (
+            <ProjectReconciliationScreen
+              key={`pr-${projectReconciliationRoute.projectId}-${JSON.stringify(
+                organizationKeys.all(sessionScope),
+              )}`}
+              baseUrl={DEFAULT_API_BASE}
+              token={authToken}
+              projectId={projectReconciliationRoute.projectId}
+              queryKeys={projectReconciliationQueryKeys(
+                sessionScopeKey(sessionScope),
+                projectReconciliationRoute.projectId,
+              )}
+              initialContext={projectReconciliationRoute.context}
+              onContextChange={(context) => {
+                const target = projectReconciliationPath(projectReconciliationRoute.projectId, context);
+                if (location.pathname + location.search !== target) {
+                  navigate(target, { replace: true });
+                }
+              }}
+              onOpenDesigns={(context) => {
+                const target = projectDesignsPath(projectReconciliationRoute.projectId, {
+                  designId: context.designId,
+                  revisionId: context.revisionId,
+                });
+                if (location.pathname + location.search !== target) navigate(target);
+              }}
+              onOpenFurnitureMatrix={(context) => {
+                const target = projectFurniturePath(projectReconciliationRoute.projectId, {
+                  quoteRevisionId: context.quoteRevisionId,
+                  designId: context.designId,
+                  designContextKind: context.revisionId ? 'revision' : 'none',
+                  designRevisionId: context.revisionId,
+                });
+                if (location.pathname + location.search !== target) navigate(target);
+              }}
+              canRequote={canRequoteDesignChanges}
+              canApprove={canApproveDesignRevisionsHint}
+              canRelease={canReleaseProductionHint}
+              onBack={() => {
+                const target = projectPath(projectReconciliationRoute.projectId);
+                if (location.pathname !== target) navigate(target);
+              }}
+            />
+          ) : (
+            <PageLoading label="Validando sesión del taller…" />
+          )
+        ) : (
+          <p className="settings-hint">Iniciá sesión para ver la reconciliación de la obra.</p>
+        )
+      ) : null}
+
+      {navId === 'quotes' &&
+      !projectFurnitureRoute &&
+      !projectDesignsRoute &&
+      !projectReconciliationRoute ? (
         <ProjectsScreen
           projects={projectsForRole}
           modules={modules}
@@ -2062,6 +2145,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onOpenFurnitureMatrix={(projectId) => {
             const target = projectFurniturePath(projectId);
             if (location.pathname + location.search !== target) navigate(target);
+          }}
+          onOpenReconciliation={(projectId) => {
+            const target = projectReconciliationPath(projectId);
+            if (location.pathname !== target) navigate(target);
           }}
           onOpenDesigns={(projectId) => {
             const target = projectDesignsPath(projectId);

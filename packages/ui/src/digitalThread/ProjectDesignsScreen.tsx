@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileCode,
   FileText,
+  GitCompareArrows,
   History,
   Layers,
   Plus,
@@ -115,6 +116,7 @@ export interface ProjectDesignsScreenProps {
   readonly onContextChange?: (context: ProjectDesignsContextState) => void;
   readonly onBack?: () => void;
   readonly onOpenFurnitureMatrix?: (context: { designId: string | null; revisionId: string | null }) => void;
+  readonly onOpenReconciliation?: (context: { designId: string | null; revisionId: string | null }) => void;
   readonly canMutate?: boolean;
 }
 
@@ -154,6 +156,7 @@ export function ProjectDesignsScreen({
   onContextChange,
   onBack,
   onOpenFurnitureMatrix,
+  onOpenReconciliation,
   canMutate = false,
 }: ProjectDesignsScreenProps): ReactNode {
   const queryClient = useQueryClient();
@@ -475,6 +478,22 @@ export function ProjectDesignsScreen({
               >
                 <Box size={16} />
                 <span>Ver matriz de muebles</span>
+              </button>
+            )}
+            {onOpenReconciliation && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                data-testid="open-reconciliation-btn"
+                onClick={() =>
+                  onOpenReconciliation({
+                    designId: activeDesignId,
+                    revisionId: selectedRevisionDetail?.id ?? selectedRevisionHeader?.id ?? null,
+                  })
+                }
+              >
+                <GitCompareArrows size={16} />
+                <span>Reconciliar y liberar</span>
               </button>
             )}
             {onBack && (

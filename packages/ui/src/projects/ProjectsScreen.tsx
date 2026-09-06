@@ -259,6 +259,7 @@ export interface ProjectsScreenProps {
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
   /** WEB-DT-2 (#501): opens the server-backed Designs and revisions workspace. */
   readonly onOpenDesigns?: (projectId: string) => void;
+  readonly onOpenReconciliation?: (projectId: string) => void;
   /**
    * Commercial quote export for client (F030 / #36).
    * Shell owns breakdown → xlsx → download.
@@ -509,6 +510,7 @@ export function ProjectsScreen({
   onOpenInProduction,
   onOpenFurnitureMatrix,
   onOpenDesigns,
+  onOpenReconciliation,
   onExportCommercialQuote,
   onExportCommercialQuotePdf,
   exportErrors = [],
@@ -730,6 +732,7 @@ export function ProjectsScreen({
           onOpenInProduction={onOpenInProduction}
           onOpenFurnitureMatrix={onOpenFurnitureMatrix}
           onOpenDesigns={onOpenDesigns}
+          onOpenReconciliation={onOpenReconciliation}
           itemHandlers={{
             onUpdateItemQuantity: state.updateItemQuantity,
             onUpdateItemMeasurePreset: state.updateItemMeasurePreset,

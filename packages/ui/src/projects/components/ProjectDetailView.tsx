@@ -126,6 +126,7 @@ export interface ProjectDetailViewProps {
   readonly onOpenInProduction?: (projectId: string) => void;
   /** WEB-DT-1 (#500): open the server-backed Project Furniture matrix. */
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
+  readonly onOpenReconciliation?: (projectId: string) => void;
   /** WEB-DT-2 (#501): open the server-backed Designs and revisions workspace. */
   readonly onOpenDesigns?: (projectId: string) => void;
 
@@ -418,6 +419,7 @@ function ProjectDetailViewInner(): ReactNode {
     onOpenInProduction,
     onOpenFurnitureMatrix,
     onOpenDesigns,
+    onOpenReconciliation,
     onOpenPresentation,
     onDuplicate,
     onSaveAsTemplate,
@@ -514,6 +516,14 @@ function ProjectDetailViewInner(): ReactNode {
         label: 'Diseños 3D y revisiones',
         hint: 'Historial inmutable de alternativas, revisiones y artefactos',
         onSelect: () => onOpenDesigns(project.id),
+      });
+    }
+    if (onOpenReconciliation) {
+      dtItems.push({
+        id: 'open-reconciliation',
+        label: 'Reconciliación y liberación',
+        hint: 'Comparación exacta, re-cotización, aprobación y liberación',
+        onSelect: () => onOpenReconciliation(project.id),
       });
     }
     if (dtItems.length > 0) {

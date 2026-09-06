@@ -1,9 +1,19 @@
-# Feature activa: Ninguna (F217 completada)
+# Feature activa: Ninguna (F218 completada)
 
-- Actualizado: 2026-09-05 America/Mexico_City
-- Última feature: F217 — `[P0][WEB-DT-2] Designs, immutable revisions and 3D artifact history` (#501)
-- Rama: `feat/501-web-dt2-designs-revisions-artifacts`
-- Estado: `completed` (verificación completa; ver `progress/implementation_501_web_dt2.md`)
+- Actualizado: 2026-09-06 America/Mexico_City
+- Última feature: F218 — `[P0][WEB-DT-3] Reconciliation, approval and exact ProductionRelease workspace` (#502)
+- Rama: `feat/502-web-dt3-reconciliation-release`
+- Estado: `completed` (verificación completa; ver `progress/implementation_502_web_dt3.md`)
+- Logros:
+  1. Read model mínimo generado: `evaluateDesignRevisionPreflight` (`POST /designs/{designId}/revisions/{revisionId}/preflight`) — la MISMA función de dominio del gate de release (#466/#395, scope `production-release-v1`), sin segundo motor; proofs Go de paridad ready/blocked + fail-closed exact-revision + RLS.
+  2. Workspace React `/quotes/:projectId/reconciliacion?qrev=&design=&rev=` con contexto exacto fail-closed, reconciliación #393/#394 verbatim (rows por `furnitureInstanceId`, sin clasificación cliente), requote explícito con modal de review (Q inmutable, conflicto VERSION_CONFLICT tipado), panel de preflight autoritativo, aprobación de revisión exacta, ProductionRelease con propuesta + pins exactos e historial durable (R2 nunca retargeta P1).
+  3. E2E browser + PostgreSQL real (`tests/organization/project-reconciliation.spec.ts`): golden path quote-first con qty>1 + design-first, requote → Q2, conflicto stale, aprobación, release P1 (Q2+R1), durabilidad tras R2, failure rollback y tenant isolation.
+  4. `#499 Web↔SketchUp handoff: DEFERRED`; `#503: DEFERRED`. Sin Ruby/SketchUp/machines/DXF.
+  5. Limitación de demo documentada: no hay API para crear/aceptar la primera QuoteRevision — el fixture siembra Q1 accepted por SQL (rol migration), misma convención que el suite Go.
+
+---
+
+# Historial previo — F217 (#501 / WEB-DT-2) — Designs, immutable revisions and 3D artifact history
 - Logros:
   1. Pure model & algorithms: `designHistory.ts` + `designHistory.test.ts` (14/14 tests) con linaje inmutable $R1 \to R2 \to R3$, resolución de release activo, selección exacta de revisión snapshot, mapeo de artefactos y formateadores.
   2. Workspace React `ProjectDesignsScreen.tsx` + `ProjectDesignsScreen.test.tsx` (9/9 tests) con alternativas en `WorkspaceTabs`, línea de tiempo inmutable con insignias de estado, visualización pineada de ítems y parámetros de revisión, visor 3D con grants firmados, tabla de artefactos con hashes SHA-256 y descarga por grants, drawer de auditoría técnica y estados vacíos honestos.
