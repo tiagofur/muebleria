@@ -166,6 +166,8 @@ export {
   roleCanMutateCustomers,
   roleCanMutateModules,
   roleCanMutateProjects,
+  roleCanApproveDesignRevisions,
+  roleCanReleaseProduction,
   roleCanReopenProject,
   roleCanViewCosts,
   roleCanViewPortfolioDashboard,

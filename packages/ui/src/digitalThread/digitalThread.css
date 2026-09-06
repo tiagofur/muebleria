@@ -795,3 +795,247 @@
   font-size: 14px;
 }
 
+
+/* ==========================================================================
+   WEB-DT-3 (issue 502) — Reconciliation, approval and exact ProductionRelease
+   workspace (pr-*). Tokens only, mirroring pd-* conventions.
+   ========================================================================== */
+
+.pr-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pr-context-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.pr-context-bar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  flex: 1 1 240px;
+}
+
+.pr-context-bar__field label {
+  font-size: var(--text-xs, 12px);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.pr-exact-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md, 6px);
+  background: var(--surface-card);
+  flex-wrap: wrap;
+}
+
+.pr-exact-header__side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pr-exact-header__kind {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pr-exact-header__vs {
+  font-size: var(--text-sm, 13px);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.pr-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.pr-summary__grid dt {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-secondary);
+}
+
+.pr-summary__grid dd {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pr-summary__state {
+  font-size: var(--text-sm, 13px);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.pr-panels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.pr-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pr-panel__hint {
+  margin: 0;
+  font-size: var(--text-sm, 13px);
+  color: var(--text-secondary);
+}
+
+.pr-panel__hint--danger {
+  color: var(--danger-700);
+  font-weight: 600;
+}
+
+.pr-panel__why {
+  margin: 0;
+  font-size: var(--text-xs, 12px);
+  color: var(--text-muted);
+}
+
+.pr-issue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pr-issue-list__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--text-sm, 13px);
+}
+
+.pr-issue-list__code {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs, 12px);
+  background: var(--danger-50);
+  color: var(--danger-700);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.pr-issue-list__param {
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs, 12px);
+}
+
+.pr-pin-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.pr-pin-toggle__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm, 13px);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.pr-latest-note {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-muted);
+}
+
+.pr-diff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pr-diff-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pr-diff-list__path {
+  font-size: var(--text-sm, 13px);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.pr-diff-list__values {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-secondary);
+}
+
+.pr-diff-list__code {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+}
+
+.pr-impact-chips {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.pr-requote-selection {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.pr-requote-selection__item label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-sm, 13px);
+  cursor: pointer;
+}
+
+.pr-requote-summary {
+  border-top: 1px solid var(--border-default);
+  padding-top: 10px;
+  font-size: var(--text-sm, 13px);
+  color: var(--text-secondary);
+}
+
+.pd-alert--success {
+  background: var(--success-50);
+  border-left: 3px solid var(--success-700);
+  color: var(--text-primary);
+}
+
+.pd-alert--warning {
+  background: var(--warning-50);
+  border-left: 3px solid var(--warning-700);
+  color: var(--text-primary);
+}

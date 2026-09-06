@@ -485,6 +485,64 @@ export function projectDesignsFromPath(
 }
 
 /**
+ * Reconciliation, approval and exact ProductionRelease workspace deep link
+ * (WEB-DT-3 / #502): `/quotes/:id/reconciliacion`. Every comparison and
+ * command is pinned to the exact commercial/design revisions via query
+ * params (`qrev`, `design`, `rev`) — reconciliation, approval and release
+ * never operate on an implicit latest, and a later revision never retargets
+ * a pinned view or an existing release.
+ */
+export interface ProjectReconciliationRouteContext {
+  readonly quoteRevisionId: string | null;
+  readonly designId: string | null;
+  readonly designRevisionId: string | null;
+}
+
+export function projectReconciliationPath(
+  projectId: string,
+  context?: ProjectReconciliationRouteContext | null,
+): string {
+  const base = `${entityPath('quotes', projectId)}/reconciliacion`;
+  if (!context) return base;
+  const params = new URLSearchParams();
+  if (context.quoteRevisionId) params.set('qrev', context.quoteRevisionId);
+  if (context.designId) params.set('design', context.designId);
+  if (context.designRevisionId) params.set('rev', context.designRevisionId);
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
+}
+
+export function projectReconciliationFromPath(
+  pathname: string,
+  search = '',
+): { projectId: string; context: ProjectReconciliationRouteContext } | null {
+  const base = NAV_PATHS.quotes;
+  const normalized = normalizePathname(pathname);
+  if (!normalized.startsWith(`${base}/`)) return null;
+  const rest = normalized.slice(base.length + 1);
+  const parts = rest.split('/').filter(Boolean);
+  if (parts.length !== 2 || parts[1] !== 'reconciliacion') return null;
+  let projectId: string;
+  try {
+    projectId = decodeURIComponent(parts[0] as string);
+  } catch {
+    projectId = parts[0] as string;
+  }
+  if (!projectId) return null;
+
+  const params = new URLSearchParams(search);
+  const qrev = params.get('qrev');
+  const design = params.get('design');
+  const rev = params.get('rev');
+  const context: ProjectReconciliationRouteContext = {
+    quoteRevisionId: qrev && qrev.length > 0 ? qrev : null,
+    designId: design && design.length > 0 ? design : null,
+    designRevisionId: rev && rev.length > 0 ? rev : null,
+  };
+  return { projectId, context };
+}
+
+/**
  * Embarques detail deep link: `/shipings/:projectId`.
  */
 export function shipmentDetailPath(projectId: string): string {

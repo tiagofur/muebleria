@@ -20,6 +20,8 @@ import {
   projectFurniturePath,
   projectDesignsFromPath,
   projectDesignsPath,
+  projectReconciliationFromPath,
+  projectReconciliationPath,
   productionOrderPath,
   projectIdFromPath,
   projectPath,
@@ -354,5 +356,80 @@ describe('project furniture matrix route (WEB-DT-1 / #500)', () => {
 
   it('maps the designs route to the quotes nav section', () => {
     expect(navFromPath(`/quotes/${id}/disenos`)).toBe('quotes');
+  });
+});
+
+describe('project reconciliation route (WEB-DT-3 / #502)', () => {
+  const id = '969f82ae-8da6-45d0-b49a-951dbfde309e';
+
+  it('parses the reconciliation route and pins the exact Q/R context from query params', () => {
+    expect(projectReconciliationFromPath(`/quotes/${id}/reconciliacion`)).toEqual({
+      projectId: id,
+      context: {
+        quoteRevisionId: null,
+        designId: null,
+        designRevisionId: null,
+      },
+    });
+
+    const pinned = projectReconciliationFromPath(
+      `/quotes/${id}/reconciliacion`,
+      '?qrev=q-1&design=d-1&rev=r-9',
+    );
+    expect(pinned?.projectId).toBe(id);
+    expect(pinned?.context).toEqual({
+      quoteRevisionId: 'q-1',
+      designId: 'd-1',
+      designRevisionId: 'r-9',
+    });
+  });
+
+  it('rejects lookalike paths for reconciliation', () => {
+    expect(projectReconciliationFromPath('/quotes')).toBeNull();
+    expect(projectReconciliationFromPath(`/quotes/${id}`)).toBeNull();
+    expect(projectReconciliationFromPath(`/orders/${id}/reconciliacion`)).toBeNull();
+    expect(projectReconciliationFromPath(`/quotes/${id}/reconciliacion/sub`)).toBeNull();
+  });
+
+  it('builds the reconciliation path with the exact pinned context (never latest)', () => {
+    expect(projectReconciliationPath(id)).toBe(`/quotes/${id}/reconciliacion`);
+    expect(
+      projectReconciliationPath(id, {
+        quoteRevisionId: 'q-2',
+        designId: 'd-1',
+        designRevisionId: 'r-1',
+      }),
+    ).toBe(`/quotes/${id}/reconciliacion?qrev=q-2&design=d-1&rev=r-1`);
+
+    // Round-trip stability keeps exact comparisons pinned.
+    const built = projectReconciliationPath(id, {
+      quoteRevisionId: 'q-2',
+      designId: 'd-2',
+      designRevisionId: 'r-1',
+    });
+    const questionIndex = built.indexOf('?');
+    const pathname = questionIndex === -1 ? built : built.slice(0, questionIndex);
+    const search = questionIndex === -1 ? '' : built.slice(questionIndex + 1);
+    expect(projectReconciliationFromPath(pathname, search)?.context).toEqual({
+      quoteRevisionId: 'q-2',
+      designId: 'd-2',
+      designRevisionId: 'r-1',
+    });
+  });
+
+  it('maps the reconciliation route to the quotes nav section', () => {
+    expect(navFromPath(`/quotes/${id}/reconciliacion`)).toBe('quotes');
+  });
+
+  it('empty params normalize to null (no implicit latest identity)', () => {
+    const parsed = projectReconciliationFromPath(
+      `/quotes/${id}/reconciliacion`,
+      '?qrev=&design=&rev=',
+    );
+    expect(parsed?.context).toEqual({
+      quoteRevisionId: null,
+      designId: null,
+      designRevisionId: null,
+    });
   });
 });
