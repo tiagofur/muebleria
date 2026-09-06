@@ -1,6 +1,6 @@
 Closes #<issue-number>
 
-<!-- Keep the closing reference as the first nonempty line. Link an approved issue. -->
+<!-- First nonempty line: Closes/Fixes/Resolves for complete delivery; Refs for partial delivery. Link an approved open issue. -->
 
 ## Type
 Select exactly one and apply its matching live PR label.
@@ -31,5 +31,11 @@ Check only verified statements; append an explicit reason when an item is N/A.
 - [ ] Documentation reflects changed behavior.
 - [ ] Commits follow Conventional Commits, without AI attribution trailers.
 
-## Remaining scope and merge boundary
-List unmet issue criteria and blockers. Partial delivery remains draft: do not merge a closing-reference PR while the linked issue is incomplete. No merge is authorized by this template or by passing checks.
+## Delivered scope
+Describe what this PR completes, with acceptance evidence.
+
+## Remaining scope
+List unmet parent-issue criteria and blockers; use None with evidence only for complete delivery.
+
+## Merge boundary
+Partial delivery must use the non-closing Refs keyword and leave the approved parent open. Complete delivery may use a closing keyword only when all issue criteria are satisfied. Passing metadata checks does not authorize merge; explicit authorization and final exact-head CI/review readback remain required.

@@ -367,8 +367,8 @@ python3 -m unittest discover -s scripts -p test_check_pr_metadata.py -v
 python3 scripts/check_pr_metadata.py
 ```
 
-Start the body with exactly one standalone `Closes #N`, `Fixes #N`, or `Resolves #N`
-line (case-insensitive; leading blank lines allowed). Foreign, malformed or multiple targets
+Start the body with exactly one standalone `Closes #N`, `Fixes #N`, `Resolves #N`
+or `Refs #N` line (case-insensitive; leading blank lines allowed). Foreign, malformed or multiple targets
 are rejected. The issue must be open, not a PR, and have only `status:approved`
 among status labels. Exactly one supported PR type is required: `type:bug`,
 `type:feature`, `type:docs`, `type:refactor`, `type:chore`, `type:breaking-change`.
@@ -383,6 +383,11 @@ merge. API errors or relevant PR metadata drift fail closed; head/base SHAs are 
 to the event. Reads are not atomic; unrelated volatile API fields are ignored.
 
 #573 remains incomplete; the autonomous product implementer remains disabled.
-A partial closing-reference PR must remain draft/no-merge until the issue scope is
-reconciled: merging it could close the unfinished parent. Queue ownership, bounded
-retries, independent validation, trusted enforcement and canary rollout remain pending.
+Partial delivery uses non-closing `Refs #N`, with nonempty `## Delivered scope` and
+`## Remaining scope` sections, leaving the approved parent open. Section completeness
+and evidence are human acceptance criteria, not parsed by the metadata checker.
+Complete delivery uses a closing keyword only when all linked-issue criteria are met.
+This explicit partial-link policy permits separately authorized, verified partial PRs
+to merge without closing unfinished issues; passing this check never grants that authority.
+Queue ownership, bounded retries, independent validation, trusted enforcement and canary
+rollout remain pending.

@@ -43,6 +43,26 @@ class PublicationTests(unittest.TestCase):
                 self.pr["body"] = body
                 self.validate()
 
+    def test_partial_reference_preserves_approval_and_open_parent(self):
+        self.pr["body"] = "rEfS #573\n## Delivered scope\nMetadata gate.\n## Remaining scope\nQueue."
+        before = copy.deepcopy(self.issue)
+        get = unittest.mock.Mock(side_effect=[self.pr, self.issue, self.pr])
+        self.assertEqual(gate.check(self.event, self.repo, get), 573)
+        self.assertEqual(self.issue, before)
+        for change in ({"labels": []}, {"state": "closed"}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                gate.validate(self.event, self.repo, self.pr, {**self.issue, **change})
+
+    def test_partial_reference_rejects_ambiguous_and_malformed_links(self):
+        scope = "\n## Delivered scope\nGate.\n## Remaining scope\nQueue."
+        for body in ("Refs #573" + scope + "\nCloses #573",
+                     "Refs #573" + scope + "\nRefs #574",
+                     "Closes #573\nRefs #574", "Refs other/repo#573" + scope,
+                     "Refs #573." + scope, "<!--\nRefs #573\n-->" + scope,
+                     "Refs #573" + scope + "\nResolves other/repo#574"):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                gate.linked_issue(body)
+
     def test_issue_rejections(self):
         for change in ({"state": "closed"}, {"pull_request": {}}, {"number": 574}, {"number": 573.0},
                        {"url": "https://api.github.com/repos/other/repo/issues/573"},
