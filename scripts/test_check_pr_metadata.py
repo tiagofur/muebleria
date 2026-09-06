@@ -63,6 +63,15 @@ class PublicationTests(unittest.TestCase):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 gate.linked_issue(body)
 
+    def test_numeric_prose_is_not_an_additional_issue_target(self):
+        self.assertEqual(gate.linked_issue("Refs #573\nAfter the fix: 67/67"), 573)
+        for suffix in ("Fixes #574", "Fixes other/repo#574", "Fixes 574",
+                       "<!-- Fixes #574 -->", "```\nFixes #574\n```",
+                       "Fixes\n#574", "<!-- Fixes\n#574 -->", "Fixes other/repo #574",
+                       "Resolves https://github.com/other/repo/issues/574"):
+            with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                gate.linked_issue("Refs #573\n" + suffix)
+
     def test_issue_rejections(self):
         for change in ({"state": "closed"}, {"pull_request": {}}, {"number": 574}, {"number": 573.0},
                        {"url": "https://api.github.com/repos/other/repo/issues/573"},

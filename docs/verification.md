@@ -391,3 +391,36 @@ This explicit partial-link policy permits separately authorized, verified partia
 to merge without closing unfinished issues; passing this check never grants that authority.
 Queue ownership, bounded retries, independent validation, trusted enforcement and canary
 rollout remain pending.
+
+
+## Exact-PR evidence handoff (partial #573 delivery)
+
+The existing leader can prepare a stateless, read-only handoff for a separately
+authorized validator. Pin the intended issue and PR plus their exact head/base;
+do not silently refresh these pins when resuming a task.
+
+```sh
+python3 -m unittest discover -s scripts -p test_factory_handoff.py -v
+# Supply GITHUB_TOKEN through the environment, never a command argument.
+python3 scripts/factory_handoff.py --issue 573 --pr "$PR_NUMBER" \
+  --head "$EXPECTED_HEAD_SHA" --base "$EXPECTED_MAIN_BASE_SHA"
+```
+
+Success emits one JSON manifest; failures emit redacted stderr and exit nonzero.
+The helper reads PR/issue twice, requires an open same-repository PR targeting main
+and the caller's open approved issue, and rejects observed identity or scope drift.
+Title/body/labels are hashed, not emitted or executed; volatile comments and label
+ordering are ignored. The manifest records no approval, receipt or model dispatch.
+
+Before accepting independently produced evidence, run the helper again with the
+original pins and compare repository, PR, issue, head/base/ref and both scope hashes
+with the initial manifest. `observed_at` is informational, not a freshness proof.
+Finite API reads cannot be atomic: a later change still invalidates the handoff.
+Recheck actual CI, applicable human authorization and intended scope at acceptance
+and immediately before any separately authorized merge. Candidate-controlled code
+is advisory and does not establish trusted enforcement or inspect RDD mode.
+
+This unit adds no coordinator, lease store, GitHub writes, candidate execution or
+unattended validation. Discovery reports/claims stay unchanged; product execution
+remains disabled. Durable ownership, dispatch/cost accounting, persisted exact-head
+evidence, trusted enforcement and canary/rollback remain open under #573.
