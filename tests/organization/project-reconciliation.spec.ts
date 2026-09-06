@@ -396,8 +396,9 @@ async function publishRevisionWithItemIds(options: {
       foreignProjectAcceptRejected = (err as { status?: number }).status === 404;
     }
     expect(foreignProjectAcceptRejected).toBe(true);
-    // The failed commands mutated nothing: Q2 is still draft in the selector.
-    await expect(page.getByTestId('exact-context-header')).toContainText('Borrador');
+    // The failed commands mutated nothing: the Q2 option still reads Draft
+    // (the workspace may legitimately be displaying Q1 after step 4).
+    await expect(quoteSelect.locator('option', { hasText: 'Q2 ·' })).toContainText('Borrador');
 
     // ------------------------------------------------------------------
     // 6. Complete the modeling: publish R2 with FI-C modeled too (qty>1
