@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
-import { Armchair, ClipboardCheck, RefreshCw, TriangleAlert } from 'lucide-react';
+import { Armchair, ClipboardCheck, Layers, RefreshCw, TriangleAlert } from 'lucide-react';
 import {
   GraneteApiClient,
   GraneteApiError,
@@ -109,6 +109,8 @@ export interface ProjectFurnitureScreenProps {
   readonly initialContext?: ProjectFurnitureContextState | null;
   readonly onContextChange?: (context: ProjectFurnitureContextState) => void;
   readonly onBack?: () => void;
+  /** WEB-DT-2 (#501): cross-surface link to designs workspace. */
+  readonly onOpenDesigns?: (context: { designId: string | null; revisionId: string | null }) => void;
 }
 
 const QUOTE_REVISION_STATUS_LABELS: Readonly<Record<string, string>> = {
@@ -199,6 +201,7 @@ export function ProjectFurnitureScreen({
   initialContext,
   onContextChange,
   onBack,
+  onOpenDesigns,
 }: ProjectFurnitureScreenProps): ReactNode {
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
   const queryClient = useQueryClient();
@@ -372,11 +375,28 @@ export function ProjectFurnitureScreen({
         subtitle="Unidades físicas del proyecto: origen, contexto comercial y presencia en el diseño"
         icon={<Armchair size={16} strokeWidth={1.5} />}
         secondaryActions={
-          onBack ? (
-            <button type="button" className="btn btn--secondary" onClick={onBack}>
-              Volver a la obra
-            </button>
-          ) : null
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {onBack ? (
+              <button type="button" className="btn btn--secondary" onClick={onBack}>
+                Volver a la obra
+              </button>
+            ) : null}
+            {onOpenDesigns && (
+              <button
+                type="button"
+                className="btn btn--secondary"
+                data-testid="open-designs-btn"
+                onClick={() =>
+                  onOpenDesigns({
+                    designId: designContext.designId,
+                    revisionId: designContext.designRevisionId,
+                  })
+                }
+              >
+                <Layers size={14} aria-hidden /> Diseños y revisiones
+              </button>
+            )}
+          </div>
         }
         primaryAction={
           <button

@@ -434,6 +434,57 @@ export function projectFurnitureFromPath(
 }
 
 /**
+ * Project Designs and immutable revisions deep link (WEB-DT-2 / #501): `/quotes/:id/disenos`.
+ * The exact design and revision context travels as query params (`design`, `rev`)
+ * so historical views stay pinned without silent mutation on subsequent publications.
+ */
+export interface ProjectDesignsRouteContext {
+  readonly designId: string | null;
+  readonly revisionId: string | null;
+}
+
+export function projectDesignsPath(
+  projectId: string,
+  context?: ProjectDesignsRouteContext | null,
+): string {
+  const base = `${entityPath('quotes', projectId)}/disenos`;
+  if (!context) return base;
+  const params = new URLSearchParams();
+  if (context.designId) params.set('design', context.designId);
+  if (context.revisionId) params.set('rev', context.revisionId);
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
+}
+
+export function projectDesignsFromPath(
+  pathname: string,
+  search = '',
+): { projectId: string; context: ProjectDesignsRouteContext } | null {
+  const base = NAV_PATHS.quotes;
+  const normalized = normalizePathname(pathname);
+  if (!normalized.startsWith(`${base}/`)) return null;
+  const rest = normalized.slice(base.length + 1);
+  const parts = rest.split('/').filter(Boolean);
+  if (parts.length !== 2 || parts[1] !== 'disenos') return null;
+  let projectId: string;
+  try {
+    projectId = decodeURIComponent(parts[0] as string);
+  } catch {
+    projectId = parts[0] as string;
+  }
+  if (!projectId) return null;
+
+  const params = new URLSearchParams(search);
+  const design = params.get('design');
+  const rev = params.get('rev');
+  const context: ProjectDesignsRouteContext = {
+    designId: design && design.length > 0 ? design : null,
+    revisionId: rev && rev.length > 0 ? rev : null,
+  };
+  return { projectId, context };
+}
+
+/**
  * Embarques detail deep link: `/shipings/:projectId`.
  */
 export function shipmentDetailPath(projectId: string): string {

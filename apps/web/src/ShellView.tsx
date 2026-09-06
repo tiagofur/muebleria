@@ -153,6 +153,8 @@ import {
   PlatformScreen,
   ProjectFurnitureScreen,
   projectFurnitureQueryKeys,
+  ProjectDesignsScreen,
+  projectDesignsQueryKeys,
   Modal,
   OnboardingTourModal,
   UsabilityBenchmarkPanel,
@@ -260,6 +262,8 @@ import {
   productionOrderPath,
   projectFurnitureFromPath,
   projectFurniturePath,
+  projectDesignsFromPath,
+  projectDesignsPath,
   shipmentDetailFromPath,
   installationDetailPath,
   shipmentDetailPath,
@@ -900,6 +904,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   // commercial/design context in the URL query string.
   const projectFurnitureRoute = useMemo(
     () => projectFurnitureFromPath(location.pathname, location.search),
+    [location.pathname, location.search],
+  );
+
+  // WEB-DT-2 (#501): the Project Designs & Revisions workspace route pins
+  // its exact design and revision context in the URL query string.
+  const projectDesignsRoute = useMemo(
+    () => projectDesignsFromPath(location.pathname, location.search),
     [location.pathname, location.search],
   );
 
@@ -1884,6 +1895,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                   navigate(target, { replace: true });
                 }
               }}
+              onOpenDesigns={(context) => {
+                const target = projectDesignsPath(projectFurnitureRoute.projectId, context);
+                if (location.pathname + location.search !== target) {
+                  navigate(target);
+                }
+              }}
               onBack={() => {
                 const target = projectPath(projectFurnitureRoute.projectId);
                 if (location.pathname !== target) navigate(target);
@@ -1897,7 +1914,56 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         )
       ) : null}
 
-      {navId === 'quotes' && !projectFurnitureRoute ? (
+      {navId === 'quotes' && projectDesignsRoute ? (
+        authToken ? (
+          sessionScope ? (
+            <ProjectDesignsScreen
+              key={`pd-${projectDesignsRoute.projectId}-${JSON.stringify(
+                organizationKeys.all(sessionScope),
+              )}`}
+              baseUrl={DEFAULT_API_BASE}
+              token={authToken}
+              projectId={projectDesignsRoute.projectId}
+              queryKeys={projectDesignsQueryKeys(
+                sessionScopeKey(sessionScope),
+                projectDesignsRoute.projectId,
+              )}
+              initialContext={projectDesignsRoute.context}
+              onContextChange={(context) => {
+                const target = projectDesignsPath(projectDesignsRoute.projectId, context);
+                if (location.pathname + location.search !== target) {
+                  navigate(target, { replace: true });
+                }
+              }}
+              onOpenFurnitureMatrix={(context) => {
+                const target = projectFurniturePath(projectDesignsRoute.projectId, {
+                  quoteRevisionId: null,
+                  designId: context.designId,
+                  designContextKind: context.revisionId
+                    ? 'revision'
+                    : context.designId
+                    ? 'working'
+                    : 'none',
+                  designRevisionId: context.revisionId,
+                });
+                if (location.pathname + location.search !== target) {
+                  navigate(target);
+                }
+              }}
+              onBack={() => {
+                const target = projectPath(projectDesignsRoute.projectId);
+                if (location.pathname !== target) navigate(target);
+              }}
+            />
+          ) : (
+            <PageLoading label="Validando sesión del taller…" />
+          )
+        ) : (
+          <p className="settings-hint">Iniciá sesión para ver los diseños de la obra.</p>
+        )
+      ) : null}
+
+      {navId === 'quotes' && !projectFurnitureRoute && !projectDesignsRoute ? (
         <ProjectsScreen
           projects={projectsForRole}
           modules={modules}
@@ -1995,6 +2061,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           }
           onOpenFurnitureMatrix={(projectId) => {
             const target = projectFurniturePath(projectId);
+            if (location.pathname + location.search !== target) navigate(target);
+          }}
+          onOpenDesigns={(projectId) => {
+            const target = projectDesignsPath(projectId);
             if (location.pathname + location.search !== target) navigate(target);
           }}
           onExportCommercialQuote={

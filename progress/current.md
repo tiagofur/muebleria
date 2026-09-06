@@ -1,41 +1,26 @@
-# Feature activa: F216 (#500 / WEB-DT-1) — Project Furniture matrix and physical-unit traceability
+# Feature activa: Ninguna (F217 completada)
+
+- Actualizado: 2026-09-05 America/Mexico_City
+- Última feature: F217 — `[P0][WEB-DT-2] Designs, immutable revisions and 3D artifact history` (#501)
+- Rama: `feat/501-web-dt2-designs-revisions-artifacts`
+- Estado: `completed` (verificación completa; ver `progress/implementation_501_web_dt2.md`)
+- Logros:
+  1. Pure model & algorithms: `designHistory.ts` + `designHistory.test.ts` (14/14 tests) con linaje inmutable $R1 \to R2 \to R3$, resolución de release activo, selección exacta de revisión snapshot, mapeo de artefactos y formateadores.
+  2. Workspace React `ProjectDesignsScreen.tsx` + `ProjectDesignsScreen.test.tsx` (9/9 tests) con alternativas en `WorkspaceTabs`, línea de tiempo inmutable con insignias de estado, visualización pineada de ítems y parámetros de revisión, visor 3D con grants firmados, tabla de artefactos con hashes SHA-256 y descarga por grants, drawer de auditoría técnica y estados vacíos honestos.
+  3. Tokens de diseño limpios en `digitalThread.css` sin hex no autorizados ni tokens inexistentes.
+  4. Ruteo y deep-linking en `routes.ts` + `routes.test.ts` (`/quotes/:id/disenos?design=&rev=`).
+  5. Navegación cruzada en `ShellView.tsx`, `ProjectsScreen.tsx`, `ProjectDetailView.tsx` y `ProjectFurnitureScreen.tsx`.
+  6. Negative proofs: R1 pineado nunca muta a R4; el browser jamás parsea `.skp`; los grants de descarga van firmados por backend sin JWT en query strings; handoff #499 diferido explícitamente (`#499 Web↔SketchUp handoff: DEFERRED`).
+  7. Verificación completa: `pnpm typecheck` verde (7/7 proyectos), `pnpm test` verde (UI 1552 tests, Web 419 tests), `pnpm openapi:check` verde.
+
+---
+
+# Historial previo — F216 (#500 / WEB-DT-1) — Project Furniture matrix and physical-unit traceability
 
 - Actualizado: 2026-09-05 America/Mexico_City
 - Feature: F216 — `[P0][WEB-DT-1] Project Furniture matrix and physical-unit traceability`
-- Rama: `feat/500-web-dt1-project-furniture-matrix` (base `main@587961fd`)
+- Rama: `feat/500-web-dt1-project-furniture-matrix` (PR #565 mergeado en `main@3a8f12aa`)
 - Estado: `completed` (verificación completa; ver `progress/implementation_500_web_dt1.md`)
-- Qué se entregó:
-  1. **Boundary #496 mínimo**: verificado que el generated boundary para #500
-     era suficiente salvo UN gap — no existía lectura de QuoteRevisions por
-     proyecto. Se agregó exactamente ese read model generado:
-     `GET /api/projects/{projectId}/quote-revisions` → `QuoteRevisionDetail[]`
-     (header inmutable + createdAt + items por unidad con join key
-     `furnitureInstanceId`). `QuoteRevision` existente intacto (cero ripple a
-     `:requote`). #496 queda ABIERTO.
-  2. **Backend**: `ListQuoteRevisionsByProject` (storage, tenant-safe con
-     espejo SQL de la política RLS + fail-closed JSON corrupto + 404 uniforme
-     sin oráculo), handler con guard `RoleCanAccessProjects`, ruta read-only.
-  3. **React**: pantalla `Muebles` server-backed en `/quotes/:id/muebles`
-     (entrada: menú "Hilo digital → Muebles del proyecto" del detalle de
-     cotización). Matriz una fila por unidad física con origen/lifecycle
-     verbatim del servidor, `Unidad i de N` (agrupamiento por definición,
-     paridad con el panel #389), presencia comercial sólo del snapshot de la
-     QuoteRevision seleccionada, placed/pending por join
-     `furnitureInstanceId` contra el contexto de diseño seleccionado (working
-     copy o revisión publicada exacta), badges de reconciliación SOLO espejo
-     de `reconcileProjectDesign` (exclusivos de revisiones publicadas
-     exactas), referencia de release con staleness. Read-only.
-  4. **Contexto exacto pineado en URL** (`?qrev=&design=&rev=work|<id>`): una
-     revisión más nueva jamás retargetea silenciosamente una vista histórica.
-     Query keys session/tenant-scoped + remount por switch de organización.
-  5. **Estados distintos y accesibles**: loading/stale/empty/no-results/
-     forbidden/cross-tenant(404)/error.
-- Verificación: `pnpm openapi:generate/check` sin drift; `pnpm typecheck`
-  verde; `pnpm test` verde (ui+web, 24 tests nuevos de digitalThread + 4 de
-  rutas); `GOFLAGS='-p=1' go test ./... -count=1` verde con PostgreSQL real
-  (handler unit + storage RLS/cross-tenant/fail-closed).
-- Fuera de alcance: #501/#502, mutaciones desde la matriz, nacimiento HTTP de
-  la primera QuoteRevision.
 
 ## Historial previo — Regression pass Demo Golden Path (2026-09-05)
 

@@ -5819,6 +5819,24 @@
       "status": "done",
       "completedAt": "2026-09-05",
       "evidence": "Generated contract: pnpm openapi:generate + openapi:check green (new listProjectQuoteRevisions operation, QuoteRevisionDetail/QuoteRevisionItem schemas in client.ts/types.ts/types.gen.go). Backend: go test ./... green incl. handler unit tests (role guard, DTO round-trip with per-unit items, uniform 404, empty list, invalid uuid) and real-PostgreSQL storage tests (revision ordering, snapshot round-trip, manufacturing-org shared read, unrelated-org and cross-tenant uniform ErrQuoteRevisionNotFound, fail-closed corrupt JSON, empty-visible-project). Web: pnpm test green (ui + web suites) incl. furnitureMatrix.test.ts (13 tests: qty>1 unit identity, partial placement, mixed origins, exact revision switching, server-only reconciliation mirroring, terminal history, filters, defaults, release reference) and ProjectFurnitureScreen.test.tsx (11 tests: generated-client-only source proof, tenant-scoped keys, qty=3 rows 'Unidad i de N', working-copy placed/pending, pinned exact revision via onContextChange with no reconciliation POST without an exact published revision, server reconciliation badges, no-design honesty, empty/no-results/forbidden/cross-tenant distinct states, release pin). pnpm typecheck green."
+    },
+    {
+      "id": "F217",
+      "title": "Designs, immutable revisions and 3D artifact history (#501 / WEB-DT-2)",
+      "description": "Second visible React surface of the Digital Thread: a server-backed Designs and immutable DesignRevision workspace at /quotes/:id/disenos ('Diseños 3D y revisiones' in project menu) that presents design alternatives, immutable R1->R2->R3 lineage, physical unit contents per revision, artifact integrity and authorized 3D preview access. Revisions are strictly immutable; selecting an older revision keeps items, parameters, artifacts, and preview pinned to that exact revision snapshot. Artifact binary access uses signed short-lived media grants via the generated authorizeDesignRevisionArtifact operation, never a session JWT in query strings, and never parsing .skp in the browser. Deep link query params (?design=&rev=) preserve historical views without silent mutation on new publishes. #499 handoff is deferred.",
+      "tags": [
+        "web",
+        "digital-thread",
+        "frontend",
+        "p0"
+      ],
+      "created": "2026-09-05",
+      "completedAt": "2026-09-05",
+      "status": "done",
+      "depends_on": [
+        "F216"
+      ],
+      "evidence": "Pure model & algorithms: designHistory.ts + designHistory.test.ts green (14 tests: immutable R1->R2->R3 lineage traversal, active release reference lookup, exact revision snapshot selection with negative proof pinned to R1 vs latest, artifact availability mapping for .skp/.json/.png, SHA-256 digest truncate, byte size formatters). Web workspace & UI: ProjectDesignsScreen.tsx + ProjectDesignsScreen.test.tsx green (9 tests: renders design alternatives switcher via WorkspaceTabs, immutable R1->R2->R3 lineage timeline with published badges, pinned exact R1 physical items and parameters snapshot, authorized 3D preview with signed grant URL, artifact authorization on download without session JWT in query params, absence of #499 custom URI / deep link with #499 handoff deferred, honest empty states for 0 designs and 0 revisions, matrix navigation). Routes: routes.ts + routes.test.ts green (25 tests incl. 5 new tests: projectDesignsPath, projectDesignsFromPath round-trip stability, exact context query params, rejection of lookalike paths, quotes nav section mapping). Cross-surface navigation in ShellView.tsx, ProjectsScreen.tsx, ProjectDetailView.tsx, and ProjectFurnitureScreen.tsx. Parity & audit: pnpm typecheck green (7/7 projects), pnpm test green (156 UI test files / 1552 tests, 33 Web test files / 419 tests), pnpm openapi:check green."
     }
   ]
 }
