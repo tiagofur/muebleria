@@ -116,6 +116,9 @@ import type {
   WarrantyTicketStatus,
   ShowcasePhotoItem,
   WorkshopSettings,
+  ManufacturingOperation,
+  MachineOutputSelection,
+  MachineOutputSelectionRecord,
 } from '@granete/domain';
 import {
   TIME_ENTRY_CATEGORIES,
@@ -4066,3 +4069,178 @@ export function materialCostValuationFromApi(raw: unknown): MaterialCostValuatio
     missingValuationMaterialIds: missing.map((m) => str(m)),
   };
 }
+
+// --- Machine output selections (#591 / WEB-MFG-2) ---
+
+function moAsRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+}
+
+function moReqString(v: unknown, field: string): string {
+  if (typeof v !== 'string' || !v) {
+    throw new Error(`machine output selection: campo requerido ${field}`);
+  }
+  return v;
+}
+
+export function machineOutputSelectionRecordFromApi(raw: unknown): MachineOutputSelectionRecord {
+  const r = moAsRecord(raw);
+  const selection = moAsRecord(r.selection);
+  return {
+    selection: {
+      operation: moReqString(selection.operation, 'selection.operation') as ManufacturingOperation,
+      machineProfileId: moReqString(selection.machineProfileId, 'selection.machineProfileId'),
+      machineProfileRevisionId: moReqString(selection.machineProfileRevisionId, 'selection.machineProfileRevisionId'),
+      outputCompatibilityProfileId: moReqString(selection.outputProfileId, 'selection.outputProfileId'),
+      outputCompatibilityProfileRevisionId: moReqString(selection.outputProfileRevisionId, 'selection.outputProfileRevisionId'),
+      postprocessorAdapterId: moReqString(selection.adapterId, 'selection.adapterId'),
+      postprocessorAdapterVersion: moReqString(selection.adapterVersion, 'selection.adapterVersion'),
+      postprocessorImplementationDigest: moReqString(selection.adapterImplementationDigest, 'selection.adapterImplementationDigest'),
+    },
+    version: num(r.version, 0),
+    updatedAt: str(r.updatedAt),
+    updatedBy: str(r.updatedBy),
+  };
+}
+
+export function machineOutputSelectionsReadModelFromApi(raw: unknown): {
+  selections: readonly {
+    selection: MachineOutputSelectionRecord;
+    machineLabel: string;
+    profileLabel: string;
+    adapterLabel: string;
+    supportStatus: string;
+    blockers: readonly { code: string; detail: string }[];
+  }[];
+  catalog: {
+    formatFamilyOperations: Record<string, readonly string[]>;
+    machines: readonly {
+      machineProfileId: string;
+      machineProfileRevisionId: string;
+      manufacturerFamily: string;
+      model: string;
+      role: string;
+      operations: readonly string[];
+      supportStatus: string;
+      provenance: string;
+    }[];
+    outputProfiles: readonly {
+      outputCompatibilityProfileId: string;
+      revisionId: string;
+      formatFamily: string;
+      supportStatus: string;
+      digest: string;
+    }[];
+    adapters: readonly {
+      postprocessorAdapterId: string;
+      adapterVersion: string;
+      implementationDigest: string;
+      producedFormatFamily: string;
+      serializerImplemented: boolean;
+    }[];
+  };
+} {
+  const r = moAsRecord(raw);
+  const selections = Array.isArray(r.selections) ? r.selections : [];
+  const catalog = moAsRecord(r.catalog);
+  const machines = Array.isArray(catalog.machines) ? catalog.machines : [];
+  const outputProfiles = Array.isArray(catalog.outputProfiles) ? catalog.outputProfiles : [];
+  const adapters = Array.isArray(catalog.adapters) ? catalog.adapters : [];
+  const families = moAsRecord(catalog.formatFamilyOperations);
+  const formatFamilyOperations: Record<string, readonly string[]> = {};
+  for (const [family, operations] of Object.entries(families)) {
+    formatFamilyOperations[family] = Array.isArray(operations) ? operations.map(String) : [];
+  }
+  return {
+    selections: selections.map((entry: unknown) => {
+      const e = moAsRecord(entry);
+      const blockers = Array.isArray(e.blockers) ? e.blockers : [];
+      return {
+        selection: machineOutputSelectionRecordFromApi(e.selection),
+        machineLabel: typeof e.machineLabel === 'string' ? e.machineLabel : '',
+        profileLabel: typeof e.profileLabel === 'string' ? e.profileLabel : '',
+        adapterLabel: typeof e.adapterLabel === 'string' ? e.adapterLabel : '',
+        supportStatus: typeof e.supportStatus === 'string' ? e.supportStatus : 'NOT_TESTED',
+        blockers: blockers.map((b: unknown) => {
+          const blocker = moAsRecord(b);
+          return {
+            code: typeof blocker.code === 'string' ? blocker.code : '',
+            detail: typeof blocker.detail === 'string' ? blocker.detail : '',
+          };
+        }),
+      };
+    }),
+    catalog: {
+      formatFamilyOperations,
+      machines: machines.map(mapMachineEntry),
+      outputProfiles: outputProfiles.map(mapProfileEntry),
+      adapters: adapters.map((a: unknown) => {
+        const entry = moAsRecord(a);
+        return {
+          postprocessorAdapterId: typeof entry.postprocessorAdapterId === 'string' ? entry.postprocessorAdapterId : '',
+          adapterVersion: typeof entry.adapterVersion === 'string' ? entry.adapterVersion : '',
+          implementationDigest: typeof entry.implementationDigest === 'string' ? entry.implementationDigest : '',
+          producedFormatFamily: typeof entry.producedFormatFamily === 'string' ? entry.producedFormatFamily : '',
+          serializerImplemented: entry.serializerImplemented === true,
+        };
+      }),
+    },
+  };
+}
+
+function mapMachineEntry(m: unknown): {
+  machineProfileId: string;
+  machineProfileRevisionId: string;
+  manufacturerFamily: string;
+  model: string;
+  role: string;
+  operations: readonly string[];
+  supportStatus: string;
+  provenance: string;
+} {
+  const entry = moAsRecord(m);
+  return {
+    machineProfileId: typeof entry.machineProfileId === 'string' ? entry.machineProfileId : '',
+    machineProfileRevisionId: typeof entry.machineProfileRevisionId === 'string' ? entry.machineProfileRevisionId : '',
+    manufacturerFamily: typeof entry.manufacturerFamily === 'string' ? entry.manufacturerFamily : '',
+    model: typeof entry.model === 'string' ? entry.model : '',
+    role: typeof entry.role === 'string' ? entry.role : '',
+    operations: Array.isArray(entry.operations) ? entry.operations.map(String) : [],
+    supportStatus: typeof entry.supportStatus === 'string' ? entry.supportStatus : 'NOT_TESTED',
+    provenance: typeof entry.provenance === 'string' ? entry.provenance : '',
+  };
+}
+
+function mapProfileEntry(p: unknown): {
+  outputCompatibilityProfileId: string;
+  revisionId: string;
+  formatFamily: string;
+  supportStatus: string;
+  digest: string;
+} {
+  const entry = moAsRecord(p);
+  return {
+    outputCompatibilityProfileId: typeof entry.outputCompatibilityProfileId === 'string' ? entry.outputCompatibilityProfileId : '',
+    revisionId: typeof entry.revisionId === 'string' ? entry.revisionId : '',
+    formatFamily: typeof entry.formatFamily === 'string' ? entry.formatFamily : '',
+    supportStatus: typeof entry.supportStatus === 'string' ? entry.supportStatus : 'NOT_TESTED',
+    digest: typeof entry.digest === 'string' ? entry.digest : '',
+  };
+}
+
+export function machineOutputSelectionToApi(
+  selection: MachineOutputSelection,
+): Record<string, unknown> {
+  return {
+    operation: selection.operation,
+    machineProfileId: selection.machineProfileId,
+    machineProfileRevisionId: selection.machineProfileRevisionId,
+    outputProfileId: selection.outputCompatibilityProfileId,
+    outputProfileRevisionId: selection.outputCompatibilityProfileRevisionId,
+    adapterId: selection.postprocessorAdapterId,
+    adapterVersion: selection.postprocessorAdapterVersion,
+    adapterImplementationDigest: selection.postprocessorImplementationDigest,
+  };
+}
+
+export type MachineOutputSelectionsReadModelView = ReturnType<typeof machineOutputSelectionsReadModelFromApi>;

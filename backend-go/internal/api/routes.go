@@ -657,6 +657,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/settings", authMW(http.HandlerFunc(server.HandleWorkshopSettings)))
 	mux.Handle("PUT /api/settings", authMW(http.HandlerFunc(server.HandleWorkshopSettings)))
 
+	// Machine output selections (#591 / WEB-MFG-2) — generated contract paths
+	mux.Handle("GET /api/machine-output-selections", authMW(http.HandlerFunc(server.HandleListMachineOutputSelections)))
+	mux.Handle("PUT /api/machine-output-selections/{operation}", authMW(http.HandlerFunc(server.HandleUpsertMachineOutputSelection)))
+
 	// NOTE: legacy /api/staff/* routes were removed (users.role bridge): they
 	// created/listed GLOBAL users with no organization scope and no caller in
 	// the clients. Team management lives in /api/org/* (memberships, #326) and

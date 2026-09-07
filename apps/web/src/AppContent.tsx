@@ -261,6 +261,13 @@ import {
   type JobCostingView,
   type SiteSurveyView,
 } from '@granete/storage';
+import { resolveManufacturingOutputTarget } from '@granete/excel';
+import type {
+  MachineOutputSelection,
+  MachineOutputSelectionRecord,
+  ManufacturingOperation,
+  ResolvedManufacturingOutputTarget,
+} from '@granete/domain';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
@@ -608,8 +615,98 @@ export function AppContent({
     [session, getAuthUser, authUserSeq],
   );
   const authToken = useMemo(
+
     () => (session === 'auth' ? getAuthToken() : null),
     [session, getAuthToken, authUserSeq],
+  );
+  // #591 / WEB-MFG-2 — machine output selection (read model + save).
+  const [machineOutputReadModel, setMachineOutputReadModel] = useState<
+    Awaited<ReturnType<APIWorkspaceRepository['getMachineOutputSelections']>> | null
+  >(null);
+  useEffect(() => {
+    if (!authToken) {
+      setMachineOutputReadModel(null);
+      return;
+    }
+    let cancelled = false;
+    const repository = getRepository();
+    if (typeof repository.getMachineOutputSelections !== 'function') {
+      setMachineOutputReadModel(null);
+      return;
+    }
+    repository
+      .getMachineOutputSelections()
+      .then((model) => {
+        if (!cancelled) setMachineOutputReadModel(model);
+      })
+      .catch(() => {
+        if (!cancelled) setMachineOutputReadModel(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, getRepository, authUserSeq]);
+  const machineOutputSelections = useMemo(() => {
+    const map: Partial<
+      Record<'cutting' | 'machining', MachineOutputSelectionRecord | undefined>
+    > = {};
+    for (const entry of machineOutputReadModel?.selections ?? []) {
+      map[entry.selection.selection.operation] = entry.selection;
+    }
+    return map;
+  }, [machineOutputReadModel]);
+  const machineOutputResolved = useMemo(() => {
+    const map: Partial<
+      Record<'cutting' | 'machining', ResolvedManufacturingOutputTarget | undefined>
+    > = {};
+    for (const operation of ['cutting', 'machining'] as const) {
+      const record = machineOutputSelections[operation];
+      map[operation] = resolveManufacturingOutputTarget(
+        record?.selection,
+        operation,
+      );
+    }
+    return map;
+  }, [machineOutputSelections]);
+  const machineOutputCuttingSelection =
+    machineOutputSelections.cutting?.selection ?? null;
+  const saveMachineOutputSelection = useCallback(
+    async (
+      operation: ManufacturingOperation,
+      selection: MachineOutputSelection,
+      expectedVersion: number,
+    ) => {
+      const repository = getRepository();
+      if (typeof repository.saveMachineOutputSelection !== 'function') {
+        throw new Error('La configuración de salida de máquina requiere modo servidor.');
+      }
+      const saved = await repository.saveMachineOutputSelection(
+        operation,
+        selection,
+        expectedVersion,
+      );
+      setMachineOutputReadModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              selections: [
+                ...prev.selections.filter(
+                  (entry) => entry.selection.selection.operation !== operation,
+                ),
+                {
+                  selection: saved,
+                  machineLabel: '',
+                  profileLabel: '',
+                  adapterLabel: '',
+                  supportStatus: 'NOT_TESTED',
+                  blockers: [],
+                },
+              ],
+            }
+          : prev,
+      );
+    },
+    [getRepository],
   );
   // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
   const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
@@ -2773,6 +2870,7 @@ export function AppContent({
     session,
     actorRole,
     workspaceSettings: workspace?.settings,
+    machineOutputCuttingSelection,
     toast,
     stampEngineeringGeneration,
     recordProductionExport,
@@ -2946,6 +3044,14 @@ export function AppContent({
   const shellViewCtx = {
     acquirePlanEditSession,
     actorRole,
+    machineOutputConfig: machineOutputReadModel
+      ? {
+          catalog: machineOutputReadModel.catalog,
+          selections: machineOutputSelections,
+          resolved: machineOutputResolved,
+          onSave: saveMachineOutputSelection,
+        }
+      : null,
     addProjectItem,
     agregados,
     allowedNavIds,

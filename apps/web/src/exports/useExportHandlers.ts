@@ -34,6 +34,7 @@ import {
 } from '../exportModuleLabels';
 import {
   buildOptimizerExport,
+  downloadOptimizerXlsx,
 } from '../exportOptimizer';
 import { buildProductionPackExport } from '../exportProductionPack';
 import { buildWallElevationsExport } from '../exportWallElevations';
@@ -45,6 +46,8 @@ import { downloadCutPlanPdf } from '../exportCutPlanPdf';
 import { downloadCutPlanDxf } from '../exportCutPlanDxf';
 import { resolveProjectDrilling } from '@granete/domain';
 import { downloadCutPlanPtx, ptxFileName } from '../exportCutPlanPtx';
+import { generateSelectedCuttingOutput } from '@granete/excel';
+import type { MachineOutputSelection } from '@granete/domain';
 import { runExport, type ExportDelivery } from './runExport';
 
 export interface ExportHandlersDeps {
@@ -55,6 +58,8 @@ export interface ExportHandlersDeps {
   readonly session: SessionMode | null;
   readonly actorRole: Parameters<typeof canExportProductionForProject>[0];
   readonly workspaceSettings: WorkshopSettings | undefined;
+  /** #591: exact selected cutting target. When set, normal generation uses ONLY this tuple. */
+  readonly machineOutputCuttingSelection?: MachineOutputSelection | null;
   readonly toast: ToastFn;
   /** Stamps generatedBy/At on the project's engineering log. */
   readonly stampEngineeringGeneration: (projectId?: string) => void;
@@ -78,6 +83,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     session,
     actorRole,
     workspaceSettings,
+    machineOutputCuttingSelection = null,
     toast,
     stampEngineeringGeneration,
     recordProductionExport,
@@ -474,6 +480,21 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     ) => {
       setExportBusy(true);
       try {
+        // #591: when a machine output target is configured, normal generation
+        // uses ONLY that tuple — blocked targets produce zero outputs (exact
+        // reason surfaced) and never fall back to the legacy generic PTX.
+        if (machineOutputCuttingSelection) {
+          const bundle = await generateSelectedCuttingOutput(
+            cutPlan,
+            machineOutputCuttingSelection,
+          );
+          downloadOptimizerXlsx(bundle.artifact.bytes, bundle.artifact.fileName);
+          toast({
+            type: 'success',
+            message: '✓ Archivo de corte generado con la salida configurada',
+          });
+          return;
+        }
         const selectedMode = mode ?? workspaceSettings?.ptxExportMode ?? 'unified';
         await downloadCutPlanPtx(
           cutPlan,
@@ -502,7 +523,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         setExportBusy(false);
       }
     },
-    [toast, workspaceSettings?.ptxExportMode],
+    [toast, workspaceSettings?.ptxExportMode, machineOutputCuttingSelection],
   );
 
   const handleReleaseToDelivery = useCallback(

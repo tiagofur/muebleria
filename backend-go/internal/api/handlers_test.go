@@ -201,6 +201,7 @@ type stubStore struct {
 	deleteProjectCalled      bool
 	// F044 workshop settings (nil → defaults, flag false)
 	workshopSettings *domain.WorkshopSettings
+	machineOutputSelections []domain.MachineOutputSelectionRecord
 	// #108: optional catalog returned by GetFullCatalog. nil → empty catalog.
 	catalogOverride *domain.Catalog
 	// Workshop furniture modules served by ListModules (SketchUp catalog).
@@ -1104,6 +1105,36 @@ func (s *stubStore) UpsertWorkshopSettings(_ context.Context, ws domain.Workshop
 	cp := ws
 	s.workshopSettings = &cp
 	return ws, nil
+}
+
+func (s *stubStore) ListMachineOutputSelections(context.Context) ([]domain.MachineOutputSelectionRecord, error) {
+	if s.machineOutputSelections != nil {
+		return s.machineOutputSelections, nil
+	}
+	return []domain.MachineOutputSelectionRecord{}, nil
+}
+
+func (s *stubStore) UpsertMachineOutputSelection(_ context.Context, sel domain.MachineOutputSelection, expectedVersion int64, updatedBy string) (domain.MachineOutputSelectionRecord, error) {
+	if s.machineOutputSelections == nil {
+		s.machineOutputSelections = []domain.MachineOutputSelectionRecord{}
+	}
+	for i, rec := range s.machineOutputSelections {
+		if rec.Operation == sel.Operation {
+			if rec.Version != expectedVersion {
+				return domain.MachineOutputSelectionRecord{}, storage.ErrVersionConflict
+			}
+			saved := domain.MachineOutputSelectionRecord{
+				MachineOutputSelection: sel, Version: rec.Version + 1, UpdatedAt: "now", UpdatedBy: updatedBy,
+			}
+			s.machineOutputSelections[i] = saved
+			return saved, nil
+		}
+	}
+	saved := domain.MachineOutputSelectionRecord{
+		MachineOutputSelection: sel, Version: 1, UpdatedAt: "now", UpdatedBy: updatedBy,
+	}
+	s.machineOutputSelections = append(s.machineOutputSelections, saved)
+	return saved, nil
 }
 
 func (s *stubStore) SeedCatalog(_ context.Context) error {

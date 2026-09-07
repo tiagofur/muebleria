@@ -1,0 +1,98 @@
+{
+  "schemaId": "granete.machine-output-catalog.v1",
+  "comment": "Shared machine-output catalog (#591): the exact machines, output compatibility profiles and postprocessor adapters selectable for normal manufacturing generation. TS (packages/excel machines) and Go validate selections against this contract; digests must match the profile/adapter implementation data. serializerImplemented=false means the adapter stays fail-closed (SERIALIZER_NOT_IMPLEMENTED) even on fully evidenced profiles.",
+  "formatFamilyOperations": {
+    "ptx": ["cutting"],
+    "saw": ["cutting"],
+    "mpr": ["machining"]
+  },
+  "machines": [
+    {
+      "machineProfileId": "client-a-machine-b-hpp250",
+      "machineProfileRevisionId": "r1",
+      "manufacturerFamily": "HOLZMA (HOMAG)",
+      "model": "HPP 250",
+      "role": "panel-dividing-saw",
+      "operations": ["cutting"],
+      "supportStatus": "NOT_TESTED",
+      "provenance": "OWNER_CONFIRMED"
+    },
+    {
+      "machineProfileId": "client-a-machine-a-bhx050",
+      "machineProfileRevisionId": "r1",
+      "manufacturerFamily": "WEEKE (HOMAG)",
+      "model": "BHX 050",
+      "role": "cnc-drilling-machining-center",
+      "operations": ["machining"],
+      "supportStatus": "NOT_TESTED",
+      "provenance": "OWNER_CONFIRMED"
+    }
+  ],
+  "outputProfiles": [
+    {
+      "outputCompatibilityProfileId": "ptx-generic",
+      "revisionId": "r1",
+      "formatFamily": "ptx",
+      "supportStatus": "NOT_TESTED",
+      "digest": "d05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595"
+    },
+    {
+      "outputCompatibilityProfileId": "ptx-cadmatic-3",
+      "revisionId": "r1",
+      "formatFamily": "ptx",
+      "supportStatus": "NOT_TESTED",
+      "digest": "c4ef85133a395b051da68a8411917217eba167a47950482270b202b160b9b7d1"
+    },
+    {
+      "outputCompatibilityProfileId": "ptx-cadmatic-4",
+      "revisionId": "r1",
+      "formatFamily": "ptx",
+      "supportStatus": "NOT_TESTED",
+      "digest": "d420e74de6a2db5c0f9a35c7bd78ef9ccd33346901a98d428b46871774ac6029"
+    },
+    {
+      "outputCompatibilityProfileId": "ptx-cadmatic-5",
+      "revisionId": "r1",
+      "formatFamily": "ptx",
+      "supportStatus": "NOT_TESTED",
+      "digest": "0679fada5b4d97ee5f2ec173d5c7ddebbf14cd8b226bf1ebe12ff95da9288bc1"
+    },
+    {
+      "outputCompatibilityProfileId": "saw-homag",
+      "revisionId": "r1",
+      "formatFamily": "saw",
+      "supportStatus": "NOT_TESTED",
+      "digest": "2cccceea22fbba8ec7c7df948473b8cb713223f0de1c3d07216e5614c7c3e112"
+    },
+    {
+      "outputCompatibilityProfileId": "mpr-woodwop",
+      "revisionId": "r1",
+      "formatFamily": "mpr",
+      "supportStatus": "NOT_TESTED",
+      "digest": "28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1"
+    }
+  ],
+  "adapters": [
+    {
+      "postprocessorAdapterId": "granete-ptx",
+      "adapterVersion": "1.0.0",
+      "implementationDigest": "39df10ba24528b5d402a940ac2e6f9fc20b735011468013090cfc78f88511a28",
+      "producedFormatFamily": "ptx",
+      "serializerImplemented": true
+    },
+    {
+      "postprocessorAdapterId": "homag-saw",
+      "adapterVersion": "0.1.0",
+      "implementationDigest": "c6278fffdde1296eb508772d7a240c06695bba8b4bcac2e59b64761b38a74e9e",
+      "producedFormatFamily": "saw",
+      "serializerImplemented": false
+    },
+    {
+      "postprocessorAdapterId": "woodwop-mpr",
+      "adapterVersion": "0.1.0",
+      "implementationDigest": "4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782",
+      "producedFormatFamily": "mpr",
+      "serializerImplemented": false
+    }
+  ]
+}

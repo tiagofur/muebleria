@@ -1,3 +1,6 @@
+## #591 — machine output selection (entrega parcial, wiring completo)
+
+- Rama `feat/591-machine-output-selection`; migración 000123 + API generada + resolver + UI de Ingeniería + export normal ligado al tuple exacto; sin fallback ni bulk (ver `progress/implementation_591_machine_output_selection.md`). Pendiente: pruebas storage PG real, E2E browser y CI.
 ## #351 — machine-output adapters foundation (entrega parcial, lane autorizado por owner)
 
 - Trigger: fallo REAL de conversión PTX en Client A (REAL_FIELD_RED, registrado sanitizado en `docs/machines/client-a/ptx-conversion-failure.md`); owner autorizó avanzar el lane machine-integration sin cerrar #348/#351/#352.
