@@ -1,3 +1,10 @@
+## #577 — private immutable snapshot schema, chain unit 3 (preparatory)
+
+- Additive migration 122 separates owner-only manufacturing payloads from intentionally shared release metadata; composite release/project/owner binding and FORCE RLS protect direct SQL.
+- Runtime grants permit only owner SELECT/INSERT; immutable triggers reject UPDATE/DELETE even for privileged writers. Existing releases remain unchanged and receive no backfill.
+- Focused real PostgreSQL proofs cover fresh/upgrade/down, shared sales privacy, owner inserts, mismatches and immutability. Capture writes, public endpoints and operational consumers are not wired.
+- This does not freeze the live BOM or close #577; full gates, independent validation and exact-head CI remain required. F202 and the ledger are unchanged.
+
 ## #577 — coherent tenant transaction foundation, chain unit 2 (preparatory)
 
 - Additive internal opt-in selects repeatable read before tenant setup; ordinary requests retain read committed.
