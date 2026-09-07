@@ -14,6 +14,35 @@ import (
 // SET LOCAL boundary or become an ambiguous PostgreSQL cast failure.
 var ErrInvalidTenantActor = errors.New("invalid tenant actor")
 
+// ErrInconsistentCatalogTransaction rejects borrowed transactions without a stable source view.
+var ErrInconsistentCatalogTransaction = errors.New("consistent catalog transaction requires repeatable read or serializable")
+
+type consistentCatalogContextKey struct{}
+
+// WithConsistentCatalogTx opts an internal caller into a coherent catalog view.
+// Attach it before the tenant transaction begins; it cannot upgrade an existing transaction.
+func WithConsistentCatalogTx(ctx context.Context) context.Context {
+	return context.WithValue(ctx, consistentCatalogContextKey{}, true)
+}
+
+func requiresConsistentCatalog(ctx context.Context) bool {
+	marked, _ := ctx.Value(consistentCatalogContextKey{}).(bool)
+	return marked
+}
+
+func verifyConsistentCatalogTx(ctx context.Context, tx pgx.Tx) error {
+	var isolation string
+	if err := tx.QueryRow(ctx, "SHOW transaction_isolation").Scan(&isolation); err != nil {
+		return fmt.Errorf("read catalog transaction isolation: %w", err)
+	}
+	switch isolation {
+	case string(pgx.RepeatableRead), string(pgx.Serializable):
+		return nil
+	default:
+		return ErrInconsistentCatalogTransaction
+	}
+}
+
 func validateOptionalUUID(name, value string) error {
 	if value == "" {
 		return nil
@@ -114,13 +143,22 @@ func (s *PostgresStore) WithinTenantTx(
 		return errors.New("tenant transaction callback is required")
 	}
 	if existing := transactionFromContext(ctx); existing != nil {
+		if requiresConsistentCatalog(ctx) {
+			if err := verifyConsistentCatalogTx(ctx, existing); err != nil {
+				return err
+			}
+		}
 		if err := setTenantContext(ctx, existing, actor); err != nil {
 			return err
 		}
 		return execute(WithTenantActorCtx(ctx, actor))
 	}
 
-	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	isolation := pgx.ReadCommitted
+	if requiresConsistentCatalog(ctx) {
+		isolation = pgx.RepeatableRead
+	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: isolation})
 	if err != nil {
 		return fmt.Errorf("begin tenant transaction: %w", err)
 	}
