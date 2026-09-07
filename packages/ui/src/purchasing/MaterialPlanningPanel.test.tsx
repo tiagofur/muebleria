@@ -225,3 +225,15 @@ describe('MaterialPlanningPanel', () => {
     expect(screen.getByTestId('plan').textContent).toContain('Material liberado a producción');
   });
 });
+
+it('provides a named keyboard-focusable region for every coverage column', () => {
+  const project = makeProject({ materialPlanning: planningWith() });
+  render(<MaterialPlanningPanel view={materialPlanningCardView(project, [planningWith()], [], [])} handlers={{}} />);
+  const region = screen.getByRole('region', { name: 'Cobertura de materiales: desplazamiento horizontal' });
+  expect(region.getAttribute('tabindex')).toBe('0');
+  region.focus();
+  expect(document.activeElement).toBe(region);
+  expect(region.querySelectorAll('th')).toHaveLength(6);
+  expect(region.textContent).toContain('Disponible depósito');
+  expect(region.textContent).toContain('Falta comprar');
+});

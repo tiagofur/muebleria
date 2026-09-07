@@ -34,3 +34,7 @@ Rollback boundary: revert this warehouse command/read-model unit and its tests/g
 ## Bounded independent-review correction
 
 The single authorized correction suppresses legacy empty-state claims while a canonical card is visible, with a three-material-tab UI regression. The real browser fixture now checks canonical card/provenance/reservation controls at 390, 768 and 1280 px, saving synthetic screenshots only when an absolute `WAREHOUSE_VISUAL_DIR` is explicitly supplied. Final new-head full gates, screenshot inspection and re-review remain pending; earlier passing evidence does not approve the corrected head.
+
+## Owner-authorized responsive correction round 2
+
+#573 comment 5574826209 authorizes only table containment/accessibility and focused regression. The coverage table now has a named, keyboard-focusable horizontal scroll region with existing design tokens; browser QA settles layout and uses ArrowRight to reach every column at 390/768/1280 px. No backend, contract, reservation or provenance behavior changed. Exact new-head browser evidence, independent review and CI remain required.

@@ -98,6 +98,7 @@ export function MaterialPlanningPanel({
               {view.provenance.label}
             </p>
           ) : null}
+          <div className="purch-plan__scroll" role="region" aria-label="Cobertura de materiales: desplazamiento horizontal" tabIndex={0}>
           <table className="purch-plan__table" aria-label="Cobertura de materiales por línea">
             <thead>
               <tr>
@@ -148,6 +149,7 @@ export function MaterialPlanningPanel({
               })}
             </tbody>
           </table>
+          </div>
 
           {canManage ? (
             <div className="purch-plan__actions">

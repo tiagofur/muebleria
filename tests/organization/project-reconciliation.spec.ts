@@ -933,6 +933,28 @@ async function publishRevisionWithItemIds(options: {
       await expect(reserve).toBeEnabled();
       await reserve.focus();
       await expect(reserve).toBeFocused();
+      await page.evaluate(async () => {
+        await Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity).map((animation) => animation.finished.catch(() => undefined)));
+      });
+      const coverageRegion = card.getByRole('region', { name: 'Cobertura de materiales: desplazamiento horizontal' });
+      await coverageRegion.focus();
+      await expect(coverageRegion).toBeFocused();
+      const geometry = await coverageRegion.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
+      if (width === 390) expect(geometry.scroll).toBeGreaterThan(geometry.client);
+      for (const heading of await coverageRegion.getByRole('columnheader').all()) {
+        await expect.poll(async () => {
+          const regionBounds = await coverageRegion.boundingBox();
+          const headingBounds = await heading.boundingBox();
+          if (!regionBounds || !headingBounds) return false;
+          const reachable = headingBounds.x >= regionBounds.x - 1 && headingBounds.x + headingBounds.width <= regionBounds.x + regionBounds.width + 1;
+          if (!reachable) await coverageRegion.press('ArrowRight');
+          return reachable;
+        }).toBe(true);
+      }
+      // The final shortage column and its actual cell are reachable by keyboard.
+      const lastCell = coverageRegion.getByRole('cell').last();
+      await expect(lastCell).toBeVisible();
+      expect(await coverageRegion.evaluate((element) => element.scrollLeft)).toBeGreaterThanOrEqual(0);
       const bounds = await card.boundingBox();
       expect(bounds).not.toBeNull();
       expect(bounds!.width).toBeLessThanOrEqual(width);
