@@ -73,3 +73,19 @@
   margin-top: var(--space-1);
   margin-left: calc(1rem + var(--space-2));
 }
+
+
+/* Machine output selection (#591) */
+.machine-output-section { display: grid; gap: 12px; margin-top: 8px; }
+.machine-output-intro { margin: 0; color: var(--text-muted); font-size: var(--text-base); }
+.machine-output-card { border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 12px; display: grid; gap: 10px; background: var(--surface-card); }
+.machine-output-card h4 { margin: 0; }
+.machine-output-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.machine-output-row label { display: grid; gap: 4px; font-size: var(--text-base); flex: 1; min-width: 220px; }
+.machine-output-meta { display: flex; gap: 18px; flex-wrap: wrap; margin: 0; font-size: var(--text-base); }
+.machine-output-meta dt { font-weight: 600; }
+.machine-output-meta dd { margin: 0; }
+.machine-output-blocked { margin: 0; color: var(--text-muted); background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 8px; font-size: var(--text-base); }
+.machine-output-error { margin: 0; color: var(--text-muted); font-size: var(--text-base); }
+.machine-output-tech summary { cursor: pointer; font-size: var(--text-base); color: var(--text-muted); }
+.machine-output-tech ul { font-size: var(--text-base); font-family: ui-monospace, monospace; }

@@ -862,6 +862,17 @@ export {
   type ResolvedMachiningJob,
 } from './machineOutput';
 
+// --- Machine output selection (#591 / WEB-MFG-2) ---
+export {
+  machineOutputBlockerMessageEs,
+  type MachineOutputBlocker,
+  type MachineOutputBlockerCode,
+  type MachineOutputSelection,
+  type MachineOutputSelectionRecord,
+  type ManufacturingOperation,
+  type ResolvedManufacturingOutputTarget,
+} from './machineOutputSelection';
+
 // --- Part Drilling Resolution Engine (F128) ---
 export {
   resolvePartDrilling,

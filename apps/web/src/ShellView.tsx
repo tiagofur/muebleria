@@ -322,7 +322,7 @@ import type {
   ShowcasePhotoItem,
   WorkshopAnalytics,
 } from '@granete/domain';
-import type { AmbientMaterialDraft } from '@granete/ui';
+import type { AmbientMaterialDraft, MachineOutputConfigProps } from '@granete/ui';
 import type { OwnerPortfolioRow } from '@granete/ui';
 import type { WorkspaceRepository } from '@granete/storage';
 import type { AuthUser, MembershipChoice, OrgSummary } from './session';
@@ -568,6 +568,7 @@ export interface ShellViewCtx {
   readonly routeStructureId: string | null;
   readonly saveAsTemplate: (projectId: string, name: string) => void;
   readonly saveWorkshopSettings: (settings: WorkshopSettings) => Promise<void>;
+  readonly machineOutputConfig?: MachineOutputConfigProps | null;
   readonly selectedProjectCutRows: ProductionCutRow[];
   readonly selectedProjectId: string | null;
   readonly session: SessionMode;
@@ -891,6 +892,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     warrantyTickets,
     workshopAnalytics,
     workshopSettings,
+    machineOutputConfig = null,
     enterSupportSession,
     isPlatformAdmin,
   } = ctx;
@@ -1748,6 +1750,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         <SettingsScreen
           settings={workshopSettings}
           onSave={saveWorkshopSettings}
+          machineOutput={machineOutputConfig}
           onOpenOnboardingTour={() => setShowOnboardingTour(true)}
           salesNetwork={
             orgType === 'factory' && authToken && onEnterConnectedOrg

@@ -1,3 +1,6 @@
+## #591 — machine output selection (entrega parcial, wiring completo)
+
+- Rama `feat/591-machine-output-selection`; migración 000123 + API generada + resolver + UI de Ingeniería + export normal ligado al tuple exacto; sin fallback ni bulk (ver `progress/implementation_591_machine_output_selection.md`). Ronda de revisión corregida (GET factory-gate, mismatch path/body, error visible en UI, refetch tras save, mapper plano) + storage PG real y E2E browser 4/4 PASS; pendiente sólo CI del head final.
 ## #577 — exact revision collection assembly (partial)
 
 - Assemble physical units through the existing Go resolver and one resolved-BOM demand aggregation; preserve revision identity, unit order and independent typed dimensions without reading mutable project items.

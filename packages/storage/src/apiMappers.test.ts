@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  machineOutputSelectionRecordFromApi,
+  machineOutputSelectionsReadModelFromApi,
   ambientCategoryFromApi,
   ambientCategoryToApi,
   materialCategoryToApi,
@@ -2564,5 +2566,61 @@ describe('materialCategoryToApi / materialCategoryFromApi', () => {
     const rootApi = materialCategoryToApi(root);
     expect(rootApi.parent_id).toBeNull();
     expect(materialCategoryFromApi(rootApi as Record<string, unknown>)).toEqual(root);
+  });
+});
+
+describe('machine output selection mappers (#591)', () => {
+  const flatRecord = {
+    operation: 'cutting',
+    machineProfileId: 'client-a-machine-b-hpp250',
+    machineProfileRevisionId: 'r1',
+    outputProfileId: 'ptx-generic',
+    outputProfileRevisionId: 'r1',
+    adapterId: 'granete-ptx',
+    adapterVersion: '1.0.0',
+    adapterImplementationDigest: '39df10ba24528b5d402a940ac2e6f9fc20b735011468013090cfc78f88511a28',
+    version: 2,
+    updatedAt: '2026-09-07T15:00:00Z',
+    updatedBy: 'owner@example.com',
+  };
+
+  it('maps the FLAT record DTO (PUT response shape)', () => {
+    const record = machineOutputSelectionRecordFromApi(flatRecord);
+    expect(record.selection.operation).toBe('cutting');
+    expect(record.selection.outputCompatibilityProfileId).toBe('ptx-generic');
+    expect(record.selection.postprocessorAdapterId).toBe('granete-ptx');
+    expect(record.version).toBe(2);
+    expect(record.updatedBy).toBe('owner@example.com');
+  });
+
+  it('maps the read model with flat records nested under selections (GET shape)', () => {
+    const view = machineOutputSelectionsReadModelFromApi({
+      selections: [
+        {
+          selection: flatRecord,
+          machineLabel: 'HOLZMA (HOMAG) HPP 250',
+          profileLabel: 'ptx-generic@r1',
+          adapterLabel: 'granete-ptx · 1.0.0',
+          supportStatus: 'NOT_TESTED',
+          blockers: [{ code: 'SERIALIZER_NOT_IMPLEMENTED', detail: 'x' }],
+        },
+      ],
+      catalog: {
+        schemaId: 'granete.machine-output-catalog.v1',
+        formatFamilyOperations: { ptx: ['cutting'] },
+        machines: [],
+        outputProfiles: [],
+        adapters: [],
+      },
+    });
+    expect(view.selections).toHaveLength(1);
+    expect(view.selections[0]!.selection.selection.outputCompatibilityProfileId).toBe('ptx-generic');
+    expect(view.selections[0]!.selection.version).toBe(2);
+    expect(view.selections[0]!.blockers[0]!.code).toBe('SERIALIZER_NOT_IMPLEMENTED');
+    expect(view.catalog.formatFamilyOperations.ptx).toEqual(['cutting']);
+  });
+
+  it('rejects a record missing required exact references', () => {
+    expect(() => machineOutputSelectionRecordFromApi({ ...flatRecord, adapterId: '' })).toThrow();
   });
 });

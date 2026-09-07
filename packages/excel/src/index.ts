@@ -204,3 +204,14 @@ export {
   FIXTURE_CUTTING_JOB_ID,
   FIXTURE_MACHINING_JOB_ID,
 } from './machines/machineOutputFixtures';
+
+export {
+  KNOWN_MACHINE_PROFILES,
+  KNOWN_OUTPUT_PROFILES,
+  resolveManufacturingOutputTarget,
+} from './machines/outputSelectionResolver';
+
+export {
+  generateSelectedCuttingOutput,
+  machineOutputBlockerMessageEs,
+} from './machines/outputSelectionResolver';

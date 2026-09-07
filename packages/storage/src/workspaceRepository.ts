@@ -127,6 +127,14 @@ export interface SiteSurveyView {
   readonly eventsAppended?: number;
 }
 export interface WorkspaceRepository {
+  /** #591 — exact machine output selection read model (server mode only). */
+  getMachineOutputSelections?(): Promise<import('./apiMappers').MachineOutputSelectionsReadModelView>;
+  /** #591 — versioned upsert of the exact selection (server mode only). */
+  saveMachineOutputSelection?(
+    operation: import('@granete/domain').ManufacturingOperation,
+    selection: import('@granete/domain').MachineOutputSelection,
+    expectedVersion: number,
+  ): Promise<import('@granete/domain').MachineOutputSelectionRecord>;
   /** Load full workspace; missing file → seed workspace. */
   load(): Promise<Workspace>;
 

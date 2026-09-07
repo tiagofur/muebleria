@@ -42,6 +42,9 @@ import type {
 import {
   DEFAULT_WORKSHOP_SETTINGS,
   withWorkshopSettings,
+  type ManufacturingOperation,
+  type MachineOutputSelection,
+  type MachineOutputSelectionRecord,
 } from '@granete/domain';
 import type {
   WorkspaceRepository,
@@ -114,6 +117,9 @@ import {
   materialCostValuationFromApi,
   siteSurveyFromApi,
   surveyGateBlockersFromApi,
+  machineOutputSelectionRecordFromApi,
+  machineOutputSelectionToApi,
+  machineOutputSelectionsReadModelFromApi,
 } from './apiMappers';
 
 import { SCHEMA_VERSION } from './seed';
@@ -267,6 +273,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
   private readonly injectedFetch?: typeof fetch;
   private readonly getAccessToken?: () => string | null;
+  private readonly generatedClient: GraneteApiClient;
 
   /**
    * #460 SEC-4B: el repository NO conoce storage de credenciales. El access
@@ -284,6 +291,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   ) {
     this.baseUrl = baseUrl;
     this.getAccessToken = deps.getAccessToken;
+    this.generatedClient = new GraneteApiClient(baseUrl, (input, init) =>
+      this.fetch(input as string, init));
     this.injectedFetch = deps.fetchImpl;
   }
 
@@ -2564,9 +2573,28 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async freezeSurveyMeasures(projectId: string): Promise<SiteSurveyView> {
     return this.surveyRequest(`/projects/${projectId}/site-survey/freeze`, 'POST', 'freeze survey measures', {});
   }
+
+  // --- Machine output selections (#591 / WEB-MFG-2): generated API only ---
+
+  async getMachineOutputSelections(): Promise<ReturnType<typeof machineOutputSelectionsReadModelFromApi>> {
+    const token = this.getAccessToken?.() ?? '';
+    const raw = await this.generatedClient.listMachineOutputSelections(token);
+    return machineOutputSelectionsReadModelFromApi(raw);
+  }
+
+  async saveMachineOutputSelection(
+    operation: ManufacturingOperation,
+    selection: MachineOutputSelection,
+    expectedVersion: number,
+  ): Promise<MachineOutputSelectionRecord> {
+    const token = this.getAccessToken?.() ?? '';
+    const raw = await this.generatedClient.upsertMachineOutputSelection(token, operation, {
+      selection: machineOutputSelectionToApi(selection) as never,
+      expectedVersion,
+    });
+    return machineOutputSelectionRecordFromApi(raw);
+  }
 }
-
-
 
 /**
  * Reports whether a response indicates a duplicate/conflict — i.e. the entity

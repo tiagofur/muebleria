@@ -3593,6 +3593,109 @@
           }
         }
       }
+    },
+    "/machine-output-selections": {
+      "get": {
+        "operationId": "listMachineOutputSelections",
+        "summary": "Read the organization's machine output selections and the selectable catalog (#591)",
+        "description": "Server-authoritative read model for Engineering settings: the exact selected machine/profile/adapter tuple per operation (empty = NO_OUTPUT_CONFIGURED), catalog metadata and structural blockers (e.g. SERIALIZER_NOT_IMPLEMENTED). Support status is evidence-bound and never implies compatibility.",
+        "responses": {
+          "200": {
+            "description": "Selections read model with catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineOutputSelectionsReadModel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine-output-selections/{operation}": {
+      "put": {
+        "operationId": "upsertMachineOutputSelection",
+        "summary": "Save the exact selection for one manufacturing operation (#591)",
+        "description": "Persists the exact machine/profile/adapter tuple validated against the shared catalog (existence, family compatibility, machine-operation coverage, exact revisions/digest). Optimistic concurrency: stale expectedVersion returns VERSION_CONFLICT. Changing the selection affects future generation only; previously generated artifacts keep their exact references.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertMachineOutputSelectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved selection with the new version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineOutputSelectionRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tuple (unknown id/revision/digest, family mismatch, operation not covered)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor cannot edit machine output configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale expectedVersion (VERSION_CONFLICT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ManufacturingOperation"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -3726,6 +3829,19 @@
             "preview"
           ]
         }
+      },
+      "ManufacturingOperation": {
+        "name": "operation",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "cutting",
+            "machining"
+          ]
+        },
+        "description": "Manufacturing operation the selection governs."
       }
     },
     "headers": {
@@ -8813,6 +8929,374 @@
           },
           "impact": {
             "$ref": "#/components/schemas/ReconciliationImpactSummary"
+          }
+        }
+      },
+      "MachineOutputSelection": {
+        "type": "object",
+        "description": "Exact machine/profile/adapter tuple selected for normal manufacturing generation (#591). Every reference pins the exact revision/version/digest from the shared machine-output catalog; there is no 'latest' resolution.",
+        "required": [
+          "operation",
+          "machineProfileId",
+          "machineProfileRevisionId",
+          "outputProfileId",
+          "outputProfileRevisionId",
+          "adapterId",
+          "adapterVersion",
+          "adapterImplementationDigest"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "cutting",
+              "machining"
+            ]
+          },
+          "machineProfileId": {
+            "type": "string"
+          },
+          "machineProfileRevisionId": {
+            "type": "string"
+          },
+          "outputProfileId": {
+            "type": "string"
+          },
+          "outputProfileRevisionId": {
+            "type": "string"
+          },
+          "adapterId": {
+            "type": "string"
+          },
+          "adapterVersion": {
+            "type": "string"
+          },
+          "adapterImplementationDigest": {
+            "type": "string"
+          }
+        }
+      },
+      "MachineOutputSelectionRecord": {
+        "type": "object",
+        "description": "Persisted selection with storage metadata (version for optimistic concurrency, actor and timestamp).",
+        "required": [
+          "operation",
+          "machineProfileId",
+          "machineProfileRevisionId",
+          "outputProfileId",
+          "outputProfileRevisionId",
+          "adapterId",
+          "adapterVersion",
+          "adapterImplementationDigest",
+          "version",
+          "updatedAt",
+          "updatedBy"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "cutting",
+              "machining"
+            ]
+          },
+          "machineProfileId": {
+            "type": "string"
+          },
+          "machineProfileRevisionId": {
+            "type": "string"
+          },
+          "outputProfileId": {
+            "type": "string"
+          },
+          "outputProfileRevisionId": {
+            "type": "string"
+          },
+          "adapterId": {
+            "type": "string"
+          },
+          "adapterVersion": {
+            "type": "string"
+          },
+          "adapterImplementationDigest": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          }
+        }
+      },
+      "MachineOutputBlocker": {
+        "type": "object",
+        "description": "Structural generation blocker resolved server-side from the catalog (e.g. SERIALIZER_NOT_IMPLEMENTED). Evidence-dimension blockers are resolved by the export-layer resolver which owns the adapters.",
+        "required": [
+          "code",
+          "detail"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "SERIALIZER_NOT_IMPLEMENTED"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
+      "MachineOutputSelectionResolved": {
+        "type": "object",
+        "description": "Read model entry: the exact selection plus human-readable catalog metadata and structural blockers. An empty selections list means NO_OUTPUT_CONFIGURED — never a silent default profile.",
+        "required": [
+          "selection",
+          "machineLabel",
+          "profileLabel",
+          "adapterLabel",
+          "supportStatus",
+          "blockers"
+        ],
+        "properties": {
+          "selection": {
+            "$ref": "#/components/schemas/MachineOutputSelectionRecord"
+          },
+          "machineLabel": {
+            "type": "string"
+          },
+          "profileLabel": {
+            "type": "string"
+          },
+          "adapterLabel": {
+            "type": "string"
+          },
+          "supportStatus": {
+            "type": "string",
+            "enum": [
+              "NOT_TESTED",
+              "PARTIAL",
+              "VALIDATED",
+              "UNSUPPORTED"
+            ]
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineOutputBlocker"
+            }
+          }
+        }
+      },
+      "MachineOutputSelectionsReadModel": {
+        "type": "object",
+        "description": "The organization's machine output selections for normal generation plus the selectable catalog (#591).",
+        "required": [
+          "selections",
+          "catalog"
+        ],
+        "properties": {
+          "selections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineOutputSelectionResolved"
+            }
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/MachineOutputCatalog"
+          }
+        }
+      },
+      "MachineOutputCatalog": {
+        "type": "object",
+        "description": "Shared machine-output catalog (parity with contracts/machineOutputCatalog.contract.json). serializerImplemented=false keeps the adapter fail-closed even on fully evidenced profiles.",
+        "required": [
+          "schemaId",
+          "formatFamilyOperations",
+          "machines",
+          "outputProfiles",
+          "adapters"
+        ],
+        "properties": {
+          "schemaId": {
+            "type": "string"
+          },
+          "formatFamilyOperations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "cutting",
+                  "machining"
+                ]
+              }
+            }
+          },
+          "machines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineOutputCatalogMachine"
+            }
+          },
+          "outputProfiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineOutputCatalogProfile"
+            }
+          },
+          "adapters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineOutputCatalogAdapter"
+            }
+          }
+        }
+      },
+      "MachineOutputCatalogMachine": {
+        "type": "object",
+        "required": [
+          "machineProfileId",
+          "machineProfileRevisionId",
+          "manufacturerFamily",
+          "model",
+          "role",
+          "operations",
+          "supportStatus",
+          "provenance"
+        ],
+        "properties": {
+          "machineProfileId": {
+            "type": "string"
+          },
+          "machineProfileRevisionId": {
+            "type": "string"
+          },
+          "manufacturerFamily": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cutting",
+                "machining"
+              ]
+            }
+          },
+          "supportStatus": {
+            "type": "string",
+            "enum": [
+              "NOT_TESTED",
+              "PARTIAL",
+              "VALIDATED",
+              "UNSUPPORTED"
+            ]
+          },
+          "provenance": {
+            "type": "string"
+          }
+        }
+      },
+      "MachineOutputCatalogProfile": {
+        "type": "object",
+        "required": [
+          "outputCompatibilityProfileId",
+          "revisionId",
+          "formatFamily",
+          "supportStatus",
+          "digest"
+        ],
+        "properties": {
+          "outputCompatibilityProfileId": {
+            "type": "string"
+          },
+          "revisionId": {
+            "type": "string"
+          },
+          "formatFamily": {
+            "type": "string",
+            "enum": [
+              "ptx",
+              "saw",
+              "mpr"
+            ]
+          },
+          "supportStatus": {
+            "type": "string",
+            "enum": [
+              "NOT_TESTED",
+              "PARTIAL",
+              "VALIDATED",
+              "UNSUPPORTED"
+            ]
+          },
+          "digest": {
+            "type": "string"
+          }
+        }
+      },
+      "MachineOutputCatalogAdapter": {
+        "type": "object",
+        "required": [
+          "postprocessorAdapterId",
+          "adapterVersion",
+          "implementationDigest",
+          "producedFormatFamily",
+          "serializerImplemented"
+        ],
+        "properties": {
+          "postprocessorAdapterId": {
+            "type": "string"
+          },
+          "adapterVersion": {
+            "type": "string"
+          },
+          "implementationDigest": {
+            "type": "string"
+          },
+          "producedFormatFamily": {
+            "type": "string",
+            "enum": [
+              "ptx",
+              "saw",
+              "mpr"
+            ]
+          },
+          "serializerImplemented": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpsertMachineOutputSelectionRequest": {
+        "type": "object",
+        "description": "Upsert of the exact selection for one operation. expectedVersion must match the stored version (0 to create); stale versions return VERSION_CONFLICT — never a silent overwrite.",
+        "required": [
+          "selection",
+          "expectedVersion"
+        ],
+        "properties": {
+          "selection": {
+            "$ref": "#/components/schemas/MachineOutputSelection"
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       }

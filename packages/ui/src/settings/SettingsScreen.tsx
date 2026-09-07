@@ -10,6 +10,10 @@ import { PageHeader, submitBusyLabel, WorkspaceTabs, type TabDefinition } from '
 import { SalesNetworkSection } from './SalesNetworkSection';
 import '../catalogs/catalogs.css';
 import './settings.css';
+import {
+  MachineOutputSelectionSection,
+  type MachineOutputConfigProps,
+} from './MachineOutputSelectionSection';
 
 export type SettingsScreenProps = {
   readonly settings: WorkshopSettings;
@@ -20,6 +24,7 @@ export type SettingsScreenProps = {
    * Sales network of a factory org (#326). Provided only when the active
    * organization is a factory — renders the "Red de Ventas" tab.
    */
+  readonly machineOutput?: MachineOutputConfigProps | null;
   readonly salesNetwork?: {
     readonly baseUrl: string;
     readonly token: string;
@@ -53,6 +58,7 @@ export function SettingsScreen({
   saving = false,
   onOpenOnboardingTour,
   salesNetwork = null,
+  machineOutput = null,
 }: SettingsScreenProps): ReactNode {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
 
@@ -419,6 +425,7 @@ export function SettingsScreen({
               <p className="settings-lead settings-lead--inline">
                 Estándares de taller para seccionadoras CNC (SCM Gabbiani/Sigma, HOMAG/Holzma, Biesse Selco, etc.).
               </p>
+              {machineOutput ? <MachineOutputSelectionSection {...machineOutput} /> : null}
 
               <div className="catalog-form__field">
                 <label>Modo de empaquetado PTX por defecto</label>

@@ -1478,3 +1478,87 @@ type ProjectQuoteRequoteResult struct {
 	QuoteRevision QuoteRevision               `json:"quoteRevision"`
 	Impact        ReconciliationImpactSummary `json:"impact"`
 }
+
+type MachineOutputSelection struct {
+	Operation                   string `json:"operation"`
+	MachineProfileId            string `json:"machineProfileId"`
+	MachineProfileRevisionId    string `json:"machineProfileRevisionId"`
+	OutputProfileId             string `json:"outputProfileId"`
+	OutputProfileRevisionId     string `json:"outputProfileRevisionId"`
+	AdapterId                   string `json:"adapterId"`
+	AdapterVersion              string `json:"adapterVersion"`
+	AdapterImplementationDigest string `json:"adapterImplementationDigest"`
+}
+
+type MachineOutputSelectionRecord struct {
+	Operation                   string `json:"operation"`
+	MachineProfileId            string `json:"machineProfileId"`
+	MachineProfileRevisionId    string `json:"machineProfileRevisionId"`
+	OutputProfileId             string `json:"outputProfileId"`
+	OutputProfileRevisionId     string `json:"outputProfileRevisionId"`
+	AdapterId                   string `json:"adapterId"`
+	AdapterVersion              string `json:"adapterVersion"`
+	AdapterImplementationDigest string `json:"adapterImplementationDigest"`
+	Version                     int64  `json:"version"`
+	UpdatedAt                   string `json:"updatedAt"`
+	UpdatedBy                   string `json:"updatedBy"`
+}
+
+type MachineOutputBlocker struct {
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+}
+
+type MachineOutputSelectionResolved struct {
+	Selection     MachineOutputSelectionRecord `json:"selection"`
+	MachineLabel  string                       `json:"machineLabel"`
+	ProfileLabel  string                       `json:"profileLabel"`
+	AdapterLabel  string                       `json:"adapterLabel"`
+	SupportStatus string                       `json:"supportStatus"`
+	Blockers      []MachineOutputBlocker       `json:"blockers"`
+}
+
+type MachineOutputSelectionsReadModel struct {
+	Selections []MachineOutputSelectionResolved `json:"selections"`
+	Catalog    MachineOutputCatalog             `json:"catalog"`
+}
+
+type MachineOutputCatalog struct {
+	SchemaId               string                        `json:"schemaId"`
+	FormatFamilyOperations map[string][]string           `json:"formatFamilyOperations"`
+	Machines               []MachineOutputCatalogMachine `json:"machines"`
+	OutputProfiles         []MachineOutputCatalogProfile `json:"outputProfiles"`
+	Adapters               []MachineOutputCatalogAdapter `json:"adapters"`
+}
+
+type MachineOutputCatalogMachine struct {
+	MachineProfileId         string   `json:"machineProfileId"`
+	MachineProfileRevisionId string   `json:"machineProfileRevisionId"`
+	ManufacturerFamily       string   `json:"manufacturerFamily"`
+	Model                    string   `json:"model"`
+	Role                     string   `json:"role"`
+	Operations               []string `json:"operations"`
+	SupportStatus            string   `json:"supportStatus"`
+	Provenance               string   `json:"provenance"`
+}
+
+type MachineOutputCatalogProfile struct {
+	OutputCompatibilityProfileId string `json:"outputCompatibilityProfileId"`
+	RevisionId                   string `json:"revisionId"`
+	FormatFamily                 string `json:"formatFamily"`
+	SupportStatus                string `json:"supportStatus"`
+	Digest                       string `json:"digest"`
+}
+
+type MachineOutputCatalogAdapter struct {
+	PostprocessorAdapterId string `json:"postprocessorAdapterId"`
+	AdapterVersion         string `json:"adapterVersion"`
+	ImplementationDigest   string `json:"implementationDigest"`
+	ProducedFormatFamily   string `json:"producedFormatFamily"`
+	SerializerImplemented  bool   `json:"serializerImplemented"`
+}
+
+type UpsertMachineOutputSelectionRequest struct {
+	Selection       MachineOutputSelection `json:"selection"`
+	ExpectedVersion int64                  `json:"expectedVersion"`
+}

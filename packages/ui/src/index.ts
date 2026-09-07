@@ -461,3 +461,5 @@ export {
   type UsabilityTaskSummary,
   type UsabilityTargetResult,
 } from './preview3d/usabilityBenchmark';
+
+export type { MachineOutputConfigProps, MachineOutputCatalogView } from './settings/MachineOutputSelectionSection';

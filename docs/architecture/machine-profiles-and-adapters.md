@@ -170,3 +170,22 @@ descubrimiento sin evidencia de campo) — vive en `docs/machines/client-a/`
 - ADR-0001, ADR-0002; `docs/architecture.md` §6/§7
 - Issues: #290 (meta), #347 (cerrada), #348, #351, #352/#353, #354
 - Ledger: F130 (DXF capas), F132 (SCM nativo, postergado), F168
+
+## Selección de salida y generación normal (#591)
+
+```text
+Validation pack:   puede evaluar múltiples candidatos (buildClientValidationPack).
+Normal production: exactamente UN tuple configurado por operación
+                   (máquina@revisión + perfil@revisión + adapter@versión/digest).
+```
+
+- La selección vive en `machine_output_selections` (tenant-scoped, versión con
+  concurrencia optimista; `GET/PUT /api/machine-output-selections`, API
+  generada) y se valida server-side contra el catálogo compartido
+  (`contracts/machineOutputCatalog.contract.json`, paridad TS↔Go).
+- El resolver autoritativo (`resolveManufacturingOutputTarget` en la capa de
+  export) devuelve `NO_OUTPUT_CONFIGURED | CONFIGURED{tuple+readiness}` —
+  nunca sustituye un perfil bloqueado ni genera candidatos en bulk.
+- Un objetivo bloqueado produce **cero archivos** con la razón exacta
+  (`machineOutputBlockerMessageEs`); el flujo legacy sin configurar se
+  mantiene intacto y documentado.

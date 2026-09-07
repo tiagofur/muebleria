@@ -47,6 +47,8 @@ import type {
   MFARecoveryCodesResponse,
   MFAStepUpRequest,
   MFAStepUpResponse,
+  MachineOutputSelectionRecord,
+  MachineOutputSelectionsReadModel,
   ManufacturingPreflightResult,
   MaterializeQuoteLineFurniture,
   MeResponse,
@@ -106,6 +108,7 @@ import type {
   UpdateMembershipStatusRequest,
   UpdateOrganizationEntitlementsRequest,
   UpdatePlatformOrganizationRequest,
+  UpsertMachineOutputSelectionRequest,
   ValidateModelBindingRequest,
 } from './types';
 
@@ -219,4 +222,6 @@ export abstract class GeneratedGraneteApiClient {
   finalizeDesignPublish(token: string, designId: string, sessionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/publish/${encodeURIComponent(sessionId)}:finalize`, { schema: "DesignRevision", token, idempotencyKey: key, signal }); }
   listDesignRevisionArtifacts(token: string, designId: string, revisionId: string, signal?: AbortSignal): Promise<ReadonlyArray<DesignRevisionArtifact>> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}/artifacts`, { arrayOf: "DesignRevisionArtifact", token, signal }); }
   authorizeDesignRevisionArtifact(token: string, designId: string, revisionId: string, kind: "model" | "manifest" | "preview", signal?: AbortSignal): Promise<DesignArtifactGrant> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}/artifacts/${encodeURIComponent(kind)}:authorize`, { schema: "DesignArtifactGrant", token, signal }); }
+  listMachineOutputSelections(token: string, signal?: AbortSignal): Promise<MachineOutputSelectionsReadModel> { return this.request("GET", "/machine-output-selections", { schema: "MachineOutputSelectionsReadModel", token, signal }); }
+  upsertMachineOutputSelection(token: string, operation: "cutting" | "machining", body: UpsertMachineOutputSelectionRequest, signal?: AbortSignal): Promise<MachineOutputSelectionRecord> { return this.request("PUT", `/machine-output-selections/${encodeURIComponent(operation)}`, { schema: "MachineOutputSelectionRecord", token, bodySchema: "UpsertMachineOutputSelectionRequest", body, signal }); }
 }

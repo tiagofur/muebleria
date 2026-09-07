@@ -394,6 +394,10 @@ type Store interface {
 	GetWorkshopSettings(ctx context.Context) (domain.WorkshopSettings, error)
 	UpsertWorkshopSettings(ctx context.Context, ws domain.WorkshopSettings) (domain.WorkshopSettings, error)
 
+	// Machine output selections (#591 / WEB-MFG-2)
+	ListMachineOutputSelections(ctx context.Context) ([]domain.MachineOutputSelectionRecord, error)
+	UpsertMachineOutputSelection(ctx context.Context, sel domain.MachineOutputSelection, expectedVersion int64, updatedBy string) (domain.MachineOutputSelectionRecord, error)
+
 	// User sector assignments (operador role)
 	ListUserSectors(ctx context.Context, userID string) ([]domain.UserSector, error)
 	SetUserSectors(ctx context.Context, userID string, sectors []domain.UserSector) error

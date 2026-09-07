@@ -261,6 +261,13 @@ import {
   type JobCostingView,
   type SiteSurveyView,
 } from '@granete/storage';
+import { resolveManufacturingOutputTarget } from '@granete/excel';
+import type {
+  MachineOutputSelection,
+  MachineOutputSelectionRecord,
+  ManufacturingOperation,
+  ResolvedManufacturingOutputTarget,
+} from '@granete/domain';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
@@ -608,8 +615,94 @@ export function AppContent({
     [session, getAuthUser, authUserSeq],
   );
   const authToken = useMemo(
+
     () => (session === 'auth' ? getAuthToken() : null),
     [session, getAuthToken, authUserSeq],
+  );
+  // #591 / WEB-MFG-2 — machine output selection (read model + save).
+  // A failed GET never hides the section silently: `machineOutputLoadError`
+  // keeps it visible with an explicit error + retry.
+  const [machineOutputReadModel, setMachineOutputReadModel] = useState<
+    Awaited<ReturnType<APIWorkspaceRepository['getMachineOutputSelections']>> | null
+  >(null);
+  const [machineOutputLoadError, setMachineOutputLoadError] = useState<string | null>(null);
+  const [machineOutputReloadKey, setMachineOutputReloadKey] = useState(0);
+  useEffect(() => {
+    if (!authToken) {
+      setMachineOutputReadModel(null);
+      setMachineOutputLoadError(null);
+      return;
+    }
+    let cancelled = false;
+    const repository = getRepository();
+    if (typeof repository.getMachineOutputSelections !== 'function') {
+      setMachineOutputReadModel(null);
+      setMachineOutputLoadError(null);
+      return;
+    }
+    repository
+      .getMachineOutputSelections()
+      .then((model) => {
+        if (!cancelled) {
+          setMachineOutputReadModel(model);
+          setMachineOutputLoadError(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMachineOutputReadModel(null);
+          setMachineOutputLoadError(
+            'No se pudo cargar la configuración de salida de máquina. Verificá tu conexión o permisos y reintentá.',
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, getRepository, authUserSeq, machineOutputReloadKey]);
+  const refreshMachineOutput = useCallback(() => {
+    setMachineOutputReloadKey((key) => key + 1);
+  }, []);
+  const machineOutputSelections = useMemo(() => {
+    const map: Partial<
+      Record<'cutting' | 'machining', MachineOutputSelectionRecord | undefined>
+    > = {};
+    for (const entry of machineOutputReadModel?.selections ?? []) {
+      map[entry.selection.selection.operation] = entry.selection;
+    }
+    return map;
+  }, [machineOutputReadModel]);
+  const machineOutputResolved = useMemo(() => {
+    const map: Partial<
+      Record<'cutting' | 'machining', ResolvedManufacturingOutputTarget | undefined>
+    > = {};
+    for (const operation of ['cutting', 'machining'] as const) {
+      const record = machineOutputSelections[operation];
+      map[operation] = resolveManufacturingOutputTarget(
+        record?.selection,
+        operation,
+      );
+    }
+    return map;
+  }, [machineOutputSelections]);
+  const machineOutputCuttingSelection =
+    machineOutputSelections.cutting?.selection ?? null;
+  const saveMachineOutputSelection = useCallback(
+    async (
+      operation: ManufacturingOperation,
+      selection: MachineOutputSelection,
+      expectedVersion: number,
+    ) => {
+      const repository = getRepository();
+      if (typeof repository.saveMachineOutputSelection !== 'function') {
+        throw new Error('La configuración de salida de máquina requiere modo servidor.');
+      }
+      // Server-authoritative: after saving, refetch the whole read model —
+      // never fabricate labels/blockers locally.
+      await repository.saveMachineOutputSelection(operation, selection, expectedVersion);
+      refreshMachineOutput();
+    },
+    [getRepository, refreshMachineOutput],
   );
   // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
   const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
@@ -2773,6 +2866,7 @@ export function AppContent({
     session,
     actorRole,
     workspaceSettings: workspace?.settings,
+    machineOutputCuttingSelection,
     toast,
     stampEngineeringGeneration,
     recordProductionExport,
@@ -2946,6 +3040,16 @@ export function AppContent({
   const shellViewCtx = {
     acquirePlanEditSession,
     actorRole,
+    // #591: config object exists whenever the feature is reachable — on load
+    // error it carries loadError + onRetry so the section stays visible.
+    machineOutputConfig: {
+      catalog: machineOutputReadModel?.catalog ?? null,
+      selections: machineOutputSelections,
+      resolved: machineOutputResolved,
+      onSave: saveMachineOutputSelection,
+      loadError: machineOutputLoadError,
+      onRetry: refreshMachineOutput,
+    },
     addProjectItem,
     agregados,
     allowedNavIds,
