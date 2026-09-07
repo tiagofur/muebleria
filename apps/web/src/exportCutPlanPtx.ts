@@ -4,6 +4,7 @@ import {
   generatePtxByMaterial,
   type PtxCutPlanExportInput,
 } from '@granete/excel';
+import type { MachineArtifactBundle } from '@granete/excel';
 import type { CutPlan } from '@granete/domain';
 import { downloadOptimizerXlsx, type DownloadDeps } from './exportOptimizer';
 
@@ -90,4 +91,27 @@ export async function downloadCutPlanPtx(
   const targetFileName =
     fileName || ptxFileName(options?.projectName || cutPlan.projectName || cutPlan.projectId);
   downloadOptimizerXlsx(bytes, targetFileName, deps);
+}
+
+/**
+ * Downloads the cutting artifacts of the #591 machine-output path: exactly one
+ * bundle → its file directly; several (by-material mode) → ALL of them bundled
+ * in a single .zip. A bundle list must never silently drop entries.
+ */
+export async function downloadCuttingArtifactBundles(
+  bundles: readonly MachineArtifactBundle[],
+  projectName?: string,
+  deps?: DownloadDeps,
+): Promise<void> {
+  const [single] = bundles;
+  if (bundles.length === 1 && single) {
+    downloadOptimizerXlsx(single.artifact.bytes, single.artifact.fileName, deps);
+    return;
+  }
+  const zip = new JSZip();
+  for (const bundle of bundles) {
+    zip.file(bundle.artifact.fileName, bundle.artifact.bytes);
+  }
+  const zipBytes = await zip.generateAsync({ type: 'uint8array' });
+  downloadOptimizerXlsx(zipBytes, ptxZipFileName(projectName), deps);
 }
