@@ -118,7 +118,7 @@ func float64Ptr(v float64) *float64 { return &v }
 
 func TestRunManufacturingPreflight_Ready(t *testing.T) {
 	items := []DesignRevisionItem{releaseTestItem("fi-1", map[string]any{"width": 600.0}, map[string]string{"body": "melamina-blanca"})}
-	result := RunManufacturingPreflight("rev-1", items, approvalTestDefinitions())
+	result := RunManufacturingPreflight("rev-1", items, approvalTestDefinitions(), map[string]bool{"melamina-blanca": true})
 	if result.Status != ManufacturingPreflightReady {
 		t.Fatalf("expected ready, got %s with issues %+v", result.Status, result.Issues)
 	}
@@ -128,7 +128,7 @@ func TestRunManufacturingPreflight_Ready(t *testing.T) {
 }
 
 func TestRunManufacturingPreflight_EmptyRevisionBlocks(t *testing.T) {
-	result := RunManufacturingPreflight("rev-1", nil, approvalTestDefinitions())
+	result := RunManufacturingPreflight("rev-1", nil, approvalTestDefinitions(), map[string]bool{"melamina-blanca": true})
 	if result.Status != ManufacturingPreflightBlocked {
 		t.Fatalf("empty revision must block")
 	}
@@ -139,7 +139,7 @@ func TestRunManufacturingPreflight_EmptyRevisionBlocks(t *testing.T) {
 
 func TestRunManufacturingPreflight_MissingDefinitionBlocks(t *testing.T) {
 	items := []DesignRevisionItem{releaseTestItem("fi-1", map[string]any{"width": 600.0}, nil)}
-	result := RunManufacturingPreflight("rev-1", items, map[string]FurnitureDefinitionParameters{})
+	result := RunManufacturingPreflight("rev-1", items, map[string]FurnitureDefinitionParameters{}, nil)
 	if result.Status != ManufacturingPreflightBlocked {
 		t.Fatalf("missing definition must block")
 	}
@@ -153,7 +153,7 @@ func TestRunManufacturingPreflight_InvalidParametersBlock(t *testing.T) {
 		releaseTestItem("fi-1", map[string]any{"width": 9999.0}, nil),        // above max 1200
 		releaseTestItem("fi-2", map[string]any{"width": "seiscientos"}, nil), // wrong type
 	}
-	result := RunManufacturingPreflight("rev-1", items, approvalTestDefinitions())
+	result := RunManufacturingPreflight("rev-1", items, approvalTestDefinitions(), map[string]bool{"melamina-blanca": true})
 	if result.Status != ManufacturingPreflightBlocked {
 		t.Fatalf("invalid parameters must block")
 	}
@@ -172,7 +172,7 @@ func TestRunManufacturingPreflight_DuplicateInstanceBlocks(t *testing.T) {
 		releaseTestItem("fi-1", map[string]any{"width": 600.0}, nil),
 		releaseTestItem("fi-1", map[string]any{"width": 800.0}, nil),
 	}
-	result := RunManufacturingPreflight("rev-1", items, approvalTestDefinitions())
+	result := RunManufacturingPreflight("rev-1", items, approvalTestDefinitions(), map[string]bool{"melamina-blanca": true})
 	if result.Status != ManufacturingPreflightBlocked {
 		t.Fatalf("duplicate instance identity must block (§17 ambiguous IDs)")
 	}
@@ -180,7 +180,7 @@ func TestRunManufacturingPreflight_DuplicateInstanceBlocks(t *testing.T) {
 
 func TestRunManufacturingPreflight_EmptyMaterialChoiceBlocks(t *testing.T) {
 	items := []DesignRevisionItem{releaseTestItem("fi-1", map[string]any{"width": 600.0}, map[string]string{"body": ""})}
-	result := RunManufacturingPreflight("rev-1", items, approvalTestDefinitions())
+	result := RunManufacturingPreflight("rev-1", items, approvalTestDefinitions(), map[string]bool{"melamina-blanca": true})
 	if result.Status != ManufacturingPreflightBlocked {
 		t.Fatalf("empty material value must block")
 	}
@@ -197,17 +197,17 @@ func TestRunManufacturingPreflight_LegacyModuleDimensionProjection(t *testing.T)
 		"11111111-1111-4111-8111-111111111111": {ParameterDefinitions: nil},
 	}
 	dimensions := releaseTestItem("fi-1", map[string]any{"widthMm": 600.0, "heightMm": 720.0}, nil)
-	if result := RunManufacturingPreflight("rev-1", []DesignRevisionItem{dimensions}, legacy); result.Status != ManufacturingPreflightReady {
+	if result := RunManufacturingPreflight("rev-1", []DesignRevisionItem{dimensions}, legacy, nil); result.Status != ManufacturingPreflightReady {
 		t.Fatalf("legacy module dimensions must validate through the projection, got %s: %+v", result.Status, result.Issues)
 	}
 
 	fractional := releaseTestItem("fi-1", map[string]any{"widthMm": 600.5}, nil)
-	if result := RunManufacturingPreflight("rev-1", []DesignRevisionItem{fractional}, legacy); result.Status != ManufacturingPreflightBlocked {
+	if result := RunManufacturingPreflight("rev-1", []DesignRevisionItem{fractional}, legacy, nil); result.Status != ManufacturingPreflightBlocked {
 		t.Fatalf("fractional millimeters must fail the integer mm projection")
 	}
 
 	unknown := releaseTestItem("fi-1", map[string]any{"color": "rojo"}, nil)
-	if result := RunManufacturingPreflight("rev-1", []DesignRevisionItem{unknown}, legacy); result.Status != ManufacturingPreflightBlocked {
+	if result := RunManufacturingPreflight("rev-1", []DesignRevisionItem{unknown}, legacy, nil); result.Status != ManufacturingPreflightBlocked {
 		t.Fatalf("undeclared parameter names must fail closed even on legacy modules")
 	}
 }
@@ -305,5 +305,33 @@ func TestResolvedProductionReleaseAdapters(t *testing.T) {
 	}
 	if ResolveLegacyProductionRelease(nil) != nil {
 		t.Fatalf("nil legacy blob must resolve to nil authority")
+	}
+}
+
+func TestRunManufacturingPreflight_SelectedMaterialMembership(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		choices map[string]string
+		ids     map[string]bool
+		valid   bool
+	}{
+		{"missing", map[string]string{"INTERIOR": "missing-id"}, map[string]bool{"board": true}, false},
+		{"unavailable", map[string]string{"BODY": "board"}, nil, false},
+		{"false membership", map[string]string{"BODY": "board"}, map[string]bool{"board": false}, false},
+		{"empty slot", map[string]string{"": "board"}, map[string]bool{"board": true}, false},
+		{"empty choices", nil, nil, true},
+		{"legacy roles and kinds", map[string]string{"BODY": "board", "custom-hinge": "hinge", "EDGE": "edge"}, map[string]bool{"board": true, "hinge": true, "edge": true}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item := releaseTestItem("fi-1", map[string]any{"width": 600.0}, tc.choices)
+			result := RunManufacturingPreflight("rev-1", []DesignRevisionItem{item}, approvalTestDefinitions(), tc.ids)
+			if tc.valid {
+				if result.Status != ManufacturingPreflightReady {
+					t.Fatalf("valid choices blocked: %+v", result)
+				}
+			} else if result.Status != ManufacturingPreflightBlocked || len(result.Issues) != 1 || result.Issues[0].Code != PreflightIssueInvalidMaterialUse {
+				t.Fatalf("expected material blocker: %+v", result)
+			}
+		})
 	}
 }

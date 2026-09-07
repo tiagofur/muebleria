@@ -33,8 +33,20 @@ const releaseMaterial = "70000000-0000-0000-0000-000000000001"
 // setupReleaseFixture builds the canonical demo: Q3 accepted with FI-A/FI-B;
 // published R3 identical to Q3 (clean reconciliation), then approved.
 func setupReleaseFixture(t *testing.T) *releaseFixture {
+	return setupReleaseFixtureWithChoices(t, map[string]string{"BODY": releaseMaterial})
+}
+
+func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *releaseFixture {
 	t.Helper()
 	fx := setupDesignsTestFixture(t)
+	for _, statement := range []string{
+		`INSERT INTO hardwares (id, code, name, unit, cost_per_unit, organization_id)
+		 VALUES ('70000000-0000-0000-0000-000000000002', 'RELEASE-HINGE', 'Release hinge', 'piece', 12, '` + rlsOrgA + `')`,
+		`INSERT INTO edge_bands (id, code, name, thickness_mm, cost_per_ml, organization_id)
+		 VALUES ('70000000-0000-0000-0000-000000000003', 'RELEASE-EDGE', 'Release edge', 1, 2, '` + rlsOrgA + `')`,
+	} {
+		multiOrgExec(t, fx.admin, statement)
+	}
 	actorA := fiActorA()
 
 	lineID := "60000000-0000-0000-0000-000000000093"
@@ -73,7 +85,7 @@ func setupReleaseFixture(t *testing.T) *releaseFixture {
 				FurnitureInstanceID:   fiID,
 				FurnitureDefinitionID: fiModuleA,
 				Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0},
-				MaterialChoices:       map[string]string{"BODY": releaseMaterial},
+				MaterialChoices:       choices,
 				LifecycleStatus:       "active",
 			}
 		}
@@ -98,7 +110,7 @@ func setupReleaseFixture(t *testing.T) *releaseFixture {
 				FurnitureInstanceID:   fiID,
 				FurnitureDefinitionID: fiModuleA,
 				Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0},
-				MaterialChoices:       map[string]string{"BODY": releaseMaterial},
+				MaterialChoices:       choices,
 				Transform:             domain.Transform3D{TranslationMm: [3]float64{100, 0, 0}},
 			}
 		}
