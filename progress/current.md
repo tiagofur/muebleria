@@ -1,3 +1,10 @@
+## #577 — coherent tenant transaction foundation, chain unit 2 (preparatory)
+
+- Additive internal opt-in selects repeatable read before tenant setup; ordinary requests retain read committed.
+- Borrowed marked transactions must already be repeatable read or serializable; weaker isolation is refused before actor changes or callback execution.
+- Real PostgreSQL proofs cover a two-connection committed-edit barrier, borrowing, commit/rollback and same-connection context cleanup. Routes and release capture are not wired yet.
+- This does not freeze a production BOM or close #577. Full gate, independent validation and exact-head CI remain publication requirements; F202 and the ledger remain unchanged.
+
 ## #577 — immutable release requirements, chain unit 1 (partial)
 
 - Base: `78116f20`; branch: `fix/577-immutable-release-bom`. Existing ledger unchanged.
