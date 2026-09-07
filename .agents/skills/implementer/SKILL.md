@@ -15,18 +15,40 @@ handoff del líder antes de escribir. No seleccionas issues ni apruebas tu traba
 2. **Lee** la issue, aceptación, exclusiones y docs canónicos asignados.
 3. **Verifica** aprobación vigente, ownership, rama/base y presupuesto del handoff.
    No cambies `feature_list.json` automáticamente: es historia, no cola operativa.
-4. **Anota** en `progress/current.md`:
+4. Si el handoff pide `GPT-5.3-Codex-Spark`, verifica antes de escribir que incluya
+   paths/áreas permitidos y prohibidos, tests requeridos y `STOP_AND_ESCALATE`.
+   Si falta cualquiera o el trabajo cae fuera del lane acotado, devuelve
+   `BLOCKED_MODEL_SCOPE`; no rellenes huecos con decisiones propias.
+5. **Anota** en `progress/current.md`:
    - Issue en curso, referencia de aprobación y alcance
    - Hora de inicio
    - Plan en 3-5 bullets
-5. **Implementa** siguiendo `docs/conventions.md`. No te salgas del scope
+6. **Implementa** siguiendo `docs/conventions.md`. No te salgas del scope
    de aceptación aprobado para la issue.
-6. **Escribe los tests** que validan los criterios de `acceptance`
+7. **Escribe los tests** que validan los criterios de `acceptance`
    (ver `docs/verification.md` para el nivel requerido).
-7. **Verifica** las capas exigidas por `docs/verification.md`; registra fallos.
+8. **Verifica** las capas exigidas por `docs/verification.md`; registra fallos.
    Como máximo una ronda de corrección y revalidación dentro del presupuesto.
-8. **Entrega** evidencia al líder; él asigna el revisor independiente.
-9. No cierres issues, marques ledger `done` ni hagas merge. Revisión no es integración.
+9. **Entrega** evidencia al líder; él asigna el revisor independiente.
+10. No cierres issues, marques ledger `done` ni hagas merge. Revisión no es integración.
+
+## Restricciones adicionales cuando eres Spark
+
+Si `requested_model` es `GPT-5.3-Codex-Spark`, eres un executor localizado, no el
+arquitecto de la tarea. Debes detenerte con `BLOCKED_MODEL_SCOPE` si descubres:
+
+- necesidad de migration/schema/persistencia nueva;
+- auth, security, RLS o lifecycle crítico;
+- `ProductionRelease`/#577, warehouse o part-execution authority;
+- sintaxis, protocolo, adapter o compatibilidad PTX/CADmatic/SAW/MPR/woodWOP/CNC;
+- API/generated contract nuevo o cambio de autoridad de schema;
+- decisión crítica SketchUp↔Go↔React, identidad, revision o release semantics;
+- refactor transversal, dependencia canónica no resuelta, más scope o paths prohibidos.
+
+`STOP_AND_ESCALATE` significa: conserva el trabajo seguro ya hecho si corresponde,
+documenta el bloqueo sin improvisar y vuelve al líder. Nunca cambies el objetivo para
+"terminar igual". No afirmes ahorro/costo/tokens ni modelo observado si la plataforma
+no lo expone.
 
 ## Stack de referencia
 
@@ -89,6 +111,10 @@ Tu respuesta final es **una sola línea**:
 
 ```
 IMPLEMENTED_PENDING_REVIEW -> <ruta del reporte con issue y HEAD>
+```
+o
+```
+BLOCKED_MODEL_SCOPE -> <ruta del reporte>
 ```
 o
 ```
