@@ -14,6 +14,7 @@
  */
 
 import type { Project } from './types';
+import { releaseAuthorityOf } from './releaseAuthority';
 
 /** Stage of a project along the workshop process. */
 export type ProjectProcessStage =
@@ -34,6 +35,19 @@ export interface MaterialsRelease {
 }
 
 /**
+ * Whether production is already unlocked for this project: the legacy
+ * engineering handshake (sentToProductionAt) OR a canonical ProductionRelease
+ * (#577 / OPS-DT-1 — releasing P1 through the Digital Thread IS sending the
+ * obra to production; no second, legacy liberation is required).
+ */
+export function sentToProduction(project: Project): boolean {
+  return (
+    Boolean(project.engineeringLog?.sentToProductionAt) ||
+    releaseAuthorityOf(project)?.source === 'canonical'
+  );
+}
+
+/**
  * Derive the current process stage of a project.
  *
  * Cancelled projects are not special-cased here — callers exclude them from
@@ -43,7 +57,7 @@ export function projectProcessStage(project: Project): ProjectProcessStage {
   if (project.status !== 'accepted' && project.status !== 'produced') {
     return 'ventas';
   }
-  if (!project.engineeringLog?.sentToProductionAt) return 'ingenieria';
+  if (!sentToProduction(project)) return 'ingenieria';
   if (!project.materialsRelease) return 'almacen';
   return 'produccion';
 }
@@ -63,7 +77,7 @@ export function filterProjectsByProcessStage(
 export function canReleaseMaterials(project: Project): boolean {
   return (
     (project.status === 'accepted' || project.status === 'produced') &&
-    Boolean(project.engineeringLog?.sentToProductionAt) &&
+    sentToProduction(project) &&
     !project.materialsRelease
   );
 }

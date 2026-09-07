@@ -679,6 +679,13 @@ type Project struct {
 	DesignRevisions   []LegacyDesignRevision   `json:"design_revisions,omitempty"`
 	Approvals         []Approval               `json:"approvals,omitempty"`
 	ProductionRelease *LegacyProductionRelease `json:"production_release,omitempty"`
+	// ResolvedProductionRelease is the server-owned projection of the ONE
+	// release authority of this project (#577 / OPS-DT-1): the canonical
+	// #395 ProductionRelease when one exists (source "canonical"), else the
+	// legacy OC-022 blob through the compatibility adapter (source
+	// "legacy"). Computed on read (list/detail); never persisted and never
+	// accepted from client writes.
+	ResolvedProductionRelease *ResolvedProductionRelease `json:"resolved_production_release,omitempty"`
 	ChangeOrders      []ChangeOrder            `json:"change_orders,omitempty"`
 	PartInstances     []PartInstance           `json:"part_instances,omitempty"`
 	ModuleUnits       []ModuleUnitExecution    `json:"module_units,omitempty"`

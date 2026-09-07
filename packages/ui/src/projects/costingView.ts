@@ -10,6 +10,7 @@ import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 import {
   OTHER_COST_KIND_LABELS_ES,
   TIME_ENTRY_CATEGORY_LABELS_ES,
+  releaseAuthorityOf,
   timeEntryCost,
   type CostBaseline,
   type CostTruth,
@@ -207,7 +208,7 @@ function otherCostView(cost: OtherActualCost, currency: string): CostingOtherCos
  * `GET /projects/{id}/costing` response which carries the job consumption).
  */
 export function costingPanelView(
-  project: Pick<Project, 'id' | 'currency' | 'priceSnapshot' | 'productionRelease' | 'costing'>,
+  project: Pick<Project, 'id' | 'currency' | 'priceSnapshot' | 'productionRelease' | 'resolvedProductionRelease' | 'costing'>,
   domain: {
     readonly summary: JobCostSummary;
     readonly materialLines?: readonly {
@@ -225,13 +226,14 @@ export function costingPanelView(
   const costing = project.costing;
   const baseline = costing?.baseline ?? null;
 
+  // #577: the release authority (server projection first — canonical
+  // unlocks costing without any legacy liberation).
+  const release = releaseAuthorityOf(project);
   const blockers: string[] = [];
   if (!project.priceSnapshot) blockers.push('capturar el snapshot de cotización (cerrar la cotización)');
-  if (!project.productionRelease) blockers.push('liberar la revisión de ingeniería a producción');
+  if (!release) blockers.push('liberar la revisión de ingeniería a producción');
   const sameRelease =
-    baseline !== null &&
-    project.productionRelease !== undefined &&
-    baseline.source.releaseId === project.productionRelease.id;
+    baseline !== null && release !== undefined && baseline.source.releaseId === release.releaseId;
   const canCapture = blockers.length === 0 && !sameRelease;
 
   return {

@@ -360,6 +360,10 @@ func toProductionReleaseDTO(readback storage.ProductionReleaseReadback) openapi.
 			ManufacturingStale: readback.Staleness.ManufacturingStale,
 		},
 	}
+	if release.DesignID != "" {
+		designID := release.DesignID
+		dto.DesignID = &designID
+	}
 	if release.QuoteRevisionID != "" {
 		q := release.QuoteRevisionID
 		dto.QuoteRevisionID = &q

@@ -11,6 +11,7 @@ import { baseContextForItem } from '../plinth';
 import type {
   Catalog,
   EdgeUsageRow,
+  BomProjectContext,
   Hardware,
   HardwarePurchaseRow,
   MaterialBoard,
@@ -33,7 +34,7 @@ import {
  * Hardware reuses generateHardwareList (EXP-08).
  */
 export function generateProjectMaterialSummary(
-  project: Project,
+  project: BomProjectContext,
   catalog: Catalog,
 ): ProjectMaterialSummary {
   const materialMap = new Map<
@@ -240,7 +241,7 @@ export function roundHardwarePurchaseQuantity(
  * When Hardware.packageSize is set, purchaseQuantity/lineCost use package ceil.
  */
 export function generateHardwareList(
-  project: Project,
+  project: BomProjectContext,
   catalog: Catalog,
 ): HardwarePurchaseRow[] {
   const totals = new Map<

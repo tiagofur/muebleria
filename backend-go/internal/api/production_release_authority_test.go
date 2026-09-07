@@ -55,7 +55,7 @@ func TestPartExec_RevisionGuardUsesCanonicalReleaseAuthority(t *testing.T) {
 	store, srv := partExecFixtures("rel-legacy-1")
 	store.partInstances = nil
 	store.moduleUnits = nil
-	store.itemQuantities = map[string]int{"i1": 2}
+	store.itemQuantities = map[string]int{"i1": 1}
 	store.latestProductionRelease = &domain.ProductionRelease{
 		ID:                      "3f0c9c11-0000-4000-8000-000000000005",
 		ProjectID:               "p1",
@@ -64,13 +64,13 @@ func TestPartExec_RevisionGuardUsesCanonicalReleaseAuthority(t *testing.T) {
 
 	// Parts stamped with the LEGACY blob revision no longer match the
 	// released authority.
-	if rr := doGenerate(srv, string(domain.RoleAdmin), generateBody("rel-legacy-1", 2)); rr.Code != http.StatusConflict {
+	if rr := doGenerate(srv, string(domain.RoleAdmin), generateBody("rel-legacy-1", 1)); rr.Code != http.StatusConflict {
 		t.Fatalf("legacy blob revision must not satisfy the guard once the canonical release exists, got %d body=%s", rr.Code, rr.Body.String())
 	}
 
 	// Parts stamped with the CANONICAL release id resolve the same authority
 	// the release gate created.
-	if rr := doGenerate(srv, string(domain.RoleAdmin), generateBody("3f0c9c11-0000-4000-8000-000000000005", 2)); rr.Code != http.StatusOK {
+	if rr := doGenerate(srv, string(domain.RoleAdmin), generateBody("3f0c9c11-0000-4000-8000-000000000005", 1)); rr.Code != http.StatusOK {
 		t.Fatalf("canonical release revision must satisfy the guard, got %d body=%s", rr.Code, rr.Body.String())
 	}
 }

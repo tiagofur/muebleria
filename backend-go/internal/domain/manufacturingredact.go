@@ -22,6 +22,9 @@ func RedactProjectManufacturing(p *Project) {
 	p.InstallationChecklist = nil
 	p.MaterialsRelease = nil
 	p.ProductionRelease = nil
+	// #577: the resolved release authority (release ids, revision pins,
+	// manufacturing fingerprint) is factory-internal.
+	p.ResolvedProductionRelease = nil
 	p.PartInstances = nil
 	p.ModuleUnits = nil
 	p.FloorEvents = nil

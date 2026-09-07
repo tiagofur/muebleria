@@ -7293,6 +7293,14 @@
             "type": "integer",
             "minimum": 1
           },
+          "design_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Parent design of the pinned DesignRevision — lets operational consumers load the exact revision snapshot (designs/{designId}/revisions/{revisionId}) without scanning (#577 / OPS-DT-1)."
+          },
           "design_revision_id": {
             "type": "string",
             "format": "uuid",

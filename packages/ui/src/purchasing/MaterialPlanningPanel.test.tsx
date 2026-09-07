@@ -78,6 +78,66 @@ describe('materialPlanningCardView (OC-054 evidence)', () => {
     expect(view.canDerive).toBe(false);
     expect(view.requirementsDerived).toBe(false);
   });
+
+  it('a canonical release alone unlocks canDerive — no legacy liberation (#577)', () => {
+    const project = makeProject({
+      productionRelease: undefined, // legacy blob stays null through the canonical path
+      resolvedProductionRelease: {
+        source: 'canonical',
+        releaseId: 'rel-canonical-1',
+        releaseNumber: 1,
+        designRevisionId: 'dr-2',
+        designRevisionNumber: 2,
+        quoteRevisionId: 'qr-2',
+        manufacturingFingerprint: 'sha256-abc',
+        status: 'active',
+      },
+    });
+    const view = materialPlanningCardView(project, [], [], []);
+    expect(view.canDerive).toBe(true);
+    expect(view.releaseAuthority?.source).toBe('canonical');
+    expect(view.provenance).toBeUndefined(); // nothing derived yet
+  });
+
+  it('canonical wins when a stale legacy blob coexists (#577)', () => {
+    const project = makeProject({
+      resolvedProductionRelease: {
+        source: 'canonical',
+        releaseId: 'rel-canonical-1',
+        releaseNumber: 2,
+        designRevisionId: 'dr-3',
+        designRevisionNumber: 3,
+      },
+    });
+    expect(materialPlanningCardView(project, [], [], []).releaseAuthority?.releaseId).toBe('rel-canonical-1');
+  });
+
+  it('shows human-readable provenance once requirements are derived (#577)', () => {
+    const project = makeProject({
+      resolvedProductionRelease: {
+        source: 'canonical',
+        releaseId: 'rel-canonical-1',
+        releaseNumber: 1,
+        designRevisionId: 'dr-2',
+        designRevisionNumber: 2,
+      },
+      materialPlanning: planningWith({
+        requirements: {
+          releaseId: 'rel-canonical-1',
+          bomFingerprint: 'sha256-abc',
+          sourceProductionReleaseNumber: 1,
+          sourceDesignRevisionId: 'dr-2',
+          sourceDesignRevisionNumber: 2,
+          sourceQuoteRevisionId: 'qr-2',
+          derivedAt: '2026-09-06T10:00:00Z',
+          lines: [{ kind: 'herrajes', materialId: 'hw-1', quantity: 10 }],
+        },
+      }),
+    });
+    const view = materialPlanningCardView(project, [project.materialPlanning!], [], []);
+    expect(view.provenance?.label).toBe('Derivado de Liberación #1 · Diseño R2');
+    expect(view.provenance?.detail).toContain('sha256-abc');
+  });
 });
 
 describe('MaterialPlanningPanel', () => {

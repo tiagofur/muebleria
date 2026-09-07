@@ -358,7 +358,7 @@ func (s *PostgresStore) loadCatalogModuleDetails(ctx context.Context, m *domain.
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, material_planning, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
 		FROM projects
 		WHERE organization_id = $1 OR sales_organization_id = $1 OR manufacturing_organization_id = $1
 		ORDER BY updated_at DESC;
@@ -392,8 +392,11 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var approvals []byte
 		var productionRelease []byte
 		var changeOrders []byte
+		var partInstances []byte
+		var moduleUnits []byte
+		var materialPlanning []byte
 		var orgID, salesOrgID, mfgOrgID *string
-		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &orgID, &salesOrgID, &mfgOrgID, &p.CreatedAt, &p.UpdatedAt)
+		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &materialPlanning, &orgID, &salesOrgID, &mfgOrgID, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -469,6 +472,18 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		if len(changeOrders) > 0 && string(changeOrders) != "null" {
 			_ = json.Unmarshal(changeOrders, &p.ChangeOrders)
 		}
+		if len(partInstances) > 0 && string(partInstances) != "null" {
+			_ = json.Unmarshal(partInstances, &p.PartInstances)
+		}
+		if len(moduleUnits) > 0 && string(moduleUnits) != "null" {
+			_ = json.Unmarshal(moduleUnits, &p.ModuleUnits)
+		}
+		if len(materialPlanning) > 0 && string(materialPlanning) != "null" {
+			var planning domain.MaterialPlanning
+			if err := json.Unmarshal(materialPlanning, &planning); err == nil {
+				p.MaterialPlanning = &planning
+			}
+		}
 
 		list = append(list, p)
 	}
@@ -476,6 +491,21 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		return nil, err
 	}
 	rows.Close()
+	// #577 / OPS-DT-1: server-owned resolved release authority projection.
+	// Canonical latest per project in ONE query (no N+1); the legacy blob is
+	// only the pre-DT fallback. Runs after the cursor closes like the other
+	// dependent queries.
+	projectIDs := make([]string, len(list))
+	for i := range list {
+		projectIDs[i] = list[i].ID
+	}
+	latestReleases, err := s.LatestCanonicalReleasesByProject(ctx, projectIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i].ResolvedProductionRelease = resolveReleaseProjection(latestReleases[list[i].ID], list[i].ProductionRelease)
+	}
 	for i := range list {
 		// Tenant requests share one transaction and one pgx connection, so
 		// dependent queries must run after the project cursor is closed.
@@ -925,6 +955,14 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		return nil, err
 	}
 	p.ProjectLevelChoices = level
+
+	// #577 / OPS-DT-1: server-owned resolved release authority projection —
+	// canonical latest first, legacy blob as the pre-DT fallback only.
+	if canonical, err := s.GetLatestProjectProductionRelease(ctx, p.ID); err != nil {
+		return nil, err
+	} else {
+		p.ResolvedProductionRelease = resolveReleaseProjection(canonical, p.ProductionRelease)
+	}
 
 	// Cargar snapshot si existe
 	snapQuery := `

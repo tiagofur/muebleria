@@ -65,7 +65,13 @@ func buildMaterialsView(snap *domain.MaterialPlanningSnapshot, planning *domain.
 	if checks == nil {
 		checks = []domain.MaterialsReleaseCheck{}
 	}
-	coverage := domain.ComputeProjectCoverage(planning.ProjectID, snap.Stock, plannings, snap.PurchaseOrders)
+	// #577: a obra that never derived requirements has no planning row — the
+	// evidence view answers empty coverage instead of dereferencing nil (the
+	// operational screens read the view BEFORE the first derivation).
+	var coverage []domain.ProjectLineCoverage
+	if planning != nil {
+		coverage = domain.ComputeProjectCoverage(planning.ProjectID, snap.Stock, plannings, snap.PurchaseOrders)
+	}
 	if coverage == nil {
 		coverage = []domain.ProjectLineCoverage{}
 	}
@@ -122,7 +128,12 @@ func (s *Server) HandleProjectMaterials(w http.ResponseWriter, r *http.Request) 
 }
 
 type deriveMaterialsRequest struct {
-	Lines []struct {
+	// ProductionReleaseID is the EXACT canonical release the derivation
+	// targets (#577 / OPS-DT-1). Required whenever the project has a
+	// canonical ProductionRelease; pre-DT (legacy-only) projects derive
+	// without it through the compatibility authority.
+	ProductionReleaseID string `json:"production_release_id,omitempty"`
+	Lines               []struct {
 		Kind       string  `json:"kind"`
 		MaterialID string  `json:"material_id"`
 		Quantity   float64 `json:"quantity"`
@@ -131,8 +142,11 @@ type deriveMaterialsRequest struct {
 
 // HandleMaterialsDerive handles POST /api/projects/{id}/materials/derive —
 // materialize the requirements snapshot from the released BOM (OC-050). The
-// lines come from the TS BOM engine; the server binds them to the recorded
-// production release (id + bomFingerprint) and audits materials_required.
+// lines come from the TS BOM engine over the exact released revision
+// snapshot; the server binds them to the EXACT canonical ProductionRelease
+// when one exists (production_release_id, never an implicit latest), or to
+// the legacy compatibility authority for pre-DT projects, and audits
+// materials_required with the full provenance pins.
 func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
@@ -161,12 +175,18 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 			Quantity:   line.Quantity,
 		})
 	}
+	targetReleaseID := strings.TrimSpace(body.ProductionReleaseID)
 
 	var view materialsViewResponse
-	_, err := s.Store.MutateProjectMaterialPlanning(r.Context(), projectID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+	_, err := s.Store.MutateProjectMaterialPlanningForRelease(r.Context(), projectID, targetReleaseID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
 		release := snap.ProductionRelease
 		if release == nil || release.ReleaseID == "" {
 			return nil, fmt.Errorf("CONFLICT:los requerimientos se derivan del BOM liberado: la obra no tiene liberación de producción")
+		}
+		// #577 / OPS-DT-1: with a canonical release the derivation MUST target
+		// an exact release id — "current project state" is not an authority.
+		if snap.CanonicalReleaseExists && targetReleaseID == "" {
+			return nil, fmt.Errorf("CONFLICT:esta obra tiene una liberación canónica: derivar requiere production_release_id exacto")
 		}
 		if snap.Planning != nil && snap.Planning.Release != nil {
 			return nil, fmt.Errorf("CONFLICT:el material de esta obra ya fue liberado")
@@ -181,16 +201,22 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 				CreatedAt: now,
 			}
 		}
+		requirements := &domain.MaterialRequirementsSnapshot{
+			ReleaseID:                   release.ReleaseID,
+			BomFingerprint:              release.ManufacturingFingerprint,
+			SourceProductionReleaseID:   release.ReleaseID,
+			SourceProductionReleaseNumber: release.ReleaseNumber,
+			SourceDesignRevisionID:      release.DesignRevisionID,
+			SourceDesignRevisionNumber:  release.DesignRevisionNumber,
+			SourceQuoteRevisionID:       release.QuoteRevisionID,
+			DerivedAt:                   now,
+			DerivedBy:                   actorID(claims),
+			Lines:                       lines,
+		}
 		planning = &domain.MaterialPlanning{
-			ID:        planning.ID,
-			ProjectID: planning.ProjectID,
-			Requirements: &domain.MaterialRequirementsSnapshot{
-				ReleaseID:      release.ReleaseID,
-				BomFingerprint: release.ManufacturingFingerprint,
-				DerivedAt:      now,
-				DerivedBy:      actorID(claims),
-				Lines:          lines,
-			},
+			ID:           planning.ID,
+			ProjectID:    planning.ProjectID,
+			Requirements: requirements,
 			Reservations: planning.Reservations,
 			Release:      planning.Release,
 			CreatedAt:    planning.CreatedAt,
@@ -203,7 +229,7 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 			ID: newProjectEventID(), ProjectID: projectID,
 			Type: "materials_required", At: now, ByUserID: byUserIDFromClaims(claims), Source: domain.ProjectEventSourceAPI,
 			Note:    fmt.Sprintf("Requerimientos derivados del BOM liberado (%d líneas)", len(lines)),
-			Payload: materialsPayload(map[string]interface{}{"release_id": release.ReleaseID, "bom_fingerprint": release.ManufacturingFingerprint, "line_count": len(lines)}),
+			Payload: materialsPayload(materialsProvenancePayload(release, len(lines))),
 		}
 		view = buildMaterialsViewWithPlanning(snap, planning)
 		return &domain.MaterialPlanningMutation{Planning: planning, Events: []domain.ProjectEvent{event}}, nil
@@ -214,6 +240,27 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 	}
 	view.EventsAppended = 1
 	respondWithJSON(w, http.StatusOK, view)
+}
+
+// materialsProvenancePayload is the audited provenance of a derivation: the
+// exact release pins the requirements are bound to (#577 / OPS-DT-1).
+func materialsProvenancePayload(release *domain.ResolvedProductionRelease, lineCount int) map[string]interface{} {
+	payload := map[string]interface{}{
+		"release_id":        release.ReleaseID,
+		"release_source":    string(release.Source),
+		"bom_fingerprint":   release.ManufacturingFingerprint,
+		"line_count":        lineCount,
+	}
+	if release.ReleaseNumber > 0 {
+		payload["release_number"] = release.ReleaseNumber
+	}
+	if release.DesignRevisionID != "" {
+		payload["design_revision_id"] = release.DesignRevisionID
+	}
+	if release.QuoteRevisionID != "" {
+		payload["quote_revision_id"] = release.QuoteRevisionID
+	}
+	return payload
 }
 
 type reserveMaterialsRequest struct {

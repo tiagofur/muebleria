@@ -51,6 +51,7 @@ import type {
   ProductionRelease,
   ProductionReleaseCheck,
   ProductionReleaseCheckCode,
+  ProductionReleaseAuthority,
   ChangeOrder,
   ChangeOrderStatus,
   ChangeOrderImpact,
@@ -1955,6 +1956,12 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     approvals: approvalsFromApi(raw.approvals),
     // OC-022 — explicit production release record
     productionRelease: productionReleaseFromApi(raw.production_release ?? raw.productionRelease),
+    // #577 / OPS-DT-1 — server-owned resolved release authority projection
+    // (canonical first, legacy blob as pre-DT compatibility). Computed on
+    // read by the API; never sent back on writes.
+    resolvedProductionRelease: releaseAuthorityFromApi(
+      raw.resolved_production_release ?? raw.resolvedProductionRelease,
+    ),
     // OC-024 — change orders
     changeOrders: changeOrdersFromApi(raw.change_orders ?? raw.changeOrders),
     // OC-030 — physical part instances
@@ -2096,6 +2103,29 @@ export function productionReleaseFromApi(raw: unknown): ProductionRelease | unde
     releasedAt: str(r.released_at ?? r.releasedAt, new Date().toISOString()),
     checks,
     note: str(r.note) || undefined,
+  };
+}
+
+/** #577 / OPS-DT-1 — server-owned resolved release authority projection. */
+export function releaseAuthorityFromApi(raw: unknown): ProductionReleaseAuthority | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const releaseId = str(r.release_id ?? r.releaseId);
+  const source = str(r.source);
+  if (!releaseId || (source !== 'canonical' && source !== 'legacy')) return undefined;
+  const releaseNumber = Math.floor(num(r.release_number ?? r.releaseNumber, 0));
+  const designRevisionNumber = Math.floor(num(r.design_revision_number ?? r.designRevisionNumber, 0));
+  return {
+    source,
+    releaseId,
+    releaseNumber: releaseNumber > 0 ? releaseNumber : undefined,
+    designRevisionId: str(r.design_revision_id ?? r.designRevisionId) || undefined,
+    designRevisionNumber: designRevisionNumber > 0 ? designRevisionNumber : undefined,
+    quoteRevisionId: str(r.quote_revision_id ?? r.quoteRevisionId) || undefined,
+    manufacturingFingerprint: str(r.manufacturing_fingerprint ?? r.manufacturingFingerprint) || undefined,
+    status: str(r.status) || undefined,
+    releasedBy: str(r.released_by ?? r.releasedBy) || undefined,
+    releasedAt: str(r.released_at ?? r.releasedAt) || undefined,
   };
 }
 
@@ -2549,6 +2579,14 @@ export function materialPlanningFromApi(raw: unknown): MaterialPlanning | undefi
     ? {
         releaseId: str(requirementsRaw.release_id ?? requirementsRaw.releaseId) || undefined,
         bomFingerprint: str(requirementsRaw.bom_fingerprint ?? requirementsRaw.bomFingerprint) || undefined,
+        sourceProductionReleaseNumber:
+          Math.floor(num(requirementsRaw.source_release_number ?? requirementsRaw.sourceProductionReleaseNumber, 0)) || undefined,
+        sourceDesignRevisionId:
+          str(requirementsRaw.source_design_revision_id ?? requirementsRaw.sourceDesignRevisionId) || undefined,
+        sourceDesignRevisionNumber:
+          Math.floor(num(requirementsRaw.source_design_revision_number ?? requirementsRaw.sourceDesignRevisionNumber, 0)) || undefined,
+        sourceQuoteRevisionId:
+          str(requirementsRaw.source_quote_revision_id ?? requirementsRaw.sourceQuoteRevisionId) || undefined,
         derivedAt: str(requirementsRaw.derived_at ?? requirementsRaw.derivedAt),
         derivedBy: str(requirementsRaw.derived_by ?? requirementsRaw.derivedBy) || undefined,
         lines: lines.map((l) => requirementLineFromApi(l as Record<string, unknown>)),
@@ -2592,6 +2630,10 @@ export function materialPlanningToApi(p: MaterialPlanning): Record<string, unkno
       ? {
           release_id: p.requirements.releaseId,
           bom_fingerprint: p.requirements.bomFingerprint,
+          source_release_number: p.requirements.sourceProductionReleaseNumber,
+          source_design_revision_id: p.requirements.sourceDesignRevisionId,
+          source_design_revision_number: p.requirements.sourceDesignRevisionNumber,
+          source_quote_revision_id: p.requirements.sourceQuoteRevisionId,
           derived_at: p.requirements.derivedAt,
           derived_by: p.requirements.derivedBy,
           lines: p.requirements.lines.map((l) => ({ kind: l.kind, material_id: l.materialId, quantity: l.quantity })),

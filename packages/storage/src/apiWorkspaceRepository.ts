@@ -30,6 +30,7 @@ import type {
   PurchaseOrder,
   Supplier,
   MaterialRequirementLine,
+  ReleaseBomItem,
   QualityIssue,
   QualityIssueStatus,
   TimeEntry,
@@ -52,6 +53,14 @@ import type {
   SiteSurveyView,
 } from './workspaceRepository';
 import { CloseoutGateError, MaterialsReleaseGateError } from './workspaceRepository';
+import { GraneteApiClient } from './apiClient';
+import type { ProductionRelease } from './openapi/generated/types';
+
+/** #577 / OPS-DT-1 — exact release + immutable revision items a derivation runs against. */
+export interface ReleaseBomContextView {
+  readonly release: ProductionRelease;
+  readonly items: readonly ReleaseBomItem[];
+}
 import {
   agregadoToApi,
   ambientCategoryToApi,
@@ -2077,11 +2086,13 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async deriveMaterialRequirements(
     projectId: string,
     lines: readonly MaterialRequirementLine[],
+    opts?: { readonly productionReleaseId?: string },
   ): Promise<MaterialPlanningView> {
     const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/materials/derive`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
+        ...(opts?.productionReleaseId ? { production_release_id: opts.productionReleaseId } : {}),
         lines: lines.map((l) => ({ kind: l.kind, material_id: l.materialId, quantity: l.quantity })),
       }),
     });
@@ -2090,6 +2101,38 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(`Failed to derive requirements: ${res.status} ${text}`);
     }
     return this.parseMaterialPlanningView((await res.json()) as Record<string, unknown>);
+  }
+
+  /**
+   * #577 / OPS-DT-1 — the EXACT canonical release context an operational
+   * derivation runs against: the explicitly selected ProductionRelease and its
+   * immutable DesignRevision snapshot items it pins. Served through the
+   * generated OpenAPI client (getProjectProductionRelease +
+   * getDesignRevision), never a handwritten fetch or an implicit latest.
+   */
+  async getReleaseBomContext(projectId: string, releaseId: string): Promise<ReleaseBomContextView> {
+    const client = new GraneteApiClient(this.baseUrl, this.injectedFetch ?? globalThis.fetch);
+    const token = this.getAccessToken?.() ?? '';
+    const release = await client.getProjectProductionRelease(token, projectId, releaseId);
+    if (release.id !== releaseId || release.project_id !== projectId || !release.design_id) {
+      throw new Error('La liberación no corresponde al contexto solicitado');
+    }
+    const revision = await client.getDesignRevision(token, release.design_id, release.design_revision_id);
+    if (revision.id !== release.design_revision_id) {
+      throw new Error('El diseño no corresponde a la revisión liberada');
+    }
+    const items: ReleaseBomItem[] = revision.items.map((item) => {
+      if (!item.furniture_definition_id) {
+        throw new Error('La revisión liberada contiene un mueble sin definición');
+      }
+      return {
+        furnitureInstanceId: item.furniture_instance_id,
+        furnitureDefinitionId: item.furniture_definition_id,
+        parameters: item.parameters ?? {},
+        materialChoices: item.material_choices ?? {},
+      };
+    });
+    return { release, items };
   }
 
   async reserveMaterials(

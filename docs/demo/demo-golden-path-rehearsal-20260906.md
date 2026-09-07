@@ -92,24 +92,45 @@ evidence; sin implementación de features. Predecesores:
 
 ### P0-2 — ProductionRelease canónico (P1) no habilita el tramo operacional en la Web (costura legacy)
 
-- **Reproducción exacta**: liberar P1 desde `/quotes/:id/reconciliacion` (E2E verde,
-  paso 8) → abrir la obra en Almacén/Producción: el panel muestra "Esta obra no tiene
-  liberación de producción" y no aparece el botón Derivar/generar.
-- **Expected**: P1 habilita derive/reserva/ejecución (el servidor ya lo acepta).
-- **Actual**: la UI se gobierna por el blob legacy `project.productionRelease`
-  (`materialPlanningView.ts:55` `canDerive`; `AppContent.tsx:1684` exige el blob;
-  `partExecutionDerivation.ts:101` deriva `project.productionRelease?.id || 'rev-1'`
-  ≠ id canónico → 409 server-side) y por `engineeringLog.sentToProductionAt` legacy.
-  El servidor sí consume el canónico
-  (`production_release_authority.go`: MRP, quality, costing, part-executions).
-- **Root cause**: convivencia legacy (OC-022 blob) ↔ release canónico (#395/#502);
-  `GET /api/projects` no expone el release canónico resuelto.
-- **Recommended issue**: nueva issue: *exponer release canónico en read model de
-  proyecto y reemplazar la fuente de canDerive/derivación de part-executions*.
-- **Estimated scope**: **S-M**.
-- **Demo mitigation**: doble liberación en guion (EngineeringWorkspace "enviar a
-  producción" → modal legacy de release). Funciona hoy y está probada; cuesta una
-  explicación incómoda.
+- **Estado**: **PARTIAL / OPEN (#577 / OPS-DT-1; corrección acotada en PR #578)**.
+- **Bloqueador pendiente**: el snapshot fija intención e identidades, pero el engine TS todavía consume catálogo industrial mutable (definiciones, componentes, herrajes, defaults y reglas). `definitionVersion` y parámetros no dimensionales no tienen cobertura completa. El fingerprint estampado no demuestra igualdad del BOM calculado; no declarar cierre ni certificación industrial.
+- **Corrección acotada del PR**: autoridad newest coherente entre listado/detalle; lectura por release ID exacto; piezas/unidades de FurnitureInstance liberadas, sin cantidades/dimensiones de la cotización mutable. Gate Chromium + Go + PostgreSQL real: **4/4 PASS** después de modificar cantidad comercial a nueve y dimensiones a 999; suites completas TS/Go y typecheck PASS. El PR registra SHA/readback de publicación; estos proofs no resuelven el bloqueador de catálogo.
+- **Solución implementada**:
+  - Read model: `GET /api/projects` (list+detail) expone la proyección
+    server-owned `resolved_production_release` (`source: canonical|legacy`,
+    releaseId, releaseNumber, designRevisionId/Number, quoteRevisionId,
+    fingerprint, status), computada con el resolver único
+    (`ResolveProjectReleaseAuthority`); canónico gana SIEMPRE sobre el blob
+    coexistente; redactada para sales callers; nunca aceptada en writes.
+  - `canDerive` y los gates operacionales (part-executions, costing,
+    overview, assembly readiness) consumen la proyección — no el blob.
+  - `POST .../materials/derive` requiere `production_release_id` EXACTO
+    cuando hay release canónico (409 implícito-latest; id ajeno → 409) y
+    persiste proveniencia exacta (`source_release_number`,
+    `source_design_revision_id/number`, `source_quote_revision_id` +
+    fingerprint del release) en el snapshot de requirements y en el evento
+    auditado.
+  - El contenido del BOM/material planning se deriva del snapshot inmutable
+    de la revisión pineada (adapter puro `releaseBomContext` en
+    `@granete/domain` → engine TS existente; paridad probada por tests:
+    mismas líneas que el estado quote equivalente, y `project.items` mutable
+    no altera la derivación).
+  - Part-executions: `'rev-1'` eliminado; piezas/unidades derivadas del
+    snapshot del release y estampadas con el id exacto (el guard 409
+    server-side se preserva).
+  - `processStage` reconoce la authority canónica como envío a producción:
+    P1 habilita almacén→producción sin "Enviar a producción" legacy (CTA
+    oculto con canónico; badge `Liberación #1 · Diseño R2` en su lugar).
+  - E2E real (React+Go+PostgreSQL, `project-reconciliation.spec.ts`):
+    derive desde P1 con provenance `Liberación #1 · Diseño R2`, readback con
+    pins exactos, negativos derive (implícito/ajeno 409 sin plan parcial),
+    mutación de `project.items` sin efecto, producción reconoce la
+    liberación + generación física estampada con el id exacto, y el blob
+    legacy permanece **NULL** durante todo el path (sin doble liberación).
+- **Nota**: límites documentados (fingerprint cubre revision items, no el
+  contenido agregado de lines; quote revision items no pinean
+  materialChoices hoy — el E2E operacional usa release design-first con
+  choices material-pinned).
 
 ## P1 Demo Quality
 

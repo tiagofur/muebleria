@@ -89,6 +89,15 @@ export function MaterialPlanningPanel({
         </div>
       ) : (
         <>
+          {view.provenance ? (
+            <p
+              className="purch-plan__hint"
+              data-testid={`purch-plan-provenance-${view.projectId}`}
+              title={view.provenance.detail || undefined}
+            >
+              {view.provenance.label}
+            </p>
+          ) : null}
           <table className="purch-plan__table" aria-label="Cobertura de materiales por línea">
             <thead>
               <tr>

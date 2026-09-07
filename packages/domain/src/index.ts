@@ -669,10 +669,27 @@ export {
   filterProjectsByProcessStage,
   canReleaseMaterials,
   isProductionReady,
+  sentToProduction,
   PROCESS_STAGE_LABELS_ES,
   type ProjectProcessStage,
   type MaterialsRelease,
 } from './processStage';
+
+export {
+  releaseAuthorityOf,
+  releaseAuthorityLabel,
+  type ProductionReleaseAuthority,
+  type ProductionReleaseAuthoritySource,
+} from './releaseAuthority';
+
+export {
+  buildReleaseBomContext,
+  releaseBomItemsToProjectItems,
+  requirementLinesFromContext,
+  type BomProjectContext,
+  type ReleaseBomItem,
+  type ReleaseRequirementLine,
+} from './releaseBomContext';
 
 export {
   buildCncPilotDocument,

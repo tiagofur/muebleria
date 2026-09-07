@@ -12,6 +12,7 @@ import type { Catalog, Module, Project } from './types';
 import { resolveBom } from './engine/bom';
 import { effectiveOptionChoices } from './optionChoices';
 import { baseContextForItem } from './plinth';
+import { releaseAuthorityOf } from './releaseAuthority';
 import { resolveProjectDrilling } from './projectDrilling';
 import {
   derivePartInstancesForProject,
@@ -34,6 +35,18 @@ export type DeriveProjectPartExecutionsResult =
   | { readonly ok: true; readonly executions: ProjectPartExecutions }
   | { readonly ok: false; readonly error: DeriveProjectPartExecutionsError };
 
+/** Options of {@link deriveProjectPartExecutions}. */
+export interface DeriveProjectPartExecutionsOptions {
+  /**
+   * Exact release authority token stamped on every part/unit (#577 /
+   * OPS-DT-1): the canonical ProductionRelease id (or the legacy blob id for
+   * pre-DT projects). Defaults to the project's resolved authority; never a
+   * made-up token — the server 409s any execution stamped with a revision
+   * that differs from the released one.
+   */
+  readonly productionRevision?: string;
+}
+
 /**
  * Derive the physical executions of a project from its catalog BOM.
  * Returns ok:false (instead of throwing) when an item cannot resolve, so
@@ -43,6 +56,7 @@ export type DeriveProjectPartExecutionsResult =
 export function deriveProjectPartExecutions(
   project: Project,
   catalog: Catalog,
+  opts?: DeriveProjectPartExecutionsOptions,
 ): DeriveProjectPartExecutionsResult {
   // 1. Board parts per item (same resolution as material summary / cut rows).
   const boardPartsByItem: Record<string, readonly import('./types').ResolvedBoardPart[]> = {};
@@ -97,8 +111,11 @@ export function deriveProjectPartExecutions(
     // cut(+edge) route — the stations still work, CNC just never queues.
   }
 
-  // 3. Physical expansion with the released revision.
-  const revision = project.productionRelease?.id || 'rev-1';
+  // 3. Physical expansion stamped with the exact release authority token:
+  //    canonical ProductionRelease id first, legacy blob id only for pre-DT
+  //    projects, empty only when nothing was ever released (#577 — the
+  //    server guard 409s any token that differs from the released one).
+  const revision = opts?.productionRevision ?? releaseAuthorityOf(project)?.releaseId ?? '';
   return {
     ok: true,
     executions: {

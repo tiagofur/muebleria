@@ -1019,6 +1019,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             session === 'auth' &&
             (canMarkProduced || canExportProductionUnion)
           }
+          onGeneratePartExecutions={handleGeneratePartExecutions}
           onAdvance={handleFloorAdvance}
           onAdvancePart={handleAdvancePart}
           onAdvanceUnit={handleAdvanceUnit}

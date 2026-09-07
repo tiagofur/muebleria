@@ -80,12 +80,119 @@ func TestMaterials_DeriveRequiresProductionRelease(t *testing.T) {
 	}
 }
 
+// #577 / OPS-DT-1: the evidence view must answer 200 with empty coverage for
+// a obra that never derived requirements (the operational screens read the
+// view BEFORE the first derivation) — never a nil dereference.
+func TestMaterials_ViewWithoutPlanningAnswersEmptyEvidence(t *testing.T) {
+	store, srv := materialsFixtures()
+	store.productionRelease = domain.ResolvedFromCanonicalRelease(&domain.ProductionRelease{
+		ID:                       "rel-canonical-view-1",
+		ProjectID:                "p1",
+		DesignRevisionID:         "dr-1",
+		ReleaseNumber:            1,
+		DesignRevisionNumber:     1,
+		ManufacturingFingerprint: "sha256-" + strings.Repeat("b", 64),
+		Status:                   domain.ProductionReleaseStatusActive,
+		ReleasedBy:               "ing-1",
+		ReleasedAt:               time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC),
+	})
+	store.materialPlanning = nil
+	rr := doMaterials(srv, http.MethodGet, "/api/projects/p1/materials", string(domain.RoleAlmacen), "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("view without planning must 200, got %d body %s", rr.Code, rr.Body.String())
+	}
+	var view struct {
+		Planning *domain.MaterialPlanning `json:"planning"`
+		Coverage []map[string]any         `json:"coverage"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &view)
+	if view.Planning != nil {
+		t.Fatalf("planning must be null before derivation, got %+v", view.Planning)
+	}
+	if len(view.Coverage) != 0 {
+		t.Fatalf("coverage must be empty before derivation, got %+v", view.Coverage)
+	}
+}
+
 func TestMaterials_DeriveForbiddenForVendedor(t *testing.T) {
 	_, srv := materialsFixtures()
 	rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/derive", string(domain.RoleVendedor),
 		`{"lines":[{"kind":"herrajes","material_id":"hw-1","quantity":10}]}`)
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("vendedor must not derive requirements, got %d", rr.Code)
+	}
+}
+
+// canonicalMaterialsFixtures builds a derive context whose release authority
+// is a CANONICAL #395 ProductionRelease (#577 / OPS-DT-1): derivations must
+// target it by exact id and carry its provenance pins.
+func canonicalMaterialsFixtures() (*stubStore, *Server, *domain.ResolvedProductionRelease) {
+	canonical := domain.ResolvedFromCanonicalRelease(&domain.ProductionRelease{
+		ID:                       "rel-canonical-1",
+		ProjectID:                "p1",
+		DesignRevisionID:         "dr-2",
+		QuoteRevisionID:          "qr-2",
+		ReleaseNumber:            1,
+		DesignRevisionNumber:     2,
+		ManufacturingFingerprint: "sha256-" + strings.Repeat("a", 64),
+		Status:                   domain.ProductionReleaseStatusActive,
+		ReleasedBy:               "ing-1",
+		ReleasedAt:               time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC),
+	})
+	store := &stubStore{
+		productionRelease: canonical,
+		materialStock: []domain.MaterialStock{
+			{Kind: "herrajes", MaterialID: "hw-1", Quantity: 12, MinStock: 2},
+		},
+	}
+	return store, &Server{Store: store}, canonical
+}
+
+func TestMaterials_DeriveCanonicalRequiresExactReleaseID(t *testing.T) {
+	_, srv, _ := canonicalMaterialsFixtures()
+	rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/derive", string(domain.RoleAlmacen),
+		`{"lines":[{"kind":"herrajes","material_id":"hw-1","quantity":10}]}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("canonical release without exact production_release_id must 409, got %d body %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestMaterials_DeriveCanonicalExactReleaseStampsProvenance(t *testing.T) {
+	store, srv, canonical := canonicalMaterialsFixtures()
+	rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/derive", string(domain.RoleAlmacen),
+		`{"production_release_id":"rel-canonical-1","lines":[{"kind":"herrajes","material_id":"hw-1","quantity":10}]}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("derive with exact canonical release = %d body %s", rr.Code, rr.Body.String())
+	}
+	req := store.materialPlanning.Requirements
+	if req == nil {
+		t.Fatal("derive must persist the requirements snapshot")
+	}
+	if req.ReleaseID != canonical.ReleaseID ||
+		req.SourceProductionReleaseID != canonical.ReleaseID ||
+		req.SourceProductionReleaseNumber != 1 ||
+		req.SourceDesignRevisionID != "dr-2" ||
+		req.SourceDesignRevisionNumber != 2 ||
+		req.SourceQuoteRevisionID != "qr-2" ||
+		req.BomFingerprint != canonical.ManufacturingFingerprint {
+		t.Fatalf("requirements must carry the exact canonical provenance pins: %+v", req)
+	}
+	if len(store.materialPlanningEvents) != 1 {
+		t.Fatalf("derive must audit materials_required: %+v", store.materialPlanningEvents)
+	}
+	payload := map[string]interface{}{}
+	_ = json.Unmarshal(store.materialPlanningEvents[0].Payload, &payload)
+	if payload["release_id"] != canonical.ReleaseID || payload["release_source"] != "canonical" || payload["design_revision_id"] != "dr-2" {
+		t.Fatalf("audit payload must carry provenance: %v", payload)
+	}
+}
+
+func TestMaterials_DeriveCanonicalWrongReleaseIDRejected(t *testing.T) {
+	_, srv, _ := canonicalMaterialsFixtures()
+	rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/derive", string(domain.RoleAlmacen),
+		`{"production_release_id":"rel-de-otra-obra","lines":[{"kind":"herrajes","material_id":"hw-1","quantity":10}]}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("foreign release id must 409, got %d body %s", rr.Code, rr.Body.String())
 	}
 }
 

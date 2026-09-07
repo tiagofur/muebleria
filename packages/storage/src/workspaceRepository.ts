@@ -325,11 +325,24 @@ export interface WorkspaceRepository {
   /** Read the planning + derived evidence view (coverage, release gates). */
   getMaterialPlanning?(projectId: string): Promise<MaterialPlanningView>;
 
-  /** Materialize requirements from the released BOM (server binds release). */
+  /**
+   * Materialize requirements from the released BOM. When the project has a
+   * canonical ProductionRelease the derivation MUST target it by exact id
+   * (#577 / OPS-DT-1); `productionReleaseId` is omitted only on the
+   * legacy-only compatibility path.
+   */
   deriveMaterialRequirements?(
     projectId: string,
     lines: readonly MaterialRequirementLine[],
+    opts?: { readonly productionReleaseId?: string },
   ): Promise<MaterialPlanningView>;
+
+  /**
+   * #577 / OPS-DT-1 — the newest canonical ProductionRelease plus the
+   * immutable DesignRevision items it pins (generated-client reads). `null`
+   * when the project has no canonical release.
+   */
+  getReleaseBomContext?(projectId: string, releaseId: string): Promise<import('./apiWorkspaceRepository').ReleaseBomContextView>;
 
   /** Reserve against warehouse availability; shortage remainder is audited. */
   reserveMaterials?(

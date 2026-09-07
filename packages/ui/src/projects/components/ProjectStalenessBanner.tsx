@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { AlertTriangle, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import {
   getProjectStalenessReport,
+  releaseAuthorityOf,
   STALENESS_REASON_LABELS_ES,
   type Project,
 } from '@granete/domain';
@@ -67,7 +68,10 @@ export function ProjectStalenessBanner({
           </button>
         ) : null}
 
-        {onOpenReleaseModal ? (
+        {/* #577: with a canonical ProductionRelease a re-release goes through
+            the Digital Thread (approve the new revision + release), never
+            through the legacy OC-022 modal. */}
+        {onOpenReleaseModal && releaseAuthorityOf(project)?.source !== 'canonical' ? (
           <button
             type="button"
             className="btn btn--primary btn--small"

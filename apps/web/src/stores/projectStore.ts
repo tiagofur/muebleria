@@ -69,6 +69,7 @@ import {
   recordProductionExport as recordProductionExportDomain,
   releasePlanEditSession as releasePlanEditSessionDomain,
   renewPlanEditSession as renewPlanEditSessionDomain,
+  releaseAuthorityOf,
   resolveOwnerOnCreateRoles,
   resolveOwnerOnUpdateRoles,
   rolesOfUser,
@@ -1516,7 +1517,7 @@ export function createProjectStore(options: InternalOptions) {
       if (!next) return { ok: false, blockers: ['la unidad ya está instalada'] };
       if (next === 'assembly' && unit.status === 'awaiting_parts') {
         const readiness = checkAssemblyReadiness(unit, project.partInstances ?? [], {
-          currentProductionRevision: project.productionRelease?.id,
+          currentProductionRevision: releaseAuthorityOf(project)?.releaseId,
         });
         if (!readiness.isReady) {
           return { ok: false, blockers: readiness.blockers };

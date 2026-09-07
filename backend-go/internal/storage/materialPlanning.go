@@ -24,10 +24,35 @@ var ErrMaterialPlanningProjectNotFound = errors.New("project not found")
 // MutateProjectMaterialPlanning loads the planning plus its warehouse context
 // with the project row locked, runs the mutator, and persists the new
 // planning, an optional materials_release stamp and the audit events in one
-// transaction.
+// transaction. The snapshot's release authority resolves latest-canonical
+// first, legacy blob last (pre-DT compatibility).
 func (s *PostgresStore) MutateProjectMaterialPlanning(
 	ctx context.Context,
 	projectID string,
+	mutate func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
+) (*domain.MaterialPlanningMutation, error) {
+	return s.mutateProjectMaterialPlanning(ctx, projectID, "", mutate)
+}
+
+// MutateProjectMaterialPlanningForRelease is the OPS-DT-1 (#577) derive
+// variant: the snapshot's release authority is the EXACT canonical
+// ProductionRelease id the command targeted — never an implicit latest and
+// never the legacy blob. A missing or foreign release id is the same
+// not-found conflict so no wrong authority can ever be stamped.
+func (s *PostgresStore) MutateProjectMaterialPlanningForRelease(
+	ctx context.Context,
+	projectID, releaseID string,
+	mutate func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
+) (*domain.MaterialPlanningMutation, error) {
+	if releaseID == "" {
+		return s.mutateProjectMaterialPlanning(ctx, projectID, "", mutate)
+	}
+	return s.mutateProjectMaterialPlanning(ctx, projectID, releaseID, mutate)
+}
+
+func (s *PostgresStore) mutateProjectMaterialPlanning(
+	ctx context.Context,
+	projectID, exactReleaseID string,
 	mutate func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
 ) (*domain.MaterialPlanningMutation, error) {
 	tx, err := s.beginTx(ctx)
@@ -60,12 +85,28 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 			legacyBlob = &release
 		}
 	}
-	// #395: ONE release authority — the canonical ProductionRelease wins over
-	// the legacy blob (which only survives through the legacy adapter) for
-	// every production consumer.
-	authority, err := s.resolveProjectReleaseAuthorityTx(ctx, tx, projectID, legacyBlob)
-	if err != nil {
-		return nil, fmt.Errorf("error resolving release authority: %w", err)
+	// #395/#577: ONE release authority. With an exact release id the
+	// authority is THAT canonical row (historical derivations stay pinned to
+	// it even if newer releases exist); otherwise the canonical latest wins
+	// over the legacy blob (which only survives through the legacy adapter)
+	// for every production consumer.
+	var authority *domain.ResolvedProductionRelease
+	if exactReleaseID != "" {
+		exact, err := s.getProjectProductionReleaseTx(ctx, tx, projectID, exactReleaseID)
+		if err != nil {
+			if errors.Is(err, domain.ErrReleaseNotFound) {
+				return nil, fmt.Errorf("CONFLICT:la liberación indicada no existe en esta obra")
+			}
+			return nil, fmt.Errorf("error resolving exact release authority: %w", err)
+		}
+		authority = domain.ResolvedFromCanonicalRelease(exact)
+		snap.CanonicalReleaseExists = true
+	} else {
+		authority, err = s.resolveProjectReleaseAuthorityTx(ctx, tx, projectID, legacyBlob)
+		if err != nil {
+			return nil, fmt.Errorf("error resolving release authority: %w", err)
+		}
+		snap.CanonicalReleaseExists = authority != nil && authority.Source == domain.ProductionReleaseAuthorityCanonical
 	}
 	snap.ProductionRelease = authority
 	snap.MaterialsReleased = len(materialsReleaseRaw) > 0 && string(materialsReleaseRaw) != "null"

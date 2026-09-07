@@ -42,13 +42,26 @@ type MaterialRequirementLine struct {
 }
 
 // MaterialRequirementsSnapshot is materialized from the released BOM (OC-050):
-// bound to the legacy OC-022 ProductionRelease it was derived from.
+// bound to the resolved release authority — the canonical #395
+// ProductionRelease by exact id (#577 / OPS-DT-1), or the legacy OC-022 blob
+// through the compatibility adapter for pre-Digital-Thread projects. The
+// Source* pins make the derivation traceable to the exact release and its
+// immutable DesignRevision; BomFingerprint is the release's authoritative
+// ManufacturingFingerprint, never a second hash namespace.
 type MaterialRequirementsSnapshot struct {
-	ReleaseID     string                   `json:"release_id,omitempty"`
-	BomFingerprint string                  `json:"bom_fingerprint,omitempty"`
-	DerivedAt     time.Time                `json:"derived_at"`
-	DerivedBy     string                   `json:"derived_by,omitempty"`
-	Lines         []MaterialRequirementLine `json:"lines"`
+	ReleaseID      string                   `json:"release_id,omitempty"`
+	BomFingerprint string                   `json:"bom_fingerprint,omitempty"`
+	// SourceProductionReleaseID is set when the derivation targeted an exact
+	// canonical ProductionRelease id (distinct from ReleaseID only in shape;
+	// kept for explicit readback of the OPS-DT-1 command contract).
+	SourceProductionReleaseID   string  `json:"source_production_release_id,omitempty"`
+	SourceProductionReleaseNumber int   `json:"source_release_number,omitempty"`
+	SourceDesignRevisionID       string  `json:"source_design_revision_id,omitempty"`
+	SourceDesignRevisionNumber   int     `json:"source_design_revision_number,omitempty"`
+	SourceQuoteRevisionID        string  `json:"source_quote_revision_id,omitempty"`
+	DerivedAt      time.Time                `json:"derived_at"`
+	DerivedBy      string                   `json:"derived_by,omitempty"`
+	Lines          []MaterialRequirementLine `json:"lines"`
 }
 
 // MaterialReservation is a warehouse reservation of material for one project.
@@ -410,8 +423,13 @@ type MaterialPlanningSnapshot struct {
 	Stock                     []MaterialStock
 	PurchaseOrders            []PurchaseOrder
 	// ProductionRelease is the resolved release authority (#395): canonical
-	// when one exists, legacy-adapted otherwise. Never the raw blob.
+	// when one exists, legacy-adapted otherwise. Never the raw blob. With an
+	// exact release id (#577 / OPS-DT-1) it is THAT canonical row.
 	ProductionRelease         *ResolvedProductionRelease
+	// CanonicalReleaseExists reports whether the project has any canonical
+	// ProductionRelease: derivations must then target an exact release id,
+	// never an implicit latest or the legacy blob.
+	CanonicalReleaseExists    bool
 	MaterialsReleased         bool
 	HasMaterialsReservedEvent bool
 }

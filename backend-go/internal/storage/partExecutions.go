@@ -84,6 +84,37 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		return nil, fmt.Errorf("error iterating item floor statuses: %w", err)
 	}
 
+	// Canonical execution membership belongs to the released revision, not
+	// the editable quote or its current materialized links. Legacy projects
+	// retain the project-item quantity compatibility contract above.
+	authority, err := s.resolveProjectReleaseAuthorityTx(ctx, tx, projectID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving execution release: %w", err)
+	}
+	if authority != nil {
+		snap.ProductionRelease = authority
+		snap.ItemQuantities = map[string]int{}
+		members, err := tx.Query(ctx, `
+			SELECT furniture_instance_id::text FROM design_revision_items
+			WHERE design_revision_id = $1;
+		`, authority.DesignRevisionID)
+		if err != nil {
+			return nil, fmt.Errorf("error loading released furniture: %w", err)
+		}
+		for members.Next() {
+			var id string
+			if err := members.Scan(&id); err != nil {
+				members.Close()
+				return nil, fmt.Errorf("error scanning released furniture: %w", err)
+			}
+			snap.ItemQuantities[id] = 1
+		}
+		members.Close()
+		if err := members.Err(); err != nil {
+			return nil, fmt.Errorf("error reading released furniture: %w", err)
+		}
+	}
+
 	mutation, err := mutate(snap)
 	if err != nil {
 		return nil, err
@@ -100,6 +131,10 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 	}
 
 	for itemID, status := range mutation.ItemStatuses {
+		// Canonical keys are FurnitureInstance IDs, not quote-line IDs.
+		if snap.ProductionRelease != nil {
+			continue
+		}
 		if before, ok := snap.ItemStatuses[itemID]; ok && before == status {
 			continue
 		}

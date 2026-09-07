@@ -9,7 +9,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { ArrowLeft, FileCheck, Printer, Send } from 'lucide-react';
+import { ArrowLeft, Factory, FileCheck, Printer, Send } from 'lucide-react';
 
 import './engineering.css';
 import '../production/production.css';
@@ -17,6 +17,8 @@ import '../production/production.css';
 import {
   canSendToProduction,
   engineeringStatus,
+  releaseAuthorityLabel,
+  releaseAuthorityOf,
   type Project,
   type Module,
   type Catalog,
@@ -209,7 +211,13 @@ export function EngineeringWorkspace({
             <span className="eng-workspace__customer">{customerLabel}</span>
           ) : null}
         </div>
-        {project.status === 'accepted' && onSendToProduction ? (
+        {/* #577 / OPS-DT-1: with a canonical ProductionRelease the obra is
+            ALREADY in production — the legacy handshake CTA is hidden (no
+            dual-write, no second liberation); the release pins are shown
+            instead. Legacy-only projects keep the handshake. */}
+        {project.status === 'accepted' &&
+        onSendToProduction &&
+        releaseAuthorityOf(project)?.source !== 'canonical' ? (
           <button
             type="button"
             className="btn btn--primary"
@@ -225,6 +233,16 @@ export function EngineeringWorkspace({
             <Send size={16} strokeWidth={1.5} aria-hidden />
             Enviar a Producción
           </button>
+        ) : null}
+        {releaseAuthorityOf(project)?.source === 'canonical' ? (
+          <span
+            className="status-badge status-badge--done"
+            data-testid="eng-canonical-release"
+            title={`Liberación canónica: producción desbloqueada por la liberación del Digital Thread`}
+          >
+            <Factory size={16} strokeWidth={1.5} aria-hidden />
+            {releaseAuthorityLabel(project)}
+          </span>
         ) : null}
         {engineeringStatus(project.engineeringLog) === 'in_progress' &&
         onMarkDocumented ? (

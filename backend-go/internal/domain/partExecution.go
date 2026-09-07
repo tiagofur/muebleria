@@ -540,6 +540,8 @@ type PartExecutionsSnapshot struct {
 	ItemStatuses map[string]string
 	/** itemID → line quantity, for generation validation (unit count per item). */
 	ItemQuantities map[string]int
+	// Canonical authority resolved under the project lock; nil for legacy.
+	ProductionRelease *ResolvedProductionRelease
 	/** Quality job of the obra — the OC-062 QC gate reads it on unit advance. */
 	Quality *QualityJob
 }

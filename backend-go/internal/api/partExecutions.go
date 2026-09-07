@@ -786,6 +786,12 @@ func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Req
 	var result map[string]interface{}
 	_, err = s.Store.MutateProjectPartExecutions(r.Context(), projectID, func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error) {
 		// ── Validation (server authority) ────────────────────────────────
+		if snap.ProductionRelease != nil {
+			released = snap.ProductionRelease.ReleaseID
+			if len(body.ModuleUnits) != len(snap.ItemQuantities) {
+				return nil, fmt.Errorf("BAD_REQUEST:se requiere una unidad por cada mueble de la revisión liberada")
+			}
+		}
 		unitsPerItem := map[string]int{}
 		for _, u := range body.ModuleUnits {
 			qty, ok := snap.ItemQuantities[u.ProjectItemID]

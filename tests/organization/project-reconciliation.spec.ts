@@ -587,6 +587,364 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId('release-row-1')).toBeVisible();
   });
 
+  // ------------------------------------------------------------------
+  // OPS-DT-1 (#577): the canonical ProductionRelease drives the whole
+  // operational leg — almacén derive FROM the exact release snapshot,
+  // provenance readback, mutable-quote independence and physical
+  // production stamped with the exact release id — while the legacy
+  // OC-022 blob stays null the entire time (no second liberation).
+  // ------------------------------------------------------------------
+  test('OPS-DT-1 (#577): canonical release drives almacén + production with exact provenance, no legacy liberation', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+
+    const OPS_PROJECT_ID = '77777777-3333-4777-8777-555555555555';
+    const OPS_LINE_ID = '88888888-3333-4888-8888-555555555555';
+    const apiBase = required('ORGANIZATION_API_BASE');
+    const step = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
+      console.log(`[opsdt1] ${label}…`);
+      try {
+        const out = await run();
+        console.log(`[opsdt1] ${label} ok`);
+        return out;
+      } catch (err) {
+        console.error(`[opsdt1] ${label} FAILED:`, err);
+        throw err;
+      }
+    };
+    const client = new GraneteApiClient(apiBase);
+    const owner = await step('login', () =>
+      client.login({
+        email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+        password: required('ORGANIZATION_GATE_PASSWORD'),
+        transport: 'web',
+        org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
+      }),
+    );
+    const authHeaders = { Authorization: `Bearer ${owner.token}` } as const;
+    const repository = new APIWorkspaceRepository(apiBase, {
+      getAccessToken: () => owner.token,
+    });
+
+    // Fixture: a self-sufficient catalog module (the gate org starts with an
+    // empty catalog — the golden path seeds a bare module), an accepted obra
+    // whose quoted units carry real material choices, and a design revision
+    // pinning the SAME choices per instance — released design-first
+    // (canonical P1, no legacy blob anywhere).
+    const OPS_MAT_ID = 'a5150000-0000-4000-8000-000000000001';
+    const OPS_OG_ID = 'a5150000-0000-4000-8000-000000000002';
+    const OPS_STRUCT_ID = 'a5150000-0000-4000-8000-000000000003';
+    const OPS_COMP_ID = 'a5150000-0000-4000-8000-000000000004';
+    const OPS_MODULE_ID = 'a5150000-0000-4000-8000-000000000005';
+    const catalog = await step('getCatalog', () => repository.getCatalog());
+    await step('saveCatalog', () => repository.saveCatalog({
+      ...catalog,
+      materials: [
+        ...catalog.materials,
+        {
+          id: OPS_MAT_ID,
+          code: 'OPS-TAB-1',
+          name: 'Tablero Operaciones',
+          widthMm: 1830,
+          lengthMm: 2440,
+          thicknessMm: 18,
+          grainDefault: false,
+          boardPrice: 100,
+          wastePercent: 0,
+          costPerM2: 100,
+          active: true,
+        },
+      ],
+      optionGroups: [
+        ...catalog.optionGroups,
+        { id: OPS_OG_ID, code: 'INTERIOR', name: 'Interior', kind: 'board', required: true, optionIds: [OPS_MAT_ID] },
+      ],
+      structures: [
+        ...(catalog.structures ?? []),
+        {
+          id: OPS_STRUCT_ID,
+          code: 'OPS-EST-1',
+          name: 'Estructura Operaciones',
+          externalDims: { width: 600, height: 720, depth: 560 },
+          components: [{ componentId: OPS_COMP_ID, quantity: 2 }],
+          active: true,
+        },
+      ],
+      components: [
+        ...(catalog.components ?? []),
+        {
+          id: OPS_COMP_ID,
+          code: 'OPS-COMP-1',
+          name: 'Panel',
+          placement: 'interno',
+          geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 },
+          // The engine requires exactly 4 edge assignments (L1/L2/W1/W2);
+          // all disabled keeps the module free of edge-band requirements.
+          defaultEdges: [
+            { side: 'L1', enabled: false },
+            { side: 'L2', enabled: false },
+            { side: 'W1', enabled: false },
+            { side: 'W2', enabled: false },
+          ],
+          optionRoles: ['INTERIOR'],
+          active: true,
+        },
+      ],
+      modules: [
+        ...catalog.modules,
+        {
+          id: OPS_MODULE_ID,
+          code: 'OPS-MOD-1',
+          name: 'Mueble Operaciones E2E',
+          externalDims: { width: 600, height: 720, depth: 560 },
+          widthMm: 600,
+          heightMm: 720,
+          depthMm: 560,
+          structureId: OPS_STRUCT_ID,
+          components: [],
+          hardwareLines: [],
+        },
+      ],
+    }));
+    const choices = { INTERIOR: OPS_MAT_ID };
+
+    const now = new Date().toISOString();
+    // Draft first: quote materialization is immutable once accepted (I3).
+    await step('saveProject draft', () => repository.saveProject({
+      id: OPS_PROJECT_ID,
+      name: 'Obra Continuidad Operacional E2E',
+      customerId: CUSTOMER_ID,
+      currency: 'MXN',
+      marginFactor: 1.2,
+      laborFixedCost: 0,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now,
+      items: [
+        { id: OPS_LINE_ID, moduleId: OPS_MODULE_ID, quantity: 2, optionChoices: choices },
+      ],
+    }));
+    const mat = await step('materialize', () =>
+      client.materializeQuoteLineFurniture(
+      owner.token,
+      OPS_PROJECT_ID,
+        OPS_LINE_ID,
+        'gate-ops-mat-quote-line',
+      ),
+    );
+    if (mat.instances.length !== 2) {
+      throw new Error(`expected 2 materialized instances, got ${mat.instances.length}`);
+    }
+    // Close commercially: the operational stages only see accepted/produced.
+    const draft = (await step('getProjects', () => repository.getProjects())).find(
+      (p) => p.id === OPS_PROJECT_ID,
+    )!;
+    await step('saveProject accepted', () => repository.saveProject({ ...draft, status: 'accepted' }));
+    const design = await step('createDesign', () =>
+      client.createProjectDesign(
+        owner.token,
+        OPS_PROJECT_ID,
+        { name: 'Cocina Operaciones' },
+        'gate-ops-create-design',
+      ),
+    );
+    await step('updateWorkingCopy', () => client.updateDesignWorkingCopy(owner.token, design.id, {
+      items: mat.instances.map((instance) => ({
+        furniture_instance_id: instance.furniture_instance_id,
+        furniture_definition_id: OPS_MODULE_ID,
+        parameters: { widthMm: 600, heightMm: 720, depthMm: 560 },
+        material_choices: choices,
+      })),
+    }));
+    const r1 = await step('publishR1', () =>
+      client.publishDesignRevision(
+        owner.token,
+        design.id,
+        { source_type: 'manual', base_revision_id: null },
+        'gate-ops-publish-r1',
+      ),
+    );
+    await step('approveR1', () =>
+      client.approveDesignRevision(owner.token, design.id, r1.id, 'gate-ops-approve-r1'),
+    );
+    const release = await step('createRelease', () =>
+      client.createProductionRelease(
+        owner.token,
+        OPS_PROJECT_ID,
+        { design_revision_id: r1.id },
+        'gate-ops-release-p1',
+      ),
+    );
+    expect(release.release_number).toBe(1);
+    expect(release.design_revision_id).toBe(r1.id);
+
+    // 1. Server-owned projection readback: canonical authority exposed on
+    //    the project read model; the legacy blob was NEVER written.
+    const detail = (await (
+      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}`, { headers: authHeaders })
+    ).json()) as {
+      resolved_production_release?: { source: string; release_id: string; design_revision_id: string; release_number: number };
+      production_release?: unknown;
+    };
+    expect(detail.resolved_production_release?.source).toBe('canonical');
+    expect(detail.resolved_production_release?.release_id).toBe(release.id);
+    expect(detail.resolved_production_release?.design_revision_id).toBe(r1.id);
+    expect(detail.resolved_production_release?.release_number).toBe(1);
+    expect(detail.production_release ?? null).toBeNull();
+
+    // 2. Negative proofs through the real API: a canonical project rejects
+    //    the implicit-latest derive (no exact id) and a foreign release id —
+    //    and leaves no partial planning behind.
+    const deriveLine = { kind: 'tableros', material_id: OPS_MAT_ID, quantity: 1 };
+    const derive = (body: Record<string, unknown>): Promise<Response> =>
+      fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials/derive`, {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    expect((await derive({ lines: [deriveLine] })).status).toBe(409);
+    expect(
+      (
+        await derive({
+          production_release_id: '99999999-9999-4999-9999-999999999999',
+          lines: [deriveLine],
+        })
+      ).status,
+    ).toBe(409);
+    const materialsBefore = (await (
+      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials`, { headers: authHeaders })
+    ).json()) as { planning?: unknown };
+    expect(materialsBefore.planning ?? null).toBeNull();
+
+    // 3. UI — Compras y Almacén: the canonical release alone unlocked the
+    //    almacén stage (no legacy engineering handshake, no legacy release).
+    //    The derive button is enabled and derives from the release snapshot.
+    await loginToA(page);
+    await page.goto('/warehouse');
+    // The obra's module has board parts only: its picking card lives under
+    // the Tableros tab. The card offers the planning panel (stage unlocked
+    // by the canonical release — no engineering handshake happened).
+    await page.getByRole('tab', { name: 'Tableros' }).click();
+    await page.getByTestId(`purch-release-${OPS_PROJECT_ID}`).click();
+    const deriveBtn = page.getByTestId(`purch-plan-derive-${OPS_PROJECT_ID}`);
+    await expect(deriveBtn).toBeVisible();
+    await deriveBtn.click();
+
+    // 4. Human-readable provenance: derived from the exact release + revision.
+    const provenance = page.getByTestId(`purch-plan-provenance-${OPS_PROJECT_ID}`);
+    await expect(provenance).toContainText('Liberación #1');
+    await expect(provenance).toContainText('Diseño R1');
+
+    // 5. Server readback: requirements pinned to the exact release pins.
+    const materials = (await (
+      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials`, { headers: authHeaders })
+    ).json()) as {
+      planning: {
+        requirements: {
+          release_id: string;
+          source_release_number: number;
+          source_design_revision_id: string;
+          bom_fingerprint: string;
+          lines: readonly { kind: string }[];
+        };
+      };
+    };
+    const requirements = materials.planning.requirements;
+    expect(requirements.release_id).toBe(release.id);
+    expect(requirements.source_release_number).toBe(1);
+    expect(requirements.source_design_revision_id).toBe(r1.id);
+    expect(requirements.bom_fingerprint).toMatch(/^sha256-/);
+    expect(requirements.lines.length).toBeGreaterThan(0);
+
+    // 6. Mutable-quote independence: a late project.items edit never
+    //    changes the derived plan (the snapshot is release-owned).
+    const stored = (await repository.getProjects()).find((p) => p.id === OPS_PROJECT_ID)!;
+    await repository.saveProject({
+      ...stored,
+      items: [
+        {
+          id: OPS_LINE_ID,
+          moduleId: OPS_MODULE_ID,
+          quantity: 9,
+          optionChoices: choices,
+          customDims: { widthMm: 999, heightMm: 999, depthMm: 999 },
+        },
+      ],
+    });
+    const materialsAfterMutation = (await (
+      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials`, { headers: authHeaders })
+    ).json()) as typeof materials;
+    expect(materialsAfterMutation.planning.requirements).toEqual(requirements);
+
+    // 7. Almacén releases the materials (audited override: no stock seeded).
+    await page.goto('/warehouse');
+    await page.getByRole('tab', { name: 'Tableros' }).click();
+    await page.getByTestId(`purch-release-${OPS_PROJECT_ID}`).click();
+    const overrideInput = page.getByTestId(`purch-plan-override-input-${OPS_PROJECT_ID}`);
+    await expect(overrideInput).toBeVisible();
+    await overrideInput.fill('E2E: liberar sin reservas (sin stock sembrado)');
+    await page.getByTestId(`purch-plan-override-release-${OPS_PROJECT_ID}`).click();
+    // Released material moves the obra past Almacén: the card leaves the
+    // almacén queue (never to appear in two queues at once).
+    await expect(page.getByTestId(`purch-release-${OPS_PROJECT_ID}`)).toHaveCount(0, {
+      timeout: 15_000,
+    });
+
+    // 8. Production floor recognizes the release — badge with the exact
+    //    label and the physical generation CTA (no legacy send-to-production).
+    await page.goto('/production');
+    const card = page.getByTestId(`fabric-card-${OPS_PROJECT_ID}`);
+    await expect(card).toBeVisible();
+    await expect(page.getByTestId(`fabric-release-${OPS_PROJECT_ID}`)).toContainText('Liberación #1');
+    await expect(page.getByTestId(`fabric-release-${OPS_PROJECT_ID}`)).toContainText('Diseño R1');
+    await page.getByTestId(`fabric-generate-parts-${OPS_PROJECT_ID}`).click();
+    // Once generated, the CTA disappears and physical rows take over.
+    await expect(page.getByTestId(`fabric-generate-parts-${OPS_PROJECT_ID}`)).toHaveCount(0, {
+      timeout: 15_000,
+    });
+
+    // 9. Part executions are stamped with the EXACT canonical release id.
+    const executions = (await (
+      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, { headers: authHeaders })
+    ).json()) as {
+      part_instances: readonly { id: string; project_item_id: string; unit_index: number; production_revision: string; length_mm: number; width_mm: number }[];
+      module_units: readonly { id: string; project_item_id: string; unit_index: number }[];
+    };
+    expect(executions.part_instances.length).toBeGreaterThan(0);
+    const stampedRevisions = new Set(executions.part_instances.map((p) => p.production_revision));
+    expect(stampedRevisions.size).toBe(1);
+    expect(Array.from(stampedRevisions)[0]).toBe(release.id);
+
+    // Current quote quantity is nine, but P1 still owns exactly two units.
+    const releasedFurniture = mat.instances.map((i) => i.furniture_instance_id).sort();
+    expect(executions.module_units.map((u) => u.project_item_id).sort()).toEqual(releasedFurniture);
+    expect(executions.module_units.every((u) => u.unit_index === 1)).toBe(true);
+    expect([...new Set(executions.part_instances.map((p) => p.project_item_id))].sort()).toEqual(releasedFurniture);
+    expect(executions.part_instances.every((p) => p.unit_index === 1)).toBe(true);
+    expect(executions.part_instances.every((p) => p.length_mm !== 999 && p.width_mm !== 999)).toBe(true);
+    // Regenerating identical untouched executions is idempotent; malformed
+    // membership cannot replace the already-persisted exact snapshot.
+    const generateExecutions = (moduleUnits: readonly unknown[]) => fetch(
+      `${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, {
+        method: 'PUT', headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ part_instances: executions.part_instances, module_units: moduleUnits }),
+      });
+    expect((await generateExecutions(executions.module_units.slice(0, 1))).status).toBe(400);
+    expect((await generateExecutions(executions.module_units)).status).toBe(200);
+    const repeated = await (await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, { headers: authHeaders })).json();
+    expect(repeated.part_instances).toEqual(executions.part_instances);
+    expect(repeated.module_units).toEqual(executions.module_units);
+
+    // 10. Critical negative proof: the legacy blob is STILL null after the
+    //     whole operational path ran on the canonical release.
+    const finalDetail = (await (
+      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}`, { headers: authHeaders })
+    ).json()) as { production_release?: unknown; resolved_production_release?: { source: string } };
+    expect(finalDetail.production_release ?? null).toBeNull();
+    expect(finalDetail.resolved_production_release?.source).toBe('canonical');
+  });
+
   test('tenant isolation: Org B never sees Org A reconciliation data', async ({ page }) => {
     test.setTimeout(60_000);
 
