@@ -18,6 +18,11 @@ import { GATE_MODULE_A_ID, required } from './support/api';
 const PROJECT_ID = '77777777-3333-4777-8777-333333333333';
 const QUOTE_LINE_ID = '88888888-3333-4888-8888-333333333333';
 const CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000003';
+const REC_MAT = '71000000-0000-4000-8000-000000000011';
+const REC_STRUCT = '71000000-0000-4000-8000-000000000012';
+const REC_COMP = '71000000-0000-4000-8000-000000000013';
+const REC_CHOICES = { BODY: REC_MAT };
+
 
 interface SeededReconciliation {
   readonly projectId: string;
@@ -50,10 +55,17 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
   const depthMm = template.depthMm || 590;
   await repository.saveCatalog({
     ...catalog,
+    materials: [...catalog.materials, { id: REC_MAT, code: 'REC-MAT', name: 'Tablero', widthMm: 1830, lengthMm: 2440, thicknessMm: 18, grainDefault: false, boardPrice: 100, wastePercent: 0, costPerM2: 100, active: true }],
+    structures: [...(catalog.structures ?? []), { id: REC_STRUCT, code: 'REC-STRUCT', name: 'Cuerpo', externalDims: { width: 600, height: 720, depth: depthMm }, components: [{ componentId: REC_COMP, quantity: 1 }], active: true }],
+    components: [...(catalog.components ?? []), { id: REC_COMP, code: 'REC-COMP', name: 'Panel', placement: 'interno', geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 }, defaultEdges: ['L1', 'L2', 'W1', 'W2'].map((side) => ({ side: side as 'L1' | 'L2' | 'W1' | 'W2', enabled: false })), optionRoles: ['BODY'], active: true }],
     modules: [
       {
         ...template,
         id: GATE_MODULE_A_ID,
+        structureId: REC_STRUCT,
+        components: [],
+        hardwareLines: [],
+        parameterDefinitions: [],
         externalDims: { width: 600, height: 720, depth: depthMm },
         widthMm: 600,
         heightMm: 720,
@@ -86,7 +98,7 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
         id: QUOTE_LINE_ID,
         moduleId: GATE_MODULE_A_ID,
         quantity: 3,
-        optionChoices: {},
+        optionChoices: REC_CHOICES,
       },
     ],
   };
@@ -126,9 +138,9 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
   );
   await client.updateDesignWorkingCopy(aOwner.token, design.id, {
     items: [
-      { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600, heightMm: 720, depthMm }, material_choices: {} },
-      { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 650, heightMm: 720, depthMm }, material_choices: {} },
-      { furniture_instance_id: designFirst.id, furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 700, heightMm: 720, depthMm }, material_choices: {} },
+      { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
+      { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 650, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
+      { furniture_instance_id: designFirst.id, furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 700, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
     ],
   });
   const r1 = await client.publishDesignRevision(
@@ -198,13 +210,13 @@ async function publishRevisionWithItemIds(options: {
           furniture_instance_id: seeded.designFirstInstanceId,
           furniture_definition_id: GATE_MODULE_A_ID,
           parameters: { widthMm: 700, heightMm: 720, depthMm: seeded.depthMm },
-          material_choices: {},
+          material_choices: REC_CHOICES,
         }
       : {
           furniture_instance_id: seeded.instanceIds[selector]!,
           furniture_definition_id: GATE_MODULE_A_ID,
           parameters: { widthMm: widthOf(selector), heightMm: 720, depthMm: seeded.depthMm },
-          material_choices: {},
+          material_choices: REC_CHOICES,
         };
   await client.updateDesignWorkingCopy(
     owner.token,
@@ -836,6 +848,11 @@ async function publishRevisionWithItemIds(options: {
     await expect(provenance).toContainText('Liberación #1');
     await expect(provenance).toContainText('Diseño R1');
 
+    // Forged client demand cannot override the server-frozen collection.
+    expect((await derive({ production_release_id: release.id, lines: [{ ...deriveLine, quantity: 999 }] })).status).toBe(200);
+    const frozenPlanning = await (await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials`, { headers: authHeaders })).json();
+    expect(frozenPlanning.planning.requirements.lines).toEqual([{ kind: 'tableros', material_id: OPS_MAT_ID, quantity: 1 }]);
+
     // 5. Server readback: requirements pinned to the exact release pins.
     const materials = (await (
       await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials`, { headers: authHeaders })
@@ -872,10 +889,12 @@ async function publishRevisionWithItemIds(options: {
         },
       ],
     });
+    expect((await derive({ production_release_id: release.id, lines: [] })).status).toBe(200);
     const materialsAfterMutation = (await (
       await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials`, { headers: authHeaders })
     ).json()) as typeof materials;
-    expect(materialsAfterMutation.planning.requirements).toEqual(requirements);
+    expect(materialsAfterMutation.planning.requirements.lines).toEqual(requirements.lines);
+    expect(materialsAfterMutation.planning.requirements.source_design_revision_id).toBe(r1.id);
 
     // 7. Almacén releases the materials (audited override: no stock seeded).
     await page.goto('/warehouse');

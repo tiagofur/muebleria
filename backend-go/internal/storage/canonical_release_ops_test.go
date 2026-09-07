@@ -20,7 +20,7 @@ func opsDt1CreateReleaseP1(t *testing.T, fx *releaseFixture) *storage.Production
 	t.Helper()
 	actorA := fiActorA()
 	var p1 *storage.ProductionReleaseReadback
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -223,8 +223,8 @@ func TestOpsDt1_MaterialDeriveBindsExactCanonicalRelease(t *testing.T) {
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
-				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {

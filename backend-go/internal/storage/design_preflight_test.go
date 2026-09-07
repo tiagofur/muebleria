@@ -40,7 +40,7 @@ func TestEvaluateDesignRevisionPreflight_ReadyParityWithReleaseGate(t *testing.T
 	// Parity: the release command accepts the same revision — one verdict,
 	// two surfaces.
 	var release *storage.ProductionReleaseReadback
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		release, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -82,7 +82,7 @@ func TestEvaluateDesignRevisionPreflight_BlockedParityWithReleaseGate(t *testing
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": "seiscientos", "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": "seiscientos", "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -139,7 +139,7 @@ func TestEvaluateDesignRevisionPreflight_BlockedParityWithReleaseGate(t *testing
 	// be bypassed by force-calling the release. (No quote pin: the commercial
 	// gate runs first and this fixture's parameter change is also commercial;
 	// the preflight parity is what this proof isolates.)
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
 			DesignRevisionID: blockedRevID,
@@ -209,8 +209,8 @@ func TestEvaluateDesignRevisionPreflight_OrgReadScope(t *testing.T) {
 		// Empty working copy: publish is allowed; the preflight would flag
 		// empty_revision — but org B must never reach the verdict at all.
 		rev, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
-			DesignID:   d.ID,
-			SourceType: domain.DesignRevisionSourceSketchup,
+			DesignID:    d.ID,
+			SourceType:  domain.DesignRevisionSourceSketchup,
 			ActorUserID: rlsUserA,
 		})
 		if err != nil {

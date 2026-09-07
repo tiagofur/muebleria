@@ -140,7 +140,8 @@ func canonicalMaterialsFixtures() (*stubStore, *Server, *domain.ResolvedProducti
 		ReleasedAt:               time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC),
 	})
 	store := &stubStore{
-		productionRelease: canonical,
+		productionRelease:     canonical,
+		canonicalRequirements: []domain.MaterialRequirementLine{{Kind: "herrajes", MaterialID: "hw-1", Quantity: 4}},
 		materialStock: []domain.MaterialStock{
 			{Kind: "herrajes", MaterialID: "hw-1", Quantity: 12, MinStock: 2},
 		},
@@ -527,5 +528,24 @@ func TestQuality_UnitQcChecklistAndOverride(t *testing.T) {
 	}
 	if store.qualityJob.UnitQC[0].Override == nil {
 		t.Fatal("override must be recorded")
+	}
+}
+
+func TestMaterials_CanonicalFrozenContent(t *testing.T) {
+	for _, body := range []string{
+		`{"production_release_id":"rel-canonical-1"}`,
+		`{"production_release_id":"rel-canonical-1","lines":[{"kind":"invalid","quantity":999}]}`,
+	} {
+		store, srv, _ := canonicalMaterialsFixtures()
+		rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/derive", string(domain.RoleAlmacen), body)
+		if rr.Code != http.StatusOK || len(store.materialPlanning.Requirements.Lines) != 1 || store.materialPlanning.Requirements.Lines[0].Quantity != 4 {
+			t.Fatalf("canonical content must ignore request lines: %d %s", rr.Code, rr.Body.String())
+		}
+	}
+	store, srv, _ := canonicalMaterialsFixtures()
+	store.canonicalRequirements = nil
+	rr := doMaterials(srv, http.MethodPost, "/api/projects/p1/materials/derive", string(domain.RoleAlmacen), `{"production_release_id":"rel-canonical-1","lines":[{"kind":"herrajes","material_id":"hw-1","quantity":4}]}`)
+	if rr.Code != http.StatusConflict || store.materialPlanning != nil {
+		t.Fatalf("missing snapshot cannot use legacy/client content: %d", rr.Code)
 	}
 }

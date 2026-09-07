@@ -242,6 +242,7 @@ type stubStore struct {
 	userSectorsList   []domain.UserSector
 	// Installation job (OC-070..074): in-memory state + audit write log.
 	installationJob           *domain.InstallationJob
+	canonicalRequirements     []domain.MaterialRequirementLine
 	materialPlanning          *domain.MaterialPlanning
 	materialStock             []domain.MaterialStock
 	purchaseOrders            []domain.PurchaseOrder
@@ -884,6 +885,7 @@ func (s *stubStore) mutateMaterialPlanning(
 		return nil, errors.New("CONFLICT:la liberación indicada no existe en esta obra")
 	}
 	snap := &domain.MaterialPlanningSnapshot{
+ CanonicalRequirements: s.canonicalRequirements,
 		Planning:                  s.materialPlanning,
 		AllPlannings:              []*domain.MaterialPlanning{s.materialPlanning},
 		Stock:                     append([]domain.MaterialStock(nil), s.materialStock...),

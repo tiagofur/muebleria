@@ -157,6 +157,14 @@ func setupDesignsTestFixture(t *testing.T) *rlsFixture {
 		VALUES ($1, 'RELEASE-BOARD', 'Release board', 1830, 2440, 18, 1000, $2)`, releaseMaterial, rlsOrgA); err != nil {
 		t.Fatal(err)
 	}
+	multiOrgExec(t, fx.admin, `INSERT INTO structures (id,code,name,organization_id) VALUES
+ ('71000000-0000-0000-0000-000000000001','RELEASE-BODY','Release body','`+rlsOrgA+`');
+ INSERT INTO components (id,code,name,placement,length_mm,width_mm,thickness_mm,option_roles,organization_id) VALUES
+ ('71000000-0000-0000-0000-000000000002','RELEASE-PANEL','Release panel','base',600,560,18,'{BODY}','`+rlsOrgA+`');
+ INSERT INTO structure_components (structure_id,component_id,quantity,organization_id) VALUES
+ ('71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002',1,'`+rlsOrgA+`');
+ UPDATE structures SET width_mm=600,height_mm=720,depth_mm=560 WHERE code='RELEASE-BODY';
+ UPDATE modules SET width_mm=600,height_mm=720,depth_mm=560,structure_id='71000000-0000-0000-0000-000000000001' WHERE id='`+fiModuleA+`';`)
 	return fx
 }
 

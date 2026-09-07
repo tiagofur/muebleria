@@ -108,6 +108,13 @@ func (s *PostgresStore) mutateProjectMaterialPlanning(
 		}
 		snap.CanonicalReleaseExists = authority != nil && authority.Source == domain.ProductionReleaseAuthorityCanonical
 	}
+	if exactReleaseID != "" {
+		frozen, err := s.GetProductionReleaseManufacturingSnapshot(context.WithValue(ctx, transactionContextKey{}, tx), projectID, exactReleaseID)
+		if err != nil {
+			return nil, err
+		}
+		snap.CanonicalRequirements = frozen.Requirements
+	}
 	snap.ProductionRelease = authority
 	snap.MaterialsReleased = len(materialsReleaseRaw) > 0 && string(materialsReleaseRaw) != "null"
 
@@ -155,7 +162,7 @@ func (s *PostgresStore) mutateProjectMaterialPlanning(
 	}
 
 	poRows, err := tx.Query(ctx, `
-		SELECT ` + poColumns + ` FROM purchase_orders WHERE organization_id = $1;
+		SELECT `+poColumns+` FROM purchase_orders WHERE organization_id = $1;
 	`, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error loading purchase orders for planning: %w", err)
