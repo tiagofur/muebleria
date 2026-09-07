@@ -45,8 +45,7 @@ import { downloadDespiecePdf } from '../exportDespiecePdf';
 import { downloadCutPlanPdf } from '../exportCutPlanPdf';
 import { downloadCutPlanDxf } from '../exportCutPlanDxf';
 import { resolveProjectDrilling } from '@granete/domain';
-import JSZip from 'jszip';
-import { downloadCutPlanPtx, ptxFileName, ptxZipFileName } from '../exportCutPlanPtx';
+import { downloadCutPlanPtx, downloadCuttingArtifactBundles, ptxFileName } from '../exportCutPlanPtx';
 import { generateSelectedCuttingOutput } from '@granete/excel';
 import type { MachineOutputSelection } from '@granete/domain';
 import { runExport, type ExportDelivery } from './runExport';
@@ -495,23 +494,10 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             machineOutputCuttingSelection,
             selectedMode,
           );
-          const [singleBundle] = bundles;
-          if (singleBundle) {
-            downloadOptimizerXlsx(
-              singleBundle.artifact.bytes,
-              singleBundle.artifact.fileName,
-            );
-          } else {
-            const zip = new JSZip();
-            for (const bundle of bundles) {
-              zip.file(bundle.artifact.fileName, bundle.artifact.bytes);
-            }
-            const zipBytes = await zip.generateAsync({ type: 'uint8array' });
-            downloadOptimizerXlsx(
-              zipBytes,
-              ptxZipFileName(cutPlan.projectName || cutPlan.projectId),
-            );
-          }
+          await downloadCuttingArtifactBundles(
+            bundles,
+            cutPlan.projectName || cutPlan.projectId,
+          );
           toast({
             type: 'success',
             message:

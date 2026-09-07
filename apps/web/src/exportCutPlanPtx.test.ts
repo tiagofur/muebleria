@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
+import JSZip from 'jszip';
 import {
   downloadCutPlanPtx,
+  downloadCuttingArtifactBundles,
   ptxFileName,
   ptxZipFileName,
 } from './exportCutPlanPtx';
 import type { CutPlan } from '@granete/domain';
+import type { MachineArtifactBundle } from '@granete/excel';
 import type { DownloadDeps } from './exportOptimizer';
 
 function buildCutPlanFixture(): CutPlan {
@@ -214,5 +217,79 @@ describe('exportCutPlanPtx', () => {
     expect(deps.createObjectURL).toHaveBeenCalled();
     expect(fakeAnchor.download).toBe('seccionadora-materiales-Cocina-Integral.zip');
     expect(fakeAnchor.click).toHaveBeenCalled();
+  });
+});
+
+describe('downloadCuttingArtifactBundles (#591 machine output)', () => {
+  function bundleFixture(fileName: string, marker: string): MachineArtifactBundle {
+    return {
+      artifact: {
+        artifactId: `artifact-${fileName}`,
+        kind: 'ptx',
+        schemaVersion: '1.14',
+        fileName,
+        bytes: new TextEncoder().encode(`PTX-CONTENT ${marker}`),
+        sha256: `sha256-${fileName}`,
+      },
+      manifest: {} as MachineArtifactBundle['manifest'],
+      manifestJson: '{}\n',
+    };
+  }
+
+  function captureDeps() {
+    const fakeAnchor: any = {
+      href: '',
+      download: '',
+      rel: '',
+      click: vi.fn(),
+    };
+    const blobs: Blob[] = [];
+    const deps: DownloadDeps = {
+      createObjectURL: vi.fn((blob: Blob) => {
+        blobs.push(blob);
+        return `blob:mock-${blobs.length}`;
+      }),
+      revokeObjectURL: vi.fn(),
+      createElement: vi.fn(() => fakeAnchor),
+      appendChild: vi.fn(),
+      removeChild: vi.fn(),
+    };
+    return { fakeAnchor, deps, blobs };
+  }
+
+  it('un único bundle se descarga directo con su nombre de artefacto', async () => {
+    const { fakeAnchor, deps, blobs } = captureDeps();
+    const bundle = bundleFixture('corte-PRJ-1042-MEL_BLANCO_18.ptx', 'blanco');
+
+    await downloadCuttingArtifactBundles([bundle], 'Cocina Moderna', deps);
+
+    expect(blobs).toHaveLength(1);
+    expect(fakeAnchor.download).toBe('corte-PRJ-1042-MEL_BLANCO_18.ptx');
+    expect(fakeAnchor.click).toHaveBeenCalledTimes(1);
+    // Es el .ptx directo, no un zip.
+    const text = new TextDecoder().decode(await blobs[0]!.arrayBuffer());
+    expect(text).toContain('PTX-CONTENT blanco');
+    expect(text.startsWith('PK')).toBe(false);
+  });
+
+  it('varios bundles por material se empaquetan TODOS en un zip (regresión: solo bajaba el primero)', async () => {
+    const { fakeAnchor, deps, blobs } = captureDeps();
+    const blanco = bundleFixture('corte-PRJ-1042-MEL_BLANCO_18.ptx', 'blanco');
+    const moscato = bundleFixture('corte-PRJ-1042-MEL_MOSCATO_18.ptx', 'moscato');
+
+    await downloadCuttingArtifactBundles([blanco, moscato], 'Cocina Moderna', deps);
+
+    expect(blobs).toHaveLength(1);
+    expect(fakeAnchor.download).toBe('seccionadora-materiales-Cocina-Moderna.zip');
+    expect(fakeAnchor.click).toHaveBeenCalledTimes(1);
+
+    // Round-trip real del zip: ambos materiales presentes con su contenido.
+    const zip = await JSZip.loadAsync(await blobs[0]!.arrayBuffer());
+    const fileNames = Object.keys(zip.files);
+    expect(fileNames).toContain('corte-PRJ-1042-MEL_BLANCO_18.ptx');
+    expect(fileNames).toContain('corte-PRJ-1042-MEL_MOSCATO_18.ptx');
+    expect(fileNames).toHaveLength(2);
+    expect(await zip.file('corte-PRJ-1042-MEL_BLANCO_18.ptx')!.async('string')).toContain('blanco');
+    expect(await zip.file('corte-PRJ-1042-MEL_MOSCATO_18.ptx')!.async('string')).toContain('moscato');
   });
 });
