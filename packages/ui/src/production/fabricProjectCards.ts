@@ -1,5 +1,6 @@
 import {
   describeMissingPieces,
+  CANONICAL_PART_ROUTING_BLOCKER,
   deriveLegacyItemFloorStatus,
   releaseAuthorityLabel,
   releaseAuthorityOf,
@@ -79,6 +80,7 @@ export type FabricProjectCard = {
   readonly releaseLabel: string;
   /** True when a release authority exists but no physical executions were generated yet (#577). */
   readonly needsPhysicalGeneration: boolean;
+  readonly executionBlocker?: string;
   readonly items: readonly FabricStationRow[];
   readonly materials: readonly (ProductionMaterialTotal & {
     readonly estimatedSheets?: number;
@@ -234,6 +236,8 @@ function buildCard(
     projectName: project.name,
     customerLabel: input.customerLabelFor?.(project.customerId) ?? '',
     releaseLabel,
+    executionBlocker: releaseAuthorityOf(project)?.source === 'canonical'
+      ? CANONICAL_PART_ROUTING_BLOCKER : undefined,
     needsPhysicalGeneration:
       releaseAuthorityOf(project) !== undefined &&
       (project.partInstances?.length ?? 0) === 0,

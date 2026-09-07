@@ -92,27 +92,21 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		return nil, fmt.Errorf("error resolving execution release: %w", err)
 	}
 	if authority != nil {
-		snap.ProductionRelease = authority
-		snap.ItemQuantities = map[string]int{}
-		members, err := tx.Query(ctx, `
-			SELECT furniture_instance_id::text FROM design_revision_items
-			WHERE design_revision_id = $1;
-		`, authority.DesignRevisionID)
+		// Validate the exact private P1/R2/fingerprint under the same project
+		// lock as every station command. Neither client routes nor a current
+		// catalog can supply the missing immutable machining coverage.
+		frozen, err := s.GetProductionReleaseManufacturingSnapshot(
+			context.WithValue(ctx, transactionContextKey{}, tx), projectID, authority.ReleaseID)
 		if err != nil {
-			return nil, fmt.Errorf("error loading released furniture: %w", err)
+			return nil, err
 		}
-		for members.Next() {
-			var id string
-			if err := members.Scan(&id); err != nil {
-				members.Close()
-				return nil, fmt.Errorf("error scanning released furniture: %w", err)
-			}
-			snap.ItemQuantities[id] = 1
+		if frozen.Release.DesignRevisionID != authority.DesignRevisionID ||
+			frozen.Release.ManufacturingFingerprint != authority.ManufacturingFingerprint {
+			return nil, ErrReleaseSnapshotUnavailable
 		}
-		members.Close()
-		if err := members.Err(); err != nil {
-			return nil, fmt.Errorf("error reading released furniture: %w", err)
-		}
+		// This applies to generation, advance, rework and supervisor override;
+		// even existing client-derived executions cannot become routing proof.
+		return nil, ErrReleaseRoutingUnavailable
 	}
 
 	mutation, err := mutate(snap)

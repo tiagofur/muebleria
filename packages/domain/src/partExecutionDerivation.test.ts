@@ -27,6 +27,21 @@ describe('deriveProjectPartExecutions — del BOM del catálogo a las piezas fí
     },
   };
 
+  it('rejects canonical P1 before mutable catalog resolution, even with an explicit token or stale legacy blob', () => {
+    const result = deriveProjectPartExecutions({
+      ...project,
+      resolvedProductionRelease: {
+        source: 'canonical', releaseId: 'P1', designRevisionId: 'R2',
+        manufacturingFingerprint: 'frozen-P1', releaseNumber: 1,
+      },
+      items: [{ id: 'mutable', moduleId: 'missing', quantity: 99, optionChoices: {} }],
+    }, plantillaCatalogWithModules, { productionRevision: 'P1' });
+    expect(result).toEqual({ ok: false, error: {
+      projectItemId: '',
+      message: expect.stringContaining('evidencia congelada de rutas y maquinados'),
+    } });
+  });
+
   it('deriva piezas y unidades con la revisión liberada', () => {
     const result = deriveProjectPartExecutions(project, plantillaCatalogWithModules);
     expect(result.ok).toBe(true);

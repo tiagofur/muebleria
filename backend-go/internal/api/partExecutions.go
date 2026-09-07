@@ -175,7 +175,13 @@ func (s *Server) HandleProjectPartExecutions(w http.ResponseWriter, r *http.Requ
 	}
 	readiness := make([]domain.AssemblyReadiness, 0, len(project.ModuleUnits))
 	for _, u := range project.ModuleUnits {
-		readiness = append(readiness, domain.CheckAssemblyReadiness(u, project.PartInstances, released))
+		check := domain.CheckAssemblyReadiness(u, project.PartInstances, released)
+		if project.ResolvedProductionRelease != nil && project.ResolvedProductionRelease.Source == "canonical" {
+			check.IsReady = false
+			check.CanStartWithOverride = false
+			check.Blockers = append(check.Blockers, domain.CanonicalPartExecutionRoutingBlocker)
+		}
+		readiness = append(readiness, check)
 	}
 	if project.PartInstances == nil {
 		project.PartInstances = []domain.PartInstance{}
@@ -749,8 +755,9 @@ type generatePartExecutionsRequest struct {
 }
 
 // HandleGeneratePartExecutions handles PUT /api/projects/{id}/part-executions —
-// persists the client-derived physical instances (TS owns the BOM resolution)
-// AFTER server-side validation: every line/item exists, one unit per unit of
+// persists client-derived instances for released legacy-only projects.
+// Canonical execution is blocked by locked storage until frozen routing exists.
+// Legacy server-side validation: every line/item exists, one unit per unit of
 // quantity, revision matches the released one, and every route starts with a
 // cut. Idempotent for untouched executions; replacing progress requires
 // force + supervisor and is audited with floor events.
@@ -783,6 +790,11 @@ func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if released == "" {
+		respondWithError(w, http.StatusConflict, "la obra no tiene una revisión liberada para generar piezas")
+		return
+	}
+
 	var result map[string]interface{}
 	_, err = s.Store.MutateProjectPartExecutions(r.Context(), projectID, func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error) {
 		// ── Validation (server authority) ────────────────────────────────
@@ -794,6 +806,9 @@ func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Req
 		}
 		unitsPerItem := map[string]int{}
 		for _, u := range body.ModuleUnits {
+			if u.ProjectID != projectID {
+				return nil, fmt.Errorf("CONFLICT:la unidad no pertenece a esta obra")
+			}
 			qty, ok := snap.ItemQuantities[u.ProjectItemID]
 			if !ok {
 				return nil, fmt.Errorf("BAD_REQUEST:unidad %s referencia la línea %s que no existe en la obra", u.ID, u.ProjectItemID)
@@ -816,6 +831,9 @@ func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Req
 		}
 		seenPartIDs := map[string]struct{}{}
 		for _, p := range body.PartInstances {
+			if p.ProjectID != projectID {
+				return nil, fmt.Errorf("CONFLICT:la pieza no pertenece a esta obra")
+			}
 			if _, ok := snap.ItemQuantities[p.ProjectItemID]; !ok {
 				return nil, fmt.Errorf("BAD_REQUEST:pieza %s referencia la línea %s que no existe en la obra", p.ID, p.ProjectItemID)
 			}

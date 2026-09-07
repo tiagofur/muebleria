@@ -47,6 +47,24 @@ describe('FabricScreen — Producción (manufacturing stations)', () => {
     makeProject('p3', [makeItem('d')], 'draft'),
   ];
 
+  it('keeps missing canonical routing visible and disables generation and legacy station shortcuts', () => {
+    const advance = vi.fn();
+    const generate = vi.fn();
+    const canonical = {
+      ...makeProject('canonical', [makeItem('a')]),
+      resolvedProductionRelease: { source: 'canonical' as const, releaseId: 'P1', releaseNumber: 1, designRevisionNumber: 2 },
+    };
+    render(<FabricScreen projects={[canonical]} canAdvance onAdvance={advance} onGeneratePartExecutions={generate} />);
+    const button = screen.getByTestId('fabric-generate-parts-canonical') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.getByTestId('fabric-routing-blocker-canonical').textContent).toContain('evidencia congelada');
+    expect(button.getAttribute('aria-describedby')).toBe('fabric-routing-blocker-canonical');
+    fireEvent.click(button);
+    expect(generate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('fabric-advance-a')).toBeNull();
+    expect(advance).not.toHaveBeenCalled();
+  });
+
   it('uses the workflow underline tab contract with linked panels', () => {
     render(
       <FabricScreen projects={projects} assignedSectors={['cutting', 'edge_banding']} canAdvance onAdvance={() => undefined} />,

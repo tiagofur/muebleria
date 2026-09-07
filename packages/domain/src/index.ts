@@ -1072,6 +1072,7 @@ export {
 
 export {
   deriveProjectPartExecutions,
+  CANONICAL_PART_ROUTING_BLOCKER,
   type ProjectPartExecutions,
   type DeriveProjectPartExecutionsResult,
   type DeriveProjectPartExecutionsError,

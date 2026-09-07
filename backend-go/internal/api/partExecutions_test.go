@@ -76,6 +76,23 @@ func doPartExec(srv *Server, method, path, role, body string) *httptest.Response
 	return rr
 }
 
+func TestPartExec_CanonicalReadinessCannotBeOverridden(t *testing.T) {
+	store, srv := partExecFixtures("P1")
+	store.projectReturnedByID.ResolvedProductionRelease = &domain.ResolvedProductionRelease{Source: "canonical", ReleaseID: "P1"}
+	store.projectReturnedByID.PartInstances[0].RequiredOperations[0].Status = domain.PartOperationStatusCompleted
+	rr := doPartExec(srv, http.MethodGet, "/api/projects/p1/part-executions", string(domain.RoleAdmin), "")
+	var result struct {
+		Readiness []domain.AssemblyReadiness `json:"assembly_readiness"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil || rr.Code != 200 || len(result.Readiness) != 1 {
+		t.Fatalf("readiness response: %d %s %v", rr.Code, rr.Body.String(), err)
+	}
+	check := result.Readiness[0]
+	if check.IsReady || check.CanStartWithOverride || !strings.Contains(strings.Join(check.Blockers, " "), "evidencia congelada") {
+		t.Fatalf("missing routing is not an overridable material shortage: %+v", check)
+	}
+}
+
 func TestPartExec_AdvanceCutDerivesLegacyStatusAndAudits(t *testing.T) {
 	store, srv := partExecFixtures("rev-1")
 	rr := doPartExec(srv, http.MethodPost, "/api/projects/p1/parts/p1_i1_u1_LAT_1/advance",
@@ -300,6 +317,28 @@ func doGenerate(srv *Server, role string, body generatePartExecutionsRequest) *h
 	return rr
 }
 
+func TestPartExec_GenerateRejectsUnreleasedAndCrossProjectIdentity(t *testing.T) {
+	for _, scenario := range []string{"unreleased", "foreign part", "foreign unit"} {
+		t.Run(scenario, func(t *testing.T) {
+			store, srv := partExecFixtures("P1")
+			store.itemQuantities = map[string]int{"i1": 1}
+			body := generateBody("P1", 1)
+			switch scenario {
+			case "unreleased":
+				store.projectReturnedByID.ProductionRelease = nil
+			case "foreign part":
+				body.PartInstances[0].ProjectID = "other-project"
+			case "foreign unit":
+				body.ModuleUnits[0].ProjectID = "other-project"
+			}
+			rr := doGenerate(srv, string(domain.RoleAdmin), body)
+			if rr.Code != http.StatusConflict {
+				t.Fatalf("identity mismatch=%d %s", rr.Code, rr.Body.String())
+			}
+		})
+	}
+}
+
 func TestPartExec_GenerateValidatesAndPersists(t *testing.T) {
 	store, srv := partExecFixtures("rev-1")
 	store.partInstances = nil
@@ -495,12 +534,15 @@ func TestPartExec_ReworkRecordsCosting(t *testing.T) {
 	}
 }
 
-func TestPartExec_CanonicalGenerationRequiresExactFurnitureMembership(t *testing.T) {
+func TestPartExec_CanonicalGenerationPropagatesFrozenRoutingBlocker(t *testing.T) {
 	for _, scenario := range []string{"valid", "missing", "extra", "duplicate", "stale"} {
 		t.Run(scenario, func(t *testing.T) {
 			store, srv := partExecFixtures("legacy")
 			store.latestProductionRelease = &domain.ProductionRelease{ID: "P1", DesignRevisionID: "R1"}
 			store.partInstances, store.moduleUnits = nil, nil
+			// Real PostgreSQL coverage proves the locked storage guard. This
+			// adapter test only proves its conflict cannot become HTTP success.
+			store.mutateErr = fmt.Errorf("CONFLICT:%s", domain.CanonicalPartExecutionRoutingBlocker)
 			store.itemQuantities = map[string]int{"fi-a": 1, "fi-b": 1}
 			body := generateBody("P1", 2)
 			for i, id := range []string{"fi-a", "fi-b"} {
@@ -519,17 +561,11 @@ func TestPartExec_CanonicalGenerationRequiresExactFurnitureMembership(t *testing
 				body.ModuleUnits[0].ProductionRevision = "P0"
 			}
 			rr := doGenerate(srv, string(domain.RoleGerenteProduccion), body)
-			want := http.StatusBadRequest
-			if scenario == "valid" {
-				want = http.StatusOK
-			}
-			if scenario == "stale" {
-				want = http.StatusConflict
-			}
+			want := http.StatusConflict
 			if rr.Code != want {
 				t.Fatalf("want %d, got %d: %s", want, rr.Code, rr.Body.String())
 			}
-			if scenario != "valid" && len(store.moduleUnits) != 0 {
+			if len(store.moduleUnits) != 0 {
 				t.Fatal("rejected generation persisted units")
 			}
 		})

@@ -1,3 +1,11 @@
+## #577 — part/stage continuity (safety partial; 2026-09-07)
+
+- Authorized child `577/part-stage-continuity`, fresh branch `codex/577-part-stage-continuity`, exact base `aca051e219dda4f0114f8ab909f4cc79008b4b90`; #573 comments 5575121350/5575143132; independent 1,100 authored-line ceiling. Started 20:12 UTC. Parent owns live admission, validation and publication.
+- Fail closed for canonical execution commands under the existing project lock: the frozen snapshot has no routing/machining coverage proof. Never replace it with live catalog or fabricated no-CNC routes.
+- Preserve existing release authority, immutable snapshot, physical identities, warehouse event and legacy-only compatibility; align engineering stage and remove fabricated mapper revisions.
+- Extend one Q1 → Q2/R2 → P1 → materials → warehouse browser scenario to the explicit routing blocker. Full physical-production golden remains NOT PROVEN; no new engine, merge or #577 closure.
+- Focused 151 TS/UI/mapper tests and Go `TestPartExec_*` pass; Web TypeScript and diff checks pass. Single Q2/R2 browser scenario is authored, not yet executed. Final R3 Go/PostgreSQL/init/browser/independent review/exact-head CI remain parent-owned. Disabled/unmanaged RDD.
+
 ## #577 — warehouse/reservations continuity (partial; 2026-09-07)
 
 - Authorized child `577/warehouse-reservations-continuity`, fresh branch `codex/577-warehouse-reservations-continuity`, exact base `97636e18ac0b827e3b77522a0015d0198987e6aa`; parent owns factory and publication. Started 18:39 UTC after baseline; owner #573 comment 5574451831 permits up to 1,000 authored lines excluding generated output.

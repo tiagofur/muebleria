@@ -118,6 +118,7 @@ func TestProductionReleaseCaptureHTTPFrozen(t *testing.T) {
 		t.Fatalf("fingerprint drift: %v", err)
 	}
 	before, _ := json.Marshal(frozen)
+	assertExecutionRoutingBlockedHTTP(t, fx, handler, token, frozen)
 	for _, target := range []struct {
 		actor   storage.TenantActor
 		project string
@@ -175,6 +176,7 @@ func TestProductionReleaseCaptureHTTPFrozen(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertWarehouseFrozenHTTP(t, fx, handler, request, release.ID, frozen)
+	assertExecutionRoutingBlockedHTTP(t, fx, handler, token, frozen)
 
 	// Historical canonical release without its snapshot fails closed, never legacy fallback.
 	multiOrgExec(t, fx.admin, `ALTER TABLE production_release_manufacturing_snapshots DISABLE TRIGGER protect_release_manufacturing_snapshots_immutable;
@@ -356,4 +358,104 @@ func assertWarehouseFrozenHTTP(t *testing.T, fx *releaseFixture, handler http.Ha
 		t.Fatalf("legacy compatibility=%s", legacyRaw)
 	}
 
+}
+
+// Both calls bracket later revision publication plus project/catalog/legacy drift.
+// No synthetic CNC/no-CNC receipt is inserted into the immutable snapshot.
+func assertExecutionRoutingBlockedHTTP(t *testing.T, fx *releaseFixture, handler http.Handler, token string, frozen *storage.ReleaseManufacturingSnapshot) {
+	t.Helper()
+	path := "/api/projects/" + fx.projectID
+	request := func(method, target, credential, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+credential)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr
+	}
+	read := func() string {
+		rr := request(http.MethodGet, path+"/part-executions", token, "")
+		if rr.Code != 200 {
+			t.Fatalf("execution read=%d %s", rr.Code, rr.Body.String())
+		}
+		return rr.Body.String()
+	}
+	persisted := func() string {
+		var state string
+		if err := fx.admin.QueryRow(context.Background(), `SELECT jsonb_build_array(part_instances,module_units,quality,
+ (SELECT count(*) FROM project_item_floor_events WHERE project_id=$1),
+ (SELECT count(*) FROM project_events WHERE project_id=$1))::text FROM projects WHERE id=$1`, fx.projectID).Scan(&state); err != nil {
+			t.Fatal(err)
+		}
+		return state
+	}
+	beforeState := persisted()
+	before := read()
+	// Client geometry, identity and claimed routes never establish authority.
+	for _, identity := range []struct{ project, release, item string }{
+		{fx.projectID, frozen.Release.ID, fx.fiA},
+		{fiProjectAOnly, frozen.Release.ID, fx.fiA},
+		{fx.projectID, "wrong-release", fx.fiA},
+		{fx.projectID, frozen.Release.DesignRevisionID, fx.fiA},
+		{fx.projectID, "rev-1", fx.fiA},
+		{fx.projectID, frozen.Release.ID, "foreign-furniture"},
+	} {
+		body := fmt.Sprintf(`{"force":true,"part_instances":[{"id":"forged-part","project_id":%q,"project_item_id":%q,"production_revision":%q,"length_mm":999,"required_operations":[{"type":"cut"}]}],"module_units":[{"id":"forged-unit","project_id":%q,"project_item_id":%q,"production_revision":%q}]}`,
+			identity.project, identity.item, identity.release, identity.project, identity.item, identity.release)
+		for retry := 0; retry < 2; retry++ {
+			rr := request(http.MethodPut, path+"/part-executions", token, body)
+			if rr.Code != 409 || !strings.Contains(rr.Body.String(), "evidencia congelada de rutas y maquinados") {
+				t.Fatalf("forged execution=%d %s", rr.Code, rr.Body.String())
+			}
+		}
+	}
+	for _, command := range []struct{ suffix, body string }{
+		{"/parts/forged-part/advance", `{"advance":true}`},
+		{"/parts/forged-part/rework", `{"action":"rework","reason":"must not bypass"}`},
+		{"/parts/forged-part/rework", `{"action":"refabricate","reason":"must not bypass"}`},
+		{"/units/forged-unit/advance", `{"advance":true}`},
+		{"/units/forged-unit/assembly-override", `{"reason":"must not bypass"}`},
+	} {
+		rr := request(http.MethodPost, path+command.suffix, token, command.body)
+		if rr.Code != 409 || !strings.Contains(rr.Body.String(), "evidencia congelada de rutas y maquinados") {
+			t.Fatalf("station %s=%d %s", command.suffix, rr.Code, rr.Body.String())
+		}
+	}
+	if after := read(); after != before {
+		t.Fatalf("rejected commands changed executions: %s", after)
+	}
+	if persisted() != beforeState {
+		t.Fatal("rejected commands changed physical state or emitted business events")
+	}
+	// A correct P1 token also cannot authorize a different project's URL.
+	foreignPath := "/api/projects/" + fiProjectAOnly + "/part-executions"
+	rr := request(http.MethodPut, foreignPath, token, fmt.Sprintf(`{"part_instances":[{"production_revision":%q}],"module_units":[{"production_revision":%q}]}`, frozen.Release.ID, frozen.Release.ID))
+	if rr.Code != 409 {
+		t.Fatalf("foreign project path=%d %s", rr.Code, rr.Body.String())
+	}
+	// Shared Org B cannot read or invoke this owner's execution context.
+	var membership string
+	var memberVersion, orgVersion int64
+	if err := fx.admin.QueryRow(context.Background(), `SELECT m.id,m.credential_version,o.credential_version
+ FROM memberships m JOIN organizations o ON o.id=m.organization_id
+ WHERE m.organization_id=$1 AND m.user_id=$2`, rlsOrgB, rlsUserB).Scan(&membership, &memberVersion, &orgVersion); err != nil {
+		t.Fatal(err)
+	}
+	foreignToken, err := auth.GenerateLegacyWebToken(rlsUserB, "rls-b@example.test", auth.TokenContext{
+		Roles: []string{string(domain.RoleAdmin)}, OrgID: rlsOrgB, MembershipID: membership,
+		MembershipCredentialVersion: memberVersion, OrganizationCredentialVersion: orgVersion,
+	}, "release-capture-http-test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPost} {
+		target := path + "/part-executions"
+		if method == http.MethodPost {
+			target = path + "/units/forged-unit/assembly-override"
+		}
+		rr := request(method, target, foreignToken, `{"reason":"foreign","part_instances":[{}],"module_units":[{}]}`)
+		if rr.Code != 403 && rr.Code != 404 {
+			t.Fatalf("foreign %s=%d %s", method, rr.Code, rr.Body.String())
+		}
+	}
 }

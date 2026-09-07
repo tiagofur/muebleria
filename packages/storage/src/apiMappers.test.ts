@@ -2001,6 +2001,14 @@ describe('projectToApi / projectFromApi — commercialStatus and events (OC-010.
     expect(roundCo?.impact?.scopeDescription).toBe('1 cajón Blum Legrabox extra');
   });
 
+  it('preserves missing execution revisions as missing, never fabricates rev-1', () => {
+    const project = projectFromApi({
+      id: 'missing-revision', part_instances: [{ id: 'part' }], module_units: [{ id: 'unit' }],
+    });
+    expect(project.partInstances?.[0]?.productionRevision).toBe('');
+    expect(project.moduleUnits?.[0]?.productionRevision).toBe('');
+  });
+
   it('round-trips part instances and module units (OC-030..OC-034)', () => {
     const part: PartInstance = {
       id: 'p1_i1_u1_LAT_1',
