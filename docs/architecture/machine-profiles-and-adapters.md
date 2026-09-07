@@ -109,7 +109,10 @@ adapters/manifest/evidence packs quedan para la implementación de #351.
 
 **Bloqueado por field evidence (#348, #352/#353):** perfiles concretos por
 cliente, adapter PTX real, evidence packs, machine packs sanitizados. La
-recolección usa `docs/templates/machine-dossier-template.md`.
+recolección usa `docs/templates/machine-dossier-template.md`. El primer pack
+instanciado — Client A (`client-a`: BHX 050 + HPP 250, estado `NOT_TESTED`,
+descubrimiento sin evidencia de campo) — vive en `docs/machines/client-a/`
+(#352).
 
 ## Referencias
 
