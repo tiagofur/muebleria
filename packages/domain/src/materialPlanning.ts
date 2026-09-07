@@ -466,10 +466,6 @@ export function reserveProjectMaterials(
     plannings: params.plannings,
     purchaseOrders: [],
   });
-  const coverageBy = new Map(
-    coverage.map((line) => [keyOf(line.kind, line.materialId), line] as const),
-  );
-
   const wanted =
     params.lines ??
     coverage
@@ -481,10 +477,15 @@ export function reserveProjectMaterials(
   const reservedLines: Array<{ kind: StockMaterialKind; materialId: string; quantity: number }> = [];
   const shortLines: Array<{ kind: StockMaterialKind; materialId: string; quantity: number }> = [];
 
+  const remaining = new Map(coverage.map((line) => [keyOf(line.kind, line.materialId), line.pendingReserve]));
+  const available = new Map(coverage.map((line) => [keyOf(line.kind, line.materialId), line.available]));
   for (const line of wanted) {
     if (!(line.quantity > 0)) continue;
-    const cov = coverageBy.get(keyOf(line.kind, line.materialId));
-    const canReserve = Math.min(line.quantity, Math.max(0, cov?.available ?? 0));
+    const key = keyOf(line.kind, line.materialId);
+    const quantity = Math.min(line.quantity, Math.max(0, remaining.get(key) ?? 0));
+    const canReserve = Math.min(quantity, Math.max(0, available.get(key) ?? 0));
+    remaining.set(key, (remaining.get(key) ?? 0) - quantity);
+    available.set(key, (available.get(key) ?? 0) - canReserve);
     if (canReserve > 0) {
       reservations.push({
         id: generatePlanningId('mres'),
@@ -497,7 +498,7 @@ export function reserveProjectMaterials(
       });
       reservedLines.push({ kind: line.kind, materialId: line.materialId, quantity: roundQty(canReserve) });
     }
-    const stillMissing = roundQty(line.quantity - canReserve);
+    const stillMissing = roundQty(quantity - canReserve);
     if (stillMissing > 0) {
       shortLines.push({ kind: line.kind, materialId: line.materialId, quantity: stillMissing });
     }

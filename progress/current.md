@@ -1,3 +1,11 @@
+## #577 — warehouse/reservations continuity (partial; 2026-09-07)
+
+- Authorized child `577/warehouse-reservations-continuity`, fresh branch `codex/577-warehouse-reservations-continuity`, exact base `97636e18ac0b827e3b77522a0015d0198987e6aa`; parent owns factory and publication. Started 18:39 UTC after baseline; owner #573 comment 5574451831 permits up to 1,000 authored lines excluding generated output.
+- Bind reserve/release to the existing exact frozen planning; cap demand/stock, serialize warehouse balances, preserve rollback/audit and legacy-only compatibility.
+- Canonical React actions bypass local recomputation, reject stale session/command results and present frozen planning/native board-sheet demand rather than mutable picking estimates.
+- Focused real PostgreSQL, domain parity, UI, typecheck and OpenAPI passed; final full Go/init/browser/independent review/exact-head CI remain parent-owned and pending. See `progress/implementation_577_warehouse_reservations.md`.
+- No part executions, machine integration, full stage continuity, ledger change, merge or #577 closure. Disabled/unmanaged RDD.
+
 ## #577 — atomic canonical manufacturing capture (partial; 2026-09-07)
 
 - Authorized continuation and up-to-800-line exception; branch `feat/577-atomic-manufacturing-capture`, base `6691fcdffd819578fd71bd196ee53bbe977abd72`; factory ownership held by parent, started 16:06 UTC.

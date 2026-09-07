@@ -9299,6 +9299,61 @@
             "minimum": 0
           }
         }
+      },
+      "MaterialReservationLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "material_id",
+          "quantity"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "tableros",
+              "cintillas",
+              "herrajes"
+            ]
+          },
+          "material_id": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      },
+      "ReserveMaterialsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "production_release_id": {
+            "type": "string",
+            "description": "Exact canonical release; required for canonical planning."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MaterialReservationLine"
+            }
+          }
+        }
+      },
+      "ReleaseMaterialsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "production_release_id": {
+            "type": "string",
+            "description": "Exact canonical release; required for canonical planning."
+          },
+          "override_reason": {
+            "type": "string"
+          }
+        }
       }
     }
   }

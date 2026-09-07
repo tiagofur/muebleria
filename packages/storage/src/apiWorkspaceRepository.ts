@@ -57,7 +57,7 @@ import type {
 } from './workspaceRepository';
 import { CloseoutGateError, MaterialsReleaseGateError } from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
-import type { ProductionRelease } from './openapi/generated/types';
+import type { ProductionRelease, ReserveMaterialsRequest, ReleaseMaterialsRequest } from './openapi/generated/types';
 
 /** #577 / OPS-DT-1 — exact release + immutable revision items a derivation runs against. */
 export interface ReleaseBomContextView {
@@ -2147,13 +2147,15 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async reserveMaterials(
     projectId: string,
     lines?: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+    opts?: { readonly productionReleaseId?: string },
   ): Promise<MaterialPlanningView> {
     const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/materials/reserve`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
+        production_release_id: opts?.productionReleaseId,
         lines: (lines ?? []).map((l) => ({ kind: l.kind, material_id: l.materialId, quantity: l.quantity })),
-      }),
+      } satisfies ReserveMaterialsRequest),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -2180,11 +2182,11 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     return this.parseMaterialPlanningView((await res.json()) as Record<string, unknown>);
   }
 
-  async releaseMaterials(projectId: string, overrideReason?: string): Promise<MaterialPlanningView> {
+  async releaseMaterials(projectId: string, overrideReason?: string, opts?: { readonly productionReleaseId?: string }): Promise<MaterialPlanningView> {
     const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/materials/release`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}),
+      body: JSON.stringify({ override_reason: overrideReason, production_release_id: opts?.productionReleaseId } satisfies ReleaseMaterialsRequest),
     });
     if (res.status === 409) {
       const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;

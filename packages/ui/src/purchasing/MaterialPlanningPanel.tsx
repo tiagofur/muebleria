@@ -111,7 +111,7 @@ export function MaterialPlanningPanel({
             </thead>
             <tbody>
               {view.coverage.map((line) => {
-                const unit = unitByMaterial[`${line.kind}:${line.materialId}`] ?? 'u';
+                const unit = line.kind === 'tableros' ? 'plancha' : line.kind === 'cintillas' ? 'ml' : (unitByMaterial[`${line.kind}:${line.materialId}`] ?? 'u');
                 return (
                   <tr key={`${line.kind}:${line.materialId}`}>
                     <td>{labelFor(line.kind, line.materialId, labelsByMaterial)}</td>

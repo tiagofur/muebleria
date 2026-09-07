@@ -356,6 +356,7 @@ export interface WorkspaceRepository {
   reserveMaterials?(
     projectId: string,
     lines?: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+    opts?: { readonly productionReleaseId?: string },
   ): Promise<MaterialPlanningView>;
 
   /**
@@ -375,6 +376,7 @@ export interface WorkspaceRepository {
   releaseMaterials?(
     projectId: string,
     overrideReason?: string,
+    opts?: { readonly productionReleaseId?: string },
   ): Promise<MaterialPlanningView>;
 
   // --- Quality job (OC-060..OC-062) ---

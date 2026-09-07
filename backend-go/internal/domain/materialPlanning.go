@@ -586,6 +586,16 @@ func PlanReservations(
 		}
 	}
 
+	pendingBy := map[string]float64{}
+	if planning.Requirements != nil {
+		for _, line := range planning.Requirements.Lines {
+			pendingBy[line.Kind+":"+line.MaterialID] += line.Quantity
+		}
+	}
+	for key, quantity := range ownReserved {
+		pendingBy[key] = math.Max(0, pendingBy[key]-quantity)
+	}
+
 	if wanted == nil {
 		if planning.Requirements == nil {
 			return planning, nil, nil
@@ -606,7 +616,11 @@ func PlanReservations(
 		if line.Quantity <= 0 {
 			continue
 		}
-		cap := math.Min(line.Quantity, available(line.Kind, line.MaterialID))
+		key := line.Kind + ":" + line.MaterialID
+		quantity := math.Min(line.Quantity, math.Max(0, pendingBy[key]))
+		cap := math.Min(quantity, available(line.Kind, line.MaterialID))
+		pendingBy[key] -= quantity
+		reservedAll[key] += cap
 		if cap > 1e-6 {
 			reservations = append(reservations, MaterialReservation{
 				ID:         NewMaterialPlanningID("mres"),
@@ -619,7 +633,7 @@ func PlanReservations(
 			})
 			reserved = append(reserved, ReserveLine{Kind: line.Kind, MaterialID: line.MaterialID, Quantity: roundQty(cap)})
 		}
-		if remaining := roundQty(line.Quantity - cap); remaining > 1e-6 {
+		if remaining := roundQty(quantity - cap); remaining > 1e-6 {
 			short = append(short, ReserveLine{Kind: line.Kind, MaterialID: line.MaterialID, Quantity: remaining})
 		}
 	}

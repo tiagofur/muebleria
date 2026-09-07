@@ -1,9 +1,83 @@
 {
-  "comment": "Contract fixture de paridad TS↔Go (OC-050..OC-054, AGENTS.md): vocabularios del MRP ligero — estados de reserva de material y códigos de gates de liberación de material con evidencia.",
-  "reservationStatuses": ["active", "released", "consumed"],
+  "comment": "Contract fixture de paridad TS\u2194Go (OC-050..OC-054, AGENTS.md): vocabularios del MRP ligero \u2014 estados de reserva de material y c\u00f3digos de gates de liberaci\u00f3n de material con evidencia.",
+  "reservationStatuses": [
+    "active",
+    "released",
+    "consumed"
+  ],
   "releaseCheckCodes": [
     "requirements_derived",
     "lines_reserved",
     "reservations_backed"
+  ],
+  "reservationCaps": [
+    {
+      "name": "remaining demand",
+      "required": 5,
+      "own": 2,
+      "stock": 20,
+      "wanted": [
+        10
+      ],
+      "reserved": 3,
+      "short": 0
+    },
+    {
+      "name": "duplicate rows share stock",
+      "required": 10,
+      "own": 0,
+      "stock": 3,
+      "wanted": [
+        2,
+        2
+      ],
+      "reserved": 3,
+      "short": 1
+    },
+    {
+      "name": "duplicate rows share demand",
+      "required": 3,
+      "own": 0,
+      "stock": 10,
+      "wanted": [
+        2,
+        2
+      ],
+      "reserved": 3,
+      "short": 0
+    },
+    {
+      "name": "negative ignored",
+      "required": 3,
+      "own": 0,
+      "stock": 10,
+      "wanted": [
+        -2
+      ],
+      "reserved": 0,
+      "short": 0
+    },
+    {
+      "name": "short stock",
+      "required": 10,
+      "own": 0,
+      "stock": 2,
+      "wanted": [
+        10
+      ],
+      "reserved": 2,
+      "short": 8
+    },
+    {
+      "name": "already covered",
+      "required": 3,
+      "own": 3,
+      "stock": 10,
+      "wanted": [
+        3
+      ],
+      "reserved": 0,
+      "short": 0
+    }
   ]
 }

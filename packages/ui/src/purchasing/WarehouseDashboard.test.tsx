@@ -154,3 +154,13 @@ describe('WarehouseDashboard', () => {
     expect(onOpenProject).toHaveBeenCalledWith('p1');
   });
 });
+
+it('keeps frozen sheets separate from area and mutable item counts', () => {
+  const frozen: WarehouseProjectInput = { id: 'frozen', name: 'Frozen', status: 'accepted', items: [{ quantity: 999 }], frozenBoardSheets: 2, boardAreaM2: 0, edgeLengthMl: 0, hardwareCount: 0 };
+  const view = render(<WarehouseDashboard projects={[frozen]} />);
+  expect(screen.getByTestId('wh-stat-boards').textContent).toContain('2 planchas');
+  expect(screen.getByTestId('wh-stat-boards').textContent).not.toContain('m²');
+  view.rerender(<WarehouseDashboard projects={[frozen, { id: 'older', name: 'Older', status: 'accepted', boardAreaM2: 3 }]} />);
+  expect(screen.getByTestId('wh-stat-boards').textContent).toContain('2 planchas + 3 m² sin convertir');
+  cleanup();
+});

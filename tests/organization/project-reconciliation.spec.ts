@@ -902,14 +902,32 @@ async function publishRevisionWithItemIds(options: {
     expect(materialsAfterMutation.planning.requirements.lines).toEqual(requirements.lines);
     expect(materialsAfterMutation.planning.requirements.source_design_revision_id).toBe(r1.id);
 
-    // 7. Almacén releases the materials (audited override: no stock seeded).
+    // #577 bounded warehouse continuity: actual server reservation uses the
+    // stored exact P1 plan after the newer design and catalog mutations above.
+    const stockResponse = await fetch(`${apiBase}/stock/movements`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ kind: 'tableros', material_id: OPS_MAT_ID, type: 'entrada', quantity: 1 }),
+    });
+    expect(stockResponse.status).toBe(201);
     await page.goto('/warehouse');
     await page.getByRole('tab', { name: 'Tableros' }).click();
     await page.getByTestId(`purch-release-${OPS_PROJECT_ID}`).click();
-    const overrideInput = page.getByTestId(`purch-plan-override-input-${OPS_PROJECT_ID}`);
-    await expect(overrideInput).toBeVisible();
-    await overrideInput.fill('E2E: liberar sin reservas (sin stock sembrado)');
-    await page.getByTestId(`purch-plan-override-release-${OPS_PROJECT_ID}`).click();
+    await expect(page.getByTestId(`purch-plan-provenance-${OPS_PROJECT_ID}`)).toContainText('Liberación #1');
+    const reserveRequest = page.waitForRequest((request) => request.url().endsWith(`/projects/${OPS_PROJECT_ID}/materials/reserve`));
+    await page.getByTestId(`purch-plan-reserve-${OPS_PROJECT_ID}`).click();
+    expect((await reserveRequest).postDataJSON().production_release_id).toBe(release.id);
+    await expect(page.getByTestId(`purch-plan-reserve-${OPS_PROJECT_ID}`)).toHaveCount(0);
+    const reserved = await (await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials`, { headers: authHeaders })).json();
+    expect(reserved.planning.requirements.lines).toEqual(requirements.lines);
+    expect(reserved.planning.reservations).toHaveLength(1);
+    expect(reserved.planning.reservations[0].quantity).toBe(1);
+
+    // 7. Almacén releases the exact reserved materials.
+
+    await page.goto('/warehouse');
+    await page.getByRole('tab', { name: 'Tableros' }).click();
+    await page.getByTestId(`purch-release-${OPS_PROJECT_ID}`).click();
+    await page.getByTestId(`purch-plan-release-${OPS_PROJECT_ID}`).click();
     // Released material moves the obra past Almacén: the card leaves the
     // almacén queue (never to appear in two queues at once).
     await expect(page.getByTestId(`purch-release-${OPS_PROJECT_ID}`)).toHaveCount(0, {

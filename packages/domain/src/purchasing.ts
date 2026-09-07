@@ -98,6 +98,7 @@ export type WarehouseDashboardStats = {
   readonly fullyPickedProjects: number;
   readonly pendingPickingProjects: number;
   readonly materialsReleasedProjects: number;
+  readonly totalFrozenBoardSheets: number;
   readonly totalBoardAreaM2: number;
   readonly boardAreaOrigin: DataTruthOrigin;
   readonly totalEdgeLengthMl: number;
@@ -131,6 +132,7 @@ export type WarehouseProjectInput = (Project | {
 }) & {
   readonly customerLabel?: string;
   readonly hardwareCount?: number;
+  readonly frozenBoardSheets?: number;
   readonly boardAreaM2?: number;
   readonly edgeLengthMl?: number;
 };
@@ -165,6 +167,7 @@ export function computeWarehouseDashboardStats(
     (p) => p.status === 'accepted' || p.status === 'produced',
   );
 
+  let totalFrozenBoardSheets = 0;
   let totalBoardAreaM2 = 0;
   let totalEdgeLengthMl = 0;
   let totalHardwareLines = 0;
@@ -202,6 +205,7 @@ export function computeWarehouseDashboardStats(
     const edgeLengthMl = p.edgeLengthMl ?? Math.round(moduleCount * 14 * 10) / 10;
     const hardwareCount = p.hardwareCount ?? moduleCount * 4;
 
+    totalFrozenBoardSheets += p.frozenBoardSheets ?? 0;
     totalBoardAreaM2 += boardAreaM2;
     totalEdgeLengthMl += edgeLengthMl;
     totalHardwareLines += hardwareCount;
@@ -287,6 +291,7 @@ export function computeWarehouseDashboardStats(
     fullyPickedProjects,
     pendingPickingProjects: activeProjects.length - fullyPickedProjects,
     materialsReleasedProjects,
+    totalFrozenBoardSheets,
     totalBoardAreaM2: Math.round(totalBoardAreaM2 * 100) / 100,
     boardAreaOrigin: activeProjects.length === 0 ? 'missing' : (hasProxyBoard ? 'proxy' : 'actual'),
     totalEdgeLengthMl: Math.round(totalEdgeLengthMl * 10) / 10,
