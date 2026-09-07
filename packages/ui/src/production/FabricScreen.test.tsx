@@ -54,7 +54,7 @@ describe('FabricScreen — Producción (manufacturing stations)', () => {
       ...makeProject('canonical', [makeItem('a')]),
       resolvedProductionRelease: { source: 'canonical' as const, releaseId: 'P1', releaseNumber: 1, designRevisionNumber: 2 },
     };
-    render(<FabricScreen projects={[canonical]} canAdvance onAdvance={advance} onGeneratePartExecutions={generate} />);
+    render(<FabricScreen projects={[canonical]} assignedSectors={['cutting']} canAdvance onAdvance={advance} onGeneratePartExecutions={generate} />);
     const button = screen.getByTestId('fabric-generate-parts-canonical') as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     expect(screen.getByTestId('fabric-routing-blocker-canonical').textContent).toContain('evidencia congelada');
