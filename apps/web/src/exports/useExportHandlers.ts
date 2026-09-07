@@ -45,7 +45,8 @@ import { downloadDespiecePdf } from '../exportDespiecePdf';
 import { downloadCutPlanPdf } from '../exportCutPlanPdf';
 import { downloadCutPlanDxf } from '../exportCutPlanDxf';
 import { resolveProjectDrilling } from '@granete/domain';
-import { downloadCutPlanPtx, ptxFileName } from '../exportCutPlanPtx';
+import JSZip from 'jszip';
+import { downloadCutPlanPtx, ptxFileName, ptxZipFileName } from '../exportCutPlanPtx';
 import { generateSelectedCuttingOutput } from '@granete/excel';
 import type { MachineOutputSelection } from '@granete/domain';
 import { runExport, type ExportDelivery } from './runExport';
@@ -480,22 +481,46 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     ) => {
       setExportBusy(true);
       try {
+        // The explicit per-click choice from Optimización is the single source
+        // of truth for bundling (unified vs per-material).
+        const selectedMode = mode ?? 'unified';
         // #591: when a machine output target is configured, normal generation
         // uses ONLY that tuple — blocked targets produce zero outputs (exact
-        // reason surfaced) and never fall back to the legacy generic PTX.
+        // reason surfaced) and never fall back to the legacy generic PTX. The
+        // bundling mode still applies: by-material yields one file per
+        // material, bundled in a .zip.
         if (machineOutputCuttingSelection) {
-          const bundle = await generateSelectedCuttingOutput(
+          const bundles = await generateSelectedCuttingOutput(
             cutPlan,
             machineOutputCuttingSelection,
+            selectedMode,
           );
-          downloadOptimizerXlsx(bundle.artifact.bytes, bundle.artifact.fileName);
+          const [singleBundle] = bundles;
+          if (singleBundle) {
+            downloadOptimizerXlsx(
+              singleBundle.artifact.bytes,
+              singleBundle.artifact.fileName,
+            );
+          } else {
+            const zip = new JSZip();
+            for (const bundle of bundles) {
+              zip.file(bundle.artifact.fileName, bundle.artifact.bytes);
+            }
+            const zipBytes = await zip.generateAsync({ type: 'uint8array' });
+            downloadOptimizerXlsx(
+              zipBytes,
+              ptxZipFileName(cutPlan.projectName || cutPlan.projectId),
+            );
+          }
           toast({
             type: 'success',
-            message: '✓ Archivo de corte generado con la salida configurada',
+            message:
+              selectedMode === 'by-material' && bundles.length > 1
+                ? `✓ ${bundles.length} archivos de corte por material generados con la salida configurada`
+                : '✓ Archivo de corte generado con la salida configurada',
           });
           return;
         }
-        const selectedMode = mode ?? workspaceSettings?.ptxExportMode ?? 'unified';
         await downloadCutPlanPtx(
           cutPlan,
           {
@@ -523,7 +548,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         setExportBusy(false);
       }
     },
-    [toast, workspaceSettings?.ptxExportMode, machineOutputCuttingSelection],
+    [toast, machineOutputCuttingSelection],
   );
 
   const handleReleaseToDelivery = useCallback(

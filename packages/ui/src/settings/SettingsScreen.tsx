@@ -81,9 +81,6 @@ export function SettingsScreen({
   );
 
   // Engineering / Production state
-  const [ptxExportMode, setPtxExportMode] = useState<'unified' | 'by-material'>(
-    settings.ptxExportMode ?? 'unified',
-  );
   const [cutStrategy, setCutStrategy] = useState<'saw-guillotine' | 'cnc-nesting'>(
     settings.defaultCutStrategy ?? 'saw-guillotine',
   );
@@ -108,7 +105,6 @@ export function SettingsScreen({
     setCurrency(settings.defaultCurrency);
     setVendedorCanViewCosts(settings.vendedorCanViewCosts);
     setWorkshopName(settings.workshopName ?? '');
-    setPtxExportMode(settings.ptxExportMode ?? 'unified');
     setCutStrategy(settings.defaultCutStrategy ?? 'saw-guillotine');
     setSawKerf(String(settings.defaultSawKerfMm ?? 4.4));
     setTrimTop(String(settings.defaultTrimMargins?.topMm ?? 10));
@@ -163,7 +159,6 @@ export function SettingsScreen({
       defaultCurrency: cur,
       vendedorCanViewCosts,
       workshopName: workshopName.trim() || undefined,
-      ptxExportMode,
       defaultCutStrategy: cutStrategy,
       defaultSawKerfMm: kerfVal,
       defaultTrimMargins: {
@@ -426,37 +421,6 @@ export function SettingsScreen({
                 Estándares de taller para seccionadoras CNC (SCM Gabbiani/Sigma, HOMAG/Holzma, Biesse Selco, etc.).
               </p>
               {machineOutput ? <MachineOutputSelectionSection {...machineOutput} /> : null}
-
-              <div className="catalog-form__field">
-                <label>Modo de empaquetado PTX por defecto</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
-                    <input
-                      type="radio"
-                      name="ptxExportMode"
-                      value="unified"
-                      checked={ptxExportMode === 'unified'}
-                      onChange={() => setPtxExportMode('unified')}
-                      data-testid="settings-ptx-mode-unified"
-                    />
-                    <span><strong>Archivo consolidado:</strong> 1 único archivo .ptx con todos los tableros y materiales.</span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
-                    <input
-                      type="radio"
-                      name="ptxExportMode"
-                      value="by-material"
-                      checked={ptxExportMode === 'by-material'}
-                      onChange={() => setPtxExportMode('by-material')}
-                      data-testid="settings-ptx-mode-by-material"
-                    />
-                    <span><strong>Separado por material:</strong> 1 archivo .ptx independiente por cada acabado/espesor (empaquetado en .zip).</span>
-                  </label>
-                </div>
-                <span className="settings-hint" style={{ marginTop: 6 }}>
-                  Recomendado: <em>Separado por material</em> si el operador de la seccionadora procesa lotes por acabado.
-                </span>
-              </div>
 
               <div className="catalog-form__field">
                 <label htmlFor="settings-saw-kerf">Espesor de disco de corte / Kerf (mm)</label>

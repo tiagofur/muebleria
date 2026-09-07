@@ -202,19 +202,29 @@ function emptyDrilling() {
 
 import type { CutPlan } from '@granete/domain';
 import { generateMachineArtifact, type MachineArtifactBundle } from './machineArtifacts';
+import {
+  cutPlanForMaterialGroup,
+  groupCutPlanSheetsByMaterial,
+  sanitizeFileNameToken,
+} from '../ptxCutPlanExport';
 import { ValidationError } from '@granete/domain';
+
+export type CuttingOutputMode = 'unified' | 'by-material';
 
 /**
  * Normal-production cutting generation through the EXACT selected target
- * (#591). Produces exactly ONE artifact; when the target is blocked it throws
- * with the typed reasons — it never falls back to another profile and never
- * bulk-generates candidates. NO_OUTPUT_CONFIGURED also throws: the legacy
- * unconfigured flow is decided by the caller, not silently here.
+ * (#591). 'unified' produces exactly ONE artifact; 'by-material' produces one
+ * artifact per material group (same grouping key as the generic per-material
+ * PTX export). When the target is blocked it throws with the typed reasons —
+ * it never falls back to another profile and never bulk-generates candidates.
+ * NO_OUTPUT_CONFIGURED also throws: the legacy unconfigured flow is decided by
+ * the caller, not silently here.
  */
 export async function generateSelectedCuttingOutput(
   cutPlan: CutPlan,
   selection: MachineOutputSelection,
-): Promise<MachineArtifactBundle> {
+  mode: CuttingOutputMode = 'unified',
+): Promise<readonly MachineArtifactBundle[]> {
   const resolved = resolveManufacturingOutputTarget(selection, 'cutting');
   if (resolved.status !== 'CONFIGURED') {
     throw new ValidationError('no hay salida de máquina configurada para corte', {
@@ -232,33 +242,65 @@ export async function generateSelectedCuttingOutput(
   )!;
   const adapter = adapterForFamily(profile.formatFamily)!;
   const kind = profile.formatFamily === 'ptx' ? ('ptx' as const) : ('saw' as const);
-  return generateMachineArtifact({
-    job: {
-      jobId: cutPlan.id,
-      provenance: {
-        projectId: cutPlan.projectId,
-        generatedAt: cutPlan.generatedAt,
-        cutPlanId: cutPlan.id,
-        cutPlanVersion: cutPlan.version,
+  const extension = profile.dimensions.fileExtension ?? 'pending';
+
+  const buildBundle = (
+    plan: CutPlan,
+    jobId: string,
+    fileName: string,
+  ): Promise<MachineArtifactBundle> =>
+    generateMachineArtifact({
+      job: {
+        jobId,
+        provenance: {
+          projectId: cutPlan.projectId,
+          generatedAt: cutPlan.generatedAt,
+          cutPlanId: cutPlan.id,
+          cutPlanVersion: cutPlan.version,
+        },
+        cutPlan: plan,
+        presentation: {
+          projectName: cutPlan.projectName ?? cutPlan.projectId,
+          projectCode: cutPlan.projectId,
+        },
       },
-      cutPlan,
-      presentation: {
-        projectName: cutPlan.projectName ?? cutPlan.projectId,
-        projectCode: cutPlan.projectId,
+      adapter: adapter as typeof PTX_POSTPROCESSOR_ADAPTER,
+      profile,
+      kind,
+      schemaVersion: String(profile.dimensions.headerVersion ?? 'pending-evidence'),
+      fileName,
+      machineProfile: {
+        ref: KNOWN_MACHINE_PROFILES.find(
+          (m) => m.ref.machineProfileId === selection.machineProfileId,
+        )!.ref,
+        supported: [],
       },
-    },
-    adapter: adapter as typeof PTX_POSTPROCESSOR_ADAPTER,
-    profile,
-    kind,
-    schemaVersion: String(profile.dimensions.headerVersion ?? 'pending-evidence'),
-    fileName: `corte-${cutPlan.projectId}.${profile.dimensions.fileExtension ?? 'pending'}`,
-    machineProfile: {
-      ref: KNOWN_MACHINE_PROFILES.find(
-        (m) => m.ref.machineProfileId === selection.machineProfileId,
-      )!.ref,
-      supported: [],
-    },
-  });
+    });
+
+  if (mode === 'by-material') {
+    const groups = groupCutPlanSheetsByMaterial(cutPlan);
+    if (groups.length > 0) {
+      const bundles: MachineArtifactBundle[] = [];
+      for (const group of groups) {
+        const safeMat = sanitizeFileNameToken(
+          group.materialCode !== 'DEFAULT' ? group.materialCode : group.materialName,
+        );
+        bundles.push(
+          await buildBundle(
+            cutPlanForMaterialGroup(cutPlan, group),
+            `${cutPlan.id}--${safeMat}`,
+            `corte-${cutPlan.projectId}-${safeMat}.${extension}`,
+          ),
+        );
+      }
+      return bundles;
+    }
+    // No sheets to group — degenerate plan still exports as one artifact.
+  }
+
+  return [
+    await buildBundle(cutPlan, cutPlan.id, `corte-${cutPlan.projectId}.${extension}`),
+  ];
 }
 
 export { machineOutputBlockerMessageEs } from '@granete/domain';

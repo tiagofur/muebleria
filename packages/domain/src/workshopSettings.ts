@@ -9,7 +9,6 @@ export const DEFAULT_WORKSHOP_SETTINGS: WorkshopSettings = {
   defaultLaborFixedCost: 0,
   defaultCurrency: 'MXN',
   vendedorCanViewCosts: false,
-  ptxExportMode: 'unified',
   defaultSawKerfMm: 4.4,
   defaultTrimMargins: {
     topMm: 10,
@@ -32,7 +31,6 @@ export function resolveWorkshopSettings(
   const currency = settings.defaultCurrency?.trim();
   const name = settings.workshopName?.trim();
 
-  const ptxMode = settings.ptxExportMode;
   const kerf = settings.defaultSawKerfMm;
   const trim = settings.defaultTrimMargins;
   const deductEdge = settings.defaultDeductEdgeBand;
@@ -54,10 +52,6 @@ export function resolveWorkshopSettings(
         ? settings.vendedorCanViewCosts
         : DEFAULT_WORKSHOP_SETTINGS.vendedorCanViewCosts,
     workshopName: name || undefined,
-    ptxExportMode:
-      ptxMode === 'by-material' || ptxMode === 'unified'
-        ? ptxMode
-        : DEFAULT_WORKSHOP_SETTINGS.ptxExportMode,
     defaultSawKerfMm:
       typeof kerf === 'number' && Number.isFinite(kerf) && kerf >= 0
         ? kerf

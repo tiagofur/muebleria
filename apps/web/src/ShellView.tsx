@@ -1306,7 +1306,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onSaveCutPlan={(plan) => { projectActions.saveCutPlan(engProject.id, plan); }}
             onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
             onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
-            onExportCutPlanPtx={(plan) => { void handleExportCutPlanPtx(plan); }}
+            onExportCutPlanPtx={(plan, mode) => { void handleExportCutPlanPtx(plan, mode); }}
             canImportNesting={canMarkProduced || canExportProductionUnion}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
             exportBusy={exportBusy}
