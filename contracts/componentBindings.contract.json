@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "goPiecePrefix": "mod-",
+  "tsPiecePrefix": "",
+  "comment": "Existing engines use distinct module-piece namespaces; this helper preserves each, not cross-runtime ID equality.",
+  "parameters": [
+    {
+      "name": "shelfCount", "label": "Shelves", "type": "number",
+      "defaultValue": 2, "required": true, "category": "configuration",
+      "unit": "count", "integer": true, "min": 0, "max": 8,
+      "binding": { "version": 1, "kind": "componentQuantity", "componentId": "comp-lateral" }
+    },
+    {
+      "name": "includeBack", "label": "Back", "type": "boolean",
+      "defaultValue": true, "required": true, "category": "configuration",
+      "binding": { "version": 1, "kind": "componentCondition", "componentId": "comp-back" }
+    }
+  ],
+  "cases": [
+    { "name": "first physical unit", "values": { "shelfCount": 2, "includeBack": true },
+      "quantities": [2, 1],
+      "pieceIds": ["comp-lateral-copy-0", "comp-lateral-copy-1", "comp-back-copy-0"] },
+    { "name": "second physical unit same definition", "values": { "shelfCount": 5, "includeBack": true },
+      "quantities": [5, 1],
+      "pieceIds": ["comp-lateral-copy-0", "comp-lateral-copy-1", "comp-lateral-copy-2", "comp-lateral-copy-3", "comp-lateral-copy-4", "comp-back-copy-0"] },
+    { "name": "disabled condition", "values": { "shelfCount": 3, "includeBack": false },
+      "quantities": [3],
+      "pieceIds": ["comp-lateral-copy-0", "comp-lateral-copy-1", "comp-lateral-copy-2"] },
+    { "name": "zero quantity removes entry", "values": { "shelfCount": 0, "includeBack": true },
+      "quantities": [1],
+      "pieceIds": ["comp-back-copy-0"] },
+    { "name": "declared defaults", "values": {},
+      "quantities": [2, 1],
+      "pieceIds": ["comp-lateral-copy-0", "comp-lateral-copy-1", "comp-back-copy-0"] },
+    { "name": "numeric string rejected", "values": { "shelfCount": "3" }, "issue": "PARAMETER_TYPE_INVALID" },
+    { "name": "boolean string rejected", "values": { "includeBack": "false" }, "issue": "PARAMETER_TYPE_INVALID" },
+    { "name": "unknown name rejected", "values": { "unknown": 3 }, "issue": "PARAMETER_UNKNOWN" },
+    { "name": "out of range rejected", "values": { "shelfCount": 9 }, "issue": "PARAMETER_OUT_OF_RANGE" },
+    { "name": "fraction rejected", "values": { "shelfCount": 1.5 }, "issue": "PARAMETER_TYPE_INVALID" }
+  ]
+}

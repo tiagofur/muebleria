@@ -217,7 +217,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 
 	// Apply declarative consumers before any authoritative expansion. Parameter
 	// names never select behavior here; only the versioned binding does.
-	input.Module = applyAuthoringParameterBindings(input.Module, input.EvaluatedParameters)
+	input.Module = ApplyEvaluatedComponentBindings(input.Module, input.EvaluatedParameters)
 
 	// 1. Dry-run the default expansion to collect the template index the
 	// snapshot must map onto (structure/module/agregado walk, same code path
@@ -306,45 +306,6 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		ValidationStatus: validationStatusFor(manufacturing),
 		ValidationIssues: manufacturing,
 	}, nil
-}
-
-func applyAuthoringParameterBindings(module domain.Module, values map[string]any) domain.Module {
-	for _, definition := range module.ParameterDefinitions {
-		binding := definition.Binding
-		if binding == nil || (binding.Kind != domain.FurnitureParameterBindingComponentQuantity && binding.Kind != domain.FurnitureParameterBindingComponentCondition) {
-			continue
-		}
-		quantity := -1
-		if binding.Kind == domain.FurnitureParameterBindingComponentQuantity {
-			value, ok := values[definition.Name].(float64)
-			if !ok {
-				continue
-			}
-			quantity = int(value)
-		} else {
-			value, ok := values[definition.Name].(bool)
-			if !ok {
-				continue
-			}
-			if !value {
-				quantity = 0
-			}
-		}
-		updated := make([]domain.ComponentInstance, 0, len(module.Components))
-		for _, instance := range module.Components {
-			if instance.ComponentID == binding.ComponentID {
-				if quantity == 0 {
-					continue
-				}
-				if quantity > 0 {
-					instance.Quantity = quantity
-				}
-			}
-			updated = append(updated, instance)
-		}
-		module.Components = updated
-	}
-	return module
 }
 
 func filterDisabledConditionDependents(input *AuthoringResolveInput) {
