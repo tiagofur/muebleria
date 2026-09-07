@@ -138,13 +138,14 @@ export {
 
 export {
   buildActualReadbackTemplate,
-  comparePtxReadback,
   type PtxActualReadback,
   type PtxExpectedReadback,
   type PtxFindingClassification,
   type PtxReadbackComparison,
   type PtxReadbackFinding,
 } from './ptxReadback';
+
+export { comparePtxReadback } from './ptxReadbackCompare';
 
 export {
   buildExpectedPtxReadback,

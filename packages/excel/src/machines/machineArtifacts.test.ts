@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AdapterSerializationBlocked } from '@granete/domain';
+import { AdapterSerializationBlocked, DomainError } from '@granete/domain';
 import {
   buildFixtureCuttingJob,
   buildFixtureCuttingJobPartialProvenance,
@@ -97,5 +97,22 @@ describe('generateMachineArtifact', () => {
         fileName: 'test-cadmatic3.ptx',
       }),
     ).rejects.toBeInstanceOf(AdapterSerializationBlocked);
+  });
+
+  it('blocked serialization is a DomainError with structured context', async () => {
+    const thrown: unknown = await generateMachineArtifact({
+      ...GENERIC_REQUEST,
+      profile: PTX_CADMATIC_3_PROFILE,
+      fileName: 'test-cadmatic3.ptx',
+    }).then(
+      () => undefined,
+      (rejection: unknown) => rejection,
+    );
+    expect(thrown).toBeInstanceOf(AdapterSerializationBlocked);
+    const error = thrown as AdapterSerializationBlocked;
+
+    expect(error).toBeInstanceOf(DomainError);
+    expect(error.reasons.length).toBeGreaterThan(0);
+    expect((error.context as { reasons?: unknown }).reasons).toBe(error.reasons);
   });
 });

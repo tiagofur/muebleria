@@ -23,6 +23,7 @@
 import type { CutPlan } from './optimizer/types';
 import type { MachineCapability, MachineProfileRef } from './sketchupAuthoringSchema';
 import type { ProjectDrillingData } from './partDrilling';
+import { DomainError } from './errors';
 
 // ---------------------------------------------------------------------------
 // Evidence provenance vocabulary (mirrors docs/machines/README.md)
@@ -191,12 +192,13 @@ export interface PostprocessorAdapter<Job = unknown> {
   serialize(job: Job, profile: OutputCompatibilityProfile): Uint8Array;
 }
 
-export class AdapterSerializationBlocked extends Error {
+export class AdapterSerializationBlocked extends DomainError {
   constructor(
     readonly reasons: readonly AdapterBlockReason[],
   ) {
     super(
       `machine output blocked: ${reasons.map((r) => `${r.code}(${r.detail})`).join('; ')}`,
+      { reasons },
     );
     this.name = 'AdapterSerializationBlocked';
   }
