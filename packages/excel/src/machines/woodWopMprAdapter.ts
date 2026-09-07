@@ -99,7 +99,12 @@ function pendingReasons(
   job: ResolvedMachiningJob,
   profile: OutputCompatibilityProfile,
 ): AdapterBlockReason[] {
-  const reasons: AdapterBlockReason[] = [];
+  const reasons: AdapterBlockReason[] = [
+    {
+      code: 'SERIALIZER_NOT_IMPLEMENTED',
+      detail: 'woodWOP MPR serializer is not implemented yet; even fully evidenced profiles stay blocked until the real serializer lands',
+    },
+  ];
   for (const dimension of MPR_REQUIRED_DIMENSIONS) {
     if (profile.dimensions[dimension] === undefined) {
       reasons.push({
@@ -136,12 +141,12 @@ export const WOODWOP_MPR_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedMac
     if (!readiness.ready) {
       throw new AdapterSerializationBlocked(readiness.reasons);
     }
-    // Unreachable until mpr-woodwop publishes an evidenced revision: the
-    // record serializer is intentionally not implemented ahead of evidence.
+    // Unreachable by contract while the serializer is pending: readiness
+    // always contains SERIALIZER_NOT_IMPLEMENTED, so the guard above fires.
     throw new AdapterSerializationBlocked([
       {
-        code: 'FIELD_FORMAT_EVIDENCE_REQUIRED',
-        detail: 'MPR serializer implementation pending its first evidenced profile revision',
+        code: 'SERIALIZER_NOT_IMPLEMENTED',
+        detail: 'woodWOP MPR serializer is not implemented yet',
       },
     ]);
   },

@@ -22,7 +22,14 @@ describe('buildClientValidationPack', () => {
     for (const entry of pack.notGenerated) {
       expect(entry.reasons.length).toBeGreaterThan(0);
       expect(entry.neededEvidence.length).toBeGreaterThan(0);
-      expect(entry.reasons.every((r) => r.code === 'FIELD_FORMAT_EVIDENCE_REQUIRED' || r.code === 'OPERATION_NOT_REPRESENTABLE')).toBe(true);
+      expect(
+        entry.reasons.every(
+          (r) =>
+            r.code === 'FIELD_FORMAT_EVIDENCE_REQUIRED' ||
+            r.code === 'OPERATION_NOT_REPRESENTABLE' ||
+            r.code === 'SERIALIZER_NOT_IMPLEMENTED',
+        ),
+      ).toBe(true);
     }
   });
 

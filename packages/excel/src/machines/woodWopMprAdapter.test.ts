@@ -10,7 +10,7 @@ import {
   MPR_ADAPTER_IMPLEMENTATION_DESCRIPTOR,
   WOODWOP_MPR_POSTPROCESSOR_ADAPTER,
 } from './woodWopMprAdapter';
-import { MPR_WOODWOP_PROFILE, PTX_GENERIC_PROFILE } from './profiles';
+import { MPR_WOODWOP_PROFILE, MPR_REQUIRED_DIMENSIONS, PTX_GENERIC_PROFILE } from './profiles';
 import { canonicalJson, sha256Hex } from './digest';
 
 describe('WOODWOP_MPR_POSTPROCESSOR_ADAPTER (evidence gate)', () => {
@@ -72,6 +72,42 @@ describe('WOODWOP_MPR_POSTPROCESSOR_ADAPTER (evidence gate)', () => {
     expect(
       readiness.reasons.find((r) => r.code === 'OPERATION_NOT_REPRESENTABLE')?.detail,
     ).toContain('2 horizontal-drilling');
+  });
+
+  it('NEVER advertises ready while the serializer is unimplemented, even on a complete profile', () => {
+    const job = buildFixtureMachiningJob();
+    // Complete synthetic profile: every required dimension evidenced and
+    // operationMacros covers every kind present in the fixture.
+    const complete: OutputCompatibilityProfile = {
+      ...MPR_WOODWOP_PROFILE,
+      ref: { outputCompatibilityProfileId: 'mpr-woodwop-test-complete', revisionId: 'rX' },
+      dimensions: {
+        fileExtension: 'mpr',
+        encoding: 'ascii',
+        versionHeader: 'sample',
+        coordinateConvention: 'sample',
+        faceConvention: 'sample',
+        toolIdConvention: 'sample',
+        macroSyntax: 'sample',
+        operationMacros: 'vertical-drilling,horizontal-drilling',
+      },
+      // Empty on purpose: readiness must NOT depend on pendingEvidence.
+      pendingEvidence: [],
+    };
+    expect(Object.keys(complete.dimensions).sort()).toEqual(
+      [...MPR_REQUIRED_DIMENSIONS].slice().sort(),
+    );
+    expect(describeUnrepresentableOperations(job, complete)).toEqual([]);
+
+    const readiness = WOODWOP_MPR_POSTPROCESSOR_ADAPTER.canSerialize(job, complete);
+    expect(readiness.ready).toBe(false);
+    // Blocked EXCLUSIVELY by missing implementation — not evidence, not ops.
+    expect(readiness.reasons).toHaveLength(1);
+    expect(readiness.reasons[0]!.code).toBe('SERIALIZER_NOT_IMPLEMENTED');
+
+    expect(() => WOODWOP_MPR_POSTPROCESSOR_ADAPTER.serialize(job, complete)).toThrow(
+      AdapterSerializationBlocked,
+    );
   });
 
   it('rejects wrong format family (never serializes machining through PTX)', () => {

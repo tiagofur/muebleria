@@ -93,6 +93,12 @@ Reglas implementadas (`packages/domain/src/machineOutput.ts` +
   como `FIELD_FORMAT_EVIDENCE_REQUIRED` y hace que el adapter **falle cerrado**
   — nunca se adivina desde artículos públicos (`PUBLIC_REFERENCE_ONLY` no
   serializa).
+- **Readiness de un adapter = evidencia de formato/perfil + representabilidad
+  de operaciones + disponibilidad de implementación del serializer.**
+  `canSerialize(...).ready === true` GARANTIZA que `serialize(...)` es
+  ejecutable para ese job/profile. Un serializer pendiente reporta
+  `SERIALIZER_NOT_IMPLEMENTED` (código distinto de evidencia faltante) incluso
+  sobre perfiles totalmente evidenciados — perfil listo ≠ adapter listo.
 - Los perfiles con marca (CADmatic, woodWOP, SAW HOMAG) viven en la capa de
   export; el dominio neutral no contiene nombres de marca ni ramas por
   cliente/máquina.

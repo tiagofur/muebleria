@@ -156,7 +156,8 @@ export interface AdapterBlockReason {
     | 'FIELD_FORMAT_EVIDENCE_REQUIRED'
     | 'FORMAT_FAMILY_MISMATCH'
     | 'OPERATION_NOT_REPRESENTABLE'
-    | 'PROFILE_DIGEST_MISMATCH';
+    | 'PROFILE_DIGEST_MISMATCH'
+    | 'SERIALIZER_NOT_IMPLEMENTED';
   readonly detail: string;
   readonly dimension?: string;
 }
@@ -179,6 +180,14 @@ export interface MachiningOperationDescriptor {
  * Thin serializer over a resolved job. Implementations MUST be deterministic
  * and MUST fail closed (AdapterSerializationBlocked) instead of emitting
  * partial or guessed output.
+ *
+ * Readiness contract: `canSerialize(job, profile).ready === true` GUARANTEES
+ * that `serialize(job, profile)` executes for that job/profile — it means the
+ * format family matches, every required dimension is evidenced, every
+ * operation is representable AND the serializer implementation exists.
+ * An adapter whose serializer is not implemented yet must therefore report
+ * ready=false with `SERIALIZER_NOT_IMPLEMENTED`, even on fully evidenced
+ * profiles.
  */
 export interface PostprocessorAdapter<Job = unknown> {
   readonly postprocessorAdapterId: string;

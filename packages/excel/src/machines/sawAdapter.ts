@@ -15,6 +15,7 @@
 
 import {
   AdapterSerializationBlocked,
+  type AdapterBlockReason,
   type AdapterReadiness,
   type OutputCompatibilityProfile,
   type PostprocessorAdapter,
@@ -31,18 +32,24 @@ export const SAW_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
   generator: 'pending-evidence',
 } as const;
 
-function pendingReasons(profile: OutputCompatibilityProfile): AdapterReadiness['reasons'] {
-  const reasons = [];
+function pendingReasons(profile: OutputCompatibilityProfile): readonly AdapterBlockReason[] {
+  const evidenceReasons: AdapterBlockReason[] = [];
   for (const dimension of SAW_REQUIRED_DIMENSIONS) {
     if (profile.dimensions[dimension] === undefined) {
-      reasons.push({
-        code: 'FIELD_FORMAT_EVIDENCE_REQUIRED' as const,
+      evidenceReasons.push({
+        code: 'FIELD_FORMAT_EVIDENCE_REQUIRED',
         dimension,
         detail: `SAW dimension '${dimension}' requires a real .saw sample/spec from Client A before serialization`,
       });
     }
   }
-  return reasons;
+  return [
+    {
+      code: 'SERIALIZER_NOT_IMPLEMENTED',
+      detail: 'SAW serializer is not implemented yet; even fully evidenced profiles stay blocked until the real serializer lands',
+    },
+    ...evidenceReasons,
+  ];
 }
 
 export const SAW_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob> = {
@@ -62,12 +69,12 @@ export const SAW_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob>
     if (!readiness.ready) {
       throw new AdapterSerializationBlocked(readiness.reasons);
     }
-    // Unreachable until saw-homag publishes an evidenced revision: the
-    // serializer is intentionally not implemented ahead of its evidence.
+    // Unreachable by contract while the serializer is pending: readiness
+    // always contains SERIALIZER_NOT_IMPLEMENTED, so the guard above fires.
     throw new AdapterSerializationBlocked([
       {
-        code: 'FIELD_FORMAT_EVIDENCE_REQUIRED',
-        detail: 'SAW serializer implementation pending its first evidenced profile revision',
+        code: 'SERIALIZER_NOT_IMPLEMENTED',
+        detail: 'SAW serializer is not implemented yet',
       },
     ]);
   },
