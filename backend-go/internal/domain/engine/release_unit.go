@@ -96,6 +96,9 @@ func ResolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog) 
 		}
 	}
 	prepared := ApplyEvaluatedComponentBindings(module, values)
+	if err := validateReleaseUnitExpansion(prepared, catalog); err != nil {
+		return nil, fmt.Errorf("release unit expansion: %w", err)
+	}
 	bom, err := ResolveBomWithContext(prepared, item.MaterialChoices, catalog, nil, "", nil, dims)
 	if err != nil {
 		return nil, err

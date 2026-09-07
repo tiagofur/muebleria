@@ -1,3 +1,9 @@
+## #577 — pre-expansion release-unit budget (partial)
+
+- Guard the prepared Go release unit before the existing BOM expansion: at most 10,000 conservative work units across physical boards, hardware rows and agregado repetition; reserve six rows for possible base synthesis.
+- Check effective typed/default/static quantities and the referenced structure/component/agregado closure with overflow-safe arithmetic; unrelated catalog records do not block resolution. Existing bounded BOM and non-positive agregado default semantics are preserved.
+- Focused release-unit and full Go domain tests pass; the existing unknown-definition-field domain subtest remains skipped because its API envelope owns that proof. No capture, collection, consumers, machine outputs or ledger changes; #577 remains incomplete.
+
 ## #577 — strict Go revision-unit resolution, chain unit 4B (partial)
 
 - Resolve one unversioned revision item through the existing BOM engine, preserving physical/definition identity and evaluating typed defaults without mutating inputs.
