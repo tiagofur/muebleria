@@ -6,6 +6,18 @@
 - Implementación `packages/excel/src/machines/`: adapter PTX (un serializador, el existente, byte-identical al golden #348) + perfiles versionados `ptx-generic` r1 / `ptx-cadmatic-3/4/5` / `saw-homag` / `mpr-woodwop` — CADmatic/SAW/MPR sin dimensiones evidenciadas → fallan cerrado con `FIELD_FORMAT_EVIDENCE_REQUIRED`; machine profiles HPP 250/BHX 050 con cero capabilities inferidas; pack de validación Client A (`buildClientValidationPack`) que hoy genera sólo `test-generic.ptx` + manifests y lista la evidencia exacta que falta por archivo.
 - 31 tests nuevos (determinismo, digests de perfil/adapter verificados, fail-closed, no-silent-drop de operaciones MPR, identidad de duplicados, manifest sin "latest" implícito); typecheck y suite excel completos verdes. Sin claim de compatibilidad: todo `NOT_TESTED`.
 - Corrección de contrato tras review: `SERIALIZER_NOT_IMPLEMENTED` como razón neutral distinta de `FIELD_FORMAT_EVIDENCE_REQUIRED`; SAW/MPR nunca reportan `ready=true` sin serializer real (invariante `ready ⇒ serialize ejecutable` probada en `adapterContract.test.ts`); PTX sin cambios (byte-identical al golden).
+## #577 — shared resolved-BOM demand aggregation (partial)
+
+- Added one pure resolved-BOM + physical-quantity batch adapter; the project adapter resolves each item once and delegates without rerunning hardware resolution.
+- Whole-collection sheet/package rounding reuses existing metrics/purchase helpers; deterministic output and fail-closed native-unit aggregate guards retain board-only, hardware-only and empty-project semantics.
+- Typed two-unit isolation, missing/inactive inputs, overflow and no-partial-output tests pass; existing TS/Go requirement and binding fixtures remain unchanged.
+- Go domain and focused race tests, TS domain/parity and domain typecheck pass; the existing unknown-definition-field Go subtest remains schema-layer-only/skipped. Full closing gate and exact-head CI remain required.
+- No collection identity/capture, API, storage, operational consumer or machine integration is wired; #577 and F202/ledger remain unchanged. Review mode: disabled/unmanaged.
+## #577 — pre-expansion release-unit budget (partial)
+
+- Guard the prepared Go release unit before the existing BOM expansion: at most 10,000 conservative work units across physical boards, hardware rows and agregado repetition; reserve six rows for possible base synthesis.
+- Check effective typed/default/static quantities and the referenced structure/component/agregado closure with overflow-safe arithmetic; unrelated catalog records do not block resolution. Existing bounded BOM and non-positive agregado default semantics are preserved.
+- Focused release-unit and full Go domain tests pass; the existing unknown-definition-field domain subtest remains skipped because its API envelope owns that proof. No capture, collection, consumers, machine outputs or ledger changes; #577 remains incomplete.
 
 ## #577 — strict Go revision-unit resolution, chain unit 4B (partial)
 
