@@ -236,14 +236,16 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
     expect(screen.getByTestId('prod-opt-export-pdf-manual')).toBeTruthy();
     expect(screen.getByTestId('prod-opt-export-optimizer-xlsx')).toBeTruthy();
     expect(screen.getByTestId('prod-opt-export-ptx')).toBeTruthy();
-    expect(screen.getByTestId('prod-opt-export-ptx-by-material')).toBeTruthy();
     expect(screen.queryByTestId('prod-opt-export-dxf-sheets')).toBeNull();
     expect(screen.queryByTestId('prod-opt-export-dxf-pieces')).toBeNull();
 
+    // Default unificado: una sola descarga con el modo seleccionado.
     fireEvent.click(screen.getByTestId('prod-opt-export-ptx'));
     expect(onExportCutPlanPtx).toHaveBeenCalledWith(expect.anything(), 'unified');
 
-    fireEvent.click(screen.getByTestId('prod-opt-export-ptx-by-material'));
+    // Cambio explícito a por material: la elección operacional viaja en el click.
+    fireEvent.click(screen.getByTestId('prod-opt-ptx-mode-by-material'));
+    fireEvent.click(screen.getByTestId('prod-opt-export-ptx'));
     expect(onExportCutPlanPtx).toHaveBeenCalledWith(expect.anything(), 'by-material');
   });
 
@@ -293,5 +295,119 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
     );
 
     expect(screen.getByText('Refilar bordes perimetrales')).toBeTruthy();
+  });
+});
+
+describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, modo y preview', () => {
+  function multiMaterialPlan(): CutPlan {
+    const base = cutPlanFixture('saw-guillotine');
+    const secondSheet = {
+      ...base.sheets[0]!,
+      sheetIndex: 1,
+      materialCode: 'ROBLE_NORD',
+      materialName: 'Roble Nórdico 18mm',
+      pieces: base.sheets[0]!.pieces.map((p) => ({
+        ...p,
+        materialCode: 'ROBLE_NORD',
+        materialName: 'Roble Nórdico 18mm',
+        sheetIndex: 1,
+      })),
+    };
+    return {
+      ...base,
+      sheets: [base.sheets[0]!, secondSheet],
+      stats: { ...base.stats, totalSheets: 2, totalPieces: 2 },
+    };
+  }
+
+  it('sin salida de máquina configurada lo dice honesto y el preview unificado muestra 1 archivo', () => {
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+        catalog={null}
+        cutRows={[]}
+      />,
+    );
+    expect(screen.getByTestId('prod-opt-cutting-output').textContent).toContain(
+      'PTX genérico v1.14',
+    );
+    expect(screen.getByTestId('prod-opt-ptx-preview').textContent).toContain(
+      'Se descargará 1 archivo PTX',
+    );
+    expect(screen.queryByTestId('prod-opt-cutting-output-blocked')).toBeNull();
+  });
+
+  it('muestra la salida configurada derivada del MachineOutputSelection real', () => {
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+        catalog={null}
+        cutRows={[]}
+        cuttingOutputTarget={{
+          machineLabel: 'HOLZMA (HOMAG) HPP 250',
+          formatLabel: 'PTX',
+          profileLabel: 'ptx-cadmatic-5@r1',
+          ready: true,
+          blockerMessage: '',
+        }}
+      />,
+    );
+    expect(screen.getByTestId('prod-opt-cutting-output').textContent).toContain(
+      'HOLZMA (HOMAG) HPP 250 · PTX · ptx-cadmatic-5@r1',
+    );
+  });
+
+  it('salida configurada bloqueada: muestra la razón ANTES de descargar y deshabilita el botón', () => {
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+        catalog={null}
+        cutRows={[]}
+        cuttingOutputTarget={{
+          machineLabel: 'HOLZMA (HOMAG) HPP 250',
+          formatLabel: 'PTX',
+          profileLabel: 'ptx-cadmatic-4@r1',
+          ready: false,
+          blockerMessage:
+            'No se puede generar este archivo todavía: faltan datos confirmados del formato (fileExtension).',
+        }}
+      />,
+    );
+    const blocked = screen.getByTestId('prod-opt-cutting-output-blocked');
+    expect(blocked.textContent).toContain('No se puede generar este archivo todavía');
+    expect(
+      (screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it('modo por material: preview cuenta materiales → archivos dentro de un ZIP y los lista', () => {
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: multiMaterialPlan() }}
+        catalog={null}
+        cutRows={[]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('prod-opt-ptx-mode-by-material'));
+    expect(screen.getByTestId('prod-opt-ptx-preview').textContent).toContain(
+      '2 materiales → 2 archivos PTX dentro de un ZIP',
+    );
+    const chips = screen.getByTestId('prod-opt-ptx-materials');
+    expect(chips.textContent).toContain('MDF Blanco 18mm');
+    expect(chips.textContent).toContain('Roble Nórdico 18mm');
+  });
+
+  it('modo por material sin plan: botón deshabilitado (nada que separar)', () => {
+    render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={null}
+        cutRows={[]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('prod-opt-ptx-mode-by-material'));
+    expect(
+      (screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });

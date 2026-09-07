@@ -203,9 +203,10 @@ function emptyDrilling() {
 import type { CutPlan } from '@granete/domain';
 import { generateMachineArtifact, type MachineArtifactBundle } from './machineArtifacts';
 import {
+  cutFileToken,
   cutPlanForMaterialGroup,
   groupCutPlanSheetsByMaterial,
-  sanitizeFileNameToken,
+  uniqueCutFileName,
 } from '../ptxCutPlanExport';
 import { ValidationError } from '@granete/domain';
 
@@ -242,7 +243,7 @@ export async function generateSelectedCuttingOutput(
   )!;
   const adapter = adapterForFamily(profile.formatFamily)!;
   const kind = profile.formatFamily === 'ptx' ? ('ptx' as const) : ('saw' as const);
-  const extension = profile.dimensions.fileExtension ?? 'pending';
+  const extension = String(profile.dimensions.fileExtension ?? 'pending');
 
   const buildBundle = (
     plan: CutPlan,
@@ -281,15 +282,21 @@ export async function generateSelectedCuttingOutput(
     const groups = groupCutPlanSheetsByMaterial(cutPlan);
     if (groups.length > 0) {
       const bundles: MachineArtifactBundle[] = [];
+      // Human file names ('corte-mdf-blanco-18mm.ptx'): readable material
+      // name first, technical code only as fallback; sanitization collisions
+      // get a deterministic '-2' suffix instead of overwriting each other.
+      const usedFileNames = new Set<string>();
       for (const group of groups) {
-        const safeMat = sanitizeFileNameToken(
-          group.materialCode !== 'DEFAULT' ? group.materialCode : group.materialName,
+        const fileName = uniqueCutFileName(
+          cutFileToken(group.materialName || group.materialCode),
+          extension,
+          usedFileNames,
         );
         bundles.push(
           await buildBundle(
             cutPlanForMaterialGroup(cutPlan, group),
-            `${cutPlan.id}--${safeMat}`,
-            `corte-${cutPlan.projectId}-${safeMat}.${extension}`,
+            `${cutPlan.id}--${group.materialCode}`,
+            fileName,
           ),
         );
       }
@@ -299,7 +306,11 @@ export async function generateSelectedCuttingOutput(
   }
 
   return [
-    await buildBundle(cutPlan, cutPlan.id, `corte-${cutPlan.projectId}.${extension}`),
+    await buildBundle(
+      cutPlan,
+      cutPlan.id,
+      `corte-${cutFileToken(cutPlan.projectName || cutPlan.projectId)}.${extension}`,
+    ),
   ];
 }
 

@@ -252,6 +252,7 @@ import {
   type CostingHandlers,
   type SurveyHandlers,
   type ProjectOverviewNav,
+  type CuttingOutputTargetView,
 } from '@granete/ui';
 import {
   APIWorkspaceRepository,
@@ -268,6 +269,7 @@ import type {
   ManufacturingOperation,
   ResolvedManufacturingOutputTarget,
 } from '@granete/domain';
+import { machineOutputBlockerMessageEs } from '@granete/domain';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
@@ -687,6 +689,27 @@ export function AppContent({
   }, [machineOutputSelections]);
   const machineOutputCuttingSelection =
     machineOutputSelections.cutting?.selection ?? null;
+  // Optimización: display summary of the #591 cutting target. Everything is
+  // derived from the authoritative resolver + catalog — the panel only
+  // presents it and never infers compatibility.
+  const cuttingOutputTarget = useMemo<CuttingOutputTargetView | null>(() => {
+    const resolved = machineOutputResolved.cutting;
+    if (!resolved || resolved.status !== 'CONFIGURED') return null;
+    const profile = machineOutputReadModel?.catalog?.outputProfiles.find(
+      (p) =>
+        p.outputCompatibilityProfileId ===
+        resolved.selection.outputCompatibilityProfileId,
+    );
+    return {
+      machineLabel: resolved.machineLabel,
+      formatLabel: (profile?.formatFamily ?? 'ptx').toUpperCase(),
+      profileLabel: resolved.profileLabel,
+      ready: resolved.readiness.ready,
+      blockerMessage: machineOutputBlockerMessageEs(
+        resolved.readiness.reasons,
+      ),
+    };
+  }, [machineOutputResolved, machineOutputReadModel]);
   const saveMachineOutputSelection = useCallback(
     async (
       operation: ManufacturingOperation,
@@ -3050,6 +3073,7 @@ export function AppContent({
       loadError: machineOutputLoadError,
       onRetry: refreshMachineOutput,
     },
+    cuttingOutputTarget,
     addProjectItem,
     agregados,
     allowedNavIds,

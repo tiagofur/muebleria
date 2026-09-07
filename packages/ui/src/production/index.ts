@@ -132,6 +132,7 @@ export {
 export {
   ProductionOrderOptimizationPanel,
   type ProductionOrderOptimizationPanelProps,
+  type CuttingOutputTargetView,
 } from './ProductionOrderOptimizationPanel';
 
 export {
