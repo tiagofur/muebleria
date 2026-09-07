@@ -1,7 +1,7 @@
 # Review — machine-output lane (#348 prep + #351 foundation)
 
 **Feature:** lane machine-integration Client A — ramas `feat/348-ptx-readback-validation-prep` (PR #587) y `feat/351-machine-output-adapters` (PR #588, apilada).
-**Veredicto:** CHANGES_REQUESTED
+**Veredicto:** CHANGES_REQUESTED → **APPROVED** (re-review tras fixes, commit `4593c496`)
 
 ## Checkpoints
 
@@ -30,3 +30,11 @@
 
 1. `packages/domain/src/machineOutput.ts`: `AdapterSerializationBlocked` debe extender `DomainError` (de `./errors`) exponiendo `reasons` también como `context` estructurado; tests siguen verificando `instanceof`.
 2. `packages/excel/src/ptxReadback.ts` (640 líneas): partir — tipos/plantilla en `ptxReadback.ts`, comparador en `ptxReadbackCompare.ts`; `packages/excel/src/index.ts` mantiene la API pública re-exportando; imports de tests actualizados.
+
+## Re-review (tras fixes, commit 4593c496)
+
+- C3: [x] `AdapterSerializationBlocked extends DomainError` con `context.reasons` estructurado; test de regresión afirma jerarquía y contexto (`machineArtifacts.test.ts`).
+- Tamaño: [x] Split aplicado — `ptxReadback.ts` 188 líneas (modelo + plantilla) y `ptxReadbackCompare.ts` 469 (comparador); API pública intacta vía index.
+- Verificación: [x] domain 1274 passed; excel 143 passed + 3 skip declarados (emisores opt-in); `pnpm typecheck` 0 errores; `git diff --check` limpio; todo pushed.
+
+**Veredicto final:** APPROVED
