@@ -410,7 +410,7 @@ export interface PtxMaterialCutFile {
   readonly piecesCount: number;
 }
 
-function sanitizeFileNameToken(text: string): string {
+export function sanitizeFileNameToken(text: string): string {
   return (
     text
       .replace(/[^\p{L}\p{N}\-_ ]+/gu, '')
@@ -421,19 +421,52 @@ function sanitizeFileNameToken(text: string): string {
 }
 
 /**
- * Splits a CutPlan by material and generates a distinct PTX file for each finish/thickness.
- * Ideal for beam saws where cutting is queued per material batch.
+ * Human, filesystem-safe token for cut file names: lowercase and sanitized
+ * (accents survive — ZIP entry names are UTF-8 and they stay readable).
  */
-export function generatePtxByMaterial(
-  input: PtxCutPlanExportInput,
-): readonly PtxMaterialCutFile[] {
-  const { cutPlan, projectName } = input;
+export function cutFileToken(text: string): string {
+  return sanitizeFileNameToken(text).toLowerCase() || 'material';
+}
+
+/**
+ * Deterministic collision guard: two materials whose names collapse to the
+ * same token (e.g. 'MDF Blanco' vs 'MDF_Blanco') must never overwrite each
+ * other — the second gets a stable '-2' suffix, never a random one.
+ */
+export function uniqueCutFileName(
+  token: string,
+  extension: string,
+  used: Set<string>,
+): string {
+  let fileName = `corte-${token}.${extension}`;
+  let counter = 2;
+  while (used.has(fileName)) {
+    fileName = `corte-${token}-${counter}.${extension}`;
+    counter++;
+  }
+  used.add(fileName);
+  return fileName;
+}
+
+export interface CutPlanMaterialGroup {
+  readonly materialCode: string;
+  readonly materialName: string;
+  readonly sheets: readonly CutPlanSheet[];
+}
+
+/**
+ * Groups a CutPlan's sheets by material (code, falling back to name — the
+ * catalog material code encodes finish/color + thickness). Shared by the
+ * generic per-material PTX export and the #591 machine-output generation so
+ * both split on exactly the same key.
+ */
+export function groupCutPlanSheetsByMaterial(
+  cutPlan: CutPlan,
+): readonly CutPlanMaterialGroup[] {
   if (!cutPlan.sheets || cutPlan.sheets.length === 0) {
     return [];
   }
-
-  // Group sheets by materialCode (or materialName)
-  const map = new Map<string, { materialName: string; sheets: (typeof cutPlan.sheets)[number][] }>();
+  const map = new Map<string, { materialName: string; sheets: CutPlanSheet[] }>();
   for (const sheet of cutPlan.sheets) {
     const code = sheet.materialCode || sheet.materialName || 'DEFAULT';
     const existing = map.get(code);
@@ -446,26 +479,53 @@ export function generatePtxByMaterial(
       });
     }
   }
+  return [...map.entries()].map(([materialCode, group]) => ({
+    materialCode,
+    materialName: group.materialName,
+    sheets: group.sheets,
+  }));
+}
 
-  const baseProject = sanitizeFileNameToken(
-    projectName || cutPlan.projectName || cutPlan.projectId || 'plan-de-corte',
-  );
+/** Sub-plan scoped to one material group, with sheet/piece totals adjusted. */
+export function cutPlanForMaterialGroup(
+  cutPlan: CutPlan,
+  group: CutPlanMaterialGroup,
+): CutPlan {
+  return {
+    ...cutPlan,
+    sheets: group.sheets,
+    stats: {
+      ...cutPlan.stats,
+      totalSheets: group.sheets.length,
+      totalPieces: group.sheets.reduce((sum, s) => sum + s.pieces.length, 0),
+    },
+  };
+}
+
+/**
+ * Splits a CutPlan by material and generates a distinct PTX file for each finish/thickness.
+ * Ideal for beam saws where cutting is queued per material batch.
+ */
+export function generatePtxByMaterial(
+  input: PtxCutPlanExportInput,
+): readonly PtxMaterialCutFile[] {
+  const { cutPlan } = input;
+
   const results: PtxMaterialCutFile[] = [];
+  // Human file names ('corte-mdf-blanco-18mm.ptx'); the readable material
+  // name wins over the technical code, and sanitization collisions get a
+  // deterministic suffix instead of overwriting each other.
+  const usedFileNames = new Set<string>();
 
-  for (const [matCode, entry] of map.entries()) {
-    const safeMat = sanitizeFileNameToken(matCode !== 'DEFAULT' ? matCode : entry.materialName);
-    const fileName = `${baseProject}_${safeMat}.ptx`;
+  for (const group of groupCutPlanSheetsByMaterial(cutPlan)) {
+    const fileName = uniqueCutFileName(
+      cutFileToken(group.materialName || group.materialCode),
+      'ptx',
+      usedFileNames,
+    );
 
-    const totalPieces = entry.sheets.reduce((sum, s) => sum + s.pieces.length, 0);
-    const subPlan: CutPlan = {
-      ...cutPlan,
-      sheets: entry.sheets,
-      stats: {
-        ...cutPlan.stats,
-        totalSheets: entry.sheets.length,
-        totalPieces,
-      },
-    };
+    const subPlan = cutPlanForMaterialGroup(cutPlan, group);
+    const totalPieces = subPlan.stats.totalPieces;
 
     const ptxContent = generatePtxString({
       ...input,
@@ -474,12 +534,12 @@ export function generatePtxByMaterial(
     const bytes = new TextEncoder().encode(ptxContent);
 
     results.push({
-      materialCode: matCode,
-      materialName: entry.materialName,
+      materialCode: group.materialCode,
+      materialName: group.materialName,
       fileName,
       ptxContent,
       bytes,
-      sheetsCount: entry.sheets.length,
+      sheetsCount: group.sheets.length,
       piecesCount: totalPieces,
     });
   }

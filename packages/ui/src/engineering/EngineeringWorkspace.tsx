@@ -35,6 +35,7 @@ import { ProductionOrderModulesPanel } from '../production/ProductionOrderModule
 import { ProductionOrderDespiecePanel } from '../production/ProductionOrderDespiecePanel';
 import { ProductionOrderViewsPanel } from '../production/ProductionOrderViewsPanel';
 import { ProductionOrderOptimizationPanel } from '../production/ProductionOrderOptimizationPanel';
+import type { CuttingOutputTargetView } from '../production/ProductionOrderOptimizationPanel';
 import { ProductionOrderDocumentsPanel } from '../production/ProductionOrderDocumentsPanel';
 import { ProductionOrderLabelsPanel } from '../production/ProductionOrderLabelsPanel';
 import { ProductionOrderHardwarePanel } from '../production/ProductionOrderHardwarePanel';
@@ -105,6 +106,7 @@ export function EngineeringWorkspace({
   onExportCutPlanPdf,
   onExportCutPlanDxf,
   onExportCutPlanPtx,
+  cuttingOutputTarget,
   onImportNesting: _onImportNesting,
   // Permissions
   canImportNesting: _canImportNesting,
@@ -165,6 +167,8 @@ export function EngineeringWorkspace({
     cutPlan: import('@granete/domain').CutPlan,
     mode?: 'unified' | 'by-material',
   ) => void | Promise<void>;
+  /** #591 display summary of the configured cutting target (Optimización). */
+  readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;
   readonly canImportNesting?: boolean;
   readonly exportBusy?: boolean;
@@ -356,6 +360,7 @@ export function EngineeringWorkspace({
             onExportOptimizer={onExportOptimizer}
             onExportCutPlanDxf={onExportCutPlanDxf}
             onExportCutPlanPtx={onExportCutPlanPtx}
+            cuttingOutputTarget={cuttingOutputTarget}
             exportBusy={exportBusy}
           />
         )}

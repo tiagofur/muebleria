@@ -3113,7 +3113,6 @@ export function workshopSettingsFromApi(raw: unknown): WorkshopSettings {
     workshopName: str(
       row.workshop_name ?? row.workshopName,
     ),
-    ptxExportMode: (row.ptx_export_mode ?? row.ptxExportMode) as 'unified' | 'by-material' | undefined,
     defaultSawKerfMm: num(
       row.default_saw_kerf_mm ?? row.defaultSawKerfMm,
       4.4,
@@ -3146,7 +3145,6 @@ export function workshopSettingsToApi(
     default_currency: s.defaultCurrency,
     vendedor_can_view_costs: s.vendedorCanViewCosts,
     workshop_name: s.workshopName,
-    ptx_export_mode: s.ptxExportMode,
     default_saw_kerf_mm: s.defaultSawKerfMm,
     default_trim_margins: s.defaultTrimMargins
       ? {

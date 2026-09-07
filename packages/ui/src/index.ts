@@ -310,6 +310,7 @@ export {
   type ProductionOrderHubProps,
   ProductionBoardView,
   type ProductionBoardViewProps,
+  type CuttingOutputTargetView,
   ProductionOrderDispatchPanel,
   type ProductionOrderDispatchPanelProps,
   PRODUCTION_ORDER_TABS,

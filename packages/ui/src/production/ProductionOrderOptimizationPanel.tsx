@@ -28,6 +28,21 @@ import {
 } from '@granete/domain';
 import { ProductionBoardView } from './ProductionBoardView';
 
+/**
+ * Display-only summary of the #591 configured cutting target (resolved by
+ * the export-layer resolver in the app shell — the panel never infers
+ * compatibility). `ready=false` carries the blocker reason to show BEFORE
+ * any download attempt; null means no machine output configured (legacy
+ * generic PTX path).
+ */
+export interface CuttingOutputTargetView {
+  readonly machineLabel: string;
+  readonly formatLabel: string;
+  readonly profileLabel: string;
+  readonly ready: boolean;
+  readonly blockerMessage: string;
+}
+
 export type ProductionOrderOptimizationPanelProps = {
   readonly project: Project;
   readonly catalog: Catalog | null;
@@ -42,6 +57,7 @@ export type ProductionOrderOptimizationPanelProps = {
     cutPlan: CutPlan,
     mode?: 'unified' | 'by-material',
   ) => void;
+  readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly exportBusy?: boolean;
 };
 
@@ -55,6 +71,7 @@ export function ProductionOrderOptimizationPanel({
   onExportOptimizer,
   onExportCutPlanDxf,
   onExportCutPlanPtx,
+  cuttingOutputTarget = null,
   exportBusy = false,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
   // Cut strategy dispatch (F126 saw/nesting + F133 workshop default):
@@ -93,8 +110,22 @@ export function ProductionOrderOptimizationPanel({
   const [cutPlanState, setCutPlanState] = useState<CutPlan | null>(project.cutPlan ?? null);
   const [activeSheetIndex, setActiveSheetIndex] = useState<number>(0);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  // Operational choice for THIS download (the only place bundling is chosen).
+  const [ptxMode, setPtxMode] = useState<'unified' | 'by-material'>('unified');
 
   const currentCutPlan = cutPlanState ?? project.cutPlan ?? null;
+
+  // Distinct materials of the active plan (same grouping key as the export:
+  // materialCode with materialName fallback) — drives the download preview.
+  const planMaterials = useMemo(() => {
+    const sheets = currentCutPlan?.sheets ?? [];
+    const byKey = new Map<string, string>();
+    for (const sheet of sheets) {
+      const key = sheet.materialCode || sheet.materialName || 'DEFAULT';
+      if (!byKey.has(key)) byKey.set(key, sheet.materialName || key);
+    }
+    return [...byKey.entries()].map(([code, name]) => ({ code, name }));
+  }, [currentCutPlan]);
 
   const summary = useMemo(() => {
     if (!catalog) return null;
@@ -162,6 +193,11 @@ export function ProductionOrderOptimizationPanel({
   const handleExportDxf = (variant: 'sheets' | 'pieces') => {
     if (!currentCutPlan) return;
     onExportCutPlanDxf?.(currentCutPlan, variant);
+  };
+
+  const handleExportPtx = () => {
+    if (!currentCutPlan) return;
+    onExportCutPlanPtx?.(currentCutPlan, ptxMode);
   };
 
   const activeSheet = currentCutPlan?.sheets[activeSheetIndex] ?? null;
@@ -650,7 +686,8 @@ export function ProductionOrderOptimizationPanel({
                 </button>
               </div>
 
-              {/* Automatic Panel Saws (PTX v1.14) */}
+              {/* Automatic Panel Saws (PTX v1.14) — la ÚNICA superficie donde
+                  se elige el modo de descarga (unificado vs por material). */}
               <div
                 style={{
                   border: '1px solid var(--border-default)',
@@ -667,32 +704,121 @@ export function ProductionOrderOptimizationPanel({
                     <span style={{ fontSize: '1.2em' }}>⚡</span>
                     <strong style={{ fontSize: '0.95em' }}>PTX Seccionadoras (SCM / Homag / Biesse)</strong>
                   </div>
-                  <p style={{ margin: '4px 0 12px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                  <p style={{ margin: '4px 0 8px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
                     Patrón de corte pre-optimizado v1.14 para seccionadoras automáticas SCM (Maestro Cut / WinCut), Homag (Cut Rite), Biesse (Selco) y Giben.
                   </p>
+                  {/* Salida configurada (#591): derivada del MachineOutputSelection
+                      real — nunca compatibilidad inventada. */}
+                  <p
+                    style={{ margin: '0 0 8px', fontSize: '0.8em', color: 'var(--text-muted)' }}
+                    data-testid="prod-opt-cutting-output"
+                  >
+                    Salida configurada:{' '}
+                    {cuttingOutputTarget ? (
+                      <strong style={{ color: 'var(--text-primary)' }}>
+                        {cuttingOutputTarget.machineLabel} · {cuttingOutputTarget.formatLabel} · {cuttingOutputTarget.profileLabel}
+                      </strong>
+                    ) : (
+                      <strong style={{ color: 'var(--text-primary)' }}>PTX genérico v1.14 (sin salida de máquina configurada)</strong>
+                    )}
+                  </p>
+                  {cuttingOutputTarget && !cuttingOutputTarget.ready ? (
+                    <p
+                      role="alert"
+                      style={{
+                        margin: '0 0 8px',
+                        fontSize: '0.8em',
+                        color: 'var(--status-warning, #b45309)',
+                        background: 'var(--surface-muted)',
+                        padding: '6px 8px',
+                        borderRadius: 4,
+                      }}
+                      data-testid="prod-opt-cutting-output-blocked"
+                    >
+                      ⚠ {cuttingOutputTarget.blockerMessage} Configurá una salida compatible en Ajustes → Ingeniería antes de descargar.
+                    </p>
+                  ) : null}
+                  <div role="radiogroup" aria-label="Modo de descarga" data-testid="prod-opt-ptx-mode" style={{ marginBottom: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.85em' }}>
+                      <input
+                        type="radio"
+                        name="ptxMode"
+                        value="unified"
+                        checked={ptxMode === 'unified'}
+                        onChange={() => setPtxMode('unified')}
+                        data-testid="prod-opt-ptx-mode-unified"
+                      />
+                      <span>Un archivo {cuttingOutputTarget?.formatLabel ?? 'PTX'}</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.85em' }}>
+                      <input
+                        type="radio"
+                        name="ptxMode"
+                        value="by-material"
+                        checked={ptxMode === 'by-material'}
+                        onChange={() => setPtxMode('by-material')}
+                        data-testid="prod-opt-ptx-mode-by-material"
+                      />
+                      <span>Separado por material (.zip)</span>
+                    </label>
+                  </div>
+                  {/* Preview honesto de lo que va a descargarse. */}
+                  <p style={{ margin: 0, fontSize: '0.8em', color: 'var(--text-muted)' }} data-testid="prod-opt-ptx-preview">
+                    {ptxMode === 'unified'
+                      ? `Se descargará 1 archivo ${cuttingOutputTarget?.formatLabel ?? 'PTX'}`
+                      : planMaterials.length > 0
+                        ? `${planMaterials.length} ${planMaterials.length === 1 ? 'material' : 'materiales'} → ${planMaterials.length} ${planMaterials.length === 1 ? 'archivo' : 'archivos'} ${cuttingOutputTarget?.formatLabel ?? 'PTX'} dentro de un ZIP`
+                        : 'Sin materiales en el plan para separar'}
+                  </p>
+                  {ptxMode === 'by-material' && planMaterials.length > 0 ? (
+                    <ul
+                      style={{
+                        margin: '6px 0 0',
+                        padding: 0,
+                        listStyle: 'none',
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 6,
+                      }}
+                      data-testid="prod-opt-ptx-materials"
+                    >
+                      {planMaterials.map((m) => (
+                        <li
+                          key={m.code}
+                          style={{
+                            fontSize: '0.75em',
+                            color: 'var(--text-muted)',
+                            background: 'var(--surface-muted)',
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                          }}
+                        >
+                          {m.name}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
                   <button
                     type="button"
-                    className="btn btn--small"
-                    onClick={() => {
-                      if (currentCutPlan) onExportCutPlanPtx?.(currentCutPlan, 'unified');
-                    }}
-                    disabled={exportBusy || !currentCutPlan || !onExportCutPlanPtx}
+                    className="btn btn--primary btn--small"
+                    onClick={handleExportPtx}
+                    disabled={
+                      exportBusy ||
+                      !currentCutPlan ||
+                      !onExportCutPlanPtx ||
+                      (ptxMode === 'by-material' && planMaterials.length === 0) ||
+                      (cuttingOutputTarget != null && !cuttingOutputTarget.ready)
+                    }
                     data-testid="prod-opt-export-ptx"
+                    title={
+                      cuttingOutputTarget != null && !cuttingOutputTarget.ready
+                        ? 'La salida configurada está bloqueada: revisá el motivo arriba.'
+                        : undefined
+                    }
                   >
-                    Descargar PTX (Todo en 1)
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--small btn--secondary"
-                    onClick={() => {
-                      if (currentCutPlan) onExportCutPlanPtx?.(currentCutPlan, 'by-material');
-                    }}
-                    disabled={exportBusy || !currentCutPlan || !onExportCutPlanPtx}
-                    data-testid="prod-opt-export-ptx-by-material"
-                  >
-                    Por Material (ZIP)
+                    Descargar {cuttingOutputTarget?.formatLabel ?? 'PTX'}
                   </button>
                 </div>
               </div>

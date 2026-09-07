@@ -322,7 +322,7 @@ import type {
   ShowcasePhotoItem,
   WorkshopAnalytics,
 } from '@granete/domain';
-import type { AmbientMaterialDraft, MachineOutputConfigProps } from '@granete/ui';
+import type { AmbientMaterialDraft, CuttingOutputTargetView, MachineOutputConfigProps } from '@granete/ui';
 import type { OwnerPortfolioRow } from '@granete/ui';
 import type { WorkspaceRepository } from '@granete/storage';
 import type { AuthUser, MembershipChoice, OrgSummary } from './session';
@@ -436,6 +436,8 @@ export interface ShellViewCtx {
   readonly handleExportCutPlanPdf: (cutPlan: CutPlan) => Promise<void>;
   readonly handleExportCutPlanDxf: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => Promise<void>;
   readonly handleExportCutPlanPtx: (cutPlan: CutPlan, mode?: 'unified' | 'by-material') => Promise<void>;
+  /** #591 display summary of the configured cutting target (Optimización). */
+  readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly handleExportDespiecePdf: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportElevations: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportHardwareList: (projectId?: string | undefined) => Promise<void>;
@@ -724,6 +726,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleExportCutPlanPdf,
     handleExportCutPlanDxf,
     handleExportCutPlanPtx,
+    cuttingOutputTarget = null,
     handleExportDespiecePdf,
     handleExportElevations,
     handleExportHardwareList,
@@ -1306,7 +1309,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onSaveCutPlan={(plan) => { projectActions.saveCutPlan(engProject.id, plan); }}
             onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
             onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
-            onExportCutPlanPtx={(plan) => { void handleExportCutPlanPtx(plan); }}
+            onExportCutPlanPtx={(plan, mode) => { void handleExportCutPlanPtx(plan, mode); }}
+            cuttingOutputTarget={cuttingOutputTarget}
             canImportNesting={canMarkProduced || canExportProductionUnion}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
             exportBusy={exportBusy}
