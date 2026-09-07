@@ -2,11 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildExpectedPtxReadback } from './ptxValidationFixture';
-import {
-  buildActualReadbackTemplate,
-  comparePtxReadback,
-  type PtxActualReadback,
-} from './ptxReadback';
+import { buildActualReadbackTemplate, type PtxActualReadback } from './ptxReadback';
+import { comparePtxReadback } from './ptxReadbackCompare';
 
 function perfectActual(): PtxActualReadback {
   return buildActualReadbackTemplate(buildExpectedPtxReadback());

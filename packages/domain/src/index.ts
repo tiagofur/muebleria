@@ -838,6 +838,30 @@ export {
   type ProjectDrillingData,
 } from './partDrilling';
 
+// --- Neutral machine-output contract (#351 foundation) ---
+export {
+  AdapterSerializationBlocked,
+  type AdapterBlockReason,
+  type AdapterReadiness,
+  type ArtifactCompatibilityEvidence,
+  type ArtifactKind,
+  type ArtifactManifest,
+  type CompatibilityEvidenceClaim,
+  type FieldProvenance,
+  type FormatDimensionStatus,
+  type MachineArtifact,
+  type MachineOutputSupportStatus,
+  type MachiningOperationDescriptor,
+  type ManufacturingJobProvenance,
+  type OutputCompatibilityProfile,
+  type OutputCompatibilityProfileRef,
+  type OutputFormatFamily,
+  type ExportPresentation,
+  type PostprocessorAdapter,
+  type ResolvedCuttingJob,
+  type ResolvedMachiningJob,
+} from './machineOutput';
+
 // --- Part Drilling Resolution Engine (F128) ---
 export {
   resolvePartDrilling,

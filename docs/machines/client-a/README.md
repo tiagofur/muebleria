@@ -3,8 +3,14 @@
 > Issue: [#352](https://github.com/tiagofur/muebleria/issues/352) — entrega
 > **parcial**: dossier de descubrimiento y preparación de evidencia.
 > Estado de ambas máquinas: **`NOT_TESTED`**. Este pack **no** afirma
-> compatibilidad, **no** implementa postprocessor ni genera output de máquina.
-> La identidad real del cliente no existe en este repositorio.
+> compatibilidad. La identidad real del cliente no existe en este repositorio.
+>
+> **2026-09-06 — evidencia de campo:** un PTX generado por Granete fue enviado
+> al cliente y su software **falló al convertirlo en archivos de máquina**
+> (`REAL_FIELD_RED`; el estado de validación sigue siendo `NOT_TESTED`).
+> Registro y respuesta: [`ptx-conversion-failure.md`](./ptx-conversion-failure.md).
+> Paquete de validación sintético y procedimiento:
+> [`client-test-procedure.md`](./client-test-procedure.md).
 
 ## Máquinas conocidas
 
@@ -27,11 +33,11 @@ Granete (`OWNER_CONFIRMED`); todo lo demás está pendiente de evidencia de camp
 | Controlador | `FIELD_VERIFICATION_REQUIRED` | `FIELD_VERIFICATION_REQUIRED` | missing |
 | Software de máquina | `FIELD_VERIFICATION_REQUIRED` | `FIELD_VERIFICATION_REQUIRED` | missing |
 | Versión exacta (control/software) | `FIELD_VERIFICATION_REQUIRED` | `FIELD_VERIFICATION_REQUIRED` | missing |
-| Formato de entrada aceptado | `FIELD_VERIFICATION_REQUIRED` | `FIELD_VERIFICATION_REQUIRED` | missing |
+| Formato de entrada aceptado | `FIELD_VERIFICATION_REQUIRED` | `CLIENT_CONFIRMED` (relay owner): PTX aceptado hasta el paso de conversión, que **falló** (2026-09); SAW declarado aceptado, sin probar | [`ptx-conversion-failure.md`](./ptx-conversion-failure.md) |
 | Método de transferencia/red | `FIELD_VERIFICATION_REQUIRED` | `FIELD_VERIFICATION_REQUIRED` | missing |
 | Unidades / origen / convención de ejes | `FIELD_VERIFICATION_REQUIRED` | `FIELD_VERIFICATION_REQUIRED` | missing |
 | Capacidades físicas verificadas | `FIELD_VERIFICATION_REQUIRED` | `FIELD_VERIFICATION_REQUIRED` | missing |
-| Validación (import/readback + sign-off) | `NOT_TESTED` | `NOT_TESTED` | none |
+| Validación (import/readback + sign-off) | `NOT_TESTED` | `NOT_TESTED` — conversión PTX fallida en campo (regresión abierta) | [`ptx-conversion-failure.md`](./ptx-conversion-failure.md) |
 
 Ningún valor se llena desde conocimiento general del mercado; lo público vive
 separado como `PUBLIC_REFERENCE_ONLY` dentro de cada dossier.
@@ -43,7 +49,9 @@ docs/machines/client-a/
 ├── README.md                 ← este archivo (identidad, matriz, mapping)
 ├── machine-a-bhx050.md       ← dossier BHX 050 (descubrimiento + fixture futuro)
 ├── machine-b-hpp250.md       ← dossier HPP 250 (descubrimiento + fixture futuro)
-└── intake-checklist.md       ← checklist de evidencia para el operador
+├── intake-checklist.md       ← checklist de evidencia para el operador
+├── ptx-conversion-failure.md ← evidencia REAL_FIELD_RED del fallo de conversión PTX (2026-09)
+└── client-test-procedure.md  ← runbook del paquete de validación sintético
 ```
 
 Cada dossier instancia

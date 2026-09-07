@@ -1,3 +1,11 @@
+## #351 — machine-output adapters foundation (entrega parcial, lane autorizado por owner)
+
+- Trigger: fallo REAL de conversión PTX en Client A (REAL_FIELD_RED, registrado sanitizado en `docs/machines/client-a/ptx-conversion-failure.md`); owner autorizó avanzar el lane machine-integration sin cerrar #348/#351/#352.
+- Rama: `feat/351-machine-output-adapters` (apilada sobre PR #587); no toca archivos de #577 (`backend-go/internal/domain/engine/**`, `packages/domain/src/engine/**`).
+- Contrato neutral `packages/domain/src/machineOutput.ts`: `ResolvedCuttingJob`/`ResolvedMachiningJob` (wrappers provenance-exactos sobre CutPlan/ProjectDrillingData existentes), `OutputCompatibilityProfile` (concepto nuevo, decisión documentada en `docs/architecture/machine-profiles-and-adapters.md`), `PostprocessorAdapter` boundary fail-closed, `ArtifactManifest` (claim `notClaimed`, missingProvenance explícito, banner non-production).
+- Implementación `packages/excel/src/machines/`: adapter PTX (un serializador, el existente, byte-identical al golden #348) + perfiles versionados `ptx-generic` r1 / `ptx-cadmatic-3/4/5` / `saw-homag` / `mpr-woodwop` — CADmatic/SAW/MPR sin dimensiones evidenciadas → fallan cerrado con `FIELD_FORMAT_EVIDENCE_REQUIRED`; machine profiles HPP 250/BHX 050 con cero capabilities inferidas; pack de validación Client A (`buildClientValidationPack`) que hoy genera sólo `test-generic.ptx` + manifests y lista la evidencia exacta que falta por archivo.
+- 31 tests nuevos (determinismo, digests de perfil/adapter verificados, fail-closed, no-silent-drop de operaciones MPR, identidad de duplicados, manifest sin "latest" implícito); typecheck y suite excel completos verdes. Sin claim de compatibilidad: todo `NOT_TESTED`.
+- Corrección de contrato tras review: `SERIALIZER_NOT_IMPLEMENTED` como razón neutral distinta de `FIELD_FORMAT_EVIDENCE_REQUIRED`; SAW/MPR nunca reportan `ready=true` sin serializer real (invariante `ready ⇒ serialize ejecutable` probada en `adapterContract.test.ts`); PTX sin cambios (byte-identical al golden).
 ## #577 — shared resolved-BOM demand aggregation (partial)
 
 - Added one pure resolved-BOM + physical-quantity batch adapter; the project adapter resolves each item once and delegates without rerunning hardware resolution.

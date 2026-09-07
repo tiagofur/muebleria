@@ -138,13 +138,14 @@ export {
 
 export {
   buildActualReadbackTemplate,
-  comparePtxReadback,
   type PtxActualReadback,
   type PtxExpectedReadback,
   type PtxFindingClassification,
   type PtxReadbackComparison,
   type PtxReadbackFinding,
 } from './ptxReadback';
+
+export { comparePtxReadback } from './ptxReadbackCompare';
 
 export {
   buildExpectedPtxReadback,
@@ -157,3 +158,49 @@ export {
 } from './ptxValidationFixture';
 
 
+
+// --- Machine output adapters and profiles (#351 foundation) ---
+export {
+  canonicalProfileData,
+  CLIENT_A_BHX050_PROFILE,
+  CLIENT_A_HPP250_PROFILE,
+  MPR_WOODWOP_PROFILE,
+  PTX_CADMATIC_3_PROFILE,
+  PTX_CADMATIC_4_PROFILE,
+  PTX_CADMATIC_5_PROFILE,
+  PTX_GENERIC_PROFILE,
+  SAW_HOMAG_PROFILE,
+  type ClientMachineProfileData,
+} from './machines/profiles';
+
+export { PTX_POSTPROCESSOR_ADAPTER, PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR } from './machines/ptxAdapter';
+export { SAW_POSTPROCESSOR_ADAPTER, SAW_ADAPTER_IMPLEMENTATION_DESCRIPTOR } from './machines/sawAdapter';
+export {
+  WOODWOP_MPR_POSTPROCESSOR_ADAPTER,
+  MPR_ADAPTER_IMPLEMENTATION_DESCRIPTOR,
+  describeMachiningOperations,
+  describeUnrepresentableOperations,
+  type MprOperationKind,
+} from './machines/woodWopMprAdapter';
+
+export {
+  generateMachineArtifact,
+  manifestComparisonKey,
+  type MachineArtifactBundle,
+  type MachineArtifactRequest,
+} from './machines/machineArtifacts';
+
+export {
+  buildClientValidationPack,
+  type ClientValidationPack,
+  type GeneratedPackEntry,
+  type NotGeneratedPackEntry,
+} from './machines/clientPack';
+
+export {
+  buildFixtureCuttingJob,
+  buildFixtureCuttingJobPartialProvenance,
+  buildFixtureMachiningJob,
+  FIXTURE_CUTTING_JOB_ID,
+  FIXTURE_MACHINING_JOB_ID,
+} from './machines/machineOutputFixtures';

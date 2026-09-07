@@ -85,3 +85,11 @@ nunca promueve `NOT_TESTED`.
   operator-safe: [`ptx-validation.md`](./ptx-validation.md) — preparación de
   #348, **sin claim de compatibilidad**. Los imports reales de cada máquina
   consumen ese fixture y registran su evidencia en el pack del cliente.
+- Machine-output adapters + perfiles de compatibilidad versionados
+  (#351 foundation, `packages/excel/src/machines/`): un adapter PTX sobre el
+  serializador existente + perfiles `ptx-generic`/`ptx-cadmatic-3/4/5`,
+  `saw-homag`, `mpr-woodwop` que **fallan cerrado** sin evidencia de formato,
+  perfiles de máquina HPP 250/BHX 050 con cero capabilities inferidas, y el
+  paquete de validación sanitizado para Client A
+  (`buildClientValidationPack`). Implementación ≠ validación: todo sigue
+  `NOT_TESTED` hasta import/readback + sign-off.
