@@ -4,6 +4,17 @@
 ni DEMO FREEZE.** GitHub Issues es la única cola operativa. Este informe registra
 evidencia y límites; no aprueba issues, no autoriza merges y no reemplaza al líder.
 
+## Modo vigente — inicio humano (2026-09-07)
+
+El propietario autorizó adaptar las skills a [propuesta → aprobación → ejecución
+acotada → PR revisado](software-factory-human-start.md), con merge humano.
+El heartbeat `Granete — auditoría y coordinación demo` fue pausado por el líder;
+no reactivarlo automáticamente. La política local discovery y la cuarentena de
+#577 permanecen intactas. Este cambio no elimina ese bloqueo de ownership ni
+habilita el implementador del runtime. No hay un canary nuevo de producto probado.
+Los gaps históricos siguientes siguen abiertos; el objetivo inmediato se acota a
+PR verificable, no merge autónomo ni cierre automático de #573.
+
 ## Autoridad y operación existente
 
 - Alcance: [#573](https://github.com/tiagofur/muebleria/issues/573).

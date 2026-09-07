@@ -420,6 +420,10 @@ Recheck actual CI, applicable human authorization and intended scope at acceptan
 and immediately before any separately authorized merge. Candidate-controlled code
 is advisory and does not establish trusted enforcement or inspect RDD mode.
 
+For the human-start role workflow and delivery gate, read
+[the current execution contract](demo/software-factory-human-start.md). The helper
+remains advisory; its tests do not demonstrate agent execution.
+
 This unit adds no coordinator, lease store, GitHub writes, candidate execution or
 unattended validation. Discovery reports/claims stay unchanged; product execution
 remains disabled. Durable ownership, dispatch/cost accounting, persisted exact-head
