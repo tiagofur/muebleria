@@ -118,6 +118,27 @@ func (s *PostgresStore) mutateProjectMaterialPlanning(
 	snap.ProductionRelease = authority
 	snap.MaterialsReleased = len(materialsReleaseRaw) > 0 && string(materialsReleaseRaw) != "null"
 
+	// Lock warehouse balances before reading reservations: different projects
+	// must not allocate the same availability from concurrent snapshots. Stock
+	// movements use these same row locks. Ordering avoids multi-material deadlocks.
+	locked, err := tx.Query(ctx, `SELECT kind, material_id, quantity, min_stock FROM material_stock WHERE organization_id = $1 ORDER BY kind, material_id FOR UPDATE`, OrgFromCtx(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("error locking warehouse balances: %w", err)
+	}
+	for locked.Next() {
+		var stock domain.MaterialStock
+		if err := locked.Scan(&stock.Kind, &stock.MaterialID, &stock.Quantity, &stock.MinStock); err != nil {
+			locked.Close()
+			return nil, err
+		}
+		snap.Stock = append(snap.Stock, stock)
+	}
+	lockErr := locked.Err()
+	locked.Close()
+	if lockErr != nil {
+		return nil, lockErr
+	}
+
 	// Every project's planning — availability/reservations are warehouse-wide.
 	planningRows, err := tx.Query(ctx, `
 		SELECT material_planning FROM projects
@@ -140,25 +161,6 @@ func (s *PostgresStore) mutateProjectMaterialPlanning(
 	}
 	if err := planningRows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating plannings: %w", err)
-	}
-
-	// Stock balances for the availability math.
-	stockRows, err := tx.Query(ctx, `
-		SELECT kind, material_id, quantity, min_stock FROM material_stock WHERE organization_id = $1;
-	`, OrgFromCtx(ctx))
-	if err != nil {
-		return nil, fmt.Errorf("error loading stock for planning: %w", err)
-	}
-	defer stockRows.Close()
-	for stockRows.Next() {
-		var s domain.MaterialStock
-		if err := stockRows.Scan(&s.Kind, &s.MaterialID, &s.Quantity, &s.MinStock); err != nil {
-			return nil, fmt.Errorf("error scanning stock for planning: %w", err)
-		}
-		snap.Stock = append(snap.Stock, s)
-	}
-	if err := stockRows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating stock for planning: %w", err)
 	}
 
 	poRows, err := tx.Query(ctx, `

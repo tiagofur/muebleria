@@ -396,3 +396,24 @@ describe('PurchasingScreen (Fase 3)', () => {
     expect(onOpenDashboard).toHaveBeenCalledTimes(1);
   });
 });
+
+it('shows canonical planning without presenting mutable picking quantities', () => {
+  render(<PurchasingScreen role="admin" projects={[{
+    projectId: 'frozen', projectName: 'Frozen release', canonical: true,
+    hardware: [hardwareRow('mutable', 'MUTABLE', 'Mutable hardware', 999)],
+    cutRows: [cutRow('MUTABLE', 'Mutable board', 18, 999)],
+  }]} />);
+  expect(screen.getByTestId('purch-project-frozen')).toBeTruthy();
+  expect(screen.getByText('1 proyecto activo')).toBeTruthy();
+  expect(screen.queryByText('Mutable hardware')).toBeNull();
+  expect(screen.queryByText(/999/)).toBeNull();
+  for (const [tab, empty] of [
+    ['Herrajes', 'Sin herrajes por despachar'],
+    ['Tableros', 'Sin tableros por despachar'],
+    ['Cintillas', 'Sin cintillas por despachar'],
+  ] as const) {
+    fireEvent.click(screen.getByRole('tab', { name: tab }));
+    expect(screen.getByTestId('purch-project-frozen')).toBeTruthy();
+    expect(screen.queryByText(empty)).toBeNull();
+  }
+});

@@ -22,6 +22,7 @@ import type {
   WarehouseProjectInput,
 } from '@granete/domain';
 import {
+  releaseAuthorityOf,
   computeProductionTotals,
   estimateBoardSheets,
   filterProjectsByProcessStage,
@@ -59,13 +60,17 @@ export function usePurchasingDerivations(deps: PurchasingDerivationsDeps) {
    * from the domain; unresolved projects contribute empty lists.
    */
   const purchasingProjects = useMemo((): ActiveProjectMaterial[] => {
-    if (!catalog) return [];
+
     // Process stage gating — Almacén only sees works whose engineering was
     // sent but whose materials are not released yet (stage "almacen").
     return filterProjectsByProcessStage(
       filterProductionVisible(projects),
       'almacen',
-    ).map((project) => {
+    ).filter((project) => catalog || releaseAuthorityOf(project)?.source === 'canonical').map((project) => {
+      if (releaseAuthorityOf(project)?.source === 'canonical') {
+        return { projectId: project.id, projectName: project.name, canonical: true, hardware: [], cutRows: [] };
+      }
+      if (!catalog) return { projectId: project.id, projectName: project.name, hardware: [], cutRows: [] };
       let hardware: readonly HardwarePurchaseRow[] = [];
       let cutRows: readonly ProductionCutRow[] = [];
       let sheetEstimates: readonly BoardSheetEstimate[] = [];
@@ -102,6 +107,13 @@ export function usePurchasingDerivations(deps: PurchasingDerivationsDeps) {
       filterProductionVisible(projects),
       'almacen',
     ).map((project) => {
+      if (releaseAuthorityOf(project)?.source === 'canonical') {
+        const lines = project.materialPlanning?.requirements?.lines ?? [];
+        const quantity = (kind: StockMaterialKind): number => lines.filter((line) => line.kind === kind).reduce((sum, line) => sum + line.quantity, 0);
+        return { ...project, customerLabel: resolveCustomerName(project.customerId, customers),
+          boardAreaM2: 0, frozenBoardSheets: quantity('tableros'),
+          edgeLengthMl: quantity('cintillas'), hardwareCount: quantity('herrajes') };
+      }
       const purchProj = purchasingProjects.find((p) => p.projectId === project.id);
       let boardAreaM2 = 0;
       let edgeLengthMl = 0;

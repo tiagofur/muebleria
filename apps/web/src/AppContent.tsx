@@ -2075,6 +2075,7 @@ export function AppContent({
    * reservation caps and the OC-054 gates with audited override); the
    * local/offline workspace runs the pure domain actions.
    */
+  const materialActionEpoch = useRef(new Map<string, number>());
   const runMaterialPlanningAction = useCallback(
     (
       projectId: string,
@@ -2085,54 +2086,64 @@ export function AppContent({
     ) => {
       const project = projectActions.projects.find((p) => p.id === projectId);
       if (!project) return;
-      let local: Project;
-      try {
-        local = localAction(project);
-      } catch (err) {
-        toast({
-          type: 'error',
-          message: err instanceof Error && err.message ? err.message : 'Acción de materiales inválida',
-        });
-        return;
-      }
-      const applyLocal = (): void => {
-        projectActions.applyMaterialPlanningProject(projectId, local);
-        toast({ type: 'success', message: successMessage });
+      const epoch = (materialActionEpoch.current.get(projectId) ?? 0) + 1;
+      materialActionEpoch.current.set(projectId, epoch);
+      const repo = getRepository();
+      const scope = useWorkspaceStore.getState().sessionScope;
+      const scopeKey = scope ? JSON.stringify(sessionScopeKey(scope)) : null;
+      const requirements = project.materialPlanning?.requirements;
+      const productionReleaseId = releaseAuthorityOf(project)?.source === 'canonical'
+        ? requirements?.releaseId : undefined;
+      const currentProject = (): Project | undefined => {
+        if (materialActionEpoch.current.get(projectId) !== epoch) return;
+        const currentScope = useWorkspaceStore.getState().sessionScope;
+        if ((currentScope ? JSON.stringify(sessionScopeKey(currentScope)) : null) !== scopeKey) return;
+        const current = getProjectStoreState().projects.find((p) => p.id === projectId);
+        if (current?.materialPlanning?.requirements?.releaseId !== requirements?.releaseId ||
+          current?.materialPlanning?.id !== project.materialPlanning?.id) return;
+        return current;
       };
       const fail = (err: unknown): void => {
-        toast({
-          type: 'error',
-          message: err instanceof Error && err.message ? err.message : 'No se pudo completar la acción de materiales',
-        });
+        if (!currentProject()) return;
+        toast({ type: 'error', message: err instanceof Error ? err.message : 'No se pudo completar la acción de materiales' });
       };
-      const repo = getRepository();
-      // API mode: the server re-computes caps/gates/stamps — apply the
-      // server-returned planning (not the local mirror) so ids/timestamps
-      // stay the server truth until the next refresh.
       const applyServer = (view: { planning: unknown; released: boolean }): void => {
-        const serverPlanning = view.planning as Project['materialPlanning'];
+        const current = currentProject();
+        if (!current) return;
+        const planning = view.planning as Project['materialPlanning'];
+        if (!planning || (planning.release && !planning.release.releasedBy) || (productionReleaseId && planning.requirements?.releaseId !== productionReleaseId)) {
+          fail(new Error('La respuesta no corresponde a la planificación solicitada'));
+          return;
+        }
         projectActions.applyMaterialPlanningProject(projectId, {
-          ...local,
-          materialPlanning: serverPlanning ?? local.materialPlanning,
-          materialsRelease: view.released
-            ? (local.materialsRelease ?? project.materialsRelease)
-            : project.materialsRelease,
+          ...current,
+          materialPlanning: planning,
+          materialsRelease: planning.release
+            ? { releasedAt: planning.release.releasedAt, releasedBy: planning.release.releasedBy! }
+            : current.materialsRelease,
         });
         toast({ type: 'success', message: successMessage });
       };
+      if (kind === 'reserve' && repo.reserveMaterials) {
+        void repo.reserveMaterials(projectId, undefined, { productionReleaseId }).then(applyServer).catch(fail);
+        return;
+      }
+      if (kind === 'release' && repo.releaseMaterials) {
+        void repo.releaseMaterials(projectId, payload.overrideReason, { productionReleaseId }).then(applyServer).catch(fail);
+        return;
+      }
       if (kind === 'derive' && repo.deriveMaterialRequirements && payload.lines) {
         void repo.deriveMaterialRequirements(projectId, payload.lines).then(applyServer).catch(fail);
         return;
       }
-      if (kind === 'reserve' && repo.reserveMaterials) {
-        void repo.reserveMaterials(projectId).then(applyServer).catch(fail);
+      if (releaseAuthorityOf(project)?.source === 'canonical') {
+        fail(new Error('La planificación canónica requiere conexión con el servidor'));
         return;
       }
-      if (kind === 'release' && repo.releaseMaterials) {
-        void repo.releaseMaterials(projectId, payload.overrideReason).then(applyServer).catch(fail);
-        return;
-      }
-      applyLocal();
+      try {
+        projectActions.applyMaterialPlanningProject(projectId, localAction(project));
+        toast({ type: 'success', message: successMessage });
+      } catch (err) { fail(err); }
     },
     [getRepository, projectActions, toast],
   );
@@ -2143,9 +2154,12 @@ export function AppContent({
         const project = projectActions.projects.find((p) => p.id === projectId);
         const authority = project ? releaseAuthorityOf(project) : undefined;
         const repo = getRepository();
+        const epoch = (materialActionEpoch.current.get(projectId) ?? 0) + 1;
+        materialActionEpoch.current.set(projectId, epoch);
         const scope = useWorkspaceStore.getState().sessionScope;
         const scopeKey = scope ? JSON.stringify(sessionScopeKey(scope)) : null;
         const isCurrent = (): boolean => {
+          if (materialActionEpoch.current.get(projectId) !== epoch) return false;
           const currentScope = useWorkspaceStore.getState().sessionScope;
           const currentKey = currentScope ? JSON.stringify(sessionScopeKey(currentScope)) : null;
           if (currentKey !== scopeKey) return false;

@@ -71,6 +71,7 @@ const HARDWARE_UNIT_LABELS: Readonly<Record<string, string>> = {
 export type ActiveProjectMaterial = {
   readonly projectId: string;
   readonly projectName: string;
+  readonly canonical?: boolean;
   readonly hardware: readonly HardwarePurchaseRow[];
   readonly cutRows: readonly ProductionCutRow[];
   /**
@@ -312,7 +313,7 @@ export function PurchasingScreen({
   // llevan el id de catálogo resuelto (materialId/edgeId) para el stock.
   const projectViews = useMemo<ProjectView[]>(
     () =>
-      projects.map((p) => {
+      projects.filter((p) => !p.canonical).map((p) => {
         const totals = computeProductionTotals(p.cutRows);
         return {
           ...p,
@@ -410,12 +411,12 @@ export function PurchasingScreen({
 
   const stats = useMemo(
     () => ({
-      projects: projectViews.length,
+      projects: projects.length,
       hardwareLines: projectViews.reduce((s, p) => s + p.hardware.length, 0),
       areaM2: projectViews.reduce((s, p) => s + p.totalAreaM2, 0),
       edgeMl: projectViews.reduce((s, p) => s + p.totalEdgeMl, 0),
     }),
-    [projectViews],
+    [projectViews, projects.length],
   );
 
   const projectsWithHardware = projectViews.filter((p) => p.hardware.length > 0);
@@ -533,6 +534,7 @@ export function PurchasingScreen({
 
   const renderHardwareTab = (): ReactNode => {
     if (projectsWithHardware.length === 0) {
+      if (projects.some((project) => project.canonical)) return null;
       return (
         <EmptyState
           icon={Wrench}
@@ -590,6 +592,7 @@ export function PurchasingScreen({
 
   const renderTablerosTab = (): ReactNode => {
     if (projectsWithMaterials.length === 0) {
+      if (projects.some((project) => project.canonical)) return null;
       return (
         <EmptyState
           icon={Layers}
@@ -662,6 +665,7 @@ export function PurchasingScreen({
 
   const renderCintillasTab = (): ReactNode => {
     if (projectsWithEdges.length === 0) {
+      if (projects.some((project) => project.canonical)) return null;
       return (
         <EmptyState
           icon={Ruler}
@@ -840,6 +844,16 @@ export function PurchasingScreen({
         aria-labelledby={`purch-tab-${effectiveTab}`}
         data-testid={`purch-panel-${effectiveTab}`}
       >
+        {effectiveTab !== 'compras' ? projects.filter((p) => p.canonical).map((p) => (
+          <div className="purch-card" key={p.projectId} data-testid={`purch-project-${p.projectId}`}>
+            <div className="purch-card__header">
+              <span className="purch-card__name">{p.projectName}</span>
+              {renderReleaseAction(p.projectId)}
+            </div>
+            <p className="purch-plan__hint">Demanda congelada de la liberación; consulte cantidades y reservas abajo.</p>
+            {renderPlanningSection(p.projectId)}
+          </div>
+        )) : null}
         {effectiveTab === 'herrajes' ? renderHardwareTab() : null}
         {effectiveTab === 'tableros' ? renderTablerosTab() : null}
         {effectiveTab === 'cintillas' ? renderCintillasTab() : null}

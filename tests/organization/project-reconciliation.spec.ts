@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { GATE_MODULE_A_ID, required } from './support/api';
@@ -902,14 +904,78 @@ async function publishRevisionWithItemIds(options: {
     expect(materialsAfterMutation.planning.requirements.lines).toEqual(requirements.lines);
     expect(materialsAfterMutation.planning.requirements.source_design_revision_id).toBe(r1.id);
 
-    // 7. Almacén releases the materials (audited override: no stock seeded).
+    // #577 bounded warehouse continuity: actual server reservation uses the
+    // stored exact P1 plan after the newer design and catalog mutations above.
+    const stockResponse = await fetch(`${apiBase}/stock/movements`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ kind: 'tableros', material_id: OPS_MAT_ID, type: 'entrada', quantity: 1 }),
+    });
+    expect(stockResponse.status).toBe(201);
     await page.goto('/warehouse');
     await page.getByRole('tab', { name: 'Tableros' }).click();
     await page.getByTestId(`purch-release-${OPS_PROJECT_ID}`).click();
-    const overrideInput = page.getByTestId(`purch-plan-override-input-${OPS_PROJECT_ID}`);
-    await expect(overrideInput).toBeVisible();
-    await overrideInput.fill('E2E: liberar sin reservas (sin stock sembrado)');
-    await page.getByTestId(`purch-plan-override-release-${OPS_PROJECT_ID}`).click();
+    await expect(page.getByTestId(`purch-plan-provenance-${OPS_PROJECT_ID}`)).toContainText('Liberación #1');
+    // Responsive QA uses the actual synthetic fixture and existing controls.
+    const originalViewport = page.viewportSize();
+    const visualDirectory = process.env.WAREHOUSE_VISUAL_DIR;
+    if (visualDirectory) {
+      if (!isAbsolute(visualDirectory)) throw new Error('WAREHOUSE_VISUAL_DIR must be absolute');
+      await mkdir(visualDirectory, { recursive: true });
+    }
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const card = page.getByTestId(`purch-project-${OPS_PROJECT_ID}`);
+      const reserve = page.getByTestId(`purch-plan-reserve-${OPS_PROJECT_ID}`);
+      await expect(card).toBeVisible();
+      await expect(page.getByTestId(`purch-plan-provenance-${OPS_PROJECT_ID}`)).toContainText('Liberación #1');
+      await expect(page.getByText('Sin tableros por despachar')).toHaveCount(0);
+      await expect(reserve).toBeVisible();
+      await expect(reserve).toBeEnabled();
+      await reserve.focus();
+      await expect(reserve).toBeFocused();
+      await page.evaluate(async () => {
+        await Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity).map((animation) => animation.finished.catch(() => undefined)));
+      });
+      const coverageRegion = card.getByRole('region', { name: 'Cobertura de materiales: desplazamiento horizontal' });
+      await coverageRegion.focus();
+      await expect(coverageRegion).toBeFocused();
+      const geometry = await coverageRegion.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
+      if (width === 390) expect(geometry.scroll).toBeGreaterThan(geometry.client);
+      for (const heading of await coverageRegion.getByRole('columnheader').all()) {
+        await expect.poll(async () => {
+          const regionBounds = await coverageRegion.boundingBox();
+          const headingBounds = await heading.boundingBox();
+          if (!regionBounds || !headingBounds) return false;
+          const reachable = headingBounds.x >= regionBounds.x - 1 && headingBounds.x + headingBounds.width <= regionBounds.x + regionBounds.width + 1;
+          if (!reachable) await coverageRegion.press('ArrowRight');
+          return reachable;
+        }).toBe(true);
+      }
+      // The final shortage column and its actual cell are reachable by keyboard.
+      const lastCell = coverageRegion.getByRole('cell').last();
+      await expect(lastCell).toBeVisible();
+      expect(await coverageRegion.evaluate((element) => element.scrollLeft)).toBeGreaterThanOrEqual(0);
+      const bounds = await card.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.width).toBeLessThanOrEqual(width);
+      if (visualDirectory) await page.screenshot({ path: join(visualDirectory, `warehouse-${width}.png`), fullPage: true });
+    }
+    if (originalViewport) await page.setViewportSize(originalViewport);
+    const reserveRequest = page.waitForRequest((request) => request.url().endsWith(`/projects/${OPS_PROJECT_ID}/materials/reserve`));
+    await page.getByTestId(`purch-plan-reserve-${OPS_PROJECT_ID}`).click();
+    expect((await reserveRequest).postDataJSON().production_release_id).toBe(release.id);
+    await expect(page.getByTestId(`purch-plan-reserve-${OPS_PROJECT_ID}`)).toHaveCount(0);
+    const reserved = await (await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials`, { headers: authHeaders })).json();
+    expect(reserved.planning.requirements.lines).toEqual(requirements.lines);
+    expect(reserved.planning.reservations).toHaveLength(1);
+    expect(reserved.planning.reservations[0].quantity).toBe(1);
+
+    // 7. Almacén releases the exact reserved materials.
+
+    await page.goto('/warehouse');
+    await page.getByRole('tab', { name: 'Tableros' }).click();
+    await page.getByTestId(`purch-release-${OPS_PROJECT_ID}`).click();
+    await page.getByTestId(`purch-plan-release-${OPS_PROJECT_ID}`).click();
     // Released material moves the obra past Almacén: the card leaves the
     // almacén queue (never to appear in two queues at once).
     await expect(page.getByTestId(`purch-release-${OPS_PROJECT_ID}`)).toHaveCount(0, {

@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -202,6 +204,10 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 			return nil, fmt.Errorf("CONFLICT:el material de esta obra ya fue liberado")
 		}
 
+		if snap.Planning != nil && len(snap.Planning.Reservations) > 0 && (snap.Planning.Requirements == nil || snap.Planning.Requirements.ReleaseID != release.ReleaseID || !reflect.DeepEqual(snap.Planning.Requirements.Lines, lines)) {
+			return nil, fmt.Errorf("CONFLICT:las reservas existentes pertenecen a otro requerimiento; no se pueden transferir")
+		}
+
 		now := time.Now().UTC()
 		planning := snap.Planning
 		if planning == nil {
@@ -273,13 +279,7 @@ func materialsProvenancePayload(release *domain.ResolvedProductionRelease, lineC
 	return payload
 }
 
-type reserveMaterialsRequest struct {
-	Lines []struct {
-		Kind       string  `json:"kind"`
-		MaterialID string  `json:"material_id"`
-		Quantity   float64 `json:"quantity"`
-	} `json:"lines"`
-}
+type reserveMaterialsRequest = openapi.ReserveMaterialsRequest
 
 // HandleMaterialsReserve handles POST /api/projects/{id}/materials/reserve —
 // server-authoritative reservations capped by warehouse availability
@@ -300,7 +300,8 @@ func (s *Server) HandleMaterialsReserve(w http.ResponseWriter, r *http.Request) 
 	var wanted []domain.ReserveLine
 	for _, line := range body.Lines {
 		if line.Quantity <= 0 {
-			continue
+			respondWithError(w, http.StatusBadRequest, "la cantidad de reserva debe ser positiva")
+			return
 		}
 		if !domain.ValidStockMaterialKind(line.Kind) || strings.TrimSpace(line.MaterialID) == "" {
 			respondWithError(w, http.StatusBadRequest, "línea de reserva inválida")
@@ -315,7 +316,10 @@ func (s *Server) HandleMaterialsReserve(w http.ResponseWriter, r *http.Request) 
 
 	var view materialsViewResponse
 	var reservedLines, shortLines []domain.ReserveLine
-	mutation, err := s.Store.MutateProjectMaterialPlanning(r.Context(), projectID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+	mutation, err := s.Store.MutateProjectMaterialPlanningForRelease(r.Context(), projectID, strings.TrimSpace(valueOrEmpty(body.ProductionReleaseID)), func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+		if err := validateCanonicalMaterialCommand(snap, projectID, strings.TrimSpace(valueOrEmpty(body.ProductionReleaseID))); err != nil {
+			return nil, err
+		}
 		if snap.Planning == nil || snap.Planning.Requirements == nil {
 			return nil, fmt.Errorf("CONFLICT:derivar los requerimientos del BOM liberado antes de reservar material")
 		}
@@ -325,17 +329,17 @@ func (s *Server) HandleMaterialsReserve(w http.ResponseWriter, r *http.Request) 
 
 		now := time.Now().UTC()
 		next, reserved, short := domain.PlanReservations(snap.Planning, snap.Stock, snap.AllPlannings, wanted, actorID(claims), now)
-		if len(reserved) == 0 && len(short) == 0 {
+		if len(reserved) == 0 && len(short) == 0 && !snap.CanonicalReleaseExists {
 			return nil, fmt.Errorf("CONFLICT:no hay material pendiente por reservar")
 		}
 
 		events := []domain.ProjectEvent{}
-		if len(reserved) > 0 && !snap.HasMaterialsReservedEvent {
+		if len(reserved) > 0 {
 			events = append(events, domain.ProjectEvent{
 				ID: newProjectEventID(), ProjectID: projectID,
 				Type: "materials_reserved", At: now, ByUserID: byUserIDFromClaims(claims), Source: domain.ProjectEventSourceAPI,
 				Note:    fmt.Sprintf("Material reservado (%d líneas)", len(reserved)),
-				Payload: materialsPayload(map[string]interface{}{"lines": reserved}),
+				Payload: materialsPayload(materialCommandPayload(snap, reserved)),
 			})
 		}
 		if len(short) > 0 {
@@ -343,7 +347,7 @@ func (s *Server) HandleMaterialsReserve(w http.ResponseWriter, r *http.Request) 
 				ID: newProjectEventID(), ProjectID: projectID,
 				Type: "materials_shortage_detected", At: now, ByUserID: byUserIDFromClaims(claims), Source: domain.ProjectEventSourceAPI,
 				Note:    fmt.Sprintf("Faltante de material detectado (%d líneas)", len(short)),
-				Payload: materialsPayload(map[string]interface{}{"lines": short}),
+				Payload: materialsPayload(materialCommandPayload(snap, short)),
 			})
 		}
 
@@ -368,9 +372,7 @@ func (s *Server) HandleMaterialsReserve(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-type releaseMaterialsRequest struct {
-	OverrideReason string `json:"override_reason,omitempty"`
-}
+type releaseMaterialsRequest = openapi.ReleaseMaterialsRequest
 
 type consumeMaterialsRequest struct {
 	Lines []struct {
@@ -450,13 +452,16 @@ func (s *Server) HandleMaterialsRelease(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}
-	overrideReason := strings.TrimSpace(body.OverrideReason)
+	overrideReason := strings.TrimSpace(valueOrEmpty(body.OverrideReason))
 
 	var gateChecks []domain.MaterialsReleaseCheck
 	gateBlocked := false
 	var view materialsViewResponse
-	mutation, err := s.Store.MutateProjectMaterialPlanning(r.Context(), projectID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
-		if snap.MaterialsReleased || snap.Planning.Release != nil {
+	mutation, err := s.Store.MutateProjectMaterialPlanningForRelease(r.Context(), projectID, strings.TrimSpace(valueOrEmpty(body.ProductionReleaseID)), func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+		if err := validateCanonicalMaterialCommand(snap, projectID, strings.TrimSpace(valueOrEmpty(body.ProductionReleaseID))); err != nil {
+			return nil, err
+		}
+		if snap.MaterialsReleased || (snap.Planning != nil && snap.Planning.Release != nil) {
 			return nil, fmt.Errorf("CONFLICT:el material de esta obra ya fue liberado")
 		}
 
@@ -530,15 +535,11 @@ func (s *Server) HandleMaterialsRelease(w http.ResponseWriter, r *http.Request) 
 				Payload: materialsPayload(map[string]interface{}{"reason": overrideReason, "failing_checks": release.Override.FailingChecks}),
 			})
 		}
-		lineCount := 0
-		if planning.Requirements != nil {
-			lineCount = len(planning.Requirements.Lines)
-		}
 		events = append(events, domain.ProjectEvent{
 			ID: newProjectEventID(), ProjectID: projectID,
 			Type: "materials_ready", At: now, ByUserID: byUserIDFromClaims(claims), Source: domain.ProjectEventSourceAPI,
 			Note:    "Material completo — liberado a producción",
-			Payload: materialsPayload(map[string]interface{}{"line_count": lineCount}),
+			Payload: materialsPayload(materialCommandPayload(snap, nil)),
 		})
 
 		view = buildMaterialsViewWithPlanning(snap, next)
@@ -578,4 +579,35 @@ func byUserIDFromClaims(claims *auth.Claims) *string {
 		return nil
 	}
 	return &claims.UserID
+}
+
+// Existing requirements own provenance; commands never infer a replacement release.
+func validateCanonicalMaterialCommand(snap *domain.MaterialPlanningSnapshot, projectID, releaseID string) error {
+	if !snap.CanonicalReleaseExists {
+		return nil
+	}
+	if releaseID == "" || snap.Planning == nil || snap.Planning.ProjectID != projectID || snap.Planning.Requirements == nil {
+		return fmt.Errorf("CONFLICT:la planificación canónica requiere su production_release_id exacto")
+	}
+	req, release := snap.Planning.Requirements, snap.ProductionRelease
+	if release == nil || req.ReleaseID != releaseID || req.SourceProductionReleaseID != releaseID || req.SourceProductionReleaseNumber != release.ReleaseNumber || req.SourceDesignRevisionNumber != release.DesignRevisionNumber || req.SourceDesignRevisionID != release.DesignRevisionID || req.SourceQuoteRevisionID != release.QuoteRevisionID || req.BomFingerprint != release.ManufacturingFingerprint || !reflect.DeepEqual(req.Lines, snap.CanonicalRequirements) {
+		return fmt.Errorf("CONFLICT:la planificación no corresponde al requerimiento canónico congelado")
+	}
+	return nil
+}
+
+func materialCommandPayload(snap *domain.MaterialPlanningSnapshot, lines []domain.ReserveLine) map[string]interface{} {
+	payload := map[string]interface{}{"lines": lines}
+	if snap.ProductionRelease != nil {
+		lineCount := len(lines)
+		if lines == nil && snap.Planning != nil && snap.Planning.Requirements != nil {
+			lineCount = len(snap.Planning.Requirements.Lines)
+		}
+		payload = materialsProvenancePayload(snap.ProductionRelease, lineCount)
+		payload["lines"] = lines
+	}
+	if snap.Planning != nil {
+		payload["planning_id"] = snap.Planning.ID
+	}
+	return payload
 }

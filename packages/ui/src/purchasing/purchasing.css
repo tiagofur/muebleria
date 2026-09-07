@@ -860,6 +860,7 @@
 /* ── Material planning evidence (OC-050..OC-054, F138) ───────────────────── */
 
 .purch-plan {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -880,6 +881,17 @@
   margin: 0;
   font-size: var(--text-sm);
   color: var(--text-secondary);
+}
+
+.purch-plan__scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+}
+
+.purch-plan__scroll:focus-visible {
+  box-shadow: var(--shadow-focus);
 }
 
 .purch-plan__table {

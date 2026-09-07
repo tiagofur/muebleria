@@ -38,9 +38,9 @@ func TestMaterialPlanningFixtureParity(t *testing.T) {
 		t.Fatalf("read contracts/materialPlanning.json: %v", err)
 	}
 	var fixture struct {
-		Comment           string   `json:"comment"`
+		Comment             string   `json:"comment"`
 		ReservationStatuses []string `json:"reservationStatuses"`
-		ReleaseCheckCodes []string `json:"releaseCheckCodes"`
+		ReleaseCheckCodes   []string `json:"releaseCheckCodes"`
 	}
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatalf("parse contracts/materialPlanning.json: %v", err)
@@ -89,7 +89,7 @@ func planningTestPlanning() *MaterialPlanning {
 			MaterialRequirementLine{Kind: "herrajes", MaterialID: "hw-1", Quantity: 10},
 		),
 		Reservations: []MaterialReservation{},
-		CreatedAt:   at,
+		CreatedAt:    at,
 	}
 }
 
@@ -148,8 +148,8 @@ func TestComputeWarehouseAvailability(t *testing.T) {
 	stock := []MaterialStock{{Kind: "herrajes", MaterialID: "hw-1", Quantity: 12, MinStock: 2}}
 	planning := planningTestPlanning()
 	other := &MaterialPlanning{
-		ID:          "mplan-2",
-		ProjectID:   "proj-2",
+		ID:        "mplan-2",
+		ProjectID: "proj-2",
 		Reservations: []MaterialReservation{{
 			ID: "r-o", Kind: "herrajes", MaterialID: "hw-1", Quantity: 5,
 			Status: MaterialReservationActive, ReservedAt: time.Now(),
@@ -327,5 +327,45 @@ func TestConsumePlannedMaterialsOldestFirst(t *testing.T) {
 	}
 	if next.Reservations[1].Status != MaterialReservationActive || next.Reservations[1].Quantity != 3 {
 		t.Fatalf("partial consumption must split the remainder: %+v", next.Reservations[1])
+	}
+}
+
+func TestReservationCapsParity(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "materialPlanning.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		ReservationCaps []struct {
+			Name                                  string
+			Required, Own, Stock, Reserved, Short float64
+			Wanted                                []float64
+		}
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range fixture.ReservationCaps {
+		t.Run(tc.Name, func(t *testing.T) {
+			planning := &MaterialPlanning{ProjectID: "p", Requirements: &MaterialRequirementsSnapshot{Lines: []MaterialRequirementLine{{Kind: "herrajes", MaterialID: "h", Quantity: tc.Required}}}}
+			if tc.Own > 0 {
+				planning.Reservations = []MaterialReservation{{Kind: "herrajes", MaterialID: "h", Quantity: tc.Own, Status: MaterialReservationActive}}
+			}
+			wanted := []ReserveLine{}
+			for _, q := range tc.Wanted {
+				wanted = append(wanted, ReserveLine{Kind: "herrajes", MaterialID: "h", Quantity: q})
+			}
+			_, reserved, short := PlanReservations(planning, []MaterialStock{{Kind: "herrajes", MaterialID: "h", Quantity: tc.Stock}}, []*MaterialPlanning{planning}, wanted, "u", time.Now())
+			var gotReserved, gotShort float64
+			for _, line := range reserved {
+				gotReserved += line.Quantity
+			}
+			for _, line := range short {
+				gotShort += line.Quantity
+			}
+			if gotReserved != tc.Reserved || gotShort != tc.Short {
+				t.Fatalf("reserved=%v short=%v want=%v/%v", gotReserved, gotShort, tc.Reserved, tc.Short)
+			}
+		})
 	}
 }

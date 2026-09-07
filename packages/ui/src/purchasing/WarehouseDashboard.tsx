@@ -156,10 +156,10 @@ export function WarehouseDashboard({
             <Layers size={18} strokeWidth={1.5} />
           </span>
           <div className="stat-card__body">
-            <span className="stat-card__value">{stats.totalBoardAreaM2} m²</span>
+            <span className="stat-card__value">{stats.totalFrozenBoardSheets > 0 ? `${stats.totalFrozenBoardSheets} planchas` : `${stats.totalBoardAreaM2} m²`}{stats.totalFrozenBoardSheets > 0 && stats.totalBoardAreaM2 > 0 ? ` + ${stats.totalBoardAreaM2} m² sin convertir` : ''}</span>
             <span className="stat-card__label">Demanda de Tableros</span>
             <span className="stat-card__subtext">
-              {stats.boardAreaOrigin === 'proxy' ? 'Área estimada (~2.8 m²/mód)' : 'Área neta calculada'}
+              {stats.totalFrozenBoardSheets > 0 ? 'Demanda congelada; unidades sin convertir' : stats.boardAreaOrigin === 'proxy' ? 'Área estimada (~2.8 m²/mód)' : 'Área neta calculada'}
             </span>
           </div>
         </div>

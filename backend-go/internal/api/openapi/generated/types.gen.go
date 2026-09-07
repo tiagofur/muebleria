@@ -1562,3 +1562,19 @@ type UpsertMachineOutputSelectionRequest struct {
 	Selection       MachineOutputSelection `json:"selection"`
 	ExpectedVersion int64                  `json:"expectedVersion"`
 }
+
+type MaterialReservationLine struct {
+	Kind       string  `json:"kind"`
+	MaterialID string  `json:"material_id"`
+	Quantity   float64 `json:"quantity"`
+}
+
+type ReserveMaterialsRequest struct {
+	ProductionReleaseID *string                   `json:"production_release_id,omitempty"`
+	Lines               []MaterialReservationLine `json:"lines,omitempty"`
+}
+
+type ReleaseMaterialsRequest struct {
+	ProductionReleaseID *string `json:"production_release_id,omitempty"`
+	OverrideReason      *string `json:"override_reason,omitempty"`
+}

@@ -494,3 +494,20 @@ describe('releaseProjectMaterials (OC-054)', () => {
     ).toThrow(ValidationError);
   });
 });
+
+describe('shared reservation demand/stock caps', () => {
+  for (const tc of materialPlanningContract.reservationCaps) {
+    it(tc.name, () => {
+      const planning = makePlanning({
+        requirements: { ...makePlanning().requirements!, lines: [{ kind: 'herrajes', materialId: 'hw-1', quantity: tc.required }] },
+        reservations: tc.own ? [{ id: 'existing', kind: 'herrajes', materialId: 'hw-1', quantity: tc.own, status: 'active', reservedAt: '2026-09-07T00:00:00Z' }] : [],
+      });
+      const result = reserveProjectMaterials(makeProject({ materialPlanning: planning }), {
+        plannings: [planning], stock: [{ kind: 'herrajes', materialId: 'hw-1', quantity: tc.stock, minStock: 0 }],
+        lines: tc.wanted.map((quantity) => ({ kind: 'herrajes', materialId: 'hw-1', quantity })),
+      });
+      expect(result.reservedLines.reduce((sum, line) => sum + line.quantity, 0)).toBe(tc.reserved);
+      expect(result.shortLines.reduce((sum, line) => sum + line.quantity, 0)).toBe(tc.short);
+    });
+  }
+});

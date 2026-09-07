@@ -174,6 +174,8 @@ func TestProductionReleaseCaptureHTTPFrozen(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	assertWarehouseFrozenHTTP(t, fx, handler, request, release.ID, frozen)
+
 	// Historical canonical release without its snapshot fails closed, never legacy fallback.
 	multiOrgExec(t, fx.admin, `ALTER TABLE production_release_manufacturing_snapshots DISABLE TRIGGER protect_release_manufacturing_snapshots_immutable;
  DELETE FROM production_release_manufacturing_snapshots;
@@ -219,4 +221,139 @@ func TestProductionReleaseCaptureResolutionRollback(t *testing.T) {
 			}
 		})
 	}
+}
+
+func assertWarehouseFrozenHTTP(t *testing.T, fx *releaseFixture, handler http.Handler, request func(string, string, string) *httptest.ResponseRecorder, releaseID string, frozen *storage.ReleaseManufacturingSnapshot) {
+	t.Helper()
+	path := "/api/projects/" + fx.projectID + "/materials/"
+	body := fmt.Sprintf(`{"production_release_id":%q}`, releaseID)
+	read := func() *domain.MaterialPlanning {
+		t.Helper()
+		var plan *domain.MaterialPlanning
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			project, err := fx.store.GetProjectByID(ctx, fx.projectID)
+			if err == nil {
+				plan = project.MaterialPlanning
+			}
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return plan
+	}
+	expect := func(target, payload string, code int) *httptest.ResponseRecorder {
+		t.Helper()
+		rr := request(target, "", payload)
+		if rr.Code != code {
+			t.Fatalf("%s status=%d want=%d %s", target, rr.Code, code, rr.Body.String())
+		}
+		return rr
+	}
+	for _, command := range []string{"reserve", "release"} {
+		expect(path+command, `{}`, 409)
+		expect(path+command, `{"production_release_id":"70000000-0000-4000-8000-000000000099"}`, 409)
+		expect("/api/projects/"+fiProjectAOnly+"/materials/"+command, body, 409)
+	}
+	expect(path+"reserve", fmt.Sprintf(`{"production_release_id":%q,"lines":[{"kind":"tableros","material_id":%q,"quantity":-1}]}`, releaseID, releaseMaterial), 400)
+	// Org B cannot reserve or read Org A's manufacturing planning via the real router.
+	var membership string
+	var memberVersion, orgVersion int64
+	if err := fx.admin.QueryRow(context.Background(), `SELECT m.id,m.credential_version,o.credential_version FROM memberships m JOIN organizations o ON o.id=m.organization_id WHERE m.organization_id=$1 AND m.user_id=$2`, rlsOrgB, rlsUserB).Scan(&membership, &memberVersion, &orgVersion); err != nil {
+		t.Fatal(err)
+	}
+	token, err := auth.GenerateLegacyWebToken(rlsUserB, "rls-b@example.test", auth.TokenContext{Roles: []string{string(domain.RoleAdmin)}, OrgID: rlsOrgB, MembershipID: membership, MembershipCredentialVersion: memberVersion, OrganizationCredentialVersion: orgVersion}, "release-capture-http-test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		target := strings.TrimSuffix(path, "/")
+		if method == http.MethodPost {
+			target += "/reserve"
+		}
+		req := httptest.NewRequest(method, target, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != 403 && rr.Code != 404 {
+			t.Fatalf("foreign %s=%d %s", method, rr.Code, rr.Body.String())
+		}
+	}
+	// Insufficient stock is an honest audited shortage, never a successful reservation.
+	expect(path+"reserve", body, 200)
+	if len(read().Reservations) != 0 {
+		t.Fatal("shortage created reservation")
+	}
+	required := frozen.Requirements[0].Quantity
+	multiOrgExec(t, fx.admin, fmt.Sprintf(`INSERT INTO material_stock(kind,material_id,quantity,min_stock,organization_id) VALUES ('tableros','%s',%f,0,'%s')`, releaseMaterial, required, rlsOrgA))
+	baseline, _ := json.Marshal(read())
+	var eventCount int
+	if err := fx.admin.QueryRow(context.Background(), `SELECT count(*) FROM project_events WHERE project_id=$1`, fx.projectID).Scan(&eventCount); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"projects", "project_events"} {
+		multiOrgExec(t, fx.admin, `CREATE FUNCTION fail_warehouse_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'warehouse failure'; END; $$; CREATE TRIGGER fail_warehouse BEFORE `+map[string]string{"projects": "UPDATE", "project_events": "INSERT"}[table]+` ON `+table+` FOR EACH ROW EXECUTE FUNCTION fail_warehouse_test();`)
+		expect(path+"reserve", body, 500)
+		multiOrgExec(t, fx.admin, `DROP TRIGGER fail_warehouse ON `+table+`; DROP FUNCTION fail_warehouse_test();`)
+		current, _ := json.Marshal(read())
+		var count int
+		if err := fx.admin.QueryRow(context.Background(), `SELECT count(*) FROM project_events WHERE project_id=$1`, fx.projectID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if string(current) != string(baseline) || count != eventCount {
+			t.Fatalf("%s failure survived rollback", table)
+		}
+	}
+	// Huge repeated client lines cannot exceed frozen demand or warehouse stock.
+	expect(path+"reserve", fmt.Sprintf(`{"production_release_id":%q,"lines":[{"kind":"tableros","material_id":%q,"quantity":999},{"kind":"tableros","material_id":%q,"quantity":999}]}`, releaseID, releaseMaterial, releaseMaterial), 200)
+	plan := read()
+	if len(plan.Reservations) != 1 || plan.Reservations[0].Quantity != required || !reflect.DeepEqual(plan.Requirements.Lines, frozen.Requirements) || plan.Requirements.SourceDesignRevisionID != frozen.Release.DesignRevisionID || plan.Requirements.BomFingerprint != frozen.Release.ManufacturingFingerprint {
+		t.Fatalf("frozen reservation mismatch: %+v", plan)
+	}
+	retry := expect(path+"reserve", body, 200)
+	if !strings.Contains(retry.Body.String(), `"events_appended":0`) || len(read().Reservations) != 1 {
+		t.Fatal("reserve-all retry duplicated reservation/audit")
+	}
+	// Stale persisted provenance cannot be rebound silently through derive or reserve.
+	saved, _ := json.Marshal(plan)
+	multiOrgExec(t, fx.admin, `UPDATE projects SET material_planning=jsonb_set(material_planning,'{requirements,release_id}','"old-release"') WHERE id='`+fx.projectID+`'`)
+	expect(path+"reserve", body, 409)
+	expect(path+"release", body, 409)
+	expect(path+"derive", body, 409)
+	if _, err := fx.admin.Exec(context.Background(), `UPDATE projects SET material_planning=$2 WHERE id=$1`, fx.projectID, saved); err != nil {
+		t.Fatal(err)
+	}
+	expect(path+"release", body, 200)
+	if read().Release == nil {
+		t.Fatal("release evidence absent")
+	}
+	expect(path+"release", body, 409)
+	var payload []byte
+	if err := fx.admin.QueryRow(context.Background(), `SELECT payload FROM project_events WHERE project_id=$1 AND type='materials_ready'`, fx.projectID).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	var evidence map[string]any
+	if err := json.Unmarshal(payload, &evidence); err != nil {
+		t.Fatal(err)
+	}
+	if evidence["release_id"] != releaseID || evidence["design_revision_id"] != frozen.Release.DesignRevisionID || evidence["line_count"] != float64(len(frozen.Requirements)) {
+		t.Fatalf("release provenance=%s", payload)
+	}
+	// Legacy-only project remains supported; no canonical ID inferred or required.
+	multiOrgExec(t, fx.admin, `UPDATE projects SET production_release='{"id":"legacy-only","bomFingerprint":"legacy-fp"}' WHERE id='`+fiProjectAOnly+`'`)
+	legacyPath := "/api/projects/" + fiProjectAOnly + "/materials/"
+	expect(legacyPath+"derive", fmt.Sprintf(`{"lines":[{"kind":"tableros","material_id":%q,"quantity":1}]}`, releaseMaterial), 200)
+	expect(legacyPath+"reserve", `{}`, 200)
+	var legacyRaw []byte
+	if err := fx.admin.QueryRow(context.Background(), `SELECT material_planning FROM projects WHERE id=$1`, fiProjectAOnly).Scan(&legacyRaw); err != nil {
+		t.Fatal(err)
+	}
+	var legacy domain.MaterialPlanning
+	if err := json.Unmarshal(legacyRaw, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Requirements.ReleaseID != "legacy-only" || len(legacy.Reservations) != 1 {
+		t.Fatalf("legacy compatibility=%s", legacyRaw)
+	}
+
 }

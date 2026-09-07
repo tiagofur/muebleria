@@ -98,6 +98,7 @@ export function MaterialPlanningPanel({
               {view.provenance.label}
             </p>
           ) : null}
+          <div className="purch-plan__scroll" role="region" aria-label="Cobertura de materiales: desplazamiento horizontal" tabIndex={0}>
           <table className="purch-plan__table" aria-label="Cobertura de materiales por línea">
             <thead>
               <tr>
@@ -111,7 +112,7 @@ export function MaterialPlanningPanel({
             </thead>
             <tbody>
               {view.coverage.map((line) => {
-                const unit = unitByMaterial[`${line.kind}:${line.materialId}`] ?? 'u';
+                const unit = line.kind === 'tableros' ? 'plancha' : line.kind === 'cintillas' ? 'ml' : (unitByMaterial[`${line.kind}:${line.materialId}`] ?? 'u');
                 return (
                   <tr key={`${line.kind}:${line.materialId}`}>
                     <td>{labelFor(line.kind, line.materialId, labelsByMaterial)}</td>
@@ -148,6 +149,7 @@ export function MaterialPlanningPanel({
               })}
             </tbody>
           </table>
+          </div>
 
           {canManage ? (
             <div className="purch-plan__actions">
