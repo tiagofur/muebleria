@@ -62,16 +62,22 @@ func TestRequirementLinesSharedContract(t *testing.T) {
 
 func TestRequirementLinesRejectInvalidInput(t *testing.T) {
 	cases := map[string]func(*domain.Project, *domain.Catalog){
-		"missing module":        func(p *domain.Project, c *domain.Catalog) { c.Modules = nil },
-		"missing material":      func(p *domain.Project, c *domain.Catalog) { c.Materials = nil },
-		"missing hardware":      func(p *domain.Project, c *domain.Catalog) { c.Hardware = nil },
-		"invalid unit quantity": func(p *domain.Project, c *domain.Catalog) { p.Items[0].Quantity = 0 },
-		"zero sheet width":      func(p *domain.Project, c *domain.Catalog) { c.Materials[1].WidthMm = 0 },
-		"infinite waste":        func(p *domain.Project, c *domain.Catalog) { c.Materials[1].WastePercent = math.Inf(1) },
-		"nan waste":             func(p *domain.Project, c *domain.Catalog) { c.Materials[1].WastePercent = math.NaN() },
-		"nan package":           func(p *domain.Project, c *domain.Catalog) { *c.Hardware[0].PackageSize = math.NaN() },
-		"negative package":      func(p *domain.Project, c *domain.Catalog) { *c.Hardware[0].PackageSize = -1 },
-		"infinite package":      func(p *domain.Project, c *domain.Catalog) { *c.Hardware[0].PackageSize = math.Inf(1) },
+		"missing module":                func(p *domain.Project, c *domain.Catalog) { c.Modules = nil },
+		"missing material":              func(p *domain.Project, c *domain.Catalog) { c.Materials = nil },
+		"missing hardware":              func(p *domain.Project, c *domain.Catalog) { c.Hardware = nil },
+		"invalid unit quantity":         func(p *domain.Project, c *domain.Catalog) { p.Items[0].Quantity = 0 },
+		"zero sheet width":              func(p *domain.Project, c *domain.Catalog) { c.Materials[1].WidthMm = 0 },
+		"infinite waste":                func(p *domain.Project, c *domain.Catalog) { c.Materials[1].WastePercent = math.Inf(1) },
+		"nan waste":                     func(p *domain.Project, c *domain.Catalog) { c.Materials[1].WastePercent = math.NaN() },
+		"nan package":                   func(p *domain.Project, c *domain.Catalog) { *c.Hardware[0].PackageSize = math.NaN() },
+		"negative package":              func(p *domain.Project, c *domain.Catalog) { *c.Hardware[0].PackageSize = -1 },
+		"infinite package":              func(p *domain.Project, c *domain.Catalog) { *c.Hardware[0].PackageSize = math.Inf(1) },
+		"subnormal package":             func(p *domain.Project, c *domain.Catalog) { *c.Hardware[0].PackageSize = math.SmallestNonzeroFloat64 },
+		"unrepresentable package count": func(p *domain.Project, c *domain.Catalog) { *c.Hardware[0].PackageSize = 1e-20 },
+		"unsafe aggregate consumption": func(p *domain.Project, c *domain.Catalog) {
+			p.Items = append(p.Items, p.Items[0])
+			c.Modules[3].HardwareLines = []domain.HardwareLine{{ID: "large", HardwareID: "hw-perfil", Quantity: 5e15}}
+		},
 		"missing edge": func(p *domain.Project, c *domain.Catalog) {
 			p.Items[0].ModuleID = "m-bajo-zoclo"
 			c.Edges = nil

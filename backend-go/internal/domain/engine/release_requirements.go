@@ -8,6 +8,8 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
+const maxExactRequirementQuantity = 9007199254740991
+
 // RequirementLinesFromProject aggregates planning demand through the existing
 // BOM engine. It does not capture a release or adapt authoring parameters.
 func RequirementLinesFromProject(project domain.Project, catalog domain.Catalog) ([]domain.MaterialRequirementLine, error) {
@@ -16,7 +18,8 @@ func RequirementLinesFromProject(project domain.Project, catalog domain.Catalog)
 		return nil, err
 	}
 	areas, edges := map[string]float64{}, map[string]float64{}
-	hasHardware := false
+	consumedHardware := map[string]float64{}
+	maxHardwarePackages := math.Min(maxExactRequirementQuantity, float64(int(^uint(0)>>1)))
 	for _, item := range project.Items {
 		if item.Quantity <= 0 {
 			return nil, fmt.Errorf("project item quantity must be positive")
@@ -36,7 +39,7 @@ func RequirementLinesFromProject(project domain.Project, catalog domain.Catalog)
 			// values outside JS's exact integer range cannot have TS/Go parity.
 			areaMm2 := float64(part.Quantity) * float64(item.Quantity) * float64(part.LengthMm) * float64(part.WidthMm)
 			perimeterMm := float64(part.Quantity) * float64(item.Quantity) * 2 * (float64(part.LengthMm) + float64(part.WidthMm))
-			if part.Quantity <= 0 || part.LengthMm <= 0 || part.WidthMm <= 0 || areaMm2 > 9007199254740991 || perimeterMm > 9007199254740991 {
+			if part.Quantity <= 0 || part.LengthMm <= 0 || part.WidthMm <= 0 || areaMm2 > maxExactRequirementQuantity || perimeterMm > maxExactRequirementQuantity {
 				return nil, fmt.Errorf("board metrics exceed supported integer range: %s", part.ID)
 			}
 			area, edge := CalcBoardLineMetrics(domain.BoardPart{
@@ -61,11 +64,17 @@ func RequirementLinesFromProject(project domain.Project, catalog domain.Catalog)
 			if !ok || (hw.PackageSize != nil && !positiveFinite(*hw.PackageSize)) {
 				return nil, fmt.Errorf("invalid hardware package: %s", line.HardwareID)
 			}
-			hasHardware = true
+			consumed := consumedHardware[hw.ID] + line.Quantity*float64(item.Quantity)
+			// Bound the aggregate before the generator converts package counts to int.
+			if !positiveFinite(consumed) || consumed > maxExactRequirementQuantity ||
+				(hw.PackageSize != nil && consumed / *hw.PackageSize > maxHardwarePackages) {
+				return nil, fmt.Errorf("hardware demand exceeds supported numeric range: %s", hw.ID)
+			}
+			consumedHardware[hw.ID] = consumed
 		}
 	}
 	lines := make([]domain.MaterialRequirementLine, 0)
-	if hasHardware {
+	if len(consumedHardware) > 0 {
 		rows, err := GenerateHardwareList(project, catalog)
 		if err != nil {
 			return nil, err
@@ -94,7 +103,7 @@ func RequirementLinesFromProject(project domain.Project, catalog domain.Catalog)
 		lines = append(lines, domain.MaterialRequirementLine{Kind: "cintillas", MaterialID: id, Quantity: quantity})
 	}
 	for _, line := range lines {
-		if line.MaterialID == "" || !positiveFinite(line.Quantity) {
+		if line.MaterialID == "" || !positiveFinite(line.Quantity) || line.Quantity > maxExactRequirementQuantity {
 			return nil, fmt.Errorf("invalid requirement: %s", line.MaterialID)
 		}
 	}
