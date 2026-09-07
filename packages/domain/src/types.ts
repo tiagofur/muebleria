@@ -1450,12 +1450,6 @@ export interface WorkshopSettings {
   readonly vendedorCanViewCosts: boolean;
   /** Workshop / business name shown in PDF exports branding. */
   readonly workshopName?: string;
-  /**
-   * Default PTX packaging mode for beam saws:
-   * - 'unified': single .ptx file containing all materials.
-   * - 'by-material': separate .ptx files per finish/thickness, bundled in .zip.
-   */
-  readonly ptxExportMode?: 'unified' | 'by-material';
   /** Default saw blade kerf thickness (mm) for 2D guillotine optimization (e.g. 4.4 mm). */
   readonly defaultSawKerfMm?: number;
   /** Default perimetral trim margins (mm) around raw boards. */

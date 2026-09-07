@@ -16,7 +16,6 @@ const base: WorkshopSettings = {
   defaultLaborFixedCost: 0,
   defaultCurrency: 'MXN',
   vendedorCanViewCosts: false,
-  ptxExportMode: 'unified',
   defaultSawKerfMm: 4.4,
   defaultTrimMargins: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
   defaultDeductEdgeBand: true,
@@ -45,7 +44,6 @@ describe('SettingsScreen (#37 / F044)', () => {
       defaultCurrency: 'MXN',
       vendedorCanViewCosts: true,
       workshopName: undefined,
-      ptxExportMode: 'unified',
       defaultCutStrategy: 'saw-guillotine',
       defaultSawKerfMm: 4.4,
       defaultTrimMargins: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
@@ -63,11 +61,13 @@ describe('SettingsScreen (#37 / F044)', () => {
     await user.click(screen.getByTestId('settings-tab-tab-ingenieria'));
 
     expect(screen.getByTestId('settings-section-ingenieria')).toBeTruthy();
+    // El modo de empaquetado PTX ya no vive aquí: la elección explícita está en
+    // Ingeniería → Optimización (un solo lugar, sin default divergente).
+    expect(screen.queryByTestId('settings-ptx-mode-unified')).toBeNull();
+    expect(screen.queryByTestId('settings-ptx-mode-by-material')).toBeNull();
     const kerfInput = screen.getByTestId('settings-saw-kerf') as HTMLInputElement;
     expect(kerfInput.value).toBe('4.4');
 
-    // Switch PTX mode to by-material
-    await user.click(screen.getByTestId('settings-ptx-mode-by-material'));
     await user.clear(kerfInput);
     await user.type(kerfInput, '4.0');
 
@@ -87,7 +87,6 @@ describe('SettingsScreen (#37 / F044)', () => {
       defaultCurrency: 'MXN',
       vendedorCanViewCosts: false,
       workshopName: undefined,
-      ptxExportMode: 'by-material',
       defaultCutStrategy: 'saw-guillotine',
       defaultSawKerfMm: 4.0,
       defaultTrimMargins: { topMm: 15, bottomMm: 10, leftMm: 10, rightMm: 10 },
