@@ -11,7 +11,7 @@
   background: var(--surface-hover);
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .pf-context__selectors {
@@ -43,32 +43,77 @@
   font-size: 13px;
 }
 
-.pf-context__reference {
+/* Exact context echo: what the user is comparing, at a glance. Mirrors the
+   pr-exact-header convention of the reconciliation workspace. */
+
+.pf-exact-header {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md, 4px);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
-.pf-context__note {
-  margin: 0;
-  font-size: 12px;
+.pf-exact-header__side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pf-exact-header__kind {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pf-exact-header__value {
+  font-size: var(--text-md, 16px);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pf-exact-header__hint {
+  font-size: var(--text-xs, 12px);
   color: var(--text-muted);
 }
 
-.pf-context__release {
+.pf-exact-header__vs {
+  font-size: var(--text-sm, 13px);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.pf-exact-header__release {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin: 0;
-  font-size: 13px;
+  margin-left: auto;
+  padding: 4px 10px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 3px);
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-primary);
+  flex-wrap: wrap;
+}
+
+.pf-exact-header__release--none {
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 .pf-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .pf-summary__card {
@@ -81,10 +126,27 @@
   border-radius: 4px;
 }
 
+.pf-summary__card--attention {
+  background: var(--warning-50);
+  border-color: var(--warning-500);
+}
+
 .pf-summary__value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--text-xl, 20px);
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.pf-summary__card--attention .pf-summary__value {
+  color: var(--warning-700);
+}
+
+.pf-summary__card--ok .pf-summary__value svg,
+.pf-summary__card--clear .pf-summary__value svg {
+  color: var(--success-700);
 }
 
 .pf-summary__label {
@@ -96,6 +158,125 @@
 .pf-summary__hint {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* Positive, sober all-clear note (only when a real comparison exists). */
+
+.pf-allclear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 3px);
+  background: var(--success-50);
+  color: var(--success-700);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Informational notice (e.g. units exist but no design selected to compare). */
+
+.pf-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 3px);
+  background: var(--info-50);
+  color: var(--info-700);
+  font-size: 13px;
+}
+
+.pf-notice svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.pf-notice p {
+  margin: 0;
+}
+
+/* Workspace load error: never render a data-less table as if it were empty. */
+
+.pf-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 16px;
+  text-align: center;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 4px);
+}
+
+.pf-error svg {
+  color: var(--danger);
+}
+
+.pf-error h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.pf-error p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 52ch;
+}
+
+/* Structural skeleton: first paint keeps the page shape (fields + cards + rows). */
+
+.pf-skeleton-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pf-skeleton-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pf-skeleton-block {
+  background: var(--surface-hover);
+  border-radius: 4px;
+  animation: pf-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.pf-skeleton-block--field {
+  min-width: 220px;
+  height: 56px;
+}
+
+.pf-skeleton-block--card {
+  height: 78px;
+}
+
+@keyframes pf-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-skeleton-block {
+    animation: none;
+  }
 }
 
 .pf-toolbar {
@@ -121,11 +302,12 @@
   color: var(--text-muted);
 }
 
-.pf-cell-title {
+.pf-cell-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+  margin-top: 2px;
 }
 
 .pf-label {
@@ -137,6 +319,35 @@
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+/* Row priority: attention/conflict tint whole rows so problems outrank
+   synced units; historical units without pending action recede. */
+
+.pf-row--attention td {
+  background: var(--warning-50);
+}
+
+.pf-row--danger td {
+  background: var(--danger-50);
+}
+
+.pf-row--inactive {
+  opacity: 0.55;
+}
+
+.pf-row-action {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 26ch;
+  white-space: normal;
+}
+
+.pf-table-busy {
+  opacity: 0.65;
+  transition: opacity 0.15s ease-out;
 }
 
 .pf-muted {
@@ -201,6 +412,55 @@
 
 .pf-kv-list li span:first-child {
   color: var(--text-muted);
+}
+
+/* Reconciliation differences: attribute label over a from → to value pair. */
+
+.pf-diff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-diff-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pf-diff-path {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pf-diff-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pf-diff-value {
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.pf-diff-value--from {
+  color: var(--text-secondary);
+}
+
+.pf-diff-value--to {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.pf-diff-arrow {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .pf-detail__next-step {

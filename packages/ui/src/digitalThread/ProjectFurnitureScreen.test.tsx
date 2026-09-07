@@ -590,6 +590,253 @@ describe('ProjectFurnitureScreen — matrix behavior (#500 acceptance)', () => {
     renderScreen({});
 
     const reference = await screen.findByTestId('pf-release-reference');
-    expect(reference.textContent).toContain('Release #1 fijado a R1 y Q1');
+    expect(reference.textContent).toContain('Liberación #1');
+    // The exact pins travel in the tooltip instead of competing with the badge.
+    expect(reference.getAttribute('title')).toContain('R1');
+  });
+
+  it('echoes the exact Q/R context in a glanceable header (never "latest")', async () => {
+    stubFetch({
+      quoteRevisions: [quoteRevision('qr-1', 1, [])],
+      designs: [design],
+      designRevisions: [
+        {
+          id: 'dr-1',
+          design_id: 'd-1',
+          revision_number: 1,
+          source_type: 'sketchup',
+          status: 'approved',
+          created_at: '2026-09-01T13:00:00Z',
+          items: [],
+        },
+      ],
+      furniture: [instance('fi-1')],
+    });
+    renderScreen({});
+
+    const header = await screen.findByTestId('pf-exact-context');
+    expect(within(header).getByText('Q1 · Aceptada')).toBeTruthy();
+    // View default is the working copy and the header says so honestly.
+    expect(within(header).getByText('Trabajo en curso')).toBeTruthy();
+
+    await waitFor(() => {
+      const select = screen.getByTestId('pf-design-context-select') as HTMLSelectElement;
+      expect(select.querySelector('option[value="dr-1"]')).not.toBeNull();
+    });
+    await userEvent.selectOptions(screen.getByTestId('pf-design-context-select'), 'dr-1');
+    await waitFor(() => {
+      expect(within(screen.getByTestId('pf-exact-context')).getByText('R1 · Aprobada')).toBeTruthy();
+    });
+  });
+
+  it('keeps the page shape with a structural skeleton while the first load is pending', async () => {
+    let resolveWorkspace: () => void = () => {};
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes('/furniture-workspace')) {
+        await new Promise<void>((resolve) => {
+          resolveWorkspace = resolve;
+        });
+        return new Response(JSON.stringify(defaultWorkspaceFromFurniture([instance('fi-1')])), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderScreen({});
+
+    expect(screen.getByTestId('pf-loading-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('pf-table')).toBeNull();
+
+    resolveWorkspace();
+    await screen.findByTestId('pf-table');
+  });
+
+  it('distinguishes "no design selected to compare" from "no furniture"', async () => {
+    stubFetch({ furniture: [instance('fi-1')] });
+    renderScreen({});
+
+    await screen.findByTestId('pf-table');
+    // Units exist but no design is selected: an informational notice, not an
+    // empty state pretending the workspace has no data.
+    expect(screen.getByTestId('pf-no-design-notice').textContent).toContain(
+      'todavía no hay un diseño seleccionado',
+    );
+    expect(screen.queryByTestId('empty-state')).toBeNull();
+  });
+
+  it('shows a sober all-clear state and neutral synced rows when everything matches', async () => {
+    const workspace: ProjectFurnitureWorkspace = {
+      projectId: PROJECT,
+      designContext: { kind: 'revision', designRevisionId: 'dr-1' },
+      summary: {
+        total: 1,
+        activeUnits: 1,
+        quoted: 1,
+        placed: 1,
+        pending: 0,
+        actionRequired: 0,
+        removed: 0,
+        cancelled: 0,
+      },
+      units: [
+        {
+          furnitureInstance: instance('fi-1') as any,
+          commercial: { present: true },
+          design: { presence: 'placed', contextKind: 'revision' },
+          reconciliation: {
+            furnitureInstanceId: 'fi-1',
+            status: 'synced',
+            differences: [],
+            impact: { commercial: false, manufacturing: false, spatial: false },
+          },
+        },
+      ],
+    };
+    stubFetch({ workspace });
+    renderScreen({});
+
+    await screen.findByTestId('pf-table');
+    expect(within(screen.getByTestId('pf-row-fi-1')).getByText('Sincronizada')).toBeTruthy();
+    expect(screen.getByTestId('pf-row-fi-1').getAttribute('data-attention')).toBe('false');
+    expect(screen.getByTestId('pf-row-fi-1').className).not.toContain('pf-row--');
+    expect(screen.getByTestId('pf-summary-synced').textContent).toContain('1');
+    expect(screen.getByTestId('pf-all-clear').textContent).toContain(
+      'Todas las unidades están sincronizadas',
+    );
+  });
+
+  it('makes action-required and conflict rows outrank synced rows visually', async () => {
+    const workspace: ProjectFurnitureWorkspace = {
+      projectId: PROJECT,
+      designContext: { kind: 'revision', designRevisionId: 'dr-1' },
+      summary: {
+        total: 3,
+        activeUnits: 3,
+        quoted: 3,
+        placed: 3,
+        pending: 0,
+        actionRequired: 2,
+        removed: 0,
+        cancelled: 0,
+      },
+      units: [
+        {
+          furnitureInstance: instance('fi-1') as any,
+          commercial: { present: true },
+          design: { presence: 'placed', contextKind: 'revision' },
+          reconciliation: {
+            furnitureInstanceId: 'fi-1',
+            status: 'synced',
+            differences: [],
+            impact: { commercial: false, manufacturing: false, spatial: false },
+          },
+        },
+        {
+          furnitureInstance: instance('fi-2') as any,
+          commercial: { present: true },
+          design: { presence: 'placed', contextKind: 'revision' },
+          reconciliation: {
+            furnitureInstanceId: 'fi-2',
+            status: 'modified',
+            differences: [],
+            impact: { commercial: true, manufacturing: false, spatial: false },
+          },
+          actionRequired: {
+            code: 'modified',
+            message: 'Difiere de la cotización',
+            remediation: 'Revisá los parámetros cotizados',
+          },
+        },
+        {
+          furnitureInstance: instance('fi-3') as any,
+          commercial: { present: true },
+          design: { presence: 'placed', contextKind: 'revision' },
+          reconciliation: {
+            furnitureInstanceId: 'fi-3',
+            status: 'conflict',
+            differences: [],
+            impact: { commercial: true, manufacturing: true, spatial: true },
+          },
+          actionRequired: {
+            code: 'conflict',
+            message: 'Conflicto irreconciliable',
+            remediation: 'Resolví el conflicto desde la reconciliación',
+          },
+        },
+      ],
+    };
+    stubFetch({ workspace });
+    renderScreen({});
+
+    await screen.findByTestId('pf-table');
+    // Status reads via icon + label, never color alone.
+    expect(within(screen.getByTestId('pf-row-fi-2')).getByText('Modificada')).toBeTruthy();
+    expect(within(screen.getByTestId('pf-row-fi-3')).getByText('Conflicto')).toBeTruthy();
+    // The remediation (what to do) is visible without opening the drawer.
+    expect(within(screen.getByTestId('pf-row-fi-2')).getByText('Revisá los parámetros cotizados')).toBeTruthy();
+    expect(screen.getByTestId('pf-row-fi-2').className).toContain('pf-row--attention');
+    expect(screen.getByTestId('pf-row-fi-2').getAttribute('data-attention')).toBe('true');
+    expect(screen.getByTestId('pf-row-fi-3').className).toContain('pf-row--danger');
+    // Synced units stay neutral — problems outrank them.
+    expect(screen.getByTestId('pf-row-fi-1').className).not.toContain('pf-row--');
+  });
+
+  it('humanizes reconciliation differences in the detail drawer (label + from → to)', async () => {
+    const workspace: ProjectFurnitureWorkspace = {
+      projectId: PROJECT,
+      designContext: { kind: 'revision', designRevisionId: 'dr-1' },
+      summary: {
+        total: 1,
+        activeUnits: 1,
+        quoted: 1,
+        placed: 1,
+        pending: 0,
+        actionRequired: 1,
+        removed: 0,
+        cancelled: 0,
+      },
+      units: [
+        {
+          furnitureInstance: instance('fi-1') as any,
+          commercial: { present: true },
+          design: { presence: 'placed', contextKind: 'revision' },
+          reconciliation: {
+            furnitureInstanceId: 'fi-1',
+            status: 'modified',
+            differences: [
+              {
+                path: 'parameters.width',
+                quoteValue: 600,
+                designValue: 650,
+                impact: { commercial: true, manufacturing: false, spatial: true },
+              },
+            ],
+            impact: { commercial: true, manufacturing: false, spatial: true },
+          },
+          actionRequired: {
+            code: 'modified',
+            message: 'Difiere de la cotización',
+            remediation: 'Revisá los parámetros cotizados',
+          },
+        },
+      ],
+    };
+    stubFetch({ workspace });
+    renderScreen({});
+
+    await screen.findByTestId('pf-table');
+    await userEvent.click(
+      within(screen.getByTestId('pf-row-fi-1')).getByRole('button', { name: /Ver detalle de/ }),
+    );
+    const modal = await screen.findByTestId('pf-detail-modal');
+    expect(within(modal).getByText('Parámetros · Ancho')).toBeTruthy();
+    expect(within(modal).getByText('600 mm')).toBeTruthy();
+    expect(within(modal).getByText('650 mm')).toBeTruthy();
   });
 });
