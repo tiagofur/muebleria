@@ -61,6 +61,50 @@ los nombres de lanes no prueban entitlement ni ejecución. Registra por actor
 identidad, rol, skill leída, modelo solicitado, modelo observado y fuente. Si el
 modelo real no es observable: `unavailable`. No escales costo fuera de lo aprobado.
 
+### Lane acotado GPT-5.3-Codex-Spark
+
+Spark es un **executor opcional del mismo rol `implementer`**, no un nuevo rol,
+dispatcher, reviewer, runtime ni autoridad. El líder puede **proponer** Spark sólo
+cuando el trabajo ya está suficientemente definido y todas estas condiciones son
+verdaderas:
+
+- cambio pequeño/localizado y de baja incertidumbre arquitectónica;
+- aceptación observable y tests esperados ya definidos;
+- áreas/rutas permitidas y prohibidas explícitas en el handoff;
+- sin schema/migrations, auth/security/RLS, lifecycle crítico ni persistencia nueva;
+- sin `ProductionRelease`/#577, warehouse/part-execution authority ni continuidad
+  operacional crítica;
+- sin diseño/implementación de protocolos o adapters de máquina: PTX, CADmatic,
+  SAW, MPR, woodWOP, CNC o compatibilidad de hardware/software;
+- sin decisiones cross-surface críticas SketchUp↔Go↔React, API contracts nuevos,
+  generated schema authority ni identidad/revision/release semantics;
+- sin refactor transversal, scope discovery abierto ni dependencia todavía no
+  resuelta por una fuente canónica.
+
+El handoff a Spark debe incluir, además de la issue y aprobación ordinarias:
+
+- `requested_model: GPT-5.3-Codex-Spark`;
+- propósito y criterios exactos de aceptación;
+- lista explícita de áreas/paths permitidos y prohibidos;
+- tests/comandos requeridos y evidencia esperada;
+- presupuesto acotado y regla de una sola ronda de corrección;
+- instrucción `STOP_AND_ESCALATE` ante ambigüedad arquitectónica, dependencia no
+  resuelta, necesidad de ampliar scope o necesidad de tocar un área prohibida.
+
+Spark **no puede autoseleccionar una issue, ampliar scope, inventar contratos ni
+convertir un bloqueo en una decisión de arquitectura**. Ante cualquiera de esas
+condiciones devuelve `BLOCKED_MODEL_SCOPE` al líder. El líder reevalúa y, si hace
+falta, propone otro modelo con nueva aprobación cuando cambie costo/riesgo/scope.
+
+La revisión de un PR escrito con Spark debe ser independiente y preferentemente con
+un modelo distinto; para cambios UI/localizados LOW/MEDIUM es suficiente si el riesgo
+lo permite. El reviewer conserva exactamente los mismos gates, pins y autoridad que
+para cualquier otro implementador. Spark nunca revisa/aprueba su propio HEAD.
+
+La disponibilidad, cuota o ahorro de Spark no se infieren. Registra `requested_model`
+y `observed_model` sólo cuando la plataforma los exponga; de lo contrario
+`observed_model: unavailable`. Una lane distinta no constituye evidencia de ahorro.
+
 ## Ejecución del líder existente
 
 1. Relee aprobación/issue y precondiciones. Verifica árbol limpio antes de empezar,
@@ -79,6 +123,9 @@ modelo real no es observable: `unavailable`. No escales costo fuera de lo aproba
    CLI: requieren aprobación humana, política compatible y ownership verificado.
 4. Despacha 1 implementador con issue, aprobación, aceptación/exclusiones, pins,
    deadline, comandos pertinentes y rutas exactas de skills. Exige que las lea.
+   Si el modelo solicitado es Spark, adjunta además el contrato de lane acotado y
+   la instrucción `STOP_AND_ESCALATE`; cualquier necesidad de ampliar scope produce
+   `BLOCKED_MODEL_SCOPE`, no una decisión improvisada.
    El escritor conserva cambios propios previstos; cambios ajenos/scope drift
    bloquean. Árbol limpio y push/readback vuelven a ser obligatorios para entregar.
 5. Publica PR autorizado con enlace parcial/cierre correcto; no auto-merge ni cierre
