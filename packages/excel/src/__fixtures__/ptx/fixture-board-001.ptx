@@ -1,0 +1,66 @@
+[HEADER]
+VERSION=1.14
+SYSTEM=GRANETE_APP
+JOB_NAME=fixture-board-001
+PROJECT_CODE=fixture-board-001
+CUSTOMER=Fixture Operator
+DATE=2026-09-06
+UNIT=MM
+METRIC=1
+KERF=4.4
+TRIM_TOP=10.0
+TRIM_BOTTOM=10.0
+TRIM_LEFT=10.0
+TRIM_RIGHT=10.0
+DEDUCT_EDGEBAND=1
+TOTAL_SHEETS=2
+TOTAL_PIECES=7
+
+[MATERIALS]
+; MAT_ID, DESCRIPTION, LENGTH, WIDTH, THICKNESS, TRIM_TOP, TRIM_BOTTOM, TRIM_LEFT, TRIM_RIGHT, KERF, BOOK_HEIGHT
+"sample-material-a", "Tablero Sintetico A 18mm", 2750.0, 1830.0, 18.0, 10.0, 10.0, 10.0, 10.0, 4.4, 1
+"sample-material-b", "Tablero Sintetico B 16mm", 2440.0, 1220.0, 16.0, 10.0, 10.0, 10.0, 10.0, 4.4, 1
+
+[PARTS]
+; PART_ID, PART_CODE, PART_NAME, MATERIAL_ID, FINISHED_L, FINISHED_W, CUT_L, CUT_W, QTY, GRAIN, ROTATED, EDGE_L1, EDGE_L2, EDGE_W1, EDGE_W2, BARCODE, CNC_PROG, MODULE_CODE, MODULE_NAME, PROJECT_CODE
+"P_1", "fixture-part-001", "Pieza Sintetica 001", "sample-material-a", 716.0, 578.0, 714.0, 578.0, 1, 1, 0, "1.0", "1.0", "0.0", "0.0", "fixture-label-001", "", "fixture-module-a", "fixture-label-001", "fixture-board-001"
+"P_2", "fixture-part-002", "Pieza Sintetica 002", "sample-material-a", 716.0, 578.0, 714.0, 578.0, 1, 1, 0, "1.0", "1.0", "0.0", "0.0", "fixture-label-002", "", "fixture-module-a", "fixture-label-002", "fixture-board-001"
+"P_3", "fixture-part-003", "Pieza Sintetica 003", "sample-material-a", 600.0, 578.0, 600.0, 578.0, 1, 0, 0, "0.0", "0.0", "0.0", "0.0", "fixture-label-003", "", "fixture-module-a", "fixture-label-003", "fixture-board-001"
+"P_4", "fixture-part-004", "Pieza Sintetica 004", "sample-material-a", 400.0, 300.0, 299.2, 400.0, 1, 0, 1, "0.0", "0.0", "0.8", "0.0", "fixture-label-004-1", "", "fixture-module-a", "fixture-label-004-1", "fixture-board-001"
+"P_5", "fixture-part-004", "Pieza Sintetica 004", "sample-material-a", 400.0, 300.0, 400.0, 299.2, 1, 0, 0, "0.0", "0.0", "0.8", "0.0", "fixture-label-004-2", "", "fixture-module-a", "fixture-label-004-2", "fixture-board-001"
+"P_6", "fixture-part-005", "Pieza Sintetica 005", "sample-material-b", 800.0, 600.0, 800.0, 599.2, 1, 1, 0, "0.0", "0.0", "0.8", "0.0", "fixture-label-005", "", "fixture-module-b", "fixture-label-005", "fixture-board-001"
+"P_7", "fixture-part-006", "Pieza Sintetica 006", "sample-material-b", 500.0, 600.0, 500.0, 600.0, 1, 0, 0, "0.0", "0.0", "0.0", "0.0", "fixture-label-006", "", "fixture-module-b", "fixture-label-006", "fixture-board-001"
+
+[PATTERNS]
+; PATTERN_ID, SHEET_INDEX, MATERIAL_ID, LENGTH, WIDTH, RUN_QTY, EFFICIENCY_PCT, PIECES_COUNT, WASTE_PCT
+"PAT_1", 1, "sample-material-a", 2750.0, 1830.0, 1, 28.1, 5, 65.0
+"PAT_2", 2, "sample-material-b", 2440.0, 1220.0, 1, 26.2, 2, 73.8
+
+[CUTS]
+; PATTERN_ID, STEP, PHASE, TYPE, POSITION_MM, LENGTH_MM, PIECE_REF
+"PAT_1", 1, 0, "TRIM_BOTTOM", 10.0, 2750.0, ""
+"PAT_1", 2, 0, "TRIM_LEFT", 10.0, 1830.0, ""
+"PAT_1", 3, 0, "TRIM_TOP", 1820.0, 2750.0, ""
+"PAT_1", 4, 0, "TRIM_RIGHT", 2740.0, 1830.0, ""
+"PAT_1", 5, 1, "RIP_STRIP_1", 588.0, 2750.0, "STRIP_1"
+"PAT_1", 6, 2, "CROSS_CUT", 724.0, 578.0, "fixture-part-001"
+"PAT_1", 7, 2, "CROSS_CUT", 1442.4, 578.0, "fixture-part-002"
+"PAT_1", 8, 2, "CROSS_CUT", 2046.8, 578.0, "fixture-part-003"
+"PAT_1", 9, 1, "RIP_STRIP_2", 992.4, 2750.0, "STRIP_2"
+"PAT_1", 10, 2, "CROSS_CUT", 309.2, 400.0, "fixture-part-004"
+"PAT_1", 11, 2, "CROSS_CUT", 713.6, 299.2, "fixture-part-004"
+"PAT_1", 12, 2, "REMNANT_USEFUL", 2651.2, 578.0, "REM_600.0x578.0"
+"PAT_2", 1, 0, "TRIM_BOTTOM", 10.0, 2440.0, ""
+"PAT_2", 2, 0, "TRIM_LEFT", 10.0, 1220.0, ""
+"PAT_2", 3, 0, "TRIM_TOP", 1210.0, 2440.0, ""
+"PAT_2", 4, 0, "TRIM_RIGHT", 2430.0, 1220.0, ""
+"PAT_2", 5, 1, "RIP_STRIP_1", 610.0, 2440.0, "STRIP_1"
+"PAT_2", 6, 2, "CROSS_CUT", 810.0, 599.2, "fixture-part-005"
+"PAT_2", 7, 2, "CROSS_CUT", 1314.4, 600.0, "fixture-part-006"
+
+[REMNANTS]
+; REMNANT_ID, PATTERN_ID, X_MM, Y_MM, LENGTH, WIDTH, AREA_M2, IS_USEFUL
+"REM_1", "PAT_1", 2051.2, 10.0, 600.0, 578.0, 0.3, 1
+"REM_2", "PAT_1", 718.0, 592.4, 300.0, 150.0, 0.0, 0
+"REM_3", "PAT_1", 10.0, 996.8, 200.0, 100.0, 0.0, 0
+"REM_4", "PAT_2", 1318.8, 10.0, 400.0, 300.0, 0.1, 0

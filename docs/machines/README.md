@@ -77,3 +77,11 @@ nunca promueve `NOT_TESTED`.
 | Pack | Máquinas conocidas | Estado |
 |---|---|---|
 | [`client-a`](./client-a/README.md) | `machine-a` (WEEKE BHX 050), `machine-b` (HOLZMA HPP 250) | `NOT_TESTED` — dossier de descubrimiento, sin evidencia de campo |
+
+## Infraestructura común de validación
+
+- Auditoría del PTX actual, fixture sintético congelado `fixture-board-001` r1
+  (golden con SHA-256), expected readback, contrato de comparación y runbook
+  operator-safe: [`ptx-validation.md`](./ptx-validation.md) — preparación de
+  #348, **sin claim de compatibilidad**. Los imports reales de cada máquina
+  consumen ese fixture y registran su evidencia en el pack del cliente.

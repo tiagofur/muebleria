@@ -136,4 +136,24 @@ export {
   type PtxMaterialCutFile,
 } from './ptxCutPlanExport';
 
+export {
+  buildActualReadbackTemplate,
+  comparePtxReadback,
+  type PtxActualReadback,
+  type PtxExpectedReadback,
+  type PtxFindingClassification,
+  type PtxReadbackComparison,
+  type PtxReadbackFinding,
+} from './ptxReadback';
+
+export {
+  buildExpectedPtxReadback,
+  buildPtxValidationCutPlan,
+  buildPtxValidationExportInput,
+  serializeExpectedReadback,
+  PTX_VALIDATION_FIXTURE_GENERATED_AT,
+  PTX_VALIDATION_FIXTURE_ID,
+  PTX_VALIDATION_FIXTURE_REVISION,
+} from './ptxValidationFixture';
+
 

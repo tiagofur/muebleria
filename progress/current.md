@@ -1,3 +1,11 @@
+## #348 — preparación de validación PTX import/readback (entrega parcial)
+
+- Rama: `feat/348-ptx-readback-validation-prep` (desde `main`); no toca #577/#351.
+- Auditoría completa del generador PTX (`packages/excel/src/ptxCutPlanExport.ts` + optimizer de dominio) documentada en `docs/machines/ptx-validation.md`: 16 hallazgos (A1–A16) incluyendo formato definido en repo sin verificación de receptor, identidad secuencial, `[CUTS]` derivado de geometría, ausencia de provenance (bomFingerprint/release) y fallbacks silenciosos.
+- Fixture sintético congelado `fixture-board-001` r1 (`packages/excel/src/ptxValidationFixture.ts`): 2 materiales, duplicados con identidad distinta, qty 2 con rotación mixta, grano 0/1, kerf 4.4 y deducción de canto no enteras, remanentes. Golden byte-exacto `__fixtures__/ptx/fixture-board-001.ptx` con SHA-256 `544dcae574bc19e19f934f96b2ad1dc104a2d7b1f668262a83ae09df72510f09` fijado en test (drift = falla).
+- Expected readback machine-neutral + comparador puro offline `packages/excel/src/ptxReadback.ts` (PASS/WARNING/BLOCKER/UNSUPPORTED_CAPABILITY/NOT_OBSERVABLE; sin estado "VALIDATED" — prueba negativa estructural). Runbook operator-safe, plantilla de evidencia sanitizada (`docs/templates/ptx-readback-evidence-template.md`) y lista de `FIELD_VERIFICATION_REQUIRED`.
+- Sin claim de compatibilidad; todos los estados de máquina siguen `NOT_TESTED`. Pendiente para cerrar #348: import real del fixture, readback en software receptor, sign-off del operador.
+
 ## #577 — private immutable snapshot schema, chain unit 3 (preparatory)
 
 - CI browser gate synchronization: await the other tab's broadcast-driven logout before an explicit reload, preserving login/no-tenant-data assertions before and after reload; no runtime change or retry. Five repeated real PostgreSQL/browser logout scenarios and all 23 organization browser scenarios pass; closing gates and exact-head CI remain required.
