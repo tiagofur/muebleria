@@ -1,3 +1,10 @@
+## #577 — strict Go revision-unit resolution, chain unit 4B (partial)
+
+- Resolve one unversioned revision item through the existing BOM engine, preserving physical/definition identity and evaluating typed defaults without mutating inputs.
+- Reject unsupported version pins, missing explicit composed dimensions, fixed-module overrides/base synthesis, invalid or competing consumers, relationship bindings and unconsumed material/edge/hardware choices.
+- Backend-only pure boundary: tenant/catalog coherence, collection identity checks and resource limits remain caller responsibilities; no capture, API, TS adapter, purchase aggregation or operational consumer is wired.
+- Focused negative and same-definition unit tests pass; independent validation, closing full gate and exact-head CI remain required. #577 and the ledger remain open/unchanged.
+
 ## #577 — shared component binding preparation, chain unit 4A (partial)
 
 - Extracted the existing Go quantity/condition binding helper without changing authoring behavior; added a TS counterpart keyed by binding kind and component ID, not parameter names.
