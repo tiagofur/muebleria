@@ -35,6 +35,44 @@ class WorkflowContractTest(unittest.TestCase):
             with self.subTest(boundary=boundary):
                 self.assertIn(boundary, contract)
 
+    def test_spark_is_bounded_executor_not_new_authority(self):
+        contract = (ROOT / CONTRACT).read_text()
+        leader = (ROOT / ".agents/skills/leader/SKILL.md").read_text()
+        writer = (ROOT / ".agents/skills/implementer/SKILL.md").read_text()
+
+        for boundary in (
+            "GPT-5.3-Codex-Spark",
+            "executor opcional del mismo rol `implementer`",
+            "STOP_AND_ESCALATE",
+            "BLOCKED_MODEL_SCOPE",
+            "ProductionRelease`/#577",
+            "PTX, CADmatic",
+            "observed_model: unavailable",
+            "Spark nunca revisa/aprueba su propio HEAD",
+        ):
+            with self.subTest(boundary=boundary):
+                self.assertIn(boundary, contract)
+
+        for boundary in (
+            "GPT-5.3-Codex-Spark",
+            "STOP_AND_ESCALATE",
+            "BLOCKED_MODEL_SCOPE",
+            "ProductionRelease/#577",
+            "PTX/CADmatic/SAW/MPR/woodWOP/CNC",
+        ):
+            with self.subTest(boundary=boundary):
+                self.assertIn(boundary, leader)
+
+        for boundary in (
+            "GPT-5.3-Codex-Spark",
+            "STOP_AND_ESCALATE",
+            "BLOCKED_MODEL_SCOPE",
+            "ProductionRelease`/#577",
+            "PTX/CADmatic/SAW/MPR/woodWOP/CNC",
+        ):
+            with self.subTest(boundary=boundary):
+                self.assertIn(boundary, writer)
+
 
 if __name__ == "__main__":
     unittest.main()
