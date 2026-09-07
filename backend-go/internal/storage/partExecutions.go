@@ -92,21 +92,11 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		return nil, fmt.Errorf("error resolving execution release: %w", err)
 	}
 	if authority != nil {
-		// Validate the exact private P1/R2/fingerprint under the same project
-		// lock as every station command. Neither client routes nor a current
-		// catalog can supply the missing immutable machining coverage.
-		frozen, err := s.GetProductionReleaseManufacturingSnapshot(
-			context.WithValue(ctx, transactionContextKey{}, tx), projectID, authority.ReleaseID)
-		if err != nil {
+		// Shared guard for generation, advance, rework and supervisor
+		// override: exact frozen P1/R2/fingerprint, then fail closed.
+		if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {
 			return nil, err
 		}
-		if frozen.Release.DesignRevisionID != authority.DesignRevisionID ||
-			frozen.Release.ManufacturingFingerprint != authority.ManufacturingFingerprint {
-			return nil, ErrReleaseSnapshotUnavailable
-		}
-		// This applies to generation, advance, rework and supervisor override;
-		// even existing client-derived executions cannot become routing proof.
-		return nil, ErrReleaseRoutingUnavailable
 	}
 
 	mutation, err := mutate(snap)

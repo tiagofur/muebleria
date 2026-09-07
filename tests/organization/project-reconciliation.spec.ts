@@ -188,7 +188,7 @@ async function assertRoutingBlocked(page: Page, apiBase: string, token: string, 
   await expect(page.getByTestId(`fabric-release-${projectId}`)).toContainText(`Diseño R${revisionNumber}`);
   await expect(page.getByTestId(`fabric-routing-blocker-${projectId}`)).toContainText('evidencia congelada de rutas y maquinados');
   await expect(page.getByTestId(`fabric-generate-parts-${projectId}`)).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Enviar a producción', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /enviar a producción/i })).toHaveCount(0);
   // A direct client cannot bypass the disabled UI with claimed no-CNC routes.
   for (let retry = 0; retry < 2; retry++) {
     const result = await fetch(`${apiBase}/projects/${projectId}/part-executions`, {

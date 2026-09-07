@@ -1443,6 +1443,11 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			return
 		} else if canonicalRelease != nil {
 			p.ProductionRelease = existing.ProductionRelease
+			// #577: physical executions are station-authoritative — without
+			// frozen routing evidence they cannot be minted or rewritten
+			// through the generic aggregate surface either; keep the stored copy.
+			p.PartInstances = existing.PartInstances
+			p.ModuleUnits = existing.ModuleUnits
 		}
 
 		// #327: organization ownership is server-authoritative. It is

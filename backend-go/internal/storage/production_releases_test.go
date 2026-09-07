@@ -902,19 +902,19 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 		t.Fatalf("job costing must resolve the SAME canonical authority (P1/F3), got %+v", costingSnap.ProductionRelease)
 	}
 
-	var qualitySnap *domain.QualitySnapshot
+	// Quality is a PHYSICAL execution consumer: with a canonical release and
+	// no frozen routing evidence even its snapshot mutation fails closed
+	// (#577) — the canonical authority itself stays observable through the
+	// planning/costing snapshots above and the read projections.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.MutateProjectQuality(ctx, fx.projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
-			qualitySnap = snap
-			return &domain.QualityMutation{}, nil
+			t.Fatal("no quality callback may run without frozen routing evidence")
+			return nil, nil
 		})
 		return err
 	})
-	if err != nil {
-		t.Fatalf("quality snapshot: %v", err)
-	}
-	if qualitySnap.ReleasedRevision != p1.Release.ID {
-		t.Fatalf("quality must resolve the canonical release revision, got %q", qualitySnap.ReleasedRevision)
+	if !errors.Is(err, storage.ErrReleaseRoutingUnavailable) {
+		t.Fatalf("quality must fail closed without frozen routing, got %v", err)
 	}
 
 	// Control — required legacy-fallback shape: a project WITHOUT a canonical

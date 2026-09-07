@@ -176,7 +176,8 @@ func (s *Server) HandleProjectPartExecutions(w http.ResponseWriter, r *http.Requ
 	readiness := make([]domain.AssemblyReadiness, 0, len(project.ModuleUnits))
 	for _, u := range project.ModuleUnits {
 		check := domain.CheckAssemblyReadiness(u, project.PartInstances, released)
-		if project.ResolvedProductionRelease != nil && project.ResolvedProductionRelease.Source == "canonical" {
+		if project.ResolvedProductionRelease != nil &&
+			project.ResolvedProductionRelease.Source == domain.ProductionReleaseAuthorityCanonical {
 			check.IsReady = false
 			check.CanStartWithOverride = false
 			check.Blockers = append(check.Blockers, domain.CanonicalPartExecutionRoutingBlocker)
@@ -798,12 +799,8 @@ func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Req
 	var result map[string]interface{}
 	_, err = s.Store.MutateProjectPartExecutions(r.Context(), projectID, func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error) {
 		// ── Validation (server authority) ────────────────────────────────
-		if snap.ProductionRelease != nil {
-			released = snap.ProductionRelease.ReleaseID
-			if len(body.ModuleUnits) != len(snap.ItemQuantities) {
-				return nil, fmt.Errorf("BAD_REQUEST:se requiere una unidad por cada mueble de la revisión liberada")
-			}
-		}
+		// Canonical releases never reach this closure: the locked storage
+		// guard rejects them before validation (missing frozen routing).
 		unitsPerItem := map[string]int{}
 		for _, u := range body.ModuleUnits {
 			if u.ProjectID != projectID {

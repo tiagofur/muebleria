@@ -415,11 +415,42 @@ func assertExecutionRoutingBlockedHTTP(t *testing.T, fx *releaseFixture, handler
 		{"/parts/forged-part/rework", `{"action":"refabricate","reason":"must not bypass"}`},
 		{"/units/forged-unit/advance", `{"advance":true}`},
 		{"/units/forged-unit/assembly-override", `{"reason":"must not bypass"}`},
+		{"/quality/rework", `{"action":"rework","reason":"must not bypass"}`},
 	} {
 		rr := request(http.MethodPost, path+command.suffix, token, command.body)
 		if rr.Code != 409 || !strings.Contains(rr.Body.String(), "evidencia congelada de rutas y maquinados") {
 			t.Fatalf("station %s=%d %s", command.suffix, rr.Code, rr.Body.String())
 		}
+	}
+	// The generic project aggregate cannot mint executions either: a full
+	// round-trip PUT with forged physical state succeeds as an aggregate
+	// update while the stored execution columns stay frozen.
+	projectRR := request(http.MethodGet, path, token, "")
+	if projectRR.Code != 200 {
+		t.Fatalf("project read=%d %s", projectRR.Code, projectRR.Body.String())
+	}
+	var projectPayload map[string]any
+	if err := json.Unmarshal(projectRR.Body.Bytes(), &projectPayload); err != nil {
+		t.Fatal(err)
+	}
+	// The seeded fixture keeps a legacy non-UUID global choice that the HTTP
+	// validator rejects on any PUT; it is irrelevant to the execution columns.
+	projectPayload["project_level_choices"] = map[string]any{}
+	projectPayload["part_instances"] = []any{map[string]any{
+		"id": "forged-part", "project_id": fx.projectID, "project_item_id": fx.fiA,
+		"production_revision": frozen.Release.ID, "length_mm": 999,
+		"required_operations": []any{map[string]any{"type": "cut"}},
+	}}
+	projectPayload["module_units"] = []any{map[string]any{
+		"id": "forged-unit", "project_id": fx.projectID, "project_item_id": fx.fiA,
+		"production_revision": frozen.Release.ID, "status": "packaged",
+	}}
+	forgedProject, err := json.Marshal(projectPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rr := request(http.MethodPut, path, token, string(forgedProject)); rr.Code != 200 {
+		t.Fatalf("aggregate put=%d %s", rr.Code, rr.Body.String())
 	}
 	if after := read(); after != before {
 		t.Fatalf("rejected commands changed executions: %s", after)

@@ -93,6 +93,28 @@ func (s *PostgresStore) resolveProjectReleaseAuthorityTx(ctx context.Context, tx
 	return domain.ResolvedFromCanonicalRelease(canonical), nil
 }
 
+// guardCanonicalExecutionRouting is the shared fail-closed guard for EVERY
+// command that can write physical execution state (part instances, module
+// units, station progress, quality gates) on a project with a canonical
+// release. It first validates the exact private frozen pair — P1 release,
+// DesignRevision and manufacturing fingerprint — under the caller's project
+// row lock; schema v1 freezes BOM demand, not machining coverage, so the
+// command then fails closed: neither client routes nor a current catalog can
+// supply the missing immutable routing evidence. Legacy-only projects never
+// reach this guard.
+func (s *PostgresStore) guardCanonicalExecutionRouting(ctx context.Context, tx pgx.Tx, projectID string, authority *domain.ResolvedProductionRelease) error {
+	frozen, err := s.GetProductionReleaseManufacturingSnapshot(
+		context.WithValue(ctx, transactionContextKey{}, tx), projectID, authority.ReleaseID)
+	if err != nil {
+		return err
+	}
+	if frozen.Release.DesignRevisionID != authority.DesignRevisionID ||
+		frozen.Release.ManufacturingFingerprint != authority.ManufacturingFingerprint {
+		return ErrReleaseSnapshotUnavailable
+	}
+	return ErrReleaseRoutingUnavailable
+}
+
 // getProjectProductionReleaseTx loads one EXACT canonical release of the
 // project on an explicit transaction (#577 / OPS-DT-1). Missing and
 // cross-project are the same not-found answer so no foreign release id can
