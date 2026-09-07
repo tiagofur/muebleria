@@ -21,6 +21,7 @@ CREATE TABLE machine_output_selections (
 );
 
 ALTER TABLE machine_output_selections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE machine_output_selections FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY machine_output_selections_read ON machine_output_selections
     FOR SELECT TO granete_app
