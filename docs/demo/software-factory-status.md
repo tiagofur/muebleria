@@ -29,20 +29,29 @@ predeterminado al versionar el controlador. Los informes completados son inmutab
 | Componente | Evidencia | Límite |
 | --- | --- | --- |
 | Publicación y handoff exacto | #574/#576 integradas | No demuestran dispatch ni permiso de merge |
-| Reserva, cuarentena, recuperación y resultados tardíos | Controlador instalado; 77 pruebas locales PASS en esta revisión | El hash declarado de un resultado no acredita sus bytes |
-| Observación de worktree/PR | Rechaza base desactualizada en prueba real con #577/#579 | No hubo canary positivo completo |
+| Reserva, cuarentena, recuperación y resultados tardíos | Controlador actualizado; 87 pruebas instaladas y 8 pruebas independientes PASS | El hash declarado de un resultado no acredita sus bytes |
+| Binding persistente v5 de worktree/PR | Prueba real con #573/PR #580 y lectura tras reinicio PASS en estado desechable; rechazo de base desactualizada con #577/#579 | No hubo canary completo de dispatch; runtime activo continúa v1, sin reservas nuevas |
 | Preflight del producto | `./init.sh` PASS, PostgreSQL desechable, sobre `6ae788aed6e5be6263462b8995ec6197352aa5a0`, árbol equivalente a `84c98698d9dab023ae9427ebdac98c63ef5d1236` | No acredita automáticamente el main posterior |
 | PR #579 | Ocho controles PASS sobre `191ee7f49527009bcae134566af2902598d1914f`; merge externo `78116f20d2dec0fb50290811b128bd55dc814383` | No fue un merge realizado por esta fábrica; #577 sigue abierto |
 | Protección remota | Consulta: main sin protección, rulesets vacíos | CI verde no es enforcement; no se cambiaron permisos |
+| CI post-merge #579 | [Run 34074800002](https://github.com/tiagofur/muebleria/actions/runs/34074800002): Go Backend Tests FAIL, timeout global de almacenamiento a los 10 minutos | Main `78116f20d2dec0fb50290811b128bd55dc814383` no está verde; no se atribuye una causa raíz sin reproducción |
 
 Durante la prueba de observación, main cambió por el merge externo de #579.
 La base anterior fue rechazada. Esa evidencia prueba rechazo de obsolescencia,
 no dispatch de implementación ni aprobación independiente de una entrega.
 
+La instalación v5 conserva hashes del estado, política e informes completados.
+Controlador SHA-256: `11e8fbca9749b623079a7b9e81826589a6bcb59f313622405337d6214004c5a1`.
+Es una entrega local del controlador existente, no código publicado por este PR
+documental. El binding se obtiene de una observación nueva bajo el mismo bloqueo;
+no acepta un digest del solicitante como prueba. No libera ni autoriza la reserva.
+La prueba real fijó PR #580 a `22bcb8edc42dea338856ac32bd805b8a7604937d`;
+cualquier commit posterior requiere un binding y una validación nuevos.
+
 ## Gaps de ejecución que mantienen #573 abierto
 
-1. Persistir asignación y binding exacto dentro de la reserva existente; consumir
-   bytes verificables de evidencia independiente, no solamente un hash declarado.
+1. Persistir asignación de agentes y consumir bytes verificables de evidencia
+   independiente. El binding exacto ya se conserva, pero no sustituye esos pasos.
 2. Conectar el líder con reviewer → implementer → validator independiente,
    registrando intento, identidad de agente, timeout y lanzamiento incierto.
 3. Seleccionar modelos por riesgo/complejidad y capacidad suficiente. Separar modelo
