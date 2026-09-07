@@ -534,6 +534,7 @@ export function PurchasingScreen({
 
   const renderHardwareTab = (): ReactNode => {
     if (projectsWithHardware.length === 0) {
+      if (projects.some((project) => project.canonical)) return null;
       return (
         <EmptyState
           icon={Wrench}
@@ -591,6 +592,7 @@ export function PurchasingScreen({
 
   const renderTablerosTab = (): ReactNode => {
     if (projectsWithMaterials.length === 0) {
+      if (projects.some((project) => project.canonical)) return null;
       return (
         <EmptyState
           icon={Layers}
@@ -663,6 +665,7 @@ export function PurchasingScreen({
 
   const renderCintillasTab = (): ReactNode => {
     if (projectsWithEdges.length === 0) {
+      if (projects.some((project) => project.canonical)) return null;
       return (
         <EmptyState
           icon={Ruler}

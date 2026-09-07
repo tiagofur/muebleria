@@ -30,3 +30,7 @@ Final exact-head full Go/init, real React+Go+PostgreSQL browser gate, independen
 Part executions, machine outputs, full stage continuity and the single whole-#577 golden path remain outside this delivery. Canonical stage entry already works without the engineering timestamp; the project-level materials-release stage seam is unchanged. #577 stays open; no merge is authorized.
 
 Rollback boundary: revert this warehouse command/read-model unit and its tests/generated request schemas together; no migration or independent inventory model was added.
+
+## Bounded independent-review correction
+
+The single authorized correction suppresses legacy empty-state claims while a canonical card is visible, with a three-material-tab UI regression. The real browser fixture now checks canonical card/provenance/reservation controls at 390, 768 and 1280 px, saving synthetic screenshots only when an absolute `WAREHOUSE_VISUAL_DIR` is explicitly supplied. Final new-head full gates, screenshot inspection and re-review remain pending; earlier passing evidence does not approve the corrected head.

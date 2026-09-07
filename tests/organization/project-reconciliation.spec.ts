@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { GATE_MODULE_A_ID, required } from './support/api';
@@ -913,6 +915,30 @@ async function publishRevisionWithItemIds(options: {
     await page.getByRole('tab', { name: 'Tableros' }).click();
     await page.getByTestId(`purch-release-${OPS_PROJECT_ID}`).click();
     await expect(page.getByTestId(`purch-plan-provenance-${OPS_PROJECT_ID}`)).toContainText('Liberación #1');
+    // Responsive QA uses the actual synthetic fixture and existing controls.
+    const originalViewport = page.viewportSize();
+    const visualDirectory = process.env.WAREHOUSE_VISUAL_DIR;
+    if (visualDirectory) {
+      if (!isAbsolute(visualDirectory)) throw new Error('WAREHOUSE_VISUAL_DIR must be absolute');
+      await mkdir(visualDirectory, { recursive: true });
+    }
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const card = page.getByTestId(`purch-project-${OPS_PROJECT_ID}`);
+      const reserve = page.getByTestId(`purch-plan-reserve-${OPS_PROJECT_ID}`);
+      await expect(card).toBeVisible();
+      await expect(page.getByTestId(`purch-plan-provenance-${OPS_PROJECT_ID}`)).toContainText('Liberación #1');
+      await expect(page.getByText('Sin tableros por despachar')).toHaveCount(0);
+      await expect(reserve).toBeVisible();
+      await expect(reserve).toBeEnabled();
+      await reserve.focus();
+      await expect(reserve).toBeFocused();
+      const bounds = await card.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.width).toBeLessThanOrEqual(width);
+      if (visualDirectory) await page.screenshot({ path: join(visualDirectory, `warehouse-${width}.png`), fullPage: true });
+    }
+    if (originalViewport) await page.setViewportSize(originalViewport);
     const reserveRequest = page.waitForRequest((request) => request.url().endsWith(`/projects/${OPS_PROJECT_ID}/materials/reserve`));
     await page.getByTestId(`purch-plan-reserve-${OPS_PROJECT_ID}`).click();
     expect((await reserveRequest).postDataJSON().production_release_id).toBe(release.id);

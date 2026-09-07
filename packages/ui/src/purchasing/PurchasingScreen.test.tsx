@@ -407,4 +407,13 @@ it('shows canonical planning without presenting mutable picking quantities', () 
   expect(screen.getByText('1 proyecto activo')).toBeTruthy();
   expect(screen.queryByText('Mutable hardware')).toBeNull();
   expect(screen.queryByText(/999/)).toBeNull();
+  for (const [tab, empty] of [
+    ['Herrajes', 'Sin herrajes por despachar'],
+    ['Tableros', 'Sin tableros por despachar'],
+    ['Cintillas', 'Sin cintillas por despachar'],
+  ] as const) {
+    fireEvent.click(screen.getByRole('tab', { name: tab }));
+    expect(screen.getByTestId('purch-project-frozen')).toBeTruthy();
+    expect(screen.queryByText(empty)).toBeNull();
+  }
 });
