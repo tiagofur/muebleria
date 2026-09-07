@@ -258,7 +258,11 @@ func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID
 	if err != nil {
 		return nil, nil, err
 	}
-	preflight := domain.RunManufacturingPreflight(designRevisionID, items, definitions)
+	materialIDs, err := s.loadSelectedMaterialIDs(ctx, projectOrgID, items)
+	if err != nil {
+		return nil, nil, err
+	}
+	preflight := domain.RunManufacturingPreflight(designRevisionID, items, definitions, materialIDs)
 	if preflight.Status == domain.ManufacturingPreflightBlocked {
 		return nil, preflight, &domain.ReleasePreflightBlockedError{Result: preflight}
 	}
@@ -311,7 +315,52 @@ func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, des
 	// 4. The ONE authoritative verdict. RLS scopes the revision read to the
 	// organizations that can access the project, so a foreign revision never
 	// reaches this point.
-	return domain.RunManufacturingPreflight(revisionID, items, definitions), nil
+	materialIDs, err := s.loadSelectedMaterialIDs(ctx, projectOrgID, items)
+	if err != nil {
+		return nil, err
+	}
+	return domain.RunManufacturingPreflight(revisionID, items, definitions, materialIDs), nil
+}
+
+// loadSelectedMaterialIDs checks membership only: role/kind resolution remains
+// owned by the manufacturing resolver. Explicit project ownership also scopes
+// shared-project reads; no ambient organization override or client authority.
+func (s *PostgresStore) loadSelectedMaterialIDs(ctx context.Context, organizationID string, items []domain.DesignRevisionItem) (map[string]bool, error) {
+	selected := make(map[string]bool)
+	for _, item := range items {
+		for _, id := range item.MaterialChoices {
+			if id != "" {
+				selected[id] = true
+			}
+		}
+	}
+	found := make(map[string]bool)
+	if len(selected) == 0 {
+		return found, nil
+	}
+	ids := make([]string, 0, len(selected))
+	for id := range selected {
+		ids = append(ids, id)
+	}
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT id::text FROM material_boards WHERE organization_id = $1 AND id::text = ANY($2)
+		UNION ALL
+		SELECT id::text FROM hardwares WHERE organization_id = $1 AND id::text = ANY($2)
+		UNION ALL
+		SELECT id::text FROM edge_bands WHERE organization_id = $1 AND id::text = ANY($2)
+	`, organizationID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		found[id] = true
+	}
+	return found, rows.Err()
 }
 
 // loadReferencedFurnitureDefinitionParameters loads the persisted parameter

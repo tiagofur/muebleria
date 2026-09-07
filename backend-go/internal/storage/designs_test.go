@@ -152,6 +152,11 @@ func setupDesignsTestFixture(t *testing.T) *rlsFixture {
 		ON CONFLICT (id) DO NOTHING`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, board_price, organization_id)
+		VALUES ($1, 'RELEASE-BOARD', 'Release board', 1830, 2440, 18, 1000, $2)`, releaseMaterial, rlsOrgA); err != nil {
+		t.Fatal(err)
+	}
 	return fx
 }
 

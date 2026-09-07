@@ -1,3 +1,13 @@
+## DEMO — selected material integrity (bounded correction)
+
+- Base: `84c98698`; branch: `fix/577-demo-release-bom-integrity`.
+- Preflight and release now require selected IDs to exist in the owning organization catalog (boards, hardware, edges); unknown legacy roles remain compatible.
+- Real PostgreSQL RED: missing/foreign/unavailable board catalog incorrectly returned ready. GREEN: 15 catalog/scenario cases; rejection commits no release or release audit.
+- Focused regressions pass; independent validation: 52 top-level tests and 15 PostgreSQL scenarios PASS, zero skips. Full worktree gate and exact-head remote CI must pass before merge.
+- This does **not** freeze catalog-derived manufacturing output: immutable released BOM remains P0.
+- #577 is closed with its existing approval label; publication requires explicit tracking reconciliation, not inferred issue reopening or approval.
+- F202 and prior feature history below remain unchanged.
+
 # Revisión y corrección activa: PR #578 / #577 (entrega parcial)
 
 - Rama: `feat/577-canonical-release-ops-continuity`; correcciones sobre `6744442a`, sin activar otra feature del ledger.

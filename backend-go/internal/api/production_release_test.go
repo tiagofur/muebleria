@@ -180,7 +180,7 @@ func TestHandleProjectProductionReleases_CreatePermissionDenial(t *testing.T) {
 
 func TestHandleProjectProductionReleases_GateErrorMapping(t *testing.T) {
 	blockedPreflight := &domain.ReleasePreflightBlockedError{Result: domain.RunManufacturingPreflight(
-		releaseTestRevisionID, nil, nil)} // empty revision → blocked
+		releaseTestRevisionID, nil, nil, nil)} // empty revision → blocked
 	conflictClassification := &domain.ImpactClassificationResult{
 		Summary: domain.ImpactClassificationSummary{RequiresResolution: true},
 	}

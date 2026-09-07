@@ -236,7 +236,8 @@ func ProjectFurnitureDimensionParameters() []FurnitureParameterDefinition {
 
 // RunManufacturingPreflight validates the exact DesignRevision items against
 // the organization catalog: every unit must reference an existing furniture
-// definition and satisfy its authoritative parameter contract. Deterministic
+// definition, satisfy its parameter contract, and select only material IDs
+// from the owning organization catalog supplied by storage. Deterministic
 // and fail-closed: any issue blocks the whole release (§17: a blocked preflight
 // means zero fabricable output, not a partial release).
 //
@@ -251,7 +252,7 @@ func ProjectFurnitureDimensionParameters() []FurnitureParameterDefinition {
 // overlapping blocker semantics. When resolved machining state becomes
 // persistable per revision (#397/#398/#503 path), it extends THIS gate; no
 // second release preflight may appear beside it.
-func RunManufacturingPreflight(revisionID string, items []DesignRevisionItem, definitions map[string]FurnitureDefinitionParameters) *ManufacturingPreflightResult {
+func RunManufacturingPreflight(revisionID string, items []DesignRevisionItem, definitions map[string]FurnitureDefinitionParameters, materialIDs map[string]bool) *ManufacturingPreflightResult {
 	result := &ManufacturingPreflightResult{
 		DesignRevisionID: revisionID,
 		Scope:            ManufacturingPreflightScope,
@@ -343,13 +344,13 @@ func RunManufacturingPreflight(revisionID string, items []DesignRevisionItem, de
 		}
 
 		for slot, material := range item.MaterialChoices {
-			if slot == "" || material == "" {
+			if slot == "" || material == "" || !materialIDs[material] {
 				block(ManufacturingPreflightIssue{
 					Code:                  PreflightIssueInvalidMaterialUse,
 					FurnitureInstanceID:   item.FurnitureInstanceID,
 					FurnitureDefinitionID: item.FurnitureDefinitionID,
 					Parameter:             slot,
-					Message:               "material choice carries an empty slot or value",
+					Message:               "material choice carries an empty slot or references no material in the organization catalog",
 				})
 			}
 		}
