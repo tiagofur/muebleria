@@ -1,0 +1,114 @@
+{
+  "schemaId": "granete.releaseRequirements.v1",
+  "catalogFixture": "plinthBaseParity.contract.json",
+  "cases": [
+    {
+      "name": "board-only",
+      "moduleId": "m-bajo-none",
+      "units": 2,
+      "wastePercent": 25,
+      "expected": [
+        {
+          "kind": "tableros",
+          "material_id": "mat-body",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "name": "edge-meters",
+      "moduleId": "m-bajo-zoclo",
+      "units": 2,
+      "wastePercent": 25,
+      "expected": [
+        {
+          "kind": "cintillas",
+          "material_id": "edge-pvc",
+          "quantity": 1.2
+        },
+        {
+          "kind": "tableros",
+          "material_id": "mat-body",
+          "quantity": 3
+        },
+        {
+          "kind": "tableros",
+          "material_id": "mat-front",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "name": "fractional-packages",
+      "moduleId": "m-bajo-perfil",
+      "units": 2,
+      "wastePercent": 25,
+      "expected": [
+        {
+          "kind": "herrajes",
+          "material_id": "hw-perfil",
+          "quantity": 4
+        },
+        {
+          "kind": "tableros",
+          "material_id": "mat-body",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "name": "exact-package",
+      "moduleId": "m-bajo-perfil",
+      "units": 20,
+      "wastePercent": 0,
+      "expected": [
+        {
+          "kind": "herrajes",
+          "material_id": "hw-perfil",
+          "quantity": 12
+        },
+        {
+          "kind": "tableros",
+          "material_id": "mat-body",
+          "quantity": 17
+        }
+      ]
+    },
+    {
+      "name": "negative-waste-clamped",
+      "moduleId": "m-bajo-none",
+      "units": 2,
+      "wastePercent": -20,
+      "expected": [
+        {
+          "kind": "tableros",
+          "material_id": "mat-body",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "name": "custom-dimensions",
+      "moduleId": "m-bajo-perfil",
+      "units": 2,
+      "wastePercent": 0,
+      "customDims": {
+        "widthMm": 800,
+        "heightMm": 1000,
+        "depthMm": 500
+      },
+      "expected": [
+        {
+          "kind": "herrajes",
+          "material_id": "hw-perfil",
+          "quantity": 4
+        },
+        {
+          "kind": "tableros",
+          "material_id": "mat-body",
+          "quantity": 2
+        }
+      ]
+    }
+  ]
+}

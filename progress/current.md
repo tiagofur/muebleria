@@ -1,3 +1,11 @@
+## #577 — immutable release requirements, chain unit 1 (partial)
+
+- Base: `78116f20`; branch: `fix/577-immutable-release-bom`. Existing ledger unchanged.
+- Added a pure Go planning-demand adapter reusing the BOM, metrics and hardware-purchase engines; shared TS/Go fixtures cover physical units, board-only demand, sheet waste, edge meters and package rounding.
+- Invalid/missing catalog inputs and non-finite demand fail without partial requirement lines. This adapter is not connected to the live release path.
+- Typed authoring preparation, coherent immutable capture, canonical consumers and the real browser golden path remain subsequent dependent units; #577 remains open.
+- Focused parity/domain tests and typecheck are recorded in the unit implementation report; full gate and remote exact-head CI remain publication requirements.
+
 ## DEMO — selected material integrity (bounded correction)
 
 - Base: `84c98698`; branch: `fix/577-demo-release-bom-integrity`.
