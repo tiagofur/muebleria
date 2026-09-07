@@ -12,7 +12,7 @@ import (
 // empty agregado repetitions before allocation. Count even base-filtered parts
 // and reserve six rows for possible base synthesis (four boards, two hardware).
 // Hardware consumption may be fractional; its quantity is not a row count.
-// Collection limits and occurrence identity validation remain caller concerns.
+// A collection shares this budget; standalone unit resolution remains unchanged.
 const releaseUnitExpansionLimit = 10_000
 
 type releaseExpansionBudget int
@@ -71,7 +71,7 @@ func (used *releaseExpansionBudget) agregados(instances []domain.ModuleAgregadoI
 	return nil
 }
 
-func validateReleaseUnitExpansion(module domain.Module, catalog domain.Catalog) error {
+func validateReleaseUnitExpansion(module domain.Module, catalog domain.Catalog, collection *releaseExpansionBudget) error {
 	var used releaseExpansionBudget
 	if err := used.add(len(module.HardwareLines), 1); err != nil {
 		return err
@@ -85,7 +85,7 @@ func validateReleaseUnitExpansion(module domain.Module, catalog domain.Catalog) 
 				return err
 			}
 		}
-		return nil
+		return chargeReleaseCollection(collection, used)
 	}
 	structure, ok := findStructure(catalog, module.StructureID)
 	if !ok {
@@ -105,5 +105,16 @@ func validateReleaseUnitExpansion(module domain.Module, catalog domain.Catalog) 
 	if err := used.agregados(structure.Agregados, catalog); err != nil {
 		return err
 	}
-	return used.agregados(module.Agregados, catalog)
+	if err := used.agregados(module.Agregados, catalog); err != nil {
+		return err
+	}
+	return chargeReleaseCollection(collection, used)
+}
+
+// Charge before BOM allocation, including one work unit for an empty definition.
+func chargeReleaseCollection(collection *releaseExpansionBudget, used releaseExpansionBudget) error {
+	if collection == nil {
+		return nil
+	}
+	return collection.add(maxInt(1, int(used)), 1)
 }
