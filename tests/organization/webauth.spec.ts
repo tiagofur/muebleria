@@ -172,7 +172,11 @@ test('logout en una pestaña corta la sesión compartida: la otra termina en log
   await tabA.getByTestId('app-logout').click();
   await expect(tabA.getByRole('button', { name: 'Iniciar Sesión' })).toBeVisible({ timeout: 15_000 });
 
-  // Tab B: la cookie fue revocada — recarga/bootstrap termina en login.
+  // Wait for the broadcast-driven reload before requesting another navigation.
+  await expect(tabB.getByRole('button', { name: 'Iniciar Sesión' })).toBeVisible({ timeout: 15_000 });
+  await expect(tabB.locator('.app-topbar__organization-text strong')).toHaveCount(0);
+
+  // An explicit reload must still bootstrap into login after cookie revocation.
   await tabB.reload();
   await expect(tabB.getByRole('button', { name: 'Iniciar Sesión' })).toBeVisible({ timeout: 15_000 });
   // Sin business data residual visible.
