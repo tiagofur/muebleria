@@ -179,6 +179,37 @@ async function loginToA(page: Page): Promise<void> {
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 }
 
+// A production queue is not proof that physical work is safe to execute.
+// Schema-v1 P1 has frozen BOM demand but no complete routing evidence.
+async function assertRoutingBlocked(page: Page, apiBase: string, token: string, projectId: string, releaseId: string, revisionNumber: number): Promise<void> {
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  await page.goto('/production');
+  await expect(page.getByTestId(`fabric-card-${projectId}`)).toBeVisible();
+  await expect(page.getByTestId(`fabric-release-${projectId}`)).toContainText(`Diseño R${revisionNumber}`);
+  await expect(page.getByTestId(`fabric-routing-blocker-${projectId}`)).toContainText('evidencia congelada de rutas y maquinados');
+  await expect(page.getByTestId(`fabric-generate-parts-${projectId}`)).toBeDisabled();
+  await expect(page.getByRole('button', { name: /enviar a producción/i })).toHaveCount(0);
+  // A direct client cannot bypass the disabled UI with claimed no-CNC routes.
+  for (let retry = 0; retry < 2; retry++) {
+    const result = await fetch(`${apiBase}/projects/${projectId}/part-executions`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({
+        force: true,
+        part_instances: [{ id: 'forged-part', project_id: projectId, production_revision: releaseId, required_operations: [{ type: 'cut' }] }],
+        module_units: [{ id: 'forged-unit', project_id: projectId, production_revision: releaseId }],
+      }),
+    });
+    expect(result.status).toBe(409);
+    expect(await result.text()).toContain('evidencia congelada de rutas y maquinados');
+  }
+  const executions = await (await fetch(`${apiBase}/projects/${projectId}/part-executions`, { headers })).json();
+  expect(executions.part_instances).toEqual([]);
+  expect(executions.module_units).toEqual([]);
+  const detail = await (await fetch(`${apiBase}/projects/${projectId}`, { headers })).json();
+  expect(detail.production_release ?? null).toBeNull();
+  expect(detail.resolved_production_release.release_id).toBe(releaseId);
+}
+
 test.describe.serial('Reconciliation, approval and exact ProductionRelease (#502 / WEB-DT-3) Browser E2E', () => {
   let seeded!: SeededReconciliation;
 
@@ -235,10 +266,10 @@ async function publishRevisionWithItemIds(options: {
 }
 
 
-  test('quote-first golden path: exact Q1/R1, requote → Q2, approval, release P1, durability after R2', async ({
+  test('quote-first path: Q1 → Q2/R2 → P1 → warehouse, physical production blocked without frozen routing', async ({
     page,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
 
     // ------------------------------------------------------------------
     // 1. Initial State: Open reconciliation workspace for the project.
@@ -522,6 +553,9 @@ async function publishRevisionWithItemIds(options: {
     await page.getByTestId('submit-release').click();
     const releaseResponse = await releaseResponsePromise;
     expect(releaseResponse.status(), await releaseResponse.text()).toBe(201);
+    const releasedP1 = await releaseResponse.json();
+    expect(releasedP1.design_revision_id).toBe(seeded.r2Id);
+    expect(releasedP1.quote_revision_id).toBe(q2DraftValue);
 
     await expect(page.getByTestId('release-success')).toBeVisible();
     await expect(page.getByTestId('release-success')).toContainText('Liberación #1 creada');
@@ -558,6 +592,49 @@ async function publishRevisionWithItemIds(options: {
     // Selecting R3 shows NO contextual release (P1 belongs to R2 only).
     await page.getByTestId('design-revision-select').selectOption(seeded.r3Id);
     await expect(page.getByTestId('contextual-release-badge')).toHaveCount(0);
+
+    // One real fixture continues the SAME accepted Q2/R2/P1 into warehouse.
+    // Hardware demand is genuine; this is explicitly not a complete physical
+    // golden path and does not manufacture a no-CNC receipt for the fixture.
+    const apiBase = required('ORGANIZATION_API_BASE');
+    const authHeaders = { Authorization: `Bearer ${lifecycleOwner.token}`, 'Content-Type': 'application/json' };
+    // Project operational acceptance remains a distinct supported command;
+    // accepting a QuoteRevision does not silently rewrite project lifecycle.
+    const operationsRepository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => lifecycleOwner.token });
+    const operationalProject = (await operationsRepository.getProjects()).find((project) => project.id === seeded.projectId)!;
+    await operationsRepository.saveProject({ ...operationalProject, status: 'accepted' });
+    await page.goto('/warehouse');
+    await page.getByRole('tab', { name: 'Herrajes' }).click();
+    await page.getByTestId(`purch-release-${seeded.projectId}`).click();
+    await page.getByTestId(`purch-plan-derive-${seeded.projectId}`).click();
+    await expect(page.getByTestId(`purch-plan-provenance-${seeded.projectId}`)).toContainText('Diseño R2');
+    const readPlanning = async () => (await (await fetch(`${apiBase}/projects/${seeded.projectId}/materials`, { headers: authHeaders })).json()).planning;
+    const planning = await readPlanning();
+    expect(planning.requirements.release_id).toBe(releasedP1.id);
+    expect(planning.requirements.source_design_revision_id).toBe(seeded.r2Id);
+    expect(planning.requirements.bom_fingerprint).toBe(releasedP1.manufacturing_fingerprint);
+    expect(planning.requirements.lines).toEqual([{ kind: 'herrajes', material_id: REC_HW, quantity: 4 }]);
+    const stock = await fetch(`${apiBase}/stock/movements`, {
+      method: 'POST', headers: authHeaders,
+      body: JSON.stringify({ kind: 'herrajes', material_id: REC_HW, type: 'entrada', quantity: 4 }),
+    });
+    expect(stock.status).toBe(201);
+    await page.reload();
+    await page.getByRole('tab', { name: 'Herrajes' }).click();
+    await page.getByTestId(`purch-release-${seeded.projectId}`).click();
+    const reserve = page.waitForRequest((request) => request.url().endsWith(`/projects/${seeded.projectId}/materials/reserve`));
+    await page.getByTestId(`purch-plan-reserve-${seeded.projectId}`).click();
+    expect((await reserve).postDataJSON().production_release_id).toBe(releasedP1.id);
+    await expect(page.getByTestId(`purch-plan-reserve-${seeded.projectId}`)).toHaveCount(0);
+    const reserved = await readPlanning();
+    expect(reserved.requirements).toEqual(planning.requirements);
+    expect(reserved.reservations).toHaveLength(1);
+    expect(reserved.reservations[0].quantity).toBe(4);
+    const releaseMaterials = page.waitForRequest((request) => request.url().endsWith(`/projects/${seeded.projectId}/materials/release`));
+    await page.getByTestId(`purch-plan-release-${seeded.projectId}`).click();
+    expect((await releaseMaterials).postDataJSON().production_release_id).toBe(releasedP1.id);
+    await expect(page.getByTestId(`purch-release-${seeded.projectId}`)).toHaveCount(0);
+    await assertRoutingBlocked(page, apiBase, lifecycleOwner.token, seeded.projectId, releasedP1.id, 2);
   });
 
   test('failure rollback: release before approval is rejected server-side, no release row, no false success', async ({
@@ -610,11 +687,11 @@ async function publishRevisionWithItemIds(options: {
   // ------------------------------------------------------------------
   // OPS-DT-1 (#577): the canonical ProductionRelease drives the whole
   // operational leg — almacén derive FROM the exact release snapshot,
-  // provenance readback, mutable-quote independence and physical
-  // production stamped with the exact release id — while the legacy
+  // provenance readback, mutable-quote independence and explicit routing
+  // blockage before physical production — while the legacy
   // OC-022 blob stays null the entire time (no second liberation).
   // ------------------------------------------------------------------
-  test('OPS-DT-1 (#577): canonical release drives almacén + production with exact provenance, no legacy liberation', async ({
+  test('OPS-DT-1 (#577): frozen board demand reaches warehouse; missing routing blocks physical production', async ({
     page,
   }) => {
     test.setTimeout(180_000);
@@ -982,58 +1059,9 @@ async function publishRevisionWithItemIds(options: {
       timeout: 15_000,
     });
 
-    // 8. Production floor recognizes the release — badge with the exact
-    //    label and the physical generation CTA (no legacy send-to-production).
-    await page.goto('/production');
-    const card = page.getByTestId(`fabric-card-${OPS_PROJECT_ID}`);
-    await expect(card).toBeVisible();
-    await expect(page.getByTestId(`fabric-release-${OPS_PROJECT_ID}`)).toContainText('Liberación #1');
-    await expect(page.getByTestId(`fabric-release-${OPS_PROJECT_ID}`)).toContainText('Diseño R1');
-    await page.getByTestId(`fabric-generate-parts-${OPS_PROJECT_ID}`).click();
-    // Once generated, the CTA disappears and physical rows take over.
-    await expect(page.getByTestId(`fabric-generate-parts-${OPS_PROJECT_ID}`)).toHaveCount(0, {
-      timeout: 15_000,
-    });
-
-    // 9. Part executions are stamped with the EXACT canonical release id.
-    const executions = (await (
-      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, { headers: authHeaders })
-    ).json()) as {
-      part_instances: readonly { id: string; project_item_id: string; unit_index: number; production_revision: string; length_mm: number; width_mm: number }[];
-      module_units: readonly { id: string; project_item_id: string; unit_index: number }[];
-    };
-    expect(executions.part_instances.length).toBeGreaterThan(0);
-    const stampedRevisions = new Set(executions.part_instances.map((p) => p.production_revision));
-    expect(stampedRevisions.size).toBe(1);
-    expect(Array.from(stampedRevisions)[0]).toBe(release.id);
-
-    // Current quote quantity is nine, but P1 still owns exactly two units.
-    const releasedFurniture = mat.instances.map((i) => i.furniture_instance_id).sort();
-    expect(executions.module_units.map((u) => u.project_item_id).sort()).toEqual(releasedFurniture);
-    expect(executions.module_units.every((u) => u.unit_index === 1)).toBe(true);
-    expect([...new Set(executions.part_instances.map((p) => p.project_item_id))].sort()).toEqual(releasedFurniture);
-    expect(executions.part_instances.every((p) => p.unit_index === 1)).toBe(true);
-    expect(executions.part_instances.every((p) => p.length_mm !== 999 && p.width_mm !== 999)).toBe(true);
-    // Regenerating identical untouched executions is idempotent; malformed
-    // membership cannot replace the already-persisted exact snapshot.
-    const generateExecutions = (moduleUnits: readonly unknown[]) => fetch(
-      `${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, {
-        method: 'PUT', headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ part_instances: executions.part_instances, module_units: moduleUnits }),
-      });
-    expect((await generateExecutions(executions.module_units.slice(0, 1))).status).toBe(400);
-    expect((await generateExecutions(executions.module_units)).status).toBe(200);
-    const repeated = await (await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, { headers: authHeaders })).json();
-    expect(repeated.part_instances).toEqual(executions.part_instances);
-    expect(repeated.module_units).toEqual(executions.module_units);
-
-    // 10. Critical negative proof: the legacy blob is STILL null after the
-    //     whole operational path ran on the canonical release.
-    const finalDetail = (await (
-      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}`, { headers: authHeaders })
-    ).json()) as { production_release?: unknown; resolved_production_release?: { source: string } };
-    expect(finalDetail.production_release ?? null).toBeNull();
-    expect(finalDetail.resolved_production_release?.source).toBe('canonical');
+    // Queue entry preserves P1, but cannot authorize physical manufacture.
+    // The old client-derived route expectation was not frozen-content proof.
+    await assertRoutingBlocked(page, apiBase, owner.token, OPS_PROJECT_ID, release.id, 1);
   });
 
   test('tenant isolation: Org B never sees Org A reconciliation data', async ({ page }) => {

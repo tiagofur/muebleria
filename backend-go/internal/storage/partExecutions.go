@@ -92,26 +92,10 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		return nil, fmt.Errorf("error resolving execution release: %w", err)
 	}
 	if authority != nil {
-		snap.ProductionRelease = authority
-		snap.ItemQuantities = map[string]int{}
-		members, err := tx.Query(ctx, `
-			SELECT furniture_instance_id::text FROM design_revision_items
-			WHERE design_revision_id = $1;
-		`, authority.DesignRevisionID)
-		if err != nil {
-			return nil, fmt.Errorf("error loading released furniture: %w", err)
-		}
-		for members.Next() {
-			var id string
-			if err := members.Scan(&id); err != nil {
-				members.Close()
-				return nil, fmt.Errorf("error scanning released furniture: %w", err)
-			}
-			snap.ItemQuantities[id] = 1
-		}
-		members.Close()
-		if err := members.Err(); err != nil {
-			return nil, fmt.Errorf("error reading released furniture: %w", err)
+		// Shared guard for generation, advance, rework and supervisor
+		// override: exact frozen P1/R2/fingerprint, then fail closed.
+		if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {
+			return nil, err
 		}
 	}
 

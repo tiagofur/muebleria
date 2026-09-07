@@ -11,6 +11,10 @@ import (
 )
 
 var ErrReleaseSnapshotResolution = errors.New("release manufacturing resolution failed")
+
+// Schema v1 freezes BOM/material demand, not complete machining/routing evidence.
+var ErrReleaseRoutingUnavailable = errors.New("CONFLICT:" + domain.CanonicalPartExecutionRoutingBlocker)
+
 var ErrReleaseSnapshotUnavailable = errors.New("CONFLICT:el snapshot de fabricación exacto no está disponible")
 
 // Private frozen content; ProductionRelease remains the sole release authority.

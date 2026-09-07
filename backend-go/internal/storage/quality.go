@@ -77,6 +77,13 @@ func (s *PostgresStore) MutateProjectQuality(
 	if authority != nil {
 		snap.ReleasedRevision = authority.ReleaseID
 	}
+	if authority != nil && authority.Source == domain.ProductionReleaseAuthorityCanonical {
+		// #577: quality gates advance physical unit state; without frozen
+		// routing evidence they fail closed like every station command.
+		if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {
+			return nil, err
+		}
+	}
 
 	rows, err := tx.Query(ctx, `
 		SELECT id, COALESCE(floor_status, 'pending'), COALESCE(quantity, 1) FROM project_items WHERE project_id = $1;

@@ -214,7 +214,7 @@ function StationMetrics({
 function ProjectCard({
   card,
   station,
-  canAdvance,
+  canAdvance: canAdvanceRequested,
   onAdvance,
   onAdvancePart,
   onAdvanceUnit,
@@ -262,6 +262,7 @@ function ProjectCard({
   /** #577 / OPS-DT-1: generate the physical executions from the release authority. */
   readonly onGeneratePartExecutions?: (projectId: string) => void;
 }): ReactNode {
+  const canAdvance = canAdvanceRequested && !card.executionBlocker;
   const target = TARGET_STATUS[station];
   const stationLabel = TAB_LABELS[station].toLowerCase();
   const hasClaims = card.activeClaims.length > 0;
@@ -316,6 +317,11 @@ function ProjectCard({
           {card.customerLabel ? (
             <p className="fabric-card__customer">{card.customerLabel}</p>
           ) : null}
+          {card.executionBlocker ? (
+            <p role="alert" id={`fabric-routing-blocker-${card.projectId}`} data-testid={`fabric-routing-blocker-${card.projectId}`}>
+              {card.executionBlocker}
+            </p>
+          ) : null}
           {card.releaseLabel ? (
             <p
               className="fabric-card__customer"
@@ -325,11 +331,13 @@ function ProjectCard({
             </p>
           ) : null}
         </div>
-        {canAdvance && card.needsPhysicalGeneration && onGeneratePartExecutions ? (
+        {canAdvanceRequested && card.needsPhysicalGeneration && onGeneratePartExecutions ? (
           <button
             type="button"
             className="btn btn--primary btn--small"
             onClick={() => onGeneratePartExecutions(card.projectId)}
+            disabled={!!card.executionBlocker}
+            aria-describedby={card.executionBlocker ? `fabric-routing-blocker-${card.projectId}` : undefined}
             data-testid={`fabric-generate-parts-${card.projectId}`}
             title="Genera las piezas y unidades físicas desde la liberación de producción"
           >

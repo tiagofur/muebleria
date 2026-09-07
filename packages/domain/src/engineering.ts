@@ -8,6 +8,7 @@
 
 import type { Project } from './types';
 import type { DataTruthOrigin } from './dataTruth';
+import { projectProcessStage, sentToProduction } from './processStage';
 
 /** Engineering lifecycle status derived from the log fields. */
 export type EngineeringStatus =
@@ -193,12 +194,8 @@ export function computeEngineeringDashboardStats(
 
     const log = p.engineeringLog;
     const status = engineeringStatus(log);
-    const isSent = Boolean(log?.sentToProductionAt);
-    
-    let stage: 'ingenieria' | 'almacen' | 'produccion' | 'ventas' = 'ingenieria';
-    if (isSent) {
-      stage = p.materialsRelease ? 'produccion' : 'almacen';
-    }
+    const isSent = sentToProduction(p);
+    const stage = projectProcessStage(p);
 
     // Module and piece counts
     let moduleCount = 0;

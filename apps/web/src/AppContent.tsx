@@ -116,7 +116,6 @@ import {
   type WarehouseProjectInput,
   deriveProjectPartExecutions,
   releaseAuthorityOf,
-  buildReleaseBomContext,
   releaseBomItemsToProjectItems,
   scheduleInstallationVisit,
   startInstallationVisit,
@@ -1834,7 +1833,9 @@ export function AppContent({
         if (!derived.ok) {
           toast({
             type: 'error',
-            message: `No se pudieron generar las piezas físicas (línea ${derived.error.projectItemId}): ${derived.error.message}`,
+            message: derived.error.projectItemId
+                ? `No se pudieron generar las piezas físicas (línea ${derived.error.projectItemId}): ${derived.error.message}`
+                : derived.error.message,
           });
           return;
         }
@@ -1860,32 +1861,8 @@ export function AppContent({
           projectActions.setPartExecutions(projectId, parts, units);
         }
       };
-      if (authority.source === 'canonical') {
-        if (!repo.getReleaseBomContext) {
-          toast({ type: 'error', message: 'No se puede leer la revisión liberada en esta conexión' });
-          return;
-        }
-        void repo.getReleaseBomContext(projectId, authority.releaseId).then((context) => {
-          if (!isCurrent()) return;
-          const snapshot = buildReleaseBomContext(projectId, context.items);
-          // Only non-manufacturing metadata is carried over. Live kitchen
-          // layout, defaults, choices and quote dimensions cannot alter P1.
-          generate({
-            ...snapshot,
-            name: project.name,
-            customerId: project.customerId,
-            currency: project.currency,
-            marginFactor: project.marginFactor,
-            laborFixedCost: project.laborFixedCost,
-            status: project.status,
-            createdAt: project.createdAt,
-            updatedAt: project.updatedAt,
-          }, authority.releaseId);
-        }).catch((err) => {
-          if (isCurrent()) toast({ type: 'error', message: err instanceof Error ? err.message : 'No se pudo leer la revisión liberada' });
-        });
-        return;
-      }
+      // The domain adapter rejects canonical inputs without frozen routing
+      // evidence. Never reconstruct P1 through current catalog definitions.
       generate(project, authority.releaseId);
     },
     [catalog, getRepository, projectActions, toast],

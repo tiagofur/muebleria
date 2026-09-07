@@ -2273,7 +2273,7 @@ export function partInstanceFromApi(raw: Record<string, unknown>): PartInstance 
   return {
     id: str(raw.id),
     projectId: str(raw.project_id ?? raw.projectId),
-    productionRevision: str(raw.production_revision ?? raw.productionRevision, 'rev-1'),
+    productionRevision: str(raw.production_revision ?? raw.productionRevision),
     projectItemId: str(raw.project_item_id ?? raw.projectItemId),
     unitIndex: Math.max(1, Math.floor(num(raw.unit_index ?? raw.unitIndex, 1))),
     partCode: str(raw.part_code ?? raw.partCode),
@@ -2335,7 +2335,7 @@ export function moduleUnitFromApi(raw: Record<string, unknown>): ModuleUnitExecu
     projectId: str(raw.project_id ?? raw.projectId),
     projectItemId: str(raw.project_item_id ?? raw.projectItemId),
     unitIndex: Math.max(1, Math.floor(num(raw.unit_index ?? raw.unitIndex, 1))),
-    productionRevision: str(raw.production_revision ?? raw.productionRevision, 'rev-1'),
+    productionRevision: str(raw.production_revision ?? raw.productionRevision),
     status: str(raw.status, 'awaiting_parts') as ModuleUnitStatus,
     packageCount: pkgCount === null || pkgCount === undefined || pkgCount === '' ? undefined : num(pkgCount),
     supervisorOverride:

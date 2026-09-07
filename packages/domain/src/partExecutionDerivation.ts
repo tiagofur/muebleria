@@ -21,6 +21,8 @@ import {
   type PartInstance,
 } from './partExecution';
 
+export const CANONICAL_PART_ROUTING_BLOCKER = 'La liberación no contiene evidencia congelada de rutas y maquinados. Ingeniería debe completar esa evidencia antes de generar o avanzar piezas.';
+
 export type ProjectPartExecutions = {
   readonly parts: readonly PartInstance[];
   readonly units: readonly ModuleUnitExecution[];
@@ -58,6 +60,18 @@ export function deriveProjectPartExecutions(
   catalog: Catalog,
   opts?: DeriveProjectPartExecutionsOptions,
 ): DeriveProjectPartExecutionsResult {
+  // This adapter only resolves legacy project/catalog data. P1's immutable
+  // snapshot currently contains BOM demand, not complete routing coverage.
+  // An explicit release token cannot turn mutable input into frozen evidence.
+  if (releaseAuthorityOf(project)?.source === 'canonical') {
+    return {
+      ok: false,
+      error: {
+        projectItemId: '',
+        message: CANONICAL_PART_ROUTING_BLOCKER,
+      },
+    };
+  }
   // 1. Board parts per item (same resolution as material summary / cut rows).
   const boardPartsByItem: Record<string, readonly import('./types').ResolvedBoardPart[]> = {};
   for (const item of project.items) {

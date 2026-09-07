@@ -531,6 +531,10 @@ func DeriveLegacyItemFloorStatus(units []ModuleUnitExecution, parts []PartInstan
 	return "pending"
 }
 
+// CanonicalPartExecutionRoutingBlocker is not a supervisor-overridable shortage.
+// The immutable release schema currently freezes BOM, not routing coverage.
+const CanonicalPartExecutionRoutingBlocker = "la liberación no contiene evidencia congelada de rutas y maquinados; ingeniería debe completar esa evidencia antes de generar o avanzar piezas"
+
 // PartExecutionsSnapshot is the locked state handed to a station mutation
 // (part_instances + module_units + the per-item legacy floor statuses used by
 // the OC-034 backward-compat bridge).

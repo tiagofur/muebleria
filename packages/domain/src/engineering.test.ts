@@ -131,6 +131,22 @@ describe('computeEngineeringDashboardStats', () => {
     },
   ];
 
+  it('uses canonical stage continuity without inventing a legacy timestamp', () => {
+    const canonical = {
+      ...mockProjects[0]!,
+      resolvedProductionRelease: { source: 'canonical' as const, releaseId: 'P1', releaseNumber: 1 },
+    };
+    const warehouse = computeEngineeringDashboardStats([canonical]);
+    expect(warehouse.projects[0]?.stage).toBe('almacen');
+    expect(warehouse.projects[0]?.isSentToProduction).toBe(true);
+    expect(warehouse.projects[0]?.sentToProductionAt).toBeUndefined();
+    expect(warehouse.totalActiveQueue).toBe(0);
+    const production = computeEngineeringDashboardStats([{
+      ...canonical, materialsRelease: { releasedBy: 'warehouse', releasedAt: '2026-09-07T20:00:00Z' },
+    }]);
+    expect(production.projects[0]?.stage).toBe('produccion');
+  });
+
   it('computes correct counts across statuses and excludes drafts', () => {
     const stats = computeEngineeringDashboardStats(mockProjects, '2026-08-14T10:00:00Z');
     expect(stats.pendingCount).toBe(1);
