@@ -342,7 +342,7 @@ export interface WorkspaceRepository {
    * immutable DesignRevision items it pins (generated-client reads). `null`
    * when the project has no canonical release.
    */
-  getLatestReleaseBomContext?(projectId: string): Promise<import('./apiWorkspaceRepository').ReleaseBomContextView | null>;
+  getReleaseBomContext?(projectId: string, releaseId: string): Promise<import('./apiWorkspaceRepository').ReleaseBomContextView>;
 
   /** Reserve against warehouse availability; shortage remainder is audited. */
   reserveMaterials?(

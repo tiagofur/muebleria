@@ -1021,6 +1021,29 @@ func TestGetContextualProductionRelease_HistoricalVsLatest(t *testing.T) {
 		if latest == nil || latest.ID != p2.Release.ID || latest.ReleaseNumber != 2 {
 			t.Fatalf("expected latest release P2 (release #2), got %+v", latest)
 		}
+		detail, err := fx.store.GetProjectByID(ctx, fx.projectID)
+		if err != nil {
+			return err
+		}
+		projects, err := fx.store.ListProjects(ctx)
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, project := range projects {
+			if project.ID != fx.projectID {
+				continue
+			}
+			found = true
+			if project.ResolvedProductionRelease == nil || detail.ResolvedProductionRelease == nil ||
+				project.ResolvedProductionRelease.ReleaseID != p2.Release.ID ||
+				detail.ResolvedProductionRelease.ReleaseID != project.ResolvedProductionRelease.ReleaseID {
+				t.Fatalf("list and detail must resolve newest P2: list=%+v detail=%+v", project.ResolvedProductionRelease, detail.ResolvedProductionRelease)
+			}
+		}
+		if !found {
+			t.Fatal("released project missing from list")
+		}
 
 		// b. Contextual release for historical context (revR3, quoteQ3) MUST return P1!
 		// Even though P2 is newer in the project, P2 must NOT hide P1.

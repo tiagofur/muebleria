@@ -259,3 +259,24 @@ func TestOpsDt1_MaterialDeriveBindsExactCanonicalRelease(t *testing.T) {
 		t.Fatalf("canonical flow must leave projects.production_release null")
 	}
 }
+
+func TestOpsDt1_ExecutionMembershipUsesReleasedFurniture(t *testing.T) {
+	fx := setupReleaseFixture(t)
+	p1 := opsDt1CreateReleaseP1(t, fx)
+	// The live quote quantity is not the released physical membership.
+	if _, err := fx.admin.Exec(context.Background(), `UPDATE project_items SET quantity = 9 WHERE project_id = $1`, fx.projectID); err != nil {
+		t.Fatal(err)
+	}
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, err := fx.store.MutateProjectPartExecutions(ctx, fx.projectID, func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error) {
+			if len(snap.ItemQuantities) != 2 || snap.ItemQuantities[fx.fiA] != 1 || snap.ItemQuantities[fx.fiB] != 1 {
+				t.Fatalf("release %s must validate its two physical identities, not live quote quantities: %+v", p1.Release.ID, snap.ItemQuantities)
+			}
+			return &domain.PartExecutionsMutation{Parts: snap.Parts, Units: snap.Units}, nil
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

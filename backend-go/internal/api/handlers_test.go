@@ -819,6 +819,9 @@ func (s *stubStore) MutateProjectPartExecutions(
 		ItemQuantities: map[string]int{},
 		Quality:        s.qualityJob,
 	}
+	if s.latestProductionRelease != nil {
+		snap.ProductionRelease = domain.ResolvedFromCanonicalRelease(s.latestProductionRelease)
+	}
 	for k, v := range s.itemFloorStatuses {
 		snap.ItemStatuses[k] = v
 	}

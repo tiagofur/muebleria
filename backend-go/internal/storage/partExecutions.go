@@ -84,23 +84,34 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		return nil, fmt.Errorf("error iterating item floor statuses: %w", err)
 	}
 
-	// #577 / OPS-DT-1: For projects with materialized quote line furniture
-	// instances (Digital Thread), the authoritative unit count per line comes
-	// from the materialized instances, not from mutable project_items.quantity.
-	qlRows, err := tx.Query(ctx, `
-		SELECT quote_line_id::text, count(*)
-		FROM quote_line_furniture_instances
-		WHERE project_id = $1 AND state = 'current'
-		GROUP BY quote_line_id;
-	`, projectID)
-	if err == nil {
-		defer qlRows.Close()
-		for qlRows.Next() {
-			var lineID string
-			var count int
-			if err := qlRows.Scan(&lineID, &count); err == nil && count > 0 {
-				snap.ItemQuantities[lineID] = count
+	// Canonical execution membership belongs to the released revision, not
+	// the editable quote or its current materialized links. Legacy projects
+	// retain the project-item quantity compatibility contract above.
+	authority, err := s.resolveProjectReleaseAuthorityTx(ctx, tx, projectID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving execution release: %w", err)
+	}
+	if authority != nil {
+		snap.ProductionRelease = authority
+		snap.ItemQuantities = map[string]int{}
+		members, err := tx.Query(ctx, `
+			SELECT furniture_instance_id::text FROM design_revision_items
+			WHERE design_revision_id = $1;
+		`, authority.DesignRevisionID)
+		if err != nil {
+			return nil, fmt.Errorf("error loading released furniture: %w", err)
+		}
+		for members.Next() {
+			var id string
+			if err := members.Scan(&id); err != nil {
+				members.Close()
+				return nil, fmt.Errorf("error scanning released furniture: %w", err)
 			}
+			snap.ItemQuantities[id] = 1
+		}
+		members.Close()
+		if err := members.Err(); err != nil {
+			return nil, fmt.Errorf("error reading released furniture: %w", err)
 		}
 	}
 
@@ -120,6 +131,10 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 	}
 
 	for itemID, status := range mutation.ItemStatuses {
+		// Canonical keys are FurnitureInstance IDs, not quote-line IDs.
+		if snap.ProductionRelease != nil {
+			continue
+		}
 		if before, ok := snap.ItemStatuses[itemID]; ok && before == status {
 			continue
 		}

@@ -4,14 +4,14 @@ Fecha: 2026-09-06. Base: `main@cb6f78bd` (post PRs #565/#568/#569/#572).
 Issue: [#577](https://github.com/tiagofur/muebleria/issues/577). Trackea #384/#396.
 Rehearsal originario: `docs/demo/demo-golden-path-rehearsal-20260906.md` (P0-2).
 
-## Qué cierra esta entrega
+## Alcance parcial de esta entrega
 
 El tramo operacional Web (BOM/material planning, almacén, ejecución física)
 deja de depender de las piezas legacy y queda gobernado por el
 `ProductionRelease` canónico (#395/#502):
 
-> Q2 accepted → R2 approved → **ProductionRelease P1** → exact manufacturing
-> context desde P1/R2 → material planning → warehouse → producción,
+> Q2 accepted → R2 approved → **ProductionRelease P1** → intención de diseño
+> pineada a P1/R2 → material planning → warehouse → producción,
 > sin segunda liberación legacy y con proveniencia exacta.
 
 ## Cambios por capa
@@ -94,7 +94,7 @@ deja de depender de las piezas legacy y queda gobernado por el
 - `apiMappers`: `resolved_production_release` (from/to dominio) y pins de
   proveniencia del planning.
 - `apiWorkspaceRepository.deriveMaterialRequirements(projectId, lines,
-  {productionReleaseId})` + `getLatestReleaseBomContext(projectId)` vía
+  {productionReleaseId})` + `getReleaseBomContext(projectId, productionReleaseId)` vía
   `GraneteApiClient` generado (sin fetch manual nuevo).
 
 ### Bug latente corregido (expuesto por esta entrega)
@@ -106,7 +106,32 @@ derive, así que el flujo canónico (que ahora llega al almacén sin pasar por
 el derive legacy) lo exponía. Fix: el view responde 200 con coverage vacío y
 `planning: null` (test `TestMaterials_ViewWithoutPlanningAnswersEmptyEvidence`).
 
+## Corrección acotada del PR #578
+
+- Listado y detalle conservan la liberación más reciente también con P1 y P2 coexistentes.
+- Materiales y ejecución solicitan el ID seleccionado mediante API generada; no retarget a `latest`.
+- Ejecución usa identidades FurnitureInstance y cantidad uno del snapshot de diseño liberado; el servidor valida membership bajo transacción, no cantidades actuales de cotización.
+- Cambios de sesión/release invalidan respuestas pendientes; el apply de materiales lee el Project vigente, no reemplaza cambios concurrentes desde un snapshot viejo.
+
+**Estado: parcial; #577/P0-2 no se consideran cerrados.** El catálogo mutable sigue impidiendo demostrar un BOM industrial inmutable aunque el release y su intención estén pineados.
+
+### Evidencia de la corrección (2026-09-06)
+
+- Base del diff corregido: `6744442adce3c0ae3f6c1e4294ab137d4f271858`; SHA de entrega y readback final se registran en el PR.
+- PostgreSQL real: reproducción rojo→verde del listado P1/P2 y de membership liberada frente a cantidad comercial nueve; cinco pruebas dirigidas pasan, sin skips. API: casos válido, faltante, extra, duplicado y stale con rechazo sin persistencia.
+- `pnpm typecheck` y `pnpm test`: PASS; storage incluye 186 pruebas y el lector por release exacto.
+- `GOFLAGS='-p=1' go test ./... -count=1`: PASS con `DATABASE_URL` explícita a PostgreSQL desechable; storage 223.291 s y pilotreadiness 249.027 s.
+- `scripts/organization-browser-gate.sh tests/organization/project-reconciliation.spec.ts`: PASS, 4/4 Chromium + Go + PostgreSQL real. Cotización modificada a cantidad nueve/medidas 999 no cambia las dos identidades liberadas; membership incompleta devuelve 400 y repetición válida 200 conserva el readback.
+- `pnpm openapi:check` y `git diff --check`: PASS.
+- La primera corrección usó un accessor inexistente del hook del store; typecheck lo rechazó. Se reemplazó por `getProjectStoreState()` y se repitieron typecheck, tests y browser antes de publicar.
+- Rollback acotado: selección newest + su prueba; o lector exacto + wiring Web + validación de membership + sus pruebas como una unidad coordinada. No cambia esquema persistente.
+- Publication metadata sigue requiriendo aprobación humana explícita de la issue; no se autoconcede. Revisión receipt-driven: `disabled/unmanaged`; sin merge ni cierre autorizado.
+
 ## Límites documentados (no silent fallbacks)
+
+- **Bloqueador no resuelto: catálogo/versiones.** El engine TS consume módulos, estructuras, componentes, herrajes, reglas de maquinado y defaults del catálogo actual. No existe un lector verificado de definición industrial por versión en esta superficie. Cambiar cantidades de herrajes del catálogo puede cambiar requirements conservando P1. Estampar el fingerprint de P1 no valida el contenido calculado.
+- La proyección adapta únicamente widthMm/heightMm/depthMm completos y materialChoices; definitionVersion, parámetros adicionales y overrides parciales no están representados completamente. No afirmar cobertura de esos casos ni exactitud industrial completa.
+- El contexto canónico de ejecución no hereda kitchenLayout, base overrides, projectLevelChoices ni medidas de la cotización actual; los defaults y reglas del catálogo permanecen en el límite anterior. La proyección de floor_status hacia project_items se conserva sólo para legacy; los eventos y piezas canónicos referencian FurnitureInstance.
 
 - El fingerprint cubre revision items (definición/versión/parámetros/
   materialChoices), NO el contenido agregado de `lines`: el contenido lo

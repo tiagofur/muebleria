@@ -866,7 +866,7 @@ async function publishRevisionWithItemIds(options: {
         {
           id: OPS_LINE_ID,
           moduleId: OPS_MODULE_ID,
-          quantity: 2,
+          quantity: 9,
           optionChoices: choices,
           customDims: { widthMm: 999, heightMm: 999, depthMm: 999 },
         },
@@ -907,11 +907,34 @@ async function publishRevisionWithItemIds(options: {
     // 9. Part executions are stamped with the EXACT canonical release id.
     const executions = (await (
       await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, { headers: authHeaders })
-    ).json()) as { part_instances: readonly { production_revision: string }[] };
+    ).json()) as {
+      part_instances: readonly { id: string; project_item_id: string; unit_index: number; production_revision: string; length_mm: number; width_mm: number }[];
+      module_units: readonly { id: string; project_item_id: string; unit_index: number }[];
+    };
     expect(executions.part_instances.length).toBeGreaterThan(0);
     const stampedRevisions = new Set(executions.part_instances.map((p) => p.production_revision));
     expect(stampedRevisions.size).toBe(1);
     expect(Array.from(stampedRevisions)[0]).toBe(release.id);
+
+    // Current quote quantity is nine, but P1 still owns exactly two units.
+    const releasedFurniture = mat.instances.map((i) => i.furniture_instance_id).sort();
+    expect(executions.module_units.map((u) => u.project_item_id).sort()).toEqual(releasedFurniture);
+    expect(executions.module_units.every((u) => u.unit_index === 1)).toBe(true);
+    expect([...new Set(executions.part_instances.map((p) => p.project_item_id))].sort()).toEqual(releasedFurniture);
+    expect(executions.part_instances.every((p) => p.unit_index === 1)).toBe(true);
+    expect(executions.part_instances.every((p) => p.length_mm !== 999 && p.width_mm !== 999)).toBe(true);
+    // Regenerating identical untouched executions is idempotent; malformed
+    // membership cannot replace the already-persisted exact snapshot.
+    const generateExecutions = (moduleUnits: readonly unknown[]) => fetch(
+      `${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, {
+        method: 'PUT', headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ part_instances: executions.part_instances, module_units: moduleUnits }),
+      });
+    expect((await generateExecutions(executions.module_units.slice(0, 1))).status).toBe(400);
+    expect((await generateExecutions(executions.module_units)).status).toBe(200);
+    const repeated = await (await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, { headers: authHeaders })).json();
+    expect(repeated.part_instances).toEqual(executions.part_instances);
+    expect(repeated.module_units).toEqual(executions.module_units);
 
     // 10. Critical negative proof: the legacy blob is STILL null after the
     //     whole operational path ran on the canonical release.

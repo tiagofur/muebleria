@@ -494,3 +494,44 @@ func TestPartExec_ReworkRecordsCosting(t *testing.T) {
 		t.Fatalf("rework events must carry OC-061 costing payload, got %+v", store.projectEventWrites)
 	}
 }
+
+func TestPartExec_CanonicalGenerationRequiresExactFurnitureMembership(t *testing.T) {
+	for _, scenario := range []string{"valid", "missing", "extra", "duplicate", "stale"} {
+		t.Run(scenario, func(t *testing.T) {
+			store, srv := partExecFixtures("legacy")
+			store.latestProductionRelease = &domain.ProductionRelease{ID: "P1", DesignRevisionID: "R1"}
+			store.partInstances, store.moduleUnits = nil, nil
+			store.itemQuantities = map[string]int{"fi-a": 1, "fi-b": 1}
+			body := generateBody("P1", 2)
+			for i, id := range []string{"fi-a", "fi-b"} {
+				body.ModuleUnits[i].ProjectItemID = id
+				body.ModuleUnits[i].UnitIndex = 1
+			}
+			body.PartInstances[0].ProjectItemID = "fi-a"
+			switch scenario {
+			case "missing":
+				body.ModuleUnits = body.ModuleUnits[:1]
+			case "extra":
+				body.ModuleUnits[1].ProjectItemID = "fi-foreign"
+			case "duplicate":
+				body.ModuleUnits[1].ProjectItemID = "fi-a"
+			case "stale":
+				body.ModuleUnits[0].ProductionRevision = "P0"
+			}
+			rr := doGenerate(srv, string(domain.RoleGerenteProduccion), body)
+			want := http.StatusBadRequest
+			if scenario == "valid" {
+				want = http.StatusOK
+			}
+			if scenario == "stale" {
+				want = http.StatusConflict
+			}
+			if rr.Code != want {
+				t.Fatalf("want %d, got %d: %s", want, rr.Code, rr.Body.String())
+			}
+			if scenario != "valid" && len(store.moduleUnits) != 0 {
+				t.Fatal("rejected generation persisted units")
+			}
+		})
+	}
+}

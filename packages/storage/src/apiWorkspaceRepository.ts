@@ -2105,27 +2105,33 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
   /**
    * #577 / OPS-DT-1 — the EXACT canonical release context an operational
-   * derivation runs against: the project's newest ProductionRelease plus the
+   * derivation runs against: the explicitly selected ProductionRelease and its
    * immutable DesignRevision snapshot items it pins. Served through the
-   * generated OpenAPI client (listProjectProductionReleases +
-   * getDesignRevision), never a handwritten fetch. `null` when the project
-   * has no canonical release (legacy-only compatibility path).
+   * generated OpenAPI client (getProjectProductionRelease +
+   * getDesignRevision), never a handwritten fetch or an implicit latest.
    */
-  async getLatestReleaseBomContext(projectId: string): Promise<ReleaseBomContextView | null> {
+  async getReleaseBomContext(projectId: string, releaseId: string): Promise<ReleaseBomContextView> {
     const client = new GraneteApiClient(this.baseUrl, this.injectedFetch ?? globalThis.fetch);
     const token = this.getAccessToken?.() ?? '';
-    const releases = await client.listProjectProductionReleases(token, projectId);
-    const release = releases[0]; // newest first (release_number DESC)
-    if (!release?.design_id || !release.design_revision_id) return null;
+    const release = await client.getProjectProductionRelease(token, projectId, releaseId);
+    if (release.id !== releaseId || release.project_id !== projectId || !release.design_id) {
+      throw new Error('La liberación no corresponde al contexto solicitado');
+    }
     const revision = await client.getDesignRevision(token, release.design_id, release.design_revision_id);
-    const items: ReleaseBomItem[] = revision.items
-      .map((item) => ({
+    if (revision.id !== release.design_revision_id) {
+      throw new Error('El diseño no corresponde a la revisión liberada');
+    }
+    const items: ReleaseBomItem[] = revision.items.map((item) => {
+      if (!item.furniture_definition_id) {
+        throw new Error('La revisión liberada contiene un mueble sin definición');
+      }
+      return {
         furnitureInstanceId: item.furniture_instance_id,
-        furnitureDefinitionId: item.furniture_definition_id ?? '',
+        furnitureDefinitionId: item.furniture_definition_id,
         parameters: item.parameters ?? {},
         materialChoices: item.material_choices ?? {},
-      }))
-      .filter((item) => item.furnitureDefinitionId !== '');
+      };
+    });
     return { release, items };
   }
 

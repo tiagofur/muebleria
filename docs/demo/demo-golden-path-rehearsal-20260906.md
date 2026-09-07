@@ -92,7 +92,9 @@ evidence; sin implementación de features. Predecesores:
 
 ### P0-2 — ProductionRelease canónico (P1) no habilita el tramo operacional en la Web (costura legacy)
 
-- **Estado**: **CLOSED (RESUELTO en #577 / OPS-DT-1)**.
+- **Estado**: **PARTIAL / OPEN (#577 / OPS-DT-1; corrección acotada en PR #578)**.
+- **Bloqueador pendiente**: el snapshot fija intención e identidades, pero el engine TS todavía consume catálogo industrial mutable (definiciones, componentes, herrajes, defaults y reglas). `definitionVersion` y parámetros no dimensionales no tienen cobertura completa. El fingerprint estampado no demuestra igualdad del BOM calculado; no declarar cierre ni certificación industrial.
+- **Corrección acotada del PR**: autoridad newest coherente entre listado/detalle; lectura por release ID exacto; piezas/unidades de FurnitureInstance liberadas, sin cantidades/dimensiones de la cotización mutable. Gate Chromium + Go + PostgreSQL real: **4/4 PASS** después de modificar cantidad comercial a nueve y dimensiones a 999; suites completas TS/Go y typecheck PASS. El PR registra SHA/readback de publicación; estos proofs no resuelven el bloqueador de catálogo.
 - **Solución implementada**:
   - Read model: `GET /api/projects` (list+detail) expone la proyección
     server-owned `resolved_production_release` (`source: canonical|legacy`,

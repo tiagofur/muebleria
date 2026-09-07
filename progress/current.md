@@ -1,4 +1,13 @@
-# Feature activa: Ninguna (F219 completada)
+# Revisión y corrección activa: PR #578 / #577 (entrega parcial)
+
+- Rama: `feat/577-canonical-release-ops-continuity`; correcciones sobre `6744442a`, sin activar otra feature del ledger.
+- Corregidos: listado de release más reciente, lector por ID exacto y generación/validación de unidades físicas desde FurnitureInstance liberadas, no cotización mutable.
+- Evidencia: suites completas TS y Go sobre PostgreSQL desechable, typecheck, OpenAPI y Chromium real 4/4 PASS. Detalle: `progress/implementation_577_canonical_release_ops.md`.
+- Pendientes: catálogo industrial no congelado por release; cobertura de definitionVersion/parámetros; aprobación humana de #577 para publication metadata. Sin merge ni cierre; readback exacto en PR #578. Receipt-driven: `disabled/unmanaged`.
+
+---
+
+# Historial: Ninguna feature activa tras F219 completada
 
 - Actualizado: 2026-09-06 America/Mexico_City
 - Última feature: F219 — `[P0][WEB-DT-4] Commercial QuoteRevision lifecycle — create, publish and accept exact revisions` (#571)

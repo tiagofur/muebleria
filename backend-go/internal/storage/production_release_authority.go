@@ -135,9 +135,10 @@ func (s *PostgresStore) LatestCanonicalReleasesByProject(ctx context.Context, pr
 		if err != nil {
 			return nil, err
 		}
-		// Rows are ordered oldest-release-first per project, so the LAST row
-		// seen per project is its newest release.
-		out[release.ProjectID] = release
+		// Descending release numbers put the newest row first per project.
+		if _, exists := out[release.ProjectID]; !exists {
+			out[release.ProjectID] = release
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

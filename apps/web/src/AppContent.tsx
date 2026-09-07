@@ -55,6 +55,7 @@ import type {
   Supplier,
 } from '@granete/domain';
 import { useWorkspaceLoad } from './shared/query/useWorkspaceLoad';
+import { sessionScopeKey } from './shared/query/sessionScope';
 import {
   applyRoleChoiceToProject,
   bumpStructureRevision,
@@ -1700,7 +1701,18 @@ export function AppContent({
         if (hasProgress) return; // regeneration is a supervised action, never automatic
       }
       const repo = getRepository();
+      const scope = useWorkspaceStore.getState().sessionScope;
+      const scopeKey = scope ? JSON.stringify(sessionScopeKey(scope)) : null;
+      const isCurrent = (): boolean => {
+        const currentScope = useWorkspaceStore.getState().sessionScope;
+        const currentKey = currentScope ? JSON.stringify(sessionScopeKey(currentScope)) : null;
+        if (currentKey !== scopeKey) return false;
+        const currentProject = getProjectStoreState().projects.find((p) => p.id === projectId);
+        return !!currentProject &&
+          releaseAuthorityOf(currentProject)?.releaseId === authority.releaseId;
+      };
       const generate = (derivationProject: Project, revision: string): void => {
+        if (!isCurrent()) return;
         const derived = deriveProjectPartExecutions(derivationProject, catalog, {
           productionRevision: revision,
         });
@@ -1716,9 +1728,11 @@ export function AppContent({
           void repo
             .generatePartExecutions(projectId, { partInstances: parts, moduleUnits: units })
             .then(() => {
+              if (!isCurrent()) return;
               projectActions.setPartExecutions(projectId, parts, units);
             })
             .catch((err) => {
+              if (!isCurrent()) return;
               toast({
                 type: 'error',
                 message:
@@ -1731,9 +1745,32 @@ export function AppContent({
           projectActions.setPartExecutions(projectId, parts, units);
         }
       };
-      // #577 / OPS-DT-1: physical executions derive stamped with the EXACT
-      // release authority id (canonical ProductionRelease first), eliminating
-      // the legacy 'rev-1' token and any implicit current-revision fallback.
+      if (authority.source === 'canonical') {
+        if (!repo.getReleaseBomContext) {
+          toast({ type: 'error', message: 'No se puede leer la revisión liberada en esta conexión' });
+          return;
+        }
+        void repo.getReleaseBomContext(projectId, authority.releaseId).then((context) => {
+          if (!isCurrent()) return;
+          const snapshot = buildReleaseBomContext(projectId, context.items);
+          // Only non-manufacturing metadata is carried over. Live kitchen
+          // layout, defaults, choices and quote dimensions cannot alter P1.
+          generate({
+            ...snapshot,
+            name: project.name,
+            customerId: project.customerId,
+            currency: project.currency,
+            marginFactor: project.marginFactor,
+            laborFixedCost: project.laborFixedCost,
+            status: project.status,
+            createdAt: project.createdAt,
+            updatedAt: project.updatedAt,
+          }, authority.releaseId);
+        }).catch((err) => {
+          if (isCurrent()) toast({ type: 'error', message: err instanceof Error ? err.message : 'No se pudo leer la revisión liberada' });
+        });
+        return;
+      }
       generate(project, authority.releaseId);
     },
     [catalog, getRepository, projectActions, toast],
@@ -1991,6 +2028,16 @@ export function AppContent({
         const project = projectActions.projects.find((p) => p.id === projectId);
         const authority = project ? releaseAuthorityOf(project) : undefined;
         const repo = getRepository();
+        const scope = useWorkspaceStore.getState().sessionScope;
+        const scopeKey = scope ? JSON.stringify(sessionScopeKey(scope)) : null;
+        const isCurrent = (): boolean => {
+          const currentScope = useWorkspaceStore.getState().sessionScope;
+          const currentKey = currentScope ? JSON.stringify(sessionScopeKey(currentScope)) : null;
+          if (currentKey !== scopeKey) return false;
+          const current = getProjectStoreState().projects.find((p) => p.id === projectId);
+          return !!current &&
+            releaseAuthorityOf(current)?.releaseId === authority?.releaseId;
+        };
         // #577 / OPS-DT-1 — canonical authority: the requirement lines come
         // from the EXACT immutable DesignRevision snapshot the release pins
         // (loaded through the generated client), never from the mutable
@@ -1998,13 +2045,14 @@ export function AppContent({
         // id and the server binds + audits the provenance.
         if (
           authority?.source === 'canonical' &&
-          repo.getLatestReleaseBomContext &&
+          repo.getReleaseBomContext &&
           repo.deriveMaterialRequirements &&
           catalog
         ) {
           void repo
-            .getLatestReleaseBomContext(projectId)
+            .getReleaseBomContext(projectId, authority.releaseId)
             .then((context) => {
+              if (!isCurrent()) return;
               if (!context || context.items.length === 0) {
                 toast({
                   type: 'error',
@@ -2039,8 +2087,8 @@ export function AppContent({
                   productionReleaseId: context.release.id,
                 })
                 .then((view) => {
-                  const current =
-                    projectActions.projects.find((p) => p.id === projectId) ?? project;
+                  if (!isCurrent()) return;
+                  const current = getProjectStoreState().projects.find((p) => p.id === projectId);
                   if (!current) return;
                   projectActions.applyMaterialPlanningProject(projectId, {
                     ...current,
@@ -2054,6 +2102,7 @@ export function AppContent({
                 });
             })
             .catch((err: unknown) => {
+              if (!isCurrent()) return;
               toast({
                 type: 'error',
                 message:
@@ -2062,6 +2111,10 @@ export function AppContent({
                     : 'No se pudo completar la acción de materiales',
               });
             });
+          return;
+        }
+        if (authority?.source === 'canonical') {
+          toast({ type: 'error', message: 'No se puede leer la revisión liberada en esta conexión' });
           return;
         }
         const lines = requirementLinesFor(projectId);
