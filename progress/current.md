@@ -1,3 +1,10 @@
+## #577 — shared component binding preparation, chain unit 4A (partial)
+
+- Extracted the existing Go quantity/condition binding helper without changing authoring behavior; added a TS counterpart keyed by binding kind and component ID, not parameter names.
+- Shared fixtures pass evaluated parameters through both existing BOM engines, proving separate same-definition quantities, conditions, dimensions, materials, each engine’s existing physical-ID namespace and unchanged source inputs; invalid scalar/name/range values remain evaluator errors.
+- This helper assumes validated definitions, unambiguous consumers and evaluated values. It is not a release gate: strict revision identity/version/dimension/material validation, relationship boundaries, collection aggregation, snapshot capture and operational wiring remain subsequent units.
+- No F202/ledger change or #577 closure; independent validation, full gate and exact-head CI remain required.
+
 ## #577 — private immutable snapshot schema, chain unit 3 (preparatory)
 
 - Additive migration 122 separates owner-only manufacturing payloads from intentionally shared release metadata; composite release/project/owner binding and FORCE RLS protect direct SQL.
