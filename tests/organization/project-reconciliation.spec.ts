@@ -18,10 +18,12 @@ import { GATE_MODULE_A_ID, required } from './support/api';
 const PROJECT_ID = '77777777-3333-4777-8777-333333333333';
 const QUOTE_LINE_ID = '88888888-3333-4888-8888-333333333333';
 const CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000003';
-const REC_MAT = '71000000-0000-4000-8000-000000000011';
+const REC_HW = '71000000-0000-4000-8000-000000000011';
 const REC_STRUCT = '71000000-0000-4000-8000-000000000012';
-const REC_COMP = '71000000-0000-4000-8000-000000000013';
-const REC_CHOICES = { BODY: REC_MAT };
+// Q1 snapshots dimensions, not material choices. Use genuine hardware demand
+// here so the original reconciliation classifications stay exact; OPS below
+// separately exercises board materials and frozen material planning.
+const REC_CHOICES = {};
 
 
 interface SeededReconciliation {
@@ -55,16 +57,15 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
   const depthMm = template.depthMm || 590;
   await repository.saveCatalog({
     ...catalog,
-    materials: [...catalog.materials, { id: REC_MAT, code: 'REC-MAT', name: 'Tablero', widthMm: 1830, lengthMm: 2440, thicknessMm: 18, grainDefault: false, boardPrice: 100, wastePercent: 0, costPerM2: 100, active: true }],
-    structures: [...(catalog.structures ?? []), { id: REC_STRUCT, code: 'REC-STRUCT', name: 'Cuerpo', externalDims: { width: 600, height: 720, depth: depthMm }, components: [{ componentId: REC_COMP, quantity: 1 }], active: true }],
-    components: [...(catalog.components ?? []), { id: REC_COMP, code: 'REC-COMP', name: 'Panel', placement: 'interno', geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 }, defaultEdges: ['L1', 'L2', 'W1', 'W2'].map((side) => ({ side: side as 'L1' | 'L2' | 'W1' | 'W2', enabled: false })), optionRoles: ['BODY'], active: true }],
+    structures: [...(catalog.structures ?? []), { id: REC_STRUCT, code: 'REC-STRUCT', name: 'Cuerpo', externalDims: { width: 600, height: 720, depth: depthMm }, components: [], active: true }],
+    hardware: [...catalog.hardware, { id: REC_HW, code: 'REC-HW', name: 'Herraje', unit: 'piece', costPerUnit: 10, active: true }],
     modules: [
       {
         ...template,
         id: GATE_MODULE_A_ID,
         structureId: REC_STRUCT,
         components: [],
-        hardwareLines: [],
+        hardwareLines: [{ id: 'rec-hardware-line', hardwareId: REC_HW, quantity: 1, optionRole: '' }],
         parameterDefinitions: [],
         externalDims: { width: 600, height: 720, depth: depthMm },
         widthMm: 600,
@@ -513,7 +514,12 @@ async function publishRevisionWithItemIds(options: {
     await expect(releaseModal).toContainText('base comercial exacta');
     await expect(releaseModal).toContainText('Q2');
     await expect(releaseModal).toContainText('R2');
+    const releaseResponsePromise = page.waitForResponse((response) =>
+      response.request().method() === 'POST' && response.url().endsWith('/production-releases'),
+    );
     await page.getByTestId('submit-release').click();
+    const releaseResponse = await releaseResponsePromise;
+    expect(releaseResponse.status(), await releaseResponse.text()).toBe(201);
 
     await expect(page.getByTestId('release-success')).toBeVisible();
     await expect(page.getByTestId('release-success')).toContainText('Liberación #1 creada');
