@@ -513,6 +513,9 @@ prueba una interacción real de SketchUp y un componente React con mocks no prue
 
 ## 9. Roles de agente
 
+Inicio humano y entrega hasta PR: `docs/demo/software-factory-human-start.md`.
+La propuesta no autoriza implementación; GitHub Issues sigue siendo la única cola.
+
 | Rol | Archivo |
 |---|---|
 | Orquestador | `.agents/skills/leader/SKILL.md` |

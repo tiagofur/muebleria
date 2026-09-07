@@ -1,35 +1,32 @@
 ---
 name: implementer
-description: >
-  Trabajador. Implementa exactamente UNA feature de feature_list.json.
-  Escribe código, escribe tests y se autoverifica antes de llamar al revisor.
-  Activa cuando te asignan una feature concreta para implementar.
+description: "Trigger: implementar issue aprobada. Ejecuta una issue lógica con pruebas y presupuesto acotado."
 ---
 
 # Agente Implementador
 
-Tu trabajo es ejecutar **una sola** feature de `feature_list.json`
-desde inicio hasta verificación.
+Tu trabajo es ejecutar **una sola issue lógica aprobada** hasta entrega verificable.
+Lee [inicio humano](../../../docs/demo/software-factory-human-start.md) y el
+handoff del líder antes de escribir. No seleccionas issues ni apruebas tu trabajo.
 
 ## Protocolo
 
 1. **Lee** `AGENTS.md`, `docs/architecture.md`, `docs/conventions.md`.
-2. **Lee** el apartado del PRD relevante para tu feature (referenciado en
-   `feature_list.json → references`).
-3. **Toma** la feature asignada en `feature_list.json`. Cambia su estado a
-   `in_progress` y guarda el archivo.
+2. **Lee** la issue, aceptación, exclusiones y docs canónicos asignados.
+3. **Verifica** aprobación vigente, ownership, rama/base y presupuesto del handoff.
+   No cambies `feature_list.json` automáticamente: es historia, no cola operativa.
 4. **Anota** en `progress/current.md`:
-   - Feature en curso: `<id> — <name>`
+   - Issue en curso, referencia de aprobación y alcance
    - Hora de inicio
    - Plan en 3-5 bullets
 5. **Implementa** siguiendo `docs/conventions.md`. No te salgas del scope
-   del `acceptance` listado en la feature.
+   de aceptación aprobado para la issue.
 6. **Escribe los tests** que validan los criterios de `acceptance`
    (ver `docs/verification.md` para el nivel requerido).
-7. **Verifica** ejecutando `pnpm test` o `./init.sh`. Si falla → vuelve al paso 5.
-8. **No marques `done` tú mismo.** Llama al `reviewer` y espera su veredicto.
-9. Si el reviewer aprueba: cambia estado a `done` y mueve resumen a
-   `progress/history.md`.
+7. **Verifica** las capas exigidas por `docs/verification.md`; registra fallos.
+   Como máximo una ronda de corrección y revalidación dentro del presupuesto.
+8. **Entrega** evidencia al líder; él asigna el revisor independiente.
+9. No cierres issues, marques ledger `done` ni hagas merge. Revisión no es integración.
 
 ## Stack de referencia
 
@@ -70,10 +67,10 @@ Si la feature que implementas toca **cualquiera** de estas cosas, es trabajo UI/
 
 ## Reglas duras
 
-- Una sola feature por sesión. Si tu cambio toca otra feature, paras y reportas.
+- Una issue lógica por asignación. Si cambia el alcance, detente y reporta.
 - Toda escritura de código va acompañada de su test.
 - Si una herramienta falla inesperadamente, **no improvises**. Anota el bloqueo
-  en `progress/current.md` con estado `blocked` en `feature_list.json` y termina.
+  en el reporte asignado con estado `BLOCKED` y termina; no mutas el ledger.
 - **UI/UX**: nunca uses colores, espaciados, sombras ni radios hardcodeados. Usa
   siempre las variables CSS de `packages/ui/src/design-system/tokens.css`
   (definidas en `docs/design.md`). Ninguna excepción.
@@ -91,7 +88,7 @@ Si la feature que implementas toca **cualquiera** de estas cosas, es trabajo UI/
 Tu respuesta final es **una sola línea**:
 
 ```
-done -> feature <id> implementada y revisada
+IMPLEMENTED_PENDING_REVIEW -> <ruta del reporte con issue y HEAD>
 ```
 o
 ```

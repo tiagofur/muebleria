@@ -28,6 +28,7 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p test_check_pr_metadata.py -v
           python3 -m unittest discover -s scripts -p test_factory_handoff.py -v
+          python3 -m unittest discover -s scripts -p test_factory_workflow_contract.py -v
       - name: Check current PR and approved issue
         env:
           GITHUB_TOKEN: ${{ github.token }}
