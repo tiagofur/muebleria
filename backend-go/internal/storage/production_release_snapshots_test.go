@@ -66,7 +66,7 @@ func TestPrivateReleaseSnapshot_OwnerPrivacyAndImmutability(t *testing.T) {
 	fx := setupReleaseFixture(t)
 	ctx := context.Background()
 	var releaseID string
-	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		release, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID: fx.projectID, DesignRevisionID: fx.revR3, ActorUserID: rlsUserA,
 		})

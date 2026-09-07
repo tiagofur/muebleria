@@ -58,7 +58,7 @@ func cleanWorkingItems(fx *releaseFixture, widthOverride *float64) []storage.Upd
 		return storage.UpdateDesignWorkingCopyItemCommand{
 			FurnitureInstanceID:   fiID,
 			FurnitureDefinitionID: fiModuleA,
-			Parameters:            map[string]any{"widthMm": width, "heightMm": 720.0},
+			Parameters:            map[string]any{"widthMm": width, "heightMm": 720.0, "depthMm": 560.0},
 			MaterialChoices:       map[string]string{"BODY": releaseMaterial},
 			Transform:             domain.Transform3D{TranslationMm: [3]float64{200, 0, 0}},
 		}
@@ -147,7 +147,7 @@ func TestApproveDesignRevision_ProductionGateBlocksOnCommercialChange(t *testing
 	if err != nil {
 		t.Fatalf("generic lifecycle approval must keep working: %v", err)
 	}
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
 			DesignRevisionID: revID,
@@ -220,7 +220,7 @@ func TestApproveDesignRevision_ProductionGateRejectsNonAcceptedBaseline(t *testi
 			ProjectID: fx.projectID,
 			Notes:     "Q4 draft",
 			Items: []storage.CreateQuoteRevisionItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, LifecycleStatus: "active"},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, LifecycleStatus: "active"},
 			},
 			Status:         "draft",
 			BaseRevisionID: fx.quoteQ3,

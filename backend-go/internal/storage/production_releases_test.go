@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -47,6 +48,11 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 	} {
 		multiOrgExec(t, fx.admin, statement)
 	}
+	if _, ok := choices["legacy-body"]; ok {
+		multiOrgExec(t, fx.admin, `UPDATE components SET option_roles='{legacy-body}', default_edges='[{"side":"L1","enabled":true}]' WHERE code='RELEASE-PANEL';
+	 INSERT INTO hardware_lines (id,module_id,quantity,option_role,organization_id) VALUES
+	 ('71000000-0000-0000-0000-000000000003','`+fiModuleA+`',1,'custom-hinge','`+rlsOrgA+`');`)
+	}
 	actorA := fiActorA()
 
 	lineID := "60000000-0000-0000-0000-000000000093"
@@ -84,7 +90,7 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 			return storage.CreateQuoteRevisionItemCommand{
 				FurnitureInstanceID:   fiID,
 				FurnitureDefinitionID: fiModuleA,
-				Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0},
+				Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
 				MaterialChoices:       choices,
 				LifecycleStatus:       "active",
 			}
@@ -109,7 +115,7 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 			return storage.UpdateDesignWorkingCopyItemCommand{
 				FurnitureInstanceID:   fiID,
 				FurnitureDefinitionID: fiModuleA,
-				Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0},
+				Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
 				MaterialChoices:       choices,
 				Transform:             domain.Transform3D{TranslationMm: [3]float64{100, 0, 0}},
 			}
@@ -190,7 +196,7 @@ func TestProductionRelease_CanonicalPinningNegativeProof(t *testing.T) {
 	actorA := fiActorA()
 
 	var p1 *storage.ProductionReleaseReadback
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -224,8 +230,8 @@ func TestProductionRelease_CanonicalPinningNegativeProof(t *testing.T) {
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
-				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -272,7 +278,7 @@ func TestProductionRelease_CanonicalPinningNegativeProof(t *testing.T) {
 	// demo exception skips the commercial gate. (Approval runs first per §29,
 	// so R4 is approved to expose exactly the commercial verdict.)
 	var commercial *domain.ReleaseCommercialGateError
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		if _, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
 			DesignID:         fx.designID,
 			DesignRevisionID: readback.Staleness.CurrentDesignRevisionID,
@@ -306,7 +312,7 @@ func TestProductionRelease_CanonicalPinningNegativeProof(t *testing.T) {
 	// The full flow for R4 production: explicit requote absorbs the commercial
 	// change, the new quote is accepted, R4 is approved and released as P2 —
 	// and P1 keeps its original pins.
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		requote, rErr := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
 			ProjectID:           fx.projectID,
 			BaseQuoteRevisionID: fx.quoteQ3,
@@ -364,7 +370,7 @@ func TestProductionRelease_SpatialOnlyRevisionIsNotManufacturingStale(t *testing
 	actorA := fiActorA()
 
 	var p1 *storage.ProductionReleaseReadback
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -384,8 +390,8 @@ func TestProductionRelease_SpatialOnlyRevisionIsNotManufacturingStale(t *testing
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, Transform: domain.Transform3D{TranslationMm: [3]float64{2400, 0, 0}, RotationDeg: [3]float64{0, 90, 0}}, RoomID: "room-2"},
-				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, Transform: domain.Transform3D{TranslationMm: [3]float64{5000, 0, 0}}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, Transform: domain.Transform3D{TranslationMm: [3]float64{2400, 0, 0}, RotationDeg: [3]float64{0, 90, 0}}, RoomID: "room-2"},
+				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, Transform: domain.Transform3D{TranslationMm: [3]float64{5000, 0, 0}}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -432,7 +438,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -454,7 +460,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 		t.Fatalf("publish unapproved R4: %v", err)
 	}
 
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
 			DesignRevisionID: revR4ID,
@@ -473,7 +479,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 			ProjectID: fx.projectID,
 			Notes:     "Q4 draft",
 			Items: []storage.CreateQuoteRevisionItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, LifecycleStatus: "active"},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, LifecycleStatus: "active"},
 			},
 			Status:         "draft",
 			BaseRevisionID: fx.quoteQ3,
@@ -484,7 +490,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create draft quote: %v", err)
 	}
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
 			DesignRevisionID: fx.revR3,
@@ -504,7 +510,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": "seiscientos", "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": "seiscientos", "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -530,7 +536,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("publish+approve invalid revision: %v", err)
 	}
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
 			DesignRevisionID: invalidRevID,
@@ -547,7 +553,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 	}
 
 	// 4. Cross-project revision: org B's actor cannot release org A's revision.
-	err = fiTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
 		_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fiProjectB,
 			DesignRevisionID: fx.revR3,
@@ -561,7 +567,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 
 	// 5. Design-first release without commercial baseline succeeds.
 	var pFirst *storage.ProductionReleaseReadback
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		pFirst, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -645,7 +651,7 @@ func TestProductionRelease_ReleaseRowsAreImmutableHistory(t *testing.T) {
 	actorA := fiActorA()
 
 	var p1 *storage.ProductionReleaseReadback
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -678,7 +684,7 @@ func TestProductionRelease_MultiOrgRLS(t *testing.T) {
 	actorA := fiActorA()
 
 	var p1 *storage.ProductionReleaseReadback
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -734,15 +740,23 @@ func TestProductionRelease_ConcurrentCreationNumbering(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			errs[idx] = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-				var err error
-				releases[idx], err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
-					ProjectID:        fx.projectID,
-					DesignRevisionID: fx.revR3,
-					ActorUserID:      rlsUserA,
+			for attempt := 0; attempt < concurrency; attempt++ {
+				errs[idx] = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
+					var err error
+					releases[idx], err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
+						ProjectID:        fx.projectID,
+						DesignRevisionID: fx.revR3,
+						ActorUserID:      rlsUserA,
+					})
+					return err
 				})
-				return err
-			})
+				// A coherent snapshot cannot see a concurrently committed release.
+				// Retry the entire transaction, never an INSERT inside the stale view.
+				var conflict *pgconn.PgError
+				if !errors.As(errs[idx], &conflict) || (conflict.Code != "40001" && conflict.ConstraintName != "uq_production_releases_project_number") {
+					break
+				}
+			}
 		}(i)
 	}
 	wg.Wait()
@@ -830,7 +844,7 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 	actorA := fiActorA()
 
 	var p1 *storage.ProductionReleaseReadback
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -936,7 +950,7 @@ func TestGetContextualProductionRelease_HistoricalVsLatest(t *testing.T) {
 
 	// 1. Create Release P1 pinned to (revR3, quoteQ3).
 	var p1 *storage.ProductionReleaseReadback
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
@@ -954,13 +968,13 @@ func TestGetContextualProductionRelease_HistoricalVsLatest(t *testing.T) {
 	// 2. Modify working copy (width change on fiA), publish R4, requote to Q4, accept Q4, approve R4, and create P2.
 	var p2 *storage.ProductionReleaseReadback
 	var revR4, quoteQ4 string
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
-				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
+				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -1090,4 +1104,10 @@ func TestGetContextualProductionRelease_HistoricalVsLatest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verification transaction: %v", err)
 	}
+}
+
+// Releases require the same coherent outer transaction as the HTTP route.
+func releaseTx(t *testing.T, store *storage.PostgresStore, actor storage.TenantActor, run func(context.Context) error) error {
+	t.Helper()
+	return store.WithinTenantTx(storage.WithConsistentCatalogTx(context.Background()), actor, run)
 }

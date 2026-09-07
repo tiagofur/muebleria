@@ -118,7 +118,6 @@ import {
   releaseAuthorityOf,
   buildReleaseBomContext,
   releaseBomItemsToProjectItems,
-  requirementLinesFromContext,
   scheduleInstallationVisit,
   startInstallationVisit,
   completeInstallationVisit,
@@ -2154,68 +2153,23 @@ export function AppContent({
           return !!current &&
             releaseAuthorityOf(current)?.releaseId === authority?.releaseId;
         };
-        // #577 / OPS-DT-1 — canonical authority: the requirement lines come
-        // from the EXACT immutable DesignRevision snapshot the release pins
-        // (loaded through the generated client), never from the mutable
-        // project quote state; the derive command targets the exact release
-        // id and the server binds + audits the provenance.
-        if (
-          authority?.source === 'canonical' &&
-          repo.getReleaseBomContext &&
-          repo.deriveMaterialRequirements &&
-          catalog
-        ) {
+        // Canonical demand is frozen server-side; never re-resolve mutable catalog here.
+        if (authority?.source === 'canonical' && repo.deriveMaterialRequirements) {
           void repo
-            .getReleaseBomContext(projectId, authority.releaseId)
-            .then((context) => {
+            .deriveMaterialRequirements(projectId, [], { productionReleaseId: authority.releaseId })
+            .then((view) => {
               if (!isCurrent()) return;
-              if (!context || context.items.length === 0) {
-                toast({
-                  type: 'error',
-                  message: 'No se pudo leer el snapshot de diseño de la liberación canónica',
-                });
-                return;
-              }
-              let lines: readonly MaterialRequirementLine[];
-              try {
-                lines = requirementLinesFromContext(
-                  buildReleaseBomContext(projectId, context.items),
-                  catalog,
-                  materials,
-                  stockCatalog.edgeIdByCode,
-                );
-              } catch (err) {
-                toast({
-                  type: 'error',
-                  message:
-                    err instanceof Error && err.message
-                      ? err.message
-                      : 'El BOM de la liberación no pudo resolverse',
-                });
-                return;
-              }
-              if (lines.length === 0) {
-                toast({ type: 'error', message: 'El BOM liberado no produjo líneas de requerimiento' });
-                return;
-              }
-              return repo
-                .deriveMaterialRequirements!(projectId, lines, {
-                  productionReleaseId: context.release.id,
-                })
-                .then((view) => {
-                  if (!isCurrent()) return;
-                  const current = getProjectStoreState().projects.find((p) => p.id === projectId);
-                  if (!current) return;
-                  projectActions.applyMaterialPlanningProject(projectId, {
-                    ...current,
-                    materialPlanning:
-                      (view.planning as Project['materialPlanning']) ?? current.materialPlanning,
-                  });
-                  toast({
-                    type: 'success',
-                    message: '✓ Requerimientos derivados de la liberación canónica',
-                  });
-                });
+              const current = getProjectStoreState().projects.find((p) => p.id === projectId);
+              if (!current) return;
+              projectActions.applyMaterialPlanningProject(projectId, {
+                ...current,
+                materialPlanning:
+                  (view.planning as Project['materialPlanning']) ?? current.materialPlanning,
+              });
+              toast({
+                type: 'success',
+                message: '✓ Requerimientos derivados de la liberación canónica',
+              });
             })
             .catch((err: unknown) => {
               if (!isCurrent()) return;

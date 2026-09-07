@@ -421,6 +421,8 @@ func respondWithProductionReleaseError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "El proyecto, la revisión o el release no existe", nil)
 	case errors.Is(err, domain.ErrInvalidReleaseCommand):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "comando de release inválido", nil)
+	case errors.Is(err, storage.ErrReleaseSnapshotResolution):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La revisión no puede resolverse para fabricación", nil)
 	case errors.Is(err, domain.ErrDesignRevisionNotApproved):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "la revisión de diseño no está aprobada para producción", nil)
 	case errors.Is(err, domain.ErrReleaseQuoteNotAccepted):

@@ -1,3 +1,11 @@
+## #577 — atomic canonical manufacturing capture (partial; 2026-09-07)
+
+- Authorized continuation and up-to-800-line exception; branch `feat/577-atomic-manufacturing-capture`, base `6691fcdffd819578fd71bd196ee53bbe977abd72`; factory ownership held by parent, started 16:06 UTC.
+- Capture exact revision units, existing fingerprint and aggregate demand with P1 in one coherent tenant transaction; reuse private immutable table 000122, with owner-private exact reader.
+- Canonical material derivation consumes frozen server requirements, not client lines or mutable catalog; Web sends only the exact release pin. Legacy-only derivation remains compatible.
+- Real PostgreSQL HTTP proofs cover failed snapshot insert/rollback, same-key retry, private read/tenant denial, later revision and project/catalog mutation, forged demand and missing-snapshot rejection. Focused storage/API evidence is recorded in the parent task; final exact-head gates/review pending.
+- No warehouse/reservation/part-execution continuity claim, new release/fingerprint, machine changes, ledger activation, issue closure or merge. Ordinary independent review; RDD disabled/unmanaged.
+
 ## #591 — machine output selection (entrega parcial, wiring completo)
 
 - Rama `feat/591-machine-output-selection`; migración 000123 + API generada + resolver + UI de Ingeniería + export normal ligado al tuple exacto; sin fallback ni bulk (ver `progress/implementation_591_machine_output_selection.md`). Ronda de revisión corregida (GET factory-gate, mismatch path/body, error visible en UI, refetch tras save, mapper plano) + storage PG real y E2E browser 4/4 PASS; pendiente sólo CI del head final.

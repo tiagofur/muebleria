@@ -9,6 +9,7 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 /**
@@ -142,8 +143,8 @@ type deriveMaterialsRequest struct {
 
 // HandleMaterialsDerive handles POST /api/projects/{id}/materials/derive —
 // materialize the requirements snapshot from the released BOM (OC-050). The
-// lines come from the TS BOM engine over the exact released revision
-// snapshot; the server binds them to the EXACT canonical ProductionRelease
+// canonical lines come exclusively from the frozen server snapshot; legacy-only
+// projects retain submitted BOM lines. The server binds the EXACT canonical ProductionRelease
 // when one exists (production_release_id, never an implicit latest), or to
 // the legacy compatibility authority for pre-DT projects, and audits
 // materials_required with the full provenance pins.
@@ -159,12 +160,15 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}
-	if len(body.Lines) == 0 {
+	if len(body.Lines) == 0 && strings.TrimSpace(body.ProductionReleaseID) == "" {
 		respondWithError(w, http.StatusBadRequest, "derivar requiere las líneas del BOM liberado")
 		return
 	}
 	lines := make([]domain.MaterialRequirementLine, 0, len(body.Lines))
 	for _, line := range body.Lines {
+		if strings.TrimSpace(body.ProductionReleaseID) != "" {
+			break
+		}
 		if !domain.ValidStockMaterialKind(line.Kind) || strings.TrimSpace(line.MaterialID) == "" || line.Quantity <= 0 {
 			respondWithError(w, http.StatusBadRequest, "línea de requerimiento inválida (material + cantidad > 0)")
 			return
@@ -188,6 +192,12 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 		if snap.CanonicalReleaseExists && targetReleaseID == "" {
 			return nil, fmt.Errorf("CONFLICT:esta obra tiene una liberación canónica: derivar requiere production_release_id exacto")
 		}
+		if snap.CanonicalReleaseExists {
+			if len(snap.CanonicalRequirements) == 0 {
+				return nil, storage.ErrReleaseSnapshotUnavailable
+			}
+			lines = snap.CanonicalRequirements
+		}
 		if snap.Planning != nil && snap.Planning.Release != nil {
 			return nil, fmt.Errorf("CONFLICT:el material de esta obra ya fue liberado")
 		}
@@ -202,16 +212,16 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		requirements := &domain.MaterialRequirementsSnapshot{
-			ReleaseID:                   release.ReleaseID,
-			BomFingerprint:              release.ManufacturingFingerprint,
-			SourceProductionReleaseID:   release.ReleaseID,
+			ReleaseID:                     release.ReleaseID,
+			BomFingerprint:                release.ManufacturingFingerprint,
+			SourceProductionReleaseID:     release.ReleaseID,
 			SourceProductionReleaseNumber: release.ReleaseNumber,
-			SourceDesignRevisionID:      release.DesignRevisionID,
-			SourceDesignRevisionNumber:  release.DesignRevisionNumber,
-			SourceQuoteRevisionID:       release.QuoteRevisionID,
-			DerivedAt:                   now,
-			DerivedBy:                   actorID(claims),
-			Lines:                       lines,
+			SourceDesignRevisionID:        release.DesignRevisionID,
+			SourceDesignRevisionNumber:    release.DesignRevisionNumber,
+			SourceQuoteRevisionID:         release.QuoteRevisionID,
+			DerivedAt:                     now,
+			DerivedBy:                     actorID(claims),
+			Lines:                         lines,
 		}
 		planning = &domain.MaterialPlanning{
 			ID:           planning.ID,
@@ -246,10 +256,10 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 // exact release pins the requirements are bound to (#577 / OPS-DT-1).
 func materialsProvenancePayload(release *domain.ResolvedProductionRelease, lineCount int) map[string]interface{} {
 	payload := map[string]interface{}{
-		"release_id":        release.ReleaseID,
-		"release_source":    string(release.Source),
-		"bom_fingerprint":   release.ManufacturingFingerprint,
-		"line_count":        lineCount,
+		"release_id":      release.ReleaseID,
+		"release_source":  string(release.Source),
+		"bom_fingerprint": release.ManufacturingFingerprint,
+		"line_count":      lineCount,
 	}
 	if release.ReleaseNumber > 0 {
 		payload["release_number"] = release.ReleaseNumber

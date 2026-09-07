@@ -278,7 +278,7 @@ func TestDigitalThreadE2E_ScenarioA_QuoteFirst(t *testing.T) {
 	var releaseP1ID string
 	var f1 string
 	// Step 4: Approve R1 and create ProductionRelease P1.
-	err = fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(txCtx context.Context) error {
 		appR1, err := fx.store.ApproveDesignRevision(txCtx, storage.ApproveDesignRevisionCommand{
 			DesignID:         designD1,
 			DesignRevisionID: revR1ID,
@@ -435,9 +435,9 @@ func TestDigitalThreadE2E_ScenarioB_QuantityGreaterThanOne(t *testing.T) {
 			ProjectID: fiSharedProject,
 			Notes:     "Qty=3 Baseline",
 			Items: []storage.CreateQuoteRevisionItemCommand{
-				{FurnitureInstanceID: fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}, LifecycleStatus: "active"},
-				{FurnitureInstanceID: fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}, LifecycleStatus: "active"},
-				{FurnitureInstanceID: fiC, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}, LifecycleStatus: "active"},
+				{FurnitureInstanceID: fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}, LifecycleStatus: "active"},
+				{FurnitureInstanceID: fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}, LifecycleStatus: "active"},
+				{FurnitureInstanceID: fiC, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}, LifecycleStatus: "active"},
 			},
 		})
 		if err != nil {
@@ -457,8 +457,8 @@ func TestDigitalThreadE2E_ScenarioB_QuantityGreaterThanOne(t *testing.T) {
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
-				{FurnitureInstanceID: fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -529,7 +529,7 @@ func TestDigitalThreadE2E_ScenarioC_DesignFirst(t *testing.T) {
 				{
 					FurnitureInstanceID:   fi1.ID,
 					FurnitureDefinitionID: fiModuleA,
-					Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0},
+					Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
 					MaterialChoices:       map[string]string{"BODY": dtCanonicalMaterial},
 					LifecycleStatus:       "active",
 				},
@@ -574,8 +574,8 @@ func TestDigitalThreadE2E_ScenarioC_DesignFirst(t *testing.T) {
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fi1.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
-				{FurnitureInstanceID: fiDID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 900.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fi1.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fiDID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 900.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -690,8 +690,8 @@ func TestDigitalThreadE2E_ScenarioD_DuplicateIdentity(t *testing.T) {
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
-				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		})
@@ -720,8 +720,8 @@ func TestDigitalThreadE2E_ScenarioD_DuplicateIdentity(t *testing.T) {
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
-				{FurnitureInstanceID: fiNew.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fiNew.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -790,8 +790,8 @@ func TestDigitalThreadE2E_ScenarioE_SemanticScope_UnmanagedExclusion(t *testing.
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fiManaged1.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
-				{FurnitureInstanceID: fiManaged2.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fiManaged1.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fiManaged2.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -874,7 +874,7 @@ func TestDigitalThreadE2E_ScenarioF_Concurrency_StaleBaseRejected(t *testing.T) 
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -897,7 +897,7 @@ func TestDigitalThreadE2E_ScenarioF_Concurrency_StaleBaseRejected(t *testing.T) 
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fi001.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -992,7 +992,7 @@ func TestDigitalThreadE2E_ScenarioG_ReleaseDurability(t *testing.T) {
 	var releaseID string
 	var f3 string
 
-	err := fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(txCtx context.Context) error {
 		p1, err := fx.store.CreateProductionRelease(txCtx, storage.CreateProductionReleaseCommand{
 			ProjectID:        fx.projectID,
 			DesignRevisionID: fx.revR3,
@@ -1011,8 +1011,8 @@ func TestDigitalThreadE2E_ScenarioG_ReleaseDurability(t *testing.T) {
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 700.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
-				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 700.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 700.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 700.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -1033,8 +1033,8 @@ func TestDigitalThreadE2E_ScenarioG_ReleaseDurability(t *testing.T) {
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 800.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
-				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 800.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 800.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
+				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 800.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": dtCanonicalMaterial}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {
@@ -1130,7 +1130,7 @@ func TestDigitalThreadE2E_NegativeProofs(t *testing.T) {
 	}
 
 	// Cross-Project Rejection: QuoteRevision from Project A cannot reconcile with DesignRevision from Project B.
-	err = fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(txCtx context.Context) error {
 		_, errCross := fx.store.ReconcileProject(txCtx, fiSharedProject, qRevAID, revBID)
 		if errCross == nil {
 			t.Fatalf("expected cross-project reconciliation rejection, got nil")

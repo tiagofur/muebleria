@@ -57,13 +57,17 @@ func TestProductionRelease_SelectedMaterialAuthority(t *testing.T) {
 						t.Fatalf("missing/foreign choice must block: %+v", preflight)
 					}
 				}
-				err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+				err = releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 					_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
 						ProjectID: fx.projectID, DesignRevisionID: fx.revR3, QuoteRevisionID: fx.quoteQ3, ActorUserID: rlsUserA,
 					})
 					return err
 				})
-				if valid && err != nil {
+				if scenario == "empty" {
+					if !errors.Is(err, storage.ErrReleaseSnapshotResolution) {
+						t.Fatalf("missing consumed material must reject capture: %v", err)
+					}
+				} else if valid && err != nil {
 					t.Fatalf("valid release rejected: %v", err)
 				}
 				if !valid {

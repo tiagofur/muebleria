@@ -193,7 +193,10 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	}
 	cat.Categories = cats
 
-	agrs, _ := s.ListAgregados(ctx)
+	agrs, err := s.ListAgregados(ctx)
+	if err != nil {
+		return cat, fmt.Errorf("error loading agregados: %w", err)
+	}
 	cat.Agregados = agrs
 
 	// Cargar módulos y su despiece
@@ -251,7 +254,9 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 			m.BaseClearanceMm = baseClearanceMm
 		}
 		if len(agrsRaw) > 0 {
-			_ = json.Unmarshal(agrsRaw, &m.Agregados)
+			if err := json.Unmarshal(agrsRaw, &m.Agregados); err != nil {
+				return cat, fmt.Errorf("module agregados: %w", err)
+			}
 		}
 		if err := decodePersistedFurnitureParameterDefinitions(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
 			return cat, fmt.Errorf("module %s parameter definitions: %w", m.ID, err)

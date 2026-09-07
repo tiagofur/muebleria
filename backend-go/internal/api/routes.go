@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // membershipCommandRouter adapts the command-oriented OpenAPI paths
@@ -475,7 +476,7 @@ func RegisterRoutes(server *Server) http.Handler {
 		"approve-for-production": http.HandlerFunc(server.HandleProjectDesignRevisionApproveForProduction),
 	})))))
 	mux.Handle("GET /api/projects/{projectId}/production-releases", authMW(http.HandlerFunc(server.HandleProjectProductionReleases)))
-	mux.Handle("POST /api/projects/{projectId}/production-releases", noStoreMiddleware(authMW(server.RequireIdempotency("production.release", http.HandlerFunc(server.HandleProjectProductionReleases)))))
+	mux.Handle("POST /api/projects/{projectId}/production-releases", noStoreMiddleware(consistentReleaseCatalogMiddleware(authMW(server.RequireIdempotency("production.release", http.HandlerFunc(server.HandleProjectProductionReleases))))))
 	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}", authMW(http.HandlerFunc(server.HandleProjectProductionRelease)))
 
 	// #392 / DT-8: staged publication of an immutable DesignRevision with
@@ -668,4 +669,11 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	// Aplicar CORS a toda la aplicación (allowlist, nunca wildcard)
 	return CORSMiddleware(server.allowedOrigins)(RequestIDMiddleware(mux))
+}
+
+// The coherent source view must be selected before AuthMiddleware opens its tenant transaction.
+func consistentReleaseCatalogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(storage.WithConsistentCatalogTx(r.Context())))
+	})
 }

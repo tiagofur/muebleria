@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
 // #395 / DT-11: server-authoritative ProductionRelease creation and readback
@@ -53,6 +54,25 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		return nil, domain.ErrInvalidReleaseCommand
 	}
 
+	if transactionFromContext(ctx) == nil {
+		actor, ok := TenantActorFromCtx(ctx)
+		if !ok {
+			return nil, ErrInvalidTenantActor
+		}
+		var result *ProductionReleaseReadback
+		err := s.WithinTenantTx(WithConsistentCatalogTx(ctx), actor, func(inner context.Context) error {
+			var err error
+			result, err = s.CreateProductionRelease(inner, cmd)
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+	if err := verifyConsistentCatalogTx(ctx, transactionFromContext(ctx)); err != nil {
+		return nil, err
+	}
 	tx, owned, err := s.beginOrUseTx(ctx)
 	if err != nil {
 		return nil, err
@@ -105,6 +125,14 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 	if err != nil {
 		return nil, err
 	}
+	catalog, err := s.GetFullCatalog(txCtx)
+	if err != nil {
+		return nil, err
+	}
+	collection, err := engine.ResolveReleaseCollection(cmd.DesignRevisionID, items, catalog)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrReleaseSnapshotResolution, err)
+	}
 	quoteRevisionID := cmd.QuoteRevisionID
 
 	// 7. Server-computed manufacturing fingerprint over the same immutable
@@ -152,6 +180,10 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		fingerprint, string(domain.ProductionReleaseStatusActive), actor,
 	).Scan(&release.ID, &release.ReleasedAt)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := s.insertReleaseManufacturingSnapshot(txCtx, release, items, collection); err != nil {
 		return nil, err
 	}
 

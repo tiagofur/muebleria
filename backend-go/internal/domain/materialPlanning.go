@@ -418,6 +418,8 @@ func EvaluateMaterialsReleaseReadiness(planning *MaterialPlanning, stock []Mater
 // MaterialPlanningSnapshot is the locked state handed to a materials mutation:
 // the stored planning plus the warehouse context the gates depend on.
 type MaterialPlanningSnapshot struct {
+	// CanonicalRequirements comes only from the owner-private exact release snapshot.
+	CanonicalRequirements []MaterialRequirementLine
 	Planning                  *MaterialPlanning
 	AllPlannings              []*MaterialPlanning
 	Stock                     []MaterialStock
