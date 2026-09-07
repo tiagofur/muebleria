@@ -9,3 +9,13 @@
 - Export normal (`useExportHandlers.handleExportCutPlanPtx`): con selección configurada genera SOLO el tuple seleccionado (éxito → 1 archivo; bloqueado → 0 archivos + mensaje exacto); sin configuración → flujo legacy intacto.
 - Tests: Go dominio (paridad+validación+blockers), Go API (roundtrip, tuple inválido, conflicto stale, permiso vendedor, SERIALIZER_NOT_IMPLEMENTED surfaced), excel resolver (7: no-configured, ready exacto, cadmatic-4 bloqueado sin fallback, MPR pendiente, refs stale, un-target, generación 1-output golden). Storage/UI/web typecheck limpios.
 - PENDIENTE para DoD de #591: test storage Go contra PostgreSQL real (RLS cross-org + versión), E2E browser real (escenario del mandato + negativos), corrida completa `pnpm test`+`init.sh` y CI del head exacto.
+
+## Ronda de revisión (CHANGES REQUIRED) — corregida
+
+- GET ahora exige el mismo gate factory (`RoleCanAccessSettings`): el catálogo interno de máquinas/adapters no reacha usuarios Store/ventas (403).
+- Mismatch path-vs-body del PUT se compara ANTES de sobrescribir el valor decodificado (el bug destruía la detección); test construye body con operación distinta del path y cubre el caso.
+- GET fallido ya no oculta la sección: `machineOutputLoadError` + banner con botón Reintentar (`machine-output-load-error` / `machine-output-retry`).
+- Tras guardar, refetch del read model server-authoritative (nunca metadata fabricada localmente).
+- Mapper del read model corregido: los records llegan PLANOS (bug destapado por el E2E; tests de regresión en `apiMappers.test.ts`).
+- Storage PG real: conflicto de versión (insert→update→stale 409) y RLS cross-org (org B ve 0 filas; insert cross-org rechazado por WITH CHECK) — ambos PASS.
+- E2E browser real 4/4 PASS: selección exacta persiste tras reload con resolver de un solo target; CADmatic 4 bloqueado con blockers visibles y SIN fallback a generic; stale → 409 VERSION_CONFLICT tipado; org B no lee la config de A.

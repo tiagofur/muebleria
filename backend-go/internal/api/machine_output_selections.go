@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -116,7 +117,14 @@ func machineOutputCatalogToAPI(catalog domain.MachineOutputCatalog) openapi.Mach
 }
 
 // HandleListMachineOutputSelections: GET /api/machine-output-selections.
+// Same settings gate as the PUT (#591 scope is factory-only): the internal
+// machine/adapter catalog must not reach store/partner users — RLS protects
+// the selections, but the catalog itself is factory engineering data.
 func (s *Server) HandleListMachineOutputSelections(w http.ResponseWriter, r *http.Request) {
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanAccessSettings),
+		"no tenés permiso para ver la configuración de salida de máquina") {
+		return
+	}
 	records, err := s.Store.ListMachineOutputSelections(r.Context())
 	if err != nil {
 		respondWithInternalError(w, err, "handler")
@@ -144,11 +152,13 @@ func (s *Server) HandleUpsertMachineOutputSelection(w http.ResponseWriter, r *ht
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}
-	body.Selection.Operation = domain.ManufacturingOperation(operation)
-	if body.Selection.Operation != domain.ManufacturingOperation(operation) ||
-		!body.Selection.Operation.Valid() || operation != string(body.Selection.Operation) {
+	// Compare BEFORE touching the decoded value: overwriting first would
+	// destroy the mismatch we are checking for.
+	if !domain.ManufacturingOperation(operation).Valid() ||
+		body.Selection.Operation != domain.ManufacturingOperation(operation) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest,
-			"operación desconocida: "+operation, nil)
+			fmt.Sprintf("la operación del body (%q) no coincide con la del path (%q)",
+				body.Selection.Operation, operation), nil)
 		return
 	}
 	catalog, err := domain.ParseMachineOutputCatalog()

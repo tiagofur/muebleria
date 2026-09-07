@@ -4084,18 +4084,18 @@ function moReqString(v: unknown, field: string): string {
 }
 
 export function machineOutputSelectionRecordFromApi(raw: unknown): MachineOutputSelectionRecord {
+  // `raw` is the FLAT record (API DTO) — not a {selection} wrapper.
   const r = moAsRecord(raw);
-  const selection = moAsRecord(r.selection);
   return {
     selection: {
-      operation: moReqString(selection.operation, 'selection.operation') as ManufacturingOperation,
-      machineProfileId: moReqString(selection.machineProfileId, 'selection.machineProfileId'),
-      machineProfileRevisionId: moReqString(selection.machineProfileRevisionId, 'selection.machineProfileRevisionId'),
-      outputCompatibilityProfileId: moReqString(selection.outputProfileId, 'selection.outputProfileId'),
-      outputCompatibilityProfileRevisionId: moReqString(selection.outputProfileRevisionId, 'selection.outputProfileRevisionId'),
-      postprocessorAdapterId: moReqString(selection.adapterId, 'selection.adapterId'),
-      postprocessorAdapterVersion: moReqString(selection.adapterVersion, 'selection.adapterVersion'),
-      postprocessorImplementationDigest: moReqString(selection.adapterImplementationDigest, 'selection.adapterImplementationDigest'),
+      operation: moReqString(r.operation, 'operation') as ManufacturingOperation,
+      machineProfileId: moReqString(r.machineProfileId, 'machineProfileId'),
+      machineProfileRevisionId: moReqString(r.machineProfileRevisionId, 'machineProfileRevisionId'),
+      outputCompatibilityProfileId: moReqString(r.outputProfileId, 'outputProfileId'),
+      outputCompatibilityProfileRevisionId: moReqString(r.outputProfileRevisionId, 'outputProfileRevisionId'),
+      postprocessorAdapterId: moReqString(r.adapterId, 'adapterId'),
+      postprocessorAdapterVersion: moReqString(r.adapterVersion, 'adapterVersion'),
+      postprocessorImplementationDigest: moReqString(r.adapterImplementationDigest, 'adapterImplementationDigest'),
     },
     version: num(r.version, 0),
     updatedAt: str(r.updatedAt),

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -28,14 +29,16 @@ func (s *PostgresStore) ListMachineOutputSelections(ctx context.Context) ([]doma
 	records := []domain.MachineOutputSelectionRecord{}
 	for rows.Next() {
 		var rec domain.MachineOutputSelectionRecord
+		var updatedAt time.Time
 		if err := rows.Scan(
 			&rec.Operation, &rec.MachineProfileID, &rec.MachineProfileRevisionID,
 			&rec.OutputProfileID, &rec.OutputProfileRevisionID,
 			&rec.AdapterID, &rec.AdapterVersion, &rec.AdapterImplementationDigest,
-			&rec.Version, &rec.UpdatedAt, &rec.UpdatedBy,
+			&rec.Version, &updatedAt, &rec.UpdatedBy,
 		); err != nil {
 			return nil, fmt.Errorf("scan machine output selection: %w", err)
 		}
+		rec.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
 		records = append(records, rec)
 	}
 	return records, rows.Err()
@@ -51,6 +54,7 @@ func (s *PostgresStore) UpsertMachineOutputSelection(
 	updatedBy string,
 ) (domain.MachineOutputSelectionRecord, error) {
 	var rec domain.MachineOutputSelectionRecord
+	var updatedAt time.Time
 	err := s.db(ctx).QueryRow(ctx, `
 		INSERT INTO machine_output_selections (
 			organization_id, operation,
@@ -85,8 +89,11 @@ func (s *PostgresStore) UpsertMachineOutputSelection(
 		&rec.Operation, &rec.MachineProfileID, &rec.MachineProfileRevisionID,
 		&rec.OutputProfileID, &rec.OutputProfileRevisionID,
 		&rec.AdapterID, &rec.AdapterVersion, &rec.AdapterImplementationDigest,
-		&rec.Version, &rec.UpdatedAt, &rec.UpdatedBy,
+		&rec.Version, &updatedAt, &rec.UpdatedBy,
 	)
+	if err == nil {
+		rec.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
+	}
 	if err == pgx.ErrNoRows {
 		// Distinguish stale version from a no-op insert: a row exists only if
 		// the ON CONFLICT update was filtered by the version guard.

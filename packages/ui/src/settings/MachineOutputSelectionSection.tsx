@@ -45,7 +45,10 @@ export interface MachineOutputCatalogView {
 }
 
 export interface MachineOutputConfigProps {
-  readonly catalog: MachineOutputCatalogView;
+  /** Null while the read model failed to load — the section stays visible. */
+  readonly catalog: MachineOutputCatalogView | null;
+  readonly loadError?: string | null;
+  readonly onRetry?: () => void;
   readonly selections: Partial<
     Record<ManufacturingOperation, MachineOutputSelectionRecord | undefined>
   >;
@@ -263,17 +266,44 @@ export function MachineOutputSelectionSection(props: MachineOutputConfigProps): 
         paquetes de validación de campo pueden evaluar varios formatos; la producción nunca
         genera candidatos en bulk ni sustituye un perfil bloqueado.
       </p>
-      {operations.map((operation) => (
-        <MachineOutputOperationCard
-          key={operation}
-          operation={operation}
-          catalog={props.catalog}
-          record={props.selections[operation]}
-          resolved={props.resolved[operation]}
-          onSave={props.onSave}
-          saving={props.saving}
-        />
-      ))}
+      {props.loadError ? (
+        <div
+          className="machine-output-blocked"
+          role="alert"
+          data-testid="machine-output-load-error"
+        >
+          <p style={{ margin: 0 }}>{props.loadError}</p>
+          {props.onRetry ? (
+            <button
+              type="button"
+              onClick={props.onRetry}
+              data-testid="machine-output-retry"
+              style={{ marginTop: 8 }}
+            >
+              Reintentar
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {(() => {
+        const catalog = props.catalog;
+        if (!catalog) {
+          return !props.loadError ? (
+            <p className="machine-output-intro">Cargando configuración de salida…</p>
+          ) : null;
+        }
+        return operations.map((operation) => (
+          <MachineOutputOperationCard
+            key={operation}
+            operation={operation}
+            catalog={catalog}
+              record={props.selections[operation]}
+              resolved={props.resolved[operation]}
+            onSave={props.onSave}
+            saving={props.saving}
+          />
+        ));
+      })()}
     </div>
   );
 }

@@ -13,7 +13,9 @@ import (
 func machineOutputPutBody(operation string, sel domain.MachineOutputSelection, expectedVersion int64) *strings.Reader {
 	payload := map[string]any{
 		"selection": map[string]any{
-			"operation":                   operation,
+			// The body carries the SELECTION's own operation; the path
+			// parameter stays independent so path/body mismatch is testable.
+			"operation":                   sel.Operation,
 			"machineProfileId":            sel.MachineProfileID,
 			"machineProfileRevisionId":    sel.MachineProfileRevisionID,
 			"outputProfileId":             sel.OutputProfileID,
@@ -138,11 +140,23 @@ func TestMachineOutputSelectionPermissionAndOperationMismatch(t *testing.T) {
 		t.Fatalf("vendedor status = %d, want 403", forbidden.Code)
 	}
 
-	// Path operation must match the body selection operation.
-	sel := validCuttingSelectionAPI()
+	// Path operation must match the body selection operation — the body keeps
+	// its ORIGINAL value (the handler must not overwrite it before comparing).
+	sel := validCuttingSelectionAPI() // body says cutting...
 	mismatch := putMachineOutputSelection(t, srv, "machining", sel, 0, string(domain.RoleAdmin))
 	if mismatch.Code != http.StatusBadRequest {
 		t.Fatalf("mismatched operation status = %d, want 400", mismatch.Code)
+	}
+	if !strings.Contains(mismatch.Body.String(), "no coincide") {
+		t.Errorf("mismatch body should explain the path/body divergence, got %s", mismatch.Body.String())
+	}
+
+	// Store (vendedor) cannot read the internal machine catalog either.
+	get := withClaims(httptest.NewRequest(http.MethodGet, "/api/machine-output-selections", nil), "v1", string(domain.RoleVendedor))
+	getRR := httptest.NewRecorder()
+	srv.HandleListMachineOutputSelections(getRR, get)
+	if getRR.Code != http.StatusForbidden {
+		t.Fatalf("vendedor GET status = %d, want 403 (factory-only scope)", getRR.Code)
 	}
 }
 

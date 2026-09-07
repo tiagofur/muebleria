@@ -620,32 +620,49 @@ export function AppContent({
     [session, getAuthToken, authUserSeq],
   );
   // #591 / WEB-MFG-2 — machine output selection (read model + save).
+  // A failed GET never hides the section silently: `machineOutputLoadError`
+  // keeps it visible with an explicit error + retry.
   const [machineOutputReadModel, setMachineOutputReadModel] = useState<
     Awaited<ReturnType<APIWorkspaceRepository['getMachineOutputSelections']>> | null
   >(null);
+  const [machineOutputLoadError, setMachineOutputLoadError] = useState<string | null>(null);
+  const [machineOutputReloadKey, setMachineOutputReloadKey] = useState(0);
   useEffect(() => {
     if (!authToken) {
       setMachineOutputReadModel(null);
+      setMachineOutputLoadError(null);
       return;
     }
     let cancelled = false;
     const repository = getRepository();
     if (typeof repository.getMachineOutputSelections !== 'function') {
       setMachineOutputReadModel(null);
+      setMachineOutputLoadError(null);
       return;
     }
     repository
       .getMachineOutputSelections()
       .then((model) => {
-        if (!cancelled) setMachineOutputReadModel(model);
+        if (!cancelled) {
+          setMachineOutputReadModel(model);
+          setMachineOutputLoadError(null);
+        }
       })
       .catch(() => {
-        if (!cancelled) setMachineOutputReadModel(null);
+        if (!cancelled) {
+          setMachineOutputReadModel(null);
+          setMachineOutputLoadError(
+            'No se pudo cargar la configuración de salida de máquina. Verificá tu conexión o permisos y reintentá.',
+          );
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [authToken, getRepository, authUserSeq]);
+  }, [authToken, getRepository, authUserSeq, machineOutputReloadKey]);
+  const refreshMachineOutput = useCallback(() => {
+    setMachineOutputReloadKey((key) => key + 1);
+  }, []);
   const machineOutputSelections = useMemo(() => {
     const map: Partial<
       Record<'cutting' | 'machining', MachineOutputSelectionRecord | undefined>
@@ -680,33 +697,12 @@ export function AppContent({
       if (typeof repository.saveMachineOutputSelection !== 'function') {
         throw new Error('La configuración de salida de máquina requiere modo servidor.');
       }
-      const saved = await repository.saveMachineOutputSelection(
-        operation,
-        selection,
-        expectedVersion,
-      );
-      setMachineOutputReadModel((prev) =>
-        prev
-          ? {
-              ...prev,
-              selections: [
-                ...prev.selections.filter(
-                  (entry) => entry.selection.selection.operation !== operation,
-                ),
-                {
-                  selection: saved,
-                  machineLabel: '',
-                  profileLabel: '',
-                  adapterLabel: '',
-                  supportStatus: 'NOT_TESTED',
-                  blockers: [],
-                },
-              ],
-            }
-          : prev,
-      );
+      // Server-authoritative: after saving, refetch the whole read model —
+      // never fabricate labels/blockers locally.
+      await repository.saveMachineOutputSelection(operation, selection, expectedVersion);
+      refreshMachineOutput();
     },
-    [getRepository],
+    [getRepository, refreshMachineOutput],
   );
   // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
   const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
@@ -3044,14 +3040,16 @@ export function AppContent({
   const shellViewCtx = {
     acquirePlanEditSession,
     actorRole,
-    machineOutputConfig: machineOutputReadModel
-      ? {
-          catalog: machineOutputReadModel.catalog,
-          selections: machineOutputSelections,
-          resolved: machineOutputResolved,
-          onSave: saveMachineOutputSelection,
-        }
-      : null,
+    // #591: config object exists whenever the feature is reachable — on load
+    // error it carries loadError + onRetry so the section stays visible.
+    machineOutputConfig: {
+      catalog: machineOutputReadModel?.catalog ?? null,
+      selections: machineOutputSelections,
+      resolved: machineOutputResolved,
+      onSave: saveMachineOutputSelection,
+      loadError: machineOutputLoadError,
+      onRetry: refreshMachineOutput,
+    },
     addProjectItem,
     agregados,
     allowedNavIds,
