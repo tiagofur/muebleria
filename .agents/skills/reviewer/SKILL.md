@@ -77,6 +77,10 @@ o
 ```
 CHANGES_REQUESTED -> ver progress/review_<id>.md
 ```
+o
+```
+BLOCKED -> ver progress/review_<id>.md
+```
 
 ## Reglas duras
 
