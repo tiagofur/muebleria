@@ -1,6 +1,22 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
-import { Armchair, ClipboardCheck, Layers, RefreshCw, TriangleAlert } from 'lucide-react';
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from '@tanstack/react-query';
+import {
+  Armchair,
+  CheckCircle2,
+  CircleAlert,
+  CircleMinus,
+  ClipboardCheck,
+  Layers,
+  OctagonAlert,
+  RefreshCw,
+  TriangleAlert,
+  type LucideIcon,
+} from 'lucide-react';
 import {
   GraneteApiClient,
   GraneteApiError,
@@ -11,7 +27,7 @@ import {
   type QuoteRevisionDetail,
   type ReconciliationStatus,
 } from '@granete/storage';
-import { EmptyState, Modal, PageHeader, PageLoading, SearchInput, StatusChips } from '../common';
+import { EmptyState, ListSkeleton, Modal, PageHeader, SearchInput, StatusChips } from '../common';
 import {
   buildFurnitureMatrix,
   defaultDesignContext,
@@ -127,21 +143,50 @@ const DESIGN_REVISION_STATUS_LABELS: Readonly<Record<string, string>> = {
 };
 
 const RECONCILIATION_BADGES: Readonly<
-  Record<ReconciliationStatus, { label: string; className: string }>
+  Record<ReconciliationStatus, { label: string; className: string; icon: LucideIcon }>
 > = {
-  synced: { label: 'Sincronizada', className: 'status-badge status-badge--done' },
+  synced: {
+    label: 'Sincronizada',
+    className: 'status-badge status-badge--done',
+    icon: CheckCircle2,
+  },
   quoted_not_modeled: {
     label: 'Cotizada sin modelar',
     className: 'status-badge status-badge--warning',
+    icon: CircleAlert,
   },
   modeled_not_quoted: {
     label: 'Modelada sin cotizar',
     className: 'status-badge status-badge--warning',
+    icon: CircleAlert,
   },
-  modified: { label: 'Modificada', className: 'status-badge status-badge--warning' },
-  removed: { label: 'Retirada del diseño', className: 'status-badge status-badge--danger' },
-  conflict: { label: 'Conflicto', className: 'status-badge status-badge--danger' },
+  modified: {
+    label: 'Modificada',
+    className: 'status-badge status-badge--warning',
+    icon: CircleAlert,
+  },
+  removed: {
+    label: 'Retirada del diseño',
+    className: 'status-badge status-badge--danger',
+    icon: CircleMinus,
+  },
+  conflict: {
+    label: 'Conflicto',
+    className: 'status-badge status-badge--danger',
+    icon: OctagonAlert,
+  },
 };
+
+function ReconciliationBadge({ status }: { readonly status: ReconciliationStatus }): ReactNode {
+  const badge = RECONCILIATION_BADGES[status];
+  const Icon = badge.icon;
+  return (
+    <span className={badge.className}>
+      <Icon size={12} aria-hidden />
+      {badge.label}
+    </span>
+  );
+}
 
 const EMPTY_SUMMARY: FurnitureMatrixSummary = {
   total: 0,
@@ -191,6 +236,13 @@ function loadErrorMessage(error: unknown): string {
 function quoteRevisionLabel(revision: QuoteRevisionDetail): string {
   const status = QUOTE_REVISION_STATUS_LABELS[revision.status] ?? revision.status;
   return `Q${revision.revisionNumber} · ${status} · ${formatWhen(revision.createdAt)}`;
+}
+
+/** Presentation-only: sentence-case a status word for the exact-context header. */
+function capitalizedStatus(labels: Readonly<Record<string, string>>, status: string): string {
+  const label = labels[status];
+  if (!label) return status;
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 export function ProjectFurnitureScreen({
@@ -302,6 +354,9 @@ export function ProjectFurnitureScreen({
         },
         signal,
       ),
+    // Keep the previous matrix on screen while the exact context changes:
+    // switching revisions refreshes in place instead of flashing a spinner.
+    placeholderData: keepPreviousData,
   });
 
   const workspace: ProjectFurnitureWorkspace | null = workspaceQuery.data ?? null;
@@ -331,6 +386,11 @@ export function ProjectFurnitureScreen({
 
   const visibleRows = useMemo(() => filterMatrixRows(rows, filters), [rows, filters]);
   const hasActiveFilters = filtersAreActive(filters);
+
+  // Presentation-only derivations over the already-built rows: how many
+  // units the server reconciliation marks as synced in this exact comparison.
+  const hasComparison = rows.some((row) => row.reconciliation !== null);
+  const syncedActive = rows.filter((row) => row.isActive && row.reconciliation === 'synced').length;
 
   const contextualRelease = workspace?.release ?? null;
   const latestProjectRelease = workspace?.latestProjectRelease ?? null;
@@ -411,15 +471,21 @@ export function ProjectFurnitureScreen({
       />
 
       {workspaceQuery.isPending ? (
-        <PageLoading label="Cargando muebles de la obra…" />
+        <ProjectFurnitureSkeleton />
       ) : workspaceQuery.isError ? (
-        <EmptyState
-          variant="empty"
-          title="No se pudo cargar la matriz de muebles"
-          description={loadErrorMessage(workspaceQuery.error)}
-          actionLabel="Reintentar"
-          onAction={reloadAll}
-        />
+        <div className="pf-error" role="alert" data-testid="pf-error">
+          <TriangleAlert size={24} aria-hidden />
+          <h3>No se pudo cargar la matriz de muebles</h3>
+          <p>{loadErrorMessage(workspaceQuery.error)}</p>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={reloadAll}
+            disabled={workspaceQuery.isFetching}
+          >
+            <RefreshCw size={14} aria-hidden /> Reintentar
+          </button>
+        </div>
       ) : (
         <>
           <ProjectFurnitureContextBar
@@ -439,12 +505,45 @@ export function ProjectFurnitureScreen({
               })
             }
             quoteRevisionsError={quoteRevisionsQuery.isError}
-            contextualRelease={contextualRelease}
-            latestProjectRelease={latestProjectRelease}
             busy={contextBusy}
           />
 
-          <ProjectFurnitureSummaryCards summary={summary} />
+          <ProjectFurnitureExactContext
+            selectedQuoteRevision={selectedQuoteRevision}
+            hasQuoteRevisions={quoteRevisions.length > 0}
+            designContext={designContext}
+            designRevision={selectedDesignRevision}
+            contextualRelease={contextualRelease}
+            latestProjectRelease={latestProjectRelease}
+          />
+
+          <ProjectFurnitureSummaryCards
+            summary={summary}
+            syncedActive={syncedActive}
+            hasComparison={hasComparison}
+          />
+
+          {hasComparison &&
+          summary.requireAttention === 0 &&
+          summary.pendingPlacement === 0 &&
+          rows.length > 0 ? (
+            <p className="pf-allclear" role="status" data-testid="pf-all-clear">
+              <CheckCircle2 size={14} aria-hidden />
+              Todas las unidades están sincronizadas en la comparación actual.
+            </p>
+          ) : null}
+
+          {designContext.kind === 'none' && rows.length > 0 ? (
+            <div className="pf-notice" data-testid="pf-no-design-notice">
+              <CircleAlert size={16} aria-hidden />
+              <p>
+                Este proyecto tiene{' '}
+                {summary.activeUnits === 1 ? '1 unidad física' : `${summary.activeUnits} unidades físicas`},
+                pero todavía no hay un diseño seleccionado para comparar. Elegí un diseño para ver
+                presencia y reconciliación.
+              </p>
+            </div>
+          ) : null}
 
           <div className="pf-toolbar">
             <SearchInput
@@ -535,7 +634,11 @@ export function ProjectFurnitureScreen({
               onAction={() => setFilters(EMPTY_MATRIX_FILTERS)}
             />
           ) : (
-            <div className="data-table-wrap" data-testid="pf-table-wrap">
+            <div
+              className={`data-table-wrap${workspaceQuery.isFetching ? ' pf-table-busy' : ''}`}
+              data-testid="pf-table-wrap"
+              aria-busy={workspaceQuery.isFetching}
+            >
               <table className="data-table" data-testid="pf-table">
                 <caption className="visually-hidden">
                   Matriz de muebles físicos de la obra, una fila por unidad
@@ -547,73 +650,92 @@ export function ProjectFurnitureScreen({
                     <th scope="col">Cotización</th>
                     <th scope="col">Diseño</th>
                     <th scope="col">Reconciliación</th>
-                    <th scope="col">Estado</th>
                     <th scope="col">
                       <span className="visually-hidden">Acciones</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map((row) => (
-                    <tr key={row.instance.id} data-testid={`pf-row-${row.instance.id}`}>
-                      <td>
-                        <div className="pf-cell-title">
+                  {visibleRows.map((row) => {
+                    const rowTone =
+                      row.reconciliation === 'conflict'
+                        ? 'pf-row--danger'
+                        : row.actionRequired !== null
+                          ? 'pf-row--attention'
+                          : '';
+                    const rowInactive =
+                      !row.isActive && row.actionRequired === null && row.reconciliation !== 'conflict'
+                        ? 'pf-row--inactive'
+                        : '';
+                    return (
+                      <tr
+                        key={row.instance.id}
+                        data-testid={`pf-row-${row.instance.id}`}
+                        data-attention={row.actionRequired !== null ? 'true' : 'false'}
+                        className={[rowTone, rowInactive].filter(Boolean).join(' ')}
+                      >
+                        <td>
                           <span className="pf-label">{row.label}</span>
-                          {row.unitProvenanceLabel ? (
-                            <span className="meta-chip">{row.unitProvenanceLabel}</span>
-                          ) : null}
-                        </div>
-                        <span className="pf-dims">{formatDimensions(row)}</span>
-                      </td>
-                      <td>{row.originLabel}</td>
-                      <td data-testid={`pf-cell-quote-${row.instance.id}`}>
-                        {row.quotedInSelectedRevision ? (
-                          selectedQuoteRevision ? (
-                            <span title={quoteRevisionLabel(selectedQuoteRevision)}>
-                              En Q{selectedQuoteRevision.revisionNumber}
+                          {row.unitProvenanceLabel || !row.isActive ? (
+                            <span className="pf-cell-meta">
+                              {row.unitProvenanceLabel ? (
+                                <span className="meta-chip">{row.unitProvenanceLabel}</span>
+                              ) : null}
+                              {!row.isActive ? (
+                                <span className="status-badge status-badge--cancelled">
+                                  {row.lifecycleLabel}
+                                </span>
+                              ) : null}
                             </span>
+                          ) : null}
+                          <span className="pf-dims">{formatDimensions(row)}</span>
+                        </td>
+                        <td>{row.originLabel}</td>
+                        <td data-testid={`pf-cell-quote-${row.instance.id}`}>
+                          {row.quotedInSelectedRevision ? (
+                            selectedQuoteRevision ? (
+                              <span title={quoteRevisionLabel(selectedQuoteRevision)}>
+                                En Q{selectedQuoteRevision.revisionNumber}
+                              </span>
+                            ) : (
+                              'Cotizada'
+                            )
                           ) : (
-                            'Cotizada'
-                          )
-                        ) : (
-                          <span className="pf-muted">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className={presenceBadgeClass(row.presence)}>
-                          {PRESENCE_LABELS[row.presence]}
-                        </span>
-                      </td>
-                      <td>
-                        {row.reconciliation === null ? (
-                          <span className="pf-muted">—</span>
-                        ) : (
-                          <span className={RECONCILIATION_BADGES[row.reconciliation].className}>
-                            {RECONCILIATION_BADGES[row.reconciliation].label}
+                            <span className="pf-muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className={presenceBadgeClass(row.presence)}>
+                            {PRESENCE_LABELS[row.presence]}
                           </span>
-                        )}
-                      </td>
-                      <td>
-                        <span className={lifecycleBadgeClass(row.lifecycle)}>
-                          {row.lifecycleLabel}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn--secondary btn--sm"
-                          aria-label={
-                            row.unitProvenanceLabel
-                              ? `Ver detalle de ${row.label} (${row.unitProvenanceLabel.toLowerCase()})`
-                              : `Ver detalle de ${row.label}`
-                          }
-                          onClick={() => setDetailRow(row)}
-                        >
-                          Detalle
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td data-testid={`pf-cell-reconciliation-${row.instance.id}`}>
+                          {row.reconciliation === null ? (
+                            <span className="pf-muted">—</span>
+                          ) : (
+                            <ReconciliationBadge status={row.reconciliation} />
+                          )}
+                          {row.nextStep ? (
+                            <span className="pf-row-action">{row.nextStep}</span>
+                          ) : null}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn--secondary btn--sm"
+                            aria-label={
+                              row.unitProvenanceLabel
+                                ? `Ver detalle de ${row.label} (${row.unitProvenanceLabel.toLowerCase()})`
+                                : `Ver detalle de ${row.label}`
+                            }
+                            onClick={() => setDetailRow(row)}
+                          >
+                            Detalle
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -647,8 +769,6 @@ interface ContextBarProps {
   readonly designRevisions: readonly DesignRevision[];
   readonly onDesignRevisionChange: (revisionId: string) => void;
   readonly quoteRevisionsError: boolean;
-  readonly contextualRelease: FurnitureWorkspaceReleaseContext | null;
-  readonly latestProjectRelease: FurnitureWorkspaceReleaseContext | null;
   readonly busy: boolean;
 }
 
@@ -663,19 +783,13 @@ function ProjectFurnitureContextBar({
   designRevisions,
   onDesignRevisionChange,
   quoteRevisionsError,
-  contextualRelease,
-  latestProjectRelease,
   busy,
 }: ContextBarProps): ReactNode {
-  const releaseQuote = contextualRelease?.quoteRevisionId
-    ? quoteRevisions.find((revision) => revision.id === contextualRelease.quoteRevisionId)
-    : null;
-
   return (
     <div className="pf-context" data-testid="pf-context-bar">
       <div className="pf-context__selectors">
         <label className="pf-field">
-          <span>Cotización (contexto comercial exacto)</span>
+          <span>Cotización</span>
           <select
             data-testid="pf-quote-revision-select"
             value={quoteRevisionId ?? ''}
@@ -760,21 +874,91 @@ function ProjectFurnitureContextBar({
           </span>
         ) : null}
       </div>
+    </div>
+  );
+}
 
-      <div className="pf-context__reference">
-        {designContext.kind === 'revision' ? null : (
-          <p className="pf-context__note">
-            La reconciliación se calcula contra una revisión de diseño publicada exacta; el
-            trabajo en curso muestra presencia, no reconciliación.
-          </p>
-        )}
+interface ExactContextProps {
+  readonly selectedQuoteRevision: QuoteRevisionDetail | null;
+  readonly hasQuoteRevisions: boolean;
+  readonly designContext: DesignContextSelection;
+  readonly designRevision: DesignRevision | null;
+  readonly contextualRelease: FurnitureWorkspaceReleaseContext | null;
+  readonly latestProjectRelease: FurnitureWorkspaceReleaseContext | null;
+}
+
+/**
+ * Read-only echo of the exact context being viewed. The selects above own the
+ * selection; this header answers "what am I looking at" in one glance
+ * (Q# + status ↔ R#/working + status, plus the contextual release) without
+ * ever implying a `latest` default.
+ */
+function ProjectFurnitureExactContext({
+  selectedQuoteRevision,
+  hasQuoteRevisions,
+  designContext,
+  designRevision,
+  contextualRelease,
+  latestProjectRelease,
+}: ExactContextProps): ReactNode {
+  const quoteValue = selectedQuoteRevision
+    ? `Q${selectedQuoteRevision.revisionNumber} · ${capitalizedStatus(
+        QUOTE_REVISION_STATUS_LABELS,
+        selectedQuoteRevision.status,
+      )}`
+    : hasQuoteRevisions
+      ? 'Elegí una revisión de cotización'
+      : 'Sin revisiones de cotización';
+
+  let designValue = 'Sin diseño';
+  let designHint: string | null =
+    'Elegí un diseño para ver presencia y reconciliación de cada unidad.';
+  if (designContext.kind === 'working') {
+    designValue = 'Trabajo en curso';
+    designHint = 'Muestra presencia; la reconciliación requiere una revisión publicada exacta.';
+  } else if (designContext.kind === 'revision') {
+    designValue =
+      designRevision !== null
+        ? `R${designRevision.revision_number} · ${capitalizedStatus(
+            DESIGN_REVISION_STATUS_LABELS,
+            designRevision.status,
+          )}`
+        : 'Revisión no disponible';
+    designHint = null;
+  }
+
+  const releaseTitle = contextualRelease
+    ? `Liberación #${contextualRelease.releaseNumber} fijada a R${contextualRelease.designRevisionNumber}${
+        contextualRelease.quoteRevisionId ? ' y a la revisión de cotización seleccionada' : ''
+      }`
+    : undefined;
+
+  return (
+    <section className="pf-exact-header" aria-label="Contexto exacto de la comparación" data-testid="pf-exact-context">
+      <div className="pf-exact-header__side">
+        <span className="pf-exact-header__kind">Cotización</span>
+        <strong className="pf-exact-header__value" title={selectedQuoteRevision ? quoteRevisionLabel(selectedQuoteRevision) : undefined}>
+          {quoteValue}
+        </strong>
+      </div>
+      <span className="pf-exact-header__vs" aria-hidden>
+        ↔
+      </span>
+      <div className="pf-exact-header__side">
+        <span className="pf-exact-header__kind">Diseño</span>
+        <strong className="pf-exact-header__value">{designValue}</strong>
+        {designHint ? <span className="pf-exact-header__hint">{designHint}</span> : null}
+      </div>
+
+      <span
+        className={`pf-exact-header__release${contextualRelease ? '' : ' pf-exact-header__release--none'}`}
+        data-testid="pf-release-reference"
+        title={releaseTitle}
+      >
+        <ClipboardCheck size={14} aria-hidden />
         {contextualRelease ? (
-          <p className="pf-context__release" data-testid="pf-release-reference">
-            <ClipboardCheck size={14} aria-hidden />
-            Release #{contextualRelease.releaseNumber} fijado a R{contextualRelease.designRevisionNumber}
-            {contextualRelease.quoteRevisionId && releaseQuote
-              ? ` y Q${releaseQuote.revisionNumber}`
-              : ''}
+          <>
+            Liberación #{contextualRelease.releaseNumber}
             {contextualRelease.manufacturingStale ? (
               <span
                 className="status-badge status-badge--warning"
@@ -783,42 +967,54 @@ function ProjectFurnitureContextBar({
                 <TriangleAlert size={12} aria-hidden /> desactualizado
               </span>
             ) : null}
-          </p>
-        ) : designContext.kind === 'working' ? (
-          <p className="pf-context__release pf-context__release--none" data-testid="pf-release-reference">
-            <ClipboardCheck size={14} aria-hidden />
-            <span>Release del contexto: Ninguno (trabajo en curso)</span>
+          </>
+        ) : (
+          <>
+            Sin liberación contextual
             {latestProjectRelease ? (
               <span className="pf-muted">
-                {' '}· Último release del proyecto: #{latestProjectRelease.releaseNumber} (fijado a R{latestProjectRelease.designRevisionNumber})
+                {' '}· último release del proyecto: #{latestProjectRelease.releaseNumber} (R
+                {latestProjectRelease.designRevisionNumber})
               </span>
             ) : null}
-          </p>
-        ) : latestProjectRelease ? (
-          <p className="pf-context__release pf-context__release--none" data-testid="pf-release-reference">
-            <ClipboardCheck size={14} aria-hidden />
-            <span>Release del contexto: Ninguno</span>
-            <span className="pf-muted">
-              {' '}· Último release del proyecto: #{latestProjectRelease.releaseNumber} (fijado a R{latestProjectRelease.designRevisionNumber})
-            </span>
-          </p>
-        ) : null}
-      </div>
-    </div>
+          </>
+        )}
+      </span>
+    </section>
   );
 }
 
 function ProjectFurnitureSummaryCards({
   summary,
+  syncedActive,
+  hasComparison,
 }: {
   readonly summary: FurnitureMatrixSummary;
+  readonly syncedActive: number;
+  readonly hasComparison: boolean;
 }): ReactNode {
-  const cards = [
+  const attention = summary.requireAttention;
+  const cards: readonly {
+    id: string;
+    label: string;
+    value: number | null;
+    hint: string;
+    icon?: LucideIcon;
+    tone?: 'attention' | 'clear' | 'ok';
+  }[] = [
     {
       id: 'active',
       label: 'Unidades activas',
       value: summary.activeUnits,
       hint: `de ${summary.total} unidades históricas`,
+    },
+    {
+      id: 'synced',
+      label: 'Sincronizadas',
+      value: hasComparison ? syncedActive : null,
+      hint: hasComparison ? 'comparación exacta actual' : 'requiere diseño publicado',
+      icon: hasComparison ? CheckCircle2 : undefined,
+      tone: 'ok',
     },
     {
       id: 'quoted',
@@ -841,8 +1037,10 @@ function ProjectFurnitureSummaryCards({
     {
       id: 'attention',
       label: 'Requieren atención',
-      value: summary.requireAttention,
-      hint: 'acción sugerida',
+      value: attention,
+      hint: attention > 0 ? 'acción sugerida' : 'sin acciones pendientes',
+      icon: attention > 0 ? TriangleAlert : CheckCircle2,
+      tone: attention > 0 ? 'attention' : 'clear',
     },
     {
       id: 'terminal',
@@ -853,13 +1051,43 @@ function ProjectFurnitureSummaryCards({
   ];
   return (
     <div className="pf-summary">
-      {cards.map((card) => (
-        <div className="pf-summary__card" key={card.id} data-testid={`pf-summary-${card.id}`}>
-          <span className="pf-summary__value">{card.value}</span>
-          <span className="pf-summary__label">{card.label}</span>
-          <span className="pf-summary__hint">{card.hint}</span>
-        </div>
-      ))}
+      {cards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <div
+            className={`pf-summary__card${card.tone ? ` pf-summary__card--${card.tone}` : ''}`}
+            key={card.id}
+            data-testid={`pf-summary-${card.id}`}
+          >
+            <span className="pf-summary__value">
+              {Icon ? <Icon size={14} aria-hidden /> : null}
+              {card.value ?? '—'}
+            </span>
+            <span className="pf-summary__label">{card.label}</span>
+            <span className="pf-summary__hint">{card.hint}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Structural loading placeholder: keeps the page shape stable (selectors +
+ * summary + table rows) so the first paint never jumps when data arrives. */
+function ProjectFurnitureSkeleton(): ReactNode {
+  return (
+    <div data-testid="pf-loading-skeleton" aria-busy="true">
+      <div className="pf-skeleton-fields" aria-hidden>
+        <div className="pf-skeleton-block pf-skeleton-block--field" />
+        <div className="pf-skeleton-block pf-skeleton-block--field" />
+        <div className="pf-skeleton-block pf-skeleton-block--field" />
+      </div>
+      <div className="pf-skeleton-summary" aria-hidden>
+        {Array.from({ length: 7 }, (_, index) => (
+          <div key={index} className="pf-skeleton-block pf-skeleton-block--card" />
+        ))}
+      </div>
+      <ListSkeleton rows={6} />
     </div>
   );
 }
@@ -1012,24 +1240,37 @@ function ProjectFurnitureDetailDrawer({
           {row.reconciliationItem ? (
             <>
               <p>
-                <span className={RECONCILIATION_BADGES[row.reconciliationItem.status].className}>
-                  {RECONCILIATION_BADGES[row.reconciliationItem.status].label}
-                </span>
+                <ReconciliationBadge status={row.reconciliationItem.status} />
               </p>
               {row.nextStep ? (
                 <p className="pf-detail__next-step">Próximo paso: {row.nextStep}</p>
               ) : null}
               {row.reconciliationItem.differences.length > 0 ? (
-                <ul className="pf-kv-list">
-                  {row.reconciliationItem.differences.map((difference, index) => (
-                    <li key={`${difference.path}-${index}`}>
-                      <span>{difference.path}</span>
-                      <span>
-                        {formatScalar(difference.quoteValue)} →{' '}
-                        {formatScalar(difference.designValue)}
-                      </span>
-                    </li>
-                  ))}
+                <ul className="pf-diff-list" data-testid="pf-diff-list">
+                  {row.reconciliationItem.differences.map((difference, index) => {
+                    const { scope, leaf, unitSuffix } = diffPathParts(difference.path);
+                    return (
+                      <li key={`${difference.path}-${index}`}>
+                        <span className="pf-diff-path">
+                          {scope ? `${scope} · ` : ''}
+                          {leaf}
+                        </span>
+                        <span className="pf-diff-values">
+                          <span className="pf-diff-value pf-diff-value--from">
+                            {formatScalar(difference.quoteValue)}
+                            {unitSuffix}
+                          </span>
+                          <span className="pf-diff-arrow" aria-hidden>
+                            →
+                          </span>
+                          <span className="pf-diff-value pf-diff-value--to">
+                            {formatScalar(difference.designValue)}
+                            {unitSuffix}
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : null}
               {row.reconciliationItem.notes ? (
@@ -1079,4 +1320,33 @@ function formatScalar(value: unknown): string {
   if (value === null || value === undefined) return '—';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
+}
+
+const DIFF_LEAF_LABELS: Readonly<Record<string, string>> = {
+  width: 'Ancho',
+  height: 'Alto',
+  depth: 'Profundidad',
+};
+
+const DIFF_SCOPE_LABELS: Readonly<Record<string, string>> = {
+  parameters: 'Parámetros',
+  materials: 'Materiales',
+  materialChoices: 'Materiales',
+};
+
+/**
+ * Presentation-only humanizer for server diff paths: `parameters.width`
+ * becomes `Parámetros · Ancho` with an `mm` suffix. Unknown segments fall
+ * back verbatim — no new diff semantics, only readable copy.
+ */
+function diffPathParts(path: string): { scope: string | null; leaf: string; unitSuffix: string } {
+  const parts = path.split('.');
+  const leafKey = parts[parts.length - 1] ?? path;
+  const scopeKey = parts.length > 1 ? parts.slice(0, -1).join('.') : null;
+  const dimensionLabel = DIFF_LEAF_LABELS[leafKey];
+  return {
+    scope: scopeKey ? (DIFF_SCOPE_LABELS[scopeKey] ?? scopeKey) : null,
+    leaf: dimensionLabel ?? leafKey.replace(/_/g, ' '),
+    unitSuffix: dimensionLabel !== undefined ? ' mm' : '',
+  };
 }
