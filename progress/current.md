@@ -1,3 +1,11 @@
+## #577 — shared resolved-BOM demand aggregation (partial)
+
+- Added one pure resolved-BOM + physical-quantity batch adapter; the project adapter resolves each item once and delegates without rerunning hardware resolution.
+- Whole-collection sheet/package rounding reuses existing metrics/purchase helpers; deterministic output and fail-closed native-unit aggregate guards retain board-only, hardware-only and empty-project semantics.
+- Typed two-unit isolation, missing/inactive inputs, overflow and no-partial-output tests pass; existing TS/Go requirement and binding fixtures remain unchanged.
+- Go domain and focused race tests, TS domain/parity and domain typecheck pass; the existing unknown-definition-field Go subtest remains schema-layer-only/skipped. Full closing gate and exact-head CI remain required.
+- No collection identity/capture, API, storage, operational consumer or machine integration is wired; #577 and F202/ledger remain unchanged. Review mode: disabled/unmanaged.
+
 ## #577 — strict Go revision-unit resolution, chain unit 4B (partial)
 
 - Resolve one unversioned revision item through the existing BOM engine, preserving physical/definition identity and evaluating typed defaults without mutating inputs.
