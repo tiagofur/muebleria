@@ -5,6 +5,11 @@
 - Typed two-unit isolation, missing/inactive inputs, overflow and no-partial-output tests pass; existing TS/Go requirement and binding fixtures remain unchanged.
 - Go domain and focused race tests, TS domain/parity and domain typecheck pass; the existing unknown-definition-field Go subtest remains schema-layer-only/skipped. Full closing gate and exact-head CI remain required.
 - No collection identity/capture, API, storage, operational consumer or machine integration is wired; #577 and F202/ledger remain unchanged. Review mode: disabled/unmanaged.
+## #577 — pre-expansion release-unit budget (partial)
+
+- Guard the prepared Go release unit before the existing BOM expansion: at most 10,000 conservative work units across physical boards, hardware rows and agregado repetition; reserve six rows for possible base synthesis.
+- Check effective typed/default/static quantities and the referenced structure/component/agregado closure with overflow-safe arithmetic; unrelated catalog records do not block resolution. Existing bounded BOM and non-positive agregado default semantics are preserved.
+- Focused release-unit and full Go domain tests pass; the existing unknown-definition-field domain subtest remains skipped because its API envelope owns that proof. No capture, collection, consumers, machine outputs or ledger changes; #577 remains incomplete.
 
 ## #577 — strict Go revision-unit resolution, chain unit 4B (partial)
 
@@ -19,6 +24,14 @@
 - Shared fixtures pass evaluated parameters through both existing BOM engines, proving separate same-definition quantities, conditions, dimensions, materials, each engine’s existing physical-ID namespace and unchanged source inputs; invalid scalar/name/range values remain evaluator errors.
 - This helper assumes validated definitions, unambiguous consumers and evaluated values. It is not a release gate: strict revision identity/version/dimension/material validation, relationship boundaries, collection aggregation, snapshot capture and operational wiring remain subsequent units.
 - No F202/ledger change or #577 closure; independent validation, full gate and exact-head CI remain required.
+
+## #348 — preparación de validación PTX import/readback (entrega parcial)
+
+- Rama: `feat/348-ptx-readback-validation-prep` (desde `main`); no toca #577/#351.
+- Auditoría completa del generador PTX (`packages/excel/src/ptxCutPlanExport.ts` + optimizer de dominio) documentada en `docs/machines/ptx-validation.md`: 16 hallazgos (A1–A16) incluyendo formato definido en repo sin verificación de receptor, identidad secuencial, `[CUTS]` derivado de geometría, ausencia de provenance (bomFingerprint/release) y fallbacks silenciosos.
+- Fixture sintético congelado `fixture-board-001` r1 (`packages/excel/src/ptxValidationFixture.ts`): 2 materiales, duplicados con identidad distinta, qty 2 con rotación mixta, grano 0/1, kerf 4.4 y deducción de canto no enteras, remanentes. Golden byte-exacto `__fixtures__/ptx/fixture-board-001.ptx` con SHA-256 `544dcae574bc19e19f934f96b2ad1dc104a2d7b1f668262a83ae09df72510f09` fijado en test (drift = falla).
+- Expected readback machine-neutral + comparador puro offline `packages/excel/src/ptxReadback.ts` (PASS/WARNING/BLOCKER/UNSUPPORTED_CAPABILITY/NOT_OBSERVABLE; sin estado "VALIDATED" — prueba negativa estructural). Runbook operator-safe, plantilla de evidencia sanitizada (`docs/templates/ptx-readback-evidence-template.md`) y lista de `FIELD_VERIFICATION_REQUIRED`.
+- Sin claim de compatibilidad; todos los estados de máquina siguen `NOT_TESTED`. Pendiente para cerrar #348: import real del fixture, readback en software receptor, sign-off del operador.
 
 ## #577 — private immutable snapshot schema, chain unit 3 (preparatory)
 
