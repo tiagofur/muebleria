@@ -1,6 +1,13 @@
 ## #591 — machine output selection (entrega parcial, wiring completo)
 
 - Rama `feat/591-machine-output-selection`; migración 000123 + API generada + resolver + UI de Ingeniería + export normal ligado al tuple exacto; sin fallback ni bulk (ver `progress/implementation_591_machine_output_selection.md`). Ronda de revisión corregida (GET factory-gate, mismatch path/body, error visible en UI, refetch tras save, mapper plano) + storage PG real y E2E browser 4/4 PASS; pendiente sólo CI del head final.
+## #577 — exact revision collection assembly (partial)
+
+- Assemble physical units through the existing Go resolver and one resolved-BOM demand aggregation; preserve revision identity, unit order and independent typed dimensions without reading mutable project items.
+- Share the existing conservative 10,000-work-unit budget across the collection before each BOM allocation; reject duplicate/missing identities, mixed revisions, empty manufacturing and partial results.
+- Focused and race suites pass: 19 top-level tests plus 145 subtests each, no skips; four new collection tests cover 19 subtests. Full engine package also passes.
+- This server-only helper is not wired to capture, API or operational consumers; PostgreSQL/React continuity, rollback/idempotency and tenant-isolation evidence remain pending. No new release/fingerprint, ledger mutation, review or merge; disabled/unmanaged.
+
 ## #351 — machine-output adapters foundation (entrega parcial, lane autorizado por owner)
 
 - Trigger: fallo REAL de conversión PTX en Client A (REAL_FIELD_RED, registrado sanitizado en `docs/machines/client-a/ptx-conversion-failure.md`); owner autorizó avanzar el lane machine-integration sin cerrar #348/#351/#352.

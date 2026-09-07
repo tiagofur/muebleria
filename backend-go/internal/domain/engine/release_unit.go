@@ -21,6 +21,10 @@ type ResolvedReleaseUnit struct {
 // tenant-scoped catalog. Callers must capture that catalog and result atomically;
 // this pure function does not make a mutable catalog historically authoritative.
 func ResolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog) (*ResolvedReleaseUnit, error) {
+	return resolveReleaseUnit(item, catalog, nil)
+}
+
+func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget) (*ResolvedReleaseUnit, error) {
 	if strings.TrimSpace(item.FurnitureInstanceID) == "" || strings.TrimSpace(item.FurnitureDefinitionID) == "" {
 		return nil, fmt.Errorf("release unit requires physical and definition identities")
 	}
@@ -96,7 +100,7 @@ func ResolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog) 
 		}
 	}
 	prepared := ApplyEvaluatedComponentBindings(module, values)
-	if err := validateReleaseUnitExpansion(prepared, catalog); err != nil {
+	if err := validateReleaseUnitExpansion(prepared, catalog, collection); err != nil {
 		return nil, fmt.Errorf("release unit expansion: %w", err)
 	}
 	bom, err := ResolveBomWithContext(prepared, item.MaterialChoices, catalog, nil, "", nil, dims)
