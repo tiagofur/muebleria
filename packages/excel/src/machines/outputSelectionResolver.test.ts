@@ -203,7 +203,8 @@ describe('generateSelectedCuttingOutput — bundling mode (#591)', () => {
     );
 
     expect(bundles).toHaveLength(1);
-    expect(bundles[0]!.artifact.fileName).toBe(`corte-${plan.projectId}-${only}.ptx`);
+    // El nombre legible del material gana sobre el código técnico.
+    expect(bundles[0]!.artifact.fileName).toBe('corte-tablero-sintetico-a-18mm.ptx');
   });
 
   it('by-material with an empty plan throws exactly like unified (no invented output)', async () => {
@@ -222,5 +223,32 @@ describe('generateSelectedCuttingOutput — bundling mode (#591)', () => {
     await expect(
       generateSelectedCuttingOutput(plan, cuttingSelection('ptx-cadmatic-4'), 'by-material'),
     ).rejects.toThrow();
+  });
+
+  it('unified prefiere el nombre legible de la obra sobre el ID técnico', async () => {
+    const plan = { ...fixturePlan(), projectName: 'Cocina de la Ana' };
+    const bundles = await generateSelectedCuttingOutput(
+      plan,
+      cuttingSelection('ptx-generic'),
+    );
+    expect(bundles).toHaveLength(1);
+    expect(bundles[0]!.artifact.fileName).toBe('corte-cocina-de-la-ana.ptx');
+  });
+
+  it('by-material resuelve colisiones de nombre con sufijo determinista', async () => {
+    const plan = fixturePlan();
+    // Los dos materiales del fixture pasan a llamarse igual (sanitizan igual).
+    const colliding = {
+      ...plan,
+      sheets: plan.sheets.map((s) => ({ ...s, materialName: 'MDF Blanco' })),
+    };
+    const bundles = await generateSelectedCuttingOutput(
+      colliding,
+      cuttingSelection('ptx-generic'),
+      'by-material',
+    );
+    expect(bundles).toHaveLength(2);
+    const names = bundles.map((b) => b.artifact.fileName).sort();
+    expect(names).toEqual(['corte-mdf-blanco-2.ptx', 'corte-mdf-blanco.ptx']);
   });
 });

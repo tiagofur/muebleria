@@ -420,6 +420,34 @@ export function sanitizeFileNameToken(text: string): string {
   );
 }
 
+/**
+ * Human, filesystem-safe token for cut file names: lowercase and sanitized
+ * (accents survive — ZIP entry names are UTF-8 and they stay readable).
+ */
+export function cutFileToken(text: string): string {
+  return sanitizeFileNameToken(text).toLowerCase() || 'material';
+}
+
+/**
+ * Deterministic collision guard: two materials whose names collapse to the
+ * same token (e.g. 'MDF Blanco' vs 'MDF_Blanco') must never overwrite each
+ * other — the second gets a stable '-2' suffix, never a random one.
+ */
+export function uniqueCutFileName(
+  token: string,
+  extension: string,
+  used: Set<string>,
+): string {
+  let fileName = `corte-${token}.${extension}`;
+  let counter = 2;
+  while (used.has(fileName)) {
+    fileName = `corte-${token}-${counter}.${extension}`;
+    counter++;
+  }
+  used.add(fileName);
+  return fileName;
+}
+
 export interface CutPlanMaterialGroup {
   readonly materialCode: string;
   readonly materialName: string;
@@ -481,18 +509,20 @@ export function cutPlanForMaterialGroup(
 export function generatePtxByMaterial(
   input: PtxCutPlanExportInput,
 ): readonly PtxMaterialCutFile[] {
-  const { cutPlan, projectName } = input;
+  const { cutPlan } = input;
 
-  const baseProject = sanitizeFileNameToken(
-    projectName || cutPlan.projectName || cutPlan.projectId || 'plan-de-corte',
-  );
   const results: PtxMaterialCutFile[] = [];
+  // Human file names ('corte-mdf-blanco-18mm.ptx'); the readable material
+  // name wins over the technical code, and sanitization collisions get a
+  // deterministic suffix instead of overwriting each other.
+  const usedFileNames = new Set<string>();
 
   for (const group of groupCutPlanSheetsByMaterial(cutPlan)) {
-    const safeMat = sanitizeFileNameToken(
-      group.materialCode !== 'DEFAULT' ? group.materialCode : group.materialName,
+    const fileName = uniqueCutFileName(
+      cutFileToken(group.materialName || group.materialCode),
+      'ptx',
+      usedFileNames,
     );
-    const fileName = `${baseProject}_${safeMat}.ptx`;
 
     const subPlan = cutPlanForMaterialGroup(cutPlan, group);
     const totalPieces = subPlan.stats.totalPieces;

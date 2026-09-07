@@ -269,7 +269,7 @@ describe('ptxCutPlanExport', () => {
     // First file: MEL_BLANCO_18
     const f1 = files.find((f) => f.materialCode === 'MEL_BLANCO_18');
     expect(f1).toBeDefined();
-    expect(f1!.fileName).toBe('Proyecto-Integral_MEL_BLANCO_18.ptx');
+    expect(f1!.fileName).toBe('corte-mdf-melamina-blanco-18mm.ptx');
     expect(f1!.sheetsCount).toBe(1);
     expect(f1!.piecesCount).toBe(2);
     expect(f1!.ptxContent).toContain('TOTAL_PIECES=2');
@@ -279,7 +279,7 @@ describe('ptxCutPlanExport', () => {
     // Second file: FONDO_3
     const f2 = files.find((f) => f.materialCode === 'FONDO_3');
     expect(f2).toBeDefined();
-    expect(f2!.fileName).toBe('Proyecto-Integral_FONDO_3.ptx');
+    expect(f2!.fileName).toBe('corte-mdf-fondo-blanco-3mm.ptx');
     expect(f2!.sheetsCount).toBe(1);
     expect(f2!.piecesCount).toBe(1);
     expect(f2!.ptxContent).toContain('TOTAL_PIECES=1');
@@ -301,3 +301,69 @@ describe('ptxCutPlanExport', () => {
   });
 });
 
+
+describe('generatePtxByMaterial — naming robustez (hardening)', () => {
+  function sheetWithMaterial(
+    index: number,
+    materialCode: string,
+    materialName: string,
+  ): CutPlan['sheets'][number] {
+    const base = buildCutPlanFixture().sheets[0]!;
+    return {
+      ...base,
+      sheetIndex: index,
+      materialCode,
+      materialName,
+      pieces: base.pieces.map((p) => ({
+        ...p,
+        materialCode,
+        materialName,
+        sheetIndex: index,
+      })),
+    };
+  }
+
+  it('acentos y caracteres especiales no rompen el nombre (UTF-8 legible)', () => {
+    const plan: CutPlan = {
+      ...buildCutPlanFixture(),
+      sheets: [sheetWithMaterial(0, 'ROBLE_NORDICO', 'Roble Nórdico ¿Año? 2026')],
+    };
+    const files = generatePtxByMaterial({ cutPlan: plan });
+    expect(files).toHaveLength(1);
+    expect(files[0]!.fileName).toBe('corte-roble-nórdico-año-2026.ptx');
+  });
+
+  it('colisión tras sanitización resuelve con sufijo determinista, sin sobrescribir', () => {
+    // Dos códigos distintos cuyos NOMBRES colapsan al mismo token al sanitizar.
+    const plan: CutPlan = {
+      ...buildCutPlanFixture(),
+      sheets: [
+        sheetWithMaterial(0, 'MDF_BLANCO_A', 'MDF Blanco'),
+        sheetWithMaterial(1, 'MDF_BLANCO_B', 'MDF: Blanco'),
+      ],
+    };
+    const files = generatePtxByMaterial({ cutPlan: plan });
+    const names = files.map((f) => f.fileName);
+    expect(names).toHaveLength(2);
+    expect(new Set(names).size).toBe(2);
+    expect(names[0]).toBe('corte-mdf-blanco.ptx');
+    expect(names[1]).toBe('corte-mdf-blanco-2.ptx');
+    // Determinista: mismo input → mismos nombres en el mismo orden.
+    const again = generatePtxByMaterial({ cutPlan: plan }).map((f) => f.fileName);
+    expect(again).toEqual(names);
+  });
+
+  it('mismo plan produce siempre las mismas entradas y nombres', () => {
+    const plan: CutPlan = {
+      ...buildCutPlanFixture(),
+      sheets: [
+        sheetWithMaterial(0, 'MEL_BLANCO_18', 'MDF Melamina Blanco 18mm'),
+        sheetWithMaterial(1, 'FONDO_3', 'MDF Fondo Blanco 3mm'),
+      ],
+    };
+    const first = generatePtxByMaterial({ cutPlan: plan });
+    const second = generatePtxByMaterial({ cutPlan: plan });
+    expect(second.map((f) => f.fileName)).toEqual(first.map((f) => f.fileName));
+    expect(second.map((f) => f.bytes)).toEqual(first.map((f) => f.bytes));
+  });
+});
