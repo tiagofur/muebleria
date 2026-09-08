@@ -355,3 +355,85 @@ func formatRFC3339Ptr(t *time.Time) *string {
 	formatted := t.UTC().Format(time.RFC3339Nano)
 	return &formatted
 }
+
+// HandleDesignPairingGrantConfirm serves POST for
+// /api/design-pairing-grants/{grantId}:confirm — extension credential only.
+//
+// Confirmation means the extension persisted AND read back the canonical
+// com.granete.project binding with the exact identity the grant pinned.
+// Only the session that exchanged may confirm; the payload carries exact
+// persisted identifiers, never model data.
+func (s *Server) HandleDesignPairingGrantConfirm(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if r.Method != http.MethodPost {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if claims.Client != auth.ExtensionClient {
+		respondWithError(w, http.StatusForbidden, "la confirmación de vinculación requiere el credencial de la extensión")
+		return
+	}
+	if claims.OrgID == "" {
+		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
+		return
+	}
+	grantID := r.PathValue("grantId")
+	if !isValidUUID(grantID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "grantId inválido", nil)
+		return
+	}
+
+	var body openapi.ConfirmPairingGrantRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	if !isValidUUID(body.ProjectID) || !isValidUUID(body.DesignID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Identidad persistida inválida", nil)
+		return
+	}
+	persistedBase := ""
+	if body.BaseRevisionID != nil {
+		persistedBase = strings.TrimSpace(*body.BaseRevisionID)
+	}
+
+	grant, err := s.Store.ConfirmDesignPairingGrant(r.Context(), storage.ConfirmDesignPairingGrantCommand{
+		GrantID:              grantID,
+		PersistedProjectID:   body.ProjectID,
+		PersistedDesignID:    body.DesignID,
+		PersistedBaseRevID:   persistedBase,
+		ConfirmedByUserID:    claims.UserID,
+		ConfirmedBySessionID: claims.Sid,
+		IP:                   clientIP(r),
+		RequestID:            RequestIDFromContext(r.Context()),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, storage.ErrPairingGrantNotFound):
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "La vinculación no existe", nil)
+		case errors.Is(err, storage.ErrPairingGrantMismatch):
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La identidad confirmada no coincide con la vinculación (proyecto, diseño o revisión base)", nil)
+		case errors.Is(err, storage.ErrPairingGrantConflict):
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La vinculación no puede confirmarse desde esta sesión", nil)
+		case errors.Is(err, domain.ErrDesignNotFound), errors.Is(err, domain.ErrDesignRevisionNotFound):
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "El proyecto o el diseño no existe", nil)
+		default:
+			respondWithInternalError(w, err, "pairing-grant: confirm")
+		}
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, openapi.PairingGrantStatus{
+		ID:             grant.ID,
+		Action:         openapi.PairingAction(grant.Action),
+		Status:         openapi.PairingGrantStatusKind(grant.Status),
+		BaseRevisionID: grant.BaseRevisionID,
+		ExpiresAt:      grant.ExpiresAt.UTC().Format(time.RFC3339Nano),
+		CreatedAt:      grant.CreatedAt.UTC().Format(time.RFC3339Nano),
+		ExchangedAt:    formatRFC3339Ptr(grant.ExchangedAt),
+		ConfirmedAt:    formatRFC3339Ptr(grant.ConfirmedAt),
+	})
+}

@@ -3834,6 +3834,43 @@
           }
         }
       }
+    },
+    "/design-pairing-grants/{grantId}:confirm": {
+      "post": {
+        "operationId": "confirmDesignPairingGrant",
+        "summary": "Confirm a pairing grant after the exact model binding was persisted and read back (#499)",
+        "description": "SketchUp-extension-credential endpoint: closes the initiated-vs-confirmed gap. Only the SAME device session that exchanged the grant may confirm, and only with the exact Project/Design/base the grant pinned (a pinned R1 grant cannot be confirmed against R2). The payload carries exact persisted identifiers only — never model data. Repeated confirmation by the same session is an idempotent success; any other session answers 409.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/GrantId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPairingGrantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Grant confirmed (or idempotent replay by the same device session)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingGrantStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9607,6 +9644,13 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "confirmed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -9689,10 +9733,37 @@
         "enum": [
           "pending",
           "exchanged",
+          "confirmed",
           "cancelled",
           "expired"
         ],
-        "description": "Lifecycle of a pairing grant. expired is derived at read time (pending past its expiry, mirroring the device-enrollment poll); it is never stored."
+        "description": "Lifecycle of a pairing grant. confirmed means the exchanging device session proved the canonical model binding was persisted and read back with the exact pinned identity; expired is derived at read time (never stored)."
+      },
+      "ConfirmPairingGrantRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "design_id"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "design_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Exact base revision persisted in the canonical model binding; empty/omitted when the design has no published revision."
+          }
+        }
       }
     }
   }

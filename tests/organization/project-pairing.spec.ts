@@ -10,7 +10,7 @@ interface SeededPairingProject {
   readonly projectId: string;
   readonly designId: string;
   readonly r1Id: string;
-  readonly instanceCount: number;
+  readonly instanceIds: readonly string[];
 }
 
 /**
@@ -90,7 +90,7 @@ async function seedPairingProject(): Promise<SeededPairingProject> {
     'gate-pairing-publish-r1',
   );
 
-  return { projectId: PROJECT_ID, designId: design.id, r1Id: r1.id, instanceCount: instanceIds.length };
+  return { projectId: PROJECT_ID, designId: design.id, r1Id: r1.id, instanceIds };
 }
 
 async function loginToA(page: Page): Promise<void> {
@@ -168,7 +168,7 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
     // 6. /muebles — physical units and the designs CTA.
     await page.goto(`/quotes/${seeded.projectId}/muebles`);
     await expect(page.getByTestId('pf-table')).toBeVisible();
-    await expect(page.getByTestId('pf-table').locator('tbody tr')).toHaveCount(seeded.instanceCount);
+    await expect(page.getByTestId('pf-table').locator('tbody tr')).toHaveCount(seeded.instanceIds.length);
     const gotoDesigns = page.getByTestId('pf-goto-designs-btn');
     if (await gotoDesigns.isVisible()) {
       await gotoDesigns.click();
@@ -183,6 +183,117 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
     await expect(page.getByTestId('sketchup-pairing-modal')).toBeVisible();
     await expect(page.getByTestId('pairing-code')).toBeVisible();
     await expect(page.getByTestId('pairing-copy-btn')).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+
+  // #499 Slice 3 cross-surface proof: the full confirmed handoff plus the
+  // publish round-trip. The plugin's HTTP halves (exchange through the
+  // extension credential + confirm of the exact persisted identity) run
+  // through the same API surface and transport the plugin uses; the host
+  // dictionary persistence half is proven by TC_PairingConnectSmoke under
+  // TestUp (real SketchUp), which CI cannot host.
+  test('confirmed handoff, publish R1→R2 immutable lineage, stale-base pin', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const apiBase = required('ORGANIZATION_API_BASE');
+    const client = new GraneteApiClient(apiBase);
+    const owner = await client.login({
+      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
+    });
+    const extension = await client.login({
+      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'sketchup',
+      org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
+    });
+
+    await loginToA(page);
+
+    // 1. New design (no published revision yet) → grant pins null.
+    const design = await client.createProjectDesign(owner.token, seeded.projectId, {
+      name: 'Cocina Confirmada',
+    }, 'gate-pairing3-create-design');
+
+    await page.goto(`/quotes/${seeded.projectId}/disenos`);
+    await page.getByRole('tab', { name: 'Cocina Confirmada' }).click();
+    await page.getByTestId('open-in-sketchup-btn').click();
+    await expect(page.getByTestId('pairing-base-label')).toHaveText('Base: Sin revisión publicada');
+    const codeText1 = (await page.getByTestId('pairing-code').textContent()) ?? '';
+    const code1 = codeText1.replace(/\s+/g, '');
+
+    // 2. Plugin receive halves through the extension credential: exchange
+    //    returns the exact context; the "persisted binding" is the exact
+    //    identity a plugin readback would confirm.
+    const exchange1 = await client.exchangeDesignPairingGrant(extension.token, { code: code1 });
+    expect(exchange1.design.id).toBe(design.id);
+    expect(exchange1.pinned_base_revision_id).toBeNull();
+    const confirm1 = await client.confirmDesignPairingGrant(extension.token, exchange1.grant_id, {
+      project_id: seeded.projectId,
+      design_id: design.id,
+    });
+    expect(confirm1.status).toBe('confirmed');
+
+    // 3. Web observes CONFIRMATION — the honest terminal wording.
+    await expect(page.getByTestId('pairing-confirmed')).toContainText('Diseño vinculado en SketchUp');
+    await page.keyboard.press('Escape');
+
+    // 4. Publish R1 through the existing revision pipeline.
+    await client.updateDesignWorkingCopy(owner.token, design.id, {
+      items: [{ furniture_instance_id: seeded.instanceIds[0]!, parameters: { width: 650 }, material_choices: {} }],
+    });
+    const r1 = await client.publishDesignRevision(owner.token, design.id, {
+      source_type: 'manual', base_revision_id: null,
+    }, 'gate-pairing3-r1');
+
+    // 5. Web reload sees R1 (server authority, no optimistic UI).
+    await page.reload();
+    await page.getByRole('tab', { name: 'Cocina Confirmada' }).click();
+    await expect(page.getByTestId('revision-node-R1')).toBeVisible();
+
+    // 6. Edit and publish R2; R1 stays immutable in the lineage.
+    await client.updateDesignWorkingCopy(owner.token, design.id, {
+      items: [
+        { furniture_instance_id: seeded.instanceIds[0]!, parameters: { width: 650 }, material_choices: {} },
+        { furniture_instance_id: seeded.instanceIds[1]!, parameters: { width: 750 }, material_choices: {} },
+      ],
+    });
+    const r2 = await client.publishDesignRevision(owner.token, design.id, {
+      source_type: 'manual', base_revision_id: r1.id,
+    }, 'gate-pairing3-r2');
+
+    await page.reload();
+    await expect(page.getByTestId('revision-node-R1')).toBeVisible();
+    await expect(page.getByTestId('revision-node-R2')).toBeVisible();
+    await page.getByTestId('revision-node-R1').click();
+    const inspector = page.getByTestId('revision-inspector');
+    await expect(inspector.getByTestId('revision-items-table').locator('tbody tr')).toHaveCount(1);
+
+    // 7. Stale-base pin: with R2 published, the Web pins the SELECTED R1 and
+    //    the exchange keeps R1 verbatim while carrying the R2 working truth.
+    await page.getByTestId('open-in-sketchup-btn').click();
+    await expect(page.getByTestId('pairing-base-label')).toHaveText('Base: R1');
+    const codeText2 = (await page.getByTestId('pairing-code').textContent()) ?? '';
+    const code2 = codeText2.replace(/\s+/g, '');
+    const exchange2 = await client.exchangeDesignPairingGrant(extension.token, { code: code2 });
+    expect(exchange2.pinned_base_revision_id).toBe(r1.id);
+    // The authoritative working truth advanced to R2 while the grant keeps
+    // its exact R1 pin — never a silent rebase.
+    expect(exchange2.working_copy.base_revision_id).toBe(r2.id);
+    // A stale pin (R1) confirmed against the R1 grant identity is exact.
+    const confirm2 = await client.confirmDesignPairingGrant(extension.token, exchange2.grant_id, {
+      project_id: seeded.projectId,
+      design_id: design.id,
+      base_revision_id: r1.id,
+    });
+    expect(confirm2.status).toBe('confirmed');
+
+    // 8. Replay: the consumed code cannot bind a second time.
+    await expect(
+      client.exchangeDesignPairingGrant(extension.token, { code: code2 }),
+    ).rejects.toThrow();
     await page.keyboard.press('Escape');
   });
 });

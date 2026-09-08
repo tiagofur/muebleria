@@ -116,6 +116,9 @@ module Granete
           dialog.add_action_callback('list_binding_projects') { handle_list_binding_projects(dialog) }
           dialog.add_action_callback('list_binding_designs') { |_c, p| handle_list_binding_designs(dialog, p) }
           dialog.add_action_callback('connect_model') { |_c, p| handle_connect_model(dialog, p) }
+          # #499 Slice 3: one-time pairing code receive — the normal
+          # Web→SketchUp handoff path. Converges into the same #388 binding.
+          dialog.add_action_callback('connect_with_code') { |_c, p| handle_connect_with_code(dialog, p) }
           dialog.add_action_callback('refresh_model_binding') { handle_refresh_model_binding(dialog) }
           dialog.add_action_callback('adopt_binding_base') { handle_adopt_binding_base(dialog) }
         end
@@ -164,6 +167,18 @@ module Granete
           execute_bridge(dialog, 'onModelBindingResult', result)
         rescue StandardError => e
           @logger.error('model_binding_connect_failed', error: e)
+          execute_bridge(dialog, 'onModelBindingResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # #499 Slice 3: consume a one-time pairing code. The connector is
+        # the only binding writer; the raw code never reaches the model.
+        def handle_connect_with_code(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          result = model_binding_connector.connect_with_code(payload['code'].to_s)
+          execute_bridge(dialog, 'onModelBindingResult', result)
+          push_preflight_state(dialog)
+        rescue StandardError => e
+          @logger.error('pairing_connect_failed', error: e)
           execute_bridge(dialog, 'onModelBindingResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         end
 

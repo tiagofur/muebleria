@@ -2314,8 +2314,23 @@
               <div class="kv-row"><span class="k">Diseño</span><span class="v" id="binding-design-name">--</span></div>
               <div class="kv-row"><span class="k">Base</span><span class="v" id="binding-base-revision">--</span></div>
             </div>
+            <!-- #499 Slice 3: one-time pairing code — the normal
+                 Web→SketchUp path. The manual selector below stays as the
+                 reviewed fallback. -->
+            <div id="pairing-entry" style="margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle);">
+              <label for="pairing-code-input" class="subhead" style="display:block; margin: 0 0 var(--space-1) 0; font-size: var(--text-xs);">Conectar con código</label>
+              <div style="display: flex; gap: var(--space-1);">
+                <input id="pairing-code-input" type="text" inputmode="latin" autocomplete="off" spellcheck="false"
+                       placeholder="Código de la web"
+                       style="flex:1 1 auto; min-width: 0; font-family: var(--font-mono, monospace); text-transform: uppercase; letter-spacing: 0.08em;"
+                       aria-describedby="pairing-message" />
+                <button id="btn-pairing-connect" class="btn btn-primary" style="flex: 0 0 auto;">Conectar</button>
+              </div>
+              <p id="pairing-message" class="subhead" role="status" aria-live="polite"
+                 style="display: none; margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
+            </div>
             <div id="model-binding-actions" style="margin-top: var(--space-2);">
-              <button id="btn-binding-connect" class="btn btn-primary" style="width: 100%;">Conectar modelo</button>
+              <button id="btn-binding-connect" class="btn btn-secondary" style="width: 100%;">Conectar modelo (manual)</button>
               <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar de nuevo</button>
               <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
               <!-- #392 / DT-8: staged revision publication. Visible only when
@@ -5720,17 +5735,30 @@
           }
         }
 
+        // Manual bind and pairing (#499 Slice 3) converge here. Pairing
+        // failures keep the code editable; success clears it — the raw code
+        // never persists anywhere in the dialog state.
         function handleModelBindingResult(result) {
           result = result || {};
           bindingConfirmBtn.disabled = false;
           bindingConfirmBtn.textContent = "Conectar";
+          setPairingBusy(false);
 
           if (result.ok) {
             bindingPicker.style.display = "none";
             bindingRebindReview.style.display = "none";
             modelBindingState.pendingTarget = null;
             renderModelBindingStatus(result.status);
-            showToast("success", "✓ Modelo conectado al diseño de Granete.");
+            if (result.pairing) {
+              pairingInput.value = "";
+              if (result.confirmationFailed) {
+                showPairingMessage("hint", result.reason || "El modelo quedó conectado, pero la web no registró la confirmación.");
+              } else {
+                showPairingMessage("hint", "Diseño vinculado en SketchUp.");
+              }
+            } else {
+              showToast("success", "✓ Modelo conectado al diseño de Granete.");
+            }
             return;
           }
 
@@ -5743,7 +5771,20 @@
 
           if (result.status) renderModelBindingStatus(result.status);
           else if (result.state) renderModelBindingStatus({ state: result.state, reason: result.reason });
-          showToast("error", "No se pudo conectar el modelo: " + (result.reason || "desconocido"));
+          if (result.pairing) {
+            if (result.code === "invalid_code") {
+              showPairingMessage("error", result.reason || "Código inválido.");
+              pairingInput.focus();
+            } else if (result.code === "code_not_found" || result.code === "code_unusable") {
+              showPairingMessage("error", result.reason || "El código no existe, expiró o ya fue usado.");
+              pairingInput.value = "";
+              pairingInput.focus();
+            } else {
+              showPairingMessage("error", result.reason || "No se pudo conectar con el código.");
+            }
+          } else {
+            showToast("error", "No se pudo conectar el modelo: " + (result.reason || "desconocido"));
+          }
         }
 
         function refreshModelBinding() {
@@ -5753,6 +5794,52 @@
         }
 
         bindingConnectBtn.addEventListener("click", openBindingPicker);
+
+        // #499 Slice 3: one-time pairing code entry. The raw code lives only
+        // in this input for the duration of the attempt; it is never written
+        // to model attributes and is cleared right after the exchange.
+        var pairingInput = document.getElementById("pairing-code-input");
+        var pairingConnectBtn = document.getElementById("btn-pairing-connect");
+        var pairingMessage = document.getElementById("pairing-message");
+
+        function setPairingBusy(busy) {
+          pairingConnectBtn.disabled = busy;
+          pairingInput.disabled = busy;
+          pairingConnectBtn.textContent = busy ? "Conectando…" : "Conectar";
+        }
+
+        function showPairingMessage(kind, text) {
+          pairingMessage.style.display = "block";
+          pairingMessage.style.color = kind === "error" ? "var(--danger-600)" : "var(--text-secondary)";
+          pairingMessage.textContent = text;
+        }
+
+        function submitPairingCode() {
+          var code = pairingInput.value.trim();
+          if (!code) {
+            showPairingMessage("error", "Pegá el código que te muestra la web.");
+            pairingInput.focus();
+            return;
+          }
+          setPairingBusy(true);
+          showPairingMessage("hint", "Conectando con Granete…");
+          if (window.sketchup && window.sketchup.connect_with_code) {
+            window.sketchup.connect_with_code(JSON.stringify({ code: code }));
+          } else {
+            setPairingBusy(false);
+            showPairingMessage("error", "La conexión con Granete no está disponible.");
+          }
+        }
+
+        pairingConnectBtn.addEventListener("click", submitPairingCode);
+        pairingInput.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            submitPairingCode();
+          }
+        });
+
+
         bindingCancelBtn.addEventListener("click", function () {
           bindingPicker.style.display = "none";
         });

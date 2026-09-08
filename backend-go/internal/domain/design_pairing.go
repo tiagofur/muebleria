@@ -15,7 +15,7 @@ type DesignPairingGrant struct {
 	BaseRevisionID *string   `json:"base_revision_id" db:"base_revision_id"`
 	Action         string    `json:"action" db:"action"`
 	CodeHash       []byte    `json:"-" db:"code_hash"`
-	Status         string    `json:"status" db:"status"` // pending, exchanged, cancelled
+	Status         string    `json:"status" db:"status"` // pending, exchanged, confirmed, cancelled
 	ExpiresAt      time.Time `json:"expires_at" db:"expires_at"`
 	CreatedBy      string    `json:"created_by" db:"created_by"`
 	// CreatedBySessionID is the creating web session's registry sid — full
@@ -23,6 +23,11 @@ type DesignPairingGrant struct {
 	CreatedBySessionID   string     `json:"created_by_session_id" db:"created_by_session_id"`
 	ExchangedAt          *time.Time `json:"exchanged_at" db:"exchanged_at"`
 	ExchangedBySessionID *string    `json:"exchanged_by_session_id" db:"exchanged_by_session_id"`
+	// ConfirmedAt/ConfirmedBySessionID close the initiated-vs-confirmed gap:
+	// only the same device session that exchanged may confirm, after the
+	// extension persisted and read back the exact canonical binding (#499 S3).
+	ConfirmedAt          *time.Time `json:"confirmed_at" db:"confirmed_at"`
+	ConfirmedBySessionID *string    `json:"confirmed_by_session_id" db:"confirmed_by_session_id"`
 	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`
 	Version              int64      `json:"version" db:"version"`
@@ -32,6 +37,7 @@ const (
 	PairingActionOpenDesign     = "open_design"
 	PairingGrantStatusPending   = "pending"
 	PairingGrantStatusExchanged = "exchanged"
+	PairingGrantStatusConfirmed = "confirmed"
 	PairingGrantStatusCancelled = "cancelled"
 	// PairingGrantStatusExpired is derived at read time only (a pending
 	// grant past its expiry, mirroring the device-enrollment poll); it is

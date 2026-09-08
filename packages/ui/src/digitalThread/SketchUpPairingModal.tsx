@@ -125,7 +125,10 @@ export function SketchUpPairingModal({
   }, [createGrant]);
 
   const terminalStatus =
-    status?.status === 'exchanged' || status?.status === 'cancelled' || status?.status === 'expired';
+    status?.status === 'exchanged' ||
+    status?.status === 'confirmed' ||
+    status?.status === 'cancelled' ||
+    status?.status === 'expired';
 
   // Poll grant status while pending. A network/API failure keeps the last
   // known state and surfaces a retryable notice — it NEVER derives expired.
@@ -173,7 +176,8 @@ export function SketchUpPairingModal({
   const handleClose = useCallback(() => {
     closedRef.current = true;
     // DEMO preference: leaving while pending cancels the outstanding grant so
-    // no live code outlives the sheet. Terminal grants are never re-cancelled.
+    // no live code outlives the sheet. Terminal grants (confirmed included)
+    // are never re-cancelled.
     if (phase === 'active' && grant && !terminalStatus) {
       void cancelPendingGrant();
     }
@@ -221,6 +225,13 @@ export function SketchUpPairingModal({
       );
     }
     switch (status?.status) {
+      case 'confirmed':
+        return (
+          <p className="psm-status psm-status--ok" role="status" data-testid="pairing-confirmed">
+            <CircleCheck size={16} /> Diseño vinculado en SketchUp. Ya podés modelar y publicar
+            desde la extensión.
+          </p>
+        );
       case 'exchanged':
         return (
           <p className="psm-status psm-status--ok" role="status" data-testid="pairing-exchanged">

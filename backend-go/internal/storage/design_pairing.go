@@ -24,11 +24,15 @@ import (
 var (
 	ErrPairingGrantNotFound = errors.New("pairing grant not found")
 	ErrPairingGrantConflict = errors.New("pairing grant not exchangeable")
+	// ErrPairingGrantMismatch: the confirmed binding does not match the
+	// grant's exact pinned identity (wrong project/design/base).
+	ErrPairingGrantMismatch = errors.New("pairing grant identity mismatch")
 )
 
 const pairingGrantColumns = `id, organization_id, project_id, design_id,
 	COALESCE(base_revision_id::text, ''), action, code_hash, status, expires_at,
 	created_by, created_by_session_id, exchanged_at, COALESCE(exchanged_by_session_id::text, ''),
+	confirmed_at, COALESCE(confirmed_by_session_id::text, ''),
 	created_at, updated_at, version`
 
 // HashPairingCode derives the stored form of a pairing code. Stored and
@@ -43,6 +47,7 @@ func scanDesignPairingGrant(row pgx.Row) (*domain.DesignPairingGrant, error) {
 	if err := row.Scan(&g.ID, &g.OrganizationID, &g.ProjectID, &g.DesignID,
 		&g.BaseRevisionID, &g.Action, &g.CodeHash, &g.Status, &g.ExpiresAt, &g.CreatedBy,
 		&g.CreatedBySessionID, &g.ExchangedAt, &g.ExchangedBySessionID,
+		&g.ConfirmedAt, &g.ConfirmedBySessionID,
 		&g.CreatedAt, &g.UpdatedAt, &g.Version); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrPairingGrantNotFound
@@ -354,4 +359,126 @@ func (s *PostgresStore) CancelDesignPairingGrant(ctx context.Context, cmd Cancel
 	}
 	err := s.WithinTenantTx(ctx, actor, execute)
 	return cancelled, err
+}
+
+// ConfirmDesignPairingGrantCommand carries the exact binding the extension
+// says it persisted and read back. Confirmation is device-only and belongs
+// to the SAME session that exchanged: a different session can never confirm
+// someone else's handoff.
+type ConfirmDesignPairingGrantCommand struct {
+	GrantID              string
+	PersistedProjectID   string
+	PersistedDesignID    string
+	PersistedBaseRevID   string // "" = bound without a published base
+	ConfirmedByUserID    string
+	ConfirmedBySessionID string
+	IP                   string
+	RequestID            string
+}
+
+// ConfirmDesignPairingGrant closes the initiated-vs-confirmed gap (#499
+// Slice 3). Exactness rules, all enforced in ONE transaction:
+//   - only the grant's own exchanging session may confirm;
+//   - the persisted project/design must match the grant row exactly;
+//   - the persisted base must be EXACTLY the grant's frozen pin when one
+//     exists (an R2 confirm against an R1 grant is rejected), or the
+//     design's authoritative working base when the grant pinned nothing;
+//   - the transition is a conditional exchanged→confirmed UPDATE, and a
+//     repeated confirm by the same session is an idempotent success.
+func (s *PostgresStore) ConfirmDesignPairingGrant(ctx context.Context, cmd ConfirmDesignPairingGrantCommand) (*domain.DesignPairingGrant, error) {
+	if !isValidUUID(cmd.GrantID) || !isValidUUID(cmd.PersistedProjectID) ||
+		!isValidUUID(cmd.PersistedDesignID) || !isValidUUID(cmd.ConfirmedByUserID) ||
+		!isValidUUID(cmd.ConfirmedBySessionID) {
+		return nil, domain.ErrInvalidDesignCommand
+	}
+	if cmd.PersistedBaseRevID != "" && !isValidUUID(cmd.PersistedBaseRevID) {
+		return nil, domain.ErrInvalidDesignCommand
+	}
+
+	var confirmed *domain.DesignPairingGrant
+	execute := func(txCtx context.Context) error {
+		current, err := scanDesignPairingGrant(s.db(txCtx).QueryRow(txCtx, `
+			SELECT `+pairingGrantColumns+` FROM design_pairing_grants WHERE id = $1::uuid
+			FOR UPDATE
+		`, cmd.GrantID))
+		if errors.Is(err, ErrPairingGrantNotFound) {
+			return ErrPairingGrantNotFound
+		}
+		if err != nil {
+			return err
+		}
+
+		// Idempotent replay: the same session confirming again succeeds.
+		if current.Status == domain.PairingGrantStatusConfirmed {
+			if current.ConfirmedBySessionID != nil && *current.ConfirmedBySessionID == cmd.ConfirmedBySessionID {
+				confirmed = current
+				return nil
+			}
+			return ErrPairingGrantConflict
+		}
+		if current.Status != domain.PairingGrantStatusExchanged {
+			return ErrPairingGrantConflict
+		}
+		if current.ExchangedBySessionID == nil || *current.ExchangedBySessionID != cmd.ConfirmedBySessionID {
+			// Uniform conflict: another session's grant is indistinguishable
+			// from a non-exchangeable one — never a probe oracle.
+			return ErrPairingGrantConflict
+		}
+		if current.ProjectID != cmd.PersistedProjectID || current.DesignID != cmd.PersistedDesignID {
+			return ErrPairingGrantMismatch
+		}
+
+		// Exact base rule: pinned grants confirm their pin verbatim; unpinned
+		// grants confirm the design's authoritative working base (or nothing
+		// when none exists). Never a silent re-base to a newer revision.
+		var persistedBase *string
+		if cmd.PersistedBaseRevID != "" {
+			persistedBase = &cmd.PersistedBaseRevID
+		}
+		expectedBase := current.BaseRevisionID
+		if expectedBase == nil {
+			bindingCtx, err := s.GetModelBindingContext(txCtx, current.ProjectID, current.DesignID, persistedBase)
+			if err != nil {
+				return err
+			}
+			expectedBase = bindingCtx.WorkingCopyBaseRevisionID
+		}
+		if derefString(expectedBase) != derefString(persistedBase) {
+			return ErrPairingGrantMismatch
+		}
+
+		updated, err := scanDesignPairingGrant(s.db(txCtx).QueryRow(txCtx, `
+			UPDATE design_pairing_grants
+			SET status = $1, confirmed_at = NOW(), confirmed_by_session_id = $2::uuid,
+				updated_at = NOW(), version = version + 1
+			WHERE id = $3::uuid AND status = $4 AND exchanged_by_session_id = $5::uuid
+			RETURNING `+pairingGrantColumns,
+			domain.PairingGrantStatusConfirmed, cmd.ConfirmedBySessionID,
+			cmd.GrantID, domain.PairingGrantStatusExchanged, cmd.ConfirmedBySessionID))
+		if err != nil {
+			return err
+		}
+		confirmed = updated
+		return s.InsertSecurityAuditEvent(txCtx, SecurityAuditEvent{
+			EventType:   "design_pairing_grant_confirmed",
+			ActorUserID: cmd.ConfirmedByUserID,
+			IP:          cmd.IP,
+			Details: map[string]interface{}{
+				"grant_id":              updated.ID,
+				"project_id":            updated.ProjectID,
+				"design_id":             updated.DesignID,
+				"persisted_base_rev_id": cmd.PersistedBaseRevID,
+				"request_id":            cmd.RequestID,
+			},
+		})
+	}
+	if transactionFromContext(ctx) != nil {
+		return confirmed, execute(ctx)
+	}
+	actor, _ := TenantActorFromCtx(ctx)
+	if actor.OrganizationID == "" {
+		actor.OrganizationID = OrgFromCtx(ctx)
+	}
+	err := s.WithinTenantTx(ctx, actor, execute)
+	return confirmed, err
 }

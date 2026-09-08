@@ -613,6 +613,10 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// (one-time, TTL'd, hash-only); the web-session surface can never
 	// exchange, and the code never rides any URL.
 	regexp.MustCompile(`^/api/design-pairing-grants:exchange$`),
+	// #499 Slice 3: exchanged→confirmed transition proving the canonical
+	// model binding was persisted with the exact pinned identity. Device-only
+	// and scoped to the exchanging session; carries exact IDs, never model data.
+	regexp.MustCompile(`^/api/design-pairing-grants/[^/]+:confirm$`),
 	// #390 / DT-6: catalog design-first creation of a project furniture
 	// identity. Allocates authoritative identity (origin='design') for the bound
 	// project before SketchUp places the physical component.
