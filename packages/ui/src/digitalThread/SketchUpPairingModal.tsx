@@ -185,16 +185,13 @@ export function SketchUpPairingModal({
     closedRef.current = true;
     // DEMO preference: leaving while pending cancels the outstanding grant so
     // no live code outlives the sheet. Terminal grants (confirmed included)
-    // are never re-cancelled.
-    if (
-      phase === 'active' &&
-      grant &&
-      !isTerminalGrantStatus(statusRef.current?.status)
-    ) {
+    // are never re-cancelled. Read refs because Modal's document listener is
+    // refreshed in a passive effect and may briefly retain an earlier callback.
+    if (grantRef.current && !isTerminalGrantStatus(statusRef.current?.status)) {
       void cancelPendingGrant();
     }
     onClose();
-  }, [phase, grant, terminalStatus, cancelPendingGrant, onClose]);
+  }, [cancelPendingGrant, onClose]);
 
   const handleRegenerate = useCallback(async () => {
     setBusy(true);
