@@ -684,6 +684,46 @@ async function publishRevisionWithItemIds(options: {
     expect((await releaseMaterials).postDataJSON().production_release_id).toBe(releasedP1.id);
     await expect(page.getByTestId(`purch-release-${seeded.projectId}`)).toHaveCount(0);
     await assertFrozenRoutingExecution(page, apiBase, lifecycleOwner.token, seeded.projectId, releasedP1.id, 2);
+
+    // ------------------------------------------------------------------
+    // 10. Production stage closure (#577): the obra reached the production
+    //     floor through the canonical release only — no legacy engineering
+    //     handshake ever ran, no legacy blob was written, and the Almacén
+    //     release stamp is the durable evidence of the last gate.
+    // ------------------------------------------------------------------
+    const finalDetail = (await (
+      await fetch(`${apiBase}/projects/${seeded.projectId}`, { headers: authHeaders })
+    ).json()) as {
+      engineering_log?: { sent_to_production_at?: string } | null;
+      materials_release?: { released_at?: string } | null;
+      production_release?: unknown;
+      resolved_production_release: { source: string; frozen_routing: boolean };
+    };
+    expect(finalDetail.engineering_log?.sent_to_production_at ?? null).toBeNull();
+    expect(finalDetail.materials_release?.released_at ?? null).toBeTruthy();
+    expect(finalDetail.production_release ?? null).toBeNull();
+    expect(finalDetail.resolved_production_release.source).toBe('canonical');
+    expect(finalDetail.resolved_production_release.frozen_routing).toBe(true);
+
+    // Physical identity: one frozen execution unit per released furniture
+    // instance (the 3 quoted units + the design-first unit), stamped with
+    // the exact release id — qty>1 never collapses and never mints ids.
+    const finalExecutions = (await (
+      await fetch(`${apiBase}/projects/${seeded.projectId}/part-executions`, { headers: authHeaders })
+    ).json()) as { module_units: Array<{ id: string }> };
+    expect(finalExecutions.module_units.map((u) => u.id).sort()).toEqual(
+      [...seeded.instanceIds, seeded.designFirstInstanceId]
+        .map((fi) => `${releasedP1.id}:${fi}:u1`)
+        .sort(),
+    );
+
+    // Stage engine readback in the UI: the obra left the ingeniería working
+    // queue and appears read-only under "Enviadas a producción" — the stage
+    // treats the canonical release as the liberation, not
+    // engineeringLog.sentToProductionAt.
+    await page.goto('/engineering');
+    await expect(page.getByTestId(`eng-project-${seeded.projectId}`)).toHaveCount(0);
+    await expect(page.getByTestId(`eng-sent-${seeded.projectId}`)).toBeVisible();
   });
 
   test('failure rollback: release before approval is rejected server-side, no release row, no false success', async ({
@@ -1111,6 +1151,25 @@ async function publishRevisionWithItemIds(options: {
     // Queue entry preserves P1, but cannot authorize physical manufacture.
     // The old client-derived route expectation was not frozen-content proof.
     await assertFrozenRoutingExecution(page, apiBase, owner.token, OPS_PROJECT_ID, release.id, 1);
+
+    // Physical identity closure (#577): the board-bearing fixture proves the
+    // exact per-piece mapping — one frozen execution unit per released
+    // furniture instance, and every physical piece stamped with the exact
+    // release id and grouped under its own unit (2 panels per unit).
+    const finalExecutions = (await (
+      await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/part-executions`, { headers: authHeaders })
+    ).json()) as { part_instances: Array<{ id: string }>; module_units: Array<{ id: string }> };
+    const instanceIDs = mat.instances.map((instance) => instance.furniture_instance_id);
+    expect(finalExecutions.module_units.map((u) => u.id).sort()).toEqual(
+      instanceIDs.map((fi) => `${release.id}:${fi}:u1`).sort(),
+    );
+    expect(finalExecutions.part_instances).toHaveLength(4);
+    for (const fi of instanceIDs) {
+      const unitParts = finalExecutions.part_instances.filter((part) =>
+        part.id.startsWith(`${release.id}:${fi}:`),
+      );
+      expect(unitParts).toHaveLength(2);
+    }
   });
 
   test('tenant isolation: Org B never sees Org A reconciliation data', async ({ page }) => {
