@@ -110,6 +110,7 @@ Operational Core OC-002 implementa los required checks en `.github/workflows/ci.
    los tests de integración de storage corran en vez de saltarse con t.Skip
    (incluye la suite de Pilot Readiness; el job instala postgresql-client
    para su pata de backup/restore)
+4. proyectar-visual: gate visual WebGL de Proyectar (#444, ver su sección)
 ```
 
 Fixture de paridad vivo: `contracts/roles.json` — los tests de roles en
@@ -355,6 +356,51 @@ la UI real contra el seed demo y falla si un paso deja de ser completable o el
 kit de medición deja de capturar los eventos (detalle en
 `docs/proyectar-3d-usability-benchmark.md`). Los tiempos de esa corrida son
 `proxy` y no cuentan como evidencia de usuario.
+
+## Gate visual WebGL de Proyectar (#444)
+
+Complemento de corrección visual (no de performance): demuestra que el editor
+renderiza el mobiliario, materiales, selección y feedback de colocación
+esperados contra el canvas WebGL real (R3F/three `FurnitureScene3D`), no un
+mock. Suite: `tests/visual/proyectar-webgl.spec.ts` (proyecto Playwright
+`proyectar-webgl`), con baselines versionadas de: sala vacía, módulo
+insertado, módulo seleccionado, cambio de material y ghost de
+arrastro/colocación.
+
+```sh
+# Requisitos: pnpm install previo; Chromium de Playwright instalado
+# (pnpm exec playwright install chromium). No requiere backend: modo guest.
+# (Invocación directa: el script `pnpm visual` reenvía `--` literal y rompe
+# el filtro de archivo en pnpm actual.)
+pnpm exec playwright test --config=playwright.config.ts tests/visual/proyectar-webgl.spec.ts
+```
+
+- **Baselines**: `tests/visual/proyectar-webgl.spec.ts-snapshots/*.png`.
+  Una sola serie sin sufijo de plataforma.
+- **Actualizar baselines tras un cambio visual intencional** (exige revisión
+  visual del diff en el PR, nunca automático):
+  `pnpm exec playwright test --config=playwright.config.ts tests/visual/proyectar-webgl.spec.ts --update-snapshots`
+- **Determinismo**: el proyecto fija `--use-angle=swiftshader-webgl`
+  (raster WebGL por CPU), viewport 1280×800, `deviceScaleFactor` 1,
+  `reducedMotion`, pose de cámara por botón "Ajustar" y el seed
+  "Demo plantilla" en modo guest. El DOM sobre el viewport se oculta con CSS
+  inyectado por el test antes de capturar (sólo píxeles del canvas; sin
+  máscaras). Los artefactos de fallo quedan en `test-results/` (actual,
+  esperado, diff, trace).
+- **Paridad CI/local**: mismo Chromium fijado por `@playwright/test` +
+  SwiftShader en local (macOS) y en CI (Linux `ubuntu-latest`, job
+  `proyectar-visual`), mismas baselines sin sufijo de plataforma. Paridad
+  verificada entre macOS y contenedor Linux oficial de Playwright
+  (`mcr.microsoft.com/playwright:v1.61.1-noble`) antes de publicar. Al subir
+  la versión de `@playwright/test` hay que regenerar baselines si el
+  renderer cambia.
+- **Entrada externa conocida**: el modo de luz "presentación" (default del
+  producto) carga un HDR de el CDN de assets de drei; ese contenido está
+  "horneado" en las baselines y su cambio se manifestará como diff
+  intencional a revisar.
+- **Separación con #312**: los flags de software GL viven sólo en el proyecto
+  `proyectar-webgl`; los smokes de performance (`pnpm smoke:perf`) siguen
+  midiendo con GL real y no comparten baseline con este gate.
 
 ## PR publication metadata (partial #573 delivery)
 
