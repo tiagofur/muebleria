@@ -80,6 +80,44 @@ jobs:
       - name: Run Tests
         run: pnpm test
 
+  proyectar-visual:
+    name: Proyectar WebGL visual gate (#444)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Suite determinista: Chromium + SwiftShader (CPU GL) y baselines sin
+      # sufijo de plataforma; misma configuración que la corrida local
+      # (docs/verification.md § Gate visual WebGL de Proyectar).
+      - name: Run Proyectar visual suite
+        run: pnpm exec playwright test --config=playwright.config.ts tests/visual/proyectar-webgl.spec.ts
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proyectar-visual-failure-artifacts
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
   foundation-gate-a:
     name: Foundation Gate A
     runs-on: ubuntu-latest
