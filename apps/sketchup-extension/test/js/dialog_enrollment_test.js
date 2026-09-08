@@ -24,6 +24,7 @@ function createMockElement(id) {
     value: '',
     listeners: {},
     _textContent: '',
+    _innerHTML: '',
     style: {},
     classList: createClassList('')
   };
@@ -32,8 +33,8 @@ function createMockElement(id) {
     set(v) { el._textContent = String(v); }
   });
   Object.defineProperty(el, 'innerHTML', {
-    get() { return ''; },
-    set(v) { el.children.length = 0; }
+    get() { return el._innerHTML; },
+    set(v) { el._innerHTML = String(v); el.children.length = 0; }
   });
   Object.defineProperty(el, 'className', {
     get() { return Array.from(el.classList._classes).join(' '); },
@@ -121,6 +122,7 @@ function buildSandbox() {
   sandbox.__registry = registry;
   sandbox.__bridge = bridgeCalls;
   sandbox.__intervals = intervals;
+  sandbox.__timeouts = timeouts;
   return sandbox;
 }
 
@@ -141,7 +143,7 @@ function el(sandbox, id) {
 
 let passed = 0;
 
-function runTests() {
+async function runTests() {
   // Test 1: onEnrollResult renders code, switches views, sets 5s interval and starts countdown
   {
     const sb = runDialog();
@@ -168,7 +170,7 @@ function runTests() {
     passed++;
   }
 
-  // Test 2: Copy button copies code to clipboard
+  // Test 2: Copy button copies code to clipboard and swaps the icon state
   {
     const sb = runDialog();
     sb.window.GraneteDialog.onEnrollResult({
@@ -180,6 +182,17 @@ function runTests() {
 
     el(sb, 'btn-copy-enroll-code').click();
     assert.strictEqual(sb.__lastCopied, 'ABC123');
+    // The dialog confirms via the clipboard promise; yield one microtask so
+    // setCopiedUI (queued by writeText().then) runs before asserting.
+    await Promise.resolve();
+    // Confirmation state: the copy SVG swaps to a check SVG + text feedback.
+    assert.strictEqual(el(sb, 'copy-enroll-code-text').textContent, '¡Copiado!');
+    assert.match(el(sb, 'copy-enroll-code-icon').innerHTML, /<svg/, 'icon renders an inline SVG, never an emoji');
+    assert.match(el(sb, 'copy-enroll-code-icon').innerHTML, /polyline/, 'confirmation state uses the check glyph');
+    // Flush the queued restore timer: the copy glyph comes back.
+    sb.__timeouts.splice(0).forEach((t) => t.cb());
+    assert.strictEqual(el(sb, 'copy-enroll-code-text').textContent, 'Copiar');
+    assert.match(el(sb, 'copy-enroll-code-icon').innerHTML, /rect x="9"/, 'copy glyph restored after the confirmation window');
     passed++;
   }
 
@@ -279,4 +292,7 @@ function runTests() {
   console.log(JSON.stringify({ success: true, testsPassed: passed }));
 }
 
-runTests();
+runTests().catch((err) => {
+  console.log(JSON.stringify({ success: false, error: String(err && err.message ? err.message : err) }));
+  process.exit(1);
+});
