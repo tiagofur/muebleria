@@ -173,8 +173,7 @@ class PairingConnectTest < Minitest::Test
                            exchange_status: 200, confirm_status: 200, design_id: DESIGN_ID)
     transport.respond_post('/design-pairing-grants:exchange', exchange_status,
                            exchange_status == 200 ? exchange_payload(pinned: pinned, working_base: working_base,
-                                                                     design_id: design_id)
-                                                  : { 'message' => 'nope' })
+                                                                     design_id: design_id) : { 'message' => 'nope' })
     transport.respond_post("/design-pairing-grants/#{GRANT_ID}:confirm", confirm_status,
                            { 'id' => GRANT_ID, 'action' => 'open_design',
                              'status' => confirm_status == 200 ? 'confirmed' : 'conflict' })

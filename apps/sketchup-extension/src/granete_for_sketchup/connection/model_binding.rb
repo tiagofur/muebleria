@@ -222,11 +222,13 @@ module Granete
               raise ArgumentError, "missing model binding key: #{key}" unless payload.key?(key)
             end
           end
+        end
 
-          # #499 Slice 3 — fail-closed parser for the pairing exchange
-          # response. The payload embeds the same #388 sub-objects
-          # (organization/project/design/working_copy/capabilities), so the
-          # parsing rules stay identical; only the grant envelope is new.
+        # #499 Slice 3 — fail-closed parser for the pairing exchange
+        # response. The payload embeds the same #388 sub-objects
+        # (organization/project/design/working_copy/capabilities), so the
+        # parsing rules stay identical; only the grant envelope is new.
+        module PairingContract
           PairingExchange = Struct.new(:grant_id, :action, :pinned_base_revision_id, :state,
                                        :schema_version, :organization, :project, :design,
                                        :working_copy, :capabilities, keyword_init: true)
@@ -238,15 +240,24 @@ module Granete
             raise ArgumentError, 'pairing exchange payload must be present' if body.nil?
 
             payload = body.is_a?(Hash) ? body : JSON.parse(body)
-            require_keys!(payload, 'grant_id', 'action', 'pinned_base_revision_id', 'state',
-                          'schema_version', 'organization', 'project', 'design',
-                          'working_copy', 'capabilities')
+            Contract.require_keys!(payload, 'grant_id', 'action', 'pinned_base_revision_id', 'state',
+                                   'schema_version', 'organization', 'project', 'design',
+                                   'working_copy', 'capabilities')
 
-            raise ArgumentError, "unknown pairing action: #{payload['action'].inspect}" unless PAIRING_ACTIONS.include?(payload['action'])
-            raise ArgumentError, "unknown pairing state: #{payload['state'].inspect}" unless PAIRING_STATES.include?(payload['state'])
+            unless PAIRING_ACTIONS.include?(payload['action'])
+              raise ArgumentError,
+                    "unknown pairing action: #{payload['action'].inspect}"
+            end
+            unless PAIRING_STATES.include?(payload['state'])
+              raise ArgumentError,
+                    "unknown pairing state: #{payload['state'].inspect}"
+            end
 
             pinned = payload['pinned_base_revision_id']
-            raise ArgumentError, 'pinned base revision must be a uuid or null' unless pinned.nil? || ModelBinding.uuid?(pinned)
+            unless pinned.nil? || ModelBinding.uuid?(pinned)
+              raise ArgumentError,
+                    'pinned base revision must be a uuid or null'
+            end
 
             PairingExchange.new(
               grant_id: payload['grant_id'],
@@ -254,11 +265,11 @@ module Granete
               pinned_base_revision_id: pinned,
               state: payload['state'],
               schema_version: payload['schema_version'],
-              organization: summary!(payload['organization'], 'organization'),
-              project: summary!(payload['project'], 'project'),
-              design: design_summary!(payload['design']),
-              working_copy: working_copy!(payload['working_copy']),
-              capabilities: capabilities!(payload['capabilities'])
+              organization: Contract.summary!(payload['organization'], 'organization'),
+              project: Contract.summary!(payload['project'], 'project'),
+              design: Contract.design_summary!(payload['design']),
+              working_copy: Contract.working_copy!(payload['working_copy']),
+              capabilities: Contract.capabilities!(payload['capabilities'])
             )
           end
 
@@ -270,9 +281,13 @@ module Granete
             raise ArgumentError, 'pairing status payload must be present' if body.nil?
 
             payload = body.is_a?(Hash) ? body : JSON.parse(body)
-            require_keys!(payload, 'status')
+            Contract.require_keys!(payload, 'status')
             status = payload['status']
-            raise ArgumentError, "unknown pairing grant status: #{status.inspect}" unless PAIRING_GRANT_STATUSES.include?(status)
+            unless PAIRING_GRANT_STATUSES.include?(status)
+              raise ArgumentError,
+                    "unknown pairing grant status: #{status.inspect}"
+            end
+
             { 'status' => status }
           end
         end
@@ -340,7 +355,7 @@ module Granete
             raise Error.new(:bad_request, 'código de vinculación inválido') if normalized.length != PAIRING_CODE_LENGTH
 
             response = request(:post, '/design-pairing-grants:exchange', { 'code' => normalized })
-            Contract.pairing_exchange!(response['body'])
+            PairingContract.pairing_exchange!(response['body'])
           end
 
           # #499 Slice 3: confirm the exact persisted binding. Device-only
@@ -349,7 +364,7 @@ module Granete
             body = { 'project_id' => project_id, 'design_id' => design_id }
             body['base_revision_id'] = base_revision_id if base_revision_id
             response = request(:post, "/design-pairing-grants/#{grant_id}:confirm", body)
-            Contract.pairing_status!(response['body'])
+            PairingContract.pairing_status!(response['body'])
           end
 
           private
@@ -512,17 +527,21 @@ module Granete
           # honestly: the exchange happens first, and if the LOCAL binding
           # fails afterwards the code stays consumed — the error says so and
           # the user returns to the Web for a fresh code.
+          # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
           def connect_with_code(code)
             normalized = Service.normalize_pairing_code(code)
             unless normalized.length == Service::PAIRING_CODE_LENGTH
-              return failure('invalid_code', 'el código debe tener 12 caracteres (ignorá espacios y guiones)', 'pairing' => true)
+              return failure('invalid_code', 'el código debe tener 12 caracteres (ignorá espacios y guiones)',
+                             'pairing' => true)
             end
 
             exchange = @service.exchange_pairing_code(normalized)
             return pairing_exchange_failure(exchange) if exchange.state == 'design_archived'
-            return failure('incompatible',
-                           "el servidor usa la versión #{exchange.schema_version} del contrato de enlace",
-                           'state' => 'incompatible', 'pairing' => true) if exchange.schema_version > ModelBinding::SCHEMA_VERSION
+            if exchange.schema_version > ModelBinding::SCHEMA_VERSION
+              return failure('incompatible',
+                             "el servidor usa la versión #{exchange.schema_version} del contrato de enlace",
+                             'state' => 'incompatible', 'pairing' => true)
+            end
 
             project_id = exchange.project['id']
             design_id = exchange.design['id']
@@ -544,7 +563,8 @@ module Granete
             stored = store.read
             unless exact_readback?(stored, project_id, design_id, written_base)
               return failure('bind_readback_failed',
-                             'el enlace no se pudo verificar en el modelo. Cerralo sin guardar y volvé a conectar; si el problema persiste, generá un código nuevo en la web.',
+                             'el enlace no se pudo verificar en el modelo. Cerralo sin guardar y volvé a conectar; ' \
+                             'si el problema persiste, generá un código nuevo en la web.',
                              'pairing' => true)
             end
 
@@ -558,7 +578,8 @@ module Granete
               # The binding IS persisted and verified locally; only the Web
               # confirmation did not reach the server. Honest partial result.
               return { 'ok' => true, 'confirmationFailed' => true, 'pairing' => true,
-                       'reason' => 'el modelo quedó conectado, pero la web no registró la confirmación; puede seguir mostrando "código aceptado".',
+                       'reason' => 'el modelo quedó conectado, pero la web no registró la confirmación; ' \
+                                   'puede seguir mostrando "código aceptado".',
                        'status' => status }
             end
 
@@ -678,6 +699,7 @@ module Granete
           # the #499 confirmation gate. nil-safe on both sides.
           def exact_readback?(stored, project_id, design_id, base_revision_id)
             return false if stored.nil?
+
             stored.project_id == project_id &&
               stored.design_id == design_id &&
               stored.base_revision_id.to_s == base_revision_id.to_s
@@ -688,19 +710,22 @@ module Granete
             when :not_found
               failure('code_not_found', 'el código no existe o expiró; generá uno nuevo en la web', 'pairing' => true)
             when :conflict
-              failure('code_unusable', 'el código ya fue usado, expiró o fue cancelado; generá uno nuevo en la web', 'pairing' => true)
+              failure('code_unusable', 'el código ya fue usado, expiró o fue cancelado; generá uno nuevo en la web',
+                      'pairing' => true)
             when :unauthenticated
-              failure('unauthenticated', 'iniciá sesión con tu cuenta del taller para conectar el código', 'pairing' => true)
+              failure('unauthenticated', 'iniciá sesión con tu cuenta del taller para conectar el código',
+                      'pairing' => true)
             when :unauthorized
               failure('unauthorized', 'no tenés permiso para conectar este diseño', 'pairing' => true)
             when :unreachable
-              failure('unreachable', 'no se pudo contactar al servidor; el código no se consumió, probá de nuevo', 'pairing' => true)
+              failure('unreachable', 'no se pudo contactar al servidor; el código no se consumió, probá de nuevo',
+                      'pairing' => true)
             else
               failure('exchange_failed', error.message, 'pairing' => true)
             end
           end
 
-          def pairing_exchange_failure(exchange)
+          def pairing_exchange_failure(_exchange)
             failure('design_archived', 'el diseño fue archivado en Granete',
                     'state' => 'design_archived', 'pairing' => true)
           end
