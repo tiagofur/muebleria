@@ -24,7 +24,9 @@ class PairingConnectTest < Minitest::Test
   REVISION_R1 = '53000000-0000-0000-0000-000000000001'
   REVISION_R2 = '53000000-0000-0000-0000-000000000002'
   GRANT_ID = '88000000-0000-0000-0000-000000000001'
+  FRESH_GRANT_ID = '88000000-0000-0000-0000-000000000002'
   CODE = 'ABCD234EFGH5'
+  FRESH_CODE = 'WXYZ234EFGH5'
 
   class BindingModel
     def initialize
@@ -100,10 +102,15 @@ class PairingConnectTest < Minitest::Test
       @responses[[:post, path]] = { 'status' => status, 'body' => body }
     end
 
+    def respond_post_sequence(path, responses)
+      @responses[[:post, path]] = responses.map { |status, body| { 'status' => status, 'body' => body } }
+    end
+
     def request(command)
       @requests << command
       key = [command['method'].to_s.downcase.to_sym, command['path']]
       response = @responses[key]
+      response = response.shift if response.is_a?(Array)
       return { 'status' => 500, 'body' => {} } unless response
 
       { 'status' => response['status'], 'headers' => {},
@@ -131,9 +138,9 @@ class PairingConnectTest < Minitest::Test
     Granete::SketchUpExtension::Connection::ModelBinding
   end
 
-  def exchange_payload(pinned: REVISION_R1, working_base: REVISION_R2, design_id: DESIGN_ID)
+  def exchange_payload(pinned: REVISION_R1, working_base: REVISION_R2, design_id: DESIGN_ID, grant_id: GRANT_ID)
     {
-      'grant_id' => GRANT_ID,
+      'grant_id' => grant_id,
       'action' => 'open_design',
       'pinned_base_revision_id' => pinned,
       'state' => 'valid',
@@ -356,7 +363,7 @@ class PairingConnectTest < Minitest::Test
 
   # --- rebind policy ---------------------------------------------------------
 
-  def test_model_bound_to_other_design_requires_reviewed_rebind
+  def test_model_bound_to_other_design_requires_fresh_pairing_code
     model = BindingModel.new
     mb::Store.new(model).write!(mb::Binding.new(project_id: PROJECT_ID, design_id: OTHER_DESIGN_ID,
                                                 base_revision_id: nil, schema_version: 1))
@@ -366,10 +373,105 @@ class PairingConnectTest < Minitest::Test
     result = connector(model, transport).connect_with_code(CODE)
 
     refute result['ok']
-    assert_equal 'rebind_required', result['code']
+    assert_equal 'pairing_rebind_requires_new_code', result['code']
+    assert_equal 'manual_rebind_then_new_code', result['recovery']
     assert_equal true, result['pairing']
-    # The previous binding is preserved untouched.
+    # The previous binding is preserved untouched; the dialog must not route
+    # the exchanged pairing grant into the manual rebind confirmation.
     assert_equal OTHER_DESIGN_ID, mb::Store.new(model).read.design_id
+  end
+
+  def test_rebind_after_consumed_r1_grant_requires_new_code_without_rebasing_to_r2
+    model = BindingModel.new
+    mb::Store.new(model).write!(mb::Binding.new(project_id: PROJECT_ID, design_id: OTHER_DESIGN_ID,
+                                                base_revision_id: nil, schema_version: 1))
+    transport = FakeTransport.new
+    stub_pairing_backend(transport, pinned: REVISION_R1, working_base: REVISION_R2, design_id: DESIGN_ID)
+
+    result = connector(model, transport).connect_with_code(CODE)
+
+    refute result['ok']
+    assert_equal 'pairing_rebind_requires_new_code', result['code']
+    assert_equal 'manual_rebind_then_new_code', result['recovery']
+    assert_match(/revisión exacta/i, result['reason'])
+    assert_match(/código nuevo en la web/i, result['reason'])
+    # The consumed pairing grant cannot turn R1 into the manual flow's R2.
+    stored = mb::Store.new(model).read
+    assert_equal OTHER_DESIGN_ID, stored.design_id
+    assert_nil stored.base_revision_id
+    refute transport.requests.any? { |r| r['path'].include?(':confirm') },
+           'a rejected pairing rebind must never confirm the exchanged grant'
+  end
+
+  def test_rebind_after_consumed_null_grant_requires_new_code_without_rebasing_to_r1
+    model = BindingModel.new
+    mb::Store.new(model).write!(mb::Binding.new(project_id: PROJECT_ID, design_id: OTHER_DESIGN_ID,
+                                                base_revision_id: REVISION_R2, schema_version: 1))
+    transport = FakeTransport.new
+    stub_pairing_backend(transport, pinned: nil, working_base: REVISION_R1, design_id: DESIGN_ID)
+
+    result = connector(model, transport).connect_with_code(CODE)
+
+    refute result['ok']
+    assert_equal 'pairing_rebind_requires_new_code', result['code']
+    assert_equal true, result['pairing']
+    # An explicit null pin also cannot become the manual working base R1.
+    stored = mb::Store.new(model).read
+    assert_equal OTHER_DESIGN_ID, stored.design_id
+    assert_equal REVISION_R2, stored.base_revision_id
+    refute transport.requests.any? { |r| r['path'].include?(':confirm') },
+           'the old binding remains and the consumed grant stays unconfirmed'
+  end
+
+  def test_recovery_manual_rebind_then_fresh_pairing_restores_exact_pin
+    [
+      { pinned: REVISION_R1, working_base: REVISION_R2 },
+      { pinned: nil, working_base: REVISION_R1 }
+    ].each do |scenario|
+      model = BindingModel.new
+      mb::Store.new(model).write!(mb::Binding.new(project_id: PROJECT_ID, design_id: OTHER_DESIGN_ID,
+                                                  base_revision_id: REVISION_R2, schema_version: 1))
+      transport = FakeTransport.new
+      transport.respond_post_sequence('/design-pairing-grants:exchange', [
+        [200, exchange_payload(**scenario, grant_id: GRANT_ID)],
+        [200, exchange_payload(**scenario, grant_id: FRESH_GRANT_ID)]
+      ])
+      transport.respond_post("/design-pairing-grants/#{FRESH_GRANT_ID}:confirm", 200,
+                             { 'id' => FRESH_GRANT_ID, 'action' => 'open_design', 'status' => 'confirmed' })
+      transport.respond_post("/projects/#{PROJECT_ID}/designs/#{DESIGN_ID}/binding:validate", 200,
+                             status_payload(base: scenario[:working_base]))
+      conn = connector(model, transport)
+
+      recovered = conn.connect_with_code(CODE)
+      refute recovered['ok']
+      assert_equal 'pairing_rebind_requires_new_code', recovered['code']
+      refute transport.requests.any? { |r| r['path'].include?(':confirm') },
+             'the consumed collision grant must stay unconfirmed'
+
+      manual = conn.bind(project_id: PROJECT_ID, design_id: DESIGN_ID, confirm_rebind: true)
+      assert manual['ok'], manual.inspect
+      assert_equal scenario[:working_base], mb::Store.new(model).read.base_revision_id,
+                   'manual rebind remains an explicit independent workflow'
+
+      fresh = conn.connect_with_code(FRESH_CODE)
+      assert fresh['ok'], fresh.inspect
+      stored = mb::Store.new(model).read
+      if scenario[:pinned].nil?
+        assert_nil stored.base_revision_id, 'the fresh pairing must preserve an explicit null pin'
+      else
+        assert_equal scenario[:pinned], stored.base_revision_id,
+                     'the fresh pairing must restore its exact pin'
+      end
+      confirmation = transport.requests.find do |request|
+        request['path'] == "/design-pairing-grants/#{FRESH_GRANT_ID}:confirm"
+      end
+      refute_nil confirmation
+      if scenario[:pinned].nil?
+        assert_nil confirmation['body']['base_revision_id']
+      else
+        assert_equal scenario[:pinned], confirmation['body']['base_revision_id']
+      end
+    end
   end
 
   # --- manual flow regression -------------------------------------------------

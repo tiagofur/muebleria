@@ -550,7 +550,12 @@ module Granete
             store = @store_factory.call
             current = store.read
             blocker = rebind_blocker(current, project_id, design_id, false)
-            return blocker.merge('pairing' => true) if blocker
+            # Exchange is necessarily one-time. Do not route this reviewed
+            # rebind into the manual path: that path intentionally chooses the
+            # current working base and would silently discard this grant's
+            # exact revision (including an explicit null pin). Preserve the
+            # old binding and require a manual rebind followed by a fresh code.
+            return pairing_rebind_recovery(blocker) if blocker
 
             # The exact frozen pin from the grant — never the (possibly
             # newer) authoritative working base. nil is an exact grant pin,
@@ -706,6 +711,22 @@ module Granete
             stored.project_id == project_id &&
               stored.design_id == design_id &&
               stored.base_revision_id.to_s == base_revision_id.to_s
+          end
+
+          # A pairing code has already been exchanged by the time a local
+          # rebind conflict is discovered. The user may still intentionally
+          # use the manual selector, but it is a separate workflow and cannot
+          # complete or confirm the consumed grant. A fresh code is required
+          # after that reviewed manual rebind.
+          def pairing_rebind_recovery(blocker)
+            blocker.merge(
+              'code' => 'pairing_rebind_requires_new_code',
+              'pairing' => true,
+              'recovery' => 'manual_rebind_then_new_code',
+              'reason' => 'este modelo ya está conectado a otro diseño. El código fue aceptado, pero no se aplicó ' \
+                          'para no cambiar su revisión exacta. Conservá o revisá el enlace manualmente y luego generá ' \
+                          'un código nuevo en la web.'
+            )
           end
 
           def pairing_error_failure(error)
