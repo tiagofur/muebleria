@@ -454,6 +454,12 @@ type ResolvedProductionRelease struct {
 	Status                   ProductionReleaseStatus          `json:"status,omitempty"`
 	ReleasedBy               string                           `json:"released_by,omitempty"`
 	ReleasedAt               time.Time                        `json:"released_at,omitempty"`
+	// FrozenRouting marks that the exact canonical release froze the
+	// machine-neutral routing/machining program (snapshot schema v2, #577).
+	// Read-side projection only: it decides whether the routing blocker
+	// surfaces; mutations revalidate everything under the project lock.
+	// Always false for legacy authorities.
+	FrozenRouting bool `json:"frozen_routing,omitempty"`
 	// ProjectVersion survives only as a legacy-origin attribute so pre-DT
 	// costing baselines keep freezing it; the canonical authority pins
 	// identity by ReleaseID + ManufacturingFingerprint and carries 0.

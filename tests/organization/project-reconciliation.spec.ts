@@ -179,17 +179,20 @@ async function loginToA(page: Page): Promise<void> {
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 }
 
-// A production queue is not proof that physical work is safe to execute.
-// Schema-v1 P1 has frozen BOM demand but no complete routing evidence.
-async function assertRoutingBlocked(page: Page, apiBase: string, token: string, projectId: string, releaseId: string, revisionNumber: number): Promise<void> {
+// A production queue is not proof by itself: physical work is authorized by
+// the FROZEN routing evidence (#577). Schema-v2 P1 froze the neutral routing
+// program, so exact server-derived PartExecutions are allowed — while client
+// payloads stay refused and the legacy blob stays null.
+async function assertFrozenRoutingExecution(page: Page, apiBase: string, token: string, projectId: string, releaseId: string, revisionNumber: number): Promise<void> {
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   await page.goto('/production');
   await expect(page.getByTestId(`fabric-card-${projectId}`)).toBeVisible();
   await expect(page.getByTestId(`fabric-release-${projectId}`)).toContainText(`Diseño R${revisionNumber}`);
-  await expect(page.getByTestId(`fabric-routing-blocker-${projectId}`)).toContainText('evidencia congelada de rutas y maquinados');
-  await expect(page.getByTestId(`fabric-generate-parts-${projectId}`)).toBeDisabled();
+  // Schema-v2 evidence: no routing blocker, generation enabled.
+  await expect(page.getByTestId(`fabric-routing-blocker-${projectId}`)).toHaveCount(0);
+  await expect(page.getByTestId(`fabric-generate-parts-${projectId}`)).toBeEnabled();
   await expect(page.getByRole('button', { name: /enviar a producción/i })).toHaveCount(0);
-  // A direct client cannot bypass the disabled UI with claimed no-CNC routes.
+  // A direct client still cannot bypass the server with claimed routes.
   for (let retry = 0; retry < 2; retry++) {
     const result = await fetch(`${apiBase}/projects/${projectId}/part-executions`, {
       method: 'PUT', headers,
@@ -200,14 +203,60 @@ async function assertRoutingBlocked(page: Page, apiBase: string, token: string, 
       }),
     });
     expect(result.status).toBe(409);
-    expect(await result.text()).toContain('evidencia congelada de rutas y maquinados');
+    expect(await result.text()).toContain('se derivan de la liberación congelada');
   }
+  // Golden path: exact PartExecutions derived exclusively from the frozen
+  // snapshot + routing program (empty request body), stamped with the exact
+  // release id and per-FurnitureInstance identity. Physical PIECES come from
+  // frozen board parts — a hardware-only frozen BOM honestly derives units
+  // without pieces.
+  const generation = await fetch(`${apiBase}/projects/${projectId}/part-executions`, {
+    method: 'PUT', headers,
+    body: JSON.stringify({}),
+  });
+  expect(generation.status).toBe(200);
+  const generated = (await generation.json()) as {
+    part_instances: Array<{ id: string; production_revision: string; required_operations: Array<{ type: string; status: string }> }>;
+    module_units: Array<{ id: string; production_revision: string }>;
+  };
+  const planning = await (await fetch(`${apiBase}/projects/${projectId}/materials`, { headers })).json();
+  const hasBoards = (planning.planning?.requirements?.lines ?? []).some(
+    (line: { kind: string }) => line.kind === 'tableros',
+  );
+  expect(generated.module_units.length).toBeGreaterThan(0);
+  if (hasBoards) {
+    expect(generated.part_instances.length).toBeGreaterThan(0);
+  } else {
+    expect(generated.part_instances).toEqual([]);
+  }
+  for (const part of generated.part_instances) {
+    expect(part.production_revision).toBe(releaseId);
+    expect(part.id.startsWith(`${releaseId}:`)).toBe(true);
+    expect(part.required_operations[0].type).toBe('cut');
+    expect(part.required_operations.every((op) => op.status === 'queued')).toBe(true);
+  }
+  for (const unit of generated.module_units) {
+    expect(unit.production_revision).toBe(releaseId);
+  }
+  // Retry is idempotent: the same derived content, no duplicate artifacts.
+  const retry = await fetch(`${apiBase}/projects/${projectId}/part-executions`, {
+    method: 'PUT', headers,
+    body: JSON.stringify({}),
+  });
+  expect(retry.status).toBe(200);
+  const retried = (await retry.json()) as typeof generated;
+  expect(retried.part_instances.length).toBe(generated.part_instances.length);
+  expect(retried.module_units.length).toBe(generated.module_units.length);
+  // Readback: executions persisted, readiness honest (no routing blocker),
+  // projection exposes frozen_routing, legacy blob stays null.
   const executions = await (await fetch(`${apiBase}/projects/${projectId}/part-executions`, { headers })).json();
-  expect(executions.part_instances).toEqual([]);
-  expect(executions.module_units).toEqual([]);
+  expect(executions.part_instances.length).toBe(generated.part_instances.length);
+  expect(executions.module_units.length).toBe(generated.module_units.length);
+  expect(JSON.stringify(executions.assembly_readiness)).not.toContain('rutas y maquinados');
   const detail = await (await fetch(`${apiBase}/projects/${projectId}`, { headers })).json();
   expect(detail.production_release ?? null).toBeNull();
   expect(detail.resolved_production_release.release_id).toBe(releaseId);
+  expect(detail.resolved_production_release.frozen_routing).toBe(true);
 }
 
 test.describe.serial('Reconciliation, approval and exact ProductionRelease (#502 / WEB-DT-3) Browser E2E', () => {
@@ -266,7 +315,7 @@ async function publishRevisionWithItemIds(options: {
 }
 
 
-  test('quote-first path: Q1 → Q2/R2 → P1 → warehouse, physical production blocked without frozen routing', async ({
+  test('quote-first path: Q1 → Q2/R2 → P1 → warehouse → frozen routing → exact part executions', async ({
     page,
   }) => {
     test.setTimeout(180_000);
@@ -634,7 +683,7 @@ async function publishRevisionWithItemIds(options: {
     await page.getByTestId(`purch-plan-release-${seeded.projectId}`).click();
     expect((await releaseMaterials).postDataJSON().production_release_id).toBe(releasedP1.id);
     await expect(page.getByTestId(`purch-release-${seeded.projectId}`)).toHaveCount(0);
-    await assertRoutingBlocked(page, apiBase, lifecycleOwner.token, seeded.projectId, releasedP1.id, 2);
+    await assertFrozenRoutingExecution(page, apiBase, lifecycleOwner.token, seeded.projectId, releasedP1.id, 2);
   });
 
   test('failure rollback: release before approval is rejected server-side, no release row, no false success', async ({
@@ -691,7 +740,7 @@ async function publishRevisionWithItemIds(options: {
   // blockage before physical production — while the legacy
   // OC-022 blob stays null the entire time (no second liberation).
   // ------------------------------------------------------------------
-  test('OPS-DT-1 (#577): frozen board demand reaches warehouse; missing routing blocks physical production', async ({
+  test('OPS-DT-1 (#577): frozen demand reaches warehouse; frozen routing authorizes exact part executions', async ({
     page,
   }) => {
     test.setTimeout(180_000);
@@ -1061,7 +1110,7 @@ async function publishRevisionWithItemIds(options: {
 
     // Queue entry preserves P1, but cannot authorize physical manufacture.
     // The old client-derived route expectation was not frozen-content proof.
-    await assertRoutingBlocked(page, apiBase, owner.token, OPS_PROJECT_ID, release.id, 1);
+    await assertFrozenRoutingExecution(page, apiBase, owner.token, OPS_PROJECT_ID, release.id, 1);
   });
 
   test('tenant isolation: Org B never sees Org A reconciliation data', async ({ page }) => {

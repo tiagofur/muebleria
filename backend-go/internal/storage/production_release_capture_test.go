@@ -391,7 +391,9 @@ func assertExecutionRoutingBlockedHTTP(t *testing.T, fx *releaseFixture, handler
 	}
 	beforeState := persisted()
 	before := read()
-	// Client geometry, identity and claimed routes never establish authority.
+	// Schema-v2 frozen routing authorizes ONLY server-derived canonical
+	// executions (#577): client geometry, identity and claimed routes never
+	// establish authority.
 	for _, identity := range []struct{ project, release, item string }{
 		{fx.projectID, frozen.Release.ID, fx.fiA},
 		{fiProjectAOnly, frozen.Release.ID, fx.fiA},
@@ -404,22 +406,23 @@ func assertExecutionRoutingBlockedHTTP(t *testing.T, fx *releaseFixture, handler
 			identity.project, identity.item, identity.release, identity.project, identity.item, identity.release)
 		for retry := 0; retry < 2; retry++ {
 			rr := request(http.MethodPut, path+"/part-executions", token, body)
-			if rr.Code != 409 || !strings.Contains(rr.Body.String(), "evidencia congelada de rutas y maquinados") {
+			if rr.Code != 409 || !strings.Contains(rr.Body.String(), "se derivan de la liberación congelada") {
 				t.Fatalf("forged execution=%d %s", rr.Code, rr.Body.String())
 			}
 		}
 	}
+	// Authorized commands still cannot act on forged identities: no physical
+	// state is minted for parts/units outside the frozen snapshot.
 	for _, command := range []struct{ suffix, body string }{
 		{"/parts/forged-part/advance", `{"advance":true}`},
 		{"/parts/forged-part/rework", `{"action":"rework","reason":"must not bypass"}`},
 		{"/parts/forged-part/rework", `{"action":"refabricate","reason":"must not bypass"}`},
 		{"/units/forged-unit/advance", `{"advance":true}`},
 		{"/units/forged-unit/assembly-override", `{"reason":"must not bypass"}`},
-		{"/quality/rework", `{"action":"rework","reason":"must not bypass"}`},
 	} {
 		rr := request(http.MethodPost, path+command.suffix, token, command.body)
-		if rr.Code != 409 || !strings.Contains(rr.Body.String(), "evidencia congelada de rutas y maquinados") {
-			t.Fatalf("station %s=%d %s", command.suffix, rr.Code, rr.Body.String())
+		if rr.Code != 404 && rr.Code != 409 {
+			t.Fatalf("station %s must fail on forged identity, got %d %s", command.suffix, rr.Code, rr.Body.String())
 		}
 	}
 	// The generic project aggregate cannot mint executions either: a full
@@ -489,4 +492,58 @@ func assertExecutionRoutingBlockedHTTP(t *testing.T, fx *releaseFixture, handler
 			t.Fatalf("foreign %s=%d %s", method, rr.Code, rr.Body.String())
 		}
 	}
+
+	// Historical schema-v1 snapshot (frozen BOM demand, no routing program):
+	// the #604 blanket blocker returns for EVERY physical command — missing
+	// machining evidence is never a no-CNC verdict. The v2 payload is
+	// restored afterwards so the caller's immutability comparisons hold.
+	var originalPayload string
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT payload::text FROM production_release_manufacturing_snapshots WHERE release_id=$1`, frozen.Release.ID).Scan(&originalPayload); err != nil {
+		t.Fatal(err)
+	}
+	multiOrgExec(t, fx.admin, `ALTER TABLE production_release_manufacturing_snapshots DISABLE TRIGGER protect_release_manufacturing_snapshots_immutable`)
+	restoreV2 := func() {
+		if _, err := fx.admin.Exec(context.Background(),
+			`UPDATE production_release_manufacturing_snapshots SET payload=$1, schema_version=2 WHERE release_id=$2`,
+			originalPayload, frozen.Release.ID); err != nil {
+			t.Fatalf("restore v2 snapshot: %v", err)
+		}
+		multiOrgExec(t, fx.admin, `ALTER TABLE production_release_manufacturing_snapshots ENABLE TRIGGER protect_release_manufacturing_snapshots_immutable`)
+	}
+	t.Cleanup(restoreV2)
+	if _, err := fx.admin.Exec(context.Background(), `
+		UPDATE production_release_manufacturing_snapshots
+		SET schema_version = 1,
+		    payload = (payload - 'routing') || '{"schemaVersion":1}'::jsonb
+		WHERE release_id = $1`, frozen.Release.ID); err != nil {
+		t.Fatalf("simulate historical v1 snapshot: %v", err)
+	}
+	// v1 + empty body: the canonical derivation path reaches the guard and
+	// fails closed on the missing frozen routing evidence.
+	for retry := 0; retry < 2; retry++ {
+		rr := request(http.MethodPut, path+"/part-executions", token, `{}`)
+		if rr.Code != 409 || !strings.Contains(rr.Body.String(), "evidencia congelada de rutas y maquinados") {
+			t.Fatalf("v1 canonical derivation=%d %s", rr.Code, rr.Body.String())
+		}
+	}
+	for _, command := range []struct{ suffix, body string }{
+		{"/parts/forged-part/advance", `{"advance":true}`},
+		{"/parts/forged-part/rework", `{"action":"rework","reason":"must not bypass"}`},
+		{"/units/forged-unit/advance", `{"advance":true}`},
+		{"/units/forged-unit/assembly-override", `{"reason":"must not bypass"}`},
+		{"/quality/rework", `{"action":"rework","reason":"must not bypass"}`},
+	} {
+		rr := request(http.MethodPost, path+command.suffix, token, command.body)
+		if rr.Code != 409 || !strings.Contains(rr.Body.String(), "evidencia congelada de rutas y maquinados") {
+			t.Fatalf("v1 station %s=%d %s", command.suffix, rr.Code, rr.Body.String())
+		}
+	}
+	if after := read(); after != before {
+		t.Fatalf("v1 rejected commands changed executions: %s", after)
+	}
+	if persisted() != beforeState {
+		t.Fatal("v1 rejected commands changed physical state or emitted business events")
+	}
+	restoreV2()
 }

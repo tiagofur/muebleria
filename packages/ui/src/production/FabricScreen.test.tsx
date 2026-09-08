@@ -65,6 +65,26 @@ describe('FabricScreen — Producción (manufacturing stations)', () => {
     expect(advance).not.toHaveBeenCalled();
   });
 
+  it('enables generation when the canonical release froze routing evidence (#577)', () => {
+    const generate = vi.fn();
+    const released = {
+      ...makeProject('canonical', [makeItem('a')]),
+      resolvedProductionRelease: {
+        source: 'canonical' as const,
+        releaseId: 'P1',
+        releaseNumber: 1,
+        designRevisionNumber: 2,
+        frozenRouting: true,
+      },
+    };
+    render(<FabricScreen projects={[released]} assignedSectors={['cutting']} canAdvance onAdvance={() => undefined} onGeneratePartExecutions={generate} />);
+    const button = screen.getByTestId('fabric-generate-parts-canonical') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(screen.queryByTestId('fabric-routing-blocker-canonical')).toBeNull();
+    fireEvent.click(button);
+    expect(generate).toHaveBeenCalledWith('canonical');
+  });
+
   it('uses the workflow underline tab contract with linked panels', () => {
     render(
       <FabricScreen projects={projects} assignedSectors={['cutting', 'edge_banding']} canAdvance onAdvance={() => undefined} />,

@@ -219,6 +219,17 @@ type Store interface {
 		projectID string,
 		mutate func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error),
 	) (*domain.PartExecutionsMutation, error)
+	// #577 canonical execution generation: derives parts/units exclusively
+	// from the exact frozen snapshot + schema-v2 routing under the project
+	// lock; fail-closed when the frozen routing evidence is missing.
+	GenerateCanonicalPartExecutions(
+		ctx context.Context,
+		projectID string,
+		force bool,
+	) ([]domain.PartInstance, []domain.ModuleUnitExecution, error)
+	// #577 read-side routing evidence probe: whether the exact release
+	// carries a valid frozen routing program (never authorizes writes).
+	HasFrozenReleaseRouting(ctx context.Context, projectID, releaseID string) bool
 	// Installation job (OC-070..074): locked read-modify-write of the
 	// installation JSONB (visits, field issues, punch, closeout) with the
 	// audit lifecycle events appended in the same transaction.

@@ -174,10 +174,16 @@ func (s *Server) HandleProjectPartExecutions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	readiness := make([]domain.AssemblyReadiness, 0, len(project.ModuleUnits))
+	// #577: the routing blocker surfaces only when the exact canonical release
+	// carries no valid frozen routing evidence (schema v1). A schema-v2
+	// release froze the neutral routing program, so readiness is the honest
+	// per-unit computation — never a blanket blocker.
+	routingBlocked := project.ResolvedProductionRelease != nil &&
+		project.ResolvedProductionRelease.Source == domain.ProductionReleaseAuthorityCanonical &&
+		!s.Store.HasFrozenReleaseRouting(r.Context(), projectID, project.ResolvedProductionRelease.ReleaseID)
 	for _, u := range project.ModuleUnits {
 		check := domain.CheckAssemblyReadiness(u, project.PartInstances, released)
-		if project.ResolvedProductionRelease != nil &&
-			project.ResolvedProductionRelease.Source == domain.ProductionReleaseAuthorityCanonical {
+		if routingBlocked {
 			check.IsReady = false
 			check.CanStartWithOverride = false
 			check.Blockers = append(check.Blockers, domain.CanonicalPartExecutionRoutingBlocker)
@@ -755,12 +761,18 @@ type generatePartExecutionsRequest struct {
 	Force bool `json:"force,omitempty"`
 }
 
-// HandleGeneratePartExecutions handles PUT /api/projects/{id}/part-executions —
-// persists client-derived instances for released legacy-only projects.
-// Canonical execution is blocked by locked storage until frozen routing exists.
-// Legacy server-side validation: every line/item exists, one unit per unit of
-// quantity, revision matches the released one, and every route starts with a
-// cut. Idempotent for untouched executions; replacing progress requires
+// HandleGeneratePartExecutions handles PUT /api/projects/{id}/part-executions.
+//
+// Canonical releases (#577): the request body must be EMPTY — the server
+// derives the physical executions exclusively from the exact frozen snapshot
+// + schema-v2 routing program under the project lock (client payloads are
+// never authority); a schema-v1 release keeps failing closed with the frozen
+// routing blocker.
+//
+// Legacy-only projects: persists client-derived instances with server-side
+// validation — every line/item exists, one unit per unit of quantity,
+// revision matches the released one, and every route starts with a cut.
+// Idempotent for untouched executions; replacing progress requires
 // force + supervisor and is audited with floor events.
 func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
@@ -775,16 +787,37 @@ func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Req
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}
-	if len(body.PartInstances) == 0 || len(body.ModuleUnits) == 0 {
-		respondWithError(w, http.StatusBadRequest, "part_instances y module_units son requeridos")
-		return
-	}
 
 	project, err := s.Store.GetProjectByID(r.Context(), projectID)
 	if err != nil || project == nil {
 		respondWithError(w, http.StatusNotFound, "obra no encontrada")
 		return
 	}
+
+	if project.ResolvedProductionRelease != nil &&
+		project.ResolvedProductionRelease.Source == domain.ProductionReleaseAuthorityCanonical {
+		if len(body.PartInstances) > 0 || len(body.ModuleUnits) > 0 {
+			respondWithError(w, http.StatusConflict, "las ejecuciones canónicas se derivan de la liberación congelada; no se aceptan piezas del cliente")
+			return
+		}
+		parts, units, gErr := s.Store.GenerateCanonicalPartExecutions(r.Context(), projectID, body.Force)
+		if gErr != nil {
+			respondWithMutationError(w, gErr)
+			return
+		}
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"part_instances": parts,
+			"module_units":   units,
+			"forced":         body.Force,
+		})
+		return
+	}
+
+	if len(body.PartInstances) == 0 || len(body.ModuleUnits) == 0 {
+		respondWithError(w, http.StatusBadRequest, "part_instances y module_units son requeridos")
+		return
+	}
+
 	released, rErr := s.releasedRevisionFor(r, project)
 	if rErr != nil {
 		respondWithInternalError(w, rErr, "resolver la revisión liberada")

@@ -237,9 +237,15 @@ type stubStore struct {
 	itemQuantities    map[string]int
 	mutateFloorEvents []domain.FloorStatusEvent
 	mutateErr         error
-	floorEventWrites  []domain.FloorStatusEvent
-	floorEventsList   []domain.FloorStatusEvent
-	userSectorsList   []domain.UserSector
+	// #577 canonical execution generation stubs.
+	canonicalExecParts    []domain.PartInstance
+	canonicalExecUnits    []domain.ModuleUnitExecution
+	canonicalExecErr      error
+	canonicalExecCalls    int
+	canonicalRoutingReady bool
+	floorEventWrites      []domain.FloorStatusEvent
+	floorEventsList       []domain.FloorStatusEvent
+	userSectorsList       []domain.UserSector
 	// Installation job (OC-070..074): in-memory state + audit write log.
 	installationJob           *domain.InstallationJob
 	canonicalRequirements     []domain.MaterialRequirementLine
@@ -838,6 +844,24 @@ func (s *stubStore) MutateProjectPartExecutions(
 	s.moduleUnits = mutation.Units
 	s.mutateFloorEvents = append(s.mutateFloorEvents, mutation.FloorEvents...)
 	return mutation, nil
+}
+
+func (s *stubStore) GenerateCanonicalPartExecutions(
+	_ context.Context,
+	_ string,
+	_ bool,
+) ([]domain.PartInstance, []domain.ModuleUnitExecution, error) {
+	s.canonicalExecCalls++
+	if s.canonicalExecErr != nil {
+		return nil, nil, s.canonicalExecErr
+	}
+	s.partInstances = append([]domain.PartInstance(nil), s.canonicalExecParts...)
+	s.moduleUnits = append([]domain.ModuleUnitExecution(nil), s.canonicalExecUnits...)
+	return s.canonicalExecParts, s.canonicalExecUnits, nil
+}
+
+func (s *stubStore) HasFrozenReleaseRouting(_ context.Context, _, _ string) bool {
+	return s.canonicalRoutingReady
 }
 
 func (s *stubStore) MutateProjectInstallation(

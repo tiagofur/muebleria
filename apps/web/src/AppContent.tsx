@@ -1827,20 +1827,55 @@ export function AppContent({
       };
       const generate = (derivationProject: Project, revision: string): void => {
         if (!isCurrent()) return;
-        const derived = deriveProjectPartExecutions(derivationProject, catalog, {
-          productionRevision: revision,
-        });
-        if (!derived.ok) {
-          toast({
-            type: 'error',
-            message: derived.error.projectItemId
-                ? `No se pudieron generar las piezas físicas (línea ${derived.error.projectItemId}): ${derived.error.message}`
-                : derived.error.message,
-          });
-          return;
-        }
-        const { parts, units } = derived.executions;
         if (repo.generatePartExecutions) {
+          if (authority.source === 'canonical') {
+            // #577: canonical executions are derived server-side from the
+            // exact frozen snapshot + routing program. The client sends an
+            // EMPTY payload and applies the authoritative readback — never a
+            // local catalog reconstruction.
+            void repo
+              .generatePartExecutions(projectId, { partInstances: [], moduleUnits: [] })
+              .then((result) => {
+                if (!isCurrent()) return;
+                if (result.canonicalParts && result.canonicalUnits) {
+                  projectActions.setPartExecutions(
+                    projectId,
+                    [...result.canonicalParts],
+                    [...result.canonicalUnits],
+                  );
+                } else {
+                  toast({
+                    type: 'error',
+                    message:
+                      'La liberación no devolvió la ejecución física congelada; recargá la obra e intentá de nuevo',
+                  });
+                }
+              })
+              .catch((err) => {
+                if (!isCurrent()) return;
+                toast({
+                  type: 'error',
+                  message:
+                    err instanceof Error && err.message
+                      ? err.message
+                      : 'No se pudo generar la ejecución física',
+                });
+              });
+            return;
+          }
+          const derived = deriveProjectPartExecutions(derivationProject, catalog, {
+            productionRevision: revision,
+          });
+          if (!derived.ok) {
+            toast({
+              type: 'error',
+              message: derived.error.projectItemId
+                  ? `No se pudieron generar las piezas físicas (línea ${derived.error.projectItemId}): ${derived.error.message}`
+                  : derived.error.message,
+            });
+            return;
+          }
+          const { parts, units } = derived.executions;
           void repo
             .generatePartExecutions(projectId, { partInstances: parts, moduleUnits: units })
             .then(() => {
@@ -1857,9 +1892,24 @@ export function AppContent({
                     : 'No se pudo generar la ejecución física',
               });
             });
-        } else {
-          projectActions.setPartExecutions(projectId, parts, units);
+          return;
         }
+        // Local/offline workspace: legacy derivation only (canonical
+        // generation requires the server's frozen snapshot authority).
+        const derived = deriveProjectPartExecutions(derivationProject, catalog, {
+          productionRevision: revision,
+        });
+        if (!derived.ok) {
+          toast({
+            type: 'error',
+            message: derived.error.projectItemId
+                ? `No se pudieron generar las piezas físicas (línea ${derived.error.projectItemId}): ${derived.error.message}`
+                : derived.error.message,
+          });
+          return;
+        }
+        const { parts, units } = derived.executions;
+        projectActions.setPartExecutions(projectId, parts, units);
       };
       // The domain adapter rejects canonical inputs without frozen routing
       // evidence. Never reconstruct P1 through current catalog definitions.
