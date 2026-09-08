@@ -1,3 +1,10 @@
+# PR #613 / #499 — R3 Actions correction
+
+- Approval: user authorized the minimum correction required to finish #499 correctly; branch `codex/499-plugin-receive-bind`, exact base/head `0897b17a199a4ed013c11c0de59354f5a73b142a`.
+- Started: 2026-09-08 America/Bahia_Banderas. Scope: repair the confirmed-terminal close race exposed by Actions in `SketchUpPairingModal`; no Slice 3 redesign, no issue closure or merge.
+- Plan: (1) reproduce the focused UI failure, (2) make close decide from the latest authoritative terminal status, (3) run focused UI tests and affected gates, then push/read back.
+- Result: the status poll now records the server terminal status before React schedules its render, so Escape/overlay close cannot cancel a grant already confirmed by the plugin. Focused modal test repeated 5/5; full `@granete/ui` suite 158 files / 1,642 tests and workspace typecheck passed. `git diff --check` passed.
+
 ## #577 — final golden-path closure (DELIVERED as evidence PR; 2026-09-08)
 
 - Admitted per #573 authorization "#577 final golden-path closure child (executor GLM)" after observing PR #606 MERGED. Child `577/final-golden-path-closure`, branch `codex/577-final-golden-path-closure`, exact base `a64b2d133f3f305fee04b316c8675df5d11dc04d`. Single-writer: GLM (attempt 1/2). No late tokens accepted from prior children.
