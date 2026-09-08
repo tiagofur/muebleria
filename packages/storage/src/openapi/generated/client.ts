@@ -12,6 +12,7 @@ import type {
   CreateInitialQuoteRevisionRequest,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  CreatePairingGrantRequest,
   CreateProductionReleaseRequest,
   Design,
   DesignArtifactGrant,
@@ -31,6 +32,7 @@ import type {
   DeviceTokenRequest,
   DeviceTokenResponse,
   EndSupportSessionResponse,
+  ExchangePairingGrantRequest,
   FactoryOrganization,
   FurnitureInstance,
   Invitation,
@@ -68,6 +70,9 @@ import type {
   OrganizationProvisioningResult,
   OrganizationReadiness,
   OrganizationRelationship,
+  PairingGrantCreated,
+  PairingGrantExchange,
+  PairingGrantStatus,
   PlatformOrganization,
   PlatformUser,
   PrepareDesignPublishRequest,
@@ -224,4 +229,8 @@ export abstract class GeneratedGraneteApiClient {
   authorizeDesignRevisionArtifact(token: string, designId: string, revisionId: string, kind: "model" | "manifest" | "preview", signal?: AbortSignal): Promise<DesignArtifactGrant> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}/artifacts/${encodeURIComponent(kind)}:authorize`, { schema: "DesignArtifactGrant", token, signal }); }
   listMachineOutputSelections(token: string, signal?: AbortSignal): Promise<MachineOutputSelectionsReadModel> { return this.request("GET", "/machine-output-selections", { schema: "MachineOutputSelectionsReadModel", token, signal }); }
   upsertMachineOutputSelection(token: string, operation: "cutting" | "machining", body: UpsertMachineOutputSelectionRequest, signal?: AbortSignal): Promise<MachineOutputSelectionRecord> { return this.request("PUT", `/machine-output-selections/${encodeURIComponent(operation)}`, { schema: "MachineOutputSelectionRecord", token, bodySchema: "UpsertMachineOutputSelectionRequest", body, signal }); }
+  createDesignPairingGrant(token: string, projectId: string, designId: string, body: CreatePairingGrantRequest, signal?: AbortSignal): Promise<PairingGrantCreated> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/pairing-grants`, { schema: "PairingGrantCreated", token, bodySchema: "CreatePairingGrantRequest", body, signal }); }
+  getDesignPairingGrant(token: string, projectId: string, designId: string, grantId: string, signal?: AbortSignal): Promise<PairingGrantStatus> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/pairing-grants/${encodeURIComponent(grantId)}`, { schema: "PairingGrantStatus", token, signal }); }
+  cancelDesignPairingGrant(token: string, projectId: string, designId: string, grantId: string, signal?: AbortSignal): Promise<PairingGrantStatus> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/pairing-grants/${encodeURIComponent(grantId)}:cancel`, { schema: "PairingGrantStatus", token, signal }); }
+  exchangeDesignPairingGrant(token: string, body: ExchangePairingGrantRequest, signal?: AbortSignal): Promise<PairingGrantExchange> { return this.request("POST", "/design-pairing-grants:exchange", { schema: "PairingGrantExchange", token, bodySchema: "ExchangePairingGrantRequest", body, signal }); }
 }

@@ -75,6 +75,15 @@ type stubStore struct {
 	modelBindingContextErr     error
 	getDesignWorkingCopyErr    error
 	updateDesignWorkingCopyCmd *storage.UpdateDesignWorkingCopyCommand
+	// Web-to-SketchUp pairing grants (#499 / DT-SU-1)
+	createPairingGrantCmd      *storage.CreateDesignPairingGrantCommand
+	createPairingGrantErr      error
+	exchangePairingGrantCmd    *storage.ExchangeDesignPairingGrantCommand
+	exchangePairingGrantErr    error
+	pairingGrant               *domain.DesignPairingGrant
+	pairingGrantErr            error
+	cancelPairingGrantCmd      *storage.CancelDesignPairingGrantCommand
+	cancelPairingGrantErr      error
 	updateDesignWorkingCopyErr error
 	resetDesignWorkingCopyCmd  *storage.ResetDesignWorkingCopyCommand
 	resetDesignWorkingCopyErr  error

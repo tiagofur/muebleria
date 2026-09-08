@@ -608,6 +608,11 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// it creates no business records and mutates nothing; binding itself
 	// stays client-side model metadata until #392/#499 publish flows.
 	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/binding:validate$`),
+	// #499 / DT-SU-1: exchange a one-time pairing code for the exact
+	// authorized Project/Design context. Consumes the grant's own row only
+	// (one-time, TTL'd, hash-only); the web-session surface can never
+	// exchange, and the code never rides any URL.
+	regexp.MustCompile(`^/api/design-pairing-grants:exchange$`),
 	// #390 / DT-6: catalog design-first creation of a project furniture
 	// identity. Allocates authoritative identity (origin='design') for the bound
 	// project before SketchUp places the physical component.

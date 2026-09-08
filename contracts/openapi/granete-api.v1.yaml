@@ -3696,6 +3696,144 @@
           }
         ]
       }
+    },
+    "/projects/{projectId}/designs/{designId}/pairing-grants": {
+      "post": {
+        "operationId": "createDesignPairingGrant",
+        "summary": "Create a short-lived one-time pairing grant for the exact Project/Design (#499)",
+        "description": "Issues an opaque one-time pairing code bound to the exact organization, Project, Design, pinned base DesignRevision and requested action. The code is returned exactly once in this response and is stored server-side only as a SHA-256 hash; no URL may ever carry it. Exchange happens through the SketchUp extension credential boundary, never a web session. The grant is consumed by a single exchange, expires quickly and can be cancelled by its creator. Missing or cross-Project/Design objects answer a uniform 404.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePairingGrantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pairing grant created; the code is displayed to the creating user only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingGrantCreated"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/designs/{designId}/pairing-grants/{grantId}": {
+      "get": {
+        "operationId": "getDesignPairingGrant",
+        "summary": "Read pairing grant status for initiated-vs-confirmed handoff feedback (#499)",
+        "description": "Read-only status of one exact pairing grant. Lets the Web surface distinguish initiated (pending), confirmed (exchanged) and cancelled/expired without exposing the code or any device credential. Foreign or cross-Project/Design objects answer a uniform 404.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/GrantId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current grant status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingGrantStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/designs/{designId}/pairing-grants/{grantId}:cancel": {
+      "post": {
+        "operationId": "cancelDesignPairingGrant",
+        "summary": "Cancel a pending pairing grant (#499)",
+        "description": "Revokes a still-pending grant created by the same user; a cancelled (or already consumed/expired) grant can no longer be exchanged. Idempotency-free explicit command: cancelling twice answers 409. Foreign or cross-Project/Design objects answer a uniform 404.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/GrantId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Grant cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingGrantStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/design-pairing-grants:exchange": {
+      "post": {
+        "operationId": "exchangeDesignPairingGrant",
+        "summary": "Exchange a one-time pairing code for the exact authorized Project/Design context (#499)",
+        "description": "SketchUp-extension-credential endpoint: consumes a pending, unexpired pairing grant by its opaque code and answers the exact authorized organization/Project/Design truth plus the authoritative working-copy base and the caller's own capabilities, reusing the #388 model-binding validation verbatim. The exchange is one-time: a replayed code loses atomically and answers 409. A code from another organization is indistinguishable from an unknown code (uniform 404). The code never appears in logs or audit details.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangePairingGrantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Grant consumed; exact authorized context and capabilities for the exchanging device",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingGrantExchange"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3842,6 +3980,16 @@
           ]
         },
         "description": "Manufacturing operation the selection governs."
+      },
+      "GrantId": {
+        "name": "grantId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "description": "Pairing grant identifier."
       }
     },
     "headers": {
@@ -9354,6 +9502,197 @@
             "type": "string"
           }
         }
+      },
+      "CreatePairingGrantRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/PairingAction"
+          },
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "PairingGrantCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "action",
+          "status",
+          "code",
+          "expires_at",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "$ref": "#/components/schemas/PairingAction"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PairingGrantStatusKind"
+          },
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "description": "Opaque one-time pairing code. Returned exactly once by this response; the server stores only its SHA-256 hash and no log or audit record ever carries it."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PairingGrantStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "action",
+          "status",
+          "expires_at",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "$ref": "#/components/schemas/PairingAction"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PairingGrantStatusKind"
+          },
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "exchanged_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ExchangePairingGrantRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Opaque one-time pairing code as displayed by the Web surface. Normalization mirrors the device enrollment code (case and separator insensitive)."
+          }
+        }
+      },
+      "PairingGrantExchange": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "grant_id",
+          "action",
+          "pinned_base_revision_id",
+          "state",
+          "schema_version",
+          "organization",
+          "project",
+          "design",
+          "working_copy",
+          "capabilities"
+        ],
+        "properties": {
+          "grant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "$ref": "#/components/schemas/PairingAction"
+          },
+          "pinned_base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ModelBindingState"
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "organization": {
+            "$ref": "#/components/schemas/ModelBindingOrganizationSummary"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ModelBindingProjectSummary"
+          },
+          "design": {
+            "$ref": "#/components/schemas/ModelBindingDesignSummary"
+          },
+          "working_copy": {
+            "$ref": "#/components/schemas/ModelBindingWorkingCopySummary"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/ModelBindingCapabilities"
+          }
+        }
+      },
+      "PairingAction": {
+        "type": "string",
+        "enum": [
+          "open_design"
+        ],
+        "description": "Requested handoff action (#499). Only open_design exists today; the enum is explicit so future actions cannot silently widen old grants."
+      },
+      "PairingGrantStatusKind": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "exchanged",
+          "cancelled",
+          "expired"
+        ],
+        "description": "Lifecycle of a pairing grant. expired is derived at read time (pending past its expiry, mirroring the device-enrollment poll); it is never stored."
       }
     }
   }

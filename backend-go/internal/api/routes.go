@@ -114,6 +114,24 @@ func designRevisionCommandRouter(commands map[string]http.Handler) http.Handler 
 	})
 }
 
+func designPairingGrantCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("grantCommand")
+		grantID, command, ok := strings.Cut(segment, ":")
+		if !ok || grantID == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("grantId", grantID)
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func RegisterRoutes(server *Server) http.Handler {
 	mux := http.NewServeMux()
 
@@ -419,6 +437,19 @@ func RegisterRoutes(server *Server) http.Handler {
 	// #388 / DT-4: stateless authoritative validation of a SketchUp model
 	// binding candidate. no-store: the answer is session- and revision-scoped.
 	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/binding:validate", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectDesignBindingValidate))))
+
+	// #499 / DT-SU-1: one-time Web-to-SketchUp pairing grants. Create,
+	// status and cancel are web-session commands on the exact Project/Design
+	// (no-store: codes and statuses are short-lived security state). The
+	// exchange is the extension-credential boundary: rate-limited like the
+	// auth surface because it consumes an opaque code, and DENIED to web
+	// sessions inside the handler.
+	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/pairing-grants", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleDesignPairingGrantCreate))))
+	mux.Handle("GET /api/projects/{projectId}/designs/{designId}/pairing-grants/{grantId}", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleDesignPairingGrantStatus))))
+	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/pairing-grants/{grantCommand...}", noStoreMiddleware(authMW(designPairingGrantCommandRouter(map[string]http.Handler{
+		"cancel": http.HandlerFunc(server.HandleDesignPairingGrantCancel),
+	}))))
+	mux.Handle("POST /api/design-pairing-grants:exchange", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDesignPairingGrantExchange))))
 
 	// #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance.
 	// Pure deterministic comparison returning structured differences and summary counts.
