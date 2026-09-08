@@ -508,8 +508,19 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 	if err != nil {
 		return nil, err
 	}
+	releaseIDs := make([]string, 0, len(latestReleases))
+	for _, release := range latestReleases {
+		releaseIDs = append(releaseIDs, release.ID)
+	}
+	frozenRouting, err := s.FrozenRoutingByRelease(ctx, releaseIDs)
+	if err != nil {
+		return nil, err
+	}
 	for i := range list {
 		list[i].ResolvedProductionRelease = resolveReleaseProjection(latestReleases[list[i].ID], list[i].ProductionRelease)
+		if canonical := latestReleases[list[i].ID]; canonical != nil {
+			list[i].ResolvedProductionRelease.FrozenRouting = frozenRouting[canonical.ID]
+		}
 	}
 	for i := range list {
 		// Tenant requests share one transaction and one pgx connection, so
@@ -967,6 +978,13 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		return nil, err
 	} else {
 		p.ResolvedProductionRelease = resolveReleaseProjection(canonical, p.ProductionRelease)
+		if canonical != nil {
+			frozenRouting, err := s.FrozenRoutingByRelease(ctx, []string{canonical.ID})
+			if err != nil {
+				return nil, err
+			}
+			p.ResolvedProductionRelease.FrozenRouting = frozenRouting[canonical.ID]
+		}
 	}
 
 	// Cargar snapshot si existe

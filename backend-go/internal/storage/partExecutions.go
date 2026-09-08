@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
 /**
@@ -22,24 +24,11 @@ import (
 
 var ErrPartExecutionsNotFound = errors.New("project not found")
 
-// MutateProjectPartExecutions loads part_instances/module_units plus the
-// per-item legacy floor statuses with the project row locked, runs the
-// mutator (pure domain logic), and persists everything atomically: JSONB
-// payloads, derived legacy item statuses (OC-034 bridge) and audit floor
-// events in the same transaction.
-func (s *PostgresStore) MutateProjectPartExecutions(
-	ctx context.Context,
-	projectID string,
-	mutate func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error),
-) (*domain.PartExecutionsMutation, error) {
-	tx, err := s.beginTx(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error beginning part executions tx: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
+// loadPartExecutionsSnapshotTx loads part_instances/module_units plus the
+// per-item legacy floor statuses with the project row already locked.
+func (s *PostgresStore) loadPartExecutionsSnapshotTx(ctx context.Context, tx pgx.Tx, projectID string) (*domain.PartExecutionsSnapshot, error) {
 	var partsRaw, unitsRaw, qualityRaw []byte
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT part_instances, module_units, quality FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;
 	`, projectID, OrgFromCtx(ctx)).Scan(&partsRaw, &unitsRaw, &qualityRaw)
 	if err != nil {
@@ -83,6 +72,29 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating item floor statuses: %w", err)
 	}
+	return snap, nil
+}
+
+// MutateProjectPartExecutions loads part_instances/module_units plus the
+// per-item legacy floor statuses with the project row locked, runs the
+// mutator (pure domain logic), and persists everything atomically: JSONB
+// payloads, derived legacy item statuses (OC-034 bridge) and audit floor
+// events in the same transaction.
+func (s *PostgresStore) MutateProjectPartExecutions(
+	ctx context.Context,
+	projectID string,
+	mutate func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error),
+) (*domain.PartExecutionsMutation, error) {
+	tx, err := s.beginTx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error beginning part executions tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	snap, err := s.loadPartExecutionsSnapshotTx(ctx, tx, projectID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Canonical execution membership belongs to the released revision, not
 	// the editable quote or its current materialized links. Legacy projects
@@ -92,8 +104,10 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		return nil, fmt.Errorf("error resolving execution release: %w", err)
 	}
 	if authority != nil {
+		snap.ProductionRelease = authority
 		// Shared guard for generation, advance, rework and supervisor
-		// override: exact frozen P1/R2/fingerprint, then fail closed.
+		// override: exact frozen P1/R2/fingerprint, then the frozen routing
+		// evidence decides (schema v2 authorizes, v1 keeps failing closed).
 		if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {
 			return nil, err
 		}
@@ -137,4 +151,98 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		return nil, fmt.Errorf("error committing part executions tx: %w", err)
 	}
 	return mutation, nil
+}
+
+// GenerateCanonicalPartExecutions derives the physical executions of a
+// canonical release EXCLUSIVELY from its frozen snapshot: the frozen BOM parts
+// carry the physical truth and the frozen schema-v2 routing program the
+// required operations (#577). Server authority under the project row lock —
+// client payloads are never input. Fail-closed end to end: the exact frozen
+// P1/revision/fingerprint pair and the routing evidence are validated by the
+// shared guard before anything is derived or written; a schema-v1 release
+// (no frozen routing) keeps rejecting. Replacing executions that already
+// advanced requires the explicit supervisor force, same contract as legacy.
+func (s *PostgresStore) GenerateCanonicalPartExecutions(
+	ctx context.Context,
+	projectID string,
+	force bool,
+) ([]domain.PartInstance, []domain.ModuleUnitExecution, error) {
+	tx, err := s.beginTx(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error beginning part executions tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	snap, err := s.loadPartExecutionsSnapshotTx(ctx, tx, projectID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	authority, err := s.resolveProjectReleaseAuthorityTx(ctx, tx, projectID, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error resolving execution release: %w", err)
+	}
+	if authority == nil || authority.Source != domain.ProductionReleaseAuthorityCanonical {
+		return nil, nil, errors.New("BAD_REQUEST:la obra no tiene una liberación canónica; use la generación legacy")
+	}
+	if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {
+		return nil, nil, err
+	}
+
+	frozen, err := s.GetProductionReleaseManufacturingSnapshot(
+		context.WithValue(ctx, transactionContextKey{}, tx), projectID, authority.ReleaseID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if frozen.SchemaVersion < 2 || frozen.Routing == nil {
+		return nil, nil, ErrReleaseRoutingUnavailable
+	}
+	unitViews := make([]engine.ReleaseExecutionUnitView, 0, len(frozen.Units))
+	for _, unit := range frozen.Units {
+		unitViews = append(unitViews, engine.ReleaseExecutionUnitView{
+			FurnitureInstanceID: unit.Resolved.FurnitureInstanceID,
+			Parts:               unit.Resolved.BOM.BoardParts,
+		})
+	}
+	parts, units, err := engine.DeriveCanonicalPartExecutions(authority.ReleaseID, unitViews, frozen.Routing)
+	if err != nil {
+		return nil, nil, fmt.Errorf("CONFLICT:%s", domain.CanonicalPartExecutionRoutingBlocker)
+	}
+	for i := range parts {
+		parts[i].ProjectID = projectID
+	}
+	for i := range units {
+		units[i].ProjectID = projectID
+	}
+
+	hasProgress := false
+	for _, existing := range snap.Parts {
+		for _, op := range existing.RequiredOperations {
+			if op.Status == domain.PartOperationStatusCompleted || op.Status == domain.PartOperationStatusInProgress || op.Status == domain.PartOperationStatusRework {
+				hasProgress = true
+			}
+		}
+	}
+	for _, existing := range snap.Units {
+		if existing.Status != domain.ModuleUnitStatusAwaitingParts {
+			hasProgress = true
+		}
+	}
+	if hasProgress && !force {
+		return nil, nil, errors.New("CONFLICT:la obra ya tiene avance físico; regenerar requiere force=true (supervisión)")
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE projects
+		SET part_instances = $2, module_units = $3,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1 AND (organization_id = $4 OR sales_organization_id = $4 OR manufacturing_organization_id = $4);
+	`, projectID, jsonbSliceArg(parts), jsonbSliceArg(units), OrgFromCtx(ctx)); err != nil {
+		return nil, nil, fmt.Errorf("error persisting part executions: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, nil, fmt.Errorf("error committing part executions tx: %w", err)
+	}
+	return parts, units, nil
 }

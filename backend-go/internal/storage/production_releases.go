@@ -183,7 +183,7 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		return nil, err
 	}
 
-	if err := s.insertReleaseManufacturingSnapshot(txCtx, release, items, collection); err != nil {
+	if err := s.insertReleaseManufacturingSnapshot(txCtx, release, items, collection, catalog); err != nil {
 		return nil, err
 	}
 
@@ -196,6 +196,7 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		"release_number":            release.ReleaseNumber,
 		"manufacturing_fingerprint": release.ManufacturingFingerprint,
 		"preflight_status":          string(preflight.Status),
+		"snapshot_schema_version":   2,
 		"item_count":                len(items),
 	}
 	if quoteRevisionID != "" {

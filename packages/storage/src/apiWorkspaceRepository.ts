@@ -71,8 +71,10 @@ import {
   catalogFromApi,
   moduleUnitFromApi,
   moduleUnitToApi,
+  moduleUnitsFromApi,
   partInstanceFromApi,
   partInstanceToApi,
+  partInstancesFromApi,
   installationJobFromApi,
   installationJobToApi,
   materialPlanningFromApi,
@@ -1092,10 +1094,13 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   /**
-   * Generate/replace the physical executions of a project (#301). The BOM
-   * resolution lives in TS domain (derivePartInstancesForProject); the server
-   * validates lines/quantities/released revision and refuses to discard floor
-   * progress without an explicit supervisor force.
+   * Generate/replace the physical executions of a project (#301). Legacy
+   * projects send the TS-derived instances (the server validates
+   * lines/quantities/released revision). Canonical releases (#577) send EMPTY
+   * arrays: the server derives the executions exclusively from the frozen
+   * snapshot + schema-v2 routing program and returns them as the
+   * authoritative readback. Refuses to discard floor progress without an
+   * explicit supervisor force.
    */
   async generatePartExecutions(
     projectId: string,
@@ -1104,7 +1109,13 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       moduleUnits: readonly ModuleUnitExecution[];
       force?: boolean;
     },
-  ): Promise<{ partInstances: number; moduleUnits: number; forced: boolean }> {
+  ): Promise<{
+    partInstances: number;
+    moduleUnits: number;
+    forced: boolean;
+    canonicalParts?: readonly PartInstance[];
+    canonicalUnits?: readonly ModuleUnitExecution[];
+  }> {
     const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/part-executions`, {
       method: 'PUT',
       headers: this.getHeaders(),
@@ -1118,7 +1129,16 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       const text = await res.text().catch(() => '');
       throw new Error(`Generate part executions failed: ${res.status} ${text}`);
     }
-    return (await res.json()) as { partInstances: number; moduleUnits: number; forced: boolean };
+    const raw = (await res.json()) as Record<string, unknown>;
+    const canonicalParts = partInstancesFromApi(raw.part_instances);
+    const canonicalUnits = moduleUnitsFromApi(raw.module_units);
+    return {
+      partInstances: Array.isArray(canonicalParts) ? canonicalParts.length : 0,
+      moduleUnits: Array.isArray(canonicalUnits) ? canonicalUnits.length : 0,
+      forced: raw.forced === true,
+      canonicalParts: Array.isArray(canonicalParts) && canonicalParts.length > 0 ? canonicalParts : undefined,
+      canonicalUnits: Array.isArray(canonicalUnits) && canonicalUnits.length > 0 ? canonicalUnits : undefined,
+    };
   }
 
   // --- Installation job (OC-070..OC-074) ---

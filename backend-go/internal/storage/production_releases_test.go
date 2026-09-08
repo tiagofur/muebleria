@@ -902,10 +902,36 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 		t.Fatalf("job costing must resolve the SAME canonical authority (P1/F3), got %+v", costingSnap.ProductionRelease)
 	}
 
-	// Quality is a PHYSICAL execution consumer: with a canonical release and
-	// no frozen routing evidence even its snapshot mutation fails closed
-	// (#577) — the canonical authority itself stays observable through the
-	// planning/costing snapshots above and the read projections.
+	// Quality is a PHYSICAL execution consumer guarded by the frozen routing
+	// evidence (#577): a schema-v2 release froze the neutral routing program,
+	// so the mutation is authorized; the historical schema-v1 shape is proven
+	// fail-closed right below.
+	qualityRan := false
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.MutateProjectQuality(ctx, fx.projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
+			qualityRan = true
+			return &domain.QualityMutation{}, nil
+		})
+		return err
+	})
+	if err != nil || !qualityRan {
+		t.Fatalf("quality must run with frozen v2 routing evidence (err=%v)", err)
+	}
+
+	// Historical schema-v1 snapshot (BOM demand frozen, no routing program):
+	// every physical execution consumer keeps failing closed — missing
+	// machining evidence is never a no-CNC verdict.
+	multiOrgExec(t, fx.admin, `ALTER TABLE production_release_manufacturing_snapshots DISABLE TRIGGER protect_release_manufacturing_snapshots_immutable`)
+	t.Cleanup(func() {
+		multiOrgExec(t, fx.admin, `ALTER TABLE production_release_manufacturing_snapshots ENABLE TRIGGER protect_release_manufacturing_snapshots_immutable`)
+	})
+	if _, err := fx.admin.Exec(context.Background(), `
+		UPDATE production_release_manufacturing_snapshots
+		SET schema_version = 1,
+		    payload = (payload - 'routing') || '{"schemaVersion":1}'::jsonb
+		WHERE release_id = $1`, p1.Release.ID); err != nil {
+		t.Fatalf("simulate historical v1 snapshot: %v", err)
+	}
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.MutateProjectQuality(ctx, fx.projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
 			t.Fatal("no quality callback may run without frozen routing evidence")

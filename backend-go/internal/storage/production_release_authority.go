@@ -96,12 +96,14 @@ func (s *PostgresStore) resolveProjectReleaseAuthorityTx(ctx context.Context, tx
 // guardCanonicalExecutionRouting is the shared fail-closed guard for EVERY
 // command that can write physical execution state (part instances, module
 // units, station progress, quality gates) on a project with a canonical
-// release. It first validates the exact private frozen pair — P1 release,
+// release. It validates the exact private frozen pair — P1 release,
 // DesignRevision and manufacturing fingerprint — under the caller's project
-// row lock; schema v1 freezes BOM demand, not machining coverage, so the
-// command then fails closed: neither client routes nor a current catalog can
-// supply the missing immutable routing evidence. Legacy-only projects never
-// reach this guard.
+// row lock, then the frozen routing evidence itself: schema v1 freezes BOM
+// demand but no machining coverage, so it keeps failing closed (neither
+// client routes nor a current catalog can supply the missing immutable
+// evidence); schema v2 carries the machine-neutral routing program the reader
+// has already re-validated against the frozen units, which authorizes the
+// command. Legacy-only projects never reach this guard.
 func (s *PostgresStore) guardCanonicalExecutionRouting(ctx context.Context, tx pgx.Tx, projectID string, authority *domain.ResolvedProductionRelease) error {
 	frozen, err := s.GetProductionReleaseManufacturingSnapshot(
 		context.WithValue(ctx, transactionContextKey{}, tx), projectID, authority.ReleaseID)
@@ -112,7 +114,10 @@ func (s *PostgresStore) guardCanonicalExecutionRouting(ctx context.Context, tx p
 		frozen.Release.ManufacturingFingerprint != authority.ManufacturingFingerprint {
 		return ErrReleaseSnapshotUnavailable
 	}
-	return ErrReleaseRoutingUnavailable
+	if frozen.SchemaVersion < 2 || frozen.Routing == nil {
+		return ErrReleaseRoutingUnavailable
+	}
+	return nil
 }
 
 // getProjectProductionReleaseTx loads one EXACT canonical release of the
@@ -166,4 +171,50 @@ func (s *PostgresStore) LatestCanonicalReleasesByProject(ctx context.Context, pr
 		return nil, err
 	}
 	return out, nil
+}
+
+// HasFrozenReleaseRouting reports whether the exact release carries a valid
+// schema-v2 routing program (complete, owner-private read; mutation paths
+// revalidate everything under the project lock). Read-side only — this never
+// authorizes writes, it only decides whether the routing blocker surfaces.
+func (s *PostgresStore) HasFrozenReleaseRouting(ctx context.Context, projectID, releaseID string) bool {
+	if !isValidUUID(projectID) || !isValidUUID(releaseID) {
+		return false
+	}
+	snapshot, err := s.GetProductionReleaseManufacturingSnapshot(ctx, projectID, releaseID)
+	return err == nil && snapshot.SchemaVersion >= 2 && snapshot.Routing != nil
+}
+
+// FrozenRoutingByRelease loads which exact releases carry a schema-v2 frozen
+// routing program in ONE query (list read model batching, #577). Read-side
+// projection only.
+func (s *PostgresStore) FrozenRoutingByRelease(ctx context.Context, releaseIDs []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(releaseIDs))
+	valid := make([]string, 0, len(releaseIDs))
+	for _, id := range releaseIDs {
+		if isValidUUID(id) {
+			valid = append(valid, id)
+		}
+	}
+	if len(valid) == 0 {
+		return out, nil
+	}
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT release_id::text, schema_version >= 2
+		FROM production_release_manufacturing_snapshots
+		WHERE release_id = ANY($1) AND organization_id = $2
+	`, valid, OrgFromCtx(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var frozen bool
+		if err := rows.Scan(&id, &frozen); err != nil {
+			return nil, err
+		}
+		out[id] = frozen
+	}
+	return out, rows.Err()
 }

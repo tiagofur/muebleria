@@ -2126,6 +2126,7 @@ export function releaseAuthorityFromApi(raw: unknown): ProductionReleaseAuthorit
     designRevisionNumber: designRevisionNumber > 0 ? designRevisionNumber : undefined,
     quoteRevisionId: str(r.quote_revision_id ?? r.quoteRevisionId) || undefined,
     manufacturingFingerprint: str(r.manufacturing_fingerprint ?? r.manufacturingFingerprint) || undefined,
+    frozenRouting: r.frozen_routing === true || r.frozenRouting === true || undefined,
     status: str(r.status) || undefined,
     releasedBy: str(r.released_by ?? r.releasedBy) || undefined,
     releasedAt: str(r.released_at ?? r.releasedAt) || undefined,

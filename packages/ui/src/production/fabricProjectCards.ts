@@ -231,13 +231,18 @@ function buildCard(
   // physical generation when a release exists but no executions were
   // generated yet (no legacy "send to production" round-trip required).
   const releaseLabel = releaseAuthorityLabel(project);
+  const authority = releaseAuthorityOf(project);
   return {
     projectId: project.id,
     projectName: project.name,
     customerLabel: input.customerLabelFor?.(project.customerId) ?? '',
     releaseLabel,
-    executionBlocker: releaseAuthorityOf(project)?.source === 'canonical'
-      ? CANONICAL_PART_ROUTING_BLOCKER : undefined,
+    // #577: the routing blocker surfaces only when the canonical release
+    // carries no frozen routing evidence (schema v1). A schema-v2 release
+    // froze the neutral routing program, so generation is authorized.
+    executionBlocker:
+      authority?.source === 'canonical' && !authority.frozenRouting
+        ? CANONICAL_PART_ROUTING_BLOCKER : undefined,
     needsPhysicalGeneration:
       releaseAuthorityOf(project) !== undefined &&
       (project.partInstances?.length ?? 0) === 0,

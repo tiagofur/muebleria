@@ -23,6 +23,13 @@ export interface ProductionReleaseAuthority {
   readonly designRevisionNumber?: number;
   readonly quoteRevisionId?: string;
   readonly manufacturingFingerprint?: string;
+  /**
+   * #577: the exact canonical release froze the machine-neutral
+   * routing/machining program (snapshot schema v2), so canonical physical
+   * execution is authorized. Absent/false keeps surfacing the routing
+   * blocker; legacy authorities never set it.
+   */
+  readonly frozenRouting?: boolean;
   readonly status?: string;
   readonly releasedBy?: string;
   readonly releasedAt?: string;

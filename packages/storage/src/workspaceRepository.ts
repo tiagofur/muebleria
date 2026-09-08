@@ -270,12 +270,22 @@ export interface WorkspaceRepository {
     assemblyReadiness: readonly Record<string, unknown>[];
   }>;
 
-  /** Generate/replace physical executions (server validates + guards). */
+  /**
+   * Generate/replace physical executions (server validates + guards).
+   * Canonical releases (#577) derive server-side from the frozen snapshot +
+   * routing program (empty payload) and return the authoritative instances.
+   */
   generatePartExecutions?(projectId: string, payload: {
     partInstances: readonly PartInstance[];
     moduleUnits: readonly ModuleUnitExecution[];
     force?: boolean;
-  }): Promise<{ partInstances: number; moduleUnits: number; forced: boolean }>;
+  }): Promise<{
+    partInstances: number;
+    moduleUnits: number;
+    forced: boolean;
+    canonicalParts?: readonly PartInstance[];
+    canonicalUnits?: readonly ModuleUnitExecution[];
+  }>;
 
   /** Complete one operation of a piece (current op when operationType omitted). */
   advancePartOperation?(projectId: string, partId: string, payload: {

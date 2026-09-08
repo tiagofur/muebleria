@@ -571,3 +571,88 @@ func TestPartExec_CanonicalGenerationPropagatesFrozenRoutingBlocker(t *testing.T
 		})
 	}
 }
+
+// ── Canonical generation (#577 frozen routing) ─────────────────────────────
+
+func canonicalReleaseProject() *domain.Project {
+	project := &domain.Project{
+		ID: "p1", Name: "Obra Canónica", CustomerID: "c1", Status: domain.StatusAccepted,
+		Items: []domain.ProjectItem{{ID: "i1", ModuleID: "m-gab", Quantity: 1}},
+	}
+	project.ResolvedProductionRelease = domain.ResolvedFromCanonicalRelease(&domain.ProductionRelease{
+		ID: "rel-1", ProjectID: "p1", DesignRevisionID: "dr-1",
+		ManufacturingFingerprint: "sha256-fixed", Status: domain.ProductionReleaseStatusActive,
+	})
+	project.ModuleUnits = []domain.ModuleUnitExecution{{
+		ID: "rel-1:fi-1:u1", ProjectID: "p1", ProjectItemID: "fi-1", UnitIndex: 1,
+		ProductionRevision: "rel-1", Status: domain.ModuleUnitStatusAwaitingParts,
+	}}
+	return project
+}
+
+func TestPartExec_CanonicalGenerationDerivesFromFrozenSnapshot(t *testing.T) {
+	store, srv := partExecFixtures("")
+	store.projectReturnedByID = canonicalReleaseProject()
+	store.partInstances = nil
+	store.moduleUnits = nil
+	store.canonicalExecParts = []domain.PartInstance{{
+		ID: "rel-1:fi-1:comp-copy-0:p1", ProjectID: "p1", ProductionRevision: "rel-1",
+		ProjectItemID: "fi-1", PartCode: "PANEL", MaterialID: "mat-1", Status: domain.PartInstanceStatusPending,
+		RequiredOperations: []domain.PartOperation{{
+			ID: "op-cut-1", Type: domain.PartOperationCut, Sequence: 1, Status: domain.PartOperationStatusQueued,
+		}},
+	}}
+	store.canonicalExecUnits = append([]domain.ModuleUnitExecution(nil), store.projectReturnedByID.ModuleUnits...)
+
+	rr := doGenerate(srv, string(domain.RoleAdmin), generatePartExecutionsRequest{})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("canonical generation=%d %s", rr.Code, rr.Body.String())
+	}
+	if store.canonicalExecCalls != 1 {
+		t.Fatalf("server derivation must run exactly once, got %d", store.canonicalExecCalls)
+	}
+	var resp struct {
+		Parts []domain.PartInstance        `json:"part_instances"`
+		Units []domain.ModuleUnitExecution `json:"module_units"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Parts) != 1 || resp.Parts[0].ID != "rel-1:fi-1:comp-copy-0:p1" ||
+		len(resp.Units) != 1 || resp.Units[0].ProductionRevision != "rel-1" {
+		t.Fatalf("authoritative readback missing: %s", rr.Body.String())
+	}
+	if len(store.partInstances) != 1 || len(store.moduleUnits) != 1 {
+		t.Fatal("derived executions were not persisted")
+	}
+}
+
+func TestPartExec_CanonicalGenerationRejectsClientPayload(t *testing.T) {
+	store, srv := partExecFixtures("")
+	store.projectReturnedByID = canonicalReleaseProject()
+
+	rr := doGenerate(srv, string(domain.RoleAdmin), generateBody("rel-1", 1))
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "se derivan de la liberación congelada") {
+		t.Fatalf("client payload must be refused, got %d %s", rr.Code, rr.Body.String())
+	}
+	if store.canonicalExecCalls != 0 {
+		t.Fatal("no server derivation may run for a payload-carrying request")
+	}
+}
+
+func TestPartExec_ReadinessBlockerOnlyWithoutFrozenRouting(t *testing.T) {
+	store, srv := partExecFixtures("")
+	store.projectReturnedByID = canonicalReleaseProject()
+
+	store.canonicalRoutingReady = false
+	rr := doPartExec(srv, http.MethodGet, "/api/projects/p1/part-executions", string(domain.RoleProduccion), "")
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), domain.CanonicalPartExecutionRoutingBlocker) {
+		t.Fatalf("v1 canonical readiness must carry the routing blocker: %d %s", rr.Code, rr.Body.String())
+	}
+
+	store.canonicalRoutingReady = true
+	rr = doPartExec(srv, http.MethodGet, "/api/projects/p1/part-executions", string(domain.RoleProduccion), "")
+	if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), domain.CanonicalPartExecutionRoutingBlocker) {
+		t.Fatalf("v2 canonical readiness must drop the routing blocker: %d %s", rr.Code, rr.Body.String())
+	}
+}
