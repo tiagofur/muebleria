@@ -5762,6 +5762,20 @@
             return;
           }
 
+          if (result.code === "pairing_rebind_requires_new_code") {
+            // The one-time code was exchanged already. Never let the manual
+            // rebind confirmation masquerade as completing this pairing;
+            // manual binding uses a different, authoritative-working-base
+            // contract. Keep the old binding and require a new Web code.
+            bindingPicker.style.display = "none";
+            bindingRebindReview.style.display = "none";
+            modelBindingState.pendingTarget = null;
+            pairingInput.value = "";
+            showPairingMessage("error", result.reason || "El código fue aceptado pero no se aplicó. Generá uno nuevo en la web.");
+            pairingInput.focus();
+            return;
+          }
+
           if (result.code === "rebind_required") {
             bindingPicker.style.display = "none";
             bindingRebindReview.style.display = "block";

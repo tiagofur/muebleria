@@ -210,6 +210,40 @@ function runTests() {
     assert.ok(el(sandbox, 'pairing-code-input')._focused, 'focus returns to the input');
   });
 
+  test('consumed pairing rebind requires a new code and never opens manual rebind confirmation', (sandbox) => {
+    el(sandbox, 'pairing-code-input').value = 'ABCD234EFGH5';
+    el(sandbox, 'btn-pairing-connect').dispatchEvent({ type: 'click' });
+    sandbox.window.GraneteDialog.onModelBindingResult({
+      ok: false,
+      pairing: true,
+      code: 'pairing_rebind_requires_new_code',
+      recovery: 'manual_rebind_then_new_code',
+      reason: 'el código fue aceptado, pero no se aplicó para no cambiar su revisión exacta. Generá un código nuevo en la web.'
+    });
+
+    assert.match(el(sandbox, 'pairing-message').textContent, /revisión exacta/);
+    assert.match(el(sandbox, 'pairing-message').textContent, /código nuevo en la web/);
+    assert.equal(el(sandbox, 'pairing-code-input').value, '', 'the consumed code cannot be retried');
+    assert.equal(el(sandbox, 'model-binding-rebind-review').style.display, 'none', 'pairing must not enter the manual rebind confirmation');
+    assert.ok(!sandbox.__bridge.some((call) => call.action === 'connect_model'),
+      'no manual bind may masquerade as completion of the consumed pairing grant');
+  });
+
+  test('null-pinned pairing rebind uses the same fresh-code recovery', (sandbox) => {
+    sandbox.window.GraneteDialog.onModelBindingResult({
+      ok: false,
+      pairing: true,
+      code: 'pairing_rebind_requires_new_code',
+      recovery: 'manual_rebind_then_new_code',
+      pinnedBaseRevisionId: null,
+      reason: 'el código fue aceptado, pero no se aplicó para no cambiar su revisión exacta. Generá un código nuevo en la web.'
+    });
+
+    assert.match(el(sandbox, 'pairing-message').textContent, /código nuevo en la web/);
+    assert.equal(el(sandbox, 'model-binding-rebind-review').style.display, 'none');
+    assert.ok(!sandbox.__bridge.some((call) => call.action === 'connect_model'));
+  });
+
   test('confirmation failure is an honest partial: connected but web unaware', (sandbox) => {
     el(sandbox, 'pairing-code-input').value = 'ABCD234EFGH5';
     el(sandbox, 'btn-pairing-connect').dispatchEvent({ type: 'click' });
