@@ -125,6 +125,23 @@ func (s *stubStore) GetDesignPairingGrant(_ context.Context, projectID, designID
 	return grant, nil
 }
 
+func (s *stubStore) ConfirmDesignPairingGrant(_ context.Context, cmd storage.ConfirmDesignPairingGrantCommand) (*domain.DesignPairingGrant, error) {
+	s.confirmPairingGrantCmd = &cmd
+	if s.confirmPairingGrantErr != nil {
+		return nil, s.confirmPairingGrantErr
+	}
+	grant := pairingTestGrant()
+	grant.ID = cmd.GrantID
+	grant.Status = domain.PairingGrantStatusConfirmed
+	now := time.Now()
+	grant.ExchangedAt = &now
+	grant.ConfirmedAt = &now
+	session := pairingTestSessionID
+	grant.ExchangedBySessionID = &session
+	grant.ConfirmedBySessionID = &session
+	return grant, nil
+}
+
 func (s *stubStore) CancelDesignPairingGrant(_ context.Context, cmd storage.CancelDesignPairingGrantCommand) (*domain.DesignPairingGrant, error) {
 	s.cancelPairingGrantCmd = &cmd
 	if s.cancelPairingGrantErr != nil {
@@ -439,5 +456,67 @@ func TestHandlePairingGrant_CancelMarksCancelledAndRejectsDoubleCancel(t *testin
 	srv.HandleDesignPairingGrantCancel(rr, req)
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("second cancel = %d, want 409", rr.Code)
+	}
+}
+
+func confirmRequest(t *testing.T, srv *Server, store *stubStore, grantID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := withExtensionClaims(httptest.NewRequest(http.MethodPost,
+		"/api/design-pairing-grants/"+grantID+":confirm", strings.NewReader(body)),
+		"device-owner-1")
+	req.SetPathValue("grantId", grantID)
+	rr := httptest.NewRecorder()
+	srv.HandleDesignPairingGrantConfirm(rr, req)
+	return rr
+}
+
+func TestHandlePairingGrant_ConfirmDeviceOnlyAndExactIdentity(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+
+	rr := confirmRequest(t, srv, store, pairingTestGrantID,
+		`{"project_id":"`+designTestProjectID+`","design_id":"`+designTestDesignID+`","base_revision_id":null}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Status      string  `json:"status"`
+		ConfirmedAt *string `json:"confirmed_at"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Status != domain.PairingGrantStatusConfirmed || body.ConfirmedAt == nil {
+		t.Fatalf("confirm body = %+v, want confirmed with confirmed_at", body)
+	}
+	cmd := *store.confirmPairingGrantCmd
+	if cmd.PersistedProjectID != designTestProjectID || cmd.PersistedDesignID != designTestDesignID {
+		t.Fatalf("confirm identity mismatch: %+v", cmd)
+	}
+	if cmd.ConfirmedBySessionID != pairingTestSessionID {
+		t.Fatalf("confirming session = %q, want the extension sid", cmd.ConfirmedBySessionID)
+	}
+	if cmd.PersistedBaseRevID != "" {
+		t.Fatalf("confirming null base = %q, want exact null", cmd.PersistedBaseRevID)
+	}
+
+	// Web sessions can never confirm.
+	req := withClaims(httptest.NewRequest(http.MethodPost,
+		"/api/design-pairing-grants/"+pairingTestGrantID+":confirm",
+		strings.NewReader(`{"project_id":"`+designTestProjectID+`","design_id":"`+designTestDesignID+`"}`)),
+		"admin-1", string(domain.RoleAdmin))
+	req.SetPathValue("grantId", pairingTestGrantID)
+	rr = httptest.NewRecorder()
+	srv.HandleDesignPairingGrantConfirm(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("web confirm = %d, want 403", rr.Code)
+	}
+
+	// Identity mismatch answers a typed 409.
+	store.confirmPairingGrantErr = storage.ErrPairingGrantMismatch
+	rr = confirmRequest(t, srv, store, pairingTestGrantID,
+		`{"project_id":"`+designTestProjectID+`","design_id":"`+designTestDesignID+`"}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("mismatch confirm = %d, want 409", rr.Code)
 	}
 }

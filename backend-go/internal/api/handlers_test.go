@@ -84,6 +84,8 @@ type stubStore struct {
 	pairingGrantErr            error
 	cancelPairingGrantCmd      *storage.CancelDesignPairingGrantCommand
 	cancelPairingGrantErr      error
+	confirmPairingGrantCmd     *storage.ConfirmDesignPairingGrantCommand
+	confirmPairingGrantErr     error
 	updateDesignWorkingCopyErr error
 	resetDesignWorkingCopyCmd  *storage.ResetDesignWorkingCopyCommand
 	resetDesignWorkingCopyErr  error
@@ -209,7 +211,7 @@ type stubStore struct {
 	createMaterialOK         bool
 	deleteProjectCalled      bool
 	// F044 workshop settings (nil → defaults, flag false)
-	workshopSettings *domain.WorkshopSettings
+	workshopSettings        *domain.WorkshopSettings
 	machineOutputSelections []domain.MachineOutputSelectionRecord
 	// #108: optional catalog returned by GetFullCatalog. nil → empty catalog.
 	catalogOverride *domain.Catalog
@@ -918,7 +920,7 @@ func (s *stubStore) mutateMaterialPlanning(
 		return nil, errors.New("CONFLICT:la liberación indicada no existe en esta obra")
 	}
 	snap := &domain.MaterialPlanningSnapshot{
- CanonicalRequirements: s.canonicalRequirements,
+		CanonicalRequirements:     s.canonicalRequirements,
 		Planning:                  s.materialPlanning,
 		AllPlannings:              []*domain.MaterialPlanning{s.materialPlanning},
 		Stock:                     append([]domain.MaterialStock(nil), s.materialStock...),

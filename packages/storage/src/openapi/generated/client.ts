@@ -7,6 +7,7 @@ import type {
   AuthDeviceDirectory,
   ChangeMembershipRolesRequest,
   ChangeMembershipSectorsRequest,
+  ConfirmPairingGrantRequest,
   CreateDesignRequest,
   CreateFurnitureInstanceRequest,
   CreateInitialQuoteRevisionRequest,
@@ -233,4 +234,5 @@ export abstract class GeneratedGraneteApiClient {
   getDesignPairingGrant(token: string, projectId: string, designId: string, grantId: string, signal?: AbortSignal): Promise<PairingGrantStatus> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/pairing-grants/${encodeURIComponent(grantId)}`, { schema: "PairingGrantStatus", token, signal }); }
   cancelDesignPairingGrant(token: string, projectId: string, designId: string, grantId: string, signal?: AbortSignal): Promise<PairingGrantStatus> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/pairing-grants/${encodeURIComponent(grantId)}:cancel`, { schema: "PairingGrantStatus", token, signal }); }
   exchangeDesignPairingGrant(token: string, body: ExchangePairingGrantRequest, signal?: AbortSignal): Promise<PairingGrantExchange> { return this.request("POST", "/design-pairing-grants:exchange", { schema: "PairingGrantExchange", token, bodySchema: "ExchangePairingGrantRequest", body, signal }); }
+  confirmDesignPairingGrant(token: string, grantId: string, body: ConfirmPairingGrantRequest, signal?: AbortSignal): Promise<PairingGrantStatus> { return this.request("POST", `/design-pairing-grants/${encodeURIComponent(grantId)}:confirm`, { schema: "PairingGrantStatus", token, bodySchema: "ConfirmPairingGrantRequest", body, signal }); }
 }

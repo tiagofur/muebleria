@@ -454,6 +454,14 @@ func RegisterRoutes(server *Server) http.Handler {
 		"cancel": http.HandlerFunc(server.HandleDesignPairingGrantCancel),
 	})))))
 	mux.Handle("POST /api/design-pairing-grants:exchange", noStoreMiddleware(authRL(authMW(http.HandlerFunc(server.HandleDesignPairingGrantExchange)))))
+	// #499 Slice 3: device-only confirmation of the persisted binding. The
+	// same authRL bucket as exchange — both consume one-time grant state. The
+	// wildcard must occupy an entire segment (same mux rule as the
+	// designRevisionCommandRouter), so the grantId:confirm segment is captured
+	// and split by the same router shape.
+	mux.Handle("POST /api/design-pairing-grants/{grantCommand...}", noStoreMiddleware(authRL(authMW(designPairingGrantCommandRouter(map[string]http.Handler{
+		"confirm": http.HandlerFunc(server.HandleDesignPairingGrantConfirm),
+	})))))
 
 	// #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance.
 	// Pure deterministic comparison returning structured differences and summary counts.

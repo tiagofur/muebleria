@@ -63,6 +63,15 @@ function formatCountdown(expiresAt: string, nowMs: number): string {
 
 type GrantPhase = 'creating' | 'active' | 'create-error';
 
+function isTerminalGrantStatus(status: PairingGrantStatus['status'] | undefined): boolean {
+  return (
+    status === 'exchanged' ||
+    status === 'confirmed' ||
+    status === 'cancelled' ||
+    status === 'expired'
+  );
+}
+
 export function SketchUpPairingModal({
   baseUrl,
   token,
@@ -87,6 +96,7 @@ export function SketchUpPairingModal({
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const grantRef = useRef<PairingGrantCreated | null>(null);
+  const statusRef = useRef<PairingGrantStatus | null>(null);
   const closedRef = useRef(false);
 
   // Base label frozen for the lifetime of the sheet: "R2 actual" arriving in
@@ -104,6 +114,7 @@ export function SketchUpPairingModal({
         ...(baseRevisionId ? { base_revision_id: baseRevisionId } : {}),
       });
       grantRef.current = created;
+      statusRef.current = null;
       setGrant(created);
       setStatus(null);
       setPhase('active');
@@ -124,8 +135,7 @@ export function SketchUpPairingModal({
     void createGrant();
   }, [createGrant]);
 
-  const terminalStatus =
-    status?.status === 'exchanged' || status?.status === 'cancelled' || status?.status === 'expired';
+  const terminalStatus = isTerminalGrantStatus(status?.status);
 
   // Poll grant status while pending. A network/API failure keeps the last
   // known state and surfaces a retryable notice — it NEVER derives expired.
@@ -136,6 +146,7 @@ export function SketchUpPairingModal({
       try {
         const current = await api.getDesignPairingGrant(token, projectId, designId, grant.id);
         if (cancelled) return;
+        statusRef.current = current;
         setStatus(current);
         setPollError(null);
       } catch {
@@ -173,8 +184,13 @@ export function SketchUpPairingModal({
   const handleClose = useCallback(() => {
     closedRef.current = true;
     // DEMO preference: leaving while pending cancels the outstanding grant so
-    // no live code outlives the sheet. Terminal grants are never re-cancelled.
-    if (phase === 'active' && grant && !terminalStatus) {
+    // no live code outlives the sheet. Terminal grants (confirmed included)
+    // are never re-cancelled.
+    if (
+      phase === 'active' &&
+      grant &&
+      !isTerminalGrantStatus(statusRef.current?.status)
+    ) {
       void cancelPendingGrant();
     }
     onClose();
@@ -185,6 +201,7 @@ export function SketchUpPairingModal({
     try {
       if (grant && !terminalStatus) await cancelPendingGrant();
       grantRef.current = null;
+      statusRef.current = null;
       setGrant(null);
       setStatus(null);
       setPhase('creating');
@@ -221,6 +238,13 @@ export function SketchUpPairingModal({
       );
     }
     switch (status?.status) {
+      case 'confirmed':
+        return (
+          <p className="psm-status psm-status--ok" role="status" data-testid="pairing-confirmed">
+            <CircleCheck size={16} /> Diseño vinculado en SketchUp. Ya podés modelar y publicar
+            desde la extensión.
+          </p>
+        );
       case 'exchanged':
         return (
           <p className="psm-status psm-status--ok" role="status" data-testid="pairing-exchanged">

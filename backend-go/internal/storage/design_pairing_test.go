@@ -773,3 +773,175 @@ func TestDesignPairingGrants_ProvenanceCorrelation(t *testing.T) {
 			orgID, createdBy, createdBySession, projectID, designRowID, pinnedBase, exchangedBy)
 	}
 }
+
+// exchangePairingGrant is a helper: consume a freshly created grant under
+// the given device session and return the exchange result.
+func exchangePairingGrant(t *testing.T, fx *rlsFixture, actor storage.TenantActor, sessionID string) *storage.ExchangeDesignPairingGrantResult {
+	t.Helper()
+	var result *storage.ExchangeDesignPairingGrantResult
+	err := fiTx(t, fx.store, actor, func(ctx context.Context) error {
+		var err error
+		result, err = fx.store.ExchangeDesignPairingGrant(ctx, storage.ExchangeDesignPairingGrantCommand{
+			Code:                 pairingTestCode,
+			ExchangedByUserID:    actor.UserID,
+			ExchangedBySessionID: sessionID,
+			IP:                   "127.0.0.1",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("exchange helper: %v", err)
+	}
+	return result
+}
+
+func confirmPairingGrant(t *testing.T, fx *rlsFixture, actor storage.TenantActor, cmd storage.ConfirmDesignPairingGrantCommand) (*domain.DesignPairingGrant, error) {
+	t.Helper()
+	var grant *domain.DesignPairingGrant
+	err := fiTx(t, fx.store, actor, func(ctx context.Context) error {
+		var err error
+		grant, err = fx.store.ConfirmDesignPairingGrant(ctx, cmd)
+		return err
+	})
+	return grant, err
+}
+
+// #499 Slice 3: confirmation proves the exact pinned binding was persisted.
+// The exchanging session confirms with the exact identity; wrong base,
+// foreign session and replay semantics are all enforced atomically.
+func TestDesignPairingGrants_ConfirmExactPinAndSessionSemantics(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	designID := seedPairingDesign(t, fx, actorA, "Pairing confirm")
+	revR1 := "8f000000-0000-0000-0000-0000000000c1"
+	revR2 := "8f000000-0000-0000-0000-0000000000c2"
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR1, 1)
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR2, 2)
+	seedPairingWorkingCopy(t, fx, rlsOrgA, fiSharedProject, designID, &revR2) // working base drifted to R2
+
+	// Grant pinned to R1; the working copy advances to R2 before exchange.
+	grant := createPairingGrant(t, fx, actorA, fiSharedProject, designID, revR1)
+	sessionA := pairingTestActorSession(t, fx, actorA)
+	sessionB := pairingTestActorSession(t, fx, actorA) // another device session
+	exchanged := exchangePairingGrant(t, fx, actorA, sessionA)
+	if exchanged.Grant.Status != domain.PairingGrantStatusExchanged {
+		t.Fatalf("exchange status = %q", exchanged.Grant.Status)
+	}
+
+	base := func(cmd storage.ConfirmDesignPairingGrantCommand, persisted string) storage.ConfirmDesignPairingGrantCommand {
+		cmd.PersistedBaseRevID = persisted
+		return cmd
+	}
+	mkcmd := func(session string) storage.ConfirmDesignPairingGrantCommand {
+		return storage.ConfirmDesignPairingGrantCommand{
+			GrantID:              grant.ID,
+			PersistedProjectID:   fiSharedProject,
+			PersistedDesignID:    designID,
+			PersistedBaseRevID:   revR1,
+			ConfirmedByUserID:    actorA.UserID,
+			ConfirmedBySessionID: session,
+		}
+	}
+
+	// 1. Confirming R2 against an R1-pinned grant is an identity mismatch.
+	if _, err := confirmPairingGrant(t, fx, actorA, base(mkcmd(sessionA), revR2)); !errors.Is(err, storage.ErrPairingGrantMismatch) {
+		t.Fatalf("confirm R2 against R1 pin = %v, want ErrPairingGrantMismatch", err)
+	}
+
+	// 2. A different device session can never confirm.
+	if _, err := confirmPairingGrant(t, fx, actorA, mkcmd(sessionB)); !errors.Is(err, storage.ErrPairingGrantConflict) {
+		t.Fatalf("foreign session confirm = %v, want ErrPairingGrantConflict", err)
+	}
+
+	// 3. The exchanging session confirms the EXACT pinned R1 — success even
+	// though the working copy has drifted to R2 (stale_base is the client's
+	// honest state, never a reason to reject confirmation).
+	confirmed, err := confirmPairingGrant(t, fx, actorA, mkcmd(sessionA))
+	if err != nil || confirmed.Status != domain.PairingGrantStatusConfirmed {
+		t.Fatalf("exact confirm = %v status=%q, want confirmed", err, statusOf(confirmed))
+	}
+
+	// 4. Same-session replay is an idempotent success.
+	if _, err := confirmPairingGrant(t, fx, actorA, mkcmd(sessionA)); err != nil {
+		t.Fatalf("idempotent re-confirm = %v, want nil", err)
+	}
+
+	// 5. One confirmation audit row, never carrying the code.
+	var auditCount int
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM security_audit_events
+		 WHERE event_type = 'design_pairing_grant_confirmed' AND details->>'grant_id' = $1`,
+		grant.ID).Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if auditCount != 1 {
+		t.Fatalf("confirm audit rows = %d, want 1", auditCount)
+	}
+}
+
+func statusOf(g *domain.DesignPairingGrant) string {
+	if g == nil {
+		return "<nil>"
+	}
+	return g.Status
+}
+
+// A null grant pin remains null even if a working base appears before the
+// extension exchanges and confirms it.
+func TestDesignPairingGrants_ConfirmNullPinRemainsNullAfterWorkingBaseAdvances(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	designID := seedPairingDesign(t, fx, actorA, "Pairing confirm unpinned")
+	revR1 := "8f000000-0000-0000-0000-0000000000d1"
+	revR2 := "8f000000-0000-0000-0000-0000000000d2"
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR1, 1)
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR2, 2)
+	seedPairingWorkingCopy(t, fx, rlsOrgA, fiSharedProject, designID, &revR1)
+	grant := createPairingGrant(t, fx, actorA, fiSharedProject, designID, "") // no pin
+	sessionA := pairingTestActorSession(t, fx, actorA)
+	seedPairingWorkingCopy(t, fx, rlsOrgA, fiSharedProject, designID, &revR2)
+	exchangePairingGrant(t, fx, actorA, sessionA)
+
+	// A current R1/R2 working base is not the grant pin and must be rejected.
+	_, err := confirmPairingGrant(t, fx, actorA, storage.ConfirmDesignPairingGrantCommand{
+		GrantID:              grant.ID,
+		PersistedProjectID:   fiSharedProject,
+		PersistedDesignID:    designID,
+		PersistedBaseRevID:   revR1,
+		ConfirmedByUserID:    actorA.UserID,
+		ConfirmedBySessionID: sessionA,
+	})
+	if !errors.Is(err, storage.ErrPairingGrantMismatch) {
+		t.Fatalf("confirm R1 against null pin = %v, want ErrPairingGrantMismatch", err)
+	}
+
+	// The canonical binding and confirmation both carry the exact null pin.
+	confirmed, err := confirmPairingGrant(t, fx, actorA, storage.ConfirmDesignPairingGrantCommand{
+		GrantID:              grant.ID,
+		PersistedProjectID:   fiSharedProject,
+		PersistedDesignID:    designID,
+		ConfirmedByUserID:    actorA.UserID,
+		ConfirmedBySessionID: sessionA,
+	})
+	if err != nil || confirmed.Status != domain.PairingGrantStatusConfirmed {
+		t.Fatalf("null-pin confirm = %v status=%q", err, statusOf(confirmed))
+	}
+
+	// Wrong project in the payload is an identity mismatch (typed conflict),
+	// never a silent accept.
+	fx2 := newRLSFixture(t)
+	design2 := seedPairingDesign(t, fx2, actorA, "Pairing wrong project")
+	grant2 := createPairingGrant(t, fx2, actorA, fiSharedProject, design2, "")
+	session2 := pairingTestActorSession(t, fx2, actorA)
+	exchangePairingGrant(t, fx2, actorA, session2)
+	_, err = confirmPairingGrant(t, fx2, actorA, storage.ConfirmDesignPairingGrantCommand{
+		GrantID:              grant2.ID,
+		PersistedProjectID:   "41000000-0000-0000-0000-000000000099", // foreign project
+		PersistedDesignID:    design2,
+		ConfirmedByUserID:    actorA.UserID,
+		ConfirmedBySessionID: session2,
+	})
+	if !errors.Is(err, storage.ErrPairingGrantMismatch) {
+		t.Fatalf("wrong-project confirm = %v, want ErrPairingGrantMismatch", err)
+	}
+}

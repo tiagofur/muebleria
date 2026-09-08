@@ -12,7 +12,7 @@ const DESIGN_ID = '22222222-0000-4000-8000-000000000001';
 const GRANT_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
 const CODE = 'ABCD234EFGH5';
 
-type StatusKind = 'pending' | 'exchanged' | 'cancelled' | 'expired';
+type StatusKind = 'pending' | 'exchanged' | 'confirmed' | 'cancelled' | 'expired';
 
 function renderModal(
   options: {
@@ -59,6 +59,7 @@ function renderModal(
           id: GRANT_ID,
           action: 'open_design',
           status: options.status ?? 'pending',
+          confirmed_at: options.status === 'confirmed' ? new Date().toISOString() : null,
           base_revision_id: null,
           expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
           created_at: new Date().toISOString(),
@@ -183,7 +184,7 @@ describe('SketchUpPairingModal (#499 Slice 2 — Web pairing sheet)', () => {
     await screen.findByTestId('pairing-code');
     await user.keyboard('{Escape}');
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(calls.cancel).toBe(1);
+    await waitFor(() => expect(calls.cancel).toBe(1));
 
     // Second scenario: grant already exchanged → close must NOT cancel again.
     cleanup();
@@ -193,5 +194,34 @@ describe('SketchUpPairingModal (#499 Slice 2 — Web pairing sheet)', () => {
     await user2.keyboard('{Escape}');
     await waitFor(() => expect(second.onClose).toHaveBeenCalled());
     expect(second.calls.cancel).toBe(0);
+  });
+});
+
+describe('SketchUpPairingModal — confirmation wording (#499 Slice 3)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('confirmed shows the linked wording only after the plugin proved the binding', async () => {
+    const { calls, onClose } = renderModal({ status: 'confirmed' });
+
+    expect(await screen.findByTestId('pairing-confirmed')).toHaveTextContent(
+      'Diseño vinculado en SketchUp',
+    );
+    // Not claimed: the sheet never says the model was saved or that a
+    // revision was published — publishing lives in the plugin flow.
+    expect(screen.queryByText(/modelo guardado/i)).not.toBeInTheDocument();
+    // A confirmed grant is terminal: closing must never cancel it.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(calls.cancel).toBe(0);
   });
 });

@@ -1602,6 +1602,7 @@ type PairingGrantStatus struct {
 	ExpiresAt      string                 `json:"expires_at"`
 	CreatedAt      string                 `json:"created_at"`
 	ExchangedAt    *string                `json:"exchanged_at,omitempty"`
+	ConfirmedAt    *string                `json:"confirmed_at,omitempty"`
 }
 
 type ExchangePairingGrantRequest struct {
@@ -1632,6 +1633,13 @@ type PairingGrantStatusKind string
 const (
 	PairingGrantStatusKindPending   PairingGrantStatusKind = "pending"
 	PairingGrantStatusKindExchanged PairingGrantStatusKind = "exchanged"
+	PairingGrantStatusKindConfirmed PairingGrantStatusKind = "confirmed"
 	PairingGrantStatusKindCancelled PairingGrantStatusKind = "cancelled"
 	PairingGrantStatusKindExpired   PairingGrantStatusKind = "expired"
 )
+
+type ConfirmPairingGrantRequest struct {
+	ProjectID      string  `json:"project_id"`
+	DesignID       string  `json:"design_id"`
+	BaseRevisionID *string `json:"base_revision_id,omitempty"`
+}

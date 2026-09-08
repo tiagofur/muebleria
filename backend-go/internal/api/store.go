@@ -365,6 +365,9 @@ type Store interface {
 	ExchangeDesignPairingGrant(ctx context.Context, cmd storage.ExchangeDesignPairingGrantCommand) (*storage.ExchangeDesignPairingGrantResult, error)
 	GetDesignPairingGrant(ctx context.Context, projectID, designID, grantID string) (*domain.DesignPairingGrant, error)
 	CancelDesignPairingGrant(ctx context.Context, cmd storage.CancelDesignPairingGrantCommand) (*domain.DesignPairingGrant, error)
+	// #499 Slice 3: device-only exchanged→confirmed transition proving the
+	// canonical model binding was persisted with the exact pinned identity.
+	ConfirmDesignPairingGrant(ctx context.Context, cmd storage.ConfirmDesignPairingGrantCommand) (*domain.DesignPairingGrant, error)
 	// #392 / DT-8 staged publish flow: prepare validates the manifest v1
 	// against the working copy and pins the base revision; artifact uploads
 	// stage metadata; finalize re-validates and publishes the immutable
