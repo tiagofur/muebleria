@@ -453,7 +453,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/pairing-grants/{grantCommand...}", noStoreMiddleware(authMW(pairingCommandRL(designPairingGrantCommandRouter(map[string]http.Handler{
 		"cancel": http.HandlerFunc(server.HandleDesignPairingGrantCancel),
 	})))))
-	mux.Handle("POST /api/design-pairing-grants:exchange", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDesignPairingGrantExchange))))
+	mux.Handle("POST /api/design-pairing-grants:exchange", noStoreMiddleware(authRL(authMW(http.HandlerFunc(server.HandleDesignPairingGrantExchange)))))
 
 	// #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance.
 	// Pure deterministic comparison returning structured differences and summary counts.
