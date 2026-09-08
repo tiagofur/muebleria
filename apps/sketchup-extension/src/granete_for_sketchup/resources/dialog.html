@@ -1272,6 +1272,7 @@
       .preset-chip:focus-visible,
       .search-clear-btn:focus-visible,
       .btn-back:focus-visible,
+      .btn-picker-open:focus-visible,
       .crumb-link:focus-visible,
       .tech-details summary:focus-visible,
       .manufacturing-feature:focus-visible,
@@ -1335,6 +1336,23 @@
         border: 1px solid hsl(0 72% 51% / 20%);
       }
 
+      /* info/warning toasts carry real feedback (pending placements, partial
+         creations); without a visible style they inherit display:none from
+         .toast and the message never reaches the user. */
+      .toast.info {
+        display: flex;
+        background: var(--brand-50);
+        color: var(--brand-600);
+        border: 1px solid hsl(245 58% 51% / 20%);
+      }
+
+      .toast.warning {
+        display: flex;
+        background: var(--warning-50);
+        color: var(--warning-700);
+        border: 1px solid hsl(38 80% 32% / 20%);
+      }
+
       /* Distinct status badges for Interactive Validation vs Authoritative Preflight */
       .badges-column {
         display: flex;
@@ -1366,6 +1384,18 @@
       .status-badge.pending {
         background: var(--neutral-50);
         color: var(--neutral-700);
+      }
+
+      /* Used by the hardware provenance badge and the drilling-conflict
+         banner; without a definition they rendered as unstyled pills. */
+      .status-badge.success {
+        background: var(--success-50);
+        color: var(--success-600);
+      }
+
+      .status-badge.error {
+        background: var(--danger-50);
+        color: var(--danger-600);
       }
 
       /* #389 Project Furniture unit cards: one card = one physical unit
@@ -1930,6 +1960,8 @@
                 </div>
                 <div class="badges-column">
                   <!-- Level 1: Interactive validation badge -->
+                  <!-- Entity type: answers "what is selected" before state. -->
+                  <span id="inspector-kind-badge" class="status-badge pending">Mueble</span>
                   <span id="inspector-interactive-badge" class="status-badge valid">✓ Medidas válidas</span>
                   <!-- Level 2: Authoritative preflight badge (NEVER auto-assumed) -->
                   <span id="inspector-manufacturing-badge" class="status-badge pending">Revisión técnica pendiente</span>
@@ -2004,9 +2036,9 @@
             <p id="child-owner-note" class="subhead" style="display: none; margin-bottom: var(--space-3); font-size: var(--text-xs);"></p>
 
             <!-- Hardware Drilling Conflict Banner (#468 §24) -->
-            <div id="hw-conflict-banner" class="card" style="display: none; border-left: 4px solid var(--state-danger, #ef4444); background: var(--surface-card); margin-bottom: var(--space-3);">
+            <div id="hw-conflict-banner" class="card" style="display: none; border-left: 4px solid var(--danger-600); background: var(--surface-card); margin-bottom: var(--space-3);">
               <div class="card-header-row">
-                <strong style="color: var(--state-danger, #ef4444); font-size: var(--text-sm);">Conflicto de perforación</strong>
+                <strong style="color: var(--danger-600); font-size: var(--text-sm);">Conflicto de perforación</strong>
                 <span class="status-badge error">Bloqueado</span>
               </div>
               <p id="hw-conflict-message" class="subhead" style="margin: var(--space-1) 0; font-size: var(--text-xs); color: var(--text-primary);"></p>
@@ -4021,7 +4053,7 @@
                 if (enrollCountdownDisplay) enrollCountdownDisplay.textContent = "00:00";
                 if (enrollStatusText) {
                   enrollStatusText.textContent = "El código expiró. Generá uno nuevo.";
-                  enrollStatusText.style.color = "var(--danger-600, #dc2626)";
+                  enrollStatusText.style.color = "var(--danger-600)";
                 }
                 return;
               }
@@ -4083,8 +4115,8 @@
               var isRateLimited = result && (result.http_status === 429 || (result.error && result.error.indexOf('429') !== -1));
               if (enrollStatusText) {
                 if (isRateLimited) {
-                  enrollStatusText.textContent = "Servidor ocupado (429), reintentando...";
-                  enrollStatusText.style.color = "var(--warning-600, #d97706)";
+                  enrollStatusText.textContent = "Servidor ocupado, reintentando...";
+                  enrollStatusText.style.color = "var(--warning-700)";
                 } else {
                   enrollStatusText.textContent = "Reintentando verificación...";
                   enrollStatusText.style.color = "var(--text-muted)";
@@ -4391,10 +4423,10 @@
             sessionLicense.style.color = "";
           } else if (status === "expired") {
             sessionLicense.textContent = planLabel + " · vencida";
-            sessionLicense.style.color = "#b91c1c";
+            sessionLicense.style.color = "var(--danger-600)";
           } else {
             sessionLicense.textContent = "Sin licencia activa";
-            sessionLicense.style.color = "#b45309";
+            sessionLicense.style.color = "var(--warning-700)";
           }
         }
 
@@ -5408,7 +5440,9 @@
         var MODEL_BINDING_COPY = {
           unbound: { badge: "Sin conectar", cls: "pending", detail: "Conectá este modelo a un proyecto y diseño de Granete para trabajar sobre su contexto exacto." },
           connected: { badge: "Conectado", cls: "valid", detail: "" },
-          stale_base: { badge: "Base desactualizada", cls: "pending", detail: "El diseño avanzó en el servidor. Actualizá la base de trabajo para continuar; nada se sobrescribe en silencio." },
+          // stale_base uses the warning badge: it is a distinct actionable
+          // condition, not the same neutral "sin conectar" state.
+          stale_base: { badge: "Base desactualizada", cls: "conflict", detail: "El diseño avanzó en el servidor. Actualizá la base de trabajo para continuar; nada se sobrescribe en silencio." },
           design_archived: { badge: "Diseño archivado", cls: "invalid", detail: "El diseño fue archivado en Granete: no se puede editar ni publicar desde este modelo." },
           invalid: { badge: "Enlace inválido", cls: "invalid", detail: "El enlace guardado no corresponde a un proyecto o diseño accesible. Conectá nuevamente." },
           incompatible: { badge: "Versión incompatible", cls: "invalid", detail: "El servidor usa una versión del contrato de enlace que esta extensión no entiende. Actualizá la extensión." },
