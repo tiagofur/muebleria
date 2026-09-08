@@ -60,6 +60,10 @@ CREATE TABLE design_pairing_grants (
         FOREIGN KEY (base_revision_id, design_id) REFERENCES design_revisions (id, design_id) ON DELETE CASCADE
 );
 
+-- Organization-first index: the runtime readiness gate requires every
+-- non-platform-global inventory table carrying organization_id to lead at
+-- least one index with it (same rule as every other tenant-owned table).
+CREATE INDEX idx_design_pairing_grants_organization ON design_pairing_grants(organization_id);
 CREATE INDEX idx_design_pairing_grants_design ON design_pairing_grants(design_id, created_at DESC);
 CREATE INDEX idx_design_pairing_grants_pending ON design_pairing_grants(expires_at)
     WHERE status = 'pending';
