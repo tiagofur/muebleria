@@ -130,7 +130,7 @@ func (s *Server) HandleDesignPairingGrantCreate(w http.ResponseWriter, r *http.R
 		ID:             grant.ID,
 		Action:         openapi.PairingAction(grant.Action),
 		Status:         openapi.PairingGrantStatusKind(grant.Status),
-		BaseRevisionID: grant.BaseRevisionID,
+		BaseRevisionID: nullableRevisionID(grant.BaseRevisionID),
 		Code:           code,
 		ExpiresAt:      grant.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		CreatedAt:      grant.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -226,7 +226,7 @@ func (s *Server) HandleDesignPairingGrantExchange(w http.ResponseWriter, r *http
 	respondWithJSON(w, http.StatusOK, openapi.PairingGrantExchange{
 		GrantID:              grant.ID,
 		Action:               openapi.PairingAction(grant.Action),
-		PinnedBaseRevisionID: grant.BaseRevisionID,
+		PinnedBaseRevisionID: nullableRevisionID(grant.BaseRevisionID),
 		State:                state,
 		SchemaVersion:        ModelBindingSchemaVersion,
 		Organization: openapi.ModelBindingOrganizationSummary{
@@ -291,7 +291,7 @@ func (s *Server) HandleDesignPairingGrantStatus(w http.ResponseWriter, r *http.R
 		ID:             grant.ID,
 		Action:         openapi.PairingAction(grant.Action),
 		Status:         openapi.PairingGrantStatusKind(domain.DerivedPairingStatus(*grant, time.Now())),
-		BaseRevisionID: grant.BaseRevisionID,
+		BaseRevisionID: nullableRevisionID(grant.BaseRevisionID),
 		ExpiresAt:      grant.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		CreatedAt:      grant.CreatedAt.UTC().Format(time.RFC3339Nano),
 		ExchangedAt:    formatRFC3339Ptr(grant.ExchangedAt),
@@ -341,7 +341,7 @@ func (s *Server) HandleDesignPairingGrantCancel(w http.ResponseWriter, r *http.R
 		ID:             grant.ID,
 		Action:         openapi.PairingAction(grant.Action),
 		Status:         openapi.PairingGrantStatusKind(grant.Status),
-		BaseRevisionID: grant.BaseRevisionID,
+		BaseRevisionID: nullableRevisionID(grant.BaseRevisionID),
 		ExpiresAt:      grant.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		CreatedAt:      grant.CreatedAt.UTC().Format(time.RFC3339Nano),
 		ExchangedAt:    formatRFC3339Ptr(grant.ExchangedAt),
@@ -354,6 +354,15 @@ func formatRFC3339Ptr(t *time.Time) *string {
 	}
 	formatted := t.UTC().Format(time.RFC3339Nano)
 	return &formatted
+}
+
+// nullableRevisionID maps the storage scan shape (COALESCE to ”) back to a
+// JSON null: an absent pinned base must serialize as null, never as "".
+func nullableRevisionID(id *string) *string {
+	if id == nil || *id == "" {
+		return nil
+	}
+	return id
 }
 
 // HandleDesignPairingGrantConfirm serves POST for
@@ -430,7 +439,7 @@ func (s *Server) HandleDesignPairingGrantConfirm(w http.ResponseWriter, r *http.
 		ID:             grant.ID,
 		Action:         openapi.PairingAction(grant.Action),
 		Status:         openapi.PairingGrantStatusKind(grant.Status),
-		BaseRevisionID: grant.BaseRevisionID,
+		BaseRevisionID: nullableRevisionID(grant.BaseRevisionID),
 		ExpiresAt:      grant.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		CreatedAt:      grant.CreatedAt.UTC().Format(time.RFC3339Nano),
 		ExchangedAt:    formatRFC3339Ptr(grant.ExchangedAt),
