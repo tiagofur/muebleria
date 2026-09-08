@@ -25,6 +25,8 @@ type platformActorTestStore struct {
 	setActor         storage.TenantActor
 	updateActor      storage.TenantActor
 	auditActor       storage.TenantActor
+	idempotencyActor storage.TenantActor
+	idempotencyScope storage.IdempotencyRequest
 	updateCalls      int
 }
 
@@ -58,6 +60,21 @@ func (s *platformActorTestStore) InsertSecurityAuditEvent(ctx context.Context, e
 	return s.stubStore.InsertSecurityAuditEvent(ctx, event)
 }
 
+func (s *platformActorTestStore) ExecuteIdempotent(
+	ctx context.Context,
+	request storage.IdempotencyRequest,
+	execute func(context.Context) (storage.IdempotencyResponse, error),
+) (storage.IdempotencyResponse, bool, error) {
+	s.idempotencyScope = request
+	actor, ok := storage.TenantActorFromCtx(ctx)
+	if !ok {
+		return storage.IdempotencyResponse{}, false, errors.New("idempotency requires the authenticated actor")
+	}
+	s.idempotencyActor = actor
+	response, err := execute(ctx)
+	return response, false, err
+}
+
 func platformActorToken(t *testing.T, secret string, platformAdmin bool) string {
 	t.Helper()
 	token, err := auth.GenerateLegacyWebToken(platformActorTestUserID, "platform@test.com", auth.TokenContext{
@@ -87,12 +104,15 @@ func TestPlatformUpdateOrganizationClearsActiveWorkshopActor(t *testing.T) {
 		getOrgByID: &domain.Organization{ID: platformActorTestOrgID, Name: "Taller", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial, Status: domain.OrganizationStatusActive, CredentialVersion: 1, Version: 2, CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}}
 	server := NewServer(store, secret, nil, 1, 1)
-	handler := PlatformAdminMiddleware(mustAuthority(secret), store)(http.HandlerFunc(server.HandlePlatformUpdateOrganization))
+	handler := PlatformAdminMiddleware(mustAuthority(secret), store)(
+		server.RequireIdempotency("platform.update-organization", http.HandlerFunc(server.HandlePlatformUpdateOrganization)),
+	)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/platform/organizations/"+platformActorTestOrgID, bytes.NewBufferString(`{"license_plan":"pro"}`))
 	req.SetPathValue("id", platformActorTestOrgID)
 	req.Header.Set("Authorization", "Bearer "+platformActorToken(t, secret, true))
 	req.Header.Set("If-Match", `"v2"`)
+	req.Header.Set("Idempotency-Key", "platform-active-workshop-regression")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -104,6 +124,12 @@ func TestPlatformUpdateOrganizationClearsActiveWorkshopActor(t *testing.T) {
 	}
 	if store.setActor.UserID != platformActorTestUserID || store.setActor.OrganizationID != "" {
 		t.Fatalf("platform actor=%+v, want user-only actor", store.setActor)
+	}
+	if store.idempotencyScope.ActorUserID != platformActorTestUserID || store.idempotencyScope.OrganizationID != "" {
+		t.Fatalf("idempotency scope=%+v, want platform user without workshop", store.idempotencyScope)
+	}
+	if store.idempotencyActor.UserID != platformActorTestUserID || store.idempotencyActor.OrganizationID != "" {
+		t.Fatalf("idempotency actor=%+v, want platform user without workshop", store.idempotencyActor)
 	}
 	if store.updateCalls != 1 || store.updateActor.OrganizationID != "" || store.auditActor.OrganizationID != "" {
 		t.Fatalf("updateCalls=%d updateActor=%+v auditActor=%+v", store.updateCalls, store.updateActor, store.auditActor)
