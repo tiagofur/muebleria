@@ -360,9 +360,9 @@ module Granete
 
           # #499 Slice 3: confirm the exact persisted binding. Device-only
           # endpoint; carries exact IDs, never model data.
-          def confirm_pairing_grant(grant_id:, project_id:, design_id:, base_revision_id: nil)
-            body = { 'project_id' => project_id, 'design_id' => design_id }
-            body['base_revision_id'] = base_revision_id if base_revision_id
+          def confirm_pairing_grant(grant_id:, project_id:, design_id:, base_revision_id:)
+            body = { 'project_id' => project_id, 'design_id' => design_id,
+                     'base_revision_id' => base_revision_id }
             response = request(:post, "/design-pairing-grants/#{grant_id}:confirm", body)
             PairingContract.pairing_status!(response['body'])
           end
@@ -456,8 +456,10 @@ module Granete
         #     intact;
         #   * rebind requires explicit confirmation and inventory review;
         #   * base-drift remediation (adopting the authoritative base) is explicit.
+        # rubocop:disable-next Metrics/ClassLength
         class Connector
           REBIND_REQUIRED = :rebind_required
+          USE_AUTHORITATIVE_WORKING_BASE = Object.new.freeze
 
           def initialize(store_factory:, service:, logger: SafeLogger.new)
             @store_factory = store_factory
@@ -551,11 +553,10 @@ module Granete
             return blocker.merge('pairing' => true) if blocker
 
             # The exact frozen pin from the grant — never the (possibly
-            # newer) authoritative working base. A drifted working copy
-            # surfaces as the existing stale_base state, with its explicit
-            # adopt remediation. Unpinned grants fall back to the
-            # authoritative working base (nil included).
-            written_base = exchange.pinned_base_revision_id || exchange.working_copy['base_revision_id']
+            # newer) authoritative working base. nil is an exact grant pin,
+            # not an instruction to rebase. The manual flow alone selects its
+            # authoritative working base through the explicit sentinel.
+            written_base = exchange.pinned_base_revision_id
             write_bound(store, exchange, base_revision_id: written_base)
 
             # Confirmation requires a READBACK of the canonical dictionary:
@@ -659,14 +660,16 @@ module Granete
                     'state' => 'incompatible')
           end
 
-          # base_revision_id: nil keeps the manual-flow behavior (the
-          # authoritative working base); the pairing path passes the grant's
-          # frozen pin explicitly.
-          def write_bound(store, validation, base_revision_id: nil)
+          # The sentinel is manual-flow-only. Pairing always passes the grant
+          # pin explicitly, including its meaningful null value.
+          def write_bound(store, validation, base_revision_id: USE_AUTHORITATIVE_WORKING_BASE)
+            if base_revision_id.equal?(USE_AUTHORITATIVE_WORKING_BASE)
+              base_revision_id = validation.working_copy['base_revision_id']
+            end
             binding = Binding.new(
               project_id: validation.project['id'],
               design_id: validation.design['id'],
-              base_revision_id: base_revision_id || validation.working_copy['base_revision_id'],
+              base_revision_id: base_revision_id,
               schema_version: ModelBinding::SCHEMA_VERSION
             )
             store.write!(binding)
@@ -718,7 +721,9 @@ module Granete
             when :unauthorized
               failure('unauthorized', 'no tenés permiso para conectar este diseño', 'pairing' => true)
             when :unreachable
-              failure('unreachable', 'no se pudo contactar al servidor; el código no se consumió, probá de nuevo',
+              failure('unreachable',
+                      'no se pudo confirmar el estado del código; volvé a intentarlo y, si falla, ' \
+                      'generá uno nuevo en la web',
                       'pairing' => true)
             else
               failure('exchange_failed', error.message, 'pairing' => true)

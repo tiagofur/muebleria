@@ -381,8 +381,8 @@ type ConfirmDesignPairingGrantCommand struct {
 //   - only the grant's own exchanging session may confirm;
 //   - the persisted project/design must match the grant row exactly;
 //   - the persisted base must be EXACTLY the grant's frozen pin when one
-//     exists (an R2 confirm against an R1 grant is rejected), or the
-//     design's authoritative working base when the grant pinned nothing;
+//     exists (an R2 confirm against an R1 grant is rejected), or exact null
+//     when the grant pinned no published revision;
 //   - the transition is a conditional exchanged→confirmed UPDATE, and a
 //     repeated confirm by the same session is an idempotent success.
 func (s *PostgresStore) ConfirmDesignPairingGrant(ctx context.Context, cmd ConfirmDesignPairingGrantCommand) (*domain.DesignPairingGrant, error) {
@@ -428,21 +428,14 @@ func (s *PostgresStore) ConfirmDesignPairingGrant(ctx context.Context, cmd Confi
 			return ErrPairingGrantMismatch
 		}
 
-		// Exact base rule: pinned grants confirm their pin verbatim; unpinned
-		// grants confirm the design's authoritative working base (or nothing
-		// when none exists). Never a silent re-base to a newer revision.
+		// Exact base rule: every grant confirms its captured pin verbatim.
+		// A nil pin is meaningful: it records that no published base existed at
+		// grant creation, even when a working base appears before exchange.
 		var persistedBase *string
 		if cmd.PersistedBaseRevID != "" {
 			persistedBase = &cmd.PersistedBaseRevID
 		}
 		expectedBase := current.BaseRevisionID
-		if expectedBase == nil {
-			bindingCtx, err := s.GetModelBindingContext(txCtx, current.ProjectID, current.DesignID, persistedBase)
-			if err != nil {
-				return err
-			}
-			expectedBase = bindingCtx.WorkingCopyBaseRevisionID
-		}
 		if derefString(expectedBase) != derefString(persistedBase) {
 			return ErrPairingGrantMismatch
 		}

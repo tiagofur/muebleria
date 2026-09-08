@@ -91,6 +91,26 @@ module Granete
         assert_equal written.base_revision_id.to_s, readback.base_revision_id.to_s
       end
 
+      # An explicit null pin is not a request to adopt the latest working
+      # base. The working-copy response may separately carry R2, but this
+      # canonical binding must preserve the grant's exact null value.
+      def test_pairing_exchange_preserves_an_explicit_null_pin
+        store = binding_store
+        exchange = fake_exchange_payload.merge('pinned_base_revision_id' => nil)
+        written = Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
+          project_id: exchange['project']['id'],
+          design_id: exchange['design']['id'],
+          base_revision_id: exchange['pinned_base_revision_id'],
+          schema_version: Granete::SketchUpExtension::Connection::ModelBinding::SCHEMA_VERSION
+        )
+        store.write!(written)
+
+        assert_nil store.read.base_revision_id
+        payload = JSON.parse(model.get_attribute('com.granete.project', 'granete.project-binding.v1'))
+        assert_nil payload['baseRevisionId']
+        assert_equal REVISION_R2, exchange['working_copy']['base_revision_id']
+      end
+
       # The code normalization the dialog input relies on: separators and
       # casing never decide match success on the host side either.
       def test_code_normalization_matches_backend_semantics

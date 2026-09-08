@@ -234,7 +234,7 @@ class PairingConnectTest < Minitest::Test
     refute model.raw_binding.include?(CODE)
   end
 
-  def test_unpinned_grant_binds_working_base_and_confirms_nil_base
+  def test_null_pin_stays_null_when_the_working_base_is_r1
     model = BindingModel.new
     transport = FakeTransport.new
     stub_pairing_backend(transport, pinned: nil, working_base: REVISION_R1)
@@ -243,11 +243,17 @@ class PairingConnectTest < Minitest::Test
 
     assert result['ok'], result.inspect
     stored = mb::Store.new(model).read
-    assert_equal REVISION_R1, stored.base_revision_id
+    assert_nil stored.base_revision_id, 'a null grant pin must not rebase to the current working base'
 
     confirm = transport.requests.find { |r| r['path'] == "/design-pairing-grants/#{GRANT_ID}:confirm" }
-    # Unpinned + working base R1: the confirm pins the persisted R1 verbatim.
-    assert_equal REVISION_R1, confirm['body']['base_revision_id']
+    assert_equal({ 'project_id' => PROJECT_ID, 'design_id' => DESIGN_ID,
+                   'base_revision_id' => nil }, confirm['body'])
+
+    # The binding remains the exact null pin while the separate working
+    # context reports R1 from the authoritative validation response.
+    status = connector(model, transport).status
+    assert_equal REVISION_R1, status['authoritativeBaseRevisionId']
+    assert_nil mb::Store.new(model).read.base_revision_id
   end
 
   def test_stale_base_is_surfaced_not_silently_rebased
@@ -291,7 +297,7 @@ class PairingConnectTest < Minitest::Test
     assert_equal 'code_not_found', result['code']
   end
 
-  def test_network_failure_before_exchange_consumes_nothing
+  def test_network_failure_is_indeterminate_and_never_claims_the_code_survived
     model = BindingModel.new
     conn = mb::Connector.new(
       store_factory: -> { mb::Store.new(model) },
@@ -304,6 +310,8 @@ class PairingConnectTest < Minitest::Test
 
     refute result['ok']
     assert_equal 'unreachable', result['code']
+    assert_match(/no se pudo confirmar el estado del código/i, result['reason'])
+    refute_match(/no se consumió|pendiente|intercambiado/i, result['reason'])
     assert_nil mb::Store.new(model).read
   end
 

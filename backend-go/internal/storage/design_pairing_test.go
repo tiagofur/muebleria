@@ -886,18 +886,36 @@ func statusOf(g *domain.DesignPairingGrant) string {
 	return g.Status
 }
 
-// Unpinned grants confirm the design's authoritative working base (or
-// nothing when no revision was ever published).
-func TestDesignPairingGrants_ConfirmUnpinnedFollowsWorkingBase(t *testing.T) {
+// A null grant pin remains null even if a working base appears before the
+// extension exchanges and confirms it.
+func TestDesignPairingGrants_ConfirmNullPinRemainsNullAfterWorkingBaseAdvances(t *testing.T) {
 	fx := newRLSFixture(t)
 	actorA := fiActorA()
 	designID := seedPairingDesign(t, fx, actorA, "Pairing confirm unpinned")
+	revR1 := "8f000000-0000-0000-0000-0000000000d1"
+	revR2 := "8f000000-0000-0000-0000-0000000000d2"
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR1, 1)
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR2, 2)
+	seedPairingWorkingCopy(t, fx, rlsOrgA, fiSharedProject, designID, &revR1)
 	grant := createPairingGrant(t, fx, actorA, fiSharedProject, designID, "") // no pin
 	sessionA := pairingTestActorSession(t, fx, actorA)
+	seedPairingWorkingCopy(t, fx, rlsOrgA, fiSharedProject, designID, &revR2)
 	exchangePairingGrant(t, fx, actorA, sessionA)
 
-	// No revision ever published: the binding carries base=nil and the
-	// confirm must accept exactly that.
+	// A current R1/R2 working base is not the grant pin and must be rejected.
+	_, err := confirmPairingGrant(t, fx, actorA, storage.ConfirmDesignPairingGrantCommand{
+		GrantID:              grant.ID,
+		PersistedProjectID:   fiSharedProject,
+		PersistedDesignID:    designID,
+		PersistedBaseRevID:   revR1,
+		ConfirmedByUserID:    actorA.UserID,
+		ConfirmedBySessionID: sessionA,
+	})
+	if !errors.Is(err, storage.ErrPairingGrantMismatch) {
+		t.Fatalf("confirm R1 against null pin = %v, want ErrPairingGrantMismatch", err)
+	}
+
+	// The canonical binding and confirmation both carry the exact null pin.
 	confirmed, err := confirmPairingGrant(t, fx, actorA, storage.ConfirmDesignPairingGrantCommand{
 		GrantID:              grant.ID,
 		PersistedProjectID:   fiSharedProject,
@@ -906,7 +924,7 @@ func TestDesignPairingGrants_ConfirmUnpinnedFollowsWorkingBase(t *testing.T) {
 		ConfirmedBySessionID: sessionA,
 	})
 	if err != nil || confirmed.Status != domain.PairingGrantStatusConfirmed {
-		t.Fatalf("unpinned nil-base confirm = %v status=%q", err, statusOf(confirmed))
+		t.Fatalf("null-pin confirm = %v status=%q", err, statusOf(confirmed))
 	}
 
 	// Wrong project in the payload is an identity mismatch (typed conflict),

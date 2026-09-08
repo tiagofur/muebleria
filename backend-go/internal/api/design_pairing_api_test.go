@@ -475,7 +475,7 @@ func TestHandlePairingGrant_ConfirmDeviceOnlyAndExactIdentity(t *testing.T) {
 	srv := &Server{Store: store}
 
 	rr := confirmRequest(t, srv, store, pairingTestGrantID,
-		`{"project_id":"`+designTestProjectID+`","design_id":"`+designTestDesignID+`"}`)
+		`{"project_id":"`+designTestProjectID+`","design_id":"`+designTestDesignID+`","base_revision_id":null}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
 	}
@@ -495,6 +495,9 @@ func TestHandlePairingGrant_ConfirmDeviceOnlyAndExactIdentity(t *testing.T) {
 	}
 	if cmd.ConfirmedBySessionID != pairingTestSessionID {
 		t.Fatalf("confirming session = %q, want the extension sid", cmd.ConfirmedBySessionID)
+	}
+	if cmd.PersistedBaseRevID != "" {
+		t.Fatalf("confirming null base = %q, want exact null", cmd.PersistedBaseRevID)
 	}
 
 	// Web sessions can never confirm.
