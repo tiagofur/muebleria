@@ -107,8 +107,22 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		claims := claimsFromRequest(r)
 		actorID, scopeActor, org := "", "anonymous", ""
-		if claims != nil {
-			actorID, scopeActor, org = claims.UserID, claims.UserID, claims.OrgID
+		// Middleware may deliberately narrow or replace the bearer scope before
+		// this boundary (for example, PlatformAdminMiddleware clears the active
+		// workshop). The transaction actor is therefore authoritative for both
+		// the receipt owner and the command savepoint; claims are only a fallback
+		// for callers that do not run inside AuthMiddleware's transaction.
+		actor, hasActor := storage.TenantActorFromCtx(r.Context())
+		if !hasActor && claims != nil {
+			actor = storage.TenantActor{
+				OrganizationID: claims.OrgID,
+				UserID:         claims.UserID,
+				MembershipID:   claims.MembershipID,
+			}
+			hasActor = true
+		}
+		if hasActor {
+			actorID, scopeActor, org = actor.UserID, actor.UserID, actor.OrganizationID
 		}
 		canonicalBody := body
 		var jsonValue any
@@ -184,14 +198,10 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 			}
 		}
 		response, replayed, err := store.ExecuteIdempotent(r.Context(), request, func(ctx context.Context) (storage.IdempotencyResponse, error) {
-			if claims != nil {
+			if hasActor {
 				if setter, ok := s.Store.(tenantActorSetter); ok {
 					var setErr error
-					ctx, setErr = setter.SetTenantActor(ctx, storage.TenantActor{
-						OrganizationID: claims.OrgID,
-						UserID:         claims.UserID,
-						MembershipID:   claims.MembershipID,
-					})
+					ctx, setErr = setter.SetTenantActor(ctx, actor)
 					if setErr != nil {
 						return storage.IdempotencyResponse{}, setErr
 					}

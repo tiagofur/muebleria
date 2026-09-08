@@ -32,6 +32,19 @@ func PlatformAdminMiddleware(tokens *auth.Authority, users MembershipLookup) fun
 				respondWithError(w, http.StatusForbidden, "platform admin required")
 				return
 			}
+			// Platform commands are authorized by the live platform_admin flag,
+			// never by the workshop selected in the bearer. Clear that tenant
+			// scope inside the request transaction before invoking the console
+			// handler: SQL platform command functions explicitly reject a
+			// non-NULL app.organization_id.
+			if setter, ok := users.(tenantActorSetter); ok {
+				ctx, err := setter.SetTenantActor(r.Context(), storage.TenantActor{UserID: claims.UserID})
+				if err != nil {
+					respondWithInternalError(w, err, "platform actor")
+					return
+				}
+				r = r.WithContext(ctx)
+			}
 			next.ServeHTTP(w, r)
 		}))
 	}
