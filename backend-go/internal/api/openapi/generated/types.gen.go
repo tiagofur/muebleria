@@ -1578,3 +1578,60 @@ type ReleaseMaterialsRequest struct {
 	ProductionReleaseID *string `json:"production_release_id,omitempty"`
 	OverrideReason      *string `json:"override_reason,omitempty"`
 }
+
+type CreatePairingGrantRequest struct {
+	Action         PairingAction `json:"action"`
+	BaseRevisionID *string       `json:"base_revision_id,omitempty"`
+}
+
+type PairingGrantCreated struct {
+	ID             string                 `json:"id"`
+	Action         PairingAction          `json:"action"`
+	Status         PairingGrantStatusKind `json:"status"`
+	BaseRevisionID *string                `json:"base_revision_id,omitempty"`
+	Code           string                 `json:"code"`
+	ExpiresAt      string                 `json:"expires_at"`
+	CreatedAt      string                 `json:"created_at"`
+}
+
+type PairingGrantStatus struct {
+	ID             string                 `json:"id"`
+	Action         PairingAction          `json:"action"`
+	Status         PairingGrantStatusKind `json:"status"`
+	BaseRevisionID *string                `json:"base_revision_id,omitempty"`
+	ExpiresAt      string                 `json:"expires_at"`
+	CreatedAt      string                 `json:"created_at"`
+	ExchangedAt    *string                `json:"exchanged_at,omitempty"`
+}
+
+type ExchangePairingGrantRequest struct {
+	Code string `json:"code"`
+}
+
+type PairingGrantExchange struct {
+	GrantID              string                          `json:"grant_id"`
+	Action               PairingAction                   `json:"action"`
+	PinnedBaseRevisionID *string                         `json:"pinned_base_revision_id"`
+	State                ModelBindingState               `json:"state"`
+	SchemaVersion        int64                           `json:"schema_version"`
+	Organization         ModelBindingOrganizationSummary `json:"organization"`
+	Project              ModelBindingProjectSummary      `json:"project"`
+	Design               ModelBindingDesignSummary       `json:"design"`
+	WorkingCopy          ModelBindingWorkingCopySummary  `json:"working_copy"`
+	Capabilities         ModelBindingCapabilities        `json:"capabilities"`
+}
+
+type PairingAction string
+
+const (
+	PairingActionOpenDesign PairingAction = "open_design"
+)
+
+type PairingGrantStatusKind string
+
+const (
+	PairingGrantStatusKindPending   PairingGrantStatusKind = "pending"
+	PairingGrantStatusKindExchanged PairingGrantStatusKind = "exchanged"
+	PairingGrantStatusKindCancelled PairingGrantStatusKind = "cancelled"
+	PairingGrantStatusKindExpired   PairingGrantStatusKind = "expired"
+)
