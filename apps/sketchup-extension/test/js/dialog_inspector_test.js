@@ -267,6 +267,21 @@ function runTests() {
   }));
   check(el(sandbox, 'inspector-edit-fieldset').disabled, 'edit fieldset fail-closed without definition');
   check(!el(sandbox, 'btn-delete').disabled, 'delete stays enabled when only canEditParameters is false');
+  check(el(sandbox, 'inspector-delete-blocker').hidden === true, 'delete blocker note hidden while canDelete is enabled');
+
+  // --- denied canDelete explains itself with the capability reason ---
+  dialog.onSelectionChange(furnitureContext({
+    capabilities: Object.assign({}, furnitureContext().capabilities, {
+      canDelete: { supported: false, reason: 'Este mueble pertenece al proyecto conectado; eliminálo desde Granete.' }
+    })
+  }));
+  check(el(sandbox, 'btn-delete').disabled, 'delete disabled when canDelete denied');
+  check(el(sandbox, 'inspector-delete-blocker').hidden === false, 'delete blocker note visible when canDelete denied');
+  check(el(sandbox, 'inspector-delete-blocker').textContent.includes('proyecto conectado'),
+    'delete blocker note carries the capability reason');
+  dialog.onSelectionChange(furnitureContext({ selectionCount: 3 }));
+  check(el(sandbox, 'inspector-delete-blocker').hidden === true, 'delete blocker note hidden under multi-selection');
+  check(visible(el(sandbox, 'inspector-multi-note')), 'multi note shown instead under multi-selection');
 
   // --- furniture, materials capability gates its own card ---
   dialog.onSelectionChange(furnitureContext({
@@ -382,7 +397,8 @@ function runTests() {
   });
   dialog.onSelectionChange(movablePart);
   check(visible(el(sandbox, 'part-authoring-card')), 'movable internal shows the authoring card');
-  check(el(sandbox, 'part-occurrence-val').textContent === 'shelf-a', 'card shows the exact occurrence id');
+  check(descendants(el(sandbox, 'child-facts')).some((n) => n.textContent === 'shelf-a'),
+    'collapsed tech facts still carry the exact occurrence id');
   check(el(sandbox, 'part-pos-x').value === 18 && el(sandbox, 'part-pos-y').value === 18 &&
     el(sandbox, 'part-pos-z').value === 150, 'position inputs prefilled with the resolved pose');
   check(el(sandbox, 'btn-apply-part-move').disabled === false, 'move enabled for movable internal');
@@ -413,6 +429,14 @@ function runTests() {
   check(el(sandbox, 'child-origin-note').textContent.includes('derivado'), 'derived provenance copy');
   dialog.onSelectionChange(hardwareContext('unknown'));
   check(el(sandbox, 'child-origin-note').textContent.includes('sin determinar'), 'unknown provenance fails closed in copy');
+
+  // --- anchor face renders translated for display only; nothing fabricated ---
+  dialog.onSelectionChange(hardwareContext('manual'));
+  check(el(sandbox, 'hw-face-val').textContent === '--', 'missing anchor face renders -- instead of a fabricated face');
+  dialog.onSelectionChange(hardwareContext('manual', { anchorFace: 'front' }));
+  check(el(sandbox, 'hw-face-val').textContent === 'Frontal', 'known anchor face renders translated');
+  dialog.onSelectionChange(hardwareContext('manual', { anchorFace: 'weird-face' }));
+  check(el(sandbox, 'hw-face-val').textContent === 'weird-face', 'unknown anchor face renders raw');
 
   // --- unmanaged ---
   dialog.onSelectionChange({ kind: 'unmanaged', ownerRecovery: 'none', display: { name: '' }, capabilities: {} });

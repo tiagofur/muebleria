@@ -1265,6 +1265,54 @@
         background: hsl(0 84% 94%);
       }
 
+      /* Visible keyboard focus (§4.8 / §3.6.1): every interactive control
+         carries the --shadow-focus ring; outline: none never stands alone. */
+      .btn:focus-visible,
+      .tab-button:focus-visible,
+      .preset-chip:focus-visible,
+      .search-clear-btn:focus-visible,
+      .btn-back:focus-visible,
+      .crumb-link:focus-visible,
+      .tech-details summary:focus-visible,
+      .manufacturing-feature:focus-visible,
+      .material-selected-preview:focus-visible,
+      .mat-card:focus-visible,
+      .selector-breadcrumb-item:focus-visible,
+      .selector-column-item:focus-visible,
+      .selector-modal-close-btn:focus-visible,
+      .selector-search-clear-btn:focus-visible {
+        outline: none;
+        box-shadow: var(--shadow-focus);
+      }
+
+      /* Consistent disabled treatment (§3.6.1), aligned with the existing
+         .inspector-fieldset:disabled opacity. */
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      /* Reduced motion (§3.6): keep state feedback, drop movement — hover
+         lifts, transitions and animations neutralize for vestibular safety. */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+
+        .furniture-card:hover,
+        .mat-card:hover {
+          transform: none;
+        }
+
+        .skeleton-pulse {
+          animation: none;
+        }
+      }
+
       .toast {
         display: none;
         padding: var(--space-3) var(--space-4);
@@ -1376,6 +1424,37 @@
       .empty-state-icon {
         font-size: 2.5rem;
         margin-bottom: var(--space-2);
+      }
+
+      /* Loading skeletons (§4.7): stable geometry with block placeholders —
+         honest "cargando", no percentages or fake progress; the pulse is
+         neutralized under prefers-reduced-motion. */
+      .skeleton-pulse {
+        animation: skeleton-pulse 1.6s ease-in-out infinite;
+      }
+
+      @keyframes skeleton-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.45; }
+      }
+
+      .furniture-card.skeleton-card {
+        cursor: default;
+        pointer-events: none;
+      }
+
+      .skeleton-line {
+        height: 0.75rem;
+        border-radius: var(--radius-sm);
+        background: var(--surface-card-subtle);
+      }
+
+      .skeleton-square {
+        width: 2.5rem;
+        height: 2.5rem;
+        flex-shrink: 0;
+        border-radius: var(--radius-md);
+        background: var(--surface-card-subtle);
       }
 
       /* Workshop presets (chips) + session form */
@@ -1626,7 +1705,51 @@
             <div id="library-loading-state" class="card empty-state" style="display: none;">
               <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
               <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Cargando catálogo…</h2>
-              <p style="margin-bottom: 0; font-size: var(--text-sm);">Obteniendo los muebles del taller.</p>
+              <p style="margin-bottom: var(--space-3); font-size: var(--text-sm);">Obteniendo los muebles del taller.</p>
+              <div class="furniture-grid" style="margin-bottom: 0;" aria-hidden="true">
+                <div class="furniture-card skeleton-card">
+                  <div class="furniture-card-preview skeleton-pulse"></div>
+                  <div class="furniture-card-body">
+                    <div class="skeleton-line skeleton-pulse"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 70%;"></div>
+                  </div>
+                </div>
+                <div class="furniture-card skeleton-card">
+                  <div class="furniture-card-preview skeleton-pulse"></div>
+                  <div class="furniture-card-body">
+                    <div class="skeleton-line skeleton-pulse"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 45%;"></div>
+                  </div>
+                </div>
+                <div class="furniture-card skeleton-card">
+                  <div class="furniture-card-preview skeleton-pulse"></div>
+                  <div class="furniture-card-body">
+                    <div class="skeleton-line skeleton-pulse"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 60%;"></div>
+                  </div>
+                </div>
+                <div class="furniture-card skeleton-card">
+                  <div class="furniture-card-preview skeleton-pulse"></div>
+                  <div class="furniture-card-body">
+                    <div class="skeleton-line skeleton-pulse"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 40%;"></div>
+                  </div>
+                </div>
+                <div class="furniture-card skeleton-card">
+                  <div class="furniture-card-preview skeleton-pulse"></div>
+                  <div class="furniture-card-body">
+                    <div class="skeleton-line skeleton-pulse"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 65%;"></div>
+                  </div>
+                </div>
+                <div class="furniture-card skeleton-card">
+                  <div class="furniture-card-preview skeleton-pulse"></div>
+                  <div class="furniture-card-body">
+                    <div class="skeleton-line skeleton-pulse"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 50%;"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div id="library-empty-state" class="card empty-state" style="display: none;">
@@ -1634,6 +1757,7 @@
               <h2 id="library-empty-title" style="font-size: var(--text-md); margin-bottom: var(--space-1);">Catálogo vacío</h2>
               <p id="library-empty-msg" style="margin-bottom: var(--space-2); font-size: var(--text-sm);"></p>
               <button id="btn-library-empty-action" class="btn btn-secondary" style="display: none; width: auto; margin: var(--space-2) auto 0;"></button>
+              <button id="btn-library-retry" type="button" class="btn btn-secondary" style="display: none; width: auto; margin: var(--space-2) auto 0;">Reintentar</button>
             </div>
 
             <div id="library-no-results-state" class="card empty-state" style="display: none;">
@@ -1722,7 +1846,30 @@
             <div id="pf-loading-state" class="card empty-state" style="display: none;">
               <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
               <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Cargando muebles…</h2>
-              <p style="margin-bottom: 0; font-size: var(--text-sm);">Obteniendo las unidades físicas del proyecto conectado.</p>
+              <p style="margin-bottom: var(--space-3); font-size: var(--text-sm);">Obteniendo las unidades físicas del proyecto conectado.</p>
+              <div aria-hidden="true">
+                <div class="card pf-unit-card">
+                  <div class="skeleton-square skeleton-pulse"></div>
+                  <div class="pf-unit-main">
+                    <div class="skeleton-line skeleton-pulse" style="width: 55%;"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 35%; margin-top: var(--space-1);"></div>
+                  </div>
+                </div>
+                <div class="card pf-unit-card">
+                  <div class="skeleton-square skeleton-pulse"></div>
+                  <div class="pf-unit-main">
+                    <div class="skeleton-line skeleton-pulse" style="width: 60%;"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 40%; margin-top: var(--space-1);"></div>
+                  </div>
+                </div>
+                <div class="card pf-unit-card">
+                  <div class="skeleton-square skeleton-pulse"></div>
+                  <div class="pf-unit-main">
+                    <div class="skeleton-line skeleton-pulse" style="width: 50%;"></div>
+                    <div class="skeleton-line skeleton-pulse" style="width: 30%; margin-top: var(--space-1);"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div id="pf-error-state" class="card empty-state" style="display: none;">
@@ -1761,9 +1908,9 @@
         <section id="pane-inspector" class="tab-pane" role="tabpanel">
           <div id="inspector-empty-state" class="card empty-state">
             <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg></div>
-            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Ningún elemento seleccionado</h2>
+            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Nada seleccionado</h2>
             <p style="margin-bottom: 0; font-size: var(--text-sm);">
-              Haz clic en un mueble, pieza o herraje de Granete en el viewport 3D para inspeccionarlo.
+              Hacé clic en un mueble, pieza o herraje de Granete en el modelo para ver sus propiedades y acciones.
             </p>
           </div>
 
@@ -1835,6 +1982,9 @@
               <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               <span>Eliminar Mueble</span>
             </button>
+            <!-- A denied canDelete explains itself with the Ruby capability
+                 reason; enabled or multi-selection hides this note. -->
+            <p id="inspector-delete-blocker" class="subhead" hidden></p>
           </div>
 
           <!-- Drill-down: part / hardware / aggregate context with owning furniture breadcrumb -->
@@ -1870,14 +2020,8 @@
                 <h3 id="hw-def-name" style="font-size: var(--text-sm); margin: 0;">--</h3>
                 <span id="hw-provenance-badge" class="status-badge">--</span>
               </div>
-              <div class="kv-row">
-                <span class="k">Colocación</span>
-                <span id="hw-placement-id-val" class="v">--</span>
-              </div>
-              <div class="kv-row">
-                <span class="k">Pieza anfitriona</span>
-                <span id="hw-host-val" class="v">--</span>
-              </div>
+              <!-- Raw placement/host IDs stay in the collapsed "Detalle
+                   técnico" (renderChildFacts): diagnostics, not product noise. -->
               <div class="kv-row">
                 <span class="k">Cara anclaje</span>
                 <span id="hw-face-val" class="v">--</span>
@@ -1913,14 +2057,6 @@
             <!-- Internal Component Authoring Card (#467 / SU-AUTH-1) -->
             <div id="part-authoring-card" class="card" style="display: none; margin-bottom: var(--space-3);">
               <div class="card-title">Componente interno</div>
-              <div class="kv-row" style="margin-top: var(--space-2);">
-                <span class="k">Ocurrencia</span>
-                <span id="part-occurrence-val" class="v">--</span>
-              </div>
-              <div class="kv-row">
-                <span class="k">Definición de pieza</span>
-                <span id="part-definition-val" class="v">--</span>
-              </div>
 
               <!-- Precise mm position (#467 interaction contract §7) -->
               <div id="part-position-group" style="margin-top: var(--space-3);">
@@ -2105,7 +2241,7 @@
               <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-bottom: var(--space-2);">
                 <div id="enroll-code-display" style="font-size: 2.2rem; font-weight: bold; letter-spacing: 0.25em; color: var(--brand-600); font-family: monospace;">--</div>
                 <button id="btn-copy-enroll-code" class="btn btn-secondary" title="Copiar código al portapapeles" style="padding: 6px 12px; font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 4px;">
-                  <span id="copy-enroll-code-icon">📋</span>
+                  <span id="copy-enroll-code-icon"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
                   <span id="copy-enroll-code-text">Copiar</span>
                 </button>
               </div>
@@ -2115,7 +2251,8 @@
               <p id="enroll-status-text" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-3);">Esperando aprobación en la web...</p>
               <div style="display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-2);">
                 <button id="btn-open-web-devices" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;">
-                  <span>🌐</span> Abrir Dispositivos en la web
+                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  <span>Abrir Dispositivos en la web</span>
                 </button>
                 <button id="btn-cancel-enroll" class="btn btn-secondary btn-sm">Cancelar</button>
               </div>
@@ -2237,7 +2374,7 @@
                 <div id="selector-detail-swatch" class="selector-detail-swatch"></div>
               </div>
               <div class="selector-detail-info">
-                <h3 id="selector-detail-name" class="selector-detail-name">Selecciona un material</h3>
+                <h3 id="selector-detail-name" class="selector-detail-name">Seleccioná un material</h3>
                 <div id="selector-detail-code" class="selector-detail-code">--</div>
                 <div class="selector-detail-specs">
                   <div class="selector-spec-row">
@@ -2348,6 +2485,7 @@
         var libEmptyTitle = document.getElementById("library-empty-title");
         var libEmptyMsg = document.getElementById("library-empty-msg");
         var btnEmptyAction = document.getElementById("btn-library-empty-action");
+        var btnLibraryRetry = document.getElementById("btn-library-retry");
         var libNoResultsState = document.getElementById("library-no-results-state");
         var libNoResultsMsg = document.getElementById("library-no-results-msg");
         var btnClearSearch = document.getElementById("btn-clear-search");
@@ -2443,6 +2581,7 @@
         var btnGotoFurniture = document.getElementById("btn-goto-furniture");
         var btnUpdate = document.getElementById("btn-update");
         var btnDelete = document.getElementById("btn-delete");
+        var inspectorDeleteBlocker = document.getElementById("inspector-delete-blocker");
 
         // Hardware placement & conflict DOM elements (#468)
         var hwConflictBanner = document.getElementById("hw-conflict-banner");
@@ -2451,8 +2590,6 @@
         var hwPlacementCard = document.getElementById("hw-placement-card");
         var hwDefName = document.getElementById("hw-def-name");
         var hwProvenanceBadge = document.getElementById("hw-provenance-badge");
-        var hwPlacementIdVal = document.getElementById("hw-placement-id-val");
-        var hwHostVal = document.getElementById("hw-host-val");
         var hwFaceVal = document.getElementById("hw-face-val");
         var hwOffsetInput = document.getElementById("hw-offset-input");
         var btnApplyHwOffset = document.getElementById("btn-apply-hw-offset");
@@ -2463,8 +2600,6 @@
 
         // Internal component authoring DOM elements (#467)
         var partAuthoringCard = document.getElementById("part-authoring-card");
-        var partOccurrenceVal = document.getElementById("part-occurrence-val");
-        var partDefinitionVal = document.getElementById("part-definition-val");
         var partPosX = document.getElementById("part-pos-x");
         var partPosY = document.getElementById("part-pos-y");
         var partPosZ = document.getElementById("part-pos-z");
@@ -2506,7 +2641,9 @@
           lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
           ruler: '<rect x="2" y="8" width="20" height="8" rx="1"/><line x1="7" y1="8" x2="7" y2="11"/><line x1="12" y1="8" x2="12" y2="11"/><line x1="17" y1="8" x2="17" y2="11"/>',
           grain: '<line x1="4" y1="20" x2="20" y2="4"/><line x1="4" y1="14" x2="14" y2="4"/><line x1="10" y1="20" x2="20" y2="10"/>',
-          book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'
+          book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+          copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+          check: '<polyline points="20 6 9 17 4 12"/>'
         };
 
         function icon(name, size) {
@@ -3333,7 +3470,7 @@
 
           if (!mat) {
             updateMaterialSwatch(selectorDetailSwatch, null);
-            selectorDetailName.textContent = "Selecciona un material";
+            selectorDetailName.textContent = "Seleccioná un material";
             selectorDetailCode.textContent = "--";
             selectorSpecManufacturer.textContent = "--";
             selectorSpecThickness.textContent = "--";
@@ -3446,6 +3583,13 @@
           libEmptyState.style.display = stateType === "empty" ? "block" : "none";
           libNoResultsState.style.display = stateType === "no-results" ? "block" : "none";
           libCardsGrid.style.display = stateType === "grid" ? "grid" : "none";
+
+          // Recoverability: only the remote-error empty state offers an
+          // explicit retry of the read-only catalog fetch.
+          btnLibraryRetry.style.display = stateType === "empty" &&
+            (options.source || "local") === "error" && !options.blocked
+            ? "inline-flex"
+            : "none";
 
           if (stateType === "empty") {
             var source = options.source || "local";
@@ -4527,6 +4671,23 @@
           return !!(context && context.capabilities && context.capabilities[name] && context.capabilities[name].supported);
         }
 
+        // Display-only translation of the anchor-face enum; a missing value
+        // renders "--" instead of a fabricated face and unknown values render
+        // raw. Never touches the business payload.
+        var ANCHOR_FACE_LABELS = {
+          front: "Frontal",
+          back: "Posterior",
+          left: "Izquierda",
+          right: "Derecha",
+          top: "Superior",
+          bottom: "Inferior"
+        };
+
+        function formatAnchorFace(anchorFace) {
+          if (!anchorFace) return "--";
+          return ANCHOR_FACE_LABELS[anchorFace] || anchorFace;
+        }
+
         function hideInspectorViews() {
           inspectorEmpty.style.display = "none";
           inspectorUnmanaged.style.display = "none";
@@ -4619,6 +4780,16 @@
           btnUpdate.disabled = Boolean(!canEditParams || multi);
           btnDelete.disabled = Boolean(!capabilityEnabled(context, "canDelete") || multi);
 
+          // A denied canDelete explains itself with the Ruby-provided reason;
+          // enabled or multi-selection hides the note (multi has its own).
+          var deleteCap = context.capabilities && context.capabilities.canDelete;
+          var deleteUnavailable = !multi && !(deleteCap && deleteCap.supported);
+          inspectorDeleteBlocker.hidden = !deleteUnavailable;
+          if (deleteUnavailable) {
+            inspectorDeleteBlocker.textContent = (deleteCap && deleteCap.reason) ||
+              "La eliminación no está disponible para este mueble.";
+          }
+
           if (!canEditParams) {
             inspectorParams = {};
             inspectorMaterialChoices = {};
@@ -4691,9 +4862,7 @@
                 return h.id === context.hardwareDefinitionId || h.code === context.hardwareDefinitionId;
               });
               if (hwDefName) hwDefName.textContent = currentDef ? currentDef.name : (context.hardwareDefinitionId || "--");
-              if (hwPlacementIdVal) hwPlacementIdVal.textContent = context.hardwarePlacementId || "--";
-              if (hwHostVal) hwHostVal.textContent = context.hostComponentInstanceId || "--";
-              if (hwFaceVal) hwFaceVal.textContent = context.anchorFace || "front";
+              if (hwFaceVal) hwFaceVal.textContent = formatAnchorFace(context.anchorFace);
 
               var isManual = context.placementKind === "manual";
               var isDerived = context.placementKind === "derived";
@@ -4785,9 +4954,6 @@
           var anyAction = movable || canDuplicate || canAdd || canRemove;
           partAuthoringCard.style.display = anyAction ? "block" : "none";
           if (!anyAction) return;
-
-          if (partOccurrenceVal) partOccurrenceVal.textContent = context.componentInstanceId || "--";
-          if (partDefinitionVal) partDefinitionVal.textContent = context.componentDefinitionId || "--";
 
           var translation = Array.isArray(context.assemblyTranslationMm)
             ? context.assemblyTranslationMm : null;
@@ -4945,6 +5111,15 @@
           libSearchInput.value = "";
           libSearchClear.style.display = "none";
           renderLibraryBrowser();
+        });
+
+        // Re-asks Ruby for the catalog; setCatalog pushes the next truthful
+        // state (error again if the server is still down), so the panel never
+        // fakes a client-side loading flip here.
+        btnLibraryRetry.addEventListener("click", function () {
+          if (window.sketchup && window.sketchup.get_catalog) {
+            window.sketchup.get_catalog();
+          }
         });
 
         btnBackToLibrary.addEventListener("click", function () {
@@ -5913,7 +6088,7 @@
 
         function pfPlaceFailureMessage(result) {
           switch (result.code) {
-            case "created_pending": return result.reason || "El mueble se creó en el proyecto pero falló la colocación local; colócalo desde la pestaña Proyecto.";
+            case "created_pending": return result.reason || "El mueble se creó en el proyecto pero falló la colocación local; colocalo desde la pestaña Proyecto.";
             case "unbound": return "Conectá el modelo al proyecto primero.";
             case "stale_base": return "El diseño avanzó en el servidor: actualizá la base de trabajo en Estado.";
             case "not_found": return "El mueble no pertenece al proyecto conectado.";
@@ -5978,12 +6153,12 @@
             if (!code || code === "--") return;
 
             var setCopiedUI = function () {
-              if (copyEnrollCodeIcon) copyEnrollCodeIcon.textContent = "✓";
+              if (copyEnrollCodeIcon) copyEnrollCodeIcon.innerHTML = icon("check", 14);
               if (copyEnrollCodeText) copyEnrollCodeText.textContent = "¡Copiado!";
               btnCopyEnrollCode.classList.remove("btn-secondary");
               btnCopyEnrollCode.classList.add("btn-primary");
               setTimeout(function () {
-                if (copyEnrollCodeIcon) copyEnrollCodeIcon.textContent = "📋";
+                if (copyEnrollCodeIcon) copyEnrollCodeIcon.innerHTML = icon("copy", 14);
                 if (copyEnrollCodeText) copyEnrollCodeText.textContent = "Copiar";
                 btnCopyEnrollCode.classList.remove("btn-primary");
                 btnCopyEnrollCode.classList.add("btn-secondary");
