@@ -237,7 +237,14 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
     expect(confirm1.status).toBe('confirmed');
 
     // 3. Web observes CONFIRMATION — the honest terminal wording.
-    await expect(page.getByTestId('pairing-confirmed')).toContainText('Diseño vinculado en SketchUp');
+    // The modal polls every four seconds. Its in-flight request may have read
+    // pending immediately before the extension committed confirmation, so
+    // allow the next authoritative poll instead of racing a five-second CI
+    // window.
+    await expect(page.getByTestId('pairing-confirmed')).toContainText(
+      'Diseño vinculado en SketchUp',
+      { timeout: 15_000 },
+    );
     await page.keyboard.press('Escape');
 
     // 4. Publish R1 through the existing revision pipeline.
