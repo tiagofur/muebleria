@@ -28,7 +28,7 @@ var (
 
 const pairingGrantColumns = `id, organization_id, project_id, design_id,
 	COALESCE(base_revision_id::text, ''), action, code_hash, status, expires_at,
-	created_by, exchanged_at, COALESCE(exchanged_by_session_id::text, ''),
+	created_by, created_by_session_id, exchanged_at, COALESCE(exchanged_by_session_id::text, ''),
 	created_at, updated_at, version`
 
 // HashPairingCode derives the stored form of a pairing code. Stored and
@@ -42,7 +42,8 @@ func scanDesignPairingGrant(row pgx.Row) (*domain.DesignPairingGrant, error) {
 	var g domain.DesignPairingGrant
 	if err := row.Scan(&g.ID, &g.OrganizationID, &g.ProjectID, &g.DesignID,
 		&g.BaseRevisionID, &g.Action, &g.CodeHash, &g.Status, &g.ExpiresAt, &g.CreatedBy,
-		&g.ExchangedAt, &g.ExchangedBySessionID, &g.CreatedAt, &g.UpdatedAt, &g.Version); err != nil {
+		&g.CreatedBySessionID, &g.ExchangedAt, &g.ExchangedBySessionID,
+		&g.CreatedAt, &g.UpdatedAt, &g.Version); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrPairingGrantNotFound
 		}
@@ -62,6 +63,7 @@ type CreateDesignPairingGrantCommand struct {
 	Code           string // normalized, as returned to the creating user
 	TTL            time.Duration
 	ActorUserID    string
+	SessionID      string // creating web session (registry sid); provenance, never a secret
 	IP             string
 	RequestID      string
 }
@@ -73,7 +75,7 @@ type CreateDesignPairingGrantCommand struct {
 func (s *PostgresStore) CreateDesignPairingGrant(ctx context.Context, cmd CreateDesignPairingGrantCommand) (*domain.DesignPairingGrant, error) {
 	if !isValidUUID(cmd.ProjectID) || !isValidUUID(cmd.DesignID) ||
 		!domain.IsValidPairingAction(cmd.Action) || cmd.Code == "" ||
-		cmd.TTL <= 0 || !isValidUUID(cmd.ActorUserID) {
+		cmd.TTL <= 0 || !isValidUUID(cmd.ActorUserID) || !isValidUUID(cmd.SessionID) {
 		return nil, domain.ErrInvalidDesignCommand
 	}
 	if cmd.BaseRevisionID != "" && !isValidUUID(cmd.BaseRevisionID) {
@@ -118,12 +120,12 @@ func (s *PostgresStore) CreateDesignPairingGrant(ctx context.Context, cmd Create
 	execute := func(txCtx context.Context) error {
 		created, err = scanDesignPairingGrant(s.db(txCtx).QueryRow(txCtx, `
 			INSERT INTO design_pairing_grants
-				(organization_id, project_id, design_id, base_revision_id, action, code_hash, status, expires_at, created_by)
-			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9::uuid)
+				(organization_id, project_id, design_id, base_revision_id, action, code_hash, status, expires_at, created_by, created_by_session_id)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9::uuid, $10::uuid)
 			RETURNING `+pairingGrantColumns,
 			orgID, cmd.ProjectID, cmd.DesignID, baseRev, cmd.Action,
 			HashPairingCode(cmd.Code), domain.PairingGrantStatusPending,
-			time.Now().Add(cmd.TTL).UTC(), cmd.ActorUserID))
+			time.Now().Add(cmd.TTL).UTC(), cmd.ActorUserID, cmd.SessionID))
 		if err != nil {
 			return err
 		}
@@ -137,6 +139,7 @@ func (s *PostgresStore) CreateDesignPairingGrant(ctx context.Context, cmd Create
 				"design_id":               cmd.DesignID,
 				"action":                  cmd.Action,
 				"pinned_base_revision_id": cmd.BaseRevisionID,
+				"initiating_session_id":   cmd.SessionID,
 				"request_id":              cmd.RequestID,
 			},
 		})
@@ -165,22 +168,41 @@ type ExchangeDesignPairingGrantCommand struct {
 	RequestID            string
 }
 
-// ExchangeDesignPairingGrant atomically consumes a pending, unexpired grant:
-// the conditional pending→exchanged UPDATE makes a replayed code lose instead
-// of revealing the context twice. The lookup runs under the caller's
-// organization RLS scope, so a code minted by another organization is
-// uniformly not-found (never a scope leak).
-func (s *PostgresStore) ExchangeDesignPairingGrant(ctx context.Context, cmd ExchangeDesignPairingGrantCommand) (*domain.DesignPairingGrant, error) {
+// ExchangeDesignPairingGrantResult carries both halves of one coherent
+// exchange: the consumed grant and the authoritative #388 binding context
+// for the exact pinned base. Callers never re-validate.
+type ExchangeDesignPairingGrantResult struct {
+	Grant          *domain.DesignPairingGrant
+	BindingContext *ModelBindingContext
+}
+
+// ExchangeDesignPairingGrant consumes a pending, unexpired grant and resolves
+// the authoritative binding context in ONE transaction, in that order:
+//
+//  1. SELECT ... FOR UPDATE by code hash under the exchanging device's own
+//     tenant scope (a foreign-org code is uniformly not-found);
+//  2. pending + TTL check — a replayed/expired/cancelled code answers
+//     ErrPairingGrantConflict WITHOUT touching the row;
+//  3. exact #388 binding validation via GetModelBindingContext, passing the
+//     grant's frozen BaseRevisionID (never nil): a grant pinned to R1
+//     validates R1 even if the design has since published R2, and an invalid
+//     pin fails with the exact ErrDesignRevisionNotFound — never a silent
+//     re-base. A validation failure ROLLS BACK: the grant stays pending and
+//     remains retryable once the cause is fixed;
+//  4. only then the conditional pending→exchanged UPDATE (one winner under
+//     concurrency) and the exchange audit (never the code or its hash).
+func (s *PostgresStore) ExchangeDesignPairingGrant(ctx context.Context, cmd ExchangeDesignPairingGrantCommand) (*ExchangeDesignPairingGrantResult, error) {
 	if cmd.Code == "" || !isValidUUID(cmd.ExchangedByUserID) || !isValidUUID(cmd.ExchangedBySessionID) {
 		return nil, domain.ErrInvalidDesignCommand
 	}
 	codeHash := HashPairingCode(cmd.Code)
-	var exchanged *domain.DesignPairingGrant
+	var result *ExchangeDesignPairingGrantResult
 	execute := func(txCtx context.Context) error {
-		// Classify before consuming so expired/cancelled/exchanged answer a
-		// typed conflict while foreign codes stay uniformly not-found.
+		// Lock the exact row so two concurrent exchanges of the same code
+		// serialize: the loser re-reads the winner's commit and conflicts.
 		current, err := scanDesignPairingGrant(s.db(txCtx).QueryRow(txCtx, `
 			SELECT `+pairingGrantColumns+` FROM design_pairing_grants WHERE code_hash = $1
+			FOR UPDATE
 		`, codeHash))
 		if errors.Is(err, ErrPairingGrantNotFound) {
 			return ErrPairingGrantNotFound
@@ -191,6 +213,14 @@ func (s *PostgresStore) ExchangeDesignPairingGrant(ctx context.Context, cmd Exch
 		if current.Status != domain.PairingGrantStatusPending || time.Now().After(current.ExpiresAt) {
 			return ErrPairingGrantConflict
 		}
+
+		// Exact pinned-base validation BEFORE any consume: a failure here
+		// rolls the whole transaction back, so the grant survives pending.
+		bindingCtx, err := s.GetModelBindingContext(txCtx, current.ProjectID, current.DesignID, current.BaseRevisionID)
+		if err != nil {
+			return err
+		}
+
 		updated, err := scanDesignPairingGrant(s.db(txCtx).QueryRow(txCtx, `
 			UPDATE design_pairing_grants
 			SET status = $1, exchanged_at = NOW(), exchanged_by_session_id = $2::uuid,
@@ -201,29 +231,39 @@ func (s *PostgresStore) ExchangeDesignPairingGrant(ctx context.Context, cmd Exch
 		if err != nil {
 			return err
 		}
-		exchanged = updated
+		result = &ExchangeDesignPairingGrantResult{Grant: updated, BindingContext: bindingCtx}
 		return s.InsertSecurityAuditEvent(txCtx, SecurityAuditEvent{
 			EventType:   "design_pairing_grant_exchanged",
 			ActorUserID: cmd.ExchangedByUserID,
 			IP:          cmd.IP,
 			Details: map[string]interface{}{
-				"grant_id":   updated.ID,
-				"project_id": updated.ProjectID,
-				"design_id":  updated.DesignID,
-				"action":     updated.Action,
-				"request_id": cmd.RequestID,
+				"grant_id":                  updated.ID,
+				"project_id":                updated.ProjectID,
+				"design_id":                 updated.DesignID,
+				"action":                    updated.Action,
+				"pinned_base_revision_id":   derefString(updated.BaseRevisionID),
+				"initiating_session_id":     updated.CreatedBySessionID,
+				"exchanging_device_session": cmd.ExchangedBySessionID,
+				"request_id":                cmd.RequestID,
 			},
 		})
 	}
 	if transactionFromContext(ctx) != nil {
-		return exchanged, execute(ctx)
+		return result, execute(ctx)
 	}
 	actor, _ := TenantActorFromCtx(ctx)
 	if actor.OrganizationID == "" {
 		actor.OrganizationID = OrgFromCtx(ctx)
 	}
 	err := s.WithinTenantTx(ctx, actor, execute)
-	return exchanged, err
+	return result, err
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // GetDesignPairingGrant reads one grant under the caller's tenant scope by

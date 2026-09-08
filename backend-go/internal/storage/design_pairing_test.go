@@ -23,26 +23,31 @@ const (
 	pairingTestTTL  = 10 * time.Minute
 )
 
-// seedPairingSession inserts a real org-less sketchup registry session for
-// the exchanging device's user and returns its id — the exchange FK
-// attributes the consumption to an auth_sessions row, exactly like the
-// #460 transport token's sid.
-func seedPairingSession(t *testing.T, fx *rlsFixture, userID string) string {
+// seedPairingSession inserts a real registry session (web for the creating
+// user, sketchup for the exchanging device) and returns its id — both grant
+// session FKs attribute to auth_sessions rows, exactly like the sids the
+// #460 tokens carry.
+func seedPairingSession(t *testing.T, fx *rlsFixture, userID, clientType string) string {
 	t.Helper()
 	var sessionID string
 	err := fx.admin.QueryRow(context.Background(), `
 		INSERT INTO auth_sessions (user_id, client_type, absolute_expires_at)
-		VALUES ($1, 'sketchup', NOW() + interval '30 days')
-		RETURNING id::text`, userID).Scan(&sessionID)
+		VALUES ($1, $2, NOW() + interval '30 days')
+		RETURNING id::text`, userID, clientType).Scan(&sessionID)
 	if err != nil {
-		t.Fatalf("seed device session: %v", err)
+		t.Fatalf("seed %s session: %v", clientType, err)
 	}
 	return sessionID
 }
 
 func pairingTestActorSession(t *testing.T, fx *rlsFixture, actor storage.TenantActor) string {
 	t.Helper()
-	return seedPairingSession(t, fx, actor.UserID)
+	return seedPairingSession(t, fx, actor.UserID, "sketchup")
+}
+
+func pairingTestWebSession(t *testing.T, fx *rlsFixture, actor storage.TenantActor) string {
+	t.Helper()
+	return seedPairingSession(t, fx, actor.UserID, "web")
 }
 
 // seedPairingDesign creates one design (owned by actor's org) on the given
@@ -76,19 +81,36 @@ func seedPairingDesign(t *testing.T, fx *rlsFixture, actor storage.TenantActor, 
 // seedPairingRevision inserts one published revision directly (admin pool):
 // revisions are immutable and their normal producer is the #392 publish
 // flow, which this slice does not need end-to-end.
-func seedPairingRevision(t *testing.T, fx *rlsFixture, orgID, projectID, designID, revisionID string) {
+func seedPairingRevision(t *testing.T, fx *rlsFixture, orgID, projectID, designID, revisionID string, number int) {
 	t.Helper()
 	_, err := fx.admin.Exec(context.Background(), `
 		INSERT INTO design_revisions (id, organization_id, project_id, design_id, revision_number, source_type, status, created_by)
-		VALUES ($1, $2, $3, $4, 1, 'sketchup', 'published', NULL)`,
-		revisionID, orgID, projectID, designID)
+		VALUES ($1, $2, $3, $4, $5, 'sketchup', 'published', NULL)`,
+		revisionID, orgID, projectID, designID, number)
 	if err != nil {
-		t.Fatalf("seed revision: %v", err)
+		t.Fatalf("seed revision %d: %v", number, err)
+	}
+}
+
+// seedPairingWorkingCopy pins the design's working copy to the given base
+// revision (admin pool): the working copy is mutable draft state whose normal
+// writers are the #392 sync flow. CreateDesign already seeds the row, so
+// this is an upsert on design_id (the table's primary key).
+func seedPairingWorkingCopy(t *testing.T, fx *rlsFixture, orgID, projectID, designID string, baseRevisionID *string) {
+	t.Helper()
+	_, err := fx.admin.Exec(context.Background(), `
+		INSERT INTO design_working_copies (organization_id, project_id, design_id, base_revision_id)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (design_id) DO UPDATE SET base_revision_id = EXCLUDED.base_revision_id`,
+		orgID, projectID, designID, baseRevisionID)
+	if err != nil {
+		t.Fatalf("seed working copy: %v", err)
 	}
 }
 
 func createPairingGrant(t *testing.T, fx *rlsFixture, actor storage.TenantActor, projectID, designID, baseRevisionID string) *domain.DesignPairingGrant {
 	t.Helper()
+	webSession := pairingTestWebSession(t, fx, actor)
 	var grant *domain.DesignPairingGrant
 	err := fiTx(t, fx.store, actor, func(ctx context.Context) error {
 		var err error
@@ -100,6 +122,7 @@ func createPairingGrant(t *testing.T, fx *rlsFixture, actor storage.TenantActor,
 			Code:           pairingTestCode,
 			TTL:            pairingTestTTL,
 			ActorUserID:    actor.UserID,
+			SessionID:      webSession,
 			IP:             "127.0.0.1",
 			RequestID:      "test-create",
 		})
@@ -177,10 +200,10 @@ func TestDesignPairingGrants_LifecycleExchangeOnceThenReplayRejected(t *testing.
 	}
 
 	// First exchange consumes the grant and attributes the device session.
-	var exchanged *domain.DesignPairingGrant
+	var result *storage.ExchangeDesignPairingGrantResult
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		exchanged, err = fx.store.ExchangeDesignPairingGrant(ctx, storage.ExchangeDesignPairingGrantCommand{
+		result, err = fx.store.ExchangeDesignPairingGrant(ctx, storage.ExchangeDesignPairingGrantCommand{
 			Code:                 pairingTestCode,
 			ExchangedByUserID:    actorA.UserID,
 			ExchangedBySessionID: sessionA,
@@ -192,11 +215,15 @@ func TestDesignPairingGrants_LifecycleExchangeOnceThenReplayRejected(t *testing.
 	if err != nil {
 		t.Fatalf("first exchange: %v", err)
 	}
+	exchanged := result.Grant
 	if exchanged.Status != domain.PairingGrantStatusExchanged || exchanged.ExchangedAt == nil {
 		t.Fatalf("exchange state = %q exchanged_at=%v, want consumed", exchanged.Status, exchanged.ExchangedAt)
 	}
 	if exchanged.ExchangedBySessionID == nil || *exchanged.ExchangedBySessionID != sessionA {
 		t.Fatalf("exchanged_by_session_id = %v, want the device session", exchanged.ExchangedBySessionID)
+	}
+	if result.BindingContext == nil || result.BindingContext.Design.ID != designID {
+		t.Fatalf("binding context = %+v, want the exact design truth", result.BindingContext)
 	}
 
 	// Replay loses atomically: same code, second transaction → conflict.
@@ -315,7 +342,7 @@ func TestDesignPairingGrants_ExactPairAndRevisionPins(t *testing.T) {
 	designA := seedPairingDesign(t, fx, actorA, "Pairing pin A")
 	designB := seedPairingDesignOn(t, fx, actorB, fiProjectB, "Pairing pin B")
 	revB := "8f000000-0000-0000-0000-00000000000b"
-	seedPairingRevision(t, fx, rlsOrgB, fiProjectB, designB, revB)
+	seedPairingRevision(t, fx, rlsOrgB, fiProjectB, designB, revB, 1)
 
 	// Wrong design for the project: org B's design does not belong to the
 	// org A owned shared project.
@@ -327,6 +354,7 @@ func TestDesignPairingGrants_ExactPairAndRevisionPins(t *testing.T) {
 			Code:        pairingTestCode,
 			TTL:         pairingTestTTL,
 			ActorUserID: actorA.UserID,
+			SessionID:   pairingTestWebSession(t, fx, actorA),
 		})
 		return err
 	})
@@ -344,6 +372,7 @@ func TestDesignPairingGrants_ExactPairAndRevisionPins(t *testing.T) {
 			Code:           pairingTestCode,
 			TTL:            pairingTestTTL,
 			ActorUserID:    actorA.UserID,
+			SessionID:      pairingTestWebSession(t, fx, actorA),
 		})
 		return err
 	})
@@ -364,7 +393,7 @@ func TestDesignPairingGrants_ExactPairAndRevisionPins(t *testing.T) {
 
 	// A pinned revision of the SAME design is accepted and read back.
 	revA := "8f000000-0000-0000-0000-00000000000a"
-	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designA, revA)
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designA, revA, 1)
 	grant := createPairingGrant(t, fx, actorA, fiSharedProject, designA, revA)
 	if grant.BaseRevisionID == nil || *grant.BaseRevisionID != revA {
 		t.Fatalf("pinned base = %v, want %s", grant.BaseRevisionID, revA)
@@ -486,5 +515,261 @@ func TestDesignPairingGrants_AuditTrailNeverCarriesCode(t *testing.T) {
 	}
 	if !kinds["design_pairing_grant_created"] || !kinds["design_pairing_grant_exchanged"] {
 		t.Fatalf("audit kinds = %v, want created+exchanged", kinds)
+	}
+}
+
+// Revision-drift proof: a grant pinned to R1 keeps validating exactly R1
+// after the design publishes R2 and the working copy re-bases onto it. The
+// exchange succeeds with the frozen pin intact (never silently R2); the
+// authoritative working-copy truth travels separately in the same payload
+// so the plugin can derive its own stale_base state (#388 semantics).
+func TestDesignPairingGrants_ExactPinnedBaseRevisionSurvivesLaterRevision(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	designID := seedPairingDesign(t, fx, actorA, "Pairing revision drift")
+	revR1 := "8f000000-0000-0000-0000-0000000000a1"
+	revR2 := "8f000000-0000-0000-0000-0000000000a2"
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR1, 1)
+	seedPairingWorkingCopy(t, fx, rlsOrgA, fiSharedProject, designID, &revR1)
+
+	grant := createPairingGrant(t, fx, actorA, fiSharedProject, designID, revR1)
+	if grant.BaseRevisionID == nil || *grant.BaseRevisionID != revR1 {
+		t.Fatalf("pinned base = %v, want R1", grant.BaseRevisionID)
+	}
+
+	// The design advances: R2 is published and becomes the working base.
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR2, 2)
+	if _, err := fx.admin.Exec(context.Background(),
+		`UPDATE design_working_copies SET base_revision_id = $1 WHERE design_id = $2`, revR2, designID); err != nil {
+		t.Fatal(err)
+	}
+
+	var result *storage.ExchangeDesignPairingGrantResult
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		result, err = fx.store.ExchangeDesignPairingGrant(ctx, storage.ExchangeDesignPairingGrantCommand{
+			Code:                 pairingTestCode,
+			ExchangedByUserID:    actorA.UserID,
+			ExchangedBySessionID: pairingTestActorSession(t, fx, actorA),
+			IP:                   "127.0.0.1",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("exchange with drifted working base: %v", err)
+	}
+
+	// The frozen pin is exactly R1 — never implicitly rebased to R2.
+	if result.Grant.BaseRevisionID == nil || *result.Grant.BaseRevisionID != revR1 {
+		t.Fatalf("exchanged pin = %v, want exactly R1", result.Grant.BaseRevisionID)
+	}
+	// The authoritative working-copy truth (R2) still travels so the client
+	// derives stale_base; it never replaces the pin.
+	if result.BindingContext == nil || result.BindingContext.WorkingCopyBaseRevisionID == nil ||
+		*result.BindingContext.WorkingCopyBaseRevisionID != revR2 {
+		t.Fatalf("binding context working base = %v, want the authoritative R2 truth",
+			result.BindingContext.WorkingCopyBaseRevisionID)
+	}
+}
+
+// Failed-validation-not-consumed proof: the #388 binding validation runs
+// BEFORE the conditional consume inside one transaction, so any failure in
+// the coherent exchange leaves the grant pending and retryable. The failure
+// is injected by failing the surrounding transaction AFTER a successful
+// exchange — the exact atomicity that keeps the grant unconsumed when the
+// validation itself fails earlier in the same transaction (data-level
+// validation failures are structurally prevented by the composite FKs).
+func TestDesignPairingGrants_FailedExchangeRollsBackGrantStaysPending(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	designID := seedPairingDesign(t, fx, actorA, "Pairing rollback")
+	grant := createPairingGrant(t, fx, actorA, fiSharedProject, designID, "")
+	sessionA := pairingTestActorSession(t, fx, actorA)
+
+	exchangeCmd := func(ctx context.Context) error {
+		_, err := fx.store.ExchangeDesignPairingGrant(ctx, storage.ExchangeDesignPairingGrantCommand{
+			Code:                 pairingTestCode,
+			ExchangedByUserID:    actorA.UserID,
+			ExchangedBySessionID: sessionA,
+			IP:                   "127.0.0.1",
+		})
+		return err
+	}
+
+	// The exchange itself succeeds, but the surrounding operation fails
+	// afterwards: nothing may persist.
+	deliberate := errors.New("caller operation failed after exchange")
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		if err := exchangeCmd(ctx); err != nil {
+			return err
+		}
+		return deliberate
+	})
+	if !errors.Is(err, deliberate) {
+		t.Fatalf("tx error = %v, want the caller failure", err)
+	}
+
+	// The grant survived pending — no consume, no exchange audit.
+	var status string
+	var exchangedAt *string
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT status, exchanged_at::text FROM design_pairing_grants WHERE id = $1`, grant.ID).
+		Scan(&status, &exchangedAt); err != nil {
+		t.Fatal(err)
+	}
+	if status != domain.PairingGrantStatusPending || exchangedAt != nil {
+		t.Fatalf("grant after rolled-back exchange = %q/%v, want pending/nil", status, exchangedAt)
+	}
+	var auditCount int
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM security_audit_events
+		 WHERE event_type = 'design_pairing_grant_exchanged' AND details->>'grant_id' = $1`,
+		grant.ID).Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if auditCount != 0 {
+		t.Fatalf("exchange audit rows after rollback = %d, want 0", auditCount)
+	}
+
+	// Retry after the cause is gone: the same code now exchanges exactly once.
+	err = fiTx(t, fx.store, actorA, exchangeCmd)
+	if err != nil {
+		t.Fatalf("retry exchange after rollback: %v", err)
+	}
+}
+
+// Concurrency proof: two exchanges of the same code race in real
+// PostgreSQL. The row lock serializes them — exactly one commits the
+// pending→exchanged transition, the loser reads the winner's commit and
+// answers ErrPairingGrantConflict. One session attributed, one audit row.
+func TestDesignPairingGrants_ConcurrentExchangeExactlyOneWinner(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	designID := seedPairingDesign(t, fx, actorA, "Pairing concurrency")
+	grant := createPairingGrant(t, fx, actorA, fiSharedProject, designID, "")
+	session1 := seedPairingSession(t, fx, actorA.UserID, "sketchup")
+	session2 := seedPairingSession(t, fx, actorA.UserID, "sketchup")
+
+	type outcome struct {
+		err error
+	}
+	outcomes := make(chan outcome, 2)
+	start := make(chan struct{})
+
+	runExchange := func(sessionID string) {
+		err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+			_, err := fx.store.ExchangeDesignPairingGrant(ctx, storage.ExchangeDesignPairingGrantCommand{
+				Code:                 pairingTestCode,
+				ExchangedByUserID:    actorA.UserID,
+				ExchangedBySessionID: sessionID,
+				IP:                   "127.0.0.1",
+			})
+			return err
+		})
+		outcomes <- outcome{err: err}
+	}
+	go runExchange(session1)
+	go runExchange(session2)
+	close(start)
+
+	var successes, conflicts int
+	for i := 0; i < 2; i++ {
+		out := <-outcomes
+		switch {
+		case out.err == nil:
+			successes++
+		case errors.Is(out.err, storage.ErrPairingGrantConflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected concurrent exchange error: %v", out.err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("concurrent outcomes = %d success / %d conflict, want 1/1", successes, conflicts)
+	}
+
+	// Exactly the winner's session is attributed, exactly one audit row.
+	var status, attributed string
+	if err := fx.admin.QueryRow(context.Background(), `
+		SELECT status, exchanged_by_session_id::text FROM design_pairing_grants WHERE id = $1`,
+		grant.ID).Scan(&status, &attributed); err != nil {
+		t.Fatal(err)
+	}
+	if status != domain.PairingGrantStatusExchanged {
+		t.Fatalf("status after race = %q, want exchanged", status)
+	}
+	if attributed != session1 && attributed != session2 {
+		t.Fatalf("attributed session = %q, want one of the two racers", attributed)
+	}
+	var auditCount int
+	if err := fx.admin.QueryRow(context.Background(), `
+		SELECT COUNT(*) FROM security_audit_events
+		WHERE event_type = 'design_pairing_grant_exchanged' AND details->>'grant_id' = $1`,
+		grant.ID).Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if auditCount != 1 {
+		t.Fatalf("exchange audit rows after race = %d, want exactly 1", auditCount)
+	}
+}
+
+// Full provenance correlation: one grant row demonstrates organization +
+// initiating user + initiating web session + project + design + pinned base
+// revision + exchanging device session — no tokens, no secrets.
+func TestDesignPairingGrants_ProvenanceCorrelation(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	designID := seedPairingDesign(t, fx, actorA, "Pairing provenance")
+	revR1 := "8f000000-0000-0000-0000-0000000000b1"
+	seedPairingRevision(t, fx, rlsOrgA, fiSharedProject, designID, revR1, 1)
+
+	webSession := pairingTestWebSession(t, fx, actorA)
+	var grant *domain.DesignPairingGrant
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		grant, err = fx.store.CreateDesignPairingGrant(ctx, storage.CreateDesignPairingGrantCommand{
+			ProjectID:      fiSharedProject,
+			DesignID:       designID,
+			BaseRevisionID: revR1,
+			Action:         domain.PairingActionOpenDesign,
+			Code:           pairingTestCode,
+			TTL:            pairingTestTTL,
+			ActorUserID:    actorA.UserID,
+			SessionID:      webSession,
+			IP:             "127.0.0.1",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deviceSession := pairingTestActorSession(t, fx, actorA)
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.ExchangeDesignPairingGrant(ctx, storage.ExchangeDesignPairingGrantCommand{
+			Code:                 pairingTestCode,
+			ExchangedByUserID:    actorA.UserID,
+			ExchangedBySessionID: deviceSession,
+			IP:                   "127.0.0.1",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var orgID, createdBy, createdBySession, projectID, designRowID, pinnedBase, exchangedBy string
+	if err := fx.admin.QueryRow(context.Background(), `
+		SELECT organization_id::text, created_by::text, created_by_session_id::text,
+		       project_id::text, design_id::text, COALESCE(base_revision_id::text, ''),
+		       exchanged_by_session_id::text
+		FROM design_pairing_grants WHERE id = $1`, grant.ID).
+		Scan(&orgID, &createdBy, &createdBySession, &projectID, &designRowID, &pinnedBase, &exchangedBy); err != nil {
+		t.Fatal(err)
+	}
+	if orgID != rlsOrgA || createdBy != actorA.UserID || createdBySession != webSession ||
+		projectID != fiSharedProject || designRowID != designID || pinnedBase != revR1 ||
+		exchangedBy != deviceSession {
+		t.Fatalf("provenance mismatch: org=%s user=%s webSession=%s project=%s design=%s pin=%s deviceSession=%s",
+			orgID, createdBy, createdBySession, projectID, designRowID, pinnedBase, exchangedBy)
 	}
 }

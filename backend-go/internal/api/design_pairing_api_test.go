@@ -28,16 +28,17 @@ const (
 func pairingTestGrant() *domain.DesignPairingGrant {
 	expires := time.Now().Add(pairingGrantTTL)
 	return &domain.DesignPairingGrant{
-		ID:             pairingTestGrantID,
-		OrganizationID: storage.InitialOrganizationID,
-		ProjectID:      designTestProjectID,
-		DesignID:       designTestDesignID,
-		Action:         domain.PairingActionOpenDesign,
-		Status:         domain.PairingGrantStatusPending,
-		ExpiresAt:      expires,
-		CreatedBy:      "admin-1",
-		CreatedAt:      time.Now().Add(-time.Minute),
-		UpdatedAt:      time.Now().Add(-time.Minute),
+		ID:                 pairingTestGrantID,
+		OrganizationID:     storage.InitialOrganizationID,
+		ProjectID:          designTestProjectID,
+		DesignID:           designTestDesignID,
+		Action:             domain.PairingActionOpenDesign,
+		Status:             domain.PairingGrantStatusPending,
+		ExpiresAt:          expires,
+		CreatedBy:          "admin-1",
+		CreatedBySessionID: pairingTestSessionID,
+		CreatedAt:          time.Now().Add(-time.Minute),
+		UpdatedAt:          time.Now().Add(-time.Minute),
 	}
 }
 
@@ -93,7 +94,7 @@ func (s *stubStore) CreateDesignPairingGrant(_ context.Context, cmd storage.Crea
 	return grant, nil
 }
 
-func (s *stubStore) ExchangeDesignPairingGrant(_ context.Context, cmd storage.ExchangeDesignPairingGrantCommand) (*domain.DesignPairingGrant, error) {
+func (s *stubStore) ExchangeDesignPairingGrant(_ context.Context, cmd storage.ExchangeDesignPairingGrantCommand) (*storage.ExchangeDesignPairingGrantResult, error) {
 	s.exchangePairingGrantCmd = &cmd
 	if s.exchangePairingGrantErr != nil {
 		return nil, s.exchangePairingGrantErr
@@ -104,7 +105,10 @@ func (s *stubStore) ExchangeDesignPairingGrant(_ context.Context, cmd storage.Ex
 	grant.ExchangedAt = &now
 	session := pairingTestSessionID
 	grant.ExchangedBySessionID = &session
-	return grant, nil
+	return &storage.ExchangeDesignPairingGrantResult{
+		Grant:          grant,
+		BindingContext: s.modelBindingContext,
+	}, nil
 }
 
 func (s *stubStore) GetDesignPairingGrant(_ context.Context, projectID, designID, grantID string) (*domain.DesignPairingGrant, error) {
@@ -141,6 +145,12 @@ func TestHandlePairingGrant_CreateReturns201WithOneTimeCode(t *testing.T) {
 	req := withClaims(httptest.NewRequest(http.MethodPost,
 		"/api/projects/"+designTestProjectID+"/designs/"+designTestDesignID+"/pairing-grants",
 		strings.NewReader(`{"action":"open_design"}`)), "admin-1", string(domain.RoleAdmin))
+	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, &auth.Claims{
+		UserID: "admin-1",
+		Role:   string(domain.RoleAdmin),
+		OrgID:  storage.InitialOrganizationID,
+		Sid:    pairingTestSessionID,
+	}))
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("projectId", designTestProjectID)
 	req.SetPathValue("designId", designTestDesignID)
@@ -174,6 +184,9 @@ func TestHandlePairingGrant_CreateReturns201WithOneTimeCode(t *testing.T) {
 	}
 	if cmd.TTL != pairingGrantTTL {
 		t.Fatalf("TTL = %v, want %v", cmd.TTL, pairingGrantTTL)
+	}
+	if cmd.SessionID != pairingTestSessionID {
+		t.Fatalf("SessionID = %q, want the creating web session sid", cmd.SessionID)
 	}
 }
 
@@ -349,14 +362,19 @@ func TestHandlePairingGrant_Exchange409ForReplayedOrExpiredGrant(t *testing.T) {
 	}
 }
 
-func TestHandlePairingGrant_Exchange404WhenDesignVanishedAfterCreate(t *testing.T) {
-	store := &stubStore{
-		modelBindingContextErr: domain.ErrDesignNotFound,
-	}
+// The #388 binding validation now runs INSIDE the storage exchange (before
+// the conditional consume): its failure surfaces as the exchange's own typed
+// error — and in the real storage the grant stays pending (proven against
+// PostgreSQL in the storage suite).
+func TestHandlePairingGrant_Exchange404WhenBindingValidationFails(t *testing.T) {
+	store := &stubStore{exchangePairingGrantErr: domain.ErrDesignNotFound}
 	srv := &Server{Store: store}
 	rr := exchangeRequest(t, srv, store, `{"code":"ABCDEFGHJKLM"}`)
 	if rr.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404 when the design no longer exists", rr.Code)
+		t.Fatalf("status = %d, want 404 when binding validation fails", rr.Code)
+	}
+	if store.exchangePairingGrantCmd == nil {
+		t.Fatal("the exchange command must reach the store")
 	}
 }
 

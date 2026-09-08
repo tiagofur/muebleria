@@ -42,7 +42,12 @@ CREATE TABLE design_pairing_grants (
     status TEXT NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending', 'exchanged', 'cancelled')),
     expires_at TIMESTAMPTZ NOT NULL,
+    -- Full provenance of the creating web session (registry sid the token
+    -- carried): organization + initiating user + initiating web session +
+    -- project + design + pinned base + exchanging device session is the
+    -- complete correlation the audit needs. No tokens, no secrets.
     created_by UUID NOT NULL REFERENCES users(id),
+    created_by_session_id UUID NOT NULL REFERENCES auth_sessions(id),
     exchanged_at TIMESTAMPTZ,
     -- Registry session of the exchanging SketchUp credential: exact
     -- attribution without storing any device secret or token.

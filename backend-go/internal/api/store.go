@@ -362,7 +362,7 @@ type Store interface {
 	// exchange consumes the grant by code hash under the exchanging device's
 	// own tenant scope (one-time, TTL'd, hash-only, audited without codes).
 	CreateDesignPairingGrant(ctx context.Context, cmd storage.CreateDesignPairingGrantCommand) (*domain.DesignPairingGrant, error)
-	ExchangeDesignPairingGrant(ctx context.Context, cmd storage.ExchangeDesignPairingGrantCommand) (*domain.DesignPairingGrant, error)
+	ExchangeDesignPairingGrant(ctx context.Context, cmd storage.ExchangeDesignPairingGrantCommand) (*storage.ExchangeDesignPairingGrantResult, error)
 	GetDesignPairingGrant(ctx context.Context, projectID, designID, grantID string) (*domain.DesignPairingGrant, error)
 	CancelDesignPairingGrant(ctx context.Context, cmd storage.CancelDesignPairingGrantCommand) (*domain.DesignPairingGrant, error)
 	// #392 / DT-8 staged publish flow: prepare validates the manifest v1

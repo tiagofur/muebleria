@@ -8,16 +8,19 @@ import "time"
 // credential. The raw code never persists: storage keeps only its SHA-256
 // hash, and audit details never carry code or hash.
 type DesignPairingGrant struct {
-	ID                   string     `json:"id" db:"id"`
-	OrganizationID       string     `json:"organization_id" db:"organization_id"`
-	ProjectID            string     `json:"project_id" db:"project_id"`
-	DesignID             string     `json:"design_id" db:"design_id"`
-	BaseRevisionID       *string    `json:"base_revision_id" db:"base_revision_id"`
-	Action               string     `json:"action" db:"action"`
-	CodeHash             []byte     `json:"-" db:"code_hash"`
-	Status               string     `json:"status" db:"status"` // pending, exchanged, cancelled
-	ExpiresAt            time.Time  `json:"expires_at" db:"expires_at"`
-	CreatedBy            string     `json:"created_by" db:"created_by"`
+	ID             string    `json:"id" db:"id"`
+	OrganizationID string    `json:"organization_id" db:"organization_id"`
+	ProjectID      string    `json:"project_id" db:"project_id"`
+	DesignID       string    `json:"design_id" db:"design_id"`
+	BaseRevisionID *string   `json:"base_revision_id" db:"base_revision_id"`
+	Action         string    `json:"action" db:"action"`
+	CodeHash       []byte    `json:"-" db:"code_hash"`
+	Status         string    `json:"status" db:"status"` // pending, exchanged, cancelled
+	ExpiresAt      time.Time `json:"expires_at" db:"expires_at"`
+	CreatedBy      string    `json:"created_by" db:"created_by"`
+	// CreatedBySessionID is the creating web session's registry sid — full
+	// provenance alongside CreatedBy, never a token or secret.
+	CreatedBySessionID   string     `json:"created_by_session_id" db:"created_by_session_id"`
 	ExchangedAt          *time.Time `json:"exchanged_at" db:"exchanged_at"`
 	ExchangedBySessionID *string    `json:"exchanged_by_session_id" db:"exchanged_by_session_id"`
 	CreatedAt            time.Time  `json:"created_at" db:"created_at"`

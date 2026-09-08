@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/rand"
 	"errors"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -35,17 +36,19 @@ const (
 	pairingCodeLength = 12
 )
 
-// generatePairingCode mints an opaque one-time code with the same no-modulo-
-// bias alphabet as the device PIN (copied between surfaces, not hand-typed,
-// so it can afford more entropy than the 6-char enrollment claim).
+// generatePairingCode mints an opaque one-time code. crypto/rand.Int draws
+// each character uniformly over the alphabet — no modulo bias for any
+// alphabet size (the 32-char device alphabet made %256 bias-free only by
+// coincidence; this stays correct if the alphabet ever changes).
 func generatePairingCode() (string, error) {
-	buf := make([]byte, pairingCodeLength)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
+	max := big.NewInt(int64(len(deviceCodeAlphabet)))
 	out := make([]byte, pairingCodeLength)
-	for i, b := range buf {
-		out[i] = deviceCodeAlphabet[int(b)%len(deviceCodeAlphabet)]
+	for i := range out {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", err
+		}
+		out[i] = deviceCodeAlphabet[n.Int64()]
 	}
 	return string(out), nil
 }
@@ -103,6 +106,7 @@ func (s *Server) HandleDesignPairingGrantCreate(w http.ResponseWriter, r *http.R
 		Code:           code,
 		TTL:            pairingGrantTTL,
 		ActorUserID:    claims.UserID,
+		SessionID:      claims.Sid,
 		IP:             clientIP(r),
 		RequestID:      RequestIDFromContext(r.Context()),
 	})
@@ -169,7 +173,11 @@ func (s *Server) HandleDesignPairingGrantExchange(w http.ResponseWriter, r *http
 		return
 	}
 
-	grant, err := s.Store.ExchangeDesignPairingGrant(r.Context(), storage.ExchangeDesignPairingGrantCommand{
+	// The storage resolves the #388 binding validation (with the grant's
+	// frozen base revision pin) and the conditional consume in ONE coherent
+	// transaction: a validation failure rolls back and leaves the grant
+	// pending — the code is never burned by an invalid binding.
+	result, err := s.Store.ExchangeDesignPairingGrant(r.Context(), storage.ExchangeDesignPairingGrantCommand{
 		Code:                 code,
 		ExchangedByUserID:    claims.UserID,
 		ExchangedBySessionID: claims.Sid,
@@ -185,28 +193,20 @@ func (s *Server) HandleDesignPairingGrantExchange(w http.ResponseWriter, r *http
 			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "El código de vinculación no existe o expiró", nil)
 		case errors.Is(err, storage.ErrPairingGrantConflict):
 			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "El código de vinculación ya fue usado, expiró o fue cancelado", nil)
+		case errors.Is(err, domain.ErrDesignNotFound):
+			// Exact binding validation failure: the grant was NOT consumed.
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "El proyecto o el diseño no existe", nil)
+		case errors.Is(err, domain.ErrDesignRevisionNotFound):
+			// The frozen pin no longer resolves to this design's lineage.
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "La revisión de diseño no existe", nil)
 		default:
 			respondWithInternalError(w, err, "pairing-grant: exchange")
 		}
 		return
 	}
+	grant, ctx := result.Grant, result.BindingContext
 
-	// Authoritative context for the exact Project/Design — the same #388
-	// validation the plugin already parses, so the handoff introduces no
-	// second truth. Capabilities mirror the binding:validate permission
-	// gates exactly.
-	ctx, err := s.Store.GetModelBindingContext(r.Context(), grant.ProjectID, grant.DesignID, nil)
-	if err != nil {
-		switch {
-		case errors.Is(err, domain.ErrDesignNotFound):
-			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "El proyecto o el diseño no existe", nil)
-		case errors.Is(err, domain.ErrDesignRevisionNotFound):
-			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "La revisión de diseño no existe", nil)
-		default:
-			respondWithInternalError(w, err, "pairing-grant: binding context")
-		}
-		return
-	}
+	// Capabilities mirror the binding:validate permission gates exactly.
 	roles := actorRoles(claims)
 	state := openapi.ModelBindingStateValid
 	if ctx.Design.Status == domain.DesignStatusArchived {
