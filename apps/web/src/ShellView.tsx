@@ -1956,6 +1956,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               baseUrl={DEFAULT_API_BASE}
               token={authToken}
               projectId={projectDesignsRoute.projectId}
+              projectName={
+                projects.find((p) => p.id === projectDesignsRoute.projectId)?.name
+              }
+              canMutate={canMutateProjects}
               queryKeys={projectDesignsQueryKeys(
                 sessionScopeKey(sessionScope),
                 projectDesignsRoute.projectId,
