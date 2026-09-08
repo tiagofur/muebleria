@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SketchUpPairingModal } from './SketchUpPairingModal';
@@ -194,6 +194,29 @@ describe('SketchUpPairingModal (#499 Slice 2 — Web pairing sheet)', () => {
     await user2.keyboard('{Escape}');
     await waitFor(() => expect(second.onClose).toHaveBeenCalled());
     expect(second.calls.cancel).toBe(0);
+  });
+
+  it('cancels when Escape reaches the listener registered before grant creation completes', async () => {
+    let initialKeydownListener: EventListener | null = null;
+    const addEventListener = document.addEventListener.bind(document);
+    vi.spyOn(document, 'addEventListener').mockImplementation((type, listener, options) => {
+      if (type === 'keydown' && initialKeydownListener === null) {
+        initialKeydownListener = listener as EventListener;
+      }
+      addEventListener(type, listener, options);
+    });
+
+    const { calls, onClose } = renderModal();
+
+    await screen.findByTestId('pairing-code');
+    expect(initialKeydownListener).not.toBeNull();
+
+    act(() => {
+      initialKeydownListener?.(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    await waitFor(() => expect(calls.cancel).toBe(1));
   });
 });
 
