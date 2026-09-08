@@ -175,7 +175,9 @@ function runTests() {
     sandbox.window.GraneteDialog.onModelBindingStatus(status);
     const badge = el(sandbox, 'model-binding-badge');
     assert.equal(badge.textContent, 'Base desactualizada');
-    assert.ok(badge.className.includes('pending'));
+    // Warning badge: stale base must read as a distinct actionable state,
+    // not the same neutral pending class as unbound/unreachable.
+    assert.ok(badge.className.includes('conflict'));
     assert.ok(visible(el(sandbox, 'btn-binding-adopt')));
     assert.ok(visible(el(sandbox, 'btn-binding-connect')));
     assert.equal(el(sandbox, 'binding-base-revision').textContent,
