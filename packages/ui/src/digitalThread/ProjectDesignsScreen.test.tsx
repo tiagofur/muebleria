@@ -205,6 +205,9 @@ interface FetchMockOptions {
   workingCopyByDesign?: Record<string, DesignWorkingCopy | null>;
   releases?: ProductionRelease[];
   artifactsFail?: boolean;
+  // #499 pairing handoff
+  pairingStatusFail?: boolean;
+  pairingStatus?: 'pending' | 'exchanged' | 'cancelled' | 'expired';
 }
 
 function setupFetchMock(options: FetchMockOptions = {}) {
@@ -337,6 +340,53 @@ function setupFetchMock(options: FetchMockOptions = {}) {
         });
       }
       return json([]);
+    }
+
+    // 8. #499 pairing grants: create / status / cancel
+    if (method === 'POST' && /\/pairing-grants$/.test(path)) {
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      const created = {
+        id: 'aaaaaaaa-0000-4000-8000-000000000001',
+        action: body.action ?? 'open_design',
+        status: 'pending',
+        base_revision_id: body.base_revision_id ?? null,
+        code: 'ABCD234EFGH5',
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        created_at: new Date().toISOString(),
+      };
+      (fetchMock as any).lastPairingCreate = body;
+      return json(created, 201);
+    }
+    const pairingStatusMatch = path.match(/\/pairing-grants\/([0-9a-f-]+)$/);
+    if (pairingStatusMatch && method === 'GET') {
+      if (options.pairingStatusFail) {
+        return new Response(JSON.stringify({ code: 'INTERNAL_ERROR', message: 'poll failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return json({
+        id: pairingStatusMatch[1],
+        action: 'open_design',
+        status: options.pairingStatus ?? 'pending',
+        base_revision_id: null,
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        created_at: new Date().toISOString(),
+        exchanged_at: options.pairingStatus === 'exchanged' ? new Date().toISOString() : null,
+      });
+    }
+    const pairingCancelMatch = path.match(/\/pairing-grants\/([0-9a-f-]+):cancel$/);
+    if (pairingCancelMatch && method === 'POST') {
+      (fetchMock as any).lastPairingCancel = pairingCancelMatch[1];
+      return json({
+        id: pairingCancelMatch[1],
+        action: 'open_design',
+        status: 'cancelled',
+        base_revision_id: null,
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        created_at: new Date().toISOString(),
+        exchanged_at: null,
+      });
     }
 
     return new Response(JSON.stringify({ code: 'NOT_FOUND', message: `Unhandled ${method} ${path}` }), {
@@ -508,7 +558,7 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
     expect(openedUrl).not.toContain('test-jwt-token'); // Negative proof: raw token never passed in URL
   });
 
-  it('negative proof: #499 Web↔SketchUp handoff is omitted and deferred', async () => {
+  it('#499 handoff: CTA exists but never launches a custom URI and never shows tokens', async () => {
     setupFetchMock();
     renderScreen({
       initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID },
@@ -516,10 +566,17 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
 
     await screen.findByText('Cocina Principal');
 
-    // Negative proof: No "Abrir en SketchUp" button or custom URI scheme
-    expect(screen.queryByText(/abrir en sketchup/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/sketchup:\/\//i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/código de emparejamiento/i)).not.toBeInTheDocument();
+    // The Slice 2 CTA exists (it opens the pairing sheet only)...
+    expect(screen.getByTestId('open-in-sketchup-btn')).toBeInTheDocument();
+
+    // ...but nothing may attempt a custom URI scheme, and no session token or
+    // secret may ever reach the DOM — the pairing code is the only manual datum.
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('open-in-sketchup-btn'));
+    const modal = await screen.findByTestId('sketchup-pairing-modal');
+    expect(modal).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/sketchup:\/\//i);
+    expect(document.body.textContent).not.toContain('test-jwt-token');
   });
 
   it('renders honest empty state when project has 0 designs', async () => {
@@ -772,3 +829,119 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
   });
 });
 
+
+describe('ProjectDesignsScreen — #499 SketchUp pairing handoff (Slice 2)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('shows create-design actions only for authorized users (canMutate wiring)', async () => {
+    setupFetchMock();
+    const { rerender } = renderScreen({ canMutate: false });
+
+    // Read-only: the mutation CTA is hidden; pairing CTA still available for
+    // the selected design (handoff is read-scoped, backend stays authority).
+    await screen.findByRole('tab', { name: /Cocina Principal/i });
+    expect(screen.queryByTestId('create-design-btn')).not.toBeInTheDocument();
+
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <ProjectDesignsScreen
+          baseUrl={API}
+          token="test-jwt-token"
+          projectId={PROJECT_ID}
+          queryKeys={projectDesignsQueryKeys(['test-scope'], PROJECT_ID)}
+          canMutate
+        />
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId('create-design-btn');
+    expect(screen.getByTestId('open-in-sketchup-btn')).toBeInTheDocument();
+  });
+
+  it('creates the grant with the EXACT selected revision (R1), not implicit latest', async () => {
+    const fetchMock = setupFetchMock();
+    renderScreen();
+
+    await screen.findByTestId('revision-node-R1');
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('revision-node-R1'));
+    await screen.findByTestId('revision-inspector');
+
+    await user.click(screen.getByTestId('open-in-sketchup-btn'));
+
+    expect(await screen.findByTestId('sketchup-pairing-modal')).toBeInTheDocument();
+    await waitFor(() => {
+      expect((fetchMock as any).lastPairingCreate).toEqual({
+        action: 'open_design',
+        base_revision_id: REV_1_ID,
+      });
+    });
+    // The frozen label shows the exact pinned revision.
+    expect(screen.getByTestId('pairing-base-label')).toHaveTextContent('Base: R1');
+  });
+
+  it('creates the grant with base_revision_id omitted when the design has no published revision', async () => {
+    const fetchMock = setupFetchMock({
+      designs: [
+        {
+          id: DESIGN_2_ID,
+          project_id: PROJECT_ID,
+          name: 'Isla & Comedor',
+          status: 'active',
+          created_at: '2026-09-02T11:00:00Z',
+          updated_at: '2026-09-02T11:00:00Z',
+        },
+      ],
+      revisionsByDesign: { [DESIGN_2_ID]: [] },
+      workingCopyByDesign: { [DESIGN_2_ID]: null },
+    });
+    renderScreen({ initialContext: { designId: DESIGN_2_ID, revisionId: null } });
+
+    const cta = await screen.findByTestId('no-revisions-open-sketchup-btn');
+    expect(cta).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(cta);
+
+    expect(await screen.findByTestId('sketchup-pairing-modal')).toBeInTheDocument();
+    await waitFor(() => {
+      expect((fetchMock as any).lastPairingCreate).toEqual({ action: 'open_design' });
+    });
+    expect(screen.getByTestId('pairing-base-label')).toHaveTextContent(
+      'Base: Sin revisión publicada',
+    );
+  });
+
+  it('keeps the modal pinned to R1 when the timeline selection moves to R2 (stale-base freeze)', async () => {
+    setupFetchMock();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    await screen.findByTestId('revision-node-R1');
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('open-in-sketchup-btn'));
+    expect(await screen.findByTestId('sketchup-pairing-modal')).toBeInTheDocument();
+    expect(screen.getByTestId('pairing-base-label')).toHaveTextContent('Base: R1');
+
+    // The user moves the timeline selection to R2 while the sheet is open:
+    // the sheet keeps the grant's own frozen pin — never silently R2.
+    await user.click(screen.getByTestId('revision-node-R2'));
+    await screen.findByTestId('revision-inspector');
+    expect(screen.getByTestId('pairing-base-label')).toHaveTextContent('Base: R1');
+  });
+
+  it('reports code accepted (not falsely opened) when the grant is exchanged', async () => {
+    setupFetchMock({ pairingStatus: 'exchanged' });
+    renderScreen();
+
+    await screen.findByTestId('revision-node-R1');
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('open-in-sketchup-btn'));
+
+    expect(await screen.findByTestId('pairing-exchanged')).toHaveTextContent(
+      /Código aceptado por SketchUp/,
+    );
+    expect(screen.queryByText(/abierto correctamente/i)).not.toBeInTheDocument();
+  });
+});

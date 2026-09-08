@@ -41,6 +41,7 @@ import {
   selectDesignRevision,
   type DesignLineageNode,
 } from './designHistory';
+import { SketchUpPairingModal } from './SketchUpPairingModal';
 import './digitalThread.css';
 
 /**
@@ -111,6 +112,8 @@ export interface ProjectDesignsScreenProps {
   readonly baseUrl: string;
   readonly token: string;
   readonly projectId: string;
+  /** Project display name for header context; falls back to a neutral label. */
+  readonly projectName?: string;
   readonly queryKeys: ProjectDesignsQueryKeys;
   readonly initialContext?: ProjectDesignsContextState | null;
   readonly onContextChange?: (context: ProjectDesignsContextState) => void;
@@ -151,6 +154,7 @@ export function ProjectDesignsScreen({
   baseUrl,
   token,
   projectId,
+  projectName,
   queryKeys,
   initialContext,
   onContextChange,
@@ -173,6 +177,16 @@ export function ProjectDesignsScreen({
   const [authorizingKind, setAuthorizingKind] = useState<string | null>(null);
   const [authorizeError, setAuthorizeError] = useState<string | null>(null);
   const [showTechnicalAudit, setShowTechnicalAudit] = useState(false);
+
+  // #499 "Abrir en SketchUp": the pin is FROZEN at click time from the exact
+  // timeline selection (or null when nothing is published). A later publish
+  // never rewrites an open sheet — the modal keeps its own frozen snapshot.
+  const [pairing, setPairing] = useState<{
+    readonly designId: string;
+    readonly baseRevisionId: string | null;
+    readonly baseRevisionLabel: string | null;
+    readonly designName: string;
+  } | null>(null);
 
   // Sync internal state when pinned initialContext changes from outside
   useEffect(() => {
@@ -417,6 +431,21 @@ export function ProjectDesignsScreen({
     }
   };
 
+  const handleOpenInSketchUp = (): void => {
+    if (!selectedDesign) return;
+    // Exact selection rule: the grant pins the revision the user selected in
+    // the timeline (presentation default = highest), never an implicit
+    // "latest" resolved later by the server. No published revision ⇒ null.
+    setPairing({
+      designId: selectedDesign.id,
+      baseRevisionId: selectedRevisionHeader?.id ?? null,
+      baseRevisionLabel: selectedRevisionHeader
+        ? `R${selectedRevisionHeader.revision_number}`
+        : null,
+      designName: selectedDesign.name,
+    });
+  };
+
   if (designsQuery.isLoading) {
     return <PageLoading label="Cargando diseños de la obra…" />;
   }
@@ -444,9 +473,21 @@ export function ProjectDesignsScreen({
     <div className="pd-workspace" data-testid="project-designs-workspace">
       <PageHeader
         title="Diseños 3D y revisiones inmutables"
-        subtitle="Historial inmutable de alternativas de diseño, revisiones publicadas y artefactos 3D de la obra."
+        subtitle={`Historial inmutable de alternativas, revisiones publicadas y artefactos 3D${
+          projectName ? ` — ${projectName}` : ' de la obra'
+        }.`}
         primaryAction={
-          canMutate ? (
+          selectedDesign ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="open-in-sketchup-btn"
+              onClick={handleOpenInSketchUp}
+            >
+              <ExternalLink size={16} />
+              <span>Abrir en SketchUp</span>
+            </button>
+          ) : canMutate ? (
             <button
               type="button"
               className="btn btn-primary"
@@ -464,6 +505,21 @@ export function ProjectDesignsScreen({
         }
         secondaryActions={
           <div className="pd-header-actions">
+            {selectedDesign && canMutate ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                data-testid="create-design-btn"
+                onClick={() => {
+                  setNewDesignName('');
+                  setCreateDesignError(null);
+                  setIsCreatingDesign(true);
+                }}
+              >
+                <Plus size={16} />
+                <span>Nueva alternativa</span>
+              </button>
+            ) : null}
             {onOpenFurnitureMatrix && (
               <button
                 type="button"
@@ -510,7 +566,11 @@ export function ProjectDesignsScreen({
         <EmptyState
           icon={Armchair}
           title="No hay diseños en esta obra"
-          description="Aún no se ha creado ninguna alternativa de diseño para el proyecto."
+          description={
+            canMutate
+              ? 'Creá el primer diseño para empezar a modelar; después podés abrirlo en SketchUp con un código de vinculación seguro.'
+              : 'Aún no se ha creado ninguna alternativa de diseño para el proyecto.'
+          }
           actionLabel={canMutate ? 'Crear primer diseño' : undefined}
           onAction={
             canMutate
@@ -607,6 +667,15 @@ export function ProjectDesignsScreen({
                   Este diseño no cuenta con revisiones inmutables publicadas todavía. El trabajo
                   actual reside en el borrador de trabajo (Working Copy).
                 </p>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  data-testid="no-revisions-open-sketchup-btn"
+                  onClick={handleOpenInSketchUp}
+                >
+                  <ExternalLink size={14} />
+                  <span>Abrir en SketchUp para modelar</span>
+                </button>
               </div>
             ) : (
               <div className="pd-lineage-track" role="list">
@@ -1024,6 +1093,21 @@ export function ProjectDesignsScreen({
           )}
         </>
       )}
+
+      {/* #499: SketchUp pairing sheet — exact Project/Design/base frozen at open */}
+      {pairing && selectedDesign ? (
+        <SketchUpPairingModal
+          baseUrl={baseUrl}
+          token={token}
+          projectId={projectId}
+          designId={pairing.designId}
+          baseRevisionId={pairing.baseRevisionId}
+          baseRevisionLabel={pairing.baseRevisionLabel}
+          projectName={projectName ?? 'la obra actual'}
+          designName={pairing.designName}
+          onClose={() => setPairing(null)}
+        />
+      ) : null}
 
       {/* Modal: Create Design Alternative */}
       {isCreatingDesign && (

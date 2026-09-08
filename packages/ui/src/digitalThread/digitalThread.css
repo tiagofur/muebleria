@@ -1299,3 +1299,106 @@
   border-left: 3px solid var(--warning-700);
   color: var(--text-primary);
 }
+
+/* Issue 499 — "Abrir en SketchUp" pairing sheet. Token-based styles only; the
+   code is the single manual datum (no secrets ever on screen). */
+.psm-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  min-width: 0;
+}
+
+.psm-context {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm, 13px);
+}
+
+.psm-base {
+  margin: 0;
+  font-size: var(--text-sm, 13px);
+  color: var(--text-primary);
+}
+
+.psm-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-radius: 8px;
+  background: var(--surface-hover);
+  font-size: var(--text-sm, 13px);
+}
+
+.psm-status--ok {
+  background: var(--success-50);
+  color: var(--text-primary);
+}
+
+.psm-status--warn {
+  background: var(--warning-50);
+  color: var(--text-primary);
+}
+
+.psm-status--muted {
+  color: var(--text-secondary);
+}
+
+.psm-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.psm-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 1.35rem;
+  letter-spacing: 0.12em;
+  text-align: center;
+  padding: var(--space-3, 12px);
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-card);
+  user-select: all;
+}
+
+.psm-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-sm, 13px);
+  color: var(--text-secondary);
+}
+
+.psm-poll-error {
+  margin: 0;
+  font-size: var(--text-sm, 13px);
+  color: var(--warning-700);
+}
+
+.psm-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--text-secondary);
+  font-size: var(--text-sm, 13px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+@media (max-width: 480px) {
+  .psm-code {
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+  }
+
+  .psm-code-row .btn {
+    flex: 1 1 100%;
+  }
+}

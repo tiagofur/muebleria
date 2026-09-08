@@ -539,9 +539,41 @@ export function ProjectFurnitureScreen({
               <p>
                 Este proyecto tiene{' '}
                 {summary.activeUnits === 1 ? '1 unidad física' : `${summary.activeUnits} unidades físicas`},
-                pero todavía no hay un diseño seleccionado para comparar. Elegí un diseño para ver
-                presencia y reconciliación.
+                pero todavía no hay un diseño seleccionado para comparar.
+                {designs.length === 0
+                  ? ' Creá un diseño para empezar a modelar estas unidades en SketchUp.'
+                  : ' Elegí un diseño para ver presencia y reconciliación.'}
               </p>
+              {onOpenDesigns ? (
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  data-testid="pf-goto-designs-btn"
+                  onClick={() => onOpenDesigns({ designId: null, revisionId: null })}
+                >
+                  <Layers size={14} aria-hidden /> {designs.length === 0 ? 'Crear diseño' : 'Ir a Diseños'}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {designs.length === 0 && quoteRevisionsQuery.isSuccess && designsQuery.isSuccess ? (
+            <div className="pf-notice" data-testid="pf-no-designs-at-all">
+              <CircleAlert size={16} aria-hidden />
+              <p>
+                Esta obra todavía no tiene diseños. Al crear uno podrás modelarlo en SketchUp y
+                publicar revisiones inmutables.
+              </p>
+              {onOpenDesigns ? (
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  data-testid="pf-create-design-btn"
+                  onClick={() => onOpenDesigns({ designId: null, revisionId: null })}
+                >
+                  <Layers size={14} aria-hidden /> Ir a Diseños
+                </button>
+              ) : null}
             </div>
           ) : null}
 

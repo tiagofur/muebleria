@@ -184,6 +184,7 @@ const design = {
 function renderScreen(options: {
   initialContext?: ProjectFurnitureContextState | null;
   onContextChange?: (context: ProjectFurnitureContextState) => void;
+  onOpenDesigns?: (context: { designId: string | null; revisionId: string | null }) => void;
 }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const keys = projectFurnitureQueryKeys(['session', 'scope-a'], PROJECT);
@@ -196,6 +197,7 @@ function renderScreen(options: {
         queryKeys={keys}
         initialContext={options.initialContext ?? null}
         onContextChange={options.onContextChange}
+        onOpenDesigns={options.onOpenDesigns}
       />
     </QueryClientProvider>,
   );
@@ -838,5 +840,30 @@ describe('ProjectFurnitureScreen — matrix behavior (#500 acceptance)', () => {
     expect(within(modal).getByText('Parámetros · Ancho')).toBeTruthy();
     expect(within(modal).getByText('600 mm')).toBeTruthy();
     expect(within(modal).getByText('650 mm')).toBeTruthy();
+  });
+});
+
+
+describe('ProjectFurnitureScreen — #499 designs CTA seam', () => {
+  it('units without any design offer a direct path to create one (exact null context)', async () => {
+    stubFetch({ furniture: [instance('fi-1')] });
+    const onOpenDesigns = vi.fn();
+    renderScreen({ onOpenDesigns });
+
+    const cta = await screen.findByTestId('pf-goto-designs-btn');
+    expect(cta.textContent).toContain('Crear diseño');
+    await userEvent.click(cta);
+    // Exact navigation context: no design, no revision — /disenos decides.
+    expect(onOpenDesigns).toHaveBeenCalledWith({ designId: null, revisionId: null });
+  });
+
+  it('projects with zero designs at all surface the create-design notice with CTA', async () => {
+    stubFetch({ furniture: [] });
+    const onOpenDesigns = vi.fn();
+    renderScreen({ onOpenDesigns });
+
+    const cta = await screen.findByTestId('pf-create-design-btn');
+    await userEvent.click(cta);
+    expect(onOpenDesigns).toHaveBeenCalledWith({ designId: null, revisionId: null });
   });
 });
