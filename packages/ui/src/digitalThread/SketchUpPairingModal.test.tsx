@@ -184,7 +184,7 @@ describe('SketchUpPairingModal (#499 Slice 2 — Web pairing sheet)', () => {
     await screen.findByTestId('pairing-code');
     await user.keyboard('{Escape}');
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(calls.cancel).toBe(1);
+    await waitFor(() => expect(calls.cancel).toBe(1));
 
     // Second scenario: grant already exchanged → close must NOT cancel again.
     cleanup();
