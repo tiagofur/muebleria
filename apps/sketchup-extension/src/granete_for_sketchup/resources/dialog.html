@@ -5648,7 +5648,10 @@
               bindingPublishProgress.textContent = copy + (result.reason ? " (" + result.reason + ")" : "");
             }
           }
-          if (bindingPublishBtn) bindingPublishBtn.disabled = false;
+          if (bindingPublishBtn) {
+            bindingPublishBtn.disabled = false;
+            bindingPublishBtn.textContent = result.ok ? "Publicar diseño" : "Reintentar publicación";
+          }
           if (result.ok) {
             showToast("success", "✓ Diseño publicado como revisión inmutable R" + (result.revisionNumber || "?") + ".");
             refreshModelBinding();

@@ -474,3 +474,8 @@ EOL.
 - Detalle: `progress/implementation_386_dt2.md`. NO implementado: #387,
   #388 re-quote, SketchUp, reconciliation (#392), release, machining.
   **#387 DT-3 may start.**
+
+# Issue #631 — SketchUp multipart publish transport
+
+- Publish retry diagnosis: the first real attempt created a prepared publish session at 2026-09-09 19:43:07 UTC but recorded zero artifacts. The failure was client-side: `HttpAdapter#upload` assigned the IO-like `MultipartBody` to `Net::HTTP#body`, whose send path calls `bytesize`; the resulting programming error was collapsed into the misleading `unreachable` message before any artifact byte reached the backend. The adapter now uses `body_stream`; the dialog also resets the stuck `Publicando…` label to `Reintentar publicación` on failure.
+- Publish retry evidence: focused Ruby publisher suite passes (20 runs / 90 assertions), the real dialog JavaScript suite passes (15/15), RuboCop on the changed Ruby files is clean, and the installed adapter passed an in-host SketchUp 2026 loopback upload (`status=201`, expected multipart payload received). The final design publication was not executed.
