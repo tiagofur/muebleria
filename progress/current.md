@@ -1,3 +1,15 @@
+# Issue #635 — Design artifact URL resolution and browser access
+
+- Approval: GitHub issue #635 is open with `status:approved`; leader handoff authorized implementation only, without PR creation, merge, or issue closure.
+- Started: 2026-09-09 16:18:24 CST. Branch `fix/635-design-artifact-url`, exact base `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`.
+- Scope: one canonical fail-closed resolver for authorized DesignRevision artifact URLs; preview load error/retry; reliable explicit access after asynchronous authorization; realistic unit/component tests and existing real Go+PostgreSQL browser smoke when feasible. No backend contract/storage/publication, WebGL/SKP viewer, naming/material, or machine-output changes.
+- Plan:
+  1. Reproduce the `/api/api` URL and silent preview/popup failure paths in focused tests.
+  2. Add one canonical resolver and route preview plus explicit artifact access through it.
+  3. Surface distinct authorization, byte-load, retry, and blocked-navigation states using existing UI patterns/tokens.
+  4. Run focused UI tests, typecheck, relevant Go/PostgreSQL browser smoke, then commit and push one conventional commit.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Canonical same-origin `/api/design-artifacts/` resolution, recoverable preview byte-load failure, and synchronous popup reservation are implemented. Focused 36/36, full UI 1,658/1,658, monorepo typecheck, real Chromium+Go+PostgreSQL artifact smoke 1/1, and diff check pass. See `progress/implementation_635_design_artifact_url.md`.
+
 # Issue #630 — SketchUp catalog pin and repeated agregado occurrence identity
 
 - Reported: furniture review before `Publicar diseño` failed on the real three-drawer cabinet. Investigation and local correction were authorized; no PR, merge, issue closure, or protected approval label was authorized.
