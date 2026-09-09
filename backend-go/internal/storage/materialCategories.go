@@ -20,7 +20,7 @@ func (s *PostgresStore) ListMaterialCategories(ctx context.Context) ([]domain.Ma
 		SELECT id, name, parent_id, sort_order, created_at, updated_at
 		FROM material_categories
 		WHERE organization_id = $1
-		ORDER BY sort_order ASC, name ASC;
+		ORDER BY sort_order ASC, name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {

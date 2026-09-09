@@ -98,10 +98,10 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 		},
 	}
 	server := licenseTestServer(t, u, nil)
+	fullCatalog := domain.Catalog{Modules: modules, Categories: []domain.ModuleCategory{{ID: "cat-base", Name: "Cocinas"}}}
 	server.Store = &stubStore{
-		getUserByEmail: u,
-		listModules:    modules,
-		listCategories: []domain.ModuleCategory{{ID: "cat-base", Name: "Cocinas"}},
+		getUserByEmail:  u,
+		catalogOverride: &fullCatalog,
 	}
 	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
@@ -165,13 +165,14 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 func TestFurnitureDefinitionsFailsClosedOnInvalidPublishedParameter(t *testing.T) {
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
+	fullCatalog := domain.Catalog{Modules: []domain.Module{{
+		ID: "m1", Code: "M1", Name: "Invalid",
+		ParameterDefinitions: []domain.FurnitureParameterDefinition{{Name: "unbound", Label: "Unbound", Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryConfiguration}},
+	}}}
 	server.Store = &stubStore{
-		getUserByEmail: u,
-		getOrgByID:     &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial, Status: domain.OrganizationStatusActive, CredentialVersion: 1},
-		listModules: []domain.Module{{
-			ID: "m1", Code: "M1", Name: "Invalid",
-			ParameterDefinitions: []domain.FurnitureParameterDefinition{{Name: "unbound", Label: "Unbound", Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryConfiguration}},
-		}},
+		getUserByEmail:  u,
+		getOrgByID:      &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial, Status: domain.OrganizationStatusActive, CredentialVersion: 1},
+		catalogOverride: &fullCatalog,
 	}
 	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 	rec := httptest.NewRecorder()
@@ -220,7 +221,7 @@ func TestFurnitureDefinitionsEmptyWorkshop(t *testing.T) {
 func TestFurnitureDefinitionsStoreErrorIs500(t *testing.T) {
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
-	server.Store = &stubStore{getUserByEmail: u, listModulesErr: errors.New("db down")}
+	server.Store = &stubStore{getUserByEmail: u, catalogError: errors.New("db down")}
 	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
 	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
@@ -238,7 +239,8 @@ func TestFurnitureDefinitionsCachesPerContentRevision(t *testing.T) {
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	modules := []domain.Module{{ID: "m1", Code: "M1", Name: "Módulo 1", WidthMm: 600, HeightMm: 720, DepthMm: 500}}
 	server := licenseTestServer(t, u, nil)
-	server.Store = &stubStore{getUserByEmail: u, listModules: modules}
+	fullCatalog := domain.Catalog{Modules: modules}
+	server.Store = &stubStore{getUserByEmail: u, catalogOverride: &fullCatalog}
 	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 
@@ -267,6 +269,45 @@ func TestFurnitureDefinitionsCachesPerContentRevision(t *testing.T) {
 	}
 	if got := get(`"stale-rev"`); got != http.StatusOK {
 		t.Fatalf("revalidation with stale etag = %d, want 200", got)
+	}
+}
+
+func TestFurnitureDefinitionsAndAuthoringResolveShareCatalogRevision(t *testing.T) {
+	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+
+	// Regression for #630: the former definitions endpoint assembled a second,
+	// lighter catalog while authoring resolve used GetFullCatalog. Any omitted
+	// composition detail could produce a different content-addressed pin even
+	// though both requests observed the same workshop state.
+	lightweight := *store.catalogOverride
+	lightweight.Modules = append([]domain.Module(nil), lightweight.Modules...)
+	lightweight.Modules[0].Components = nil
+	store.listModules = lightweight.Modules
+
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("definitions status = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var served workshopFurnitureCatalog
+	if err := json.Unmarshal(rec.Body.Bytes(), &served); err != nil {
+		t.Fatalf("decode definitions: %v", err)
+	}
+	authoritativeRevision := authoringCatalogRevision(t, server)
+	if served.RevisionID != authoritativeRevision {
+		t.Fatalf("definitions revision %q != authoring revision %q", served.RevisionID, authoritativeRevision)
+	}
+
+	resolve := postAuthoringResolve(server, token, "", authoringFixtureRequest(served.RevisionID, authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+	}))
+	if resolve.Code != http.StatusOK {
+		t.Fatalf("server-served catalog pin must resolve, status=%d body=%s", resolve.Code, resolve.Body.String())
 	}
 }
 

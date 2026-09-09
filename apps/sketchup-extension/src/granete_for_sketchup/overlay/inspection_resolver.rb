@@ -24,7 +24,22 @@ module Granete
         # Returns { result:, message_id: } for an ACCEPTED resolve; raises
         # Library::AuthoringResolveError (or LayoutResolutionError) on
         # rejection/unavailability so the caller maps it to UNAVAILABLE.
+        # A CATALOG_REVISION_STALE rejection (the catalog drifted mid-session)
+        # refetches the workshop catalog once and retries with the fresh pin;
+        # the second stale answer propagates — never an implicit latest.
         def resolve(furniture_entity:, model:)
+          perform_resolve(furniture_entity: furniture_entity, model: model)
+        rescue Library::AuthoringResolveError => e
+          raise unless stale_catalog_rejection?(e) && @catalog_provider.respond_to?(:refresh!)
+
+          @logger&.info('authoring_catalog_stale_refetching', issues: e.issues.map(&:code))
+          @catalog_provider.refresh!
+          perform_resolve(furniture_entity: furniture_entity, model: model)
+        end
+
+        private
+
+        def perform_resolve(furniture_entity:, model:)
           metadata = read_metadata(furniture_entity, model)
           definition = @catalog_provider.find_definition(definition_id_of(metadata))
           if definition.nil?
@@ -63,8 +78,6 @@ module Granete
 
           { result: result, message_id: identity[:message_id] }
         end
-
-        private
 
         # Mirrors the mutation request shape (#468): occurrence identities +
         # the manual hardware placement set echoed from the resolved layout;
@@ -105,6 +118,13 @@ module Granete
           else
             'workshop-current'
           end
+        end
+
+        # Branches on the structured issue code (#477 rule), never on the
+        # localized message text.
+        def stale_catalog_rejection?(error)
+          error.respond_to?(:issues) &&
+            error.issues.any? { |issue| issue.respond_to?(:code) && issue.code == 'CATALOG_REVISION_STALE' }
         end
 
         def definition_id_of(metadata)

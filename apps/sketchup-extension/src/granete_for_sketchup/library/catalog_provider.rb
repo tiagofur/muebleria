@@ -307,6 +307,28 @@ module Granete
           all_definitions.find { |d| d['furniture_definition_id'] == definition_id }
         end
 
+        # Content-addressed catalog revision the backend pins authoring
+        # resolves against (#466/#477: a drifted catalog rejects with
+        # CATALOG_REVISION_STALE, never an implicit latest). The cached
+        # contract carries it as revisionId; every authoring request must pin
+        # THIS value — the legacy 'workshop-current' literal can never match
+        # the server's content hash. nil when no remote contract is cached
+        # (offline/local fallback), so callers fail honestly instead of
+        # sending a fabricated pin.
+        def catalog_revision
+          revision = @cached_contract.is_a?(Hash) ? @cached_contract['revisionId'] : nil
+          revision.is_a?(String) && !revision.strip.empty? ? revision : nil
+        end
+
+        # Forces a contract refetch (If-None-Match included) so a client that
+        # just received CATALOG_REVISION_STALE can re-pin against the fresh
+        # revision without a relogin. Best effort: failures leave the cache
+        # untouched and the caller surfaces the original rejection.
+        def refresh!
+          fetch_contract(force: true)
+          nil
+        end
+
         # Resolves the definition's COMPLETE layout server-side (every board of
         # its structure/agregados plus visible hardware) at the given
         # parameters and board choices. Granete owns resolution truth: this

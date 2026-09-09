@@ -128,7 +128,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 	}
 	var trailing any
 	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
-		s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, req, authoringStatusRejected, []domain.ContractIssue{{
+		s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, authoringResolveRequest{}, authoringStatusRejected, []domain.ContractIssue{{
 			Code: "REQUEST_INVALID", Message: "el body contiene JSON adicional después del request",
 			Severity: domain.IssueSeverityError, Path: "body",
 		}})

@@ -118,4 +118,83 @@ class OverlayInspectionResolverTest < Minitest::Test
     refute furniture.key?('relationships'),
            'inspection request must not include relationships key when metadata has none'
   end
+
+  def test_stale_catalog_revision_refetches_once_and_retries_with_the_fresh_pin
+    stale = stale_rejection
+    attempts = 0
+    refreshes = 0
+    @provider.define_singleton_method(:catalog_revision) do
+      attempts.zero? ? 'rev-overlay-test' : 'rev-overlay-fresh'
+    end
+    @provider.define_singleton_method(:refresh!) { refreshes += 1 }
+    @provider.define_singleton_method(:resolve_authoring) do |request_payload|
+      @requests << request_payload
+      attempts += 1
+      raise stale if attempts == 1
+
+      OverlayFixture.accepted_result(
+        message_id: request_payload['messageId'],
+        idempotency_key: request_payload['idempotencyKey']
+      )
+    end
+
+    resolved = @resolver.resolve(furniture_entity: @root, model: @model)
+
+    assert resolved[:result].accepted?
+    assert_equal 1, refreshes, 'a stale pin must refetch the catalog exactly once'
+    assert_equal 2, @provider.requests.length
+    assert_equal 'rev-overlay-test', @provider.requests.first['furniture']['catalogRevision']
+    assert_equal 'rev-overlay-fresh', @provider.requests.last['furniture']['catalogRevision'],
+                 'the retry must pin the fresh revision, never re-send the stale one'
+  end
+
+  def test_persistent_stale_after_one_refetch_propagates_the_rejection
+    stale = stale_rejection
+    @provider.define_singleton_method(:refresh!) { nil }
+    @provider.define_singleton_method(:resolve_authoring) do |request_payload|
+      @requests << request_payload
+      raise stale
+    end
+
+    error = assert_raises Granete::SketchUpExtension::Library::AuthoringResolveError do
+      @resolver.resolve(furniture_entity: @root, model: @model)
+    end
+
+    assert_equal 2, @provider.requests.length, 'exactly one retry, no retry loops'
+    assert(error.issues.any? { |issue| issue.code == 'CATALOG_REVISION_STALE' })
+  end
+
+  def test_non_stale_rejection_never_refetches_or_retries
+    @provider.define_singleton_method(:refresh!) { flunk 'refresh! must not run for other rejections' }
+    rejection = Granete::SketchUpExtension::Library::AuthoringResolveError.new(
+      'parámetro inválido',
+      status: 422,
+      issues: [Granete::SketchUpExtension::Library::AuthoringResolveIssue.new(
+        'code' => 'PARAMETER_INVALID', 'severity' => 'error',
+        'message' => 'parámetro inválido'
+      )]
+    )
+    @provider.define_singleton_method(:resolve_authoring) do |request_payload|
+      @requests << request_payload
+      raise rejection
+    end
+
+    assert_raises Granete::SketchUpExtension::Library::AuthoringResolveError do
+      @resolver.resolve(furniture_entity: @root, model: @model)
+    end
+    assert_equal 1, @provider.requests.length
+  end
+
+  private
+
+  def stale_rejection
+    Granete::SketchUpExtension::Library::AuthoringResolveError.new(
+      'el request fue armado contra la revisión vieja del catálogo',
+      status: 422,
+      issues: [Granete::SketchUpExtension::Library::AuthoringResolveIssue.new(
+        'code' => 'CATALOG_REVISION_STALE', 'severity' => 'error',
+        'message' => 'el request fue armado contra la revisión vieja del catálogo'
+      )]
+    )
+  end
 end

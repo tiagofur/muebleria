@@ -301,6 +301,25 @@ class AuthoringResolveContractTest < Minitest::Test
     end
   end
 
+  def test_snapshot_echo_accepts_optional_manual_placement_kind
+    body = deep_copy(scenario('01-params-materials-parity')['response'])
+    body['normalizedSnapshot']['hardwarePlacements'][0]['placementKind'] = 'manual'
+
+    result = parse_response(body)
+
+    assert result.accepted?
+    assert_equal 'manual', result.normalized_snapshot['hardwarePlacements'][0]['placementKind']
+  end
+
+  def test_snapshot_echo_rejects_unknown_placement_kind
+    body = deep_copy(scenario('01-params-materials-parity')['response'])
+    body['normalizedSnapshot']['hardwarePlacements'][0]['placementKind'] = 'guessed'
+
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      parse_response(body)
+    end
+  end
+
   def test_snapshot_echo_with_non_finite_offset_fails_closed
     snapshot = scenario('01-params-materials-parity')['response']['normalizedSnapshot']
                .merge('hardwarePlacements' => [

@@ -401,7 +401,10 @@ module Granete
       module AuthoringSnapshotParsing
         ANCHOR_FACES = %w[front back left right top bottom].freeze
         COMPONENT_KEYS = %w[componentInstanceId componentDefinitionId catalogComponentId role transform].freeze
-        PLACEMENT_KEYS = %w[hardwarePlacementId catalogHardwareId hostComponentInstanceId anchorFace offsetMm].freeze
+        PLACEMENT_REQUIRED_KEYS = %w[hardwarePlacementId catalogHardwareId hostComponentInstanceId
+                                     anchorFace offsetMm].freeze
+        PLACEMENT_KEYS = (PLACEMENT_REQUIRED_KEYS + %w[placementKind]).freeze
+        PLACEMENT_KINDS = %w[manual derived].freeze
         RELATIONSHIP_KEYS = %w[relationshipId kind source targets joinerySystemId parameters].freeze
         ANCHOR_KEYS = %w[componentInstanceId role].freeze
 
@@ -475,9 +478,13 @@ module Granete
           end
 
           id = placement['hardwarePlacementId']
-          unless placement.keys.sort == PLACEMENT_KEYS.sort &&
+          unless (placement.keys - PLACEMENT_KEYS).empty? &&
+                 (PLACEMENT_REQUIRED_KEYS - placement.keys).empty? &&
                  component_ids.include?(placement['hostComponentInstanceId'])
             raise AuthoringResolveContract::ContractError, "Placement #{id} con host o campos inválidos"
+          end
+          if placement.key?('placementKind') && !PLACEMENT_KINDS.include?(placement['placementKind'])
+            raise AuthoringResolveContract::ContractError, "Placement #{id} con placementKind desconocido"
           end
           unless ANCHOR_FACES.include?(placement['anchorFace'])
             raise AuthoringResolveContract::ContractError, "Placement #{id} con anchorFace desconocida"

@@ -17,7 +17,7 @@ func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, e
 		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, created_at, updated_at
 		FROM agregados
 		WHERE organization_id = $1
-		ORDER BY name ASC;
+		ORDER BY name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {

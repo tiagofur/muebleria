@@ -10,11 +10,15 @@ import (
 )
 
 func (s *PostgresStore) ListCategories(ctx context.Context) ([]domain.ModuleCategory, error) {
+	// id is the final tiebreaker: duplicate (sort_order, name) rows — real
+	// workshops create e.g. three "Puertas" — must never reorder between
+	// reads or the content-addressed catalog revision oscillates and every
+	// pinned client randomly answers CATALOG_REVISION_STALE.
 	query := `
 		SELECT id, name, parent_id, sort_order, created_at, updated_at
 		FROM module_categories
 		WHERE organization_id = $1
-		ORDER BY sort_order ASC, name ASC;
+		ORDER BY sort_order ASC, name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {

@@ -1159,6 +1159,61 @@ func TestAuthoringResolveRejectsMultiEntryTemplates(t *testing.T) {
 	}
 }
 
+func TestAuthoringResolveAcceptsExactDefaultEchoForMultiEntryTemplate(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	top := domain.PlacementSuperior
+	catalog.Structures[0].Components = append(
+		catalog.Structures[0].Components,
+		domain.ComponentInstance{ComponentID: "comp-base", Quantity: 1, PlacementOverride: &top},
+	)
+
+	reference, err := ResolveFurnitureLayout(module, catalog, nil, nil)
+	if err != nil {
+		t.Fatalf("default layout: %v", err)
+	}
+	occurrences := make([]AuthoringOccurrence, 0, len(reference.Components))
+	for _, component := range reference.Components {
+		occurrences = append(occurrences, AuthoringOccurrence{
+			ComponentInstanceID:   component.ComponentInstanceID,
+			ComponentDefinitionID: component.ComponentDefinitionID,
+		})
+	}
+
+	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences: occurrences, Relationships: []AuthoringRelationship{},
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(result.StructuralIssues) != 0 {
+		t.Fatalf("exact unchanged multi-entry echo must preflight, got %+v", result.StructuralIssues)
+	}
+	if !reflect.DeepEqual(result.Layout, reference) {
+		t.Fatalf("multi-entry passthrough changed default entry semantics:\n got %+v\nwant %+v", result.Layout, reference)
+	}
+
+	for i := range occurrences {
+		if occurrences[i].ComponentDefinitionID != "st-comp-base" {
+			continue
+		}
+		occurrences[i].Transform = &AuthoringOccurrenceTransform{
+			Frame: "assembly", TranslationMm: [3]float64{0, 0, 100},
+		}
+		break
+	}
+	rejected, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences: occurrences, Relationships: []AuthoringRelationship{},
+	})
+	if err != nil {
+		t.Fatalf("changed resolve: %v", err)
+	}
+	if len(rejected.StructuralIssues) == 0 || rejected.StructuralIssues[0].Code != "OCCURRENCE_COUNT_UNSUPPORTED" {
+		t.Fatalf("authored multi-entry template must remain fail-closed, got %+v", rejected.StructuralIssues)
+	}
+}
+
 func TestAuthoringResolveRejectsOutOfRangeHardwareOffset(t *testing.T) {
 	module, catalog := authoringCabinetCatalog()
 	outOfRangeInput := AuthoringResolveInput{

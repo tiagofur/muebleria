@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -531,4 +532,138 @@ func TestLayoutTransformContractSerializationGolden(t *testing.T) {
 	if _, ok := lt["translationMm"].([]any); !ok {
 		t.Fatal("localTransform.translationMm missing on the wire")
 	}
+}
+
+// Regression (drawer cabinets): a module may instantiate the SAME agregado
+// several times with quantity 1 each — three drawers, three drawer fronts.
+// Every instance expands its own `u0` unit, so without a stable instance
+// disambiguator the sibling instances emit colliding componentInstanceIds
+// (three `...-u0-...-copy-0`), which the authoring resolve correctly rejects
+// as OCCURRENCE_DUPLICATE_ID and which surfaces as superposed drilling
+// (#388 exact identity). Single instances keep the historical prefix.
+func TestLayoutAgregadoSiblingInstancesGetUniqueOccurrenceIds(t *testing.T) {
+	drawerFront := domain.Component{
+		ID: "comp-dfront2", Code: "FRENTE-CAJ-2", Name: "Frente Cajón", Placement: domain.PlacementFrenteCajon,
+		GeometryKind: "rectangular_board", ThicknessMm: 18, OptionRoles: []string{"FRENTE"},
+		LengthFormula: "PH/4 - 4", WidthFormula: "PW - 4", Active: true,
+	}
+	agregado := domain.Agregado{
+		ID: "agr-front", Code: "FRENTE", Name: "Frente Cajon", Active: true,
+		Components: []domain.ComponentInstance{{ComponentID: "comp-dfront2", Quantity: 1}},
+	}
+	module, catalog := oneDoorCabinetCatalog()
+	module.Components = []domain.ComponentInstance{}
+	catalog.Agregados = append(catalog.Agregados, agregado)
+	catalog.Components = append(catalog.Components, drawerFront)
+	catalog.Structures[0].Agregados = []domain.ModuleAgregadoInstance{
+		{ID: "inst-a", AgregadoID: "agr-front", Quantity: 1},
+		{ID: "inst-b", AgregadoID: "agr-front", Quantity: 1},
+		{ID: "inst-c", AgregadoID: "agr-front", Quantity: 1},
+	}
+
+	layout, err := ResolveFurnitureLayout(module, catalog, nil, nil)
+	if err != nil {
+		t.Fatalf("resolve layout: %v", err)
+	}
+
+	seen := map[string]bool{}
+	seenDefinitions := map[string]bool{}
+	fronts := 0
+	for i := range layout.Components {
+		c := &layout.Components[i]
+		if contains(c.ComponentInstanceID, "agr-front") {
+			fronts++
+			if seen[c.ComponentInstanceID] {
+				t.Fatalf("duplicate componentInstanceId across sibling agregado instances: %s", c.ComponentInstanceID)
+			}
+			seen[c.ComponentInstanceID] = true
+			seenDefinitions[c.ComponentDefinitionID] = true
+		}
+	}
+	if fronts != 3 {
+		t.Fatalf("drawer fronts = %d, want 3 (one per sibling instance)", fronts)
+	}
+	if len(seenDefinitions) != 3 {
+		t.Fatalf("authoring definitions = %d, want one per positioned agregado instance", len(seenDefinitions))
+	}
+	for _, instanceID := range []string{"inst-a", "inst-b", "inst-c"} {
+		want := "agr-agr-front-instance-" + instanceID + "-u0-comp-dfront2-copy-0"
+		if !seen[want] {
+			t.Errorf("missing occurrence identity derived from stable agregado instance id: %s; got %v", want, seen)
+		}
+	}
+
+	// Reordering persisted instances must not churn any occurrence identity.
+	reorderedCatalog := catalog
+	reorderedCatalog.Structures = append([]domain.Structure(nil), catalog.Structures...)
+	reorderedCatalog.Structures[0].Agregados = []domain.ModuleAgregadoInstance{
+		{ID: "inst-c", AgregadoID: "agr-front", Quantity: 1},
+		{ID: "inst-a", AgregadoID: "agr-front", Quantity: 1},
+		{ID: "inst-b", AgregadoID: "agr-front", Quantity: 1},
+	}
+	reorderedLayout, err := ResolveFurnitureLayout(module, reorderedCatalog, nil, nil)
+	if err != nil {
+		t.Fatalf("resolve reordered layout: %v", err)
+	}
+	reorderedSeen := map[string]bool{}
+	for _, component := range reorderedLayout.Components {
+		if contains(component.ComponentInstanceID, "agr-front") {
+			reorderedSeen[component.ComponentInstanceID] = true
+		}
+	}
+	if len(reorderedSeen) != len(seen) {
+		t.Fatalf("reordered occurrence count = %d, want %d", len(reorderedSeen), len(seen))
+	}
+	for id := range seen {
+		if !reorderedSeen[id] {
+			t.Errorf("reordering churned occurrence identity %s", id)
+		}
+	}
+
+	// The single-instance historical prefix must stay byte-identical.
+	single, catalog2 := oneDoorCabinetCatalog()
+	singleAgregado := domain.Agregado{
+		ID: "agr-single", Code: "PUE", Name: "Puerta", Active: true,
+		Components: []domain.ComponentInstance{{ComponentID: catalog2.Components[0].ID, Quantity: 1}},
+	}
+	catalog2.Agregados = append(catalog2.Agregados, singleAgregado)
+	catalog2.Structures[0].Agregados = []domain.ModuleAgregadoInstance{{ID: "only", AgregadoID: "agr-single", Quantity: 1}}
+	singleLayout, err := ResolveFurnitureLayout(single, catalog2, nil, nil)
+	if err != nil {
+		t.Fatalf("single-instance resolve: %v", err)
+	}
+	for i := range singleLayout.Components {
+		if id := singleLayout.Components[i].ComponentInstanceID; contains(id, "agr-single") {
+			if !contains(id, "agr-single-u0-") {
+				t.Fatalf("single-instance prefix must stay historical, got %s", id)
+			}
+		}
+	}
+}
+
+func TestLayoutAgregadoRepeatedInstancesRequireUniqueStableIds(t *testing.T) {
+	module, catalog := oneDoorCabinetCatalog()
+	agregado := domain.Agregado{
+		ID: "agr-front", Code: "FRENTE", Name: "Frente Cajon", Active: true,
+		Components: []domain.ComponentInstance{{ComponentID: catalog.Components[0].ID, Quantity: 1}},
+	}
+	catalog.Agregados = append(catalog.Agregados, agregado)
+	module.Components = nil
+	module.Agregados = []domain.ModuleAgregadoInstance{
+		{ID: "same", AgregadoID: "agr-front", Quantity: 1},
+		{ID: "same", AgregadoID: "agr-front", Quantity: 1},
+	}
+
+	if _, err := ResolveFurnitureLayout(module, catalog, nil, nil); err == nil || !strings.Contains(err.Error(), "duplicate instance id") {
+		t.Fatalf("duplicate persisted agregado identity must fail closed, got %v", err)
+	}
+
+	module.Agregados[1].ID = ""
+	if _, err := ResolveFurnitureLayout(module, catalog, nil, nil); err == nil || !strings.Contains(err.Error(), "requires a stable instance id") {
+		t.Fatalf("missing repeated agregado identity must fail closed, got %v", err)
+	}
+}
+
+func contains(haystack, needle string) bool {
+	return len(needle) > 0 && len(haystack) >= len(needle) && strings.Contains(haystack, needle)
 }

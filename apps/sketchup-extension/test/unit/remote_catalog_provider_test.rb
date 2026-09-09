@@ -251,6 +251,43 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal 2, definitions.length
   end
 
+  # #466/#477: authoring resolves must pin the revisionId the workshop
+  # catalog served — a fabricated 'workshop-current' pin can never match the
+  # server's content hash and rejects with CATALOG_REVISION_STALE.
+  def test_catalog_revision_pins_the_served_revision_id
+    contract = CONTRACT.merge('revisionId' => 'workshop-d5fd9a3f37af')
+    transport = FakeTransport.new({ 'status' => 200, 'body' => contract })
+    provider = build_provider(transport: transport)
+
+    assert_nil provider.catalog_revision, 'nothing cached yet must answer nil, never a fabricated pin'
+
+    provider.all_definitions
+
+    assert_equal 'workshop-d5fd9a3f37af', provider.catalog_revision
+    assert_equal 1, transport.requests, 'reading the revision must reuse the cache, not refetch'
+  end
+
+  def test_catalog_revision_is_nil_when_the_contract_carries_no_revision
+    provider = build_provider(status: 200, body: CONTRACT)
+    provider.all_definitions
+
+    assert_nil provider.catalog_revision,
+               'a contract without revisionId must answer nil — callers fail honestly'
+  end
+
+  def test_refresh_forces_a_single_refetch_keeping_the_cache_warm
+    contract = CONTRACT.merge('revisionId' => 'workshop-a1')
+    transport = FakeTransport.new({ 'status' => 200, 'body' => contract })
+    provider = build_provider(transport: transport)
+    provider.all_definitions
+    first_requests = transport.requests
+
+    provider.refresh!
+
+    assert_equal first_requests + 1, transport.requests, 'refresh! must refetch exactly once'
+    assert_equal 'workshop-a1', provider.catalog_revision
+  end
+
   LAYOUT = {
     'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111',
     'definitionName' => 'Módulo Base',
