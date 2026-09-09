@@ -112,6 +112,11 @@ export function SketchUpPairingModal({
   const grantRef = useRef<PairingGrantCreated | null>(null);
   const statusRef = useRef<PairingGrantStatus | null>(null);
   const closedRef = useRef(false);
+  // StrictMode dev runs the create effect twice. Without this guard the
+  // sheet mints TWO live grants: the first code reaches the screen (and the
+  // plugin may exchange it) while the sheet keeps polling only the second —
+  // "Diseño vinculado" then never appears.
+  const createStartedRef = useRef(false);
 
   // Base label frozen for the lifetime of the sheet: "R2 actual" arriving in
   // the background never rewrites what this grant pinned.
@@ -146,6 +151,8 @@ export function SketchUpPairingModal({
   }, [api, token, projectId, designId, baseRevisionId]);
 
   useEffect(() => {
+    if (createStartedRef.current) return;
+    createStartedRef.current = true;
     void createGrant();
   }, [createGrant]);
 
