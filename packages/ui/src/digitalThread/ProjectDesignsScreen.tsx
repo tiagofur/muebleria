@@ -536,7 +536,9 @@ export function ProjectDesignsScreen({
                 <span>Ver matriz de muebles</span>
               </button>
             )}
-            {onOpenReconciliation && (
+            {/* Reconciliation needs a DesignRevision (#502); with zero designs
+                the destination only dead-ends in its "Falta contexto" state. */}
+            {onOpenReconciliation && designs.length > 0 && (
               <button
                 type="button"
                 className="btn btn-secondary"
