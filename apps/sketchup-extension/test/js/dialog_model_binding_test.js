@@ -148,6 +148,9 @@ function runTests() {
     assert.equal(badge.textContent, 'Sin conectar');
     assert.ok(badge.className.includes('pending'));
     assert.ok(visible(el(sandbox, 'btn-binding-connect')));
+    // The pairing-code entry is the primary connect path: it must be offered
+    // exactly when there is something to connect.
+    assert.ok(visible(el(sandbox, 'pairing-entry')));
     assert.ok(!visible(el(sandbox, 'model-binding-info')));
     assert.ok(!visible(el(sandbox, 'btn-binding-refresh')));
     assert.ok(!visible(el(sandbox, 'btn-binding-adopt')));
@@ -164,6 +167,9 @@ function runTests() {
     assert.equal(el(sandbox, 'binding-base-revision').textContent, 'R2');
     assert.ok(visible(el(sandbox, 'model-binding-info')));
     assert.ok(!visible(el(sandbox, 'btn-binding-connect')));
+    // A linked design has nothing to connect: the pairing-code entry hides
+    // with the manual picker instead of offering a rebind code.
+    assert.ok(!visible(el(sandbox, 'pairing-entry')));
     assert.ok(visible(el(sandbox, 'btn-binding-refresh')));
     assert.ok(!visible(el(sandbox, 'btn-binding-adopt')));
   });
