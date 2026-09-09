@@ -14,7 +14,7 @@ func (s *PostgresStore) loadStructureComponents(ctx context.Context, structureID
 		SELECT component_id, quantity, placement_override, overrides
 		FROM structure_components
 		WHERE structure_id = $1
-		ORDER BY created_at ASC;
+		ORDER BY created_at ASC, id ASC;
 	`, structureID)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func (s *PostgresStore) loadStructurePresets(ctx context.Context, structureID st
 		SELECT id, name, width_mm, height_mm, depth_mm
 		FROM structure_presets
 		WHERE structure_id = $1
-		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
+		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, presetsQuery, structureID)
 	if err != nil {
@@ -141,7 +141,7 @@ func loadStructureComponentsTx(ctx context.Context, tx pgx.Tx, structureID strin
 		SELECT component_id, quantity, placement_override, overrides
 		FROM structure_components
 		WHERE structure_id = $1
-		ORDER BY created_at ASC;
+		ORDER BY created_at ASC, id ASC;
 	`, structureID)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func loadStructurePresetsTx(ctx context.Context, tx pgx.Tx, structureID string) 
 		SELECT id, name, width_mm, height_mm, depth_mm
 		FROM structure_presets
 		WHERE structure_id = $1
-		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
+		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC, id ASC;
 	`, structureID)
 	if err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at
 		FROM structures
 		WHERE organization_id = $1
-		ORDER BY name ASC;
+		ORDER BY name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {

@@ -18,7 +18,7 @@ func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component,
 		       notes, active, created_at, updated_at
 		FROM components
 		WHERE organization_id = $1
-		ORDER BY name ASC;
+		ORDER BY name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {

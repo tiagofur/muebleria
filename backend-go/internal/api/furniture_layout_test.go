@@ -343,25 +343,20 @@ func TestFurnitureDefinitionsCarryMaterialsAndRoles(t *testing.T) {
 	module, catalog := layoutCabinetFixture()
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
+	fullCatalog := catalog
+	fullCatalog.Modules = []domain.Module{*module}
+	fullCatalog.Materials = []domain.MaterialBoard{
+		{ID: "mat-white", Code: "MEL-BLANCO", Name: "Melamina Blanca", ThicknessMm: 18, Active: true},
+		{ID: "mat-oak", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, PreviewColor: "#c4a574", Active: true},
+		{ID: "mat-old", Code: "VIEJO", Name: "Descontinuado", Active: false},
+	}
+	fullCatalog.OptionGroups = []domain.OptionGroup{
+		{ID: "og-1", Code: "FRENTE", Name: "Frente / Puertas", Kind: "board", OptionIDs: []string{"mat-oak"}},
+		{ID: "og-2", Code: "CORREDERAS", Name: "Correderas", Kind: "hardware", OptionIDs: []string{"hw-x"}},
+	}
 	server.Store = &stubStore{
-		getUserByEmail: u,
-		listModules:    []domain.Module{*module},
-		listStructures: catalog.Structures,
-		listComponents: catalog.Components,
-		listHardwares:  catalog.Hardware,
-		listMaterials: []domain.MaterialBoard{
-			{ID: "mat-white", Code: "MEL-BLANCO", Name: "Melamina Blanca", ThicknessMm: 18, Active: true},
-			{ID: "mat-oak", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, PreviewColor: "#c4a574", Active: true},
-			{ID: "mat-old", Code: "VIEJO", Name: "Descontinuado", Active: false},
-		},
-		listOptionGroups: []domain.OptionGroup{
-			// Curated list for FRENTE: only oak.
-			{ID: "og-1", Code: "FRENTE", Name: "Frente / Puertas", Kind: "board",
-				OptionIDs: []string{"mat-oak"}},
-			// Hardware group must not leak into board roles.
-			{ID: "og-2", Code: "CORREDERAS", Name: "Correderas", Kind: "hardware",
-				OptionIDs: []string{"hw-x"}},
-		},
+		getUserByEmail:  u,
+		catalogOverride: &fullCatalog,
 	}
 	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
@@ -414,12 +409,11 @@ func TestFurnitureDefinitionsCarryEstimatedCounts(t *testing.T) {
 	module, catalog := layoutCabinetFixture()
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
+	fullCatalog := catalog
+	fullCatalog.Modules = []domain.Module{*module}
 	server.Store = &stubStore{
-		getUserByEmail: u,
-		listModules:    []domain.Module{*module},
-		listStructures: catalog.Structures,
-		listComponents: catalog.Components,
-		listHardwares:  catalog.Hardware,
+		getUserByEmail:  u,
+		catalogOverride: &fullCatalog,
 	}
 	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 

@@ -215,6 +215,7 @@ type stubStore struct {
 	machineOutputSelections []domain.MachineOutputSelectionRecord
 	// #108: optional catalog returned by GetFullCatalog. nil → empty catalog.
 	catalogOverride *domain.Catalog
+	catalogError    error
 	// Workshop furniture modules served by ListModules (SketchUp catalog).
 	listModules    []domain.Module
 	listModulesErr error
@@ -781,6 +782,9 @@ func (s *stubStore) ListModules(context.Context) ([]domain.Module, error) {
 }
 
 func (s *stubStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
+	if s.catalogError != nil {
+		return domain.Catalog{}, s.catalogError
+	}
 	// #108: HandleProjectByID now loads the catalog to pin structure revisions
 	// when a quote is closed. Tests that need to exercise pinning inject a
 	// catalog via catalogOverride; otherwise an empty catalog is fine —

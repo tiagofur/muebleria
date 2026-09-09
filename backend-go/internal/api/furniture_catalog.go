@@ -262,6 +262,13 @@ func buildWorkshopFurnitureCatalogValidated(modules []domain.Module, categories 
 			catalog.Presets = append(catalog.Presets, buildWorkshopPreset(m, p, category))
 		}
 	}
+	// NOTE: the arrays above feed the content-addressed revisionId/ETag, so
+	// their order must be a total function of content. That guarantee lives
+	// in the storage layer's ORDER BY (id tiebreakers for duplicate
+	// (sort_order, name) categories and equal-dimension presets) — the
+	// projection deliberately preserves the store's semantic order verbatim
+	// (tests assert it); re-sorting here would desync the web client's
+	// presentation order (#466 pinned-resolve stability).
 	return catalog, nil
 }
 

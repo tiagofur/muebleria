@@ -161,12 +161,13 @@ type authoringTemplateIndex struct {
 }
 
 type authoringTemplateInfo struct {
-	defID              string
-	catalogComponentID string
-	placement          string
-	defaultCount       int
-	entryCount         int
-	agregado           bool
+	defID                string
+	catalogComponentID   string
+	placement            string
+	defaultCount         int
+	entryCount           int
+	agregado             bool
+	defaultOccurrenceIDs map[string]struct{}
 }
 
 func (idx *authoringTemplateIndex) note(defID, catalogComponentID, placement string, quantity int, agregado bool) {
@@ -223,8 +224,19 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	// snapshot must map onto (structure/module/agregado walk, same code path
 	// as the real resolve).
 	templateIndex := &authoringTemplateIndex{}
-	if _, _, err := resolveFurnitureLayoutOpts(input.Module, input.Catalog, input.Dims, input.OptionChoices, resolveOptions{templateCollector: templateIndex}); err != nil {
+	_, defaultBoards, err := resolveFurnitureLayoutOpts(input.Module, input.Catalog, input.Dims, input.OptionChoices, resolveOptions{templateCollector: templateIndex})
+	if err != nil {
 		return nil, err
+	}
+	for _, board := range defaultBoards {
+		template := templateIndex.entries[board.defID]
+		if template == nil {
+			continue
+		}
+		if template.defaultOccurrenceIDs == nil {
+			template.defaultOccurrenceIDs = map[string]struct{}{}
+		}
+		template.defaultOccurrenceIDs[board.id] = struct{}{}
 	}
 
 	// 2. Validate + plan the occurrence snapshot.
@@ -606,14 +618,20 @@ func planOccurrences(plan *authoringPlan, occurrences []AuthoringOccurrence, ind
 		}
 		if template.entryCount > 1 {
 			// Multiple definition entries may carry different formulas and
-			// overrides per copy; grouping them under one template would
-			// silently honor only the first entry. Fail closed instead.
-			*issues = append(*issues, domain.ContractIssue{
-				Code:     "OCCURRENCE_COUNT_UNSUPPORTED",
-				Message:  fmt.Sprintf("template %s is instantiated by multiple definition entries; its occurrences cannot be authoring-planned", defID),
-				Severity: domain.IssueSeverityError, Path: "furniture.components",
-				Remediation: "Authoring v1 plans templates backed by exactly one definition entry.",
-			})
+			// overrides per copy. Their exact default echo is nevertheless a
+			// valid read-only preflight input: leave that template out of the
+			// authoring plan so the authoritative default expansion preserves
+			// each entry's own semantics. Any changed identity, count or
+			// transform still fails closed because v1 cannot map that authored
+			// change back onto one specific definition entry.
+			if !exactDefaultMultiEntryEcho(grouped[defID], template) {
+				*issues = append(*issues, domain.ContractIssue{
+					Code:     "OCCURRENCE_COUNT_UNSUPPORTED",
+					Message:  fmt.Sprintf("template %s is instantiated by multiple definition entries; only its exact unchanged occurrence snapshot can be preflighted", defID),
+					Severity: domain.IssueSeverityError, Path: "furniture.components",
+					Remediation: "Echo the exact unchanged occurrences from the last resolve; authoring changes require a template backed by one definition entry.",
+				})
+			}
 			continue
 		}
 		if count != template.defaultCount && !template.movableInternal() {
@@ -631,6 +649,9 @@ func planOccurrences(plan *authoringPlan, occurrences []AuthoringOccurrence, ind
 	// occurrences (by ID) take default pose slots, authored ones (by ID)
 	// follow with their own translations.
 	for defID, group := range grouped {
+		if template := index.entries[defID]; template != nil && template.entryCount > 1 {
+			continue
+		}
 		unauthored := make([]AuthoringOccurrence, 0, len(group))
 		authored := make([]AuthoringOccurrence, 0, len(group))
 		for _, occurrence := range group {
@@ -656,6 +677,23 @@ func planOccurrences(plan *authoringPlan, occurrences []AuthoringOccurrence, ind
 		}
 		plan.templates[defID] = copies
 	}
+}
+
+func exactDefaultMultiEntryEcho(group []AuthoringOccurrence, template *authoringTemplateInfo) bool {
+	if template == nil || len(group) != template.defaultCount || len(template.defaultOccurrenceIDs) != template.defaultCount {
+		return false
+	}
+	seen := make(map[string]struct{}, len(group))
+	for _, occurrence := range group {
+		if occurrence.Transform != nil {
+			return false
+		}
+		if _, ok := template.defaultOccurrenceIDs[occurrence.ComponentInstanceID]; !ok {
+			return false
+		}
+		seen[occurrence.ComponentInstanceID] = struct{}{}
+	}
+	return len(seen) == template.defaultCount
 }
 
 // effectiveManualPlacement pairs an intent with its resolved host board.

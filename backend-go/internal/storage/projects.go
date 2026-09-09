@@ -31,7 +31,7 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 		SELECT component_id, quantity, placement_override, length_formula, width_formula, overrides
 		FROM module_components
 		WHERE module_id = $1 AND organization_id = $2
-		ORDER BY created_at ASC;
+		ORDER BY created_at ASC, id ASC;
 	`, moduleID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	cat.Agregados = agrs
 
 	// Cargar módulos y su despiece
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions FROM modules WHERE organization_id = $1 ORDER BY name ASC`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions FROM modules WHERE organization_id = $1 ORDER BY name ASC, id ASC`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return cat, fmt.Errorf("error query modules: %w", err)
@@ -586,11 +586,14 @@ func replaceProjectLevelChoicesTx(ctx context.Context, tx pgx.Tx, projectID stri
 
 // loadModulePresets returns commercial measure presets for a module (H09).
 func (s *PostgresStore) loadModulePresets(ctx context.Context, moduleID string) ([]domain.DimensionPreset, error) {
+	// id is the final tiebreaker: presets with identical dimensions within a
+	// module must never reorder between reads or the content-addressed
+	// catalog revision oscillates (#466 pinned resolves randomly stale).
 	q := `
 		SELECT id, name, width_mm, height_mm, depth_mm
 		FROM module_presets
 		WHERE module_id = $1 AND organization_id = $2
-		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
+		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, q, moduleID, OrgFromCtx(ctx))
 	if err != nil {
@@ -1323,7 +1326,7 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		       furniture_type, base_mode, base_clearance_mm, image_url, structure_id, agregados, parameter_definitions
 		FROM modules
 		WHERE organization_id = $1
-		ORDER BY name ASC;
+		ORDER BY name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
@@ -1424,7 +1427,7 @@ func (s *PostgresStore) listAllModuleComponents(ctx context.Context) (map[string
 		SELECT module_id, component_id, quantity, placement_override, length_formula, width_formula, overrides
 		FROM module_components
 		WHERE organization_id = $1
-		ORDER BY created_at ASC;
+		ORDER BY created_at ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
@@ -1478,7 +1481,7 @@ func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]
 		SELECT id, module_id, name, width_mm, height_mm, depth_mm
 		FROM module_presets
 		WHERE organization_id = $1
-		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
+		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {

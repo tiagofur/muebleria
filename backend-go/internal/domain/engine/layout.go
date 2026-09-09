@@ -116,31 +116,31 @@ type LayoutComponent struct {
 	// never the host-generated SketchUp definition GUID and never implicitly
 	// the catalog component ID (catalogComponentId, when a schema publishes
 	// it, stays a separate field).
-	ComponentDefinitionID       string                       `json:"componentDefinitionId"`
-	SlotID                      string                       `json:"slotId"`
-	Role                        string                       `json:"role,omitempty"`
-	Name                        string                       `json:"name"`
-	Kind                        string                       `json:"kind"`
-	Transform                   LayoutTransform              `json:"transform"`
-	DimensionsMm                [3]float64                   `json:"dimensionsMm"`
-	LocalTransform              LayoutLocalTransform         `json:"localTransform"`
-	LengthMm                    int                          `json:"lengthMm"`
-	WidthMm                     int                          `json:"widthMm"`
-	ThicknessMm                 int                          `json:"thicknessMm"`
-	AuthoringCapability         *LayoutAuthoringCapability   `json:"authoringCapability,omitempty"`
-	OptionRole                  string                       `json:"optionRole,omitempty"`
-	MaterialID                  string                       `json:"materialId,omitempty"`
-	MaterialCode                string                       `json:"materialCode,omitempty"`
-	MaterialName                string                       `json:"materialName,omitempty"`
-	MaterialColorHex            string                       `json:"materialColorHex,omitempty"`
-	MaterialImageURL            string                       `json:"materialImageUrl,omitempty"`
-	MaterialTextureURL          string                       `json:"materialTextureUrl,omitempty"`
-	MaterialTextureTileWidthMm  float64                      `json:"materialTextureTileWidthMm,omitempty"`
-	MaterialTextureTileLengthMm float64                      `json:"materialTextureTileLengthMm,omitempty"`
-	MaterialRoughness           *float64                     `json:"materialRoughness,omitempty"`
-	MaterialMetalness           *float64                     `json:"materialMetalness,omitempty"`
-	MaterialClearcoat           *float64                     `json:"materialClearcoat,omitempty"`
-	MaterialGrain               bool                         `json:"materialGrain,omitempty"`
+	ComponentDefinitionID       string                     `json:"componentDefinitionId"`
+	SlotID                      string                     `json:"slotId"`
+	Role                        string                     `json:"role,omitempty"`
+	Name                        string                     `json:"name"`
+	Kind                        string                     `json:"kind"`
+	Transform                   LayoutTransform            `json:"transform"`
+	DimensionsMm                [3]float64                 `json:"dimensionsMm"`
+	LocalTransform              LayoutLocalTransform       `json:"localTransform"`
+	LengthMm                    int                        `json:"lengthMm"`
+	WidthMm                     int                        `json:"widthMm"`
+	ThicknessMm                 int                        `json:"thicknessMm"`
+	AuthoringCapability         *LayoutAuthoringCapability `json:"authoringCapability,omitempty"`
+	OptionRole                  string                     `json:"optionRole,omitempty"`
+	MaterialID                  string                     `json:"materialId,omitempty"`
+	MaterialCode                string                     `json:"materialCode,omitempty"`
+	MaterialName                string                     `json:"materialName,omitempty"`
+	MaterialColorHex            string                     `json:"materialColorHex,omitempty"`
+	MaterialImageURL            string                     `json:"materialImageUrl,omitempty"`
+	MaterialTextureURL          string                     `json:"materialTextureUrl,omitempty"`
+	MaterialTextureTileWidthMm  float64                    `json:"materialTextureTileWidthMm,omitempty"`
+	MaterialTextureTileLengthMm float64                    `json:"materialTextureTileLengthMm,omitempty"`
+	MaterialRoughness           *float64                   `json:"materialRoughness,omitempty"`
+	MaterialMetalness           *float64                   `json:"materialMetalness,omitempty"`
+	MaterialClearcoat           *float64                   `json:"materialClearcoat,omitempty"`
+	MaterialGrain               bool                       `json:"materialGrain,omitempty"`
 }
 
 // LayoutHardware is one visible hardware placement (handle, hinge, …) resolved
@@ -413,8 +413,34 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 	boards = append(boards, moduleBoards...)
 
 	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
+	// Occurrence identity must be unique across the WHOLE layout. A module
+	// may legitimately instantiate the same agregado several times (three
+	// drawers, three drawer fronts) with quantity 1 each. Every repeated
+	// placement is its own authoring definition entry because it may carry a
+	// different pose/formula, so disambiguate it with the persisted agregado
+	// instance ID — never its array position (#388 exact identity). Single
+	// instances keep the historical prefix so existing part identities do
+	// not churn.
+	agregadoInstanceCount := map[string]int{}
+	for _, inst := range agregadoInstances {
+		agregadoInstanceCount[inst.AgregadoID]++
+	}
+	seenInstanceIDs := map[string]bool{}
 	for _, agrInst := range agregadoInstances {
-		agrBoards, err := expandLayoutAgregado(agrInst, catalog, dims, b, baseMode, optionChoices, opts)
+		instanceTag := ""
+		if agregadoInstanceCount[agrInst.AgregadoID] > 1 {
+			instanceID := strings.TrimSpace(agrInst.ID)
+			if instanceID == "" {
+				return nil, fmt.Errorf("repeated agregado %s requires a stable instance id", agrInst.AgregadoID)
+			}
+			identityKey := agrInst.AgregadoID + "\x00" + instanceID
+			if seenInstanceIDs[identityKey] {
+				return nil, fmt.Errorf("repeated agregado %s has duplicate instance id %s", agrInst.AgregadoID, instanceID)
+			}
+			seenInstanceIDs[identityKey] = true
+			instanceTag = fmt.Sprintf("instance-%s-", instanceID)
+		}
+		agrBoards, err := expandLayoutAgregado(agrInst, catalog, dims, b, baseMode, optionChoices, opts, instanceTag)
 		if err != nil {
 			return nil, err
 		}
@@ -734,8 +760,10 @@ func pickRotation(compValue int, inst domain.ComponentInstance, placement string
 // sub-space box + origin, split it into units, expand inner components against
 // each unit's dims and offset by the unit origin. Inner components resolve
 // their own material binding role — an agregado never leaks a hardcoded
-// thickness into its children (#402).
-func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int, baseMode string, optionChoices map[string]string, opts resolveOptions) ([]layoutBoard, error) {
+// thickness into its children (#402). instanceTag disambiguates sibling
+// instances of the SAME agregado in one module (empty for the single-instance
+// historical prefix).
+func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int, baseMode string, optionChoices map[string]string, opts resolveOptions, instanceTag string) ([]layoutBoard, error) {
 	agr, ok := findAgregado(catalog, agrInst.AgregadoID)
 	if !ok {
 		return nil, fmt.Errorf("agregado not found: %s", agrInst.AgregadoID)
@@ -826,7 +854,7 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 		// quote excludes.
 		unitBoards, err := expandLayoutInstances(
 			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
-			catalog, unitDims, fmt.Sprintf("agr-%s-u%d-", agrInst.AgregadoID, unit.index), baseClearance, optionChoices, opts)
+			catalog, unitDims, fmt.Sprintf("agr-%s-%su%d-", agrInst.AgregadoID, instanceTag, unit.index), baseClearance, optionChoices, opts)
 		if err != nil {
 			return nil, err
 		}

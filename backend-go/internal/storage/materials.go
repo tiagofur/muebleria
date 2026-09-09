@@ -185,7 +185,7 @@ func (s *PostgresStore) ListMaterialBoards(ctx context.Context) ([]domain.Materi
 		SELECT id, code, name, manufacturer, category_id, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, cost_per_m2, default_edge_band_id, image_url, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, notes, active, created_at, updated_at
 		FROM material_boards
 		WHERE organization_id = $1
-		ORDER BY name ASC;
+		ORDER BY name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
@@ -277,7 +277,7 @@ func (s *PostgresStore) ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, e
 		SELECT id, code, name, thickness_mm, cost_per_ml, notes, preview_color, active, created_at, updated_at
 		FROM edge_bands
 		WHERE organization_id = $1
-		ORDER BY name ASC;
+		ORDER BY name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
@@ -311,7 +311,7 @@ func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, e
 		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, created_at, updated_at
 		FROM hardwares
 		WHERE organization_id = $1
-		ORDER BY name ASC;
+		ORDER BY name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
@@ -357,7 +357,7 @@ func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGr
 		SELECT id, code, name, kind, required
 		FROM option_groups
 		WHERE organization_id = $1
-		ORDER BY name ASC;
+		ORDER BY name ASC, id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
@@ -380,7 +380,7 @@ func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGr
 	}
 	rows.Close()
 	for i := range list {
-		mRows, err := s.db(ctx).Query(ctx, `SELECT entity_id FROM option_group_members WHERE option_group_id = $1`, list[i].ID)
+		mRows, err := s.db(ctx).Query(ctx, `SELECT entity_id FROM option_group_members WHERE option_group_id = $1 ORDER BY entity_id ASC`, list[i].ID)
 		if err != nil {
 			return nil, err
 		}

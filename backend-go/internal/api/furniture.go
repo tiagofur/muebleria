@@ -51,63 +51,11 @@ func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	modules, err := s.Store.ListModules(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	categories, err := s.Store.ListCategories(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-
-	// Composition context for the estimated piece counts of each definition.
-	structures, err := s.Store.ListStructures(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	components, err := s.Store.ListComponents(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	agregados, err := s.Store.ListAgregados(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	hardware, err := s.Store.ListHardwares(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	materials, err := s.Store.ListMaterialBoards(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	optionGroups, err := s.Store.ListOptionGroups(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	materialCategories, err := s.Store.ListMaterialCategories(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	composition := domain.Catalog{
-		Structures:   structures,
-		Components:   components,
-		Agregados:    agregados,
-		Hardware:     hardware,
-		Materials:    materials,
-		OptionGroups: optionGroups,
-	}
-
-	catalog, err := buildWorkshopFurnitureCatalogValidated(modules, categories, materialCategories, composition)
+	// Catalog delivery and authoring resolve MUST pin the same snapshot. A
+	// second assembly path here previously produced a different revision from
+	// loadWorkshopCatalogOnce even when the workshop had not changed, making
+	// every SketchUp review fail as CATALOG_REVISION_STALE.
+	snapshot, err := s.loadWorkshopCatalogOnce(r)
 	if err != nil {
 		if definitionErr, ok := furnitureParameterDefinitionsError(err); ok {
 			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
@@ -118,7 +66,7 @@ func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Reque
 		respondWithInternalError(w, err, "project furniture catalog")
 		return
 	}
-	catalog.RevisionID = workshopCatalogRevisionID(catalog)
+	catalog := snapshot.Projection
 	body, err := json.Marshal(catalog)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
