@@ -271,10 +271,11 @@ func TestHandleFurnitureInstanceRemove_ReturnsTerminalState(t *testing.T) {
 }
 
 // TestHandleProjectFurnitureInstances_ListIncludesDisplaySummary (#389 / DT-5):
-// the list DTO carries the server-computed presentation block — catalog label
-// plus quoted-or-default dimensions — so authoring clients never guess labels
-// or dimensions. Identity fields stay verbatim; display is optional and absent
-// when neither source knows anything.
+// the list DTO carries the server-computed presentation block — catalog label,
+// quoted-or-default dimensions and the quoted finish (#620) — so authoring
+// clients never guess labels, dimensions or the board choices. Identity fields
+// stay verbatim; display is optional and absent when neither source knows
+// anything.
 func TestHandleProjectFurnitureInstances_ListIncludesDisplaySummary(t *testing.T) {
 	definitionID := "50000000-0000-0000-0000-000000000001"
 	summaries := []storage.FurnitureInstanceSummary{
@@ -284,6 +285,10 @@ func TestHandleProjectFurnitureInstances_ListIncludesDisplaySummary(t *testing.T
 				LifecycleStatus: domain.FurnitureInstanceLifecycleActive, Version: 1},
 			DisplayName: "Gabinete Base 600",
 			DisplayDims: &domain.ItemCustomDims{WidthMm: 600, HeightMm: 720, DepthMm: 560},
+			DisplayMaterialChoices: map[string]string{
+				"FRENTE":   "70000000-0000-0000-0000-0000000000c1",
+				"INTERIOR": "70000000-0000-0000-0000-0000000000c2",
+			},
 		},
 		{
 			Instance: domain.FurnitureInstance{ID: "fi-2", ProjectID: fiTestProjectID,
@@ -302,8 +307,9 @@ func TestHandleProjectFurnitureInstances_ListIncludesDisplaySummary(t *testing.T
 		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, `"display":{"name":"Gabinete Base 600","dimensions_mm":{"width":600,"height":720,"depth":560}}`) {
-		t.Fatalf("list DTO %s missing the display summary", body)
+	if !strings.Contains(body, `"display":{"name":"Gabinete Base 600","dimensions_mm":{"width":600,"height":720,"depth":560},`+
+		`"material_choices":{"FRENTE":"70000000-0000-0000-0000-0000000000c1","INTERIOR":"70000000-0000-0000-0000-0000000000c2"}}`) {
+		t.Fatalf("list DTO %s missing the display summary with the quoted finish", body)
 	}
 	// A unit without catalog or quoted presentation carries NO display object
 	// (never an invented label).

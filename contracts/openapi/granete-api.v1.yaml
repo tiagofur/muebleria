@@ -6951,13 +6951,20 @@
       "FurnitureInstanceDisplay": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Presentation-only summary for authoring clients (#389 / DT-5): the catalog module label and the quoted dimensions when the unit comes from a quote line. Server-computed; never part of business identity.",
+        "description": "Presentation-only summary for authoring clients (#389 / DT-5): the catalog module label, the quoted dimensions when the unit comes from a quote line, and the quoted board choices so a placement seeds the finish the customer chose. Server-computed; never part of business identity.",
         "properties": {
           "name": {
             "type": "string"
           },
           "dimensions_mm": {
             "$ref": "#/components/schemas/FurnitureInstanceDimensionsMm"
+          },
+          "material_choices": {
+            "type": "object",
+            "description": "Board choices by role (option group code -> material id) from the unit's current quote line option_choices. Same keys/values the layout endpoint accepts as choice.ROLE params. Absent when the unit carries no quoted finish.",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },

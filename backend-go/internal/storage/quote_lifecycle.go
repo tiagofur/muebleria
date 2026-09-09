@@ -228,6 +228,11 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 	// custom dimensions (F144 single-source: customDims → module).
 	unitRows, err := s.db(ctx).Query(ctx, `
 		SELECT pi.id::text, pi.module_id::text, COALESCE(pi.custom_dims, 'null'::jsonb),
+			COALESCE((
+				SELECT jsonb_object_agg(pic.option_group_code, pic.choice_entity_id::text)
+				FROM project_item_choices pic
+				WHERE pic.project_item_id = pi.id
+			), 'null'::jsonb),
 			fi.id::text, fi.lifecycle_status
 		FROM project_items pi
 		JOIN quote_line_furniture_instances qli ON qli.quote_line_id = pi.id AND qli.state = 'current'
@@ -242,14 +247,15 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 		LineID          string
 		ModuleID        string
 		LineCustomDims  map[string]any
+		LineOptions     map[string]string
 		InstanceID      string
 		LifecycleStatus string
 	}
 	units := []quotedUnit{}
 	for unitRows.Next() {
 		var unit quotedUnit
-		var dimsJSON []byte
-		if err := unitRows.Scan(&unit.LineID, &unit.ModuleID, &dimsJSON, &unit.InstanceID, &unit.LifecycleStatus); err != nil {
+		var dimsJSON, optionsJSON []byte
+		if err := unitRows.Scan(&unit.LineID, &unit.ModuleID, &dimsJSON, &optionsJSON, &unit.InstanceID, &unit.LifecycleStatus); err != nil {
 			unitRows.Close()
 			return nil, err
 		}
@@ -260,6 +266,14 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 				return nil, fmt.Errorf("%w: custom_dims de la línea de cotización", domain.ErrInvalidRevisionSnapshot)
 			}
 			unit.LineCustomDims = dims
+		}
+		if len(optionsJSON) > 0 && string(optionsJSON) != "null" {
+			choices := map[string]string{}
+			if err := json.Unmarshal(optionsJSON, &choices); err != nil {
+				unitRows.Close()
+				return nil, fmt.Errorf("%w: option_choices de la línea de cotización", domain.ErrInvalidRevisionSnapshot)
+			}
+			unit.LineOptions = choices
 		}
 		units = append(units, unit)
 	}
@@ -287,8 +301,10 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 		item := CreateQuoteRevisionItemCommand{
 			FurnitureInstanceID: unit.InstanceID,
 			Parameters:          map[string]any{},
-			MaterialChoices:     map[string]string{},
-			LifecycleStatus:     unit.LifecycleStatus,
+			// The quoted finish rides along: option_choices are the board
+			// choices (role -> material id) the customer selected (#620).
+			MaterialChoices: unit.LineOptions,
+			LifecycleStatus:  unit.LifecycleStatus,
 		}
 		if unit.ModuleID != "" {
 			item.FurnitureDefinitionID = unit.ModuleID

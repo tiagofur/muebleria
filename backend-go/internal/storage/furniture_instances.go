@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -323,6 +324,11 @@ type FurnitureInstanceSummary struct {
 	// to a quote line (project_items.custom_dims wins), else the module's
 	// default dimensions. nil when neither source knows any dimension.
 	DisplayDims *domain.ItemCustomDims
+	// DisplayMaterialChoices are the quoted board choices (option group code
+	// -> material id) from the unit's current quote line option_choices, so an
+	// authoring placement seeds the finish the customer chose (#620). nil when
+	// the unit carries no quoted finish.
+	DisplayMaterialChoices map[string]string
 }
 
 // ListFurnitureInstanceSummariesByProject lists the project's identities with
@@ -342,6 +348,7 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 		SELECT fi.*,
 			COALESCE(m.name, ''),
 			quoted.width_mm, quoted.height_mm, quoted.depth_mm,
+			quoted.option_choices,
 			m.width_mm, m.height_mm, m.depth_mm
 		FROM (
 			SELECT id, project_id, organization_id,
@@ -355,7 +362,10 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 		LEFT JOIN LATERAL (
 			SELECT (pi.custom_dims->>'widthMm')::int AS width_mm,
 			       (pi.custom_dims->>'heightMm')::int AS height_mm,
-			       (pi.custom_dims->>'depthMm')::int AS depth_mm
+			       (pi.custom_dims->>'depthMm')::int AS depth_mm,
+			       (SELECT jsonb_object_agg(pic.option_group_code, pic.choice_entity_id::text)
+			        FROM project_item_choices pic
+			        WHERE pic.project_item_id = pi.id) AS option_choices
 			FROM quote_line_furniture_instances ql
 			JOIN project_items pi ON pi.id = ql.quote_line_id
 			WHERE ql.furniture_instance_id = fi.id
@@ -377,14 +387,24 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 		var quotedDims *domain.ItemCustomDims
 		var quotedW, quotedH, quotedD *int
 		var moduleW, moduleH, moduleD *int
+		var optionsJSON []byte
 		if err := rows.Scan(
 			&summary.Instance.ID, &summary.Instance.ProjectID, &summary.Instance.OrganizationID,
 			&summary.Instance.FurnitureDefinitionID, &summary.Instance.Origin,
 			&summary.Instance.OriginFurnitureInstanceID, &summary.Instance.LifecycleStatus,
 			&summary.Instance.Version, &summary.Instance.CreatedAt, &summary.Instance.UpdatedAt,
-			&summary.DisplayName, &quotedW, &quotedH, &quotedD, &moduleW, &moduleH, &moduleD,
+			&summary.DisplayName, &quotedW, &quotedH, &quotedD, &optionsJSON, &moduleW, &moduleH, &moduleD,
 		); err != nil {
 			return nil, err
+		}
+		if len(optionsJSON) > 0 && string(optionsJSON) != "null" {
+			choices := map[string]string{}
+			if err := json.Unmarshal(optionsJSON, &choices); err != nil {
+				return nil, fmt.Errorf("%w: option_choices de la línea de cotización", domain.ErrInvalidRevisionSnapshot)
+			}
+			if len(choices) > 0 {
+				summary.DisplayMaterialChoices = choices
+			}
 		}
 		if quotedW != nil || quotedH != nil || quotedD != nil {
 			quotedDims = &domain.ItemCustomDims{}
