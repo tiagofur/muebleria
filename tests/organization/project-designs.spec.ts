@@ -17,6 +17,31 @@ interface SeededProjectDesigns {
   readonly instanceIds: readonly [string, string, string];
 }
 
+async function uploadDesignArtifact(
+  apiBase: string,
+  token: string,
+  designId: string,
+  sessionId: string,
+  kind: 'model' | 'manifest' | 'preview',
+  filename: string,
+  bytes: Uint8Array,
+  contentType: string,
+): Promise<void> {
+  const body = new FormData();
+  body.append('file', new Blob([bytes], { type: contentType }), filename);
+  const response = await fetch(
+    `${apiBase}/designs/${designId}/publish/${sessionId}/artifacts/${kind}`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body,
+    },
+  );
+  if (response.status !== 201) {
+    throw new Error(`artifact ${kind} upload failed: ${response.status} ${await response.text()}`);
+  }
+}
+
 async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
   const apiBase = required('ORGANIZATION_API_BASE');
   const client = new GraneteApiClient(apiBase);
@@ -111,13 +136,89 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
     ],
   });
 
-  // 7. Authoritatively publish R2 (contains FI-A, FI-B, and FI-C)
-  const r2 = await client.publishDesignRevision(
+  // 7. Publish R2 through the real artifact pipeline (contains FI-A, FI-B, and FI-C).
+  const manifest = {
+    schemaVersion: 1,
+    projectId: PROJECT_ID,
+    designId: design.id,
+    baseRevisionId: r1.id,
+    source: {
+      client: 'sketchup' as const,
+      sketchupVersion: '2026',
+      pluginVersion: 'browser-gate',
+    },
+    items: instanceIds.map((furnitureInstanceId) => ({ furnitureInstanceId })),
+  };
+  const session = await client.prepareDesignPublish(
     aOwner.token,
     design.id,
-    { source_type: 'manual', base_revision_id: r1.id },
-    'gate-pd-publish-r2',
+    { manifest },
+    'gate-pd-prepare-r2',
   );
+  const previewBytes = Uint8Array.from(
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  );
+  await uploadDesignArtifact(
+    apiBase,
+    aOwner.token,
+    design.id,
+    session.id,
+    'model',
+    'design-r2.skp',
+    new TextEncoder().encode('SketchUp browser gate model'),
+    'application/octet-stream',
+  );
+  await uploadDesignArtifact(
+    apiBase,
+    aOwner.token,
+    design.id,
+    session.id,
+    'manifest',
+    'manifest.json',
+    new TextEncoder().encode(JSON.stringify(manifest)),
+    'application/json',
+  );
+  await uploadDesignArtifact(
+    apiBase,
+    aOwner.token,
+    design.id,
+    session.id,
+    'preview',
+    'preview.png',
+    previewBytes,
+    'image/png',
+  );
+  const r2 = await client.finalizeDesignPublish(
+    aOwner.token,
+    design.id,
+    session.id,
+    'gate-pd-finalize-r2',
+  );
+
+  // Real Go + PostgreSQL + filesystem proof: every authorized artifact grant
+  // resolves against the backend origin and serves bytes without /api/api.
+  for (const kind of ['preview', 'manifest', 'model'] as const) {
+    const grant = await client.authorizeDesignRevisionArtifact(
+      aOwner.token,
+      design.id,
+      r2.id,
+      kind,
+    );
+    const artifactUrl = new URL(grant.url, new URL(apiBase).origin);
+    if (artifactUrl.pathname.includes('/api/api/')) {
+      throw new Error(`artifact ${kind} grant contains a duplicate /api prefix`);
+    }
+    const artifactResponse = await fetch(artifactUrl);
+    if (!artifactResponse.ok || artifactResponse.status === 404) {
+      throw new Error(`artifact ${kind} GET failed: ${artifactResponse.status}`);
+    }
+    if ((await artifactResponse.arrayBuffer()).byteLength === 0) {
+      throw new Error(`artifact ${kind} GET returned no bytes`);
+    }
+  }
 
   return {
     projectId: PROJECT_ID,
@@ -149,7 +250,7 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
 
   test('lineage R1->R2, pinned historical snapshot R1 vs R2, reload stability, and tenant isolation', async ({
     page,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(60_000);
 
     // 1. Login to Org A
@@ -194,6 +295,70 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(itemsTable.getByTitle(seeded.instanceIds[0])).toBeVisible();
     await expect(itemsTable.getByTitle(seeded.instanceIds[1])).toBeVisible();
     await expect(itemsTable.getByTitle(seeded.instanceIds[2])).toBeVisible();
+
+    // R2 preview bytes load through the signed grant in the real browser.
+    const preview = page.getByTestId('preview-image');
+    await expect(preview).toBeVisible();
+    await expect(preview).toHaveAttribute('src', /\/api\/design-artifacts\//);
+    await expect(preview).not.toHaveAttribute('src', /\/api\/api\//);
+
+    // Responsive visual proof for the two recoverable preview failures. The
+    // workspace and all prior requests remain real; only the failure under
+    // test is injected at the signed-grant boundary.
+    const originalViewport = page.viewportSize();
+    const previewAuthorize = `**/designs/${seeded.designId}/revisions/${seeded.r2Id}/artifacts/preview:authorize`;
+    await page.route(previewAuthorize, (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'preview',
+          url: 'https://invalid.test/api/design-artifacts/preview.png?grant=invalid',
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      }),
+    );
+    await page.reload();
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const error = page.getByTestId('preview-grant-error');
+      await expect(error).toBeVisible();
+      await expect(error.getByRole('button', { name: 'Solicitar nuevo acceso' })).toBeVisible();
+      expect((await page.getByTestId('preview-card').boundingBox())!.width).toBeLessThanOrEqual(width);
+      await testInfo.attach(`preview-invalid-grant-${width}`, {
+        body: await page.getByTestId('preview-card').screenshot(),
+        contentType: 'image/png',
+      });
+    }
+    await page.unroute(previewAuthorize);
+
+    await page.route(previewAuthorize, (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'preview',
+          url: '/api/design-artifacts/visual-preview.png?grant=visual-test',
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      }),
+    );
+    await page.route('**/api/design-artifacts/visual-preview.png?*', (route) =>
+      route.fulfill({ status: 500, contentType: 'text/plain', body: 'injected image failure' }),
+    );
+    await page.reload();
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const error = page.getByTestId('preview-load-error');
+      await expect(error).toBeVisible();
+      await expect(error.getByRole('button', { name: 'Reintentar vista previa' })).toBeVisible();
+      expect((await page.getByTestId('preview-card').boundingBox())!.width).toBeLessThanOrEqual(width);
+      await testInfo.attach(`preview-byte-load-${width}`, {
+        body: await page.getByTestId('preview-card').screenshot(),
+        contentType: 'image/png',
+      });
+    }
+    await page.unroute(previewAuthorize);
+    await page.unroute('**/api/design-artifacts/visual-preview.png?*');
+    if (originalViewport) await page.setViewportSize(originalViewport);
 
     // 7. Select R1 again and verify historical reload stability
     await timeline.getByTestId('revision-node-R1').click();

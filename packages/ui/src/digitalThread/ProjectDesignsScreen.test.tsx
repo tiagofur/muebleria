@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type {
@@ -17,7 +17,7 @@ import {
   type ProjectDesignsContextState,
 } from './ProjectDesignsScreen';
 
-const API = 'http://api.test';
+const API = 'http://api.test/api';
 const PROJECT_ID = '11111111-0000-4000-8000-000000000001';
 const DESIGN_1_ID = '22222222-0000-4000-8000-000000000001';
 const DESIGN_2_ID = '22222222-0000-4000-8000-000000000002';
@@ -205,6 +205,8 @@ interface FetchMockOptions {
   workingCopyByDesign?: Record<string, DesignWorkingCopy | null>;
   releases?: ProductionRelease[];
   artifactsFail?: boolean;
+  grantUrlByKind?: Partial<Record<'model' | 'manifest' | 'preview', string>>;
+  artifactAuthorizationFailKind?: 'model' | 'manifest' | 'preview';
   // #499 pairing handoff
   pairingStatusFail?: boolean;
   pairingStatus?: 'pending' | 'exchanged' | 'cancelled' | 'expired';
@@ -241,7 +243,7 @@ function setupFetchMock(options: FetchMockOptions = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     const parsed = new URL(url);
-    const path = parsed.pathname;
+    const path = parsed.pathname.replace(/^\/api(?=\/)/, '');
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
 
     const json = (data: unknown, status = 200) =>
@@ -328,9 +330,14 @@ function setupFetchMock(options: FetchMockOptions = {}) {
     const authMatch = path.match(authRegex);
     if (authMatch && method === 'POST') {
       const [, designId, revId, kind] = authMatch;
+      if (kind === options.artifactAuthorizationFailKind) {
+        return json({ code: 'FORBIDDEN', message: 'artifact access rejected' }, 403);
+      }
       const grant: DesignArtifactGrant = {
         kind: kind as any,
-        url: `/api/design-artifacts/storage/${designId}/${revId}/${kind}.bin?grant=signed-token-xyz`,
+        url:
+          options.grantUrlByKind?.[kind as 'model' | 'manifest' | 'preview'] ??
+          `/api/design-artifacts/storage/${designId}/${revId}/${kind}.bin?grant=signed-token-xyz`,
         expires_at: '2026-09-05T20:00:00Z',
       };
       return json(grant);
@@ -440,9 +447,20 @@ function renderScreen(props: {
 
 describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
   let windowOpenSpy: any;
+  let popupReplaceSpy: ReturnType<typeof vi.fn>;
+  let popupCloseSpy: ReturnType<typeof vi.fn>;
+  let popupWindow: Window;
 
   beforeEach(() => {
-    windowOpenSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    popupReplaceSpy = vi.fn();
+    popupCloseSpy = vi.fn();
+    popupWindow = {
+      opener: window,
+      closed: false,
+      location: { replace: popupReplaceSpy },
+      close: popupCloseSpy,
+    } as unknown as Window;
+    windowOpenSpy = vi.spyOn(window, 'open').mockImplementation(() => popupWindow);
   });
 
   afterEach(() => {
@@ -530,7 +548,10 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
     // Expect preview image to be fetched and rendered
     const previewImg = await screen.findByAltText(/Vista previa 3D R3/i);
     expect(previewImg).toBeInTheDocument();
-    expect(previewImg.getAttribute('src')).toContain('/api/design-artifacts/storage/');
+    expect(previewImg.getAttribute('src')).toBe(
+      `http://api.test/api/design-artifacts/storage/${DESIGN_1_ID}/${REV_3_ID}/preview.bin?grant=signed-token-xyz`,
+    );
+    expect(previewImg.getAttribute('src')).not.toContain('/api/api/');
     expect(previewImg.getAttribute('src')).toContain('grant=signed-token-xyz');
 
     // Verify authorize was called for preview
@@ -540,8 +561,8 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
     );
   });
 
-  it('authorizes artifact download on button click without leaking raw auth token in query', async () => {
-    setupFetchMock();
+  it('authorizes the selected artifact and navigates a synchronously reserved tab to its exact URL', async () => {
+    const fetchMock = setupFetchMock();
     const user = userEvent.setup();
 
     renderScreen({
@@ -559,11 +580,152 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
 
     await waitFor(() => {
       expect(windowOpenSpy).toHaveBeenCalledTimes(1);
+      expect(popupReplaceSpy).toHaveBeenCalledTimes(1);
     });
 
-    const openedUrl = windowOpenSpy.mock.calls[0]![0] as string;
+    expect(windowOpenSpy).toHaveBeenCalledWith('', '_blank');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        `/designs/${DESIGN_1_ID}/revisions/${REV_3_ID}/artifacts/model:authorize`,
+      ),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const openedUrl = popupReplaceSpy.mock.calls[0]![0] as string;
+    expect(openedUrl).toBe(
+      `http://api.test/api/design-artifacts/storage/${DESIGN_1_ID}/${REV_3_ID}/model.bin?grant=signed-token-xyz`,
+    );
+    expect(openedUrl).not.toContain('/api/api/');
     expect(openedUrl).toContain('grant=signed-token-xyz');
     expect(openedUrl).not.toContain('test-jwt-token'); // Negative proof: raw token never passed in URL
+  });
+
+  it('turns preview byte-load failure into a recoverable state and retries authorization', async () => {
+    const fetchMock = setupFetchMock();
+    const user = userEvent.setup();
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID },
+    });
+
+    const previewImg = await screen.findByTestId('preview-image');
+    fireEvent.error(previewImg);
+
+    expect(await screen.findByTestId('preview-load-error')).toHaveTextContent(
+      'No se pudo cargar la imagen de vista previa.',
+    );
+    expect(screen.queryByTestId('preview-image')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reintentar vista previa' }));
+
+    expect(await screen.findByTestId('preview-image')).toBeInTheDocument();
+    await waitFor(() => {
+      const previewAuthorizations = fetchMock.mock.calls.filter(([input]) =>
+        String(input).includes('/artifacts/preview:authorize'),
+      );
+      expect(previewAuthorizations).toHaveLength(2);
+    });
+  });
+
+  it('fails closed when the backend returns a cross-origin preview grant', async () => {
+    setupFetchMock({
+      grantUrlByKind: {
+        preview: 'https://attacker.test/api/design-artifacts/model.skp?grant=stolen',
+      },
+    });
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID },
+    });
+
+    expect(await screen.findByTestId('preview-grant-error')).toHaveTextContent(
+      'El servidor devolvió un enlace no válido para la vista previa.',
+    );
+    expect(screen.queryByTestId('preview-image')).not.toBeInTheDocument();
+  });
+
+  it('reports a blocked popup instead of silently authorizing an artifact', async () => {
+    const fetchMock = setupFetchMock();
+    windowOpenSpy.mockReturnValueOnce(null);
+    const user = userEvent.setup();
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID },
+    });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    await user.click(screen.getByTestId('download-artifact-manifest'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'El navegador bloqueó la nueva pestaña.',
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes('/artifacts/manifest:authorize')),
+    ).toBe(false);
+    expect(popupCloseSpy).not.toHaveBeenCalled();
+  });
+
+  it('closes the reserved tab and reports authorization rejection separately', async () => {
+    setupFetchMock({ artifactAuthorizationFailKind: 'model' });
+    const user = userEvent.setup();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    await user.click(screen.getByTestId('download-artifact-model'));
+
+    expect(await screen.findByTestId('artifact-access-error-authorization')).toHaveTextContent(
+      'El servidor rechazó el acceso al artefacto.',
+    );
+    expect(popupCloseSpy).toHaveBeenCalledTimes(1);
+    expect(popupReplaceSpy).not.toHaveBeenCalled();
+  });
+
+  it('closes the reserved tab and fails closed for an invalid artifact grant', async () => {
+    setupFetchMock({ grantUrlByKind: { manifest: 'https://attacker.test/artifact.json' } });
+    const user = userEvent.setup();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    await user.click(screen.getByTestId('download-artifact-manifest'));
+
+    expect(await screen.findByTestId('artifact-access-error-invalid-grant')).toHaveTextContent(
+      'El servidor devolvió un enlace de acceso no válido.',
+    );
+    expect(popupCloseSpy).toHaveBeenCalledTimes(1);
+    expect(popupReplaceSpy).not.toHaveBeenCalled();
+  });
+
+  it('reports a tab closed while authorization was pending without relabeling it as auth failure', async () => {
+    setupFetchMock();
+    Object.defineProperty(popupWindow, 'closed', { value: true });
+    const user = userEvent.setup();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    await user.click(screen.getByTestId('download-artifact-preview'));
+
+    expect(await screen.findByTestId('artifact-access-error-popup-closed')).toHaveTextContent(
+      'La pestaña del artefacto se cerró antes de abrirlo.',
+    );
+    expect(popupCloseSpy).not.toHaveBeenCalled();
+    expect(popupReplaceSpy).not.toHaveBeenCalled();
+  });
+
+  it('closes the reserved tab and reports navigation failure when replace throws', async () => {
+    setupFetchMock();
+    popupReplaceSpy.mockImplementationOnce(() => {
+      throw new Error('navigation rejected');
+    });
+    const user = userEvent.setup();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    await user.click(screen.getByTestId('download-artifact-model'));
+
+    expect(await screen.findByTestId('artifact-access-error-navigation')).toHaveTextContent(
+      'No se pudo abrir el artefacto en la nueva pestaña.',
+    );
+    expect(popupCloseSpy).toHaveBeenCalledTimes(1);
+    expect(popupReplaceSpy).toHaveBeenCalledTimes(1);
   });
 
   it('#499 handoff: CTA exists but never launches a custom URI and never shows tokens', async () => {

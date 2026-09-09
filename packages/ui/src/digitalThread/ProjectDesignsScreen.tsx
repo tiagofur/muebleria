@@ -24,6 +24,7 @@ import {
   GraneteApiError,
   type CreateDesignRequest,
   type Design,
+  type DesignArtifactGrant,
   type DesignPublishArtifactKind,
   type DesignRevision,
   type DesignRevisionArtifact,
@@ -41,6 +42,7 @@ import {
   selectDesignRevision,
   type DesignLineageNode,
 } from './designHistory';
+import { resolveDesignArtifactUrl } from './designArtifactUrl';
 import { SketchUpPairingModal } from './SketchUpPairingModal';
 import './digitalThread.css';
 
@@ -123,6 +125,18 @@ export interface ProjectDesignsScreenProps {
   readonly canMutate?: boolean;
 }
 
+type ArtifactAccessErrorKind =
+  | 'authorization'
+  | 'invalid-grant'
+  | 'popup-blocked'
+  | 'popup-closed'
+  | 'navigation';
+
+interface ArtifactAccessError {
+  readonly kind: ArtifactAccessErrorKind;
+  readonly message: string;
+}
+
 function formatWhen(iso: string | null | undefined): string {
   if (!iso) return '—';
   const date = new Date(iso);
@@ -175,7 +189,8 @@ export function ProjectDesignsScreen({
   const [isSubmittingDesign, setIsSubmittingDesign] = useState(false);
 
   const [authorizingKind, setAuthorizingKind] = useState<string | null>(null);
-  const [authorizeError, setAuthorizeError] = useState<string | null>(null);
+  const [artifactAccessError, setArtifactAccessError] = useState<ArtifactAccessError | null>(null);
+  const [previewLoadError, setPreviewLoadError] = useState(false);
   const [showTechnicalAudit, setShowTechnicalAudit] = useState(false);
 
   // #499 "Abrir en SketchUp": the pin is FROZEN at click time from the exact
@@ -369,6 +384,19 @@ export function ProjectDesignsScreen({
     staleTime: 1000 * 60 * 2, // 2 minutes cache (strictly within 3-minute backend MediaGrantTTL)
   });
 
+  const previewUrl = useMemo(() => {
+    if (!previewGrantQuery.data) return null;
+    try {
+      return resolveDesignArtifactUrl(baseUrl, previewGrantQuery.data.url);
+    } catch {
+      return null;
+    }
+  }, [baseUrl, previewGrantQuery.data]);
+
+  useEffect(() => {
+    setPreviewLoadError(false);
+  }, [selectedRevisionDetail?.id, previewGrantQuery.data?.url]);
+
 
   const handleSelectDesign = (newId: string) => {
     setDesignId(newId);
@@ -410,25 +438,68 @@ export function ProjectDesignsScreen({
 
   const handleAuthorizeAndOpen = async (kind: DesignPublishArtifactKind) => {
     if (!activeDesignId || !selectedRevisionDetail) return;
+    const artifactWindow = window.open('', '_blank');
+    if (!artifactWindow) {
+      setArtifactAccessError({
+        kind: 'popup-blocked',
+        message:
+          'El navegador bloqueó la nueva pestaña. Habilitá las ventanas emergentes y volvé a intentar.',
+      });
+      return;
+    }
+    artifactWindow.opener = null;
     setAuthorizingKind(kind);
-    setAuthorizeError(null);
+    setArtifactAccessError(null);
+    let grant: DesignArtifactGrant;
     try {
-      const grant = await api.authorizeDesignRevisionArtifact(
+      grant = await api.authorizeDesignRevisionArtifact(
         token,
         activeDesignId,
         selectedRevisionDetail.id,
         kind,
       );
-      const cleanBase = baseUrl.replace(/\/+$/, '');
-      const url = grant.url.startsWith('http')
-        ? grant.url
-        : `${cleanBase}${grant.url.startsWith('/') ? '' : '/'}${grant.url}`;
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (err) {
-      setAuthorizeError(`No se pudo autorizar el acceso al artefacto (${kind}).`);
-    } finally {
+    } catch {
+      artifactWindow.close();
+      setArtifactAccessError({
+        kind: 'authorization',
+        message: 'El servidor rechazó el acceso al artefacto. Verificá tus permisos y volvé a intentar.',
+      });
       setAuthorizingKind(null);
+      return;
     }
+
+    let url: string;
+    try {
+      url = resolveDesignArtifactUrl(baseUrl, grant.url);
+    } catch {
+      artifactWindow.close();
+      setArtifactAccessError({
+        kind: 'invalid-grant',
+        message: 'El servidor devolvió un enlace de acceso no válido. Volvé a solicitar el artefacto.',
+      });
+      setAuthorizingKind(null);
+      return;
+    }
+
+    if (artifactWindow.closed) {
+      setArtifactAccessError({
+        kind: 'popup-closed',
+        message: 'La pestaña del artefacto se cerró antes de abrirlo. Volvé a intentar y mantenela abierta.',
+      });
+      setAuthorizingKind(null);
+      return;
+    }
+
+    try {
+      artifactWindow.location.replace(url);
+    } catch {
+      artifactWindow.close();
+      setArtifactAccessError({
+        kind: 'navigation',
+        message: 'No se pudo abrir el artefacto en la nueva pestaña. Volvé a intentar.',
+      });
+    }
+    setAuthorizingKind(null);
   };
 
   const handleOpenInSketchUp = (): void => {
@@ -918,22 +989,59 @@ export function ProjectDesignsScreen({
                           className="pd-preview-placeholder pd-preview-error"
                           data-testid="preview-error"
                         >
-                          <TriangleAlert size={24} />
-                          <span>No se pudo cargar la vista previa</span>
+                          <TriangleAlert size={24} strokeWidth={1.5} />
+                          <span>No se pudo autorizar la vista previa.</span>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => void previewGrantQuery.refetch()}
+                          >
+                            Reintentar acceso
+                          </button>
                         </div>
-                      ) : previewGrantQuery.data ? (
+                      ) : previewGrantQuery.data && !previewUrl ? (
+                        <div
+                          className="pd-preview-placeholder pd-preview-error"
+                          data-testid="preview-grant-error"
+                          role="alert"
+                        >
+                          <TriangleAlert size={24} strokeWidth={1.5} />
+                          <span>El servidor devolvió un enlace no válido para la vista previa.</span>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => void previewGrantQuery.refetch()}
+                          >
+                            Solicitar nuevo acceso
+                          </button>
+                        </div>
+                      ) : previewLoadError ? (
+                        <div
+                          className="pd-preview-placeholder pd-preview-error"
+                          data-testid="preview-load-error"
+                          role="alert"
+                        >
+                          <TriangleAlert size={24} strokeWidth={1.5} />
+                          <span>No se pudo cargar la imagen de vista previa.</span>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              setPreviewLoadError(false);
+                              void previewGrantQuery.refetch();
+                            }}
+                          >
+                            Reintentar vista previa
+                          </button>
+                        </div>
+                      ) : previewUrl ? (
                         <div className="pd-preview-image-wrapper">
                           <img
-                            src={
-                              previewGrantQuery.data.url.startsWith('http')
-                                ? previewGrantQuery.data.url
-                                : `${baseUrl.replace(/\/+$/, '')}${
-                                    previewGrantQuery.data.url.startsWith('/') ? '' : '/'
-                                  }${previewGrantQuery.data.url}`
-                            }
+                            src={previewUrl}
                             alt={`Vista previa 3D R${selectedRevisionDetail.revision_number}`}
                             className="pd-preview-image"
                             data-testid="preview-image"
+                            onError={() => setPreviewLoadError(true)}
                           />
                         </div>
                       ) : (
@@ -957,9 +1065,13 @@ export function ProjectDesignsScreen({
                       </div>
                     </div>
 
-                    {authorizeError && (
-                      <div className="pd-alert pd-alert--error" role="alert">
-                        {authorizeError}
+                    {artifactAccessError && (
+                      <div
+                        className="pd-alert pd-alert--error"
+                        role="alert"
+                        data-testid={`artifact-access-error-${artifactAccessError.kind}`}
+                      >
+                        {artifactAccessError.message}
                       </div>
                     )}
 
