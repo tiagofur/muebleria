@@ -9,6 +9,8 @@
   3. Surface distinct authorization, byte-load, retry, and blocked-navigation states using existing UI patterns/tokens.
   4. Run focused UI tests, typecheck, relevant Go/PostgreSQL browser smoke, then commit and push one conventional commit.
 - Result: `IMPLEMENTED_PENDING_REVIEW`. Canonical same-origin `/api/design-artifacts/` resolution, recoverable preview byte-load failure, and synchronous popup reservation are implemented. Focused 36/36, full UI 1,658/1,658, monorepo typecheck, real Chromium+Go+PostgreSQL artifact smoke 1/1, and diff check pass. See `progress/implementation_635_design_artifact_url.md`.
+- Review correction R1: PR #636 review at `81a878d2` requires honest distinct states for authorization, invalid grant, blocked/closed popup, failed navigation, and preview byte-load; specific close-behavior tests; 390/768/1280 captured responsive smoke; and 1.5 icon strokes. Scope remains #635 only; this is the single authorized correction round.
+- Review correction: PR #636 `CHANGES_REQUIRED` resolved in the single allowed round. Authorization, invalid grant, popup blocked/closed, navigation, and byte-load states/copy/tests are separate; error icons use 1.5 stroke; six Playwright screenshots cover invalid-grant and byte-load retry states at 390/768/1280. Focused 40/40, full UI 1,662/1,662, typecheck, browser gate 1/1, and diff check pass.
 
 # Issue #630 — SketchUp catalog pin and repeated agregado occurrence identity
 

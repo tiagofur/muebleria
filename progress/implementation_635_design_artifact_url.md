@@ -25,3 +25,14 @@ Status: `IMPLEMENTED_PENDING_REVIEW`
 Files: `designArtifactUrl.ts` + test, `ProjectDesignsScreen.tsx` + test, existing `project-designs.spec.ts`, and progress reports.
 
 No backend/OpenAPI/storage/publication/migration, WebGL/SKP viewer, naming/material, machine-output, or ledger change. Rollback: revert this one commit.
+
+## Independent review correction — PR #636
+
+Resolved `CHANGES_REQUIRED` from `review_635_pr636_81a878d2.md` in the single allowed correction round:
+
+- Artifact authorization rejection, invalid grant, blocked popup, popup closed during authorization, navigation failure, and preview byte-load failure now have distinct states and actionable copy.
+- Component regressions assert each state, `popup.closed`, throwing `location.replace`, fail-closed cross-origin grants, `img.onError`, and whether the reserved tab closes.
+- Preview error icons use the required `strokeWidth={1.5}`.
+- The browser smoke captures both invalid-grant/retry and byte-load/retry cards at 390, 768, and 1280 pixels as Playwright attachments. Its first responsive run exposed a 438px card at 390px; `min-width: 0` on the existing inspector flex/card boundary corrected the overflow, and the re-run passed all six captures.
+
+Correction evidence: focused resolver/component 40/40 PASS; full UI 159 files / 1,662 tests PASS; monorepo typecheck PASS; Go+PostgreSQL+Chromium browser gate 1/1 PASS with six responsive screenshot attachments; `git diff --check` PASS. The first visual run failed only on the newly added width assertion and is not claimed green.

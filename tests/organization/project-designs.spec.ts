@@ -250,7 +250,7 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
 
   test('lineage R1->R2, pinned historical snapshot R1 vs R2, reload stability, and tenant isolation', async ({
     page,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(60_000);
 
     // 1. Login to Org A
@@ -301,6 +301,64 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(preview).toBeVisible();
     await expect(preview).toHaveAttribute('src', /\/api\/design-artifacts\//);
     await expect(preview).not.toHaveAttribute('src', /\/api\/api\//);
+
+    // Responsive visual proof for the two recoverable preview failures. The
+    // workspace and all prior requests remain real; only the failure under
+    // test is injected at the signed-grant boundary.
+    const originalViewport = page.viewportSize();
+    const previewAuthorize = `**/designs/${seeded.designId}/revisions/${seeded.r2Id}/artifacts/preview:authorize`;
+    await page.route(previewAuthorize, (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'preview',
+          url: 'https://invalid.test/api/design-artifacts/preview.png?grant=invalid',
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      }),
+    );
+    await page.reload();
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const error = page.getByTestId('preview-grant-error');
+      await expect(error).toBeVisible();
+      await expect(error.getByRole('button', { name: 'Solicitar nuevo acceso' })).toBeVisible();
+      expect((await page.getByTestId('preview-card').boundingBox())!.width).toBeLessThanOrEqual(width);
+      await testInfo.attach(`preview-invalid-grant-${width}`, {
+        body: await page.getByTestId('preview-card').screenshot(),
+        contentType: 'image/png',
+      });
+    }
+    await page.unroute(previewAuthorize);
+
+    await page.route(previewAuthorize, (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'preview',
+          url: '/api/design-artifacts/visual-preview.png?grant=visual-test',
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      }),
+    );
+    await page.route('**/api/design-artifacts/visual-preview.png?*', (route) =>
+      route.fulfill({ status: 500, contentType: 'text/plain', body: 'injected image failure' }),
+    );
+    await page.reload();
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      const error = page.getByTestId('preview-load-error');
+      await expect(error).toBeVisible();
+      await expect(error.getByRole('button', { name: 'Reintentar vista previa' })).toBeVisible();
+      expect((await page.getByTestId('preview-card').boundingBox())!.width).toBeLessThanOrEqual(width);
+      await testInfo.attach(`preview-byte-load-${width}`, {
+        body: await page.getByTestId('preview-card').screenshot(),
+        contentType: 'image/png',
+      });
+    }
+    await page.unroute(previewAuthorize);
+    await page.unroute('**/api/design-artifacts/visual-preview.png?*');
+    if (originalViewport) await page.setViewportSize(originalViewport);
 
     // 7. Select R1 again and verify historical reload stability
     await timeline.getByTestId('revision-node-R1').click();
