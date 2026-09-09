@@ -3358,6 +3358,77 @@
         }
       }
     },
+    "/designs/{designId}/working-copy/material-choices:reconcile": {
+      "post": {
+        "operationId": "reconcileDesignWorkingMaterials",
+        "description": "Explicit repair (#637 / DT-MAT): fills ONLY the quoted material roles missing from one exact working item. Authored/alias-governed roles are preserved verbatim; published revisions are never touched. Idempotent (no-candidate and replay succeed with empty filled_choices). Requires an Idempotency-Key header.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileDesignWorkingMaterialsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reconciliation applied (or idempotent no-op)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignWorkingMaterialsReconciliation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/working-copy/material-provenance": {
+      "get": {
+        "operationId": "getDesignWorkingCopyMaterialProvenance",
+        "description": "Detection read model (#637 / DT-MAT): per working item, each material role classified as authored, quoted_missing_from_working (the only reconciliation candidate), inherited_default (alias-governed) or missing_unresolved. Read-only.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-unit material provenance of the exact working copy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignWorkingCopyMaterialProvenance"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}/revisions": {
       "get": {
         "operationId": "listDesignRevisions",
@@ -7843,6 +7914,177 @@
           "revision_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "ReconcileDesignWorkingMaterialsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furniture_instance_id"
+        ],
+        "properties": {
+          "furniture_instance_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Exact physical unit whose working item receives the missing quoted choices."
+          },
+          "expected_updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Optimistic-concurrency token (working-copy updated_at the caller read); a mismatch rejects the command."
+          }
+        }
+      },
+      "MaterialProvenanceStatus": {
+        "type": "string",
+        "enum": [
+          "authored",
+          "quoted_missing_from_working",
+          "inherited_default",
+          "missing_unresolved"
+        ],
+        "description": "#637 provenance: authored = explicit working-copy truth; quoted_missing_from_working = quote carries a choice the working copy lost (only candidate); inherited_default = legacy FRENTE alias proves the governing authored choice; missing_unresolved = nothing provable."
+      },
+      "MaterialRoleProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "provenance"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Material binding role (option group code, e.g. FRENTES)."
+          },
+          "working_choice": {
+            "type": "string",
+            "description": "Explicit choice in the working copy (material id), when present."
+          },
+          "quoted_choice": {
+            "type": "string",
+            "description": "Choice the unit's current quote line carries (material id), when present."
+          },
+          "effective_choice": {
+            "type": "string",
+            "description": "Choice the server can prove resolves today (authored or alias-inherited). Absent when nothing is provable; visual host defaults are never truth."
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/MaterialProvenanceStatus"
+          }
+        }
+      },
+      "DesignWorkingItemMaterialProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furniture_instance_id",
+          "roles",
+          "reconcilable"
+        ],
+        "properties": {
+          "furniture_instance_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_definition_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MaterialRoleProvenance"
+            }
+          },
+          "reconcilable": {
+            "type": "boolean",
+            "description": "True when at least one role is a reconciliation candidate (quoted, missing from the working copy, not alias-governed)."
+          }
+        }
+      },
+      "DesignWorkingCopyMaterialProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "design_id",
+          "project_id",
+          "items"
+        ],
+        "properties": {
+          "design_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "working_copy_updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Working-copy version at read time (null when no working-copy row exists yet); use as expected_updated_at on the reconcile command."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignWorkingItemMaterialProvenance"
+            }
+          }
+        }
+      },
+      "DesignWorkingMaterialsReconciliation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "design_id",
+          "project_id",
+          "furniture_instance_id",
+          "filled_choices",
+          "preserved_choices",
+          "working_copy_updated_at"
+        ],
+        "properties": {
+          "design_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_instance_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filled_choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Roles actually written (role → material id). Empty on the idempotent no-op."
+          },
+          "preserved_choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Authored and alias-governed roles kept verbatim (role → effective material id)."
+          },
+          "working_copy_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Working-copy version AFTER the command: bumped when roles were filled, unchanged on the no-op."
           }
         }
       },

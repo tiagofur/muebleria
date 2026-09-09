@@ -21,6 +21,8 @@ import type {
   DesignRevision,
   DesignRevisionArtifact,
   DesignWorkingCopy,
+  DesignWorkingCopyMaterialProvenance,
+  DesignWorkingMaterialsReconciliation,
   DeviceApproveRequest,
   DeviceEnrollPollRequest,
   DeviceEnrollRequest,
@@ -87,6 +89,7 @@ import type {
   QuoteLineFurnitureInstance,
   QuoteRevision,
   QuoteRevisionDetail,
+  ReconcileDesignWorkingMaterialsRequest,
   ReconcileProjectDesignRequest,
   RefreshRequest,
   RequoteProjectQuoteRequest,
@@ -221,6 +224,8 @@ export abstract class GeneratedGraneteApiClient {
   getDesignWorkingCopy(token: string, designId: string, signal?: AbortSignal): Promise<DesignWorkingCopy> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/working-copy`, { schema: "DesignWorkingCopy", token, signal }); }
   updateDesignWorkingCopy(token: string, designId: string, body: UpdateDesignWorkingCopyRequest, signal?: AbortSignal): Promise<DesignWorkingCopy> { return this.request("PUT", `/designs/${encodeURIComponent(designId)}/working-copy`, { schema: "DesignWorkingCopy", token, bodySchema: "UpdateDesignWorkingCopyRequest", body, signal }); }
   resetDesignWorkingCopy(token: string, designId: string, body: ResetDesignWorkingCopyRequest, signal?: AbortSignal): Promise<DesignWorkingCopy> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/working-copy:reset`, { schema: "DesignWorkingCopy", token, bodySchema: "ResetDesignWorkingCopyRequest", body, signal }); }
+  reconcileDesignWorkingMaterials(token: string, designId: string, body: ReconcileDesignWorkingMaterialsRequest, signal?: AbortSignal): Promise<DesignWorkingMaterialsReconciliation> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/working-copy/material-choices:reconcile`, { schema: "DesignWorkingMaterialsReconciliation", token, bodySchema: "ReconcileDesignWorkingMaterialsRequest", body, signal }); }
+  getDesignWorkingCopyMaterialProvenance(token: string, designId: string, signal?: AbortSignal): Promise<DesignWorkingCopyMaterialProvenance> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/working-copy/material-provenance`, { schema: "DesignWorkingCopyMaterialProvenance", token, signal }); }
   listDesignRevisions(token: string, designId: string, signal?: AbortSignal): Promise<ReadonlyArray<DesignRevision>> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/revisions`, { arrayOf: "DesignRevision", token, signal }); }
   publishDesignRevision(token: string, designId: string, body: PublishDesignRevisionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions`, { schema: "DesignRevision", token, bodySchema: "PublishDesignRevisionRequest", body, idempotencyKey: key, signal }); }
   getDesignRevision(token: string, designId: string, revisionId: string, signal?: AbortSignal): Promise<DesignRevision> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}`, { schema: "DesignRevision", token, signal }); }
