@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "comment": "Shared #624 Ruby-to-Go working-copy boundary. Ruby builds each request from the persisted placement intent; the Go handler decodes the same request through the generated UpdateDesignWorkingCopyRequest. Catalog semver is not an integer Design definition revision and must be omitted, while an authoritative integer is preserved.",
+  "endpoint": "PUT /api/designs/{designId}/working-copy",
+  "scenarios": [
+    {
+      "id": "catalog-semver-omitted",
+      "intent": {
+        "furnitureDefinitionId": "50000000-0000-0000-0000-0000000000d1",
+        "definitionVersion": "1.0.0",
+        "parameters": {
+          "widthMm": 650,
+          "heightMm": 720,
+          "depthMm": 560
+        },
+        "materialChoices": {
+          "INTERIOR": "mat-mdf-blanco",
+          "FRENTE": "mat-roble"
+        }
+      },
+      "request": {
+        "base_revision_id": "53000000-0000-0000-0000-000000000001",
+        "items": [
+          {
+            "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+            "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
+            "parameters": {
+              "widthMm": 650,
+              "heightMm": 720,
+              "depthMm": 560
+            },
+            "material_choices": {
+              "INTERIOR": "mat-mdf-blanco",
+              "FRENTE": "mat-roble"
+            },
+            "transform": {
+              "translation_mm": [0.0, 0.0, 0.0],
+              "rotation_deg": [0.0, 0.0, 0.0]
+            },
+            "technical_client_locator": {
+              "kind": "sketchup_persistent_id",
+              "value": "4242"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "authoritative-integer-preserved",
+      "intent": {
+        "furnitureDefinitionId": "50000000-0000-0000-0000-0000000000d1",
+        "definitionVersion": 7,
+        "parameters": {},
+        "materialChoices": {}
+      },
+      "request": {
+        "base_revision_id": "53000000-0000-0000-0000-000000000001",
+        "items": [
+          {
+            "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+            "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
+            "definition_version": 7,
+            "parameters": {},
+            "material_choices": {},
+            "transform": {
+              "translation_mm": [0.0, 0.0, 0.0],
+              "rotation_deg": [0.0, 0.0, 0.0]
+            },
+            "technical_client_locator": {
+              "kind": "sketchup_persistent_id",
+              "value": "4242"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "invalidRequest": {
+    "base_revision_id": "53000000-0000-0000-0000-000000000001",
+    "items": [
+      {
+        "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+        "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
+        "definition_version": "1.0.0",
+        "parameters": {},
+        "material_choices": {}
+      }
+    ]
+  }
+}

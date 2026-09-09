@@ -29,12 +29,17 @@ module Granete
                 'material_choices' => material_choices || {}
               }
               item['furniture_definition_id'] = furniture_definition_id if furniture_definition_id
-              item['definition_version'] = definition_version if definition_version
+              version = Contract.authoritative_definition_version(definition_version)
+              item['definition_version'] = version unless version.nil?
               item['transform'] = transform if transform
               item['technical_client_locator'] = technical_client_locator if technical_client_locator
               item['room_id'] = room_id if room_id
               item
             end
+          end
+
+          def self.authoritative_definition_version(*values)
+            values.find { |value| value.is_a?(Integer) }
           end
 
           def self.assert_instance_field!(entry, field)
@@ -139,8 +144,7 @@ module Granete
 
               definition_id = entry['furniture_definition_id']
               definition_id = nil unless definition_id.is_a?(String) && !definition_id.strip.empty?
-              version = entry['definition_version']
-              version = nil unless version.is_a?(Integer)
+              version = Contract.authoritative_definition_version(entry['definition_version'])
               room_id = entry['room_id']
               room_id = nil unless room_id.is_a?(String) && !room_id.strip.empty?
 
@@ -202,7 +206,9 @@ module Granete
           def new_working_item(furniture_instance_id, entity, intent, locator)
             parameters = intent['parameters'].is_a?(Hash) ? intent['parameters'] : {}
             choices = intent['materialChoices'].is_a?(Hash) ? intent['materialChoices'] : {}
-            version = intent['definitionVersion'] || intent['definition_version']
+            version = Contract.authoritative_definition_version(
+              intent['definitionVersion'], intent['definition_version']
+            )
             Contract::WorkingItem.new(
               furniture_instance_id: furniture_instance_id,
               furniture_definition_id: intent['furnitureDefinitionId'],
