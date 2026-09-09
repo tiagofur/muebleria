@@ -293,7 +293,9 @@ function runTests() {
 
     const progress = el(sandbox, 'binding-publish-progress');
     assert.ok(progress.textContent.indexOf('copias con la misma identidad') >= 0);
-    assert.ok(!el(sandbox, 'btn-binding-publish').disabled);
+    const btn = el(sandbox, 'btn-binding-publish');
+    assert.ok(!btn.disabled);
+    assert.equal(btn.textContent, 'Reintentar publicación');
   });
 
   test('in-flight publish blocks a second click', (sandbox) => {

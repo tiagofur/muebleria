@@ -88,7 +88,10 @@ module Granete
                 request[k.to_s] = v.to_s
               end
             end
-            request.body = body
+            # Net::HTTP treats #body as a String and calls #bytesize on it.
+            # MultipartBody is an IO-like reader, so it must be assigned as a
+            # stream or the upload fails locally before a single byte is sent.
+            request.body_stream = body
 
             response = perform(http, request)
             {

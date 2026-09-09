@@ -538,6 +538,39 @@ class DesignPublishTest < Minitest::Test
     end
   end
 
+  def test_http_adapter_upload_assigns_multipart_reader_as_body_stream
+    response = Struct.new(:code, :body) do
+      def each_header
+        {}.each
+      end
+    end.new('201', '{}')
+
+    adapter = Granete::SketchUpExtension::Transport::HttpAdapter.new(base_url: 'http://localhost:8080')
+    adapter.define_singleton_method(:perform) do |_http, request|
+      @captured_body = request.body
+      @captured_body_stream = request.body_stream
+      response
+    end
+    adapter.define_singleton_method(:captured_body) { @captured_body }
+    adapter.define_singleton_method(:captured_body_stream) { @captured_body_stream }
+
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, 'model.skp')
+      File.binwrite(path, 'sketchup-model')
+
+      adapter.upload(
+        { 'path' => '/designs/design-id/publish/session-id/artifacts/model' },
+        file_path: path,
+        content_type: 'application/octet-stream',
+        authorization_header: 'Bearer test-token'
+      )
+    end
+
+    assert_nil adapter.captured_body
+    assert_instance_of Granete::SketchUpExtension::Transport::MultipartBody,
+                       adapter.captured_body_stream
+  end
+
   # ---- ArtifactExporter: View#write_image host compatibility ----
 
   def test_artifact_exporter_uses_active_view_write_image_and_never_model_write_image
