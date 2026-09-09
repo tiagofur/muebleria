@@ -2324,7 +2324,7 @@
                        placeholder="Código de la web"
                        style="flex:1 1 auto; min-width: 0; font-family: var(--font-mono, monospace); text-transform: uppercase; letter-spacing: 0.08em;"
                        aria-describedby="pairing-message" />
-                <button id="btn-pairing-connect" class="btn btn-primary" style="flex: 0 0 auto;">Conectar</button>
+                <button id="btn-pairing-connect" class="btn btn-primary" style="flex: 0 0 auto; width: auto; white-space: nowrap;">Conectar</button>
               </div>
               <p id="pairing-message" class="subhead" role="status" aria-live="polite"
                  style="display: none; margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
@@ -2598,6 +2598,7 @@
         var bindingRebindReview = document.getElementById("model-binding-rebind-review");
         var bindingRebindConfirmBtn = document.getElementById("btn-binding-rebind-confirm");
         var bindingRebindCancelBtn = document.getElementById("btn-binding-rebind-cancel");
+        var pairingEntry = document.getElementById("pairing-entry");
 
         // Inspector elements
         var inspectorEmpty = document.getElementById("inspector-empty-state");
@@ -5511,6 +5512,10 @@
           }
 
           bindingConnectBtn.style.display = status.state === "connected" ? "none" : "block";
+          // The pairing-code entry is the primary connect path and follows the
+          // same rule as the manual picker: once the design is linked there is
+          // nothing to connect, and a new code would only rebind (#499/#388).
+          pairingEntry.style.display = status.state === "connected" ? "none" : "";
           bindingRefreshBtn.style.display = bound ? "block" : "none";
           bindingAdoptBtn.style.display = status.state === "stale_base" ? "block" : "none";
           renderPublishAvailability(status);

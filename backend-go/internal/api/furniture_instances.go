@@ -86,7 +86,7 @@ func toFurnitureInstanceDTO(instance domain.FurnitureInstance) openapi.Furniture
 // FurnitureInstance row.
 func toFurnitureInstanceSummaryDTO(summary storage.FurnitureInstanceSummary) openapi.FurnitureInstance {
 	dto := toFurnitureInstanceDTO(summary.Instance)
-	if summary.DisplayName == "" && summary.DisplayDims == nil {
+	if summary.DisplayName == "" && summary.DisplayDims == nil && len(summary.DisplayMaterialChoices) == 0 {
 		return dto
 	}
 	display := openapi.FurnitureInstanceDisplay{}
@@ -109,6 +109,9 @@ func toFurnitureInstanceSummaryDTO(summary storage.FurnitureInstanceSummary) ope
 			dims.Depth = &d
 		}
 		display.DimensionsMm = &dims
+	}
+	if len(summary.DisplayMaterialChoices) > 0 {
+		display.MaterialChoices = summary.DisplayMaterialChoices
 	}
 	dto.Display = &display
 	return dto

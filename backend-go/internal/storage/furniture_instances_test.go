@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -737,7 +738,8 @@ func TestFurnitureInstances_ListSummariesDisplay(t *testing.T) {
 	}
 
 	// Quoted unit: linked to a quote line whose custom_dims win over the
-	// module defaults (quoted 650 vs module 600).
+	// module defaults (quoted 650 vs module 600) and whose option choices
+	// ride along as the quoted finish (#620).
 	quoted, err := create(func() storage.CreateFurnitureInstanceCommand {
 		cmd := base
 		cmd.FurnitureDefinitionID = moduleWithDims
@@ -750,6 +752,15 @@ func TestFurnitureInstances_ListSummariesDisplay(t *testing.T) {
 		INSERT INTO project_items (id, project_id, module_id, quantity, custom_dims, organization_id)
 		VALUES ('`+quotedLine+`', '`+fiSharedProject+`', '`+moduleWithDims+`', 1,
 			'{"widthMm":650,"heightMm":720,"depthMm":560}'::jsonb, '`+rlsOrgA+`')`); err != nil {
+		t.Fatal(err)
+	}
+	const quotedInterior = "70000000-0000-0000-0000-0000000000a1"
+	const quotedFront = "70000000-0000-0000-0000-0000000000a2"
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES
+			('`+quotedLine+`', 'INTERIOR', '`+quotedInterior+`', '`+rlsOrgA+`'),
+			('`+quotedLine+`', 'FRENTE', '`+quotedFront+`', '`+rlsOrgA+`')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fx.admin.Exec(ctx, `
@@ -804,11 +815,17 @@ func TestFurnitureInstances_ListSummariesDisplay(t *testing.T) {
 		row.DisplayDims == nil || row.DisplayDims.WidthMm != 650 || row.DisplayDims.HeightMm != 720 || row.DisplayDims.DepthMm != 560 {
 		t.Fatalf("quoted summary = %+v, want quoted custom dims (650×720×560) to win", row)
 	}
-	if row := got[unlinked.ID]; row.DisplayName != "Gabinete Base 600" ||
-		row.DisplayDims == nil || row.DisplayDims.WidthMm != 600 {
-		t.Fatalf("unlinked summary = %+v, want module default dims", row)
+	if row := got[quoted.ID]; !reflect.DeepEqual(row.DisplayMaterialChoices, map[string]string{
+		"INTERIOR": "70000000-0000-0000-0000-0000000000a1",
+		"FRENTE":   "70000000-0000-0000-0000-0000000000a2",
+	}) {
+		t.Fatalf("quoted summary choices = %+v, want the quoted finish from project_item_choices", row.DisplayMaterialChoices)
 	}
-	if row := got[bare.ID]; row.DisplayName != "" || row.DisplayDims != nil {
+	if row := got[unlinked.ID]; row.DisplayName != "Gabinete Base 600" ||
+		row.DisplayDims == nil || row.DisplayDims.WidthMm != 600 || row.DisplayMaterialChoices != nil {
+		t.Fatalf("unlinked summary = %+v, want module default dims and no invented finish", row)
+	}
+	if row := got[bare.ID]; row.DisplayName != "" || row.DisplayDims != nil || row.DisplayMaterialChoices != nil {
 		t.Fatalf("bare summary = %+v, want no invented presentation", row)
 	}
 }

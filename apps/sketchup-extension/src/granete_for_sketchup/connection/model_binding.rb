@@ -723,8 +723,9 @@ module Granete
               'code' => 'pairing_rebind_requires_new_code',
               'pairing' => true,
               'recovery' => 'manual_rebind_then_new_code',
-              'reason' => 'este modelo ya está conectado a otro diseño. El código fue aceptado, pero no se aplicó ' \
-                          'para no cambiar su revisión exacta. Conservá o revisá el enlace manualmente y luego generá ' \
+              'reason' => 'este modelo ya está conectado a otro diseño. El código fue aceptado, ' \
+                          'pero no se aplicó para no cambiar su revisión exacta. Conservá o revisá el enlace ' \
+                          'manualmente y luego generá ' \
                           'un código nuevo en la web.'
             )
           end

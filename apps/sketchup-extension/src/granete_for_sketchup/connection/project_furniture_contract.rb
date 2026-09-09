@@ -16,7 +16,8 @@ module Granete
                                    keyword_init: true)
           WorkingCopy = Struct.new(:design_id, :project_id, :base_revision_id, :items, keyword_init: true)
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
-                                :display_name, :display_dimensions, keyword_init: true)
+                                :display_name, :display_dimensions, :display_material_choices,
+                                keyword_init: true)
 
           # Canonical wire shape of one working item (generated contract):
           # string keys, absent-when-null optional fields.
@@ -28,12 +29,17 @@ module Granete
                 'material_choices' => material_choices || {}
               }
               item['furniture_definition_id'] = furniture_definition_id if furniture_definition_id
-              item['definition_version'] = definition_version if definition_version
+              version = Contract.authoritative_definition_version(definition_version)
+              item['definition_version'] = version unless version.nil?
               item['transform'] = transform if transform
               item['technical_client_locator'] = technical_client_locator if technical_client_locator
               item['room_id'] = room_id if room_id
               item
             end
+          end
+
+          def self.authoritative_definition_version(*values)
+            values.find { |value| value.is_a?(Integer) }
           end
 
           def self.assert_instance_field!(entry, field)
@@ -42,8 +48,12 @@ module Granete
             raise ContractError, "campo #{field} inválido: #{entry[field].inspect}"
           end
 
+          # Presentation block parsers. Returns [name, dimensions_mm,
+          # material_choices] — the quoted finish (role -> material id) is
+          # presentation-only identity-free data the server derives from the
+          # current quote line (#620).
           def self.parse_display!(display)
-            return [nil, nil] if display.nil?
+            return [nil, nil, nil] if display.nil?
             raise ContractError, 'display inválido' unless display.is_a?(Hash)
 
             name = display['name'] if display['name'].is_a?(String) && !display['name'].strip.empty?
@@ -56,7 +66,14 @@ module Granete
               end
               dims = nil if dims.compact.empty?
             end
-            [name, dims]
+            [name, dims, parse_material_choices!(display['material_choices'])]
+          end
+
+          def self.parse_material_choices!(raw)
+            return nil if raw.nil?
+            raise ContractError, 'material_choices inválidos' unless raw.is_a?(Hash) && raw.values.all?(String)
+
+            raw.empty? ? nil : raw
           end
 
           def self.parse_instances!(body)
@@ -78,13 +95,14 @@ module Granete
               raise ContractError, 'furniture_definition_id inválido'
             end
 
-            name, dims = parse_display!(entry['display'])
+            name, dims, choices = parse_display!(entry['display'])
 
             Instance.new(
               id: entry['id'], project_id: entry['project_id'],
               furniture_definition_id: definition_id, origin: entry['origin'],
               lifecycle_status: entry['lifecycle_status'],
-              display_name: name, display_dimensions: dims
+              display_name: name, display_dimensions: dims,
+              display_material_choices: choices
             )
           end
 
@@ -126,8 +144,7 @@ module Granete
 
               definition_id = entry['furniture_definition_id']
               definition_id = nil unless definition_id.is_a?(String) && !definition_id.strip.empty?
-              version = entry['definition_version']
-              version = nil unless version.is_a?(Integer)
+              version = Contract.authoritative_definition_version(entry['definition_version'])
               room_id = entry['room_id']
               room_id = nil unless room_id.is_a?(String) && !room_id.strip.empty?
 
@@ -189,7 +206,9 @@ module Granete
           def new_working_item(furniture_instance_id, entity, intent, locator)
             parameters = intent['parameters'].is_a?(Hash) ? intent['parameters'] : {}
             choices = intent['materialChoices'].is_a?(Hash) ? intent['materialChoices'] : {}
-            version = intent['definitionVersion'] || intent['definition_version']
+            version = Contract.authoritative_definition_version(
+              intent['definitionVersion'], intent['definition_version']
+            )
             Contract::WorkingItem.new(
               furniture_instance_id: furniture_instance_id,
               furniture_definition_id: intent['furnitureDefinitionId'],

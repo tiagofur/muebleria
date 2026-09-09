@@ -118,9 +118,10 @@ class ProjectFurnitureTest < Minitest::Test
   end
 
   class FakeCatalog
-    attr_reader :definitions
+    attr_reader :definitions, :layout_resolves
 
     def initialize
+      @layout_resolves = []
       @definitions = [
         {
           'furniture_definition_id' => DEFINITION_ID,
@@ -144,8 +145,13 @@ class ProjectFurnitureTest < Minitest::Test
       @definitions.find { |d| d['furniture_definition_id'] == definition_id }
     end
 
-    def resolved_native_layout(_definition_id, _parameters = {}, _choices = {})
-      nil # local development catalog: documented generic authoring path
+    # Records the authoritative resolve the placement asked for (#620: the
+    # quoted finish must reach the layout), then stays on the documented
+    # generic authoring path.
+    def resolved_native_layout(definition_id, parameters = {}, choices = {})
+      @layout_resolves << { 'definition_id' => definition_id,
+                            'parameters' => parameters.dup, 'choices' => choices.dup }
+      nil
     end
   end
 
@@ -175,7 +181,6 @@ class ProjectFurnitureTest < Minitest::Test
 
   def test_place_existing_stamps_server_identity_and_never_creates_business_objects
     result = @placer.place(FI_1)
-
     assert result['ok'], "place failed: #{result.inspect}"
     # Honest intermediate: inserted, awaiting the user's final position.
     assert_equal 'pending_position', result['code']
@@ -203,6 +208,59 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal PROJECT_ID, metadata.dig('identity', 'projectId')
     assert_equal DESIGN_ID, metadata.dig('identity', 'designId')
     assert_equal DEFINITION_ID, metadata.dig('intent', 'furnitureDefinitionId')
+  end
+
+  # #620: placing quote furniture must seed the finish the customer chose in
+  # React — the quoted display material_choices drive the layout resolve, the
+  # local placement intent and the confirmed working item, instead of the
+  # user having to re-pick materials by hand.
+  def test_place_existing_seeds_quoted_finish_from_instance_display
+    quoted_finish = { 'INTERIOR' => 'mat-mdf-blanco', 'FRENTE' => 'mat-roble' }
+    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
+                       [instance_body(FI_1, 'quote', display_choices: quoted_finish)])
+    stub_working_copy(working_copy_body([]))
+
+    result = @placer.place(FI_1)
+    assert result['ok'], result.inspect
+
+    # The authoritative layout resolve carried the quoted finish — never a
+    # silent default-material resolve.
+    resolve = @catalog.layout_resolves.last
+    assert_equal quoted_finish, resolve['choices']
+
+    # The local intent persists them so the confirmed working item keeps them.
+    entity = top_level_furniture(@model).first
+    metadata = MS.new(@model).read(entity)
+    assert_equal quoted_finish, metadata['intent']['materialChoices']
+
+    finalize_position!(@model, FI_1)
+    confirmed = @placer.confirm_placement(FI_1)
+    assert confirmed['ok'], confirmed.inspect
+
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    assert_equal quoted_finish, put['body']['items'].first['material_choices']
+  end
+
+  # Cascade priority: an authored working item's materials are design truth
+  # and win over the quoted display finish — the confirm merge keeps them
+  # verbatim, so the local render must match what will be persisted.
+  def test_place_existing_prefers_authored_working_item_materials
+    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
+                       [instance_body(FI_1, 'quote', display_choices: { 'FRENTE' => 'mat-quoted' })])
+    stub_working_copy(working_copy_body([
+                                          { 'furniture_instance_id' => FI_1,
+                                            'furniture_definition_id' => DEFINITION_ID,
+                                            'parameters' => { 'widthMm' => 600 },
+                                            'material_choices' => { 'FRENTE' => 'mat-authored' },
+                                            'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                                             'rotation_deg' => [0.0, 0.0, 0.0] } }
+                                        ]))
+
+    result = @placer.place(FI_1)
+    assert result['ok'], result.inspect
+
+    resolve = @catalog.layout_resolves.last
+    assert_equal({ 'FRENTE' => 'mat-authored' }, resolve['choices'])
   end
 
   def test_confirm_writes_working_item_with_final_transform
@@ -235,6 +293,28 @@ class ProjectFurnitureTest < Minitest::Test
     locator = item['technical_client_locator']
     assert_equal 'sketchup_persistent_id', locator['kind']
     refute_equal FI_1, locator['value']
+  end
+
+  def test_confirm_omits_catalog_semver_and_preserves_placement_payload
+    quoted_finish = { 'INTERIOR' => 'mat-mdf-blanco', 'FRENTE' => 'mat-roble' }
+    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
+                       [instance_body(FI_1, 'quote', display_dims: [650, 720, 560],
+                                                     display_choices: quoted_finish)])
+    stub_working_copy(working_copy_body([]))
+
+    assert @placer.place(FI_1)['ok']
+    finalize_position!(@model, FI_1, [1000, 0, 0])
+    result = @placer.confirm_placement(FI_1)
+    assert result['ok'], result.inspect
+
+    item = @transport.requests_for('PUT', %r{/working-copy}).first['body']['items'].first
+    refute item.key?('definition_version'), 'catalog semver must not populate the integer revision field'
+    assert_equal FI_1, item['furniture_instance_id']
+    assert_equal DEFINITION_ID, item['furniture_definition_id']
+    assert_equal 650, item.dig('parameters', 'widthMm')
+    assert_equal quoted_finish, item['material_choices']
+    assert_equal 1000.0, item.dig('transform', 'translation_mm', 0)
+    assert_equal 'sketchup_persistent_id', item.dig('technical_client_locator', 'kind')
   end
 
   def test_place_preserves_other_working_items
@@ -329,8 +409,8 @@ class ProjectFurnitureTest < Minitest::Test
   def test_backend_failure_at_confirm_rolls_back_local_placement
     # Proof H: the working-copy PUT fails at confirm → the placed component
     # is erased and the failure is loud (no false local success).
-    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 409,
-                       { 'error' => { 'code' => 'conflict', 'message' => 'El diseño no está activo' } })
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 400,
+                       { 'error' => { 'code' => 'bad_request', 'message' => 'invalid request body' } })
 
     assert @placer.place(FI_1)['ok'], 'place itself does not touch the working copy'
     finalize_position!(@model, FI_1)
@@ -643,6 +723,13 @@ class ProjectFurnitureTest < Minitest::Test
       PF::Contract.parse_instances!([{ 'id' => FI_1, 'lifecycle_status' => 'weird',
                                        'origin' => 'quote', 'project_id' => PROJECT_ID }])
     end
+    # #620: the quoted finish is parsed fail-closed — a non-string choice
+    # value raises instead of guessing.
+    assert_raises(PF::Contract::ContractError) do
+      PF::Contract.parse_instances!([{ 'id' => FI_1, 'lifecycle_status' => 'active',
+                                       'origin' => 'quote', 'project_id' => PROJECT_ID,
+                                       'display' => { 'material_choices' => { 'INTERIOR' => 5 } } }])
+    end
     assert_raises(PF::Contract::ContractError) do
       PF::Contract::WorkingCopyContract.parse_working_copy!({ 'items' => 'nope' })
     end
@@ -652,6 +739,15 @@ class ProjectFurnitureTest < Minitest::Test
           'items' => [{ 'furniture_instance_id' => 'bad' }] }
       )
     end
+
+    # Positive mirror: a quoted finish surfaces on the parsed instance, and
+    # absent/empty stays nil (no invented empty-map truth).
+    parsed = PF::Contract.parse_instances!(
+      [instance_body(FI_1, 'quote', display_choices: { 'FRENTE' => 'mat-roble' })]
+    ).first
+    assert_equal({ 'FRENTE' => 'mat-roble' }, parsed.display_material_choices)
+    plain = PF::Contract.parse_instances!([instance_body(FI_2, 'quote')]).first
+    assert_nil plain.display_material_choices
   end
 
   def test_transform_contract_conversions
@@ -1047,7 +1143,7 @@ class ProjectFurnitureTest < Minitest::Test
   end
 
   def instance_body(id, origin, lifecycle: 'active', display_name: nil, display_dims: nil,
-                    definition_id: DEFINITION_ID)
+                    display_choices: nil, definition_id: DEFINITION_ID)
     entry = {
       'id' => id, 'project_id' => PROJECT_ID, 'furniture_definition_id' => definition_id,
       'origin' => origin, 'lifecycle_status' => lifecycle, 'version' => 1,
@@ -1061,6 +1157,7 @@ class ProjectFurnitureTest < Minitest::Test
                                else
                                  { 'width' => 600, 'height' => 720, 'depth' => 560 }
                                end
+    display['material_choices'] = display_choices if display_choices
     entry['display'] = display
     entry
   end
