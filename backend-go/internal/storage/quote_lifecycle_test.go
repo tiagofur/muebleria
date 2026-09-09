@@ -3,6 +3,7 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -284,6 +285,43 @@ func TestQuoteLifecycle_CreateInitialRevision_ModuleDimsFallback(t *testing.T) {
 	params := details[0].Items[0].Parameters
 	if params["widthMm"] != float64(300) || params["heightMm"] != float64(720) || params["depthMm"] != float64(590) {
 		t.Fatalf("module dims fallback expected, got %v", params)
+	}
+}
+
+// The line's quoted finish (option choices) rides into the immutable snapshot:
+// unmodeled units must carry the board choices the customer selected, not an
+// invented empty MaterialChoices (#620).
+func TestQuoteLifecycle_CreateInitialRevision_QuotedFinishRidesAlong(t *testing.T) {
+	base := setupDesignsTestFixture(t)
+	ctx := context.Background()
+	const interiorChoice = "70000000-0000-0000-0000-0000000000b1"
+	const frontChoice = "70000000-0000-0000-0000-0000000000b2"
+	if _, err := base.admin.Exec(ctx, `
+		INSERT INTO project_items (id, project_id, module_id, quantity, custom_dims, organization_id)
+		VALUES ($1, $2, $3, 2, $4::jsonb, '`+rlsOrgA+`')`,
+		qlLineA, fiProjectAOnly, fiModuleA, qlCustomDimsRow); err != nil {
+		t.Fatalf("seed line: %v", err)
+	}
+	if _, err := base.admin.Exec(ctx, `
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES
+			($1, 'INTERIOR', $2, '`+rlsOrgA+`'),
+			($1, 'FRENTE', $3, '`+rlsOrgA+`')`,
+		qlLineA, interiorChoice, frontChoice); err != nil {
+		t.Fatalf("seed line choices: %v", err)
+	}
+	fx := &quoteLifecycleFixture{rlsFixture: base, projectID: fiProjectAOnly}
+	createInitialRevision(t, fx)
+
+	details := listRevisions(t, fx)
+	if len(details) != 1 || len(details[0].Items) != 2 {
+		t.Fatalf("expected Q1 with 2 items, got %d revisions", len(details))
+	}
+	want := map[string]string{"INTERIOR": interiorChoice, "FRENTE": frontChoice}
+	for _, item := range details[0].Items {
+		if !reflect.DeepEqual(item.MaterialChoices, want) {
+			t.Fatalf("item %s material choices = %v, want the quoted finish %v", item.FurnitureInstanceID, item.MaterialChoices, want)
+		}
 	}
 }
 

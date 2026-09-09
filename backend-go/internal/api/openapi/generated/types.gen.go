@@ -861,8 +861,9 @@ type FurnitureInstance struct {
 }
 
 type FurnitureInstanceDisplay struct {
-	Name         *string                        `json:"name,omitempty"`
-	DimensionsMm *FurnitureInstanceDimensionsMm `json:"dimensions_mm,omitempty"`
+	Name            *string                        `json:"name,omitempty"`
+	DimensionsMm    *FurnitureInstanceDimensionsMm `json:"dimensions_mm,omitempty"`
+	MaterialChoices map[string]string              `json:"material_choices,omitempty"`
 }
 
 type FurnitureInstanceDimensionsMm struct {

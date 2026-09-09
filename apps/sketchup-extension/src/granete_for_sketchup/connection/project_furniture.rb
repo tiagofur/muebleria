@@ -13,6 +13,9 @@ module Granete
       #     stamps it verbatim and never creates another identity;
       #   * pending/placed is DERIVED per furnitureInstanceId from the
       #     current DesignWorkingCopy — no global placed flag exists;
+      #   * board choices seed from the authored working item or the
+      #     quoted finish on the instance display — a placement never
+      #     silently drops the acabado the customer chose (#620);
       #   * resolution stays server-authoritative (display summary + layout);
       #   * the working copy update is a merge (GET → merge by
       #     furnitureInstanceId → PUT complete state) so other working items
@@ -215,6 +218,32 @@ module Granete
             end
 
             { 'ok' => true }
+          end
+
+          # Authoritative inputs for placing an existing unit (#389 §8 +
+          # #620): a pending create-and-place intent is resumed verbatim
+          # (recovery), else parameters seed from the quoted display and the
+          # board choices cascade below.
+          def placement_inputs(service, intent_store, binding, instance, definition)
+            pending = intent_store.fetch(instance.id)
+            return [pending['parameters'], pending['material_choices']] if pending
+
+            [WorkingCopyMerger.placement_parameters(instance, definition),
+             seed_material_choices(service, binding, instance)]
+          end
+
+          # Board choices for placing an existing unit (#620): an authored
+          # working item wins (its material_choices are the design truth the
+          # confirm merge keeps verbatim, so the local render must match),
+          # else the quoted finish the server exposes on the instance
+          # display. Empty when neither source carries a finish — the layout
+          # then resolves server defaults, as before.
+          def seed_material_choices(service, binding, instance)
+            working = service.get_working_copy(binding.design_id)
+            item = working.items.find { |candidate| candidate.furniture_instance_id == instance.id }
+            return item.material_choices.dup if item && !item.material_choices.nil? && !item.material_choices.empty?
+
+            instance.display_material_choices || {}
           end
         end
 
@@ -497,9 +526,7 @@ module Granete
                              'el catálogo del taller no incluye la definición de este mueble')
             end
 
-            pending = @intent_store.fetch(instance.id)
-            params = pending ? pending['parameters'] : WorkingCopyMerger.placement_parameters(instance, definition)
-            choices = pending ? pending['material_choices'] : {}
+            params, choices = PlacementGuards.placement_inputs(@service, @intent_store, binding, instance, definition)
             layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
             insert_physical_unit(model, binding, instance, definition, params, choices, layout)
           end

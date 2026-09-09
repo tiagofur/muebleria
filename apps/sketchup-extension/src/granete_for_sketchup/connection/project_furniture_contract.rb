@@ -16,7 +16,8 @@ module Granete
                                    keyword_init: true)
           WorkingCopy = Struct.new(:design_id, :project_id, :base_revision_id, :items, keyword_init: true)
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
-                                :display_name, :display_dimensions, keyword_init: true)
+                                :display_name, :display_dimensions, :display_material_choices,
+                                keyword_init: true)
 
           # Canonical wire shape of one working item (generated contract):
           # string keys, absent-when-null optional fields.
@@ -42,8 +43,12 @@ module Granete
             raise ContractError, "campo #{field} inválido: #{entry[field].inspect}"
           end
 
+          # Presentation block parsers. Returns [name, dimensions_mm,
+          # material_choices] — the quoted finish (role -> material id) is
+          # presentation-only identity-free data the server derives from the
+          # current quote line (#620).
           def self.parse_display!(display)
-            return [nil, nil] if display.nil?
+            return [nil, nil, nil] if display.nil?
             raise ContractError, 'display inválido' unless display.is_a?(Hash)
 
             name = display['name'] if display['name'].is_a?(String) && !display['name'].strip.empty?
@@ -56,7 +61,14 @@ module Granete
               end
               dims = nil if dims.compact.empty?
             end
-            [name, dims]
+            [name, dims, parse_material_choices!(display['material_choices'])]
+          end
+
+          def self.parse_material_choices!(raw)
+            return nil if raw.nil?
+            raise ContractError, 'material_choices inválidos' unless raw.is_a?(Hash) && raw.values.all?(String)
+
+            raw.empty? ? nil : raw
           end
 
           def self.parse_instances!(body)
@@ -78,13 +90,14 @@ module Granete
               raise ContractError, 'furniture_definition_id inválido'
             end
 
-            name, dims = parse_display!(entry['display'])
+            name, dims, choices = parse_display!(entry['display'])
 
             Instance.new(
               id: entry['id'], project_id: entry['project_id'],
               furniture_definition_id: definition_id, origin: entry['origin'],
               lifecycle_status: entry['lifecycle_status'],
-              display_name: name, display_dimensions: dims
+              display_name: name, display_dimensions: dims,
+              display_material_choices: choices
             )
           end
 
