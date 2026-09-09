@@ -219,6 +219,30 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
 
     await page.goto(`/quotes/${seeded.projectId}/disenos`);
     await page.getByRole('tab', { name: 'Cocina Confirmada' }).click();
+    // Diagnostics hook: count every pairing-grant fetch the sheet issues and
+    // whether it settles. The api client captures `globalThis.fetch` at
+    // construction (modal mount), so patching before opening the sheet is
+    // captured too.
+    await page.evaluate(() => {
+      const w = window as Window & { __pairingFetchLog?: unknown[] };
+      w.__pairingFetchLog = [];
+      const orig = window.fetch.bind(window);
+      window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input instanceof Request ? input.url : input);
+        const tagged = url.includes('pairing-grants');
+        if (tagged) w.__pairingFetchLog!.push({ url: url.split('/api')[1] ?? url, sent: Date.now() });
+        return orig(input, init).then(
+          (res) => {
+            if (tagged) w.__pairingFetchLog!.push({ done: Date.now(), status: res.status });
+            return res;
+          },
+          (err) => {
+            if (tagged) w.__pairingFetchLog!.push({ failed: Date.now(), error: String(err) });
+            throw err;
+          },
+        );
+      }) as typeof fetch;
+    });
     await page.getByTestId('open-in-sketchup-btn').click();
     await expect(page.getByTestId('pairing-base-label')).toHaveText('Base: Sin revisión publicada');
     const codeText1 = (await page.getByTestId('pairing-code').textContent()) ?? '';
@@ -277,6 +301,7 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
           statusLine: status,
           pollError,
           grantRequests,
+          fetchLog: (window as Window & { __pairingFetchLog?: unknown[] }).__pairingFetchLog ?? [],
           modalText: modal?.textContent?.slice(0, 400) ?? null,
         };
       });
