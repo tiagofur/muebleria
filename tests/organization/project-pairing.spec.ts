@@ -219,30 +219,6 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
 
     await page.goto(`/quotes/${seeded.projectId}/disenos`);
     await page.getByRole('tab', { name: 'Cocina Confirmada' }).click();
-    // Diagnostics hook: count every pairing-grant fetch the sheet issues and
-    // whether it settles. The api client captures `globalThis.fetch` at
-    // construction (modal mount), so patching before opening the sheet is
-    // captured too.
-    await page.evaluate(() => {
-      const w = window as Window & { __pairingFetchLog?: unknown[] };
-      w.__pairingFetchLog = [];
-      const orig = window.fetch.bind(window);
-      window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input instanceof Request ? input.url : input);
-        const tagged = url.includes('pairing-grants');
-        if (tagged) w.__pairingFetchLog!.push({ url: url.split('/api')[1] ?? url, sent: Date.now() });
-        return orig(input, init).then(
-          (res) => {
-            if (tagged) w.__pairingFetchLog!.push({ done: Date.now(), status: res.status });
-            return res;
-          },
-          (err) => {
-            if (tagged) w.__pairingFetchLog!.push({ failed: Date.now(), error: String(err) });
-            throw err;
-          },
-        );
-      }) as typeof fetch;
-    });
     await page.getByTestId('open-in-sketchup-btn').click();
     await expect(page.getByTestId('pairing-base-label')).toHaveText('Base: Sin revisión publicada');
     const codeText1 = (await page.getByTestId('pairing-code').textContent()) ?? '';
@@ -275,33 +251,15 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
         { timeout: 30_000 },
       );
     } catch (err) {
-      // Diagnostics for the intermittent CI-only miss of this wait: capture
-      // what the sheet actually held (state line, poll error, modal presence)
-      // plus the server's authoritative grant, then rethrow.
+      // Diagnostics for any future miss of this wait: capture what the sheet
+      // actually held plus the server's authoritative grant, then rethrow.
       const sheet = await page.evaluate(() => {
         const modal = document.querySelector('[data-testid="sketchup-pairing-modal"]');
-        const status = modal?.querySelector('[data-testid^="pairing-"]')?.textContent ?? null;
-        const pollError = document.querySelector('[data-testid="pairing-poll-error"]')?.textContent ?? null;
-        // Resource timing proves whether the poll fetches actually left the
-        // browser and how long they took (hanging vs never-sent vs slow).
-        const grantRequests = (performance as Performance & {
-          getEntriesByType?: (t: string) => PerformanceResourceTiming[];
-        }).getEntriesByType?.('resource')
-          ?.filter((r) => r.name.includes('pairing-grants'))
-          .slice(-8)
-          .map((r) => ({
-            url: r.name.split('/api')[1] ?? r.name,
-            start: Math.round(r.startTime),
-            dur: r.duration === 0 ? 'pending' : Math.round(r.duration),
-          })) ?? [];
         return {
           url: window.location.href,
           visibility: document.visibilityState,
           modalPresent: modal !== null,
-          statusLine: status,
-          pollError,
-          grantRequests,
-          fetchLog: (window as Window & { __pairingFetchLog?: unknown[] }).__pairingFetchLog ?? [],
+          pollError: document.querySelector('[data-testid="pairing-poll-error"]')?.textContent ?? null,
           modalText: modal?.textContent?.slice(0, 400) ?? null,
         };
       });

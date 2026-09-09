@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -23,6 +24,8 @@ function renderModal(
     onStatus?: () => void;
     onClose?: () => void;
     baseRevisionId?: string | null;
+    /** Render inside React StrictMode (production shells run it in dev). */
+    strict?: boolean;
   } = {},
 ) {
   let statusCalls = 0;
@@ -93,7 +96,7 @@ function renderModal(
   vi.stubGlobal('fetch', fetchMock);
 
   const onClose = options.onClose ?? vi.fn();
-  render(
+  const sheet = (
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <SketchUpPairingModal
         baseUrl={API}
@@ -106,8 +109,9 @@ function renderModal(
         designName="Cocina Principal"
         onClose={onClose}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  render(options.strict ? <StrictMode>{sheet}</StrictMode> : sheet);
   return { fetchMock, calls, onClose };
 }
 
@@ -249,6 +253,17 @@ describe('SketchUpPairingModal — confirmation wording (#499 Slice 3)', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.cancel).toBe(0);
+  });
+
+  it('mints exactly ONE grant per sheet under StrictMode double effects', async () => {
+    // The dev shell mounts under StrictMode, whose double effect invocation
+    // used to mint two live grants: the first code reached the screen (and
+    // the plugin could exchange it) while the sheet polled only the second —
+    // the intermittent confirmed-handoff CI failure and a real UX defect.
+    const { calls } = renderModal({ strict: true });
+
+    expect(await screen.findByTestId('pairing-code')).toHaveTextContent('ABCD 234E FGH5');
+    expect(calls.create).toBe(1);
   });
 
   it('keeps polling after exchanged so a late plugin confirm still reaches "Diseño vinculado"', async () => {
