@@ -258,11 +258,25 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
         const modal = document.querySelector('[data-testid="sketchup-pairing-modal"]');
         const status = modal?.querySelector('[data-testid^="pairing-"]')?.textContent ?? null;
         const pollError = document.querySelector('[data-testid="pairing-poll-error"]')?.textContent ?? null;
+        // Resource timing proves whether the poll fetches actually left the
+        // browser and how long they took (hanging vs never-sent vs slow).
+        const grantRequests = (performance as Performance & {
+          getEntriesByType?: (t: string) => PerformanceResourceTiming[];
+        }).getEntriesByType?.('resource')
+          ?.filter((r) => r.name.includes('pairing-grants'))
+          .slice(-8)
+          .map((r) => ({
+            url: r.name.split('/api')[1] ?? r.name,
+            start: Math.round(r.startTime),
+            dur: r.duration === 0 ? 'pending' : Math.round(r.duration),
+          })) ?? [];
         return {
           url: window.location.href,
+          visibility: document.visibilityState,
           modalPresent: modal !== null,
           statusLine: status,
           pollError,
+          grantRequests,
           modalText: modal?.textContent?.slice(0, 400) ?? null,
         };
       });
