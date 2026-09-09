@@ -432,10 +432,11 @@ class PairingConnectTest < Minitest::Test
       mb::Store.new(model).write!(mb::Binding.new(project_id: PROJECT_ID, design_id: OTHER_DESIGN_ID,
                                                   base_revision_id: REVISION_R2, schema_version: 1))
       transport = FakeTransport.new
-      transport.respond_post_sequence('/design-pairing-grants:exchange', [
+      exchange_responses = [
         [200, exchange_payload(**scenario, grant_id: GRANT_ID)],
         [200, exchange_payload(**scenario, grant_id: FRESH_GRANT_ID)]
-      ])
+      ]
+      transport.respond_post_sequence('/design-pairing-grants:exchange', exchange_responses)
       transport.respond_post("/design-pairing-grants/#{FRESH_GRANT_ID}:confirm", 200,
                              { 'id' => FRESH_GRANT_ID, 'action' => 'open_design', 'status' => 'confirmed' })
       transport.respond_post("/projects/#{PROJECT_ID}/designs/#{DESIGN_ID}/binding:validate", 200,
