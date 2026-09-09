@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -17,10 +18,14 @@ type StatusKind = 'pending' | 'exchanged' | 'confirmed' | 'cancelled' | 'expired
 function renderModal(
   options: {
     status?: StatusKind;
+    /** Consecutive poll answers in order; falls back to `status` when exhausted. */
+    statusSequence?: StatusKind[];
     statusFailTimes?: number;
     onStatus?: () => void;
     onClose?: () => void;
     baseRevisionId?: string | null;
+    /** Render inside React StrictMode (production shells run it in dev). */
+    strict?: boolean;
   } = {},
 ) {
   let statusCalls = 0;
@@ -54,16 +59,17 @@ function renderModal(
           status: 500,
         });
       }
+      const status = options.statusSequence?.[statusCalls - 1] ?? options.status ?? 'pending';
       return new Response(
         JSON.stringify({
           id: GRANT_ID,
           action: 'open_design',
-          status: options.status ?? 'pending',
-          confirmed_at: options.status === 'confirmed' ? new Date().toISOString() : null,
+          status,
+          confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
           base_revision_id: null,
           expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
           created_at: new Date().toISOString(),
-          exchanged_at: null,
+          exchanged_at: status === 'exchanged' || status === 'confirmed' ? new Date().toISOString() : null,
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -90,7 +96,7 @@ function renderModal(
   vi.stubGlobal('fetch', fetchMock);
 
   const onClose = options.onClose ?? vi.fn();
-  render(
+  const sheet = (
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <SketchUpPairingModal
         baseUrl={API}
@@ -103,8 +109,9 @@ function renderModal(
         designName="Cocina Principal"
         onClose={onClose}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  render(options.strict ? <StrictMode>{sheet}</StrictMode> : sheet);
   return { fetchMock, calls, onClose };
 }
 
@@ -246,5 +253,41 @@ describe('SketchUpPairingModal — confirmation wording (#499 Slice 3)', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.cancel).toBe(0);
+  });
+
+  it('mints exactly ONE grant per sheet under StrictMode double effects', async () => {
+    // The dev shell mounts under StrictMode, whose double effect invocation
+    // used to mint two live grants: the first code reached the screen (and
+    // the plugin could exchange it) while the sheet polled only the second —
+    // the intermittent confirmed-handoff CI failure and a real UX defect.
+    const { calls } = renderModal({ strict: true });
+
+    expect(await screen.findByTestId('pairing-code')).toHaveTextContent('ABCD 234E FGH5');
+    expect(calls.create).toBe(1);
+  });
+
+  it('keeps polling after exchanged so a late plugin confirm still reaches "Diseño vinculado"', async () => {
+    // Real sequence: a poll observes the intermediate `exchanged` state
+    // before the plugin commits the binding. Exchanged is NOT final — the
+    // sheet must keep polling and surface the eventual confirmation instead
+    // of freezing on "Código aceptado por SketchUp" (CI race on the #499
+    // confirmed-handoff browser gate).
+    renderModal({ statusSequence: ['exchanged', 'exchanged', 'confirmed'] });
+
+    expect(await screen.findByTestId('pairing-exchanged')).toHaveTextContent(
+      /Código aceptado por SketchUp/,
+    );
+    // Poll 2 (t=4s) still sees exchanged; poll 3 (t=8s) sees the confirm.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_100);
+    });
+    expect(screen.getByTestId('pairing-exchanged')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_100);
+    });
+    expect(await screen.findByTestId('pairing-confirmed')).toHaveTextContent(
+      'Diseño vinculado en SketchUp',
+    );
+    expect(screen.queryByTestId('pairing-exchanged')).not.toBeInTheDocument();
   });
 });

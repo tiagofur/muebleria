@@ -211,7 +211,9 @@ interface FetchMockOptions {
 }
 
 function setupFetchMock(options: FetchMockOptions = {}) {
-  const designs = options.designs ?? mockDesigns;
+  // Copy: POST below appends the created row, and the default mockDesigns must
+  // not leak across tests.
+  const designs = [...(options.designs ?? mockDesigns)];
   const revisionsByDesign = options.revisionsByDesign ?? {
     [DESIGN_1_ID]: [mockRevision1, mockRevision2, mockRevision3],
     [DESIGN_2_ID]: [],
@@ -264,6 +266,10 @@ function setupFetchMock(options: FetchMockOptions = {}) {
         created_at: '2026-09-05T12:00:00Z',
         updated_at: '2026-09-05T12:00:00Z',
       };
+      // The server persists the row: the invalidated list refetch (and only
+      // it) must observe the new design — mirror that in the mock.
+      designs.push(created);
+      (fetchMock as any).lastDesignCreate = body;
       return json(created, 201);
     }
 
@@ -403,6 +409,7 @@ function renderScreen(props: {
   initialContext?: ProjectDesignsContextState | null;
   onContextChange?: (ctx: ProjectDesignsContextState) => void;
   onOpenFurnitureMatrix?: (ctx: { designId: string | null; revisionId: string | null }) => void;
+  onOpenReconciliation?: (ctx: { designId: string | null; revisionId: string | null }) => void;
   onBack?: () => void;
   canMutate?: boolean;
 } = {}) {
@@ -423,6 +430,7 @@ function renderScreen(props: {
         initialContext={props.initialContext}
         onContextChange={props.onContextChange}
         onOpenFurnitureMatrix={props.onOpenFurnitureMatrix}
+        onOpenReconciliation={props.onOpenReconciliation}
         onBack={props.onBack}
         canMutate={props.canMutate}
       />
@@ -943,5 +951,68 @@ describe('ProjectDesignsScreen — #499 SketchUp pairing handoff (Slice 2)', () 
       /Código aceptado por SketchUp/,
     );
     expect(screen.queryByText(/abierto correctamente/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('ProjectDesignsScreen — zero-design empty state (first Design DEMO path)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('authorized user (canMutate) sees "Crear primer diseño", creates via canonical POST, selection and SketchUp CTA follow', async () => {
+    const fetchMock = setupFetchMock({ designs: [] });
+    renderScreen({
+      canMutate: true,
+      onOpenReconciliation: vi.fn(),
+      onOpenFurnitureMatrix: vi.fn(),
+    });
+
+    // Empty state with the mutation CTA for authorized users.
+    expect(await screen.findByText('No hay diseños en esta obra')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crear primer diseño' })).toBeInTheDocument();
+
+    // Reconciliation dead-ends without a DesignRevision (#502) — hidden.
+    // The furniture matrix stays: it is useful independently of designs.
+    expect(screen.queryByTestId('open-reconciliation-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('open-furniture-matrix-btn')).toBeInTheDocument();
+
+    // CTA opens the modal with the suggested name prefilled.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Crear primer diseño' }));
+    const nameInput = await screen.findByLabelText(/Nombre de la alternativa/i);
+    expect(nameInput).toHaveValue('Diseño Principal');
+
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Diseño principal');
+    await user.click(screen.getByTestId('submit-create-design'));
+
+    // Canonical API create → refetch → the new design is selected and the
+    // SketchUp handoff becomes available (no local fabrication).
+    expect(await screen.findByRole('tab', { name: /Diseño principal/i })).toBeInTheDocument();
+    expect(screen.getByTestId('open-in-sketchup-btn')).toBeInTheDocument();
+    expect((fetchMock as any).lastDesignCreate).toEqual({ name: 'Diseño principal' });
+    expect(screen.queryByText('No hay diseños en esta obra')).not.toBeInTheDocument();
+  });
+
+  it('read-only user sees the read-only empty state without the creation CTA', async () => {
+    setupFetchMock({ designs: [] });
+    renderScreen({ canMutate: false });
+
+    expect(await screen.findByText('No hay diseños en esta obra')).toBeInTheDocument();
+    expect(
+      screen.getByText('Aún no se ha creado ninguna alternativa de diseño para el proyecto.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crear primer diseño' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('create-design-btn')).not.toBeInTheDocument();
+  });
+
+  it('reconciliation CTA stays available once a design exists', async () => {
+    setupFetchMock();
+    renderScreen({ onOpenReconciliation: vi.fn() });
+
+    await screen.findByRole('tab', { name: /Cocina Principal/i });
+    expect(screen.getByTestId('open-reconciliation-btn')).toBeInTheDocument();
   });
 });

@@ -72,6 +72,20 @@ function isTerminalGrantStatus(status: PairingGrantStatus['status'] | undefined)
   );
 }
 
+/**
+ * States the grant can never leave. `exchanged` is NOT final — the plugin
+ * still owes the confirm that closes the initiated-vs-confirmed gap (#499
+ * Slice 3), so polling must continue through it or a confirm committed
+ * between two polls would never surface.
+ */
+function isFinalGrantStatus(status: PairingGrantStatus['status'] | undefined): boolean {
+  return (
+    status === 'confirmed' ||
+    status === 'cancelled' ||
+    status === 'expired'
+  );
+}
+
 export function SketchUpPairingModal({
   baseUrl,
   token,
@@ -98,6 +112,11 @@ export function SketchUpPairingModal({
   const grantRef = useRef<PairingGrantCreated | null>(null);
   const statusRef = useRef<PairingGrantStatus | null>(null);
   const closedRef = useRef(false);
+  // StrictMode dev runs the create effect twice. Without this guard the
+  // sheet mints TWO live grants: the first code reaches the screen (and the
+  // plugin may exchange it) while the sheet keeps polling only the second —
+  // "Diseño vinculado" then never appears.
+  const createStartedRef = useRef(false);
 
   // Base label frozen for the lifetime of the sheet: "R2 actual" arriving in
   // the background never rewrites what this grant pinned.
@@ -132,15 +151,20 @@ export function SketchUpPairingModal({
   }, [api, token, projectId, designId, baseRevisionId]);
 
   useEffect(() => {
+    if (createStartedRef.current) return;
+    createStartedRef.current = true;
     void createGrant();
   }, [createGrant]);
 
   const terminalStatus = isTerminalGrantStatus(status?.status);
+  const finalStatus = isFinalGrantStatus(status?.status);
 
-  // Poll grant status while pending. A network/API failure keeps the last
-  // known state and surfaces a retryable notice — it NEVER derives expired.
+  // Poll grant status while it can still advance. A network/API failure keeps
+  // the last known state and surfaces a retryable notice — it NEVER derives
+  // expired. `exchanged` keeps polling: the plugin confirm may land between
+  // two polls (backend pending→exchanged→confirmed).
   useEffect(() => {
-    if (phase !== 'active' || !grant || terminalStatus) return;
+    if (phase !== 'active' || !grant || finalStatus) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -160,15 +184,15 @@ export function SketchUpPairingModal({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [api, token, projectId, designId, grant, phase, terminalStatus]);
+  }, [api, token, projectId, designId, grant, phase, finalStatus]);
 
   // Countdown ticker: visual only (aria-hidden) so screen readers are not
   // spammed every second.
   useEffect(() => {
-    if (phase !== 'active' || terminalStatus) return;
+    if (phase !== 'active' || finalStatus) return;
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [phase, terminalStatus]);
+  }, [phase, finalStatus]);
 
   const cancelPendingGrant = useCallback(async () => {
     const current = grantRef.current;

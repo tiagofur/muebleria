@@ -241,10 +241,34 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
     // pending immediately before the extension committed confirmation, so
     // allow the next authoritative poll instead of racing a five-second CI
     // window.
-    await expect(page.getByTestId('pairing-confirmed')).toContainText(
-      'Diseño vinculado en SketchUp',
-      { timeout: 15_000 },
-    );
+    try {
+      // 30s = CI timer slack, not a weaker assertion: the server already
+      // confirmed (asserted above); the sheet only needs ONE 4s poll to
+      // observe it. On shared CI runners the interval can be delayed well
+      // past 15s while the box runs postgres+go+vite+chromium together.
+      await expect(page.getByTestId('pairing-confirmed')).toContainText(
+        'Diseño vinculado en SketchUp',
+        { timeout: 30_000 },
+      );
+    } catch (err) {
+      // Diagnostics for any future miss of this wait: capture what the sheet
+      // actually held plus the server's authoritative grant, then rethrow.
+      const sheet = await page.evaluate(() => {
+        const modal = document.querySelector('[data-testid="sketchup-pairing-modal"]');
+        return {
+          url: window.location.href,
+          visibility: document.visibilityState,
+          modalPresent: modal !== null,
+          pollError: document.querySelector('[data-testid="pairing-poll-error"]')?.textContent ?? null,
+          modalText: modal?.textContent?.slice(0, 400) ?? null,
+        };
+      });
+      const grantState = await client
+        .getDesignPairingGrant(owner.token, seeded.projectId, design.id, exchange1.grant_id)
+        .catch((e: unknown) => `lookup failed: ${String(e)}`);
+      console.log('[pairing-confirm-debug]', JSON.stringify({ sheet, grantState }));
+      throw err;
+    }
     await page.keyboard.press('Escape');
 
     // 4. Publish R1 through the existing revision pipeline.
