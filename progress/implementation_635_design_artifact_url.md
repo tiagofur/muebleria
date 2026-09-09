@@ -3,8 +3,8 @@
 Status: `IMPLEMENTED_PENDING_REVIEW`
 
 - Branch/base: `fix/635-design-artifact-url` from `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`.
-- Final HEAD: the single atomic commit containing this report; exact remote readback is in the leader handoff.
-- PR/merge/issue closure: not performed; not authorized.
+- Delivery commits: the initial fix plus one scoped independent-review correction; exact final HEAD is recorded by the leader handoff.
+- PR #636 is open; merge and issue closure were not performed or authorized.
 
 ## Delivery
 
