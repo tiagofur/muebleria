@@ -17,6 +17,8 @@ type StatusKind = 'pending' | 'exchanged' | 'confirmed' | 'cancelled' | 'expired
 function renderModal(
   options: {
     status?: StatusKind;
+    /** Consecutive poll answers in order; falls back to `status` when exhausted. */
+    statusSequence?: StatusKind[];
     statusFailTimes?: number;
     onStatus?: () => void;
     onClose?: () => void;
@@ -54,16 +56,17 @@ function renderModal(
           status: 500,
         });
       }
+      const status = options.statusSequence?.[statusCalls - 1] ?? options.status ?? 'pending';
       return new Response(
         JSON.stringify({
           id: GRANT_ID,
           action: 'open_design',
-          status: options.status ?? 'pending',
-          confirmed_at: options.status === 'confirmed' ? new Date().toISOString() : null,
+          status,
+          confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
           base_revision_id: null,
           expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
           created_at: new Date().toISOString(),
-          exchanged_at: null,
+          exchanged_at: status === 'exchanged' || status === 'confirmed' ? new Date().toISOString() : null,
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
@@ -246,5 +249,30 @@ describe('SketchUpPairingModal — confirmation wording (#499 Slice 3)', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.cancel).toBe(0);
+  });
+
+  it('keeps polling after exchanged so a late plugin confirm still reaches "Diseño vinculado"', async () => {
+    // Real sequence: a poll observes the intermediate `exchanged` state
+    // before the plugin commits the binding. Exchanged is NOT final — the
+    // sheet must keep polling and surface the eventual confirmation instead
+    // of freezing on "Código aceptado por SketchUp" (CI race on the #499
+    // confirmed-handoff browser gate).
+    renderModal({ statusSequence: ['exchanged', 'exchanged', 'confirmed'] });
+
+    expect(await screen.findByTestId('pairing-exchanged')).toHaveTextContent(
+      /Código aceptado por SketchUp/,
+    );
+    // Poll 2 (t=4s) still sees exchanged; poll 3 (t=8s) sees the confirm.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_100);
+    });
+    expect(screen.getByTestId('pairing-exchanged')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_100);
+    });
+    expect(await screen.findByTestId('pairing-confirmed')).toHaveTextContent(
+      'Diseño vinculado en SketchUp',
+    );
+    expect(screen.queryByTestId('pairing-exchanged')).not.toBeInTheDocument();
   });
 });

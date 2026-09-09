@@ -72,6 +72,20 @@ function isTerminalGrantStatus(status: PairingGrantStatus['status'] | undefined)
   );
 }
 
+/**
+ * States the grant can never leave. `exchanged` is NOT final — the plugin
+ * still owes the confirm that closes the initiated-vs-confirmed gap (#499
+ * Slice 3), so polling must continue through it or a confirm committed
+ * between two polls would never surface.
+ */
+function isFinalGrantStatus(status: PairingGrantStatus['status'] | undefined): boolean {
+  return (
+    status === 'confirmed' ||
+    status === 'cancelled' ||
+    status === 'expired'
+  );
+}
+
 export function SketchUpPairingModal({
   baseUrl,
   token,
@@ -136,11 +150,14 @@ export function SketchUpPairingModal({
   }, [createGrant]);
 
   const terminalStatus = isTerminalGrantStatus(status?.status);
+  const finalStatus = isFinalGrantStatus(status?.status);
 
-  // Poll grant status while pending. A network/API failure keeps the last
-  // known state and surfaces a retryable notice — it NEVER derives expired.
+  // Poll grant status while it can still advance. A network/API failure keeps
+  // the last known state and surfaces a retryable notice — it NEVER derives
+  // expired. `exchanged` keeps polling: the plugin confirm may land between
+  // two polls (backend pending→exchanged→confirmed).
   useEffect(() => {
-    if (phase !== 'active' || !grant || terminalStatus) return;
+    if (phase !== 'active' || !grant || finalStatus) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -160,15 +177,15 @@ export function SketchUpPairingModal({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [api, token, projectId, designId, grant, phase, terminalStatus]);
+  }, [api, token, projectId, designId, grant, phase, finalStatus]);
 
   // Countdown ticker: visual only (aria-hidden) so screen readers are not
   // spammed every second.
   useEffect(() => {
-    if (phase !== 'active' || terminalStatus) return;
+    if (phase !== 'active' || finalStatus) return;
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [phase, terminalStatus]);
+  }, [phase, finalStatus]);
 
   const cancelPendingGrant = useCallback(async () => {
     const current = grantRef.current;
