@@ -567,7 +567,11 @@ module Granete
           ProjectFurniture::Contract::WorkingItem.new(
             furniture_instance_id: new_id,
             furniture_definition_id: resolve_definition_id(source_item, metadata),
-            definition_version: source_item&.definition_version || metadata.dig('intent', 'definitionVersion'),
+            definition_version: ProjectFurniture::Contract.authoritative_definition_version(
+              source_item&.definition_version,
+              metadata.dig('intent', 'definitionVersion'),
+              metadata.dig('intent', 'definition_version')
+            ),
             room_id: source_item&.room_id || metadata.dig('intent', 'roomId'),
             parameters: params,
             material_choices: materials,

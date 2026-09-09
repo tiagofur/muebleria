@@ -1,3 +1,18 @@
+# Issue #624 — SketchUp working-copy definition version guard
+
+- Approval: user said `corregimos el 624`; GitHub issue #624 has `status:approved`.
+- Started: 2026-09-08 22:40 CST. Branch `codex/fix-624-sketchup-definition-version`, exact base `origin/main@3b2d08539b5d0e3aaf81fc4d6627636398a00fb7`.
+- Scope: prevent catalog semver and incompatible historical metadata from reaching the optional integer `definition_version` in confirm-placement and duplicate working-copy payloads; preserve identity, parameters, material choices, transform, locator, full merge, and rollback.
+- Plan:
+  1. Add RED Ruby regressions for realistic `version: "1.0.0"` placement intent and duplicate metadata.
+  2. Add an executable Ruby-to-generated-Go/OpenAPI boundary that rejects arbitrary payloads and proves the corrected payload decodes.
+  3. Implement one narrow integer-only normalization at the working-item contract boundary without changing OpenAPI/backend/material behavior.
+  4. Run focused Ruby and Go contract tests, `bundle exec rake verify`, `pnpm openapi:check`, then commit, push, and record exact evidence.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. One integer-only normalization now protects placement, duplicate metadata fallback, parsed working copies, and final serialization. A shared fixture is produced by Ruby and accepted/rejected through the generated Go request type at the real handler boundary.
+- Evidence: RED reproduced in all three Ruby regressions; GREEN focused Ruby (57 runs / 357 assertions), Go API package, `bundle exec rake verify` (632 unit / 4,410 assertions; 6 boundary / 2,531 assertions), `pnpm openapi:check`, and final `./init.sh` all passed. RBZ SHA-256: `0a8913bd37eda3e5df5664714e206c5be701a9128f0b6256258da33b9c5f44e3`.
+- Remaining evidence: real SketchUp 2026 installation and save/reopen smoke are pending after review; no real-host claim is inferred from Ruby stubs or RBZ construction.
+- Rollback: revert the #624 working-copy version guard, shared fixture, Ruby/Go regressions, and this report together. No migration, OpenAPI change, material logic, UI, or backend production code changed.
+
 # PR #613 / #499 — R3 Actions correction
 
 - Approval: user authorized the minimum correction required to finish #499 correctly; branch `codex/499-plugin-receive-bind`, exact base/head `0897b17a199a4ed013c11c0de59354f5a73b142a`.

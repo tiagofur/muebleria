@@ -515,6 +515,27 @@ class DuplicateResolverTest < Minitest::Test
     refute_equal orig_item.technical_client_locator, copy_item.technical_client_locator
   end
 
+  def test_duplicate_omits_historical_catalog_semver_from_working_copy_payload
+    _original = create_managed_instance(furniture_instance_id: FI_1)
+    copy = create_managed_instance(furniture_instance_id: FI_1)
+    metadata = @metadata_store.read(copy)
+    metadata['intent']['definitionVersion'] = '1.0.0'
+    metadata['intent']['materialChoices'] = { 'INTERIOR' => 'mat-white', 'FRENTE' => 'mat-oak' }
+    @metadata_store.write(copy, metadata)
+
+    result = @resolver.resolve_observed_addition(@model, copy)
+    assert result['ok'], result.inspect
+
+    item = @service.working_copy.items.find { |candidate| candidate.furniture_instance_id == FI_2 }
+    assert item, 'duplicate item must be appended to the complete working copy'
+    assert_nil item.definition_version
+    refute item.to_contract_h.key?('definition_version')
+    assert_equal({ 'ancho' => 600 }, item.parameters)
+    assert_equal({ 'INTERIOR' => 'mat-white', 'FRENTE' => 'mat-oak' }, item.material_choices)
+    assert_equal DEFINITION_ID, item.furniture_definition_id
+    assert_equal 'sketchup_persistent_id', item.technical_client_locator['kind']
+  end
+
   # Proof 15: Fail-closed precheck when service is unavailable (#391 / DT-7 hardening)
   def test_validate_model_fail_closed_when_service_unavailable
     create_managed_instance(furniture_instance_id: FI_1)

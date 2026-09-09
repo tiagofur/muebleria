@@ -295,6 +295,28 @@ class ProjectFurnitureTest < Minitest::Test
     refute_equal FI_1, locator['value']
   end
 
+  def test_confirm_omits_catalog_semver_and_preserves_placement_payload
+    quoted_finish = { 'INTERIOR' => 'mat-mdf-blanco', 'FRENTE' => 'mat-roble' }
+    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
+                       [instance_body(FI_1, 'quote', display_dims: [650, 720, 560],
+                                                     display_choices: quoted_finish)])
+    stub_working_copy(working_copy_body([]))
+
+    assert @placer.place(FI_1)['ok']
+    finalize_position!(@model, FI_1, [1000, 0, 0])
+    result = @placer.confirm_placement(FI_1)
+    assert result['ok'], result.inspect
+
+    item = @transport.requests_for('PUT', %r{/working-copy}).first['body']['items'].first
+    refute item.key?('definition_version'), 'catalog semver must not populate the integer revision field'
+    assert_equal FI_1, item['furniture_instance_id']
+    assert_equal DEFINITION_ID, item['furniture_definition_id']
+    assert_equal 650, item.dig('parameters', 'widthMm')
+    assert_equal quoted_finish, item['material_choices']
+    assert_equal 1000.0, item.dig('transform', 'translation_mm', 0)
+    assert_equal 'sketchup_persistent_id', item.dig('technical_client_locator', 'kind')
+  end
+
   def test_place_preserves_other_working_items
     # Proof G: working copy already holds FI-2; placing FI-1 must not drop it.
     stub_working_copy(working_copy_body([
@@ -387,8 +409,8 @@ class ProjectFurnitureTest < Minitest::Test
   def test_backend_failure_at_confirm_rolls_back_local_placement
     # Proof H: the working-copy PUT fails at confirm → the placed component
     # is erased and the failure is loud (no false local success).
-    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 409,
-                       { 'error' => { 'code' => 'conflict', 'message' => 'El diseño no está activo' } })
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 400,
+                       { 'error' => { 'code' => 'bad_request', 'message' => 'invalid request body' } })
 
     assert @placer.place(FI_1)['ok'], 'place itself does not touch the working copy'
     finalize_position!(@model, FI_1)
