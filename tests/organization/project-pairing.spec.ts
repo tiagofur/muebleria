@@ -242,9 +242,13 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
     // allow the next authoritative poll instead of racing a five-second CI
     // window.
     try {
+      // 30s = CI timer slack, not a weaker assertion: the server already
+      // confirmed (asserted above); the sheet only needs ONE 4s poll to
+      // observe it. On shared CI runners the interval can be delayed well
+      // past 15s while the box runs postgres+go+vite+chromium together.
       await expect(page.getByTestId('pairing-confirmed')).toContainText(
         'Diseño vinculado en SketchUp',
-        { timeout: 15_000 },
+        { timeout: 30_000 },
       );
     } catch (err) {
       // Diagnostics for the intermittent CI-only miss of this wait: capture
