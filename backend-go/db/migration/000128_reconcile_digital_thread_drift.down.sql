@@ -1,0 +1,5 @@
+-- 000128 only reconciles drift toward the canonical end state of 000113 and
+-- 000115/000117; it changes no canonical schema. Rolling it back must not
+-- drop the reconciled objects: the working-copy tables may hold business
+-- data, and removing the immutability backstops would weaken quote revision
+-- integrity on every installation. Reconciliation is therefore forward-only.
