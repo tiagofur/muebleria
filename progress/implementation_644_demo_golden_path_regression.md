@@ -57,8 +57,12 @@ Correction run after #639:
 - full `pnpm test:organization:browser`: **36 PASS, 2 FAIL, 3 NOT RUN** in
   1.7 min. The failures were outside this PR's file: the reconciliation
   workspace and a later Web auth login timed out waiting for their route/topbar
-  elements. The focused golden stayed green inside the same full run. This is
-  recorded as a remaining full-suite gate gap, not misreported as green.
+  elements. The focused golden stayed green inside the same full run. This run
+  is not misreported as green.
+- independent focused recheck of both affected specs through the same ephemeral
+  browser gate (`project-reconciliation.spec.ts` + `webauth.spec.ts`):
+  **11/11 PASS** in 38.0s. The two visibility timeouts were not reproducible and
+  are not caused by the golden fixture; exact-head Actions remain the final gate.
 
 ## Assertion strength after #639
 
@@ -116,8 +120,9 @@ exercised the #502 gate; Q1 supersede semantics; choice keys not matching
 component `optionRoles`). The two behavior refusals (outdated-baseline
 approval, forged part-execution payloads elsewhere in the suite) are the
 gates working as designed and are now permanent regression assertions. The
-full-suite correction run still has the two unrelated visibility timeouts
-recorded above, so full organization-browser green is NOT claimed.
+full-suite correction run still records the two visibility timeouts above, so
+that run is not claimed green; both affected specs passed their independent
+11/11 recheck through a fresh Go + PostgreSQL + Chromium environment.
 
 ## Product files changed
 
