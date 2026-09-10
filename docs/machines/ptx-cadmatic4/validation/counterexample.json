@@ -1,0 +1,50 @@
+{
+  "status": "REDUCED_RULE_REPRODUCTION_NOT_REPO_RUNTIME",
+  "repoBaseline": "b3efd4191526010e440aafe20e80378f21615161",
+  "board": {
+    "lengthMm": 1000,
+    "widthMm": 600
+  },
+  "kerfMm": 4,
+  "outerTrimMm": 0,
+  "pieces": [
+    {
+      "regionId": "A",
+      "xMm": 0,
+      "yMm": 0,
+      "lengthMm": 400,
+      "widthMm": 600
+    },
+    {
+      "regionId": "B",
+      "xMm": 404,
+      "yMm": 0,
+      "lengthMm": 596,
+      "widthMm": 196
+    },
+    {
+      "regionId": "C",
+      "xMm": 404,
+      "yMm": 200,
+      "lengthMm": 596,
+      "widthMm": 196
+    },
+    {
+      "regionId": "D",
+      "xMm": 404,
+      "yMm": 400,
+      "lengthMm": 596,
+      "widthMm": 200
+    }
+  ],
+  "validTreeDescription": "First separate left column 400mm along X with kerf4; then split right column into 196,196,200mm along Y with two kerfs4.",
+  "expectedPreviewFirstCut": {
+    "axis": "x",
+    "coordinateMm": 400
+  },
+  "expectedExportFirstRip": {
+    "axis": "y",
+    "coordinateMm": 600
+  },
+  "limitations": "Constructed valid layout; does not claim that the current optimizer produced this layout for a client job."
+}

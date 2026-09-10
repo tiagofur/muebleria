@@ -1,0 +1,148 @@
+{
+  "status": "ORIGINAL_DIDACTIC_EXERCISE_NOT_MACHINE_VALIDATED",
+  "coordinateFrame": "mm_top_left_x_right_y_down",
+  "kerfMm": 4,
+  "outerTrimMm": 0,
+  "regions": [
+    {
+      "regionId": "BOARD",
+      "xMm": 0,
+      "yMm": 0,
+      "lengthMm": 1200,
+      "widthMm": 700
+    },
+    {
+      "regionId": "STRIP",
+      "xMm": 0,
+      "yMm": 0,
+      "lengthMm": 1200,
+      "widthMm": 320
+    },
+    {
+      "regionId": "REM_TOP",
+      "xMm": 0,
+      "yMm": 324,
+      "lengthMm": 1200,
+      "widthMm": 376
+    },
+    {
+      "regionId": "PART_A",
+      "xMm": 0,
+      "yMm": 0,
+      "lengthMm": 450,
+      "widthMm": 320
+    },
+    {
+      "regionId": "STRIP_REST",
+      "xMm": 454,
+      "yMm": 0,
+      "lengthMm": 746,
+      "widthMm": 320
+    },
+    {
+      "regionId": "BLOCK_B",
+      "xMm": 454,
+      "yMm": 0,
+      "lengthMm": 280,
+      "widthMm": 320
+    },
+    {
+      "regionId": "REM_RIGHT",
+      "xMm": 738,
+      "yMm": 0,
+      "lengthMm": 462,
+      "widthMm": 320
+    },
+    {
+      "regionId": "PART_B",
+      "xMm": 454,
+      "yMm": 0,
+      "lengthMm": 280,
+      "widthMm": 210
+    },
+    {
+      "regionId": "REM_B",
+      "xMm": 454,
+      "yMm": 214,
+      "lengthMm": 280,
+      "widthMm": 106
+    }
+  ],
+  "events": [
+    {
+      "cutId": "CUT_A",
+      "parentRegionId": "BOARD",
+      "outputRegionIds": [
+        "STRIP",
+        "REM_TOP"
+      ],
+      "axis": "y",
+      "relativeExtentMm": 320,
+      "kerfBand": {
+        "regionId": "KERF_A",
+        "xMm": 0,
+        "yMm": 320,
+        "lengthMm": 1200,
+        "widthMm": 4
+      }
+    },
+    {
+      "cutId": "CUT_B",
+      "parentRegionId": "STRIP",
+      "outputRegionIds": [
+        "PART_A",
+        "STRIP_REST"
+      ],
+      "axis": "x",
+      "relativeExtentMm": 450,
+      "kerfBand": {
+        "regionId": "KERF_B",
+        "xMm": 450,
+        "yMm": 0,
+        "lengthMm": 4,
+        "widthMm": 320
+      }
+    },
+    {
+      "cutId": "CUT_C",
+      "parentRegionId": "STRIP_REST",
+      "outputRegionIds": [
+        "BLOCK_B",
+        "REM_RIGHT"
+      ],
+      "axis": "x",
+      "relativeExtentMm": 280,
+      "kerfBand": {
+        "regionId": "KERF_C",
+        "xMm": 734,
+        "yMm": 0,
+        "lengthMm": 4,
+        "widthMm": 320
+      }
+    },
+    {
+      "cutId": "CUT_D",
+      "parentRegionId": "BLOCK_B",
+      "outputRegionIds": [
+        "PART_B",
+        "REM_B"
+      ],
+      "axis": "y",
+      "relativeExtentMm": 210,
+      "kerfBand": {
+        "regionId": "KERF_D",
+        "xMm": 454,
+        "yMm": 210,
+        "lengthMm": 280,
+        "widthMm": 4
+      }
+    }
+  ],
+  "expectedLeafRegionIds": [
+    "PART_A",
+    "PART_B",
+    "REM_TOP",
+    "REM_RIGHT",
+    "REM_B"
+  ]
+}

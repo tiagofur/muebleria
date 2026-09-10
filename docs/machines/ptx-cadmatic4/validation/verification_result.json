@@ -1,0 +1,38 @@
+{
+  "status": "PASS_FOR_SCOPED_OFFLINE_CHECKS_ONLY",
+  "limitations": [
+    "No complete PTX validation",
+    "No Granete test suite execution",
+    "No CADLink conversion",
+    "No CADmatic import",
+    "No machine execution"
+  ],
+  "checks": [
+    "Parent availability",
+    "Positive dimensions",
+    "Child containment",
+    "No overlap",
+    "Per-split and global area conservation",
+    "Expected leaves",
+    "Four CUTS rows: field counts, phases, dimensions, refs and exercise quantities",
+    "Reduced X/Y rule counterexample"
+  ],
+  "example": {
+    "boardAreaMm2": 840000,
+    "leafAreaMm2": 831520,
+    "kerfAreaMm2": 8480,
+    "partsCount": 2
+  },
+  "counterexample": {
+    "previewFirstCut": {
+      "axis": "x",
+      "coordinateMm": 400
+    },
+    "exportFirstRip": {
+      "axis": "y",
+      "coordinateMm": 600
+    },
+    "sameCut": false
+  },
+  "fragmentSha256": "177240080e8d60b328079721db3bfbd8f04d19790242f23ebad3fbad859cd91b"
+}
