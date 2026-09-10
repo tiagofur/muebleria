@@ -1,7 +1,7 @@
 # Issue #642 — Slice 2a: exact QuoteRevision authority in quote detail
 
 - Base `origin/main@ad8865e132c0d319324f34aa50505dd8149c7c48`; branch
-  `feat/642-quote-revision-consumers`; issue remains open.
+  `feat/642-quote-revision-consumers`; partial PR #653; issue remains open.
 - Bounded partition: authenticated Cotizaciones detail only. Identity, status,
   totals and lifecycle navigation use the accepted (otherwise newest exact)
   QuoteRevision snapshot; missing/legacy authority fails closed.

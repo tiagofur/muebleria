@@ -1,5 +1,5 @@
 # #642 Slice 2a — QuoteRevision consumers
-Status: `IMPLEMENTED_PENDING_REVIEW`; base `ad8865e132c0d319324f34aa50505dd8149c7c48`.
+Status: `IMPLEMENTED_PENDING_REVIEW`; PR #653; base `ad8865e132c0d319324f34aa50505dd8149c7c48`.
 Authenticated Cotizaciones project detail now loads QuoteRevisions through the
 generated client and selects the accepted revision, or newest exact revision when
 none is accepted. Identity/status/totals come only from `commercialSnapshot`.
