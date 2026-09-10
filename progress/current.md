@@ -1,3 +1,12 @@
+# Issue #644 — [P0][DEMO] Golden path regression: Quote → SketchUp → DesignRevision → ProductionRelease
+
+- Verification lane (`status:approved`). Rama `test/644-demo-golden-path-regression`, base exacta `origin/main@55399890` (post-merge #636/#638; sin PRs solapados activos). Test-only: **cero archivos de producto**.
+- Entrega: `tests/organization/demo-golden-path.spec.ts` — un fixture canónico de cocina determinística (línea qty=2 con choices citadas reales + línea qty=1) que recorre las 10 etapas del DEMO sobre el stack real: Q1 accepted → materialización (ids físicos distintos) → Design base null → pairing extension-credential confirmed → working copy (#625 integer-or-omitted) → R1 multipart #633 source=sketchup → artifact grants #636 (`/api/design-artifacts/`, sin `/api/api`) → R2 con R1 inmutable → approval con gate #502 (rechaza Q1 desactualizada, requote Q2, acepta, aprueba R2 vs Q2) → ProductionRelease con frozen routing v2 y unidades `${release}:${instance}:u1`.
+- Evidencia: gate efímero real Chromium+Go+PostgreSQL — spec 10/10 PASS; gate completo 41/41 PASS (1.8 min); `git diff --check` limpio.
+- Observaciones registradas (no se corrigen aquí): FOUND_DOUBLE_TRUTH — `QuoteRevision.status=accepted` convive con `Project.status=draft` hasta un save legacy separado para etapas operativas; Q1 snapshot SÍ congela `materialChoices` en main actual; provenance de materiales SIN pérdida en flujo quote-first fresco (12/12 superficies exactas) — #637 queda como lane de reparación para unidades pre-#621.
+- SketchUp-host con licencia sigue RUBY CONTRACT / NOT PROVEN en CI (programa real-host: #354).
+- Detalle: `progress/implementation_644_demo_golden_path_regression.md`.
+
 # Issue #637 — [P0][BUG][DT-MAT] Repair quoted materials missing from existing working snapshots
 
 - Aprobada (`status:approved`). Base `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`; rama `fix/637-dt-material-provenance-reconcile`.
