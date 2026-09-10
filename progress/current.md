@@ -1,3 +1,14 @@
+# Issue #639 — immutable DesignRevision presentation read model
+
+- Approved (`status:approved`); user-authorized one-PR size exception. Base `origin/main@55399890173e76b3ae30d858ec9a9472bcd78ab1`; branch `fix/639-design-revision-read-model`.
+- Started: 2026-09-09 15:00 CST. Scope: immutable human-readable revision descriptors, server-owned material provenance, honest legacy unavailable state, generated API, React presentation and focused proofs. No artifact health, Proyectar convergence, quote exports or `.skp` parsing.
+- Plan:
+  1. Add additive snapshot/provenance persistence and strict domain contract without backfilling historical revisions.
+  2. Build descriptors and actor labels atomically during publication/approval; preserve exact revision selection and RLS/immutability.
+  3. Regenerate OpenAPI clients and map frozen/legacy states without handwritten DTOs.
+  4. Extract the React revision panel, keep UUIDs inside technical audit, and cover behavior/a11y/responsive presentation.
+  5. Run focused backend/storage/UI/browser gates, commit logical units, push and record exact evidence.
+
 # Issue #637 — [P0][BUG][DT-MAT] Repair quoted materials missing from existing working snapshots
 
 - Aprobada (`status:approved`). Base `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`; rama `fix/637-dt-material-provenance-reconcile`.

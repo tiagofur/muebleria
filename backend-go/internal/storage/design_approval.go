@@ -135,12 +135,13 @@ func (s *PostgresStore) approveDesignRevision(ctx context.Context, designID, rev
 	// 3. The single lifecycle mutation. The immutability trigger and the
 	// owner-org RLS update policy are the DB backstop behind this UPDATE.
 	if rev.Status == domain.DesignRevisionStatusPublished {
+		approvedByDisplayName := actorDisplayName(txCtx, s, actor, "Usuario no disponible")
 		approved, err := scanDesignRevision(s.db(txCtx).QueryRow(txCtx, `
 			UPDATE design_revisions
-			SET status = 'approved', approved_by = $2, approved_at = NOW()
+			SET status = 'approved', approved_by = $2, approved_at = NOW(), approved_by_display_name = $3
 			WHERE id = $1
 			RETURNING `+designRevisionColumns+`
-		`, cmd.DesignRevisionID, actor))
+		`, cmd.DesignRevisionID, actor, approvedByDisplayName))
 		if err != nil {
 			return nil, err
 		}

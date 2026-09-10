@@ -383,11 +383,21 @@ func (s *PostgresStore) ReconcileDesignWorkingMaterials(ctx context.Context, cmd
 	if err != nil {
 		return nil, fmt.Errorf("%w: material_choices: %v", domain.ErrSerializationFailed, err)
 	}
+	quotedSources := make(map[string]domain.DesignMaterialProvenance, len(filled))
+	for role := range filled {
+		quotedSources[role] = domain.DesignMaterialProvenanceQuoted
+	}
+	quotedSourcesJSON, err := json.Marshal(quotedSources)
+	if err != nil {
+		return nil, fmt.Errorf("%w: material_choice_sources: %v", domain.ErrSerializationFailed, err)
+	}
 	if _, err := s.db(ctx).Exec(ctx, `
 		UPDATE design_working_items
-		SET material_choices = $1, updated_at = NOW()
+		SET material_choices = $1,
+		    material_choice_sources = COALESCE(material_choice_sources, '{}'::jsonb) || $4::jsonb,
+		    updated_at = NOW()
 		WHERE design_id = $2 AND furniture_instance_id = $3
-	`, mergedJSON, cmd.DesignID, cmd.FurnitureInstanceID); err != nil {
+	`, mergedJSON, cmd.DesignID, cmd.FurnitureInstanceID, quotedSourcesJSON); err != nil {
 		return nil, fmt.Errorf("reconcile working item materials: %w", err)
 	}
 

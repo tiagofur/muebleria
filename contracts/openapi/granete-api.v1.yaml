@@ -7461,7 +7461,8 @@
           "furniture_instance_id",
           "parameters",
           "material_choices",
-          "created_at"
+          "created_at",
+          "descriptor_state"
         ],
         "properties": {
           "id": {
@@ -7513,6 +7514,12 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "descriptor_state": {
+            "$ref": "#/components/schemas/DesignRevisionDescriptorState"
+          },
+          "presentation_snapshot": {
+            "$ref": "#/components/schemas/DesignRevisionPresentationSnapshot"
           }
         }
       },
@@ -7588,6 +7595,18 @@
             "items": {
               "$ref": "#/components/schemas/DesignRevisionArtifact"
             }
+          },
+          "created_by_display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "approved_by_display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -10014,6 +10033,178 @@
             ],
             "format": "uuid",
             "description": "Exact base revision persisted in the canonical model binding; empty/omitted when the design has no published revision."
+          }
+        }
+      },
+      "DesignRevisionDescriptorState": {
+        "type": "string",
+        "enum": [
+          "available",
+          "unavailable_legacy"
+        ]
+      },
+      "DesignMaterialProvenance": {
+        "type": "string",
+        "enum": [
+          "authored",
+          "quoted",
+          "inherited_default",
+          "unresolved"
+        ]
+      },
+      "DesignRevisionUnitDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "DesignRevisionDefinitionDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "DesignRevisionParameterDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "value",
+          "state"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "value": {},
+          "unit": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "DesignRevisionMaterialDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "provenance"
+        ],
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "role_label": {
+            "type": "string"
+          },
+          "material_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "effective_thickness_mm": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/DesignMaterialProvenance"
+          }
+        }
+      },
+      "DesignRevisionRoomDescriptor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "DesignRevisionPresentationSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "unit",
+          "definition",
+          "parameters",
+          "materials",
+          "room"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "unit": {
+            "$ref": "#/components/schemas/DesignRevisionUnitDescriptor"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/DesignRevisionDefinitionDescriptor"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignRevisionParameterDescriptor"
+            }
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignRevisionMaterialDescriptor"
+            }
+          },
+          "room": {
+            "$ref": "#/components/schemas/DesignRevisionRoomDescriptor"
           }
         }
       }

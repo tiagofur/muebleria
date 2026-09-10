@@ -648,3 +648,11 @@ A required layer cannot be skipped and still reported green.
 ## 21. Global Definition of Done
 
 Granete for SketchUp reaches cross-surface excellence when a real workshop can administer the catalog in React, author professionally in SketchUp, preserve Project-owned identity, publish and understand exact revisions, reconcile/approve/release in React, generate evidence-backed machine artifacts, operate safely across organizations, update/migrate/diagnose the plugin and prove the whole path with real browser/PostgreSQL/SketchUp/machine evidence—without any duplicated business or manufacturing authority.
+## Historical presentation ownership (#639)
+
+SketchUp publishes technical authoring truth into the working copy; the Go publication
+transaction owns the immutable human-readable projection. React renders that frozen
+projection and never resolves catalog/material provenance itself. Legacy revisions
+without the projection show an explicit unavailable state, while their technical IDs
+remain accessible for audit. This keeps React and SketchUp aligned without making
+mutable current catalog labels rewrite an old revision.
