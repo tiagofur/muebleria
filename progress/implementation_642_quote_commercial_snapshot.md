@@ -74,7 +74,10 @@ tabla paralela, SIN segundo dominio):
   por línea) y `units[]` (`furnitureInstanceId`, `quoteLineId`, `moduleCode`,
   `moduleName`, `lifecycleStatus`, `options[] {groupCode, groupLabel, choiceId,
   choiceLabel}`). Dos líneas visualmente idénticas conservan identidad y
-  agrupación separadas; quantity coincide con sus unidades físicas activas.
+  agrupación separadas; quantity es el entero de unidades físicas activas
+  (positivo mientras exista una activa; cero sólo para historia compuesta
+  completamente por unidades removed/cancelled). Superseded pertenece a la
+  revisión y no reescribe el lifecycle congelado de sus unidades.
 - `quote_revisions.published_at`, `accepted_at TIMESTAMPTZ NULL` — eventos de
   lifecycle reales fijados por la transición que los posee; jamás derivados de
   `created_at`/`updated_at`. NULL en filas legacy = ausencia honesta.
@@ -113,8 +116,10 @@ marcador `schema` versiona el payload.
   TODO INSERT posterior a la migración exige un snapshot v1 semánticamente
   válido (también bajo `granete_app`), draft y sin timestamps. El validador DB
   exige los ocho montos del breakdown, los seis montos de cada línea,
-  no-negatividad/margen positivo y reconciliación de sumas; un objeto vacío no
-  cuenta como autoridad. Sólo las filas que YA existían al aplicar 000130
+  no-negatividad/margen positivo, reconciliación de sumas, IDs únicos,
+  cobertura/binding bidireccional línea↔unidad, cardinalidad activa exacta y
+  opciones customer-facing en orden canónico sin fallback UUID; un objeto vacío
+  no cuenta como autoridad. Sólo las filas que YA existían al aplicar 000130
   conservan NULL. `commercial_snapshot` es inmutable (ni rewrite ni inyección
   NULL→valor); `published_at` fijable SOLO por draft→published (NULL→valor);
   `accepted_at` SOLO por published→accepted; superseding preserva ambos.
@@ -179,8 +184,13 @@ Storage/domain/API (13 tests `TestQuoteCommercialSnapshot*` más pruebas API):
   distintas de múltiples opciones producen JSON idéntico y no mutan el input.
 - Publish/accept, retry y concurrencia mantienen snapshot/timestamps/audit
   inmutables; cross-tenant retorna 404 uniforme y RLS app-role ve cero filas.
-- INSERT SQL directo NULL o con snapshot corrupto falla en PostgreSQL. Un draft
-  corrupto simulado por restore privilegiado tampoco puede publicarse bajo
+- INSERT SQL directo NULL o con snapshot corrupto falla en PostgreSQL. El rol
+  `granete_app` rechaza quantity 2 con una sola unidad activa, IDs duplicados
+  de línea/unidad, binding ajeno, descriptor de opción incompleto/fallback UUID
+  y orden no canónico; un draft canónico sí cruza a published con su timestamp.
+  Quantity cero se acepta sólo con unidades terminales y superseding conserva
+  byte-for-byte esa cardinalidad/lifecycle histórico.
+  Un draft corrupto simulado por restore privilegiado tampoco puede publicarse bajo
   `granete_app`. El upgrade real
   siembra draft/published/accepted antes de 000130, preserva identidad/status/
   created_at con snapshot/timestamps NULL, prueba fail-closed, FORCE RLS,
@@ -197,11 +207,12 @@ Storage/domain/API (13 tests `TestQuoteCommercialSnapshot*` más pruebas API):
 El diff excede el alcance de la autorización de tamaño anterior; el incremento
 autorado requiere una decisión nueva del owner. No se ocultan artifacts del total:
 
-- Total PR contra base: **3713 additions + 127 deletions = 3840 líneas**.
-- Autorado (producción + tests + docs): **3562 + 106 = 3668 líneas**.
+- Total PR contra base: **4038 additions + 127 deletions = 4165 líneas**.
+- Autorado (producción + tests + docs): **3887 + 106 = 3993 líneas**.
 - Generado OpenAPI Go/TS: **151 + 21 = 172 líneas**.
 - Rondas: `4661745`: **1071 + 268 = 1339**; `85beb97`: **330 + 90 =
-  420 líneas** (generated 2; autorado 418).
+  420 líneas** (generated 2; autorado 418); corrección final sobre `f861458`:
+  **385 + 60 = 445 líneas** (generated 2; autorado 443).
 
 ## Pendiente / siguientes slices
 
@@ -213,9 +224,10 @@ autorado requiere una decisión nueva del owner. No se ocultan artifacts del tot
 
 - `./init.sh` PASS (preflight).
 - `go vet ./...` PASS.
-- `GOFLAGS='-p=1' go test ./...`: PASS (storage 282.998 s; pilotreadiness 220.970 s; cero fallos).
-- Focused: domain + **13/13** `TestQuoteCommercialSnapshot*` (incl. upgrade
-  pre-000130, down/replay y app-role INSERT) + API quote/idempotency +
+- `GOFLAGS='-p=1' go test ./...`: PASS en árbol final (rerun serial limpio; cero fallos).
+- Focused: domain/storage/API comercial PASS, incluyendo **8 subcasos SQL
+  app-role inválidos**, draft válido→published, upgrade pre-000130, down/replay,
+  validación de bindings canónicos y lifecycle terminal; API quote/idempotency +
   regresiones lifecycle/requote/release/Digital Thread PASS.
 - `pnpm openapi:check` PASS (sin drift) · `pnpm typecheck` PASS.
 - `pnpm test`: verde — UI 1.690, Web 442, Mobile 73, Desktop 17 (más storage/

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -106,13 +107,13 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 	if snapshot.Schema != QuoteCommercialSnapshotSchema {
 		return fmt.Errorf("%w: unknown commercial snapshot schema %q", ErrInvalidRevisionSnapshot, snapshot.Schema)
 	}
-	if snapshot.Currency == "" {
+	if strings.TrimSpace(snapshot.Currency) == "" {
 		return fmt.Errorf("%w: commercial snapshot currency is empty", ErrInvalidRevisionSnapshot)
 	}
-	if snapshot.Customer.ID == "" || snapshot.Customer.Name == "" {
+	if strings.TrimSpace(snapshot.Customer.ID) == "" || strings.TrimSpace(snapshot.Customer.Name) == "" {
 		return fmt.Errorf("%w: commercial snapshot customer identity is incomplete", ErrInvalidRevisionSnapshot)
 	}
-	if snapshot.Project.ID == "" || snapshot.Project.Name == "" {
+	if strings.TrimSpace(snapshot.Project.ID) == "" || strings.TrimSpace(snapshot.Project.Name) == "" {
 		return fmt.Errorf("%w: commercial snapshot project identity is incomplete", ErrInvalidRevisionSnapshot)
 	}
 	if snapshot.CapturedAt.IsZero() {
@@ -182,14 +183,19 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 		summed.SalePrice += line.Amounts.SalePrice
 	}
 	activeByLine := make(map[string]int, len(snapshot.Lines))
+	unitIDs := make(map[string]struct{}, len(snapshot.Units))
 	for i, unit := range snapshot.Units {
 		if _, err := uuid.Parse(unit.FurnitureInstanceID); err != nil {
 			return fmt.Errorf("%w: commercial snapshot unit %d has invalid physical identity", ErrInvalidRevisionSnapshot, i)
 		}
+		if _, duplicate := unitIDs[unit.FurnitureInstanceID]; duplicate {
+			return fmt.Errorf("%w: duplicate commercial unit %s", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
+		}
+		unitIDs[unit.FurnitureInstanceID] = struct{}{}
 		if _, err := uuid.Parse(unit.QuoteLineID); err != nil {
 			return fmt.Errorf("%w: commercial snapshot unit %d has incomplete physical/commercial identity", ErrInvalidRevisionSnapshot, i)
 		}
-		if unit.ModuleCode == "" || unit.ModuleName == "" {
+		if strings.TrimSpace(unit.ModuleCode) == "" || strings.TrimSpace(unit.ModuleName) == "" || looksLikeUUID(unit.ModuleCode) || looksLikeUUID(unit.ModuleName) {
 			return fmt.Errorf("%w: commercial snapshot unit %d has no customer-facing module descriptor", ErrInvalidRevisionSnapshot, i)
 		}
 		if unit.Options == nil {
@@ -199,12 +205,16 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 			return fmt.Errorf("%w: commercial snapshot unit %s is not bound to quote line %s", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, unit.QuoteLineID)
 		}
 		for j, option := range unit.Options {
-			if option.GroupCode == "" || option.GroupLabel == "" || option.ChoiceID == "" || option.ChoiceLabel == "" {
+			if strings.TrimSpace(option.GroupCode) == "" || strings.TrimSpace(option.GroupLabel) == "" || strings.TrimSpace(option.ChoiceLabel) == "" ||
+				looksLikeUUID(option.GroupCode) || looksLikeUUID(option.GroupLabel) || looksLikeUUID(option.ChoiceLabel) {
 				return fmt.Errorf("%w: commercial snapshot unit %s option %d has no customer-facing descriptor", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, j)
+			}
+			if _, err := uuid.Parse(option.ChoiceID); err != nil {
+				return fmt.Errorf("%w: commercial snapshot unit %s option %d has invalid choice identity", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, j)
 			}
 			if j > 0 {
 				prior := unit.Options[j-1]
-				if prior.GroupCode > option.GroupCode || (prior.GroupCode == option.GroupCode && prior.ChoiceID > option.ChoiceID) {
+				if prior.GroupCode >= option.GroupCode {
 					return fmt.Errorf("%w: commercial snapshot unit %s options are not deterministic", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
 				}
 			}
@@ -216,6 +226,11 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 		}
 		if unit.LifecycleStatus == "active" {
 			activeByLine[unit.QuoteLineID]++
+		}
+	}
+	for instanceID, lineID := range instanceLine {
+		if _, exists := unitIDs[instanceID]; !exists {
+			return fmt.Errorf("%w: commercial snapshot line %s has no descriptor for furniture instance %s", ErrInvalidRevisionSnapshot, lineID, instanceID)
 		}
 	}
 	for _, line := range snapshot.Lines {
@@ -236,6 +251,11 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 		}
 	}
 	return nil
+}
+
+func looksLikeUUID(value string) bool {
+	_, err := uuid.Parse(value)
+	return err == nil
 }
 
 func commercialAmountsEqual(a, b float64) bool {

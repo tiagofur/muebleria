@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -9,6 +10,41 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func mutateQuoteCommercialEnvelope(t *testing.T, mutate func(map[string]any)) string {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(validQuoteCommercialEnvelope), &payload); err != nil {
+		t.Fatal(err)
+	}
+	mutate(payload)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
+}
+
+func assertAppRoleQuoteSnapshotInsertRejected(t *testing.T, pool *pgxpool.Pool, id string, revision int, payload string) {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, commercial_snapshot)
+		VALUES ($1,$2,$3,$4,'draft',$5::jsonb)`, id, migrationQuoteOrg, migrationQuoteProject, revision, payload)
+	if err == nil || !strings.Contains(err.Error(), "not a valid") {
+		t.Fatalf("app-role invalid canonical snapshot insert must be rejected, got %v", err)
+	}
+}
 
 const (
 	migrationQuoteOrg            = "a1000000-0000-0000-0000-000000000001"
@@ -118,6 +154,143 @@ func TestQuoteCommercialSnapshotMigrationFreshAndDirectSQLValidation(t *testing.
 		t.Fatalf("app-role invalid canonical lifecycle insert must be rejected, got %v", err)
 	}
 	_ = tx.Rollback(ctx)
+
+	invalidSnapshots := []struct {
+		name     string
+		id       string
+		revision int
+		payload  string
+	}{
+		{
+			name: "quantity two with one active unit", id: "a4000000-0000-0000-0000-000000000021", revision: 21,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				payload["lines"].([]any)[0].(map[string]any)["quantity"] = float64(2)
+			}),
+		},
+		{
+			name: "duplicate quote line identity", id: "a4000000-0000-0000-0000-000000000022", revision: 22,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				line := payload["lines"].([]any)[0].(map[string]any)
+				payload["lines"] = append(payload["lines"].([]any), line)
+			}),
+		},
+		{
+			name: "duplicate furniture instance identity", id: "a4000000-0000-0000-0000-000000000023", revision: 23,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				unit := payload["units"].([]any)[0].(map[string]any)
+				payload["units"] = append(payload["units"].([]any), unit)
+			}),
+		},
+		{
+			name: "duplicate furniture identity inside line", id: "a4000000-0000-0000-0000-000000000028", revision: 28,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				line := payload["lines"].([]any)[0].(map[string]any)
+				line["furnitureInstanceIds"] = append(line["furnitureInstanceIds"].([]any), line["furnitureInstanceIds"].([]any)[0])
+			}),
+		},
+		{
+			name: "unit bound to unknown quote line", id: "a4000000-0000-0000-0000-000000000024", revision: 24,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				payload["units"].([]any)[0].(map[string]any)["quoteLineId"] = "62000000-0000-0000-0000-000000000099"
+			}),
+		},
+		{
+			name: "incomplete option descriptor", id: "a4000000-0000-0000-0000-000000000025", revision: 25,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				payload["units"].([]any)[0].(map[string]any)["options"] = []any{map[string]any{
+					"groupCode": "FRONT", "groupLabel": "Front", "choiceId": "82000000-0000-0000-0000-000000000001",
+				}}
+			}),
+		},
+		{
+			name: "non-canonical option order", id: "a4000000-0000-0000-0000-000000000026", revision: 26,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				payload["units"].([]any)[0].(map[string]any)["options"] = []any{
+					map[string]any{"groupCode": "INTERIOR", "groupLabel": "Interior", "choiceId": "82000000-0000-0000-0000-000000000002", "choiceLabel": "White"},
+					map[string]any{"groupCode": "FRONT", "groupLabel": "Front", "choiceId": "82000000-0000-0000-0000-000000000001", "choiceLabel": "Oak"},
+				}
+			}),
+		},
+		{
+			name: "uuid option label fallback", id: "a4000000-0000-0000-0000-000000000029", revision: 29,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				payload["units"].([]any)[0].(map[string]any)["options"] = []any{map[string]any{
+					"groupCode": "FRONT", "groupLabel": "Front", "choiceId": "82000000-0000-0000-0000-000000000001", "choiceLabel": "82000000-0000-0000-0000-000000000001",
+				}}
+			}),
+		},
+	}
+	for _, test := range invalidSnapshots {
+		t.Run(test.name, func(t *testing.T) {
+			assertAppRoleQuoteSnapshotInsertRejected(t, pool, test.id, test.revision, test.payload)
+		})
+	}
+
+	// A canonical draft created by the runtime role remains publishable: the
+	// database backstop rejects corruption without shadowing the valid lifecycle.
+	tx, err = pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, commercial_snapshot)
+		VALUES ('a4000000-0000-0000-0000-000000000027',$1,$2,27,'draft',$3::jsonb)`, migrationQuoteOrg, migrationQuoteProject, validQuoteCommercialEnvelope); err != nil {
+		t.Fatalf("insert canonical draft: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE quote_revisions SET status='published', published_at=NOW()
+		WHERE id='a4000000-0000-0000-0000-000000000027'`); err != nil {
+		t.Fatalf("publish canonical draft: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	var publishedAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT status,published_at FROM quote_revisions WHERE id='a4000000-0000-0000-0000-000000000027'`).Scan(&status, &publishedAt); err != nil || status != "published" || publishedAt.IsZero() {
+		t.Fatalf("canonical draft publication status=%q publishedAt=%s err=%v", status, publishedAt, err)
+	}
+
+	terminalEnvelope := mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+		payload["lines"].([]any)[0].(map[string]any)["quantity"] = float64(0)
+		payload["units"].([]any)[0].(map[string]any)["lifecycleStatus"] = "removed"
+	})
+	tx, err = pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, commercial_snapshot)
+		VALUES ('a4000000-0000-0000-0000-000000000030',$1,$2,30,'draft',$3::jsonb)`, migrationQuoteOrg, migrationQuoteProject, terminalEnvelope); err != nil {
+		t.Fatalf("insert terminal-only canonical draft: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE quote_revisions SET status='published', published_at=NOW()
+		WHERE id='a4000000-0000-0000-0000-000000000030'`); err != nil {
+		t.Fatalf("publish terminal-only canonical draft: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE quote_revisions SET status='superseded'
+		WHERE id='a4000000-0000-0000-0000-000000000030'`); err != nil {
+		t.Fatalf("supersede terminal-only canonical revision: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var frozenQuantity int
+	var frozenLifecycle string
+	if err := pool.QueryRow(ctx, `SELECT (commercial_snapshot#>>'{lines,0,quantity}')::int,
+		commercial_snapshot#>>'{units,0,lifecycleStatus}' FROM quote_revisions
+		WHERE id='a4000000-0000-0000-0000-000000000030'`).Scan(&frozenQuantity, &frozenLifecycle); err != nil || frozenQuantity != 0 || frozenLifecycle != "removed" {
+		t.Fatalf("superseded terminal history quantity=%d lifecycle=%q err=%v", frozenQuantity, frozenLifecycle, err)
+	}
 
 	// Simulate corrupt at-rest bytes from a privileged restore. Even if such a
 	// row bypassed INSERT protection, the app role cannot publish it.

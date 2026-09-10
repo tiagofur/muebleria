@@ -9174,7 +9174,7 @@
       },
       "QuoteCommercialLine": {
         "type": "object",
-        "description": "One frozen commercial QuoteLine. Quantity counts active physical units; furnitureInstanceIds preserves the exact physical identities, including terminal units retained as history.",
+        "description": "One frozen commercial QuoteLine. Quantity is the integer count of active physical units and must be positive while any unit is active; zero is reserved for terminal-only removed/cancelled history. furnitureInstanceIds preserves every exact physical identity. Superseding a QuoteRevision does not rewrite this frozen unit lifecycle.",
         "additionalProperties": false,
         "required": [
           "quoteLineId",
