@@ -1,3 +1,13 @@
+# Issue #637 — [P0][BUG][DT-MAT] Repair quoted materials missing from existing working snapshots
+
+- Aprobada (`status:approved`). Base `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`; rama `fix/637-dt-material-provenance-reconcile`.
+- Phase 1 (pre-edición): causa raíz verificada — pre-#621 la colocación no sembraba choices y `buildInitialQuoteItems` ponía `{}`; el merge/publish conservan verbatim, así que unidades ya conectadas congelaron `material_choices={}` en working copy y R1–R3 mientras la línea current de cotización sigue llevando la verdad (`project_item_choices`, misma autoridad que #621).
+- Entrega: clasificador puro 4 estados (`authored|quoted_missing_from_working|inherited_default|missing_unresolved`) + detección read-only `GET /designs/{id}/working-copy/material-provenance` + comando explícito idempotente `POST /designs/{id}/working-copy/material-choices:reconcile` (fill-only, expected_updated_at, audit durable misma tx, fail-closed). R1–R3 inmutables; R4 es la primera revisión con las choices. OpenAPI/codegen regenerado; Ruby: el plugin relee el working copy reconciliado y el merger lo conserva verbatim (2 pruebas nuevas).
+- Evidencia: `go test ./...` verde; PostgreSQL real (matriz completa incl. inmutabilidad R1–R3 + R4); `rake unit boundary` + rubocop verdes; `pnpm openapi:check`/`typecheck`/`test` verdes. Real-host SketchUp smoke: NOT PROVEN.
+- Detalle: `progress/implementation_637_dt_material_reconciliation.md`.
+- Correction 2026-09-09 18:30 CST: resolver únicamente el bloqueo de contrato de PR #638 declarando `IdempotencyKey` en el POST de reconciliación, regenerando Go/TS y agregando una regresión cliente→header; sin UI ni cambios de dominio/storage.
+- Correction evidence: preflight `./init.sh` PASS; después del cambio, storage 191/191, `pnpm openapi:check`, `pnpm typecheck` y `git diff --check` PASS. El cliente generado crea y envía `Idempotency-Key` por defecto.
+
 # Issue #635 — Design artifact URL resolution and browser access
 
 - Approval: GitHub issue #635 is open with `status:approved`; leader handoff authorized implementation only, without PR creation, merge, or issue closure.

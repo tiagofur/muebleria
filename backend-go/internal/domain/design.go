@@ -73,6 +73,9 @@ var (
 	ErrDesignRevisionImmutable              = errors.New("design revision is immutable")
 	ErrDesignNotActive                      = errors.New("design is not active")
 	ErrWorkingCopyNotFound                  = errors.New("design working copy not found")
+	// #637 / DT-MAT: the exact furniture instance is not part of this
+	// design's working copy — nothing to reconcile, fail closed.
+	ErrWorkingItemNotFound = errors.New("design working item not found")
 	ErrSerializationFailed                  = errors.New("snapshot serialization failed")
 	// #395: approval is an explicit, permission-protected lifecycle decision
 	// on an exact revision — publishing alone never authorizes production.

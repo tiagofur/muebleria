@@ -191,6 +191,10 @@ func respondWithDesignError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Mueble referenciado no encontrado", nil)
 	case errors.Is(err, domain.ErrWorkingCopyNotFound):
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "El borrador de trabajo no existe", nil)
+	case errors.Is(err, domain.ErrWorkingItemNotFound):
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "La unidad no forma parte del borrador de trabajo de este diseño", nil)
+	case errors.Is(err, storage.ErrVersionConflict):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "El borrador de trabajo cambió; volvé a leer su estado antes de reconciliar", nil)
 	case errors.Is(err, domain.ErrSerializationFailed):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Error de serialización del diseño", nil)
 	case errors.Is(err, domain.ErrFurnitureInstanceProjectNotWritable):

@@ -263,6 +263,75 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal({ 'FRENTE' => 'mat-authored' }, resolve['choices'])
   end
 
+  # #637 / DT-MAT: after the web/backend reconciliation fills the lost quoted
+  # finish into the working copy of an EXISTING connected unit, the plugin
+  # reads the exact explicit choices from the refreshed working copy: they
+  # drive the authoritative layout resolve on re-placement and survive the
+  # confirm merge verbatim. No silent local default masquerades as the quoted
+  # provenance.
+  def test_reconciled_working_copy_choices_drive_resolve_and_survive_confirm
+    reconciled = { 'FRENTES' => 'mat-roble', 'INTERIOR' => 'mat-blanco' }
+    stub_project_furniture([instance_body(FI_1, 'quote', display_choices: reconciled)])
+    stub_working_copy(working_copy_body([
+                                          { 'furniture_instance_id' => FI_1,
+                                            'furniture_definition_id' => DEFINITION_ID,
+                                            'parameters' => { 'widthMm' => 600 },
+                                            'material_choices' => reconciled,
+                                            'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                                             'rotation_deg' => [0.0, 0.0, 0.0] } }
+                                        ]))
+
+    # The local root is gone; re-placing the connected unit re-runs the
+    # authoritative resolve with the RECONCILED explicit choices.
+    result = @placer.place(FI_1)
+    assert result['ok'], result.inspect
+    assert_equal 'pending_position', result['code']
+
+    resolve = @catalog.layout_resolves.last
+    assert_equal reconciled, resolve['choices'],
+                 'layout resolve must use the reconciled explicit choices, never a default'
+
+    finalize_position!(@model, FI_1)
+    confirmed = @placer.confirm_placement(FI_1)
+    assert confirmed['ok'], confirmed.inspect
+
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    assert_equal reconciled, put['body']['items'].first['material_choices'],
+                 'confirm must keep the reconciled choices verbatim (authored design truth)'
+  end
+
+  # Negative mirror of #637: when the working copy still carries the historical
+  # empty snapshot and only the display quotes a finish, the re-placement seeds
+  # the quoted finish (#620) but a confirm that finds an EXISTING empty item
+  # keeps it empty — the plugin never fabricates provenance locally; only the
+  # explicit server-side reconciliation may fill it.
+  def test_unreconciled_working_item_is_never_locally_backfilled_at_confirm
+    stub_project_furniture([instance_body(FI_1, 'quote', display_choices: { 'FRENTES' => 'mat-roble' })])
+    stub_working_copy(working_copy_body([
+                                          { 'furniture_instance_id' => FI_1,
+                                            'furniture_definition_id' => DEFINITION_ID,
+                                            'parameters' => { 'widthMm' => 600 },
+                                            'material_choices' => {},
+                                            'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                                             'rotation_deg' => [0.0, 0.0, 0.0] } }
+                                        ]))
+
+    result = @placer.place(FI_1)
+    assert result['ok'], result.inspect
+    # #620 seeding still applies while the unit has no authored choice: the
+    # resolve sees the quoted finish (it is not an authored truth yet).
+    assert_equal({ 'FRENTES' => 'mat-roble' }, @catalog.layout_resolves.last['choices'])
+
+    finalize_position!(@model, FI_1)
+    confirmed = @placer.confirm_placement(FI_1)
+    assert confirmed['ok'], confirmed.inspect
+
+    # The merge keeps the EXISTING working item's fields verbatim: the empty
+    # snapshot stays empty until the explicit server-side reconciliation.
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    assert_equal({}, put['body']['items'].first['material_choices'])
+  end
+
   def test_confirm_writes_working_item_with_final_transform
     @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
                        [instance_body(FI_1, 'quote', display_dims: [650, 720, 560])])

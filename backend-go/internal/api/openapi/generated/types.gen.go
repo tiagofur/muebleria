@@ -1107,6 +1107,51 @@ type ResetDesignWorkingCopyRequest struct {
 	RevisionID string `json:"revision_id"`
 }
 
+type ReconcileDesignWorkingMaterialsRequest struct {
+	FurnitureInstanceID string  `json:"furniture_instance_id"`
+	ExpectedUpdatedAt   *string `json:"expected_updated_at,omitempty"`
+}
+
+type MaterialProvenanceStatus string
+
+const (
+	MaterialProvenanceStatusAuthored                 MaterialProvenanceStatus = "authored"
+	MaterialProvenanceStatusQuotedMissingFromWorking MaterialProvenanceStatus = "quoted_missing_from_working"
+	MaterialProvenanceStatusInheritedDefault         MaterialProvenanceStatus = "inherited_default"
+	MaterialProvenanceStatusMissingUnresolved        MaterialProvenanceStatus = "missing_unresolved"
+)
+
+type MaterialRoleProvenance struct {
+	Role            string                   `json:"role"`
+	WorkingChoice   *string                  `json:"working_choice,omitempty"`
+	QuotedChoice    *string                  `json:"quoted_choice,omitempty"`
+	EffectiveChoice *string                  `json:"effective_choice,omitempty"`
+	Provenance      MaterialProvenanceStatus `json:"provenance"`
+}
+
+type DesignWorkingItemMaterialProvenance struct {
+	FurnitureInstanceID   string                   `json:"furniture_instance_id"`
+	FurnitureDefinitionID *string                  `json:"furniture_definition_id,omitempty"`
+	Roles                 []MaterialRoleProvenance `json:"roles"`
+	Reconcilable          bool                     `json:"reconcilable"`
+}
+
+type DesignWorkingCopyMaterialProvenance struct {
+	DesignID             string                                `json:"design_id"`
+	ProjectID            string                                `json:"project_id"`
+	WorkingCopyUpdatedAt *string                               `json:"working_copy_updated_at,omitempty"`
+	Items                []DesignWorkingItemMaterialProvenance `json:"items"`
+}
+
+type DesignWorkingMaterialsReconciliation struct {
+	DesignID             string            `json:"design_id"`
+	ProjectID            string            `json:"project_id"`
+	FurnitureInstanceID  string            `json:"furniture_instance_id"`
+	FilledChoices        map[string]string `json:"filled_choices"`
+	PreservedChoices     map[string]string `json:"preserved_choices"`
+	WorkingCopyUpdatedAt string            `json:"working_copy_updated_at"`
+}
+
 type PublishDesignRevisionRequest struct {
 	SourceType     DesignRevisionSourceType `json:"source_type"`
 	BaseRevisionID *string                  `json:"base_revision_id,omitempty"`

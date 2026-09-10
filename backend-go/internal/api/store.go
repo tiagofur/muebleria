@@ -309,6 +309,10 @@ type Store interface {
 	GetDesignWorkingCopy(ctx context.Context, designID string) (*domain.DesignWorkingCopy, error)
 	UpdateDesignWorkingCopy(ctx context.Context, cmd storage.UpdateDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error)
 	ResetDesignWorkingCopy(ctx context.Context, cmd storage.ResetDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error)
+	// #637 / DT-MAT: quoted-material provenance detection (read-only) and
+	// the explicit fill-only reconciliation into the mutable working copy.
+	GetDesignWorkingCopyMaterialProvenance(ctx context.Context, designID string) (*storage.DesignWorkingCopyMaterialProvenance, error)
+	ReconcileDesignWorkingMaterials(ctx context.Context, cmd storage.ReconcileDesignWorkingMaterialsCommand) (*storage.DesignWorkingMaterialsReconciliation, error)
 	PublishDesignRevision(ctx context.Context, cmd storage.PublishDesignRevisionCommand) (*domain.DesignRevision, error)
 	GetDesignRevision(ctx context.Context, designID string, revisionID string) (*domain.DesignRevision, error)
 	ListDesignRevisions(ctx context.Context, designID string) ([]domain.DesignRevision, error)

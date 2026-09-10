@@ -89,6 +89,12 @@ type stubStore struct {
 	updateDesignWorkingCopyErr error
 	resetDesignWorkingCopyCmd  *storage.ResetDesignWorkingCopyCommand
 	resetDesignWorkingCopyErr  error
+	// #637 / DT-MAT quoted-material provenance + reconciliation
+	materialProvenance       *storage.DesignWorkingCopyMaterialProvenance
+	materialProvenanceErr    error
+	reconcileMaterialsCmd    *storage.ReconcileDesignWorkingMaterialsCommand
+	reconcileMaterialsErr    error
+	reconcileMaterialsResult *storage.DesignWorkingMaterialsReconciliation
 	// #392 / DT-8 staged publish flow
 	prepareDesignPublishCmd             *storage.PrepareDesignPublishCommand
 	prepareDesignPublishErr             error
@@ -2096,6 +2102,38 @@ func (s *stubStore) ResetDesignWorkingCopy(_ context.Context, cmd storage.ResetD
 	}
 	s.designWorkingCopiesByID[cmd.DesignID] = wc
 	return &wc, nil
+}
+
+func (s *stubStore) GetDesignWorkingCopyMaterialProvenance(_ context.Context, designID string) (*storage.DesignWorkingCopyMaterialProvenance, error) {
+	if s.materialProvenanceErr != nil {
+		return nil, s.materialProvenanceErr
+	}
+	if s.materialProvenance != nil {
+		return s.materialProvenance, nil
+	}
+	return &storage.DesignWorkingCopyMaterialProvenance{
+		DesignID:  designID,
+		ProjectID: "proj-1",
+		Items:     []storage.DesignWorkingItemMaterialProvenance{},
+	}, nil
+}
+
+func (s *stubStore) ReconcileDesignWorkingMaterials(_ context.Context, cmd storage.ReconcileDesignWorkingMaterialsCommand) (*storage.DesignWorkingMaterialsReconciliation, error) {
+	s.reconcileMaterialsCmd = &cmd
+	if s.reconcileMaterialsErr != nil {
+		return nil, s.reconcileMaterialsErr
+	}
+	if s.reconcileMaterialsResult != nil {
+		return s.reconcileMaterialsResult, nil
+	}
+	return &storage.DesignWorkingMaterialsReconciliation{
+		DesignID:             cmd.DesignID,
+		ProjectID:            "proj-1",
+		FurnitureInstanceID:  cmd.FurnitureInstanceID,
+		FilledChoices:        map[string]string{},
+		PreservedChoices:     map[string]string{},
+		WorkingCopyUpdatedAt: time.Now(),
+	}, nil
 }
 
 // compile-time guard: stubStore must satisfy Store.
