@@ -1,3 +1,13 @@
+# Issue #642 — Slice 2a: exact QuoteRevision authority in quote detail
+
+- Base `origin/main@ad8865e132c0d319324f34aa50505dd8149c7c48`; branch
+  `feat/642-quote-revision-consumers`; issue remains open.
+- Bounded partition: authenticated Cotizaciones detail only. Identity, status,
+  totals and lifecycle navigation use the accepted (otherwise newest exact)
+  QuoteRevision snapshot; missing/legacy authority fails closed.
+- Remaining list/dashboard/operations consumers stay inventoried for Slice 2b;
+  PDF/XLSX/export handlers remain Slice 3. See implementation report.
+
 # Issue #642 — [P1][QUOTE-AUTH] Slice 1: immutable commercial snapshot authority
 
 - Inicio: 2026-09-10 (autoinstrucción humana "Start ONLY with SLICE 1"). Issue OPEN

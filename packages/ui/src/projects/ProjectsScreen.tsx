@@ -104,6 +104,7 @@ export interface ProjectsScreenProps {
     readonly role?: string;
   }[];
   readonly ownerLabels?: Readonly<Record<string, string>>;
+  readonly quoteAuthority?: import('./components/projectDetailContext').ProjectDetailContextValue['quoteAuthority'];
   readonly onCreate: (draft: ProjectDraft) => void;
   readonly onUpdate: (id: string, draft: ProjectDraft) => void;
   readonly onDelete: (id: string) => void;
@@ -259,7 +260,7 @@ export interface ProjectsScreenProps {
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
   /** WEB-DT-2 (#501): opens the server-backed Designs and revisions workspace. */
   readonly onOpenDesigns?: (projectId: string) => void;
-  readonly onOpenReconciliation?: (projectId: string) => void;
+  readonly onOpenReconciliation?: (projectId: string, quoteRevisionId?: string) => void;
   /**
    * Commercial quote export for client (F030 / #36).
    * Shell owns breakdown → xlsx → download.
@@ -460,6 +461,7 @@ export function ProjectsScreen({
   canAssignOwner = false,
   assignableOwners = [],
   ownerLabels = {},
+  quoteAuthority,
   onCreate,
   onUpdate,
   onDelete,
@@ -627,6 +629,10 @@ export function ProjectsScreen({
     (state.selectedProject.status === 'accepted' ||
       state.selectedProject.status === 'produced');
   const productionExportDisabled = exportDisabled || !productionExportOk;
+  const canMutateCommercialDraft = canMutate && (
+    !quoteAuthority || quoteAuthority.kind === 'empty' ||
+    (quoteAuthority.kind === 'ready' && quoteAuthority.status === 'draft')
+  );
 
   const exportMenu = useMemo<{
     readonly sections: readonly DropdownMenuSection[];
@@ -712,6 +718,7 @@ export function ProjectsScreen({
           catalogStructures={catalogStructures}
           customers={customers}
           ownerLabels={ownerLabels}
+          quoteAuthority={quoteAuthority}
           breakdown={breakdown}
           materialSummary={materialSummary}
           breakdownLoading={breakdownLoading}
@@ -817,7 +824,7 @@ export function ProjectsScreen({
           canApproveSurvey={canApproveSurvey}
           overviewNav={overviewNav}
           onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}
-          canMutate={canMutate}
+          canMutate={canMutateCommercialDraft}
           canDelete={canDelete}
           onRestoreVersion={onRestoreVersion ? (version) => onRestoreVersion(state.selectedProject!.id, version) : undefined}
           canReopen={canReopen}
@@ -916,7 +923,7 @@ export function ProjectsScreen({
         canAssignOwner={canAssignOwner}
         assignableOwners={assignableOwners}
         showCosts={showCosts}
-        canMutate={canMutate}
+        canMutate={canMutateCommercialDraft}
         canReopen={canReopen}
         canMarkProduced={canMarkProduced}
         metaModalOpen={state.metaModalOpen}

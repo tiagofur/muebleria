@@ -841,6 +841,18 @@ Reglas duras:
    con snapshot y timestamps NULL, identidad y status intactos. Sólo una nueva
    revisión puede nacer con autoridad v1; no existe backfill inventado.
 
+Inventario de consumidores runtime (Slice 2):
+
+| Consumer | Estado |
+|---|---|
+| Detalle de Cotizaciones: identidad, estado, totales y Enviar/Aceptar | Migrado: QuoteRevision aceptada o última exacta; lifecycle exacto |
+| Lista de Cotizaciones y `projectEstimates` | Pendiente: todavía usa Project/priceSnapshot o cálculo vivo |
+| Dashboard Inicio/Ventas (`dashboardStats`, `dashboardRecent`, funnel) | Pendiente: misma dependencia legacy |
+| Operaciones/Producción (`ProductionQueue`, workspace) | Pendiente: separar aceptación comercial de etapa operativa |
+| Costing/version history | Pendiente: clasificar autoridad comercial vs. costo operativo |
+| PDF/XLSX y export handlers | Slice 3; excluido de esta partición |
+| `Project.commercialStatus` CRM | Fuera: estado de oportunidad, no lifecycle de QuoteRevision |
+
 ---
 
 ## 17. Approval y ProductionRelease

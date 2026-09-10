@@ -11,7 +11,6 @@ import {
   estimateBoardSheets,
   parseNestingImportCsv,
   nestingImportFromRows,
-  isProjectClosed,
 } from '@granete/domain';
 import { AlertCircle } from 'lucide-react';
 import { InlineLoading } from '../../common';
@@ -39,7 +38,9 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
     canMutate,
     onRestoreVersion,
     onImportNesting,
+    quoteAuthority,
   } = useProjectDetail();
+  const currency = quoteAuthority?.kind === 'ready' ? quoteAuthority.currency : project.currency;
 
   return (
     <aside
@@ -54,14 +55,14 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
       <div className="project-totals__header">
         <div className="project-totals__heading">
           <h3 className="project-totals__title">
-            {isProjectClosed(project.status) && project.priceSnapshot
-              ? 'Totales (congelados)'
+            {quoteAuthority?.kind === 'ready'
+              ? `Totales congelados · Q${quoteAuthority.revisionNumber}`
               : 'Totales'}
           </h3>
-          {isProjectClosed(project.status) && project.priceSnapshot ? (
+          {quoteAuthority?.kind === 'ready' ? (
             <span
               className="project-totals__frozen-badge"
-              title={`Precios capturados el ${formatIsoDate(project.priceSnapshot.capturedAt)}`}
+              title={`Precios capturados el ${formatIsoDate(quoteAuthority.capturedAt ?? '')}`}
             >
               Precios congelados
             </span>
@@ -72,10 +73,19 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
         ) : null}
       </div>
 
-      {breakdownError ? (
+      {breakdownError || (quoteAuthority && 'message' in quoteAuthority) ? (
         <p className="project-totals__error" role="alert" data-testid="breakdown-error">
           <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
-          <span>{breakdownError}</span>
+          <span>{breakdownError ?? (quoteAuthority && 'message' in quoteAuthority ? quoteAuthority.message : '')}</span>
+        </p>
+      ) : null}
+      {quoteAuthority?.staleMessage ? (
+        <p className="project-totals__error" role="alert">
+          <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
+          <span>{quoteAuthority.staleMessage}</span>
+          <button type="button" className="btn btn--secondary btn--small" onClick={quoteAuthority.onRetry}>
+            Reintentar
+          </button>
         </p>
       ) : null}
 
@@ -91,11 +101,11 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
           <dl className="project-totals__grid">
             {showCosts ? (
               <>
-                <div><dt>Materiales</dt><dd>{formatProjectMoney(breakdown.materialsCost, project.currency)}</dd></div>
-                <div><dt>Cantos</dt><dd>{formatProjectMoney(breakdown.edgeTotal, project.currency)}</dd></div>
-                <div><dt>Herrajes</dt><dd>{formatProjectMoney(breakdown.hardwareTotal, project.currency)}</dd></div>
-                <div><dt>Costo directo</dt><dd>{formatProjectMoney(breakdown.directCost, project.currency)}</dd></div>
-                <div><dt>MO modular</dt><dd>{formatProjectMoney(breakdown.laborModular, project.currency)}</dd></div>
+                <div><dt>Materiales</dt><dd>{formatProjectMoney(breakdown.materialsCost, currency)}</dd></div>
+                <div><dt>Cantos</dt><dd>{formatProjectMoney(breakdown.edgeTotal, currency)}</dd></div>
+                <div><dt>Herrajes</dt><dd>{formatProjectMoney(breakdown.hardwareTotal, currency)}</dd></div>
+                <div><dt>Costo directo</dt><dd>{formatProjectMoney(breakdown.directCost, currency)}</dd></div>
+                <div><dt>MO modular</dt><dd>{formatProjectMoney(breakdown.laborModular, currency)}</dd></div>
                 <div>
                   <dt>Factor margen</dt>
                   <dd>
@@ -115,7 +125,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
             <div className="project-totals__sale-row">
               <dt>Precio de venta</dt>
               <dd className="project-totals__sale">
-                {formatProjectMoney(breakdown.salePrice, project.currency)}
+                {formatProjectMoney(breakdown.salePrice, currency)}
               </dd>
             </div>
           </dl>
@@ -153,7 +163,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
                     <span className="project-material-summary__meta">
                       {row.areaM2.toFixed(3)} m²
                       {showCosts
-                        ? ` · ${formatProjectMoney(row.boardCost, project.currency)}`
+                        ? ` · ${formatProjectMoney(row.boardCost, currency)}`
                         : ''}
                     </span>
                   </li>
@@ -289,7 +299,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
                     <span className="project-material-summary__meta">
                       {row.edgeMl.toFixed(2)} ML
                       {showCosts
-                        ? ` · ${formatProjectMoney(row.edgeCost, project.currency)}`
+                        ? ` · ${formatProjectMoney(row.edgeCost, currency)}`
                         : ''}
                     </span>
                   </li>
@@ -316,7 +326,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
                     <span className="project-material-summary__meta">
                       ×{row.quantity}
                       {showCosts
-                        ? ` · ${formatProjectMoney(row.lineCost, project.currency)}`
+                        ? ` · ${formatProjectMoney(row.lineCost, currency)}`
                         : ''}
                     </span>
                   </li>

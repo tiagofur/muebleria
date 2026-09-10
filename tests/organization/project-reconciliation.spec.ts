@@ -580,6 +580,29 @@ async function publishRevisionWithItemIds(options: {
     }
     expect(doubleAcceptRejected).toBe(true);
 
+    // Cotizaciones consumes the exact accepted revision even while the legacy
+    // Project.status deliberately remains draft.
+    const acceptedRevision = (await lifecycleClient.listProjectQuoteRevisions(
+      lifecycleOwner.token,
+      seeded.projectId,
+    )).find((revision) => revision.status === 'accepted');
+    expect(acceptedRevision?.commercialSnapshot).toBeTruthy();
+    const legacyProjects = await new APIWorkspaceRepository(required('ORGANIZATION_API_BASE'), {
+      getAccessToken: () => lifecycleOwner.token,
+    }).getProjects();
+    expect(legacyProjects.find((project) => project.id === seeded.projectId)?.status).toBe('draft');
+    await page.goto(`/quotes/${seeded.projectId}`);
+    const quoteDetail = page.getByTestId('project-detail-chrome');
+    await expect(quoteDetail).toContainText('Q2 · Aceptada');
+    await expect(quoteDetail).toContainText(acceptedRevision!.commercialSnapshot!.project.name);
+    await expect(page.getByTestId('project-detail-total')).toContainText(
+      acceptedRevision!.commercialSnapshot!.breakdown.salePrice.toFixed(2),
+    );
+    await expect(page.getByTestId('project-send-quote')).toHaveCount(0);
+    await page.goto(
+      `/quotes/${seeded.projectId}/reconciliacion?qrev=${q2DraftValue}&design=${seeded.designId}&rev=${seeded.r2Id}`,
+    );
+
     // Now approve exact R2 against accepted Q2:
     await page.getByTestId('design-revision-select').selectOption(seeded.r2Id);
     await expect(page.getByTestId('approval-pending')).toBeVisible();

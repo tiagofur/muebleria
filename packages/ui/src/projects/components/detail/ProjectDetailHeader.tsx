@@ -70,6 +70,8 @@ export function ProjectDetailHeader({
     onChangeStatus,
     canMutate,
     canMarkProduced,
+    quoteAuthority,
+    onOpenReconciliation,
   } = ctx;
 
   const hasOpenInProduction = Boolean(onOpenInProduction);
@@ -102,8 +104,18 @@ export function ProjectDetailHeader({
         </button>
         <div className="workspace-chrome__identity">
           <div className="workspace-chrome__title-row">
-            <h2 className="workspace-chrome__title">{project.name}</h2>
-            <StatusBadge status={project.status} />
+            <h2 className="workspace-chrome__title">
+              {quoteAuthority?.kind === 'ready' ? quoteAuthority.projectName : project.name}
+            </h2>
+            {quoteAuthority?.kind === 'ready' ? (
+              <span className={`status-badge status-badge--${quoteAuthority.status === 'accepted' ? 'accepted' : quoteAuthority.status === 'published' ? 'quoted' : 'draft'}`}>
+                Q{quoteAuthority.revisionNumber} · {quoteAuthority.status === 'accepted' ? 'Aceptada' : quoteAuthority.status === 'published' ? 'Publicada' : quoteAuthority.status === 'superseded' ? 'Reemplazada' : 'Borrador'}
+              </span>
+            ) : quoteAuthority ? (
+              <span className="badge badge--warning-subtle">Sin autoridad comercial</span>
+            ) : (
+              <StatusBadge status={project.status} />
+            )}
             <span
               className="badge badge--neutral-subtle"
               title="Etapa Operativa del Proyecto"
@@ -157,17 +169,19 @@ export function ProjectDetailHeader({
           </div>
 
           <p className="workspace-chrome__subtitle">
-            {resolveCustomerName(project.customerId, customers)}
+            {quoteAuthority?.kind === 'ready'
+              ? quoteAuthority.customerName
+              : resolveCustomerName(project.customerId, customers)}
             {(() => {
               const cust = customers.find((c) => c.id === project.customerId);
               return cust?.phone ? (
                 <>
                   <span className="workspace-chrome__dot" aria-hidden>·</span>
                   <WhatsAppButton
-                    customerName={cust.name}
+                    customerName={quoteAuthority?.kind === 'ready' ? quoteAuthority.customerName : cust.name}
                     phone={cust.phone}
-                    projectName={project.name}
-                    quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, project.currency) : undefined}
+                    projectName={quoteAuthority?.kind === 'ready' ? quoteAuthority.projectName : project.name}
+                    quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, quoteAuthority?.kind === 'ready' ? quoteAuthority.currency : project.currency) : undefined}
                     workshopName={ctx.workshopName}
                     compact
                     label="WhatsApp"
@@ -178,7 +192,7 @@ export function ProjectDetailHeader({
             <span className="workspace-chrome__dot" aria-hidden>·</span>
             {project.items.length} mueble{project.items.length === 1 ? '' : 's'}
             <span className="workspace-chrome__dot" aria-hidden>·</span>
-            {project.currency}
+            {quoteAuthority?.kind === 'ready' ? quoteAuthority.currency : project.currency}
             {ctx.showCosts ? (
               <>
                 <span className="workspace-chrome__dot" aria-hidden>·</span>
@@ -191,14 +205,38 @@ export function ProjectDetailHeader({
       <div className="workspace-chrome__total" data-testid="project-detail-total">
         <span className="workspace-chrome__total-label">Precio de venta</span>
         <span className={chromeSale == null ? 'workspace-chrome__total-value workspace-chrome__total-value--muted' : 'workspace-chrome__total-value'}>
-          {chromeSale == null ? '—' : formatProjectMoney(chromeSale, project.currency)}
+          {chromeSale == null ? '—' : formatProjectMoney(chromeSale, quoteAuthority?.kind === 'ready' ? quoteAuthority.currency : project.currency)}
         </span>
       </div>
       <div
         className="workspace-chrome__actions project-detail__chrome-actions"
         data-testid="project-chrome-actions"
       >
-        {primary === 'send' && onChangeStatus ? (
+        {quoteAuthority?.kind === 'ready' && onOpenReconciliation && quoteAuthority.status !== 'accepted' ? (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+            data-testid="quote-revision-lifecycle-action"
+          >
+            Gestionar Q{quoteAuthority.revisionNumber}
+          </button>
+        ) : null}
+        {quoteAuthority?.kind === 'error' ? (
+          <button type="button" className="btn btn--secondary" onClick={quoteAuthority.onRetry}>
+            Reintentar carga
+          </button>
+        ) : null}
+        {(quoteAuthority?.kind === 'empty' || quoteAuthority?.kind === 'legacy') && onOpenReconciliation ? (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+          >
+            Crear nueva revisión
+          </button>
+        ) : null}
+        {!quoteAuthority && primary === 'send' && onChangeStatus ? (
           <button
             type="button"
             className="btn btn--primary"
@@ -209,7 +247,7 @@ export function ProjectDetailHeader({
             <Send size={16} strokeWidth={1.5} aria-hidden /> Enviar al cliente
           </button>
         ) : null}
-        {primary === 'accept' && onChangeStatus ? (
+        {!quoteAuthority && primary === 'accept' && onChangeStatus ? (
           <button
             type="button"
             className="btn btn--primary"

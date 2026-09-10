@@ -488,6 +488,58 @@ describe('ProjectsScreen F022', () => {
     );
   });
 
+  it('renders the exact accepted revision instead of conflicting project status', async () => {
+    const user = userEvent.setup();
+    const onOpenReconciliation = vi.fn();
+    renderScreen({
+      breakdown: sampleBreakdown,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerName: 'Cliente congelado Q2',
+        currency: 'USD',
+        capturedAt: '2026-09-10T12:00:00Z',
+      },
+      onChangeStatus: vi.fn(),
+      onOpenReconciliation,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const detail = screen.getByTestId('project-detail');
+    expect(within(detail).getByRole('heading', { name: 'Cocina congelada Q2' })).toBeTruthy();
+    expect(screen.getByTestId('project-detail-chrome').textContent).toContain('Cliente congelado Q2');
+    expect(within(detail).getByText('Q2 · Aceptada')).toBeTruthy();
+    expect(screen.getByTestId('project-detail-total').textContent).toContain('$202.50 USD');
+    expect(screen.queryByTestId('project-chrome-edit')).toBeNull();
+    expect(screen.queryByTestId('project-send-quote')).toBeNull();
+    expect(screen.queryByTestId('project-accept-quote')).toBeNull();
+  });
+
+  it('fails closed for a legacy revision without a commercial snapshot', async () => {
+    const user = userEvent.setup();
+    const onOpenReconciliation = vi.fn();
+    renderScreen({
+      breakdown: null,
+      quoteAuthority: {
+        kind: 'legacy',
+        revisionId: 'quote-1',
+        revisionNumber: 1,
+        status: 'published',
+        message: 'Q1 no contiene un snapshot comercial. Creá una nueva revisión.',
+      },
+      onOpenReconciliation,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    expect(screen.getByRole('alert').textContent).toContain('no contiene un snapshot');
+    await user.click(screen.getByRole('button', { name: 'Crear nueva revisión' }));
+    expect(onOpenReconciliation).toHaveBeenCalledWith('prj-1', 'quote-1');
+    expect(screen.getByTestId('project-detail-total').textContent).not.toContain('$202.50');
+  });
+
   it('shows loading status in totals when breakdownLoading', async () => {
     const user = userEvent.setup();
     renderScreen({
