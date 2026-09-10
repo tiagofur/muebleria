@@ -1,5 +1,14 @@
 # Issue #644 — [P0][DEMO] Golden path regression: Quote → SketchUp → DesignRevision → ProductionRelease
 
+## Correction delivery (2026-09-10)
+
+- Tested implementation commit: `7b74985d7c62f3f17a2b13dcc48a9a7f0ad0ae50`.
+- Exact merge base: `fde538a839a7b882657fafbfe41bbdd1cf91fbee`.
+- Correction diff: 3 files, 171 insertions, 55 deletions; complete PR diff
+  against main remains test-only (3 files).
+- `pnpm typecheck`: PASS.
+- `git diff --check`: PASS.
+
 - Verification lane (`status:approved`). Test-only: **zero product files changed.**
 - Branch `test/644-demo-golden-path-regression`, original implementation head
   `9661df177748d69b020dda29962f2ca88713818d`, merged with exact
