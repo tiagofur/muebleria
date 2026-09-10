@@ -50,6 +50,7 @@ var mediaFilenamePattern = regexp.MustCompile(`^[0-9a-f]{32}\.(jpg|png|webp)$`)
 const designArtifactResourcePrefix = "designart/"
 
 var designArtifactKeyPattern = regexp.MustCompile(`^designs/publish/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(model|manifest|preview)-[0-9a-f]{12}\.(skp|json|png|jpg)$`)
+var canonicalSHA256Pattern = regexp.MustCompile(`^sha256-[0-9a-f]{64}$`)
 
 // MediaResourceKey builds the canonical signed resource key for a catalog
 // media filename. Non-canonical input yields "" — callers must refuse to mint
@@ -124,7 +125,12 @@ type MediaClaims struct {
 	SessionID string `json:"sid,omitempty"`
 	// UserID records the minting user for the same purpose.
 	UserID string `json:"uid,omitempty"`
-	Ver    int    `json:"ver"`
+	// ExpectedSizeBytes and ExpectedSHA256 pin an immutable DesignRevision
+	// artifact grant to the exact persisted publication metadata. Catalog media
+	// grants omit both fields.
+	ExpectedSizeBytes *int64 `json:"expected_size_bytes,omitempty"`
+	ExpectedSHA256    string `json:"expected_sha256,omitempty"`
+	Ver               int    `json:"ver"`
 	jwt.RegisteredClaims
 }
 
@@ -152,11 +158,13 @@ func NewMediaAuthority(secret string) (*MediaAuthority, error) {
 // AbsoluteCap (when non-zero) is the minting session's absolute expiry — the
 // grant never outlives it.
 type MediaIssueRequest struct {
-	ResourceKey string
-	OrgID       string
-	SessionID   string
-	UserID      string
-	AbsoluteCap time.Time
+	ResourceKey       string
+	OrgID             string
+	SessionID         string
+	UserID            string
+	AbsoluteCap       time.Time
+	ExpectedSizeBytes *int64
+	ExpectedSHA256    string
 }
 
 // Issue signs one media_read grant valid for MediaGrantTTL, capped at the
@@ -171,6 +179,14 @@ func (m *MediaAuthority) Issue(req MediaIssueRequest) (string, *MediaClaims, err
 	if req.OrgID == "" {
 		return "", nil, errors.New("media grant requires an organization")
 	}
+	isDesignArtifact := DesignArtifactKeyFromResource(req.ResourceKey) != ""
+	if isDesignArtifact {
+		if req.ExpectedSizeBytes == nil || *req.ExpectedSizeBytes < 0 || !canonicalSHA256Pattern.MatchString(req.ExpectedSHA256) {
+			return "", nil, errors.New("design artifact grant requires canonical integrity pins")
+		}
+	} else if req.ExpectedSizeBytes != nil || req.ExpectedSHA256 != "" {
+		return "", nil, errors.New("catalog media grant cannot carry design artifact integrity pins")
+	}
 	now := time.Now()
 	expiresAt := now.Add(MediaGrantTTL)
 	if !req.AbsoluteCap.IsZero() && req.AbsoluteCap.Before(expiresAt) {
@@ -180,13 +196,15 @@ func (m *MediaAuthority) Issue(req MediaIssueRequest) (string, *MediaClaims, err
 		return "", nil, errors.New("media grant expiry must be in the future")
 	}
 	claims := &MediaClaims{
-		Resource:  req.ResourceKey,
-		OrgID:     req.OrgID,
-		Op:        MediaOperationRead,
-		Typ:       TokenTypeMediaRead,
-		SessionID: req.SessionID,
-		UserID:    req.UserID,
-		Ver:       MediaGrantVersion,
+		Resource:          req.ResourceKey,
+		OrgID:             req.OrgID,
+		Op:                MediaOperationRead,
+		Typ:               TokenTypeMediaRead,
+		SessionID:         req.SessionID,
+		UserID:            req.UserID,
+		ExpectedSizeBytes: req.ExpectedSizeBytes,
+		ExpectedSHA256:    req.ExpectedSHA256,
+		Ver:               MediaGrantVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   req.ResourceKey,
 			Audience:  jwt.ClaimStrings{MediaAudience},
@@ -246,6 +264,14 @@ func (m *MediaAuthority) Validate(tokenStr string) (*MediaClaims, error) {
 		claims.Subject != claims.Resource ||
 		!resourceKeyBelongsToGrantClass(claims.Resource) ||
 		claims.OrgID == "" {
+		return nil, errors.New("invalid media grant")
+	}
+	isDesignArtifact := DesignArtifactKeyFromResource(claims.Resource) != ""
+	if isDesignArtifact {
+		if claims.ExpectedSizeBytes == nil || *claims.ExpectedSizeBytes < 0 || !canonicalSHA256Pattern.MatchString(claims.ExpectedSHA256) {
+			return nil, errors.New("invalid media grant")
+		}
+	} else if claims.ExpectedSizeBytes != nil || claims.ExpectedSHA256 != "" {
 		return nil, errors.New("invalid media grant")
 	}
 	return claims, nil

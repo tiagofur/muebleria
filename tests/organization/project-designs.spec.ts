@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   GATE_MODULE_A_ID,
   required,
@@ -15,6 +17,7 @@ interface SeededProjectDesigns {
   readonly designId: string;
   readonly r1Id: string;
   readonly r2Id: string;
+  readonly r2SessionId: string;
   readonly instanceIds: readonly [string, string, string];
   readonly moduleName: string;
   readonly moduleCode: string;
@@ -251,6 +254,7 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
     designId: design.id,
     r1Id: r1.id,
     r2Id: r2.id,
+    r2SessionId: session.id,
     instanceIds,
     moduleName: 'Mueble real A',
     moduleCode: 'GATE-A',
@@ -449,7 +453,28 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(reloadedTable.getByText(seeded.instanceIds[1])).not.toBeVisible();
     await expect(reloadedTable.getByText(seeded.instanceIds[2])).not.toBeVisible();
 
-    // 8. Tenant isolation: switch to Organization B
+    // 8. Tenant isolation at the real API boundary: private Org A revision
+    // metadata remains a neutral 404 for Org B across detail/list/authorize.
+    const apiBase = required('ORGANIZATION_API_BASE');
+    const bClient = new GraneteApiClient(apiBase);
+    const bOwner = await bClient.login({
+      email: required('ORGANIZATION_GATE_B_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_B_SLUG'),
+    });
+    const bHeaders = { Authorization: `Bearer ${bOwner.token}` };
+    for (const request of [
+      { method: 'GET', url: `${apiBase}/designs/${seeded.designId}/revisions/${seeded.r1Id}` },
+      { method: 'GET', url: `${apiBase}/designs/${seeded.designId}/revisions/${seeded.r1Id}/artifacts` },
+      { method: 'POST', url: `${apiBase}/designs/${seeded.designId}/revisions/${seeded.r1Id}/artifacts/model:authorize` },
+    ]) {
+      const response = await fetch(request.url, { method: request.method, headers: bHeaders });
+      expect(response.status).toBe(404);
+      expect(await response.text()).not.toMatch(/ARTIFACT_(MISSING|INTEGRITY_MISMATCH)/);
+    }
+
+    // Switch the browser to Organization B and prove no private data renders.
     await page.getByLabel('Cambiar organización').selectOption({ label: 'Browser Gate B' });
     await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
 
@@ -480,4 +505,97 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
       await expect(page.getByTestId('revision-items-list')).toHaveCount(0);
     }
   });
+
+// #640: resolves the real backing file of one staged/published artifact under
+// the gate's MEDIA_DIR. Artifacts are the deterministic fixtures this spec
+// uploaded, so no shared state is contaminated.
+function findArtifactFile(sessionId: string, kind: 'model' | 'manifest' | 'preview'): string {
+  const mediaDir = required('MEDIA_DIR');
+  for (const orgEntry of fs.readdirSync(mediaDir, { withFileTypes: true })) {
+    if (!orgEntry.isDirectory()) continue;
+    const dir = path.join(mediaDir, orgEntry.name, 'designs', 'publish', sessionId);
+    if (!fs.existsSync(dir)) continue;
+    const match = fs.readdirSync(dir).find((f) => f.startsWith(`${kind}-`));
+    if (match) return path.join(dir, match);
+  }
+  throw new Error(`backing file for ${kind} of session ${sessionId} not found under MEDIA_DIR`);
+}
+
+test('authoritative artifact health: available, missing bytes and tampered bytes (#640)', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+
+  const apiBase = required('ORGANIZATION_API_BASE');
+  const client = new GraneteApiClient(apiBase);
+  const aOwner = await client.login({
+    email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+    password: required('ORGANIZATION_GATE_PASSWORD'),
+    transport: 'web',
+    org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
+  });
+  const authHeaders = { Authorization: `Bearer ${aOwner.token}` };
+  const listUrl = `${apiBase}/designs/${seeded.designId}/revisions/${seeded.r2Id}/artifacts`;
+  const authorizeUrl = (kind: string) =>
+    `${apiBase}/designs/${seeded.designId}/revisions/${seeded.r2Id}/artifacts/${kind}:authorize`;
+
+  // Scenario A: real bytes behind real metadata report available with an
+  // observation timestamp — never metadata presence alone.
+  const healthyList = await (await fetch(listUrl, { headers: authHeaders })).json();
+  expect(healthyList.map((a: { kind: string }) => a.kind).sort()).toEqual(['manifest', 'model', 'preview']);
+  for (const art of healthyList) {
+    expect(art.health.status).toBe('available');
+    expect(art.health.checked_at).toBeTruthy();
+  }
+  const metaByKind = (kind: string) => healthyList.find((a: { kind: string }) => a.kind === kind);
+
+  const previewPath = findArtifactFile(seeded.r2SessionId, 'preview');
+  const modelPath = findArtifactFile(seeded.r2SessionId, 'model');
+  const previewBytes = fs.readFileSync(previewPath);
+  const modelBytes = fs.readFileSync(modelPath);
+
+  try {
+    // Scenario B: delete the backing bytes behind existing metadata.
+    fs.unlinkSync(previewPath);
+    const afterDelete = await (await fetch(listUrl, { headers: authHeaders })).json();
+    const previewMeta = afterDelete.find((a: { kind: string }) => a.kind === 'preview');
+    expect(previewMeta.health.status).toBe('missing');
+    expect(previewMeta.sha256).toBe(metaByKind('preview').sha256); // metadata never regenerated
+    const missingAuth = await fetch(authorizeUrl('preview'), { method: 'POST', headers: authHeaders });
+    expect(missingAuth.status).toBe(409);
+    expect((await missingAuth.json()).code).toBe('ARTIFACT_MISSING');
+
+    await loginToA(page);
+    await page.goto(
+      `/quotes/${seeded.projectId}/disenos?design=${seeded.designId}&rev=${seeded.r2Id}`,
+    );
+    await expect(page.getByTestId('preview-health-missing')).toBeVisible();
+    await expect(page.getByTestId('download-artifact-preview')).toBeDisabled();
+    await expect(page.getByTestId('artifact-health-recovery')).toBeVisible();
+    await expect(page.getByTestId('artifact-health-model')).toHaveText('Disponible');
+
+    // Restore the preview bytes so scenario C proves per-artifact isolation.
+    fs.writeFileSync(previewPath, previewBytes);
+
+    // Scenario C: tamper the model bytes (different size and content).
+    fs.writeFileSync(modelPath, Buffer.from('tampered model bytes - #640 health gate proof'));
+    const afterTamper = await (await fetch(listUrl, { headers: authHeaders })).json();
+    const modelMeta = afterTamper.find((a: { kind: string }) => a.kind === 'model');
+    expect(modelMeta.health.status).toBe('integrity_mismatch');
+    expect(modelMeta.sha256).toBe(metaByKind('model').sha256); // digest never rewritten
+    const mismatchAuth = await fetch(authorizeUrl('model'), { method: 'POST', headers: authHeaders });
+    expect(mismatchAuth.status).toBe(409);
+    expect((await mismatchAuth.json()).code).toBe('ARTIFACT_INTEGRITY_MISMATCH');
+
+    await page.reload();
+    await expect(page.getByTestId('artifact-health-model')).toHaveText('Integridad comprometida');
+    await expect(page.getByTestId('download-artifact-model')).toBeDisabled();
+    // The restored preview is healthy again: mismatch is per artifact, never a
+    // blanket failure.
+    await expect(page.getByTestId('preview-image')).toBeVisible();
+  } finally {
+    fs.writeFileSync(previewPath, previewBytes);
+    fs.writeFileSync(modelPath, modelBytes);
+  }
+});
 });

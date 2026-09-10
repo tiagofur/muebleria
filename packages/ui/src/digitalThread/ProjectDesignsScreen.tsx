@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronRight,
+  Copy,
   Download,
   ExternalLink,
   FileCode,
@@ -32,13 +33,16 @@ import {
 } from '@granete/storage';
 import { EmptyState, Modal, PageHeader, PageLoading, WorkspaceTabs } from '../common';
 import {
+  ARTIFACT_HEALTH_LABELS,
   ARTIFACT_KIND_LABELS,
   buildDesignLineage,
+  canonicalArtifactSHA256,
   DESIGN_REVISION_STATUS_LABELS,
   DESIGN_SOURCE_TYPE_LABELS,
   formatArtifactSize,
   formatSha256Digest,
   getArtifactAvailability,
+  artifactHealth,
   selectDesignRevision,
   type DesignLineageNode,
 } from './designHistory';
@@ -179,6 +183,7 @@ export function ProjectDesignsScreen({
   const [artifactAccessError, setArtifactAccessError] = useState<ArtifactAccessError | null>(null);
   const [previewLoadError, setPreviewLoadError] = useState(false);
   const [showTechnicalAudit, setShowTechnicalAudit] = useState(false);
+  const [copiedDigestKind, setCopiedDigestKind] = useState<string | null>(null);
 
   // #499 "Abrir en SketchUp": the pin is FROZEN at click time from the exact
   // timeline selection (or null when nothing is published). A later publish
@@ -353,6 +358,11 @@ export function ProjectDesignsScreen({
 
   const availability = useMemo(() => getArtifactAvailability(artifacts), [artifacts]);
 
+  // #640: only explicitly available preview bytes may request a grant.
+  // Missing, mismatched, and legacy/unknown health all fail closed.
+  const previewHealth = availability.preview ? artifactHealth(availability.preview) : null;
+  const previewUnusable = availability.preview !== null && previewHealth !== 'available';
+
   // Preview Grant Query: conservative cache bounded to 2m (less than MediaGrantTTL of 3m)
   const previewGrantQuery = useQuery({
     queryKey:
@@ -367,7 +377,11 @@ export function ProjectDesignsScreen({
         'preview',
         signal,
       ),
-    enabled: activeDesignId !== null && selectedRevisionDetail !== null && availability.preview !== null,
+    enabled:
+      activeDesignId !== null &&
+      selectedRevisionDetail !== null &&
+      availability.preview !== null &&
+      !previewUnusable,
     staleTime: 1000 * 60 * 2, // 2 minutes cache (strictly within 3-minute backend MediaGrantTTL)
   });
 
@@ -915,7 +929,50 @@ export function ProjectDesignsScreen({
                     </div>
 
                     <div className="pd-preview-card__body">
-                      {previewGrantQuery.isLoading ? (
+                      {previewUnusable ? (
+                        <div
+                          className={`pd-preview-placeholder ${
+                            previewHealth === 'missing'
+                              ? 'pd-preview-warning'
+                              : 'pd-preview-error'
+                          }`}
+                          data-testid={`preview-health-${previewHealth ?? 'unknown'}`}
+                          role="alert"
+                        >
+                          <TriangleAlert size={24} strokeWidth={1.5} />
+                          {previewHealth === 'missing' ? (
+                            <span>
+                              La vista previa está registrada pero sus bytes ya no están
+                              disponibles en el almacenamiento.
+                            </span>
+                          ) : previewHealth === 'integrity_mismatch' ? (
+                            <span>
+                              Los bytes de la vista previa no coinciden con el artefacto
+                              publicado: su integridad está comprometida.
+                            </span>
+                          ) : (
+                            <span>
+                              El servidor no informó un estado verificable para la vista previa.
+                              El acceso permanece bloqueado por seguridad.
+                            </span>
+                          )}
+                          {previewHealth !== null && <p className="pd-recovery-hint">
+                              La revisión publicada es inmutable y no se repara en el lugar.
+                              Publicá una nueva revisión del diseño para regenerar la vista previa.
+                            </p>}
+                          {canMutate && previewHealth !== null && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={handleOpenInSketchUp}
+                              data-testid="preview-recovery-open-sketchup-btn"
+                            >
+                              <ExternalLink size={14} strokeWidth={1.5} />
+                              <span>Abrir en SketchUp y publicar nueva revisión</span>
+                            </button>
+                          )}
+                        </div>
+                      ) : previewGrantQuery.isLoading ? (
                         <div className="pd-preview-placeholder pd-preview-loading">
                           <RefreshCw size={24} className="spin" />
                           <span>Obteniendo acceso a vista previa…</span>
@@ -1011,13 +1068,55 @@ export function ProjectDesignsScreen({
                       </div>
                     )}
 
+                    {artifacts.some((art) => {
+                      const h = artifactHealth(art);
+                      return h === 'missing' || h === 'integrity_mismatch';
+                    }) &&
+                      artifacts.length > 0 && (
+                        <div
+                          className="pd-alert pd-alert--warning"
+                          role="alert"
+                          data-testid="artifact-health-recovery"
+                        >
+                          <p>
+                            Uno o más artefactos de esta revisión no están disponibles o no
+                            coinciden con lo publicado. La revisión es inmutable y no se
+                            repara en el lugar: publicá una nueva revisión del diseño para
+                            regenerar los artefactos.
+                          </p>
+                          {canMutate && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={handleOpenInSketchUp}
+                              data-testid="artifact-recovery-open-sketchup-btn"
+                            >
+                              <ExternalLink size={14} strokeWidth={1.5} />
+                              <span>Abrir en SketchUp y publicar nueva revisión</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                     {artifactsQuery.isLoading && artifacts.length === 0 ? (
                       <p className="pd-empty-hint" data-testid="artifacts-loading-hint">
                         Cargando artefactos de la revisión…
                       </p>
                     ) : artifactsQuery.isError && artifacts.length === 0 ? (
-                      <div className="pd-alert pd-alert--error" data-testid="artifacts-error-hint">
-                        No se pudieron cargar los artefactos de la revisión.
+                      <div
+                        className="pd-alert pd-alert--error"
+                        data-testid="artifacts-error-hint"
+                        role="alert"
+                      >
+                        <p>No se pudo verificar el estado de los artefactos de la revisión.</p>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          data-testid="retry-artifacts-btn"
+                          onClick={() => void artifactsQuery.refetch()}
+                        >
+                          Reintentar
+                        </button>
                       </div>
                     ) : artifacts.length === 0 ? (
                       <p className="pd-empty-hint" data-testid="no-artifacts-hint">
@@ -1041,6 +1140,17 @@ export function ProjectDesignsScreen({
                             {artifacts.map((art) => {
                               const label = ARTIFACT_KIND_LABELS[art.kind] ?? art.kind;
                               const isAuthorizing = authorizingKind === art.kind;
+                              // #640: access is only offered for artifacts whose
+                              // bytes the server verified as available; unhealthy
+                              // or unverifiable artifacts fail closed here too.
+                              const health = artifactHealth(art);
+                              const isHealthy = health === 'available';
+                              const actionLabel =
+                                art.kind === 'model'
+                                  ? 'Descargar modelo'
+                                  : art.kind === 'manifest'
+                                    ? 'Descargar manifest'
+                                    : 'Abrir vista previa';
 
                               return (
                                 <tr key={art.id} data-testid={`artifact-row-${art.kind}`}>
@@ -1060,18 +1170,34 @@ export function ProjectDesignsScreen({
                                   <td>
                                     <span
                                       className="pd-hash-badge"
-                                      title={`SHA-256: ${art.sha256}`}
+                                      aria-label={`SHA-256 del artefacto ${label}`}
+                                      title={canonicalArtifactSHA256(art.sha256) ?? art.sha256}
                                     >
                                       {formatSha256Digest(art.sha256)}
+                                    </span>{' '}
+                                    <span
+                                      className={`status-badge ${
+                                        health === 'available'
+                                          ? 'status-badge--done'
+                                          : health === 'integrity_mismatch'
+                                            ? 'status-badge--danger'
+                                            : 'status-badge--warning'
+                                      }`}
+                                      data-testid={`artifact-health-${art.kind}`}
+                                    >
+                                      {health !== null
+                                        ? ARTIFACT_HEALTH_LABELS[health]
+                                        : 'Estado no informado'}
                                     </span>
                                   </td>
                                   <td>
                                     <button
                                       type="button"
                                       className="btn btn-sm btn-secondary"
-                                      disabled={isAuthorizing}
+                                      disabled={isAuthorizing || !isHealthy}
                                       onClick={() => handleAuthorizeAndOpen(art.kind)}
                                       data-testid={`download-artifact-${art.kind}`}
+                                      aria-label={actionLabel}
                                     >
                                       {isAuthorizing ? (
                                         <RefreshCw size={14} className="spin" />
@@ -1127,6 +1253,56 @@ export function ProjectDesignsScreen({
 
                         <dt>Cantidad artefactos</dt>
                         <dd>{artifacts.length}</dd>
+
+                        {artifacts.length > 0 && (
+                          <>
+                            <dt>SHA-256 de artefactos</dt>
+                            <dd>
+                              <ul className="pd-audit-digests" data-testid="artifact-digests-list">
+                                {artifacts.map((art) => {
+                                  const label = ARTIFACT_KIND_LABELS[art.kind] ?? art.kind;
+                                  const digest = canonicalArtifactSHA256(art.sha256);
+                                  return (
+                                    <li key={art.id} data-testid={`artifact-digest-${art.kind}`}>
+                                      <span className="pd-audit-digest-kind">{label}</span>
+                                      <code className="pd-audit-digest-value">
+                                        {digest ?? '—'}
+                                      </code>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-secondary"
+                                        data-testid={`copy-sha256-${art.kind}`}
+                                        aria-label={`Copiar SHA-256 de ${label}`}
+                                        disabled={!digest}
+                                        onClick={() => {
+                                          if (!digest) return;
+                                          void navigator.clipboard
+                                            ?.writeText(digest)
+                                            .then(() => {
+                                              setCopiedDigestKind(art.kind);
+                                              window.setTimeout(() => {
+                                                setCopiedDigestKind((current) =>
+                                                  current === art.kind ? null : current,
+                                                );
+                                              }, 2000);
+                                            })
+                                            .catch(() => {
+                                              setCopiedDigestKind(null);
+                                            });
+                                        }}
+                                      >
+                                        <Copy size={14} strokeWidth={1.5} />
+                                        <span aria-live="polite">
+                                          {copiedDigestKind === art.kind ? 'Copiado' : 'Copiar'}
+                                        </span>
+                                      </button>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </dd>
+                          </>
+                        )}
                       </dl>
                     )}
                   </div>

@@ -62,6 +62,12 @@ func respondWithDesignPublishError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Falta subir uno o más artefactos de la publicación (modelo, manifest o preview)", nil)
 	case errors.Is(err, domain.ErrPublishArtifactHashMismatch):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "El hash del artefacto no coincide con el contenido subido", nil)
+	case errors.Is(err, domain.ErrArtifactBytesMissing):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeArtifactMissing,
+			"El artefacto publicado ya no está disponible en el almacenamiento; publicá una nueva revisión del diseño", nil)
+	case errors.Is(err, domain.ErrArtifactBytesIntegrityMismatch):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeArtifactIntegrityMismatch,
+			"Los bytes almacenados no coinciden con el artefacto publicado; publicá una nueva revisión del diseño", nil)
 	default:
 		respondWithDesignError(w, err)
 	}
@@ -188,14 +194,14 @@ func (s *Server) HandleDesignPublishPrepare(w http.ResponseWriter, r *http.Reque
 	respondWithJSON(w, http.StatusCreated, toDesignPublishSessionDTO(*result.Session))
 }
 
-// designArtifactStoragePath resolves a design artifact storage key under the
-// caller's organization partition. The key must be canonical
+// designArtifactStoragePath resolves a design artifact storage key under its
+// owning organization partition. The key must be canonical
 // (server-generated shape) — anything else is refused before touching disk.
-func (s *Server) designArtifactStoragePath(ctx context.Context, storageKey string) (string, bool) {
-	if strings.TrimSpace(s.MediaDir) == "" || auth.DesignArtifactResourceKey(storageKey) == "" {
+func (s *Server) designArtifactStoragePath(ownerOrgID, storageKey string) (string, bool) {
+	if strings.TrimSpace(s.MediaDir) == "" || strings.TrimSpace(ownerOrgID) == "" || auth.DesignArtifactResourceKey(storageKey) == "" {
 		return "", false
 	}
-	path := filepath.Join(s.MediaDir, storage.OrgFromCtx(ctx), filepath.FromSlash(storageKey))
+	path := filepath.Join(s.MediaDir, ownerOrgID, filepath.FromSlash(storageKey))
 	cleanRoot := filepath.Clean(s.MediaDir)
 	if !strings.HasPrefix(filepath.Clean(path), cleanRoot+string(os.PathSeparator)) {
 		return "", false
@@ -206,7 +212,7 @@ func (s *Server) designArtifactStoragePath(ctx context.Context, storageKey strin
 // removeDesignArtifactFile deletes one staged/published artifact file
 // best-effort (idempotent; IO errors are logged, never propagated).
 func (s *Server) removeDesignArtifactFile(ctx context.Context, storageKey string) {
-	path, ok := s.designArtifactStoragePath(ctx, storageKey)
+	path, ok := s.designArtifactStoragePath(storage.OrgFromCtx(ctx), storageKey)
 	if !ok {
 		return
 	}
@@ -464,7 +470,7 @@ func (s *Server) HandleDesignPublishFinalize(w http.ResponseWriter, r *http.Requ
 				respondWithDesignPublishError(w, domain.ErrPublishArtifactMissing)
 				return
 			}
-			path, ok := s.designArtifactStoragePath(r.Context(), a.StorageKey)
+			path, ok := s.designArtifactStoragePath(a.OrganizationID, a.StorageKey)
 			if !ok {
 				respondWithDesignPublishError(w, domain.ErrPublishArtifactMissing)
 				return
@@ -488,7 +494,7 @@ func (s *Server) HandleDesignPublishFinalize(w http.ResponseWriter, r *http.Requ
 		respondWithDesignPublishError(w, err)
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, toDesignRevisionDTO(*rev))
+	respondWithJSON(w, http.StatusCreated, s.toDesignRevisionDTOWithArtifactHealth(r.Context(), *rev))
 }
 
 // HandleDesignRevisionArtifacts: GET /api/designs/{designId}/revisions/{revisionId}/artifacts.
@@ -513,9 +519,11 @@ func (s *Server) HandleDesignRevisionArtifacts(w http.ResponseWriter, r *http.Re
 		respondWithDesignPublishError(w, err)
 		return
 	}
+	// #640: the read model carries authoritative per-artifact health observed
+	// from storage — metadata presence alone never reads as available.
 	dtos := make([]openapi.DesignRevisionArtifact, 0, len(artifacts))
 	for _, a := range artifacts {
-		dtos = append(dtos, toDesignRevisionArtifactDTO(a))
+		dtos = append(dtos, s.toDesignRevisionArtifactDTOWithHealth(r.Context(), a))
 	}
 	respondWithJSON(w, http.StatusOK, dtos)
 }
@@ -551,17 +559,28 @@ func (s *Server) HandleDesignRevisionArtifactAuthorize(w http.ResponseWriter, r 
 		respondWithDesignPublishError(w, err)
 		return
 	}
+	// #640 fail-closed authorization: the grant is minted only after the
+	// backing bytes are observed to exist and match the published metadata.
+	// This runs after the tenant-scoped resolution above, so a foreign caller
+	// never learns anything about byte state.
+	if health := s.verifyDesignArtifactHealth(r.Context(), *artifact); health.Status != domain.DesignArtifactHealthAvailable {
+		respondWithDesignPublishError(w, health.Status.HealthError())
+		return
+	}
 	resourceKey := auth.DesignArtifactResourceKey(artifact.StorageKey)
 	if resourceKey == "" {
 		respondWithInternalError(w, fmt.Errorf("non-canonical artifact storage key"), "design artifact grant")
 		return
 	}
+	expectedSize := artifact.SizeBytes
 	signed, mc, err := s.MediaTokens.Issue(auth.MediaIssueRequest{
-		ResourceKey: resourceKey,
-		OrgID:       storage.OrgFromCtx(r.Context()),
-		SessionID:   claims.Sid,
-		UserID:      claims.UserID,
-		AbsoluteCap: mediaGrantAbsoluteCap(claims),
+		ResourceKey:       resourceKey,
+		OrgID:             artifact.OrganizationID,
+		SessionID:         claims.Sid,
+		UserID:            claims.UserID,
+		AbsoluteCap:       mediaGrantAbsoluteCap(claims),
+		ExpectedSizeBytes: &expectedSize,
+		ExpectedSHA256:    artifact.SHA256,
 	})
 	if err != nil {
 		respondWithInternalError(w, err, "design artifact grant issue")
@@ -574,15 +593,23 @@ func (s *Server) HandleDesignRevisionArtifactAuthorize(w http.ResponseWriter, r 
 	})
 }
 
-// designArtifactGetAuth authenticates GET /api/design-artifacts/{key} under
-// the same dual-credential policy as media (#460 SEC-3): Authorization
-// header → full session policy; otherwise a signed media_read grant for
-// EXACTLY this resource key.
+type designArtifactReadPins struct {
+	ownerOrgID        string
+	expectedSizeBytes int64
+	expectedSHA256    string
+}
+
+type designArtifactReadPinsKey struct{}
+
+// designArtifactGetAuth accepts only a short-lived grant minted after the
+// tenant-authorized metadata lookup. A bearer token alone cannot bind this
+// storage key to exact immutable metadata and therefore fails closed.
 func (s *Server) designArtifactGetAuth(next http.Handler) http.Handler {
-	sessionAuth := AuthMiddleware(s.tokenAuthority(), s.Store)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" {
-			sessionAuth(next).ServeHTTP(w, r)
+			noStore(w)
+			respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeUnauthorized,
+				"signed artifact grant required", nil)
 			return
 		}
 		if s.MediaTokens == nil {
@@ -616,7 +643,17 @@ func (s *Server) designArtifactGetAuth(next http.Handler) http.Handler {
 			respondWithError(w, http.StatusNotFound, "not found")
 			return
 		}
+		if claims.ExpectedSizeBytes == nil || claims.ExpectedSHA256 == "" {
+			noStore(w)
+			respondWithError(w, http.StatusNotFound, "not found")
+			return
+		}
 		ctx := storage.WithOrgCtx(r.Context(), claims.OrgID)
+		ctx = context.WithValue(ctx, designArtifactReadPinsKey{}, designArtifactReadPins{
+			ownerOrgID:        claims.OrgID,
+			expectedSizeBytes: *claims.ExpectedSizeBytes,
+			expectedSHA256:    claims.ExpectedSHA256,
+		})
 		ctx = context.WithValue(ctx, mediaGrantRemainingKey{}, time.Until(claims.ExpiresAt.Time))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -638,7 +675,12 @@ func (s *Server) HandleDesignArtifactGet(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusNotFound, "not found")
 		return
 	}
-	path, ok := s.designArtifactStoragePath(r.Context(), key)
+	pins, ok := r.Context().Value(designArtifactReadPinsKey{}).(designArtifactReadPins)
+	if !ok {
+		respondWithError(w, http.StatusNotFound, "not found")
+		return
+	}
+	path, ok := s.designArtifactStoragePath(pins.ownerOrgID, key)
 	if !ok {
 		respondWithError(w, http.StatusBadRequest, "ruta inválida")
 		return
@@ -650,7 +692,18 @@ func (s *Server) HandleDesignArtifactGet(w http.ResponseWriter, r *http.Request)
 	}
 	defer f.Close()
 	stat, err := f.Stat()
-	if err != nil || stat.IsDir() {
+	if err != nil || stat.IsDir() || stat.Size() != pins.expectedSizeBytes {
+		respondWithError(w, http.StatusNotFound, "not found")
+		return
+	}
+	hasher := sha256.New()
+	readSize, err := io.Copy(hasher, f)
+	actualSHA := "sha256-" + hex.EncodeToString(hasher.Sum(nil))
+	if err != nil || readSize != pins.expectedSizeBytes || actualSHA != pins.expectedSHA256 {
+		respondWithError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		respondWithError(w, http.StatusNotFound, "not found")
 		return
 	}

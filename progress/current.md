@@ -1,3 +1,10 @@
+# Issue #640 — [P1][WEB-DT] Authoritative availability and integrity for DesignRevision artifacts
+
+- Aprobada para ejecución (execution prompt GLM MAX; issue OPEN). Base exacta `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` (post-merge #636/#638/#646); rama `feat/640-design-artifact-health`. Single writer: GLM. Sin merge ni cierre.
+- Estado: `IMPLEMENTED_PENDING_REVIEW` (corrección R1 de revisión aplicada).
+- Entrega: salud autoritativa `available|missing|integrity_mismatch` observada del storage (clasificador puro en domain + verificador streaming SHA-256 en la capa API dueña de `MediaDir`), expuesta como `health {status, checked_at}` en el read model de artefactos y el revision detail; autorización de grants fail-closed con errores tipados `ARTIFACT_MISSING` / `ARTIFACT_INTEGRITY_MISMATCH` (409) verificados DESPUÉS de la resolución tenant (cross-org sigue 404 neutral); OpenAPI Go/TS regenerado sin drift; UI con estados honestos por artefacto (incl. loading/request-failed con retry), acceso deshabilitado para no-available, preview missing/mismatch sin round-trip fallido, recovery que nombra publicar nueva revisión vía `Abrir en SketchUp`, digest canónico `sha256-<64hex>` con un solo prefijo y digest completo copiable con label accesible. #636 intacto (misma URL/grant mechanism, sin segundo store, sin URLs públicas). `processing/failed` NO agregados (sin lifecycle persistido que los avale).
+- Evidencia: `go test ./... -count=1` verde (incl. storage PostgreSQL real); focus domain 8/8 matriz, API 5 suites sobre filesystem real; `pnpm openapi:check` PASS; UI 39/39 + 18/18; browser gate real Chromium+Go+PostgreSQL `project-designs.spec.ts` 2/2 PASS (escenarios healthy / bytes borrados→missing+409 tipado+UI honesta / bytes alterados→integrity_mismatch+409 tipado+digest original intacto). Detalle: `progress/implementation_640_design_artifact_health.md`. Revisión independiente read-only: CHANGES_REQUIRED → corrección R1 aplicada (approve endpoints ahora emiten health válido con regresión, short-circuit por size implementado, riesgos residuales TOCTOU/partición documentados, NITs revertidos/limpiados); suites completas re-verificadas verde.
+
 # Issue #644 — [P0][DEMO] Golden path regression: Quote → SketchUp → DesignRevision → ProductionRelease
 
 - Verification lane (`status:approved`). Rama `test/644-demo-golden-path-regression`, integrada con base exacta `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` mediante merge `b2dde534cd7e3fd264283e2d55adbbf2d54ebb4d`. Test-only: **cero archivos de producto**.
@@ -536,3 +543,9 @@ EOL.
 - Scope: turn Q1 choices/dimensions and display/working-copy/R1/R2 provenance into failing assertions; assert #639 immutable presentation descriptors; prove a post-R1 catalog rename cannot retarget R1; retain double-truth as an observation.
 - The canonical #502 commercial gate rejects R2+Q1, so the executable journey intentionally uses Q2 derived from R2 and documents that correction to issue #644's stale literal.
 - Focused real Chromium + Go + PostgreSQL gate: 10/10 PASS. Full organization browser run reached 36 PASS, 2 unrelated route/login visibility timeouts, and 3 skipped after the serial reconciliation failure; see `progress/implementation_644_demo_golden_path_regression.md`.
+
+## PR #647 — issue #640 correction R2
+
+- User-authorized correction on `feat/640-design-artifact-health`, including the cohesive `size:exception` already applied to the PR.
+- Scope: enforce owner-partition and immutable integrity pins through signed GET; remove bearer-only artifact reads; add API/app-role RLS and post-mint mutation proofs; fail preview closed on unknown health; repair UI tokens/icons and evidence.
+- No merge or issue closure. Delivery remains `IMPLEMENTED_PENDING_REVIEW` after verification and exact remote SHA readback.

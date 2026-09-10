@@ -3,6 +3,7 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -632,7 +633,7 @@ func TestDesignPublish_MissingArtifactFinalizeFails(t *testing.T) {
 	if err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
 		_, _, err := w.fx.store.RecordDesignPublishArtifact(ctx, storage.RecordDesignPublishArtifactCommand{
 			DesignID: w.designID, SessionID: session.Session.ID, Kind: domain.DesignPublishArtifactModel,
-			StorageKey: "designs/publish/" + session.Session.ID + "/model-abcdef123456.skp",
+			StorageKey:  "designs/publish/" + session.Session.ID + "/model-abcdef123456.skp",
 			ContentType: "application/octet-stream", SizeBytes: 42,
 			SHA256: "sha256-" + strings.Repeat("ab", 32), ActorUserID: rlsUserA,
 		})
@@ -754,7 +755,7 @@ func TestDesignPublish_ExpiredSessionsAbandonedLazily(t *testing.T) {
 	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
 		_, _, err := w.fx.store.RecordDesignPublishArtifact(ctx, storage.RecordDesignPublishArtifactCommand{
 			DesignID: w.designID, SessionID: session.Session.ID, Kind: domain.DesignPublishArtifactPreview,
-			StorageKey: "designs/publish/" + session.Session.ID + "/preview-abcdef123456.png",
+			StorageKey:  "designs/publish/" + session.Session.ID + "/preview-abcdef123456.png",
 			ContentType: "image/png", SizeBytes: 1,
 			SHA256: "sha256-" + strings.Repeat("ab", 32), ActorUserID: rlsUserA,
 		})
@@ -872,7 +873,7 @@ func TestDesignPublish_TenantIsolation(t *testing.T) {
 		}
 		_, _, err := w.fx.store.RecordDesignPublishArtifact(ctx, storage.RecordDesignPublishArtifactCommand{
 			DesignID: w.designID, SessionID: session.Session.ID, Kind: domain.DesignPublishArtifactModel,
-			StorageKey: "designs/publish/" + session.Session.ID + "/model-abcdef123456.skp",
+			StorageKey:  "designs/publish/" + session.Session.ID + "/model-abcdef123456.skp",
 			ContentType: "application/octet-stream", SizeBytes: 1,
 			SHA256: "sha256-" + strings.Repeat("ab", 32), ActorUserID: rlsUserB,
 		})
@@ -893,10 +894,45 @@ func TestDesignPublish_TenantIsolation(t *testing.T) {
 		t.Fatalf("cross-org finalize must fail closed, got %v", err)
 	}
 
+	// The explicitly shared project grants org B read access to the published
+	// metadata, while the physical partition remains owned by org A. This is
+	// the server-side authority used by artifact health and signed reads.
+	var sharedRevision *domain.DesignRevision
+	err = fiTx(t, w.fx.store, actorA, func(ctx context.Context) error {
+		stageAllArtifactsInTx(t, ctx, w, session.Session.ID)
+		var err error
+		sharedRevision, err = w.fx.store.FinalizeDesignPublish(ctx, storage.FinalizeDesignPublishCommand{
+			DesignID: w.designID, SessionID: session.Session.ID, ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("owner finalize shared revision: %v", err)
+	}
+	err = fiTx(t, w.fx.store, actorB, func(ctx context.Context) error {
+		artifacts, err := w.fx.store.ListDesignRevisionArtifacts(ctx, w.designID, sharedRevision.ID)
+		if err != nil {
+			return err
+		}
+		if len(artifacts) != 3 {
+			return fmt.Errorf("partner artifacts=%d, want 3", len(artifacts))
+		}
+		for _, artifact := range artifacts {
+			if artifact.OrganizationID != rlsOrgA {
+				return fmt.Errorf("artifact owner=%s, want %s", artifact.OrganizationID, rlsOrgA)
+			}
+		}
+		_, err = w.fx.store.GetDesignRevisionArtifact(ctx, w.designID, sharedRevision.ID, domain.DesignPublishArtifactModel)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("authorized partner read shared artifacts: %v", err)
+	}
+
 	// Hard isolation proof on a PRIVATE org A project: org B cannot even see
 	// the session, and published artifact rows are invisible under the app
 	// role even with a deliberately unfiltered query (#449 convention).
-	var privateDesignID string
+	var privateDesignID, privateSessionID string
 	err = fiTx(t, w.fx.store, actorA, func(ctx context.Context) error {
 		design, err := w.fx.store.CreateDesign(ctx, storage.CreateDesignCommand{
 			ProjectID: fiProjectAOnly, Name: "Closet Privado", ActorUserID: rlsUserA,
@@ -914,6 +950,7 @@ func TestDesignPublish_TenantIsolation(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		privateSessionID = result.Session.ID
 		stageAllArtifactsInTx(t, ctx, &designPublishWorld{fx: w.fx, designID: privateDesignID}, result.Session.ID)
 		_, err = w.fx.store.FinalizeDesignPublish(ctx, storage.FinalizeDesignPublishCommand{
 			DesignID: privateDesignID, SessionID: result.Session.ID, ActorUserID: rlsUserA,
@@ -924,28 +961,35 @@ func TestDesignPublish_TenantIsolation(t *testing.T) {
 		t.Fatalf("private project publish: %v", err)
 	}
 
-	err = fiTx(t, w.fx.store, actorB, func(ctx context.Context) error {
-		var ids []string
-		rows, err := w.fx.app.Query(ctx, `SELECT id FROM design_publish_sessions`)
-		if err != nil {
+	tx, err := w.fx.app.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	setRLSActor(t, tx, rlsOrgB, rlsUserB, "")
+	err = func(ctx context.Context) error {
+		var privateSessions, privateArtifacts int
+		if err := tx.QueryRow(ctx,
+			`SELECT count(*) FROM design_publish_sessions WHERE id=$1`, privateSessionID).Scan(&privateSessions); err != nil {
 			return err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				return err
-			}
-			ids = append(ids, id)
+		if err := tx.QueryRow(ctx,
+			`SELECT count(*) FROM design_revision_artifacts WHERE project_id=$1`, fiProjectAOnly).Scan(&privateArtifacts); err != nil {
+			return err
 		}
-		for _, id := range ids {
-			if id == session.Session.ID {
-				return domain.ErrPublishSessionNotFound
-			}
+		if privateSessions != 0 || privateArtifacts != 0 {
+			return fmt.Errorf("RLS leak: private sessions=%d artifacts=%d", privateSessions, privateArtifacts)
 		}
-		return w.fx.app.QueryRow(ctx,
-			`SELECT count(*) FROM design_revision_artifacts`).Scan(new(int))
-	})
+		var sharedArtifacts int
+		if err := tx.QueryRow(ctx,
+			`SELECT count(*) FROM design_revision_artifacts WHERE project_id=$1`, fiSharedProject).Scan(&sharedArtifacts); err != nil {
+			return err
+		}
+		if sharedArtifacts != 3 {
+			return fmt.Errorf("shared artifacts=%d, want 3", sharedArtifacts)
+		}
+		return nil
+	}(context.Background())
 	if err != nil {
 		t.Fatalf("org B must see zero sessions/artifacts of a private org A project under RLS: %v", err)
 	}

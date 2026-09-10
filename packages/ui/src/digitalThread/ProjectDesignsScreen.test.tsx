@@ -8,6 +8,7 @@ import type {
   Design,
   DesignArtifactGrant,
   DesignRevision,
+  DesignRevisionArtifact,
   DesignWorkingCopy,
   ProductionRelease,
 } from '@granete/storage';
@@ -108,6 +109,7 @@ const mockRevision1: DesignRevision = {
       size_bytes: 1240,
       sha256: 'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       created_at: '2026-09-01T10:00:00Z',
+      health: { status: 'available', checked_at: '2026-09-01T10:00:00Z' },
     },
   ],
 };
@@ -175,6 +177,7 @@ const mockRevision3: DesignRevision = {
       size_bytes: 4520000,
       sha256: 'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       created_at: '2026-09-03T14:00:00Z',
+      health: { status: 'available', checked_at: '2026-09-03T14:00:00Z' },
     },
     {
       id: '55555555-0000-4000-8000-000000000032',
@@ -184,6 +187,7 @@ const mockRevision3: DesignRevision = {
       size_bytes: 3500,
       sha256: 'sha256-ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb',
       created_at: '2026-09-03T14:00:00Z',
+      health: { status: 'available', checked_at: '2026-09-03T14:00:00Z' },
     },
     {
       id: '55555555-0000-4000-8000-000000000033',
@@ -193,6 +197,7 @@ const mockRevision3: DesignRevision = {
       size_bytes: 185000,
       sha256: 'sha256-4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce',
       created_at: '2026-09-03T14:00:00Z',
+      health: { status: 'available', checked_at: '2026-09-03T14:00:00Z' },
     },
   ],
 };
@@ -440,6 +445,7 @@ function renderScreen(props: {
   onOpenReconciliation?: (ctx: { designId: string | null; revisionId: string | null }) => void;
   onBack?: () => void;
   canMutate?: boolean;
+  seedRevisionDetail?: DesignRevision;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -447,6 +453,13 @@ function renderScreen(props: {
     },
   });
   const keys = projectDesignsQueryKeys(['test-scope'], PROJECT_ID);
+
+  if (props.seedRevisionDetail) {
+    queryClient.setQueryData(
+      keys.designRevisionDetail(DESIGN_1_ID, props.seedRevisionDetail.id),
+      props.seedRevisionDetail,
+    );
+  }
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -893,8 +906,11 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
 
     expect(await screen.findByTestId('artifacts-error-hint')).toBeInTheDocument();
     expect(
-      screen.getByText('No se pudieron cargar los artefactos de la revisión.'),
+      screen.getByText('No se pudo verificar el estado de los artefactos de la revisión.'),
     ).toBeInTheDocument();
+    // #640: a failed health request keeps its retry, never an empty collapse.
+    expect(screen.getByTestId('retry-artifacts-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('no-artifacts-hint')).not.toBeInTheDocument();
   });
 
   it('shows loading indicator and prevents premature inspector render while revision detail is loading', async () => {
@@ -1198,5 +1214,209 @@ describe('ProjectDesignsScreen — zero-design empty state (first Design DEMO pa
 
     await screen.findByRole('tab', { name: /Cocina Principal/i });
     expect(screen.getByTestId('open-reconciliation-btn')).toBeInTheDocument();
+  });
+});
+
+describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
+  type HealthStatus = 'available' | 'missing' | 'integrity_mismatch';
+
+  const revision3WithHealth = (
+    healthByKind: Partial<Record<'model' | 'manifest' | 'preview', HealthStatus>>,
+  ): DesignRevision => ({
+    ...mockRevision3,
+    artifacts: (mockRevision3.artifacts ?? []).map((art) => ({
+      ...art,
+      health: {
+        status: healthByKind[art.kind as 'model' | 'manifest' | 'preview'] ?? 'available',
+        checked_at: '2026-09-03T14:00:05Z',
+      },
+    })),
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('renders available artifacts with working access and kind-specific accessible labels', async () => {
+    setupFetchMock();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+
+    for (const kind of ['model', 'manifest', 'preview'] as const) {
+      const badge = screen.getByTestId(`artifact-health-${kind}`);
+      expect(badge).toHaveTextContent('Disponible');
+      expect(screen.getByTestId(`download-artifact-${kind}`)).toBeEnabled();
+    }
+    expect(
+      screen.getByTestId('download-artifact-model'),
+    ).toHaveAccessibleName('Descargar modelo');
+    expect(
+      screen.getByTestId('download-artifact-manifest'),
+    ).toHaveAccessibleName('Descargar manifest');
+    expect(
+      screen.getByTestId('download-artifact-preview'),
+    ).toHaveAccessibleName('Abrir vista previa');
+    // Healthy revision: no recovery alert.
+    expect(screen.queryByTestId('artifact-health-recovery')).not.toBeInTheDocument();
+  });
+
+  it('missing bytes show an honest preview state, disabled access and a republish recovery path', async () => {
+    const fetchMock = setupFetchMock({
+      revisionDetailOverride: {
+        [DESIGN_1_ID]: { [REV_3_ID]: revision3WithHealth({ preview: 'missing' }) },
+      },
+    });
+    const user = userEvent.setup();
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID },
+      canMutate: true,
+    });
+
+    const missing = await screen.findByTestId('preview-health-missing');
+    expect(missing).toHaveTextContent(
+      'sus bytes ya no están disponibles en el almacenamiento',
+    );
+    // Immutable-revision honesty: recovery names republishing, never in-place repair.
+    expect(missing).toHaveTextContent('no se repara en el lugar');
+    expect(screen.queryByTestId('preview-image')).not.toBeInTheDocument();
+
+    // No authorize round-trip is attempted for a known-missing artifact.
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) => String(input).includes('/artifacts/preview:authorize')),
+      ).toBe(false);
+    });
+
+    expect(screen.getByTestId('download-artifact-preview')).toBeDisabled();
+    expect(screen.getByTestId('download-artifact-model')).toBeEnabled();
+    expect(screen.getByTestId('artifact-health-preview')).toHaveTextContent(
+      'Bytes no disponibles',
+    );
+
+    // Recovery is actionable: it opens the executable republish continuation.
+    const recovery = screen.getByTestId('artifact-health-recovery');
+    expect(recovery).toHaveTextContent('publicá una nueva revisión');
+    await user.click(screen.getByTestId('preview-recovery-open-sketchup-btn'));
+    expect(await screen.findByTestId('sketchup-pairing-modal')).toBeInTheDocument();
+  });
+
+  it('integrity_mismatch shows a stronger warning and never grants access', async () => {
+    setupFetchMock({
+      revisionDetailOverride: {
+        [DESIGN_1_ID]: { [REV_3_ID]: revision3WithHealth({ model: 'integrity_mismatch' }) },
+      },
+    });
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    expect(await screen.findByTestId('artifact-health-model')).toHaveTextContent(
+      'Integridad comprometida',
+    );
+    expect(screen.getByTestId('download-artifact-model')).toBeDisabled();
+    expect(screen.getByTestId('artifact-health-recovery')).toHaveTextContent(
+      'no coinciden con lo publicado',
+    );
+    // The healthy preview keeps its normal flow: mismatch is per artifact.
+    expect(await screen.findByTestId('preview-image')).toBeInTheDocument();
+    expect(screen.getByTestId('artifact-health-preview')).toHaveTextContent('Disponible');
+  });
+
+  it('fails closed when preview health is absent and exposes the unknown state accessibly', async () => {
+    const revisionWithoutPreviewHealth: DesignRevision = {
+      ...mockRevision3,
+      artifacts: (mockRevision3.artifacts ?? []).map((artifact) =>
+        artifact.kind === 'preview' ? { ...artifact, health: undefined } : artifact,
+      ) as unknown as readonly DesignRevisionArtifact[],
+    };
+    const fetchMock = setupFetchMock({ revisionDetailPending: true });
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID },
+      seedRevisionDetail: revisionWithoutPreviewHealth,
+    });
+
+    const unknown = await screen.findByTestId('preview-health-unknown');
+    expect(unknown).toHaveAttribute('role', 'alert');
+    expect(unknown).toHaveTextContent('no informó un estado verificable');
+    expect(screen.queryByTestId('preview-image')).not.toBeInTheDocument();
+    expect(screen.getByTestId('download-artifact-preview')).toBeDisabled();
+    expect(screen.getByTestId('artifact-health-preview')).toHaveTextContent('Estado no informado');
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes('/artifacts/preview:authorize')),
+    ).toBe(false);
+  });
+
+  it('keeps health loading distinct from loaded states', async () => {
+    setupFetchMock({ revisionDetailPending: true });
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    expect(await screen.findByTestId('revision-detail-loading')).toBeVisible();
+    expect(screen.queryByTestId('artifacts-table')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('no-artifacts-hint')).not.toBeInTheDocument();
+  });
+
+  it('reports artifact health request failure with retry and never an empty-list collapse', async () => {
+    const fetchMock = setupFetchMock({
+      revisionDetailOverride: {
+        [DESIGN_1_ID]: {
+          [REV_3_ID]: { ...mockRevision3, artifacts: [] },
+        },
+      },
+      artifactsFail: true,
+    });
+    const user = userEvent.setup();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    const error = await screen.findByTestId('artifacts-error-hint');
+    expect(error).toHaveTextContent('No se pudo verificar el estado de los artefactos');
+    // A failed health request is NOT "sin artefactos".
+    expect(screen.queryByTestId('no-artifacts-hint')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('retry-artifacts-btn'));
+    await waitFor(() => {
+      const artifactListCalls = fetchMock.mock.calls.filter(
+        ([input]) => /\/artifacts$/.test(String(input)),
+      );
+      expect(artifactListCalls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.getByTestId('artifacts-error-hint')).toBeInTheDocument();
+  });
+
+  it('exposes the full canonical digest once, copyable with an accessible label', async () => {
+    // userEvent.setup() installs its own navigator.clipboard stub, so the
+    // spy must land after setup to observe the copy.
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setupFetchMock();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+
+    // Compact badge: one canonical prefix, never duplicated.
+    const badge = screen.getByTestId('artifact-row-model').querySelector('.pd-hash-badge');
+    expect(badge?.textContent).toBe('sha256-e3b0c442…');
+    expect(screen.queryByText(/sha256-sha256/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sha256:sha256/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('artifact-row-model').querySelector('.pd-hash-badge')).toHaveAccessibleName(
+      'SHA-256 del artefacto Modelo 3D (.skp)',
+    );
+
+    await user.click(screen.getByTestId('toggle-technical-audit'));
+    const modelDigest = await screen.findByTestId('artifact-digest-model');
+    expect(modelDigest).toHaveTextContent(
+      'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
+    // Exactly one occurrence of the full digest (compact + full differ).
+    expect(screen.getAllByText('sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')).toHaveLength(1);
+
+    const copyButton = screen.getByTestId('copy-sha256-model');
+    expect(copyButton).toHaveAccessibleName('Copiar SHA-256 de Modelo 3D (.skp)');
+    await user.click(copyButton);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(
+      'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    ));
+    expect(await screen.findByText('Copiado')).toBeInTheDocument();
   });
 });

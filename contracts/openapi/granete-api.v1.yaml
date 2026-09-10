@@ -3607,7 +3607,7 @@
     "/designs/{designId}/revisions/{revisionId}/artifacts": {
       "get": {
         "operationId": "listDesignRevisionArtifacts",
-        "summary": "List published artifact metadata of one design revision (#392 / DT-8)",
+        "summary": "List published artifact metadata with authoritative health of one design revision (#392 / DT-8, #640)",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
@@ -3640,6 +3640,7 @@
       "post": {
         "operationId": "authorizeDesignRevisionArtifact",
         "summary": "Mint a short-lived signed read URL for one published artifact (#392 / DT-8)",
+        "description": "Fail-closed (#640): the grant is minted only after the backing bytes are observed to exist and match the published size and SHA-256. Unhealthy artifacts return a typed 409 (ARTIFACT_MISSING / ARTIFACT_INTEGRITY_MISMATCH).",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
@@ -3658,6 +3659,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DesignArtifactGrant"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Artifact bytes are missing (ARTIFACT_MISSING) or do not match the published metadata (ARTIFACT_INTEGRITY_MISMATCH); no grant is issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -4182,6 +4193,8 @@
           "SESSION_NOT_FOUND",
           "MEDIA_ACCESS_EXPIRED",
           "MEDIA_ACCESS_INVALID",
+          "ARTIFACT_MISSING",
+          "ARTIFACT_INTEGRITY_MISMATCH",
           "STEP_UP_REQUIRED",
           "STEP_UP_EXPIRED",
           "MFA_REQUIRED",
@@ -8480,9 +8493,37 @@
           }
         }
       },
+      "DesignArtifactHealthStatus": {
+        "type": "string",
+        "description": "Authoritative storage-backed state of one published artifact (#640). available requires observed bytes whose size and SHA-256 match the persisted metadata; never metadata presence alone.",
+        "enum": [
+          "available",
+          "missing",
+          "integrity_mismatch"
+        ]
+      },
+      "DesignArtifactHealth": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Result of one server-side verification pass over the artifact bytes. Computed per request; never persisted.",
+        "required": [
+          "status",
+          "checked_at"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/DesignArtifactHealthStatus"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "DesignRevisionArtifact": {
         "type": "object",
         "additionalProperties": false,
+        "description": "Published artifact metadata with its authoritative storage-backed health (#640).",
         "required": [
           "id",
           "design_revision_id",
@@ -8490,6 +8531,7 @@
           "content_type",
           "size_bytes",
           "sha256",
+          "health",
           "created_at"
         ],
         "properties": {
@@ -8516,6 +8558,9 @@
           "sha256": {
             "type": "string",
             "pattern": "^sha256-[0-9a-f]{64}$"
+          },
+          "health": {
+            "$ref": "#/components/schemas/DesignArtifactHealth"
           },
           "uploaded_by": {
             "type": [
