@@ -40,4 +40,3 @@ exacto debe confirmar si fue transitorio.
 - `packages/ui/src/digitalThread/digitalThread.css`
 - `progress/current.md`
 - `progress/implementation_641_design_inspector_async_a11y.md`
-
