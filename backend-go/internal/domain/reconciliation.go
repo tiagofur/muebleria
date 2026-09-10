@@ -70,6 +70,12 @@ type QuoteRevision struct {
 	// revisions with other origins.
 	BaseQuoteRevisionID    string `json:"baseQuoteRevisionId,omitempty"`
 	SourceDesignRevisionID string `json:"sourceDesignRevisionId,omitempty"`
+	// #642 / QUOTE-AUTH: real lifecycle event timestamps, set exactly once by
+	// the draft → published and published → accepted transitions. They are
+	// never derived from created_at/updated_at. NULL on legacy rows whose
+	// event was never recorded (honest absence, not fabricated dates).
+	PublishedAt *time.Time `json:"publishedAt,omitempty"`
+	AcceptedAt  *time.Time `json:"acceptedAt,omitempty"`
 }
 
 // QuoteRevisionItem is the immutable commercial snapshot of ONE physical
@@ -87,10 +93,14 @@ type QuoteRevisionItem struct {
 // QuoteRevisionDetail is the #500 / WEB-DT-1 read model: the immutable
 // revision header plus its per-unit items, so commercial presence derives
 // from the exact selected revision instead of the live mutable quote.
+// #642: CommercialSnapshot is the frozen commercial authority; NULL means the
+// revision never froze one (legacy) and consumers must fail closed — never
+// recalculate from mutable state.
 type QuoteRevisionDetail struct {
 	QuoteRevision
-	CreatedAt time.Time
-	Items     []QuoteRevisionItem
+	CreatedAt          time.Time
+	CommercialSnapshot *QuoteCommercialSnapshot
+	Items              []QuoteRevisionItem
 }
 
 // StructuredDifference captures a specific property difference between quote and design.

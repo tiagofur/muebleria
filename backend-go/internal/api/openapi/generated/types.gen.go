@@ -1392,6 +1392,8 @@ type QuoteRevision struct {
 	SourceDesignRevisionId *string                 `json:"sourceDesignRevisionId,omitempty"`
 	Notes                  *string                 `json:"notes,omitempty"`
 	CreatedBy              *string                 `json:"createdBy,omitempty"`
+	PublishedAt            *string                 `json:"publishedAt,omitempty"`
+	AcceptedAt             *string                 `json:"acceptedAt,omitempty"`
 }
 
 type QuoteRevisionItem struct {
@@ -1404,17 +1406,61 @@ type QuoteRevisionItem struct {
 }
 
 type QuoteRevisionDetail struct {
-	ID                     string                  `json:"id"`
-	ProjectId              string                  `json:"projectId"`
-	RevisionNumber         int64                   `json:"revisionNumber"`
-	Status                 QuoteRevisionStatus     `json:"status"`
-	SourceType             QuoteRevisionSourceType `json:"sourceType"`
-	BaseQuoteRevisionId    *string                 `json:"baseQuoteRevisionId,omitempty"`
-	SourceDesignRevisionId *string                 `json:"sourceDesignRevisionId,omitempty"`
-	Notes                  *string                 `json:"notes,omitempty"`
-	CreatedBy              *string                 `json:"createdBy,omitempty"`
-	CreatedAt              string                  `json:"createdAt"`
-	Items                  []QuoteRevisionItem     `json:"items"`
+	ID                     string                   `json:"id"`
+	ProjectId              string                   `json:"projectId"`
+	RevisionNumber         int64                    `json:"revisionNumber"`
+	Status                 QuoteRevisionStatus      `json:"status"`
+	SourceType             QuoteRevisionSourceType  `json:"sourceType"`
+	BaseQuoteRevisionId    *string                  `json:"baseQuoteRevisionId,omitempty"`
+	SourceDesignRevisionId *string                  `json:"sourceDesignRevisionId,omitempty"`
+	Notes                  *string                  `json:"notes,omitempty"`
+	CreatedBy              *string                  `json:"createdBy,omitempty"`
+	CreatedAt              string                   `json:"createdAt"`
+	PublishedAt            *string                  `json:"publishedAt,omitempty"`
+	AcceptedAt             *string                  `json:"acceptedAt,omitempty"`
+	CommercialSnapshot     *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`
+	Items                  []QuoteRevisionItem      `json:"items"`
+}
+
+type QuoteCommercialSnapshot struct {
+	Schema     string                   `json:"schema"`
+	CapturedAt string                   `json:"capturedAt"`
+	Currency   string                   `json:"currency"`
+	Customer   QuoteCommercialIdentity  `json:"customer"`
+	Project    QuoteCommercialIdentity  `json:"project"`
+	Breakdown  QuoteCommercialBreakdown `json:"breakdown"`
+	Units      []QuoteCommercialUnit    `json:"units"`
+}
+
+type QuoteCommercialIdentity struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type QuoteCommercialBreakdown struct {
+	MaterialsCost  float64 `json:"materialsCost"`
+	EdgeTotal      float64 `json:"edgeTotal"`
+	HardwareTotal  float64 `json:"hardwareTotal"`
+	DirectCost     float64 `json:"directCost"`
+	LaborModular   float64 `json:"laborModular"`
+	LaborFixedCost float64 `json:"laborFixedCost"`
+	MarginFactor   float64 `json:"marginFactor"`
+	SalePrice      float64 `json:"salePrice"`
+}
+
+type QuoteCommercialUnit struct {
+	FurnitureInstanceId string                           `json:"furnitureInstanceId"`
+	ModuleCode          string                           `json:"moduleCode"`
+	ModuleName          string                           `json:"moduleName"`
+	LifecycleStatus     FurnitureInstanceLifecycleStatus `json:"lifecycleStatus"`
+	Options             []QuoteCommercialOption          `json:"options"`
+}
+
+type QuoteCommercialOption struct {
+	GroupCode   string `json:"groupCode"`
+	GroupLabel  string `json:"groupLabel"`
+	ChoiceId    string `json:"choiceId"`
+	ChoiceLabel string `json:"choiceLabel"`
 }
 
 type FurnitureWorkspaceContextKind string

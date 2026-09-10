@@ -55,7 +55,22 @@ func setupQuoteLifecycleFixture(t *testing.T) *quoteLifecycleFixture {
 		qlLineA, fiProjectAOnly, fiModuleA, qlCustomDimsRow); err != nil {
 		t.Fatalf("seed quote line: %v", err)
 	}
+	seedBodyChoice(t, fx, qlLineA)
 	return &quoteLifecycleFixture{rlsFixture: fx, projectID: fiProjectAOnly}
+}
+
+// seedBodyChoice makes a fixture line priceable: the composed fixture module
+// (RELEASE-BODY) resolves a board part through the BODY material role, and
+// #642 requires the initial revision to freeze authoritative amounts computed
+// once by the pricing engine — an unpriceable line fails closed instead.
+func seedBodyChoice(t *testing.T, fx *rlsFixture, lineID string) {
+	t.Helper()
+	if _, err := fx.admin.Exec(context.Background(), `
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ($1, 'BODY', $2, '`+rlsOrgA+`')`,
+		lineID, releaseMaterial); err != nil {
+		t.Fatalf("seed BODY choice: %v", err)
+	}
 }
 
 func createInitialRevision(t *testing.T, fx *quoteLifecycleFixture) *storage.CreateInitialQuoteRevisionResult {
@@ -279,6 +294,7 @@ func TestQuoteLifecycle_CreateInitialRevision_ModuleDimsFallback(t *testing.T) {
 		t.Fatalf("seed module dims: %v", err)
 	}
 	fx := &quoteLifecycleFixture{rlsFixture: base, projectID: fiProjectAOnly}
+	seedBodyChoice(t, base, qlLineNoDims)
 	createInitialRevision(t, fx)
 
 	details := listRevisions(t, fx)
@@ -306,8 +322,9 @@ func TestQuoteLifecycle_CreateInitialRevision_QuotedFinishRidesAlong(t *testing.
 		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
 		VALUES
 			($1, 'INTERIOR', $2, '`+rlsOrgA+`'),
-			($1, 'FRENTE', $3, '`+rlsOrgA+`')`,
-		qlLineA, interiorChoice, frontChoice); err != nil {
+			($1, 'FRENTE', $3, '`+rlsOrgA+`'),
+			($1, 'BODY', $4, '`+rlsOrgA+`')`,
+		qlLineA, interiorChoice, frontChoice, releaseMaterial); err != nil {
 		t.Fatalf("seed line choices: %v", err)
 	}
 	fx := &quoteLifecycleFixture{rlsFixture: base, projectID: fiProjectAOnly}
@@ -317,7 +334,7 @@ func TestQuoteLifecycle_CreateInitialRevision_QuotedFinishRidesAlong(t *testing.
 	if len(details) != 1 || len(details[0].Items) != 2 {
 		t.Fatalf("expected Q1 with 2 items, got %d revisions", len(details))
 	}
-	want := map[string]string{"INTERIOR": interiorChoice, "FRENTE": frontChoice}
+	want := map[string]string{"INTERIOR": interiorChoice, "FRENTE": frontChoice, "BODY": releaseMaterial}
 	for _, item := range details[0].Items {
 		if !reflect.DeepEqual(item.MaterialChoices, want) {
 			t.Fatalf("item %s material choices = %v, want the quoted finish %v", item.FurnitureInstanceID, item.MaterialChoices, want)
@@ -449,6 +466,10 @@ func TestQuoteLifecycle_Publish(t *testing.T) {
 		qlSharedLineB, fiSharedProject, fiModuleA); err != nil {
 		t.Fatalf("seed shared line: %v", err)
 	}
+	seedBodyChoice(t, fx.rlsFixture, qlSharedLineB)
+	// The base RLS fixture also seeds a choice-less line (60000000-…001) on
+	// the shared project; pricing covers every line, so it needs the role too.
+	seedBodyChoice(t, fx.rlsFixture, "60000000-0000-0000-0000-000000000001")
 	var sharedQ1 string
 	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		result, txErr := fx.store.CreateInitialQuoteRevision(ctx, storage.CreateInitialQuoteRevisionCommand{

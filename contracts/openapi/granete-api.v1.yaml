@@ -8871,6 +8871,22 @@
           "createdBy": {
             "type": "string",
             "format": "uuid"
+          },
+          "publishedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Real draft → published lifecycle event (#642). Never derived from createdAt; NULL on legacy revisions whose event was never recorded."
+          },
+          "acceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Real published → accepted lifecycle event (#642). Never derived from createdAt/updatedAt; NULL on legacy revisions whose event was never recorded."
           }
         }
       },
@@ -8975,11 +8991,191 @@
             "type": "string",
             "format": "date-time"
           },
+          "publishedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "acceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "commercialSnapshot": {
+            "$ref": "#/components/schemas/QuoteCommercialSnapshot"
+          },
           "items": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/QuoteRevisionItem"
             }
+          }
+        }
+      },
+      "QuoteCommercialSnapshot": {
+        "type": "object",
+        "description": "Immutable server-owned commercial payload frozen in the same transaction that created the exact QuoteRevision (#642 / digital-thread §16A). Reproduces the revision's commercial meaning WITHOUT mutable Project state, current catalog, settings, legacy priceSnapshot or live pricing. Absent on legacy revisions that never froze one — consumers must fail closed, never recalculate.",
+        "additionalProperties": false,
+        "required": [
+          "schema",
+          "capturedAt",
+          "currency",
+          "customer",
+          "project",
+          "breakdown",
+          "units"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "granete.quote-commercial-snapshot.v1"
+            ]
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 1
+          },
+          "customer": {
+            "$ref": "#/components/schemas/QuoteCommercialIdentity"
+          },
+          "project": {
+            "$ref": "#/components/schemas/QuoteCommercialIdentity"
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/QuoteCommercialBreakdown"
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteCommercialUnit"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "QuoteCommercialIdentity": {
+        "type": "object",
+        "description": "Frozen commercial identity reference: exact id plus the customer-facing label captured at revision creation (#642).",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "QuoteCommercialBreakdown": {
+        "type": "object",
+        "description": "Authoritative calculated amounts frozen once at revision creation by the existing server-side pricing engine (#642). Workshop cost fields are redacted to 0 for cost-blind actors; salePrice is commercial and always visible.",
+        "additionalProperties": false,
+        "required": [
+          "materialsCost",
+          "edgeTotal",
+          "hardwareTotal",
+          "directCost",
+          "laborModular",
+          "laborFixedCost",
+          "marginFactor",
+          "salePrice"
+        ],
+        "properties": {
+          "materialsCost": {
+            "type": "number"
+          },
+          "edgeTotal": {
+            "type": "number"
+          },
+          "hardwareTotal": {
+            "type": "number"
+          },
+          "directCost": {
+            "type": "number"
+          },
+          "laborModular": {
+            "type": "number"
+          },
+          "laborFixedCost": {
+            "type": "number"
+          },
+          "marginFactor": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "salePrice": {
+            "type": "number"
+          }
+        }
+      },
+      "QuoteCommercialUnit": {
+        "type": "object",
+        "description": "Frozen customer-facing descriptor of ONE physical furniture unit inside the exact revision, keyed by the exact FurnitureInstance identity (#642).",
+        "additionalProperties": false,
+        "required": [
+          "furnitureInstanceId",
+          "moduleCode",
+          "moduleName",
+          "lifecycleStatus",
+          "options"
+        ],
+        "properties": {
+          "furnitureInstanceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "moduleCode": {
+            "type": "string"
+          },
+          "moduleName": {
+            "type": "string"
+          },
+          "lifecycleStatus": {
+            "$ref": "#/components/schemas/FurnitureInstanceLifecycleStatus"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteCommercialOption"
+            }
+          }
+        }
+      },
+      "QuoteCommercialOption": {
+        "type": "object",
+        "description": "One frozen customer-facing option descriptor: option group and chosen entity, each with exact identity and captured label (#642).",
+        "additionalProperties": false,
+        "required": [
+          "groupCode",
+          "groupLabel",
+          "choiceId",
+          "choiceLabel"
+        ],
+        "properties": {
+          "groupCode": {
+            "type": "string"
+          },
+          "groupLabel": {
+            "type": "string"
+          },
+          "choiceId": {
+            "type": "string"
+          },
+          "choiceLabel": {
+            "type": "string"
           }
         }
       },

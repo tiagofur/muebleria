@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -1803,13 +1804,34 @@ func TestQuoteRevision_StatusTransitions_ExactLifecycle(t *testing.T) {
 		t.Fatalf("seed FI: %v", err)
 	}
 
-	// Q1 born as draft.
+	// Q1 born as draft. #642: a publishable draft carries its immutable
+	// commercial snapshot — publishing without one fails closed.
+	snapshot, snapErr := domain.BuildQuoteCommercialSnapshot(
+		time.Now().UTC(), "MXN",
+		domain.QuoteCommercialIdentity{ID: "30000000-0000-0000-0000-00000000000a", Name: "Customer A"},
+		domain.QuoteCommercialIdentity{ID: fiSharedProject, Name: "Shared A-B"},
+		domain.QuoteBreakdown{
+			MaterialsCost: 100, DirectCost: 100, LaborModular: 10,
+			LaborFixedCost: 5, MarginFactor: 1.5, SalePrice: 165,
+		},
+		[]domain.QuoteCommercialUnit{{
+			FurnitureInstanceID: fiID,
+			ModuleCode:          "RLS-MODULE",
+			ModuleName:          "RLS module",
+			LifecycleStatus:     "active",
+			Options:             []domain.QuoteCommercialOption{},
+		}},
+	)
+	if snapErr != nil {
+		t.Fatalf("build commercial snapshot: %v", snapErr)
+	}
 	var draftRev *domain.QuoteRevision
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		draftRev, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
-			ProjectID: fiSharedProject,
-			Status:    "draft",
+			ProjectID:          fiSharedProject,
+			Status:             "draft",
+			CommercialSnapshot: snapshot,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{FurnitureInstanceID: fiID, LifecycleStatus: "active"},
 			},
@@ -1884,9 +1906,10 @@ func TestQuoteRevision_StatusTransitions_ExactLifecycle(t *testing.T) {
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		draft2, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
-			ProjectID:      fiSharedProject,
-			BaseRevisionID: draftRev.ID,
-			Status:         "draft",
+			ProjectID:          fiSharedProject,
+			BaseRevisionID:     draftRev.ID,
+			Status:             "draft",
+			CommercialSnapshot: snapshot,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{FurnitureInstanceID: fiID, LifecycleStatus: "active"},
 			},

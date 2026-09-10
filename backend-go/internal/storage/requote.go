@@ -116,6 +116,17 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 			LifecycleStatus:       item.LifecycleStatus,
 		}
 	}
+
+	// 3b. Freeze the immutable commercial snapshot (#642) for the exact draft
+	// configuration, computed once server-side in this same transaction.
+	commercialSnapshot, err := s.buildRequoteCommercialSnapshot(ctx, cmd.ProjectID, items)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Create the immutable draft revision through the single #393 writer:
+	// atomic items, race-safe numbering and fail-closed base revision
+	// concurrency all come from CreateQuoteRevision.
 	rev, err := s.CreateQuoteRevision(ctx, CreateQuoteRevisionCommand{
 		ProjectID:              cmd.ProjectID,
 		OrganizationID:         inputs.OrganizationID,
@@ -126,6 +137,7 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 		CreatedBy:              nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
 		SourceDesignRevisionID: cmd.DesignRevisionID,
 		Items:                  items,
+		CommercialSnapshot:     commercialSnapshot,
 	})
 	if err != nil {
 		return nil, err

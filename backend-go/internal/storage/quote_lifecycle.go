@@ -170,16 +170,26 @@ func (s *PostgresStore) CreateInitialQuoteRevision(ctx context.Context, cmd Crea
 		return nil, fmt.Errorf("%w: la materialización no produjo unidades físicas para la revisión inicial", domain.ErrInvalidRevisionSnapshot)
 	}
 
+	// 4b. Freeze the immutable commercial snapshot (#642) in this same
+	// transaction: authoritative amounts computed once from the SAME editable
+	// commercial state being snapshotted, plus the customer-facing
+	// descriptors. Shares the item build's consistency boundary.
+	commercialSnapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items)
+	if err != nil {
+		return nil, err
+	}
+
 	// 5. Single #393 writer: no base revision is only legal while the project
 	// has none — a retry/concurrent create fails typed instead of minting Q2.
 	rev, err := s.CreateQuoteRevision(ctx, CreateQuoteRevisionCommand{
-		ProjectID:      cmd.ProjectID,
-		OrganizationID: projectOrgID,
-		Status:         "draft",
-		SourceType:     "manual",
-		Notes:          nonEmptyOrDefault(cmd.Notes, "Revisión inicial creada desde el estado comercial editable de la obra."),
-		CreatedBy:      nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
-		Items:          items,
+		ProjectID:          cmd.ProjectID,
+		OrganizationID:     projectOrgID,
+		Status:             "draft",
+		SourceType:         "manual",
+		Notes:              nonEmptyOrDefault(cmd.Notes, "Revisión inicial creada desde el estado comercial editable de la obra."),
+		CreatedBy:          nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
+		Items:              items,
+		CommercialSnapshot: commercialSnapshot,
 	})
 	if err != nil {
 		return nil, err
@@ -378,25 +388,31 @@ type QuoteRevisionLifecycleCommand struct {
 // (owner-organization only), which would hide the row from shared-read
 // organizations and collapse the 403 ownership verdict into a false 404. The
 // locked re-read below re-validates under the same transaction, so nothing
-// races between the two reads.
-func (s *PostgresStore) loadQuoteRevisionForLifecycle(ctx context.Context, cmd QuoteRevisionLifecycleCommand) (*domain.QuoteRevision, error) {
+// races between the two reads. The parsed commercial snapshot (#642) rides
+// along fail-closed: a corrupt stored payload blocks the lifecycle command.
+func (s *PostgresStore) loadQuoteRevisionForLifecycle(ctx context.Context, cmd QuoteRevisionLifecycleCommand) (*domain.QuoteRevision, *domain.QuoteCommercialSnapshot, error) {
 	if !isValidUUID(cmd.ProjectID) || !isValidUUID(cmd.QuoteRevisionID) {
-		return nil, domain.ErrInvalidRevisionID
+		return nil, nil, domain.ErrInvalidRevisionID
 	}
-	rev, err := s.readQuoteRevision(ctx, cmd.QuoteRevisionID, cmd.ProjectID, false)
+	rev, _, err := s.readQuoteRevision(ctx, cmd.QuoteRevisionID, cmd.ProjectID, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if rev.OrganizationID != OrgFromCtx(ctx) {
-		return nil, domain.ErrFurnitureInstanceProjectNotWritable
+		return nil, nil, domain.ErrFurnitureInstanceProjectNotWritable
 	}
-	return s.readQuoteRevision(ctx, cmd.QuoteRevisionID, cmd.ProjectID, true)
+	rev, snapshot, err := s.readQuoteRevision(ctx, cmd.QuoteRevisionID, cmd.ProjectID, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	return rev, snapshot, nil
 }
 
-func (s *PostgresStore) readQuoteRevision(ctx context.Context, revisionID, projectID string, forUpdate bool) (*domain.QuoteRevision, error) {
+func (s *PostgresStore) readQuoteRevision(ctx context.Context, revisionID, projectID string, forUpdate bool) (*domain.QuoteRevision, *domain.QuoteCommercialSnapshot, error) {
 	query := `
 		SELECT id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
-			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
+			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
+			COALESCE(commercial_snapshot, 'null'::jsonb), published_at, accepted_at
 		FROM quote_revisions
 		WHERE id = $1 AND project_id = $2`
 	if forUpdate {
@@ -404,6 +420,7 @@ func (s *PostgresStore) readQuoteRevision(ctx context.Context, revisionID, proje
 		FOR UPDATE`
 	}
 	var rev domain.QuoteRevision
+	var commercialSnapshot []byte
 	err := s.db(ctx).QueryRow(ctx, query, revisionID, projectID).Scan(
 		&rev.ID,
 		&rev.OrganizationID,
@@ -414,14 +431,21 @@ func (s *PostgresStore) readQuoteRevision(ctx context.Context, revisionID, proje
 		&rev.Notes,
 		&rev.BaseQuoteRevisionID,
 		&rev.SourceDesignRevisionID,
+		&commercialSnapshot,
+		&rev.PublishedAt,
+		&rev.AcceptedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.ErrQuoteRevisionNotFound
+			return nil, nil, domain.ErrQuoteRevisionNotFound
 		}
-		return nil, err
+		return nil, nil, err
 	}
-	return &rev, nil
+	snapshot, err := parseQuoteCommercialSnapshot(commercialSnapshot)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &rev, snapshot, nil
 }
 
 // PublishQuoteRevision performs the explicit draft → published transition on
@@ -445,13 +469,18 @@ func (s *PostgresStore) PublishQuoteRevision(ctx context.Context, cmd QuoteRevis
 		return rev, err
 	}
 
-	rev, err := s.loadQuoteRevisionForLifecycle(ctx, cmd)
+	rev, snapshot, err := s.loadQuoteRevisionForLifecycle(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
 	switch rev.Status {
 	case "draft":
-		// draft → published: the only valid entry.
+		// #642 fail-closed: publishing freezes commercial history — a legacy
+		// draft without the immutable commercial snapshot cannot publish. The
+		// actionable path is creating a new revision from current state.
+		if snapshot == nil {
+			return nil, domain.ErrQuoteCommercialSnapshotMissing
+		}
 	case "published":
 		return nil, fmt.Errorf("%w: la cotización ya está publicada", domain.ErrQuoteRevisionInvalidTransition)
 	case "accepted":
@@ -517,7 +546,7 @@ func (s *PostgresStore) AcceptQuoteRevision(ctx context.Context, cmd QuoteRevisi
 		return nil, err
 	}
 
-	rev, err := s.loadQuoteRevisionForLifecycle(ctx, cmd)
+	rev, _, err := s.loadQuoteRevisionForLifecycle(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +570,8 @@ func (s *PostgresStore) AcceptQuoteRevision(ctx context.Context, cmd QuoteRevisi
 		SET status = 'superseded'
 		WHERE project_id = $1 AND status = 'accepted' AND id <> $2
 		RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
-			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
+			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
+			published_at, accepted_at
 	`, cmd.ProjectID, cmd.QuoteRevisionID)
 	if err != nil {
 		return nil, err
@@ -558,6 +588,8 @@ func (s *PostgresStore) AcceptQuoteRevision(ctx context.Context, cmd QuoteRevisi
 			&old.Notes,
 			&old.BaseQuoteRevisionID,
 			&old.SourceDesignRevisionID,
+			&old.PublishedAt,
+			&old.AcceptedAt,
 		); err != nil {
 			supersededRows.Close()
 			return nil, err
