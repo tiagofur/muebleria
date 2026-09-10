@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
@@ -106,9 +107,24 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 	// atomic items, race-safe numbering and fail-closed base revision
 	// concurrency all come from CreateQuoteRevision.
 	items := make([]CreateQuoteRevisionItemCommand, len(draft.Items))
+	if inputs.Quote.CommercialSnapshot == nil {
+		return nil, domain.ErrQuoteCommercialSnapshotMissing
+	}
+	quoteLineByInstance := make(map[string]string, len(inputs.Quote.CommercialSnapshot.Units))
+	for _, unit := range inputs.Quote.CommercialSnapshot.Units {
+		quoteLineByInstance[unit.FurnitureInstanceID] = unit.QuoteLineID
+	}
 	for i, item := range draft.Items {
+		quoteLineID := quoteLineByInstance[item.FurnitureInstanceID]
+		if quoteLineID == "" {
+			// A design-only unit has no prior commercial line. Derive a stable,
+			// non-FurnitureInstance UUID once from its immutable identity; later
+			// revisions carry this exact QuoteLineID from the source snapshot.
+			quoteLineID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("granete.quote-line:"+item.FurnitureInstanceID)).String()
+		}
 		items[i] = CreateQuoteRevisionItemCommand{
 			FurnitureInstanceID:   item.FurnitureInstanceID,
+			QuoteLineID:           quoteLineID,
 			FurnitureDefinitionID: item.FurnitureDefinitionID,
 			DefinitionVersion:     item.DefinitionVersion,
 			Parameters:            item.Parameters,

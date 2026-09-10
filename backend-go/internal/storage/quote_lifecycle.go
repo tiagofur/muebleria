@@ -310,11 +310,12 @@ func (s *PostgresStore) buildInitialQuoteItems(ctx context.Context, projectID st
 	for _, unit := range units {
 		item := CreateQuoteRevisionItemCommand{
 			FurnitureInstanceID: unit.InstanceID,
+			QuoteLineID:         unit.LineID,
 			Parameters:          map[string]any{},
 			// The quoted finish rides along: option_choices are the board
 			// choices (role -> material id) the customer selected (#620).
 			MaterialChoices: unit.LineOptions,
-			LifecycleStatus:  unit.LifecycleStatus,
+			LifecycleStatus: unit.LifecycleStatus,
 		}
 		if unit.ModuleID != "" {
 			item.FurnitureDefinitionID = unit.ModuleID
@@ -445,6 +446,7 @@ func (s *PostgresStore) readQuoteRevision(ctx context.Context, revisionID, proje
 	if err != nil {
 		return nil, nil, err
 	}
+	rev.CommercialSnapshot = snapshot
 	return &rev, snapshot, nil
 }
 

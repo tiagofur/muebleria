@@ -8887,6 +8887,9 @@
             ],
             "format": "date-time",
             "description": "Real published → accepted lifecycle event (#642). Never derived from createdAt/updatedAt; NULL on legacy revisions whose event was never recorded."
+          },
+          "commercialSnapshot": {
+            "$ref": "#/components/schemas/QuoteCommercialSnapshot"
           }
         }
       },
@@ -9027,6 +9030,7 @@
           "customer",
           "project",
           "breakdown",
+          "lines",
           "units"
         ],
         "properties": {
@@ -9052,6 +9056,14 @@
           },
           "breakdown": {
             "$ref": "#/components/schemas/QuoteCommercialBreakdown"
+          },
+          "lines": {
+            "type": "array",
+            "description": "Stable QuoteLine commercial groupings with explicit quantity, exact physical identities and authoritative frozen line amounts. Visually identical lines remain distinct by quoteLineId.",
+            "items": {
+              "$ref": "#/components/schemas/QuoteCommercialLine"
+            },
+            "minItems": 1
           },
           "units": {
             "type": "array",
@@ -9127,6 +9139,7 @@
         "additionalProperties": false,
         "required": [
           "furnitureInstanceId",
+          "quoteLineId",
           "moduleCode",
           "moduleName",
           "lifecycleStatus",
@@ -9136,6 +9149,11 @@
           "furnitureInstanceId": {
             "type": "string",
             "format": "uuid"
+          },
+          "quoteLineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable commercial grouping identity; never inferred from module labels or FurnitureInstance presentation."
           },
           "moduleCode": {
             "type": "string"
@@ -9152,6 +9170,60 @@
               "$ref": "#/components/schemas/QuoteCommercialOption"
             }
           }
+        }
+      },
+      "QuoteCommercialLine": {
+        "type": "object",
+        "description": "One frozen commercial QuoteLine. Quantity counts active physical units; furnitureInstanceIds preserves the exact physical identities, including terminal units retained as history.",
+        "additionalProperties": false,
+        "required": [
+          "quoteLineId",
+          "quantity",
+          "furnitureInstanceIds",
+          "amounts"
+        ],
+        "properties": {
+          "quoteLineId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "furnitureInstanceIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "amounts": {
+            "$ref": "#/components/schemas/QuoteCommercialLineAmounts"
+          }
+        }
+      },
+      "QuoteCommercialLineAmounts": {
+        "type": "object",
+        "description": "Authoritative amount contribution frozen for one QuoteLine. salePrice excludes snapshot-level fixed labor, which is added exactly once in the snapshot breakdown.",
+        "additionalProperties": false,
+        "required": [
+          "materialsCost",
+          "edgeTotal",
+          "hardwareTotal",
+          "directCost",
+          "laborModular",
+          "salePrice"
+        ],
+        "properties": {
+          "materialsCost": { "type": "number", "minimum": 0 },
+          "edgeTotal": { "type": "number", "minimum": 0 },
+          "hardwareTotal": { "type": "number", "minimum": 0 },
+          "directCost": { "type": "number", "minimum": 0 },
+          "laborModular": { "type": "number", "minimum": 0 },
+          "salePrice": { "type": "number", "minimum": 0 }
         }
       },
       "QuoteCommercialOption": {

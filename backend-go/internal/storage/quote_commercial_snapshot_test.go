@@ -59,10 +59,13 @@ func setupCommercialSnapshotFixture(t *testing.T) *quoteLifecycleFixture {
 		 ('`+csMaterial+`', 'CS-MAT', 'Tablero Roble', 1000, 1000, 18, 200, 0, '`+rlsOrgA+`'),
 		 ('`+csMaterial2+`', 'CS-MAT-2', 'Tablero Nogal', 1000, 1000, 18, 400, 0, '`+rlsOrgA+`');
 		INSERT INTO option_groups (id, code, name, kind, required, organization_id)
-		VALUES ('93000000-0000-0000-0000-0000000000c1', 'INTERIOR', 'Acabado interior', 'board', TRUE, '`+rlsOrgA+`');
+		VALUES ('93000000-0000-0000-0000-0000000000c1', 'INTERIOR', 'Acabado interior', 'board', TRUE, '`+rlsOrgA+`')
+		ON CONFLICT (organization_id, code) DO UPDATE SET name=EXCLUDED.name, required=EXCLUDED.required;
 		INSERT INTO option_group_members (option_group_id, entity_id, organization_id)
-		VALUES ('93000000-0000-0000-0000-0000000000c1', '`+csMaterial+`', '`+rlsOrgA+`'),
-		 ('93000000-0000-0000-0000-0000000000c1', '`+csMaterial2+`', '`+rlsOrgA+`');
+		SELECT og.id, v.entity_id::uuid, '`+rlsOrgA+`'::uuid
+		FROM option_groups og
+		CROSS JOIN (VALUES ('`+csMaterial+`'), ('`+csMaterial2+`')) AS v(entity_id)
+		WHERE og.organization_id='`+rlsOrgA+`' AND og.code='INTERIOR';
 		INSERT INTO modules (id, code, name, base_labor_cost, organization_id)
 		VALUES ('`+csModule+`', 'CS-MOD', 'Gabinete CS', 50, '`+rlsOrgA+`');
 		INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, organization_id)
@@ -165,7 +168,20 @@ func TestQuoteCommercialSnapshot_Q1_FreezesExactValues(t *testing.T) {
 	if len(snapshot.Units) != 2 {
 		t.Fatalf("expected 2 frozen unit descriptors, got %d", len(snapshot.Units))
 	}
+	if len(snapshot.Lines) != 1 {
+		t.Fatalf("expected one stable commercial line, got %+v", snapshot.Lines)
+	}
+	line := snapshot.Lines[0]
+	if line.QuoteLineID != csLine || line.Quantity != 2 || len(line.FurnitureInstanceIDs) != 2 {
+		t.Fatalf("commercial line identity/quantity = %+v", line)
+	}
+	if line.Amounts.MaterialsCost != 192 || line.Amounts.DirectCost != 192 || line.Amounts.LaborModular != 100 || line.Amounts.SalePrice != 388 {
+		t.Fatalf("commercial line authoritative amounts = %+v", line.Amounts)
+	}
 	for _, unit := range snapshot.Units {
+		if unit.QuoteLineID != csLine {
+			t.Fatalf("unit %s bound to line %s, want %s", unit.FurnitureInstanceID, unit.QuoteLineID, csLine)
+		}
 		if unit.ModuleCode != "CS-MOD" || unit.ModuleName != "Gabinete CS" {
 			t.Fatalf("unit descriptor = %q/%q, want CS-MOD/Gabinete CS", unit.ModuleCode, unit.ModuleName)
 		}
@@ -181,6 +197,47 @@ func TestQuoteCommercialSnapshot_Q1_FreezesExactValues(t *testing.T) {
 	}
 	if result.Revision.PublishedAt != nil || result.Revision.AcceptedAt != nil {
 		t.Fatal("a draft must not carry lifecycle timestamps")
+	}
+}
+
+func TestQuoteCommercialSnapshot_VisuallyIdenticalLinesStayDistinct(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+	secondLine := "62000000-0000-0000-0000-0000000000c2"
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO project_items (id, project_id, module_id, quantity, organization_id)
+		VALUES ('`+secondLine+`', '`+csProject+`', '`+csModule+`', 3, '`+rlsOrgA+`');
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ('`+secondLine+`', 'INTERIOR', '`+csMaterial+`', '`+rlsOrgA+`');`)
+
+	createInitialRevision(t, fx)
+	snapshot := listRevisions(t, fx)[0].CommercialSnapshot
+	if len(snapshot.Lines) != 2 || len(snapshot.Units) != 5 {
+		t.Fatalf("lines/units = %d/%d, want 2/5", len(snapshot.Lines), len(snapshot.Units))
+	}
+	wantQuantity := map[string]int{csLine: 2, secondLine: 3}
+	for _, line := range snapshot.Lines {
+		if line.Quantity != wantQuantity[line.QuoteLineID] || len(line.FurnitureInstanceIDs) != line.Quantity {
+			t.Fatalf("distinct line grouping lost: %+v", line)
+		}
+	}
+	for _, unit := range snapshot.Units {
+		if _, ok := wantQuantity[unit.QuoteLineID]; !ok {
+			t.Fatalf("unit %s has unknown commercial line %s", unit.FurnitureInstanceID, unit.QuoteLineID)
+		}
+	}
+}
+
+func TestQuoteCommercialSnapshot_MissingCustomerFacingLabelFailsClosed(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+	multiOrgExec(t, fx.admin, `UPDATE modules SET name='' WHERE id='`+csModule+`'`)
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, err := fx.store.CreateInitialQuoteRevision(ctx, storage.CreateInitialQuoteRevisionCommand{
+			ProjectID: csProject, ActorUserID: rlsUserA, RequestID: "missing-label",
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrInvalidRevisionSnapshot) || !strings.Contains(err.Error(), "module name") {
+		t.Fatalf("missing customer-facing label must be actionable invalid snapshot, got %v", err)
 	}
 }
 
@@ -588,27 +645,14 @@ func TestQuoteCommercialSnapshot_ConcurrentLifecycleSingleAudit(t *testing.T) {
 	}
 }
 
-// Corrupt stored history is rejected fail-closed — never partially loaded or
-// guessed. (Seeded by raw INSERT: the immutability trigger only guards
-// UPDATE/DELETE, and injection at insert time is the honest corruption path.)
-func TestQuoteCommercialSnapshot_CorruptPayloadFailsClosed(t *testing.T) {
+// Direct SQL cannot create corrupt canonical history: the database rejects an
+// invalid envelope before it can become a read-path ambiguity.
+func TestQuoteCommercialSnapshot_CorruptPayloadInsertRejected(t *testing.T) {
 	fx := setupCommercialSnapshotFixture(t)
-	if _, err := fx.admin.Exec(context.Background(), `
-		INSERT INTO furniture_instances (id, organization_id, project_id, origin, lifecycle_status)
-		VALUES ('54000000-0000-0000-0000-0000000000c2', '`+rlsOrgA+`', '`+csProject+`', 'manual', 'active')`); err != nil {
-		t.Fatalf("seed furniture instance: %v", err)
-	}
-	if _, err := fx.admin.Exec(context.Background(), `
+	_, err := fx.admin.Exec(context.Background(), `
 		INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, commercial_snapshot)
-		VALUES ('74000000-0000-0000-0000-0000000000c1', '`+rlsOrgA+`', '`+csProject+`', 1, 'draft', '{"schema":"wrong"}'::jsonb)`); err != nil {
-		t.Fatalf("seed corrupt snapshot: %v", err)
-	}
-
-	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-		_, err := fx.store.ListQuoteRevisionsByProject(ctx, csProject)
-		return err
-	})
-	if !errors.Is(err, domain.ErrInvalidRevisionSnapshot) {
-		t.Fatalf("corrupt snapshot must fail closed, got %v", err)
+		VALUES ('74000000-0000-0000-0000-0000000000c1', '`+rlsOrgA+`', '`+csProject+`', 1, 'draft', '{"schema":"wrong"}'::jsonb)`)
+	if err == nil || !strings.Contains(err.Error(), "not a valid") {
+		t.Fatalf("corrupt snapshot insert must fail closed, got %v", err)
 	}
 }

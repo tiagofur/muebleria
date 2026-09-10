@@ -6,12 +6,11 @@ Issue: [#642](https://github.com/tiagofur/muebleria/issues/642) —
 
 - Base: `origin/main@b3efd4191526010e440aafe20e80378f21615161`
 - Branch: `feat/642-quote-commercial-snapshot`
-- Single writer: GLM. Sin merge ni cierre de issue.
+- Corrección de review ejecutada en la misma rama/PR. Sin merge ni cierre de issue.
 - Preflight `./init.sh`: PASS (2026-09-10).
-- ⚠️ Issue #642 está OPEN pero **sin label `status:approved`** al momento de
-  iniciar (a diferencia de #640/#641). La implementación fue autorizada por
-  instrucción directa del owner; el preflight de publicación de PR exige el
-  label antes de publicar.
+- Implementación y corrección de bloqueos autorizadas directamente por el
+  owner. La sincronización final de governance/metadata queda a cargo del
+  coordinador después de conocer el tamaño exacto.
 
 ## Authority inventory (pre-código)
 
@@ -70,10 +69,12 @@ tabla paralela, SIN segundo dominio):
   `granete.quote-commercial-snapshot.v1`: `schema`, `capturedAt`, `currency`,
   `customer {id, name}`, `project {id, name}`, `breakdown` (los 8 campos que
   el XLSX consume: materialsCost, edgeTotal, hardwareTotal, directCost,
-  laborModular, laborFixedCost, marginFactor, salePrice), `units[]`
-  (`furnitureInstanceId`, `moduleCode`, `moduleName`, `lifecycleStatus`,
-  `options[] {groupCode, groupLabel, choiceId, choiceLabel}`).
-  Cantidad por línea = conteo de unidades congeladas (identidad exacta).
+  laborModular, laborFixedCost, marginFactor, salePrice), `lines[]`
+  (`quoteLineId`, `quantity`, `furnitureInstanceIds[]`, `amounts` autoritativos
+  por línea) y `units[]` (`furnitureInstanceId`, `quoteLineId`, `moduleCode`,
+  `moduleName`, `lifecycleStatus`, `options[] {groupCode, groupLabel, choiceId,
+  choiceLabel}`). Dos líneas visualmente idénticas conservan identidad y
+  agrupación separadas; quantity coincide con sus unidades físicas activas.
 - `quote_revisions.published_at`, `accepted_at TIMESTAMPTZ NULL` — eventos de
   lifecycle reales fijados por la transición que los posee; jamás derivados de
   `created_at`/`updated_at`. NULL en filas legacy = ausencia honesta.
@@ -88,9 +89,9 @@ como dependencia (prohibido depender del engine actual para siempre); el
 marcador `schema` versiona el payload.
 
 - Q1 (`CreateInitialQuoteRevision`): pricing del estado comercial EDITABLE
-  completo (líneas con base mode/presets/pins/kitchen layout, snapshot legacy
-  si el proyecto ya estaba cerrado-legacy — el engine decide, esa ES su verdad
-  actual). Misma frontera de consistencia que el snapshot de items.
+  completo (líneas con base mode/presets/pins/kitchen layout). Nunca copia el
+  `priceSnapshot` legacy, que no conserva autoridad por línea. Misma frontera
+  de consistencia que el snapshot de items.
 - Q2+ (`RequoteProjectQuote`): input sintetizado por unidad ACTIVA
   (definición + choices congeladas + dims de parámetros, `CustomDims` sólo con
   las 3 dimensiones presentes y positivas), resuelto contra el catálogo una
@@ -98,13 +99,20 @@ marcador `schema` versiona el payload.
   snapshot legacy del proyecto). Unidades removed/cancelled quedan en `units[]`
   con su lifecycle pero no contribuyen a los totales (misma semántica que la
   cantidad comercial editable).
-- Líneas no precioables (choice faltante, definición inexistente) → error
-  tipado `ErrInvalidRevisionSnapshot` accionable; NUNCA precios inventados.
+- Cada línea congela su propia contribución autoritativa de materiales, cantos,
+  herrajes, costo directo, labor modular y precio de venta; la suma reconcilia
+  con el breakdown global y el labor fijo se aplica una sola vez al snapshot.
+- Líneas no precioables o descriptores customer-facing ausentes (módulo, grupo,
+  opción) → error tipado `ErrInvalidRevisionSnapshot` accionable; NUNCA precio
+  inventado ni UUID presentado como fallback. Opciones ordenadas por
+  `groupCode` + `choiceId` antes de persistir.
 
 ## Inmutabilidad
 
 - Trigger DB endurecido (`protect_quote_revision_immutability`, 000130):
-  `commercial_snapshot` inmutable una vez escrito (ni rewrite ni inyección
+  valida INSERT directo del envelope v1 (también bajo `granete_app`), exige que
+  el snapshot canónico nazca draft sin timestamps y deja NULL sólo como
+  compatibilidad legacy; `commercial_snapshot` inmutable una vez escrito (ni rewrite ni inyección
   NULL→valor); `published_at` fijable SOLO por draft→published (NULL→valor);
   `accepted_at` SOLO por published→accepted; superseding preserva ambos.
 - Backstop fail-closed: `draft → published` con snapshot NULL es rechazado por
@@ -140,63 +148,54 @@ marcador `schema` versiona el payload.
 
 ## API generada
 
-- `QuoteRevisionDetail` += `publishedAt?`, `acceptedAt?`, `commercialSnapshot?`
-  (opcional — ausencia = legacy fail-closed, nunca recálculo).
-- Schemas nuevos: `QuoteCommercialSnapshot`, `QuoteCommercialIdentity`,
-  `QuoteCommercialBreakdown`, `QuoteCommercialUnit`, `QuoteCommercialOption`.
-- `QuoteRevision` += `publishedAt?`/`acceptedAt?` (respuestas de lifecycle).
+- `QuoteRevision` y `QuoteRevisionDetail` += `publishedAt?`, `acceptedAt?`,
+  `commercialSnapshot?` (opcional — ausencia = legacy fail-closed, nunca
+  recálculo); por eso create/publish/accept/requote y list/detail exponen la
+  misma autoridad exacta.
+- Schemas: `QuoteCommercialSnapshot`, `QuoteCommercialIdentity`,
+  `QuoteCommercialBreakdown`, `QuoteCommercialLine`,
+  `QuoteCommercialLineAmounts`, `QuoteCommercialUnit`,
+  `QuoteCommercialOption`.
 - `pnpm openapi:generate` ejecutado; `pnpm openapi:check` PASS (sin drift).
   TS (`packages/storage`) re-exporta los tipos generados — sin DTO manual.
 
 ## Tests (PostgreSQL real, cero skips)
 
-Storage (`quote_commercial_snapshot_test.go`, 10 tests ≈ los 14 proofs):
+Storage/domain/API (13 tests `TestQuoteCommercialSnapshot*` más pruebas API):
 
-1-2. Q1 congela valores exactos (fixture determinista: 2 unidades × 0.48 m² ×
-$200/m², labor 50/u, margin 1.5, fijo 100 → materials 192 / sale 488) +
-descriptores (CS-MOD/Gabinete CS, INTERIOR/Acabado interior, Tablero Roble).
-3. publish/accept fijan timestamps exactos una vez; snapshot idéntico.
-4-7. Mutar Project (nombre/moneda/margin/labor/status + rename cliente) y
-catálogo (rename módulo/material/grupo + board_price 9999 + waste 50) → bytes
-almacenados y read model IDÉNTICOS.
-8-9. Q2 por requote real (design revision publicada, unidad 2 cambia a
-material $400/m²) → materials 288 / sale 632 ≠ Q1; Q1 y Q2 reproducibles
-independientemente tras nueva mutación.
-10. Cross-tenant: org B → 404 uniforme (list + publish) + SQL directo bajo
-app role con GUC org B ve 0 filas.
-11. Legacy sin snapshot: publish por comando y por owner de transición fallan
-`ErrQuoteCommercialSnapshotMissing`; SQL directo → trigger; fila queda draft.
-12. Inmutabilidad DB: 5 UPDATEs (rewrite/NULL del snapshot, published_at,
-accepted_at set/NULL) rechazados; accepted→superseded preserva todo verbatim.
-13. Retry de CreateInitialQuoteRevision → `ErrQuoteRevisionConflict`, 1
-revisión, snapshot intacto.
-14. Publish/accept concurrentes (2 goroutines): exactamente 1 ganador, réplica
-tipada, exactamente 1 audit event c/u.
+- Q1 congela `quoteLineId`, quantity 2, dos FurnitureInstance exactos y montos
+  autoritativos de línea (materials/direct 192, labor 100, sale 388) que
+  reconcilian con sale total 488 al sumar labor fijo 100.
+- Dos líneas visualmente idénticas (mismo módulo/material) conservan IDs,
+  cantidades 2 y 3, y cinco unidades físicas correctamente agrupadas.
+- Q2 por requote hereda la línea estable de cada unidad y congela verdad
+  independiente; Q1/Q2 permanecen byte-identical tras mutar Project/catálogo.
+- Label customer-facing ausente falla `ErrInvalidRevisionSnapshot`; dos órdenes
+  distintas de múltiples opciones producen JSON idéntico y no mutan el input.
+- Publish/accept, retry y concurrencia mantienen snapshot/timestamps/audit
+  inmutables; cross-tenant retorna 404 uniforme y RLS app-role ve cero filas.
+- INSERT SQL directo de snapshot corrupto falla en PostgreSQL. El upgrade real
+  siembra draft/published/accepted antes de 000130, preserva identidad/status/
+  created_at con snapshot/timestamps NULL, prueba fail-closed, FORCE RLS,
+  down y replay. `granete_app` no puede insertar ni envelope inválido ni
+  snapshot canónico en estado distinto de draft.
+- Create HTTP con la misma idempotency key ejecuta una vez y reenvía status,
+  header y bytes exactos, incluyendo lines/quantity/quoteLineId. List/detail y
+  lifecycle mapean el mismo contrato; redacción cubre costos globales y de
+  línea sin ocultar salePrice.
 
-Migración (`quote_commercial_snapshot_migration_test.go`): fresh + upgrade
-129→130 + down (columnas eliminadas, semántica pre-#642 restaurada, inventario
-revertido, RLS intacta).
+## Tamaño (additions + deletions, no neto)
 
-API (`quote_commercial_snapshot_api_test.go`): DTO completo con costos para
-admin; redacción para vendedor sin flag (costos 0, salePrice/descriptores
-intactos); legacy sin snapshot → `commercialSnapshot` ausente; publish sin
-snapshot → 409 accionable.
+El diff excede el tope original y usa la excepción cohesiva autorizada por el
+owner. Los artifacts generados se separan, pero NO se ocultan del total:
 
-Fixtures actualizados (semántica #642, no debilitación): lifecycle tests
-siembran choice BODY precioable (el módulo compuesto del fixture requiere el
-rol; el pricing fail-closed es el comportamiento correcto);
-`reconciliation_test` draft/draft2 llevan snapshot (publicar legítimo sigue
-sintiéndose legítimo por SQL directo).
-
-## Tamaño
-
-- Producción nueva (SQL migración up+down, domain, storage builder): 785 líneas.
-- Diffs Go en archivos existentes: +240/−38 (≈202 netas).
-- Spec OpenAPI autorado: +196 líneas (los artifacts GENERADOS Go/TS quedan
-  fuera del presupuesto autorado según la issue).
-- Total Go+SQL autorado ≈ 987 (< tope duro 1000; rango suave 400–900
-  excedido principalmente por comentarios de convención y el par up/down del
-  trigger — se reporta para criterio del owner/reviewer).
+- Total PR contra base: **3433 additions + 87 deletions = 3520 líneas**.
+- Autorado (producción + tests + docs): **3282 + 66 = 3348 líneas**.
+- Generado OpenAPI Go/TS: **151 + 21 = 172 líneas**.
+- Ronda correctiva contra `4661745`: **1071 additions + 268 deletions =
+  1339 líneas** (de ellas, generated 50 + 12 = 62; autorado 1277).
+- La cifra anterior de “≈987 netas” era incorrecta porque restaba deletes y
+  omitía categorías; este reporte usa additions + deletions.
 
 ## Pendiente / siguientes slices
 
@@ -208,15 +207,15 @@ sintiéndose legítimo por SQL directo).
 
 - `./init.sh` PASS (preflight).
 - `go vet ./...` PASS.
-- `GOFLAGS='-p=1' go test ./... -count=1`: **10/10 paquetes ok, cero fallos**
-  (incl. `internal/storage` 316 s sobre PostgreSQL real, cero skips).
-- Focused: `TestQuoteCommercialSnapshot*` 10/10 (14 proofs) + migración
-  fresh/upgrade/down + API quote surfaces PASS.
+- `GOFLAGS='-p=1' go test ./... -count=1`: PASS (storage 336.081 s; pilotreadiness 235.452 s; cero fallos).
+- Focused: domain + **13/13** `TestQuoteCommercialSnapshot*` (incl. upgrade
+  pre-000130, down/replay y app-role INSERT) + API quote/idempotency +
+  regresiones lifecycle/requote/release/Digital Thread PASS.
 - `pnpm openapi:check` PASS (sin drift) · `pnpm typecheck` PASS.
 - `pnpm test`: verde — UI 1.690, Web 442, Mobile 73, Desktop 17 (más storage/
   domain/excel en el mismo run, EXIT 0).
 - Browser gate real (`scripts/organization-browser-gate.sh
-  tests/organization/project-reconciliation.spec.ts`): **4/4 PASS (29.3 s)** —
+  tests/organization/project-reconciliation.spec.ts`): **4/4 PASS (29.5 s)** —
   Chromium + Go + PostgreSQL efímero; el golden path comercial completo (Q1 →
   publish → accept → requote Q2 → aprobación → release → tenant isolation)
   funciona con la captura del snapshot.

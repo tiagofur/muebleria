@@ -789,8 +789,11 @@ necesitan reproducir sin consultar NADA mutable:
 moneda · identidad comercial de cliente {id, nombre} · identidad comercial de obra {id, nombre}
 breakdown autoritativo calculado UNA vez (materialsCost, edgeTotal, hardwareTotal,
 directCost, laborModular, laborFixedCost, marginFactor, salePrice)
-descriptores congelados por unidad física (moduleCode, moduleName, opciones
-{groupCode, groupLabel, choiceId, choiceLabel}) · capturedAt
+líneas comerciales congeladas {quoteLineId, quantity, furnitureInstanceIds,
+amounts {materialsCost, edgeTotal, hardwareTotal, directCost, laborModular,
+salePrice}} · descriptores congelados por unidad física {furnitureInstanceId,
+quoteLineId, moduleCode, moduleName, opciones {groupCode, groupLabel, choiceId,
+choiceLabel}} · capturedAt
 ```
 
 Timestamps de lifecycle **reales** (`published_at`, `accepted_at`) los fijan los
@@ -815,12 +818,25 @@ Reglas duras:
    falla cerrado (backstop en trigger DB).
 4. **Inmutabilidad**: el snapshot, `published_at` y `accepted_at` son inmutables
    una vez escritos (trigger DB + grants); cambio comercial = nueva revisión.
+   `quoteLineId` conserva la agrupación comercial aunque dos líneas tengan la
+   misma presentación; `quantity` es explícita y debe coincidir con las unidades
+   físicas activas de esa línea. Los montos por línea son autoridad congelada y
+   su suma debe reconciliar exactamente con el breakdown global (más el labor
+   fijo, que se aplica una sola vez a nivel snapshot).
 5. **Costos**: el read model del snapshot aplica la misma redacción de costos
    (`RedactQuoteBreakdown`) que el resto de la plataforma para actores sin
    permiso de costos; `salePrice` es comercial y permanece.
+   La redacción también cubre los montos de costo por línea.
 6. Campos no inventados: sin impuestos (no existen en el modelo runtime) y sin
    descuentos congelados adicionales (los tiers TS no tienen fuente persistida;
    el breakdown congelado ES el monto autoritativo).
+7. **Presentación determinista**: módulo, grupo y opción requieren un descriptor
+   customer-facing real al capturar. Un label ausente falla de forma tipada y
+   accionable; nunca se muestra un UUID como fallback. Las opciones se ordenan
+   por `groupCode` + `choiceId` antes de persistir.
+8. **Upgrade honesto**: revisiones legacy draft/published/accepted permanecen
+   con snapshot y timestamps NULL, identidad y status intactos. Sólo una nueva
+   revisión puede nacer con autoridad v1; no existe backfill inventado.
 
 ---
 

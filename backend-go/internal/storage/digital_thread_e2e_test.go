@@ -77,7 +77,7 @@ func TestDigitalThreadE2E_ScenarioA_QuoteFirst(t *testing.T) {
 			t.Fatalf("contract invariant C1 violated: QuoteLine ID used as physical unit identity")
 		}
 
-		qRev, err := fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createPublishedFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Baseline Q1",
 			Items: []storage.CreateQuoteRevisionItemCommand{
@@ -522,7 +522,7 @@ func TestDigitalThreadE2E_ScenarioC_DesignFirst(t *testing.T) {
 			return err
 		}
 
-		qRev1, err := fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+		qRev1, err := createPublishedFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Initial Q1",
 			Items: []storage.CreateQuoteRevisionItemCommand{

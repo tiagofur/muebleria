@@ -49,10 +49,18 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER protect_quote_revisions_immutable ON quote_revisions;
+CREATE TRIGGER protect_quote_revisions_immutable
+    BEFORE UPDATE OR DELETE ON quote_revisions
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_quote_revision_immutability();
+
 ALTER TABLE quote_revisions
     DROP COLUMN IF EXISTS commercial_snapshot,
     DROP COLUMN IF EXISTS published_at,
     DROP COLUMN IF EXISTS accepted_at;
+
+DROP FUNCTION IF EXISTS valid_quote_commercial_snapshot_v1(JSONB);
 
 UPDATE rls_policy_inventory
 SET rationale = 'Project quote revisions are historical snapshots; mutations are restricted strictly to lifecycle transitions (#393 / ADR-0003)',

@@ -160,10 +160,27 @@ func toQuoteCommercialSnapshotDTO(snapshot *domain.QuoteCommercialSnapshot) *ope
 		}
 		units = append(units, openapi.QuoteCommercialUnit{
 			FurnitureInstanceId: unit.FurnitureInstanceID,
+			QuoteLineId:         unit.QuoteLineID,
 			ModuleCode:          unit.ModuleCode,
 			ModuleName:          unit.ModuleName,
 			LifecycleStatus:     openapi.FurnitureInstanceLifecycleStatus(unit.LifecycleStatus),
 			Options:             options,
+		})
+	}
+	lines := make([]openapi.QuoteCommercialLine, 0, len(snapshot.Lines))
+	for _, line := range snapshot.Lines {
+		lines = append(lines, openapi.QuoteCommercialLine{
+			QuoteLineId:          line.QuoteLineID,
+			Quantity:             int64(line.Quantity),
+			FurnitureInstanceIds: append([]string(nil), line.FurnitureInstanceIDs...),
+			Amounts: openapi.QuoteCommercialLineAmounts{
+				MaterialsCost: line.Amounts.MaterialsCost,
+				EdgeTotal:     line.Amounts.EdgeTotal,
+				HardwareTotal: line.Amounts.HardwareTotal,
+				DirectCost:    line.Amounts.DirectCost,
+				LaborModular:  line.Amounts.LaborModular,
+				SalePrice:     line.Amounts.SalePrice,
+			},
 		})
 	}
 	return &openapi.QuoteCommercialSnapshot{
@@ -188,6 +205,7 @@ func toQuoteCommercialSnapshotDTO(snapshot *domain.QuoteCommercialSnapshot) *ope
 			MarginFactor:   snapshot.Breakdown.MarginFactor,
 			SalePrice:      snapshot.Breakdown.SalePrice,
 		},
+		Lines: lines,
 		Units: units,
 	}
 }

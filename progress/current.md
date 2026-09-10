@@ -27,6 +27,29 @@
   de tamaño documentada en la issue; PR parcial `Refs #642` publicado con label
   único `type:feature`. Sin merge ni cierre; revisión independiente pendiente.
 
+# Issue #642 — PR #649 correction round
+
+- Corrección autorizada sobre `feat/642-quote-commercial-snapshot`, head inicial
+  `466174572c43742d089ecb79a56606e40f6f008d`, base
+  `b3efd4191526010e440aafe20e80378f21615161`; worktree limpio verificado.
+- Inicio: 2026-09-10. El owner autorizó resolver todos los bloqueos y la
+  excepción real de tamaño >1000; no autoriza nuevo PR, merge, cierre,
+  autoaprobación ni cambios de metadata GitHub.
+- Plan: (1) completar autoridad comercial por QuoteLine y cantidad; (2) hacer
+  real el upgrade fixture pre-000130 y endurecer INSERT; (3) fallar cerrado en
+  descriptores sin label y ordenar opciones; (4) probar replay HTTP exacto del
+  payload extendido; (5) regenerar OpenAPI, documentar §16A y verificar gates.
+- Resultado: `IMPLEMENTED_PENDING_REVIEW`. Snapshot v1 ahora conserva
+  `quoteLineId`, quantity, FurnitureInstanceIds y montos autoritativos por línea;
+  create/lifecycle/requote/list/detail devuelven la misma autoridad generada.
+  Descriptores ausentes fallan tipado, opciones/bytes son deterministas y la
+  redacción cubre costos por línea. Migración upgrade siembra legado antes de
+  000130, preserva status/identidad/NULL honestos, prueba down/replay/FORCE RLS
+  y bloquea INSERT app-role inválido. Replay HTTP exacto probado.
+- Evidencia de corrección: domain + 13 tests storage `TestQuoteCommercialSnapshot*`
+  + API quote enfocada PASS; OpenAPI check/typecheck PASS; browser gate real
+  Chromium+Go+PostgreSQL 4/4 PASS (29.5 s). Full Go exacto PASS (storage 336.081 s; pilotreadiness 235.452 s).
+
 # Issue #641 — Design inspector async and accessibility correction
 
 - Corrección autorizada sobre PR #648, rama `fix/641-design-inspector-async-a11y`,

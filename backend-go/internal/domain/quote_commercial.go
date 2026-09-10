@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // #642 / QUOTE-AUTH: the exact QuoteRevision is the sole canonical commercial
@@ -50,10 +53,34 @@ type QuoteCommercialOption struct {
 // identity (never by name or geometry).
 type QuoteCommercialUnit struct {
 	FurnitureInstanceID string                  `json:"furnitureInstanceId"`
+	QuoteLineID         string                  `json:"quoteLineId"`
 	ModuleCode          string                  `json:"moduleCode"`
 	ModuleName          string                  `json:"moduleName"`
 	LifecycleStatus     string                  `json:"lifecycleStatus"`
 	Options             []QuoteCommercialOption `json:"options"`
+}
+
+// QuoteCommercialLineAmounts freezes the amount contribution of one exact
+// QuoteLine. Fixed labor stays at snapshot level; line SalePrice is
+// DirectCost*MarginFactor + LaborModular, so the line sum plus fixed labor is
+// exactly the authoritative snapshot SalePrice.
+type QuoteCommercialLineAmounts struct {
+	MaterialsCost float64 `json:"materialsCost"`
+	EdgeTotal     float64 `json:"edgeTotal"`
+	HardwareTotal float64 `json:"hardwareTotal"`
+	DirectCost    float64 `json:"directCost"`
+	LaborModular  float64 `json:"laborModular"`
+	SalePrice     float64 `json:"salePrice"`
+}
+
+// QuoteCommercialLine is the stable commercial grouping captured alongside
+// physical FurnitureInstance identities. Visually identical lines remain
+// distinct because QuoteLineID, never presentation text, owns grouping.
+type QuoteCommercialLine struct {
+	QuoteLineID          string                     `json:"quoteLineId"`
+	Quantity             int                        `json:"quantity"`
+	FurnitureInstanceIDs []string                   `json:"furnitureInstanceIds"`
+	Amounts              QuoteCommercialLineAmounts `json:"amounts"`
 }
 
 // QuoteCommercialSnapshot is the complete frozen commercial payload of one
@@ -65,6 +92,7 @@ type QuoteCommercialSnapshot struct {
 	Customer   QuoteCommercialIdentity `json:"customer"`
 	Project    QuoteCommercialIdentity `json:"project"`
 	Breakdown  QuoteBreakdown          `json:"breakdown"`
+	Lines      []QuoteCommercialLine   `json:"lines"`
 	Units      []QuoteCommercialUnit   `json:"units"`
 }
 
@@ -111,17 +139,108 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 	if len(snapshot.Units) == 0 {
 		return fmt.Errorf("%w: commercial snapshot has no units", ErrInvalidRevisionSnapshot)
 	}
+	if len(snapshot.Lines) == 0 {
+		return fmt.Errorf("%w: commercial snapshot has no quote lines", ErrInvalidRevisionSnapshot)
+	}
+	lineByID := make(map[string]QuoteCommercialLine, len(snapshot.Lines))
+	instanceLine := make(map[string]string, len(snapshot.Units))
+	var summed QuoteCommercialLineAmounts
+	for i, line := range snapshot.Lines {
+		if _, err := uuid.Parse(line.QuoteLineID); err != nil || line.Quantity < 0 || len(line.FurnitureInstanceIDs) == 0 {
+			return fmt.Errorf("%w: commercial snapshot line %d identity or quantity is invalid", ErrInvalidRevisionSnapshot, i)
+		}
+		if _, duplicate := lineByID[line.QuoteLineID]; duplicate {
+			return fmt.Errorf("%w: duplicate commercial quote line %s", ErrInvalidRevisionSnapshot, line.QuoteLineID)
+		}
+		lineByID[line.QuoteLineID] = line
+		for _, instanceID := range line.FurnitureInstanceIDs {
+			if _, err := uuid.Parse(instanceID); err != nil {
+				return fmt.Errorf("%w: commercial snapshot line %s has empty furniture identity", ErrInvalidRevisionSnapshot, line.QuoteLineID)
+			}
+			if prior, duplicate := instanceLine[instanceID]; duplicate {
+				return fmt.Errorf("%w: furniture instance %s appears in quote lines %s and %s", ErrInvalidRevisionSnapshot, instanceID, prior, line.QuoteLineID)
+			}
+			instanceLine[instanceID] = line.QuoteLineID
+		}
+		for field, value := range map[string]float64{
+			"materialsCost": line.Amounts.MaterialsCost,
+			"edgeTotal":     line.Amounts.EdgeTotal,
+			"hardwareTotal": line.Amounts.HardwareTotal,
+			"directCost":    line.Amounts.DirectCost,
+			"laborModular":  line.Amounts.LaborModular,
+			"salePrice":     line.Amounts.SalePrice,
+		} {
+			if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+				return fmt.Errorf("%w: commercial snapshot line %s amount %s is invalid", ErrInvalidRevisionSnapshot, line.QuoteLineID, field)
+			}
+		}
+		summed.MaterialsCost += line.Amounts.MaterialsCost
+		summed.EdgeTotal += line.Amounts.EdgeTotal
+		summed.HardwareTotal += line.Amounts.HardwareTotal
+		summed.DirectCost += line.Amounts.DirectCost
+		summed.LaborModular += line.Amounts.LaborModular
+		summed.SalePrice += line.Amounts.SalePrice
+	}
+	activeByLine := make(map[string]int, len(snapshot.Lines))
 	for i, unit := range snapshot.Units {
-		if unit.FurnitureInstanceID == "" {
-			return fmt.Errorf("%w: commercial snapshot unit %d has no furniture instance identity", ErrInvalidRevisionSnapshot, i)
+		if _, err := uuid.Parse(unit.FurnitureInstanceID); err != nil {
+			return fmt.Errorf("%w: commercial snapshot unit %d has invalid physical identity", ErrInvalidRevisionSnapshot, i)
+		}
+		if _, err := uuid.Parse(unit.QuoteLineID); err != nil {
+			return fmt.Errorf("%w: commercial snapshot unit %d has incomplete physical/commercial identity", ErrInvalidRevisionSnapshot, i)
+		}
+		if unit.ModuleCode == "" || unit.ModuleName == "" {
+			return fmt.Errorf("%w: commercial snapshot unit %d has no customer-facing module descriptor", ErrInvalidRevisionSnapshot, i)
+		}
+		if unit.Options == nil {
+			return fmt.Errorf("%w: commercial snapshot unit %s options must be an array", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
+		}
+		if instanceLine[unit.FurnitureInstanceID] != unit.QuoteLineID {
+			return fmt.Errorf("%w: commercial snapshot unit %s is not bound to quote line %s", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, unit.QuoteLineID)
+		}
+		for j, option := range unit.Options {
+			if option.GroupCode == "" || option.GroupLabel == "" || option.ChoiceID == "" || option.ChoiceLabel == "" {
+				return fmt.Errorf("%w: commercial snapshot unit %s option %d has no customer-facing descriptor", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, j)
+			}
+			if j > 0 {
+				prior := unit.Options[j-1]
+				if prior.GroupCode > option.GroupCode || (prior.GroupCode == option.GroupCode && prior.ChoiceID > option.ChoiceID) {
+					return fmt.Errorf("%w: commercial snapshot unit %s options are not deterministic", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
+				}
+			}
 		}
 		switch unit.LifecycleStatus {
 		case "active", "removed", "cancelled":
 		default:
 			return fmt.Errorf("%w: commercial snapshot unit %d has invalid lifecycle %q", ErrInvalidRevisionSnapshot, i, unit.LifecycleStatus)
 		}
+		if unit.LifecycleStatus == "active" {
+			activeByLine[unit.QuoteLineID]++
+		}
+	}
+	for _, line := range snapshot.Lines {
+		if activeByLine[line.QuoteLineID] != line.Quantity {
+			return fmt.Errorf("%w: commercial snapshot line %s quantity %d differs from %d active physical units", ErrInvalidRevisionSnapshot, line.QuoteLineID, line.Quantity, activeByLine[line.QuoteLineID])
+		}
+	}
+	for field, values := range map[string][2]float64{
+		"materialsCost": {summed.MaterialsCost, breakdown.MaterialsCost},
+		"edgeTotal":     {summed.EdgeTotal, breakdown.EdgeTotal},
+		"hardwareTotal": {summed.HardwareTotal, breakdown.HardwareTotal},
+		"directCost":    {summed.DirectCost, breakdown.DirectCost},
+		"laborModular":  {summed.LaborModular, breakdown.LaborModular},
+		"salePrice":     {summed.SalePrice + breakdown.LaborFixedCost, breakdown.SalePrice},
+	} {
+		if !commercialAmountsEqual(values[0], values[1]) {
+			return fmt.Errorf("%w: commercial snapshot line %s sum %.12g differs from breakdown %.12g", ErrInvalidRevisionSnapshot, field, values[0], values[1])
+		}
 	}
 	return nil
+}
+
+func commercialAmountsEqual(a, b float64) bool {
+	scale := math.Max(1, math.Max(math.Abs(a), math.Abs(b)))
+	return math.Abs(a-b) <= scale*1e-9
 }
 
 // RedactQuoteCommercialSnapshot returns a copy with the workshop cost stack
@@ -133,12 +252,44 @@ func RedactQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) *QuoteComm
 	}
 	redacted := *snapshot
 	RedactQuoteBreakdown(&redacted.Breakdown)
+	redacted.Lines = append([]QuoteCommercialLine(nil), snapshot.Lines...)
+	for i := range redacted.Lines {
+		redacted.Lines[i].Amounts.MaterialsCost = 0
+		redacted.Lines[i].Amounts.EdgeTotal = 0
+		redacted.Lines[i].Amounts.HardwareTotal = 0
+		redacted.Lines[i].Amounts.DirectCost = 0
+		redacted.Lines[i].Amounts.LaborModular = 0
+	}
 	return &redacted
 }
 
 // BuildQuoteCommercialSnapshot assembles and validates the frozen payload from
 // already-authoritative inputs. Pure: it never mutates its arguments.
-func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, customer, project QuoteCommercialIdentity, breakdown QuoteBreakdown, units []QuoteCommercialUnit) (*QuoteCommercialSnapshot, error) {
+func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, customer, project QuoteCommercialIdentity, breakdown QuoteBreakdown, lines []QuoteCommercialLine, units []QuoteCommercialUnit) (*QuoteCommercialSnapshot, error) {
+	lines = append([]QuoteCommercialLine(nil), lines...)
+	units = append([]QuoteCommercialUnit(nil), units...)
+	for i := range lines {
+		lines[i].FurnitureInstanceIDs = append([]string(nil), lines[i].FurnitureInstanceIDs...)
+		sort.Strings(lines[i].FurnitureInstanceIDs)
+	}
+	for i := range units {
+		options := make([]QuoteCommercialOption, len(units[i].Options))
+		copy(options, units[i].Options)
+		units[i].Options = options
+		sort.Slice(units[i].Options, func(a, b int) bool {
+			if units[i].Options[a].GroupCode == units[i].Options[b].GroupCode {
+				return units[i].Options[a].ChoiceID < units[i].Options[b].ChoiceID
+			}
+			return units[i].Options[a].GroupCode < units[i].Options[b].GroupCode
+		})
+	}
+	sort.Slice(lines, func(i, j int) bool { return lines[i].QuoteLineID < lines[j].QuoteLineID })
+	sort.Slice(units, func(i, j int) bool {
+		if units[i].QuoteLineID == units[j].QuoteLineID {
+			return units[i].FurnitureInstanceID < units[j].FurnitureInstanceID
+		}
+		return units[i].QuoteLineID < units[j].QuoteLineID
+	})
 	snapshot := &QuoteCommercialSnapshot{
 		Schema:     QuoteCommercialSnapshotSchema,
 		CapturedAt: capturedAt,
@@ -146,6 +297,7 @@ func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, custome
 		Customer:   customer,
 		Project:    project,
 		Breakdown:  breakdown,
+		Lines:      lines,
 		Units:      units,
 	}
 	if err := ValidateQuoteCommercialSnapshot(snapshot); err != nil {

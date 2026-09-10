@@ -5,103 +5,191 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// #642 / QUOTE-AUTH Slice 1: migration 000130 fresh/upgrade/down against real
-// PostgreSQL. The commercial-authority columns exist, the RLS inventory row
-// records the new ownership, and the hardened trigger enforces snapshot
-// immutability + the fail-closed publish gate; the down path restores the
-// pre-#642 semantics completely.
-func TestQuoteCommercialSnapshotMigrationFreshUpgradeAndDown(t *testing.T) {
-	assert := func(t *testing.T, fresh bool) {
-		t.Helper()
-		pool := multiOrgFreshDB(t)
-		if fresh {
-			identityApplyThrough(t, pool, 130)
-		} else {
-			identityApplyThrough(t, pool, 129)
-			up, err := os.ReadFile("../../db/migration/000130_quote_commercial_snapshot.up.sql")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = pool.Exec(context.Background(), string(up)); err != nil {
-				t.Fatalf("apply migration: %v", err)
-			}
-		}
-		ctx := context.Background()
+const (
+	migrationQuoteOrg      = "a1000000-0000-0000-0000-000000000001"
+	migrationQuoteCustomer = "a2000000-0000-0000-0000-000000000001"
+	migrationQuoteProject  = "a3000000-0000-0000-0000-000000000001"
+)
 
-		for _, column := range []string{"commercial_snapshot", "published_at", "accepted_at"} {
-			var exists bool
-			if err := pool.QueryRow(ctx,
-				`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='quote_revisions' AND column_name=$1)`,
-				column).Scan(&exists); err != nil || !exists {
-				t.Fatalf("fresh=%v missing quote_revisions.%s: %v", fresh, column, err)
-			}
-		}
+func applyQuoteCommercial130(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	up, err := os.ReadFile("../../db/migration/000130_quote_commercial_snapshot.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), string(up)); err != nil {
+		t.Fatalf("apply migration 130: %v", err)
+	}
+}
 
-		var rationale string
-		var version int
-		if err := pool.QueryRow(ctx,
-			`SELECT rationale, policy_version FROM rls_policy_inventory WHERE table_name='quote_revisions'`).Scan(&rationale, &version); err != nil {
-			t.Fatalf("read policy: %v", err)
-		}
-		if !strings.Contains(rationale, "#642") || !strings.Contains(rationale, "commercial authority") {
-			t.Fatalf("up policy does not record commercial authority: %q", rationale)
-		}
-		upVersion := version
+func seedQuoteMigrationProject(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	multiOrgExec(t, pool, `
+		INSERT INTO organizations (id, name, slug, status) VALUES ('`+migrationQuoteOrg+`', 'Mig Org', 'mig-org', 'provisioning');
+		INSERT INTO customers (id, name, organization_id) VALUES ('`+migrationQuoteCustomer+`', 'Mig Customer', '`+migrationQuoteOrg+`');
+		INSERT INTO projects (id, name, customer_id, status, organization_id) VALUES ('`+migrationQuoteProject+`', 'Mig Project', '`+migrationQuoteCustomer+`', 'draft', '`+migrationQuoteOrg+`');`)
+}
 
-		// The migration must not weaken the existing RLS posture.
-		var rls, forced bool
-		if err := pool.QueryRow(ctx,
-			`SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='quote_revisions'`).Scan(&rls, &forced); err != nil || !rls || !forced {
-			t.Fatalf("RLS enabled=%v forced=%v, want both true (err %v)", rls, forced, err)
-		}
-
-		// Seed a minimal project + snapshot-less draft, then prove the
-		// hardened trigger: publish without a snapshot is rejected.
-		if _, err := pool.Exec(ctx, `
-			INSERT INTO organizations (id, name, slug, status) VALUES ('a1000000-0000-0000-0000-000000000001', 'Mig Org', 'mig-org', 'provisioning');
-			INSERT INTO customers (id, name, organization_id) VALUES ('a2000000-0000-0000-0000-000000000001', 'Mig Customer', 'a1000000-0000-0000-0000-000000000001');
-			INSERT INTO projects (id, name, customer_id, status, organization_id) VALUES ('a3000000-0000-0000-0000-000000000001', 'Mig Project', 'a2000000-0000-0000-0000-000000000001', 'draft', 'a1000000-0000-0000-0000-000000000001');
-			INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status)
-			VALUES ('a4000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'a3000000-0000-0000-0000-000000000001', 1, 'draft')`); err != nil {
-			t.Fatalf("seed: %v", err)
-		}
-		if _, err := pool.Exec(ctx,
-			`UPDATE quote_revisions SET status='published' WHERE id='a4000000-0000-0000-0000-000000000001'`); err == nil || !strings.Contains(err.Error(), "commercial_snapshot") {
-			t.Fatalf("snapshot-less publish must be rejected by the trigger, got %v", err)
-		}
-		if _, err := pool.Exec(ctx,
-			`UPDATE quote_revisions SET commercial_snapshot='{"schema":"x"}'::jsonb WHERE id='a4000000-0000-0000-0000-000000000001'`); err == nil || !strings.Contains(err.Error(), "commercial_snapshot is immutable") {
-			t.Fatalf("snapshot injection on update must be rejected, got %v", err)
-		}
-
-		// Down: columns disappear and the previous trigger semantics return
-		// (a snapshot-less publish is legal again — pre-#642 behavior).
-		down, err := os.ReadFile("../../db/migration/000130_quote_commercial_snapshot.down.sql")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = pool.Exec(ctx, string(down)); err != nil {
-			t.Fatalf("down migration: %v", err)
-		}
+func assertQuoteCommercial130Posture(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+	ctx := context.Background()
+	for _, column := range []string{"commercial_snapshot", "published_at", "accepted_at"} {
 		var exists bool
-		if err := pool.QueryRow(ctx,
-			`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='quote_revisions' AND column_name='commercial_snapshot')`).Scan(&exists); err != nil || exists {
-			t.Fatalf("down left commercial_snapshot: %v", err)
-		}
-		if _, err := pool.Exec(ctx,
-			`UPDATE quote_revisions SET status='published' WHERE id='a4000000-0000-0000-0000-000000000001'`); err != nil {
-			t.Fatalf("down must restore pre-#642 publish semantics, got %v", err)
-		}
-		if err := pool.QueryRow(ctx,
-			`SELECT rationale, policy_version FROM rls_policy_inventory WHERE table_name='quote_revisions'`).Scan(&rationale, &version); err != nil {
-			t.Fatalf("read down policy: %v", err)
-		}
-		if version != upVersion-1 || strings.Contains(rationale, "#642") {
-			t.Fatalf("down policy = (%q, %d), want version %d without #642 rationale", rationale, version, upVersion-1)
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='quote_revisions' AND column_name=$1)`, column).Scan(&exists); err != nil || !exists {
+			t.Fatalf("missing quote_revisions.%s: %v", column, err)
 		}
 	}
-	t.Run("fresh", func(t *testing.T) { assert(t, true) })
-	t.Run("upgrade", func(t *testing.T) { assert(t, false) })
+	var rationale string
+	var version int
+	if err := pool.QueryRow(ctx, `SELECT rationale, policy_version FROM rls_policy_inventory WHERE table_name='quote_revisions'`).Scan(&rationale, &version); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rationale, "#642") || !strings.Contains(rationale, "commercial authority") {
+		t.Fatalf("policy rationale=%q", rationale)
+	}
+	var rls, forced bool
+	if err := pool.QueryRow(ctx, `SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='quote_revisions'`).Scan(&rls, &forced); err != nil || !rls || !forced {
+		t.Fatalf("RLS=%v FORCE=%v err=%v", rls, forced, err)
+	}
+	return version
+}
+
+func TestQuoteCommercialSnapshotMigrationFreshAndDirectSQLValidation(t *testing.T) {
+	pool := multiOrgFreshDB(t)
+	identityApplyThrough(t, pool, 130)
+	assertQuoteCommercial130Posture(t, pool)
+	seedQuoteMigrationProject(t, pool)
+	ctx := context.Background()
+	multiOrgExec(t, pool, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status)
+		VALUES ('a4000000-0000-0000-0000-000000000001', '`+migrationQuoteOrg+`', '`+migrationQuoteProject+`', 1, 'draft')`)
+	if _, err := pool.Exec(ctx, `UPDATE quote_revisions SET status='published' WHERE id='a4000000-0000-0000-0000-000000000001'`); err == nil || !strings.Contains(err.Error(), "commercial_snapshot") {
+		t.Fatalf("snapshot-less publish must fail closed, got %v", err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, commercial_snapshot)
+		VALUES ('a4000000-0000-0000-0000-000000000002',$1,$2,2,'draft','{"schema":"wrong"}'::jsonb)`, migrationQuoteOrg, migrationQuoteProject)
+	if err == nil || !strings.Contains(err.Error(), "not a valid") {
+		t.Fatalf("app-role malformed insert must be rejected, got %v", err)
+	}
+	_ = tx.Rollback(ctx)
+
+	tx, err = pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	validEnvelope := `{"schema":"granete.quote-commercial-snapshot.v1","capturedAt":"2026-09-10T12:00:00Z","currency":"MXN","customer":{"id":"c","name":"Customer"},"project":{"id":"p","name":"Project"},"breakdown":{},"lines":[{"quoteLineId":"62000000-0000-0000-0000-000000000001","quantity":1,"furnitureInstanceIds":["72000000-0000-0000-0000-000000000001"],"amounts":{}}],"units":[{"furnitureInstanceId":"72000000-0000-0000-0000-000000000001","quoteLineId":"62000000-0000-0000-0000-000000000001","moduleCode":"M","moduleName":"Module","lifecycleStatus":"active","options":[]}]}`
+	_, err = tx.Exec(ctx, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, commercial_snapshot)
+		VALUES ('a4000000-0000-0000-0000-000000000003',$1,$2,3,'accepted',$3::jsonb)`, migrationQuoteOrg, migrationQuoteProject, validEnvelope)
+	if err == nil || !strings.Contains(err.Error(), "must be inserted as draft") {
+		t.Fatalf("app-role invalid canonical lifecycle insert must be rejected, got %v", err)
+	}
+}
+
+func TestQuoteCommercialSnapshotMigrationUpgradePreservesLegacyRowsDownAndReplay(t *testing.T) {
+	pool := multiOrgFreshDB(t)
+	identityApplyThrough(t, pool, 129)
+	seedQuoteMigrationProject(t, pool)
+	ctx := context.Background()
+	ids := []string{
+		"a4000000-0000-0000-0000-000000000011",
+		"a4000000-0000-0000-0000-000000000012",
+		"a4000000-0000-0000-0000-000000000013",
+	}
+	statuses := []string{"draft", "published", "accepted"}
+	created := make([]time.Time, len(ids))
+	for i := range ids {
+		if err := pool.QueryRow(ctx, `INSERT INTO quote_revisions (id,organization_id,project_id,revision_number,status) VALUES ($1,$2,$3,$4,$5) RETURNING created_at`, ids[i], migrationQuoteOrg, migrationQuoteProject, i+1, statuses[i]).Scan(&created[i]); err != nil {
+			t.Fatalf("seed legacy %s: %v", statuses[i], err)
+		}
+	}
+
+	applyQuoteCommercial130(t, pool)
+	upVersion := assertQuoteCommercial130Posture(t, pool)
+	assertPreserved := func(stage string) {
+		t.Helper()
+		for i := range ids {
+			var status string
+			var gotCreated time.Time
+			var snapshot, publishedAt, acceptedAt any
+			if err := pool.QueryRow(ctx, `SELECT status,created_at,commercial_snapshot,published_at,accepted_at FROM quote_revisions WHERE id=$1`, ids[i]).Scan(&status, &gotCreated, &snapshot, &publishedAt, &acceptedAt); err != nil {
+				t.Fatalf("%s read: %v", stage, err)
+			}
+			if status != statuses[i] || !gotCreated.Equal(created[i]) || snapshot != nil || publishedAt != nil || acceptedAt != nil {
+				t.Fatalf("%s changed legacy row %d: status=%s created=%s snapshot=%v published=%v accepted=%v", stage, i, status, gotCreated, snapshot, publishedAt, acceptedAt)
+			}
+		}
+	}
+	assertPreserved("upgrade")
+
+	// Legacy NULL snapshots remain honestly readable but cannot cross draft -> published.
+	if _, err := pool.Exec(ctx, `UPDATE quote_revisions SET status='published' WHERE id=$1`, ids[0]); err == nil || !strings.Contains(err.Error(), "commercial_snapshot") {
+		t.Fatalf("legacy draft publish must fail closed, got %v", err)
+	}
+	// FORCE RLS still hides all owner-A rows from an unrelated app-role tenant.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, "b1000000-0000-0000-0000-000000000001", "b5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	var visible int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM quote_revisions WHERE project_id=$1`, migrationQuoteProject).Scan(&visible); err != nil || visible != 0 {
+		t.Fatalf("cross-org direct SQL visible=%d err=%v", visible, err)
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	down, err := os.ReadFile("../../db/migration/000130_quote_commercial_snapshot.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("down: %v", err)
+	}
+	var exists bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='quote_revisions' AND column_name='commercial_snapshot')`).Scan(&exists); err != nil || exists {
+		t.Fatalf("down left column: %v", err)
+	}
+	var downVersion int
+	if err := pool.QueryRow(ctx, `SELECT policy_version FROM rls_policy_inventory WHERE table_name='quote_revisions'`).Scan(&downVersion); err != nil || downVersion != upVersion-1 {
+		t.Fatalf("down policy version=%d err=%v", downVersion, err)
+	}
+	for i := range ids {
+		var status string
+		var gotCreated time.Time
+		if err := pool.QueryRow(ctx, `SELECT status,created_at FROM quote_revisions WHERE id=$1`, ids[i]).Scan(&status, &gotCreated); err != nil || status != statuses[i] || !gotCreated.Equal(created[i]) {
+			t.Fatalf("down changed row %d status=%s err=%v", i, status, err)
+		}
+	}
+	applyQuoteCommercial130(t, pool)
+	assertQuoteCommercial130Posture(t, pool)
+	assertPreserved("replay")
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -71,6 +72,45 @@ func seedBodyChoice(t *testing.T, fx *rlsFixture, lineID string) {
 		lineID, releaseMaterial); err != nil {
 		t.Fatalf("seed BODY choice: %v", err)
 	}
+}
+
+// fixtureCommercialSnapshot gives lower-level lifecycle/release tests a
+// structurally valid frozen authority without consulting mutable catalog data.
+// Production initial/requote tests exercise the real snapshot builder.
+func fixtureCommercialSnapshot(projectID string, items []storage.CreateQuoteRevisionItemCommand) *domain.QuoteCommercialSnapshot {
+	lines := make([]domain.QuoteCommercialLine, 0, len(items))
+	units := make([]domain.QuoteCommercialUnit, 0, len(items))
+	for _, item := range items {
+		lineID := item.FurnitureInstanceID
+		lifecycle := item.LifecycleStatus
+		if lifecycle == "" {
+			lifecycle = "active"
+		}
+		quantity := 0
+		if lifecycle == "active" {
+			quantity = 1
+		}
+		lines = append(lines, domain.QuoteCommercialLine{QuoteLineID: lineID, Quantity: quantity, FurnitureInstanceIDs: []string{item.FurnitureInstanceID}})
+		units = append(units, domain.QuoteCommercialUnit{FurnitureInstanceID: item.FurnitureInstanceID, QuoteLineID: lineID, ModuleCode: "FIXTURE", ModuleName: "Fixture module", LifecycleStatus: lifecycle, Options: []domain.QuoteCommercialOption{}})
+	}
+	snapshot, err := domain.BuildQuoteCommercialSnapshot(time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC), "MXN",
+		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture customer"},
+		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture project"},
+		domain.QuoteBreakdown{MarginFactor: 1}, lines, units)
+	if err != nil {
+		panic(err)
+	}
+	return snapshot
+}
+
+func createPublishedFixtureQuoteRevision(ctx context.Context, store *storage.PostgresStore, cmd storage.CreateQuoteRevisionCommand) (*domain.QuoteRevision, error) {
+	cmd.Status = "draft"
+	cmd.CommercialSnapshot = fixtureCommercialSnapshot(cmd.ProjectID, cmd.Items)
+	revision, err := store.CreateQuoteRevision(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "published"})
 }
 
 func createInitialRevision(t *testing.T, fx *quoteLifecycleFixture) *storage.CreateInitialQuoteRevisionResult {
@@ -313,6 +353,12 @@ func TestQuoteLifecycle_CreateInitialRevision_QuotedFinishRidesAlong(t *testing.
 	const interiorChoice = "70000000-0000-0000-0000-0000000000b1"
 	const frontChoice = "70000000-0000-0000-0000-0000000000b2"
 	if _, err := base.admin.Exec(ctx, `
+		INSERT INTO material_boards (id,code,name,width_mm,length_mm,thickness_mm,board_price,organization_id) VALUES
+		($1,'INTERIOR-FIXTURE','Interior fixture',1830,2440,18,1000,$3),
+		($2,'FRONT-FIXTURE','Front fixture',1830,2440,18,1000,$3)`, interiorChoice, frontChoice, rlsOrgA); err != nil {
+		t.Fatalf("seed customer-facing choices: %v", err)
+	}
+	if _, err := base.admin.Exec(ctx, `
 		INSERT INTO project_items (id, project_id, module_id, quantity, custom_dims, organization_id)
 		VALUES ($1, $2, $3, 2, $4::jsonb, '`+rlsOrgA+`')`,
 		qlLineA, fiProjectAOnly, fiModuleA, qlCustomDimsRow); err != nil {
@@ -544,7 +590,7 @@ func TestQuoteLifecycle_AcceptAtomicSupersede(t *testing.T) {
 	// accepted, one transaction, exactly one accepted.
 	var q2 string
 	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-		rev, txErr := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		rev, txErr := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fx.projectID,
 			BaseRevisionID: q1,
 			Status:         "published",
@@ -611,7 +657,7 @@ func TestQuoteLifecycle_ConcurrentAcceptsLeaveSingleWinner(t *testing.T) {
 	for i := range revisionIDs {
 		nextBase := base
 		err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-			rev, txErr := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			rev, txErr := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 				ProjectID:      fx.projectID,
 				BaseRevisionID: nextBase,
 				Status:         "published",
@@ -682,7 +728,7 @@ func TestQuoteLifecycle_AcceptedUniquenessBackstop(t *testing.T) {
 
 	var q2 string
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-		rev, txErr := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		rev, txErr := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fx.projectID,
 			BaseRevisionID: q1,
 			Status:         "published",

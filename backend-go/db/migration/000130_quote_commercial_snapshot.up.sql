@@ -31,6 +31,56 @@ ALTER TABLE quote_revisions
     ADD COLUMN published_at TIMESTAMPTZ NULL,
     ADD COLUMN accepted_at TIMESTAMPTZ NULL;
 
+-- Database backstop for direct SQL writers. Application validation remains
+-- richer (cross-field sums and exact identity binding), while PostgreSQL
+-- rejects payloads that are not even the canonical v1 envelope.
+CREATE OR REPLACE FUNCTION valid_quote_commercial_snapshot_v1(payload JSONB)
+RETURNS BOOLEAN
+LANGUAGE SQL
+IMMUTABLE
+AS $$
+    SELECT jsonb_typeof(payload) = 'object'
+       AND payload->>'schema' = 'granete.quote-commercial-snapshot.v1'
+       AND NULLIF(BTRIM(payload->>'capturedAt'), '') IS NOT NULL
+       AND NULLIF(BTRIM(payload->>'currency'), '') IS NOT NULL
+       AND jsonb_typeof(payload->'customer') = 'object'
+       AND NULLIF(BTRIM(payload#>>'{customer,id}'), '') IS NOT NULL
+       AND NULLIF(BTRIM(payload#>>'{customer,name}'), '') IS NOT NULL
+       AND jsonb_typeof(payload->'project') = 'object'
+       AND NULLIF(BTRIM(payload#>>'{project,id}'), '') IS NOT NULL
+       AND NULLIF(BTRIM(payload#>>'{project,name}'), '') IS NOT NULL
+       AND jsonb_typeof(payload->'breakdown') = 'object'
+       AND jsonb_typeof(payload->'lines') = 'array'
+       AND jsonb_array_length(payload->'lines') > 0
+       AND jsonb_typeof(payload->'units') = 'array'
+       AND jsonb_array_length(payload->'units') > 0
+       AND NOT EXISTS (
+           SELECT 1 FROM jsonb_array_elements(payload->'lines') AS line
+           WHERE COALESCE(jsonb_typeof(line), '') <> 'object'
+              OR NULLIF(BTRIM(line->>'quoteLineId'), '') IS NULL
+		      OR line->>'quoteLineId' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              OR COALESCE(jsonb_typeof(line->'quantity'), '') <> 'number'
+              OR CASE WHEN jsonb_typeof(line->'quantity') = 'number'
+                      THEN (line->>'quantity')::numeric < 0 ELSE FALSE END
+              OR COALESCE(jsonb_typeof(line->'furnitureInstanceIds'), '') <> 'array'
+              OR jsonb_array_length(line->'furnitureInstanceIds') = 0
+		      OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(line->'furnitureInstanceIds') AS id WHERE id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+              OR COALESCE(jsonb_typeof(line->'amounts'), '') <> 'object'
+       )
+       AND NOT EXISTS (
+           SELECT 1 FROM jsonb_array_elements(payload->'units') AS unit
+           WHERE COALESCE(jsonb_typeof(unit), '') <> 'object'
+              OR NULLIF(BTRIM(unit->>'furnitureInstanceId'), '') IS NULL
+		      OR unit->>'furnitureInstanceId' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              OR NULLIF(BTRIM(unit->>'quoteLineId'), '') IS NULL
+		      OR unit->>'quoteLineId' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              OR NULLIF(BTRIM(unit->>'moduleCode'), '') IS NULL
+              OR NULLIF(BTRIM(unit->>'moduleName'), '') IS NULL
+              OR COALESCE(unit->>'lifecycleStatus', '') NOT IN ('active', 'removed', 'cancelled')
+              OR COALESCE(jsonb_typeof(unit->'options'), '') <> 'array'
+       );
+$$;
+
 CREATE OR REPLACE FUNCTION protect_quote_revision_immutability()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -38,6 +88,15 @@ AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'quote_revisions cannot be deleted once created';
+    END IF;
+
+    IF TG_OP = 'INSERT' AND NEW.commercial_snapshot IS NOT NULL THEN
+        IF NOT valid_quote_commercial_snapshot_v1(NEW.commercial_snapshot) THEN
+            RAISE EXCEPTION 'quote_revision commercial_snapshot is not a valid granete.quote-commercial-snapshot.v1 payload';
+        END IF;
+        IF NEW.status <> 'draft' OR NEW.published_at IS NOT NULL OR NEW.accepted_at IS NOT NULL THEN
+            RAISE EXCEPTION 'quote_revision with commercial_snapshot must be inserted as draft without lifecycle timestamps';
+        END IF;
     END IF;
 
     IF TG_OP = 'UPDATE' THEN
@@ -107,6 +166,12 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
+DROP TRIGGER protect_quote_revisions_immutable ON quote_revisions;
+CREATE TRIGGER protect_quote_revisions_immutable
+    BEFORE INSERT OR UPDATE OR DELETE ON quote_revisions
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_quote_revision_immutability();
 
 INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale)
 VALUES

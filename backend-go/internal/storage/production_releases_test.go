@@ -95,7 +95,7 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 				LifecycleStatus:       "active",
 			}
 		}
-		q3, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q3, err := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Q3",
 			Items:     []storage.CreateQuoteRevisionItemCommand{quoteItem(out.fiA), quoteItem(out.fiB)},

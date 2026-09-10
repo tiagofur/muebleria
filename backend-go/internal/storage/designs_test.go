@@ -165,6 +165,12 @@ func setupDesignsTestFixture(t *testing.T) *rlsFixture {
  ('71000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000002',1,'`+rlsOrgA+`');
  UPDATE structures SET width_mm=600,height_mm=720,depth_mm=560 WHERE code='RELEASE-BODY';
  UPDATE modules SET width_mm=600,height_mm=720,depth_mm=560,structure_id='71000000-0000-0000-0000-000000000001' WHERE id='`+fiModuleA+`';`)
+	multiOrgExec(t, fx.admin, `INSERT INTO option_groups (id,code,name,kind,required,organization_id) VALUES
+	('93000000-0000-0000-0000-0000000000b0','BODY','Material principal','board',TRUE,'`+rlsOrgA+`'),
+	('93000000-0000-0000-0000-0000000000b1','INTERIOR','Acabado interior','board',FALSE,'`+rlsOrgA+`'),
+	('93000000-0000-0000-0000-0000000000b2','FRENTE','Acabado de frente','board',FALSE,'`+rlsOrgA+`'),
+	('93000000-0000-0000-0000-0000000000b3','RLS','Acabado RLS','board',FALSE,'`+rlsOrgA+`')
+	ON CONFLICT (organization_id,code) DO NOTHING;`)
 	return fx
 }
 

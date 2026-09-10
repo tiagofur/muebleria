@@ -111,6 +111,7 @@ func toQuoteRevisionDTO(rev *domain.QuoteRevision) openapi.QuoteRevision {
 		a := rev.AcceptedAt.UTC().Format(time.RFC3339Nano)
 		dto.AcceptedAt = &a
 	}
+	dto.CommercialSnapshot = toQuoteCommercialSnapshotDTO(rev.CommercialSnapshot)
 	return dto
 }
 

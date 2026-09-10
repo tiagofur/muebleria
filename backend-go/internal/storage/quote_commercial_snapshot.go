@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -87,14 +89,9 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	legacySnapshot, err := s.loadLegacyQuoteSnapshot(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Force a live calculation for drafts; a legacy-quoted project keeps its
-	// frozen legacy breakdown (engine behavior) — that IS its current
-	// commercial truth, and re-reading catalog prices would rewrite it.
+	// A new canonical QuoteRevision captures the current editable state once.
+	// It never copies the mutable project-level legacy snapshot because that
+	// payload has no exact QuoteLine authority.
 	pricingProject := domain.Project{
 		ID:                  projectID,
 		Name:                envelope.ProjectName,
@@ -102,10 +99,9 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 		Currency:            envelope.Currency,
 		MarginFactor:        envelope.MarginFactor,
 		LaborFixedCost:      envelope.LaborFixedCost,
-		Status:              domain.ProjectStatus(envelope.Status),
+		Status:              domain.ProjectStatus("draft"),
 		Items:               projectItems,
 		ProjectLevelChoices: levelChoices,
-		PriceSnapshot:       legacySnapshot,
 	}
 	if len(envelope.KitchenLayout) > 0 {
 		pricingProject.KitchenLayout = envelope.KitchenLayout
@@ -124,12 +120,17 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	lines, err := buildQuoteCommercialLines(pricingProject, catalog, items)
+	if err != nil {
+		return nil, err
+	}
 	return domain.BuildQuoteCommercialSnapshot(
 		time.Now().UTC(),
 		envelope.Currency,
 		domain.QuoteCommercialIdentity{ID: envelope.CustomerID, Name: envelope.CustomerName},
 		domain.QuoteCommercialIdentity{ID: projectID, Name: envelope.ProjectName},
 		breakdown,
+		lines,
 		units,
 	)
 }
@@ -191,21 +192,96 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 	if err != nil {
 		return nil, err
 	}
+	lines, err := buildQuoteCommercialLines(pricingProject, catalog, items)
+	if err != nil {
+		return nil, err
+	}
 	return domain.BuildQuoteCommercialSnapshot(
 		time.Now().UTC(),
 		envelope.Currency,
 		domain.QuoteCommercialIdentity{ID: envelope.CustomerID, Name: envelope.CustomerName},
 		domain.QuoteCommercialIdentity{ID: projectID, Name: envelope.ProjectName},
 		breakdown,
+		lines,
 		units,
 	)
 }
 
+// buildQuoteCommercialLines freezes stable commercial grouping, explicit
+// quantity and authoritative per-line amount contributions. Pricing is run
+// with the exact inputs for each line and zero fixed labor; the snapshot-level
+// fixed labor is therefore added exactly once.
+func buildQuoteCommercialLines(pricingProject domain.Project, catalog domain.Catalog, items []CreateQuoteRevisionItemCommand) ([]domain.QuoteCommercialLine, error) {
+	type lineInput struct {
+		instanceIDs []string
+		active      int
+		items       []domain.ProjectItem
+	}
+	byLine := map[string]*lineInput{}
+	lineByInstance := make(map[string]string, len(items))
+	for _, item := range items {
+		if !isValidUUID(item.QuoteLineID) {
+			return nil, fmt.Errorf("%w: la unidad %s no tiene quoteLineId estable", domain.ErrInvalidRevisionSnapshot, item.FurnitureInstanceID)
+		}
+		line := byLine[item.QuoteLineID]
+		if line == nil {
+			line = &lineInput{}
+			byLine[item.QuoteLineID] = line
+		}
+		line.instanceIDs = append(line.instanceIDs, item.FurnitureInstanceID)
+		lineByInstance[item.FurnitureInstanceID] = item.QuoteLineID
+		if item.LifecycleStatus == "" || item.LifecycleStatus == "active" {
+			line.active++
+		}
+	}
+	for _, item := range pricingProject.Items {
+		lineID := item.ID
+		if mapped := lineByInstance[item.ID]; mapped != "" {
+			lineID = mapped
+		}
+		line := byLine[lineID]
+		if line == nil {
+			return nil, fmt.Errorf("%w: la línea %s no tiene unidades físicas congeladas", domain.ErrInvalidRevisionSnapshot, lineID)
+		}
+		line.items = append(line.items, item)
+	}
+
+	lines := make([]domain.QuoteCommercialLine, 0, len(byLine))
+	for lineID, input := range byLine {
+		amounts := domain.QuoteCommercialLineAmounts{}
+		if len(input.items) > 0 {
+			lineProject := pricingProject
+			lineProject.Status = domain.ProjectStatus("draft")
+			lineProject.PriceSnapshot = nil
+			lineProject.LaborFixedCost = 0
+			lineProject.Items = input.items
+			breakdown, err := engine.CalcProjectBreakdown(lineProject, catalog)
+			if err != nil {
+				return nil, fmt.Errorf("%w: línea %s: %s", domain.ErrInvalidRevisionSnapshot, lineID, err.Error())
+			}
+			amounts = domain.QuoteCommercialLineAmounts{
+				MaterialsCost: breakdown.MaterialsCost,
+				EdgeTotal:     breakdown.EdgeTotal,
+				HardwareTotal: breakdown.HardwareTotal,
+				DirectCost:    breakdown.DirectCost,
+				LaborModular:  breakdown.LaborModular,
+				SalePrice:     breakdown.SalePrice,
+			}
+		}
+		lines = append(lines, domain.QuoteCommercialLine{
+			QuoteLineID:          lineID,
+			Quantity:             input.active,
+			FurnitureInstanceIDs: input.instanceIDs,
+			Amounts:              amounts,
+		})
+	}
+	return lines, nil
+}
+
 // buildQuoteCommercialUnits freezes the customer-facing descriptor of every
 // physical unit: module code/name and option group/choice labels read from
-// the owning organization's catalog at capture time. Unknown references keep
-// their raw identity as the label — the honest descriptor when a catalog row
-// no longer resolves, never a fabricated name.
+// the owning organization's catalog at capture time. Missing customer-facing
+// labels fail typed/actionable; raw UUIDs are never frozen as presentation.
 func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []CreateQuoteRevisionItemCommand) ([]domain.QuoteCommercialUnit, error) {
 	orgID := OrgFromCtx(ctx)
 
@@ -247,29 +323,33 @@ func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []C
 
 	units := make([]domain.QuoteCommercialUnit, 0, len(items))
 	for _, item := range items {
+		if !isValidUUID(item.QuoteLineID) {
+			return nil, fmt.Errorf("%w: la unidad %s no tiene quoteLineId estable", domain.ErrInvalidRevisionSnapshot, item.FurnitureInstanceID)
+		}
 		lifecycle := item.LifecycleStatus
 		if lifecycle == "" {
 			lifecycle = "active"
 		}
 		unit := domain.QuoteCommercialUnit{
 			FurnitureInstanceID: item.FurnitureInstanceID,
-			ModuleCode:          item.FurnitureDefinitionID,
-			ModuleName:          item.FurnitureDefinitionID,
+			QuoteLineID:         item.QuoteLineID,
 			LifecycleStatus:     lifecycle,
 			Options:             []domain.QuoteCommercialOption{},
 		}
-		if label, ok := moduleLabels[item.FurnitureDefinitionID]; ok {
-			unit.ModuleCode = label.Code
-			unit.ModuleName = label.Name
+		label, ok := moduleLabels[item.FurnitureDefinitionID]
+		if !ok || strings.TrimSpace(label.Code) == "" || strings.TrimSpace(label.Name) == "" {
+			return nil, fmt.Errorf("%w: el módulo %s no tiene descriptor comercial; corregí el catálogo antes de cotizar", domain.ErrInvalidRevisionSnapshot, item.FurnitureDefinitionID)
 		}
+		unit.ModuleCode = label.Code
+		unit.ModuleName = label.Name
 		for groupCode, choiceID := range item.MaterialChoices {
 			groupLabel := groupLabels[groupCode]
-			if groupLabel == "" {
-				groupLabel = groupCode
+			if strings.TrimSpace(groupLabel) == "" {
+				return nil, fmt.Errorf("%w: el grupo de opción %s no tiene label comercial; corregí el catálogo antes de cotizar", domain.ErrInvalidRevisionSnapshot, groupCode)
 			}
-			choiceLabel := choiceID
-			if label, ok := choiceLabels[choiceID]; ok && label != "" {
-				choiceLabel = label
+			choiceLabel, ok := choiceLabels[choiceID]
+			if !ok || strings.TrimSpace(choiceLabel) == "" {
+				return nil, fmt.Errorf("%w: la opción %s no tiene label comercial; corregí el catálogo antes de cotizar", domain.ErrInvalidRevisionSnapshot, choiceID)
 			}
 			unit.Options = append(unit.Options, domain.QuoteCommercialOption{
 				GroupCode:   groupCode,
@@ -278,6 +358,12 @@ func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []C
 				ChoiceLabel: choiceLabel,
 			})
 		}
+		sort.Slice(unit.Options, func(i, j int) bool {
+			if unit.Options[i].GroupCode == unit.Options[j].GroupCode {
+				return unit.Options[i].ChoiceID < unit.Options[j].ChoiceID
+			}
+			return unit.Options[i].GroupCode < unit.Options[j].GroupCode
+		})
 		units = append(units, unit)
 	}
 	return units, nil

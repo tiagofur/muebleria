@@ -92,7 +92,7 @@ func setupRequoteFixture(t *testing.T) *requoteFixture {
 		}
 		out.fiModeledNew = newFI.ID
 
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Q1",
 			Items: []storage.CreateQuoteRevisionItemCommand{
@@ -121,9 +121,9 @@ func setupRequoteFixture(t *testing.T) *requoteFixture {
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
-				{FurnitureInstanceID: out.fiSynced, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": "70000000-0000-0000-0000-000000000001"}},
-				{FurnitureInstanceID: out.fiModified, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": "70000000-0000-0000-0000-000000000001"}},
-				{FurnitureInstanceID: out.fiModeledNew, Parameters: map[string]any{"widthMm": 450.0, "heightMm": 1400.0}, MaterialChoices: map[string]string{"BODY": "70000000-0000-0000-0000-000000000001"}},
+				{FurnitureInstanceID: out.fiSynced, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": "70000000-0000-0000-0000-000000000001"}},
+				{FurnitureInstanceID: out.fiModified, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 650.0, "heightMm": 720.0}, MaterialChoices: map[string]string{"BODY": "70000000-0000-0000-0000-000000000001"}},
+				{FurnitureInstanceID: out.fiModeledNew, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 450.0, "heightMm": 1400.0}, MaterialChoices: map[string]string{"BODY": "70000000-0000-0000-0000-000000000001"}},
 			},
 			ActorUserID: rlsUserA,
 		}); err != nil {

@@ -76,6 +76,9 @@ type QuoteRevision struct {
 	// event was never recorded (honest absence, not fabricated dates).
 	PublishedAt *time.Time `json:"publishedAt,omitempty"`
 	AcceptedAt  *time.Time `json:"acceptedAt,omitempty"`
+	// CommercialSnapshot is returned by every exact revision command/read. It
+	// is nil only for legacy revisions that predate canonical capture.
+	CommercialSnapshot *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`
 }
 
 // QuoteRevisionItem is the immutable commercial snapshot of ONE physical
@@ -98,9 +101,8 @@ type QuoteRevisionItem struct {
 // recalculate from mutable state.
 type QuoteRevisionDetail struct {
 	QuoteRevision
-	CreatedAt          time.Time
-	CommercialSnapshot *QuoteCommercialSnapshot
-	Items              []QuoteRevisionItem
+	CreatedAt time.Time
+	Items     []QuoteRevisionItem
 }
 
 // StructuredDifference captures a specific property difference between quote and design.
@@ -160,9 +162,10 @@ type CommercialItemSnapshot struct {
 
 // QuoteRevisionSnapshot is the exact commercial revision input.
 type QuoteRevisionSnapshot struct {
-	ProjectID       string                   `json:"projectId"`
-	QuoteRevisionID string                   `json:"quoteRevisionId"`
-	Items           []CommercialItemSnapshot `json:"items"`
+	ProjectID          string                   `json:"projectId"`
+	QuoteRevisionID    string                   `json:"quoteRevisionId"`
+	Items              []CommercialItemSnapshot `json:"items"`
+	CommercialSnapshot *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`
 }
 
 // DesignRevisionSnapshot is the exact design revision input.

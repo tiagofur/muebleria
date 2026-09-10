@@ -1814,8 +1814,14 @@ func TestQuoteRevision_StatusTransitions_ExactLifecycle(t *testing.T) {
 			MaterialsCost: 100, DirectCost: 100, LaborModular: 10,
 			LaborFixedCost: 5, MarginFactor: 1.5, SalePrice: 165,
 		},
+		[]domain.QuoteCommercialLine{{
+			QuoteLineID: "40000000-0000-0000-0000-0000000000c3", Quantity: 1,
+			FurnitureInstanceIDs: []string{fiID},
+			Amounts:              domain.QuoteCommercialLineAmounts{MaterialsCost: 100, DirectCost: 100, LaborModular: 10, SalePrice: 160},
+		}},
 		[]domain.QuoteCommercialUnit{{
 			FurnitureInstanceID: fiID,
+			QuoteLineID:         "40000000-0000-0000-0000-0000000000c3",
 			ModuleCode:          "RLS-MODULE",
 			ModuleName:          "RLS module",
 			LifecycleStatus:     "active",
@@ -2013,4 +2019,3 @@ func TestQuoteRevision_LifecycleMigration_FreshAndUpgrade(t *testing.T) {
 	}
 	assertLifecycleTrigger(t, upgrade)
 }
-

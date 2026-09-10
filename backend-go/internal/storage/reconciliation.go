@@ -39,7 +39,10 @@ type CreateQuoteRevisionCommand struct {
 
 // CreateQuoteRevisionItemCommand holds parameters for one physical furniture unit snapshot.
 type CreateQuoteRevisionItemCommand struct {
-	FurnitureInstanceID   string
+	FurnitureInstanceID string
+	// QuoteLineID is transient capture provenance for the immutable commercial
+	// snapshot. Physical item persistence remains keyed by FurnitureInstance.
+	QuoteLineID           string
 	FurnitureDefinitionID string
 	DefinitionVersion     *int
 	Parameters            map[string]any
@@ -227,6 +230,7 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 	if err != nil {
 		return nil, err
 	}
+	rev.CommercialSnapshot = cmd.CommercialSnapshot
 
 	for _, item := range cmd.Items {
 		if !isValidUUID(item.FurnitureInstanceID) {
@@ -488,9 +492,10 @@ func (s *PostgresStore) loadReconciliationInputs(ctx context.Context, projectID,
 
 	// 3. Load QuoteRevision and verify same-project invariant.
 	var qrProjectID, qrStatus string
+	var qrCommercialSnapshot []byte
 	err = s.db(ctx).QueryRow(ctx, `
-		SELECT project_id, status FROM quote_revisions WHERE id = $1
-	`, quoteRevisionID).Scan(&qrProjectID, &qrStatus)
+		SELECT project_id, status, commercial_snapshot FROM quote_revisions WHERE id = $1
+	`, quoteRevisionID).Scan(&qrProjectID, &qrStatus, &qrCommercialSnapshot)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrQuoteRevisionNotFound
@@ -499,6 +504,10 @@ func (s *PostgresStore) loadReconciliationInputs(ctx context.Context, projectID,
 	}
 	if qrProjectID != projectID {
 		return nil, domain.ErrCrossProjectReconciliation
+	}
+	commercialSnapshot, err := parseQuoteCommercialSnapshot(qrCommercialSnapshot)
+	if err != nil && !errors.Is(err, domain.ErrQuoteCommercialSnapshotMissing) {
+		return nil, err
 	}
 
 	// 4. Load Commercial Items Snapshot from quote_revision_items
@@ -631,9 +640,10 @@ func (s *PostgresStore) loadReconciliationInputs(ctx context.Context, projectID,
 		QuoteStatus:      qrStatus,
 		DesignStatus:     drStatus,
 		Quote: domain.QuoteRevisionSnapshot{
-			ProjectID:       projectID,
-			QuoteRevisionID: quoteRevisionID,
-			Items:           commercialItems,
+			ProjectID:          projectID,
+			QuoteRevisionID:    quoteRevisionID,
+			Items:              commercialItems,
+			CommercialSnapshot: commercialSnapshot,
 		},
 		Design: domain.DesignRevisionSnapshot{
 			ProjectID:        projectID,

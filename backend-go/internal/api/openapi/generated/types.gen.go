@@ -1383,17 +1383,18 @@ const (
 )
 
 type QuoteRevision struct {
-	ID                     string                  `json:"id"`
-	ProjectId              string                  `json:"projectId"`
-	RevisionNumber         int64                   `json:"revisionNumber"`
-	Status                 QuoteRevisionStatus     `json:"status"`
-	SourceType             QuoteRevisionSourceType `json:"sourceType"`
-	BaseQuoteRevisionId    *string                 `json:"baseQuoteRevisionId,omitempty"`
-	SourceDesignRevisionId *string                 `json:"sourceDesignRevisionId,omitempty"`
-	Notes                  *string                 `json:"notes,omitempty"`
-	CreatedBy              *string                 `json:"createdBy,omitempty"`
-	PublishedAt            *string                 `json:"publishedAt,omitempty"`
-	AcceptedAt             *string                 `json:"acceptedAt,omitempty"`
+	ID                     string                   `json:"id"`
+	ProjectId              string                   `json:"projectId"`
+	RevisionNumber         int64                    `json:"revisionNumber"`
+	Status                 QuoteRevisionStatus      `json:"status"`
+	SourceType             QuoteRevisionSourceType  `json:"sourceType"`
+	BaseQuoteRevisionId    *string                  `json:"baseQuoteRevisionId,omitempty"`
+	SourceDesignRevisionId *string                  `json:"sourceDesignRevisionId,omitempty"`
+	Notes                  *string                  `json:"notes,omitempty"`
+	CreatedBy              *string                  `json:"createdBy,omitempty"`
+	PublishedAt            *string                  `json:"publishedAt,omitempty"`
+	AcceptedAt             *string                  `json:"acceptedAt,omitempty"`
+	CommercialSnapshot     *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`
 }
 
 type QuoteRevisionItem struct {
@@ -1429,6 +1430,7 @@ type QuoteCommercialSnapshot struct {
 	Customer   QuoteCommercialIdentity  `json:"customer"`
 	Project    QuoteCommercialIdentity  `json:"project"`
 	Breakdown  QuoteCommercialBreakdown `json:"breakdown"`
+	Lines      []QuoteCommercialLine    `json:"lines"`
 	Units      []QuoteCommercialUnit    `json:"units"`
 }
 
@@ -1450,10 +1452,27 @@ type QuoteCommercialBreakdown struct {
 
 type QuoteCommercialUnit struct {
 	FurnitureInstanceId string                           `json:"furnitureInstanceId"`
+	QuoteLineId         string                           `json:"quoteLineId"`
 	ModuleCode          string                           `json:"moduleCode"`
 	ModuleName          string                           `json:"moduleName"`
 	LifecycleStatus     FurnitureInstanceLifecycleStatus `json:"lifecycleStatus"`
 	Options             []QuoteCommercialOption          `json:"options"`
+}
+
+type QuoteCommercialLine struct {
+	QuoteLineId          string                     `json:"quoteLineId"`
+	Quantity             int64                      `json:"quantity"`
+	FurnitureInstanceIds []string                   `json:"furnitureInstanceIds"`
+	Amounts              QuoteCommercialLineAmounts `json:"amounts"`
+}
+
+type QuoteCommercialLineAmounts struct {
+	MaterialsCost float64 `json:"materialsCost"`
+	EdgeTotal     float64 `json:"edgeTotal"`
+	HardwareTotal float64 `json:"hardwareTotal"`
+	DirectCost    float64 `json:"directCost"`
+	LaborModular  float64 `json:"laborModular"`
+	SalePrice     float64 `json:"salePrice"`
 }
 
 type QuoteCommercialOption struct {

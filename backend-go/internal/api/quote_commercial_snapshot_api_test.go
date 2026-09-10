@@ -28,30 +28,36 @@ func commercialSnapshotTestDetail() domain.QuoteRevisionDetail {
 			SourceType:     "requote",
 			PublishedAt:    &published,
 			AcceptedAt:     &accepted,
+			CommercialSnapshot: &domain.QuoteCommercialSnapshot{
+				Schema:     domain.QuoteCommercialSnapshotSchema,
+				CapturedAt: time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC),
+				Currency:   "MXN",
+				Customer:   domain.QuoteCommercialIdentity{ID: "c1000000-0000-4000-8000-000000000001", Name: "Cliente CS"},
+				Project:    domain.QuoteCommercialIdentity{ID: quoteLifecycleTestProjectID, Name: "Obra CS"},
+				Breakdown: domain.QuoteBreakdown{
+					MaterialsCost: 192, EdgeTotal: 3, HardwareTotal: 4, DirectCost: 199,
+					LaborModular: 100, LaborFixedCost: 100, MarginFactor: 1.5, SalePrice: 498.5,
+				},
+				Lines: []domain.QuoteCommercialLine{{
+					QuoteLineID: "e1000000-0000-4000-8000-000000000001", Quantity: 1,
+					FurnitureInstanceIDs: []string{"f1000000-0000-4000-8000-000000000001"},
+					Amounts:              domain.QuoteCommercialLineAmounts{MaterialsCost: 192, EdgeTotal: 3, HardwareTotal: 4, DirectCost: 199, LaborModular: 100, SalePrice: 398.5},
+				}},
+				Units: []domain.QuoteCommercialUnit{{
+					FurnitureInstanceID: "f1000000-0000-4000-8000-000000000001",
+					QuoteLineID:         "e1000000-0000-4000-8000-000000000001",
+					ModuleCode:          "CS-MOD",
+					ModuleName:          "Gabinete CS",
+					LifecycleStatus:     "active",
+					Options: []domain.QuoteCommercialOption{{
+						GroupCode: "INTERIOR", GroupLabel: "Acabado interior",
+						ChoiceID: "92000000-0000-4000-8000-000000000001", ChoiceLabel: "Tablero Roble",
+					}},
+				}},
+			},
 		},
 		CreatedAt: time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC),
-		CommercialSnapshot: &domain.QuoteCommercialSnapshot{
-			Schema:     domain.QuoteCommercialSnapshotSchema,
-			CapturedAt: time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC),
-			Currency:   "MXN",
-			Customer:   domain.QuoteCommercialIdentity{ID: "c1000000-0000-4000-8000-000000000001", Name: "Cliente CS"},
-			Project:    domain.QuoteCommercialIdentity{ID: quoteLifecycleTestProjectID, Name: "Obra CS"},
-			Breakdown: domain.QuoteBreakdown{
-				MaterialsCost: 192, EdgeTotal: 3, HardwareTotal: 4, DirectCost: 199,
-				LaborModular: 100, LaborFixedCost: 100, MarginFactor: 1.5, SalePrice: 498.5,
-			},
-			Units: []domain.QuoteCommercialUnit{{
-				FurnitureInstanceID: "f1000000-0000-4000-8000-000000000001",
-				ModuleCode:          "CS-MOD",
-				ModuleName:          "Gabinete CS",
-				LifecycleStatus:     "active",
-				Options: []domain.QuoteCommercialOption{{
-					GroupCode: "INTERIOR", GroupLabel: "Acabado interior",
-					ChoiceID: "92000000-0000-4000-8000-000000000001", ChoiceLabel: "Tablero Roble",
-				}},
-			}},
-		},
-		Items: []domain.QuoteRevisionItem{},
+		Items:     []domain.QuoteRevisionItem{},
 	}
 }
 
@@ -132,6 +138,16 @@ func TestHandleProjectQuoteRevisions_CommercialSnapshotCostRedaction(t *testing.
 	}
 	if snapshot["currency"] != "MXN" || snapshot["units"] == nil {
 		t.Fatal("commercial identity/descriptors must survive redaction")
+	}
+	lines := snapshot["lines"].([]any)
+	amounts := lines[0].(map[string]any)["amounts"].(map[string]any)
+	for _, field := range []string{"materialsCost", "edgeTotal", "hardwareTotal", "directCost", "laborModular"} {
+		if amounts[field].(float64) != 0 {
+			t.Fatalf("line cost field %s must be redacted, got %v", field, amounts[field])
+		}
+	}
+	if amounts["salePrice"].(float64) != 398.5 {
+		t.Fatalf("line salePrice is commercial and must stay, got %v", amounts["salePrice"])
 	}
 }
 
