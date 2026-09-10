@@ -31,7 +31,9 @@ PASS:
 - `scripts/organization-browser-gate.sh tests/organization/project-designs.spec.ts` — Chromium + Go + PostgreSQL, 1/1, including exact R1/R2 refresh and 390/768/1280 descriptor captures.
 - `git diff --check`
 
-A pre-fix full `go test ./internal/storage` run exposed six artifact-finalization failures because that second publication entrypoint had not yet invoked the descriptor builder. The root cause was fixed in `FinalizeDesignPublish`; all six affected publish tests and the new storage suite passed afterward. The full 255-second storage suite was not rerun after the fix due the bounded handoff window, so no final full-storage claim is made. Final `./init.sh` was likewise not rerun; focused affected gates plus monorepo typecheck and real browser integration are the final evidence.
+A pre-fix full `go test ./internal/storage` run exposed six artifact-finalization failures because that second publication entrypoint had not yet invoked the descriptor builder. The root cause was fixed in `FinalizeDesignPublish`; all six affected publish tests and the new storage suite passed afterward.
+
+Independent coordinator readback then ran final `./init.sh` against implementation commit `e7f7e528`: monorepo typecheck and TypeScript tests passed, `go test ./...` passed including `internal/storage` in 275.263s and `tests/pilotreadiness` in 243.523s, and the Ruby/RBZ gate passed with 643 runs / 4,440 assertions plus the 6-run distribution check. This closes the earlier full-suite evidence gap.
 
 ## Review focus
 
