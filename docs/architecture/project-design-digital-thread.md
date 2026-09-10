@@ -1302,3 +1302,19 @@ Leer junto con:
 - `../adr/0002-parametric-furniture-library-architecture.md` — librería paramétrica;
 - `../adr/0003-project-owned-furniture-identity-and-versioned-design.md` — decisión de identidad/revisiones;
 - `../architecture.md` — bounded contexts y contrato global de calidad.
+
+## Immutable revision presentation snapshot (#639)
+
+Every revision published after migration `000129` freezes a versioned, human-readable
+presentation snapshot in the same transaction as the technical DesignRevision item.
+It contains the physical-unit label, furniture definition name/code, typed parameter
+labels and units, material name/code/effective thickness and server-owned provenance,
+and the exact site-survey room label when one exists. Publisher and approver display
+names are frozen at their respective transitions. These fields are read-model evidence:
+the UUIDs remain authoritative identity and remain available only as technical audit.
+
+A null `presentation_snapshot` means `unavailable_legacy`. Readers MUST NOT join a
+legacy revision to the current catalog, room, or user directory and present those
+mutable labels as historical truth. Published snapshots cannot be updated or backfilled.
+Material provenance is carried server-side from the working copy (`authored` or
+`quoted`); absent legacy source evidence is `unresolved`, never guessed.

@@ -15,7 +15,8 @@ const revision: DesignRevision = {
   status: 'approved', created_at: '2026-09-06T00:00:00Z',
   items: [{ id: 'item', design_revision_id: 'R1', furniture_instance_id: 'fi-1',
     furniture_definition_id: 'module', parameters: { widthMm: 600 },
-    material_choices: { BODY: 'material' }, created_at: '2026-09-06T00:00:00Z' }],
+    material_choices: { BODY: 'material' }, descriptor_state: 'unavailable_legacy',
+    created_at: '2026-09-06T00:00:00Z' }],
 };
 
 afterEach(() => vi.restoreAllMocks());

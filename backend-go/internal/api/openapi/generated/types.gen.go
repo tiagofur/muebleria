@@ -1001,32 +1001,36 @@ type TechnicalClientLocator struct {
 }
 
 type DesignRevisionItem struct {
-	ID                     string                  `json:"id"`
-	DesignRevisionID       string                  `json:"design_revision_id"`
-	FurnitureInstanceID    string                  `json:"furniture_instance_id"`
-	FurnitureDefinitionID  *string                 `json:"furniture_definition_id,omitempty"`
-	DefinitionVersion      *int64                  `json:"definition_version,omitempty"`
-	Parameters             map[string]any          `json:"parameters"`
-	MaterialChoices        map[string]string       `json:"material_choices"`
-	Transform              *Transform3D            `json:"transform,omitempty"`
-	RoomID                 *string                 `json:"room_id,omitempty"`
-	TechnicalClientLocator *TechnicalClientLocator `json:"technical_client_locator,omitempty"`
-	CreatedAt              string                  `json:"created_at"`
+	ID                     string                              `json:"id"`
+	DesignRevisionID       string                              `json:"design_revision_id"`
+	FurnitureInstanceID    string                              `json:"furniture_instance_id"`
+	FurnitureDefinitionID  *string                             `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion      *int64                              `json:"definition_version,omitempty"`
+	Parameters             map[string]any                      `json:"parameters"`
+	MaterialChoices        map[string]string                   `json:"material_choices"`
+	Transform              *Transform3D                        `json:"transform,omitempty"`
+	RoomID                 *string                             `json:"room_id,omitempty"`
+	TechnicalClientLocator *TechnicalClientLocator             `json:"technical_client_locator,omitempty"`
+	CreatedAt              string                              `json:"created_at"`
+	DescriptorState        DesignRevisionDescriptorState       `json:"descriptor_state"`
+	PresentationSnapshot   *DesignRevisionPresentationSnapshot `json:"presentation_snapshot,omitempty"`
 }
 
 type DesignRevision struct {
-	ID               string                   `json:"id"`
-	DesignID         string                   `json:"design_id"`
-	RevisionNumber   int64                    `json:"revision_number"`
-	ParentRevisionID *string                  `json:"parent_revision_id,omitempty"`
-	SourceType       DesignRevisionSourceType `json:"source_type"`
-	Status           DesignRevisionStatus     `json:"status"`
-	CreatedBy        *string                  `json:"created_by,omitempty"`
-	CreatedAt        string                   `json:"created_at"`
-	ApprovedBy       *string                  `json:"approved_by,omitempty"`
-	ApprovedAt       *string                  `json:"approved_at,omitempty"`
-	Items            []DesignRevisionItem     `json:"items"`
-	Artifacts        []DesignRevisionArtifact `json:"artifacts,omitempty"`
+	ID                    string                   `json:"id"`
+	DesignID              string                   `json:"design_id"`
+	RevisionNumber        int64                    `json:"revision_number"`
+	ParentRevisionID      *string                  `json:"parent_revision_id,omitempty"`
+	SourceType            DesignRevisionSourceType `json:"source_type"`
+	Status                DesignRevisionStatus     `json:"status"`
+	CreatedBy             *string                  `json:"created_by,omitempty"`
+	CreatedAt             string                   `json:"created_at"`
+	ApprovedBy            *string                  `json:"approved_by,omitempty"`
+	ApprovedAt            *string                  `json:"approved_at,omitempty"`
+	Items                 []DesignRevisionItem     `json:"items"`
+	Artifacts             []DesignRevisionArtifact `json:"artifacts,omitempty"`
+	CreatedByDisplayName  *string                  `json:"created_by_display_name,omitempty"`
+	ApprovedByDisplayName *string                  `json:"approved_by_display_name,omitempty"`
 }
 
 type CreateProductionReleaseRequest struct {
@@ -1688,4 +1692,64 @@ type ConfirmPairingGrantRequest struct {
 	ProjectID      string  `json:"project_id"`
 	DesignID       string  `json:"design_id"`
 	BaseRevisionID *string `json:"base_revision_id,omitempty"`
+}
+
+type DesignRevisionDescriptorState string
+
+const (
+	DesignRevisionDescriptorStateAvailable         DesignRevisionDescriptorState = "available"
+	DesignRevisionDescriptorStateUnavailableLegacy DesignRevisionDescriptorState = "unavailable_legacy"
+)
+
+type DesignMaterialProvenance string
+
+const (
+	DesignMaterialProvenanceAuthored         DesignMaterialProvenance = "authored"
+	DesignMaterialProvenanceQuoted           DesignMaterialProvenance = "quoted"
+	DesignMaterialProvenanceInheritedDefault DesignMaterialProvenance = "inherited_default"
+	DesignMaterialProvenanceUnresolved       DesignMaterialProvenance = "unresolved"
+)
+
+type DesignRevisionUnitDescriptor struct {
+	Label string `json:"label"`
+	Index *int64 `json:"index,omitempty"`
+	Total *int64 `json:"total,omitempty"`
+}
+
+type DesignRevisionDefinitionDescriptor struct {
+	Code *string `json:"code,omitempty"`
+	Name *string `json:"name,omitempty"`
+}
+
+type DesignRevisionParameterDescriptor struct {
+	Key   string  `json:"key"`
+	Label *string `json:"label,omitempty"`
+	Type  *string `json:"type,omitempty"`
+	Value any     `json:"value"`
+	Unit  *string `json:"unit,omitempty"`
+	State string  `json:"state"`
+}
+
+type DesignRevisionMaterialDescriptor struct {
+	Role                 string                   `json:"role"`
+	RoleLabel            *string                  `json:"role_label,omitempty"`
+	MaterialID           *string                  `json:"material_id,omitempty"`
+	Code                 *string                  `json:"code,omitempty"`
+	Name                 *string                  `json:"name,omitempty"`
+	EffectiveThicknessMm *float64                 `json:"effective_thickness_mm,omitempty"`
+	Provenance           DesignMaterialProvenance `json:"provenance"`
+}
+
+type DesignRevisionRoomDescriptor struct {
+	Label *string `json:"label,omitempty"`
+	State string  `json:"state"`
+}
+
+type DesignRevisionPresentationSnapshot struct {
+	SchemaVersion int64                               `json:"schema_version"`
+	Unit          DesignRevisionUnitDescriptor        `json:"unit"`
+	Definition    DesignRevisionDefinitionDescriptor  `json:"definition"`
+	Parameters    []DesignRevisionParameterDescriptor `json:"parameters"`
+	Materials     []DesignRevisionMaterialDescriptor  `json:"materials"`
+	Room          DesignRevisionRoomDescriptor        `json:"room"`
 }
