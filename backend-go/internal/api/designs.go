@@ -39,6 +39,10 @@ func toDesignRevisionItemDTO(item domain.DesignRevisionItem) openapi.DesignRevis
 		Parameters:          item.Parameters,
 		MaterialChoices:     item.MaterialChoices,
 		CreatedAt:           item.CreatedAt.UTC().Format(time.RFC3339Nano),
+		DescriptorState:     openapi.DesignRevisionDescriptorState(domain.DesignRevisionDescriptorStateFor(item.PresentationSnapshot)),
+	}
+	if item.PresentationSnapshot != nil {
+		dto.PresentationSnapshot = toDesignRevisionPresentationDTO(*item.PresentationSnapshot)
 	}
 	if item.Parameters == nil {
 		dto.Parameters = map[string]any{}
@@ -87,9 +91,15 @@ func toDesignRevisionDTO(rev domain.DesignRevision) openapi.DesignRevision {
 	if rev.CreatedBy != "" {
 		dto.CreatedBy = &rev.CreatedBy
 	}
+	if rev.CreatedByDisplayName != "" {
+		dto.CreatedByDisplayName = &rev.CreatedByDisplayName
+	}
 	// #395: approval metadata (absent while the revision is only published).
 	if rev.ApprovedBy != "" {
 		dto.ApprovedBy = &rev.ApprovedBy
+	}
+	if rev.ApprovedByDisplayName != "" {
+		dto.ApprovedByDisplayName = &rev.ApprovedByDisplayName
 	}
 	if rev.ApprovedAt != nil {
 		approvedAt := rev.ApprovedAt.UTC().Format(time.RFC3339Nano)
@@ -106,6 +116,39 @@ func toDesignRevisionDTO(rev domain.DesignRevision) openapi.DesignRevision {
 		}
 	}
 	return dto
+}
+
+func toDesignRevisionPresentationDTO(snapshot domain.DesignRevisionPresentationSnapshot) *openapi.DesignRevisionPresentationSnapshot {
+	index, total := int64(snapshot.Unit.Index), int64(snapshot.Unit.Total)
+	dto := &openapi.DesignRevisionPresentationSnapshot{
+		SchemaVersion: int64(snapshot.SchemaVersion),
+		Unit:          openapi.DesignRevisionUnitDescriptor{Label: snapshot.Unit.Label, Index: &index, Total: &total},
+		Definition:    openapi.DesignRevisionDefinitionDescriptor{Code: optionalString(snapshot.Definition.Code), Name: optionalString(snapshot.Definition.Name)},
+		Parameters:    make([]openapi.DesignRevisionParameterDescriptor, 0, len(snapshot.Parameters)),
+		Materials:     make([]openapi.DesignRevisionMaterialDescriptor, 0, len(snapshot.Materials)),
+		Room:          openapi.DesignRevisionRoomDescriptor{Label: optionalString(snapshot.Room.Label), State: snapshot.Room.State},
+	}
+	for _, parameter := range snapshot.Parameters {
+		dto.Parameters = append(dto.Parameters, openapi.DesignRevisionParameterDescriptor{
+			Key: parameter.Key, Label: optionalString(parameter.Label), Type: optionalString(parameter.Type),
+			Value: parameter.Value, Unit: optionalString(parameter.Unit), State: parameter.State,
+		})
+	}
+	for _, material := range snapshot.Materials {
+		dto.Materials = append(dto.Materials, openapi.DesignRevisionMaterialDescriptor{
+			Role: material.Role, RoleLabel: optionalString(material.RoleLabel), MaterialID: optionalString(material.MaterialID),
+			Code: optionalString(material.Code), Name: optionalString(material.Name), EffectiveThicknessMm: material.EffectiveThicknessMM,
+			Provenance: openapi.DesignMaterialProvenance(material.Provenance),
+		})
+	}
+	return dto
+}
+
+func optionalString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func toDesignWorkingCopyItemDTO(item domain.DesignWorkingItem) openapi.DesignWorkingCopyItem {

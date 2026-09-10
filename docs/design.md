@@ -1409,3 +1409,12 @@ visualizados o renderizado especializado documentado, feature CSS/TSX usa tokens
 ---
 
 *Este documento es fuente de verdad para el diseño. Ante cualquier duda sobre color, espaciado, patrón o componente, este documento es el árbitro. Si la respuesta no está aquí, agregarla aquí antes de implementar.*
+
+### Revision history labels (#639)
+
+Design-revision primary content uses frozen business labels: unit, furniture name/code,
+semantic measurements, material name/code/thickness/provenance, room, and actor. UUIDs
+belong only in the keyboard-accessible technical audit disclosure. A legacy revision
+without frozen descriptors displays `Descripción histórica no disponible`; it must not
+silently project the current catalog. Material provenance is always textual, never
+color-only, and revision item cards collapse to one column on narrow screens.

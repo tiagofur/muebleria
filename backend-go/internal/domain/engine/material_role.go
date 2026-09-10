@@ -104,3 +104,17 @@ func resolveBoardOptionChoiceID(optionRole string, optionChoices map[string]stri
 	}
 	return ""
 }
+
+// ResolveBoardChoiceForPresentation exposes the canonical direct/legacy-alias
+// lookup to immutable read-model builders without duplicating the alias table.
+func ResolveBoardChoiceForPresentation(optionRole string, optionChoices map[string]string) (string, bool) {
+	if direct := strings.TrimSpace(optionChoices[optionRole]); direct != "" {
+		return direct, false
+	}
+	for _, alias := range legacyFrontAliasTargets(optionRole) {
+		if inherited := strings.TrimSpace(optionChoices[alias]); inherited != "" {
+			return inherited, true
+		}
+	}
+	return "", false
+}

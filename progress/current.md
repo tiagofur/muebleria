@@ -1,3 +1,14 @@
+# Issue #639 — immutable DesignRevision presentation read model
+
+- Approved (`status:approved`); user-authorized one-PR size exception. Base `origin/main@55399890173e76b3ae30d858ec9a9472bcd78ab1`; branch `fix/639-design-revision-read-model`.
+- Started: 2026-09-09 15:00 CST. Scope: immutable human-readable revision descriptors, server-owned material provenance, honest legacy unavailable state, generated API, React presentation and focused proofs. No artifact health, Proyectar convergence, quote exports or `.skp` parsing.
+- Plan:
+  1. Add additive snapshot/provenance persistence and strict domain contract without backfilling historical revisions.
+  2. Build descriptors and actor labels atomically during publication/approval; preserve exact revision selection and RLS/immutability.
+  3. Regenerate OpenAPI clients and map frozen/legacy states without handwritten DTOs.
+  4. Extract the React revision panel, keep UUIDs inside technical audit, and cover behavior/a11y/responsive presentation.
+  5. Run focused backend/storage/UI/browser gates, commit logical units, push and record exact evidence.
+
 # Issue #637 — [P0][BUG][DT-MAT] Repair quoted materials missing from existing working snapshots
 
 - Aprobada (`status:approved`). Base `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`; rama `fix/637-dt-material-provenance-reconcile`.
@@ -503,3 +514,10 @@ EOL.
 
 - Publish retry diagnosis: the first real attempt created a prepared publish session at 2026-09-09 19:43:07 UTC but recorded zero artifacts. The failure was client-side: `HttpAdapter#upload` assigned the IO-like `MultipartBody` to `Net::HTTP#body`, whose send path calls `bytesize`; the resulting programming error was collapsed into the misleading `unreachable` message before any artifact byte reached the backend. The adapter now uses `body_stream`; the dialog also resets the stuck `Publicando…` label to `Reintentar publicación` on failure.
 - Publish retry evidence: focused Ruby publisher suite passes (20 runs / 90 assertions), the real dialog JavaScript suite passes (15/15), RuboCop on the changed Ruby files is clean, and the installed adapter passed an in-host SketchUp 2026 loopback upload (`status=201`, expected multipart payload received). The final design publication was not executed.
+
+## PR #646 — correction round 1 for issue #639
+
+- Authorized single correction round against reviewed head `d359ca305b5de0627a765c192795e322c4ed85b4`; same branch/worktree, no GitHub mutations.
+- Scope: repair Foundation Gate A semantic selector, cover all four server-owned presentation provenance states, strengthen real-browser descriptor/actor/overflow proof, restore RLS inventory metadata on migration down, complete disclosure interaction tokens/a11y, and correct the documentation typo.
+- Verification plan: focused Go migration/provenance tests, focused UI, real project-design browser gate, complete `pnpm gate:foundation:a`, diff check, commit and push exact readback.
+- Correction result: `IMPLEMENTED_PENDING_REVIEW`. Focused provenance/migration and UI tests pass; real project-design browser gate passes; full Foundation Gate A passes 34/34 with 31 Chromium cases. See `progress/implement_639_design_revision_read_model.md`.

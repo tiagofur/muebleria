@@ -26,6 +26,17 @@ const REV_2_ID = '33333333-0000-4000-8000-000000000002';
 const REV_3_ID = '33333333-0000-4000-8000-000000000003';
 const INSTANCE_1_ID = '77777777-0000-4000-8000-000000000001';
 
+function presentation(name: string, code: string, width: number, material: string) {
+  return {
+    schema_version: 1 as const,
+    unit: { label: `${name} 1 de 1`, index: 1, total: 1 },
+    definition: { name, code },
+    parameters: [{ key: 'width', label: 'Ancho', type: 'number', value: width, unit: 'mm', state: 'available' as const }],
+    materials: [{ role: 'estructura', role_label: 'Estructura', name: material, code: 'MAT-01', effective_thickness_mm: 18, provenance: 'authored' as const }],
+    room: { label: 'Cocina', state: 'available' as const },
+  };
+}
+
 const mockDesigns: Design[] = [
   {
     id: DESIGN_1_ID,
@@ -71,7 +82,8 @@ const mockRevision1: DesignRevision = {
   parent_revision_id: null,
   source_type: 'sketchup',
   status: 'superseded',
-  created_by: 'Arquitecto Juan',
+  created_by: '66666666-0000-4000-8000-000000000001',
+      created_by_display_name: 'Arquitecto Juan',
   created_at: '2026-09-01T10:00:00Z',
   items: [
     {
@@ -81,6 +93,8 @@ const mockRevision1: DesignRevision = {
       furniture_definition_id: '88888888-0000-4000-8000-000000000001',
       parameters: { width: 600, height: 720, depth: 560 },
       material_choices: { estructura: 'Blanco 18mm' },
+      descriptor_state: 'available',
+      presentation_snapshot: presentation('Gabinete bajo', 'MOD-GAB-01', 600, 'Blanco 18mm'),
       room_id: 'cocina',
       created_at: '2026-09-01T10:00:00Z',
     },
@@ -105,7 +119,8 @@ const mockRevision2: DesignRevision = {
   parent_revision_id: REV_1_ID,
   source_type: 'sketchup',
   status: 'superseded',
-  created_by: 'Arquitecto Juan',
+  created_by: '66666666-0000-4000-8000-000000000001',
+  created_by_display_name: 'Arquitecto Juan',
   created_at: '2026-09-02T12:00:00Z',
   items: [
     {
@@ -115,6 +130,8 @@ const mockRevision2: DesignRevision = {
       furniture_definition_id: '88888888-0000-4000-8000-000000000002',
       parameters: { width: 700, height: 720, depth: 560 },
       material_choices: { estructura: 'Gris Grafito 18mm' },
+      descriptor_state: 'available',
+      presentation_snapshot: presentation('Gabinete bajo', 'MOD-GAB-02', 700, 'Gris Grafito 18mm'),
       room_id: 'cocina',
       created_at: '2026-09-02T12:00:00Z',
     },
@@ -131,7 +148,9 @@ const mockRevision3: DesignRevision = {
   status: 'approved',
   approved_by: '66666666-0000-4000-8000-000000000001',
   approved_at: '2026-09-03T15:00:00Z',
-  created_by: 'Diseñadora Sofía',
+  created_by: '66666666-0000-4000-8000-000000000002',
+  created_by_display_name: 'Diseñadora Sofía',
+  approved_by_display_name: 'Gerente Ana',
   created_at: '2026-09-03T14:00:00Z',
   items: [
     {
@@ -141,6 +160,8 @@ const mockRevision3: DesignRevision = {
       furniture_definition_id: '88888888-0000-4000-8000-000000000003',
       parameters: { width: 900, height: 720, depth: 560 },
       material_choices: { estructura: 'Roble Nebraska 18mm' },
+      descriptor_state: 'available',
+      presentation_snapshot: presentation('Gabinete bajo', 'MOD-GAB-03', 900, 'Roble Nebraska 18mm'),
       room_id: 'cocina',
       created_at: '2026-09-03T14:00:00Z',
     },
@@ -527,9 +548,9 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
 
     // Snapshot items MUST be R1 items (600mm, Blanco 18mm), NOT R3 items (900mm, Roble Nebraska)
     expect(screen.getByText(/Blanco 18mm/i)).toBeInTheDocument();
-    expect(screen.getByText(/width: 600/i)).toBeInTheDocument();
+    expect(screen.getByText(/600 mm/i)).toBeInTheDocument();
     expect(screen.queryByText(/Roble Nebraska 18mm/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/width: 900/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/900 mm/i)).not.toBeInTheDocument();
 
     // Artifacts table must show R1 artifacts (only Manifest), NOT 3D model or Preview
     const table = screen.getByTestId('artifacts-table');
@@ -923,7 +944,8 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
       parent_revision_id: '99999999-9999-4999-8999-999999999999',
       source_type: 'sketchup',
       status: 'published',
-      created_by: 'Arquitecto Juan',
+      created_by: '66666666-0000-4000-8000-000000000001',
+  created_by_display_name: 'Arquitecto Juan',
       created_at: '2026-09-02T12:00:00Z',
       items: [],
       artifacts: [],

@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -321,6 +322,21 @@ func TestDesignMaterialProvenance_DetectReconcileAndPreserveHistory(t *testing.T
 	}
 	if len(res1.FilledChoices) != 2 || res1.FilledChoices["FRENTES"] != matProvenanceFront || res1.FilledChoices["INTERIOR"] != matProvenanceInterior {
 		t.Fatalf("fiHist filled = %v, want FRENTES+INTERIOR quoted finishes", res1.FilledChoices)
+	}
+	var reconciledSources []byte
+	if err := fx.admin.QueryRow(context.Background(), `
+		SELECT material_choice_sources
+		FROM design_working_items
+		WHERE design_id = $1 AND furniture_instance_id = $2
+	`, designID, fiHist).Scan(&reconciledSources); err != nil {
+		t.Fatalf("read reconciled material sources: %v", err)
+	}
+	var sources map[string]string
+	if err := json.Unmarshal(reconciledSources, &sources); err != nil {
+		t.Fatalf("decode reconciled material sources: %v", err)
+	}
+	if sources["FRENTES"] != "quoted" || sources["INTERIOR"] != "quoted" {
+		t.Fatalf("reconciled sources = %v, want quoted provenance for filled roles", sources)
 	}
 
 	// ── Repair 2 (fiMixed): INTERIOR filled, authored FRENTES preserved.

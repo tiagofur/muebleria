@@ -8,6 +8,7 @@ import {
 const PROJECT_ID = '77777777-2222-4777-8777-222222222222';
 const QUOTE_LINE_ID = '88888888-2222-4888-8888-222222222222';
 const CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000002';
+const MATERIAL_ID = 'c0000000-0000-4000-8000-000000000039';
 
 interface SeededProjectDesigns {
   readonly projectId: string;
@@ -15,6 +16,13 @@ interface SeededProjectDesigns {
   readonly r1Id: string;
   readonly r2Id: string;
   readonly instanceIds: readonly [string, string, string];
+  readonly moduleName: string;
+  readonly moduleCode: string;
+  readonly materialName: string;
+  readonly materialCode: string;
+  readonly materialThicknessMm: number;
+  readonly roomName: string;
+  readonly actorName: string;
 }
 
 async function uploadDesignArtifact(
@@ -57,8 +65,21 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
   });
 
   const catalog = await repository.getCatalog();
+  const material = {
+    id: MATERIAL_ID,
+    code: 'GATE-MAT-A',
+    name: 'Melamina blanca E2E',
+    widthMm: 1830,
+    lengthMm: 2440,
+    thicknessMm: 18,
+    grainDefault: false,
+    boardPrice: 1000,
+    wastePercent: 10,
+    costPerM2: 223.88,
+  };
   await repository.saveCatalog({
     ...catalog,
+    materials: [material],
     customers: [
       {
         id: CUSTOMER_ID,
@@ -90,6 +111,11 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
     ],
   };
   await repository.saveProject(project);
+  await repository.startSiteSurvey(PROJECT_ID);
+  const roomName = 'Cocina E2E';
+  const survey = await repository.upsertSurveySpace(PROJECT_ID, { name: roomName });
+  const roomId = survey.survey?.spaces.find((space) => space.name === roomName)?.id;
+  if (!roomId) throw new Error('site survey did not return the seeded room identity');
 
   // 2. Materialize the QuoteLine into 3 distinct FurnitureInstances (FI-A, FI-B, FI-C)
   const mat = await client.materializeQuoteLineFurniture(
@@ -114,8 +140,8 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
   // 4. Update Working Copy with FI-A and FI-B
   await client.updateDesignWorkingCopy(aOwner.token, design.id, {
     items: [
-      { furniture_instance_id: instanceIds[0], parameters: { width: 600 }, material_choices: {} },
-      { furniture_instance_id: instanceIds[1], parameters: { width: 800 }, material_choices: {} },
+      { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
+      { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 800 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
     ],
   });
 
@@ -130,9 +156,9 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
   // 6. Update Working Copy after R1 to add FI-C (now 3 items)
   await client.updateDesignWorkingCopy(aOwner.token, design.id, {
     items: [
-      { furniture_instance_id: instanceIds[0], parameters: { width: 600 }, material_choices: {} },
-      { furniture_instance_id: instanceIds[1], parameters: { width: 800 }, material_choices: {} },
-      { furniture_instance_id: instanceIds[2], parameters: { width: 900 }, material_choices: {} },
+      { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
+      { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 800 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
+      { furniture_instance_id: instanceIds[2], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 900 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
     ],
   });
 
@@ -226,6 +252,13 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
     r1Id: r1.id,
     r2Id: r2.id,
     instanceIds,
+    moduleName: 'Mueble real A',
+    moduleCode: 'GATE-A',
+    materialName: material.name,
+    materialCode: material.code,
+    materialThicknessMm: material.thicknessMm,
+    roomName,
+    actorName: aOwner.user.name,
   };
 }
 
@@ -279,11 +312,29 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(inspector.getByRole('heading', { level: 2, name: /Revisión R1/i })).toBeVisible();
 
     // R1 exactness: exactly 2 items (FI-A and FI-B), FI-C absent
-    const itemsTable = inspector.getByTestId('revision-items-table');
-    await expect(itemsTable.locator('tbody tr')).toHaveCount(2);
-    await expect(itemsTable.getByTitle(seeded.instanceIds[0])).toBeVisible();
-    await expect(itemsTable.getByTitle(seeded.instanceIds[1])).toBeVisible();
-    await expect(itemsTable.getByTitle(seeded.instanceIds[2])).toHaveCount(0);
+    const itemsTable = inspector.getByTestId('revision-items-list');
+    await expect(itemsTable.locator('article')).toHaveCount(2);
+    await expect(itemsTable.getByText(seeded.instanceIds[0])).not.toBeVisible();
+    await expect(itemsTable.getByText(seeded.instanceIds[1])).not.toBeVisible();
+    await expect(itemsTable.getByText(seeded.instanceIds[2])).not.toBeVisible();
+
+    const firstItem = itemsTable.locator('article').first();
+    await expect(firstItem.getByText(seeded.moduleName, { exact: true }).first()).toBeVisible();
+    await expect(firstItem.getByText(seeded.moduleCode, { exact: true })).toBeVisible();
+    await expect(firstItem.getByText('Ancho', { exact: true })).toBeVisible();
+    await expect(firstItem.getByText('600 mm', { exact: true })).toBeVisible();
+    await expect(firstItem.getByText(seeded.materialName, { exact: true })).toBeVisible();
+    await expect(firstItem.getByText(seeded.materialCode, { exact: true })).toBeVisible();
+    await expect(firstItem.getByText(`${seeded.materialThicknessMm} mm`, { exact: true })).toBeVisible();
+    await expect(firstItem.getByText('Elegido en diseño', { exact: true })).toBeVisible();
+    await expect(firstItem.getByText(seeded.roomName, { exact: true })).toBeVisible();
+    await expect(inspector.getByText(seeded.actorName, { exact: true }).first()).toBeVisible();
+    const technicalSummary = firstItem.locator('summary', { hasText: 'Identificadores técnicos' });
+    await technicalSummary.focus();
+    await expect(technicalSummary).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(firstItem.locator('details')).toHaveAttribute('open', '');
+    await page.keyboard.press('Enter');
 
     // 6. Select R2 explicitly
     await timeline.getByTestId('revision-node-R2').click();
@@ -291,10 +342,32 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(inspector.getByRole('heading', { level: 2, name: /Revisión R2/i })).toBeVisible();
 
     // R2 exactness: exactly 3 items (FI-A, FI-B, and FI-C)
-    await expect(itemsTable.locator('tbody tr')).toHaveCount(3);
-    await expect(itemsTable.getByTitle(seeded.instanceIds[0])).toBeVisible();
-    await expect(itemsTable.getByTitle(seeded.instanceIds[1])).toBeVisible();
-    await expect(itemsTable.getByTitle(seeded.instanceIds[2])).toBeVisible();
+    await expect(itemsTable.locator('article')).toHaveCount(3);
+    await expect(itemsTable.getByText(seeded.instanceIds[0])).not.toBeVisible();
+    await expect(itemsTable.getByText(seeded.instanceIds[1])).not.toBeVisible();
+    await expect(itemsTable.getByText(seeded.instanceIds[2])).not.toBeVisible();
+
+    // The immutable descriptors remain usable without horizontal overflow at
+    // the three supported operational breakpoints.
+    const originalViewport = page.viewportSize();
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(itemsTable).toBeVisible();
+      const surfaces = [inspector, itemsTable, ...await itemsTable.locator('article').all()];
+      for (const surface of surfaces) {
+        const box = await surface.boundingBox();
+        expect(box, `missing layout box at ${width}px`).not.toBeNull();
+        expect(box!.x, `left overflow at ${width}px`).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width, `right overflow at ${width}px`).toBeLessThanOrEqual(width);
+      }
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `document overflow at ${width}px`).toBeLessThanOrEqual(0);
+      await testInfo.attach(`revision-descriptors-${width}`, {
+        body: await itemsTable.screenshot(),
+        contentType: 'image/png',
+      });
+    }
+    if (originalViewport) await page.setViewportSize(originalViewport);
 
     // R2 preview bytes load through the signed grant in the real browser.
     const preview = page.getByTestId('preview-image');
@@ -305,7 +378,6 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     // Responsive visual proof for the two recoverable preview failures. The
     // workspace and all prior requests remain real; only the failure under
     // test is injected at the signed-grant boundary.
-    const originalViewport = page.viewportSize();
     const previewAuthorize = `**/designs/${seeded.designId}/revisions/${seeded.r2Id}/artifacts/preview:authorize`;
     await page.route(previewAuthorize, (route) =>
       route.fulfill({
@@ -363,7 +435,7 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     // 7. Select R1 again and verify historical reload stability
     await timeline.getByTestId('revision-node-R1').click();
     await expect(page).toHaveURL(new RegExp(`rev=${seeded.r1Id}`));
-    await expect(itemsTable.locator('tbody tr')).toHaveCount(2);
+    await expect(itemsTable.locator('article')).toHaveCount(2);
 
     // Reload browser page
     await page.reload();
@@ -371,11 +443,11 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     // Post-reload: R1 remains pinned, URL still contains rev=r1Id, item count is 2, FI-C absent
     await expect(page).toHaveURL(new RegExp(`rev=${seeded.r1Id}`));
     await expect(page.getByRole('heading', { level: 2, name: /Revisión R1/i })).toBeVisible();
-    const reloadedTable = page.getByTestId('revision-items-table');
-    await expect(reloadedTable.locator('tbody tr')).toHaveCount(2);
-    await expect(reloadedTable.getByTitle(seeded.instanceIds[0])).toBeVisible();
-    await expect(reloadedTable.getByTitle(seeded.instanceIds[1])).toBeVisible();
-    await expect(reloadedTable.getByTitle(seeded.instanceIds[2])).toHaveCount(0);
+    const reloadedTable = page.getByTestId('revision-items-list');
+    await expect(reloadedTable.locator('article')).toHaveCount(2);
+    await expect(reloadedTable.getByText(seeded.instanceIds[0])).not.toBeVisible();
+    await expect(reloadedTable.getByText(seeded.instanceIds[1])).not.toBeVisible();
+    await expect(reloadedTable.getByText(seeded.instanceIds[2])).not.toBeVisible();
 
     // 8. Tenant isolation: switch to Organization B
     await page.getByLabel('Cambiar organización').selectOption({ label: 'Browser Gate B' });
@@ -393,7 +465,7 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     // Core negative proofs: zero Org A data ever appears in the Org B session
     await expect(page.getByText('Cocina Integral')).toHaveCount(0);
     await expect(page.getByTestId('design-lineage-timeline')).toHaveCount(0);
-    await expect(page.getByTestId('revision-items-table')).toHaveCount(0);
+    await expect(page.getByTestId('revision-items-list')).toHaveCount(0);
 
     // Positive proof: the workspace renders an accessible state (error or empty — not Org A data)
     const workspaceOrError = page.locator(
@@ -405,7 +477,7 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     if (workspaceCount > 0) {
       // If a workspace rendered, it must be in an error or empty state — NOT showing Org A data
       await expect(page.getByTestId('revision-inspector')).toHaveCount(0);
-      await expect(page.getByTestId('revision-items-table')).toHaveCount(0);
+      await expect(page.getByTestId('revision-items-list')).toHaveCount(0);
     }
   });
 });

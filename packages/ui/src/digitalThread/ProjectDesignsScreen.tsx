@@ -44,6 +44,7 @@ import {
 } from './designHistory';
 import { resolveDesignArtifactUrl } from './designArtifactUrl';
 import { SketchUpPairingModal } from './SketchUpPairingModal';
+import { RevisionSnapshotItemsPanel } from './RevisionSnapshotItemsPanel';
 import './digitalThread.css';
 
 /**
@@ -148,20 +149,6 @@ function formatWhen(iso: string | null | undefined): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function formatParameters(params: Record<string, unknown>): string {
-  const entries = Object.entries(params);
-  if (entries.length === 0) return '—';
-  return entries
-    .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
-    .join(', ');
-}
-
-function formatMaterials(materials: Record<string, string>): string {
-  const entries = Object.entries(materials);
-  if (entries.length === 0) return '—';
-  return entries.map(([role, mat]) => `${role}: ${mat}`).join(', ');
 }
 
 export function ProjectDesignsScreen({
@@ -794,9 +781,9 @@ export function ProjectDesignsScreen({
                         <div className="pd-lineage-node__date">
                           {formatWhen(node.revision.created_at)}
                         </div>
-                        {node.revision.created_by && (
+                        {node.revision.created_by_display_name && (
                           <div className="pd-lineage-node__author">
-                            {node.revision.created_by}
+                            {node.revision.created_by_display_name}
                           </div>
                         )}
                       </button>
@@ -877,13 +864,19 @@ export function ProjectDesignsScreen({
                   </h2>
                   <p className="pd-inspector__subtitle">
                     Snapshot inmutable publicado el {formatWhen(selectedRevisionDetail.created_at)} por{' '}
-                    <strong>{selectedRevisionDetail.created_by ?? 'Sistema'}</strong> desde{' '}
+                    <strong>{selectedRevisionDetail.created_by_display_name ?? (selectedRevisionDetail.created_by ? 'Autor histórico no disponible' : 'Sistema')}</strong> desde{' '}
                     <strong>
                       {DESIGN_SOURCE_TYPE_LABELS[selectedRevisionDetail.source_type] ??
                         selectedRevisionDetail.source_type}
                     </strong>
                     .
                   </p>
+                  {selectedRevisionDetail.approved_by_display_name && (
+                    <p className="pd-inspector__subtitle">
+                      Aprobada por <strong>{selectedRevisionDetail.approved_by_display_name}</strong>
+                      {selectedRevisionDetail.approved_at ? ` el ${formatWhen(selectedRevisionDetail.approved_at)}` : ''}.
+                    </p>
+                  )}
 
                 </div>
 
@@ -907,64 +900,7 @@ export function ProjectDesignsScreen({
                       </div>
                     </div>
 
-                    {selectedRevisionDetail.items.length === 0 ? (
-                      <p className="pd-empty-hint">Esta revisión no contiene unidades físicas.</p>
-                    ) : (
-                      <div className="pd-table-container">
-                        <table
-                          className="pd-items-table"
-                          data-testid="revision-items-table"
-                        >
-
-                          <thead>
-                            <tr>
-                              <th>Unidad física (ID)</th>
-                              <th>Definición / Módulo</th>
-                              <th>Parámetros</th>
-                              <th>Materiales</th>
-                              <th>Ambiente</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedRevisionDetail.items.map((item) => (
-
-                              <tr key={item.id} data-testid={`revision-item-${item.id}`}>
-                                <td>
-                                  <span
-                                    className="pd-code-pill"
-                                    title={item.furniture_instance_id}
-                                  >
-                                    {item.furniture_instance_id.slice(0, 13)}…
-                                  </span>
-                                </td>
-                                <td>
-                                  {item.furniture_definition_id ? (
-                                    <span>
-                                      {item.furniture_definition_id}
-                                      {item.definition_version != null && (
-                                        <small className="text-muted">
-                                          {' '}
-                                          v{item.definition_version}
-                                        </small>
-                                      )}
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted">—</span>
-                                  )}
-                                </td>
-                                <td className="pd-param-cell">
-                                  {formatParameters(item.parameters)}
-                                </td>
-                                <td className="pd-param-cell">
-                                  {formatMaterials(item.material_choices)}
-                                </td>
-                                <td>{item.room_id ?? <span className="text-muted">—</span>}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                    <RevisionSnapshotItemsPanel items={selectedRevisionDetail.items} />
                   </div>
                 </div>
 

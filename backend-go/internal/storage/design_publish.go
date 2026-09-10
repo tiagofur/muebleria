@@ -27,22 +27,22 @@ import (
 const DesignPublishSessionTTL = 24 * time.Hour
 
 type PrepareDesignPublishCommand struct {
-	DesignID  string
-	Manifest  domain.DesignPublishManifest
+	DesignID    string
+	Manifest    domain.DesignPublishManifest
 	ActorUserID string
-	IP        string
-	RequestID string
+	IP          string
+	RequestID   string
 }
 
 type RecordDesignPublishArtifactCommand struct {
-	DesignID  string
-	SessionID string
-	Kind      domain.DesignPublishArtifactKind
-	StorageKey   string
-	ContentType  string
-	SizeBytes    int64
-	SHA256       string
-	ActorUserID  string
+	DesignID    string
+	SessionID   string
+	Kind        domain.DesignPublishArtifactKind
+	StorageKey  string
+	ContentType string
+	SizeBytes   int64
+	SHA256      string
+	ActorUserID string
 }
 
 type FinalizeDesignPublishCommand struct {
@@ -57,8 +57,8 @@ type FinalizeDesignPublishCommand struct {
 // expired sessions abandoned during the lazy cleanup sweep so the API layer
 // can delete those files best-effort.
 type PrepareResult struct {
-	Session         *domain.DesignPublishSession
-	AbandonedKeys   []string
+	Session       *domain.DesignPublishSession
+	AbandonedKeys []string
 }
 
 const designPublishSessionColumns = `
@@ -565,6 +565,9 @@ func (s *PostgresStore) FinalizeDesignPublish(ctx context.Context, cmd FinalizeD
 	if err := s.validateWorkingItemsForPublish(ctx, projectID, workingItems); err != nil {
 		return nil, err
 	}
+	if err := s.buildDesignRevisionPresentation(ctx, designOrgID, projectID, workingItems); err != nil {
+		return nil, err
+	}
 
 	// 6. Publish the immutable revision through the shared #387 core.
 	rev, err := s.insertDesignRevisionAndItems(ctx, designOrgID, projectID, cmd.DesignID,
@@ -627,10 +630,10 @@ func (s *PostgresStore) FinalizeDesignPublish(ctx context.Context, cmd FinalizeD
 	artifactRefs := make([]map[string]interface{}, 0, len(artifacts))
 	for _, a := range artifacts {
 		artifactRefs = append(artifactRefs, map[string]interface{}{
-			"kind":          string(a.Kind),
-			"sha256":        a.SHA256,
-			"size_bytes":    a.SizeBytes,
-			"content_type":  a.ContentType,
+			"kind":         string(a.Kind),
+			"sha256":       a.SHA256,
+			"size_bytes":   a.SizeBytes,
+			"content_type": a.ContentType,
 		})
 	}
 	extras := map[string]interface{}{

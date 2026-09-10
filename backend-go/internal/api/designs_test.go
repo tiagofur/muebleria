@@ -348,3 +348,21 @@ func TestHandleDesignWorkingCopyReset_PostReturns200(t *testing.T) {
 		t.Fatalf("revision_id = %s, want %s", store.resetDesignWorkingCopyCmd.RevisionID, designTestRevisionID)
 	}
 }
+
+func TestDesignRevisionDTOCarriesFrozenPresentationAndHonestLegacyState(t *testing.T) {
+	frozen := domain.DesignRevisionItem{PresentationSnapshot: &domain.DesignRevisionPresentationSnapshot{
+		SchemaVersion: 1, Unit: domain.DesignRevisionUnitDescriptor{Label: "Gabinete 1", Index: 1, Total: 1},
+		Definition: domain.DesignRevisionDefinition{Code: "MOD-1", Name: "Gabinete"},
+		Parameters: []domain.DesignRevisionParameter{{Key: "widthMm", Label: "Ancho", Value: 600.0, Unit: "mm", State: "available"}},
+		Materials:  []domain.DesignRevisionMaterial{{Role: "INTERIOR", Name: "Blanco", Provenance: domain.DesignMaterialProvenanceQuoted}},
+		Room:       domain.DesignRevisionRoomDescriptor{Label: "Cocina", State: "available"},
+	}}
+	dto := toDesignRevisionItemDTO(frozen)
+	if dto.DescriptorState != "available" || dto.PresentationSnapshot == nil || dto.PresentationSnapshot.Definition.Name == nil || *dto.PresentationSnapshot.Definition.Name != "Gabinete" || dto.PresentationSnapshot.Materials[0].Provenance != "quoted" {
+		t.Fatalf("frozen DTO mismatch: %#v", dto)
+	}
+	legacy := toDesignRevisionItemDTO(domain.DesignRevisionItem{})
+	if legacy.DescriptorState != "unavailable_legacy" || legacy.PresentationSnapshot != nil {
+		t.Fatalf("legacy DTO invented presentation: %#v", legacy)
+	}
+}
