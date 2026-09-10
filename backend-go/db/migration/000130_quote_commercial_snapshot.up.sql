@@ -80,6 +80,28 @@ AS $$
            ELSE FALSE END;
 $$;
 
+-- Match Go's time.Time JSON contract without letting a malformed direct-SQL
+-- timestamp escape as an accidental cast exception from the validator.
+CREATE OR REPLACE FUNCTION valid_quote_commercial_timestamp_v1(value TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+    parsed TIMESTAMPTZ;
+BEGIN
+    IF value IS NULL OR BTRIM(value) = '' OR
+       value !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$' THEN
+        RETURN FALSE;
+    END IF;
+    parsed := value::timestamptz;
+    RETURN isfinite(parsed)
+       AND parsed <> TIMESTAMPTZ '0001-01-01 00:00:00+00';
+EXCEPTION WHEN OTHERS THEN
+    RETURN FALSE;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION valid_quote_commercial_snapshot_v1(payload JSONB)
 RETURNS BOOLEAN
 LANGUAGE SQL
@@ -88,7 +110,7 @@ AS $$
     SELECT CASE
       WHEN jsonb_typeof(payload) = 'object'
        AND payload->>'schema' = 'granete.quote-commercial-snapshot.v1'
-       AND NULLIF(BTRIM(payload->>'capturedAt'), '') IS NOT NULL
+       AND valid_quote_commercial_timestamp_v1(payload->>'capturedAt')
        AND NULLIF(BTRIM(payload->>'currency'), '') IS NOT NULL
        AND jsonb_typeof(payload->'customer') = 'object'
        AND NULLIF(BTRIM(payload#>>'{customer,id}'), '') IS NOT NULL
@@ -150,6 +172,7 @@ AS $$
                        OR option_value->>'groupCode' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                        OR NULLIF(BTRIM(option_value->>'groupLabel'), '') IS NULL
                        OR option_value->>'groupLabel' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                       OR NULLIF(BTRIM(option_value->>'choiceId'), '') IS NULL
                        OR option_value->>'choiceId' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                        OR NULLIF(BTRIM(option_value->>'choiceLabel'), '') IS NULL
                        OR option_value->>'choiceLabel' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'

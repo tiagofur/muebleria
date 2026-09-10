@@ -61,6 +61,7 @@ ALTER TABLE quote_revisions
     DROP COLUMN IF EXISTS accepted_at;
 
 DROP FUNCTION IF EXISTS valid_quote_commercial_snapshot_v1(JSONB);
+DROP FUNCTION IF EXISTS valid_quote_commercial_timestamp_v1(TEXT);
 DROP FUNCTION IF EXISTS valid_quote_commercial_line_amounts_v1(JSONB);
 DROP FUNCTION IF EXISTS valid_quote_commercial_breakdown_v1(JSONB);
 

@@ -46,6 +46,26 @@ func assertAppRoleQuoteSnapshotInsertRejected(t *testing.T, pool *pgxpool.Pool, 
 	}
 }
 
+func assertAppRoleQuoteSnapshotPublishRejected(t *testing.T, pool *pgxpool.Pool, id string) {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(ctx, `UPDATE quote_revisions SET status='published', published_at=NOW() WHERE id=$1`, id)
+	if err == nil || !strings.Contains(err.Error(), "valid commercial_snapshot") {
+		t.Fatalf("app-role corrupt draft publish must fail closed, got %v", err)
+	}
+}
+
 const (
 	migrationQuoteOrg            = "a1000000-0000-0000-0000-000000000001"
 	migrationQuoteCustomer       = "a2000000-0000-0000-0000-000000000001"
@@ -219,6 +239,26 @@ func TestQuoteCommercialSnapshotMigrationFreshAndDirectSQLValidation(t *testing.
 				}}
 			}),
 		},
+		{
+			name: "missing option choice identity", id: "a4000000-0000-0000-0000-000000000032", revision: 32,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				payload["units"].([]any)[0].(map[string]any)["options"] = []any{map[string]any{
+					"groupCode": "FRONT", "groupLabel": "Front", "choiceLabel": "Oak",
+				}}
+			}),
+		},
+		{
+			name: "invalid captured timestamp", id: "a4000000-0000-0000-0000-000000000033", revision: 33,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				payload["capturedAt"] = "not-a-timestamp"
+			}),
+		},
+		{
+			name: "zero captured timestamp", id: "a4000000-0000-0000-0000-000000000034", revision: 34,
+			payload: mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+				payload["capturedAt"] = "0001-01-01T00:00:00Z"
+			}),
+		},
 	}
 	for _, test := range invalidSnapshots {
 		t.Run(test.name, func(t *testing.T) {
@@ -304,26 +344,20 @@ func TestQuoteCommercialSnapshotMigrationFreshAndDirectSQLValidation(t *testing.
 		VALUES ('a4000000-0000-0000-0000-000000000004',$1,$2,4,'draft',$3::jsonb)`, migrationQuoteOrg, migrationQuoteProject, corruptEnvelope); err != nil {
 		t.Fatal(err)
 	}
+	missingChoiceEnvelope := mutateQuoteCommercialEnvelope(t, func(payload map[string]any) {
+		payload["units"].([]any)[0].(map[string]any)["options"] = []any{map[string]any{
+			"groupCode": "FRONT", "groupLabel": "Front", "choiceLabel": "Oak",
+		}}
+	})
+	if _, err := pool.Exec(ctx, `INSERT INTO quote_revisions (id,organization_id,project_id,revision_number,status,commercial_snapshot)
+		VALUES ('a4000000-0000-0000-0000-000000000031',$1,$2,31,'draft',$3::jsonb)`, migrationQuoteOrg, migrationQuoteProject, missingChoiceEnvelope); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(ctx, `ALTER TABLE quote_revisions ENABLE TRIGGER protect_quote_revisions_immutable`); err != nil {
 		t.Fatal(err)
 	}
-
-	tx, err = pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
-		t.Fatal(err)
-	}
-	_, err = tx.Exec(ctx, `UPDATE quote_revisions SET status='published', published_at=NOW()
-		WHERE id='a4000000-0000-0000-0000-000000000004'`)
-	if err == nil || !strings.Contains(err.Error(), "valid commercial_snapshot") {
-		t.Fatalf("app-role corrupt draft publish must fail closed, got %v", err)
-	}
+	assertAppRoleQuoteSnapshotPublishRejected(t, pool, "a4000000-0000-0000-0000-000000000004")
+	assertAppRoleQuoteSnapshotPublishRejected(t, pool, "a4000000-0000-0000-0000-000000000031")
 }
 
 func TestQuoteCommercialSnapshotMigrationUpgradePreservesLegacyRowsDownAndReplay(t *testing.T) {
