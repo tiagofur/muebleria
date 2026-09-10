@@ -183,7 +183,7 @@ function describeRequestFailure(err: unknown): string {
 function RefreshingMark({ testId }: { readonly testId: string }) {
   return (
     <span className="pd-refreshing-mark" data-testid={testId} aria-hidden="true">
-      <RefreshCw size={12} className="spin" />
+      <RefreshCw size={12} strokeWidth={1.5} className="spin" />
       Actualizando…
     </span>
   );
@@ -353,6 +353,8 @@ export function ProjectDesignsScreen({
   // #641: only a successful 404 is honest absence; any other failure of the
   // working-copy request is a visible, actionable error (never a hidden banner).
   const workingCopyAbsent = workingCopyQuery.isSuccess && workingCopyQuery.data === null;
+  const workingCopyInitialLoading = workingCopyQuery.isLoading && !workingCopyQuery.data;
+  const workingCopyBackgroundFailure = workingCopyQuery.isError && Boolean(workingCopyQuery.data);
 
   // 4. Production Releases query
   const releasesQuery = useQuery({
@@ -809,209 +811,288 @@ export function ProjectDesignsScreen({
           ) : (
             <>
               {/* Working Copy Banner — #641: data | request failure | honest 404 absence */}
-          {workingCopy ? (
-            <div className="pd-working-copy-banner" data-testid="working-copy-banner">
-              <div className="pd-working-copy-banner__info">
-                <Layers size={18} className="pd-working-copy-banner__icon" />
-                <div>
-                  <strong>Borrador de trabajo (Working Copy):</strong>{' '}
-                  <span>
-                    {workingCopy.items.length}{' '}
-                    {workingCopy.items.length === 1 ? 'mueble' : 'muebles'} modelados
-                  </span>
-                  {workingCopy.base_revision_id ? (
-                    <span
-                      className="pd-working-copy-banner__meta"
-                      title={workingCopy.base_revision_id}
-                    >
-                      {' '}
-                      · Base: {workingCopy.base_revision_id.slice(0, 8)}…
-                    </span>
-                  ) : (
-                    <span className="pd-working-copy-banner__meta"> · Sin revisión base</span>
-                  )}
-                </div>
-              </div>
-              <span className="pd-working-copy-banner__date">
-                Modificado: {formatWhen(workingCopy.updated_at)}
-                {workingCopyQuery.isFetching && <RefreshingMark testId="working-copy-refreshing" />}
-              </span>
-            </div>
-          ) : workingCopyQuery.isError ? (
-            <div
-              className="pd-working-copy-banner pd-working-copy-banner--error"
-              data-testid="working-copy-error"
-              role="alert"
-            >
-              <div className="pd-working-copy-banner__info">
-                <TriangleAlert size={18} className="pd-working-copy-banner__icon" />
-                <div>
-                  <strong>No se pudo verificar el borrador de trabajo.</strong>{' '}
-                  <span>{describeRequestFailure(workingCopyQuery.error)}</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-sm btn-secondary"
-                data-testid="retry-working-copy-btn"
-                onClick={() => void workingCopyQuery.refetch()}
-              >
-                Reintentar
-              </button>
-            </div>
-          ) : workingCopyAbsent ? (
-            <div
-              className="pd-working-copy-banner pd-working-copy-banner--absent"
-              data-testid="no-working-copy-notice"
-            >
-              <div className="pd-working-copy-banner__info">
-                <Layers size={18} className="pd-working-copy-banner__icon" />
-                <span>No hay borrador de trabajo para este diseño.</span>
-              </div>
-            </div>
-          ) : null}
-
-          {/* Lineage Timeline (R1 → R2 → R3) */}
-          <div className="pd-lineage-container" data-testid="design-lineage-timeline">
-            <div className="pd-lineage-header">
-              <div className="pd-lineage-title">
-                <History size={18} />
-                <h3>Linaje de revisiones inmutables</h3>
-              </div>
-              <span className="pd-lineage-count">
-                {lineage.length} {lineage.length === 1 ? 'publicación' : 'publicaciones'}{' '}
-                {revisionsBackgroundRefresh && <RefreshingMark testId="revisions-refreshing" />}
-              </span>
-            </div>
-
-            {/* #641: a failed request is an explicit error with retry — never
-                the "no revisions" empty state. A failed background refetch
-                keeps the exact known timeline visible with a stale notice. */}
-            {revisionsQuery.isLoading ? (
-              <div className="pd-lineage-loading" role="status" data-testid="revisions-loading">
-                Cargando revisiones…
-              </div>
-            ) : revisionsRequestFailed ? (
-              <div className="pd-lineage-error" data-testid="revisions-error" role="alert">
-                <TriangleAlert size={18} />
-                <div>
-                  <strong>No se pudo cargar el linaje de revisiones.</strong>
-                  <p>{describeRequestFailure(revisionsQuery.error)}</p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  data-testid="retry-revisions-btn"
-                  onClick={() => void revisionsQuery.refetch()}
-                >
-                  Reintentar
-                </button>
-              </div>
-            ) : lineage.length === 0 ? (
-              <div className="pd-lineage-empty" data-testid="no-revisions-notice">
-                <p>
-                  Este diseño no cuenta con revisiones inmutables publicadas todavía. El trabajo
-                  actual reside en el borrador de trabajo (Working Copy).
-                </p>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  data-testid="no-revisions-open-sketchup-btn"
-                  onClick={handleOpenInSketchUp}
-                >
-                  <ExternalLink size={14} />
-                  <span>Abrir en SketchUp para modelar</span>
-                </button>
-              </div>
-            ) : (
-              <>
-              {revisionsBackgroundFailure && (
+              {workingCopyInitialLoading ? (
                 <div
-                  className="pd-lineage-error pd-lineage-error--inline"
-                  data-testid="revisions-stale-error"
+                  className="pd-working-copy-banner pd-working-copy-banner--pending"
+                  data-testid="working-copy-loading"
+                  role="status"
+                >
+                  <div className="pd-working-copy-banner__info">
+                    <RefreshCw
+                      size={18}
+                      strokeWidth={1.5}
+                      className="pd-working-copy-banner__icon spin"
+                    />
+                    <span>Consultando borrador de trabajo…</span>
+                  </div>
+                </div>
+              ) : workingCopyQuery.isError && !workingCopy ? (
+                <div
+                  className="pd-working-copy-banner pd-working-copy-banner--error"
+                  data-testid="working-copy-error"
                   role="alert"
                 >
-                  <TriangleAlert size={14} />
-                  <span>No se pudo actualizar el linaje; se muestra la última versión conocida.</span>
+                  <div className="pd-working-copy-banner__info">
+                    <TriangleAlert
+                      size={18}
+                      strokeWidth={1.5}
+                      className="pd-working-copy-banner__icon"
+                    />
+                    <div>
+                      <strong>No se pudo verificar el borrador de trabajo.</strong>{' '}
+                      <span>{describeRequestFailure(workingCopyQuery.error)}</span>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     className="btn btn-sm btn-secondary"
-                    data-testid="retry-revisions-btn"
-                    onClick={() => void revisionsQuery.refetch()}
+                    data-testid="retry-working-copy-btn"
+                    onClick={() => void workingCopyQuery.refetch()}
                   >
                     Reintentar
                   </button>
                 </div>
-              )}
-              <div className="pd-lineage-track" role="list">
-                {lineage.map((node, index) => {
-                  const isSelected = selectedRevisionHeader?.id === node.revision.id;
-                  const statusLabel =
-                    DESIGN_REVISION_STATUS_LABELS[node.status] ?? node.status;
-                  const sourceLabel =
-                    DESIGN_SOURCE_TYPE_LABELS[node.sourceType] ?? node.sourceType;
-                  // A connector between currentNode and nextNode is authoritative ONLY
-                  // when nextNode explicitly references this currentNode as its parent.
-                  const nextNode = lineage[index + 1];
-                  const connectorIsAuthoritative = Boolean(
-                    nextNode && nextNode.parentRevisionId === node.revision.id,
-                  );
-
-                  return (
-                    <div key={node.revision.id} className="pd-lineage-step" role="listitem">
+              ) : workingCopy ? (
+                <>
+                  <div className="pd-working-copy-banner" data-testid="working-copy-banner">
+                    <div className="pd-working-copy-banner__info">
+                      <Layers
+                        size={18}
+                        strokeWidth={1.5}
+                        className="pd-working-copy-banner__icon"
+                      />
+                      <div>
+                        <strong>Borrador de trabajo (Working Copy):</strong>{' '}
+                        <span>
+                          {workingCopy.items.length}{' '}
+                          {workingCopy.items.length === 1 ? 'mueble' : 'muebles'} modelados
+                        </span>
+                        {workingCopy.base_revision_id ? (
+                          <span
+                            className="pd-working-copy-banner__meta"
+                            title={workingCopy.base_revision_id}
+                          >
+                            {' '}
+                            · Base: {workingCopy.base_revision_id.slice(0, 8)}…
+                          </span>
+                        ) : (
+                          <span className="pd-working-copy-banner__meta">
+                            {' '}
+                            · Sin revisión base
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="pd-working-copy-banner__date">
+                      Modificado: {formatWhen(workingCopy.updated_at)}
+                      {workingCopyQuery.isFetching && !workingCopyBackgroundFailure && (
+                        <RefreshingMark testId="working-copy-refreshing" />
+                      )}
+                    </span>
+                  </div>
+                  {workingCopyBackgroundFailure && (
+                    <div
+                      className="pd-lineage-error pd-lineage-error--inline"
+                      data-testid="working-copy-stale-error"
+                      role="alert"
+                    >
+                      <TriangleAlert size={14} strokeWidth={1.5} />
+                      <span>
+                        No se pudo actualizar el borrador; se muestra la última versión conocida.
+                      </span>
                       <button
                         type="button"
-                        className={`pd-lineage-node ${
-                          isSelected ? 'pd-lineage-node--selected' : ''
-                        } ${node.isApproved ? 'pd-lineage-node--approved' : ''}`}
-                        onClick={() => handleSelectRevision(node)}
-                        aria-current={isSelected ? 'step' : undefined}
-                        data-testid={`revision-node-R${node.revisionNumber}`}
+                        className="btn btn-sm btn-secondary"
+                        data-testid="retry-working-copy-btn"
+                        onClick={() => void workingCopyQuery.refetch()}
                       >
-                        <div className="pd-lineage-node__top">
-                          <span className="pd-lineage-node__badge">R{node.revisionNumber}</span>
-                          <span
-                            className={`status-badge ${
-                              node.isApproved
-                                ? 'status-badge--done'
-                                : node.status === 'superseded'
-                                ? 'status-badge--inactive'
-                                : 'status-badge--open'
-                            }`}
-                          >
-                            {statusLabel}
-                          </span>
-                        </div>
-                        <div className="pd-lineage-node__source">{sourceLabel}</div>
-                        <div className="pd-lineage-node__date">
-                          {formatWhen(node.revision.created_at)}
-                        </div>
-                        {node.revision.created_by_display_name && (
-                          <div className="pd-lineage-node__author">
-                            {node.revision.created_by_display_name}
-                          </div>
-                        )}
+                        Reintentar
                       </button>
-                      {index < lineage.length - 1 && (
-                        <div
-                          className={`pd-lineage-connector ${
-                            connectorIsAuthoritative
-                              ? ''
-                              : 'pd-lineage-connector--orphan'
-                          }`}
-                          aria-hidden="true"
-                          title={connectorIsAuthoritative ? undefined : 'Parent no disponible'}
-                        >
-                          <ChevronRight size={18} />
-                        </div>
-                      )}
                     </div>
-                  );
-                })}
+                  )}
+                </>
+              ) : workingCopyAbsent ? (
+                <div
+                  className="pd-working-copy-banner pd-working-copy-banner--absent"
+                  data-testid="no-working-copy-notice"
+                >
+                  <div className="pd-working-copy-banner__info">
+                    <Layers
+                      size={18}
+                      strokeWidth={1.5}
+                      className="pd-working-copy-banner__icon"
+                    />
+                    <span>No hay borrador de trabajo para este diseño.</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Lineage Timeline (R1 → R2 → R3) */}
+              <div className="pd-lineage-container" data-testid="design-lineage-timeline">
+                <div className="pd-lineage-header">
+                  <div className="pd-lineage-title">
+                    <History size={18} strokeWidth={1.5} />
+                    <h3>Linaje de revisiones inmutables</h3>
+                  </div>
+                  <span className="pd-lineage-count">
+                    {lineage.length} {lineage.length === 1 ? 'publicación' : 'publicaciones'}{' '}
+                    {revisionsBackgroundRefresh && <RefreshingMark testId="revisions-refreshing" />}
+                  </span>
+                </div>
+
+                {/* #641: a failed request is an explicit error with retry — never
+                    the "no revisions" empty state. A failed background refetch
+                    keeps the exact known timeline visible with a stale notice. */}
+                {revisionsQuery.isLoading ? (
+                  <div className="pd-lineage-loading" role="status" data-testid="revisions-loading">
+                    Cargando revisiones…
+                  </div>
+                ) : revisionsRequestFailed ? (
+                  <div className="pd-lineage-error" data-testid="revisions-error" role="alert">
+                    <TriangleAlert size={18} strokeWidth={1.5} />
+                    <div>
+                      <strong>No se pudo cargar el linaje de revisiones.</strong>
+                      <p>{describeRequestFailure(revisionsQuery.error)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      data-testid="retry-revisions-btn"
+                      onClick={() => void revisionsQuery.refetch()}
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : revisionsBackgroundFailure && lineage.length === 0 ? (
+                  <div
+                    className="pd-lineage-error"
+                    data-testid="revisions-stale-error"
+                    role="alert"
+                  >
+                    <TriangleAlert size={18} strokeWidth={1.5} />
+                    <div>
+                      <strong>No se pudo actualizar el linaje de revisiones.</strong>
+                      <p>
+                        La última respuesta conocida estaba vacía; intenta nuevamente antes de
+                        asumir que no hay publicaciones.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      data-testid="retry-revisions-btn"
+                      onClick={() => void revisionsQuery.refetch()}
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : lineage.length === 0 ? (
+                  <div className="pd-lineage-empty" data-testid="no-revisions-notice">
+                    <p>
+                      Este diseño no cuenta con revisiones inmutables publicadas todavía. El trabajo
+                      actual reside en el borrador de trabajo (Working Copy).
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      data-testid="no-revisions-open-sketchup-btn"
+                      onClick={handleOpenInSketchUp}
+                    >
+                      <ExternalLink size={14} strokeWidth={1.5} />
+                      <span>Abrir en SketchUp para modelar</span>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {revisionsBackgroundFailure && (
+                      <div
+                        className="pd-lineage-error pd-lineage-error--inline"
+                        data-testid="revisions-stale-error"
+                        role="alert"
+                      >
+                        <TriangleAlert size={14} strokeWidth={1.5} />
+                        <span>
+                          No se pudo actualizar el linaje; se muestra la última versión conocida.
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          data-testid="retry-revisions-btn"
+                          onClick={() => void revisionsQuery.refetch()}
+                        >
+                          Reintentar
+                        </button>
+                      </div>
+                    )}
+                    <div className="pd-lineage-track" role="list">
+                      {lineage.map((node, index) => {
+                        const isSelected = selectedRevisionHeader?.id === node.revision.id;
+                        const statusLabel =
+                          DESIGN_REVISION_STATUS_LABELS[node.status] ?? node.status;
+                        const sourceLabel =
+                          DESIGN_SOURCE_TYPE_LABELS[node.sourceType] ?? node.sourceType;
+                        // A connector between currentNode and nextNode is authoritative ONLY
+                        // when nextNode explicitly references this currentNode as its parent.
+                        const nextNode = lineage[index + 1];
+                        const connectorIsAuthoritative = Boolean(
+                          nextNode && nextNode.parentRevisionId === node.revision.id,
+                        );
+
+                        return (
+                          <div key={node.revision.id} className="pd-lineage-step" role="listitem">
+                            <button
+                              type="button"
+                              className={`pd-lineage-node ${
+                                isSelected ? 'pd-lineage-node--selected' : ''
+                              } ${node.isApproved ? 'pd-lineage-node--approved' : ''}`}
+                              onClick={() => handleSelectRevision(node)}
+                              aria-current={isSelected ? 'step' : undefined}
+                              data-testid={`revision-node-R${node.revisionNumber}`}
+                            >
+                              <div className="pd-lineage-node__top">
+                                <span className="pd-lineage-node__badge">R{node.revisionNumber}</span>
+                                <span
+                                  className={`status-badge ${
+                                    node.isApproved
+                                      ? 'status-badge--done'
+                                      : node.status === 'superseded'
+                                      ? 'status-badge--inactive'
+                                      : 'status-badge--open'
+                                  }`}
+                                >
+                                  {statusLabel}
+                                </span>
+                              </div>
+                              <div className="pd-lineage-node__source">{sourceLabel}</div>
+                              <div className="pd-lineage-node__date">
+                                {formatWhen(node.revision.created_at)}
+                              </div>
+                              {node.revision.created_by_display_name && (
+                                <div className="pd-lineage-node__author">
+                                  {node.revision.created_by_display_name}
+                                </div>
+                              )}
+                            </button>
+                            {index < lineage.length - 1 && (
+                              <div
+                                className={`pd-lineage-connector ${
+                                  connectorIsAuthoritative
+                                    ? ''
+                                    : 'pd-lineage-connector--orphan'
+                                }`}
+                                aria-hidden="true"
+                                title={connectorIsAuthoritative ? undefined : 'Parent no disponible'}
+                              >
+                                <ChevronRight size={18} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
-              </>
-            )}
-          </div>
 
           {/* Selected Revision Inspector (Pinned View) */}
           {isInvalidExplicitRevision ? (
@@ -1091,7 +1172,7 @@ export function ProjectDesignsScreen({
                 <div className="pd-inspector__header-aux">
                   {linkedRelease && (
                     <div className="pd-inspector__release-badge" data-testid="linked-release-badge">
-                      <CheckCircle2 size={16} className="text-success" />
+                      <CheckCircle2 size={16} strokeWidth={1.5} className="text-success" />
                       <span>Liberación a producción #{linkedRelease.release_number} vinculada</span>
                       {releasesQuery.isFetching && <RefreshingMark testId="release-refreshing" />}
                     </div>
@@ -1111,7 +1192,7 @@ export function ProjectDesignsScreen({
                       data-testid="release-status-error"
                       role="alert"
                     >
-                      <TriangleAlert size={16} />
+                      <TriangleAlert size={16} strokeWidth={1.5} />
                       <span>Estado de liberación no disponible</span>
                       <button
                         type="button"

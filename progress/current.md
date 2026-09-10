@@ -1,3 +1,17 @@
+# Issue #641 — Design inspector async and accessibility correction
+
+- Corrección autorizada sobre PR #648, rama `fix/641-design-inspector-async-a11y`,
+  desde head exacto `5b9592aef900dbef273fb7b90627da4475e832fa` y base
+  `a20bc412bff0e4f6579d690385f7d40bec5658ea`. Excepción de tamaño ya autorizada.
+- Inicio: 2026-09-10 09:20 CST. Sin nuevo PR, merge, cierre, autoaprobación ni
+  cambios de metadata GitHub.
+- Plan ejecutado: (1) distinguir carga inicial, cache stale y ausencia honesta;
+  (2) preservar error/reintento antes del empty de revisiones; (3) aplicar tokens
+  e iconografía normativa; (4) ejecutar tests UI, typecheck y browser gate real;
+  (5) diagnosticar el timeout Go sin ampliar alcance.
+- Resultado: `IMPLEMENTED_PENDING_REVIEW`. Detalle en
+  `progress/implementation_641_design_inspector_async_a11y.md`.
+
 # Issue #640 — [P1][WEB-DT] Authoritative availability and integrity for DesignRevision artifacts
 
 - Aprobada para ejecución (execution prompt GLM MAX; issue OPEN). Base exacta `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` (post-merge #636/#638/#646); rama `feat/640-design-artifact-health`. Single writer: GLM. Sin merge ni cierre.

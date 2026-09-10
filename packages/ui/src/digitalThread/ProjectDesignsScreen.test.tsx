@@ -232,6 +232,7 @@ interface FetchMockOptions {
   workingCopyByDesign?: Record<string, DesignWorkingCopy | null>;
   workingCopyFail?: boolean | (() => boolean); // #641: non-404 working-copy failure
   workingCopyFailStatus?: number;
+  workingCopyPending?: boolean;
   releases?: ProductionRelease[];
   releasesFail?: boolean | (() => boolean); // #641: release linkage request failure
   artifactsFail?: boolean;
@@ -348,6 +349,9 @@ function setupFetchMock(options: FetchMockOptions = {}) {
     // 4. Working copy: GET /designs/:id/working-copy
     for (const dId of Object.keys(workingCopies)) {
       if (path === `/designs/${dId}/working-copy` && method === 'GET') {
+        if (options.workingCopyPending) {
+          return new Promise(() => {});
+        }
         if (
           options.workingCopyFail === true ||
           (typeof options.workingCopyFail === 'function' && options.workingCopyFail())
@@ -1495,6 +1499,18 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     expect(screen.queryByTestId('working-copy-banner')).not.toBeInTheDocument();
   });
 
+  it('#641 working copy initial load exposes a status instead of disappearing', async () => {
+    setupFetchMock({ workingCopyPending: true });
+
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    const loading = await screen.findByTestId('working-copy-loading');
+    expect(loading).toHaveAttribute('role', 'status');
+    expect(loading).toHaveTextContent('Consultando borrador de trabajo');
+    expect(screen.queryByTestId('no-working-copy-notice')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('working-copy-error')).not.toBeInTheDocument();
+  });
+
   it('#641 working copy request failure is actionable with retry, never collapsed into absence', async () => {
     let shouldFail = true;
     setupFetchMock({ workingCopyFail: () => shouldFail });
@@ -1513,6 +1529,52 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     await user.click(screen.getByTestId('retry-working-copy-btn'));
     expect(await screen.findByTestId('working-copy-banner')).toBeInTheDocument();
     expect(screen.queryByTestId('working-copy-error')).not.toBeInTheDocument();
+  });
+
+  it('#641 failed working-copy background refresh marks cached data stale and provides retry', async () => {
+    let shouldFail = false;
+    setupFetchMock({ workingCopyFail: () => shouldFail });
+    const user = userEvent.setup();
+
+    const { queryClient, keys } = renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID },
+    });
+    expect(await screen.findByTestId('working-copy-banner')).toBeInTheDocument();
+
+    shouldFail = true;
+    await queryClient.invalidateQueries({ queryKey: keys.designWorkingCopy(DESIGN_1_ID) });
+
+    const stale = await screen.findByTestId('working-copy-stale-error');
+    expect(stale).toHaveAttribute('role', 'alert');
+    expect(stale).toHaveTextContent('última versión conocida');
+    expect(screen.getByTestId('working-copy-banner')).toBeInTheDocument();
+
+    shouldFail = false;
+    await user.click(screen.getByTestId('retry-working-copy-btn'));
+    await waitFor(() => expect(screen.queryByTestId('working-copy-stale-error')).not.toBeInTheDocument());
+    expect(screen.getByTestId('working-copy-banner')).toBeInTheDocument();
+  });
+
+  it('#641 cached empty revision list with failed refetch is stale/error, never business empty', async () => {
+    let shouldFail = false;
+    setupFetchMock({
+      revisionsByDesign: { [DESIGN_1_ID]: [] },
+      revisionsFail: () => shouldFail,
+    });
+
+    const { queryClient, keys } = renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: null },
+    });
+    expect(await screen.findByTestId('no-revisions-notice')).toBeInTheDocument();
+
+    shouldFail = true;
+    await queryClient.invalidateQueries({ queryKey: keys.designRevisions(DESIGN_1_ID) });
+
+    const stale = await screen.findByTestId('revisions-stale-error');
+    expect(stale).toHaveAttribute('role', 'alert');
+    expect(stale).toHaveTextContent('última respuesta conocida estaba vacía');
+    expect(screen.queryByTestId('no-revisions-notice')).not.toBeInTheDocument();
+    expect(screen.getByTestId('retry-revisions-btn')).toBeEnabled();
   });
 
   it('#641 distinguishes session (401) from permission (403) working copy failures', async () => {
