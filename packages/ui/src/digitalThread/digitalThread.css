@@ -1413,23 +1413,23 @@
 
 .pd-recovery-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
 .pd-audit-digests {
   list-style: none;
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .pd-audit-digests li {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -1440,7 +1440,7 @@
 
 .pd-audit-digest-value {
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   word-break: break-all;
 }

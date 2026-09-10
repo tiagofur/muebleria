@@ -358,11 +358,10 @@ export function ProjectDesignsScreen({
 
   const availability = useMemo(() => getArtifactAvailability(artifacts), [artifacts]);
 
-  // #640: authoritative preview health. missing/integrity_mismatch never
-  // request a grant — the server would refuse it fail-closed — and render an
-  // honest state instead of a doomed authorize round-trip.
+  // #640: only explicitly available preview bytes may request a grant.
+  // Missing, mismatched, and legacy/unknown health all fail closed.
   const previewHealth = availability.preview ? artifactHealth(availability.preview) : null;
-  const previewUnusable = previewHealth === 'missing' || previewHealth === 'integrity_mismatch';
+  const previewUnusable = availability.preview !== null && previewHealth !== 'available';
 
   // Preview Grant Query: conservative cache bounded to 2m (less than MediaGrantTTL of 3m)
   const previewGrantQuery = useQuery({
@@ -937,7 +936,7 @@ export function ProjectDesignsScreen({
                               ? 'pd-preview-warning'
                               : 'pd-preview-error'
                           }`}
-                          data-testid={`preview-health-${previewHealth}`}
+                          data-testid={`preview-health-${previewHealth ?? 'unknown'}`}
                           role="alert"
                         >
                           <TriangleAlert size={24} strokeWidth={1.5} />
@@ -946,24 +945,29 @@ export function ProjectDesignsScreen({
                               La vista previa está registrada pero sus bytes ya no están
                               disponibles en el almacenamiento.
                             </span>
-                          ) : (
+                          ) : previewHealth === 'integrity_mismatch' ? (
                             <span>
                               Los bytes de la vista previa no coinciden con el artefacto
                               publicado: su integridad está comprometida.
                             </span>
+                          ) : (
+                            <span>
+                              El servidor no informó un estado verificable para la vista previa.
+                              El acceso permanece bloqueado por seguridad.
+                            </span>
                           )}
-                          <p className="pd-recovery-hint">
-                            La revisión publicada es inmutable y no se repara en el lugar.
-                            Publicá una nueva revisión del diseño para regenerar la vista previa.
-                          </p>
-                          {canMutate && (
+                          {previewHealth !== null && <p className="pd-recovery-hint">
+                              La revisión publicada es inmutable y no se repara en el lugar.
+                              Publicá una nueva revisión del diseño para regenerar la vista previa.
+                            </p>}
+                          {canMutate && previewHealth !== null && (
                             <button
                               type="button"
                               className="btn btn-secondary"
                               onClick={handleOpenInSketchUp}
                               data-testid="preview-recovery-open-sketchup-btn"
                             >
-                              <ExternalLink size={14} />
+                              <ExternalLink size={14} strokeWidth={1.5} />
                               <span>Abrir en SketchUp y publicar nueva revisión</span>
                             </button>
                           )}
@@ -1087,7 +1091,7 @@ export function ProjectDesignsScreen({
                               onClick={handleOpenInSketchUp}
                               data-testid="artifact-recovery-open-sketchup-btn"
                             >
-                              <ExternalLink size={14} />
+                              <ExternalLink size={14} strokeWidth={1.5} />
                               <span>Abrir en SketchUp y publicar nueva revisión</span>
                             </button>
                           )}
@@ -1287,7 +1291,7 @@ export function ProjectDesignsScreen({
                                             });
                                         }}
                                       >
-                                        <Copy size={14} />
+                                        <Copy size={14} strokeWidth={1.5} />
                                         <span aria-live="polite">
                                           {copiedDigestKind === art.kind ? 'Copiado' : 'Copiar'}
                                         </span>

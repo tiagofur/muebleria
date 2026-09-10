@@ -543,3 +543,9 @@ EOL.
 - Scope: turn Q1 choices/dimensions and display/working-copy/R1/R2 provenance into failing assertions; assert #639 immutable presentation descriptors; prove a post-R1 catalog rename cannot retarget R1; retain double-truth as an observation.
 - The canonical #502 commercial gate rejects R2+Q1, so the executable journey intentionally uses Q2 derived from R2 and documents that correction to issue #644's stale literal.
 - Focused real Chromium + Go + PostgreSQL gate: 10/10 PASS. Full organization browser run reached 36 PASS, 2 unrelated route/login visibility timeouts, and 3 skipped after the serial reconciliation failure; see `progress/implementation_644_demo_golden_path_regression.md`.
+
+## PR #647 — issue #640 correction R2
+
+- User-authorized correction on `feat/640-design-artifact-health`, including the cohesive `size:exception` already applied to the PR.
+- Scope: enforce owner-partition and immutable integrity pins through signed GET; remove bearer-only artifact reads; add API/app-role RLS and post-mint mutation proofs; fail preview closed on unknown health; repair UI tokens/icons and evidence.
+- No merge or issue closure. Delivery remains `IMPLEMENTED_PENDING_REVIEW` after verification and exact remote SHA readback.

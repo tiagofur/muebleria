@@ -20,6 +20,8 @@ func mustMediaAuthority(t *testing.T) *MediaAuthority {
 }
 
 const canonicalMediaFile = "0123456789abcdef0123456789abcdef.png"
+const canonicalDesignArtifactKey = "designs/publish/11111111-1111-4111-8111-111111111111/model-0123456789ab.skp"
+const canonicalDesignArtifactSHA = "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func TestMediaResourceKeyGrammar(t *testing.T) {
 	valid := []string{
@@ -93,6 +95,37 @@ func TestMediaGrantIssueValidateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDesignArtifactGrantRequiresAndPreservesIntegrityPins(t *testing.T) {
+	authority := mustMediaAuthority(t)
+	size := int64(42)
+	signed, _, err := authority.Issue(MediaIssueRequest{
+		ResourceKey: DesignArtifactResourceKey(canonicalDesignArtifactKey),
+		OrgID:       "owner-org", ExpectedSizeBytes: &size, ExpectedSHA256: canonicalDesignArtifactSHA,
+	})
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	claims, err := authority.Validate(signed)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if claims.ExpectedSizeBytes == nil || *claims.ExpectedSizeBytes != size || claims.ExpectedSHA256 != canonicalDesignArtifactSHA {
+		t.Fatalf("integrity pins drifted: %+v", claims)
+	}
+
+	if _, _, err := authority.Issue(MediaIssueRequest{
+		ResourceKey: DesignArtifactResourceKey(canonicalDesignArtifactKey), OrgID: "owner-org",
+	}); err == nil {
+		t.Fatal("design artifact grant without integrity pins must fail")
+	}
+	if _, _, err := authority.Issue(MediaIssueRequest{
+		ResourceKey: MediaResourceKey(canonicalMediaFile), OrgID: "owner-org",
+		ExpectedSizeBytes: &size, ExpectedSHA256: canonicalDesignArtifactSHA,
+	}); err == nil {
+		t.Fatal("catalog media grant with design integrity pins must fail")
+	}
+}
+
 func TestMediaGrantAbsoluteCapWins(t *testing.T) {
 	authority := mustMediaAuthority(t)
 	cap := time.Now().Add(30 * time.Second)
@@ -126,10 +159,10 @@ func TestMediaGrantExactClaimsFailClosed(t *testing.T) {
 			Resource: MediaResourceKey(canonicalMediaFile), OrgID: "org-1",
 			Op: MediaOperationRead, Typ: TokenTypeMediaRead, Ver: MediaGrantVersion,
 			RegisteredClaims: jwt.RegisteredClaims{
-				Subject:  MediaResourceKey(canonicalMediaFile),
-				Audience: jwt.ClaimStrings{MediaAudience},
-				Issuer:   MediaIssuer,
-				ID:       "jti-1",
+				Subject:   MediaResourceKey(canonicalMediaFile),
+				Audience:  jwt.ClaimStrings{MediaAudience},
+				Issuer:    MediaIssuer,
+				ID:        "jti-1",
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute)),
 				IssuedAt:  jwt.NewNumericDate(time.Now().Add(-time.Second)),
 				NotBefore: jwt.NewNumericDate(time.Now().Add(-time.Second)),
@@ -143,20 +176,23 @@ func TestMediaGrantExactClaimsFailClosed(t *testing.T) {
 		return signed
 	}
 	cases := map[string]func(*MediaClaims){
-		"wrong typ":           func(c *MediaClaims) { c.Typ = TokenTypeAccessWeb },
-		"wrong op":            func(c *MediaClaims) { c.Op = "write" },
-		"wrong ver":           func(c *MediaClaims) { c.Ver = 2 },
-		"wrong issuer":        func(c *MediaClaims) { c.Issuer = DefaultIssuer },
-		"wrong audience":      func(c *MediaClaims) { c.Audience = jwt.ClaimStrings{AudienceWeb} },
-		"two audiences":       func(c *MediaClaims) { c.Audience = jwt.ClaimStrings{MediaAudience, AudienceWeb} },
-		"no jti":              func(c *MediaClaims) { c.ID = "" },
-		"sub mismatch":        func(c *MediaClaims) { c.Subject = "media/other" },
-		"non-canonical res":   func(c *MediaClaims) { c.Resource = "media/not-canonical.png"; c.Subject = "media/not-canonical.png" },
-		"missing org":         func(c *MediaClaims) { c.OrgID = "" },
-		"missing resource":    func(c *MediaClaims) { c.Resource = "" },
-		"no iat":              func(c *MediaClaims) { c.IssuedAt = nil },
-		"no nbf":              func(c *MediaClaims) { c.NotBefore = nil },
-		"resource org folded": func(c *MediaClaims) { c.Resource = "org-1/media/" + canonicalMediaFile; c.Subject = "org-1/media/" + canonicalMediaFile },
+		"wrong typ":         func(c *MediaClaims) { c.Typ = TokenTypeAccessWeb },
+		"wrong op":          func(c *MediaClaims) { c.Op = "write" },
+		"wrong ver":         func(c *MediaClaims) { c.Ver = 2 },
+		"wrong issuer":      func(c *MediaClaims) { c.Issuer = DefaultIssuer },
+		"wrong audience":    func(c *MediaClaims) { c.Audience = jwt.ClaimStrings{AudienceWeb} },
+		"two audiences":     func(c *MediaClaims) { c.Audience = jwt.ClaimStrings{MediaAudience, AudienceWeb} },
+		"no jti":            func(c *MediaClaims) { c.ID = "" },
+		"sub mismatch":      func(c *MediaClaims) { c.Subject = "media/other" },
+		"non-canonical res": func(c *MediaClaims) { c.Resource = "media/not-canonical.png"; c.Subject = "media/not-canonical.png" },
+		"missing org":       func(c *MediaClaims) { c.OrgID = "" },
+		"missing resource":  func(c *MediaClaims) { c.Resource = "" },
+		"no iat":            func(c *MediaClaims) { c.IssuedAt = nil },
+		"no nbf":            func(c *MediaClaims) { c.NotBefore = nil },
+		"resource org folded": func(c *MediaClaims) {
+			c.Resource = "org-1/media/" + canonicalMediaFile
+			c.Subject = "org-1/media/" + canonicalMediaFile
+		},
 	}
 	for name, mutate := range cases {
 		if _, err := authority.Validate(base(mutate)); err == nil {

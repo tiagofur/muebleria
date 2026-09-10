@@ -47,17 +47,17 @@ func newArtifactHealthEnv(t *testing.T, content []byte) *artifactHealthEnv {
 	}
 
 	artifact := &domain.DesignRevisionArtifact{
-		ID: "a1", DesignRevisionID: publishTestRevision, Kind: domain.DesignPublishArtifactModel,
+		ID: "a1", OrganizationID: storage.InitialOrganizationID, DesignRevisionID: publishTestRevision, Kind: domain.DesignPublishArtifactModel,
 		StorageKey: key, ContentType: "application/octet-stream",
 		SizeBytes: int64(len(content)), SHA256: sha,
 	}
 	store := &stubStore{
-		getDesignRevisionArtifactResult: artifact,
+		getDesignRevisionArtifactResult:   artifact,
 		listDesignRevisionArtifactsResult: []domain.DesignRevisionArtifact{*artifact},
 	}
 	srv := &Server{
-		Store:      store,
-		MediaDir:   dir,
+		Store:       store,
+		MediaDir:    dir,
 		MediaTokens: mustMediaAuthority(t, "design-artifact-health-test-media-key-0123456789"),
 	}
 	return &artifactHealthEnv{srv: srv, store: store, dir: dir, storage: key, path: path, sha256: sha, size: int64(len(content))}
@@ -87,6 +87,26 @@ func (e *artifactHealthEnv) authorize(t *testing.T) *httptest.ResponseRecorder {
 	rr := httptest.NewRecorder()
 	e.srv.HandleDesignRevisionArtifactAuthorize(rr, req)
 	return rr
+}
+
+func (e *artifactHealthEnv) readWithGrant(t *testing.T, grantURL string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, grantURL, nil)
+	req.SetPathValue("key", e.storage)
+	rr := httptest.NewRecorder()
+	e.srv.designArtifactGetAuth(http.HandlerFunc(e.srv.HandleDesignArtifactGet)).ServeHTTP(rr, req)
+	return rr
+}
+
+func grantURLFromResponse(t *testing.T, rr *httptest.ResponseRecorder) string {
+	t.Helper()
+	var grant struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &grant); err != nil {
+		t.Fatal(err)
+	}
+	return grant.URL
 }
 
 func TestDesignArtifactHealth_HealthyBytesAreAvailableAndGrantable(t *testing.T) {
@@ -120,6 +140,78 @@ func TestDesignArtifactHealth_HealthyBytesAreAvailableAndGrantable(t *testing.T)
 	}
 	if !strings.Contains(rr.Body.String(), "grant=") {
 		t.Fatalf("healthy artifact must mint a grant: %s", rr.Body.String())
+	}
+	read := env.readWithGrant(t, grantURLFromResponse(t, rr))
+	if read.Code != http.StatusOK || read.Body.String() != "healthy model bytes \x00\x01" {
+		t.Fatalf("signed read status=%d body=%q", read.Code, read.Body.String())
+	}
+}
+
+func TestDesignArtifactHealth_ExistingGrantFailsClosedAfterByteMutation(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*artifactHealthEnv) error
+	}{
+		{"missing after mint", func(e *artifactHealthEnv) error { return os.Remove(e.path) }},
+		{"tampered after mint", func(e *artifactHealthEnv) error {
+			return os.WriteFile(e.path, []byte("tampered artifact bytes"), 0o640)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newArtifactHealthEnv(t, []byte("original artifact bytes"))
+			grant := env.authorize(t)
+			if grant.Code != http.StatusOK {
+				t.Fatalf("authorize status=%d body=%s", grant.Code, grant.Body.String())
+			}
+			if err := tc.mutate(env); err != nil {
+				t.Fatal(err)
+			}
+			read := env.readWithGrant(t, grantURLFromResponse(t, grant))
+			if read.Code != http.StatusNotFound {
+				t.Fatalf("read status=%d, want neutral 404 after mutation (body=%s)", read.Code, read.Body.String())
+			}
+		})
+	}
+}
+
+func TestDesignArtifactHealth_BearerReadWithoutPinnedGrantFailsClosed(t *testing.T) {
+	env := newArtifactHealthEnv(t, []byte("healthy artifact bytes"))
+	req := httptest.NewRequest(http.MethodGet, "/api/design-artifacts/"+env.storage, nil)
+	req.SetPathValue("key", env.storage)
+	req.Header.Set("Authorization", "Bearer unsupported-direct-read")
+	rr := httptest.NewRecorder()
+	env.srv.designArtifactGetAuth(http.HandlerFunc(env.srv.HandleDesignArtifactGet)).ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d, want 401 for bearer-only artifact read", rr.Code)
+	}
+}
+
+func TestDesignArtifactHealth_AuthorizedCallerReadsOwnerPartition(t *testing.T) {
+	env := newArtifactHealthEnv(t, []byte("owner partition bytes"))
+	ownerOrgID := "11111111-1111-4111-8111-111111111111"
+	ownerPath := filepath.Join(env.dir, ownerOrgID, filepath.FromSlash(env.storage))
+	if err := os.MkdirAll(filepath.Dir(ownerPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(env.path, ownerPath); err != nil {
+		t.Fatal(err)
+	}
+	env.path = ownerPath
+	env.store.getDesignRevisionArtifactResult.OrganizationID = ownerOrgID
+	env.store.listDesignRevisionArtifactsResult[0].OrganizationID = ownerOrgID
+
+	listed := env.listArtifacts(t)
+	health, _ := listed[0]["health"].(map[string]any)
+	if health["status"] != "available" {
+		t.Fatalf("owner-partition health=%v", health["status"])
+	}
+	grant := env.authorize(t)
+	if grant.Code != http.StatusOK {
+		t.Fatalf("authorize status=%d body=%s", grant.Code, grant.Body.String())
+	}
+	read := env.readWithGrant(t, grantURLFromResponse(t, grant))
+	if read.Code != http.StatusOK || read.Body.String() != "owner partition bytes" {
+		t.Fatalf("owner read status=%d body=%q", read.Code, read.Body.String())
 	}
 }
 
@@ -249,7 +341,7 @@ func TestDesignArtifactHealth_ApproveEndpointsEmitValidHealth(t *testing.T) {
 	}
 
 	handlers := map[string]func(http.ResponseWriter, *http.Request){
-		"/api/designs/" + designTestDesignID + "/revisions/" + publishTestRevision + ":approve":                 env.srv.HandleDesignRevisionApprove,
+		"/api/designs/" + designTestDesignID + "/revisions/" + publishTestRevision + ":approve":                                                     env.srv.HandleDesignRevisionApprove,
 		"/api/projects/" + designTestProjectID + "/designs/" + designTestDesignID + "/revisions/" + publishTestRevision + ":approve-for-production": env.srv.HandleProjectDesignRevisionApproveForProduction,
 	}
 	for target, handler := range handlers {

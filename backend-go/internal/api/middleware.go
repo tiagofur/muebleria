@@ -508,16 +508,12 @@ func clientIP(r *http.Request) string {
 // read-only for those tokens.
 // extensionClientGetPrefixes is the ONLY read surface the SketchUp bearer
 // may reach: the furniture catalog (definitions + resolved layouts) and
-// media reads, plus the exact Project/Design discovery reads the model
+// catalog media reads, plus the exact Project/Design discovery reads the model
 // binding needs. Everything else — team, sessions, devices, organizations,
 // platform — is out of the extension's contract.
 var extensionClientGetPrefixes = []string{
 	"/api/furniture/",
 	"/api/media",
-	// #392 / DT-8: published artifact bytes are served through the same
-	// signed-grant read path as catalog media; the extension may stream its
-	// own organization's artifacts (cross-org resolves as not found).
-	"/api/design-artifacts",
 }
 
 // #388 / DT-4 model binding: the plugin must pick the exact Project/Design

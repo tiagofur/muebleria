@@ -32,9 +32,9 @@ import (
 // Bytes that cannot be found or read classify as missing: an unreadable file
 // can never prove availability. The revision and its metadata are never
 // mutated.
-func (s *Server) verifyDesignArtifactHealth(ctx context.Context, a domain.DesignRevisionArtifact) domain.DesignArtifactHealth {
+func (s *Server) verifyDesignArtifactHealth(_ context.Context, a domain.DesignRevisionArtifact) domain.DesignArtifactHealth {
 	status := domain.DesignArtifactHealthMissing
-	if path, ok := s.designArtifactStoragePath(ctx, a.StorageKey); ok {
+	if path, ok := s.designArtifactStoragePath(a.OrganizationID, a.StorageKey); ok {
 		if actualSize, actualSHA, found := observeDesignArtifactFile(path, a.SizeBytes); found {
 			status = domain.ClassifyDesignArtifactHealth(a.SizeBytes, a.SHA256, true, actualSize, actualSHA)
 		}

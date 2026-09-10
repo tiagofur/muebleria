@@ -453,7 +453,28 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(reloadedTable.getByText(seeded.instanceIds[1])).not.toBeVisible();
     await expect(reloadedTable.getByText(seeded.instanceIds[2])).not.toBeVisible();
 
-    // 8. Tenant isolation: switch to Organization B
+    // 8. Tenant isolation at the real API boundary: private Org A revision
+    // metadata remains a neutral 404 for Org B across detail/list/authorize.
+    const apiBase = required('ORGANIZATION_API_BASE');
+    const bClient = new GraneteApiClient(apiBase);
+    const bOwner = await bClient.login({
+      email: required('ORGANIZATION_GATE_B_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_B_SLUG'),
+    });
+    const bHeaders = { Authorization: `Bearer ${bOwner.token}` };
+    for (const request of [
+      { method: 'GET', url: `${apiBase}/designs/${seeded.designId}/revisions/${seeded.r1Id}` },
+      { method: 'GET', url: `${apiBase}/designs/${seeded.designId}/revisions/${seeded.r1Id}/artifacts` },
+      { method: 'POST', url: `${apiBase}/designs/${seeded.designId}/revisions/${seeded.r1Id}/artifacts/model:authorize` },
+    ]) {
+      const response = await fetch(request.url, { method: request.method, headers: bHeaders });
+      expect(response.status).toBe(404);
+      expect(await response.text()).not.toMatch(/ARTIFACT_(MISSING|INTEGRITY_MISMATCH)/);
+    }
+
+    // Switch the browser to Organization B and prove no private data renders.
     await page.getByLabel('Cambiar organización').selectOption({ label: 'Browser Gate B' });
     await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
 

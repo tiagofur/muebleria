@@ -1,6 +1,6 @@
 # Issue #640 — Authoritative availability and integrity for DesignRevision artifacts
 
-- Estado: `IMPLEMENTED_PENDING_REVIEW` (corrección R1 de revisión aplicada).
+- Estado: `IMPLEMENTED_PENDING_REVIEW` (corrección R2 autorizada aplicada).
 - Base exacta: `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` (post-merge #636/#638/#646).
 - Rama: `feat/640-design-artifact-health`. Single writer: GLM. Sin merge ni cierre.
 
@@ -20,8 +20,8 @@ canónico (`sha256:sha256-…`).
 - Storage: filesystem `MediaDir/<orgID>/<storageKey>`; clave server-generated
   `designs/publish/{sessionID}/{kind}-{sha6}{ext}`; lector en la capa API
   (`designArtifactStoragePath` + `os.Open`).
-- Grants: `POST .../artifacts/{kind}:authorize` → media token firmado ≤3 min
-  → `GET /api/design-artifacts/{key}` (misma mecánica #636, intacta).
+- Grants: `POST .../artifacts/{kind}:authorize` → media token firmado ≤3 min,
+  pinneado a owner+tamaño+digest → `GET /api/design-artifacts/{key}`.
 
 ## Entrega
 
@@ -38,12 +38,14 @@ canónico (`sha256:sha256-…`).
 3. **Read model**: `GET .../artifacts` y el revision detail (`GET
    .../revisions/{id}`) emiten `health: {status, checked_at}` por artefacto;
    finalize también. Storage keys nunca salen del server.
-4. **Autorización fail-closed**: authorize verifica salud DESPUÉS de resolver
+4. **Autorización y lectura fail-closed**: authorize verifica salud DESPUÉS de resolver
    la revisión bajo el tenant del llamador y ANTES de mintear el grant:
    `ARTIFACT_MISSING` / `ARTIFACT_INTEGRITY_MISMATCH` (409 tipado). Caller
    cruzado sigue recibiendo 404 neutral: el estado de bytes no es oracle.
    MediaDir sin configurar → fail-closed typed (nunca grant sin storage
-   observable).
+   observable). El GET exige grant (bearer directo rechazado), revalida tamaño
+   y digest sobre el mismo descriptor que sirve, y devuelve 404 neutral si
+   los bytes faltan o cambian después del minteo.
 5. **OpenAPI** (`contracts/openapi/granete-api.v1.yaml`): schemas
    `DesignArtifactHealth(Status)`, `health` required en
    `DesignRevisionArtifact`, códigos `ARTIFACT_MISSING` /
@@ -61,10 +63,10 @@ canónico (`sha256:sha256-…`).
 ## Decisiones
 
 - La verificación vive en la capa API (única dueña de `MediaDir`); el dominio
-  queda puro y testeable. No se tocó el token de media (claim-set ver-pinned
-  compartido con catálogo — would be R3): la ventana TOCTOU entre authorize
-  saludable y GET queda acotada por el TTL ≤3 min del grant, documentada, y
-  el GET ya 404a bytes ausentes.
+  queda puro y testeable. El claim compartido mantiene catálogo sin cambios y
+  agrega pins obligatorios sólo para la clase `designart/`. La partición física
+  proviene de la metadata autorizada (`artifact.organization_id`), no del
+  tenant caller.
 - `processing`/`failed` NO se agregaron: no existe lifecycle persistido de
   post-publicación que los avale (sólo se usan estados con verdad observable).
 - E2E usa fixtures deterministas propios (los artefactos que el spec sube) y
@@ -119,6 +121,28 @@ Veredicto inicial `CHANGES_REQUIRED`. Hallazgos y resolución:
    `--warning-700`; eliminado `IsValidDesignArtifactHealthStatus` muerto;
    alerta de recovery sólo para estados explícitamente unhealthy (null
    muestra "Estado no informado" sin reclamar pérdida).
+
+## Corrección R2 autorizada
+
+- Eliminado el bypass bearer y cerrada la ventana post-mint: grants de diseño
+  llevan owner, tamaño y SHA-256; GET revalida el archivo exacto antes de servir.
+- Salud y grants resuelven el filesystem por `DesignRevisionArtifact.organization_id`.
+- Prueba PostgreSQL app-role demuestra metadata compartida visible al partner
+  y proyecto privado invisible por SQL directo; browser prueba 404 neutral en
+  detail/list/authorize para el tenant no autorizado.
+- Preview sólo autoriza con `health=available`; `health` ausente muestra alerta
+  explícita, no solicita grant ni renderiza imagen. CSS e iconografía usan los
+  tokens y stroke normativos.
+- Evidencia R2: `pnpm typecheck` PASS; UI focal 40/40 PASS; `go test
+  ./internal/auth ./internal/api` PASS; PostgreSQL/app-role focal
+  `TestDesignPublish_TenantIsolation` PASS; `pnpm openapi:check` PASS;
+  organization browser gate 2/2 PASS con Chromium+Go+PostgreSQL real.
+- `./init.sh` completó harness y la suite JS completa (UI 1675, storage 191,
+  domain 1283, Excel 165 + 3 skipped, mobile 73, desktop 17 y web verde), pero
+  su primer typecheck detectó el cast deliberado del fixture legacy; se corrigió
+  y `pnpm typecheck` pasó después. Un `go test ./...` concurrente no es evidencia
+  verde: agotó/reinició la base compartida (`57P01`/`too many clients`); las
+  suites focales y el gate aislado posterior sí pasaron.
 
 Evidencia post-corrección: `go test ./... -count=1` verde;
 `pnpm typecheck` verde; `pnpm openapi:check` PASS; `pnpm test` verde

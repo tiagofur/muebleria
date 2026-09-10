@@ -8,6 +8,7 @@ import type {
   Design,
   DesignArtifactGrant,
   DesignRevision,
+  DesignRevisionArtifact,
   DesignWorkingCopy,
   ProductionRelease,
 } from '@granete/storage';
@@ -444,6 +445,7 @@ function renderScreen(props: {
   onOpenReconciliation?: (ctx: { designId: string | null; revisionId: string | null }) => void;
   onBack?: () => void;
   canMutate?: boolean;
+  seedRevisionDetail?: DesignRevision;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -451,6 +453,13 @@ function renderScreen(props: {
     },
   });
   const keys = projectDesignsQueryKeys(['test-scope'], PROJECT_ID);
+
+  if (props.seedRevisionDetail) {
+    queryClient.setQueryData(
+      keys.designRevisionDetail(DESIGN_1_ID, props.seedRevisionDetail.id),
+      props.seedRevisionDetail,
+    );
+  }
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -1312,6 +1321,30 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     // The healthy preview keeps its normal flow: mismatch is per artifact.
     expect(await screen.findByTestId('preview-image')).toBeInTheDocument();
     expect(screen.getByTestId('artifact-health-preview')).toHaveTextContent('Disponible');
+  });
+
+  it('fails closed when preview health is absent and exposes the unknown state accessibly', async () => {
+    const revisionWithoutPreviewHealth: DesignRevision = {
+      ...mockRevision3,
+      artifacts: (mockRevision3.artifacts ?? []).map((artifact) =>
+        artifact.kind === 'preview' ? { ...artifact, health: undefined } : artifact,
+      ) as unknown as readonly DesignRevisionArtifact[],
+    };
+    const fetchMock = setupFetchMock({ revisionDetailPending: true });
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID },
+      seedRevisionDetail: revisionWithoutPreviewHealth,
+    });
+
+    const unknown = await screen.findByTestId('preview-health-unknown');
+    expect(unknown).toHaveAttribute('role', 'alert');
+    expect(unknown).toHaveTextContent('no informó un estado verificable');
+    expect(screen.queryByTestId('preview-image')).not.toBeInTheDocument();
+    expect(screen.getByTestId('download-artifact-preview')).toBeDisabled();
+    expect(screen.getByTestId('artifact-health-preview')).toHaveTextContent('Estado no informado');
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes('/artifacts/preview:authorize')),
+    ).toBe(false);
   });
 
   it('keeps health loading distinct from loaded states', async () => {

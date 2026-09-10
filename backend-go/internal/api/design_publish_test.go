@@ -383,7 +383,6 @@ func TestDesignPublish_ExtensionCapabilityBoundary(t *testing.T) {
 		{http.MethodPost, "/api/designs/" + designTestDesignID + "/publish/" + publishTestSessionID + "/artifacts/preview"},
 		{http.MethodPost, "/api/designs/" + designTestDesignID + "/publish/" + publishTestSessionID + ":finalize"},
 		{http.MethodPost, "/api/designs/" + designTestDesignID + "/revisions/" + publishTestRevision + "/artifacts/preview:authorize"},
-		{http.MethodGet, "/api/design-artifacts/designs/publish/" + publishTestSessionID + "/model-abcdef123456.skp"},
 	}
 	for _, c := range allowed {
 		if !extensionClientMayAccess(c[0], c[1]) {
@@ -399,6 +398,9 @@ func TestDesignPublish_ExtensionCapabilityBoundary(t *testing.T) {
 		// Arbitrary design mutations stay out.
 		{http.MethodDelete, "/api/designs/" + designTestDesignID},
 		{http.MethodPut, "/api/designs/" + designTestDesignID + "/revisions/" + publishTestRevision},
+		// Artifact bytes require the exact signed grant minted by :authorize;
+		// bearer credentials alone cannot bind immutable integrity metadata.
+		{http.MethodGet, "/api/design-artifacts/designs/publish/" + publishTestSessionID + "/model-abcdef123456.skp"},
 	}
 	for _, c := range denied {
 		if extensionClientMayAccess(c[0], c[1]) {
@@ -435,7 +437,7 @@ func TestHandleDesignRevisionArtifactAuthorize_MintsGrant(t *testing.T) {
 
 	media := mustMediaAuthority(t, "design-publish-test-media-signing-key-0123456789")
 	store := &stubStore{getDesignRevisionArtifactResult: &domain.DesignRevisionArtifact{
-		ID: "a1", DesignRevisionID: publishTestRevision, Kind: domain.DesignPublishArtifactModel,
+		ID: "a1", OrganizationID: storage.InitialOrganizationID, DesignRevisionID: publishTestRevision, Kind: domain.DesignPublishArtifactModel,
 		StorageKey:  key,
 		ContentType: "application/octet-stream", SizeBytes: int64(len(content)), SHA256: "sha256-" + hex.EncodeToString(sum[:]),
 	}}
