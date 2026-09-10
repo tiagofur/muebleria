@@ -39,6 +39,8 @@ const GOLD_STRUCT = 'a7770000-0000-4000-8000-000000000006';
 const GOLD_COMP_FRENTE = 'a7770000-0000-4000-8000-000000000007';
 const GOLD_COMP_INTERIOR = 'a7770000-0000-4000-8000-000000000008';
 const GOLD_MODULE = 'a7770000-0000-4000-8000-000000000009';
+const GOLD_MODULE_NAME = 'Gabinete Cocina Dorada';
+const GOLD_MODULE_RENAMED = 'Gabinete Cocina Dorada v2';
 
 // Explicit quoted material choices per commercial line (the same authority
 // #621/#637 consume: project line optionChoices with real catalog materials).
@@ -116,7 +118,7 @@ function recordProvenance(instanceId: string, surface: string, choices: Record<s
   provenance.push({ instanceId, surface, materialChoices: { ...(choices ?? {}) } });
 }
 
-/** Records FOUND_MATERIAL_PROVENANCE_LOSS findings; never fails the stage. */
+/** Records the provenance surface and fails if quoted choices drift or disappear. */
 function expectQuotedChoices(
   instanceId: string,
   surface: string,
@@ -124,12 +126,76 @@ function expectQuotedChoices(
 ): void {
   recordProvenance(instanceId, surface, choices);
   const wanted = expectedChoices.get(instanceId) ?? {};
-  for (const [slot, material] of Object.entries(wanted)) {
-    if (choices?.[slot] !== material) {
-      note(
-        `FOUND_MATERIAL_PROVENANCE_LOSS: unit ${instanceId} lost quoted ${slot}=${material} at ${surface} (found ${JSON.stringify(choices ?? {})})`,
-      );
-    }
+  expect(choices, `unit ${instanceId} quoted choices drifted at ${surface}`).toEqual(wanted);
+}
+
+function expectExactDimensions(parameters: Record<string, unknown>, widthMm = 600): void {
+  expect(parameters).toEqual({ depthMm: 590, heightMm: 720, widthMm });
+}
+
+interface RevisionPresentationItem {
+  furniture_instance_id: string;
+  furniture_definition_id?: string | null;
+  parameters: Record<string, unknown>;
+  material_choices: Record<string, string>;
+  descriptor_state: 'available' | 'unavailable_legacy';
+  presentation_snapshot?: {
+    schema_version: 1;
+    definition: { name?: string; code?: string };
+    parameters: readonly { key: string; label?: string; value: unknown; unit?: string; state: string }[];
+    materials: readonly {
+      role: string;
+      role_label?: string;
+      material_id?: string;
+      name?: string;
+      code?: string;
+      effective_thickness_mm?: number;
+      provenance: string;
+    }[];
+    room: { label?: string; state: string };
+  };
+}
+
+function expectPresentationSnapshot(
+  item: RevisionPresentationItem,
+  definitionName: string,
+  materialNameSuffix = '',
+  widthMm = 600,
+): void {
+  expect(item.descriptor_state).toBe('available');
+  const snapshot = item.presentation_snapshot;
+  expect(snapshot).toBeTruthy();
+  expect(snapshot!.schema_version).toBe(1);
+  expect(snapshot!.definition).toEqual({ code: 'GOLD-MOD-1', name: definitionName });
+  expect(snapshot!.parameters).toEqual(expect.arrayContaining([
+    expect.objectContaining({ key: 'widthMm', label: 'Ancho', value: widthMm, unit: 'mm', state: 'available' }),
+    expect.objectContaining({ key: 'heightMm', label: 'Alto', value: 720, unit: 'mm', state: 'available' }),
+    expect.objectContaining({ key: 'depthMm', label: 'Profundidad', value: 590, unit: 'mm', state: 'available' }),
+  ]));
+  expect(snapshot!.room).toEqual({ state: 'unavailable' });
+
+  const expected = expectedChoices.get(item.furniture_instance_id)!;
+  expect(snapshot!.materials).toHaveLength(2);
+  for (const [role, materialId] of Object.entries(expected)) {
+    const descriptor = snapshot!.materials.find((material) => material.role === role);
+    expect(descriptor).toBeTruthy();
+    const expectedName = materialId === GOLD_MAT_INTERIOR_BLANCO
+      ? `Arania Blanco${materialNameSuffix}`
+      : materialId === GOLD_MAT_INTERIOR_ROBLE
+        ? `Roble Interior${materialNameSuffix}`
+        : `Madera Frente${materialNameSuffix}`;
+    const expectedCode = materialId === GOLD_MAT_INTERIOR_BLANCO
+      ? 'GOLD-TAB-ARA-BLA'
+      : materialId === GOLD_MAT_INTERIOR_ROBLE
+        ? 'GOLD-TAB-ROB'
+        : 'GOLD-TAB-MAD-FRE';
+    expect(descriptor).toEqual(expect.objectContaining({
+      material_id: materialId,
+      name: expectedName,
+      code: expectedCode,
+      effective_thickness_mm: 18,
+      provenance: 'quoted',
+    }));
   }
 }
 
@@ -147,7 +213,7 @@ async function publishViaSketchUpContract(
   instanceIds: readonly string[],
   baseRevisionId: string | null,
   key: string,
-): Promise<{ id: string; revision_number: number; parent_revision_id: string | null; source_type: string; items: readonly { furniture_instance_id: string; parameters: Record<string, unknown>; material_choices: Record<string, string> }[] }> {
+): Promise<{ id: string; revision_number: number; parent_revision_id: string | null; source_type: string; items: readonly RevisionPresentationItem[] }> {
   const apiBase = required('ORGANIZATION_API_BASE');
   const manifest = {
     schemaVersion: 1,
@@ -183,7 +249,7 @@ async function publishViaSketchUpContract(
     revision_number: number;
     parent_revision_id: string | null;
     source_type: string;
-    items: readonly { furniture_instance_id: string; parameters: Record<string, unknown>; material_choices: Record<string, string> }[];
+    items: readonly RevisionPresentationItem[];
   };
 }
 
@@ -308,7 +374,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
         {
           id: GOLD_MODULE,
           code: 'GOLD-MOD-1',
-          name: 'Gabinete Cocina Dorada',
+          name: GOLD_MODULE_NAME,
           externalDims: { width: 600, height: 720, depth: 590 },
           structureId: GOLD_STRUCT,
           components: [],
@@ -363,18 +429,25 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
       id: string;
       status: string;
       revisionNumber: number;
-      items: readonly { furnitureInstanceId: string; materialChoices: Record<string, string>; lifecycleStatus: string }[];
+      items: readonly { furnitureInstanceId: string; furnitureDefinitionId?: string | null; parameters: Record<string, unknown>; materialChoices: Record<string, string>; lifecycleStatus: string }[];
     };
     expect(accepted.status).toBe('accepted');
     expect(accepted.revisionNumber).toBe(1);
-
-    // Truth observation: does the Q1 SNAPSHOT carry the quoted choices, or
-    // only the live project line? Recorded — never smoothed over (feeds the
-    // QuoteRevision lifecycle issue).
-    const q1ChoicesPresent = accepted.items.every((item) => Object.keys(item.materialChoices ?? {}).length > 0);
-    note(
-      `truth: Q1 snapshot items materialChoices=${q1ChoicesPresent ? 'present' : 'ABSENT'} while current project lines carry ${JSON.stringify(CHOICES_A)}/${JSON.stringify(CHOICES_B)}`,
-    );
+    expect(accepted.items).toHaveLength(3);
+    for (const item of accepted.items) {
+      expect(item.furnitureDefinitionId).toBe(GOLD_MODULE);
+      expect(item.lifecycleStatus).toBe('active');
+      expectExactDimensions(item.parameters);
+    }
+    const q1A = accepted.items.filter((item) => item.materialChoices['GOLD-INTERIOR'] === GOLD_MAT_INTERIOR_BLANCO);
+    const q1B = accepted.items.filter((item) => item.materialChoices['GOLD-INTERIOR'] === GOLD_MAT_INTERIOR_ROBLE);
+    expect(q1A).toHaveLength(2);
+    expect(q1B).toHaveLength(1);
+    for (const item of q1A) expect(item.materialChoices).toEqual(CHOICES_A);
+    for (const item of q1B) expect(item.materialChoices).toEqual(CHOICES_B);
+    track.furnitureInstanceIds = [...q1A, ...q1B].map((item) => item.furnitureInstanceId);
+    for (const item of q1A) expectedChoices.set(item.furnitureInstanceId, { ...CHOICES_A });
+    for (const item of q1B) expectedChoices.set(item.furnitureInstanceId, { ...CHOICES_B });
     note(`truth: Project.status=draft at acceptance time (QuoteRevision Q1 accepted independently — separate truth sources)`);
   });
 
@@ -389,15 +462,13 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     const matB = await client.materializeQuoteLineFurniture(owner.token, PROJECT_ID, GOLD_LINE_B, 'golden-mat-line-b-units');
     expect(matB.instances).toHaveLength(1);
 
-    track.furnitureInstanceIds = [
+    const materializedIds = [
       matA.instances[0]!.furniture_instance_id,
       matA.instances[1]!.furniture_instance_id,
       matB.instances[0]!.furniture_instance_id,
     ];
-    expect(new Set(track.furnitureInstanceIds).size).toBe(3);
-    expectedChoices.set(track.furnitureInstanceIds[0]!, { ...CHOICES_A });
-    expectedChoices.set(track.furnitureInstanceIds[1]!, { ...CHOICES_A });
-    expectedChoices.set(track.furnitureInstanceIds[2]!, { ...CHOICES_B });
+    expect(new Set(materializedIds).size).toBe(3);
+    expect(new Set(materializedIds)).toEqual(new Set(track.furnitureInstanceIds));
 
     // Exact placement inputs (#389/#621): the LIST surface carries the
     // server-computed authoring display per unit — project, definition
@@ -411,9 +482,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
       expect(instance.furniture_definition_id).toBe(GOLD_MODULE);
       const display = instance.display;
       expect(display, `unit ${instanceId} missing authoring display`).toBeTruthy();
-      if ((display!.dimensions_mm?.width ?? 0) <= 0) {
-        note(`BLOCKER-CANDIDATE: unit ${instanceId} missing quoted dimensions in authoring display`);
-      }
+      expect(display!.dimensions_mm).toEqual({ depth: 590, height: 720, width: 600 });
       expectQuotedChoices(instanceId, 'furniture-instance-display', display!.material_choices);
     }
 
@@ -520,7 +589,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     expect(working.items).toHaveLength(3);
     expect(new Set(working.items.map((i) => i.furniture_instance_id))).toEqual(new Set(track.furnitureInstanceIds));
     for (const item of working.items) {
-      expect(item.parameters.widthMm).toBe(600);
+      expectExactDimensions(item.parameters);
       if (item.definition_version !== null && item.definition_version !== undefined) {
         expect(Number.isInteger(item.definition_version)).toBe(true);
       }
@@ -542,7 +611,9 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     expect(r1.source_type).toBe('sketchup');
     expect(r1.items.map((i) => i.furniture_instance_id).sort()).toEqual([...track.furnitureInstanceIds].sort());
     for (const item of r1.items) {
+      expectExactDimensions(item.parameters);
       expectQuotedChoices(item.furniture_instance_id, 'R1', item.material_choices);
+      expectPresentationSnapshot(item, GOLD_MODULE_NAME);
     }
     // The working copy advanced to R1 as its base.
     const working = await client.getDesignWorkingCopy(owner.token, track.designId);
@@ -575,7 +646,24 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
   // ------------------------------------------------------------------
   test('stage 8 — R2 parented to R1, R1 immutable, Web shows both', async ({ page }) => {
     test.setTimeout(120_000);
-    const r1Before = revisionById(await client.listDesignRevisions(owner.token, track.designId), track.r1Id, 'R1');
+    const r1Before = revisionById(await client.listDesignRevisions(owner.token, track.designId), track.r1Id, 'R1') as unknown as { items: readonly RevisionPresentationItem[] };
+
+    // Mutable catalog labels change after R1, but must never retarget R1's
+    // immutable presentation snapshot (#639).
+    const repository = new APIWorkspaceRepository(required('ORGANIZATION_API_BASE'), { getAccessToken: () => owner.token });
+    const catalog = await repository.getCatalog();
+    await repository.saveCatalog({
+      ...catalog,
+      modules: catalog.modules.map((module) => module.id === GOLD_MODULE ? { ...module, name: GOLD_MODULE_RENAMED } : module),
+      materials: catalog.materials.map((material) => (
+        [GOLD_MAT_INTERIOR_BLANCO, GOLD_MAT_INTERIOR_ROBLE, GOLD_MAT_FRENTE_MADERA].includes(material.id)
+          ? { ...material, name: `${material.name} v2` }
+          : material
+      )),
+    });
+    const r1AfterCatalogRename = revisionById(await client.listDesignRevisions(owner.token, track.designId), track.r1Id, 'R1 after catalog rename') as unknown as { items: readonly RevisionPresentationItem[] };
+    expect(r1AfterCatalogRename).toEqual(r1Before);
+    for (const item of r1AfterCatalogRename.items) expectPresentationSnapshot(item, GOLD_MODULE_NAME);
 
     const modifiedWidth = 650;
     await client.updateDesignWorkingCopy(owner.token, track.designId, {
@@ -593,7 +681,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     expect(r2.revision_number).toBe(2);
     expect(r2.parent_revision_id).toBe(track.r1Id);
 
-    // R1 remains byte-identical (immutable history).
+    // The API projection of R1 remains semantically stable (immutable history).
     const r1After = revisionById(await client.listDesignRevisions(owner.token, track.designId), track.r1Id, 'R1 after R2');
     expect(r1After).toEqual(r1Before);
 
@@ -603,7 +691,10 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     const untouched = r2.items.find((i) => i.furniture_instance_id === track.furnitureInstanceIds[0]);
     expect(untouched!.parameters.widthMm).toBe(600);
     for (const item of r2.items) {
+      const widthMm = item.furniture_instance_id === track.furnitureInstanceIds[2] ? modifiedWidth : 600;
+      expectExactDimensions(item.parameters, widthMm);
       expectQuotedChoices(item.furniture_instance_id, 'R2', item.material_choices);
+      expectPresentationSnapshot(item, GOLD_MODULE_RENAMED, ' v2', widthMm);
     }
 
     // Web readback shows both revisions of the exact lineage.

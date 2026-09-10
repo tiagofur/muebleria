@@ -1,8 +1,8 @@
 # Issue #644 — [P0][DEMO] Golden path regression: Quote → SketchUp → DesignRevision → ProductionRelease
 
-- Verification lane (`status:approved`). Rama `test/644-demo-golden-path-regression`, base exacta `origin/main@55399890` (post-merge #636/#638; sin PRs solapados activos). Test-only: **cero archivos de producto**.
+- Verification lane (`status:approved`). Rama `test/644-demo-golden-path-regression`, integrada con base exacta `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` mediante merge `b2dde534cd7e3fd264283e2d55adbbf2d54ebb4d`. Test-only: **cero archivos de producto**.
 - Entrega: `tests/organization/demo-golden-path.spec.ts` — un fixture canónico de cocina determinística (línea qty=2 con choices citadas reales + línea qty=1) que recorre las 10 etapas del DEMO sobre el stack real: Q1 accepted → materialización (ids físicos distintos) → Design base null → pairing extension-credential confirmed → working copy (#625 integer-or-omitted) → R1 multipart #633 source=sketchup → artifact grants #636 (`/api/design-artifacts/`, sin `/api/api`) → R2 con R1 inmutable → approval con gate #502 (rechaza Q1 desactualizada, requote Q2, acepta, aprueba R2 vs Q2) → ProductionRelease con frozen routing v2 y unidades `${release}:${instance}:u1`.
-- Evidencia: gate efímero real Chromium+Go+PostgreSQL — spec 10/10 PASS; gate completo 41/41 PASS (1.8 min); `git diff --check` limpio.
+- Evidencia de corrección post-#639: gate enfocado real Chromium+Go+PostgreSQL 10/10 PASS; gate completo 36 PASS, 2 timeouts ajenos, 3 no ejecutados tras fallo serial; `git diff --check` limpio.
 - Observaciones registradas (no se corrigen aquí): FOUND_DOUBLE_TRUTH — `QuoteRevision.status=accepted` convive con `Project.status=draft` hasta un save legacy separado para etapas operativas; Q1 snapshot SÍ congela `materialChoices` en main actual; provenance de materiales SIN pérdida en flujo quote-first fresco (12/12 superficies exactas) — #637 queda como lane de reparación para unidades pre-#621.
 - SketchUp-host con licencia sigue RUBY CONTRACT / NOT PROVEN en CI (programa real-host: #354).
 - Detalle: `progress/implementation_644_demo_golden_path_regression.md`.
@@ -529,3 +529,10 @@ EOL.
 - Scope: repair Foundation Gate A semantic selector, cover all four server-owned presentation provenance states, strengthen real-browser descriptor/actor/overflow proof, restore RLS inventory metadata on migration down, complete disclosure interaction tokens/a11y, and correct the documentation typo.
 - Verification plan: focused Go migration/provenance tests, focused UI, real project-design browser gate, complete `pnpm gate:foundation:a`, diff check, commit and push exact readback.
 - Correction result: `IMPLEMENTED_PENDING_REVIEW`. Focused provenance/migration and UI tests pass; real project-design browser gate passes; full Foundation Gate A passes 34/34 with 31 Chromium cases. See `progress/implement_639_design_revision_read_model.md`.
+
+## PR #645 — issue #644 golden-path correction
+
+- Existing test-only PR updated after #639 landed on `main@fde538a839a7b882657fafbfe41bbdd1cf91fbee`; merge commit `b2dde534cd7e3fd264283e2d55adbbf2d54ebb4d` preserves the complete #639 record above.
+- Scope: turn Q1 choices/dimensions and display/working-copy/R1/R2 provenance into failing assertions; assert #639 immutable presentation descriptors; prove a post-R1 catalog rename cannot retarget R1; retain double-truth as an observation.
+- The canonical #502 commercial gate rejects R2+Q1, so the executable journey intentionally uses Q2 derived from R2 and documents that correction to issue #644's stale literal.
+- Focused real Chromium + Go + PostgreSQL gate: 10/10 PASS. Full organization browser run reached 36 PASS, 2 unrelated route/login visibility timeouts, and 3 skipped after the serial reconciliation failure; see `progress/implementation_644_demo_golden_path_regression.md`.

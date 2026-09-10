@@ -1,9 +1,10 @@
 # Issue #644 — [P0][DEMO] Golden path regression: Quote → SketchUp → DesignRevision → ProductionRelease
 
 - Verification lane (`status:approved`). Test-only: **zero product files changed.**
-- Branch `test/644-demo-golden-path-regression`, exact base `origin/main@55399890`
-  (merge of PR #638; includes #636 merged 2026-09-09 and #638 merged 2026-09-10 —
-  no active overlapping PRs at run time).
+- Branch `test/644-demo-golden-path-regression`, original implementation head
+  `9661df177748d69b020dda29962f2ca88713818d`, merged with exact
+  `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` through merge commit
+  `b2dde534cd7e3fd264283e2d55adbbf2d54ebb4d` (includes #639 / PR #646).
 - Deliverable: `tests/organization/demo-golden-path.spec.ts` — ONE canonical
   deterministic kitchen-quote fixture driven through the REAL supported stack
   (browser React + Go API + PostgreSQL + artifact filesystem). Extends the
@@ -36,23 +37,34 @@ shared with other gate specs):
 | 5 Working copy (exact identity, quoted finishes, definition_version integer-or-omitted) | PASS | REAL GO + POSTGRESQL (authoring contract payload; Ruby serialization is RUBY CONTRACT) |
 | 6 Publish R1 (#633 multipart SketchUp contract, parent null) | PASS | REAL GO + POSTGRESQL + artifact filesystem (`.skp` bytes are a CI stand-in — licensed host execution NOT PROVEN in CI) |
 | 7 Artifact readback (signed grants, `/api/design-artifacts/`, no `/api/api`) | PASS | REAL GO + POSTGRESQL |
-| 8 R2 (parent=R1, R1 byte-identical, isolated change, Web lineage) | PASS | REAL BROWSER + GO + POSTGRESQL |
+| 8 R2 (parent=R1, R1 API snapshot semantically stable, isolated change, Web lineage) | PASS | REAL BROWSER + GO + POSTGRESQL |
 | 9 Approval (gate rejects outdated Q1 → requote Q2 → accept → approve R2 vs Q2) | PASS | REAL GO + POSTGRESQL |
 | 10 ProductionRelease (exact R2+Q2 pin, frozen routing v2, `${release}:${instance}:u1` units, 9 parts) | PASS | REAL GO + POSTGRESQL |
 
-`pnpm test:organization:browser` full gate: **41/41 PASS (1.8 min)** — the new
-spec coexists with every existing organization spec.
+Correction run after #639:
 
-## Scenario ids (final run)
+- focused `scripts/organization-browser-gate.sh tests/organization/demo-golden-path.spec.ts`:
+  **10/10 PASS**;
+- full `pnpm test:organization:browser`: **36 PASS, 2 FAIL, 3 NOT RUN** in
+  1.7 min. The failures were outside this PR's file: the reconciliation
+  workspace and a later Web auth login timed out waiting for their route/topbar
+  elements. The focused golden stayed green inside the same full run. This is
+  recorded as a remaining full-suite gate gap, not misreported as green.
 
-- project: `77777777-4444-4777-8777-444444444444` (deterministic)
-- Q1: `5c654fbd-ede0-4b95-b5c7-c52579af80be` → accepted → **superseded** after Q2
-- Q2: `da5cf11e-0cbf-4514-aab0-deb9d93c168f` → accepted
-- furniture instances: `6fab41ed-…`, `9857bb29-…` (qty=2 line), `d8cad010-…` (qty=1 line)
-- design: `c3115eef-a2cf-45f7-ae8a-6b0c98f3b466`
-- R1: `73ba37c3-aefa-4bed-ba4f-12f9242de232` (source_type=sketchup, parent null, published)
-- R2: `c337c6de-5106-43a3-b1c3-92966f2023f5` (parent=R1, approved)
-- release: `48eab1d9-83fd-4365-83b9-db61ef43720e` (P1, active, frozen_routing=true)
+## Assertion strength after #639
+
+- Q1 now fails unless all three immutable per-unit items carry exact module,
+  `{widthMm:600,heightMm:720,depthMm:590}`, lifecycle and the exact two material
+  choices (2× A, 1× B).
+- FurnitureInstance display and Design working copy assert those same exact
+  dimensions and choices; material loss is no longer a note-only finding.
+- R1 and R2 both require `descriptor_state=available`, definition name+code,
+  parameter labels+units+values, material name+code+18 mm+`quoted` provenance,
+  plus their exact raw choices.
+- Renaming the module and three materials after R1 proves R1's API projection
+  remains semantically equal and retains its original labels, while R2 freezes
+  the new labels. This proves historical immutability without claiming byte
+  identity for a decoded API response.
 
 ## Truth observations
 
@@ -69,11 +81,15 @@ spec coexists with every existing organization spec.
   stages). Recorded, not fixed. Feeds the planned QuoteRevision lifecycle issue.
 - Q1 snapshot **does** carry per-unit `materialChoices` on current main (the
   old "#571 Q1 has no choices" limitation is gone).
+- Issue #644's literal ProductionRelease pin `R2 + Q1` is stale against the
+  integrated #502 safety gate: R2 changes quoted commercial reality, so Q1 is
+  rejected. The golden explicitly derives and accepts Q2 from exact R2, then
+  pins `R2 + Q2`; weakening that gate to satisfy the literal would be wrong.
 
 ## Material provenance (12 records, all exact)
 
 Quoted → instance display → working copy → R1 → R2 for all 3 units: **zero
-loss**. Every surface carries the exact quoted
+loss, asserted**. Every surface carries the exact quoted
 `{GOLD-INTERIOR, GOLD-FRENTE}` per unit.
 
 - **FOUND_MATERIAL_PROVENANCE_LOSS: no** on a FRESH quote-first flow. The #637
@@ -81,21 +97,23 @@ loss**. Every surface carries the exact quoted
   `{}` in existing working snapshots); this regression proves the fresh path
   is clean and freezes that guarantee.
 
-## Blockers found
+## Test and gate findings
 
-None. Every mid-run failure was a test-fixture bug (short idempotency key <
+The focused golden has no blocker. Every mid-run failure was a test-fixture bug (short idempotency key <
 16 chars; `display` read from the workspace payload instead of the
 furniture-instances list surface (#389); missing per-test browser login;
 approval attempted against the outdated Q1 baseline — which correctly
 exercised the #502 gate; Q1 supersede semantics; choice keys not matching
 component `optionRoles`). The two behavior refusals (outdated-baseline
 approval, forged part-execution payloads elsewhere in the suite) are the
-gates working as designed and are now permanent regression assertions.
+gates working as designed and are now permanent regression assertions. The
+full-suite correction run still has the two unrelated visibility timeouts
+recorded above, so full organization-browser green is NOT claimed.
 
 ## Product files changed
 
-NONE. `git diff main --stat` → only `tests/organization/demo-golden-path.spec.ts`
-and this progress document.
+NONE. Relative to main the PR changes only
+`tests/organization/demo-golden-path.spec.ts` and two progress documents.
 
 ## Verdict
 
