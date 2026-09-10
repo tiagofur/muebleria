@@ -23,6 +23,9 @@
   PASS; `pnpm openapi:check`/`typecheck` PASS; `pnpm test` verde (UI 1690, Web
   442, Mobile 73, Desktop 17); browser gate golden path ver reporte.
 - Detalle: `progress/implementation_642_quote_commercial_snapshot.md`.
+- Publicación (2026-09-10): owner autorizó label `status:approved` + excepción
+  de tamaño documentada en la issue; PR parcial `Refs #642` publicado con label
+  único `type:feature`. Sin merge ni cierre; revisión independiente pendiente.
 
 # Issue #641 — Design inspector async and accessibility correction
 

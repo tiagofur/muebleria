@@ -224,15 +224,12 @@ sintiéndose legítimo por SQL directo).
 
 ## Publicación
 
-- PR sugerido: `feat(quote): freeze canonical commercial snapshot per QuoteRevision`
-  con primera línea del body `Refs #642`, label único `type:feature`.
-- ⚠️ **Preflight bloqueado**: la issue #642 sigue sin el label
-  `status:approved` (verificado vía API). Según el contrato de fábrica
-  (`docs/demo/software-factory-human-start.md`) el agente nunca autoaplica el
-  label ni publica sin él. Se solicita al owner aplicar `status:approved`
-  (o autorizar la publicación explícitamente) para abrir el PR.
+- Owner (tiagofur) autorizó el label `status:approved` y la excepción de
+  tamaño (comentario en la issue #642, 2026-09-10) antes de publicar.
+- PR: `feat(quote): freeze canonical commercial snapshot per QuoteRevision`,
+  primera línea del body `Refs #642`, label único `type:feature`, sin cierre.
 
 ## Verdict
 
-`IMPLEMENTED_PENDING_REVIEW` — candidato a revisión independiente read-only
-una vez publicado el PR.
+`IMPLEMENTED_PENDING_REVIEW` — PR publicado; se requiere revisión
+independiente read-only antes de cualquier merge.
