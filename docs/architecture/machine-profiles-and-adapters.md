@@ -1,5 +1,14 @@
 # Machine Profiles & Postprocessor Adapters
 
+> **Preparation scope — 2026-09-10:** [#650](https://github.com/tiagofur/muebleria/issues/650)
+> define programa de corte único, preview fiel y serialización PTX documentada
+> para un candidato CADLink/CAD4. El [dossier](../machines/ptx-cadmatic4/README.md)
+> importa la investigación y ejemplos de la conversación. Es preparación, no
+> implementación nueva. A+B se verifican internamente; generar cinco cocinas y
+> verificar con el cliente quedan a cargo del propietario y fuera del cierre
+> técnico. Esta separación permite desarrollar sin esperar #348, pero no
+> promueve compatibilidad/capabilities ni elimina gates productivos.
+
 > **Execution status — 2026-09-06:** FOUNDATION IMPLEMENTED, nothing validated.
 > Tras el fallo real de conversión PTX en Client A
 > (`docs/machines/client-a/ptx-conversion-failure.md`), el owner autorizó
@@ -40,13 +49,13 @@ MachineProfile
  ├── machineProfileRevisionId (inmutable por publicación)
  ├── machine identity: maker, model, control software + versión exacta
  ├── capabilities: MachineCapability[]          (contract §10)
- └── declaredFormats: PostprocessorAdapterRef[] (qué adapters puede servir)
+ └── declaredFormats: PostprocessorAdapterRef[] (adapters que puede servir)
 
 PostprocessorAdapter
  ├── postprocessorAdapterId
  ├── postprocessorAdapterVersion (semver)
  ├── implementationDigest (hash del código que produce los bytes)
- ├── inputSchema (DTOs resueltos que consume: p.ej. ResolvedBoardPart + drilling)
+ ├── inputSchema (DTOs resueltos: p.ej. ResolvedBoardPart + drilling)
  ├── requiredCapabilities (qué capabilities exige del profile)
  └── producedArtifacts (kinds: ptx | dxf | csv | pdf | label)
 
@@ -69,18 +78,18 @@ Reglas:
   DTOs resueltos; paridad vía contract fixtures compartidos si una regla
   viviera en TS y Go.
 
-## OutputCompatibilityProfile (decisión 2026-09-06)
+## OutputCompatibilityProfile (decisión 2026-09-06, alcance precisado 2026-09-10)
 
 El modelo original distinguía `MachineProfile` (qué puede hacer la
 máquina/instalación) de `PostprocessorAdapter` (serializador). El fallo real
 de conversión PTX en Client A mostró la capa faltante: **cómo espera el
 archivo el software receptor** (encoding, fin de línea, decimales, sintaxis de
 registros, restricciones de nombre de archivo) no es una capability física ni
-una decisión del serializador. Decisión (menor abstracción correcta):
+una decisión arbitraria del serializador.
 
 ```text
-MachineProfile            = qué la máquina/instalación puede hacer (capabilities)
-OutputCompatibilityProfile = cómo esta versión de software receptor espera el archivo
+MachineProfile             = qué la máquina/instalación puede hacer
+OutputCompatibilityProfile = cómo el software receptor espera el archivo
 PostprocessorAdapter       = implementación del serializador (consume perfiles)
 ```
 
@@ -90,20 +99,39 @@ Reglas implementadas (`packages/domain/src/machineOutput.ts` +
 - Un perfil de compatibilidad es **DATA versionada e inmutable** (digest
   SHA-256 sobre datos canónicos; cambiar un valor publica revisión nueva).
 - Toda dimensión sin evidencia de campo/repositorio vive en `pendingEvidence`
-  como `FIELD_FORMAT_EVIDENCE_REQUIRED` y hace que el adapter **falle cerrado**
-  — nunca se adivina desde artículos públicos (`PUBLIC_REFERENCE_ONLY` no
-  serializa).
+  como `FIELD_FORMAT_EVIDENCE_REQUIRED` y hace que el adapter falle cerrado.
+  Los perfiles r1 actuales no cambian con este PR documental.
 - **Readiness de un adapter = evidencia de formato/perfil + representabilidad
   de operaciones + disponibilidad de implementación del serializer.**
-  `canSerialize(...).ready === true` GARANTIZA que `serialize(...)` es
+  `canSerialize(...).ready === true` garantiza que `serialize(...)` es
   ejecutable para ese job/profile. Un serializer pendiente reporta
-  `SERIALIZER_NOT_IMPLEMENTED` (código distinto de evidencia faltante) incluso
-  sobre perfiles totalmente evidenciados — perfil listo ≠ adapter listo.
+  `SERIALIZER_NOT_IMPLEMENTED` incluso sobre perfiles totalmente evidenciados.
 - Los perfiles con marca (CADmatic, woodWOP, SAW HOMAG) viven en la capa de
   export; el dominio neutral no contiene nombres de marca ni ramas por
   cliente/máquina.
-- Un mismo `ResolvedCuttingJob` puede serializarse a N variantes (una por
-  perfil) — exactamente el kit de diagnóstico que se envía al cliente.
+- Un mismo `ResolvedCuttingJob` puede serializarse a N variantes explícitas
+  en un kit de diagnóstico; generación normal sigue selección única #591.
+
+### Implementación de candidato versus evidencia de instalación (#650)
+
+El requisito anterior no prohíbe implementar la gramática de una **especificación
+primaria de interfaz**, con fuente y localizador, para pruebas internas/candidato
+no productivo. Eso es distinto de deducir sintaxis de artículos genéricos o llenar
+capacidades físicas de una máquina desde su nombre.
+
+#650 propone publicar una nueva revisión de perfil CAD4 y versión/digest del
+serializer que apliquen realmente sus parámetros. El serializador consumirá el
+mismo programa de corte que la preview, sin reconstruir por clustering X/Y ni
+reoptimizar. Un lector independiente verificará los bytes contra ese programa.
+
+Distinguir serialización posible, evidencia de receptor y permiso productivo.
+La especificación pública no promueve `NOT_TESTED` a `PARTIAL/VALIDATED`, no
+rellena limits de la instalación y no concede una `ProductionRelease`.
+Generación productiva conserva los guards y la evidencia exacta existentes.
+
+El objetivo es PTX → CADLink/CAD4 → archivo del receptor. SAW propio y MPR no
+pertenecen a esta entrega. Las versiones 3/5 sólo se extienden por diferencias
+pequeñas documentadas y probadas, sin claims cruzados ni requisito de cierre.
 
 ## Registro de capabilities canónicas
 
@@ -118,11 +146,10 @@ constraint requerido y no declarado bloquea.
 | `granete.panel-geometry` | 1 | `maxLengthMm`, `maxWidthMm`, `maxThicknessMm` | geometría de catálogo |
 
 El registro crece sólo con evidencia: cada capability nueva nace de un dossier
-real (número de husillos, paso de matriz, sierra, vacío, etc.) y se versiona
-cuando su semántica cambia. `granete.*` es el namespace neutro de dominio; los
-perfiles concretos por cliente se aislan en machine packs (#352/#353).
+real y se versiona cuando su semántica cambia. `granete.*` es el namespace
+neutro; perfiles concretos por cliente se aislan en machine packs (#352/#353).
 
-## Flujo de export
+## Flujo de export productivo
 
 ```text
 AuthoringEnvelope → preflight (#347: negotiation contra MachineProfile)
@@ -132,44 +159,50 @@ AuthoringEnvelope → preflight (#347: negotiation contra MachineProfile)
                  → bytes + ManufacturingArtifactManifest (contract §12)
 ```
 
-- El export re-checa el manifest: `machineProfileId`,
-  `machineProfileRevisionId`, `bomFingerprint`, `designRevisionId`,
-  `postprocessorAdapterId/Version/implementationDigest`.
+- El export re-checa `machineProfileId`, `machineProfileRevisionId`,
+  `bomFingerprint`, `designRevisionId`, adapter ID/versión/digest.
 - Un claim `validated|partial` exige evidence pack sanitizado;
-  `notClaimed|unsupported` no puede adjuntarlo.
-- Stale revision (§8) bloquea el export salvo override auditado.
+  `notClaimed|unsupported` no puede adjuntarlo como prueba positiva.
+- Stale revision bloquea salvo override auditado conforme al contrato.
+- Un candidato no productivo no se presenta como esa cadena completada.
+  #503/#577 conservan su ownership; no se evitan sus dependencias con datos
+  mutables ni se absorben en #650.
 
 ## PTX como adapter inicial
 
-PTX no es una regla global: es el primer `PostprocessorAdapter`. Su
-implementación (#351 impl) empieza cuando #348 cierre con import/readback y
-sign-off del operador sobre la combinación exacta máquina/software. Hasta
-entonces, la ruta oficial hacia talleres SCM sigue siendo DXF por capas (F130),
-importado por Maestro con asignación capa→herramienta (F132 quedó postergado
-por la misma razón: sin máquina confirmada no se promete formato nativo).
+PTX no es una regla global: es el primer `PostprocessorAdapter`. La foundation
+se entregó mediante #588. #650 concreta su corrección documentada y la fidelidad
+programa/preview/bytes. **Desarrollo interno no depende del cierre de #348;
+compatibilidad de campo y habilitación productiva sí conservan esa evidencia.**
+
+El requisito histórico de esperar #348 antes de cualquier implementación de
+adapter fue superado por la foundation autorizada y este alcance técnico;
+no interpretar ese cambio como exención de preflight, release o field claims.
+No se implementan otros formatos de máquina con esta preparación.
 
 ## Qué está habilitado ya vs qué falta
 
-**Ya implementado (F168, #347):** tipos §10 (`MachineProfileRef`,
-`MachineCapability`, `CapabilityNegotiation`), `requiredCapabilities` derivadas
-de verdad resuelta, negotiation bloqueante con todos los modos de falla,
-overrides auditados, stale. `MachineProfile` (con identidad de software) y los
-adapters/manifest/evidence packs quedan para la implementación de #351.
+**Implementado:** preflight neutral #347/F168, foundation #351/PR #588,
+selección #591/PR #592 y robustez de descargas/ZIP PR #595/#598/#599.
+El perfil disponible en una lista no demuestra gramática ni compatibilidad.
 
-**Bloqueado por field evidence (#348, #352/#353):** perfiles concretos por
-cliente, adapter PTX real, evidence packs, machine packs sanitizados. La
-recolección usa `docs/templates/machine-dossier-template.md`. El primer pack
-instanciado — Client A (`client-a`: BHX 050 + HPP 250, estado `NOT_TESTED`,
-descubrimiento sin evidencia de campo) — vive en `docs/machines/client-a/`
-(#352).
+**Preparado, pendiente de implementar:** #650 A+B (programa real + preview y
+serializer PTX + lector independiente), con diccionario y ejemplos bajo
+[`docs/machines/ptx-cadmatic4/`](../machines/ptx-cadmatic4/README.md).
+
+**Pendiente de field evidence:** compatibilidad de la combinación exacta y
+capacidades reales (#348/#352/#353). Cinco cocinas y verificación con el cliente
+las realiza el propietario fuera de #650. No bloquean su cierre técnico ni se
+registran como PASS por exclusión.
 
 ## Referencias
 
 - Contract §10/§11/§12: `docs/sketchup-manufacturing-contract.md`
-- Preflight implementado: `packages/domain/src/sketchupPreflight.ts` (F168)
+- Preflight: `packages/domain/src/sketchupPreflight.ts` (F168)
 - ADR-0001, ADR-0002; `docs/architecture.md` §6/§7
-- Issues: #290 (meta), #347 (cerrada), #348, #351, #352/#353, #354
-- Ledger: F130 (DXF capas), F132 (SCM nativo, postergado), F168
+- Issues: #290, #347, #348, #351, #352/#353, #354, #591, #650
+- Ledger histórico: F130 (DXF capas), F132 (SCM nativo), F168
+- [Dossier PTX/CAD4](../machines/ptx-cadmatic4/README.md)
 
 ## Selección de salida y generación normal (#591)
 
@@ -188,4 +221,5 @@ Normal production: exactamente UN tuple configurado por operación
   nunca sustituye un perfil bloqueado ni genera candidatos en bulk.
 - Un objetivo bloqueado produce **cero archivos** con la razón exacta
   (`machineOutputBlockerMessageEs`); el flujo legacy sin configurar se
-  mantiene intacto y documentado.
+  mantiene intacto y documentado. #650 debe mantener la ausencia de fallback
+  y comunicar por separado candidato no productivo y compatibilidad real.

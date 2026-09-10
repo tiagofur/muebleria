@@ -15,16 +15,22 @@ Cada pack reúne los dossiers de campo de las máquinas reales de ese cliente �
 [`docs/templates/machine-dossier-template.md`](../templates/machine-dossier-template.md) —
 más su checklist de intake y los fixtures de validación futuros.
 
-Estos packs alimentan la cadena bloqueada por evidencia de campo:
+La ruta de habilitación productiva y claims conserva evidencia de campo exacta:
 
 ```text
 #348 (validación PTX import/readback) → #351 (MachineProfile/PostprocessorAdapter)
      → #352/#353 (packs por cliente) → #354 (E2E) / #503 (workspace React)
 ```
 
-La implementación de perfiles y adapters permanece **hard-blocked** hasta que
-#348 cierre con import/readback y sign-off del operador sobre la combinación
-exacta máquina/controlador/versión de software.
+**Aclaración de alcance — 2026-09-10:** la foundation #351 ya fue implementada
+por PR #588; no confundir implementación con validación. La nueva
+[#650](https://github.com/tiagofur/muebleria/issues/650) concreta el trabajo de
+programa guillotina/vista previa y serializador PTX para un **candidato no
+productivo** CADLink/CAD4, basado en fuentes primarias. Su programación y tests
+internos no requieren cerrar #348 primero. Los claims, capabilities reales y
+permiso productivo siguen sujetos a evidencia/preflight/release. El propietario
+excluyó de #650 generar cinco cocinas y verificar con el cliente; lo hará por su
+cuenta. No son criterios de cierre técnico ni una excusa para promover estados.
 
 ## Reglas de sanitización (obligatorias antes de que un dato entre al repo)
 
@@ -51,16 +57,20 @@ ejemplo se renombran y se revisan por metadatos. La correspondencia entre
 | `UNSUPPORTED` | la evidencia demuestra incompatibilidad | `unsupported` |
 
 Ningún estado se promueve con documentación pública: `PUBLIC_REFERENCE_ONLY`
-nunca promueve `NOT_TESTED`.
+nunca promueve `NOT_TESTED`. Una especificación primaria de interfaz puede
+fundamentar un candidato de serialización bajo #650, no validar la máquina.
 
 ## Vocabulario de procedencia de un dato
 
 | Etiqueta | Significado |
 |---|---|
 | `CLIENT_CONFIRMED` | confirmado con evidencia de campo de la máquina del cliente (foto, archivo, readback u operador) |
-| `OWNER_CONFIRMED` | valor provisto por el owner de Granete (p. ej. modelo); requiere confirmación de campo antes de publicar un `MachineProfile` |
+| `OWNER_CONFIRMED` | valor provisto por el owner de Granete (p. ej. modelo); requiere confirmación de campo antes de publicar capacidades de un `MachineProfile` productivo |
 | `FIELD_VERIFICATION_REQUIRED` | desconocido; prohibido llenarlo desde conocimiento general del mercado |
 | `PUBLIC_REFERENCE_ONLY` | dato de documentación pública/fabricante/terceros; **nunca es validación** y jamás se promueve a `CLIENT_CONFIRMED` sin evidencia de campo |
+
+Las clasificaciones documentales de la investigación #650 no crean estados de
+negocio ni cambian este vocabulario persistido.
 
 ## Reglas duras del pack
 
@@ -80,6 +90,10 @@ nunca promueve `NOT_TESTED`.
 
 ## Infraestructura común de validación
 
+- [Investigación y plan PTX/CADmatic 4](./ptx-cadmatic4/README.md) — #650:
+  fuentes primarias y campos/códigos, programa de corte único para preview y
+  PTX, ejemplos parciales y comprobador matemático. Preparación documental;
+  no entrega runtime, cocinas ni evidencia de máquina. Plan activo A → B.
 - Auditoría del PTX actual, fixture sintético congelado `fixture-board-001` r1
   (golden con SHA-256), expected readback, contrato de comparación y runbook
   operator-safe: [`ptx-validation.md`](./ptx-validation.md) — preparación de

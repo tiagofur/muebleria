@@ -1,0 +1,80 @@
+{
+  "package": "granete-ptx-cadmatic4-research",
+  "documentDate": "2026-09-10",
+  "repository": "tiagofur/muebleria",
+  "repositoryCommit": "b3efd4191526010e440aafe20e80378f21615161",
+  "status": "RESEARCH_AND_SCOPED_OFFLINE_CHECKS_ONLY",
+  "notIncluded": [
+    "Machine-qualified PTX programs",
+    "Five complete kitchen jobs",
+    "Manufacturer manuals",
+    "Licensed CADLink software"
+  ],
+  "files": [
+    {
+      "path": "01_investigacion_y_contrato.md",
+      "bytes": 27394,
+      "sha256": "cb713c3d984433d226105adba92e8d8e8ba92ec598605bc872f564788c97f6ee"
+    },
+    {
+      "path": "02_plan_de_implementacion.md",
+      "bytes": 17511,
+      "sha256": "feb655e121a6562ddeafba78bb8721e8b2d6efc80ae2a43c7376472d150eb8a8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1775,
+      "sha256": "2d392dd356970caa92c7555d62504fbcf635e42404642cd945f5d78a909b7475"
+    },
+    {
+      "path": "examples/01_expected_trace.json",
+      "bytes": 2721,
+      "sha256": "7590f2865447f5682f2d92ff7d22975601f5eef059337c9ce2ad581c8f505c7f"
+    },
+    {
+      "path": "examples/01_recorte_tres_fases.ptx.txt",
+      "bytes": 136,
+      "sha256": "177240080e8d60b328079721db3bfbd8f04d19790242f23ebad3fbad859cd91b"
+    },
+    {
+      "path": "examples/02_prefijo_identidad.ptx.txt",
+      "bytes": 305,
+      "sha256": "85cd80a9bbdfdb5f7f2d780d538d9febf103284b12290dac63c97e984688c469"
+    },
+    {
+      "path": "examples/03_jerarquia_y_secuencia.ptx.txt",
+      "bytes": 178,
+      "sha256": "48dd0745a73833ebe1b5cdcc25205ed9a3bee11c510fb8bd7c0e8f03dbbd37be"
+    },
+    {
+      "path": "examples/04_retazo_sin_pasada.ptx.txt",
+      "bytes": 77,
+      "sha256": "a87e4540cee9f346cf37a0ede1a6974b264b8a1e16c4cc03f8ac71a98b462218"
+    },
+    {
+      "path": "examples/05_vector_auxiliar.ptx.txt",
+      "bytes": 38,
+      "sha256": "3ef2263369a4b4e749e048687eea47313441493322bcdf4b801b3e6c92efd330"
+    },
+    {
+      "path": "examples/README.md",
+      "bytes": 2462,
+      "sha256": "3d296ae754c384ccaef07de674f8116a6bc6c3f67e04fc7fe11a218e9b3f1c05"
+    },
+    {
+      "path": "validation/counterexample.json",
+      "bytes": 1123,
+      "sha256": "8db54172a0ad58090a7102f20ad1fd1d2075d1ae7c205ef18258cc62da17f333"
+    },
+    {
+      "path": "validation/verification_result.json",
+      "bytes": 951,
+      "sha256": "2524340c3b17f8f55f97e1a6008c611e084b60b90cf7a2b6f940bdb7176a1659"
+    },
+    {
+      "path": "validation/verify_examples.py",
+      "bytes": 5286,
+      "sha256": "d65916264a16d20b9659415ceaea1ff43e87ba639e920ea9136bb33f011159b6"
+    }
+  ]
+}
