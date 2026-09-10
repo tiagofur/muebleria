@@ -348,7 +348,7 @@ func TestRequote_NoCommercialChanges_Rejected(t *testing.T) {
 		}
 		fiID = instance.ID
 
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: "40000000-0000-0000-0000-0000000000c1",
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{FurnitureInstanceID: fiID, Parameters: map[string]any{"widthMm": 600.0}},
@@ -436,7 +436,7 @@ func TestRequote_PureMove_NeverCreatesCommercialRevision(t *testing.T) {
 		}
 		fiID = instance.ID
 
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: "40000000-0000-0000-0000-0000000000c2",
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{FurnitureInstanceID: fiID, Parameters: map[string]any{"widthMm": 600.0}},

@@ -441,6 +441,12 @@ func TestQuoteCommercialSnapshot_MissingFailsClosed(t *testing.T) {
 		VALUES ('54000000-0000-0000-0000-0000000000c1', '`+rlsOrgA+`', '`+csProject+`', 'manual', 'active')`); err != nil {
 		t.Fatalf("seed legacy furniture instance: %v", err)
 	}
+	// The migration suite proves this shape is created before 000130. This
+	// current-schema fixture temporarily bypasses only the new INSERT guard to
+	// exercise the application and transition behavior of that preserved row.
+	if _, err := fx.admin.Exec(context.Background(), `ALTER TABLE quote_revisions DISABLE TRIGGER protect_quote_revisions_immutable`); err != nil {
+		t.Fatalf("disable trigger for legacy fixture: %v", err)
+	}
 	var legacy *domain.QuoteRevision
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		var err error
@@ -453,6 +459,9 @@ func TestQuoteCommercialSnapshot_MissingFailsClosed(t *testing.T) {
 		})
 		return err
 	})
+	if _, enableErr := fx.admin.Exec(context.Background(), `ALTER TABLE quote_revisions ENABLE TRIGGER protect_quote_revisions_immutable`); enableErr != nil {
+		t.Fatalf("re-enable trigger after legacy fixture: %v", enableErr)
+	}
 	if err != nil {
 		t.Fatalf("seed legacy draft: %v", err)
 	}

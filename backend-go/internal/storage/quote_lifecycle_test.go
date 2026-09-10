@@ -113,6 +113,55 @@ func createPublishedFixtureQuoteRevision(ctx context.Context, store *storage.Pos
 	return store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "published"})
 }
 
+// createFixtureQuoteRevision keeps lower-level Digital Thread tests honest
+// after #642: new rows always carry canonical commercial authority and closed
+// states are reached through lifecycle transitions rather than fabricated by
+// INSERT. Production paths still build their real priced snapshot.
+func createFixtureQuoteRevision(ctx context.Context, store *storage.PostgresStore, cmd storage.CreateQuoteRevisionCommand) (*domain.QuoteRevision, error) {
+	if cmd.CommercialSnapshot == nil && len(cmd.Items) == 0 {
+		instance, err := store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID: cmd.ProjectID,
+			Origin:    domain.FurnitureInstanceOriginManual,
+		})
+		if err != nil {
+			return nil, err
+		}
+		cmd.Items = []storage.CreateQuoteRevisionItemCommand{{
+			FurnitureInstanceID: instance.ID,
+			LifecycleStatus:     "active",
+		}}
+	}
+	if cmd.CommercialSnapshot == nil {
+		cmd.CommercialSnapshot = fixtureCommercialSnapshot(cmd.ProjectID, cmd.Items)
+	}
+	desiredStatus := cmd.Status
+	if desiredStatus == "" {
+		// Preserve the historical repository default while satisfying the new
+		// insert-draft-only invariant.
+		desiredStatus = "published"
+	}
+	if desiredStatus == "draft" {
+		return store.CreateQuoteRevision(ctx, cmd)
+	}
+	if desiredStatus != "published" && desiredStatus != "accepted" && desiredStatus != "superseded" {
+		return store.CreateQuoteRevision(ctx, cmd)
+	}
+	cmd.Status = "draft"
+	revision, err := store.CreateQuoteRevision(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	revision, err = store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "published"})
+	if err != nil || desiredStatus == "published" {
+		return revision, err
+	}
+	revision, err = store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "accepted"})
+	if err != nil || desiredStatus == "accepted" {
+		return revision, err
+	}
+	return store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "superseded"})
+}
+
 func createInitialRevision(t *testing.T, fx *quoteLifecycleFixture) *storage.CreateInitialQuoteRevisionResult {
 	t.Helper()
 	var result *storage.CreateInitialQuoteRevisionResult

@@ -31,9 +31,55 @@ ALTER TABLE quote_revisions
     ADD COLUMN published_at TIMESTAMPTZ NULL,
     ADD COLUMN accepted_at TIMESTAMPTZ NULL;
 
--- Database backstop for direct SQL writers. Application validation remains
--- richer (cross-field sums and exact identity binding), while PostgreSQL
--- rejects payloads that are not even the canonical v1 envelope.
+-- Database backstop for direct SQL writers. PostgreSQL validates both the v1
+-- envelope and its amount authority; a structurally present but commercially
+-- empty/corrupt payload cannot cross the lifecycle boundary.
+CREATE OR REPLACE FUNCTION valid_quote_commercial_breakdown_v1(amounts JSONB)
+RETURNS BOOLEAN
+LANGUAGE SQL
+IMMUTABLE
+AS $$
+    SELECT CASE WHEN jsonb_typeof(amounts) = 'object'
+                 AND jsonb_typeof(amounts->'materials_cost') = 'number'
+                 AND jsonb_typeof(amounts->'edge_total') = 'number'
+                 AND jsonb_typeof(amounts->'hardware_total') = 'number'
+                 AND jsonb_typeof(amounts->'direct_cost') = 'number'
+                 AND jsonb_typeof(amounts->'labor_modular') = 'number'
+                 AND jsonb_typeof(amounts->'labor_fixed_cost') = 'number'
+                 AND jsonb_typeof(amounts->'margin_factor') = 'number'
+                 AND jsonb_typeof(amounts->'sale_price') = 'number'
+           THEN (amounts->>'materials_cost')::numeric >= 0
+             AND (amounts->>'edge_total')::numeric >= 0
+             AND (amounts->>'hardware_total')::numeric >= 0
+             AND (amounts->>'direct_cost')::numeric >= 0
+             AND (amounts->>'labor_modular')::numeric >= 0
+             AND (amounts->>'labor_fixed_cost')::numeric >= 0
+             AND (amounts->>'margin_factor')::numeric > 0
+             AND (amounts->>'sale_price')::numeric >= 0
+           ELSE FALSE END;
+$$;
+
+CREATE OR REPLACE FUNCTION valid_quote_commercial_line_amounts_v1(amounts JSONB)
+RETURNS BOOLEAN
+LANGUAGE SQL
+IMMUTABLE
+AS $$
+    SELECT CASE WHEN jsonb_typeof(amounts) = 'object'
+                 AND jsonb_typeof(amounts->'materialsCost') = 'number'
+                 AND jsonb_typeof(amounts->'edgeTotal') = 'number'
+                 AND jsonb_typeof(amounts->'hardwareTotal') = 'number'
+                 AND jsonb_typeof(amounts->'directCost') = 'number'
+                 AND jsonb_typeof(amounts->'laborModular') = 'number'
+                 AND jsonb_typeof(amounts->'salePrice') = 'number'
+           THEN (amounts->>'materialsCost')::numeric >= 0
+             AND (amounts->>'edgeTotal')::numeric >= 0
+             AND (amounts->>'hardwareTotal')::numeric >= 0
+             AND (amounts->>'directCost')::numeric >= 0
+             AND (amounts->>'laborModular')::numeric >= 0
+             AND (amounts->>'salePrice')::numeric >= 0
+           ELSE FALSE END;
+$$;
+
 CREATE OR REPLACE FUNCTION valid_quote_commercial_snapshot_v1(payload JSONB)
 RETURNS BOOLEAN
 LANGUAGE SQL
@@ -49,7 +95,7 @@ AS $$
        AND jsonb_typeof(payload->'project') = 'object'
        AND NULLIF(BTRIM(payload#>>'{project,id}'), '') IS NOT NULL
        AND NULLIF(BTRIM(payload#>>'{project,name}'), '') IS NOT NULL
-       AND jsonb_typeof(payload->'breakdown') = 'object'
+       AND valid_quote_commercial_breakdown_v1(payload->'breakdown')
        AND jsonb_typeof(payload->'lines') = 'array'
        AND jsonb_array_length(payload->'lines') > 0
        AND jsonb_typeof(payload->'units') = 'array'
@@ -65,7 +111,7 @@ AS $$
               OR COALESCE(jsonb_typeof(line->'furnitureInstanceIds'), '') <> 'array'
               OR jsonb_array_length(line->'furnitureInstanceIds') = 0
 		      OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(line->'furnitureInstanceIds') AS id WHERE id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-              OR COALESCE(jsonb_typeof(line->'amounts'), '') <> 'object'
+              OR NOT valid_quote_commercial_line_amounts_v1(line->'amounts')
        )
        AND NOT EXISTS (
            SELECT 1 FROM jsonb_array_elements(payload->'units') AS unit
@@ -78,7 +124,37 @@ AS $$
               OR NULLIF(BTRIM(unit->>'moduleName'), '') IS NULL
               OR COALESCE(unit->>'lifecycleStatus', '') NOT IN ('active', 'removed', 'cancelled')
               OR COALESCE(jsonb_typeof(unit->'options'), '') <> 'array'
-       );
+       )
+       AND CASE
+           WHEN valid_quote_commercial_breakdown_v1(payload->'breakdown')
+            AND NOT EXISTS (
+                SELECT 1 FROM jsonb_array_elements(payload->'lines') AS line
+                WHERE NOT valid_quote_commercial_line_amounts_v1(line->'amounts')
+            )
+           THEN (
+               SELECT ABS(SUM((line#>>'{amounts,materialsCost}')::numeric)
+                              - (payload#>>'{breakdown,materials_cost}')::numeric)
+                          <= GREATEST(1, ABS((payload#>>'{breakdown,materials_cost}')::numeric)) * 0.000000001
+                  AND ABS(SUM((line#>>'{amounts,edgeTotal}')::numeric)
+                              - (payload#>>'{breakdown,edge_total}')::numeric)
+                          <= GREATEST(1, ABS((payload#>>'{breakdown,edge_total}')::numeric)) * 0.000000001
+                  AND ABS(SUM((line#>>'{amounts,hardwareTotal}')::numeric)
+                              - (payload#>>'{breakdown,hardware_total}')::numeric)
+                          <= GREATEST(1, ABS((payload#>>'{breakdown,hardware_total}')::numeric)) * 0.000000001
+                  AND ABS(SUM((line#>>'{amounts,directCost}')::numeric)
+                              - (payload#>>'{breakdown,direct_cost}')::numeric)
+                          <= GREATEST(1, ABS((payload#>>'{breakdown,direct_cost}')::numeric)) * 0.000000001
+                  AND ABS(SUM((line#>>'{amounts,laborModular}')::numeric)
+                              - (payload#>>'{breakdown,labor_modular}')::numeric)
+                          <= GREATEST(1, ABS((payload#>>'{breakdown,labor_modular}')::numeric)) * 0.000000001
+                  AND ABS(SUM((line#>>'{amounts,salePrice}')::numeric)
+                              + (payload#>>'{breakdown,labor_fixed_cost}')::numeric
+                              - (payload#>>'{breakdown,sale_price}')::numeric)
+                          <= GREATEST(1, ABS((payload#>>'{breakdown,sale_price}')::numeric)) * 0.000000001
+               FROM jsonb_array_elements(payload->'lines') AS line
+           )
+           ELSE FALSE
+       END;
 $$;
 
 CREATE OR REPLACE FUNCTION protect_quote_revision_immutability()
@@ -90,7 +166,12 @@ BEGIN
         RAISE EXCEPTION 'quote_revisions cannot be deleted once created';
     END IF;
 
-    IF TG_OP = 'INSERT' AND NEW.commercial_snapshot IS NOT NULL THEN
+    IF TG_OP = 'INSERT' THEN
+        -- Existing rows are the only legacy exception: they predate this
+        -- trigger. Every post-migration INSERT must carry canonical authority.
+        IF NEW.commercial_snapshot IS NULL THEN
+            RAISE EXCEPTION 'new quote_revision requires commercial_snapshot; NULL is reserved for pre-#642 legacy rows';
+        END IF;
         IF NOT valid_quote_commercial_snapshot_v1(NEW.commercial_snapshot) THEN
             RAISE EXCEPTION 'quote_revision commercial_snapshot is not a valid granete.quote-commercial-snapshot.v1 payload';
         END IF;
@@ -144,8 +225,10 @@ BEGIN
             -- #642 fail-closed backstop: publishing requires the immutable
             -- commercial snapshot (legacy drafts must re-quote, not publish
             -- unpriced history).
-            IF OLD.status = 'draft' AND NEW.status = 'published' AND NEW.commercial_snapshot IS NULL THEN
-                RAISE EXCEPTION 'draft quote_revision without commercial_snapshot cannot be published';
+            IF OLD.status = 'draft' AND NEW.status = 'published'
+                    AND (NEW.commercial_snapshot IS NULL
+                         OR NOT valid_quote_commercial_snapshot_v1(NEW.commercial_snapshot)) THEN
+                RAISE EXCEPTION 'draft quote_revision without a valid commercial_snapshot cannot be published';
             END IF;
             IF OLD.status = 'superseded' THEN
                 RAISE EXCEPTION 'superseded quote_revision cannot transition to %', NEW.status;

@@ -50,6 +50,22 @@
   + API quote enfocada PASS; OpenAPI check/typecheck PASS; browser gate real
   Chromium+Go+PostgreSQL 4/4 PASS (29.5 s). Full Go exacto PASS (storage 336.081 s; pilotreadiness 235.452 s).
 
+# Issue #642 — PR #649 second focused correction
+
+- Inicio: 2026-09-10 sobre head exacto
+  `85beb97683b405481e98328cd4e5b9b92ea49c4f`; misma rama/PR, sin merge,
+  cierre, autoaprobación ni cambios de labels.
+- Alcance: bloquear TODO INSERT NULL posterior a 000130 sin alterar las filas
+  legacy pre-migración; validar semántica monetaria y sumas en PostgreSQL;
+  impedir publish de bytes corruptos; cerrar inferencia de labor fijo en la
+  proyección cost-blind; sincronizar contrato/evidencia.
+- Resultado: nuevos INSERT requieren snapshot canónico draft; legado existente
+  conserva NULL y continúa fail-closed. Breakdown y amounts vacíos o
+  irreconciliables son inválidos en DB. La proyección sin permiso mantiene el
+  total comercial y oculta todos los montos de línea, incluido line salePrice.
+- Evidencia enfocada: migración fresh/upgrade/down/replay, app-role NULL/corrupt
+  y API non-inference PASS. Ver reporte de implementación para gates finales.
+
 # Issue #641 — Design inspector async and accessibility correction
 
 - Corrección autorizada sobre PR #648, rama `fix/641-design-inspector-async-a11y`,

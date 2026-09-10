@@ -146,8 +146,15 @@ func TestHandleProjectQuoteRevisions_CommercialSnapshotCostRedaction(t *testing.
 			t.Fatalf("line cost field %s must be redacted, got %v", field, amounts[field])
 		}
 	}
-	if amounts["salePrice"].(float64) != 398.5 {
-		t.Fatalf("line salePrice is commercial and must stay, got %v", amounts["salePrice"])
+	if amounts["salePrice"].(float64) != 0 {
+		t.Fatalf("line salePrice must be redacted to prevent fixed-labor inference, got %v", amounts["salePrice"])
+	}
+	// Keeping exact line sale prices would reveal the hidden fixed labor as
+	// global salePrice - sum(line salePrice). The cost-blind projection retains
+	// the quote total but exposes no operands that reconstruct the hidden 100.
+	lineSaleSum := amounts["salePrice"].(float64)
+	if inferred := breakdown["salePrice"].(float64) - lineSaleSum; inferred == 100 {
+		t.Fatalf("cost-blind arithmetic reconstructed fixed labor: %v", inferred)
 	}
 }
 

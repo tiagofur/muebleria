@@ -431,7 +431,7 @@ func TestDigitalThreadE2E_ScenarioB_QuantityGreaterThanOne(t *testing.T) {
 			t.Fatalf("Digital Thread contract invariant C1 violated: QuoteLine ID used as physical unit identity")
 		}
 
-		qRev, err := fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Qty=3 Baseline",
 			Items: []storage.CreateQuoteRevisionItemCommand{
@@ -1089,7 +1089,7 @@ func TestDigitalThreadE2E_NegativeProofs(t *testing.T) {
 
 	// 1. Setup: Project A quote revision in Org A.
 	err := fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
-		qRevA, err := fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+		qRevA, err := createFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Project A Quote",
 			Items:     []storage.CreateQuoteRevisionItemCommand{},
@@ -1183,7 +1183,7 @@ func TestDigitalThreadE2E_NegativeProofs(t *testing.T) {
 	// 4. DB Immutability Triggers: direct UPDATE or DELETE on accepted quote revision is blocked at DB level.
 	var acceptedQuoteID string
 	err = fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
-		q, err := fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+		q, err := createFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: qRevAID,
 			Notes:          "Immutable Quote",

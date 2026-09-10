@@ -61,6 +61,8 @@ ALTER TABLE quote_revisions
     DROP COLUMN IF EXISTS accepted_at;
 
 DROP FUNCTION IF EXISTS valid_quote_commercial_snapshot_v1(JSONB);
+DROP FUNCTION IF EXISTS valid_quote_commercial_line_amounts_v1(JSONB);
+DROP FUNCTION IF EXISTS valid_quote_commercial_breakdown_v1(JSONB);
 
 UPDATE rls_policy_inventory
 SET rationale = 'Project quote revisions are historical snapshots; mutations are restricted strictly to lifecycle transitions (#393 / ADR-0003)',

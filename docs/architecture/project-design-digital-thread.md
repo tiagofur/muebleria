@@ -825,8 +825,11 @@ Reglas duras:
    fijo, que se aplica una sola vez a nivel snapshot).
 5. **Costos**: el read model del snapshot aplica la misma redacción de costos
    (`RedactQuoteBreakdown`) que el resto de la plataforma para actores sin
-   permiso de costos; `salePrice` es comercial y permanece.
-   La redacción también cubre los montos de costo por línea.
+   permiso de costos. El `salePrice` global es comercial y permanece, pero
+   TODOS los montos de línea —incluido su `salePrice`— se proyectan a cero: si
+   se conservaran las ventas de línea, `salePrice global - suma de líneas`
+   revelaría el labor fijo oculto. La agrupación, cantidad, descriptores y total
+   comercial exacto siguen disponibles.
 6. Campos no inventados: sin impuestos (no existen en el modelo runtime) y sin
    descuentos congelados adicionales (los tiers TS no tienen fuente persistida;
    el breakdown congelado ES el monto autoritativo).

@@ -244,8 +244,9 @@ func commercialAmountsEqual(a, b float64) bool {
 }
 
 // RedactQuoteCommercialSnapshot returns a copy with the workshop cost stack
-// zeroed for cost-blind actors (same policy as RedactQuoteBreakdown: sale
-// price is commercial and stays visible). The original stays authoritative.
+// zeroed for cost-blind actors. The exact total sale price and line grouping
+// remain useful, but every line amount (including salePrice) is hidden: keeping
+// line sale prices would reveal fixed labor as total minus the line sum.
 func RedactQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) *QuoteCommercialSnapshot {
 	if snapshot == nil {
 		return nil
@@ -259,6 +260,7 @@ func RedactQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) *QuoteComm
 		redacted.Lines[i].Amounts.HardwareTotal = 0
 		redacted.Lines[i].Amounts.DirectCost = 0
 		redacted.Lines[i].Amounts.LaborModular = 0
+		redacted.Lines[i].Amounts.SalePrice = 0
 	}
 	return &redacted
 }

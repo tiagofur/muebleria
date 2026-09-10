@@ -475,7 +475,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 	// 2. Quote not accepted: a fresh quote revision stays draft.
 	var draftQuoteID string
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		q, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fx.projectID,
 			Notes:     "Q4 draft",
 			Items: []storage.CreateQuoteRevisionItemCommand{

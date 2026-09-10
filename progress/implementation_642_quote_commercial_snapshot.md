@@ -110,17 +110,20 @@ marcador `schema` versiona el payload.
 ## Inmutabilidad
 
 - Trigger DB endurecido (`protect_quote_revision_immutability`, 000130):
-  valida INSERT directo del envelope v1 (también bajo `granete_app`), exige que
-  el snapshot canónico nazca draft sin timestamps y deja NULL sólo como
-  compatibilidad legacy; `commercial_snapshot` inmutable una vez escrito (ni rewrite ni inyección
+  TODO INSERT posterior a la migración exige un snapshot v1 semánticamente
+  válido (también bajo `granete_app`), draft y sin timestamps. El validador DB
+  exige los ocho montos del breakdown, los seis montos de cada línea,
+  no-negatividad/margen positivo y reconciliación de sumas; un objeto vacío no
+  cuenta como autoridad. Sólo las filas que YA existían al aplicar 000130
+  conservan NULL. `commercial_snapshot` es inmutable (ni rewrite ni inyección
   NULL→valor); `published_at` fijable SOLO por draft→published (NULL→valor);
   `accepted_at` SOLO por published→accepted; superseding preserva ambos.
 - Backstop fail-closed: `draft → published` con snapshot NULL es rechazado por
   el trigger (legacy no publica historia sin precio).
 - Writer único (#393) `CreateQuoteRevision` persiste el snapshot validado;
-  comandos de producción (initial/requote) SIEMPRE lo adjuntan; NULL sólo se
-  tolera para filas legacy/estilo-legacy (seeds) que fallan cerrado en publish
-  y lectura.
+  comandos de producción (initial/requote) SIEMPRE lo adjuntan. No se admiten
+  nuevos seeds NULL después de 000130; sólo el legado preexistente permanece
+  snapshot-less y falla cerrado en publish/lectura.
 - `UpdateQuoteRevisionStatus` fija timestamps en la transición exacta y gate
   tipado `ErrQuoteCommercialSnapshotMissing` en draft→publish sin snapshot.
 
@@ -141,8 +144,10 @@ marcador `schema` versiona el payload.
   actualizado (rationale + policy_version, restaurado en down).
 - `GET /api/projects/{id}/quote-revisions` aplica la MISMA redacción de costos
   que el resto de la plataforma (`actorCanViewCosts` →
-  `RedactQuoteCommercialSnapshot`: costos/margen a 0, `salePrice` comercial
-  permanece, descriptores/moneda intactos).
+  `RedactQuoteCommercialSnapshot`: costos/margen globales a 0, `salePrice`
+  global comercial permanece y TODOS los montos de línea, incluido su
+  `salePrice`, quedan en 0). Así el labor fijo no puede inferirse como total
+  menos suma de líneas; agrupación/cantidad/descriptores/moneda permanecen.
 - Cross-tenant: 404 uniforme (store) + RLS niega SQL directo bajo app role con
   contexto org B (probado).
 
@@ -174,28 +179,29 @@ Storage/domain/API (13 tests `TestQuoteCommercialSnapshot*` más pruebas API):
   distintas de múltiples opciones producen JSON idéntico y no mutan el input.
 - Publish/accept, retry y concurrencia mantienen snapshot/timestamps/audit
   inmutables; cross-tenant retorna 404 uniforme y RLS app-role ve cero filas.
-- INSERT SQL directo de snapshot corrupto falla en PostgreSQL. El upgrade real
+- INSERT SQL directo NULL o con snapshot corrupto falla en PostgreSQL. Un draft
+  corrupto simulado por restore privilegiado tampoco puede publicarse bajo
+  `granete_app`. El upgrade real
   siembra draft/published/accepted antes de 000130, preserva identidad/status/
   created_at con snapshot/timestamps NULL, prueba fail-closed, FORCE RLS,
   down y replay. `granete_app` no puede insertar ni envelope inválido ni
   snapshot canónico en estado distinto de draft.
 - Create HTTP con la misma idempotency key ejecuta una vez y reenvía status,
   header y bytes exactos, incluyendo lines/quantity/quoteLineId. List/detail y
-  lifecycle mapean el mismo contrato; redacción cubre costos globales y de
-  línea sin ocultar salePrice.
+  lifecycle mapean el mismo contrato. La regresión API prueba que el actor
+  cost-blind conserva el total comercial pero NO puede reconstruir labor fijo
+  desde los montos de línea.
 
 ## Tamaño (additions + deletions, no neto)
 
-El diff excede el tope original y usa la excepción cohesiva autorizada por el
-owner. Los artifacts generados se separan, pero NO se ocultan del total:
+El diff excede el alcance de la autorización de tamaño anterior; el incremento
+autorado requiere una decisión nueva del owner. No se ocultan artifacts del total:
 
-- Total PR contra base: **3433 additions + 87 deletions = 3520 líneas**.
-- Autorado (producción + tests + docs): **3282 + 66 = 3348 líneas**.
+- Total PR contra base: **3713 additions + 127 deletions = 3840 líneas**.
+- Autorado (producción + tests + docs): **3562 + 106 = 3668 líneas**.
 - Generado OpenAPI Go/TS: **151 + 21 = 172 líneas**.
-- Ronda correctiva contra `4661745`: **1071 additions + 268 deletions =
-  1339 líneas** (de ellas, generated 50 + 12 = 62; autorado 1277).
-- La cifra anterior de “≈987 netas” era incorrecta porque restaba deletes y
-  omitía categorías; este reporte usa additions + deletions.
+- Rondas: `4661745`: **1071 + 268 = 1339**; `85beb97`: **330 + 90 =
+  420 líneas** (generated 2; autorado 418).
 
 ## Pendiente / siguientes slices
 
@@ -207,7 +213,7 @@ owner. Los artifacts generados se separan, pero NO se ocultan del total:
 
 - `./init.sh` PASS (preflight).
 - `go vet ./...` PASS.
-- `GOFLAGS='-p=1' go test ./... -count=1`: PASS (storage 336.081 s; pilotreadiness 235.452 s; cero fallos).
+- `GOFLAGS='-p=1' go test ./...`: PASS (storage 282.998 s; pilotreadiness 220.970 s; cero fallos).
 - Focused: domain + **13/13** `TestQuoteCommercialSnapshot*` (incl. upgrade
   pre-000130, down/replay y app-role INSERT) + API quote/idempotency +
   regresiones lifecycle/requote/release/Digital Thread PASS.
@@ -215,7 +221,7 @@ owner. Los artifacts generados se separan, pero NO se ocultan del total:
 - `pnpm test`: verde — UI 1.690, Web 442, Mobile 73, Desktop 17 (más storage/
   domain/excel en el mismo run, EXIT 0).
 - Browser gate real (`scripts/organization-browser-gate.sh
-  tests/organization/project-reconciliation.spec.ts`): **4/4 PASS (29.5 s)** —
+  tests/organization/project-reconciliation.spec.ts`): **4/4 PASS (26.6 s)** —
   Chromium + Go + PostgreSQL efímero; el golden path comercial completo (Q1 →
   publish → accept → requote Q2 → aprobación → release → tenant isolation)
   funciona con la captura del snapshot.
@@ -223,8 +229,9 @@ owner. Los artifacts generados se separan, pero NO se ocultan del total:
 
 ## Publicación
 
-- Owner (tiagofur) autorizó el label `status:approved` y la excepción de
-  tamaño (comentario en la issue #642, 2026-09-10) antes de publicar.
+- Issue #642 conserva aprobación del owner. La excepción previa NO cubre el
+  nuevo total autorado; falta decisión nueva y el PR permanece sin
+  `size:exception`.
 - PR: `feat(quote): freeze canonical commercial snapshot per QuoteRevision`,
   primera línea del body `Refs #642`, label único `type:feature`, sin cierre.
 

@@ -158,7 +158,7 @@ func TestReconciliation_SyncedAndModified(t *testing.T) {
 		fi2 := matRes.Instances[1].FurnitureInstanceID
 
 		// 3. Create immutable QuoteRevision Q1
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Revision Q1",
 			Items: []storage.CreateQuoteRevisionItemCommand{
@@ -285,7 +285,7 @@ func TestReconciliation_NegativeProofE_SameLookingDifferentIdentity(t *testing.T
 		modeledFI = fiM.ID
 
 		// QuoteRevision contains quotedFI
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{
@@ -410,7 +410,7 @@ func TestReconciliation_QuantityGreaterThanOne_PartialPlacement(t *testing.T) {
 		fi3 = i3.ID
 
 		// Quote contains all 3
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{FurnitureInstanceID: fi1, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, LifecycleStatus: "active"},
@@ -513,7 +513,7 @@ func TestReconciliation_CrossProjectRejected(t *testing.T) {
 		}
 		designRevB = rev.ID
 
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 		})
 		if err != nil {
@@ -563,7 +563,7 @@ func TestReconciliation_ImmutabilityNegativeProof(t *testing.T) {
 			return err
 		}
 
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{
@@ -690,7 +690,7 @@ func TestReconciliation_MultiOrgRLS(t *testing.T) {
 		}
 		designRevID = rev.ID
 
-		qRev, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRev, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiProjectAOnly,
 		})
 		if err != nil {
@@ -736,7 +736,7 @@ func TestReconciliation_HistoricalQuote_OldQuoteRevisionStaysOld(t *testing.T) {
 		fiID = fi.ID
 
 		// 2. Q1: FI-001 width = 600
-		q1, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q1, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Quote Q1 - width 600",
 			Items: []storage.CreateQuoteRevisionItemCommand{
@@ -754,7 +754,7 @@ func TestReconciliation_HistoricalQuote_OldQuoteRevisionStaysOld(t *testing.T) {
 		q1ID = q1.ID
 
 		// 3. Q2: FI-001 width = 800 (based on the exact current latest Q1)
-		q2, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q2, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: q1ID,
 			Notes:          "Quote Q2 - width 800",
@@ -845,7 +845,7 @@ func TestReconciliation_HistoricalQuote_OldQuoteRevisionStaysOld(t *testing.T) {
 
 	// 7. Mutate current draft / create Q3 with width = 999 (based on the exact current latest Q2)
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		_, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: q2ID,
 			Notes:          "Quote Q3 - current edits",
@@ -905,7 +905,7 @@ func TestReconciliation_HistoricalRemoval_LaterCancellationDoesNotRewriteOld(t *
 		fiID = fi.ID
 
 		// Q1 contains active FI-001
-		q1, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q1, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{
@@ -922,7 +922,7 @@ func TestReconciliation_HistoricalRemoval_LaterCancellationDoesNotRewriteOld(t *
 		q1ID = q1.ID
 
 		// Q_removed explicitly records FI-001 as cancelled (based on the exact current latest Q1)
-		qRem, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		qRem, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: q1ID,
 			Items: []storage.CreateQuoteRevisionItemCommand{
@@ -1040,7 +1040,7 @@ func TestReconciliation_DefinitionVersion(t *testing.T) {
 		fiID = fi.ID
 
 		// Quote with definition version 4
-		q, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{
@@ -1138,7 +1138,7 @@ func TestReconciliation_CorruptSnapshot_FailsClosed(t *testing.T) {
 			return err
 		}
 
-		q, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Items: []storage.CreateQuoteRevisionItemCommand{
 				{
@@ -1287,7 +1287,7 @@ func TestQuoteRevision_Atomicity_RollbackOnFailedItem(t *testing.T) {
 
 	quoteRevID := "70000000-0000-0000-0000-000000000077"
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		_, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ID:        quoteRevID,
 			ProjectID: fiSharedProject,
 			Notes:     "Atomic rollback test",
@@ -1343,7 +1343,7 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 	var q1 *domain.QuoteRevision
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		q1, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q1, err = createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Base Q1",
 			CreatedBy: rlsUserA,
@@ -1378,7 +1378,7 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 			var r *domain.QuoteRevision
 			err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 				var err error
-				r, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+				r, err = createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 					ProjectID:      fiSharedProject,
 					BaseRevisionID: q1.ID, // Both workers author from the same Q1.
 					Notes:          fmt.Sprintf("Concurrent worker %d", workerID),
@@ -1430,7 +1430,7 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 			var r *domain.QuoteRevision
 			err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 				var err error
-				r, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+				r, err = createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 					ProjectID:      fiSharedProject,
 					BaseRevisionID: q1.ID, // Stale! Latest is already Q2.
 					Notes:          fmt.Sprintf("Conflict worker %d", workerID),
@@ -1462,7 +1462,7 @@ func TestQuoteRevision_Concurrency_SafeRevisionNumbering(t *testing.T) {
 	// latest (Q2): the retry succeeds and allocates Q3.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		q3, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q3, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: winner.ID,
 			Notes:          "Reloaded retry after conflict",
@@ -1506,7 +1506,7 @@ func TestQuoteRevision_Immutability_EnforcedAtDatabaseAndServer(t *testing.T) {
 	var rev *domain.QuoteRevision
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		rev, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		rev, err = createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Status:    "published",
 			Notes:     "Historical published snapshot",
@@ -1674,7 +1674,7 @@ func TestQuoteRevision_BaseRevision_FailClosed(t *testing.T) {
 
 	// 0. No previous revision + base specified → conflict: the FIRST revision must be baseless.
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		_, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: "51000000-0000-0000-0000-0000000000e1",
 			Items:          items(),
@@ -1692,7 +1692,7 @@ func TestQuoteRevision_BaseRevision_FailClosed(t *testing.T) {
 	var q1 *domain.QuoteRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		q1, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q1, err = createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Q1",
 			Items:     items(),
@@ -1710,7 +1710,7 @@ func TestQuoteRevision_BaseRevision_FailClosed(t *testing.T) {
 	var q2 *domain.QuoteRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		q2, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q2, err = createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: q1.ID,
 			Notes:          "Q2 by client B",
@@ -1727,7 +1727,7 @@ func TestQuoteRevision_BaseRevision_FailClosed(t *testing.T) {
 
 	// 3. Client A still holds Q1 (stale): create WITHOUT base → conflict, no Q3.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		_, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Q3 attempted without base",
 			Items:     items(),
@@ -1743,7 +1743,7 @@ func TestQuoteRevision_BaseRevision_FailClosed(t *testing.T) {
 
 	// 4. Client A creates WITH stale base Q1 → conflict, still no Q3.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		_, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: q1.ID,
 			Notes:          "Q3 attempted from stale Q1",
@@ -1761,7 +1761,7 @@ func TestQuoteRevision_BaseRevision_FailClosed(t *testing.T) {
 	// 5. Client A explicitly reloads and bases the new revision on Q2 → Q3 allowed.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		q3, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q3, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: q2.ID,
 			Notes:          "Q3 after explicit reload",
@@ -1834,7 +1834,7 @@ func TestQuoteRevision_StatusTransitions_ExactLifecycle(t *testing.T) {
 	var draftRev *domain.QuoteRevision
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		draftRev, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		draftRev, err = createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:          fiSharedProject,
 			Status:             "draft",
 			CommercialSnapshot: snapshot,
@@ -1911,7 +1911,7 @@ func TestQuoteRevision_StatusTransitions_ExactLifecycle(t *testing.T) {
 	var draft2 *domain.QuoteRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		draft2, err = fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		draft2, err = createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:          fiSharedProject,
 			BaseRevisionID:     draftRev.ID,
 			Status:             "draft",

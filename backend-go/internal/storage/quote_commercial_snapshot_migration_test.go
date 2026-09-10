@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	migrationQuoteOrg      = "a1000000-0000-0000-0000-000000000001"
-	migrationQuoteCustomer = "a2000000-0000-0000-0000-000000000001"
-	migrationQuoteProject  = "a3000000-0000-0000-0000-000000000001"
+	migrationQuoteOrg            = "a1000000-0000-0000-0000-000000000001"
+	migrationQuoteCustomer       = "a2000000-0000-0000-0000-000000000001"
+	migrationQuoteProject        = "a3000000-0000-0000-0000-000000000001"
+	validQuoteCommercialEnvelope = `{"schema":"granete.quote-commercial-snapshot.v1","capturedAt":"2026-09-10T12:00:00Z","currency":"MXN","customer":{"id":"c","name":"Customer"},"project":{"id":"p","name":"Project"},"breakdown":{"materials_cost":10,"edge_total":2,"hardware_total":3,"direct_cost":15,"labor_modular":5,"labor_fixed_cost":7,"margin_factor":1.5,"sale_price":27},"lines":[{"quoteLineId":"62000000-0000-0000-0000-000000000001","quantity":1,"furnitureInstanceIds":["72000000-0000-0000-0000-000000000001"],"amounts":{"materialsCost":10,"edgeTotal":2,"hardwareTotal":3,"directCost":15,"laborModular":5,"salePrice":20}}],"units":[{"furnitureInstanceId":"72000000-0000-0000-0000-000000000001","quoteLineId":"62000000-0000-0000-0000-000000000001","moduleCode":"M","moduleName":"Module","lifecycleStatus":"active","options":[]}]}`
 )
 
 func applyQuoteCommercial130(t *testing.T, pool *pgxpool.Pool) {
@@ -65,13 +66,25 @@ func TestQuoteCommercialSnapshotMigrationFreshAndDirectSQLValidation(t *testing.
 	assertQuoteCommercial130Posture(t, pool)
 	seedQuoteMigrationProject(t, pool)
 	ctx := context.Background()
-	multiOrgExec(t, pool, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status)
-		VALUES ('a4000000-0000-0000-0000-000000000001', '`+migrationQuoteOrg+`', '`+migrationQuoteProject+`', 1, 'draft')`)
-	if _, err := pool.Exec(ctx, `UPDATE quote_revisions SET status='published' WHERE id='a4000000-0000-0000-0000-000000000001'`); err == nil || !strings.Contains(err.Error(), "commercial_snapshot") {
-		t.Fatalf("snapshot-less publish must fail closed, got %v", err)
-	}
 
 	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status)
+		VALUES ('a4000000-0000-0000-0000-000000000001',$1,$2,1,'draft')`, migrationQuoteOrg, migrationQuoteProject)
+	if err == nil || !strings.Contains(err.Error(), "requires commercial_snapshot") {
+		t.Fatalf("app-role post-migration NULL insert must be rejected, got %v", err)
+	}
+	_ = tx.Rollback(ctx)
+
+	tx, err = pool.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,11 +112,44 @@ func TestQuoteCommercialSnapshotMigrationFreshAndDirectSQLValidation(t *testing.
 	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
 		t.Fatal(err)
 	}
-	validEnvelope := `{"schema":"granete.quote-commercial-snapshot.v1","capturedAt":"2026-09-10T12:00:00Z","currency":"MXN","customer":{"id":"c","name":"Customer"},"project":{"id":"p","name":"Project"},"breakdown":{},"lines":[{"quoteLineId":"62000000-0000-0000-0000-000000000001","quantity":1,"furnitureInstanceIds":["72000000-0000-0000-0000-000000000001"],"amounts":{}}],"units":[{"furnitureInstanceId":"72000000-0000-0000-0000-000000000001","quoteLineId":"62000000-0000-0000-0000-000000000001","moduleCode":"M","moduleName":"Module","lifecycleStatus":"active","options":[]}]}`
 	_, err = tx.Exec(ctx, `INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, commercial_snapshot)
-		VALUES ('a4000000-0000-0000-0000-000000000003',$1,$2,3,'accepted',$3::jsonb)`, migrationQuoteOrg, migrationQuoteProject, validEnvelope)
+		VALUES ('a4000000-0000-0000-0000-000000000003',$1,$2,3,'accepted',$3::jsonb)`, migrationQuoteOrg, migrationQuoteProject, validQuoteCommercialEnvelope)
 	if err == nil || !strings.Contains(err.Error(), "must be inserted as draft") {
 		t.Fatalf("app-role invalid canonical lifecycle insert must be rejected, got %v", err)
+	}
+	_ = tx.Rollback(ctx)
+
+	// Simulate corrupt at-rest bytes from a privileged restore. Even if such a
+	// row bypassed INSERT protection, the app role cannot publish it.
+	if _, err := pool.Exec(ctx, `ALTER TABLE quote_revisions DISABLE TRIGGER protect_quote_revisions_immutable`); err != nil {
+		t.Fatal(err)
+	}
+	corruptEnvelope := strings.Replace(validQuoteCommercialEnvelope,
+		`"breakdown":{"materials_cost":10,"edge_total":2,"hardware_total":3,"direct_cost":15,"labor_modular":5,"labor_fixed_cost":7,"margin_factor":1.5,"sale_price":27}`,
+		`"breakdown":{}`, 1)
+	if _, err := pool.Exec(ctx, `INSERT INTO quote_revisions (id,organization_id,project_id,revision_number,status,commercial_snapshot)
+		VALUES ('a4000000-0000-0000-0000-000000000004',$1,$2,4,'draft',$3::jsonb)`, migrationQuoteOrg, migrationQuoteProject, corruptEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE quote_revisions ENABLE TRIGGER protect_quote_revisions_immutable`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err = pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SET LOCAL ROLE granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id',$1,true), set_config('app.user_id',$2,true)`, migrationQuoteOrg, "a5000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(ctx, `UPDATE quote_revisions SET status='published', published_at=NOW()
+		WHERE id='a4000000-0000-0000-0000-000000000004'`)
+	if err == nil || !strings.Contains(err.Error(), "valid commercial_snapshot") {
+		t.Fatalf("app-role corrupt draft publish must fail closed, got %v", err)
 	}
 }
 

@@ -9207,7 +9207,7 @@
       },
       "QuoteCommercialLineAmounts": {
         "type": "object",
-        "description": "Authoritative amount contribution frozen for one QuoteLine. salePrice excludes snapshot-level fixed labor, which is added exactly once in the snapshot breakdown.",
+        "description": "Authoritative amount contribution frozen for one QuoteLine. salePrice excludes snapshot-level fixed labor, which is added exactly once in the snapshot breakdown. For cost-blind actors every line amount is projected to 0, including salePrice, so fixed labor cannot be reconstructed as total minus line sales; the exact quote total remains available as breakdown.salePrice.",
         "additionalProperties": false,
         "required": [
           "materialsCost",
