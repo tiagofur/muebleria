@@ -27,15 +27,6 @@ const (
 	DesignArtifactHealthIntegrityMismatch DesignArtifactHealthStatus = "integrity_mismatch"
 )
 
-func IsValidDesignArtifactHealthStatus(st DesignArtifactHealthStatus) bool {
-	switch st {
-	case DesignArtifactHealthAvailable, DesignArtifactHealthMissing, DesignArtifactHealthIntegrityMismatch:
-		return true
-	default:
-		return false
-	}
-}
-
 var (
 	// ErrArtifactBytesMissing fails closed the signed-read authorization when
 	// the artifact metadata exists but its bytes cannot be found (#640 §7).

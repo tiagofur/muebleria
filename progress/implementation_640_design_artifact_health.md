@@ -1,6 +1,6 @@
 # Issue #640 — Authoritative availability and integrity for DesignRevision artifacts
 
-- Estado: `IMPLEMENTED_PENDING_REVIEW`.
+- Estado: `IMPLEMENTED_PENDING_REVIEW` (corrección R1 de revisión aplicada).
 - Base exacta: `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` (post-merge #636/#638/#646).
 - Rama: `feat/640-design-artifact-health`. Single writer: GLM. Sin merge ni cierre.
 
@@ -95,3 +95,32 @@ canónico (`sha256:sha256-…`).
 - Generado: OpenAPI Go/TS regenerado.
 - Tests: ~600 líneas (domain 3 casos matriz, API 5 suites, UI 6 casos nuevos +
   formatter/health units, E2E 1 spec con 3 escenarios).
+
+## Revisión independiente (read-only) — corrección R1
+
+Veredicto inicial `CHANGES_REQUIRED`. Hallazgos y resolución:
+
+1. **MAJOR — approve endpoints emitían health vacío**: `:approve` y
+   `:approve-for-production` usaban el DTO plano y devolvían
+   `{"status":"","checked_at":""}` (contract-invalid). Corregido: ambos
+   rutan por `toDesignRevisionDTOWithArtifactHealth`; regresión
+   `TestDesignArtifactHealth_ApproveEndpointsEmitValidHealth` (200 +
+   status `available` + checked_at en ambos handlers).
+2. **MINOR — short-circuit por size reclamado pero no implementado**:
+   implementado (`observeDesignArtifactFile` hace stat primero; hash
+   streaming sólo cuando el size coincide).
+3. **MINOR — ventana TOCTOU serve-time no documentada**: documentada como
+   riesgo residual aceptado (TTL grant ≤3 min; endurecer requeriría tocar
+   el media token ver-pinned compartido = R3) junto con el GET directo
+   Authorization (superficie dual #460 preexistente) y la partición por
+   organización para partners cross-org.
+4. **NITs**: revertido el cambio de token no relacionado en
+   `.pd-lineage-connector--orphan`; `.pd-preview-warning` usa
+   `--warning-700`; eliminado `IsValidDesignArtifactHealthStatus` muerto;
+   alerta de recovery sólo para estados explícitamente unhealthy (null
+   muestra "Estado no informado" sin reclamar pérdida).
+
+Evidencia post-corrección: `go test ./... -count=1` verde;
+`pnpm typecheck` verde; `pnpm openapi:check` PASS; `pnpm test` verde
+(UI 1674, web 442, mobile 73, desktop 17); browser gate re-ejecutado sobre
+el head corregido.

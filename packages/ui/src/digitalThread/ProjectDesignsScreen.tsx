@@ -1064,7 +1064,10 @@ export function ProjectDesignsScreen({
                       </div>
                     )}
 
-                    {artifacts.some((art) => artifactHealth(art) !== 'available') &&
+                    {artifacts.some((art) => {
+                      const h = artifactHealth(art);
+                      return h === 'missing' || h === 'integrity_mismatch';
+                    }) &&
                       artifacts.length > 0 && (
                         <div
                           className="pd-alert pd-alert--warning"

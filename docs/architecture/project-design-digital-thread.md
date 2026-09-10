@@ -447,6 +447,29 @@ Reglas duras:
   distintos; la recuperación nombra publicar una nueva revisión (la revisión
   publicada es inmutable y no se repara in-place).
 
+Riesgos residuales aceptados y conocidos:
+
+- **Ventana TOCTOU serve-time**: el grant se verifica al mintearse; el GET
+  firmado sirve bytes después sin re-verificar digest. La ventana queda
+  acotada por el TTL del media grant (≤3 min). Borrar bytes dentro de la
+  ventana produce un 404 neutral (fail-closed); alterar bytes dentro de la
+  ventana sirve bytes alterados a un holder de grant vigente — requiere
+  acceso de escritura al `MediaDir` (atacante ya interno) y el cliente
+  dispone del digest canónico publicado para verificar. Endurecer el GET
+  (p. ej. re-hash serve-time o claims de integridad en el media token)
+  requeriría tocar el contrato ver-pinned del media token compartido con
+  catálogo (R3); no se hace en #640.
+- **GET directo con Authorization** (superficie dual #460 preexistente): un
+  caller con sesión válida y la storage key exacta puede leer
+  `/api/design-artifacts/{key}` sin pasar por authorize; esa ruta no aplica
+  el gate de salud. El minteo de grants sigue siendo fail-closed.
+- **Partición por organización**: los bytes viven bajo la partición de la
+  organización dueña. Un partner cross-org con acceso al proyecto (RLS
+  `app_can_access_project`) resuelve la metadata pero no los bytes de la
+  partición ajena: verá `missing` aunque el storage del dueño esté intacto —
+  honesto respecto a lo que ese caller puede servir (el GET firmado tampoco
+  resolvería su partición), pero distinto de "bytes perdidos".
+
 ---
 
 ## 11. Manifest contract

@@ -730,7 +730,7 @@
 
 .pd-lineage-connector--orphan {
   opacity: 0.4;
-  color: var(--warning-700);
+  color: var(--warning);
 }
 
 .pd-inspector {
@@ -1406,9 +1406,9 @@
   }
 }
 
-/* #640: authoritative artifact health states */
+/* Authoritative artifact health states (issue 640) */
 .pd-preview-warning {
-  color: var(--warning);
+  color: var(--warning-700);
 }
 
 .pd-recovery-hint {

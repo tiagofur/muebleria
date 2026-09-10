@@ -55,7 +55,9 @@ func (s *Server) HandleDesignRevisionApprove(w http.ResponseWriter, r *http.Requ
 		respondWithDesignApprovalError(w, err)
 		return
 	}
-	respondWithJSON(w, http.StatusOK, toDesignRevisionDTO(*rev))
+	// #640: embedded artifacts carry authoritative health on every surface
+	// that serializes them (approve loads artifacts in the revision).
+	respondWithJSON(w, http.StatusOK, s.toDesignRevisionDTOWithArtifactHealth(r.Context(), *rev))
 }
 
 // HandleProjectDesignRevisionApproveForProduction serves POST
@@ -106,7 +108,9 @@ func (s *Server) HandleProjectDesignRevisionApproveForProduction(w http.Response
 		respondWithDesignApprovalError(w, err)
 		return
 	}
-	respondWithJSON(w, http.StatusOK, toDesignRevisionDTO(*rev))
+	// #640: embedded artifacts carry authoritative health on every surface
+	// that serializes them (approve loads artifacts in the revision).
+	respondWithJSON(w, http.StatusOK, s.toDesignRevisionDTOWithArtifactHealth(r.Context(), *rev))
 }
 
 func respondWithDesignApprovalError(w http.ResponseWriter, err error) {

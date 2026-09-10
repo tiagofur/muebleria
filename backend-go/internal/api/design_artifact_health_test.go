@@ -223,3 +223,54 @@ func TestDesignArtifactHealth_UnconfiguredStorageFailsClosed(t *testing.T) {
 		t.Fatalf("unconfigured storage must fail closed as ARTIFACT_MISSING: %s", rr.Body.String())
 	}
 }
+
+// Review correction (#640 R1): every surface that serializes artifact-bearing
+// revisions must emit contract-valid health — the approve endpoints load
+// artifacts into the revision, so a plain DTO would return an empty health
+// object that violates the required enum/date-time contract.
+func TestDesignArtifactHealth_ApproveEndpointsEmitValidHealth(t *testing.T) {
+	content := []byte("approved revision model bytes")
+	env := newArtifactHealthEnv(t, content)
+
+	approved := &domain.DesignRevision{
+		ID: publishTestRevision, DesignID: designTestDesignID, RevisionNumber: 2,
+		SourceType: domain.DesignRevisionSourceSketchup, Status: domain.DesignRevisionStatusApproved,
+		Artifacts: env.store.listDesignRevisionArtifactsResult,
+	}
+	env.store.approveDesignRevisionResult = approved // ApproveForProduction delegates to it
+
+	newApproveReq := func(target string) *http.Request {
+		req := withTestClaims(httptest.NewRequest(http.MethodPost, target, strings.NewReader(`{"quoteRevisionId":"`+publishTestRevision+`"}`)),
+			"user-1", []domain.UserRole{domain.RoleAdmin})
+		req.SetPathValue("designId", designTestDesignID)
+		req.SetPathValue("revisionId", publishTestRevision)
+		req.SetPathValue("projectId", designTestProjectID)
+		return req
+	}
+
+	handlers := map[string]func(http.ResponseWriter, *http.Request){
+		"/api/designs/" + designTestDesignID + "/revisions/" + publishTestRevision + ":approve":                 env.srv.HandleDesignRevisionApprove,
+		"/api/projects/" + designTestProjectID + "/designs/" + designTestDesignID + "/revisions/" + publishTestRevision + ":approve-for-production": env.srv.HandleProjectDesignRevisionApproveForProduction,
+	}
+	for target, handler := range handlers {
+		rr := httptest.NewRecorder()
+		handler(rr, newApproveReq(target))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d (body=%s)", target, rr.Code, rr.Body.String())
+		}
+		var body struct {
+			Artifacts []struct {
+				Health struct {
+					Status    string `json:"status"`
+					CheckedAt string `json:"checked_at"`
+				} `json:"health"`
+			} `json:"artifacts"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s: %v", target, err)
+		}
+		if len(body.Artifacts) != 1 || body.Artifacts[0].Health.Status != "available" || body.Artifacts[0].Health.CheckedAt == "" {
+			t.Fatalf("%s must emit valid authoritative health, got %s", target, rr.Body.String())
+		}
+	}
+}

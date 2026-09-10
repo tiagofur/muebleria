@@ -18,14 +18,14 @@ import (
 // organization media namespace; only the API layer owns MediaDir. This file
 // is the single verification boundary: it observes the backing bytes of one
 // DesignRevisionArtifact and feeds the observation to the pure domain
-// classifier. Health is computed per request and never persisted — there is
-// no second artifact-health store.
+// classifier — the one health decision authority. Health is computed per
+// request and never persisted — there is no second artifact-health store.
 //
-// Cost (#640 §8): one stat plus one streaming SHA-256 pass per artifact per
-// request; a size mismatch short-circuits without hashing. Current DEMO
-// artifacts are small (manifest ≤1 MiB, preview ≤16 MiB, .skp model ≤256 MiB
-// worst case), so direct verification is the correctness-first choice; no
-// cache is introduced.
+// Cost (#640 §8): one stat per artifact; the streaming SHA-256 pass runs only
+// when the observed size matches the metadata (a size mismatch short-circuits
+// without hashing). Current DEMO artifacts are small (manifest ≤1 MiB, preview
+// ≤16 MiB, .skp model ≤256 MiB worst case), so direct verification is the
+// correctness-first choice; no cache is introduced.
 
 // verifyDesignArtifactHealth observes the backing bytes of one published
 // artifact under the caller's organization partition and classifies health.
@@ -35,16 +35,20 @@ import (
 func (s *Server) verifyDesignArtifactHealth(ctx context.Context, a domain.DesignRevisionArtifact) domain.DesignArtifactHealth {
 	status := domain.DesignArtifactHealthMissing
 	if path, ok := s.designArtifactStoragePath(ctx, a.StorageKey); ok {
-		if actualSize, actualSHA, found := hashDesignArtifactFile(path); found {
+		if actualSize, actualSHA, found := observeDesignArtifactFile(path, a.SizeBytes); found {
 			status = domain.ClassifyDesignArtifactHealth(a.SizeBytes, a.SHA256, true, actualSize, actualSHA)
 		}
 	}
 	return domain.DesignArtifactHealth{Status: status, CheckedAt: time.Now().UTC()}
 }
 
-// hashDesignArtifactFile streams one file and returns its size and canonical
-// sha256-<hex> digest. found=false means the file is absent or unreadable.
-func hashDesignArtifactFile(path string) (int64, string, bool) {
+// observeDesignArtifactFile stats the backing file and, only when its size
+// matches the expected metadata size, streams its canonical sha256-<hex>
+// digest. found=false means the file is absent or unreadable (or is a
+// directory) — such a file can never prove availability. A size mismatch
+// returns immediately with an empty observed digest: the classifier marks it
+// integrity_mismatch without paying the hashing pass.
+func observeDesignArtifactFile(path string, expectedSizeBytes int64) (int64, string, bool) {
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, "", false
@@ -53,6 +57,9 @@ func hashDesignArtifactFile(path string) (int64, string, bool) {
 	info, err := f.Stat()
 	if err != nil || info.IsDir() {
 		return 0, "", false
+	}
+	if info.Size() != expectedSizeBytes {
+		return info.Size(), "", true
 	}
 	hasher := sha256.New()
 	size, err := io.Copy(hasher, f)
