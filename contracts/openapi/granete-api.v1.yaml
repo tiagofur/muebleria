@@ -3365,6 +3365,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {

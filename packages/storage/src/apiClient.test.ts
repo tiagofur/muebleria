@@ -143,6 +143,33 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
     expect(headers.get('X-Request-ID')).toBeTruthy();
   });
 
+  it('sends the required idempotency key for Design material reconciliation', async () => {
+    const designId = '11111111-1111-4111-8111-111111111111';
+    const furnitureInstanceId = '22222222-2222-4222-8222-222222222222';
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({
+      design_id: designId,
+      project_id: '33333333-3333-4333-8333-333333333333',
+      furniture_instance_id: furnitureInstanceId,
+      filled_choices: { FRENTES: '44444444-4444-4444-8444-444444444444' },
+      preserved_choices: {},
+      working_copy_updated_at: '2026-09-09T18:30:00Z',
+    }));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+
+    await client.reconcileDesignWorkingMaterials(
+      'token',
+      designId,
+      { furniture_instance_id: furnitureInstanceId },
+    );
+
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(
+      `http://api.test/designs/${designId}/working-copy/material-choices:reconcile`,
+    );
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('Idempotency-Key')).toMatch(/^web:/);
+  });
+
   it('rejects non-string fieldErrors values from an error envelope', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({
       code: 'BAD_REQUEST', message: 'invalid', fieldErrors: { email: 123 },

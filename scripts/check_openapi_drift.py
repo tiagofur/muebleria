@@ -111,6 +111,10 @@ if "#/components/parameters/IdempotencyKey" not in account_parameters:
     raise RuntimeError("Platform account lifecycle command must declare Idempotency-Key")
 if account_command["requestBody"]["content"]["application/json"]["schema"].get("$ref") != "#/components/schemas/UpdateAccountStatusRequest":
     raise RuntimeError("Platform account lifecycle command must use the generated status request")
+material_reconciliation=spec["paths"]["/designs/{designId}/working-copy/material-choices:reconcile"]["post"]
+material_reconciliation_parameters=[p.get("$ref",p.get("name")) for p in material_reconciliation.get("parameters",[])]
+if "#/components/parameters/IdempotencyKey" not in material_reconciliation_parameters:
+    raise RuntimeError("Design material reconciliation command must declare Idempotency-Key")
 if "/factory/organizations" not in spec["paths"]:
     raise RuntimeError("current factory organizations boundary is missing from OpenAPI")
 

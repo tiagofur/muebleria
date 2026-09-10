@@ -5,6 +5,8 @@
 - Entrega: clasificador puro 4 estados (`authored|quoted_missing_from_working|inherited_default|missing_unresolved`) + detección read-only `GET /designs/{id}/working-copy/material-provenance` + comando explícito idempotente `POST /designs/{id}/working-copy/material-choices:reconcile` (fill-only, expected_updated_at, audit durable misma tx, fail-closed). R1–R3 inmutables; R4 es la primera revisión con las choices. OpenAPI/codegen regenerado; Ruby: el plugin relee el working copy reconciliado y el merger lo conserva verbatim (2 pruebas nuevas).
 - Evidencia: `go test ./...` verde; PostgreSQL real (matriz completa incl. inmutabilidad R1–R3 + R4); `rake unit boundary` + rubocop verdes; `pnpm openapi:check`/`typecheck`/`test` verdes. Real-host SketchUp smoke: NOT PROVEN.
 - Detalle: `progress/implementation_637_dt_material_reconciliation.md`.
+- Correction 2026-09-09 18:30 CST: resolver únicamente el bloqueo de contrato de PR #638 declarando `IdempotencyKey` en el POST de reconciliación, regenerando Go/TS y agregando una regresión cliente→header; sin UI ni cambios de dominio/storage.
+- Correction evidence: preflight `./init.sh` PASS; después del cambio, storage 191/191, `pnpm openapi:check`, `pnpm typecheck` y `git diff --check` PASS. El cliente generado crea y envía `Idempotency-Key` por defecto.
 
 # Issue #635 — Design artifact URL resolution and browser access
 
