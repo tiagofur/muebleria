@@ -225,11 +225,16 @@ const mockReleases: ProductionRelease[] = [
 interface FetchMockOptions {
   designs?: Design[];
   revisionsByDesign?: Record<string, DesignRevision[]>;
+  revisionsFail?: boolean | (() => boolean); // #641: list-level request failure
   revisionDetailOverride?: Record<string, Record<string, DesignRevision>>; // designId → revisionId → revision
   revisionDetailFail?: boolean | ((designId: string, revId: string) => boolean);
   revisionDetailPending?: boolean;
   workingCopyByDesign?: Record<string, DesignWorkingCopy | null>;
+  workingCopyFail?: boolean | (() => boolean); // #641: non-404 working-copy failure
+  workingCopyFailStatus?: number;
+  workingCopyPending?: boolean;
   releases?: ProductionRelease[];
+  releasesFail?: boolean | (() => boolean); // #641: release linkage request failure
   artifactsFail?: boolean;
   grantUrlByKind?: Partial<Record<'model' | 'manifest' | 'preview', string>>;
   artifactAuthorizationFailKind?: 'model' | 'manifest' | 'preview';
@@ -304,6 +309,12 @@ function setupFetchMock(options: FetchMockOptions = {}) {
     // 3. List revisions: GET /designs/:id/revisions
     for (const dId of Object.keys(revisionsByDesign)) {
       if (path === `/designs/${dId}/revisions` && method === 'GET') {
+        if (options.revisionsFail === true || (typeof options.revisionsFail === 'function' && options.revisionsFail())) {
+          return new Response(JSON.stringify({ code: 'INTERNAL', message: 'revisions list failed' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         return json(revisionsByDesign[dId] ?? []);
       }
     }
@@ -338,6 +349,22 @@ function setupFetchMock(options: FetchMockOptions = {}) {
     // 4. Working copy: GET /designs/:id/working-copy
     for (const dId of Object.keys(workingCopies)) {
       if (path === `/designs/${dId}/working-copy` && method === 'GET') {
+        if (options.workingCopyPending) {
+          return new Promise(() => {});
+        }
+        if (
+          options.workingCopyFail === true ||
+          (typeof options.workingCopyFail === 'function' && options.workingCopyFail())
+        ) {
+          const status = options.workingCopyFailStatus ?? 500;
+          return new Response(
+            JSON.stringify({
+              code: status === 401 ? 'UNAUTHORIZED' : status === 403 ? 'FORBIDDEN' : 'INTERNAL',
+              message: 'working copy request failed',
+            }),
+            { status, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
         const wc = workingCopies[dId];
         if (!wc) {
           return new Response('Not Found', { status: 404 });
@@ -348,6 +375,12 @@ function setupFetchMock(options: FetchMockOptions = {}) {
 
     // 5. Production releases: GET /projects/:id/production-releases
     if (path === `/projects/${PROJECT_ID}/production-releases` && method === 'GET') {
+      if (options.releasesFail === true || (typeof options.releasesFail === 'function' && options.releasesFail())) {
+        return new Response(JSON.stringify({ code: 'INTERNAL', message: 'releases failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       return json(releases);
     }
 
@@ -461,22 +494,26 @@ function renderScreen(props: {
     );
   }
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ProjectDesignsScreen
-        baseUrl={API}
-        token="test-jwt-token"
-        projectId={PROJECT_ID}
-        queryKeys={keys}
-        initialContext={props.initialContext}
-        onContextChange={props.onContextChange}
-        onOpenFurnitureMatrix={props.onOpenFurnitureMatrix}
-        onOpenReconciliation={props.onOpenReconciliation}
-        onBack={props.onBack}
-        canMutate={props.canMutate}
-      />
-    </QueryClientProvider>,
-  );
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <ProjectDesignsScreen
+          baseUrl={API}
+          token="test-jwt-token"
+          projectId={PROJECT_ID}
+          queryKeys={keys}
+          initialContext={props.initialContext}
+          onContextChange={props.onContextChange}
+          onOpenFurnitureMatrix={props.onOpenFurnitureMatrix}
+          onOpenReconciliation={props.onOpenReconciliation}
+          onBack={props.onBack}
+          canMutate={props.canMutate}
+        />
+      </QueryClientProvider>,
+    ),
+    queryClient,
+    keys,
+  };
 }
 
 describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
@@ -1252,13 +1289,13 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     }
     expect(
       screen.getByTestId('download-artifact-model'),
-    ).toHaveAccessibleName('Descargar modelo');
+    ).toHaveAccessibleName('Descargar modelo SKP');
     expect(
       screen.getByTestId('download-artifact-manifest'),
-    ).toHaveAccessibleName('Descargar manifest');
+    ).toHaveAccessibleName('Descargar manifest JSON');
     expect(
       screen.getByTestId('download-artifact-preview'),
-    ).toHaveAccessibleName('Abrir vista previa');
+    ).toHaveAccessibleName('Abrir vista previa PNG');
     // Healthy revision: no recovery alert.
     expect(screen.queryByTestId('artifact-health-recovery')).not.toBeInTheDocument();
   });
@@ -1418,5 +1455,316 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
       'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     ));
     expect(await screen.findByText('Copiado')).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // #641 — honest async states, exact pinning across background refetches and
+  // accessibility. A request failure must never masquerade as business
+  // absence ("no revisions", "no release", "no working copy").
+  // ---------------------------------------------------------------------------
+
+  it('#641 revision list request failure is an explicit error with retry, never "no revisions"', async () => {
+    let shouldFail = true;
+    setupFetchMock({ revisionsFail: () => shouldFail });
+    const user = userEvent.setup();
+
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: null } });
+
+    const error = await screen.findByTestId('revisions-error');
+    expect(error).toHaveAttribute('role', 'alert');
+    expect(error).toHaveTextContent('No se pudo cargar el linaje de revisiones');
+    expect(screen.queryByTestId('no-revisions-notice')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('revision-node-R1')).not.toBeInTheDocument();
+    // Independent queries keep their truth: the working copy is unaffected.
+    expect(await screen.findByTestId('working-copy-banner')).toBeInTheDocument();
+
+    shouldFail = false;
+    const retry = screen.getByTestId('retry-revisions-btn');
+    retry.focus();
+    await user.keyboard('{Enter}'); // keyboard-reachable retry
+    expect(await screen.findByTestId('revision-node-R1')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-node-R3')).toBeInTheDocument();
+    expect(screen.queryByTestId('revisions-error')).not.toBeInTheDocument();
+  });
+
+  it('#641 working copy 404 is honest absence, not an error', async () => {
+    setupFetchMock({ workingCopyByDesign: { [DESIGN_1_ID]: null } });
+
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    expect(await screen.findByTestId('no-working-copy-notice')).toHaveTextContent(
+      'No hay borrador de trabajo',
+    );
+    expect(screen.queryByTestId('working-copy-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('working-copy-banner')).not.toBeInTheDocument();
+  });
+
+  it('#641 working copy initial load exposes a status instead of disappearing', async () => {
+    setupFetchMock({ workingCopyPending: true });
+
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    const loading = await screen.findByTestId('working-copy-loading');
+    expect(loading).toHaveAttribute('role', 'status');
+    expect(loading).toHaveTextContent('Consultando borrador de trabajo');
+    expect(screen.queryByTestId('no-working-copy-notice')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('working-copy-error')).not.toBeInTheDocument();
+  });
+
+  it('#641 working copy request failure is actionable with retry, never collapsed into absence', async () => {
+    let shouldFail = true;
+    setupFetchMock({ workingCopyFail: () => shouldFail });
+    const user = userEvent.setup();
+
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    const error = await screen.findByTestId('working-copy-error');
+    expect(error).toHaveAttribute('role', 'alert');
+    expect(error).toHaveTextContent('No se pudo verificar el borrador de trabajo');
+    // Failure != 404 absence: neither the banner nor the absence notice may render.
+    expect(screen.queryByTestId('working-copy-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('no-working-copy-notice')).not.toBeInTheDocument();
+
+    shouldFail = false;
+    await user.click(screen.getByTestId('retry-working-copy-btn'));
+    expect(await screen.findByTestId('working-copy-banner')).toBeInTheDocument();
+    expect(screen.queryByTestId('working-copy-error')).not.toBeInTheDocument();
+  });
+
+  it('#641 failed working-copy background refresh marks cached data stale and provides retry', async () => {
+    let shouldFail = false;
+    setupFetchMock({ workingCopyFail: () => shouldFail });
+    const user = userEvent.setup();
+
+    const { queryClient, keys } = renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID },
+    });
+    expect(await screen.findByTestId('working-copy-banner')).toBeInTheDocument();
+
+    shouldFail = true;
+    await queryClient.invalidateQueries({ queryKey: keys.designWorkingCopy(DESIGN_1_ID) });
+
+    const stale = await screen.findByTestId('working-copy-stale-error');
+    expect(stale).toHaveAttribute('role', 'alert');
+    expect(stale).toHaveTextContent('última versión conocida');
+    expect(screen.getByTestId('working-copy-banner')).toBeInTheDocument();
+
+    shouldFail = false;
+    await user.click(screen.getByTestId('retry-working-copy-btn'));
+    await waitFor(() => expect(screen.queryByTestId('working-copy-stale-error')).not.toBeInTheDocument());
+    expect(screen.getByTestId('working-copy-banner')).toBeInTheDocument();
+  });
+
+  it('#641 cached empty revision list with failed refetch is stale/error, never business empty', async () => {
+    let shouldFail = false;
+    setupFetchMock({
+      revisionsByDesign: { [DESIGN_1_ID]: [] },
+      revisionsFail: () => shouldFail,
+    });
+
+    const { queryClient, keys } = renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: null },
+    });
+    expect(await screen.findByTestId('no-revisions-notice')).toBeInTheDocument();
+
+    shouldFail = true;
+    await queryClient.invalidateQueries({ queryKey: keys.designRevisions(DESIGN_1_ID) });
+
+    const stale = await screen.findByTestId('revisions-stale-error');
+    expect(stale).toHaveAttribute('role', 'alert');
+    expect(stale).toHaveTextContent('última respuesta conocida estaba vacía');
+    expect(screen.queryByTestId('no-revisions-notice')).not.toBeInTheDocument();
+    expect(screen.getByTestId('retry-revisions-btn')).toBeEnabled();
+  });
+
+  it('#641 distinguishes session (401) from permission (403) working copy failures', async () => {
+    setupFetchMock({ workingCopyFail: true, workingCopyFailStatus: 403 });
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    expect(await screen.findByTestId('working-copy-error')).toHaveTextContent(
+      'No tenés permiso para consultar esta información',
+    );
+    expect(screen.queryByTestId('no-working-copy-notice')).not.toBeInTheDocument();
+
+    cleanup();
+
+    setupFetchMock({ workingCopyFail: true, workingCopyFailStatus: 401 });
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    expect(await screen.findByTestId('working-copy-error')).toHaveTextContent(
+      'Tu sesión no es válida o expiró',
+    );
+    expect(screen.queryByTestId('no-working-copy-notice')).not.toBeInTheDocument();
+  });
+
+  it('#641 production release request failure shows an unavailable state with retry, never silent "no release"', async () => {
+    let shouldFail = true;
+    setupFetchMock({ releasesFail: () => shouldFail });
+    const user = userEvent.setup();
+
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    expect(await screen.findByRole('heading', { level: 2, name: /Revisión R3/i })).toBeInTheDocument();
+    const unavailable = await screen.findByTestId('release-status-error');
+    expect(unavailable).toHaveAttribute('role', 'alert');
+    expect(unavailable).toHaveTextContent('Estado de liberación no disponible');
+    // The release area is NOT silently removed.
+    expect(screen.queryByTestId('linked-release-badge')).not.toBeInTheDocument();
+
+    shouldFail = false;
+    await user.click(screen.getByTestId('retry-releases-btn'));
+    expect(await screen.findByTestId('linked-release-badge')).toBeInTheDocument();
+    expect(screen.queryByTestId('release-status-error')).not.toBeInTheDocument();
+  });
+
+  it('#641 failed background refresh of the exact snapshot keeps pinned data visible with an honest error', async () => {
+    setupFetchMock({ revisionDetailFail: true });
+
+    renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID },
+      seedRevisionDetail: mockRevision3,
+    });
+
+    // Seeded exact data stays visible; the failed refresh is explicit, never a blank.
+    const staleError = await screen.findByTestId('revision-detail-stale-error');
+    expect(staleError).toHaveAttribute('role', 'alert');
+    expect(screen.getByTestId('revision-inspector')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /Revisión R3/i })).toBeInTheDocument();
+    // No substitution: the failed refresh never swaps in another revision.
+    expect(screen.queryByTestId('revision-detail-error')).not.toBeInTheDocument();
+  });
+
+  it('#641 background refetch keeps exact R2 pinned even when the fresh list adds R3', async () => {
+    const revisions = [mockRevision1, mockRevision2];
+    setupFetchMock({ revisionsByDesign: { [DESIGN_1_ID]: revisions } });
+
+    const { queryClient, keys } = renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_2_ID },
+    });
+    expect(await screen.findByRole('heading', { level: 2, name: /Revisión R2/i })).toBeInTheDocument();
+
+    // The server now has R3 as the latest published revision.
+    revisions.push(mockRevision3);
+    await queryClient.invalidateQueries({ queryKey: keys.designRevisions(DESIGN_1_ID) });
+
+    // The fresh timeline includes R3, but the explicit selection stays R2.
+    expect(await screen.findByTestId('revision-node-R3')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-node-R2')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByTestId('revision-node-R3')).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('heading', { level: 2, name: /Revisión R2/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('invalid-revision-notice')).not.toBeInTheDocument();
+  });
+
+  it('#641 marks an in-flight background refresh without clearing the pinned timeline', async () => {
+    const fetchMock = setupFetchMock();
+    let blockRevisions = false;
+    // Holder object: TS control-flow analysis can't track closure assignments
+    // on a bare `let`, which types the resolver as `never` at the call site.
+    const blocked: { resolve: ((response: Response) => void) | null } = { resolve: null };
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (blockRevisions && /\/revisions$/.test(new URL(url).pathname)) {
+        return new Promise<Response>((resolve) => {
+          blocked.resolve = resolve;
+        });
+      }
+      return fetchMock(input as RequestInfo, init);
+    });
+
+    const { queryClient, keys } = renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_2_ID },
+    });
+    expect(await screen.findByRole('heading', { level: 2, name: /Revisión R2/i })).toBeInTheDocument();
+
+    blockRevisions = true;
+    void queryClient.invalidateQueries({ queryKey: keys.designRevisions(DESIGN_1_ID) });
+
+    // While refetching: exact timeline + pinned selection stay, marked as refreshing.
+    const mark = await screen.findByTestId('revisions-refreshing');
+    expect(mark).toHaveAttribute('aria-hidden', 'true'); // no polling noise for assistive tech
+    expect(screen.getByTestId('revision-node-R1')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-node-R2')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('heading', { level: 2, name: /Revisión R2/i })).toBeInTheDocument();
+
+    const freshList = (await fetchMock(`${API}/designs/${DESIGN_1_ID}/revisions`)) as Response;
+    blocked.resolve?.(freshList);
+    await waitFor(() =>
+      expect(screen.queryByTestId('revisions-refreshing')).not.toBeInTheDocument(),
+    );
+    // After the refresh the pinned revision is still exactly R2.
+    expect(screen.getByRole('heading', { level: 2, name: /Revisión R2/i })).toBeInTheDocument();
+  });
+
+  it('#641 a11y: no generic "Acceder" accessible names remain on artifact actions', async () => {
+    setupFetchMock();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    expect(screen.queryAllByRole('button', { name: 'Acceder' })).toHaveLength(0);
+    const artifactButtons = [
+      screen.getByTestId('download-artifact-model'),
+      screen.getByTestId('download-artifact-manifest'),
+      screen.getByTestId('download-artifact-preview'),
+    ];
+    const names = artifactButtons.map((button) => button.getAttribute('aria-label'));
+    expect(new Set(names).size).toBe(artifactButtons.length); // unique per artifact
+  });
+
+  it('#641 a11y: technical audit disclosure exposes expanded/controls and stays keyboard operable', async () => {
+    const user = userEvent.setup();
+    setupFetchMock();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+
+    const toggle = screen.getByTestId('toggle-technical-audit');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const controlsId = toggle.getAttribute('aria-controls');
+    expect(controlsId).toBeTruthy();
+    const panel = document.getElementById(controlsId as string);
+    expect(panel).not.toBeNull();
+    expect(panel).toHaveAttribute('hidden'); // stable id, mounted while collapsed
+
+    toggle.focus();
+    await user.keyboard('{Enter}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('technical-audit-details')).toBeVisible();
+    // Focus stays on the disclosure button: no forced focus move.
+    expect(toggle).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('technical-audit-details')).not.toBeVisible();
+  });
+
+  it('#641 a11y: loading surfaces use status semantics', async () => {
+    setupFetchMock({ revisionDetailPending: true });
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    expect(await screen.findByTestId('revision-detail-loading')).toHaveAttribute('role', 'status');
+  });
+
+  it('#641 a11y: full IDs are exposed through a focusable, copyable technical path', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setupFetchMock();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    await user.click(screen.getByTestId('toggle-technical-audit'));
+
+    const copyRevision = screen.getByTestId('copy-revision-id');
+    expect(copyRevision).toHaveAccessibleName('Copiar Revision ID completo');
+    expect(copyRevision).toBeEnabled(); // focusable + operable
+    await user.click(copyRevision);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(REV_3_ID));
+
+    // The full ID is selectable text inside the technical path only; primary
+    // product copy (working copy banner) keeps the truncated form.
+    const panel = screen.getByTestId('technical-audit-details');
+    expect(within(panel).getAllByText(REV_3_ID).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId('working-copy-banner')).toHaveTextContent('33333333…');
+    expect(screen.getByTestId('working-copy-banner')).not.toHaveTextContent(REV_3_ID);
   });
 });

@@ -598,4 +598,94 @@ test('authoritative artifact health: available, missing bytes and tampered bytes
     fs.writeFileSync(modelPath, modelBytes);
   }
 });
+
+  // #641: a failed revision-list request is an explicit error with retry —
+  // never the "no revisions" empty state — and recovery comes from the real
+  // Go/PostgreSQL backend. Only the list request is intercepted; every other
+  // request (working copy, releases, artifacts, grants) stays real.
+  test('revision list failure is an error, not absence; retry recovers from the real backend (#641)', async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    await loginToA(page);
+
+    const revisionsList = `**/designs/${seeded.designId}/revisions`;
+    await page.route(revisionsList, (route) =>
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'INTERNAL', message: 'injected revision list failure' }),
+      }),
+    );
+
+    await page.goto(`/quotes/${seeded.projectId}/disenos?design=${seeded.designId}`);
+
+    // Error visible as an alert — and never rendered as the empty state.
+    const error = page.getByTestId('revisions-error');
+    await expect(error).toBeVisible();
+    await expect(error).toHaveAttribute('role', 'alert');
+    await expect(page.getByTestId('no-revisions-notice')).toHaveCount(0);
+    await expect(page.getByTestId('revision-node-R1')).toHaveCount(0);
+
+    // Independent requests keep their real truth while the list is failing.
+    await expect(page.getByTestId('working-copy-banner')).toBeVisible();
+
+    // Retry hits the real backend once the injected failure is removed.
+    await page.unroute(revisionsList);
+    await page.getByTestId('retry-revisions-btn').click();
+
+    const timeline = page.getByTestId('design-lineage-timeline');
+    await expect(timeline.getByTestId('revision-node-R1')).toBeVisible();
+    await expect(timeline.getByTestId('revision-node-R2')).toBeVisible();
+    await expect(page.getByTestId('revisions-error')).toHaveCount(0);
+  });
+
+  // #641: the inspector surfaces stay operable at the three operational
+  // breakpoints: no page-level horizontal overflow, artifact actions
+  // reachable, and the technical disclosure keyboard-usable.
+  test('inspector async surfaces remain usable at 390/768/1280 without horizontal overflow (#641)', async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    await loginToA(page);
+    await page.goto(
+      `/quotes/${seeded.projectId}/disenos?design=${seeded.designId}&rev=${seeded.r2Id}`,
+    );
+    await expect(page.getByTestId('revision-inspector')).toBeVisible();
+
+    const originalViewport = page.viewportSize();
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `document overflow at ${width}px`).toBeLessThanOrEqual(0);
+
+      // Artifact actions are reachable at every width.
+      for (const kind of ['model', 'manifest', 'preview'] as const) {
+        const action = page.getByTestId(`download-artifact-${kind}`);
+        await expect(action).toBeVisible();
+        await action.scrollIntoViewIfNeeded();
+        expect(await action.isEnabled(), `artifact ${kind} usable at ${width}px`).toBe(true);
+      }
+
+      // The technical audit disclosure is keyboard operable with honest
+      // expanded/controls semantics and a stable controlled-region id.
+      const toggle = page.getByTestId('toggle-technical-audit');
+      await toggle.scrollIntoViewIfNeeded();
+      await toggle.focus();
+      await expect(toggle).toBeFocused();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await page.keyboard.press('Enter');
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      const panelId = await toggle.getAttribute('aria-controls');
+      expect(panelId).toBeTruthy();
+      await expect(page.locator(`#${panelId}`)).toBeVisible();
+      await page.keyboard.press('Enter');
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await expect(toggle).toBeFocused(); // focus never forcibly moved
+    }
+    if (originalViewport) await page.setViewportSize(originalViewport);
+  });
 });
