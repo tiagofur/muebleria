@@ -3361,7 +3361,7 @@
     "/designs/{designId}/working-copy/material-choices:reconcile": {
       "post": {
         "operationId": "reconcileDesignWorkingMaterials",
-        "description": "Explicit repair (#637 / DT-MAT): fills ONLY the quoted material roles missing from one exact working item. Authored/alias-governed roles are preserved verbatim; published revisions are never touched. Idempotent (no-candidate and replay succeed with empty filled_choices). Requires an Idempotency-Key header.",
+        "description": "Explicit repair (#637 / DT-MAT): fills ONLY the quoted material roles missing from one exact working item. Authored/alias-governed roles are preserved verbatim; published revisions are never touched. Idempotent: a no-candidate call and a same-key replay succeed with empty filled_choices (a fresh key carrying a stale expected_updated_at still rejects). Requires an Idempotency-Key header.",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"

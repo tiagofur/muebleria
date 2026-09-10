@@ -147,7 +147,7 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 			LIMIT 1
 		) quoted ON TRUE
 		WHERE dwi.design_id = $1
-		ORDER BY dwi.created_at ASC
+		ORDER BY dwi.created_at ASC, dwi.furniture_instance_id
 	`, designID)
 	if err != nil {
 		return nil, err

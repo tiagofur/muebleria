@@ -521,13 +521,21 @@ func fiTxAnd[T any](t *testing.T, fx *rlsFixture, actor storage.TenantActor, run
 
 func workingCopyState(t *testing.T, fx *rlsFixture, designID string) string {
 	t.Helper()
-	var state string
+	var items string
 	if err := fx.admin.QueryRow(context.Background(), `
 		SELECT string_agg(furniture_instance_id::text || '=' || material_choices::text, ',' ORDER BY furniture_instance_id)
-		FROM design_working_items WHERE design_id = $1`, designID).Scan(&state); err != nil {
-		t.Fatalf("read working copy state: %v", err)
+		FROM design_working_items WHERE design_id = $1`, designID).Scan(&items); err != nil {
+		t.Fatalf("read working copy items: %v", err)
 	}
-	return state
+	// The header carries the working-copy version: a no-op retry must leave
+	// updated_at/updated_by untouched too, not only the item rows.
+	var header string
+	if err := fx.admin.QueryRow(context.Background(), `
+		SELECT updated_at::text || '/' || updated_by
+		FROM design_working_copies WHERE design_id = $1`, designID).Scan(&header); err != nil {
+		t.Fatalf("read working copy header: %v", err)
+	}
+	return items + "@" + header
 }
 
 type storageRoleView struct {
