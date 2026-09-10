@@ -3,6 +3,8 @@ import type { DesignRevision, DesignRevisionArtifact } from '@granete/storage';
 import {
   buildDesignLineage,
   formatArtifactSize,
+  artifactHealth,
+  canonicalArtifactSHA256,
   formatSha256Digest,
   getArtifactAvailability,
   selectDesignRevision,
@@ -136,6 +138,7 @@ describe('designHistory pure model', () => {
         size_bytes: 15400000,
         sha256: 'abc1234567890',
         created_at: '2026-09-01T10:00:00Z',
+        health: { status: 'available', checked_at: '2026-09-01T10:00:05Z' },
       };
       const manifest: DesignRevisionArtifact = {
         id: 'art-2',
@@ -145,6 +148,7 @@ describe('designHistory pure model', () => {
         size_bytes: 42000,
         sha256: 'def4567890123',
         created_at: '2026-09-01T10:00:00Z',
+        health: { status: 'available', checked_at: '2026-09-01T10:00:05Z' },
       };
       const preview: DesignRevisionArtifact = {
         id: 'art-3',
@@ -154,6 +158,7 @@ describe('designHistory pure model', () => {
         size_bytes: 250000,
         sha256: 'ghi7890123456',
         created_at: '2026-09-01T10:00:00Z',
+        health: { status: 'available', checked_at: '2026-09-01T10:00:05Z' },
       };
 
       const result = getArtifactAvailability([model, manifest, preview]);
@@ -179,19 +184,71 @@ describe('designHistory pure model', () => {
     });
   });
 
-  describe('formatSha256Digest', () => {
-    it('formats sha-256 hashes cleanly', () => {
-      expect(formatSha256Digest('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')).toBe(
-        'sha256:e3b0c442…',
-      );
-      expect(
-        formatSha256Digest('sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'),
-      ).toBe('sha256:e3b0c442…');
+  describe('formatSha256Digest (#640 canonical contract)', () => {
+    const canonical =
+      'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+    it('renders the canonical digest with exactly one prefix', () => {
+      expect(formatSha256Digest(canonical)).toBe('sha256-e3b0c442…');
     });
 
-    it('handles empty or short strings', () => {
-      expect(formatSha256Digest('')).toBe('sha256:—');
-      expect(formatSha256Digest('abcd')).toBe('sha256:abcd');
+    it('never duplicates the prefix or reinterprets non-canonical values', () => {
+      // Legacy colon forms and bare hex are NOT reinterpreted as digests.
+      expect(formatSha256Digest('sha256:' + canonical.slice('sha256-'.length))).toBe('sha256-—');
+      expect(formatSha256Digest(canonical.slice('sha256-'.length))).toBe('sha256-—');
+      expect(formatSha256Digest('sha256-sha256-' + 'ab'.repeat(32))).toBe('sha256-—');
+      expect(formatSha256Digest('')).toBe('sha256-—');
+      expect(formatSha256Digest('abcd')).toBe('sha256-—');
+      // A duplicated prefix can never appear in the output.
+      expect(formatSha256Digest(canonical)).not.toContain('sha256-sha256');
+      expect(formatSha256Digest(canonical)).not.toContain('sha256:');
+    });
+  });
+
+  describe('canonicalArtifactSHA256 (#640)', () => {
+    it('accepts exactly the sha256-<64 lowercase hex> contract', () => {
+      const good = 'sha256-' + 'ab'.repeat(32);
+      expect(canonicalArtifactSHA256(good)).toBe(good);
+      expect(canonicalArtifactSHA256('sha256-' + 'AB'.repeat(32))).toBe(null);
+      expect(canonicalArtifactSHA256('sha256:' + 'ab'.repeat(32))).toBe(null);
+      expect(canonicalArtifactSHA256('')).toBe(null);
+      expect(canonicalArtifactSHA256(null)).toBe(null);
+    });
+
+    it('trims surrounding whitespace before validating', () => {
+      const good = 'sha256-' + 'cd'.repeat(32);
+      expect(canonicalArtifactSHA256(` ${good} `)).toBe(good);
+    });
+  });
+
+  describe('artifactHealth (#640)', () => {
+    const base = {
+      id: 'art-h1',
+      design_revision_id: 'rev-1',
+      kind: 'model' as const,
+      content_type: 'application/octet-stream',
+      size_bytes: 10,
+      sha256: 'sha256-' + 'ab'.repeat(32),
+      created_at: '2026-09-01T10:00:00Z',
+    };
+
+    it('returns the authoritative status when present', () => {
+      expect(
+        artifactHealth({ ...base, health: { status: 'available', checked_at: '2026-09-01T10:00:05Z' } }),
+      ).toBe('available');
+      expect(
+        artifactHealth({ ...base, health: { status: 'missing', checked_at: '2026-09-01T10:00:05Z' } }),
+      ).toBe('missing');
+      expect(
+        artifactHealth({ ...base, health: { status: 'integrity_mismatch', checked_at: '2026-09-01T10:00:05Z' } }),
+      ).toBe('integrity_mismatch');
+    });
+
+    it('returns null for absent or unknown health instead of assuming available', () => {
+      expect(artifactHealth(base as never)).toBe(null);
+      expect(
+        artifactHealth({ ...base, health: { status: 'processing', checked_at: 'x' } as never }),
+      ).toBe(null);
     });
   });
 });

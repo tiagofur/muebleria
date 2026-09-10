@@ -51,6 +51,8 @@ const (
 	ApiErrorCodeSessionNotFound                ApiErrorCode = "SESSION_NOT_FOUND"
 	ApiErrorCodeMediaAccessExpired             ApiErrorCode = "MEDIA_ACCESS_EXPIRED"
 	ApiErrorCodeMediaAccessInvalid             ApiErrorCode = "MEDIA_ACCESS_INVALID"
+	ApiErrorCodeArtifactMissing                ApiErrorCode = "ARTIFACT_MISSING"
+	ApiErrorCodeArtifactIntegrityMismatch      ApiErrorCode = "ARTIFACT_INTEGRITY_MISMATCH"
 	ApiErrorCodeStepUpRequired                 ApiErrorCode = "STEP_UP_REQUIRED"
 	ApiErrorCodeStepUpExpired                  ApiErrorCode = "STEP_UP_EXPIRED"
 	ApiErrorCodeMfaRequired                    ApiErrorCode = "MFA_REQUIRED"
@@ -1266,6 +1268,19 @@ type DesignPublishArtifactUploaded struct {
 	ContentType string                    `json:"content_type"`
 }
 
+type DesignArtifactHealthStatus string
+
+const (
+	DesignArtifactHealthStatusAvailable         DesignArtifactHealthStatus = "available"
+	DesignArtifactHealthStatusMissing           DesignArtifactHealthStatus = "missing"
+	DesignArtifactHealthStatusIntegrityMismatch DesignArtifactHealthStatus = "integrity_mismatch"
+)
+
+type DesignArtifactHealth struct {
+	Status    DesignArtifactHealthStatus `json:"status"`
+	CheckedAt string                     `json:"checked_at"`
+}
+
 type DesignRevisionArtifact struct {
 	ID               string                    `json:"id"`
 	DesignRevisionID string                    `json:"design_revision_id"`
@@ -1273,6 +1288,7 @@ type DesignRevisionArtifact struct {
 	ContentType      string                    `json:"content_type"`
 	SizeBytes        int64                     `json:"size_bytes"`
 	Sha256           string                    `json:"sha256"`
+	Health           DesignArtifactHealth      `json:"health"`
 	UploadedBy       *string                   `json:"uploaded_by,omitempty"`
 	CreatedAt        string                    `json:"created_at"`
 }

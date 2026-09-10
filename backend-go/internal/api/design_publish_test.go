@@ -419,13 +419,27 @@ func TestDesignPublish_RouterRegistration(t *testing.T) {
 }
 
 func TestHandleDesignRevisionArtifactAuthorize_MintsGrant(t *testing.T) {
+	// #640: a grant is only minted for bytes that exist and match the
+	// published metadata, so the fixture stages the real backing file.
+	content := []byte("skp")
+	sum := sha256.Sum256(content)
+	key := "designs/publish/" + publishTestSessionID + "/model-" + hex.EncodeToString(sum[:6]) + ".skp"
+	dir := t.TempDir()
+	path := filepath.Join(dir, storage.InitialOrganizationID, filepath.FromSlash(key))
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, content, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
 	media := mustMediaAuthority(t, "design-publish-test-media-signing-key-0123456789")
 	store := &stubStore{getDesignRevisionArtifactResult: &domain.DesignRevisionArtifact{
 		ID: "a1", DesignRevisionID: publishTestRevision, Kind: domain.DesignPublishArtifactModel,
-		StorageKey:  "designs/publish/" + publishTestSessionID + "/model-abcdef123456.skp",
-		ContentType: "application/octet-stream", SizeBytes: 3, SHA256: "sha256-" + strings.Repeat("ab", 32),
+		StorageKey:  key,
+		ContentType: "application/octet-stream", SizeBytes: int64(len(content)), SHA256: "sha256-" + hex.EncodeToString(sum[:]),
 	}}
-	srv := &Server{Store: store, MediaTokens: media}
+	srv := &Server{Store: store, MediaTokens: media, MediaDir: dir}
 	req := publishRequest(http.MethodPost,
 		"/api/designs/"+designTestDesignID+"/revisions/"+publishTestRevision+"/artifacts/model:authorize", "", string(domain.RoleAdmin))
 	req.SetPathValue("kind", "model")

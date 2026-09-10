@@ -62,6 +62,12 @@ func respondWithDesignPublishError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Falta subir uno o más artefactos de la publicación (modelo, manifest o preview)", nil)
 	case errors.Is(err, domain.ErrPublishArtifactHashMismatch):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "El hash del artefacto no coincide con el contenido subido", nil)
+	case errors.Is(err, domain.ErrArtifactBytesMissing):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeArtifactMissing,
+			"El artefacto publicado ya no está disponible en el almacenamiento; publicá una nueva revisión del diseño", nil)
+	case errors.Is(err, domain.ErrArtifactBytesIntegrityMismatch):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeArtifactIntegrityMismatch,
+			"Los bytes almacenados no coinciden con el artefacto publicado; publicá una nueva revisión del diseño", nil)
 	default:
 		respondWithDesignError(w, err)
 	}
@@ -488,7 +494,7 @@ func (s *Server) HandleDesignPublishFinalize(w http.ResponseWriter, r *http.Requ
 		respondWithDesignPublishError(w, err)
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, toDesignRevisionDTO(*rev))
+	respondWithJSON(w, http.StatusCreated, s.toDesignRevisionDTOWithArtifactHealth(r.Context(), *rev))
 }
 
 // HandleDesignRevisionArtifacts: GET /api/designs/{designId}/revisions/{revisionId}/artifacts.
@@ -513,9 +519,11 @@ func (s *Server) HandleDesignRevisionArtifacts(w http.ResponseWriter, r *http.Re
 		respondWithDesignPublishError(w, err)
 		return
 	}
+	// #640: the read model carries authoritative per-artifact health observed
+	// from storage — metadata presence alone never reads as available.
 	dtos := make([]openapi.DesignRevisionArtifact, 0, len(artifacts))
 	for _, a := range artifacts {
-		dtos = append(dtos, toDesignRevisionArtifactDTO(a))
+		dtos = append(dtos, s.toDesignRevisionArtifactDTOWithHealth(r.Context(), a))
 	}
 	respondWithJSON(w, http.StatusOK, dtos)
 }
@@ -549,6 +557,14 @@ func (s *Server) HandleDesignRevisionArtifactAuthorize(w http.ResponseWriter, r 
 	artifact, err := s.Store.GetDesignRevisionArtifact(r.Context(), designID, revisionID, kind)
 	if err != nil {
 		respondWithDesignPublishError(w, err)
+		return
+	}
+	// #640 fail-closed authorization: the grant is minted only after the
+	// backing bytes are observed to exist and match the published metadata.
+	// This runs after the tenant-scoped resolution above, so a foreign caller
+	// never learns anything about byte state.
+	if health := s.verifyDesignArtifactHealth(r.Context(), *artifact); health.Status != domain.DesignArtifactHealthAvailable {
+		respondWithDesignPublishError(w, health.Status.HealthError())
 		return
 	}
 	resourceKey := auth.DesignArtifactResourceKey(artifact.StorageKey)

@@ -1,3 +1,10 @@
+# Issue #640 — [P1][WEB-DT] Authoritative availability and integrity for DesignRevision artifacts
+
+- Aprobada para ejecución (execution prompt GLM MAX; issue OPEN). Base exacta `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` (post-merge #636/#638/#646); rama `feat/640-design-artifact-health`. Single writer: GLM. Sin merge ni cierre.
+- Estado: `IMPLEMENTED_PENDING_REVIEW`.
+- Entrega: salud autoritativa `available|missing|integrity_mismatch` observada del storage (clasificador puro en domain + verificador streaming SHA-256 en la capa API dueña de `MediaDir`), expuesta como `health {status, checked_at}` en el read model de artefactos y el revision detail; autorización de grants fail-closed con errores tipados `ARTIFACT_MISSING` / `ARTIFACT_INTEGRITY_MISMATCH` (409) verificados DESPUÉS de la resolución tenant (cross-org sigue 404 neutral); OpenAPI Go/TS regenerado sin drift; UI con estados honestos por artefacto (incl. loading/request-failed con retry), acceso deshabilitado para no-available, preview missing/mismatch sin round-trip fallido, recovery que nombra publicar nueva revisión vía `Abrir en SketchUp`, digest canónico `sha256-<64hex>` con un solo prefijo y digest completo copiable con label accesible. #636 intacto (misma URL/grant mechanism, sin segundo store, sin URLs públicas). `processing/failed` NO agregados (sin lifecycle persistido que los avale).
+- Evidencia: `go test ./... -count=1` verde (incl. storage PostgreSQL real); focus domain 8/8 matriz, API 5 suites sobre filesystem real; `pnpm openapi:check` PASS; UI 39/39 + 18/18; browser gate real Chromium+Go+PostgreSQL `project-designs.spec.ts` 2/2 PASS (escenarios healthy / bytes borrados→missing+409 tipado+UI honesta / bytes alterados→integrity_mismatch+409 tipado+digest original intacto). Detalle: `progress/implementation_640_design_artifact_health.md`.
+
 # Issue #639 — immutable DesignRevision presentation read model
 
 - Approved (`status:approved`); user-authorized one-PR size exception. Base `origin/main@55399890173e76b3ae30d858ec9a9472bcd78ab1`; branch `fix/639-design-revision-read-model`.

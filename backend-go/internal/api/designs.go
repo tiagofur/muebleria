@@ -435,7 +435,9 @@ func (s *Server) HandleDesignRevision(w http.ResponseWriter, r *http.Request) {
 		respondWithDesignError(w, err)
 		return
 	}
-	respondWithJSON(w, http.StatusOK, toDesignRevisionDTO(*rev))
+	// #640: the inspector's authoritative snapshot embeds per-artifact health
+	// observed from storage, never inferred from metadata presence.
+	respondWithJSON(w, http.StatusOK, s.toDesignRevisionDTOWithArtifactHealth(r.Context(), *rev))
 }
 
 // HandleDesignWorkingCopy serves GET (read) and PUT (save/replace draft items) for /api/designs/{designId}/working-copy.

@@ -409,6 +409,44 @@ Guardar al menos:
 - uploader;
 - timestamp.
 
+### Health post-publicación (#640)
+
+La metadata prueba que una revisión fue publicada; no prueba que los bytes
+referenciados sigan existiendo o coincidiendo. El read model de artefactos
+expone salud autoritativa observada del storage en el momento del request:
+
+```text
+health:
+  status: available | missing | integrity_mismatch
+  checked_at: <observación>
+```
+
+- `available` exige bytes existentes cuyo size y SHA-256 coincidan con la
+  metadata persistida (formato canónico único `sha256-<64 hex lowercase>`).
+  Nunca se deriva de la presencia de la fila.
+- `missing`: la metadata existe pero los bytes no se encuentran.
+- `integrity_mismatch`: los bytes existen pero difieren en size y/o digest,
+  o el digest persistido no es canónico (fail-closed, sin reinterpretación).
+
+Reglas duras:
+
+- La autorización de lectura firmada fail-closed: `missing` responde
+  `ARTIFACT_MISSING` (409) y `integrity_mismatch` responde
+  `ARTIFACT_INTEGRITY_MISMATCH` (409); jamás se emite grant para un artefacto
+  no verificado. La verificación corre DESPUÉS de resolver la revisión bajo
+  el tenant del llamador: un caller cruzado nunca aprende el estado de los
+  bytes.
+- Verificar salud nunca muta la revisión ni la metadata (inmutabilidad I4);
+  no existe un segundo store de salud ni caching persistido.
+- Costo: una pasada de streaming SHA-256 por artefacto por request, con
+  short-circuit por size; aceptable para los tamaños DEMO actuales
+  (manifest ≤1 MiB, preview ≤16 MiB, model ≤256 MiB). No debilitar identidad
+  exacta, aislamiento tenant ni digest para acelerar.
+- La UI nunca colapsa estados de salud en "sin artefactos": disponible,
+  missing, integrity_mismatch, cargando y fallo del request son estados
+  distintos; la recuperación nombra publicar una nueva revisión (la revisión
+  publicada es inmutable y no se repara in-place).
+
 ---
 
 ## 11. Manifest contract
