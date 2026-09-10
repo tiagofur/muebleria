@@ -5,6 +5,19 @@
 - Entrega: clasificador puro 4 estados (`authored|quoted_missing_from_working|inherited_default|missing_unresolved`) + detección read-only `GET /designs/{id}/working-copy/material-provenance` + comando explícito idempotente `POST /designs/{id}/working-copy/material-choices:reconcile` (fill-only, expected_updated_at, audit durable misma tx, fail-closed). R1–R3 inmutables; R4 es la primera revisión con las choices. OpenAPI/codegen regenerado; Ruby: el plugin relee el working copy reconciliado y el merger lo conserva verbatim (2 pruebas nuevas).
 - Evidencia: `go test ./...` verde; PostgreSQL real (matriz completa incl. inmutabilidad R1–R3 + R4); `rake unit boundary` + rubocop verdes; `pnpm openapi:check`/`typecheck`/`test` verdes. Real-host SketchUp smoke: NOT PROVEN.
 - Detalle: `progress/implementation_637_dt_material_reconciliation.md`.
+# Issue #635 — Design artifact URL resolution and browser access
+
+- Approval: GitHub issue #635 is open with `status:approved`; leader handoff authorized implementation only, without PR creation, merge, or issue closure.
+- Started: 2026-09-09 16:18:24 CST. Branch `fix/635-design-artifact-url`, exact base `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`.
+- Scope: one canonical fail-closed resolver for authorized DesignRevision artifact URLs; preview load error/retry; reliable explicit access after asynchronous authorization; realistic unit/component tests and existing real Go+PostgreSQL browser smoke when feasible. No backend contract/storage/publication, WebGL/SKP viewer, naming/material, or machine-output changes.
+- Plan:
+  1. Reproduce the `/api/api` URL and silent preview/popup failure paths in focused tests.
+  2. Add one canonical resolver and route preview plus explicit artifact access through it.
+  3. Surface distinct authorization, byte-load, retry, and blocked-navigation states using existing UI patterns/tokens.
+  4. Run focused UI tests, typecheck, relevant Go/PostgreSQL browser smoke, then commit and push one conventional commit.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Canonical same-origin `/api/design-artifacts/` resolution, recoverable preview byte-load failure, and synchronous popup reservation are implemented. Focused 36/36, full UI 1,658/1,658, monorepo typecheck, real Chromium+Go+PostgreSQL artifact smoke 1/1, and diff check pass. See `progress/implementation_635_design_artifact_url.md`.
+- Review correction R1: PR #636 review at `81a878d2` requires honest distinct states for authorization, invalid grant, blocked/closed popup, failed navigation, and preview byte-load; specific close-behavior tests; 390/768/1280 captured responsive smoke; and 1.5 icon strokes. Scope remains #635 only; this is the single authorized correction round.
+- Review correction: PR #636 `CHANGES_REQUIRED` resolved in the single allowed round. Authorization, invalid grant, popup blocked/closed, navigation, and byte-load states/copy/tests are separate; error icons use 1.5 stroke; six Playwright screenshots cover invalid-grant and byte-load retry states at 390/768/1280. Focused 40/40, full UI 1,662/1,662, typecheck, browser gate 1/1, and diff check pass.
 
 # Issue #630 — SketchUp catalog pin and repeated agregado occurrence identity
 
