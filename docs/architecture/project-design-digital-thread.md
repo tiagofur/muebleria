@@ -774,6 +774,75 @@ accepted R4 → silently mutate R4
 
 ---
 
+## 16A. Autoridad comercial única: QuoteRevision (#642)
+
+> Decisión canónica: la `QuoteRevision` exacta es la **única autoridad comercial**
+> — estado comercial, totales, historial de cotización visible al cliente, PDF,
+> XLSX y acciones comerciales de UI.
+
+Cada `QuoteRevision` lleva un **snapshot comercial inmutable** server-owned
+(`granete.quote-commercial-snapshot.v1`, capturado en el mismo comando atómico de
+creación) que congela exactamente lo que los documentos y la UI comercial
+necesitan reproducir sin consultar NADA mutable:
+
+```text
+moneda · identidad comercial de cliente {id, nombre} · identidad comercial de obra {id, nombre}
+breakdown autoritativo calculado UNA vez (materialsCost, edgeTotal, hardwareTotal,
+directCost, laborModular, laborFixedCost, marginFactor, salePrice)
+líneas comerciales congeladas {quoteLineId, quantity, furnitureInstanceIds,
+amounts {materialsCost, edgeTotal, hardwareTotal, directCost, laborModular,
+salePrice}} · descriptores congelados por unidad física {furnitureInstanceId,
+quoteLineId, moduleCode, moduleName, opciones {groupCode, groupLabel, choiceId,
+choiceLabel}} · capturedAt
+```
+
+Timestamps de lifecycle **reales** (`published_at`, `accepted_at`) los fijan los
+comandos de transición; `created_at`/`updated_at` nunca los sustituyen.
+
+Reglas duras:
+
+1. **Sin dependencia mutable**: reproducir una revisión publicada/aceptada no
+   consulta `Project` mutable, nombres/precios de catálogo actuales, settings,
+   `priceSnapshot` legacy, ni cálculo vivo de precios. El snapshot congela el
+   OUTPUT del motor de precios existente calculado una vez en la creación
+   (estrategia "authoritative calculated amounts": el motor puede evolucionar sin
+   reescribir historia).
+2. **Clasificación de legado**:
+   - `Project.status` queda sólo para workflow operativo/legacy del proyecto; ya
+     NO define estado comercial de cotización.
+   - `priceSnapshot` (`quote_snapshots`) queda explícitamente
+     `compatibility-only`; nunca es autoridad histórica.
+3. **Fail-closed**: revisión publicada/aceptada sin snapshot comercial requerido
+   → error tipado accionable (re-cotizar); JAMÁS recalcular desde
+   Project/catálogo/settings actuales. Publicar un draft legacy sin snapshot
+   falla cerrado (backstop en trigger DB).
+4. **Inmutabilidad**: el snapshot, `published_at` y `accepted_at` son inmutables
+   una vez escritos (trigger DB + grants); cambio comercial = nueva revisión.
+   `quoteLineId` conserva la agrupación comercial aunque dos líneas tengan la
+   misma presentación; `quantity` es explícita y debe coincidir con las unidades
+   físicas activas de esa línea. Los montos por línea son autoridad congelada y
+   su suma debe reconciliar exactamente con el breakdown global (más el labor
+   fijo, que se aplica una sola vez a nivel snapshot).
+5. **Costos**: el read model del snapshot aplica la misma redacción de costos
+   (`RedactQuoteBreakdown`) que el resto de la plataforma para actores sin
+   permiso de costos. El `salePrice` global es comercial y permanece, pero
+   TODOS los montos de línea —incluido su `salePrice`— se proyectan a cero: si
+   se conservaran las ventas de línea, `salePrice global - suma de líneas`
+   revelaría el labor fijo oculto. La agrupación, cantidad, descriptores y total
+   comercial exacto siguen disponibles.
+6. Campos no inventados: sin impuestos (no existen en el modelo runtime) y sin
+   descuentos congelados adicionales (los tiers TS no tienen fuente persistida;
+   el breakdown congelado ES el monto autoritativo).
+7. **Presentación determinista**: módulo, grupo y opción requieren un descriptor
+   customer-facing real al capturar. Un label ausente falla de forma tipada y
+   accionable; nunca se muestra un UUID como fallback. Las opciones se ordenan
+   por `groupCode` + `choiceId` antes de persistir.
+8. **Upgrade honesto**: revisiones legacy draft/published/accepted permanecen
+   con snapshot y timestamps NULL, identidad y status intactos. Sólo una nueva
+   revisión puede nacer con autoridad v1; no existe backfill inventado.
+
+---
+
 ## 17. Approval y ProductionRelease
 
 Una revisión puede publicarse sin estar todavía aprobada.

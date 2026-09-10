@@ -29,11 +29,20 @@ type CreateQuoteRevisionCommand struct {
 	// Requote provenance (#394 / DT-10): recorded verbatim when SourceType is
 	// "requote" (and tolerated empty otherwise).
 	SourceDesignRevisionID string
+	// CommercialSnapshot (#642): the immutable commercial truth frozen in this
+	// same transaction. The production commands (initial + requote) always
+	// attach one; NULL is tolerated ONLY for legacy-style rows (pre-#642
+	// fixtures) which then fail closed at publish/read time — never silently
+	// recalculated.
+	CommercialSnapshot *domain.QuoteCommercialSnapshot
 }
 
 // CreateQuoteRevisionItemCommand holds parameters for one physical furniture unit snapshot.
 type CreateQuoteRevisionItemCommand struct {
-	FurnitureInstanceID   string
+	FurnitureInstanceID string
+	// QuoteLineID is transient capture provenance for the immutable commercial
+	// snapshot. Physical item persistence remains keyed by FurnitureInstance.
+	QuoteLineID           string
 	FurnitureDefinitionID string
 	DefinitionVersion     *int
 	Parameters            map[string]any
@@ -173,30 +182,36 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 	var rev domain.QuoteRevision
 	var insertQuery string
 	var args []any
+	snapshotJSON, err := marshalQuoteCommercialSnapshot(cmd.CommercialSnapshot)
+	if err != nil {
+		return nil, err
+	}
 	if quoteRevID != "" {
 		insertQuery = `
 			INSERT INTO quote_revisions (
 				id, organization_id, project_id, revision_number,
 				status, source_type, notes, created_by,
-				base_quote_revision_id, source_design_revision_id
+				base_quote_revision_id, source_design_revision_id, commercial_snapshot
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
-				COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
+				COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
+				published_at, accepted_at
 		`
-		args = []any{quoteRevID, orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy, baseRevisionID, sourceDesignRevID}
+		args = []any{quoteRevID, orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy, baseRevisionID, sourceDesignRevID, snapshotJSON}
 	} else {
 		insertQuery = `
 			INSERT INTO quote_revisions (
 				organization_id, project_id, revision_number,
 				status, source_type, notes, created_by,
-				base_quote_revision_id, source_design_revision_id
+				base_quote_revision_id, source_design_revision_id, commercial_snapshot
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
-				COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
+				COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
+				published_at, accepted_at
 		`
-		args = []any{orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy, baseRevisionID, sourceDesignRevID}
+		args = []any{orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy, baseRevisionID, sourceDesignRevID, snapshotJSON}
 	}
 
 	err = s.db(txCtx).QueryRow(txCtx, insertQuery, args...).Scan(
@@ -209,10 +224,13 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 		&rev.Notes,
 		&rev.BaseQuoteRevisionID,
 		&rev.SourceDesignRevisionID,
+		&rev.PublishedAt,
+		&rev.AcceptedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+	rev.CommercialSnapshot = cmd.CommercialSnapshot
 
 	for _, item := range cmd.Items {
 		if !isValidUUID(item.FurnitureInstanceID) {
@@ -266,6 +284,23 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 	return &rev, nil
 }
 
+// marshalQuoteCommercialSnapshot serializes the frozen commercial payload for
+// persistence. NULL (not the string "null") when absent, so legacy-style rows
+// stay honestly snapshot-less.
+func marshalQuoteCommercialSnapshot(snapshot *domain.QuoteCommercialSnapshot) (any, error) {
+	if snapshot == nil {
+		return nil, nil
+	}
+	if err := domain.ValidateQuoteCommercialSnapshot(snapshot); err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 // UpdateQuoteRevisionStatusCommand holds parameters for a legitimate metadata/status transition of a QuoteRevision.
 type UpdateQuoteRevisionStatusCommand struct {
 	QuoteRevisionID string
@@ -296,9 +331,11 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 	txCtx := context.WithValue(ctx, transactionContextKey{}, tx)
 
 	var rev domain.QuoteRevision
+	var commercialSnapshot []byte
 	err = s.db(txCtx).QueryRow(txCtx, `
 		SELECT id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
-			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
+			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
+			COALESCE(commercial_snapshot, 'null'::jsonb)
 		FROM quote_revisions
 		WHERE id = $1
 		FOR UPDATE
@@ -312,11 +349,15 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		&rev.Notes,
 		&rev.BaseQuoteRevisionID,
 		&rev.SourceDesignRevisionID,
+		&commercialSnapshot,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrQuoteRevisionNotFound
 		}
+		return nil, err
+	}
+	if _, err := parseQuoteCommercialSnapshot(commercialSnapshot); err != nil {
 		return nil, err
 	}
 
@@ -334,6 +375,12 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 	case "draft":
 		if targetStatus != "published" {
 			return nil, transitionErr("published")
+		}
+		// #642 fail-closed: publishing requires the frozen commercial truth.
+		// A legacy draft without a snapshot must re-quote, never publish
+		// unpriced history (DB trigger is the durable backstop).
+		if len(commercialSnapshot) == 0 || string(commercialSnapshot) == "null" {
+			return nil, domain.ErrQuoteCommercialSnapshotMissing
 		}
 	case "published":
 		if targetStatus != "accepted" && targetStatus != "superseded" {
@@ -361,12 +408,17 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		}
 	}
 
+	// #642: real lifecycle timestamps — set exactly once by the transition
+	// that owns them; the DB trigger rejects any other change.
 	err = s.db(txCtx).QueryRow(txCtx, `
 		UPDATE quote_revisions
-		SET status = $2
+		SET status = $2,
+			published_at = CASE WHEN $2 = 'published' THEN NOW() ELSE published_at END,
+			accepted_at = CASE WHEN $2 = 'accepted' THEN NOW() ELSE accepted_at END
 		WHERE id = $1
 		RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, ''),
-			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, '')
+			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
+			published_at, accepted_at
 	`, cmd.QuoteRevisionID, targetStatus).Scan(
 		&rev.ID,
 		&rev.OrganizationID,
@@ -377,6 +429,8 @@ func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd Updat
 		&rev.Notes,
 		&rev.BaseQuoteRevisionID,
 		&rev.SourceDesignRevisionID,
+		&rev.PublishedAt,
+		&rev.AcceptedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -438,9 +492,10 @@ func (s *PostgresStore) loadReconciliationInputs(ctx context.Context, projectID,
 
 	// 3. Load QuoteRevision and verify same-project invariant.
 	var qrProjectID, qrStatus string
+	var qrCommercialSnapshot []byte
 	err = s.db(ctx).QueryRow(ctx, `
-		SELECT project_id, status FROM quote_revisions WHERE id = $1
-	`, quoteRevisionID).Scan(&qrProjectID, &qrStatus)
+		SELECT project_id, status, commercial_snapshot FROM quote_revisions WHERE id = $1
+	`, quoteRevisionID).Scan(&qrProjectID, &qrStatus, &qrCommercialSnapshot)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrQuoteRevisionNotFound
@@ -449,6 +504,10 @@ func (s *PostgresStore) loadReconciliationInputs(ctx context.Context, projectID,
 	}
 	if qrProjectID != projectID {
 		return nil, domain.ErrCrossProjectReconciliation
+	}
+	commercialSnapshot, err := parseQuoteCommercialSnapshot(qrCommercialSnapshot)
+	if err != nil && !errors.Is(err, domain.ErrQuoteCommercialSnapshotMissing) {
+		return nil, err
 	}
 
 	// 4. Load Commercial Items Snapshot from quote_revision_items
@@ -581,9 +640,10 @@ func (s *PostgresStore) loadReconciliationInputs(ctx context.Context, projectID,
 		QuoteStatus:      qrStatus,
 		DesignStatus:     drStatus,
 		Quote: domain.QuoteRevisionSnapshot{
-			ProjectID:       projectID,
-			QuoteRevisionID: quoteRevisionID,
-			Items:           commercialItems,
+			ProjectID:          projectID,
+			QuoteRevisionID:    quoteRevisionID,
+			Items:              commercialItems,
+			CommercialSnapshot: commercialSnapshot,
 		},
 		Design: domain.DesignRevisionSnapshot{
 			ProjectID:        projectID,

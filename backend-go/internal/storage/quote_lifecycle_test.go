@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -55,7 +56,110 @@ func setupQuoteLifecycleFixture(t *testing.T) *quoteLifecycleFixture {
 		qlLineA, fiProjectAOnly, fiModuleA, qlCustomDimsRow); err != nil {
 		t.Fatalf("seed quote line: %v", err)
 	}
+	seedBodyChoice(t, fx, qlLineA)
 	return &quoteLifecycleFixture{rlsFixture: fx, projectID: fiProjectAOnly}
+}
+
+// seedBodyChoice makes a fixture line priceable: the composed fixture module
+// (RELEASE-BODY) resolves a board part through the BODY material role, and
+// #642 requires the initial revision to freeze authoritative amounts computed
+// once by the pricing engine — an unpriceable line fails closed instead.
+func seedBodyChoice(t *testing.T, fx *rlsFixture, lineID string) {
+	t.Helper()
+	if _, err := fx.admin.Exec(context.Background(), `
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ($1, 'BODY', $2, '`+rlsOrgA+`')`,
+		lineID, releaseMaterial); err != nil {
+		t.Fatalf("seed BODY choice: %v", err)
+	}
+}
+
+// fixtureCommercialSnapshot gives lower-level lifecycle/release tests a
+// structurally valid frozen authority without consulting mutable catalog data.
+// Production initial/requote tests exercise the real snapshot builder.
+func fixtureCommercialSnapshot(projectID string, items []storage.CreateQuoteRevisionItemCommand) *domain.QuoteCommercialSnapshot {
+	lines := make([]domain.QuoteCommercialLine, 0, len(items))
+	units := make([]domain.QuoteCommercialUnit, 0, len(items))
+	for _, item := range items {
+		lineID := item.FurnitureInstanceID
+		lifecycle := item.LifecycleStatus
+		if lifecycle == "" {
+			lifecycle = "active"
+		}
+		quantity := 0
+		if lifecycle == "active" {
+			quantity = 1
+		}
+		lines = append(lines, domain.QuoteCommercialLine{QuoteLineID: lineID, Quantity: quantity, FurnitureInstanceIDs: []string{item.FurnitureInstanceID}})
+		units = append(units, domain.QuoteCommercialUnit{FurnitureInstanceID: item.FurnitureInstanceID, QuoteLineID: lineID, ModuleCode: "FIXTURE", ModuleName: "Fixture module", LifecycleStatus: lifecycle, Options: []domain.QuoteCommercialOption{}})
+	}
+	snapshot, err := domain.BuildQuoteCommercialSnapshot(time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC), "MXN",
+		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture customer"},
+		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture project"},
+		domain.QuoteBreakdown{MarginFactor: 1}, lines, units)
+	if err != nil {
+		panic(err)
+	}
+	return snapshot
+}
+
+func createPublishedFixtureQuoteRevision(ctx context.Context, store *storage.PostgresStore, cmd storage.CreateQuoteRevisionCommand) (*domain.QuoteRevision, error) {
+	cmd.Status = "draft"
+	cmd.CommercialSnapshot = fixtureCommercialSnapshot(cmd.ProjectID, cmd.Items)
+	revision, err := store.CreateQuoteRevision(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "published"})
+}
+
+// createFixtureQuoteRevision keeps lower-level Digital Thread tests honest
+// after #642: new rows always carry canonical commercial authority and closed
+// states are reached through lifecycle transitions rather than fabricated by
+// INSERT. Production paths still build their real priced snapshot.
+func createFixtureQuoteRevision(ctx context.Context, store *storage.PostgresStore, cmd storage.CreateQuoteRevisionCommand) (*domain.QuoteRevision, error) {
+	if cmd.CommercialSnapshot == nil && len(cmd.Items) == 0 {
+		instance, err := store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID: cmd.ProjectID,
+			Origin:    domain.FurnitureInstanceOriginManual,
+		})
+		if err != nil {
+			return nil, err
+		}
+		cmd.Items = []storage.CreateQuoteRevisionItemCommand{{
+			FurnitureInstanceID: instance.ID,
+			LifecycleStatus:     "active",
+		}}
+	}
+	if cmd.CommercialSnapshot == nil {
+		cmd.CommercialSnapshot = fixtureCommercialSnapshot(cmd.ProjectID, cmd.Items)
+	}
+	desiredStatus := cmd.Status
+	if desiredStatus == "" {
+		// Preserve the historical repository default while satisfying the new
+		// insert-draft-only invariant.
+		desiredStatus = "published"
+	}
+	if desiredStatus == "draft" {
+		return store.CreateQuoteRevision(ctx, cmd)
+	}
+	if desiredStatus != "published" && desiredStatus != "accepted" && desiredStatus != "superseded" {
+		return store.CreateQuoteRevision(ctx, cmd)
+	}
+	cmd.Status = "draft"
+	revision, err := store.CreateQuoteRevision(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	revision, err = store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "published"})
+	if err != nil || desiredStatus == "published" {
+		return revision, err
+	}
+	revision, err = store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "accepted"})
+	if err != nil || desiredStatus == "accepted" {
+		return revision, err
+	}
+	return store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{QuoteRevisionID: revision.ID, Status: "superseded"})
 }
 
 func createInitialRevision(t *testing.T, fx *quoteLifecycleFixture) *storage.CreateInitialQuoteRevisionResult {
@@ -279,6 +383,7 @@ func TestQuoteLifecycle_CreateInitialRevision_ModuleDimsFallback(t *testing.T) {
 		t.Fatalf("seed module dims: %v", err)
 	}
 	fx := &quoteLifecycleFixture{rlsFixture: base, projectID: fiProjectAOnly}
+	seedBodyChoice(t, base, qlLineNoDims)
 	createInitialRevision(t, fx)
 
 	details := listRevisions(t, fx)
@@ -297,6 +402,12 @@ func TestQuoteLifecycle_CreateInitialRevision_QuotedFinishRidesAlong(t *testing.
 	const interiorChoice = "70000000-0000-0000-0000-0000000000b1"
 	const frontChoice = "70000000-0000-0000-0000-0000000000b2"
 	if _, err := base.admin.Exec(ctx, `
+		INSERT INTO material_boards (id,code,name,width_mm,length_mm,thickness_mm,board_price,organization_id) VALUES
+		($1,'INTERIOR-FIXTURE','Interior fixture',1830,2440,18,1000,$3),
+		($2,'FRONT-FIXTURE','Front fixture',1830,2440,18,1000,$3)`, interiorChoice, frontChoice, rlsOrgA); err != nil {
+		t.Fatalf("seed customer-facing choices: %v", err)
+	}
+	if _, err := base.admin.Exec(ctx, `
 		INSERT INTO project_items (id, project_id, module_id, quantity, custom_dims, organization_id)
 		VALUES ($1, $2, $3, 2, $4::jsonb, '`+rlsOrgA+`')`,
 		qlLineA, fiProjectAOnly, fiModuleA, qlCustomDimsRow); err != nil {
@@ -306,8 +417,9 @@ func TestQuoteLifecycle_CreateInitialRevision_QuotedFinishRidesAlong(t *testing.
 		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
 		VALUES
 			($1, 'INTERIOR', $2, '`+rlsOrgA+`'),
-			($1, 'FRENTE', $3, '`+rlsOrgA+`')`,
-		qlLineA, interiorChoice, frontChoice); err != nil {
+			($1, 'FRENTE', $3, '`+rlsOrgA+`'),
+			($1, 'BODY', $4, '`+rlsOrgA+`')`,
+		qlLineA, interiorChoice, frontChoice, releaseMaterial); err != nil {
 		t.Fatalf("seed line choices: %v", err)
 	}
 	fx := &quoteLifecycleFixture{rlsFixture: base, projectID: fiProjectAOnly}
@@ -317,7 +429,7 @@ func TestQuoteLifecycle_CreateInitialRevision_QuotedFinishRidesAlong(t *testing.
 	if len(details) != 1 || len(details[0].Items) != 2 {
 		t.Fatalf("expected Q1 with 2 items, got %d revisions", len(details))
 	}
-	want := map[string]string{"INTERIOR": interiorChoice, "FRENTE": frontChoice}
+	want := map[string]string{"INTERIOR": interiorChoice, "FRENTE": frontChoice, "BODY": releaseMaterial}
 	for _, item := range details[0].Items {
 		if !reflect.DeepEqual(item.MaterialChoices, want) {
 			t.Fatalf("item %s material choices = %v, want the quoted finish %v", item.FurnitureInstanceID, item.MaterialChoices, want)
@@ -449,6 +561,10 @@ func TestQuoteLifecycle_Publish(t *testing.T) {
 		qlSharedLineB, fiSharedProject, fiModuleA); err != nil {
 		t.Fatalf("seed shared line: %v", err)
 	}
+	seedBodyChoice(t, fx.rlsFixture, qlSharedLineB)
+	// The base RLS fixture also seeds a choice-less line (60000000-…001) on
+	// the shared project; pricing covers every line, so it needs the role too.
+	seedBodyChoice(t, fx.rlsFixture, "60000000-0000-0000-0000-000000000001")
 	var sharedQ1 string
 	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		result, txErr := fx.store.CreateInitialQuoteRevision(ctx, storage.CreateInitialQuoteRevisionCommand{
@@ -523,7 +639,7 @@ func TestQuoteLifecycle_AcceptAtomicSupersede(t *testing.T) {
 	// accepted, one transaction, exactly one accepted.
 	var q2 string
 	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-		rev, txErr := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		rev, txErr := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fx.projectID,
 			BaseRevisionID: q1,
 			Status:         "published",
@@ -590,7 +706,7 @@ func TestQuoteLifecycle_ConcurrentAcceptsLeaveSingleWinner(t *testing.T) {
 	for i := range revisionIDs {
 		nextBase := base
 		err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-			rev, txErr := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+			rev, txErr := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 				ProjectID:      fx.projectID,
 				BaseRevisionID: nextBase,
 				Status:         "published",
@@ -661,7 +777,7 @@ func TestQuoteLifecycle_AcceptedUniquenessBackstop(t *testing.T) {
 
 	var q2 string
 	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-		rev, txErr := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		rev, txErr := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID:      fx.projectID,
 			BaseRevisionID: q1,
 			Status:         "published",

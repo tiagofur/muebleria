@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -58,7 +59,7 @@ func TestListQuoteRevisionsByProject_ContextReadModel(t *testing.T) {
 	var revisionOne *domain.QuoteRevision
 	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
 		var txErr error
-		revisionOne, txErr = fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+		revisionOne, txErr = createFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
 			OrganizationID: rlsOrgA,
 			ProjectID:      fiSharedProject,
 			Status:         "published",
@@ -87,7 +88,7 @@ func TestListQuoteRevisionsByProject_ContextReadModel(t *testing.T) {
 	// source would additionally require the exact sourceDesignRevisionId —
 	// provenance that the #394 writer enforces fail-closed.)
 	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
-		_, txErr := fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+		_, txErr := createFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
 			OrganizationID: rlsOrgA,
 			ProjectID:      fiSharedProject,
 			BaseRevisionID: revisionOne.ID,
@@ -210,16 +211,31 @@ func TestListQuoteRevisionsByProject_FailsClosedOnCorruptSnapshot(t *testing.T) 
 		t.Fatalf("create instance: %v", err)
 	}
 
+	item := storage.CreateQuoteRevisionItemCommand{
+		FurnitureInstanceID: instance.ID,
+		QuoteLineID:         "3c100000-0000-0000-0000-000000000001",
+		LifecycleStatus:     "active",
+	}
+	snapshotJSON, err := json.Marshal(fixtureCommercialSnapshot(fiSharedProject, []storage.CreateQuoteRevisionItemCommand{item}))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := fx.admin.Exec(ctx, `
-		INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, source_type)
-		VALUES ('3c000000-0000-0000-0000-000000000001', '`+rlsOrgA+`', '`+fiSharedProject+`', 1, 'published', 'manual')
-	`); err != nil {
+		INSERT INTO quote_revisions (id, organization_id, project_id, revision_number, status, source_type, commercial_snapshot)
+		VALUES ('3c000000-0000-0000-0000-000000000001', $1, $2, 1, 'draft', 'manual', $3::jsonb)
+	`, rlsOrgA, fiSharedProject, snapshotJSON); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fx.admin.Exec(ctx, `
 		INSERT INTO quote_revision_items (organization_id, project_id, quote_revision_id, furniture_instance_id, parameters, material_choices, lifecycle_status)
 		VALUES ('`+rlsOrgA+`', '`+fiSharedProject+`', '3c000000-0000-0000-0000-000000000001', '`+instance.ID+`',
 			'"corrupt-not-an-object"'::jsonb, '{}'::jsonb, 'active')
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.admin.Exec(ctx, `
+		UPDATE quote_revisions SET status='published', published_at=NOW()
+		WHERE id='3c000000-0000-0000-0000-000000000001'
 	`); err != nil {
 		t.Fatal(err)
 	}

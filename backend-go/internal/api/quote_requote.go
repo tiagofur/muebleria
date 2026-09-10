@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -102,6 +103,15 @@ func toQuoteRevisionDTO(rev *domain.QuoteRevision) openapi.QuoteRevision {
 		c := rev.CreatedBy
 		dto.CreatedBy = &c
 	}
+	if rev.PublishedAt != nil {
+		p := rev.PublishedAt.UTC().Format(time.RFC3339Nano)
+		dto.PublishedAt = &p
+	}
+	if rev.AcceptedAt != nil {
+		a := rev.AcceptedAt.UTC().Format(time.RFC3339Nano)
+		dto.AcceptedAt = &a
+	}
+	dto.CommercialSnapshot = toQuoteCommercialSnapshotDTO(rev.CommercialSnapshot)
 	return dto
 }
 

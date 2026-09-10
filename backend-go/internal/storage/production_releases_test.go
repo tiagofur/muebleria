@@ -95,7 +95,7 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 				LifecycleStatus:       "active",
 			}
 		}
-		q3, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q3, err := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Q3",
 			Items:     []storage.CreateQuoteRevisionItemCommand{quoteItem(out.fiA), quoteItem(out.fiB)},
@@ -475,7 +475,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 	// 2. Quote not accepted: a fresh quote revision stays draft.
 	var draftQuoteID string
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		q, err := fx.store.CreateQuoteRevision(ctx, storage.CreateQuoteRevisionCommand{
+		q, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fx.projectID,
 			Notes:     "Q4 draft",
 			Items: []storage.CreateQuoteRevisionItemCommand{

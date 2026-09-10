@@ -318,3 +318,47 @@ func TestHandleQuoteLifecycle_IdempotentRetryReplaysSameTransition(t *testing.T)
 		t.Fatalf("retry must replay, not re-execute: %d calls", store.acceptQuoteRevisionCalls)
 	}
 }
+
+func TestHandleCreateQuoteRevision_IdempotentReplayPreservesExactCommercialPayload(t *testing.T) {
+	snapshot := commercialSnapshotTestDetail().CommercialSnapshot
+	store := &quoteLifecycleIdempotentStore{
+		stubStore: &stubStore{createInitialQuoteRevisionResult: &storage.CreateInitialQuoteRevisionResult{
+			Revision: &domain.QuoteRevision{
+				ID: quoteLifecycleTestRevID, ProjectID: quoteLifecycleTestProjectID,
+				RevisionNumber: 1, Status: "draft", SourceType: "manual", CommercialSnapshot: snapshot,
+			},
+		}},
+		receipts: map[string]storage.IdempotencyResponse{},
+	}
+	server := &Server{Store: store}
+	handler := server.RequireIdempotency("quote.create-revision", http.HandlerFunc(server.HandleCreateInitialQuoteRevision))
+	request := func() *http.Request {
+		req := newCreateQuoteRevisionRequest("user-1", []domain.UserRole{domain.RoleAdmin}, `{}`)
+		req.Header.Set("Idempotency-Key", "create-commercial-snapshot-001")
+		return req
+	}
+
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, request())
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, request())
+	if first.Code != http.StatusCreated || second.Code != http.StatusCreated {
+		t.Fatalf("create/replay status = %d/%d", first.Code, second.Code)
+	}
+	if store.createInitialQuoteRevisionCalls != 1 {
+		t.Fatalf("replay executed writer %d times", store.createInitialQuoteRevisionCalls)
+	}
+	if second.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("missing replay receipt header: %v", second.Header())
+	}
+	if !bytes.Equal(first.Body.Bytes(), second.Body.Bytes()) {
+		t.Fatalf("replay changed exact response bytes:\n%s\n%s", first.Body.Bytes(), second.Body.Bytes())
+	}
+	var response openapi.QuoteRevision
+	if err := json.Unmarshal(second.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.CommercialSnapshot == nil || len(response.CommercialSnapshot.Lines) != 1 || response.CommercialSnapshot.Lines[0].Quantity != 1 || response.CommercialSnapshot.Units[0].QuoteLineId == "" {
+		t.Fatalf("replayed response lost line authority: %+v", response.CommercialSnapshot)
+	}
+}

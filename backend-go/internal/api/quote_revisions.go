@@ -49,6 +49,12 @@ func (s *Server) HandleProjectQuoteRevisions(w http.ResponseWriter, r *http.Requ
 
 	dtos := make([]openapi.QuoteRevisionDetail, 0, len(details))
 	for _, detail := range details {
+		// #642: cost-blind actors see the same commercial truth with the
+		// workshop cost stack redacted (sale price is commercial and stays) —
+		// identical policy to project payloads.
+		if !s.actorCanViewCosts(r) {
+			detail.CommercialSnapshot = domain.RedactQuoteCommercialSnapshot(detail.CommercialSnapshot)
+		}
 		dtos = append(dtos, toQuoteRevisionDetailDTO(detail))
 	}
 	respondWithJSON(w, http.StatusOK, dtos)
@@ -106,6 +112,16 @@ func toQuoteRevisionDetailDTO(d domain.QuoteRevisionDetail) openapi.QuoteRevisio
 		sourceDesignRevisionID = &source
 	}
 
+	var publishedAt, acceptedAt *string
+	if d.PublishedAt != nil {
+		published := d.PublishedAt.UTC().Format(time.RFC3339Nano)
+		publishedAt = &published
+	}
+	if d.AcceptedAt != nil {
+		accepted := d.AcceptedAt.UTC().Format(time.RFC3339Nano)
+		acceptedAt = &accepted
+	}
+
 	return openapi.QuoteRevisionDetail{
 		ID:                     d.ID,
 		ProjectId:              d.ProjectID,
@@ -117,6 +133,79 @@ func toQuoteRevisionDetailDTO(d domain.QuoteRevisionDetail) openapi.QuoteRevisio
 		Notes:                  notes,
 		CreatedBy:              createdBy,
 		CreatedAt:              d.CreatedAt.UTC().Format(time.RFC3339Nano),
+		PublishedAt:            publishedAt,
+		AcceptedAt:             acceptedAt,
+		CommercialSnapshot:     toQuoteCommercialSnapshotDTO(d.CommercialSnapshot),
 		Items:                  items,
+	}
+}
+
+// toQuoteCommercialSnapshotDTO maps the frozen commercial payload (#642). A
+// NULL snapshot (legacy revision) maps to an absent DTO value — the honest
+// fail-closed state, never a recalculated one.
+func toQuoteCommercialSnapshotDTO(snapshot *domain.QuoteCommercialSnapshot) *openapi.QuoteCommercialSnapshot {
+	if snapshot == nil {
+		return nil
+	}
+	units := make([]openapi.QuoteCommercialUnit, 0, len(snapshot.Units))
+	for _, unit := range snapshot.Units {
+		options := make([]openapi.QuoteCommercialOption, 0, len(unit.Options))
+		for _, option := range unit.Options {
+			options = append(options, openapi.QuoteCommercialOption{
+				GroupCode:   option.GroupCode,
+				GroupLabel:  option.GroupLabel,
+				ChoiceId:    option.ChoiceID,
+				ChoiceLabel: option.ChoiceLabel,
+			})
+		}
+		units = append(units, openapi.QuoteCommercialUnit{
+			FurnitureInstanceId: unit.FurnitureInstanceID,
+			QuoteLineId:         unit.QuoteLineID,
+			ModuleCode:          unit.ModuleCode,
+			ModuleName:          unit.ModuleName,
+			LifecycleStatus:     openapi.FurnitureInstanceLifecycleStatus(unit.LifecycleStatus),
+			Options:             options,
+		})
+	}
+	lines := make([]openapi.QuoteCommercialLine, 0, len(snapshot.Lines))
+	for _, line := range snapshot.Lines {
+		lines = append(lines, openapi.QuoteCommercialLine{
+			QuoteLineId:          line.QuoteLineID,
+			Quantity:             int64(line.Quantity),
+			FurnitureInstanceIds: append([]string(nil), line.FurnitureInstanceIDs...),
+			Amounts: openapi.QuoteCommercialLineAmounts{
+				MaterialsCost: line.Amounts.MaterialsCost,
+				EdgeTotal:     line.Amounts.EdgeTotal,
+				HardwareTotal: line.Amounts.HardwareTotal,
+				DirectCost:    line.Amounts.DirectCost,
+				LaborModular:  line.Amounts.LaborModular,
+				SalePrice:     line.Amounts.SalePrice,
+			},
+		})
+	}
+	return &openapi.QuoteCommercialSnapshot{
+		Schema:     snapshot.Schema,
+		CapturedAt: snapshot.CapturedAt.UTC().Format(time.RFC3339Nano),
+		Currency:   snapshot.Currency,
+		Customer: openapi.QuoteCommercialIdentity{
+			ID:   snapshot.Customer.ID,
+			Name: snapshot.Customer.Name,
+		},
+		Project: openapi.QuoteCommercialIdentity{
+			ID:   snapshot.Project.ID,
+			Name: snapshot.Project.Name,
+		},
+		Breakdown: openapi.QuoteCommercialBreakdown{
+			MaterialsCost:  snapshot.Breakdown.MaterialsCost,
+			EdgeTotal:      snapshot.Breakdown.EdgeTotal,
+			HardwareTotal:  snapshot.Breakdown.HardwareTotal,
+			DirectCost:     snapshot.Breakdown.DirectCost,
+			LaborModular:   snapshot.Breakdown.LaborModular,
+			LaborFixedCost: snapshot.Breakdown.LaborFixedCost,
+			MarginFactor:   snapshot.Breakdown.MarginFactor,
+			SalePrice:      snapshot.Breakdown.SalePrice,
+		},
+		Lines: lines,
+		Units: units,
 	}
 }

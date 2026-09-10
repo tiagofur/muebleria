@@ -47,7 +47,7 @@ func (s *PostgresStore) ListQuoteRevisionsByProject(ctx context.Context, project
 		SELECT id, organization_id, project_id, revision_number, status, source_type,
 			COALESCE(notes, ''), COALESCE(created_by::text, ''),
 			COALESCE(base_quote_revision_id::text, ''), COALESCE(source_design_revision_id::text, ''),
-			created_at
+			created_at, published_at, accepted_at, COALESCE(commercial_snapshot, 'null'::jsonb)
 		FROM quote_revisions
 		WHERE project_id = $1
 		ORDER BY revision_number ASC
@@ -61,6 +61,7 @@ func (s *PostgresStore) ListQuoteRevisionsByProject(ctx context.Context, project
 	revisionIDs := []string{}
 	for rows.Next() {
 		var d domain.QuoteRevisionDetail
+		var commercialSnapshot []byte
 		if err := rows.Scan(
 			&d.ID,
 			&d.OrganizationID,
@@ -73,9 +74,21 @@ func (s *PostgresStore) ListQuoteRevisionsByProject(ctx context.Context, project
 			&d.BaseQuoteRevisionID,
 			&d.SourceDesignRevisionID,
 			&d.CreatedAt,
+			&d.PublishedAt,
+			&d.AcceptedAt,
+			&commercialSnapshot,
 		); err != nil {
 			return nil, err
 		}
+		// #642: the frozen commercial payload decodes fail-closed — corrupt
+		// history is rejected, never guessed. NULL (legacy revisions that
+		// never froze commercial truth) stays honestly absent; consumers fail
+		// closed instead of recalculating.
+		snapshot, err := parseQuoteCommercialSnapshot(commercialSnapshot)
+		if err != nil {
+			return nil, err
+		}
+		d.CommercialSnapshot = snapshot
 		details = append(details, d)
 		revisionIDs = append(revisionIDs, d.ID)
 	}

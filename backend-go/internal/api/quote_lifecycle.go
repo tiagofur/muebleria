@@ -179,8 +179,13 @@ func respondWithQuoteLifecycleError(w http.ResponseWriter, err error, command st
 			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La cotización no puede aceptarse desde su estado actual: publicá el borrador primero. Una cotización aceptada o reemplazada es histórico inmutable.", nil)
 		}
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La cotización no puede publicarse desde su estado actual: sólo un borrador se publica, y lo publicado/aceptado/reemplazado es histórico inmutable.", nil)
+	case errors.Is(err, domain.ErrQuoteCommercialSnapshotMissing):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "Esta revisión no congeló su verdad comercial (legado): creá una nueva revisión de cotización para publicar. Nunca se recalcula la histórica.", nil)
 	case errors.Is(err, domain.ErrInvalidRevisionSnapshot):
-		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La obra no tiene líneas de cotización para crear la revisión inicial", nil)
+		// Discriminates only the payload copy: the typed error carries the
+		// exact snapshot defect (missing lines, corrupt frozen payload,
+		// unpriceable configuration) without leaking internals.
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "El estado comercial de la obra no produce una revisión válida: revisá las líneas de cotización y volvé a intentarlo", map[string]any{"reason": err.Error()})
 	default:
 		respondWithInternalError(w, err, "quote revision lifecycle command")
 	}

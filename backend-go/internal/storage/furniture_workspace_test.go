@@ -213,7 +213,7 @@ func TestGetProjectFurnitureWorkspace_HistoricalQuoteRevisionNoGrouping(t *testi
 		}
 		instID := mat.Instances[0].FurnitureInstanceID
 
-		qRev, txErr = fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+		qRev, txErr = createFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			CreatedBy: rlsUserA,
 			Items: []storage.CreateQuoteRevisionItemCommand{

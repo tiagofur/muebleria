@@ -1,3 +1,71 @@
+# Issue #642 — [P1][QUOTE-AUTH] Slice 1: immutable commercial snapshot authority
+
+- Inicio: 2026-09-10 (autoinstrucción humana "Start ONLY with SLICE 1"). Issue OPEN
+  pero SIN label `status:approved` al iniciar (#640/#641 lo tienen): flag pendiente
+  para el preflight de publicación del PR.
+- Base exacta `origin/main@b3efd4191526010e440aafe20e80378f21615161`; rama
+  `feat/642-quote-commercial-snapshot`. Single writer GLM. Sin merge ni cierre.
+- Alcance Slice 1 ONLY: snapshot comercial inmutable por QuoteRevision
+  (`granete.quote-commercial-snapshot.v1`), timestamps de lifecycle reales
+  (published_at/accepted_at), fail-closed legacy, RLS/trigger hardening, API
+  generada. NO reescribe Cotizaciones/dashboard/PDF/XLSX (Slices 2–3).
+- Plan: (1) authority map + consumer inventory; (2) sección de arquitectura en
+  digital-thread doc; (3) migración 000130 aditiva; (4) dominio/storage/API;
+ (5) proofs PostgreSQL real; (6) PR parcial `Refs #642` + STOP.
+- Preflight init.sh: PASS (2026-09-10).
+- Resultado: `IMPLEMENTED_PENDING_REVIEW`. Snapshot congelado en la MISMA tx de
+  creación (Q1 live editable state; Q2+ sintetizado por unidad activa del draft),
+  published_at/accepted_at por transición exacta, fail-closed legacy en
+  publish/lectura (comando + trigger DB), redacción de costos para actores sin
+  permiso, migración fresh+upgrade+down, OpenAPI regenerado sin drift.
+- Evidencia: `go test ./... -count=1` 10/10 ok (storage 316s sobre PostgreSQL
+  real, cero skips); focused snapshot 10/10 (14 proofs); API quote surfaces
+  PASS; `pnpm openapi:check`/`typecheck` PASS; `pnpm test` verde (UI 1690, Web
+  442, Mobile 73, Desktop 17); browser gate golden path ver reporte.
+- Detalle: `progress/implementation_642_quote_commercial_snapshot.md`.
+- Publicación (2026-09-10): owner autorizó label `status:approved` + excepción
+  de tamaño documentada en la issue; PR parcial `Refs #642` publicado con label
+  único `type:feature`. Sin merge ni cierre; revisión independiente pendiente.
+
+# Issue #642 — PR #649 correction round
+
+- Corrección autorizada sobre `feat/642-quote-commercial-snapshot`, head inicial
+  `466174572c43742d089ecb79a56606e40f6f008d`, base
+  `b3efd4191526010e440aafe20e80378f21615161`; worktree limpio verificado.
+- Inicio: 2026-09-10. El owner autorizó resolver todos los bloqueos y la
+  excepción real de tamaño >1000; no autoriza nuevo PR, merge, cierre,
+  autoaprobación ni cambios de metadata GitHub.
+- Plan: (1) completar autoridad comercial por QuoteLine y cantidad; (2) hacer
+  real el upgrade fixture pre-000130 y endurecer INSERT; (3) fallar cerrado en
+  descriptores sin label y ordenar opciones; (4) probar replay HTTP exacto del
+  payload extendido; (5) regenerar OpenAPI, documentar §16A y verificar gates.
+- Resultado: `IMPLEMENTED_PENDING_REVIEW`. Snapshot v1 ahora conserva
+  `quoteLineId`, quantity, FurnitureInstanceIds y montos autoritativos por línea;
+  create/lifecycle/requote/list/detail devuelven la misma autoridad generada.
+  Descriptores ausentes fallan tipado, opciones/bytes son deterministas y la
+  redacción cubre costos por línea. Migración upgrade siembra legado antes de
+  000130, preserva status/identidad/NULL honestos, prueba down/replay/FORCE RLS
+  y bloquea INSERT app-role inválido. Replay HTTP exacto probado.
+- Evidencia de corrección: domain + 13 tests storage `TestQuoteCommercialSnapshot*`
+  + API quote enfocada PASS; OpenAPI check/typecheck PASS; browser gate real
+  Chromium+Go+PostgreSQL 4/4 PASS (29.5 s). Full Go exacto PASS (storage 336.081 s; pilotreadiness 235.452 s).
+
+# Issue #642 — PR #649 second focused correction
+
+- Inicio: 2026-09-10 sobre head exacto
+  `85beb97683b405481e98328cd4e5b9b92ea49c4f`; misma rama/PR, sin merge,
+  cierre, autoaprobación ni cambios de labels.
+- Alcance: bloquear TODO INSERT NULL posterior a 000130 sin alterar las filas
+  legacy pre-migración; validar semántica monetaria y sumas en PostgreSQL;
+  impedir publish de bytes corruptos; cerrar inferencia de labor fijo en la
+  proyección cost-blind; sincronizar contrato/evidencia.
+- Resultado: nuevos INSERT requieren snapshot canónico draft; legado existente
+  conserva NULL y continúa fail-closed. Breakdown y amounts vacíos o
+  irreconciliables son inválidos en DB. La proyección sin permiso mantiene el
+  total comercial y oculta todos los montos de línea, incluido line salePrice.
+- Evidencia enfocada: migración fresh/upgrade/down/replay, app-role NULL/corrupt
+  y API non-inference PASS. Ver reporte de implementación para gates finales.
+
 # Issue #641 — Design inspector async and accessibility correction
 
 - Corrección autorizada sobre PR #648, rama `fix/641-design-inspector-async-a11y`,
