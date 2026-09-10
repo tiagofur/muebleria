@@ -1414,7 +1414,7 @@ visualizados o renderizado especializado documentado, feature CSS/TSX usa tokens
 
 Design-revision primary content uses frozen business labels: unit, furniture name/code,
 semantic measurements, material name/code/thickness/provenance, room, and actor. UUIDs
-belong inonly in the keyboard-accessible technical audit disclosure. A legacy revision
+belong only in the keyboard-accessible technical audit disclosure. A legacy revision
 without frozen descriptors displays `Descripción histórica no disponible`; it must not
 silently project the current catalog. Material provenance is always textual, never
 color-only, and revision item cards collapse to one column on narrow screens.

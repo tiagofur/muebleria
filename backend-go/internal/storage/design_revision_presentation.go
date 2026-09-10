@@ -168,17 +168,16 @@ func (s *PostgresStore) buildDesignRevisionPresentation(ctx context.Context, org
 		presentationMaterials := make([]domain.DesignRevisionMaterial, 0, len(roles))
 		for _, role := range roles {
 			materialID, inherited := engine.ResolveBoardChoiceForPresentation(role, item.MaterialChoices)
-			entry := domain.DesignRevisionMaterial{Role: role, RoleLabel: humanizeRole(role), MaterialID: materialID, Provenance: domain.DesignMaterialProvenanceUnresolved}
-			if inherited {
-				entry.Provenance = domain.DesignMaterialProvenanceInheritedDefault
-			} else if source := item.MaterialChoiceSources[role]; source != "" {
-				entry.Provenance = source
+			material, resolved := materials[materialID]
+			entry := domain.DesignRevisionMaterial{
+				Role:       role,
+				RoleLabel:  humanizeRole(role),
+				MaterialID: materialID,
+				Provenance: presentationMaterialProvenance(item.MaterialChoiceSources[role], inherited, resolved),
 			}
-			if material, ok := materials[materialID]; ok {
+			if resolved {
 				thickness := material.ThicknessMM
 				entry.Code, entry.Name, entry.EffectiveThicknessMM = material.Code, material.Name, &thickness
-			} else {
-				entry.Provenance = domain.DesignMaterialProvenanceUnresolved
 			}
 			presentationMaterials = append(presentationMaterials, entry)
 		}
@@ -197,6 +196,19 @@ func (s *PostgresStore) buildDesignRevisionPresentation(ctx context.Context, org
 		}
 	}
 	return nil
+}
+
+func presentationMaterialProvenance(source domain.DesignMaterialProvenance, inherited, resolved bool) domain.DesignMaterialProvenance {
+	if !resolved {
+		return domain.DesignMaterialProvenanceUnresolved
+	}
+	if inherited {
+		return domain.DesignMaterialProvenanceInheritedDefault
+	}
+	if source == domain.DesignMaterialProvenanceAuthored || source == domain.DesignMaterialProvenanceQuoted {
+		return source
+	}
+	return domain.DesignMaterialProvenanceUnresolved
 }
 
 func sortedAnyKeys(values map[string]any) []string {

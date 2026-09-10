@@ -36,3 +36,12 @@ ALTER TABLE design_revision_items
 ALTER TABLE design_working_items
     DROP CONSTRAINT IF EXISTS design_working_items_material_choice_sources_object,
     DROP COLUMN IF EXISTS material_choice_sources;
+
+UPDATE rls_policy_inventory
+SET rationale = CASE table_name
+        WHEN 'design_revisions' THEN 'Published design revisions are immutable snapshots following project organizations; the owner organization may transition a published revision to approved exactly once (#387 / #395 / I4 / I12 / §17)'
+        WHEN 'design_revision_items' THEN 'Design revision items capture the authoring snapshot of furniture instances within an immutable revision (#387 / I4 / I12)'
+    END,
+    policy_version = GREATEST(policy_version - 1, 1),
+    updated_at = NOW()
+WHERE table_name IN ('design_revisions', 'design_revision_items');

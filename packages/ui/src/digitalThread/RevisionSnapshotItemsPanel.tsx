@@ -21,7 +21,7 @@ function TechnicalId({ label, value }: { readonly label: string; readonly value:
       <dt>{label}</dt>
       <dd>
         <code>{value}</code>{' '}
-        <button type="button" className="btn btn--ghost btn--sm" aria-label={`Copiar ${label}`} onClick={() => void navigator.clipboard?.writeText(value)}>
+        <button type="button" className="btn btn--ghost btn--small" aria-label={`Copiar ${label}`} onClick={() => void navigator.clipboard?.writeText(value)}>
           Copiar
         </button>
       </dd>

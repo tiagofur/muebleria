@@ -22,16 +22,20 @@ const base: DesignRevisionItem = {
 afterEach(cleanup);
 
 describe('RevisionSnapshotItemsPanel', () => {
-  it('presents frozen business labels and keeps UUIDs in a keyboard disclosure', () => {
+  it('presents frozen business labels and exposes a focusable semantic technical disclosure', () => {
     render(<RevisionSnapshotItemsPanel items={[base]} />);
     expect(screen.getByRole('heading', { name: 'Gabinete bajo 1 de 2' })).toBeTruthy();
     expect(screen.getByText('Tomado de cotización')).toBeTruthy();
     const summary = screen.getByText('Identificadores técnicos');
     const disclosure = summary.closest('details');
     expect(disclosure?.open).toBe(false);
+    summary.focus();
+    expect(document.activeElement).toBe(summary);
+    expect(summary.tagName).toBe('SUMMARY');
     fireEvent.click(summary);
     expect(disclosure?.open).toBe(true);
     expect(screen.getByText(base.furniture_instance_id)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copiar FurnitureInstance ID' })).toBeTruthy();
   });
 
   it('labels legacy revisions honestly without a mutable catalog projection', () => {

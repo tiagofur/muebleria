@@ -43,3 +43,24 @@ Independent coordinator readback then ran final `./init.sh` against implementati
 - `contracts/openapi/granete-api.v1.yaml`
 - `packages/ui/src/digitalThread/RevisionSnapshotItemsPanel.tsx`
 - `tests/organization/project-designs.spec.ts`
+
+## PR #646 correction round 1
+
+Reviewed head: `d359ca305b5de0627a765c192795e322c4ed85b4`. This is the single authorized correction round.
+
+Corrections applied:
+
+- Updated the Foundation project-pairing consumer from the removed table test ID to the semantic revision item list/article contract.
+- Added storage-level table coverage for `authored`, `quoted`, `inherited_default`, and `unresolved` presentation provenance.
+- Strengthened the real browser fixture with a persisted board material and site-survey room. Chromium now asserts frozen module name/code, parameter label/unit, material name/code/thickness/provenance, room and actor; it also proves keyboard activation/focus and verifies every inspector/list/card edge stays inside the 390/768/1280 viewports with zero document overflow.
+- Restored the exact pre-000129 RLS inventory rationale and policy version in the down migration, with fresh and upgrade/down assertions.
+- Reconciled the disclosure with the design system: `btn--small`, `--weight-semibold`, hover/focus-visible/active states, and focused semantic disclosure coverage.
+- Corrected `belong inonly in` to `belong only in`.
+
+Correction evidence:
+
+- `go test ./internal/storage -run 'TestPresentationMaterialProvenanceCoversAllServerOwnedStates|TestDesignRevisionReadModelMigrationFreshUpgradeAndDown' -count=1` — PASS.
+- Focused UI (`RevisionSnapshotItemsPanel` + `ProjectDesignsScreen`) — 35/35 PASS.
+- `scripts/organization-browser-gate.sh tests/organization/project-designs.spec.ts` — Chromium + Go + PostgreSQL 1/1 PASS.
+- `pnpm gate:foundation:a` — PASS: OpenAPI drift, monorepo typecheck/tests, deployment 31/31, PostgreSQL/RLS/API/fresh/upgrade/atomic proofs, Pilot Readiness, and all 31 Chromium cases including both project-design and project-pairing paths; final gate reports 34/34 Foundation scenarios executable.
+- `git diff --check` — PASS.

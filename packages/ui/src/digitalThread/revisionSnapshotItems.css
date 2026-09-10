@@ -9,12 +9,22 @@
 .revision-snapshot-materials > li { padding-block: var(--space-2); border-top: 1px solid var(--color-border); }
 .revision-snapshot-materials strong, .revision-snapshot-materials small { display: block; }
 .revision-snapshot-material__meta { display: grid; justify-items: end; gap: var(--space-1); }
-.revision-provenance { font-size: var(--text-xs); font-weight: 600; }
+.revision-provenance { font-size: var(--text-xs); font-weight: var(--weight-semibold); }
 .revision-provenance--unresolved { color: var(--danger); }
 .revision-provenance--quoted { color: var(--info); }
 .revision-provenance--authored, .revision-provenance--inherited_default { color: var(--success); }
 .revision-snapshot-legacy { display: grid; gap: var(--space-1); color: var(--color-text-muted); }
-.revision-item-audit summary { cursor: pointer; font-weight: 600; }
+.revision-item-audit summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-semibold);
+  transition: background-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+.revision-item-audit summary:hover { background: var(--surface-hover); }
+.revision-item-audit summary:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.revision-item-audit summary:active { background: var(--surface-selected); transform: translateY(1px); }
 .revision-item-audit dd { overflow-wrap: anywhere; }
 @media (max-width: 48rem) {
   .revision-snapshot-item__header, .revision-snapshot-materials > li, .revision-snapshot-values > li { flex-direction: column; }

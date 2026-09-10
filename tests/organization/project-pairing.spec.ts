@@ -300,7 +300,7 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
     await expect(page.getByTestId('revision-node-R2')).toBeVisible();
     await page.getByTestId('revision-node-R1').click();
     const inspector = page.getByTestId('revision-inspector');
-    await expect(inspector.getByTestId('revision-items-table').locator('tbody tr')).toHaveCount(1);
+    await expect(inspector.getByTestId('revision-items-list').locator('article')).toHaveCount(1);
 
     // 7. Stale-base pin: with R2 published, the Web pins the SELECTED R1 and
     //    the exchange keeps R1 verbatim while carrying the R2 working truth.
