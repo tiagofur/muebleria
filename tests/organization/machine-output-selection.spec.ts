@@ -6,8 +6,10 @@ import { required } from './support/api';
  * #591 / WEB-MFG-2 browser E2E against the real Go backend + PostgreSQL:
  * the factory pins the EXACT machine/profile/adapter tuple per operation,
  * it survives reload, the resolver read model returns only that target, a
- * blocked CADmatic 4 selection produces blockers (never a silent fallback to
- * ptx-generic), stale writes conflict, and org B never sees org A's config.
+ * blocked CADmatic 3 selection produces blockers (never a silent fallback to
+ * ptx-generic), the CADmatic 4 candidate revision (r2, #650) resolves ready
+ * while staying an unvalidated candidate, stale writes conflict, and org B
+ * never sees org A's config.
  */
 
 const CUTTING_GENERIC = {
@@ -17,13 +19,14 @@ const CUTTING_GENERIC = {
   outputProfileId: 'ptx-generic',
   outputProfileRevisionId: 'r1',
   adapterId: 'granete-ptx',
-  adapterVersion: '1.0.0',
-  adapterImplementationDigest: '39df10ba24528b5d402a940ac2e6f9fc20b735011468013090cfc78f88511a28',
+  adapterVersion: '1.1.0',
+  adapterImplementationDigest: 'b56de3839ac9a0da94aa9c90b62d56cad19aefea27d365ff934cac46c1f70d8b',
 } as const;
 
-const CUTTING_CADMATIC4 = {
+const CUTTING_CADMATIC4_CANDIDATE = {
   ...CUTTING_GENERIC,
   outputProfileId: 'ptx-cadmatic-4',
+  outputProfileRevisionId: 'r2',
 } as const;
 
 async function api() {
@@ -100,12 +103,12 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     // Reload: exact tuple survives.
     await page.reload();
     await page.getByTestId('settings-tab-tab-ingenieria').click();
-    await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('No probado');
+    await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
     await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Listo');
     await page.getByText('Detalle técnico').click();
     const tech = page.getByTestId('machine-output-cutting');
     await expect(tech.getByText('profile: ptx-generic@r1')).toBeVisible();
-    await expect(tech.getByText('adapter: granete-ptx@1.0.0')).toBeVisible();
+    await expect(tech.getByText('adapter: granete-ptx@1.1.0')).toBeVisible();
 
     // Server read model: exactly ONE configured target, no blockers.
     const readModel = await repository.getMachineOutputSelections();
@@ -116,24 +119,24 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     expect(readModel.selections.filter((s) => s.selection.selection.operation === 'cutting')).toHaveLength(1);
   });
 
-  test('blocked CADmatic 4 stays selected with visible blockers — no fallback to generic', async ({ page }) => {
+  test('blocked CADmatic 3 stays selected with visible blockers — no fallback to generic', async ({ page }) => {
     test.setTimeout(90_000);
 
     const { repository } = await api();
     await loginToA(page);
     await openEngineeringSettings(page);
-    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4', 'ptx-cadmatic-4');
+    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 3', 'ptx-cadmatic-3');
 
-    await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('No probado');
+    await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
     await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Bloqueado');
     await expect(page.getByTestId('machine-output-cutting-blocked')).toContainText(
       'No se puede generar este archivo todavía',
     );
 
-    // Server still holds CADmatic 4 — never silently swapped for ptx-generic.
+    // Server still holds CADmatic 3 — never silently swapped for ptx-generic.
     const readModel = await repository.getMachineOutputSelections();
     const cutting = readModel.selections.find((s) => s.selection.selection.operation === 'cutting');
-    expect(cutting!.selection.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
+    expect(cutting!.selection.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-3');
 
     // Machining selection of the pending MPR serializer is valid and surfaces
     // the structural blocker (selection ≠ generation).
@@ -156,6 +159,28 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     );
   });
 
+  test('CADmatic 4 candidate (r2, #650) resolves ready while staying an unvalidated candidate', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const { repository } = await api();
+    await loginToA(page);
+    await openEngineeringSettings(page);
+    // Switching is an explicit user action — never an automatic fallback.
+    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4', 'ptx-cadmatic-4');
+
+    // Ready (the revision's real compilation preflight passes) but honest
+    // about field state: candidate, not validated on the machine.
+    await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
+    await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Listo');
+
+    const readModel = await repository.getMachineOutputSelections();
+    const cutting = readModel.selections.find((s) => s.selection.selection.operation === 'cutting');
+    expect(cutting!.selection.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
+    expect(cutting!.selection.selection.outputCompatibilityProfileRevisionId).toBe('r2');
+    expect(cutting!.blockers).toEqual([]);
+    expect(cutting!.supportStatus).toBe('NOT_TESTED');
+  });
+
   test('stale editor gets a typed VERSION_CONFLICT, never a silent overwrite', async () => {
     const { client, token } = await api();
 
@@ -172,7 +197,7 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     // Editor B still holds the previous version: typed conflict.
     await expect(
       client.upsertMachineOutputSelection(token, 'cutting', {
-        selection: { ...CUTTING_CADMATIC4 },
+        selection: { ...CUTTING_CADMATIC4_CANDIDATE },
         expectedVersion: version,
       }),
     ).rejects.toMatchObject({ status: 409, payload: { code: 'VERSION_CONFLICT' } });
