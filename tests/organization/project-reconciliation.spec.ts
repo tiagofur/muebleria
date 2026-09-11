@@ -56,7 +56,7 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
   });
   const catalog = await repository.getCatalog();
   const template = catalog.modules.find((m) => m.id === GATE_MODULE_A_ID) ?? catalog.modules[0]!;
-  const depthMm = template.depthMm || 590;
+  const depthMm = template.externalDims?.depth || 590;
   await repository.saveCatalog({
     ...catalog,
     structures: [...(catalog.structures ?? []), { id: REC_STRUCT, code: 'REC-STRUCT', name: 'Cuerpo', externalDims: { width: 600, height: 720, depth: depthMm }, components: [], active: true }],
@@ -68,11 +68,7 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
         structureId: REC_STRUCT,
         components: [],
         hardwareLines: [{ id: 'rec-hardware-line', hardwareId: REC_HW, quantity: 1, optionRole: '' }],
-        parameterDefinitions: [],
         externalDims: { width: 600, height: 720, depth: depthMm },
-        widthMm: 600,
-        heightMm: 720,
-        depthMm,
       },
     ],
     customers: [
@@ -129,7 +125,7 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
   );
 
   // 3. Organization context (from authenticated session, no direct DB lookup)
-  const orgId = aOwner.organization.id;
+  const orgId = aOwner.organization!.id;
 
   // 4. Design + working copy: FI-A synced (600), FI-B modified (650),
   // design-first unit added (700). FI-C deliberately not modeled.
@@ -232,7 +228,7 @@ async function assertFrozenRoutingExecution(page: Page, apiBase: string, token: 
   for (const part of generated.part_instances) {
     expect(part.production_revision).toBe(releaseId);
     expect(part.id.startsWith(`${releaseId}:`)).toBe(true);
-    expect(part.required_operations[0].type).toBe('cut');
+    expect(part.required_operations[0]?.type).toBe('cut');
     expect(part.required_operations.every((op) => op.status === 'queued')).toBe(true);
   }
   for (const unit of generated.module_units) {
@@ -610,6 +606,15 @@ async function publishRevisionWithItemIds(options: {
       acceptedRevision!.commercialSnapshot!.breakdown.salePrice.toFixed(2),
     );
     await expect(page.getByTestId('project-send-quote')).toHaveCount(0);
+
+    // Exact Q2 snapshot furniture & dimensions assertion (#642)
+    await expect(page.getByTestId('quote-revision-badge')).toContainText('Q2 · Solo lectura');
+    await expect(page.getByText(`650×720×${seeded.depthMm} mm`)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Agregar mueble/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Quitar/i })).toHaveCount(0);
+    await expect(page.getByLabel(/Cantidad/i)).toHaveCount(0);
+    await expect(page.getByLabel(/Medida/i)).toHaveCount(0);
+
     const quoteVisualDirectory = process.env.QUOTE_VISUAL_DIR;
     if (quoteVisualDirectory) {
       if (!isAbsolute(quoteVisualDirectory)) throw new Error('QUOTE_VISUAL_DIR must be absolute');
@@ -624,6 +629,22 @@ async function publishRevisionWithItemIds(options: {
       await quoteDetail.scrollIntoViewIfNeeded();
       await expect(quoteDetail).toBeVisible();
       await expect(quoteDetail).toContainText('Q2 · Aceptada');
+
+      // Exact Q2 snapshot furniture & dimensions verified in each viewport (#642)
+      const revisionBadge = page.getByTestId('quote-revision-badge');
+      await revisionBadge.scrollIntoViewIfNeeded();
+      await expect(revisionBadge).toBeVisible();
+      await expect(revisionBadge).toContainText('Q2 · Solo lectura');
+
+      const unitDimension = page.getByText(`650×720×${seeded.depthMm} mm`);
+      await unitDimension.scrollIntoViewIfNeeded();
+      await expect(unitDimension).toBeVisible();
+
+      await expect(page.getByRole('button', { name: /Agregar mueble/i })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Quitar/i })).toHaveCount(0);
+      await expect(page.getByLabel(/Cantidad/i)).toHaveCount(0);
+      await expect(page.getByLabel(/Medida/i)).toHaveCount(0);
+
       await page.evaluate(async () => {
         await Promise.all(
           document
@@ -970,9 +991,6 @@ async function publishRevisionWithItemIds(options: {
           code: 'OPS-MOD-1',
           name: 'Mueble Operaciones E2E',
           externalDims: { width: 600, height: 720, depth: 560 },
-          widthMm: 600,
-          heightMm: 720,
-          depthMm: 560,
           structureId: OPS_STRUCT_ID,
           components: [],
           hardwareLines: [],

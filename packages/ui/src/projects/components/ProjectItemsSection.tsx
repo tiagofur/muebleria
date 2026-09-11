@@ -16,7 +16,12 @@ import {
   optionLabelForId,
   optionsForGroup,
   furnitureTypeLabel,
+  formatProjectMoney,
 } from '../projectHelpers';
+import {
+  buildRevisionLines,
+  formatLifecycleStatus,
+} from '../quoteRevisionPresentation';
 
 /** Drag-over visual feedback state. */
 type DropPosition = 'above' | 'below' | null;
@@ -39,6 +44,8 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
     postAddPlaceCue,
     onDismissPostAddPlaceCue,
     onOpenSpatialStudioUnplaced,
+    quoteAuthority,
+    showCosts,
   } = useProjectDetail();
 
   // ─── Drag & drop state ────────────────────────────────────────────────
@@ -126,6 +133,239 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
   );
 
   // ─── Render ────────────────────────────────────────────────────────────
+
+  if (quoteAuthority?.kind === 'loading') {
+    return (
+      <section className="project-detail__section project-detail__items" aria-label="Ítems de cotización">
+        <div className="project-detail__section-header">
+          <h3 className="project-detail__section-title">Muebles</h3>
+        </div>
+        <p className="project-detail__empty" aria-busy="true">
+          Cargando muebles de la cotización…
+        </p>
+      </section>
+    );
+  }
+
+  if (quoteAuthority?.kind === 'error') {
+    return (
+      <section className="project-detail__section project-detail__items" aria-label="Ítems de cotización">
+        <div className="project-detail__section-header">
+          <h3 className="project-detail__section-title">Muebles</h3>
+        </div>
+        <div
+          className="catalog-form__error"
+          role="alert"
+          data-testid="project-items-error"
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}
+        >
+          <p>{quoteAuthority.message}</p>
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={quoteAuthority.onRetry}
+            data-testid="project-items-retry"
+          >
+            Reintentar
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (quoteAuthority?.kind === 'legacy') {
+    return (
+      <section className="project-detail__section project-detail__items" aria-label="Ítems de cotización">
+        <div className="project-detail__section-header">
+          <h3 className="project-detail__section-title">Muebles</h3>
+          <span className="badge badge--warning">
+            Q{quoteAuthority.revisionNumber} · Legacy
+          </span>
+        </div>
+        <div className="catalog-form__error" data-testid="project-items-legacy" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
+          <p>{quoteAuthority.message}</p>
+          {quoteAuthority.staleMessage ? <p style={{ fontSize: '0.85rem' }}>{quoteAuthority.staleMessage}</p> : null}
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={quoteAuthority.onRetry}
+            data-testid="project-items-legacy-retry"
+          >
+            Reintentar
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (quoteAuthority?.kind === 'ready') {
+    if (!quoteAuthority.snapshot) {
+      return (
+        <section className="project-detail__section project-detail__items" aria-label="Ítems de cotización">
+          <div className="project-detail__section-header">
+            <h3 className="project-detail__section-title">Muebles ({quoteAuthority.furnitureQuantity})</h3>
+            <span className="badge badge--subtle">Q{quoteAuthority.revisionNumber} · Solo lectura</span>
+          </div>
+          <p className="project-detail__empty">Sin snapshot de muebles disponible para esta revisión.</p>
+        </section>
+      );
+    }
+
+    const revisionLines = buildRevisionLines(quoteAuthority.snapshot, quoteAuthority.items, {
+      amountsVisible: showCosts,
+    });
+
+    return (
+      <section className="project-detail__section project-detail__items" aria-label="Ítems de cotización">
+        <div className="project-detail__section-header">
+          <h3 className="project-detail__section-title">Muebles ({quoteAuthority.furnitureQuantity})</h3>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span className="badge badge--subtle" data-testid="quote-revision-badge">
+              Q{quoteAuthority.revisionNumber} · Solo lectura
+            </span>
+          </div>
+        </div>
+
+        {quoteAuthority.staleMessage ? (
+          <div className="catalog-form__error" role="status" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <span>{quoteAuthority.staleMessage}</span>
+            <button type="button" className="btn btn--small" onClick={quoteAuthority.onRetry}>
+              Reintentar
+            </button>
+          </div>
+        ) : null}
+
+        {revisionLines.length === 0 ? (
+          <p className="project-detail__empty">Sin muebles registrados en esta revisión.</p>
+        ) : (
+          <div className="project-item-list">
+            {revisionLines.map((line, index) => (
+              <div
+                key={line.quoteLineId}
+                className="project-item-card project-item-card--readonly"
+                data-testid={`quote-line-${line.quoteLineId}`}
+              >
+                <div className="project-item-card__header">
+                  <div className="project-item-card__header-left">
+                    <span className="project-item-card__index">{index + 1}.</span>
+                    <h4 className="project-item-card__title">
+                      {line.moduleName}{line.moduleCode ? ` — ${line.moduleCode}` : ''}
+                    </h4>
+                  </div>
+                  {line.salePrice !== null ? (
+                    <div className="project-item-card__price">
+                      {formatProjectMoney(line.salePrice, quoteAuthority.currency)}
+                    </div>
+                  ) : null}
+                </div>
+
+                {line.isMultiUnit ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div className="catalog-form__field" style={{ maxWidth: '120px' }}>
+                      <span className="catalog-form__label">Cantidad total</span>
+                      <div className="project-item-readonly-value">{line.quantity}</div>
+                    </div>
+                    {line.units.map((unit, uIdx) => (
+                      <div
+                        key={unit.furnitureInstanceId}
+                        className="project-revision-unit-card"
+                        data-testid={`quote-unit-${unit.furnitureInstanceId}`}
+                      >
+                        <div className="project-revision-unit-card__header">
+                          <span className="project-revision-unit-card__title">Unidad {uIdx + 1}</span>
+                          <span className={`badge ${unit.lifecycleStatus === 'active' ? 'badge--subtle' : 'badge--warning'}`}>
+                            {formatLifecycleStatus(unit.lifecycleStatus)}
+                          </span>
+                        </div>
+                        <div className="project-revision-unit-card__meta">
+                          <span className="project-item-readonly-uuid" title={unit.furnitureInstanceId}>
+                            ID: {unit.furnitureInstanceId}
+                          </span>
+                        </div>
+                        <div className="project-editor__grid">
+                          {unit.dimensionsFormatted ? (
+                            <div className="catalog-form__field">
+                              <span className="catalog-form__label">Medidas</span>
+                              <div className="project-item-readonly-value">{unit.dimensionsFormatted}</div>
+                            </div>
+                          ) : null}
+                        </div>
+                        {unit.options.length > 0 ? (
+                          <div className="project-item-choices">
+                            {unit.options.map((opt) => (
+                              <div key={opt.groupCode} className="catalog-form__field">
+                                <span className="catalog-form__label">{opt.groupLabel} ({opt.groupCode})</span>
+                                <div className="project-item-readonly-value">
+                                  {opt.groupLabel}: {opt.choiceLabel}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div>
+                    {line.units[0] ? (
+                      <div data-testid={`quote-unit-${line.units[0].furnitureInstanceId}`}>
+                        <div className="project-revision-unit-card__meta" style={{ marginBottom: '0.5rem' }}>
+                          <span className="project-item-readonly-uuid" title={line.units[0].furnitureInstanceId}>
+                            ID: {line.units[0].furnitureInstanceId}
+                          </span>
+                        </div>
+                        <div className="project-editor__grid">
+                          <div className="catalog-form__field">
+                            <span className="catalog-form__label">Cantidad</span>
+                            <div className="project-item-readonly-value">{line.quantity}</div>
+                          </div>
+                          <div className="catalog-form__field">
+                            <span className="catalog-form__label">Estado</span>
+                            <div className="project-item-readonly-value">
+                              <span className={`badge ${line.units[0].lifecycleStatus === 'active' ? 'badge--subtle' : 'badge--warning'}`}>
+                                {formatLifecycleStatus(line.units[0].lifecycleStatus)}
+                              </span>
+                            </div>
+                          </div>
+                          {line.units[0].dimensionsFormatted ? (
+                            <div className="catalog-form__field">
+                              <span className="catalog-form__label">Medidas</span>
+                              <div className="project-item-readonly-value">
+                                {line.units[0].dimensionsFormatted}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                        {line.units[0].options.length > 0 ? (
+                          <div className="project-item-choices">
+                            {line.units[0].options.map((opt) => (
+                              <div key={opt.groupCode} className="catalog-form__field">
+                                <span className="catalog-form__label">{opt.groupLabel} ({opt.groupCode})</span>
+                                <div className="project-item-readonly-value">
+                                  {opt.groupLabel}: {opt.choiceLabel}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="catalog-empty">Sin opciones requeridas.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="catalog-form__field">
+                        <span className="catalog-form__label">Cantidad</span>
+                        <div className="project-item-readonly-value">{line.quantity}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="project-detail__section project-detail__items" aria-label="Ítems de cotización">

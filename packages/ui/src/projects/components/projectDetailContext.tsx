@@ -68,6 +68,8 @@ export type ProjectDetailQuoteAuthority =
       readonly capturedAt: string;
       readonly staleMessage?: string;
       readonly onRetry: () => void;
+      readonly snapshot?: import('@granete/storage').QuoteCommercialSnapshot;
+      readonly items?: ReadonlyArray<import('@granete/storage').QuoteRevisionItem>;
     };
 
 // ─── Item handlers ──────────────────────────────────────────────────

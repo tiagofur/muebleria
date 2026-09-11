@@ -957,6 +957,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           capturedAt: quoteAuthority.snapshot.capturedAt,
           staleMessage: quoteAuthority.staleMessage,
           onRetry: quoteAuthority.retry,
+          snapshot: quoteAuthority.snapshot,
+          items: quoteAuthority.revision.items,
         }
       : quoteAuthority.kind === 'legacy'
         ? {

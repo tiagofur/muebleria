@@ -460,7 +460,10 @@ function ProjectDetailViewInner(): ReactNode {
   }, [project, modules]);
 
   const hasOpenInProduction = Boolean(onOpenInProduction);
-  const canEditContent = canMutate && project.status === 'draft';
+  const canEditContent =
+    canMutate &&
+    project.status === 'draft' &&
+    (!ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty');
   const primary = resolveChromePrimary({
     status: project.status,
     canMutate,
@@ -668,22 +671,24 @@ function ProjectDetailViewInner(): ReactNode {
           <ProjectMeasureDefaults />
           <ProjectItemsSection />
 
-          <section
-            className="project-detail__tools"
-            data-testid="project-quote-tools"
-            aria-label="Herramientas de cotización"
-          >
-            <ProjectDetailToolsNav
-              toolsPanel={toolsPanel}
-              onToggleTools={toggleTools}
-              kitchenUnplacedCount={kitchenUnplacedCount}
-            />
+          {!ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty' ? (
+            <section
+              className="project-detail__tools"
+              data-testid="project-quote-tools"
+              aria-label="Herramientas de cotización"
+            >
+              <ProjectDetailToolsNav
+                toolsPanel={toolsPanel}
+                onToggleTools={toggleTools}
+                kitchenUnplacedCount={kitchenUnplacedCount}
+              />
 
-            <ProjectDetailToolsContent
-              toolsPanel={toolsPanel}
-              canEditContent={canEditContent}
-            />
-          </section>
+              <ProjectDetailToolsContent
+                toolsPanel={toolsPanel}
+                canEditContent={canEditContent}
+              />
+            </section>
+          ) : null}
 
           {ctx.costingView && ctx.showCosts ? (
             <CostingPanel
@@ -876,7 +881,10 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onRecordDeposit,
   } = props;
 
-  const canEditContent = canMutate && project.status === 'draft';
+  const canEditContent =
+    canMutate &&
+    project.status === 'draft' &&
+    (!quoteAuthority || quoteAuthority.kind === 'empty');
 
   const contextValue = useMemo(
     (): ProjectDetailContextValue => ({
