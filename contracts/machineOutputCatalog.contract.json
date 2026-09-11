@@ -45,10 +45,10 @@
     },
     {
       "outputCompatibilityProfileId": "ptx-cadmatic-4",
-      "revisionId": "r1",
+      "revisionId": "r2",
       "formatFamily": "ptx",
       "supportStatus": "NOT_TESTED",
-      "digest": "d420e74de6a2db5c0f9a35c7bd78ef9ccd33346901a98d428b46871774ac6029"
+      "digest": "822221a6324199e63ec432966cfdd84b41dd8821fe09da1a3d1970e9fbae3c4a"
     },
     {
       "outputCompatibilityProfileId": "ptx-cadmatic-5",
@@ -75,8 +75,8 @@
   "adapters": [
     {
       "postprocessorAdapterId": "granete-ptx",
-      "adapterVersion": "1.0.0",
-      "implementationDigest": "39df10ba24528b5d402a940ac2e6f9fc20b735011468013090cfc78f88511a28",
+      "adapterVersion": "1.1.0",
+      "implementationDigest": "b56de3839ac9a0da94aa9c90b62d56cad19aefea27d365ff934cac46c1f70d8b",
       "producedFormatFamily": "ptx",
       "serializerImplemented": true
     },

@@ -6,7 +6,9 @@ import {
   ptxFileName,
   ptxZipFileName,
 } from './exportCutPlanPtx';
-import type { CutPlan } from '@granete/domain';
+import { DEFAULT_CUT_PLAN_CONFIG, optimizeCutPlan } from '@granete/domain';
+import type { CutPlan, MachineOutputSelection, ProductionCutRow } from '@granete/domain';
+import { generateSelectedCuttingOutput, PTX_POSTPROCESSOR_ADAPTER } from '@granete/excel';
 import type { MachineArtifactBundle } from '@granete/excel';
 import type { DownloadDeps } from './exportOptimizer';
 
@@ -219,6 +221,115 @@ describe('exportCutPlanPtx', () => {
     expect(fakeAnchor.click).toHaveBeenCalled();
   });
 });
+
+describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r2, #650)', () => {
+  it('by-material: el PTX documentado del compilador llega dentro del ZIP, un archivo por material', async () => {
+    const { fakeAnchor, deps, blobs } = captureDeps();
+
+    const materials = [
+      {
+        id: 'mat-a',
+        code: 'LAB18',
+        name: 'Lab Board 18',
+        costPerM2: 10,
+        wastePercent: 10,
+        lengthMm: 1200,
+        widthMm: 700,
+        thicknessMm: 18,
+        grainDefault: true,
+        boardPrice: 8,
+        active: true,
+      },
+      {
+        id: 'mat-b',
+        code: 'ALT18',
+        name: 'Lab Alt 18',
+        costPerM2: 12,
+        wastePercent: 10,
+        lengthMm: 800,
+        widthMm: 600,
+        thicknessMm: 18,
+        grainDefault: true,
+        boardPrice: 6,
+        active: true,
+      },
+    ];
+    const row = (
+      partCode: string,
+      lengthMm: number,
+      widthMm: number,
+      materialName: string,
+      materialCode: string,
+    ): ProductionCutRow => ({
+      quantity: 1,
+      lengthMm,
+      widthMm,
+      description: `${partCode} lab`,
+      materialName,
+      materialCode,
+      grain: 1 as const,
+      L1: 0,
+      L2: 0,
+      W1: 0,
+      W2: 0,
+      partCode,
+      partName: partCode,
+      moduleCode: 'M01',
+      thicknessMm: 18,
+    });
+    const plan = optimizeCutPlan(
+      'lab-650-cad4-zip',
+      [
+        row('A', 450, 320, 'Lab Board 18', 'LAB18'),
+        row('C', 500, 400, 'Lab Alt 18', 'ALT18'),
+      ],
+      materials,
+      {
+        ...DEFAULT_CUT_PLAN_CONFIG,
+        sawKerfMm: 4,
+        trim: { topMm: 0, bottomMm: 0, leftMm: 0, rightMm: 0 },
+      },
+    );
+
+    const bundles = await generateSelectedCuttingOutput(plan, cad4Selection(), 'by-material');
+    expect(bundles.length).toBe(2);
+
+    await downloadCuttingArtifactBundles(bundles, 'Cocina Candidata', deps, 'by-material');
+
+    expect(blobs).toHaveLength(1);
+    expect(fakeAnchor.download).toBe('seccionadora-materiales-Cocina-Candidata.zip');
+    const zip = await JSZip.loadAsync(await blobs[0]!.arrayBuffer());
+    const fileNames = Object.keys(zip.files).filter((name) => name.endsWith('.ptx'));
+    expect(fileNames).toHaveLength(2);
+    // El PTX documentado (registros CSV del compilador #657) llega al archivo
+    // descargado — no el formato INI legacy.
+    for (const name of fileNames) {
+      const content = await zip.file(name)!.async('string');
+      expect(content.startsWith('HEADER,')).toBe(true);
+      expect(content).not.toContain('[HEADER]');
+      expect(content).toContain('GRANETE-PTX-CANDIDATE NOT_MACHINE_VALIDATED');
+    }
+    // Manifest exacto por material dentro del propio bundle.
+    for (const bundle of bundles) {
+      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r2');
+      expect(bundle.manifest.validationStatus).toBe('NOT_TESTED');
+      expect(bundle.manifest.compatibilityEvidence.claim).toBe('notClaimed');
+    }
+  });
+});
+
+function cad4Selection(): MachineOutputSelection {
+  return {
+    operation: 'cutting',
+    machineProfileId: 'client-a-machine-b-hpp250',
+    machineProfileRevisionId: 'r1',
+    outputCompatibilityProfileId: 'ptx-cadmatic-4',
+    outputCompatibilityProfileRevisionId: 'r2',
+    postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
+    postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
+    postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
+  };
+}
 
 function bundleFixture(fileName: string, marker: string): MachineArtifactBundle {
   return {

@@ -1,3 +1,10 @@
+# Issue #650 — PR 6: perfil CADmatic 4 efectivo + adapter + descarga candidata
+
+- Approval: prompt del propietario (2026-09-11), siguiente incremento de #650. Dependencia verificada: PR #657 MERGED en origin/main@598253d322e68a08f76adebf8324fa96ec633f9c. Frente Cotización/Diseño (agente paralelo, rama docs/642) fuera de alcance.
+- Started: 2026-09-11. Branch `feat/650-cadmatic4-ptx-integration`, base `origin/main@598253d3`. Single writer.
+- Result: `IMPLEMENTED_PENDING_REVIEW` → `progress/implementation_650_cadmatic4_ptx_integration.md`. Perfil `ptx-cadmatic-4@r2` (revisión inmutable, opciones efectivas con evidencia de repo, NOT_TESTED) + adapter granete-ptx v1.1.0 con ruteo por revisión exacta (r2 → compilador documentado #657 con preflight real ready⇒serialize; resto → legacy intacto) + descarga EXISTENTE #591 conectada (unified/by-material/ZIP + manifest notClaimed) + paridad Go/TS (catálogo compartido, pins stale accionables) + UI "Candidato — no validado en máquina". Golden end-to-end por adapter verde.
+- Evidence: `@granete/excel` 37/299 (+3 skipped); monorepo domain 105/1407, ui 160/1704, web 35/445, storage 12/191, desktop 3/17, mobile 10/73; `pnpm typecheck` 7/7; `go test ./...` backend-go OK; `pnpm openapi:check` sin drift; `git diff --check` limpio; golden #348 legacy y #657 intactos.
+
 # Issue #650 — PR 5: compilar CutProgram real a PTX documentado
 
 - Approval: prompt del propietario (2026-09-11), PR 5 de #650 con spec expandida de 33 secciones ("continuar PTX + integración CADmatic sin tocar Cotización/Diseño") + correcciones finales de revisión R1–R3 sobre el MISMO PR #657. Dependencia verificada: PR #656 MERGED en origin/main@25c2cbb55f86d379ffba9c47844ce850552b09f9. Frente Cotización/Diseño (agente paralelo) fuera de alcance; origin/main sin movimiento.

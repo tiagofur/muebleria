@@ -127,6 +127,84 @@ export const PTX_CADMATIC_5_PROFILE: OutputCompatibilityProfile = cadmaticProfil
   '0679fada5b4d97ee5f2ec173d5c7ddebbf14cd8b226bf1ebe12ff95da9288bc1',
 );
 
+/**
+ * Dimensions the documented-PTX compiler route consumes when a profile
+ * revision is routed to compileCutPlanToPtxDocument (#650). Every value here
+ * must be present in the profile's `dimensions` AND implemented by the
+ * adapter, or serialization fails closed — a profile option that does not
+ * reach the bytes is forbidden.
+ */
+export const PTX_COMPILER_REQUIRED_DIMENSIONS = [
+  'fileExtension',
+  'encoding',
+  'lineEnding',
+  'decimalPlaces',
+  'headerVersion',
+  'unit',
+  'headerOrigin',
+  'trimType',
+  'includeVectors',
+  'supportsPositiveTrim',
+  'supportedFunctions',
+] as const;
+
+/**
+ * `ptx-cadmatic-4` r2 — the CANDIDATE revision routed to the documented PTX
+ * compiler (#650 PR 6: CutProgram → PtxDocument → CADLink/CAD4 route).
+ *
+ * EVIDENCE STATUS of every dimension: repo-implementation evidence — the
+ * documented PTX subset frozen in docs/machines/ptx-cadmatic4/ (S03 locators)
+ * and implemented by the #656 core + #657 compiler in this repository. None
+ * of it is receiver evidence: supportStatus stays NOT_TESTED and the
+ * receiving-side unknowns (which optional fields CADmatic 4 consumes, record
+ * ordering expectations, character/filename constraints) remain in
+ * pendingEvidence as FIELD_FORMAT evidence. Receiver-family identity:
+ * CADmatic 4 via CADLink, with the install itself FIELD_VERIFICATION_REQUIRED.
+ *
+ * Effective options (govern the bytes through the adapter):
+ * - headerVersion 1 (dossier examples' documented form; never from the
+ *   controller name), units mm, origin 0, trimType 1 (candidate choice).
+ * - ASCII + CRLF: the conservative first-candidate encoding already
+ *   documented in the dossier — NOT a claim that CADmatic 4 requires them.
+ * - decimalPlaces 2: covers domain mm measures up to two decimals with the
+ *   exact-representability preflight blocking anything finer.
+ * - includeVectors false: not needed for the documented CADLink/CAD4 route.
+ * - supportsPositiveTrim false: the compiler rejects positive trims
+ *   (ptx_compile.trim_unsupported) and the 90..99 codes stay disabled.
+ * - supportedFunctions 0,1,2,3: exactly the #656/#657 supported subset.
+ */
+export const PTX_CADMATIC_4_CANDIDATE_PROFILE: OutputCompatibilityProfile = {
+  ref: { outputCompatibilityProfileId: 'ptx-cadmatic-4', revisionId: 'r2' },
+  formatFamily: 'ptx',
+  targetSoftware: {
+    name: 'CADmatic',
+    version: '4',
+    provenance: 'FIELD_VERIFICATION_REQUIRED',
+  },
+  dimensions: {
+    fileExtension: 'ptx',
+    encoding: 'ascii',
+    lineEnding: 'crlf',
+    decimalPlaces: 2,
+    headerVersion: '1',
+    unit: 'mm',
+    headerOrigin: 0,
+    trimType: 1,
+    includeVectors: false,
+    supportsPositiveTrim: false,
+    supportedFunctions: '0,1,2,3',
+  },
+  pendingEvidence: [
+    'fieldAvailability',
+    'recordOrdering',
+    'characterRestrictions',
+    'filenameConstraints',
+  ],
+  supportStatus: 'NOT_TESTED',
+  digest: '822221a6324199e63ec432966cfdd84b41dd8821fe09da1a3d1970e9fbae3c4a',
+  evidenceUri: 'docs/machines/ptx-cadmatic4/README.md',
+};
+
 // ---------------------------------------------------------------------------
 // Output compatibility profiles — SAW family
 // ---------------------------------------------------------------------------

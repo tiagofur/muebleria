@@ -77,7 +77,10 @@ function profileHumanLabel(profileId: string, family: string): string {
 }
 
 const SUPPORT_LABELS: Record<string, string> = {
-  NOT_TESTED: 'No probado',
+  // NOT_TESTED is deliberately explicit: serializing a candidate never
+  // promotes a compatibility claim — the workshop reads "candidate, not
+  // validated on the machine", never "compatible/validado".
+  NOT_TESTED: 'Candidato — no validado en máquina',
   PARTIAL: 'Parcial',
   VALIDATED: 'Validado',
   UNSUPPORTED: 'No soportado',
