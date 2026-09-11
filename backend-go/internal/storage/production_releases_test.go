@@ -363,6 +363,101 @@ func TestProductionRelease_CanonicalPinningNegativeProof(t *testing.T) {
 	}
 }
 
+// #642: commercial acceptance lives in QuoteRevision.status — never in
+// Project.status. The golden pair (accepted quote + approved revision)
+// releases while projects.status stays 'draft', and a legacy 'accepted'
+// project status alone never authorizes a release over a non-accepted quote.
+func TestProductionRelease_AuthorityIsQuoteRevisionNotProjectStatus(t *testing.T) {
+	fx := setupReleaseFixture(t)
+	actorA := fiActorA()
+
+	projectStatus := func() string {
+		t.Helper()
+		var status string
+		if err := fx.admin.QueryRow(context.Background(),
+			`SELECT status FROM projects WHERE id = $1`, fx.projectID).Scan(&status); err != nil {
+			t.Fatalf("read project status: %v", err)
+		}
+		return status
+	}
+
+	// Golden: the fixture carries Q3 accepted + R3 approved with the project
+	// still draft — the post-#642 commercial state. The release must succeed
+	// over that exact pair and must not rewrite the project status.
+	if got := projectStatus(); got != "draft" {
+		t.Fatalf("fixture project must be draft (commercial acceptance lives in QuoteRevision), got %q", got)
+	}
+	var p1 *storage.ProductionReleaseReadback
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
+			ProjectID:        fx.projectID,
+			DesignRevisionID: fx.revR3,
+			QuoteRevisionID:  fx.quoteQ3,
+			ActorUserID:      rlsUserA,
+			RequestID:        "req-release-authority-1",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("accepted Q3 + approved R3 must release with Project.status=draft: %v", err)
+	}
+	if p1.Release.QuoteRevisionID != fx.quoteQ3 || p1.Release.DesignRevisionID != fx.revR3 {
+		t.Fatalf("release must pin the exact pair, got Q=%s R=%s", p1.Release.QuoteRevisionID, p1.Release.DesignRevisionID)
+	}
+	if got := projectStatus(); got != "draft" {
+		t.Fatalf("release must not rewrite Project.status, got %q", got)
+	}
+
+	// Negative proof: the legacy operational status authorizes nothing. A
+	// project row stamped 'accepted' (the accidental legacy state) still
+	// rejects a release whose exact quote is published but not accepted.
+	if _, err := fx.admin.Exec(context.Background(),
+		`UPDATE projects SET status = 'accepted' WHERE id = $1`, fx.projectID); err != nil {
+		t.Fatalf("stamp legacy project status: %v", err)
+	}
+	var publishedQuoteID string
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		q, err := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
+			ProjectID: fx.projectID,
+			Notes:     "Q4 published not accepted",
+			Items: []storage.CreateQuoteRevisionItemCommand{
+				{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, LifecycleStatus: "active"},
+				{FurnitureInstanceID: fx.fiB, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}, LifecycleStatus: "active"},
+			},
+			BaseRevisionID: fx.quoteQ3,
+		})
+		publishedQuoteID = q.ID
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create published quote: %v", err)
+	}
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
+			ProjectID:        fx.projectID,
+			DesignRevisionID: fx.revR3,
+			QuoteRevisionID:  publishedQuoteID,
+			ActorUserID:      rlsUserA,
+			RequestID:        "req-release-authority-neg",
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrReleaseQuoteNotAccepted) {
+		t.Fatalf("Project.status='accepted' must NOT authorize a release over a non-accepted quote, got %v", err)
+	}
+
+	// The rejection is total: no second release row may exist.
+	var releaseCount int
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM production_releases WHERE project_id = $1`, fx.projectID).Scan(&releaseCount); err != nil {
+		t.Fatalf("count releases: %v", err)
+	}
+	if releaseCount != 1 {
+		t.Fatalf("only the golden release may exist, got %d", releaseCount)
+	}
+}
+
 // §25: a newer revision that differs ONLY spatially keeps the same
 // manufacturing fingerprint — the old release is NOT flagged stale.
 func TestProductionRelease_SpatialOnlyRevisionIsNotManufacturingStale(t *testing.T) {

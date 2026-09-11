@@ -1837,6 +1837,75 @@ describe('ProjectsScreen project templates (#110)', () => {
     ).toBeNull();
   });
 
+  it('#642: accepted QuoteRevision authority unlocks the production chrome while Project.status stays draft', async () => {
+    const user = userEvent.setup();
+    const onOpenInProduction = vi.fn();
+    const draftWithAcceptedQuote: Project = {
+      ...projects[0]!,
+      id: 'prj-draft-q2',
+      name: 'Obra con Q2 aceptada',
+      status: 'draft',
+    };
+    renderScreen({
+      projects: [draftWithAcceptedQuote],
+      projectEstimates: { 'prj-draft-q2': 500 },
+      onOpenInProduction,
+      onMarkProduced: vi.fn(),
+      canMarkProduced: true,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Obra con Q2 aceptada',
+        customerId: 'cust-ana',
+        customerName: 'Ana López',
+        furnitureQuantity: 1,
+        currency: 'MXN',
+        capturedAt: '2026-09-11T12:00:00Z',
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-draft-q2'));
+
+    // Exact commercial authority (not Project.status) unlocks production.
+    const openBtn = screen.getByTestId('project-open-in-production');
+    expect(openBtn.className).toMatch(/btn--primary/);
+    // mark-produced stays bound to the literal project lifecycle (draft here).
+    expect(screen.queryByTestId('project-mark-produced')).toBeNull();
+
+    await user.click(openBtn);
+    expect(onOpenInProduction).toHaveBeenCalledWith('prj-draft-q2');
+  });
+
+  it('#642: non-accepted quote authority keeps the production chrome closed', async () => {
+    const user = userEvent.setup();
+    const onOpenInProduction = vi.fn();
+    renderScreen({
+      onOpenInProduction,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-1',
+        revisionNumber: 1,
+        status: 'published',
+        projectName: 'Cocina Ana',
+        customerId: 'cust-ana',
+        customerName: 'Ana López',
+        furnitureQuantity: 1,
+        currency: 'MXN',
+        capturedAt: '2026-09-11T12:00:00Z',
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    expect(screen.queryByTestId('project-open-in-production')).toBeNull();
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
+    expect(screen.queryByTestId('project-mark-produced')).toBeNull();
+  });
+
   it('management modal lists templates with a delete button', async () => {
     const user = userEvent.setup();
     const { onDeleteTemplate } = renderScreen({

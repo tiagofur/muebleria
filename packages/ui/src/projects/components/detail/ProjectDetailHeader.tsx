@@ -71,7 +71,7 @@ export function ProjectDetailHeader({
   const canEditContent = canMutate && project.status === 'draft';
 
   const exportTitle = !productionExportOk
-    ? 'Export de producción solo en Aceptado o En producción'
+    ? 'Export de producción solo con una cotización aceptada (o En producción)'
     : 'Exportar cut-list Optimizer (.xlsx)';
 
   const showExportInChrome =

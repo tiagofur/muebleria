@@ -356,6 +356,7 @@ export interface ProjectDetailViewProps {
 
 function resolveChromePrimary(args: {
   status: ProjectStatus;
+  commerciallyAccepted: boolean;
   canMutate: boolean;
   canMarkProduced: boolean;
   hasMarkProduced: boolean;
@@ -364,13 +365,19 @@ function resolveChromePrimary(args: {
 }): ChromePrimary {
   const {
     status,
+    commerciallyAccepted,
     canMarkProduced,
     hasMarkProduced,
     hasExport,
     hasOpenInProduction,
   } = args;
+  // #642: advancing to production from Cotizaciones follows the exact
+  // QuoteRevision authority — an accepted quote keeps the operational
+  // project in draft, so commerciallyAccepted unlocks the same CTAs the
+  // legacy accepted/produced statuses unlocked. mark-produced stays bound to
+  // the literal project status: it mutates that legacy lifecycle itself.
   if (
-    (status === 'accepted' || status === 'produced') &&
+    ((status === 'accepted' || status === 'produced') || commerciallyAccepted) &&
     hasOpenInProduction
   ) {
     return 'open-production';
@@ -384,7 +391,7 @@ function resolveChromePrimary(args: {
     return 'mark-produced';
   }
   if (
-    (status === 'accepted' || status === 'produced') &&
+    ((status === 'accepted' || status === 'produced') || commerciallyAccepted) &&
     hasExport
   ) {
     return 'export';
@@ -448,8 +455,12 @@ function ProjectDetailViewInner(): ReactNode {
     canMutate &&
     project.status === 'draft' &&
     (!ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty');
+  const commerciallyAccepted =
+    ctx.quoteAuthority?.kind === 'ready' &&
+    ctx.quoteAuthority.status === 'accepted';
   const primary = resolveChromePrimary({
     status: project.status,
+    commerciallyAccepted,
     canMutate,
     canMarkProduced,
     hasMarkProduced: Boolean(onMarkProduced),

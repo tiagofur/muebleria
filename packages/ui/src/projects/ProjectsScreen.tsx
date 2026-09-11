@@ -617,11 +617,16 @@ export function ProjectsScreen({
   /** Block export when shell says so or options incomplete; still allow retry after listed issues. */
   const exportDisabled =
     exportBusy || exportBlocked || previewBlocked || !state.selectedProject;
-  /** F041: Optimizer/herrajes only for accepted/produced (plant-ready). */
+  /** F041: Optimizer/herrajes only for plant-ready work. #642: commercial
+   * readiness is the exact QuoteRevision authority (an accepted quote keeps
+   * the operational project in draft); legacy accepted/produced statuses
+   * still count for pre-Digital-Thread projects. */
   const productionExportOk =
     state.selectedProject != null &&
-    (state.selectedProject.status === 'accepted' ||
-      state.selectedProject.status === 'produced');
+    ((state.selectedProject.status === 'accepted' ||
+      state.selectedProject.status === 'produced') ||
+      (quoteAuthority?.kind === 'ready' &&
+        quoteAuthority.status === 'accepted'));
   const productionExportDisabled = exportDisabled || !productionExportOk;
   const canMutateCommercialDraft = canMutate && (
     !quoteAuthority || quoteAuthority.kind === 'empty' ||

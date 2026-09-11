@@ -21,7 +21,9 @@ import { required } from './support/api';
  *
  * Truth contradictions and material-provenance losses are recorded as
  * explicit findings (`note`) instead of being smoothed over or silently
- * fixed: this lane does NOT change product behavior.
+ * fixed. #642 resolved the recorded FOUND_DOUBLE_TRUTH: the golden release
+ * now runs entirely with Project.status=draft and a negative proof pins that
+ * a legacy 'accepted' stamp alone never authorizes a release.
  */
 
 const PROJECT_ID = '77777777-4444-4777-8777-444444444444';
@@ -778,13 +780,13 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     test.setTimeout(120_000);
     const apiBase = required('ORGANIZATION_API_BASE');
 
-    // Operational acceptance is a DISTINCT legacy command: accepting the
-    // QuoteRevision never rewrote Project.status (recorded at stage 1).
+    // #642: commercial acceptance lives in the exact QuoteRevision. Accepting
+    // Q2 never rewrote Project.status (recorded at stage 1), and the release
+    // below runs ENTIRELY against the draft operational project — no legacy
+    // Project.status = accepted is written as golden-path preparation.
     const repository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => owner.token });
     const stored = (await repository.getProjects()).find((p) => p.id === PROJECT_ID)!;
     expect(stored.status).toBe('draft');
-    await repository.saveProject({ ...stored, status: 'accepted' });
-    note('truth: FOUND_DOUBLE_TRUTH — "accepted" exists twice (QuoteRevision.status since stage 1 AND legacy Project.status set here for operational stages)');
 
     const release = await client.createProductionRelease(owner.token, PROJECT_ID, {
       design_revision_id: track.r2Id,
@@ -842,14 +844,65 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     expect(detail.resolved_production_release?.frozen_routing).toBe(true);
     expect(detail.production_release ?? null).toBeNull();
 
+    // #642 negative proof: a legacy 'accepted' Project.status alone authorizes
+    // nothing. Stamping the operational status while the exact quote is
+    // published-but-not-accepted must keep the release closed — regression
+    // guard against the old Project.status-as-commercial-acceptance model.
+    const stampedProject = (await repository.getProjects()).find((p) => p.id === PROJECT_ID)!;
+    await repository.saveProject({ ...stampedProject, status: 'accepted' });
+
+    // A REAL pending commercial change (width 650 → 700 on the golden unit)
+    // grounds quote Q3 through the supported requote command; it is published
+    // but deliberately NOT accepted.
+    await client.updateDesignWorkingCopy(owner.token, track.designId, {
+      source_type: 'sketchup',
+      items: track.furnitureInstanceIds.map((instanceId, index) => ({
+        furniture_instance_id: instanceId,
+        furniture_definition_id: GOLD_MODULE,
+        parameters: { widthMm: index === 2 ? 700 : 600, heightMm: 720, depthMm: 590 },
+        material_choices: { ...(index === 2 ? CHOICES_B : CHOICES_A) },
+        transform: { translation_mm: [index * 600, 0, 0], rotation_deg: [0, 0, 0] },
+      })),
+    });
+    const r3 = await publishViaSketchUpContract(client, owner.token, track.designId, track.furnitureInstanceIds, track.r2Id, 'golden-publish-r3');
+    const requoteQ3 = await client.requoteProjectQuote(owner.token, PROJECT_ID, {
+      baseQuoteRevisionId: track.q2Id,
+      designRevisionId: r3.id,
+      includeFurnitureInstanceIds: [track.furnitureInstanceIds[2]!],
+    }, 'golden-requote-q3');
+    expect(requoteQ3.quoteRevision.status).toBe('draft');
+    expect((await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, requoteQ3.quoteRevision.id, 'golden-q3-publish')).status).toBe('published');
+    let legacyStatusRejected = false;
+    try {
+      await client.createProductionRelease(owner.token, PROJECT_ID, {
+        design_revision_id: track.r2Id,
+        quote_revision_id: requoteQ3.quoteRevision.id,
+      }, 'golden-release-negative');
+    } catch (error) {
+      legacyStatusRejected = (error as { status?: number }).status === 409
+        && String(error).includes('la cotización base no está aceptada');
+    }
+    expect(legacyStatusRejected, 'Project.status=accepted must NOT authorize a release over a non-accepted quote').toBe(true);
+
+    // Restore the honest operational state: the golden path never needed the
+    // legacy stamp, and the exact Q2/R2/P1 pins survive the round-trip.
+    const stamped = (await repository.getProjects()).find((p) => p.id === PROJECT_ID)!;
+    await repository.saveProject({ ...stamped, status: 'draft' });
+    const restored = (await repository.getProjects()).find((p) => p.id === PROJECT_ID)!;
+    expect(restored.status).toBe('draft');
+    const releasesAfterNegative = await client.listProjectProductionReleases(owner.token, PROJECT_ID);
+    expect(releasesAfterNegative.map((r) => r.id)).toEqual([track.productionReleaseId]);
+
     // Final truth ledger: lifecycle values read directly from their owners.
     const quotes = await client.listProjectQuoteRevisions(owner.token, PROJECT_ID);
     const q1 = revisionById(quotes, track.quoteRevisionId, 'Q1') as unknown as { status: string };
     const q2 = revisionById(quotes, track.q2Id, 'Q2') as unknown as { status: string };
+    // The published-not-accepted Q3 never disturbed the accepted baseline.
+    expect(q2.status).toBe('accepted');
     const revisions = await client.listDesignRevisions(owner.token, track.designId);
     const r1 = revisionById(revisions, track.r1Id, 'R1') as unknown as { status: string };
     const r2 = revisionById(revisions, track.r2Id, 'R2') as unknown as { status: string };
-    note(`truth: Project.status=${detail.status} / QuoteRevision(Q1).status=${q1.status} / QuoteRevision(Q2).status=${q2.status} / DesignRevision(R1).status=${r1.status} / DesignRevision(R2).status=${r2.status} / ProductionRelease(P1).status=${release.status}`);
+    note(`truth: Project.status=${restored.status} / QuoteRevision(Q1).status=${q1.status} / QuoteRevision(Q2).status=${q2.status} / DesignRevision(R1).status=${r1.status} / DesignRevision(R2).status=${r2.status} / ProductionRelease(P1).status=${release.status}`);
     note(`provenance: ${JSON.stringify(provenance)}`);
     note(`ids: project=${track.projectId} Q1=${track.quoteRevisionId} Q2=${track.q2Id} instances=[${track.furnitureInstanceIds.join(', ')}] design=${track.designId} R1=${track.r1Id} R2=${track.r2Id} release=${track.productionReleaseId}`);
     note(`findings total: ${findings.length}`);
