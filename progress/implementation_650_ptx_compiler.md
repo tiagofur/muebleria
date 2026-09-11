@@ -2,8 +2,43 @@
 
 - Issue: #650. Quinto incremento técnico de la entrega B (sobre PR #656 fusionado).
 - Rama: `feat/650-cut-program-to-ptx`. Base exacta: `origin/main@25c2cbb55f86d379ffba9c47844ce850552b09f9` (merge de PR #656). Single writer. `origin/main` sin movimiento durante el trabajo (frente Cotización/Diseño intacto y no tocado).
-- Fecha: 2026-09-11. Estado: `IMPLEMENTED_PENDING_REVIEW`.
-- Spec: prompt del propietario "continuar PTX + integración CADmatic sin tocar Cotización/Diseño" (secciones 1–33).
+- Fecha: 2026-09-11. Estado: `IMPLEMENTED_PENDING_REVIEW` (R1–R3 de revisión aplicadas sobre el mismo PR #657).
+- Spec: prompt del propietario "continuar PTX + integración CADmatic sin tocar Cotización/Diseño" (secciones 1–33) + correcciones finales R1–R3.
+
+## Correcciones de revisión (R1–R3, mismo PR #657)
+
+- **R1 — independencia semántica del verifier**: `verifyCutPlanPtxReadback.ts`
+  ya NO importa helpers productivos del compiler (sólo `import type`). Las
+  expectativas se re-derivan localmente desde `CutProgramTrace` con reglas
+  duplicadas a propósito (comprobación cruzada, no lógica compartida):
+  `deriveDivisionExpectations` (fase/FUNCTION por generaciones de staging),
+  `deriveStructuralPreorder`, `derivePatternType`, `deriveReleases`,
+  `deriveVectorLine` y `auxAscii` para texto auxiliar. Regresión RED-first:
+  test de guard de fuente (todo import desde `./compileCutPlan` debe ser
+  type-only; lista de helpers prohibidos) + test de mutación FUNCTION con
+  `validatePtxDocument` verde y verifier rojo. Un bug industrial del writer
+  ya no puede verificarse a sí mismo.
+- **R2 — identidad ASCII crítica fail-closed**: nueva política de dos
+  grupos. Identidad crítica (código de material de hoja/pieza, claves que
+  agrupan MATERIALS o resuelven mapeos, `PARTS_REQ.CODE` contractual):
+  debe ser ASCII de impresión o falla con `ptx_compile.identity_not_ascii`
+  (campo, valor original, entidad) — 'MDFÁ' y 'MDF' jamás se fusionan al
+  filtrar; partCode vacío → código técnico explícito `PART-<n>`. Texto
+  auxiliar (descriptions, COMMENT, nombres visibles): filtro determinista
+  documentado. `HEADER.title` sin cambios (ya exigía ASCII). Regresiones
+  RED-first: material ASCII válido, material con Á, par colisionable
+  ('MDF'+'MDFÁ'), partCode 'LARGUERO-Ñ', partCode vacío → PART-1. Se
+  eliminó además un path silencioso (materialCode de pieza no-ASCII se
+  ignoraba y reventaba después con TypeError).
+- **R3 — MATERIALS.BOOK conservador**: relectura sólo del dossier congelado:
+  lo único establecido es "BOOK cuenta tableros, no milímetros" [S03
+  pp.134–135]; "total de tableros del material en el job" NO está
+  documentado. El compiler emite `BOOK = 1` (política de un tablero por
+  ciclo, coherente con MAX_BOOK=1/QTY_CYCLES=1 y un BOARDS por sheet) y el
+  verifier valida esa misma política documentada sin helper compartido.
+  Test que distingue BOOK (1 fila MATERIALS) de MAX_BOOK/QTY_RUN/QTY_CYCLES
+  (filas PATTERNS) y BOARDS.QTY_STOCK/QTY_USED (filas BOARDS). El golden no
+  cambió (ya emitía BOOK=1).
 
 ## Alcance implementado
 
@@ -111,7 +146,7 @@ SketchUp/backend/API/migrations.
   representable, pieza/remnant inconsistente (inatribuible). Sin caer al
   serializer legacy en ningún caso. 16 códigos `ptx_compile.*`.
 
-### Verificador independiente (§24)
+### Verificador independiente (§24 + R1)
 
 `verifyCutPlanPtxReadback(parsed, cutPlan, mapping, options)`: re-valida el
 documento parseado, re-ejecuta cada programa con `executeCutProgram` (nunca
@@ -161,11 +196,12 @@ mismo número de paso (SEQUENCE), mismo kerf (MATERIALS) y pieza producida
 coincidente (PART_INDEX vía mapping). Caso explícito: preview línea local
 280 (cutLine.x1=734) ↔ PTX DIMENSION 280.
 
-## Evidence (HEAD del commit de este reporte)
+## Evidence (HEAD tras R1–R3)
 
-- `packages/excel` 36 archivos / 269 tests pasados (+3 skipped preexistentes
-  de hardware); `compileCutPlan.test.ts` 39/39; `cutPlanPtxGolden.test.ts`
-  4/4; núcleo PTX #656 (parse/serialize/validate/roundtrip/equivalence) verde.
+- `packages/excel` 36 archivos / 276 tests pasados (+3 skipped preexistentes
+  de hardware); `compileCutPlan.test.ts` 46/46 (6 regresiones R1–R3 escritas
+  RED primero); `cutPlanPtxGolden.test.ts` 4/4 sin cambios del fixture;
+  núcleo PTX #656 (parse/serialize/validate/roundtrip/equivalence) verde.
 - Monorepo: domain 105/1407, storage 12/191, ui 160/1704, web 35/444,
   desktop 3/17, mobile 10/73 — todo verde (`pnpm test` raíz).
 - `pnpm typecheck` 7/7 paquetes Done, 0 errores. `pnpm openapi:check` sin

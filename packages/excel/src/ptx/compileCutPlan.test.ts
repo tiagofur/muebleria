@@ -13,6 +13,7 @@
  * coordinates: 280, not 734), same part references.
  */
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CUT_PLAN_CONFIG,
@@ -693,12 +694,23 @@ describe('Caso E — dos formatos de stock del mismo material', () => {
     const compiled = compileCutPlanToPtxDocument(plan, WITHOUT_VECTORS);
     const materials = compiled.document.records.filter((r) => r.type === 'MATERIALS');
     const boards = compiled.document.records.filter((r) => r.type === 'BOARDS');
+    const patterns = compiled.document.records.filter((r) => r.type === 'PATTERNS');
     expect(materials).toHaveLength(1);
-    expect((materials[0] as { bookQuantity: number }).bookQuantity).toBe(2);
     expect(boards).toHaveLength(2);
+    expect(patterns).toHaveLength(2);
     expect(boards[0]).toMatchObject({ length: 2440, width: 1830 });
     expect(boards[1]).toMatchObject({ length: 2750, width: 1830 });
     expect(compiled.mapping.sheetIndexByPatternIndex).toEqual([0, 1]);
+    // Campos distintos, nunca sinónimos: MATERIALS.BOOK (una fila por
+    // material) vs PATTERNS.QTY_RUN/QTY_CYCLES/MAX_BOOK (una fila por
+    // patrón) vs BOARDS.QTY_STOCK/QTY_USED (una fila por tablero).
+    expect(materials[0]).toMatchObject({ bookQuantity: 1 });
+    for (const pattern of patterns) {
+      expect(pattern).toMatchObject({ runQuantity: 1, cyclesQuantity: 1, maxBook: 1 });
+    }
+    for (const board of boards) {
+      expect(board).toMatchObject({ stockQuantity: 1, usedQuantity: 1 });
+    }
 
     expect(verifyCutPlanPtxReadback(
       parsePtxDocumentBytes(
@@ -982,12 +994,16 @@ describe('verifyCutPlanPtxReadback — detección de mutaciones semánticas', ()
     expectReadbackIssues(parsed, plan, options, 'cuts.dimension');
   });
 
-  it('detecta una función de fase alterada (3 → 2 en el recorte)', () => {
+  it('detecta una función de fase alterada (3 → 2 en el recorte) aunque el PTX siga siendo válido', () => {
     const { parsed, plan, options } = buildMutatedDidactic((records) =>
       records.map((r) => (r.type === 'CUTS' && r.cutIndex === 4 && r.patternIndex === 1
         ? { ...r, functionCode: 2 }
         : r)),
     );
+    // La mutación es sintácticamente válida: el validator del formato sigue
+    // verde. Sólo el verifier semántico (que deriva el expected desde la
+    // traza, no desde el compiler) la detecta.
+    expect(validatePtxDocument(parsed)).toEqual([]);
     expectReadbackIssues(parsed, plan, options, 'cuts.function');
   });
 
@@ -1365,5 +1381,172 @@ describe('compileCutPlanToPtxDocument — fail closed', () => {
       'ptx_compile.phase_unsupported',
     );
     expect(error.context.phase).toBe(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R1 — independencia semántica del verifier respecto del compiler
+// ---------------------------------------------------------------------------
+
+describe('R1 — el verifier no comparte lógica productiva con el compiler', () => {
+  it('verifyCutPlanPtxReadback sólo importa tipos del módulo del compiler', () => {
+    const source = readFileSync(
+      new URL('./verifyCutPlanPtxReadback.ts', import.meta.url),
+      'utf8',
+    );
+    const importMatches = [
+      ...source.matchAll(/import\s+(type\s+)?\{([^}]*)\}\s*from\s*'\.\/compileCutPlan';?/g),
+    ];
+    // Debe importar los tipos del contrato (permitido) y NADA de valor:
+    // si derivara FUNCTION/preorder/TYPE/releases/vectores del compiler, un
+    // bug industrial del writer se replicaría en el checker.
+    expect(importMatches.length).toBeGreaterThan(0);
+    for (const match of importMatches) {
+      const typeKeyword = match[1];
+      const specifiers = match[2] ?? '';
+      if (typeKeyword) continue; // `import type {...}`: todo el import es de tipos
+      for (const specifier of specifiers.split(',')) {
+        const trimmed = specifier.trim();
+        if (trimmed === '') continue;
+        expect(
+          trimmed.startsWith('type '),
+          `el verifier importa '${trimmed}' como valor desde compileCutPlan`,
+        ).toBe(true);
+      }
+    }
+    for (const forbidden of [
+      'planCutProgramDivisions',
+      'ptxStructuralPreorder',
+      'ptxPatternTypeForSheet',
+      'planSheetReleases',
+      'ptxDivisionVector',
+      'ptxAscii',
+      'ptxResolveMagnitude',
+      'compileCutPlanToPtxDocument',
+    ]) {
+      expect(source, `referencia prohibida a ${forbidden} como import`).not.toMatch(
+        new RegExp(`import\\s*\\{[^}]*\\b${forbidden}\\b[^}]*\\}\\s*from`),
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R2 — identidad ASCII crítica no se mutila silenciosamente
+// ---------------------------------------------------------------------------
+
+describe('R2 — identidad ASCII crítica falla cerrado', () => {
+  function planWithSheetMaterial(materialCode: string): CutPlan {
+    const rows = [makeRow({ quantity: 1, lengthMm: 400, widthMm: 300, grain: 1, partCode: 'P1' })];
+    const { sheet } = packSingleSheetStrip(
+      unroll(rows),
+      0,
+      1000,
+      600,
+      BASE_CONFIG,
+      materialCode,
+      'Lab Board 18',
+      18,
+    );
+    return planFromSheets(
+      [
+        sheetFromPlacement(sheet, {
+          materialCode,
+          pieces: sheet.pieces.map((piece) => ({ ...piece, materialCode })),
+        }),
+      ],
+      BASE_CONFIG,
+    );
+  }
+
+  it('materialCode ASCII normal compila', () => {
+    const plan = planWithSheetMaterial('MDF18');
+    const compiled = compileCutPlanToPtxDocument(plan, WITHOUT_VECTORS);
+    expect((compiled.document.records.find((r) => r.type === 'MATERIALS') as { code: string }).code).toBe('MDF18');
+  });
+
+  it('materialCode con Á falla cerrado con identity_not_ascii', () => {
+    const plan = planWithSheetMaterial('MDFÁ');
+    const error = expectCompilationError(
+      () => compileCutPlanToPtxDocument(plan, WITHOUT_VECTORS),
+      'ptx_compile.identity_not_ascii',
+    );
+    expect(error.context.value).toBe('MDFÁ');
+    expect(error.context.field).toContain('material');
+  });
+
+  it('dos códigos que colisionarían al filtrar nunca se fusionan', () => {
+    // 'MDFÁ' y 'MDF' sanitizan igual ('MDF'): la política de identidad debe
+    // rechazar el no-ASCII en lugar de fusionar dos entidades industriales.
+    const rowsA = [makeRow({ quantity: 1, lengthMm: 400, widthMm: 300, grain: 1, partCode: 'PA', materialCode: 'MDF' })];
+    const rowsB = [makeRow({ quantity: 1, lengthMm: 350, widthMm: 250, grain: 1, partCode: 'PB', materialCode: 'MDFÁ' })];
+    const first = packSingleSheetStrip(unroll(rowsA), 0, 1000, 600, BASE_CONFIG, 'MDF', 'M', 18);
+    const second = packSingleSheetStrip(unroll(rowsB), 1, 1000, 600, BASE_CONFIG, 'MDFÁ', 'M', 18);
+    const plan = planFromSheets(
+      [
+        sheetFromPlacement(first.sheet, { materialCode: 'MDF', pieces: first.sheet.pieces.map((p) => ({ ...p, materialCode: 'MDF' })) }),
+        sheetFromPlacement(second.sheet, { materialCode: 'MDFÁ', pieces: second.sheet.pieces.map((p) => ({ ...p, materialCode: 'MDFÁ' })) }),
+      ],
+      BASE_CONFIG,
+    );
+    const error = expectCompilationError(
+      () => compileCutPlanToPtxDocument(plan, WITHOUT_VECTORS),
+      'ptx_compile.identity_not_ascii',
+    );
+    expect(error.context.value).toBe('MDFÁ');
+  });
+
+  it('partCode no ASCII falla cerrado (CODE de PARTS_REQ es identidad contractual)', () => {
+    const rows = [makeRow({ quantity: 1, lengthMm: 400, widthMm: 300, grain: 1, partCode: 'P1' })];
+    const { sheet } = packSingleSheetStrip(unroll(rows), 0, 1000, 600, BASE_CONFIG, 'LAB18', 'Lab Board 18', 18);
+    const renamed = sheet.pieces.map((piece) => ({ ...piece, partCode: 'LARGUERO-Ñ' }));
+    const plan = planFromSheets([sheetFromPlacement(sheet, { pieces: renamed })], BASE_CONFIG);
+    const error = expectCompilationError(
+      () => compileCutPlanToPtxDocument(plan, WITHOUT_VECTORS),
+      'ptx_compile.identity_not_ascii',
+    );
+    expect(error.context.value).toBe('LARGUERO-Ñ');
+    expect(error.context.field).toContain('partCode');
+  });
+
+  it('partCode vacío genera código técnico explícito PART-n', () => {
+    const rows = [makeRow({ quantity: 1, lengthMm: 400, widthMm: 300, grain: 1, partCode: 'P1' })];
+    const { sheet } = packSingleSheetStrip(unroll(rows), 0, 1000, 600, BASE_CONFIG, 'LAB18', 'Lab Board 18', 18);
+    const renamed = sheet.pieces.map((piece) => ({ ...piece, partCode: '' }));
+    const plan = planFromSheets([sheetFromPlacement(sheet, { pieces: renamed })], BASE_CONFIG);
+    const compiled = compileCutPlanToPtxDocument(plan, WITHOUT_VECTORS);
+    expect((compiled.document.records.find((r) => r.type === 'PARTS_REQ') as { code: string }).code).toBe('PART-1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R3 — MATERIALS.BOOK: sólo "cuenta tableros" está documentado (S03 pp.134–135)
+// ---------------------------------------------------------------------------
+
+describe('R3 — MATERIALS.BOOK usa la política conservadora BOOK=1', () => {
+  it('dos sheets del mismo material: BOOK=1 (un tablero por ciclo), no el total del plan', () => {
+    const rowA = [makeRow({ quantity: 1, lengthMm: 2000, widthMm: 1600, grain: 1, partCode: 'G1', materialCode: 'MDF18' })];
+    const rowB = [makeRow({ quantity: 1, lengthMm: 2400, widthMm: 1500, grain: 1, partCode: 'G2', materialCode: 'MDF18' })];
+    const first = packSingleSheetStrip(unroll(rowA), 0, 2440, 1830, BASE_CONFIG, 'MDF18', 'MDF Blanco 18', 18);
+    const second = packSingleSheetStrip(unroll(rowB), 1, 2750, 1830, BASE_CONFIG, 'MDF18', 'MDF Blanco 18', 18);
+    const plan = planFromSheets(
+      [sheetFromPlacement(first.sheet), sheetFromPlacement(second.sheet)],
+      BASE_CONFIG,
+    );
+    const compiled = compileCutPlanToPtxDocument(plan, WITHOUT_VECTORS);
+    const materials = compiled.document.records.filter((r) => r.type === 'MATERIALS');
+    expect(materials).toHaveLength(1);
+    // El dossier sólo documenta que BOOK cuenta tableros (no milímetros);
+    // "total de tableros del material en el job" NO está establecido, así
+    // que el candidato emite el libro por ciclo: 1.
+    expect(materials[0]).toMatchObject({ bookQuantity: 1 });
+    expect(verifyCutPlanPtxReadback(
+      parsePtxDocumentBytes(
+        serializePtxDocumentBytes(compiled.document, { decimalPlaces: WITHOUT_VECTORS.decimalPlaces }),
+      ),
+      plan,
+      compiled.mapping,
+      WITHOUT_VECTORS,
+    )).toEqual([]);
   });
 });

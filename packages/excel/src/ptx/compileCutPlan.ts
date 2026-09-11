@@ -69,9 +69,13 @@
  *   (missing thickness fails closed; no hardcoded 4/18 mm); both kerf fields
  *   stay separate fields fed from Granete's single saw configuration, and
  *   every division kerf must equal config.sawKerfMm or compilation fails.
- *   TRIM_* and RULE1..4 stay EMPTY: their per-class receiver semantics are a
- *   documented §9 ambiguity and the trim geometry would live in CUTS rows —
- *   which are rejected anyway by the trim policy above.
+ *   The dossier only establishes that BOOK counts boards, not millimetres
+ *   [S03 pp.134–135] — "total boards of the material in the job" is NOT
+ *   documented, so the candidate emits the conservative one-board-per-cycle
+ *   value BOOK = 1 (consistent with MAX_BOOK=1/QTY_CYCLES=1 and one BOARDS
+ *   row per sheet). TRIM_* and RULE1..4 stay EMPTY: their per-class receiver
+ *   semantics are a documented §9 ambiguity and the trim geometry would live
+ *   in CUTS rows — which are rejected anyway by the trim policy above.
  *
  * - Quantization: decimalPlaces is explicit and every magnitude must be
  *   exactly representable at that resolution, absorbing IEEE-754 arithmetic
@@ -83,9 +87,17 @@
  *   randomness, no new UUIDs, stable iteration orders; Map insertion order
  *   is only used where the emitted arrays are the authoritative form.
  *
- * - ASCII policy: PTX text cells must be printable ASCII. Codes/titles are
- *   derived by filtering non-printable characters; a required field that
- *   comes out empty fails closed instead of being silently renamed.
+ * - ASCII policy, two explicit groups. CRITICAL IDENTITY (material codes,
+ *   any key that groups MATERIALS or resolves mappings, PARTS_REQ.CODE):
+ *   must already be printable ASCII — non-ASCII or empty values FAIL CLOSED
+ *   with ptx_compile.identity_not_ascii (field, original value, entity) so
+ *   two industrial entities can never merge into one filtered
+ *   representation ('MDFÁ' and 'MDF' both filtering to 'MDF' is a bug, not
+ *   a sanitization). An empty partCode gets the explicit technical code
+ *   PART-<n> (piece identity is the placement ref, never the display code).
+ *   AUXILIARY TEXT (descriptions, COMMENT, display names): filtered to
+ *   printable ASCII deterministically; a required field that comes out
+ *   empty fails closed instead of being silently renamed.
  */
 
 import { executeCutProgram, ValidationError } from '@granete/domain';
@@ -176,7 +188,7 @@ export type PtxCompilationErrorCode =
   | 'ptx_compile.trim_unsupported'
   | 'ptx_compile.kerf_not_uniform'
   | 'ptx_compile.magnitude_not_representable'
-  | 'ptx_compile.material_code_not_representable'
+  | 'ptx_compile.identity_not_ascii'
   | 'ptx_compile.material_thickness_missing'
   | 'ptx_compile.material_conflict'
   | 'ptx_compile.material_without_boards'
@@ -202,7 +214,7 @@ export class PtxCompilationError extends Error {
 // Shared helpers (pure; the readback verifier reuses the documented contract)
 // ---------------------------------------------------------------------------
 
-/** Filters to printable ASCII (32..126). No trimming, no transliteration: deterministic. */
+/** Filters to printable ASCII (32..126). AUXILIARY text only — never identity (see requireAsciiIdentity). */
 export function ptxAscii(value: string): string {
   let out = '';
   for (const ch of value) {
@@ -210,6 +222,28 @@ export function ptxAscii(value: string): string {
     if (code >= 32 && code <= 126) out += ch;
   }
   return out;
+}
+
+/**
+ * CRITICAL IDENTITY gate: a value that groups MATERIALS, resolves mappings or
+ * feeds a contractual CODE column must already be printable ASCII. Filtering
+ * it would silently merge distinct industrial entities ('MDFÁ' and 'MDF' both
+ * becoming 'MDF'), so non-ASCII or empty values fail closed with the field,
+ * the original value and the affected entity.
+ */
+function requireAsciiIdentity(
+  value: string,
+  field: string,
+  entity: Record<string, unknown>,
+): string {
+  if (value === '' || !isPrintableAscii(value)) {
+    throw new PtxCompilationError(
+      'ptx_compile.identity_not_ascii',
+      `Identidad crítica '${field}' no es ASCII de impresión: rechazada en vez de mutilarse`,
+      { ...entity, field, value },
+    );
+  }
+  return value;
 }
 
 /**
@@ -383,7 +417,7 @@ interface MaterialRow {
   readonly code: string;
   readonly thicknessMm: number;
   index: number;
-  bookCount: number;
+  hasBoards: boolean;
 }
 
 /** A leaf released by a dedicated QTY_RPT=0 row: remnants (Xn) and rest-side pieces. */
@@ -576,15 +610,20 @@ function compileSheet(sheet: CutPlanSheet, kerfMm: number): CompiledSheet {
 }
 
 function materialCodeOf(sheet: CutPlanSheet): string {
-  const code = ptxAscii(sheet.materialCode);
-  if (code === '') {
-    throw new PtxCompilationError(
-      'ptx_compile.material_code_not_representable',
-      'Código de material no representable en ASCII de impresión',
-      { sheetIndex: sheet.sheetIndex, materialCode: sheet.materialCode },
-    );
-  }
-  return code;
+  return requireAsciiIdentity(sheet.materialCode, 'material code', {
+    sheetIndex: sheet.sheetIndex,
+    materialCode: sheet.materialCode,
+  });
+}
+
+/** Piece material identity: the piece's own code, or the sheet's when absent. */
+function pieceMaterialCodeOf(piece: { readonly materialCode?: string }, sheet: CutPlanSheet): string {
+  return piece.materialCode !== undefined
+    ? requireAsciiIdentity(piece.materialCode, 'piece material code', {
+        sheetIndex: sheet.sheetIndex,
+        materialCode: piece.materialCode,
+      })
+    : materialCodeOf(sheet);
 }
 
 function registerMaterial(
@@ -611,7 +650,7 @@ function registerMaterial(
     }
     return;
   }
-  materials.set(code, { code, thicknessMm, index: 0, bookCount: 0 });
+  materials.set(code, { code, thicknessMm, index: 0, hasBoards: false });
 }
 
 function grainOf(grain: number, context: Record<string, unknown>): PtxGrain {
@@ -683,12 +722,12 @@ export function compileCutPlanToPtxDocument(
   for (const { sheet } of compiledSheets) {
     const code = materialCodeOf(sheet);
     registerMaterial(materials, code, sheet.thicknessMm, { sheetIndex: sheet.sheetIndex });
-    materials.get(code)!.bookCount += 1;
+    materials.get(code)!.hasBoards = true;
   }
   for (const { sheet } of compiledSheets) {
     for (const piece of sheet.pieces) {
-      const code = ptxAscii(piece.materialCode ?? sheet.materialCode);
-      if (code === '' || materials.has(code)) continue;
+      const code = pieceMaterialCodeOf(piece, sheet);
+      if (materials.has(code)) continue;
       registerMaterial(materials, code, piece.thicknessMm ?? sheet.thicknessMm, {
         sheetIndex: sheet.sheetIndex,
         pieceRef: piece.id,
@@ -697,7 +736,7 @@ export function compileCutPlanToPtxDocument(
   }
   let nextMaterialIndex = 1;
   for (const material of materials.values()) {
-    if (material.bookCount === 0) {
+    if (!material.hasBoards) {
       throw new PtxCompilationError(
         'ptx_compile.material_without_boards',
         'Material referenciado por piezas sin ningún tablero propio en el plan',
@@ -723,12 +762,19 @@ export function compileCutPlanToPtxDocument(
       }
       partIndexByPieceRef.set(piece.id, partIndex);
       pieceRefByPartIndex.push(piece.id);
-      const materialCode = ptxAscii(piece.materialCode ?? sheet.materialCode);
+      const materialCode = pieceMaterialCodeOf(piece, sheet);
+      // PARTS_REQ.CODE is contractual identity: non-ASCII fails closed (no
+      // silent filtering that could merge two part codes); empty gets the
+      // explicit technical code PART-<n> (the placement ref is the identity).
+      const partCode =
+        piece.partCode === ''
+          ? `PART-${partIndex}`
+          : requireAsciiIdentity(piece.partCode, 'partCode', { pieceRef: piece.id, partCode: piece.partCode });
       partsReq.push({
         type: 'PARTS_REQ',
         jobIndex: 1,
         partIndex,
-        code: ptxAscii(piece.partCode) || `PART-${partIndex}`,
+        code: partCode,
         materialIndex: materials.get(materialCode)!.index,
         length: q(piece.lengthMm, `PARTS_REQ ${partIndex} LENGTH`),
         width: q(piece.widthMm, `PARTS_REQ ${partIndex} WIDTH`),
@@ -766,7 +812,11 @@ export function compileCutPlanToPtxDocument(
       code: material.code,
       description: ptxAscii(sampleSheet.materialName) || undefined,
       thickness: q(material.thicknessMm, `MATERIALS '${material.code}' THICK`),
-      bookQuantity: material.bookCount,
+      // BOOK: the dossier only establishes that it counts boards, not
+      // millimetres [S03 pp.134–135]; "total boards of the material in the
+      // job" is NOT documented. The candidate's one-board-per-cycle policy
+      // (MAX_BOOK=1, QTY_CYCLES=1, one BOARDS row per sheet) emits BOOK = 1.
+      bookQuantity: 1,
       kerfRip: q(kerfMm, `MATERIALS '${material.code}' KERF_RIP`),
       kerfCrosscut: q(kerfMm, `MATERIALS '${material.code}' KERF_XCT`),
       // TRIM_* and RULE1..4 deliberately empty: per-class trim semantics are

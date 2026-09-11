@@ -1,36 +1,35 @@
 /**
  * Semantic readback verification: parsed PTX bytes vs the original CutPlan
- * (#650 PR 5).
+ * (#650 PR 5, R1-hardened).
  *
  * This is the closing step of the compiler chain required by the issue:
  *   optimizeCutPlan → validated cutProgram → compileCutPlanToPtxDocument
  *   → validatePtxDocument → serializePtxDocumentBytes → parsePtxDocumentBytes
  *   → verifyCutPlanPtxReadback === [].
  *
- * Independence boundaries, stated honestly:
- * - Format-level readback independence is #656's (parser vs serializer).
- * - Here the program is re-executed with the DOMAIN core (executeCutProgram)
- *   and every expected value is recomputed from that trace and from the plan;
- *   the compiler is never re-run to compute expectations.
- * - The staging contract (phase/FUNCTION policy, structural-preorder
- *   CUT_INDEX vs execution SEQUENCE, release rows, vector lines, TYPE policy)
- *   is shared with the compiler through the pure helpers in compileCutPlan.ts:
- *   that contract IS the documented meaning of the bytes, and comparing bytes
- *   against it is the point of this check.
- * - The inverse mapping (durable id ↔ local index) is the audit bridge the
- *   plan requires. Full from-scratch tree inference from bytes alone is NOT
- *   possible in this subset: the staging class of a row and the axis of a
- *   phase-3 recut are underdetermined without it (a documented limitation;
- *   VECTORS carry the absolute positions when emitted).
+ * Independence boundaries, stated honestly and enforced by a source guard
+ * test: this module imports ONLY types from compileCutPlan.ts — never the
+ * compiler's productive helpers (FUNCTION staging, structural preorder,
+ * PATTERN TYPE, releases, vector geometry, sanitizers). Every expected
+ * invariant is re-derived here from the CutProgramTrace with deliberately
+ * duplicated rules: if the writer classifies a phase wrong, this checker
+ * computes the expectation independently and the mutation surfaces. Sharing
+ * the derivation would let an industrial bug in the writer verify itself.
  *
- * Returned issues are empty exactly when the parsed document is semantically
- * equivalent to the original program under the documented contract.
+ * Also independent at the format level (#656's parser vs serializer) and at
+ * the program level (executeCutProgram re-runs each sheet; the compiler is
+ * never re-run to compute expectations). The inverse mapping (durable id ↔
+ * local index) is the audit bridge; full from-scratch tree inference from
+ * bytes alone is NOT possible in this subset (staging class and phase-3 recut
+ * axis are underdetermined without the mapping — a documented limitation;
+ * VECTORS carry the absolute positions when emitted).
+ *
  * Tolerance absorbs IEEE-754 arithmetic noise only (relative 1e-9) — never a
  * manufacturing or visual-grouping tolerance.
  */
 
 import { executeCutProgram } from '@granete/domain';
-import type { CutPlan, CutPlanSheet, CutProgramTrace } from '@granete/domain';
+import type { CutPlan, CutPlanSheet, CutProgramTrace, CutProgramTraceDivision } from '@granete/domain';
 import type {
   PtxBoardRecord,
   PtxCutRecord,
@@ -44,22 +43,199 @@ import type {
 } from './records';
 import { PTX_UNITS } from './records';
 import { validatePtxDocument } from './validate';
-import {
-  ptxAscii,
-  ptxDivisionVector,
-  ptxPatternTypeForSheet,
-  ptxStructuralPreorder,
-  planCutProgramDivisions,
-  planSheetReleases,
-  type CompileCutPlanToPtxOptions,
-  type PtxCompilationMapping,
-  type PtxCompiledSheetMapping,
+import type {
+  CompileCutPlanToPtxOptions,
+  PtxCompilationMapping,
+  PtxCompiledSheetMapping,
 } from './compileCutPlan';
 
 export interface CutPlanPtxReadbackIssue {
   readonly code: string;
   readonly message: string;
 }
+
+// ---------------------------------------------------------------------------
+// Independent derivations (duplicated from the documented candidate
+// contract ON PURPOSE — cross-check, not shared productive logic)
+// ---------------------------------------------------------------------------
+
+/** Auxiliary-text filter for display cells (comments, JOBS name). Never identity. */
+function auxAscii(value: string): string {
+  let out = '';
+  for (const ch of value) {
+    const code = ch.charCodeAt(0);
+    if (code >= 32 && code <= 126) out += ch;
+  }
+  return out;
+}
+
+/** Independently derived expectation for one division (staging model). */
+interface LocalDivisionExpectation {
+  readonly division: CutProgramTraceDivision;
+  readonly phase: number;
+  readonly functionCode: number;
+  readonly keptPieceRef?: string;
+  readonly restPieceRef?: string;
+}
+
+/**
+ * Staging generations, re-derived: board = 1; dividing a generation-g region
+ * is a phase-g pass; the kept child moves to g+1, the rest child stays at g.
+ * FUNCTION: phases ≤ 2 by axis role (y→1 rip, x→2 cross), phase 3 → 3.
+ * Returns null when the trace needs a phase beyond the supported subset
+ * (the compiler must have rejected such a plan already).
+ */
+function deriveDivisionExpectations(trace: CutProgramTrace): readonly LocalDivisionExpectation[] | null {
+  const generation = new Map<string, number>([[trace.boardRegionId, 1]]);
+  const pieceByRegion = new Map<string, string>();
+  for (const terminal of trace.terminals) {
+    if (terminal.kind === 'piece' && terminal.pieceRef) {
+      pieceByRegion.set(terminal.regionId, terminal.pieceRef);
+    }
+  }
+  const expectations: LocalDivisionExpectation[] = [];
+  for (const division of trace.divisions) {
+    const parentGeneration = generation.get(division.parentRegionId) ?? 1;
+    const phase = parentGeneration;
+    if (phase > 3) return null;
+    generation.set(division.keptRegionId, parentGeneration + 1);
+    if (division.restRegionId) {
+      generation.set(division.restRegionId, phase);
+    }
+    expectations.push({
+      division,
+      phase,
+      functionCode: phase <= 2 ? (division.axis === 'y' ? 1 : 2) : 3,
+      keptPieceRef: pieceByRegion.get(division.keptRegionId),
+      restPieceRef: division.restRegionId ? pieceByRegion.get(division.restRegionId) : undefined,
+    });
+  }
+  return expectations;
+}
+
+/**
+ * Structural preorder, re-derived: kept subtree first, then the rest
+ * subtree, from the board root. CUT_INDEX must follow this order while
+ * SEQUENCE carries execution order — the two coincide on simple fixtures
+ * but are checked independently (dossier fragment 03). Null when the tree
+ * is not reachable from the board.
+ */
+function deriveStructuralPreorder(trace: CutProgramTrace): readonly CutProgramTraceDivision[] | null {
+  const divisionByParentRegion = new Map<string, CutProgramTraceDivision>();
+  for (const division of trace.divisions) {
+    divisionByParentRegion.set(division.parentRegionId, division);
+  }
+  const out: CutProgramTraceDivision[] = [];
+  const visit = (regionId: string): void => {
+    const division = divisionByParentRegion.get(regionId);
+    if (!division) return;
+    out.push(division);
+    visit(division.keptRegionId);
+    if (division.restRegionId) visit(division.restRegionId);
+  };
+  visit(trace.boardRegionId);
+  return out.length === trace.divisions.length ? out : null;
+}
+
+/** PATTERNS.TYPE, re-derived: 0 (longitudinal rip) when the first division advances along y, else 4. */
+function derivePatternType(trace: CutProgramTrace): number {
+  const first = trace.divisions[0];
+  return first && first.axis === 'y' ? 0 : 4;
+}
+
+/** Independently derived release-row expectation for one leaf. */
+interface LocalReleaseExpectation {
+  readonly regionId: string;
+  readonly kind: 'offcut' | 'part';
+  readonly pieceRef?: string;
+  readonly dimensionMm: number;
+  readonly functionCode: number;
+}
+
+/**
+ * Release rows, re-derived: remnant leaves (attribution via Xn, fragment
+ * 04) and a rest-side piece of a double-piece division get a QTY_RPT=0
+ * row whose DIMENSION is the leaf extent along its producing division's
+ * axis. Exact-fit terminals never get a fictitious row.
+ */
+function deriveReleases(
+  trace: CutProgramTrace,
+  expectations: readonly LocalDivisionExpectation[],
+): readonly LocalReleaseExpectation[] {
+  const expectationByLeafRegion = new Map<string, LocalDivisionExpectation>();
+  for (const expectation of expectations) {
+    expectationByLeafRegion.set(expectation.division.keptRegionId, expectation);
+    if (expectation.division.restRegionId) {
+      expectationByLeafRegion.set(expectation.division.restRegionId, expectation);
+    }
+  }
+  const releases: LocalReleaseExpectation[] = [];
+  for (const terminal of trace.terminals) {
+    const producing = expectationByLeafRegion.get(terminal.regionId);
+    if (!producing) continue;
+    const division = producing.division;
+    const isKept = division.keptRegionId === terminal.regionId;
+    const restExtentMm =
+      division.axis === 'x' ? division.restRect?.lengthMm : division.restRect?.widthMm;
+    if (terminal.kind === 'remnant') {
+      releases.push({
+        regionId: terminal.regionId,
+        kind: 'offcut',
+        dimensionMm: isKept ? division.keptExtentMm : restExtentMm!,
+        functionCode: producing.functionCode,
+      });
+      continue;
+    }
+    if (
+      terminal.kind === 'piece' &&
+      !isKept &&
+      producing.keptPieceRef !== undefined &&
+      producing.restPieceRef === terminal.pieceRef
+    ) {
+      releases.push({
+        regionId: terminal.regionId,
+        kind: 'part',
+        pieceRef: terminal.pieceRef,
+        dimensionMm: restExtentMm!,
+        functionCode: producing.functionCode,
+      });
+    }
+  }
+  return releases;
+}
+
+/**
+ * VECTORS line, re-derived: the cut line at the kerf-band edge away from the
+ * kept region, spanning the parent on the other axis, converted to the
+ * top-left origin convention (yTop = boardWidth − yBottom).
+ */
+function deriveVectorLine(
+  division: CutProgramTraceDivision,
+  boardWidthMm: number,
+): { readonly xStart: number; readonly yStart: number; readonly xEnd: number; readonly yEnd: number } {
+  const parent = division.parentRect;
+  const band = division.kerfBandRect;
+  if (division.axis === 'x') {
+    const x = division.leadingBand ? band.xMm : band.xMm + band.lengthMm;
+    return {
+      xStart: x,
+      yStart: boardWidthMm - parent.yMm,
+      xEnd: x,
+      yEnd: boardWidthMm - (parent.yMm + parent.widthMm),
+    };
+  }
+  const y = division.leadingBand ? band.yMm : band.yMm + band.widthMm;
+  return {
+    xStart: parent.xMm,
+    yStart: boardWidthMm - y,
+    xEnd: parent.xMm + parent.lengthMm,
+    yEnd: boardWidthMm - y,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Verifier
+// ---------------------------------------------------------------------------
 
 export function verifyCutPlanPtxReadback(
   parsed: PtxDocument,
@@ -84,7 +260,7 @@ export function verifyCutPlanPtxReadback(
     const factor = 10 ** options.decimalPlaces;
     return Math.round(value * factor) / factor;
   };
-  const expectedComment = (value: string): string | undefined => ptxAscii(value) || undefined;
+  const expectedComment = (value: string): string | undefined => auxAscii(value) || undefined;
 
   // 2. Header carries the caller's declared candidate options.
   if (parsed.header.units !== PTX_UNITS.metric) {
@@ -122,24 +298,24 @@ export function verifyCutPlanPtxReadback(
   if (jobRows.length !== 1 || jobRows[0]!.jobIndex !== mapping.jobIndex) {
     push('jobs.count', `se esperaba un único JOBS con índice ${mapping.jobIndex}`);
   } else {
-    const expectedName = ptxAscii(cutPlan.projectId) || 'GRANETE-JOB';
+    // JOBS.NAME is auxiliary display text (stable projectId, no clock).
+    const expectedName = auxAscii(cutPlan.projectId) || 'GRANETE-JOB';
     if (jobRows[0]!.name !== expectedName) {
       push('jobs.name', `JOBS NAME='${jobRows[0]!.name}' ≠ '${expectedName}' (projectId estable, sin reloj)`);
     }
   }
 
-  // 4. Materials: kerf must equal the plan kerf and thickness the industrial
-  //    thickness (recomputed from the plan, not from the compiler).
+  // 4. Materials: kerf must equal the plan kerf, thickness the industrial
+  //    thickness (recomputed from the plan — raw codes, since the compiler
+  //    rejects non-ASCII identity), and BOOK the documented conservative
+  //    policy (1: "counts boards" is all S03 pp.134–135 establishes).
   const expectedThickness = new Map<string, number>();
-  const expectedBook = new Map<string, number>();
   for (const sheet of cutPlan.sheets) {
-    const code = ptxAscii(sheet.materialCode);
-    expectedThickness.set(code, sheet.thicknessMm ?? Number.NaN);
-    expectedBook.set(code, (expectedBook.get(code) ?? 0) + 1);
+    expectedThickness.set(sheet.materialCode, sheet.thicknessMm ?? Number.NaN);
   }
   for (const sheet of cutPlan.sheets) {
     for (const piece of sheet.pieces) {
-      const code = ptxAscii(piece.materialCode ?? sheet.materialCode);
+      const code = piece.materialCode ?? sheet.materialCode;
       if (!expectedThickness.has(code)) {
         expectedThickness.set(code, piece.thicknessMm ?? sheet.thicknessMm ?? Number.NaN);
       }
@@ -169,13 +345,14 @@ export function verifyCutPlanPtxReadback(
     } else if (!close(row.thickness, snap(thickness))) {
       push('materials.thickness', `MATERIALS '${row.code}' THICK=${row.thickness} ≠ ${snap(thickness)}`);
     }
-    const book = expectedBook.get(row.code) ?? 0;
-    if (row.bookQuantity !== Math.max(1, book)) {
-      push('materials.book', `MATERIALS '${row.code}' BOOK=${row.bookQuantity} ≠ tableros del plan (${book})`);
+    if (row.bookQuantity !== 1) {
+      push('materials.book', `MATERIALS '${row.code}' BOOK=${row.bookQuantity} ≠ 1 (política documentada: cuenta tableros, un tablero por ciclo; el total del job NO está establecido en S03)`);
     }
   }
 
-  // 5. PARTS_REQ: one row per placed piece, in sheet/piece order.
+  // 5. PARTS_REQ: one row per placed piece, in sheet/piece order. Codes are
+  //    raw identity (non-ASCII would have failed compilation); an empty
+  //    partCode gets the explicit technical code PART-<n>.
   const expectedPieces = cutPlan.sheets.flatMap((sheet) =>
     sheet.pieces.map((piece) => ({ sheet, piece })),
   );
@@ -193,7 +370,7 @@ export function verifyCutPlanPtxReadback(
     if (row.partIndex !== expectedPartIndex) {
       push('parts.order', `PARTS_REQ fila ${position + 1} PART_INDEX=${row.partIndex} ≠ ${expectedPartIndex} (pieza ${piece.id})`);
     }
-    const expectedCode = ptxAscii(piece.partCode) || `PART-${expectedPartIndex}`;
+    const expectedCode = piece.partCode === '' ? `PART-${expectedPartIndex}` : piece.partCode;
     if (row.code !== expectedCode) {
       push('parts.code', `PARTS_REQ ${expectedPartIndex} CODE='${row.code}' ≠ '${expectedCode}'`);
     }
@@ -207,7 +384,7 @@ export function verifyCutPlanPtxReadback(
     if (row.requiredQuantity !== 1 || (row.producedQuantity ?? 0) !== 1) {
       push('parts.qty', `PARTS_REQ ${expectedPartIndex} QTY_REQ/QTY_PROD=${row.requiredQuantity}/${row.producedQuantity} ≠ 1/1 (sin agregación)`);
     }
-    const materialCode = ptxAscii(piece.materialCode ?? sheet.materialCode);
+    const materialCode = piece.materialCode ?? sheet.materialCode;
     const expectedMaterialIndex = mapping.materialIndexByCode.get(materialCode);
     if (expectedMaterialIndex === undefined || row.materialIndex !== expectedMaterialIndex) {
       push('parts.material', `PARTS_REQ ${expectedPartIndex} MAT_INDEX=${row.materialIndex} ≠ material '${materialCode}'`);
@@ -283,10 +460,11 @@ export function verifyCutPlanPtxReadback(
     (sum, trace) => sum + trace.divisions.length,
     0,
   );
-  const totalReleases = [...sheetTraces.values()].reduce(
-    (sum, trace) => sum + planSheetReleases(trace, planCutProgramDivisions(trace)).length,
-    0,
-  );
+  let totalReleases = 0;
+  for (const trace of sheetTraces.values()) {
+    const expectations = deriveDivisionExpectations(trace);
+    if (expectations) totalReleases += deriveReleases(trace, expectations).length;
+  }
   if (cutRows.length !== totalDivisions + totalReleases) {
     push('cuts.count', `CUTS=${cutRows.length} ≠ divisiones ${totalDivisions} + liberaciones ${totalReleases}`);
   }
@@ -342,17 +520,14 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     expectedComment,
   } = ctx;
 
-  let executionPlans;
-  let preorderDivisions;
-  try {
-    executionPlans = planCutProgramDivisions(trace);
-    preorderDivisions = ptxStructuralPreorder(trace);
-  } catch {
+  const expectations = deriveDivisionExpectations(trace);
+  const preorder = deriveStructuralPreorder(trace);
+  if (!expectations || !preorder) {
     push('sheet.phase_unsupported', `hoja ${sheet.sheetIndex}: estructura no representable en el subconjunto`);
     return;
   }
-  const planByCutId = new Map(executionPlans.map((plan) => [plan.division.cutId, plan]));
-  const releases = planSheetReleases(trace, executionPlans);
+  const expectationByCutId = new Map(expectations.map((e) => [e.division.cutId, e]));
+  const releases = deriveReleases(trace, expectations);
 
   if (!boardRow) {
     push('boards.missing', `hoja ${sheet.sheetIndex} sin fila BOARDS`);
@@ -366,16 +541,16 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     ) {
       push('boards.dims', `BOARDS ${boardRow.length}×${boardRow.width} ≠ tablero ${snap(sheet.sheetLengthMm)}×${snap(sheet.sheetWidthMm)} (hoja ${sheet.sheetIndex})`);
     }
-    const sheetMaterialIndex = mapping.materialIndexByCode.get(ptxAscii(sheet.materialCode));
+    const sheetMaterialIndex = mapping.materialIndexByCode.get(sheet.materialCode);
     if (sheetMaterialIndex === undefined || boardRow.materialIndex !== sheetMaterialIndex) {
-      push('boards.material', `BOARDS MAT_INDEX=${boardRow.materialIndex} ≠ material '${ptxAscii(sheet.materialCode)}'`);
+      push('boards.material', `BOARDS MAT_INDEX=${boardRow.materialIndex} ≠ material '${sheet.materialCode}'`);
     }
   }
 
   if (!patternRow) {
     push('patterns.missing', `hoja ${sheet.sheetIndex} sin fila PATTERNS`);
   } else {
-    const expectedType = ptxPatternTypeForSheet(trace);
+    const expectedType = derivePatternType(trace);
     if (patternRow.patternIndex !== sheetMapping.patternIndex) {
       push('patterns.index', `PATTERNS PTN_INDEX=${patternRow.patternIndex} ≠ ${sheetMapping.patternIndex}`);
     }
@@ -396,8 +571,8 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
 
   // --- CUTS rows: divisions in structural preorder, then release rows -----
   const rows = cutsByPattern.get(sheetMapping.patternIndex) ?? [];
-  if (rows.length !== preorderDivisions.length + releases.length) {
-    push('cuts.sheet_count', `patrón ${sheetMapping.patternIndex}: CUTS=${rows.length} ≠ ${preorderDivisions.length} divisiones + ${releases.length} liberaciones`);
+  if (rows.length !== preorder.length + releases.length) {
+    push('cuts.sheet_count', `patrón ${sheetMapping.patternIndex}: CUTS=${rows.length} ≠ ${preorder.length} divisiones + ${releases.length} liberaciones`);
   }
 
   // Byte-derived extent reconstruction: the board extents come from BOARDS
@@ -413,23 +588,22 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
   recordExtent(trace.boardRegionId, 'y', boardWidthBytes);
   const kerfBytes = materialKerfBytes(ctx);
 
-  preorderDivisions.forEach((division, position) => {
+  preorder.forEach((division, position) => {
     const row = rows[position];
     const label = `CUTS patrón ${sheetMapping.patternIndex} fila ${position + 1} (cutId ${division.cutId})`;
     if (!row) return;
+    const expectation = expectationByCutId.get(division.cutId)!;
     const expectedCutIndex = sheetMapping.cutIndexByCutId.get(division.cutId);
     if (expectedCutIndex === undefined || row.cutIndex !== expectedCutIndex || expectedCutIndex !== position + 1) {
       push('cuts.index', `${label}: CUT_INDEX=${row.cutIndex} ≠ ${expectedCutIndex ?? '?'} (posición preorder ${position + 1})`);
     }
-    // SEQUENCE is derived independently from the execution order: it equals
-    // the division's program order, which diverges from the row position
-    // when the program interleaves subtrees (dossier fragment 03).
+    // SEQUENCE is checked against the EXECUTION order — derived
+    // independently from the row position (fragment 03).
     if (row.sequence !== division.order) {
       push('cuts.sequence', `${label}: SEQUENCE=${row.sequence} ≠ orden de ejecución ${division.order}`);
     }
-    const plan = planByCutId.get(division.cutId)!;
-    if (row.functionCode !== plan.functionCode) {
-      push('cuts.function', `${label}: FUNCTION=${row.functionCode} ≠ política documentada (${plan.functionCode}, fase ${plan.phase}, eje ${division.axis})`);
+    if (row.functionCode !== expectation.functionCode) {
+      push('cuts.function', `${label}: FUNCTION=${row.functionCode} ≠ política documentada (${expectation.functionCode}, fase ${expectation.phase}, eje ${division.axis})`);
     }
     if (!close(row.dimension, snap(division.keptExtentMm))) {
       push('cuts.dimension', `${label}: DIMENSION=${row.dimension} ≠ medida relativa conservada ${snap(division.keptExtentMm)}`);
@@ -438,16 +612,16 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
       push('cuts.repeat', `${label}: QTY_RPT=${row.repeatQuantity} ≠ 1 (sin compresión)`);
     }
     const expectedReference =
-      plan.keptPieceRef !== undefined
-        ? { kind: 'part' as const, partIndex: mapping.partIndexByPieceRef.get(plan.keptPieceRef) ?? -1 }
+      expectation.keptPieceRef !== undefined
+        ? { kind: 'part' as const, partIndex: mapping.partIndexByPieceRef.get(expectation.keptPieceRef) ?? -1 }
         : { kind: 'none' as const };
     if (
       row.partReference.kind !== expectedReference.kind ||
       (expectedReference.kind === 'part' && row.partReference.kind === 'part' && row.partReference.partIndex !== expectedReference.partIndex)
     ) {
-      push('cuts.part_ref', `${label}: PART_INDEX no corresponde a la hoja de pieza esperada (${plan.keptPieceRef ?? 'sin pieza'})`);
+      push('cuts.part_ref', `${label}: PART_INDEX no corresponde a la hoja de pieza esperada (${expectation.keptPieceRef ?? 'sin pieza'})`);
     }
-    const expectedProduced = plan.keptPieceRef !== undefined ? 1 : 0;
+    const expectedProduced = expectation.keptPieceRef !== undefined ? 1 : 0;
     if (row.producedQuantity !== expectedProduced) {
       push('cuts.produced', `${label}: QTY_PARTS=${row.producedQuantity} ≠ ${expectedProduced}`);
     }
@@ -487,7 +661,7 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
   });
 
   releases.forEach((release, position) => {
-    const row = rows[preorderDivisions.length + position];
+    const row = rows[preorder.length + position];
     const label = `liberación '${release.regionId}' (patrón ${sheetMapping.patternIndex})`;
     if (!row) return;
     if (row.sequence !== 0 || row.repeatQuantity !== 0) {
@@ -541,7 +715,7 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     ) {
       push('offcuts.dims', `OFFCUTS X${expectedIndex} ${row.length}×${row.width} ≠ hoja ejecutada ${snap(terminal.rect.lengthMm)}×${snap(terminal.rect.widthMm)}`);
     }
-    const sheetMaterialIndex = mapping.materialIndexByCode.get(ptxAscii(sheet.materialCode));
+    const sheetMaterialIndex = mapping.materialIndexByCode.get(sheet.materialCode);
     if (sheetMaterialIndex === undefined || row.materialIndex !== sheetMaterialIndex) {
       push('offcuts.material', `OFFCUTS X${expectedIndex} MAT_INDEX=${row.materialIndex} ≠ material de la hoja`);
     }
@@ -549,7 +723,7 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
 
   // --- VECTORS: absolute cut lines, top-left origin ----------------------
   if (options.includeVectors === true) {
-    preorderDivisions.forEach((division, position) => {
+    preorder.forEach((division, position) => {
       const matching = vectorRows.filter(
         (v) => v.patternIndex === sheetMapping.patternIndex && v.cutIndex === position + 1,
       );
@@ -558,7 +732,7 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
         push('vectors.count', `${label}: ${matching.length} filas, se esperaba 1`);
         return;
       }
-      const expected = ptxDivisionVector(division, trace.boardRect.widthMm, options.decimalPlaces);
+      const expected = deriveVectorLine(division, trace.boardRect.widthMm);
       const row = matching[0]!;
       if (
         !close(row.xStart, expected.xStart) ||
@@ -580,8 +754,7 @@ function materialKerfBytes(ctx: SheetVerificationContext): number {
   // kerf is checked in step 4); the sheet material's kerf is the derivation
   // input. Falls back to the executed trace's first kerf when the row is
   // missing — the corresponding materials issue has already been reported.
-  const code = ptxAscii(ctx.sheet.materialCode);
-  const index = ctx.mapping.materialIndexByCode.get(code);
+  const index = ctx.mapping.materialIndexByCode.get(ctx.sheet.materialCode);
   for (const record of ctx.parsed.records) {
     if (record.type === 'MATERIALS' && (index === undefined || record.materialIndex === index)) {
       return record.kerfRip;
