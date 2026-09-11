@@ -322,6 +322,9 @@ type Store interface {
 	// #500 / WEB-DT-1: immutable QuoteRevision read model with per-unit
 	// commercial items for the Project Furniture matrix exact context.
 	ListQuoteRevisionsByProject(ctx context.Context, projectID string) ([]domain.QuoteRevisionDetail, error)
+	// #642 / 2A: authoritative commercial summaries for accessible projects
+	// in the caller's organization, derived from the authoritative QuoteRevision.
+	ListProjectCommercialSummaries(ctx context.Context) ([]domain.ProjectCommercialSummary, error)
 	// #500 / WEB-DT-1: authoritative contextual projection of the Project
 	// Furniture matrix.
 	GetProjectFurnitureWorkspace(ctx context.Context, projectID string, query storage.FurnitureWorkspaceQuery) (*domain.FurnitureWorkspace, error)

@@ -1,3 +1,24 @@
+# Issue #642 — Entrega 2A: Lista de Cotizaciones con QuoteRevision exacta y retiro del lifecycle comercial legacy
+
+- Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base exacta `origin/main@6495085be8024a558bba35a47c0c5985e1465bdc` (post-merge PR #663). Rama `feat/642-quote-list-authority`. Single writer.
+- Started: 2026-09-11 14:05 CST.
+- Result: `IMPLEMENTED_PENDING_REVIEW` — ronda de corrección de review sobre el mismo PR #664 (commit `b4ce24bc` + `9112dde8` + corrección). Paso 6 (wiring ShellView) y paso 7 (browser E2E) COMPLETADOS junto con los 6 bloqueos de la revisión: identidad congelada (snapshot dueño de nombre/cliente/moneda), qty sin fallback a units/itemCount (removed ⇒ 0), `commercialActivityAt` real y nullable (contrato `string | null`), error ≠ `Sin cotización` (dataset loading/ready/error explícito, filtros deshabilitados), `saleTotal` fail-closed para manufacturing-only, invalidación de summaries en create/publish/accept/requote y negative proof de que aceptar no escribe `Project.status`. Detalle: `progress/implementation_642_quote_list_authority.md`.
+- Evidence:
+  - `@granete/ui`: 161 archivos / 1727 tests pasados.
+  - `@granete/storage`: 12 archivos / 191 tests pasados.
+  - Go `internal/api`: OK (cached).
+  - Go `internal/storage` — `TestListProjectCommercialSummaries_*`: 4/4 tests en PostgreSQL real pasados.
+  - `pnpm openapi:check`: 0 drift.
+  - `git diff --check`: limpio.
+- Plan:
+  1. Contrato OpenAPI y read model batch `GET /projects/commercial-summaries` sin N+1, derivado de tablas canónicas sin nuevas migraciones.
+  2. Implementación Go (storage en PostgreSQL real, handler API con filtrado de ownership/tenancy, tests).
+  3. Mappers puros y badges en `@granete/ui` (`quoteRevisionPresentation.ts`, `CommercialStatusBadge.tsx`, tests unitarios).
+  4. Migración de tarjetas, contadores y filtros en `ProjectsListView.tsx` y `ProjectsScreen.tsx` eliminando la dependencia de `Project.status` y `projectEstimates`.
+  5. Retiro de la segunda UX comercial legacy en Cotizaciones (botones Enviar/Aceptar clásico y Reabrir).
+  6. Conexión de `useProjectsCommercialSummaries` en `ShellView.tsx` e invalidación al transicionar revisiones.
+  7. Batería de pruebas Casos A–G en UI, tests Go en PostgreSQL real, browser E2E y verificación completa.
+
 # Issue #642 — Entrega 1: coherencia de líneas y detalle comercial en QuoteRevision exacta
 
 - Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base exacta `origin/main@b285cf316ab87bc95003de4dd6b4c00cbb713312` (verificada por `git merge-base`). Rama `feat/642-quote-revision-detail-lines`. PR #663. Single writer.

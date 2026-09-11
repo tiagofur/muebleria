@@ -24,6 +24,8 @@ export type StatusChipsProps<T extends string = CatalogStatusFilter> = {
   readonly value: T;
   readonly onChange: (value: T) => void;
   readonly options?: readonly StatusChipOption<T>[];
+  /** Disables every chip while the underlying dataset is loading/failed. */
+  readonly disabled?: boolean;
   readonly 'aria-label'?: string;
   readonly 'data-testid'?: string;
 };
@@ -32,6 +34,7 @@ export function StatusChips<T extends string = CatalogStatusFilter>({
   value,
   onChange,
   options,
+  disabled = false,
   'aria-label': ariaLabel = 'Filtrar por estado',
   'data-testid': dataTestId,
 }: StatusChipsProps<T>): ReactNode {
@@ -57,6 +60,7 @@ export function StatusChips<T extends string = CatalogStatusFilter>({
                 : 'ui-status-chips__chip'
             }
             aria-pressed={selected}
+            disabled={disabled}
             onClick={() => onChange(opt.value)}
           >
             {opt.label}

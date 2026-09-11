@@ -1364,6 +1364,32 @@ type ReconciliationImpactSummary struct {
 	SpatialChanges       int64 `json:"spatialChanges"`
 }
 
+type ProjectCommercialQuoteStatus string
+
+const (
+	ProjectCommercialQuoteStatusNone       ProjectCommercialQuoteStatus = "none"
+	ProjectCommercialQuoteStatusDraft      ProjectCommercialQuoteStatus = "draft"
+	ProjectCommercialQuoteStatusPublished  ProjectCommercialQuoteStatus = "published"
+	ProjectCommercialQuoteStatusAccepted   ProjectCommercialQuoteStatus = "accepted"
+	ProjectCommercialQuoteStatusSuperseded ProjectCommercialQuoteStatus = "superseded"
+)
+
+type ProjectCommercialSummary struct {
+	ProjectId                 string                       `json:"projectId"`
+	ProjectName               string                       `json:"projectName"`
+	CustomerId                *string                      `json:"customerId,omitempty"`
+	CustomerName              *string                      `json:"customerName,omitempty"`
+	Currency                  string                       `json:"currency"`
+	QuoteStatus               ProjectCommercialQuoteStatus `json:"quoteStatus"`
+	QuoteRevisionId           *string                      `json:"quoteRevisionId,omitempty"`
+	QuoteRevisionNumber       *int64                       `json:"quoteRevisionNumber,omitempty"`
+	ActiveDraftRevisionNumber *int64                       `json:"activeDraftRevisionNumber,omitempty"`
+	IsLegacy                  bool                         `json:"isLegacy"`
+	SaleTotal                 *float64                     `json:"saleTotal,omitempty"`
+	FurnitureQuantity         int64                        `json:"furnitureQuantity"`
+	CommercialActivityAt      *string                      `json:"commercialActivityAt"`
+}
+
 type QuoteRevisionStatus string
 
 const (

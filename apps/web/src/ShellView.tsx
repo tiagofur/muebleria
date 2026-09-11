@@ -281,6 +281,7 @@ import { organizationKeys } from './shared/query/queryKeys';
 import { sessionScopeKey } from './shared/query/sessionScope';
 import type { SessionScope } from './shared/query/sessionScope';
 import { useQuoteRevisionAuthority } from './quoteRevisionAuthority';
+import { useProjectsCommercialSummaries } from './projectsCommercialSummaries';
 import {
   DEFAULT_API_BASE,
   isAdminRole,
@@ -937,6 +938,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
       selectedProjectId ?? 'no-project',
     ).quoteAuthority,
+  });
+  // #642 / 2A: ONE batch summaries request per session/organization scope
+  // feeds every Cotizaciones list card (no per-card revision fetches).
+  const commercialSummaries = useProjectsCommercialSummaries({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    queryKey: projectReconciliationQueryKeys(
+      sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+      selectedProjectId ?? 'no-project',
+    ).commercialSummaries,
   });
   const quoteAuthorityView = quoteAuthority.kind === 'idle'
     ? undefined
@@ -2110,6 +2121,28 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       !projectReconciliationRoute ? (
         <ProjectsScreen
           projects={projectsForRole}
+          commercialSummaries={
+            commercialSummaries.kind === 'ready'
+              ? commercialSummaries.summaries
+              : undefined
+          }
+          commercialSummariesStatus={
+            commercialSummaries.kind === 'ready'
+              ? 'ready'
+              : commercialSummaries.kind === 'error'
+                ? 'error'
+                : 'loading'
+          }
+          commercialSummariesError={
+            commercialSummaries.kind === 'error'
+              ? commercialSummaries.message
+              : null
+          }
+          onRetryCommercialSummaries={
+            commercialSummaries.kind === 'error'
+              ? commercialSummaries.retry
+              : undefined
+          }
           modules={modules}
           categories={categories}
           optionGroups={optionGroups}

@@ -120,6 +120,10 @@ type stubStore struct {
 	quoteRevisionsErr   error
 	quoteRevisionsCalls int
 
+	commercialSummariesList  []domain.ProjectCommercialSummary
+	commercialSummariesErr   error
+	commercialSummariesCalls int
+
 	furnitureWorkspaceResult *domain.FurnitureWorkspace
 	furnitureWorkspaceErr    error
 	furnitureWorkspaceCalls  int
@@ -1912,6 +1916,17 @@ func (s *stubStore) ListQuoteRevisionsByProject(_ context.Context, projectID str
 			},
 		},
 	}, nil
+}
+
+func (s *stubStore) ListProjectCommercialSummaries(_ context.Context) ([]domain.ProjectCommercialSummary, error) {
+	s.commercialSummariesCalls++
+	if s.commercialSummariesErr != nil {
+		return nil, s.commercialSummariesErr
+	}
+	if s.commercialSummariesList != nil {
+		return s.commercialSummariesList, nil
+	}
+	return []domain.ProjectCommercialSummary{}, nil
 }
 
 func (s *stubStore) GetProjectFurnitureWorkspace(_ context.Context, projectID string, query storage.FurnitureWorkspaceQuery) (*domain.FurnitureWorkspace, error) {

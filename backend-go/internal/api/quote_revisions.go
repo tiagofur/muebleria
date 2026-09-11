@@ -209,3 +209,81 @@ func toQuoteCommercialSnapshotDTO(snapshot *domain.QuoteCommercialSnapshot) *ope
 		Units: units,
 	}
 }
+
+// HandleProjectCommercialSummaries serves GET /api/projects/commercial-summaries (#642 / 2A).
+func (s *Server) HandleProjectCommercialSummaries(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	roles := actorRoles(claims)
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver las cotizaciones") {
+		return
+	}
+
+	summaries, err := s.Store.ListProjectCommercialSummaries(r.Context())
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidRevisionSnapshot) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "snapshot de revisión inválido: payload corrupto", nil)
+			return
+		}
+		respondWithInternalError(w, err, "list project commercial summaries")
+		return
+	}
+
+	// Filter by portfolio owner if caller does not see all owners (F034)
+	if !domain.RolesSeesAllOwners(roles) {
+		filtered := make([]domain.ProjectCommercialSummary, 0, len(summaries))
+		for _, item := range summaries {
+			if item.OwnerUserID == claims.UserID {
+				filtered = append(filtered, item)
+			}
+		}
+		summaries = filtered
+	}
+
+	dtos := make([]openapi.ProjectCommercialSummary, 0, len(summaries))
+	for _, item := range summaries {
+		dtos = append(dtos, toProjectCommercialSummaryDTO(item))
+	}
+	respondWithJSON(w, http.StatusOK, dtos)
+}
+
+func toProjectCommercialSummaryDTO(s domain.ProjectCommercialSummary) openapi.ProjectCommercialSummary {
+	var quoteStatus openapi.ProjectCommercialQuoteStatus
+	switch s.QuoteStatus {
+	case domain.ProjectCommercialQuoteStatusNone:
+		quoteStatus = openapi.ProjectCommercialQuoteStatusNone
+	case domain.ProjectCommercialQuoteStatusDraft:
+		quoteStatus = openapi.ProjectCommercialQuoteStatusDraft
+	case domain.ProjectCommercialQuoteStatusPublished:
+		quoteStatus = openapi.ProjectCommercialQuoteStatusPublished
+	case domain.ProjectCommercialQuoteStatusAccepted:
+		quoteStatus = openapi.ProjectCommercialQuoteStatusAccepted
+	case domain.ProjectCommercialQuoteStatusSuperseded:
+		quoteStatus = openapi.ProjectCommercialQuoteStatusSuperseded
+	default:
+		quoteStatus = openapi.ProjectCommercialQuoteStatusNone
+	}
+
+	return openapi.ProjectCommercialSummary{
+		ProjectId:                 s.ProjectID,
+		ProjectName:               s.ProjectName,
+		CustomerId:                s.CustomerID,
+		CustomerName:              s.CustomerName,
+		Currency:                  s.Currency,
+		QuoteStatus:               quoteStatus,
+		QuoteRevisionId:           s.QuoteRevisionID,
+		QuoteRevisionNumber:       s.QuoteRevisionNumber,
+		ActiveDraftRevisionNumber: s.ActiveDraftRevisionNumber,
+		IsLegacy:                  s.IsLegacy,
+		SaleTotal:                 s.SaleTotal,
+		FurnitureQuantity:         s.FurnitureQuantity,
+		CommercialActivityAt:      s.CommercialActivityAt,
+	}
+}

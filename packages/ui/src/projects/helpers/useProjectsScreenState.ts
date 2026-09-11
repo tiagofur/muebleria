@@ -29,23 +29,30 @@ import type {
   Structure,
   WorkshopSettings,
 } from '@granete/domain';
+import type { ProjectCommercialSummary } from '@granete/storage';
 import { trackUsability } from '../../preview3d/usabilityBenchmark';
 import { useDebouncedValue } from '../../common';
 import { consumeRequestCreateKey } from '../../common/consumeRequestCreateKey';
 import {
   emptyProjectDraft,
-  filterProjectsList,
   projectToDraft,
   quickAddPayloadForModule,
   setItemOptionChoice,
   setProjectLevelChoice,
   validateItemQuantity,
   type ProjectDraft,
-  type ProjectStatusFilter,
 } from '../projectHelpers';
+import {
+  filterProjectsByCommercialStatus,
+  type CommercialSummariesStatus,
+  type QuoteCommercialStatusFilter,
+} from '../quoteRevisionPresentation';
 
 export interface UseProjectsScreenStateProps {
   readonly projects: readonly Project[];
+  readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
+  /** Dataset state of the summaries batch request (#642 / 2A): error/loading never filter as 'none'. */
+  readonly commercialSummariesStatus?: CommercialSummariesStatus;
   readonly modules: readonly Module[];
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
@@ -96,6 +103,8 @@ export interface UseProjectsScreenStateProps {
 
 export function useProjectsScreenState({
   projects,
+  commercialSummaries,
+  commercialSummariesStatus = 'ready',
   modules,
   materials,
   edges,
@@ -130,7 +139,7 @@ export function useProjectsScreenState({
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] =
-    useState<ProjectStatusFilter>('all');
+    useState<QuoteCommercialStatusFilter>('all');
   // Deep-link mount (refresh / post-login remount): seed from the URL so the
   // first paint already shows the detail instead of flashing the list.
   const [selectedId, setSelectedIdState] = useState<string | null>(() =>
@@ -211,10 +220,20 @@ export function useProjectsScreenState({
     ],
   );
 
+  // Commercial status chips only apply to a READY dataset: while loading or
+  // failed, filtering by status would misclassify projects as 'none' (#642/2A).
+  const commercialFiltersDisabled = commercialSummariesStatus !== 'ready';
   const filtered = useMemo(
     () =>
-      filterProjectsList(projects, debouncedSearch, statusFilter, customers),
-    [projects, debouncedSearch, statusFilter, customers],
+      filterProjectsByCommercialStatus(
+        projects,
+        debouncedSearch,
+        statusFilter,
+        customers,
+        commercialSummaries,
+        commercialSummariesStatus,
+      ),
+    [projects, debouncedSearch, statusFilter, customers, commercialSummaries, commercialSummariesStatus],
   );
 
   const selectedProject =
@@ -481,6 +500,7 @@ export function useProjectsScreenState({
     setSearch,
     statusFilter,
     setStatusFilter,
+    commercialFiltersDisabled,
     selectedId,
     /** Local intent selection (state + URL). Raw state stays internal. */
     setSelectedId: selectProject,

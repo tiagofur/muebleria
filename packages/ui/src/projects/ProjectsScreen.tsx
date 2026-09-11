@@ -61,18 +61,29 @@ import type { SurveyHandlers } from './components/SiteSurveyPanel';
 import type { ProjectOverviewNav } from './components/ProjectOverviewPanel';
 import { ProjectsListView } from './components/ProjectsListView';
 import { ProjectModalsContainer } from './components/ProjectModalsContainer';
+import type { ProjectCommercialSummary } from '@granete/storage';
 import {
-  formatProjectMoney,
   type AddItemDraft,
   type ProjectDraft,
 } from './projectHelpers';
 import { useProjectsScreenState } from './helpers/useProjectsScreenState';
+import type { CommercialSummariesStatus } from './quoteRevisionPresentation';
 import './projects.css';
 
 export type { ProjectDraft, AddItemDraft };
 export { ExportIssueList, type ExportIssueListProps } from './ExportIssueList';
 
 export interface ProjectsScreenProps {
+  /** Authoritative QuoteRevision commercial summaries (#642 / 2A). */
+  readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
+  /**
+   * Dataset state of the batch summaries request (#642 / 2A). Strictly
+   * separate from any per-project quoteStatus: loading/error must never be
+   * presented as "Sin cotización" nor fall back to legacy commercial truth.
+   */
+  readonly commercialSummariesStatus?: CommercialSummariesStatus;
+  readonly commercialSummariesError?: string | null;
+  readonly onRetryCommercialSummaries?: () => void;
   /** When true, show section loading (workspace/async gate). */
   readonly loading?: boolean;
   readonly projects: readonly Project[];
@@ -444,6 +455,10 @@ export interface ProjectsScreenProps {
 }
 
 export function ProjectsScreen({
+  commercialSummaries,
+  commercialSummariesStatus = 'loading',
+  commercialSummariesError = null,
+  onRetryCommercialSummaries,
   projects,
   modules,
   categories = [],
@@ -565,6 +580,8 @@ export function ProjectsScreen({
 }: ProjectsScreenProps): ReactNode {
   const state = useProjectsScreenState({
     projects,
+    commercialSummaries,
+    commercialSummariesStatus,
     modules,
     materials,
     edges,
@@ -596,29 +613,6 @@ export function ProjectsScreen({
     onUpdateProjectLevelChoices,
     onSelectionChange,
   });
-
-  const estimateLabel = (projectId: string): ReactNode => {
-    if (!(projectId in projectEstimates)) {
-      return (
-        <span className="project-card__price-value project-card__price-value--muted">
-          —
-        </span>
-      );
-    }
-    const value = projectEstimates[projectId];
-    if (value == null) {
-      return (
-        <span className="project-card__price-value project-card__price-value--muted">
-          Sin total
-        </span>
-      );
-    }
-    return (
-      <span className="project-card__price-value">
-        {formatProjectMoney(value)}
-      </span>
-    );
-  };
 
   /** Block export when shell says so or options incomplete; still allow retry after listed issues. */
   const exportDisabled =
@@ -888,12 +882,16 @@ export function ProjectsScreen({
           projectTemplates={projectTemplates}
           search={state.search}
           statusFilter={state.statusFilter}
+          commercialSummaries={commercialSummaries}
+          commercialSummariesStatus={commercialSummariesStatus}
+          commercialSummariesError={commercialSummariesError}
+          onRetryCommercialSummaries={onRetryCommercialSummaries}
+          commercialFiltersDisabled={state.commercialFiltersDisabled}
           isTrulyEmpty={state.isTrulyEmpty}
           isFilterEmpty={state.isFilterEmpty}
           canMutate={canMutate}
           hasCreateFromTemplate={!!onCreateFromTemplate}
           hasDeleteTemplate={!!onDeleteTemplate}
-          estimateLabel={estimateLabel}
           onSearchChange={state.setSearch}
           onStatusFilterChange={state.setStatusFilter}
           onClearFilters={() => {

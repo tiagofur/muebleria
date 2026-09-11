@@ -5,13 +5,11 @@
 import { type ReactNode } from 'react';
 import {
   AlertTriangle,
-  Check,
   ChevronLeft,
   Factory,
   HardHat,
   MoreHorizontal,
   Pencil,
-  Send,
 } from 'lucide-react';
 import {
   TECHNICAL_STATUS_METADATA,
@@ -28,8 +26,6 @@ import { formatProjectMoney, resolveCustomerName } from '../../projectHelpers';
 import { useProjectDetail } from '../projectDetailContext';
 
 export type ChromePrimary =
-  | 'send'
-  | 'accept'
   | 'open-production'
   | 'mark-produced'
   | 'export'
@@ -40,9 +36,9 @@ export interface ProjectDetailHeaderProps {
   readonly chromeSale: number | null;
   readonly moreSections: readonly DropdownMenuSection[];
   readonly exportMenuClose?: () => void;
-  readonly onRequestStatus: (next: ProjectStatus, message: string) => void;
-  readonly confirmSendText: string;
-  readonly confirmAcceptText: string;
+  readonly onRequestStatus?: (next: ProjectStatus, message: string) => void;
+  readonly confirmSendText?: string;
+  readonly confirmAcceptText?: string;
 }
 
 export function ProjectDetailHeader({
@@ -50,9 +46,6 @@ export function ProjectDetailHeader({
   chromeSale,
   moreSections,
   exportMenuClose,
-  onRequestStatus,
-  confirmSendText,
-  confirmAcceptText,
 }: ProjectDetailHeaderProps): ReactNode {
   const ctx = useProjectDetail();
   const {
@@ -260,28 +253,6 @@ export function ProjectDetailHeader({
             )}
           >
             Crear nueva revisión
-          </button>
-        ) : null}
-        {!quoteAuthority && primary === 'send' && onChangeStatus ? (
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => onRequestStatus('quoted', confirmSendText)}
-            data-testid="project-send-quote"
-            title="Envía al cliente y congela precios (confirmación)"
-          >
-            <Send size={16} strokeWidth={1.5} aria-hidden /> Enviar al cliente
-          </button>
-        ) : null}
-        {!quoteAuthority && primary === 'accept' && onChangeStatus ? (
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => onRequestStatus('accepted', confirmAcceptText)}
-            data-testid="project-accept-quote"
-            title="Acepta y congela la obra (flujo clásico)"
-          >
-            <Check size={16} strokeWidth={1.5} aria-hidden /> Aceptar obra (flujo clásico)
           </button>
         ) : null}
         {primary === 'open-production' && onOpenInProduction ? (

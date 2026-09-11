@@ -847,7 +847,7 @@ Inventario de consumidores runtime (Slice 2):
 |---|---|
 | Detalle de Cotizaciones: identidad, estado, totales y Enviar/Aceptar | Migrado: QuoteRevision aceptada o última exacta; lifecycle exacto |
 | Detalle de Cotizaciones: muebles, líneas y medidas congeladas (#642) | Migrado: renderiza líneas/unidades del snapshot y parámetros congelados de QuoteRevision exacta; sin fallback a `project.items` mutable; desglosa unidades físicas (`quantity > 1`); badges `Q{N} · Solo lectura` |
-| Lista de Cotizaciones y `projectEstimates` | Pendiente: todavía usa Project/priceSnapshot o cálculo vivo |
+| Lista de Cotizaciones y `projectEstimates` | Migrado en #664 (#642 / 2A): el Shell carga UN batch `GET /projects/commercial-summaries` por scope de sesión/organización; cada tarjeta consume la QuoteRevision exacta (badge, filtros, total, cantidad activa). Un snapshot válido congela identidad (nombre de obra, cliente, moneda); `commercialActivityAt` es un evento real de la revisión o null; error de request ≠ `none`; sin fallback a `projectEstimates`/`project.items`/`Project.updatedAt`. La ordenación de la pantalla sigue siendo la del workspace de proyectos (el endpoint ordena determinista, no por actividad comercial) |
 | Dashboard Inicio/Ventas (`dashboardStats`, `dashboardRecent`, funnel) | Pendiente: misma dependencia legacy |
 | Operaciones/Producción (`ProductionQueue`, workspace) | Pendiente: separar aceptación comercial de etapa operativa |
 | Costing/version history | Pendiente: clasificar autoridad comercial vs. costo operativo |

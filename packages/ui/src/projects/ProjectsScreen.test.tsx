@@ -22,7 +22,11 @@ import type {
   ProjectTemplate,
   QuoteBreakdown,
 } from '@granete/domain';
-import type { QuoteCommercialSnapshot, QuoteRevisionItem } from '@granete/storage';
+import type {
+  ProjectCommercialSummary,
+  QuoteCommercialSnapshot,
+  QuoteRevisionItem,
+} from '@granete/storage';
 import { ProjectsScreen } from './ProjectsScreen';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -167,6 +171,37 @@ const sampleBreakdown: QuoteBreakdown = {
   discountAmount: 0,
 };
 
+const defaultCommercialSummaries: ReadonlyMap<string, ProjectCommercialSummary> = new Map([
+  [
+    'prj-1',
+    {
+      projectId: 'prj-1',
+      projectName: 'Cocina Ana',
+      quoteStatus: 'draft',
+      quoteRevisionNumber: 1,
+      isLegacy: false,
+      furnitureQuantity: 1,
+      saleTotal: 202.5,
+      currency: 'MXN',
+      commercialActivityAt: '2026-07-12T00:00:00.000Z',
+    },
+  ],
+  [
+    'prj-2',
+    {
+      projectId: 'prj-2',
+      projectName: 'Dormitorio',
+      quoteStatus: 'published',
+      quoteRevisionNumber: 1,
+      isLegacy: false,
+      furnitureQuantity: 0,
+      saleTotal: null,
+      currency: 'MXN',
+      commercialActivityAt: '2026-07-13T00:00:00.000Z',
+    },
+  ],
+]);
+
 function renderScreen(
   props: Partial<ComponentProps<typeof ProjectsScreen>> = {},
 ) {
@@ -208,6 +243,8 @@ function renderScreen(
     onSelectionChange,
     breakdown: null,
     projectEstimates: { 'prj-1': 202.5, 'prj-2': null },
+    commercialSummaries: defaultCommercialSummaries,
+    commercialSummariesStatus: 'ready',
     onExport,
     onExportHardware,
   };
@@ -250,7 +287,7 @@ describe('ProjectsScreen F022', () => {
     const card = screen.getByTestId('project-card-prj-1');
     expect(within(card).getByText('Cocina Ana')).toBeTruthy();
     expect(within(card).getByText('Ana López')).toBeTruthy();
-    expect(within(card).getByText('Borrador')).toBeTruthy();
+    expect(within(card).getByText(/Borrador/)).toBeTruthy();
     expect(within(card).getByText(/1 mueble/)).toBeTruthy();
     expect(within(card).getByText('$202.50 MXN')).toBeTruthy();
   });
@@ -318,16 +355,15 @@ describe('ProjectsScreen F022', () => {
     expect(onSelectionChange).toHaveBeenCalledWith(null);
   });
 
-  it('draft chrome has a single primary (Enviar) and advanced tools collapsed', async () => {
+  it('draft chrome has advanced tools collapsed and no legacy send action', async () => {
     const user = userEvent.setup();
     renderScreen({ onChangeStatus: vi.fn() });
 
     await user.click(screen.getByTestId('project-card-prj-1'));
 
     const chrome = screen.getByTestId('project-detail-chrome');
-    const primaries = chrome.querySelectorAll('.btn--primary');
-    expect(primaries.length).toBe(1);
-    expect(screen.getByTestId('project-send-quote')).toBeTruthy();
+    expect(screen.queryByTestId('project-send-quote')).toBeNull();
+    expect(screen.queryByTestId('project-accept-quote')).toBeNull();
     // Draft: Optimizer is not a chrome button (factory path is Producción).
     expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     // Advanced tools start closed — kitchen plan not in DOM until toggle.
@@ -1288,11 +1324,11 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.queryByTestId('project-card-prj-2')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: /^Cotizado$/i }));
+    await user.click(screen.getByRole('button', { name: /^Publicada$/i }));
     expect(screen.queryByTestId('project-card-prj-1')).toBeNull();
     expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: /^Todos$/i }));
+    await user.click(screen.getByRole('button', { name: /^Todas$/i }));
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
   });
@@ -1851,5 +1887,133 @@ describe('F101 page chrome migration', () => {
     expect(header.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(header).getByRole('button', { name: /Nueva cotización/i })).toBeTruthy();
     expect(within(toolbar).getByRole('searchbox', { name: 'Buscar cotizaciones' })).toBeTruthy();
+  });
+});
+
+describe('#642 / 2A commercial summaries dataset states', () => {
+  const summaryFor = (overrides: Partial<ProjectCommercialSummary>): ProjectCommercialSummary => ({
+    projectId: 'prj-1',
+    projectName: 'Cocina Ana',
+    quoteStatus: 'accepted',
+    quoteRevisionNumber: 2,
+    isLegacy: false,
+    furnitureQuantity: 1,
+    saleTotal: 202.5,
+    currency: 'MXN',
+    commercialActivityAt: '2026-07-12T00:00:00.000Z',
+    ...overrides,
+  });
+
+  it('BLOCKER 5: request error is not "Sin cotización" — banner, disabled filters, no legacy price', async () => {
+    const user = userEvent.setup();
+    renderScreen({ commercialSummariesStatus: 'error' });
+
+    // The explicit error banner is rendered with retry.
+    expect(screen.getByTestId('commercial-summaries-error')).toBeTruthy();
+    expect(screen.getByText('No se pudo cargar la información comercial.')).toBeTruthy();
+
+    // No per-card "Sin cotización" verdict and no legacy estimate price.
+    const grid = screen.getByLabelText('Lista de cotizaciones');
+    expect(within(grid).queryByText('Sin cotización')).toBeNull();
+    expect(within(grid).queryByText('$202.50 MXN')).toBeNull();
+
+    // Commercial filters are disabled while the dataset is failed.
+    const chips = screen.getByTestId('project-status-chips');
+    for (const chip of within(chips).getAllByRole('button')) {
+      expect((chip as HTMLButtonElement).disabled).toBe(true);
+    }
+    await user.click(within(chips).getByRole('button', { name: 'Sin cotización' }));
+    // The filter did not apply: every project stays visible.
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
+
+    // Card badges honestly report unavailability.
+    expect(screen.getAllByTestId('commercial-status-badge-error').length).toBe(2);
+  });
+
+  it('BLOCKER 5: loading keeps navigation identity only, badge pending, no commercial truth', () => {
+    renderScreen({ commercialSummaries: undefined, commercialSummariesStatus: 'loading' });
+
+    expect(screen.getAllByTestId('commercial-status-badge-loading').length).toBe(2);
+    expect(screen.queryByText('$202.50 MXN')).toBeNull();
+    // Mutable quantity and customer identity stay hidden while pending.
+    expect(screen.queryByText(/mueble/)).toBeNull();
+    expect(screen.queryByText('Ana López')).toBeNull();
+    expect(within(screen.getByLabelText('Lista de cotizaciones')).queryByText('Sin cotización')).toBeNull();
+  });
+
+  it('ready + quoteStatus none renders current identity with honest "Sin cotización"', () => {
+    renderScreen({
+      commercialSummaries: new Map([
+        ['prj-1', summaryFor({ quoteStatus: 'none', quoteRevisionNumber: undefined, saleTotal: undefined, furnitureQuantity: 0, commercialActivityAt: null })],
+        ['prj-2', summaryFor({ projectId: 'prj-2', projectName: 'Dormitorio', quoteStatus: 'none', quoteRevisionNumber: undefined, saleTotal: undefined, furnitureQuantity: 0, commercialActivityAt: null })],
+      ]),
+      commercialSummariesStatus: 'ready',
+    });
+
+    const card = screen.getByTestId('project-card-prj-1');
+    expect(within(card).getByText('Sin cotización')).toBeTruthy();
+    expect(within(card).getByText('Cocina Ana')).toBeTruthy();
+    expect(within(card).getByText('Ana López')).toBeTruthy();
+    expect(within(card).getByText('0 muebles')).toBeTruthy();
+    expect(within(card).queryByText(/Act\./)).toBeNull();
+  });
+
+  it('BLOCKER 2: a valid snapshot owns the frozen card identity (name, customer, currency)', () => {
+    renderScreen({
+      commercialSummaries: new Map([
+        ['prj-1', summaryFor({
+          projectName: 'Cocina López (congelada)',
+          customerName: 'Ana López (congelada)',
+          currency: 'EUR',
+          saleTotal: 150,
+        })],
+        ['prj-2', summaryFor({ projectId: 'prj-2', projectName: 'Dormitorio', quoteStatus: 'published', quoteRevisionNumber: 1, saleTotal: null })],
+      ]),
+      commercialSummariesStatus: 'ready',
+    });
+
+    const card = screen.getByTestId('project-card-prj-1');
+    expect(within(card).getByText('Cocina López (congelada)')).toBeTruthy();
+    expect(within(card).getByText('Ana López (congelada)')).toBeTruthy();
+    expect(within(card).queryByText('Cocina Ana')).toBeNull();
+  });
+
+  it('BLOCKER 3/§11: a historical revision whose only unit is removed shows 0 muebles', () => {
+    renderScreen({
+      commercialSummaries: new Map([
+        ['prj-1', summaryFor({ furnitureQuantity: 0, quoteStatus: 'accepted' })],
+        ['prj-2', summaryFor({ projectId: 'prj-2', projectName: 'Dormitorio', quoteStatus: 'published', quoteRevisionNumber: 1, saleTotal: null })],
+      ]),
+      commercialSummariesStatus: 'ready',
+    });
+
+    expect(within(screen.getByTestId('project-card-prj-1')).getByText('0 muebles')).toBeTruthy();
+  });
+
+  it('ready + legacy revision shows the legacy badge without fabricating a frozen price', () => {
+    renderScreen({
+      commercialSummaries: new Map([
+        ['prj-1', summaryFor({ quoteStatus: 'published', isLegacy: true, saleTotal: undefined, furnitureQuantity: 1 })],
+        ['prj-2', summaryFor({ projectId: 'prj-2', projectName: 'Dormitorio', quoteStatus: 'published', quoteRevisionNumber: 1, saleTotal: null })],
+      ]),
+      commercialSummariesStatus: 'ready',
+    });
+
+    const card = screen.getByTestId('project-card-prj-1');
+    expect(within(card).getByText('Cotización anterior')).toBeTruthy();
+    expect(within(card).queryByText('$202.50 MXN')).toBeNull();
+  });
+
+  it('ready + accepted with newer draft surfaces "Q3 en borrador" secondary line', () => {
+    renderScreen({
+      commercialSummaries: new Map([
+        ['prj-1', summaryFor({ quoteStatus: 'accepted', quoteRevisionNumber: 2, activeDraftRevisionNumber: 3 })],
+        ['prj-2', summaryFor({ projectId: 'prj-2', projectName: 'Dormitorio', quoteStatus: 'published', quoteRevisionNumber: 1, saleTotal: null })],
+      ]),
+      commercialSummariesStatus: 'ready',
+    });
+
+    expect(within(screen.getByTestId('project-card-prj-1')).getByText('Q3 en borrador')).toBeTruthy();
   });
 });
