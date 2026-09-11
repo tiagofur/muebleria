@@ -6,7 +6,7 @@
  */
 
 import type { CutStrategy, Grain, ProductionCutRow } from '../types';
-import type { CutProgramInput } from './cutProgram';
+import type { CutProgramAxis, CutProgramInput, CutProgramRect } from './cutProgram';
 
 /**
  * Configurable trim (refilado) margins per side (mm).
@@ -149,14 +149,50 @@ export interface CutPlanRemnant {
 
 /**
  * Step-by-step guillotine cutting instruction for manual saw operators.
+ *
+ * Generated authoritatively from the executed guillotine program (#650 PR 3),
+ * preserving program cutId, parent region, relative measures (never absolute
+ * board positions), kerf footprint, and expected piece references.
  */
 export interface CutInstruction {
   readonly step: number;
   readonly phase: 1 | 2 | 3; // 1: Trim, 2: Rip strip, 3: Cross cut
   readonly cutType: 'trim' | 'rip' | 'cross';
   readonly description: string;
+  /** Relative measure (mm) along the advance axis from the parent origin. */
   readonly positionMm: number;
+  /** Cut line extent across the parent region (mm). */
   readonly lengthMm: number;
+  /** Program-local division identity. */
+  readonly cutId?: string;
+  /** Program-local active parent region identity. */
+  readonly parentRegionId?: string;
+  /** Axis of advance ('x' | 'y'). */
+  readonly axis?: CutProgramAxis;
+  /** Kept extent (mm) along the advance axis. */
+  readonly relativeMeasureMm?: number;
+  /** Nominal saw blade kerf (mm). */
+  readonly kerfMm?: number;
+  /** Nominal saw blade kerf (mm). */
+  readonly nominalKerfMm?: number;
+  /** Consumed kerf band extent from the parent (mm). */
+  readonly consumedKerfMm?: number;
+  /** True when the blade overhangs the parent. */
+  readonly bladeExitsParent?: boolean;
+  /** True for near-side trims with mirrored layout. */
+  readonly leadingBand?: boolean;
+  /** Piece identity reference if this pass directly isolates a piece. */
+  readonly pieceRef?: string;
+  readonly partCode?: string;
+  readonly partName?: string;
+  /** Active parent region geometry. */
+  readonly parentRect?: CutProgramRect;
+  /** Kept child region geometry. */
+  readonly keptRect?: CutProgramRect;
+  /** Solid remainder child region geometry (null if kerf-only / blade-exit). */
+  readonly restRect?: CutProgramRect | null;
+  /** Consumed kerf band geometry inside the parent. */
+  readonly kerfBandRect?: CutProgramRect;
 }
 
 /**

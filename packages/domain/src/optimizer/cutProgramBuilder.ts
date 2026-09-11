@@ -109,6 +109,7 @@ export class CutProgramSheetBuilder {
     readonly restRegionId?: string;
     readonly pieceRef?: string;
     readonly leadingBand?: boolean;
+    readonly trim?: boolean;
   }): SeparateRegionResult {
     const parent = this.region(params.parentRegionId);
     const separation = separateExtent(
@@ -137,6 +138,7 @@ export class CutProgramSheetBuilder {
     let rest: RegisteredRegion | null = null;
     const bladeExitsParent = geometry.bladeExitsParent ? true : undefined;
     const leadingBand = params.leadingBand === true ? true : undefined;
+    const trim = params.trim === true ? true : undefined;
     if (geometry.restRect) {
       const restRegionId = params.restRegionId ?? `${cutId}:rest`;
       rest = {
@@ -157,6 +159,7 @@ export class CutProgramSheetBuilder {
         restRegionId,
         bladeExitsParent,
         leadingBand,
+        trim,
       });
     } else {
       this.outDivisions.push({
@@ -168,6 +171,7 @@ export class CutProgramSheetBuilder {
         keptRegionId,
         bladeExitsParent,
         leadingBand,
+        trim,
       });
     }
     return { kept, rest, cutHappened: true };
@@ -280,6 +284,7 @@ export function registerTrimDivisions(
       kerfMm,
       cutId: 'trim:left',
       restRegionId: 'trim:left',
+      trim: true,
     });
     if (sep.rest) {
       builder.markLiberatedWasteTerminal(sep.rest.regionId);
@@ -294,6 +299,7 @@ export function registerTrimDivisions(
       kerfMm,
       cutId: 'trim:right',
       restRegionId: 'trim:right',
+      trim: true,
     });
     if (sep.rest) {
       builder.markLiberatedWasteTerminal(sep.rest.regionId);
@@ -309,6 +315,7 @@ export function registerTrimDivisions(
       kerfMm,
       cutId: 'trim:bottom',
       restRegionId: 'trim:bottom',
+      trim: true,
     });
     if (sep.rest) {
       builder.markLiberatedWasteTerminal(sep.rest.regionId);
@@ -323,6 +330,7 @@ export function registerTrimDivisions(
       kerfMm,
       cutId: 'trim:top',
       restRegionId: 'trim:top',
+      trim: true,
     });
     if (sep.rest) {
       builder.markLiberatedWasteTerminal(sep.rest.regionId);

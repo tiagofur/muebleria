@@ -1,9 +1,20 @@
 /**
  * ProductionBoardSvg — High precision SVG rendering of board cuts, pieces, edges and remnants.
+ *
+ * Since #650 PR 3, all cutting lines, primary cut markers, kerf bands and waste
+ * areas derive strictly from the authoritative executed cut program in
+ * @granete/domain. Supports both general layout view and step-by-step navigation
+ * with active region, cut line/band, nominal tool overhang, and piece isolation
+ * highlighting.
+ *
+ * Single explicit board→SVG transform (#650 PR 3 review): X grows to the right
+ * and board Y=0 (borde inferior, the domain frame also used by the PDF export)
+ * renders at the BOTTOM of the drawing. Every geometric element goes through
+ * sx/sy — no Y inversions are distributed anywhere else.
  */
 
 import type { ReactNode } from 'react';
-import type { CutPlanSheet, CutPlanPlacedPiece } from '@granete/domain';
+import type { CutPlanSheet, CutPlanPlacedPiece, CutProgramStepView } from '@granete/domain';
 import type {
   BoardCutLayout,
   PlacedPieceLegacy,
@@ -20,6 +31,8 @@ export interface ProductionBoardSvgProps {
   readonly hoveredPiece: CutPlanPlacedPiece | null;
   readonly onHoverPiece: (piece: CutPlanPlacedPiece | null) => void;
   readonly onSelectPiece?: (piece: CutPlanPlacedPiece) => void;
+  /** Active step for step-by-step preview (#650 PR 3). */
+  readonly activeStep?: CutProgramStepView | null;
 }
 
 export function ProductionBoardSvg({
@@ -33,8 +46,15 @@ export function ProductionBoardSvg({
   hoveredPiece,
   onHoverPiece,
   onSelectPiece,
+  activeStep,
 }: ProductionBoardSvgProps): ReactNode {
-  const { strips, crossCuts, wasteBlocks, primaryCut } = layout;
+  const { wasteBlocks, primaryCut, projection } = layout;
+
+  // The one board→SVG transform: program-local IDs repeat across boards, so
+  // keys/testids carry the board context to stay collision-free.
+  const boardKey = isExactPlan && sheet ? `b${sheet.sheetIndex}` : 'legacy';
+  const sx = (xMm: number): number => xMm * scale;
+  const sy = (yMm: number, extentMm = 0): number => svgH - (yMm + extentMm) * scale;
 
   return (
     <svg
@@ -56,17 +76,17 @@ export function ProductionBoardSvg({
         strokeWidth={1.5}
       />
 
-      {/* Useful Remnants (Green boxes ONLY if truly large and useful) */}
+      {/* Useful Remnants (Green dashed boxes) */}
       {isExactPlan &&
         sheet!.remnants
           .filter((rem) => rem.isUseful && rem.areaM2 >= 0.24)
           .map((rem) => {
-            const rx = rem.xMm * scale;
-            const ry = rem.yMm * scale;
+            const rx = sx(rem.xMm);
+            const ry = sy(rem.yMm, rem.widthMm);
             const rw = rem.lengthMm * scale;
             const rh = rem.widthMm * scale;
             return (
-              <g key={rem.id}>
+              <g key={`${boardKey}-rem-${rem.id}`}>
                 <rect
                   x={rx}
                   y={ry}
@@ -98,13 +118,13 @@ export function ProductionBoardSvg({
         sheet!.remnants
           .filter((rem) => !rem.isUseful || rem.areaM2 < 0.24)
           .map((rem) => {
-            const rx = rem.xMm * scale;
-            const ry = rem.yMm * scale;
+            const rx = sx(rem.xMm);
+            const ry = sy(rem.yMm, rem.widthMm);
             const rw = rem.lengthMm * scale;
             const rh = rem.widthMm * scale;
             if (rw < 5 || rh < 5) return null;
             return (
-              <g key={`scrap-${rem.id}`}>
+              <g key={`${boardKey}-scrap-${rem.id}`}>
                 <rect
                   x={rx}
                   y={ry}
@@ -119,16 +139,16 @@ export function ProductionBoardSvg({
             );
           })}
 
-      {/* Continuous Strip Waste Blocks (Gaps between uneven pieces within strips) */}
+      {/* Waste Blocks from Program Terminals */}
       {isExactPlan &&
         wasteBlocks.map((wb, idx) => {
-          const wx = wb.x * scale;
-          const wy = wb.y * scale;
+          const wx = sx(wb.x);
+          const wy = sy(wb.y, wb.h);
           const ww = wb.w * scale;
           const wh = wb.h * scale;
           if (ww < 4 || wh < 4) return null;
           return (
-            <g key={`waste-${idx}`}>
+            <g key={`${boardKey}-waste-${idx}`}>
               <rect
                 x={wx}
                 y={wy}
@@ -148,80 +168,77 @@ export function ProductionBoardSvg({
           );
         })}
 
-      {/* Continuous Guillotine Strip Rip Lines */}
-      {isExactPlan &&
-        strips.map((s, idx) => {
-          if (s.axis === 'horizontal') {
-            const sy = s.maxY * scale;
-            return (
-              <line
-                key={`rip-h-${idx}`}
-                x1={0}
-                y1={sy}
-                x2={svgW}
-                y2={sy}
-                stroke="#64748b"
-                strokeWidth={1}
-                strokeDasharray="5 3"
-              />
-            );
-          } else {
-            const sx = s.maxX * scale;
-            return (
-              <line
-                key={`rip-v-${idx}`}
-                x1={sx}
-                y1={0}
-                x2={sx}
-                y2={svgH}
-                stroke="#64748b"
-                strokeWidth={1}
-                strokeDasharray="5 3"
-              />
-            );
-          }
-        })}
+      {/* GENERAL VIEW: Authoritative Cuts strictly bounded to their parent regions */}
+      {isExactPlan && !activeStep && projection?.cuts && (
+        <g data-testid="production-board-cuts">
+          {projection.cuts.map((cut) => {
+            const cx1 = sx(cut.cutLine.x1);
+            const cy1 = sy(cut.cutLine.y1);
+            const cx2 = sx(cut.cutLine.x2);
+            const cy2 = sy(cut.cutLine.y2);
 
-      {/* Continuous Cross Cut Lines (within strips) */}
-      {isExactPlan &&
-        crossCuts.map((cc, idx) => (
-          <line
-            key={`cross-${idx}`}
-            x1={cc.x1 * scale}
-            y1={cc.y1 * scale}
-            x2={cc.x2 * scale}
-            y2={cc.y2 * scale}
-            stroke="#94a3b8"
-            strokeWidth={0.9}
-            strokeDasharray="3 2"
-          />
-        ))}
+            const kx = sx(cut.kerfBandRect.xMm);
+            const ky = sy(cut.kerfBandRect.yMm, cut.kerfBandRect.widthMm);
+            const kw = cut.kerfBandRect.lengthMm * scale;
+            const kh = cut.kerfBandRect.widthMm * scale;
 
-      {/* Primary Cut Marker Line (1er Corte Real del Tablero) */}
-      {isExactPlan && primaryCut != null && (
-        <g>
+            return (
+              <g
+                key={`${boardKey}-prog-cut-${cut.cutId}`}
+                data-testid={`cut-line-${boardKey}-${cut.cutId}`}
+              >
+                {/* Consumed kerf band */}
+                {kw > 0.5 && kh > 0.5 && (
+                  <rect
+                    x={kx}
+                    y={ky}
+                    width={kw}
+                    height={kh}
+                    fill="rgba(148, 163, 184, 0.22)"
+                    stroke="none"
+                  />
+                )}
+                {/* Cut line */}
+                <line
+                  x1={cx1}
+                  y1={cy1}
+                  x2={cx2}
+                  y2={cy2}
+                  stroke={cut.isTrim ? '#94a3b8' : '#64748b'}
+                  strokeWidth={cut.isTrim ? 0.9 : 1.1}
+                  strokeDasharray={cut.isTrim ? '3 2' : '5 3'}
+                />
+              </g>
+            );
+          })}
+        </g>
+      )}
+
+      {/* GENERAL VIEW: Primary Cut Marker Line (1er corte real del tablero) */}
+      {isExactPlan && !activeStep && primaryCut != null && (
+        <g data-testid="production-board-primary-cut">
           {primaryCut.axis === 'horizontal' ? (
             <>
               <line
                 x1={0}
-                y1={primaryCut.coordinateMm * scale}
+                y1={sy(primaryCut.coordinateMm)}
                 x2={svgW}
-                y2={primaryCut.coordinateMm * scale}
+                y2={sy(primaryCut.coordinateMm)}
                 stroke="#d97706"
                 strokeWidth={2}
                 strokeDasharray="6 3"
               />
               <rect
                 x={4}
-                y={primaryCut.coordinateMm * scale - 8}
-                width={120}
+                y={sy(primaryCut.coordinateMm) - 8}
+                width={130}
                 height={16}
                 rx={3}
                 fill="#d97706"
               />
               <text
-                x={64}
-                y={primaryCut.coordinateMm * scale + 3}
+                x={69}
+                y={sy(primaryCut.coordinateMm) + 3}
                 fontSize={7.5}
                 fontWeight="bold"
                 fill="#ffffff"
@@ -233,24 +250,24 @@ export function ProductionBoardSvg({
           ) : (
             <>
               <line
-                x1={primaryCut.coordinateMm * scale}
+                x1={sx(primaryCut.coordinateMm)}
                 y1={0}
-                x2={primaryCut.coordinateMm * scale}
+                x2={sx(primaryCut.coordinateMm)}
                 y2={svgH}
                 stroke="#d97706"
                 strokeWidth={2}
                 strokeDasharray="6 3"
               />
               <rect
-                x={primaryCut.coordinateMm * scale - 55}
+                x={sx(primaryCut.coordinateMm) - 60}
                 y={4}
-                width={110}
+                width={120}
                 height={16}
                 rx={3}
                 fill="#d97706"
               />
               <text
-                x={primaryCut.coordinateMm * scale}
+                x={sx(primaryCut.coordinateMm)}
                 y={15}
                 fontSize={7.5}
                 fontWeight="bold"
@@ -264,32 +281,158 @@ export function ProductionBoardSvg({
         </g>
       )}
 
+      {/* STEP-BY-STEP VIEW: Active Region, Blade Footprint & Cut Highlight */}
+      {isExactPlan && activeStep && (
+        <g data-testid="production-board-active-step">
+          {/* 1. Active Parent Region Highlight */}
+          <g data-testid="step-active-region">
+            <rect
+              x={sx(activeStep.parentRect.xMm)}
+              y={sy(activeStep.parentRect.yMm, activeStep.parentRect.widthMm)}
+              width={activeStep.parentRect.lengthMm * scale}
+              height={activeStep.parentRect.widthMm * scale}
+              fill="rgba(59, 130, 246, 0.08)"
+              stroke="#2563eb"
+              strokeWidth={1.8}
+              strokeDasharray="5 3"
+            />
+            <rect
+              x={sx(activeStep.parentRect.xMm) + 4}
+              y={sy(activeStep.parentRect.yMm, activeStep.parentRect.widthMm) + 4}
+              width={140}
+              height={14}
+              rx={2}
+              fill="#2563eb"
+            />
+            <text
+              x={sx(activeStep.parentRect.xMm) + 74}
+              y={sy(activeStep.parentRect.yMm, activeStep.parentRect.widthMm) + 14}
+              fontSize={7}
+              fontWeight="bold"
+              fill="#ffffff"
+              textAnchor="middle"
+            >
+              Región activa {Math.round(activeStep.parentRect.lengthMm)}×{Math.round(activeStep.parentRect.widthMm)} mm
+            </text>
+          </g>
+
+          {/* 2. Nominal Blade Tool Overhang (when blade exits parent) */}
+          {activeStep.bladeExitsParent && (
+            <g data-testid="step-blade-overhang">
+              <rect
+                x={sx(activeStep.toolFootprintRect.xMm)}
+                y={sy(
+                  activeStep.toolFootprintRect.yMm,
+                  activeStep.toolFootprintRect.widthMm,
+                )}
+                width={activeStep.toolFootprintRect.lengthMm * scale}
+                height={activeStep.toolFootprintRect.widthMm * scale}
+                fill="rgba(245, 158, 11, 0.18)"
+                stroke="#f59e0b"
+                strokeWidth={1}
+                strokeDasharray="2 2"
+              />
+            </g>
+          )}
+
+          {/* 3. Consumed Kerf Band */}
+          <rect
+            x={sx(activeStep.kerfBandRect.xMm)}
+            y={sy(activeStep.kerfBandRect.yMm, activeStep.kerfBandRect.widthMm)}
+            width={activeStep.kerfBandRect.lengthMm * scale}
+            height={activeStep.kerfBandRect.widthMm * scale}
+            fill="rgba(217, 119, 6, 0.35)"
+            stroke="#d97706"
+            strokeWidth={1.2}
+            data-testid="step-kerf-band"
+          />
+
+          {/* 4. Cut Line */}
+          <line
+            x1={sx(activeStep.cutLine.x1)}
+            y1={sy(activeStep.cutLine.y1)}
+            x2={sx(activeStep.cutLine.x2)}
+            y2={sy(activeStep.cutLine.y2)}
+            stroke="#d97706"
+            strokeWidth={2.5}
+            strokeDasharray="6 3"
+            data-testid="step-cut-line"
+          />
+
+          {/* 5. Cut Step Badge */}
+          {activeStep.axis === 'x' ? (
+            <g>
+              <rect
+                x={sx(activeStep.cutLine.x1) - 45}
+                y={Math.max(2, sy(activeStep.parentRect.yMm, activeStep.parentRect.widthMm) + 4)}
+                width={90}
+                height={15}
+                rx={3}
+                fill="#d97706"
+              />
+              <text
+                x={sx(activeStep.cutLine.x1)}
+                y={Math.max(2, sy(activeStep.parentRect.yMm, activeStep.parentRect.widthMm) + 4) + 11}
+                fontSize={7}
+                fontWeight="bold"
+                fill="#ffffff"
+                textAnchor="middle"
+              >
+                Corte #{activeStep.stepNumber} ({Math.round(activeStep.relativeMeasureMm)}mm)
+              </text>
+            </g>
+          ) : (
+            <g>
+              <rect
+                x={Math.max(4, sx(activeStep.parentRect.xMm) + 4)}
+                y={sy(activeStep.cutLine.y1) - 8}
+                width={95}
+                height={15}
+                rx={3}
+                fill="#d97706"
+              />
+              <text
+                x={Math.max(4, sx(activeStep.parentRect.xMm) + 4) + 47}
+                y={sy(activeStep.cutLine.y1) + 3}
+                fontSize={7}
+                fontWeight="bold"
+                fill="#ffffff"
+                textAnchor="middle"
+              >
+                Corte #{activeStep.stepNumber} ({Math.round(activeStep.relativeMeasureMm)}mm)
+              </text>
+            </g>
+          )}
+        </g>
+      )}
+
       {/* Exact CutPlan Pieces */}
       {isExactPlan &&
         sheet!.pieces.map((p, i) => {
-          const px = p.xMm * scale;
-          const py = p.yMm * scale;
+          const px = sx(p.xMm);
+          const py = sy(p.yMm, p.widthMm);
           const pw = p.lengthMm * scale;
           const ph = p.widthMm * scale;
           const isHovered = hoveredPiece?.id === p.id;
+          const isProducedInActiveStep = activeStep?.producedPiece?.id === p.id;
 
           return (
             <g
-              key={p.id || i}
+              key={p.id || `${boardKey}-piece-${i}`}
               style={{ cursor: onSelectPiece ? 'pointer' : 'default' }}
               onMouseEnter={() => onHoverPiece(p)}
               onMouseLeave={() => onHoverPiece(null)}
               onClick={() => onSelectPiece?.(p)}
             >
-              {/* Piece Body: Crisp white background with clean slate border */}
+              {/* Piece Body */}
               <rect
                 x={px}
                 y={py}
                 width={pw}
                 height={ph}
-                fill={isHovered ? '#fef08a' : '#ffffff'}
-                stroke="#334155"
-                strokeWidth={isHovered ? 2 : 1}
+                fill={isProducedInActiveStep ? '#fef08a' : isHovered ? '#fef9c3' : '#ffffff'}
+                stroke={isProducedInActiveStep ? '#d97706' : '#334155'}
+                strokeWidth={isProducedInActiveStep ? 2 : isHovered ? 1.5 : 1}
                 data-testid={`production-piece-${i}`}
               />
 
@@ -367,6 +510,19 @@ export function ProductionBoardSvg({
                   strokeDasharray="3 2"
                 />
               ) : null}
+
+              {/* Highlight badge for produced piece in active step */}
+              {isProducedInActiveStep && pw > 45 && ph > 32 && (
+                <text
+                  x={px + 4}
+                  y={py + ph - 6}
+                  fontSize={6.5}
+                  fontWeight="bold"
+                  fill="#b45309"
+                >
+                  Pieza obtenida
+                </text>
+              )}
             </g>
           );
         })}
@@ -374,13 +530,13 @@ export function ProductionBoardSvg({
       {/* Legacy Pieces fallback */}
       {!isExactPlan &&
         legacyPlaced.map((p, i) => {
-          const px = p.x * scale;
-          const py = p.y * scale;
+          const px = sx(p.x);
+          const py = sy(p.y, p.h);
           const pw = p.w * scale;
           const ph = p.h * scale;
 
           return (
-            <g key={i}>
+            <g key={`${boardKey}-legacy-${i}`}>
               <rect
                 x={px}
                 y={py}

@@ -75,6 +75,14 @@ export interface CutProgramDivision {
    */
   readonly bladeExitsParent?: boolean;
   /**
+   * Neutral operational metadata: this pass removes the declared perimeter
+   * margin (refilado). It is classification for projections/instructions only
+   * — never a geometric authority and never inferred from cutId names. Set by
+   * the trim registration itself, including kerf-only and blade-exit passes
+   * where no liberated waste leaf exists to derive it from.
+   */
+  readonly trim?: boolean;
+  /**
    * Band placement along the axis. Default (absent/false): kept region at the
    * parent origin, band after it, rest beyond ([kept][band][rest]). True:
    * mirrored layout with the kept region at the parent's far end
@@ -200,6 +208,8 @@ export interface CutProgramTraceDivision {
   readonly kerfBandRect: CutProgramRect;
   readonly bladeExitsParent: boolean;
   readonly leadingBand: boolean;
+  /** Neutral operational classification propagated from the declaration. */
+  readonly trim: boolean;
 }
 
 /** Terminal leaf with authoritative geometry. */
@@ -877,6 +887,7 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
       kerfBandRect: geometry.kerfBandRect,
       bladeExitsParent: geometry.bladeExitsParent,
       leadingBand: division.leadingBand === true,
+      trim: division.trim === true,
     });
   }
 

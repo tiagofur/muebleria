@@ -10,6 +10,7 @@
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
+import { Zap } from 'lucide-react';
 import type {
   MaterialBoard,
   Project,
@@ -109,6 +110,7 @@ export function ProductionOrderOptimizationPanel({
   // Current active CutPlan (stored in state or loaded from project)
   const [cutPlanState, setCutPlanState] = useState<CutPlan | null>(project.cutPlan ?? null);
   const [activeSheetIndex, setActiveSheetIndex] = useState<number>(0);
+  const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   // Operational choice for THIS download (the only place bundling is chosen).
   const [ptxMode, setPtxMode] = useState<'unified' | 'by-material'>('unified');
@@ -175,6 +177,7 @@ export function ProductionOrderOptimizationPanel({
 
     setCutPlanState(newPlan);
     setActiveSheetIndex(0);
+    setSelectedStepIndex(null);
     setSaveSuccessMsg(null);
   };
 
@@ -496,7 +499,10 @@ export function ProductionOrderOptimizationPanel({
                   key={idx}
                   type="button"
                   className={`btn btn--small ${activeSheetIndex === idx ? 'btn--primary' : 'btn--ghost'}`}
-                  onClick={() => setActiveSheetIndex(idx)}
+                  onClick={() => {
+                    setActiveSheetIndex(idx);
+                    setSelectedStepIndex(null);
+                  }}
                 >
                   #{idx + 1} · {s.materialCode} ({s.yieldPercent}% uso)
                 </button>
@@ -508,39 +514,115 @@ export function ProductionOrderOptimizationPanel({
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: activeSheet.instructions.length > 0 ? '1fr 300px' : '1fr',
+                  gridTemplateColumns:
+                    !isNesting && (activeSheet.instructions.length > 0 || !activeSheet.cutProgram)
+                      ? '1fr 300px'
+                      : '1fr',
                   gap: 16,
                 }}
               >
                 <div>
-                  <ProductionBoardView sheet={activeSheet} />
+                  <ProductionBoardView
+                    sheet={activeSheet}
+                    selectedStepIndex={selectedStepIndex}
+                    onSelectStep={setSelectedStepIndex}
+                    onRegeneratePlan={handleGenerateCutPlan}
+                  />
                 </div>
-                {activeSheet.instructions.length > 0 && (
+                {activeSheet.instructions.length > 0 ? (
                   <div
-                  style={{
-                    background: 'var(--surface-card)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: 14,
-                    fontSize: '0.85em',
-                    maxHeight: 520,
-                    overflowY: 'auto',
-                  }}
-                >
-                  <h4 style={{ margin: '0 0 10px 0', fontSize: '0.95em', fontWeight: 600 }}>
-                    Secuencia de Corte ({activeSheet.instructions.length} pasos)
-                  </h4>
-                  <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.45 }}>
-                    {activeSheet.instructions.map((inst) => (
-                      <li key={inst.step} style={{ marginBottom: 6 }}>
-                        <span style={{ fontWeight: inst.phase === 1 ? 600 : 400 }}>
-                          {inst.description}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-                )}
+                    style={{
+                      background: 'var(--surface-card)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: 14,
+                      fontSize: '0.85em',
+                      maxHeight: 520,
+                      overflowY: 'auto',
+                    }}
+                    data-testid="prod-opt-cut-sequence-sidebar"
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 10,
+                      }}
+                    >
+                      <h4 style={{ margin: 0, fontSize: '0.95em', fontWeight: 600 }}>
+                        Secuencia de Corte ({activeSheet.instructions.length} pasos)
+                      </h4>
+                      {selectedStepIndex !== null && (
+                        <button
+                          type="button"
+                          className="btn btn--small btn--ghost"
+                          onClick={() => setSelectedStepIndex(null)}
+                        >
+                          Vista general
+                        </button>
+                      )}
+                    </div>
+                    <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.45 }}>
+                      {activeSheet.instructions.map((inst, idx) => {
+                        const isSelected = selectedStepIndex === idx;
+                        return (
+                          <li
+                            key={inst.step}
+                            style={{
+                              marginBottom: 6,
+                              cursor: 'pointer',
+                              padding: '4px 6px',
+                              borderRadius: 'var(--radius-sm)',
+                              background: isSelected ? 'var(--surface-selected)' : 'transparent',
+                              outline: isSelected ? '1px solid var(--border-brand)' : 'none',
+                            }}
+                            onClick={() => setSelectedStepIndex(idx)}
+                            role="button"
+                            tabIndex={0}
+                            aria-current={isSelected ? 'step' : undefined}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setSelectedStepIndex(idx);
+                              }
+                            }}
+                          >
+                            <span style={{ fontWeight: inst.phase === 1 || isSelected ? 600 : 400 }}>
+                              {inst.description}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                ) : !isNesting && !activeSheet.cutProgram ? (
+                  <div
+                    style={{
+                      background: 'var(--surface-card)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: 14,
+                      fontSize: '0.85em',
+                      color: 'var(--text-secondary, #475569)',
+                    }}
+                    data-testid="prod-opt-missing-program-sidebar"
+                  >
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95em', fontWeight: 600 }}>
+                      Secuencia no disponible
+                    </h4>
+                    <p style={{ margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                      Este plan no cuenta con un programa de corte verificado. Regenerá el plan para obtener la secuencia exacta de pasadas.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={handleGenerateCutPlan}
+                    >
+                      <Zap size={14} strokeWidth={1.5} aria-hidden /> Regenerar plan
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

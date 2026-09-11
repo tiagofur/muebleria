@@ -6,7 +6,7 @@
  */
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { CutPlan, Project } from '@granete/domain';
+import type { CutPlan, CutPlanSheet, ProductionCutRow, Project } from '@granete/domain';
 import { ProductionOrderOptimizationPanel } from './ProductionOrderOptimizationPanel';
 
 function project(): Project {
@@ -409,5 +409,92 @@ describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, m
     expect(
       (screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled,
     ).toBe(true);
+  });
+
+  it('secuencia de corte sincronizada: clic en paso de la barra lateral activa el paso', () => {
+    const sampleRows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01',
+        partCode: 'LAT-01',
+        partName: 'Lateral',
+        moduleCode: 'M01',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: 800,
+        widthMm: 500,
+        quantity: 1,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+        catalog={null}
+        cutRows={sampleRows}
+      />,
+    );
+
+    const sidebar = screen.getByTestId('prod-opt-cut-sequence-sidebar');
+    expect(sidebar).toBeTruthy();
+    const stepItem = sidebar.querySelector('li');
+    expect(stepItem).toBeTruthy();
+    expect(stepItem?.getAttribute('aria-current')).toBeNull();
+
+    // Click on the instruction step
+    fireEvent.click(stepItem!);
+    expect(stepItem?.getAttribute('aria-current')).toBe('step');
+
+    // Click "Vista general" button
+    const btnGeneral = screen.getByText('Vista general');
+    fireEvent.click(btnGeneral);
+    expect(stepItem?.getAttribute('aria-current')).toBeNull();
+  });
+
+  it('plan legacy sin cutProgram: muestra aviso de secuencia no disponible en barra lateral', () => {
+    const sampleRows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01',
+        partCode: 'LAT-01',
+        partName: 'Lateral',
+        moduleCode: 'M01',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: 800,
+        widthMm: 500,
+        quantity: 1,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+
+    const basePlan = cutPlanFixture('saw-guillotine');
+    const legacyPlan: CutPlan = {
+      ...basePlan,
+      sheets: [
+        {
+          ...basePlan.sheets[0]!,
+          instructions: [],
+          cutProgram: undefined,
+        },
+      ],
+    };
+
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: legacyPlan }}
+        catalog={null}
+        cutRows={sampleRows}
+      />,
+    );
+
+    const missingNotice = screen.getByTestId('prod-opt-missing-program-sidebar');
+    expect(missingNotice).toBeTruthy();
+    expect(missingNotice.textContent).toContain('Secuencia no disponible');
   });
 });
