@@ -5,8 +5,16 @@
  * F126: estrategia de corte (sierra vs CNC nesting) y despacho exclusivo de export.
  */
 import { describe, expect, it, afterEach, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { CutPlan, Project } from '@granete/domain';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import {
+  optimizeCutPlan,
+  type Catalog,
+  type CutPlan,
+  type CutPlanSheet,
+  type MaterialBoard,
+  type ProductionCutRow,
+  type Project,
+} from '@granete/domain';
 import { ProductionOrderOptimizationPanel } from './ProductionOrderOptimizationPanel';
 
 function project(): Project {
@@ -22,6 +30,69 @@ function project(): Project {
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
   };
+}
+
+const fixtureBoard: MaterialBoard = {
+  id: 'mat-mdf18',
+  code: 'MDF18',
+  name: 'MDF Blanco 18mm',
+  widthMm: 1830,
+  lengthMm: 2440,
+  thicknessMm: 18,
+  grainDefault: true,
+  boardPrice: 100,
+  wastePercent: 10,
+  costPerM2: 25,
+  active: true,
+};
+
+function fixtureCatalog(): Catalog {
+  return {
+    materials: [fixtureBoard],
+    edges: [],
+    hardware: [],
+    optionGroups: [],
+    modules: [],
+  };
+}
+
+/**
+ * Real saw sheet from the optimizer: carries a valid cutProgram, so the
+ * sequence sidebar is governed by the validated projection (#650 R3).
+ */
+function sawSheetFixture(): CutPlanSheet {
+  const rows: ProductionCutRow[] = [
+    {
+      description: 'LAT-01 · Lateral · M01',
+      partCode: 'LAT-01',
+      partName: 'Lateral',
+      moduleCode: 'M01',
+      materialName: 'MDF Blanco 18mm',
+      lengthMm: 800,
+      widthMm: 500,
+      quantity: 1,
+      grain: 1,
+      L1: 0,
+      L2: 0,
+      W1: 0,
+      W2: 0,
+    },
+  ];
+  const plan = optimizeCutPlan('p1', rows, [fixtureBoard], {
+    sawKerfMm: 4,
+    trim: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
+    deductEdgeBand: true,
+    allowRotationNoGrain: true,
+    minRemnantWidthMm: 400,
+    minRemnantLengthMm: 600,
+    preferLongitudinalRips: true,
+    heuristic: 'guillotine-hybrid',
+    cutStrategy: 'saw-guillotine',
+  });
+  const sheet = plan.sheets[0]!;
+  expect(sheet.cutProgram).toBeDefined();
+  expect(sheet.instructions.length).toBeGreaterThan(0);
+  return sheet;
 }
 
 function cutPlanFixture(strategy: 'saw-guillotine' | 'cnc-nesting'): CutPlan {
@@ -44,63 +115,53 @@ function cutPlanFixture(strategy: 'saw-guillotine' | 'cnc-nesting'): CutPlan {
       ...(strategy === 'cnc-nesting' ? { toolSpacingMm: 8 } : {}),
     },
     sheets: [
-      {
-        sheetIndex: 0,
-        strategy,
-        materialCode: 'MDF18',
-        materialName: 'MDF Blanco 18mm',
-        sheetWidthMm: 1830,
-        sheetLengthMm: 2440,
-        thicknessMm: 18,
-        pieces: [
-          {
-            id: 'LAT-01-1-s0',
-            partCode: 'LAT-01',
-            partName: 'Lateral',
-            moduleCode: 'M01',
-            labelRef: 'A1',
-            materialName: 'MDF Blanco 18mm',
-            materialCode: 'MDF18',
-            xMm: 10,
-            yMm: 10,
-            lengthMm: 800,
-            widthMm: 500,
-            originalLengthMm: 800,
-            originalWidthMm: 500,
-            grain: 1,
-            rotated: false,
-            L1: 1,
-            L2: 0,
-            W1: 0,
-            W2: 0,
-            thicknessMm: 18,
+      strategy === 'saw-guillotine'
+        ? sawSheetFixture()
+        : {
             sheetIndex: 0,
-            stripIndex: 0,
-            cutSequenceNumber: 1,
-            status: 'pending',
+            strategy,
+            materialCode: 'MDF18',
+            materialName: 'MDF Blanco 18mm',
+            sheetWidthMm: 1830,
+            sheetLengthMm: 2440,
+            thicknessMm: 18,
+            pieces: [
+              {
+                id: 'LAT-01-1-s0',
+                partCode: 'LAT-01',
+                partName: 'Lateral',
+                moduleCode: 'M01',
+                labelRef: 'A1',
+                materialName: 'MDF Blanco 18mm',
+                materialCode: 'MDF18',
+                xMm: 10,
+                yMm: 10,
+                lengthMm: 800,
+                widthMm: 500,
+                originalLengthMm: 800,
+                originalWidthMm: 500,
+                grain: 1,
+                rotated: false,
+                L1: 1,
+                L2: 0,
+                W1: 0,
+                W2: 0,
+                thicknessMm: 18,
+                sheetIndex: 0,
+                stripIndex: 0,
+                cutSequenceNumber: 1,
+                status: 'pending',
+              },
+            ],
+            remnants: [],
+            instructions: [],
+            netPiecesAreaM2: 0.4,
+            grossSheetAreaM2: 4.47,
+            usableRemnantAreaM2: 0,
+            wasteAreaM2: 4.07,
+            wastePercent: 91,
+            yieldPercent: 9,
           },
-        ],
-        remnants: [],
-        instructions:
-          strategy === 'saw-guillotine'
-            ? [
-                {
-                  step: 1,
-                  phase: 1,
-                  cutType: 'trim',
-                  description: 'Refilar bordes perimetrales',
-                  positionMm: 0,
-                  lengthMm: 4270,
-                },
-              ]
-            : [],
-        netPiecesAreaM2: 0.4,
-        grossSheetAreaM2: 4.47,
-        usableRemnantAreaM2: 0,
-        wasteAreaM2: 4.07,
-        wastePercent: 91,
-        yieldPercent: 9,
-      },
     ],
     stats: {
       totalSheets: 1,
@@ -294,7 +355,10 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
       />,
     );
 
-    expect(screen.getByText('Refilar bordes perimetrales')).toBeTruthy();
+    // Real program-driven sequence: the four trim passes come first.
+    const sidebar = screen.getByTestId('prod-opt-cut-sequence-sidebar');
+    expect(sidebar.querySelectorAll('li').length).toBeGreaterThanOrEqual(5);
+    expect(sidebar.textContent).toContain('Refilar borde');
   });
 });
 
@@ -409,5 +473,232 @@ describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, m
     expect(
       (screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled,
     ).toBe(true);
+  });
+
+  it('secuencia de corte sincronizada: clic en paso de la barra lateral activa el paso', () => {
+    const sampleRows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01',
+        partCode: 'LAT-01',
+        partName: 'Lateral',
+        moduleCode: 'M01',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: 800,
+        widthMm: 500,
+        quantity: 1,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+        catalog={null}
+        cutRows={sampleRows}
+      />,
+    );
+
+    const sidebar = screen.getByTestId('prod-opt-cut-sequence-sidebar');
+    expect(sidebar).toBeTruthy();
+    const stepItem = sidebar.querySelector('li');
+    expect(stepItem).toBeTruthy();
+    expect(stepItem?.getAttribute('aria-current')).toBeNull();
+
+    // Click on the instruction step
+    fireEvent.click(stepItem!);
+    expect(stepItem?.getAttribute('aria-current')).toBe('step');
+
+    // Click "Vista general" button
+    const btnGeneral = within(sidebar).getByText('Vista general');
+    fireEvent.click(btnGeneral);
+    expect(stepItem?.getAttribute('aria-current')).toBeNull();
+  });
+
+  it('plan legacy sin cutProgram: muestra aviso de secuencia no disponible en barra lateral', () => {
+    const sampleRows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01',
+        partCode: 'LAT-01',
+        partName: 'Lateral',
+        moduleCode: 'M01',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: 800,
+        widthMm: 500,
+        quantity: 1,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+
+    const basePlan = cutPlanFixture('saw-guillotine');
+    const legacyPlan: CutPlan = {
+      ...basePlan,
+      sheets: [
+        {
+          ...basePlan.sheets[0]!,
+          instructions: [],
+          cutProgram: undefined,
+        },
+      ],
+    };
+
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: legacyPlan }}
+        catalog={null}
+        cutRows={sampleRows}
+      />,
+    );
+
+    const missingNotice = screen.getByTestId('prod-opt-missing-program-sidebar');
+    expect(missingNotice).toBeTruthy();
+    expect(missingNotice.textContent).toContain('Secuencia no disponible');
+  });
+
+  it('R3: programa inválido bloquea TODA secuencia aunque existan instrucciones stale', () => {
+    const sampleRows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01',
+        partCode: 'LAT-01',
+        partName: 'Lateral',
+        moduleCode: 'M01',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: 800,
+        widthMm: 500,
+        quantity: 1,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+
+    const basePlan = cutPlanFixture('saw-guillotine');
+    const sheet = basePlan.sheets[0]!;
+    // Simulate stale data: instructions exist but the current program fails
+    // validation (keptExtent far beyond its parent).
+    expect(sheet.instructions.length).toBeGreaterThan(0);
+    const corruptSheet: CutPlanSheet = {
+      ...sheet,
+      cutProgram: {
+        ...sheet.cutProgram!,
+        divisions: sheet.cutProgram!.divisions.map((d, idx) =>
+          idx === 0 ? { ...d, keptExtentMm: 99999 } : d,
+        ),
+      },
+    };
+    const stalePlan: CutPlan = { ...basePlan, sheets: [corruptSheet] };
+
+    const { container } = render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: stalePlan }}
+        catalog={null}
+        cutRows={sampleRows}
+      />,
+    );
+
+    // Board banner shows the blocked state with a reason.
+    expect(screen.getByTestId('invalid-program-banner')).toBeTruthy();
+    expect(screen.getByTestId('invalid-program-banner').textContent).toContain(
+      'Programa de corte inválido',
+    );
+
+    // The sequence sidebar is fully gone: no clickable stale instructions.
+    expect(screen.queryByTestId('prod-opt-cut-sequence-sidebar')).toBeNull();
+    const blocked = screen.getByTestId('prod-opt-invalid-program-sidebar');
+    expect(blocked.textContent).toContain('Secuencia bloqueada');
+    expect(container.querySelectorAll('li[role="button"]')).toHaveLength(0);
+
+    // No guillotine decoration derived from those stale instructions.
+    expect(container.querySelectorAll('[data-testid^="cut-line-"]')).toHaveLength(0);
+  });
+
+  it('R4A: plan Sierra visible no sigue el selector CNC hasta regenerar', () => {
+    const sampleRows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01',
+        partCode: 'LAT-01',
+        partName: 'Lateral',
+        moduleCode: 'M01',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: 800,
+        widthMm: 500,
+        quantity: 1,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+        catalog={fixtureCatalog()}
+        cutRows={sampleRows}
+      />,
+    );
+
+    // The generated saw plan drives the result UI.
+    expect(screen.getByTestId('prod-opt-cut-sequence-sidebar')).toBeTruthy();
+    expect(screen.getByTestId('production-board-view').textContent).toContain('Guillotina 2D');
+
+    // Switching the selector to CNC without regenerating changes nothing.
+    fireEvent.click(screen.getByTestId('prod-opt-strategy-nesting'));
+    expect(screen.getByTestId('prod-opt-cut-sequence-sidebar')).toBeTruthy();
+    expect(screen.getByTestId('production-board-view').textContent).toContain('Guillotina 2D');
+  });
+
+  it('R4B: plan CNC visible no gana secuencia al cambiar el selector a Sierra sin regenerar', () => {
+    const sampleRows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01',
+        partCode: 'LAT-01',
+        partName: 'Lateral',
+        moduleCode: 'M01',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: 800,
+        widthMm: 500,
+        quantity: 1,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: cutPlanFixture('cnc-nesting') }}
+        catalog={fixtureCatalog()}
+        cutRows={sampleRows}
+      />,
+    );
+
+    const boardView = () => screen.getByTestId('production-board-view');
+
+    // Generated CNC plan: no guillotine sequence, no saw decoration.
+    expect(screen.queryByTestId('prod-opt-cut-sequence-sidebar')).toBeNull();
+    expect(boardView().textContent).toContain('CNC Nesting');
+
+    // Selector back to saw WITHOUT regenerating: the visible plan stays CNC.
+    fireEvent.click(screen.getByTestId('prod-opt-strategy-saw'));
+    expect(screen.queryByTestId('prod-opt-cut-sequence-sidebar')).toBeNull();
+    expect(boardView().textContent).toContain('CNC Nesting');
+
+    // After actually regenerating, the new saw plan drives the UI.
+    fireEvent.click(screen.getByRole('button', { name: /Generar Plan de Corte 2D/ }));
+    expect(screen.getByTestId('prod-opt-cut-sequence-sidebar')).toBeTruthy();
+    expect(boardView().textContent).toContain('Guillotina 2D');
   });
 });

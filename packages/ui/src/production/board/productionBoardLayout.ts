@@ -1,12 +1,20 @@
 /**
  * Pure layout algorithms for 2D guillotine cutting board views (ProductionBoardView).
+ *
+ * Since #650 PR 3, all cutting lines, 1st cut markers, kerf bands and waste
+ * blocks derive strictly from the authoritative executed cut program in
+ * @granete/domain (projectSheetCutProgram). Cuts are limited to their active
+ * parent regions, never spanning across neighboring pieces or the full board.
+ * Heuristic X/Y clustering is eliminated.
  */
 
 import type {
   ProductionCutRow,
   CutPlanSheet,
-  CutPlanPlacedPiece,
+  CutProgramBoardProjection,
+  CutProgramStepView,
 } from '@granete/domain';
+import { projectSheetCutProgram } from '@granete/domain';
 
 export const DEFAULT_SHEET_L = 2440;
 export const DEFAULT_SHEET_W = 1830;
@@ -97,12 +105,15 @@ export interface BoardCutLayout {
   readonly crossCuts: readonly CrossCutLine[];
   readonly wasteBlocks: readonly WasteBlock[];
   readonly primaryCut: PrimaryCutInfo | null;
+  /** Program provenance status (#650 PR 3). */
+  readonly programStatus: 'valid' | 'missing' | 'invalid' | 'cnc-nesting';
+  readonly errorMessage?: string;
+  readonly projection?: CutProgramBoardProjection;
 }
 
 /**
  * CNC nesting sheets carry no guillotine decoration: no strip rip lines, no
- * cross cuts, no 1st-cut marker. The router/fresa follows piece contours, so
- * the only meaningful geometry is the pieces and the sheet remnants.
+ * cross cuts, no 1st-cut marker.
  */
 export const EMPTY_BOARD_CUT_LAYOUT: BoardCutLayout = {
   layoutDirection: 'horizontal',
@@ -110,227 +121,83 @@ export const EMPTY_BOARD_CUT_LAYOUT: BoardCutLayout = {
   crossCuts: [],
   wasteBlocks: [],
   primaryCut: null,
+  programStatus: 'missing',
 };
 
 export function computeBoardCutLayout(
   sheet: CutPlanSheet | undefined,
-  lengthMm: number,
-  widthMm: number,
+  _lengthMm: number,
+  _widthMm: number,
 ): BoardCutLayout {
   if (!sheet || !sheet.pieces || sheet.pieces.length === 0) {
+    return EMPTY_BOARD_CUT_LAYOUT;
+  }
+
+  if (sheet.strategy === 'cnc-nesting') {
+    return {
+      ...EMPTY_BOARD_CUT_LAYOUT,
+      programStatus: 'cnc-nesting',
+    };
+  }
+
+  // Authoritative projection from the executed cut program
+  const projection = projectSheetCutProgram(sheet);
+
+  if (projection.status === 'valid') {
+    const isHorizontal = projection.primaryCut?.axis === 'y';
+    const primaryCut: PrimaryCutInfo | null = projection.primaryCut
+      ? {
+          axis: projection.primaryCut.axis === 'y' ? 'horizontal' : 'vertical',
+          coordinateMm: projection.primaryCut.coordinateMm,
+          label: projection.primaryCut.label,
+        }
+      : null;
+
+    // Each cut is strictly bounded to its active parent region
+    const crossCuts: CrossCutLine[] = projection.cuts.map((c) => ({
+      x1: c.cutLine.x1,
+      y1: c.cutLine.y1,
+      x2: c.cutLine.x2,
+      y2: c.cutLine.y2,
+    }));
+
+    const wasteBlocks: WasteBlock[] = projection.wasteLeaves.map((w) => ({
+      x: w.rect.xMm,
+      y: w.rect.yMm,
+      w: w.rect.lengthMm,
+      h: w.rect.widthMm,
+    }));
+
+    return {
+      layoutDirection: isHorizontal ? 'horizontal' : 'vertical',
+      strips: [],
+      crossCuts,
+      wasteBlocks,
+      primaryCut,
+      programStatus: 'valid',
+      projection,
+    };
+  }
+
+  if (projection.status === 'invalid') {
     return {
       layoutDirection: 'horizontal',
       strips: [],
       crossCuts: [],
       wasteBlocks: [],
       primaryCut: null,
+      programStatus: 'invalid',
+      errorMessage: projection.errorMessage,
     };
   }
 
-  const pieces = sheet.pieces;
-
-  // Determine layout direction: group by yMm (horizontal rows) vs xMm (vertical cols)
-  const yClusters = new Map<number, CutPlanPlacedPiece[]>();
-  const xClusters = new Map<number, CutPlanPlacedPiece[]>();
-
-  for (const p of pieces) {
-    // Y clustering
-    let foundYKey: number | null = null;
-    for (const k of yClusters.keys()) {
-      if (Math.abs(k - p.yMm) <= 2) {
-        foundYKey = k;
-        break;
-      }
-    }
-    if (foundYKey !== null) {
-      yClusters.get(foundYKey)!.push(p);
-    } else {
-      yClusters.set(p.yMm, [p]);
-    }
-
-    // X clustering
-    let foundXKey: number | null = null;
-    for (const k of xClusters.keys()) {
-      if (Math.abs(k - p.xMm) <= 2) {
-        foundXKey = k;
-        break;
-      }
-    }
-    if (foundXKey !== null) {
-      xClusters.get(foundXKey)!.push(p);
-    } else {
-      xClusters.set(p.xMm, [p]);
-    }
-  }
-
-  const avgPiecesPerY = pieces.length / Math.max(1, yClusters.size);
-  const avgPiecesPerX = pieces.length / Math.max(1, xClusters.size);
-
-  const isHorizontal = avgPiecesPerY >= avgPiecesPerX;
-  const computedStrips: StripInfo[] = [];
-  const computedCrossCuts: CrossCutLine[] = [];
-  const computedWaste: WasteBlock[] = [];
-  let primCut: PrimaryCutInfo | null = null;
-
-  if (isHorizontal) {
-    // HORIZONTAL STRIPS (Layout in Rows)
-    const sortedYKeys = [...yClusters.keys()].sort((a, b) => a - b);
-    let maxUsedY = 0;
-
-    for (const yKey of sortedYKeys) {
-      const rowPieces = yClusters.get(yKey)!;
-      const minY = Math.min(...rowPieces.map((p) => p.yMm));
-      const maxY = Math.max(...rowPieces.map((p) => p.yMm + p.widthMm));
-      const minX = Math.min(...rowPieces.map((p) => p.xMm));
-      const maxX = Math.max(...rowPieces.map((p) => p.xMm + p.lengthMm));
-      const rowHeight = maxY - minY;
-
-      if (maxY > maxUsedY) maxUsedY = maxY;
-
-      computedStrips.push({
-        axis: 'horizontal',
-        minX,
-        maxX,
-        minY,
-        maxY,
-        cutCoordinate: maxY,
-      });
-
-      // Vertical cross cuts between pieces in this horizontal row
-      const sortedPiecesInRow = [...rowPieces].sort((a, b) => a.xMm - b.xMm);
-      for (const p of sortedPiecesInRow) {
-        const cutX = p.xMm + p.lengthMm;
-        computedCrossCuts.push({
-          x1: cutX,
-          y1: minY,
-          x2: cutX,
-          y2: maxY,
-        });
-
-        // If piece height is less than row height, there is a waste strip above it
-        if (p.widthMm < rowHeight - 1) {
-          computedWaste.push({
-            x: p.xMm,
-            y: p.yMm + p.widthMm,
-            w: p.lengthMm,
-            h: rowHeight - p.widthMm,
-          });
-        }
-      }
-
-      // Leftover at the end of the row
-      if (maxX < lengthMm - 15) {
-        computedWaste.push({
-          x: maxX,
-          y: minY,
-          w: lengthMm - maxX,
-          h: rowHeight,
-        });
-      }
-    }
-
-    // Check if there is a large useful remnant below/above the rows
-    const largeUsefulRemnant = sheet.remnants.find(
-      (r) => r.isUseful && r.yMm >= maxUsedY - 5 && r.areaM2 >= 0.24,
-    );
-
-    if (largeUsefulRemnant) {
-      primCut = {
-        axis: 'horizontal',
-        coordinateMm: largeUsefulRemnant.yMm,
-        label: `✂ 1er CORTE: Y = ${Math.round(largeUsefulRemnant.yMm)} mm`,
-      };
-    } else if (computedStrips.length > 0) {
-      const firstStrip = computedStrips[0]!;
-      primCut = {
-        axis: 'horizontal',
-        coordinateMm: firstStrip.maxY,
-        label: `✂ 1er CORTE: Y = ${Math.round(firstStrip.maxY)} mm`,
-      };
-    }
-  } else {
-    // VERTICAL STRIPS (Layout in Columns)
-    const sortedXKeys = [...xClusters.keys()].sort((a, b) => a - b);
-    let maxUsedX = 0;
-
-    for (const xKey of sortedXKeys) {
-      const colPieces = xClusters.get(xKey)!;
-      const minX = Math.min(...colPieces.map((p) => p.xMm));
-      const maxX = Math.max(...colPieces.map((p) => p.xMm + p.lengthMm));
-      const minY = Math.min(...colPieces.map((p) => p.yMm));
-      const maxY = Math.max(...colPieces.map((p) => p.yMm + p.widthMm));
-      const colWidth = maxX - minX;
-
-      if (maxX > maxUsedX) maxUsedX = maxX;
-
-      computedStrips.push({
-        axis: 'vertical',
-        minX,
-        maxX,
-        minY,
-        maxY,
-        cutCoordinate: maxX,
-      });
-
-      // Horizontal cross cuts between pieces in this vertical column
-      const sortedPiecesInCol = [...colPieces].sort((a, b) => a.yMm - b.yMm);
-      for (const p of sortedPiecesInCol) {
-        const cutY = p.yMm + p.widthMm;
-        computedCrossCuts.push({
-          x1: minX,
-          y1: cutY,
-          x2: maxX,
-          y2: cutY,
-        });
-
-        // If piece length is less than column width, there is a waste strip to the right of it
-        if (p.lengthMm < colWidth - 1) {
-          computedWaste.push({
-            x: p.xMm + p.lengthMm,
-            y: p.yMm,
-            w: colWidth - p.lengthMm,
-            h: p.widthMm,
-          });
-        }
-      }
-
-      // Leftover at the bottom of the column
-      if (maxY < widthMm - 15) {
-        computedWaste.push({
-          x: minX,
-          y: maxY,
-          w: colWidth,
-          h: widthMm - maxY,
-        });
-      }
-    }
-
-    // Check if there is a large useful remnant to the right
-    const largeUsefulRemnant = sheet.remnants.find(
-      (r) => r.isUseful && r.xMm >= maxUsedX - 5 && r.areaM2 >= 0.24,
-    );
-
-    if (largeUsefulRemnant) {
-      primCut = {
-        axis: 'vertical',
-        coordinateMm: largeUsefulRemnant.xMm,
-        label: `✂ 1er CORTE: X = ${Math.round(largeUsefulRemnant.xMm)} mm`,
-      };
-    } else if (computedStrips.length > 0) {
-      const firstStrip = computedStrips[0]!;
-      primCut = {
-        axis: 'vertical',
-        coordinateMm: firstStrip.maxX,
-        label: `✂ 1er CORTE: X = ${Math.round(firstStrip.maxX)} mm`,
-      };
-    }
-  }
-
+  // Missing program (legacy plan): keep pieces & remnants, no invented lines or cuts
   return {
-    layoutDirection: isHorizontal ? 'horizontal' : 'vertical',
-    strips: computedStrips,
-    crossCuts: computedCrossCuts,
-    wasteBlocks: computedWaste,
-    primaryCut: primCut,
+    layoutDirection: 'horizontal',
+    strips: [],
+    crossCuts: [],
+    wasteBlocks: [],
+    primaryCut: null,
+    programStatus: 'missing',
   };
 }

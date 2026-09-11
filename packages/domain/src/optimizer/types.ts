@@ -6,7 +6,7 @@
  */
 
 import type { CutStrategy, Grain, ProductionCutRow } from '../types';
-import type { CutProgramInput } from './cutProgram';
+import type { CutProgramAxis, CutProgramInput, CutProgramRect } from './cutProgram';
 
 /**
  * Configurable trim (refilado) margins per side (mm).
@@ -149,14 +149,72 @@ export interface CutPlanRemnant {
 
 /**
  * Step-by-step guillotine cutting instruction for manual saw operators.
+ *
+ * Generated authoritatively from the executed guillotine program (#650 PR 3),
+ * preserving program cutId, parent region, relative measures (never absolute
+ * board positions), kerf footprint, and expected piece references.
  */
 export interface CutInstruction {
   readonly step: number;
   readonly phase: 1 | 2 | 3; // 1: Trim, 2: Rip strip, 3: Cross cut
   readonly cutType: 'trim' | 'rip' | 'cross';
   readonly description: string;
+  /**
+   * Cut line position (mm) from the parent region's near origin along the
+   * axis — same value as cutOffsetMm when the program projection produced
+   * this instruction. Kept as the historical field name.
+   */
   readonly positionMm: number;
+  /** Cut line extent across the parent region (mm). */
   readonly lengthMm: number;
+  /** Program-local division identity. */
+  readonly cutId?: string;
+  /** Program-local active parent region identity. */
+  readonly parentRegionId?: string;
+  /** Division axis of advance ('x' | 'y'). */
+  readonly axis?: CutProgramAxis;
+  /**
+   * Position of the cut line measured from the NEAR ORIGIN of the parent
+   * region along the axis (mm). Local to the parent — never a global board
+   * coordinate. For normal layouts it equals the kept extent; for
+   * leadingBand passes it is the distance from the parent's origin to the
+   * blade (e.g. trim:left with margin 10 cuts at offset 10, kept 2430).
+   */
+  readonly cutOffsetMm?: number;
+  /**
+   * Total amount removed from that edge by a trim pass (mm): parent extent
+   * minus kept extent. Only meaningful when cutType is 'trim'.
+   */
+  readonly trimAmountMm?: number;
+  /**
+   * Kept extent along the axis from the parent origin (mm) — the size of the
+   * region the pass keeps, NOT the cut line position. Compat alias of the
+   * program's keptExtentMm; kept explicit so future consumers (PTX) never
+   * mistake it for cutOffsetMm.
+   */
+  readonly relativeMeasureMm?: number;
+  /** Nominal saw blade kerf (mm). */
+  readonly kerfMm?: number;
+  /** Nominal saw blade kerf (mm). */
+  readonly nominalKerfMm?: number;
+  /** Consumed kerf band extent from the parent (mm). */
+  readonly consumedKerfMm?: number;
+  /** True when the blade overhangs the parent. */
+  readonly bladeExitsParent?: boolean;
+  /** True for near-side trims with mirrored layout. */
+  readonly leadingBand?: boolean;
+  /** Piece identity reference if this pass directly isolates a piece. */
+  readonly pieceRef?: string;
+  readonly partCode?: string;
+  readonly partName?: string;
+  /** Active parent region geometry. */
+  readonly parentRect?: CutProgramRect;
+  /** Kept child region geometry. */
+  readonly keptRect?: CutProgramRect;
+  /** Solid remainder child region geometry (null if kerf-only / blade-exit). */
+  readonly restRect?: CutProgramRect | null;
+  /** Consumed kerf band geometry inside the parent. */
+  readonly kerfBandRect?: CutProgramRect;
 }
 
 /**

@@ -34,6 +34,7 @@ import {
   registerTrimDivisions,
   type RegisteredRegion,
 } from './cutProgramBuilder';
+import { generateCuttingInstructionsFromProgram } from './cutProgramProjection';
 import { optimizeSingleMaterialNesting } from './nesting';
 import { isUsefulRemnant, unrollRows, type PieceToPlace, type PlacementResult } from './pieces';
 
@@ -256,8 +257,8 @@ export function packSingleSheetGuillotineBestFit(
     5,
   );
 
-  // Generate step-by-step cutting instructions
-  const instructions = generateCuttingInstructions(placedPieces, config, sheetLengthMm, sheetWidthMm);
+  // Generate step-by-step cutting instructions from the real program
+  const instructions = generateCuttingInstructionsFromProgram(cutProgram, placedPieces, remnants);
 
   return {
     sheet: {
@@ -528,7 +529,7 @@ export function packSingleSheetStrip(
     materialName,
     10,
   );
-  const instructions = generateCuttingInstructions(placedPieces, config, sheetLengthMm, sheetWidthMm);
+  const instructions = generateCuttingInstructionsFromProgram(cutProgram, placedPieces, remnants);
 
   return {
     sheet: {
@@ -547,12 +548,17 @@ export function packSingleSheetStrip(
   };
 }
 
-function generateCuttingInstructions(
+export function generateCuttingInstructions(
   pieces: readonly CutPlanPlacedPiece[],
   config: CutPlanConfig,
   sheetLengthMm: number,
   sheetWidthMm: number,
+  cutProgram?: CutProgramInput,
+  remnants: readonly CutPlanRemnant[] = [],
 ): CutInstruction[] {
+  if (cutProgram) {
+    return generateCuttingInstructionsFromProgram(cutProgram, pieces, remnants);
+  }
   const instructions: CutInstruction[] = [];
   let step = 1;
 
