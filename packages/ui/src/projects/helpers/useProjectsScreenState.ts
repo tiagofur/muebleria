@@ -44,12 +44,15 @@ import {
 } from '../projectHelpers';
 import {
   filterProjectsByCommercialStatus,
+  type CommercialSummariesStatus,
   type QuoteCommercialStatusFilter,
 } from '../quoteRevisionPresentation';
 
 export interface UseProjectsScreenStateProps {
   readonly projects: readonly Project[];
   readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
+  /** Dataset state of the summaries batch request (#642 / 2A): error/loading never filter as 'none'. */
+  readonly commercialSummariesStatus?: CommercialSummariesStatus;
   readonly modules: readonly Module[];
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
@@ -101,6 +104,7 @@ export interface UseProjectsScreenStateProps {
 export function useProjectsScreenState({
   projects,
   commercialSummaries,
+  commercialSummariesStatus = 'ready',
   modules,
   materials,
   edges,
@@ -216,6 +220,9 @@ export function useProjectsScreenState({
     ],
   );
 
+  // Commercial status chips only apply to a READY dataset: while loading or
+  // failed, filtering by status would misclassify projects as 'none' (#642/2A).
+  const commercialFiltersDisabled = commercialSummariesStatus !== 'ready';
   const filtered = useMemo(
     () =>
       filterProjectsByCommercialStatus(
@@ -224,8 +231,9 @@ export function useProjectsScreenState({
         statusFilter,
         customers,
         commercialSummaries,
+        commercialSummariesStatus,
       ),
-    [projects, debouncedSearch, statusFilter, customers, commercialSummaries],
+    [projects, debouncedSearch, statusFilter, customers, commercialSummaries, commercialSummariesStatus],
   );
 
   const selectedProject =
@@ -492,6 +500,7 @@ export function useProjectsScreenState({
     setSearch,
     statusFilter,
     setStatusFilter,
+    commercialFiltersDisabled,
     selectedId,
     /** Local intent selection (state + URL). Raw state stays internal. */
     setSelectedId: selectProject,

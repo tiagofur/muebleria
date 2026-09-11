@@ -2332,7 +2332,7 @@
       "get": {
         "operationId": "listProjectCommercialSummaries",
         "summary": "List authoritative commercial summaries for projects in the caller's organization (#642 / 2A)",
-        "description": "Batch read model for the Cotizaciones list. Resolves the authoritative QuoteRevision for every accessible project (accepted if present, otherwise newest revision) without per-card N+1 queries. Exposes client-facing sale price, revision status and frozen furniture counts. Absent or legacy commercial snapshots fail closed with isLegacy=true without deriving pricing from mutable Project state.",
+        "description": "Batch read model for the Cotizaciones list. Resolves the authoritative QuoteRevision for every accessible project (accepted if present, otherwise newest revision) without per-card N+1 queries. A valid frozen snapshot owns the commercial identity (project name, customer, currency), the sale total and the exact active furniture quantity (SUM of line quantities, no unit-count fallback). Absent or legacy commercial snapshots fail closed with isLegacy=true without deriving pricing from mutable Project state. commercialActivityAt is a real revision lifecycle event or null; the batch order is deterministic only, not a commercial-activity ordering.",
         "responses": {
           "200": {
             "description": "Project commercial summaries for the organization",
@@ -8902,20 +8902,26 @@
             ]
           },
           "isLegacy": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the authoritative revision predates the frozen commercial snapshot (legacy): no sale total and no frozen identity are derived; re-quote to continue."
           },
           "saleTotal": {
             "type": [
               "number",
               "null"
-            ]
+            ],
+            "description": "Client-facing sale total of the authoritative revision's frozen snapshot. Null (fail-closed) for legacy snapshots and for callers whose organization reaches the project only as manufacturing organization; never recalculated from mutable Project state."
           },
           "furnitureQuantity": {
             "type": "integer"
           },
           "commercialActivityAt": {
-            "type": "string",
-            "format": "date-time"
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Real commercial lifecycle event of the authoritative revision (acceptedAt, otherwise publishedAt, otherwise revision creation). Null when the project has no QuoteRevision; Project.updatedAt is never substituted."
           }
         }
       },

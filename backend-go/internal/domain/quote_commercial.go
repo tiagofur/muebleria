@@ -367,6 +367,12 @@ const (
 
 // ProjectCommercialSummary is the server-owned commercial summary of a project
 // derived from its authoritative QuoteRevision (#642 / 2A).
+//
+// CommercialActivityAt is a REAL commercial event (accepted_at → published_at →
+// revision creation, by lifecycle) or nil when the project has no revision at
+// all — Project.updated_at never stands in for commercial activity. SaleTotal
+// is nil when the caller must not see the retail amount (legacy fail-closed, or
+// an organization that reaches the project only as manufacturing organization).
 type ProjectCommercialSummary struct {
 	ProjectID                 string                       `json:"projectId"`
 	ProjectName               string                       `json:"projectName"`
@@ -380,6 +386,6 @@ type ProjectCommercialSummary struct {
 	IsLegacy                  bool                         `json:"isLegacy"`
 	SaleTotal                 *float64                     `json:"saleTotal,omitempty"`
 	FurnitureQuantity         int64                        `json:"furnitureQuantity"`
-	CommercialActivityAt      string                       `json:"commercialActivityAt"`
+	CommercialActivityAt      *string                      `json:"commercialActivityAt"`
 	OwnerUserID               string                       `json:"-"`
 }

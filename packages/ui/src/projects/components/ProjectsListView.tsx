@@ -2,6 +2,9 @@
  * Projects list view — toolbar + search + status chips + card grid + empty states.
  * Extracted from ProjectsScreen.tsx renderList (F058c).
  * Fase 2 UI: status chips + EmptyState secondary CTA (from template).
+ * #642 / 2A: every card consumes the batch commercial summaries read model —
+ * loading/error/none are distinct dataset states and a valid snapshot owns the
+ * frozen identity (name, customer, currency, total, active quantity).
  */
 
 import type { ReactNode } from 'react';
@@ -28,6 +31,7 @@ import {
 } from '../projectHelpers';
 import {
   QUOTE_COMMERCIAL_FILTER_OPTIONS,
+  type CommercialSummariesStatus,
   type QuoteCommercialStatusFilter,
 } from '../quoteRevisionPresentation';
 import { CommercialStatusBadge } from './CommercialStatusBadge';
@@ -40,15 +44,16 @@ export interface ProjectsListViewProps {
   readonly search: string;
   readonly statusFilter: QuoteCommercialStatusFilter;
   readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
-  readonly commercialSummariesLoading?: boolean;
+  /** Dataset state of the batch summaries request — loading/error are never "Sin cotización". */
+  readonly commercialSummariesStatus?: CommercialSummariesStatus;
   readonly commercialSummariesError?: string | null;
   readonly onRetryCommercialSummaries?: () => void;
+  readonly commercialFiltersDisabled?: boolean;
   readonly isTrulyEmpty: boolean;
   readonly isFilterEmpty: boolean;
   readonly canMutate: boolean;
   readonly hasCreateFromTemplate: boolean;
   readonly hasDeleteTemplate: boolean;
-  readonly estimateLabel: (projectId: string) => ReactNode;
   readonly onSearchChange: (value: string) => void;
   readonly onStatusFilterChange: (value: QuoteCommercialStatusFilter) => void;
   readonly onClearFilters: () => void;
@@ -66,15 +71,15 @@ export function ProjectsListView({
   search,
   statusFilter,
   commercialSummaries,
-  commercialSummariesLoading,
+  commercialSummariesStatus = 'ready',
   commercialSummariesError,
   onRetryCommercialSummaries,
+  commercialFiltersDisabled = false,
   isTrulyEmpty,
   isFilterEmpty,
   canMutate,
   hasCreateFromTemplate,
   hasDeleteTemplate,
-  estimateLabel,
   onSearchChange,
   onStatusFilterChange,
   onClearFilters,
@@ -87,6 +92,34 @@ export function ProjectsListView({
     projectTemplates && projectTemplates.length > 0;
   const showTemplateSecondary =
     Boolean(canMutate && hasTemplates && hasCreateFromTemplate);
+
+  // Dataset gates (#642 / 2A): the commercial representation of every card is
+  // authoritative ONLY while the batch request is ready. Loading keeps the
+  // badge pending; error surfaces the banner and never "Sin cotización".
+  const summariesReady = commercialSummariesStatus === 'ready';
+  const summariesFailed = commercialSummariesStatus === 'error';
+
+  const cardIdentity = (
+    project: Project,
+    summary?: ProjectCommercialSummary,
+  ): { readonly name: string; readonly customer: string | null } => {
+    // Frozen identity: a valid snapshot owns the historical name. Projects
+    // without a revision (none) or with a legacy revision keep their CURRENT
+    // project identity — the only identity the contract can assert there.
+    const frozen =
+      summariesReady &&
+      summary != null &&
+      !summary.isLegacy &&
+      summary.quoteStatus !== 'none';
+    return {
+      name: frozen ? summary.projectName : project.name,
+      customer: !summariesReady
+        ? null
+        : frozen && summary.customerName != null
+          ? summary.customerName
+          : resolveCustomerName(project.customerId, customers),
+    };
+  };
 
   return (
     <>
@@ -146,6 +179,7 @@ export function ProjectsListView({
               value={statusFilter}
               onChange={onStatusFilterChange}
               options={QUOTE_COMMERCIAL_FILTER_OPTIONS}
+              disabled={commercialFiltersDisabled}
               aria-label="Filtrar cotizaciones por estado"
               data-testid="project-status-chips"
             />
@@ -153,20 +187,13 @@ export function ProjectsListView({
         />
       ) : null}
 
-      {commercialSummariesError ? (
+      {summariesFailed ? (
         <div
           className="alert alert--danger"
           role="alert"
-          style={{
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
+          data-testid="commercial-summaries-error"
         >
-          <span>
-            No se pudieron cargar los estados comerciales: {commercialSummariesError}
-          </span>
+          <span>No se pudo cargar la información comercial.</span>
           {onRetryCommercialSummaries ? (
             <button
               type="button"
@@ -211,14 +238,18 @@ export function ProjectsListView({
         <ul className="project-card-grid" aria-label="Lista de cotizaciones">
           {filtered.map((project) => {
             const summary = commercialSummaries?.get(project.id);
-            const furnitureCount =
-              summary?.furnitureQuantity ?? project.items.length;
+            const identity = cardIdentity(project, summary);
+            // Loading/error keep navigation identity only: no legacy price,
+            // no mutable quantity, no Project activity as commercial truth.
+            const furnitureCount = summariesReady
+              ? (summary?.furnitureQuantity ?? 0)
+              : null;
             const activityDate =
-              summary?.commercialActivityAt ?? project.updatedAt;
+              summariesReady ? (summary?.commercialActivityAt ?? null) : null;
             const formattedTotal =
-              summary?.saleTotal != null
+              summariesReady && summary?.saleTotal != null
                 ? formatMoneyDisplay(summary.saleTotal, { currency: summary.currency })
-                : '—';
+                : null;
 
             return (
               <li key={project.id}>
@@ -229,46 +260,37 @@ export function ProjectsListView({
                   data-testid={`project-card-${project.id}`}
                 >
                   <div className="project-card__top">
-                    <h3 className="project-card__name">{project.name}</h3>
+                    <h3 className="project-card__name">{identity.name}</h3>
                     <CommercialStatusBadge
                       summary={summary}
-                      loading={commercialSummariesLoading}
+                      loading={!summariesReady && !summariesFailed}
+                      error={summariesFailed}
                     />
                   </div>
-                  <p className="project-card__client">
-                    {resolveCustomerName(project.customerId, customers)}
-                  </p>
+                  {identity.customer != null ? (
+                    <p className="project-card__client">{identity.customer}</p>
+                  ) : null}
                   <div className="project-card__stats">
-                    <span className="project-card__stat">
-                      <Package size={14} strokeWidth={1.5} aria-hidden />
-                      {furnitureCount} mueble
-                      {furnitureCount === 1 ? '' : 's'}
-                    </span>
-                    <span className="project-card__stat">
-                      Act. {formatIsoDate(activityDate)}
-                    </span>
+                    {furnitureCount != null ? (
+                      <span className="project-card__stat">
+                        <Package size={14} strokeWidth={1.5} aria-hidden />
+                        {furnitureCount} mueble
+                        {furnitureCount === 1 ? '' : 's'}
+                      </span>
+                    ) : null}
+                    {activityDate != null ? (
+                      <span className="project-card__stat">
+                        Act. {formatIsoDate(activityDate)}
+                      </span>
+                    ) : null}
                   </div>
-                  {summary?.activeDraftRevisionNumber != null ? (
-                    <div
-                      className="project-card__substat"
-                      style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)',
-                        marginTop: '0.25rem',
-                      }}
-                    >
+                  {summariesReady && summary?.activeDraftRevisionNumber != null ? (
+                    <div className="project-card__substat">
                       Q{summary.activeDraftRevisionNumber} en borrador
                     </div>
                   ) : null}
-                  {summary?.isLegacy ? (
-                    <div
-                      className="project-card__legacy-badge"
-                      style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-muted)',
-                        marginTop: '0.25rem',
-                      }}
-                    >
+                  {summariesReady && summary?.isLegacy ? (
+                    <div className="project-card__legacy">
                       <span className="badge badge--neutral-subtle">
                         Cotización anterior
                       </span>
@@ -278,18 +300,14 @@ export function ProjectsListView({
                     <span className="project-card__price-label">
                       Precio total
                     </span>
-                    {summary ? (
-                      <span
-                        className={
-                          summary.saleTotal == null
-                            ? 'project-card__price-value project-card__price-value--muted'
-                            : 'project-card__price-value'
-                        }
-                      >
+                    {formattedTotal != null ? (
+                      <span className="project-card__price-value">
                         {formattedTotal}
                       </span>
                     ) : (
-                      estimateLabel(project.id)
+                      <span className="project-card__price-value project-card__price-value--muted">
+                        —
+                      </span>
                     )}
                   </div>
                 </button>

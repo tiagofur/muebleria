@@ -11,6 +11,53 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
+// activityAt formats a real commercial event timestamp for the summary stub.
+func activityAt(t time.Time) *string {
+	formatted := t.UTC().Format(time.RFC3339)
+	return &formatted
+}
+
+// 2A BLOCKER 4: commercialActivityAt is nullable in the wire contract — a
+// project without revisions serializes an explicit null, never a substituted
+// Project timestamp.
+func TestHandleProjectCommercialSummaries_ActivityAtNullable(t *testing.T) {
+	store := &stubStore{
+		commercialSummariesList: []domain.ProjectCommercialSummary{
+			{
+				ProjectID:            "p-none",
+				ProjectName:          "Project without revisions",
+				Currency:             "MXN",
+				QuoteStatus:          domain.ProjectCommercialQuoteStatusNone,
+				FurnitureQuantity:    0,
+				CommercialActivityAt: nil,
+			},
+		},
+	}
+	server := &Server{Store: store}
+
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/api/projects/commercial-summaries", nil), "u-admin", string(domain.RoleAdmin))
+	w := httptest.NewRecorder()
+	server.HandleProjectCommercialSummaries(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+	var payload []map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("expected 1 summary, got %d", len(payload))
+	}
+	value, ok := payload[0]["commercialActivityAt"]
+	if !ok {
+		t.Fatal("commercialActivityAt must be present in the payload")
+	}
+	if value != nil {
+		t.Fatalf("commercialActivityAt = %v, want explicit null without revisions", value)
+	}
+}
+
 func TestHandleProjectCommercialSummaries_RequiresAuth(t *testing.T) {
 	server := &Server{Store: &stubStore{}}
 	req := httptest.NewRequest(http.MethodGet, "/api/projects/commercial-summaries", nil)
@@ -55,7 +102,7 @@ func TestHandleProjectCommercialSummaries_OwnerFiltering(t *testing.T) {
 				QuoteRevisionNumber:  &revNum,
 				SaleTotal:            &sale,
 				FurnitureQuantity:    2,
-				CommercialActivityAt: time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC).Format(time.RFC3339),
+				CommercialActivityAt: activityAt(time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)),
 				OwnerUserID:          sellerID,
 			},
 			{
@@ -66,7 +113,7 @@ func TestHandleProjectCommercialSummaries_OwnerFiltering(t *testing.T) {
 				QuoteRevisionNumber:  &revNum,
 				SaleTotal:            &sale,
 				FurnitureQuantity:    1,
-				CommercialActivityAt: time.Date(2026, 9, 11, 11, 0, 0, 0, time.UTC).Format(time.RFC3339),
+				CommercialActivityAt: activityAt(time.Date(2026, 9, 11, 11, 0, 0, 0, time.UTC)),
 				OwnerUserID:          otherID,
 			},
 		},
@@ -109,7 +156,7 @@ func TestHandleProjectCommercialSummaries_AdminSeesAll(t *testing.T) {
 				QuoteRevisionNumber:  &revNum,
 				SaleTotal:            &sale,
 				FurnitureQuantity:    2,
-				CommercialActivityAt: time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC).Format(time.RFC3339),
+				CommercialActivityAt: activityAt(time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)),
 				OwnerUserID:          "u-1",
 			},
 			{
@@ -120,7 +167,7 @@ func TestHandleProjectCommercialSummaries_AdminSeesAll(t *testing.T) {
 				QuoteRevisionNumber:  &revNum,
 				SaleTotal:            &sale,
 				FurnitureQuantity:    1,
-				CommercialActivityAt: time.Date(2026, 9, 11, 11, 0, 0, 0, time.UTC).Format(time.RFC3339),
+				CommercialActivityAt: activityAt(time.Date(2026, 9, 11, 11, 0, 0, 0, time.UTC)),
 				OwnerUserID:          "u-2",
 			},
 		},

@@ -1387,7 +1387,7 @@ type ProjectCommercialSummary struct {
 	IsLegacy                  bool                         `json:"isLegacy"`
 	SaleTotal                 *float64                     `json:"saleTotal,omitempty"`
 	FurnitureQuantity         int64                        `json:"furnitureQuantity"`
-	CommercialActivityAt      string                       `json:"commercialActivityAt"`
+	CommercialActivityAt      *string                      `json:"commercialActivityAt"`
 }
 
 type QuoteRevisionStatus string

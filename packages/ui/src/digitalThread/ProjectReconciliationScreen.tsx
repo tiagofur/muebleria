@@ -84,6 +84,8 @@ export interface ProjectReconciliationContextState {
 export interface ProjectReconciliationQueryKeys {
   readonly root: QueryKey;
   readonly quoteAuthority: QueryKey;
+  /** Batch commercial summaries of the Cotizaciones list (#642 / 2A); tenant/session-scoped, project-independent. */
+  readonly commercialSummaries: QueryKey;
   readonly quoteRevisions: QueryKey;
   readonly designs: QueryKey;
   readonly designRevisions: (designId: string) => QueryKey;
@@ -100,6 +102,7 @@ export function projectReconciliationQueryKeys(
   return {
     root,
     quoteAuthority: ['quote-revision-authority', ...scopeKey, projectId],
+    commercialSummaries: ['project-commercial-summaries', ...scopeKey],
     quoteRevisions: [...root, 'quote-revisions'],
     designs: [...root, 'designs'],
     designRevisions: (designId: string) => [...root, 'designs', designId, 'revisions'],
@@ -376,6 +379,9 @@ export function ProjectReconciliationScreen({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions }),
       queryClient.invalidateQueries({ queryKey: queryKeys.quoteAuthority }),
+      // #642 / 2A: every commercial revision transition refreshes the
+      // Cotizaciones list summaries in the same invalidation pass.
+      queryClient.invalidateQueries({ queryKey: queryKeys.commercialSummaries }),
       queryClient.invalidateQueries({ queryKey: [...queryKeys.root, 'reconciliation'] }),
     ]);
   };

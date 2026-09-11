@@ -158,6 +158,20 @@
   color: var(--text-muted);
 }
 
+/* #642 / 2A: secondary commercial metadata on list cards (draft in progress,
+   legacy revision badge). Token-based; no inline styles on the cards. */
+.project-card__substat {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.project-card__legacy {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 /* .project-filter-empty moved to common/surfaceCard.css (F1 UI 1b). */
 
 /* —— Detail view —— */

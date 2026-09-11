@@ -2,7 +2,7 @@
 
 - Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base exacta `origin/main@6495085be8024a558bba35a47c0c5985e1465bdc` (post-merge PR #663). Rama `feat/642-quote-list-authority`. Single writer.
 - Started: 2026-09-11 14:05 CST.
-- Result: `IMPLEMENTED_PENDING_REVIEW` — commit `b4ce24bc` en `feat/642-quote-list-authority`. Pendiente: paso 6 (conexión ShellView) y paso 7 (browser E2E completo).
+- Result: `IMPLEMENTED_PENDING_REVIEW` — ronda de corrección de review sobre el mismo PR #664 (commit `b4ce24bc` + `9112dde8` + corrección). Paso 6 (wiring ShellView) y paso 7 (browser E2E) COMPLETADOS junto con los 6 bloqueos de la revisión: identidad congelada (snapshot dueño de nombre/cliente/moneda), qty sin fallback a units/itemCount (removed ⇒ 0), `commercialActivityAt` real y nullable (contrato `string | null`), error ≠ `Sin cotización` (dataset loading/ready/error explícito, filtros deshabilitados), `saleTotal` fail-closed para manufacturing-only, invalidación de summaries en create/publish/accept/requote y negative proof de que aceptar no escribe `Project.status`. Detalle: `progress/implementation_642_quote_list_authority.md`.
 - Evidence:
   - `@granete/ui`: 161 archivos / 1727 tests pasados.
   - `@granete/storage`: 12 archivos / 191 tests pasados.
