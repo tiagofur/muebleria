@@ -23,6 +23,19 @@ Preparación documental iniciada por el propietario el 2026-09-10. Este director
 6. [Evidencia de campo y base segura para r3](03_evidencia_campo.md): dos muestras `.ptx` reales del cliente, saneadas en [field/](field/README.md); separa observación, inferencia y decisiones todavía abiertas.
 7. [Contrato conservador de refilados r3](04_contrato_r3_refilados.md): resolución G1–G5, mapping soportado para `TRIM_TYPE=1`, proyección de raíz útil, política HEAD/recut y subconjunto `FUNCTION 92 + Xn`.
 
+La secuencia de autoridad para r3 es:
+
+```text
+manual / contrato Pattern Exchange
++ evidencia de field/
++ CutProgram ejecutado de Granete
+→ 03_evidencia_campo.md (qué observamos)
+→ 04_contrato_r3_refilados.md (qué podemos implementar)
+→ #661 (trabajo de producto)
+```
+
+Si el 03 y el 04 difieren en fuerza de una conclusión, **prevalece el 04 para implementación**, porque ya incorpora la revisión conservadora posterior.
+
 ## Artefactos no productivos
 
 Los `.ptx.txt` de `examples/` son **parciales**: no enviarlos a CADLink, no renombrarlos para ejecutar ni usarlos como programas de máquina.
