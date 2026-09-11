@@ -8,6 +8,20 @@
 - Remaining list/dashboard/operations consumers stay inventoried for Slice 2b;
   PDF/XLSX/export handlers remain Slice 3. See implementation report.
 
+# Issue #650 — PR 1: núcleo ejecutable del programa de corte guillotina
+
+- Approval: issue #650 `status:approved`; prompt del propietario autoriza únicamente el primer incremento técnico (núcleo de dominio para representar, validar y reproducir un programa de cortes guillotina), con publicación como PR parcial `Refs #650`.
+- Started: 2026-09-10 17:42 CST. Branch `feat/650-cut-program-core`, exact base `origin/main@ad8865e132c0d319324f34aa50505dd8149c7c48` (PR documental #651 integrado).
+- Scope: módulo `packages/domain/src/optimizer/cutProgram.ts` + tests + fixtures; exports en barrel del optimizer; sin tocar optimizador existente, `generateCuttingInstructions`, UI, serializador PTX ni backend.
+- Plan:
+  1. Modelo mínimo explícito: regiones rectangulares con identidad, divisiones (padre/eje de avance/medida relativa/kerf), terminales pieza/retazo/desperdicio y referencias de pieza esperadas.
+  2. `divideRegion` pura (geometría kept/kerf/rest) con dominio y casos de borde documentados.
+  3. `executeCutProgram`: reproducir/validar recalculando cada división, disponibilidad de padres, unicidad, huérfanos, completitud y conservación de superficie; `checkExpectedPieces` contra fixture acotado.
+  4. Tests: ejercicio de tercera fase (1200×700, kerf 4), contraejemplo vertical (1000×600), ejes/desplazamiento/decimales/kerf 0/duplicados/determinismo, y negativas (referencias, consumo doble, límites, geometría alterada, piezas, incompletitud, NaN/Infinity).
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Núcleo `packages/domain/src/optimizer/cutProgram.ts` (`divideRegion`, `executeCutProgram`, `checkExpectedPieces` + contrato `granete.cut-program.v1`) con fixtures documentales y 46 tests propios. Sin tocar optimizador existente, instrucciones, UI, PTX ni backend. Detalle: `progress/implementation_650_cut_program_core.md`.
+- Evidence: cutProgram 46/46; domain 102 archivos / 1329 tests; `pnpm typecheck` raíz (7 proyectos) pass; `pnpm test` monorepo verde (domain/storage/excel/desktop/mobile/ui/web); `git diff --check` limpio. Validación externa no ejecutada (fuera de alcance); campo sigue `NOT_TESTED/notClaimed`.
+- Review fix (2026-09-10, mismo PR #652): dos hallazgos corregidos sobre `e28cfdc9` con regresiones RED-primero (7 tests nuevos fallando antes del fix). R1: contención/borde/finitud ahora usan la MISMA política aritmética relativa 1e-9 (`sameMeasure`/`atMost`/`atLeast`, no finitos nunca equivalentes); particiones decimales válidas (2440×1830, kept 100.1, kerf 3.2) ya no se rechazan por ruido IEEE-754 y el corte al borde sigue explícito. R2: separación geometría declarada (inspección) vs ejecutada (autoridad): raíz copiada, cada división consume el rect ejecutado de su padre y registra hijos recalculados; traza/terminales/mapa/totales sin objetos compartidos con el input. cutProgram 56/56; domain 1339; monorepo typecheck/test verde; `git diff --check` limpio.
+
 # Issue #642 — [P1][QUOTE-AUTH] Slice 1: immutable commercial snapshot authority
 
 - Inicio: 2026-09-10 (autoinstrucción humana "Start ONLY with SLICE 1"). Issue OPEN
