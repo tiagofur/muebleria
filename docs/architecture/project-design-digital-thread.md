@@ -810,6 +810,13 @@ Reglas duras:
 2. **Clasificación de legado**:
    - `Project.status` queda sólo para workflow operativo/legacy del proyecto; ya
      NO define estado comercial de cotización.
+   - `QuoteRevision.accepted ≠ Project.status accepted`: aceptar una revisión
+     NO escribe ni sincroniza `Project.status`, y un `Project.status=accepted`
+     legado NO constituye aceptación comercial. La cadena de autoridad es:
+     aceptación comercial → `QuoteRevision`; aprobación de diseño →
+     `DesignRevision` exacta + `QuoteRevision` compatible; autoridad de
+     fabricación → `ProductionRelease(QN, RN)`. `Project.status` no participa
+     en esa cadena.
    - `priceSnapshot` (`quote_snapshots`) queda explícitamente
      `compatibility-only`; nunca es autoridad histórica.
 3. **Fail-closed**: revisión publicada/aceptada sin snapshot comercial requerido
@@ -847,6 +854,7 @@ Inventario de consumidores runtime (Slice 2):
 |---|---|
 | Detalle de Cotizaciones: identidad, estado, totales y Enviar/Aceptar | Migrado: QuoteRevision aceptada o última exacta; lifecycle exacto |
 | Detalle de Cotizaciones: muebles, líneas y medidas congeladas (#642) | Migrado: renderiza líneas/unidades del snapshot y parámetros congelados de QuoteRevision exacta; sin fallback a `project.items` mutable; desglosa unidades físicas (`quantity > 1`); badges `Q{N} · Solo lectura` |
+| Chrome de avance comercial→producción en Cotizaciones (`Abrir en Producción`, export de producción F041) | Migrado: `resolveChromePrimary`/`productionExportOk` se habilitan por autoridad comercial exacta (QuoteRevision aceptada) además de los statuses operativos accepted/produced legacy; `Marcar producida` permanece ligado al lifecycle literal del proyecto |
 | Lista de Cotizaciones y `projectEstimates` | Migrado en #664 (#642 / 2A): el Shell carga UN batch `GET /projects/commercial-summaries` por scope de sesión/organización; cada tarjeta consume la QuoteRevision exacta (badge, filtros, total, cantidad activa). Un snapshot válido congela identidad (nombre de obra, cliente, moneda); `commercialActivityAt` es un evento real de la revisión o null; error de request ≠ `none`; sin fallback a `projectEstimates`/`project.items`/`Project.updatedAt`. La ordenación de la pantalla sigue siendo la del workspace de proyectos (el endpoint ordena determinista, no por actividad comercial) |
 | Dashboard Inicio/Ventas (`dashboardStats`, `dashboardRecent`, funnel) | Pendiente: misma dependencia legacy |
 | Operaciones/Producción (`ProductionQueue`, workspace) | Pendiente: separar aceptación comercial de etapa operativa |
@@ -895,6 +903,26 @@ No liberar si existe cualquiera de estos blockers:
 - IDs duplicados/ambiguos.
 
 Producción anterior permanece fijada a su revisión incluso si aparece R9/R10 posteriormente.
+
+### Autoridad del release: par exacto, nunca `Project.status` (#642)
+
+El comando de release valida y congela SIEMPRE la pareja exacta:
+
+```text
+P1
+├── quoteRevisionId = QN (status accepted, mismo proyecto)
+└── designRevisionId = RN (status approved, mismo proyecto)
+```
+
+`Project.status` NO participa en la decisión: el golden path
+`Q2 accepted + R2 approved → ProductionRelease(Q2,R2)` se ejecuta completo con
+`Project.status = draft` (probado en storage con PostgreSQL real y en el E2E
+`tests/organization/demo-golden-path.spec.ts`, que ya NO escribe un
+`Project.status=accepted` auxiliar). Negative proof simétrica: un proyecto con
+`Project.status=accepted` legado y una QuoteRevision publicada (no aceptada)
+NUNCA autoriza un release — el guard de regresión vive en
+`TestProductionRelease_AuthorityIsQuoteRevisionNotProjectStatus` y en el stage 10
+del E2E golden.
 
 ---
 
