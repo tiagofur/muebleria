@@ -37,7 +37,7 @@ r2 bloquea cualquier refilado positivo (`ptx_compile.trim_unsupported`) porque,
 cuando se implementó, faltaba evidencia suficiente para mapear la geometría de
 Granete al contrato PTX.
 
-Las muestras nuevas permiten avanzar, pero no eliminan todas las preguntas.
+Las muestras nuevas permiten avanzar.
 
 ### 2.1 Observación: los refilados perimetrales están declarados en MATERIALS
 
@@ -93,13 +93,6 @@ los trims, conservando medidas relativas.
 La lectura consistente es que el patrón está expresado sobre un área ya
 condicionada por trims y que los `TRIM_*` representan magnitudes totales que
 incluyen kerf.
-
-Sigue sin estar demostrado únicamente por las muestras:
-
-- cómo participa cada campo de trim bajo todos los giros/orígenes;
-- cuál de `TRIM_HEAD`/`TRIM_FRCT` explica los 20 mm internos, porque ambos tienen
-  el mismo valor;
-- si un entorno distinto utiliza los mismos parámetros.
 
 ### 2.3 Observación: FUNCTION 92 aparece asociado a X1/offcut
 
@@ -182,8 +175,9 @@ La investigación posterior a estas muestras produjo el contrato de
 | G4 — double counting | `RESOLVED`: trims totales + raíz útil PTX |
 | G5 — FUNCTION 92 | `RESOLVED_SUBSET`: sólo rest-side remnant de phase 2 con contrato geométrico |
 
-Cualquier combinación fuera de ese subconjunto falla cerrado; no se amplía por
-suposición.
+**El discovery gate queda cerrado para el subconjunto r3.** No hace falta otra
+ronda abierta de investigación antes de escribir tests/código. El implementador
+debe obedecer el 04 y fallar cerrado fuera de ese frame.
 
 ## 5. Alcance recomendado para r3
 
