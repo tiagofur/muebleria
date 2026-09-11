@@ -595,6 +595,302 @@ describe('executeCutProgram — rechazos', () => {
   });
 });
 
+describe('executeCutProgram — regresión R1: particiones decimales válidas', () => {
+  it('acepta el programa decimal 2440×1830 con kept 100.1 y kerf 3.2 rechazado por contención estricta', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 2440, widthMm: 1830 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 100.1, widthMm: 1830 } },
+        { regionId: 'REST', rect: { xMm: 103.3, yMm: 0, lengthMm: 2336.7, widthMm: 1830 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 100.1,
+          kerfMm: 3.2,
+          keptRegionId: 'KEPT',
+          restRegionId: 'REST',
+        },
+      ],
+      terminals: [
+        { regionId: 'KEPT', kind: 'piece', pieceRef: 'PIECE1' },
+        { regionId: 'REST', kind: 'remnant' },
+      ],
+    };
+    const trace = executeCutProgram(program);
+    expect(trace.divisions[0]!.kerfBandRect.xMm).toBeCloseTo(100.1, 9);
+    expect(trace.regionRects.get('REST')!.xMm).toBeCloseTo(103.3, 9);
+    expect(trace.leafAreaMm2 + trace.kerfAreaMm2).toBeCloseTo(4465200, 6);
+    expect(() =>
+      checkExpectedPieces(trace, [{ pieceRef: 'PIECE1', lengthMm: 100.1, widthMm: 1830 }]),
+    ).not.toThrow();
+  });
+
+  it('acepta el caso equivalente sobre el eje Y (1000 de ancho, kept 100.3, kerf 4.4)', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 1000 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 100.3 } },
+        { regionId: 'REST', rect: { xMm: 0, yMm: 104.7, lengthMm: 600, widthMm: 895.3 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'y',
+          keptExtentMm: 100.3,
+          kerfMm: 4.4,
+          keptRegionId: 'KEPT',
+          restRegionId: 'REST',
+        },
+      ],
+      terminals: [
+        { regionId: 'KEPT', kind: 'piece', pieceRef: 'PIECE1' },
+        { regionId: 'REST', kind: 'remnant' },
+      ],
+    };
+    const trace = executeCutProgram(program);
+    expect(trace.divisions[0]!.kerfBandRect.yMm).toBeCloseTo(100.3, 9);
+    expect(trace.regionRects.get('REST')!.yMm).toBeCloseTo(104.7, 9);
+    expect(trace.leafAreaMm2 + trace.kerfAreaMm2).toBeCloseTo(600000, 6);
+  });
+
+  it('acepta una partición decimal con región inicial desplazada', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 100, yMm: 50, lengthMm: 2440, widthMm: 1830 } },
+        { regionId: 'KEPT', rect: { xMm: 100, yMm: 50, lengthMm: 100.1, widthMm: 1830 } },
+        { regionId: 'REST', rect: { xMm: 203.3, yMm: 50, lengthMm: 2336.7, widthMm: 1830 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 100.1,
+          kerfMm: 3.2,
+          keptRegionId: 'KEPT',
+          restRegionId: 'REST',
+        },
+      ],
+      terminals: [
+        { regionId: 'KEPT', kind: 'piece', pieceRef: 'PIECE1' },
+        { regionId: 'REST', kind: 'remnant' },
+      ],
+    };
+    const trace = executeCutProgram(program);
+    expect(trace.boardRect.xMm).toBe(100);
+    expect(trace.regionRects.get('REST')!.xMm).toBeCloseTo(203.3, 9);
+    expect(trace.leafAreaMm2 + trace.kerfAreaMm2).toBeCloseTo(4465200, 6);
+  });
+
+  it('permite dividir una región creada por un corte decimal y conserva una sola geometría ejecutada', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 2440, widthMm: 1830 } },
+        { regionId: 'KEPT1', rect: { xMm: 0, yMm: 0, lengthMm: 100.1, widthMm: 1830 } },
+        { regionId: 'REST1', rect: { xMm: 103.3, yMm: 0, lengthMm: 2336.7, widthMm: 1830 } },
+        { regionId: 'KEPT2', rect: { xMm: 103.3, yMm: 0, lengthMm: 500, widthMm: 1830 } },
+        { regionId: 'REST2', rect: { xMm: 606.5, yMm: 0, lengthMm: 1833.5, widthMm: 1830 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 100.1,
+          kerfMm: 3.2,
+          keptRegionId: 'KEPT1',
+          restRegionId: 'REST1',
+        },
+        {
+          cutId: 'CUT2',
+          parentRegionId: 'REST1',
+          axis: 'x',
+          keptExtentMm: 500,
+          kerfMm: 3.2,
+          keptRegionId: 'KEPT2',
+          restRegionId: 'REST2',
+        },
+      ],
+      terminals: [
+        { regionId: 'KEPT1', kind: 'piece', pieceRef: 'P1' },
+        { regionId: 'KEPT2', kind: 'piece', pieceRef: 'P2' },
+        { regionId: 'REST2', kind: 'remnant' },
+      ],
+    };
+    const trace = executeCutProgram(program);
+    expect(trace.divisions).toHaveLength(2);
+    expect(trace.divisions[1]!.parentRegionId).toBe('REST1');
+    expect(trace.divisions[1]!.parentRect).toEqual(trace.divisions[0]!.restRect);
+    expect(trace.divisions[1]!.parentRect.xMm).toBeCloseTo(103.3, 9);
+    expect(trace.divisions[1]!.keptRect.xMm).toBeCloseTo(103.3, 9);
+    expect(trace.divisions[1]!.keptRect.lengthMm).toBe(500);
+    expect(trace.regionRects.get('KEPT2')!.lengthMm).toBe(500);
+    expect(trace.regionRects.get('REST2')!.xMm).toBeCloseTo(606.5, 9);
+    expect(trace.leafAreaMm2 + trace.kerfAreaMm2).toBeCloseTo(4465200, 6);
+    expect(() =>
+      checkExpectedPieces(trace, [
+        { pieceRef: 'P1', lengthMm: 100.1, widthMm: 1830 },
+        { pieceRef: 'P2', lengthMm: 500, widthMm: 1830 },
+      ]),
+    ).not.toThrow();
+  });
+
+  it('una desviación geométrica real (1 mm) sigue siendo rechazada pese a la tolerancia aritmética', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 2440, widthMm: 1830 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 101.1, widthMm: 1830 } },
+        { regionId: 'REST', rect: { xMm: 103.3, yMm: 0, lengthMm: 2336.7, widthMm: 1830 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 100.1,
+          kerfMm: 3.2,
+          keptRegionId: 'KEPT',
+          restRegionId: 'REST',
+        },
+      ],
+      terminals: [
+        { regionId: 'KEPT', kind: 'piece', pieceRef: 'PIECE1' },
+        { regionId: 'REST', kind: 'remnant' },
+      ],
+    };
+    expectCutProgramError(
+      () => executeCutProgram(program),
+      'cut_program.geometry_mismatch',
+      { cutId: 'CUT1', regionId: 'KEPT' },
+    );
+  });
+});
+
+describe('executeCutProgram — regresión R2: aislamiento entre input y traza ejecutada', () => {
+  function buildIsolationProgram(): MutableCutProgram {
+    return {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 1000, widthMm: 600 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 300, widthMm: 600 } },
+        { regionId: 'REST', rect: { xMm: 304, yMm: 0, lengthMm: 696, widthMm: 600 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 300,
+          kerfMm: 4,
+          keptRegionId: 'KEPT',
+          restRegionId: 'REST',
+        },
+      ],
+      terminals: [
+        { regionId: 'KEPT', kind: 'piece', pieceRef: 'PIEZA1' },
+        { regionId: 'REST', kind: 'remnant' },
+      ],
+    };
+  }
+
+  it('modificar el input después de ejecutar no altera la traza devuelta', () => {
+    const program = buildIsolationProgram();
+    const trace = executeCutProgram(program);
+    const leafAreaBefore = trace.leafAreaMm2;
+    const kerfAreaBefore = trace.kerfAreaMm2;
+
+    program.regions[1]!.rect.lengthMm = 999;
+
+    const keptTerminal = trace.terminals.find((t) => t.regionId === 'KEPT')!;
+    expect(keptTerminal.rect.lengthMm).toBe(300);
+    expect(trace.divisions[0]!.keptRect.lengthMm).toBe(300);
+    expect(trace.regionRects.get('KEPT')!.lengthMm).toBe(300);
+    expect(trace.leafAreaMm2).toBe(leafAreaBefore);
+    expect(trace.kerfAreaMm2).toBe(kerfAreaBefore);
+    expect(trace.leafAreaMm2 + trace.kerfAreaMm2).toBe(600000);
+  });
+
+  it('el resultado no comparte rectángulos mutables con la entrada', () => {
+    const program = buildIsolationProgram();
+    const trace = executeCutProgram(program);
+    expect(trace.boardRect).not.toBe(program.regions[0]!.rect);
+    for (const region of program.regions) {
+      expect(trace.regionRects.get(region.regionId)).not.toBe(region.rect);
+    }
+    for (const terminal of trace.terminals) {
+      const declared = program.regions.find((r) => r.regionId === terminal.regionId)!;
+      expect(terminal.rect).not.toBe(declared.rect);
+    }
+  });
+
+  it('las geometrías de una misma región coinciden en divisiones, terminales, mapa y padres posteriores', () => {
+    const program = buildIsolationProgram();
+    program.regions.push({ regionId: 'KEPT_B', rect: { xMm: 304, yMm: 0, lengthMm: 200, widthMm: 600 } });
+    program.regions.push({ regionId: 'REST_B', rect: { xMm: 508, yMm: 0, lengthMm: 492, widthMm: 600 } });
+    program.divisions.push({
+      cutId: 'CUT2',
+      parentRegionId: 'REST',
+      axis: 'x',
+      keptExtentMm: 200,
+      kerfMm: 4,
+      keptRegionId: 'KEPT_B',
+      restRegionId: 'REST_B',
+    });
+    program.terminals[1] = { regionId: 'KEPT_B', kind: 'piece', pieceRef: 'PIEZA2' };
+    program.terminals.push({ regionId: 'REST_B', kind: 'remnant' });
+
+    const trace = executeCutProgram(program);
+    const executedRest = trace.divisions[0]!.restRect;
+    expect(trace.divisions[1]!.parentRect).toEqual(executedRest);
+    expect(trace.regionRects.get('REST')).toEqual(executedRest);
+    const restTerminal = trace.terminals.find((t) => t.regionId === 'KEPT_B')!;
+    expect(restTerminal.rect).toEqual(trace.divisions[1]!.keptRect);
+    expect(trace.leafAreaMm2 + trace.kerfAreaMm2).toBe(600000);
+  });
+
+  it('una diferencia declarada admisible como ruido aritmético no se propaga como segunda geometría', () => {
+    const program = buildIsolationProgram();
+    program.regions[1]!.rect.lengthMm = 300.0000001;
+
+    const trace = executeCutProgram(program);
+    expect(trace.divisions[0]!.keptRect.lengthMm).toBe(300);
+    expect(trace.regionRects.get('KEPT')!.lengthMm).toBe(300);
+    const keptTerminal = trace.terminals.find((t) => t.regionId === 'KEPT')!;
+    expect(keptTerminal.rect.lengthMm).toBe(300);
+    expect(trace.boardAreaMm2).toBe(600000);
+    expect(trace.kerfAreaMm2).toBe(2400);
+    expect(trace.leafAreaMm2).toBe(597600);
+    expect(() =>
+      checkExpectedPieces(trace, [{ pieceRef: 'PIEZA1', lengthMm: 300, widthMm: 600 }]),
+    ).not.toThrow();
+  });
+
+  it('una diferencia geométrica real en la declaración sigue siendo rechazada', () => {
+    const program = buildIsolationProgram();
+    program.regions[1]!.rect.lengthMm = 301;
+    expectCutProgramError(
+      () => executeCutProgram(program),
+      'cut_program.geometry_mismatch',
+      { cutId: 'CUT1', regionId: 'KEPT' },
+    );
+  });
+});
+
 describe('checkExpectedPieces — rechazos', () => {
   it('pieza esperada omitida por el programa', () => {
     const trace = executeCutProgram(threePhaseExerciseProgram);

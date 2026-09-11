@@ -79,6 +79,64 @@ X, cortes siguientes limitados a la región derecha; hojas 592832 mm² + kerf
 7168 mm² = 600000 mm²; pieza D como hoja de tamaño exacto sin pasada;
 dos piezas idénticas con referencias distintas).
 
+## Ronda de corrección de revisión (mismo PR #652, 2026-09-10)
+
+Base de la corrección: `e28cfdc974099fa93c02335dba5e77f786626204`. Regresiones
+añadidas ANTES del fix (7 tests nuevos en RED sobre ese HEAD), luego corrección
+y verificación completa.
+
+### R1 — rechazo incorrecto de geometría decimal válida
+
+- Causa: `assertDivisionPartition` comparaba contención con `<=`/`>=` estrictos
+  mientras igualdad y superficies usaban tolerancia aritmética; extremos
+  recalculados con ruido IEEE-754 (2440.0000000000005 vs 2440) disparaban
+  `cut_program.invariant_violated`.
+- Corrección: una sola política aritmética para igualdad, contención y límites
+  (`sameMeasure`, `atMost`, `atLeast`; relativa 1e-9). `sameMeasure` endurecido:
+  valores no finitos nunca son equivalentes; `divideRegion` rechaza geometrías
+  resultantes no finitas (`cut_program.geometry_not_representable`). El dominio
+  del corte al borde se evalúa con la misma política: el resto debe superar el
+  ruido aritmético, sin fabricar regiones de área ~0. Comentario de escala de
+  tolerancia corregido (nanómetros en longitudes de tablero, < 0,005 mm² en
+  áreas; no es tolerancia visual de 2 mm ni de fabricación). No se recorta
+  geometría para pasar validaciones y no hay dependencias numéricas nuevas.
+- Regresiones: programa decimal 2440×1830 (kept 100.1, kerf 3.2) completo;
+  equivalente en eje Y (ancho 1000, kept 100.3, kerf 4.4); origen desplazado;
+  división encadenada de región creada por corte decimal; desviación real de
+  1 mm sigue rechazada. Los tests de NaN/Infinity/kerf inválido/borde
+  permanecen.
+
+### R2 — geometría de salida no canónica y compartida con la entrada
+
+- Causa: `regionRects` guardaba referencias directas a `region.rect` del input;
+  la traza mezclaba geometría declarada y recalculada y los cortes descendientes
+  usaban el rect declarado del padre.
+- Corrección: mapas separados. `declaredRects` (input, sólo inspección/
+  validación) y `executedRects` (autoridad de salida): raíz copiada, cada
+  división consume el rect ejecutado de su padre, los hijos recalculados se
+  registran como regiones ejecutadas, y boardRect/divisiones/terminales/
+  regionRects/totales se construyen desde esa geometría ejecutada. Disponibilidad
+  de padres, unicidad, huérfanos y completitud se conservan; una diferencia
+  declarada fuera de la política aritmética sigue fallando (sin
+  autocorrección); input no se congela ni modifica; contrato readonly público
+  intacto.
+- Regresiones: mutar el input tras ejecutar no altera la traza; el resultado no
+  comparte rectángulos con la entrada; geometría de una misma región coincide en
+  divisiones/terminales/mapa/padre de cortes posteriores; declaración
+  300.0000001 admitida como ruido NO se propaga (salida ejecutada 300 y totales
+  exactos 600000/2400); desviación real rechazada; casos positivos de tercera
+  fase y vertical conservados; determinismo/no-mutación (deep-frozen)
+  conservado.
+
+### Evidencia de la corrección (HEAD del commit de corrección)
+
+- RED confirmado antes del fix: 7 tests nuevos fallando (4 de R1, 3 de R2).
+- `pnpm vitest run src/optimizer/cutProgram.test.ts`: 56/56 pass.
+- `pnpm vitest run` (packages/domain): 102 archivos / 1339 tests pass.
+- `pnpm typecheck` (raíz, 7 proyectos): 0 errores.
+- `pnpm test` (monorepo): verde en los 7 workspaces.
+- `git diff --check`: limpio.
+
 ## Pendiente (siguientes incrementos de #650)
 
 - Integración con el optimizador existente (conservar árbol de la candidata

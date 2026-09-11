@@ -146,15 +146,30 @@ export interface CutProgramExpectedPiece {
 }
 
 /**
- * Arithmetic-only comparison tolerance: absorbs IEEE-754 representation noise
- * of decimal inputs (relative 1e-9 — picometre scale on board measures). It is
- * NOT a manufacturing tolerance and NOT the 2 mm visual-grouping tolerance:
- * millimetre-scale errors always fail these checks.
+ * Arithmetic-only comparison policy: absorbs IEEE-754 representation noise
+ * of decimal inputs with a relative 1e-9 epsilon — nanometre scale on
+ * board-scale lengths (≈ 2.4e-6 mm at 2440 mm) and under 0.005 mm² on
+ * board-scale areas (~4.5e6 mm²). It is NOT a manufacturing tolerance and
+ * NOT the 2 mm visual-grouping tolerance: millimetre-scale errors always
+ * fail these checks. Non-finite values are never equivalent to anything.
  */
 const ARITHMETIC_RELATIVE_EPSILON = 1e-9;
 
 function sameMeasure(a: number, b: number): boolean {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) {
+    return false;
+  }
   return Math.abs(a - b) <= ARITHMETIC_RELATIVE_EPSILON * Math.max(1, Math.abs(a), Math.abs(b));
+}
+
+/** a <= b accepting arithmetic-representation noise only. */
+function atMost(a: number, b: number): boolean {
+  return a < b || sameMeasure(a, b);
+}
+
+/** a >= b accepting arithmetic-representation noise only. */
+function atLeast(a: number, b: number): boolean {
+  return a > b || sameMeasure(a, b);
 }
 
 function sameRect(a: CutProgramRect, b: CutProgramRect): boolean {
@@ -237,7 +252,11 @@ export function divideRegion(
   }
 
   const parentExtent = axis === 'x' ? parent.lengthMm : parent.widthMm;
-  if (keptExtentMm + kerfMm >= parentExtent) {
+  const restExtent = parentExtent - keptExtentMm - kerfMm;
+  // The rest must keep a positive extent beyond arithmetic-representation
+  // noise: a mathematically-zero rest that only float rounding "saves" is
+  // still a cut at the border, never a zero-area region.
+  if (!(restExtent > 0) || sameMeasure(restExtent, 0)) {
     fail(
       'cut_program.cut_at_border_unsupported',
       'Corte al borde no soportado: el resto quedaría sin extensión positiva; una pieza que coincide con la región se declara hoja terminal sin pasada',
@@ -245,27 +264,43 @@ export function divideRegion(
     );
   }
 
-  if (axis === 'x') {
-    const restLength = parent.lengthMm - keptExtentMm - kerfMm;
-    return {
-      axis,
+  const geometry =
+    axis === 'x'
+      ? {
+          axis,
+          keptExtentMm,
+          kerfMm,
+          keptRect: { xMm: parent.xMm, yMm: parent.yMm, lengthMm: keptExtentMm, widthMm: parent.widthMm },
+          kerfBandRect: { xMm: parent.xMm + keptExtentMm, yMm: parent.yMm, lengthMm: kerfMm, widthMm: parent.widthMm },
+          restRect: { xMm: parent.xMm + keptExtentMm + kerfMm, yMm: parent.yMm, lengthMm: restExtent, widthMm: parent.widthMm },
+        }
+      : {
+          axis,
+          keptExtentMm,
+          kerfMm,
+          keptRect: { xMm: parent.xMm, yMm: parent.yMm, lengthMm: parent.lengthMm, widthMm: keptExtentMm },
+          kerfBandRect: { xMm: parent.xMm, yMm: parent.yMm + keptExtentMm, lengthMm: parent.lengthMm, widthMm: kerfMm },
+          restRect: { xMm: parent.xMm, yMm: parent.yMm + keptExtentMm + kerfMm, lengthMm: parent.lengthMm, widthMm: restExtent },
+        };
+
+  const representable = (r: CutProgramRect): boolean =>
+    Number.isFinite(r.xMm) &&
+    Number.isFinite(r.yMm) &&
+    Number.isFinite(r.lengthMm) &&
+    Number.isFinite(r.widthMm);
+  if (
+    !representable(geometry.keptRect) ||
+    !representable(geometry.kerfBandRect) ||
+    !representable(geometry.restRect)
+  ) {
+    fail('cut_program.geometry_not_representable', 'Geometría resultante no finita y no representable', {
       keptExtentMm,
       kerfMm,
-      keptRect: { xMm: parent.xMm, yMm: parent.yMm, lengthMm: keptExtentMm, widthMm: parent.widthMm },
-      kerfBandRect: { xMm: parent.xMm + keptExtentMm, yMm: parent.yMm, lengthMm: kerfMm, widthMm: parent.widthMm },
-      restRect: { xMm: parent.xMm + keptExtentMm + kerfMm, yMm: parent.yMm, lengthMm: restLength, widthMm: parent.widthMm },
-    };
+      axis,
+    });
   }
 
-  const restWidth = parent.widthMm - keptExtentMm - kerfMm;
-  return {
-    axis,
-    keptExtentMm,
-    kerfMm,
-    keptRect: { xMm: parent.xMm, yMm: parent.yMm, lengthMm: parent.lengthMm, widthMm: keptExtentMm },
-    kerfBandRect: { xMm: parent.xMm, yMm: parent.yMm + keptExtentMm, lengthMm: parent.lengthMm, widthMm: kerfMm },
-    restRect: { xMm: parent.xMm, yMm: parent.yMm + keptExtentMm + kerfMm, lengthMm: parent.lengthMm, widthMm: restWidth },
-  };
+  return geometry;
 }
 
 function assertDivisionPartition(
@@ -274,11 +309,15 @@ function assertDivisionPartition(
   cutId: string,
 ): void {
   const { keptRect, kerfBandRect, restRect } = geometry;
+  // Containment uses the same arithmetic policy as equality and area checks:
+  // a recomputed far edge that exceeds the parent far edge by pure IEEE-754
+  // noise (e.g. 2440.0000000000005 vs 2440) is contained; geometry is never
+  // silently trimmed to pass validation.
   const contained = (r: CutProgramRect): boolean =>
-    r.xMm >= parentRect.xMm &&
-    r.yMm >= parentRect.yMm &&
-    r.xMm + r.lengthMm <= parentRect.xMm + parentRect.lengthMm &&
-    r.yMm + r.widthMm <= parentRect.yMm + parentRect.widthMm;
+    atLeast(r.xMm, parentRect.xMm) &&
+    atLeast(r.yMm, parentRect.yMm) &&
+    atMost(r.xMm + r.lengthMm, parentRect.xMm + parentRect.lengthMm) &&
+    atMost(r.yMm + r.widthMm, parentRect.yMm + parentRect.widthMm);
   const areasSum = rectArea(keptRect) + rectArea(kerfBandRect) + rectArea(restRect);
   if (!contained(keptRect) || !contained(kerfBandRect) || !contained(restRect)) {
     fail('cut_program.invariant_violated', 'Resultado fuera del padre', { cutId });
@@ -295,11 +334,19 @@ function assertDivisionPartition(
  *
  * Every division is recomputed from its parent, axis, relative measure and
  * kerf; geometries declared by the input are only accepted when they match the
- * recomputation. Each parent must exist and be available (created earlier,
- * never consumed, never terminal). No region is consumed twice, no orphan or
- * disconnected region survives, and every leaf must be declared terminal — an
- * incomplete program presented as finished is rejected. Leaves plus kerf bands
- * must conserve the board surface.
+ * recomputation within the arithmetic policy. Each parent must exist and be
+ * available (created earlier, never consumed, never terminal). No region is
+ * consumed twice, no orphan or disconnected region survives, and every leaf
+ * must be declared terminal — an incomplete program presented as finished is
+ * rejected. Leaves plus kerf bands must conserve the board surface.
+ *
+ * The returned trace is built exclusively from executed geometry: the board
+ * root is copied, each division consumes the executed rectangle of its parent,
+ * and recomputed children become the executed regions for later cuts,
+ * terminals, boardRect, regionRects and area totals. Declared geometry is
+ * inspection-only, so a difference accepted as representation noise never
+ * becomes output authority and the result shares no mutable object with the
+ * input.
  *
  * Throws ValidationError (context carries a machine-readable `code` plus the
  * cut/region/piece that caused the problem and how many divisions had been
@@ -314,23 +361,31 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
     });
   }
 
-  const regionRects = new Map<string, CutProgramRect>();
+  // Declared geometry is inspected and validated only. The authoritative
+  // output geometry is recomputed (executedRects): the board root is copied
+  // and every division consumes and registers executed rectangles, so the
+  // trace never shares mutable objects with the input and never mixes
+  // declared values into the validated result.
+  const declaredRects = new Map<string, CutProgramRect>();
   for (const region of program.regions) {
-    if (regionRects.has(region.regionId)) {
+    if (declaredRects.has(region.regionId)) {
       fail('cut_program.region_duplicate_id', 'RegionId duplicado en el programa', {
         regionId: region.regionId,
       });
     }
     assertRect(region.rect, region.regionId, { regionId: region.regionId });
-    regionRects.set(region.regionId, region.rect);
+    declaredRects.set(region.regionId, region.rect);
   }
 
-  const boardRect = regionRects.get(program.boardRegionId);
-  if (!boardRect) {
+  const declaredBoardRect = declaredRects.get(program.boardRegionId);
+  if (!declaredBoardRect) {
     fail('cut_program.reference_missing', 'Región de tablero no declarada', {
       regionId: program.boardRegionId,
     });
   }
+  const executedRects = new Map<string, CutProgramRect>();
+  const boardRect: CutProgramRect = { ...declaredBoardRect };
+  executedRects.set(program.boardRegionId, boardRect);
 
   const cutIds = new Set<string>();
   for (const division of program.divisions) {
@@ -370,7 +425,6 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
     }
   }
 
-  const createdRegions = new Set<string>([program.boardRegionId]);
   const producedBy = new Map<string, string>();
   const consumedBy = new Set<string>();
   const traceDivisions: CutProgramTraceDivision[] = [];
@@ -379,14 +433,14 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
   for (const [index, division] of program.divisions.entries()) {
     const executedSoFar = index;
     const cutContext = { cutId: division.cutId, executedDivisions: executedSoFar };
-    const parentRect = regionRects.get(division.parentRegionId);
-    if (!parentRect) {
+    if (!declaredRects.has(division.parentRegionId)) {
       fail('cut_program.reference_missing', 'Región padre no declarada', {
         ...cutContext,
         regionId: division.parentRegionId,
       });
     }
-    if (!createdRegions.has(division.parentRegionId)) {
+    const parentRect = executedRects.get(division.parentRegionId);
+    if (!parentRect) {
       fail('cut_program.parent_not_yet_available', 'El padre aún no existe al ejecutar este corte', {
         ...cutContext,
         regionId: division.parentRegionId,
@@ -415,14 +469,14 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
       throw error;
     }
 
-    const keptDeclared = regionRects.get(division.keptRegionId);
+    const keptDeclared = declaredRects.get(division.keptRegionId);
     if (!keptDeclared) {
       fail('cut_program.reference_missing', 'Región resultado (kept) no declarada', {
         ...cutContext,
         regionId: division.keptRegionId,
       });
     }
-    const restDeclared = regionRects.get(division.restRegionId);
+    const restDeclared = declaredRects.get(division.restRegionId);
     if (!restDeclared) {
       fail('cut_program.reference_missing', 'Región resultado (rest) no declarada', {
         ...cutContext,
@@ -468,8 +522,8 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
 
     const bandId = kerfBandIdOf(division.cutId);
     consumedBy.add(division.parentRegionId);
-    createdRegions.add(division.keptRegionId);
-    createdRegions.add(division.restRegionId);
+    executedRects.set(division.keptRegionId, geometry.keptRect);
+    executedRects.set(division.restRegionId, geometry.restRect);
     kerfBands.push({ cutId: division.cutId, bandId, rect: geometry.kerfBandRect });
     traceDivisions.push({
       order: index + 1,
@@ -496,7 +550,7 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
     }
   }
 
-  for (const regionId of regionRects.keys()) {
+  for (const regionId of executedRects.keys()) {
     if (!consumedBy.has(regionId) && !terminalRegionIds.has(regionId)) {
       fail('cut_program.incomplete_program', 'Región hoja sin declaración terminal: programa incompleto', {
         regionId,
@@ -505,7 +559,7 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
   }
 
   const terminals: CutProgramTerminalRegion[] = program.terminals.map((terminal) => {
-    const rect = regionRects.get(terminal.regionId);
+    const rect = executedRects.get(terminal.regionId);
     if (!rect) {
       fail('cut_program.reference_missing', 'Terminal referencia una región inexistente', {
         regionId: terminal.regionId,
@@ -537,7 +591,7 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
     divisions: traceDivisions,
     kerfBands,
     terminals,
-    regionRects,
+    regionRects: executedRects,
     boardAreaMm2,
     leafAreaMm2,
     kerfAreaMm2,
