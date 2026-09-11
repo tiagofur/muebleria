@@ -1,12 +1,14 @@
 # Issue #642 — Slice 2a: exact QuoteRevision authority in quote detail
 
-- Base `origin/main@ad8865e132c0d319324f34aa50505dd8149c7c48`; branch
+- Current base `origin/main@e1d2e832b07e936bbdb7884021b7bf3c6f0ca307`; branch
   `feat/642-quote-revision-consumers`; partial PR #653; issue remains open.
 - Bounded partition: authenticated Cotizaciones detail only. Identity, status,
   totals and lifecycle navigation use the accepted (otherwise newest exact)
   QuoteRevision snapshot; missing/legacy authority fails closed.
 - Remaining list/dashboard/operations consumers stay inventoried for Slice 2b;
   PDF/XLSX/export handlers remain Slice 3. See implementation report.
+- Current-main merge preserved the integrated #650 record below; post-merge
+  focused/full/type/OpenAPI/diff and real browser 4/4 evidence is green.
 
 # Issue #650 — PR 1: núcleo ejecutable del programa de corte guillotina
 

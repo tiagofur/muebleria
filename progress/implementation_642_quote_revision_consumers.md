@@ -1,5 +1,6 @@
 # #642 Slice 2a — QuoteRevision consumers
-Status: `IMPLEMENTED_PENDING_REVIEW`; PR #653; base `ad8865e132c0d319324f34aa50505dd8149c7c48`.
+Status: `IMPLEMENTED_PENDING_REVIEW`; PR #653; current base
+`e1d2e832b07e936bbdb7884021b7bf3c6f0ca307`.
 Authenticated Cotizaciones project detail now loads QuoteRevisions through the
 generated client and selects the accepted revision, or newest exact revision when
 none is accepted. Identity/status/totals come only from `commercialSnapshot`.
@@ -66,3 +67,17 @@ PDF/XLSX exports, geometry and machine output were untouched.
   the full Go job concluded green. The narrow margin confirms accumulated suite
   load/flakiness rather than a branch-related backend regression; the timeout
   remains recorded rather than hidden.
+
+## Current-main reconciliation
+
+- Merged `origin/main@e1d2e832b07e936bbdb7884021b7bf3c6f0ca307`
+  into the same branch. The sole conflict was `progress/current.md`; resolution
+  preserves both this Slice 2a record and the newly integrated #650 optimizer
+  record. No feature code required conflict resolution.
+- Post-merge evidence: focused Cotizaciones/lifecycle UI 82/82, integrated
+  optimizer 56/56, full workspace tests (domain 1339, storage 191, Excel 165
+  passed + 3 skipped, desktop 17, mobile 73, UI 1695, web 444), typecheck,
+  OpenAPI drift and diff checks all PASS. The real Chromium + Go + PostgreSQL
+  gate also passed 4/4 in 34.1 s and regenerated the six reviewed screenshots.
+- The immutable final branch head and exact authored additions/deletions are
+  recorded in the live PR #653 body after push/readback.
