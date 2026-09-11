@@ -50,12 +50,22 @@ investigación; PARTS_INF/PARTS_UDI/PARTS_DST/PTN_UDI/NOTES no están
 implementados.
 
 Sobre ese núcleo, `ptx/compileCutPlan.ts` compila el CutPlan/CutProgram real
-del optimizador en un `PtxDocument` validado con tabla inversa de índices, y
-`ptx/verifyCutPlanPtxReadback.ts` comprueba semánticamente los bytes leídos
-contra el programa original (`optimizeCutPlan → compile → validate →
-serialize → parse → readback`). La política de FUNCTION/fases, liberaciones de
-retazos y vectores está documentada en el propio módulo como decisiones de
-candidato, no como claims de receptor; la fase > 3 falla cerrada. El compilador
+del optimizador en un `PtxDocument` validado con tabla inversa de índices
+(hacia adelante y hacia atrás: cutId↔CUT_INDEX, pieza↔PART_INDEX,
+hoja↔PTN_INDEX, retazo↔Xn), y `ptx/verifyCutPlanPtxReadback.ts` comprueba
+semánticamente los bytes leídos contra el programa original re-ejecutado
+(`optimizeCutPlan → compile → validate → serialize → parse → readback`).
+Decisiones de candidato documentadas en el módulo, no claims de receptor: la
+fase de staging determina FUNCTION (fase 3 sobre X sigue siendo 3; fase > 3
+falla cerrado), las filas CUTS van en preorder estructural con CUT_INDEX y
+llevan SEQUENCE de ejecución independiente (como el fragmento 03), las
+liberaciones de retazos son filas QTY_RPT=0, el exact-fit no genera filas
+ficticias, DIMENSION siempre es la medida relativa conservada (280, no 734),
+las magnitudes deben ser representables en la resolución configurada o
+fallan cerrado, y los planes con refilados positivos se rechazan
+(`ptx_compile.trim_unsupported`) porque no hay mapping documentado para
+90..99 ni para head. `ptx/cutPlanPtxGolden.ts` congela un candidato real de
+laboratorio etiquetado `LAB_FIXTURE NOT_MACHINE_VALIDATED`. El compilador
 sigue sin conectarse al perfil CADmatic 4, al adapter productivo, al botón de
 descarga o al exportador legacy `ptxCutPlanExport`.
 
