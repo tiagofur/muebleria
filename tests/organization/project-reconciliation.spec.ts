@@ -610,6 +610,58 @@ async function publishRevisionWithItemIds(options: {
       acceptedRevision!.commercialSnapshot!.breakdown.salePrice.toFixed(2),
     );
     await expect(page.getByTestId('project-send-quote')).toHaveCount(0);
+    const quoteVisualDirectory = process.env.QUOTE_VISUAL_DIR;
+    if (quoteVisualDirectory) {
+      if (!isAbsolute(quoteVisualDirectory)) throw new Error('QUOTE_VISUAL_DIR must be absolute');
+      await mkdir(quoteVisualDirectory, { recursive: true });
+    }
+    for (const viewport of [
+      { name: 'compact', width: 390, height: 844 },
+      { name: 'medium', width: 768, height: 900 },
+      { name: 'expanded', width: 1280, height: 800 },
+    ] as const) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await quoteDetail.scrollIntoViewIfNeeded();
+      await expect(quoteDetail).toBeVisible();
+      await expect(quoteDetail).toContainText('Q2 · Aceptada');
+      await page.evaluate(async () => {
+        await Promise.all(
+          document
+            .getAnimations()
+            .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+            .map((animation) => animation.finished.catch(() => undefined)),
+        );
+      });
+      const pageGeometry = await page.locator('html').evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(pageGeometry.scrollWidth).toBeLessThanOrEqual(pageGeometry.clientWidth);
+      const detailBounds = await page.getByTestId('project-detail').boundingBox();
+      expect(detailBounds).not.toBeNull();
+      expect(detailBounds!.width).toBeLessThanOrEqual(viewport.width);
+      if (quoteVisualDirectory) {
+        await page.screenshot({
+          path: join(quoteVisualDirectory, `cotizaciones-${viewport.name}-${viewport.width}.png`),
+          fullPage: true,
+        });
+      }
+      const totals = page.getByLabel('Totales de cotización');
+      await totals.scrollIntoViewIfNeeded();
+      await expect(totals).toBeVisible();
+      const totalsBounds = await totals.boundingBox();
+      expect(totalsBounds).not.toBeNull();
+      expect(totalsBounds!.width).toBeLessThanOrEqual(viewport.width);
+      if (quoteVisualDirectory) {
+        await page.screenshot({
+          path: join(
+            quoteVisualDirectory,
+            `cotizaciones-${viewport.name}-${viewport.width}-totals.png`,
+          ),
+          fullPage: true,
+        });
+      }
+    }
     await page.goto(
       `/quotes/${seeded.projectId}/reconciliacion?qrev=${q2DraftValue}&design=${seeded.designId}&rev=${seeded.r2Id}`,
     );

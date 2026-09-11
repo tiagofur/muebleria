@@ -655,3 +655,10 @@ EOL.
 - No merge, issue closure or size-governance mutation. Status remains
   `IMPLEMENTED_PENDING_REVIEW`; see
   `progress/implementation_642_quote_revision_consumers.md`.
+- UI DoD rereview added real 390/768/1280 no-overflow/bounded-panel assertions
+  and six reviewed screenshots under
+  `test-results/issue-642-slice2a-responsive-rereview/`; browser gate 4/4 PASS.
+- The original Go job hit the global 600.211 s timeout without an assertion.
+  Exact rerun attempt 2 passed (job `103123806142`, 9m51s;
+  `internal/storage` 275.163 s), confirming suite-load flakiness with no backend
+  change.

@@ -36,3 +36,33 @@ PDF/XLSX exports, geometry and machine output were untouched.
 - Evidence after correction: focused UI 82/82, full UI 1695/1695, full web
   444/444, all-workspace `pnpm test` PASS, typecheck PASS, OpenAPI drift PASS,
   and Chromium + Go + PostgreSQL browser gate 4/4 PASS.
+
+## UI Definition of Done rereview
+
+- The real Chromium + Go + PostgreSQL gate now exercises accepted Q2 in
+  Cotizaciones at 390×844, 768×900 and 1280×800. Each viewport asserts no
+  document overflow, bounded project detail and bounded frozen-totals panel.
+- Six screenshots (overview + frozen totals for each viewport) are stored in
+  `test-results/issue-642-slice2a-responsive-rereview/`. The screenshot review
+  against `docs/design.md` §8 found no clipped content, overlap, competing
+  primary action or broken responsive hierarchy. Phone/tablet correctly use
+  the closed drawer; desktop retains the navigation rail.
+- The first diagnostic capture observed the sidebar transition immediately
+  after resizing. Waiting for the system animation produced the stable final
+  state; this was capture timing, not a product defect. No UI product code was
+  changed in this rereview.
+- Final real browser run: 4/4 PASS (33.8 s). The screenshots were manually
+  inspected at their original resolutions; 390 shows the stacked commercial
+  header and two-column frozen breakdown, 768 uses the wide single-column
+  content flow, and 1280 preserves the sticky totals aside.
+
+## Go CI timeout rereview
+
+- Original exact-head job `103099438915` failed only because the global Go
+  timeout expired at 600.211 s while `internal/storage` was applying another
+  fixture migration; the PR contains no backend change and no assertion failed.
+- The exact job was rerun as attempt 2 (`103123806142`) without code changes.
+  It completed successfully in 9m51s; `internal/storage` passed in 275.163 s and
+  the full Go job concluded green. The narrow margin confirms accumulated suite
+  load/flakiness rather than a branch-related backend regression; the timeout
+  remains recorded rather than hidden.
