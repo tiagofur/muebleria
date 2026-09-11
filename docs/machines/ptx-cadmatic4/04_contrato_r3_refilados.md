@@ -15,7 +15,7 @@
 | G1 — `DIMENSION` observado | **RESOLVED** | Las diferencias ≈9.8/9.9 mm se explican por el fixed rip trim ≈10 mm; `DIMENSION` sigue siendo relativa al subpanel/raíz útil. |
 | G2 — cuatro refilados físicos | **SPEC_POLICY_READY** para `TRIM_TYPE=1`, sin giro inicial | Mapear por eje operativo y lado `leadingBand`, no por nombre visual. Near/fixed → `TRIM_F*`; far/falling minimum → `TRIM_V*`. |
 | G3 — HEAD / recut | **PROFILE_POLICY** | No derivar de los cuatro márgenes. r3 deja `TRIM_HEAD/TRIM_FRCT/TRIM_VRCT` sin override mientras no exista evidencia suficiente/configuración explícita. |
-| G4 — no double counting | **RESOLVED** | `trimAmountMm` ya incluye kerf; PTX recibe el total. El árbol PTX empieza en la raíz útil y no vuelve a emitir las cuatro divisiones perimetrales. |
+| G4 — no double counting | **RESOLVED** | El margen total ya incluye kerf; PTX recibe el total. El árbol PTX empieza en la raíz útil y no vuelve a emitir las divisiones perimetrales. |
 | G5 — FUNCTION 92 / offcut | **RESOLVED_SUBSET** | Emitir 92 sólo para un remnant `rest` producido por una división phase-2/cross que cumpla la regla geométrica y de identidad descrita abajo. |
 
 Los demás casos fallan cerrado o conservan la representación r2 cuando no entren en conflicto.
@@ -42,7 +42,7 @@ Comprobación:
 333.0 + 4.4 + 872.4 + 10.0 = 1219.8 ≈ 1220
 ```
 
-La diferencia residual de 0.2 mm está dentro de la granularidad observada del
+La diferencia residual de 0.2 mm pertenece a la granularidad observada del
 archivo externo; no es una nueva fase ni una coordenada global.
 
 ### Muestra B / patrón 2, `TYPE=1`
@@ -94,9 +94,8 @@ leadingBand=false → lado far / falling-waste
 
 ### 3.2 Subconjunto inicial
 
-La primera revisión r3 soporta trims positivos sólo cuando el patrón productivo,
-tras proyectar fuera los trims perimetrales, tiene orientación sin giro inicial y
-una clasificación inequívoca de ejes:
+La primera r3 soporta trim positivo sólo cuando, después de proyectar fuera el
+prefijo perimetral, el frame PTX puede normalizarse sin giro inicial y con:
 
 ```text
 axis y → rip class
@@ -105,38 +104,40 @@ TRIM_TYPE = 1
 VECTORS = off
 ```
 
-En el frame actual de Granete esto produce, para patrón no girado:
+Para el frame actual de Granete, sin rotación PTX:
 
-| Margen Granete | Clase | PTX |
+| Margen Granete | Semántica estructural | PTX |
 |---|---|---|
-| `bottomMm` (`leadingBand`, eje y) | fixed rip | `TRIM_FRIP` |
-| `topMm` (far side, eje y) | minimum falling rip waste | `TRIM_VRIP` |
-| `leftMm` (`leadingBand`, eje x) | fixed crosscut | `TRIM_FXCT` |
-| `rightMm` (far side, eje x) | minimum falling crosscut waste | `TRIM_VXCT` |
+| `bottomMm` | eje y + `leadingBand`, fixed-first | `TRIM_FRIP` |
+| `topMm` | eje y + far/falling side | `TRIM_VRIP` |
+| `leftMm` | eje x + `leadingBand`, fixed-first | `TRIM_FXCT` |
+| `rightMm` | eje x + far/falling side | `TRIM_VXCT` |
 
-Esta tabla es una **política del subconjunto r3** respaldada por la semántica
-fixed-vs-falling del estándar y por el `leadingBand` explícito del dominio.
-No es una afirmación de que los nombres físicos tengan ese significado bajo
-cualquier giro/origen.
+La tabla es una **política de frame r3** respaldada por el estándar y por la
+clasificación explícita `leadingBand`; no es una afirmación sobre nombres físicos
+bajo cualquier orientación.
+
+Los `TRIM_V*` son mínimos de falling waste. La geometría de la raíz útil sigue
+siendo la autoridad de cuánto queda realmente en el lado far; por eso un margen
+far explícito se refleja en la extensión útil y además como mínimo de seguridad,
+sin inventar una pasada adicional.
 
 ### 3.3 Casos no soportados inicialmente
 
 Fail closed cuando, con trim > 0:
 
 - el patrón necesita `PATTERNS.TYPE=1` u otra rotación no implementada;
-- no puede determinarse de forma inequívoca la clase rip/cross del frame útil;
-- un trim perimetral no forma parte del prefijo estructural esperado;
-- el patrón exige reinterpretar los lados sin una transformación de frame
-  demostrada.
+- no puede determinarse inequívocamente rip/cross en el frame útil;
+- las divisiones de trim no forman el prefijo estructural esperado;
+- una transformación exigiría reinterpretar lados sin una regla demostrada.
 
-No cambiar silenciosamente de lado ni poner todos los valores en los campos
-fixed.
+No cambiar silenciosamente de lado ni poner todos los valores en fixed.
 
 ---
 
 ## 4. G3 — `TRIM_HEAD`, `TRIM_FRCT`, `TRIM_VRCT`
 
-Las muestras del cliente contienen:
+Las muestras contienen:
 
 ```text
 TRIM_HEAD = 20
@@ -146,17 +147,16 @@ TRIM_VRCT = 0
 
 pero no permiten distinguir qué regla produjo los dos valores de 20.
 
-Dos igualdades muestran que un trim interno de 20 participa en el área de
-crosscut/offcut:
+Dos igualdades muestran que un trim interno de 20 participa en la geometría de
+offcut/crosscut:
 
 ```text
 697.0 + 4.4 + 1718.6 + 20 = 2440.0
 350.0 + 4.4 + 845.6  + 20 = 1220.0
 ```
 
-Como `TRIM_HEAD` y `TRIM_FRCT` tienen el mismo valor en ambas muestras, esas
-sumas NO permiten identificar cuál de los dos campos es responsable ni crear
-una fórmula general.
+Como `TRIM_HEAD` y `TRIM_FRCT` valen 20 simultáneamente, esas sumas NO permiten
+identificar cuál gobierna cada caso ni crear una fórmula general.
 
 ### Política r3
 
@@ -170,18 +170,19 @@ TRIM_FRCT = blank
 TRIM_VRCT = blank
 ```
 
-Es decir: **sin override**. Esto conserva la semántica del estándar donde vacío
-no impone un parámetro, evita hardcodear `20` como supuesto universal y deja que
-la validación real revele si el entorno del cliente necesita una revisión
-posterior con política machine/material específica.
+Vacío significa **sin override**, distinto de cero. Así evitamos hardcodear
+`20` como supuesto universal y permitimos que el entorno del cliente conserve
+sus parámetros locales hasta que la prueba de importación diga si necesitamos
+una revisión posterior machine/material específica.
 
-No usar `0` como sustituto de vacío: cero sí es un override explícito.
+La presencia de phase 3 no obliga por sí sola a inventar estos campos: r2 ya
+representa phase 3 con esos overrides vacíos.
 
 ---
 
 ## 5. G4 — proyección PTX sin contar el refilo dos veces
 
-Granete ya representa correctamente un margen total. Ejemplo:
+Granete ya representa un margen total. Ejemplo:
 
 ```text
 margin = 10
@@ -219,31 +220,23 @@ raw board CutProgram
 Reglas:
 
 1. ejecutar/validar primero el CutProgram completo;
-2. exigir que las divisiones perimetrales `trim=true` formen una cadena
-   estructural coherente hasta una única raíz útil;
-3. calcular cada margen como `parentExtent - keptExtent` de su división de
-   trim (total, incluyendo kerf), validándolo contra la geometría ejecutada;
-4. no emitir esas cuatro divisiones como CUTS productivos;
-5. reiniciar la generación/staging PTX en la raíz útil (`generation=1`);
-6. conservar BOARD con dimensiones brutas;
-7. compilar todos los `CUTS.DIMENSION` productivos relativos a regiones dentro
-   de la raíz útil;
-8. el verifier debe comprobar:
+2. exigir que los trims perimetrales formen una cadena coherente hasta una única
+   raíz útil;
+3. calcular cada margen desde la geometría ejecutada (`parentExtent-keptExtent`),
+   nunca desde UI;
+4. no emitir las divisiones `trim=true` como CUTS productivos;
+5. reiniciar staging PTX en la raíz útil (`generation=1`);
+6. conservar BOARDS con dimensiones brutas;
+7. compilar DIMENSION productiva relativa a regiones dentro de la raíz útil;
+8. comprobar en verifier que no exista trim/kerf duplicado.
 
-```text
-raw extent = fixed trim + usable/event geometry + far/falling trim
-```
-
-por cada eje aplicable, sin duplicar kerf.
-
-Casos obligatorios: trim 10/kerf 4, trim==kerf, trim<kerf, trims asimétricos y
-trim cero.
+Casos obligatorios: 10/4, `trim==kerf`, `trim<kerf`, asimétricos y trim cero.
 
 ---
 
 ## 6. G5 — contrato soportado para `FUNCTION 92 + Xn`
 
-### 6.1 Patrón repetido en las dos muestras
+### 6.1 Patrón repetido en las muestras
 
 Muestra A:
 
@@ -251,12 +244,6 @@ Muestra A:
 parent phase-2: FUNCTION 2, DIMENSION 697.0, SEQUENCE 5
 release row:    FUNCTION 92, DIMENSION 1718.6, PART_INDEX X1, QTY_RPT 1, SEQUENCE 6
 child phase-3:  FUNCTION 3, DIMENSION 333.0, SEQUENCE 7
-```
-
-Conservación:
-
-```text
-697.0 + 4.4 + 1718.6 + 20 = 2440.0
 ```
 
 Muestra B:
@@ -267,33 +254,22 @@ release row:    FUNCTION 92, DIMENSION 845.6, PART_INDEX X1, QTY_RPT 1, SEQUENCE
 child phase-3:  FUNCTION 3, DIMENSION 1200.0, SEQUENCE 16
 ```
 
-Conservación:
-
-```text
-350.0 + 4.4 + 845.6 + 20 = 1220.0
-```
-
-El manual define 92 como trim/waste correspondiente a phase 2 y `Xn` como
-referencia a OFFCUTS.
+El manual define 92 como trim/waste de phase 2 y `Xn` como referencia a OFFCUTS.
 
 ### 6.2 Regla r3
 
-Una release r2 puede convertirse en una pasada física 92 únicamente si:
+Una release r2 se convierte a una pasada física 92 únicamente si:
 
 1. el terminal es `kind=remnant` y tiene OFFCUT `Xn` asignable;
 2. es el **rest-side terminal** de una división productora phase 2 cuya función
    normal es `2`;
 3. el remnant es rectangular y su extent sobre el eje productor es conocido;
-4. existe un kept subtree/pieza productiva al otro lado de la división;
-5. la geometría conserva exactamente:
+4. existe un kept subtree/pieza productiva al otro lado;
+5. no existe otra release física del mismo `Xn`;
+6. la proyección puede ordenar el evento 92 después del producer y antes de
+   cualquier recut dependiente sin violar dependencias.
 
-```text
-parent extent = kept/block extent + kerf + remnant extent + cualquier trim interno explícitamente representado
-```
-
-6. no existe otra release física del mismo `Xn`.
-
-La fila PTX será:
+La fila:
 
 ```text
 FUNCTION   = 92
@@ -301,47 +277,42 @@ DIMENSION  = remnant extent sobre el eje de la división productora
 QTY_RPT    = 1
 PART_INDEX = Xn
 QTY_PARTS  = blank salvo evidencia distinta
-SEQUENCE   = positivo y ordenado después del parent phase-2 y antes de
-             cualquier recut dependiente del bloque mantenido
+SEQUENCE   = positivo; después del producer y antes del recut dependiente
 ```
 
-### 6.3 Scheduler
+### 6.3 Scheduler PTX
 
-Añadir FUNCTION 92 crea un evento físico que r2 no tenía. Por tanto, r3 NO debe
-reutilizar ciegamente `division.order` como entero final de SEQUENCE.
+Añadir 92 crea un evento físico que r2 no tenía. r3 NO reutiliza ciegamente
+`division.order` como SEQUENCE final.
 
-Construir un **event schedule PTX determinista** que:
+Construir un event schedule determinista que:
 
-- preserve el orden relativo de las divisiones reales del CutProgram;
-- inserte la release 92 después de su phase-2 producer;
-- coloque cualquier phase-3 dependiente después de esa release cuando así lo
-  exige la relación estructural;
-- mantenga CUT_INDEX como preorder estructural independiente del schedule.
+- preserve el orden relativo de divisiones reales;
+- inserte la release 92 tras su producer phase 2;
+- sitúe recuts dependientes después de esa release;
+- mantenga CUT_INDEX como preorder estructural independiente.
 
-No es necesario imitar los gaps numéricos de las muestras externas: el estándar
-requiere orden, no la numeración exacta de otro optimizador. El verifier debe
-comparar relaciones de orden y no una secuencia copiada del fixture externo.
+Los gaps numéricos de las muestras externas no son un golden: el estándar
+requiere orden, no copiar la numeración de otro optimizador. El verifier compara
+relaciones de orden y unicidad/positividad, no los mismos enteros del fixture.
 
-### 6.4 Lo que sigue siendo fail-closed
+### 6.4 Fail-closed
 
 No convertir automáticamente a 92:
 
 - remnant producido por phase 1 o phase 3;
-- remnant en el kept side;
-- waste terminal que no es un offcut reutilizable;
+- remnant del kept side;
+- waste no reutilizable;
 - pieza rest-side;
-- release cuyo productor/eje no pueda identificarse;
-- cualquier situación que produciría dos referencias físicas al mismo Xn.
+- release con productor/eje ambiguo;
+- caso que duplicaría `Xn`.
 
-Esos casos conservan la semántica soportada de r2 sólo si no contradice el
-perfil r3; de lo contrario bloquean con un reason específico.
+Si la antigua release r2 no puede coexistir con el perfil r3 sin ambigüedad, el
+caso bloquea con razón específica.
 
 ---
 
-## 7. Errores / blockers nuevos recomendados
-
-Nombres exactos pueden ajustarse al vocabulario del paquete, pero deben ser
-específicos:
+## 7. Blockers nuevos recomendados
 
 ```text
 ptx_compile.trim_frame_unsupported
@@ -358,18 +329,18 @@ No volver a `trim_unsupported` genérico para todos los trims positivos.
 
 ## 8. Orden de implementación cuando vuelva el agente
 
-Un solo PR de #661 puede hacerse en commits/slices internos:
+Un solo PR de #661, con commits/slices internos:
 
 1. **RED / planner**
-   - fixtures trim 10/4, asimétrico, ==kerf, <kerf;
+   - fixtures 10/4, asimétrico, ==kerf, <kerf;
    - proyección de raíz útil;
    - mapping FRIP/VRIP/FXCT/VXCT;
-   - negativos de frame/estructura.
+   - negativos frame/estructura.
 2. **Compiler + verifier**
    - MATERIALS.TRIM_*;
    - no trim CUTS duplicados;
    - FUNCTION 92 subset;
-   - scheduler PTX;
+   - scheduler;
    - mutation tests independientes.
 3. **Profile/adapter/download**
    - `ptx-cadmatic-4@r3`;
@@ -386,11 +357,11 @@ este PR salvo dependencia demostrada por un test de trims.
 ## 9. Criterio de cierre de #661
 
 #661 queda técnicamente cumplida cuando un plan representable con trims positivos
-puede recorrer:
+recorre:
 
 ```text
 CutPlan/CutProgram completo
-→ proyección de trim r3
+→ proyección trim r3
 → MATERIALS.TRIM_* + raíz útil
 → CUTS productivos + 92/Xn sólo donde aplica
 → serialize bytes
