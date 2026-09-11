@@ -62,6 +62,27 @@ G5 RESOLVED_SUBSET
 
 **#661 ya puede comenzar con tests/código cuando haya agente disponible.** Fuera de ese frame, fail closed.
 
+## Handoff al implementador
+
+El próximo agente NO debe volver a investigar desde cero ni ampliar scope. Debe leer, en este orden:
+
+```text
+04_contrato_r3_refilados.md
+→ #661
+→ compileCutPlan.ts / verifyCutPlanPtxReadback.ts
+→ tests r2 existentes
+```
+
+Y ejecutar un único PR de #661 en tres pasos internos:
+
+```text
+RED planner/proyección trim
+→ compiler + verifier + scheduler 92
+→ profile r3 + adapter + download/parity/UI
+```
+
+No absorber TYPE=1, BOOK stacking, PARTS_INF/UDI/NOTES, CADmatic 3/5, SAW/MPR ni pruebas del cliente.
+
 ## Núcleo PTX r2 integrado
 
 `packages/excel/src/ptx/` contiene el modelo tipado, validator, serializer determinista, parser independiente y verifier semántico. `compileCutPlan.ts` compila el CutProgram real con tabla inversa de índices y `verifyCutPlanPtxReadback.ts` comprueba los bytes contra el programa re-ejecutado.
