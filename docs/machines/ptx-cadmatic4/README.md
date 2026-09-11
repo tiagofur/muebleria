@@ -18,6 +18,7 @@ Implementación no equivale a compatibilidad: `NOT_TESTED/notClaimed` permanece 
 3. [Ejemplos parciales](examples/README.md): fragmentos propios y traza geométrica.
 4. [Comprobación acotada](validation/verification_result.json): resultados del ejercicio y contraejemplo reducido.
 5. [Manifiesto original de procedencia](source-artifact-manifest.json): checksums del paquete de conversación antes de adaptar documentos/índice. No describe los documentos editados de este PR; no usarlo como manifiesto de fabricación.
+6. [Evidencia de campo y base para r3](03_evidencia_campo.md) (2026-09-11): dos muestras `.ptx` reales del cliente, saneadas en [field/](field/README.md) — trims por `MATERIALS.TRIM_*`, liberación de retazos `FUNCTION 92 + Xn`, y validación del HEADER/dialecto del candidato r2.
 
 La investigación conserva un procedimiento de campo como contexto, expresamente fuera de alcance. El plan activo y #650 prevalecen sobre las antiguas referencias a una tercera entrega comercial.
 
