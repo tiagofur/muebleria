@@ -4,9 +4,11 @@
 - Started: 2026-09-11 17:00 CST.
 - Result: `IMPLEMENTED_PENDING_REVIEW`. El golden `Q2 accepted + R2 approved → ProductionRelease(Q2,R2)` se ejecuta completo con `Project.status = draft`: el stage 10 del E2E golden ya NO escribe el stamp legacy auxiliar (FOUND_DOUBLE_TRUTH resuelto) y añade negative proof HTTP (proyecto estampado accepted + Q3 published → 409 'la cotización base no está aceptada'). Storage test nuevo fija golden+negativa en PostgreSQL real (`TestProductionRelease_AuthorityIsQuoteRevisionNotProjectStatus`). Guards UI del chrome de Cotizaciones (`productionExportOk`, `resolveChromePrimary`) migrados a la autoridad comercial exacta; 'Marcar producida' queda ligado al lifecycle literal. Backend de producto SIN cambios (la autoridad ya era QuoteRevision en `enforceProductionGates`). Detalle: `progress/implementation_642_release_without_project_accepted.md`.
 - Evidence:
-  - Go storage suites relacionadas (PostgreSQL real): PASS 80.077s.
-  - `ProjectsScreen.test.tsx`: 62/62.
-  - Gates finales (browser E2E golden, suites completas, typecheck, diff-check): ver PR.
+  - Go completo `go test ./... -count=1`: OK (storage 559.629s PostgreSQL real; pilotreadiness 247.200s); suites enfocadas PASS 80.077s.
+  - `pnpm test`: domain 1407 / storage 191 / excel 335 (+3 skip) / desktop 17 / mobile 73 / ui 1736 / web 449.
+  - `pnpm typecheck` 7/7; `pnpm openapi:check` sin drift; `git diff --check` limpio.
+  - Browser gate completo 48/48 PASS (3.2m) con demo-golden-path 10/10 (`Project.status=draft / Q2=accepted / R2=approved / P1=active` + negative proof).
+  - PR #673 (label `type:feature`).
 
 # Issue #642 — Entrega 2A: Lista de Cotizaciones con QuoteRevision exacta y retiro del lifecycle comercial legacy
 

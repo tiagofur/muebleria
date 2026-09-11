@@ -97,11 +97,16 @@ Project.status    → workflow operativo/legacy; fuera de la cadena comercial
 
 ## 5. Evidencia
 
+- PR: https://github.com/tiagofur/muebleria/pull/673 (label único `type:feature`; issue #642 OPEN `status:approved`).
 - Go storage (PostgreSQL real `localhost:5445`):
   `TestProductionRelease_AuthorityIsQuoteRevisionNotProjectStatus` PASS;
   suites `TestProductionRelease*|TestApproveDesignRevision*|TestDigitalThreadE2E*|TestRequote*|TestQuoteLifecycle*` PASS (80.077s).
-- UI: `ProjectsScreen.test.tsx` 62/62 PASS.
-- Ver sección de gates finales del PR para browser E2E y suites completas.
+- Go completo `go test ./... -count=1`: OK en todos los paquetes (storage 559.629s sobre PostgreSQL real; pilotreadiness 247.200s).
+- `pnpm test`: domain 1407 / storage 191 / excel 335 (+3 skip hardware preexistentes) / desktop 17 / mobile 73 / ui 1736 / web 449 — todos PASS.
+- `pnpm typecheck`: 7/7 paquetes, 0 errores.
+- `pnpm openapi:check`: sin drift (sin cambios de contrato).
+- Browser gate completo (`scripts/organization-browser-gate.sh`, Chromium + Go + PostgreSQL efímero): 48/48 PASS (3.2m). Incluye `demo-golden-path.spec.ts` 10/10 con ledger final `Project.status=draft / Q1=superseded / Q2=accepted / R1=published / R2=approved / P1=active` y la negative proof del stage 10.
+- `git diff --check`: limpio.
 
 ## 6. Fuera de alcance (documentado)
 
