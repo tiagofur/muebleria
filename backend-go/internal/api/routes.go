@@ -395,6 +395,8 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Proyectos y cotizaciones
 	mux.Handle("GET /api/projects", authMW(http.HandlerFunc(server.HandleProjects)))
 	mux.Handle("POST /api/projects", authMW(http.HandlerFunc(server.HandleProjects)))
+	// #642 / 2A: batch read model for project commercial summaries in Cotizaciones list.
+	mux.Handle("GET /api/projects/commercial-summaries", authMW(http.HandlerFunc(server.HandleProjectCommercialSummaries)))
 	mux.Handle("GET /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("PUT /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))

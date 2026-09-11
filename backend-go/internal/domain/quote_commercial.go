@@ -352,3 +352,34 @@ func positiveNumber(value any) (float64, bool) {
 	}
 	return number, true
 }
+
+// ProjectCommercialQuoteStatus is the authoritative quote status of a project
+// derived solely from its authoritative QuoteRevision (#642 / 2A).
+type ProjectCommercialQuoteStatus string
+
+const (
+	ProjectCommercialQuoteStatusNone       ProjectCommercialQuoteStatus = "none"
+	ProjectCommercialQuoteStatusDraft      ProjectCommercialQuoteStatus = "draft"
+	ProjectCommercialQuoteStatusPublished  ProjectCommercialQuoteStatus = "published"
+	ProjectCommercialQuoteStatusAccepted   ProjectCommercialQuoteStatus = "accepted"
+	ProjectCommercialQuoteStatusSuperseded ProjectCommercialQuoteStatus = "superseded"
+)
+
+// ProjectCommercialSummary is the server-owned commercial summary of a project
+// derived from its authoritative QuoteRevision (#642 / 2A).
+type ProjectCommercialSummary struct {
+	ProjectID                 string                       `json:"projectId"`
+	ProjectName               string                       `json:"projectName"`
+	CustomerID                *string                      `json:"customerId,omitempty"`
+	CustomerName              *string                      `json:"customerName,omitempty"`
+	Currency                  string                       `json:"currency"`
+	QuoteStatus               ProjectCommercialQuoteStatus `json:"quoteStatus"`
+	QuoteRevisionID           *string                      `json:"quoteRevisionId,omitempty"`
+	QuoteRevisionNumber       *int64                       `json:"quoteRevisionNumber,omitempty"`
+	ActiveDraftRevisionNumber *int64                       `json:"activeDraftRevisionNumber,omitempty"`
+	IsLegacy                  bool                         `json:"isLegacy"`
+	SaleTotal                 *float64                     `json:"saleTotal,omitempty"`
+	FurnitureQuantity         int64                        `json:"furnitureQuantity"`
+	CommercialActivityAt      string                       `json:"commercialActivityAt"`
+	OwnerUserID               string                       `json:"-"`
+}

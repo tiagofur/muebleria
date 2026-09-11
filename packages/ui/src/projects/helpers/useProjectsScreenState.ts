@@ -29,23 +29,27 @@ import type {
   Structure,
   WorkshopSettings,
 } from '@granete/domain';
+import type { ProjectCommercialSummary } from '@granete/storage';
 import { trackUsability } from '../../preview3d/usabilityBenchmark';
 import { useDebouncedValue } from '../../common';
 import { consumeRequestCreateKey } from '../../common/consumeRequestCreateKey';
 import {
   emptyProjectDraft,
-  filterProjectsList,
   projectToDraft,
   quickAddPayloadForModule,
   setItemOptionChoice,
   setProjectLevelChoice,
   validateItemQuantity,
   type ProjectDraft,
-  type ProjectStatusFilter,
 } from '../projectHelpers';
+import {
+  filterProjectsByCommercialStatus,
+  type QuoteCommercialStatusFilter,
+} from '../quoteRevisionPresentation';
 
 export interface UseProjectsScreenStateProps {
   readonly projects: readonly Project[];
+  readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
   readonly modules: readonly Module[];
   readonly materials: readonly MaterialBoard[];
   readonly edges: readonly EdgeBand[];
@@ -96,6 +100,7 @@ export interface UseProjectsScreenStateProps {
 
 export function useProjectsScreenState({
   projects,
+  commercialSummaries,
   modules,
   materials,
   edges,
@@ -130,7 +135,7 @@ export function useProjectsScreenState({
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] =
-    useState<ProjectStatusFilter>('all');
+    useState<QuoteCommercialStatusFilter>('all');
   // Deep-link mount (refresh / post-login remount): seed from the URL so the
   // first paint already shows the detail instead of flashing the list.
   const [selectedId, setSelectedIdState] = useState<string | null>(() =>
@@ -213,8 +218,14 @@ export function useProjectsScreenState({
 
   const filtered = useMemo(
     () =>
-      filterProjectsList(projects, debouncedSearch, statusFilter, customers),
-    [projects, debouncedSearch, statusFilter, customers],
+      filterProjectsByCommercialStatus(
+        projects,
+        debouncedSearch,
+        statusFilter,
+        customers,
+        commercialSummaries,
+      ),
+    [projects, debouncedSearch, statusFilter, customers, commercialSummaries],
   );
 
   const selectedProject =

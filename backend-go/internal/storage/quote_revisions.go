@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -157,4 +158,198 @@ func (s *PostgresStore) ListQuoteRevisionsByProject(ctx context.Context, project
 	}
 
 	return details, nil
+}
+
+// ListProjectCommercialSummaries resolves the authoritative commercial summary
+// for every project accessible to the caller's organization (#642 / 2A).
+// Selection per project:
+// 1. Authoritative QuoteRevision: 'accepted' status if present, otherwise newest revision.
+// 2. In-progress draft detection: if Q_accepted is selected, detects whether a newer draft exists (e.g. Q3 draft while Q2 is accepted).
+// 3. Fail-closed: missing commercial snapshot marks isLegacy=true with nil saleTotal; corrupt snapshot returns error.
+func (s *PostgresStore) ListProjectCommercialSummaries(ctx context.Context) ([]domain.ProjectCommercialSummary, error) {
+	orgID, err := RequireOrgFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT
+			p.id::text,
+			p.name,
+			p.customer_id::text,
+			COALESCE(c.name, p.customer_id::text) AS customer_name,
+			p.currency,
+			COALESCE(p.owner_user_id::text, ''),
+			p.created_at,
+			p.updated_at,
+			qr.id::text AS revision_id,
+			qr.revision_number,
+			qr.status AS revision_status,
+			qr.created_at AS revision_created_at,
+			qr.published_at,
+			qr.accepted_at,
+			COALESCE(qr.commercial_snapshot, 'null'::jsonb),
+			COALESCE(qr.item_count, 0),
+			draft_qr.revision_number AS active_draft_revision_number
+		FROM projects p
+		LEFT JOIN customers c ON c.id = p.customer_id AND c.organization_id = p.organization_id
+		LEFT JOIN LATERAL (
+			SELECT
+				id,
+				revision_number,
+				status,
+				created_at,
+				published_at,
+				accepted_at,
+				commercial_snapshot,
+				(SELECT count(*) FROM quote_revision_items WHERE quote_revision_id = quote_revisions.id) AS item_count
+			FROM quote_revisions
+			WHERE project_id = p.id
+			ORDER BY CASE WHEN status = 'accepted' THEN 0 ELSE 1 END ASC, revision_number DESC
+			LIMIT 1
+		) qr ON true
+		LEFT JOIN LATERAL (
+			SELECT revision_number
+			FROM quote_revisions
+			WHERE project_id = p.id
+			  AND status = 'draft'
+			  AND qr.status = 'accepted'
+			  AND revision_number > qr.revision_number
+			ORDER BY revision_number DESC
+			LIMIT 1
+		) draft_qr ON true
+		WHERE p.organization_id = $1 OR p.sales_organization_id = $1 OR p.manufacturing_organization_id = $1
+		ORDER BY p.updated_at DESC;
+	`
+
+	rows, err := s.db(ctx).Query(ctx, query, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []domain.ProjectCommercialSummary
+	for rows.Next() {
+		var (
+			projectID, projectName, customerID, customerName, currency, ownerUserID string
+			projectCreatedAt, projectUpdatedAt                                     time.Time
+			revisionID, revisionStatus                                             *string
+			revisionNumber                                                         *int64
+			revisionCreatedAt, publishedAt, acceptedAt                             *time.Time
+			commercialSnapshotRaw                                                  []byte
+			itemCount                                                              int64
+			activeDraftRevisionNumber                                              *int64
+		)
+
+		if err := rows.Scan(
+			&projectID,
+			&projectName,
+			&customerID,
+			&customerName,
+			&currency,
+			&ownerUserID,
+			&projectCreatedAt,
+			&projectUpdatedAt,
+			&revisionID,
+			&revisionNumber,
+			&revisionStatus,
+			&revisionCreatedAt,
+			&publishedAt,
+			&acceptedAt,
+			&commercialSnapshotRaw,
+			&itemCount,
+			&activeDraftRevisionNumber,
+		); err != nil {
+			return nil, err
+		}
+
+		summary := domain.ProjectCommercialSummary{
+			ProjectID:            projectID,
+			ProjectName:          projectName,
+			Currency:             currency,
+			OwnerUserID:          ownerUserID,
+			CommercialActivityAt: projectUpdatedAt.UTC().Format(time.RFC3339),
+		}
+
+		if customerID != "" {
+			summary.CustomerID = &customerID
+		}
+		if customerName != "" {
+			summary.CustomerName = &customerName
+		}
+
+		if revisionID == nil {
+			summary.QuoteStatus = domain.ProjectCommercialQuoteStatusNone
+			summary.IsLegacy = false
+			summary.FurnitureQuantity = 0
+			summaries = append(summaries, summary)
+			continue
+		}
+
+		summary.QuoteRevisionID = revisionID
+		summary.QuoteRevisionNumber = revisionNumber
+		summary.ActiveDraftRevisionNumber = activeDraftRevisionNumber
+
+		switch *revisionStatus {
+		case "accepted":
+			summary.QuoteStatus = domain.ProjectCommercialQuoteStatusAccepted
+		case "published":
+			summary.QuoteStatus = domain.ProjectCommercialQuoteStatusPublished
+		case "draft":
+			summary.QuoteStatus = domain.ProjectCommercialQuoteStatusDraft
+		case "superseded":
+			summary.QuoteStatus = domain.ProjectCommercialQuoteStatusSuperseded
+		default:
+			summary.QuoteStatus = domain.ProjectCommercialQuoteStatusDraft
+		}
+
+		if acceptedAt != nil && !acceptedAt.IsZero() {
+			summary.CommercialActivityAt = acceptedAt.UTC().Format(time.RFC3339)
+		} else if publishedAt != nil && !publishedAt.IsZero() {
+			summary.CommercialActivityAt = publishedAt.UTC().Format(time.RFC3339)
+		} else if revisionCreatedAt != nil && !revisionCreatedAt.IsZero() {
+			summary.CommercialActivityAt = revisionCreatedAt.UTC().Format(time.RFC3339)
+		}
+
+		snapshot, err := parseQuoteCommercialSnapshot(commercialSnapshotRaw)
+		if err != nil {
+			return nil, err
+		}
+
+		if snapshot == nil {
+			summary.IsLegacy = true
+			summary.SaleTotal = nil
+			summary.FurnitureQuantity = itemCount
+		} else {
+			summary.IsLegacy = false
+			salePrice := snapshot.Breakdown.SalePrice
+			summary.SaleTotal = &salePrice
+			if snapshot.Currency != "" {
+				summary.Currency = snapshot.Currency
+			}
+
+			var qty int64
+			for _, line := range snapshot.Lines {
+				qty += int64(line.Quantity)
+			}
+			if qty == 0 && len(snapshot.Units) > 0 {
+				qty = int64(len(snapshot.Units))
+			}
+			if qty == 0 && itemCount > 0 {
+				qty = itemCount
+			}
+			summary.FurnitureQuantity = qty
+		}
+
+		summaries = append(summaries, summary)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if summaries == nil {
+		summaries = []domain.ProjectCommercialSummary{}
+	}
+	return summaries, nil
 }

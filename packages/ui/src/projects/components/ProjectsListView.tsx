@@ -13,6 +13,7 @@ import {
   SearchX,
 } from 'lucide-react';
 import type { Customer, Project, ProjectTemplate } from '@granete/domain';
+import type { ProjectCommercialSummary } from '@granete/storage';
 import {
   EmptyState,
   PageHeader,
@@ -20,13 +21,16 @@ import {
   SearchInput,
   StatusChips,
 } from '../../common';
+import { formatMoneyDisplay } from '../../common/formatMoneyDisplay';
 import {
-  PROJECT_STATUS_FILTER_OPTIONS,
   resolveCustomerName,
   formatIsoDate,
-  type ProjectStatusFilter,
 } from '../projectHelpers';
-import { StatusBadge } from './StatusBadge';
+import {
+  QUOTE_COMMERCIAL_FILTER_OPTIONS,
+  type QuoteCommercialStatusFilter,
+} from '../quoteRevisionPresentation';
+import { CommercialStatusBadge } from './CommercialStatusBadge';
 
 export interface ProjectsListViewProps {
   readonly projects: readonly Project[];
@@ -34,7 +38,11 @@ export interface ProjectsListViewProps {
   readonly customers: readonly Customer[] | undefined;
   readonly projectTemplates: readonly ProjectTemplate[] | undefined;
   readonly search: string;
-  readonly statusFilter: ProjectStatusFilter;
+  readonly statusFilter: QuoteCommercialStatusFilter;
+  readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
+  readonly commercialSummariesLoading?: boolean;
+  readonly commercialSummariesError?: string | null;
+  readonly onRetryCommercialSummaries?: () => void;
   readonly isTrulyEmpty: boolean;
   readonly isFilterEmpty: boolean;
   readonly canMutate: boolean;
@@ -42,7 +50,7 @@ export interface ProjectsListViewProps {
   readonly hasDeleteTemplate: boolean;
   readonly estimateLabel: (projectId: string) => ReactNode;
   readonly onSearchChange: (value: string) => void;
-  readonly onStatusFilterChange: (value: ProjectStatusFilter) => void;
+  readonly onStatusFilterChange: (value: QuoteCommercialStatusFilter) => void;
   readonly onClearFilters: () => void;
   readonly onNewProject: () => void;
   readonly onFromTemplate: () => void;
@@ -57,6 +65,10 @@ export function ProjectsListView({
   projectTemplates,
   search,
   statusFilter,
+  commercialSummaries,
+  commercialSummariesLoading,
+  commercialSummariesError,
+  onRetryCommercialSummaries,
   isTrulyEmpty,
   isFilterEmpty,
   canMutate,
@@ -133,12 +145,38 @@ export function ProjectsListView({
             <StatusChips
               value={statusFilter}
               onChange={onStatusFilterChange}
-              options={PROJECT_STATUS_FILTER_OPTIONS}
+              options={QUOTE_COMMERCIAL_FILTER_OPTIONS}
               aria-label="Filtrar cotizaciones por estado"
               data-testid="project-status-chips"
             />
           }
         />
+      ) : null}
+
+      {commercialSummariesError ? (
+        <div
+          className="alert alert--danger"
+          role="alert"
+          style={{
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <span>
+            No se pudieron cargar los estados comerciales: {commercialSummariesError}
+          </span>
+          {onRetryCommercialSummaries ? (
+            <button
+              type="button"
+              className="btn btn--small btn--secondary"
+              onClick={onRetryCommercialSummaries}
+            >
+              Reintentar
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {isTrulyEmpty ? (
@@ -171,40 +209,93 @@ export function ProjectsListView({
         />
       ) : (
         <ul className="project-card-grid" aria-label="Lista de cotizaciones">
-          {filtered.map((project) => (
-            <li key={project.id}>
-              <button
-                type="button"
-                className="project-card"
-                onClick={() => onOpenProject(project)}
-                data-testid={`project-card-${project.id}`}
-              >
-                <div className="project-card__top">
-                  <h3 className="project-card__name">{project.name}</h3>
-                  <StatusBadge status={project.status} />
-                </div>
-                <p className="project-card__client">
-                  {resolveCustomerName(project.customerId, customers)}
-                </p>
-                <div className="project-card__stats">
-                  <span className="project-card__stat">
-                    <Package size={14} strokeWidth={1.5} aria-hidden />
-                    {project.items.length} mueble
-                    {project.items.length === 1 ? '' : 's'}
-                  </span>
-                  <span className="project-card__stat">
-                    Act. {formatIsoDate(project.updatedAt)}
-                  </span>
-                </div>
-                <div className="project-card__price">
-                  <span className="project-card__price-label">
-                    Precio total
-                  </span>
-                  {estimateLabel(project.id)}
-                </div>
-              </button>
-            </li>
-          ))}
+          {filtered.map((project) => {
+            const summary = commercialSummaries?.get(project.id);
+            const furnitureCount =
+              summary?.furnitureQuantity ?? project.items.length;
+            const activityDate =
+              summary?.commercialActivityAt ?? project.updatedAt;
+            const formattedTotal =
+              summary?.saleTotal != null
+                ? formatMoneyDisplay(summary.saleTotal, { currency: summary.currency })
+                : '—';
+
+            return (
+              <li key={project.id}>
+                <button
+                  type="button"
+                  className="project-card"
+                  onClick={() => onOpenProject(project)}
+                  data-testid={`project-card-${project.id}`}
+                >
+                  <div className="project-card__top">
+                    <h3 className="project-card__name">{project.name}</h3>
+                    <CommercialStatusBadge
+                      summary={summary}
+                      loading={commercialSummariesLoading}
+                    />
+                  </div>
+                  <p className="project-card__client">
+                    {resolveCustomerName(project.customerId, customers)}
+                  </p>
+                  <div className="project-card__stats">
+                    <span className="project-card__stat">
+                      <Package size={14} strokeWidth={1.5} aria-hidden />
+                      {furnitureCount} mueble
+                      {furnitureCount === 1 ? '' : 's'}
+                    </span>
+                    <span className="project-card__stat">
+                      Act. {formatIsoDate(activityDate)}
+                    </span>
+                  </div>
+                  {summary?.activeDraftRevisionNumber != null ? (
+                    <div
+                      className="project-card__substat"
+                      style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                        marginTop: '0.25rem',
+                      }}
+                    >
+                      Q{summary.activeDraftRevisionNumber} en borrador
+                    </div>
+                  ) : null}
+                  {summary?.isLegacy ? (
+                    <div
+                      className="project-card__legacy-badge"
+                      style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--text-muted)',
+                        marginTop: '0.25rem',
+                      }}
+                    >
+                      <span className="badge badge--neutral-subtle">
+                        Cotización anterior
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="project-card__price">
+                    <span className="project-card__price-label">
+                      Precio total
+                    </span>
+                    {summary ? (
+                      <span
+                        className={
+                          summary.saleTotal == null
+                            ? 'project-card__price-value project-card__price-value--muted'
+                            : 'project-card__price-value'
+                        }
+                      >
+                        {formattedTotal}
+                      </span>
+                    ) : (
+                      estimateLabel(project.id)
+                    )}
+                  </div>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </>

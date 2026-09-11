@@ -1,3 +1,16 @@
+# Issue #642 — Entrega 2A: Lista de Cotizaciones con QuoteRevision exacta y retiro del lifecycle comercial legacy
+
+- Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base exacta `origin/main@6495085be8024a558bba35a47c0c5985e1465bdc` (post-merge PR #663). Rama `feat/642-quote-list-authority`. Single writer.
+- Started: 2026-09-11 14:05 CST.
+- Plan:
+  1. Contrato OpenAPI y read model batch `GET /projects/commercial-summaries` sin N+1, derivado de tablas canónicas sin nuevas migraciones.
+  2. Implementación Go (storage en PostgreSQL real, handler API con filtrado de ownership/tenancy, tests).
+  3. Mappers puros y badges en `@granete/ui` (`quoteRevisionPresentation.ts`, `CommercialStatusBadge.tsx`, tests unitarios).
+  4. Migración de tarjetas, contadores y filtros en `ProjectsListView.tsx` y `ProjectsScreen.tsx` eliminando la dependencia de `Project.status` y `projectEstimates`.
+  5. Retiro de la segunda UX comercial legacy en Cotizaciones (botones Enviar/Aceptar clásico y Reabrir).
+  6. Conexión de `useProjectsCommercialSummaries` en `ShellView.tsx` e invalidación al transicionar revisiones.
+  7. Batería de pruebas Casos A–G en UI, tests Go en PostgreSQL real, browser E2E y verificación completa.
+
 # Issue #642 — Entrega 1: coherencia de líneas y detalle comercial en QuoteRevision exacta
 
 - Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base exacta `origin/main@b285cf316ab87bc95003de4dd6b4c00cbb713312` (verificada por `git merge-base`). Rama `feat/642-quote-revision-detail-lines`. PR #663. Single writer.

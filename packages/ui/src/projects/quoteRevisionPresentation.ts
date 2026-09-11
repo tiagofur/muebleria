@@ -6,11 +6,15 @@
  * geometry, or live catalog defaults.
  */
 
+import type { Customer, Project } from '@granete/domain';
 import type {
+  ProjectCommercialQuoteStatus,
+  ProjectCommercialSummary,
   QuoteCommercialOption,
   QuoteCommercialSnapshot,
   QuoteRevisionItem,
 } from '@granete/storage';
+import { filterProjectsByQuery } from './helpers/projectFilterHelpers';
 
 export interface ProjectRevisionUnitView {
   readonly furnitureInstanceId: string;
@@ -154,5 +158,108 @@ export function buildRevisionLines(
       units,
       isMultiUnit: line.quantity > 1 || units.length > 1,
     };
+  });
+}
+
+/**
+ * Filter value for the Quotations list screen (#642 / 2A).
+ * Canonical QuoteRevision status authority replaces mutable Project.status filtering.
+ */
+export type QuoteCommercialStatusFilter =
+  | 'all'
+  | 'draft'
+  | 'published'
+  | 'accepted'
+  | 'superseded'
+  | 'none';
+
+export interface QuoteCommercialFilterOption {
+  readonly value: QuoteCommercialStatusFilter;
+  readonly label: string;
+}
+
+export const QUOTE_COMMERCIAL_FILTER_OPTIONS: ReadonlyArray<QuoteCommercialFilterOption> = [
+  { value: 'all', label: 'Todas' },
+  { value: 'draft', label: 'Borrador' },
+  { value: 'published', label: 'Publicada' },
+  { value: 'accepted', label: 'Aceptada' },
+  { value: 'superseded', label: 'Reemplazada' },
+  { value: 'none', label: 'Sin cotización' },
+];
+
+export interface CommercialBadgeView {
+  readonly label: string;
+  readonly modifier: string;
+  readonly ariaLabel: string;
+}
+
+/**
+ * Formats badge presentation data for a project's authoritative commercial revision (#642).
+ */
+export function formatCommercialSummaryBadge(
+  summary?: ProjectCommercialSummary,
+): CommercialBadgeView {
+  if (!summary || summary.quoteStatus === 'none') {
+    return {
+      label: 'Sin cotización',
+      modifier: 'status-badge--draft',
+      ariaLabel: 'Estado comercial: sin cotización',
+    };
+  }
+
+  const revPrefix =
+    summary.quoteRevisionNumber != null ? `Q${summary.quoteRevisionNumber} · ` : '';
+
+  switch (summary.quoteStatus) {
+    case 'accepted':
+      return {
+        label: `${revPrefix}Aceptada`,
+        modifier: 'status-badge--accepted',
+        ariaLabel: `Estado comercial: Q${summary.quoteRevisionNumber ?? ''} aceptada`,
+      };
+    case 'published':
+      return {
+        label: `${revPrefix}Publicada`,
+        modifier: 'status-badge--quoted',
+        ariaLabel: `Estado comercial: Q${summary.quoteRevisionNumber ?? ''} publicada`,
+      };
+    case 'draft':
+      return {
+        label: `${revPrefix}Borrador`,
+        modifier: 'status-badge--draft',
+        ariaLabel: `Estado comercial: Q${summary.quoteRevisionNumber ?? ''} borrador`,
+      };
+    case 'superseded':
+      return {
+        label: `${revPrefix}Reemplazada`,
+        modifier: 'status-badge--inactive',
+        ariaLabel: `Estado comercial: Q${summary.quoteRevisionNumber ?? ''} reemplazada`,
+      };
+    default:
+      return {
+        label: `${revPrefix}${summary.quoteStatus}`,
+        modifier: 'status-badge--draft',
+        ariaLabel: `Estado comercial: ${summary.quoteStatus}`,
+      };
+  }
+}
+
+/**
+ * Filter projects by query and authoritative QuoteRevision commercial status (#642 / 2A).
+ */
+export function filterProjectsByCommercialStatus(
+  projects: readonly Project[],
+  query: string,
+  status: QuoteCommercialStatusFilter,
+  customers: readonly Customer[] = [],
+  commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary>,
+): Project[] {
+  const byQuery = filterProjectsByQuery(projects, query, customers);
+  if (status === 'all') return byQuery;
+
+  return byQuery.filter((project) => {
+    const summary = commercialSummaries?.get(project.id);
+    const quoteStatus = summary?.quoteStatus ?? 'none';
+    return quoteStatus === status;
   });
 }

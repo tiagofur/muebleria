@@ -34,10 +34,8 @@ import type {
 } from '@granete/domain';
 
 import {
-  Check,
   Copy,
   LayoutTemplate,
-  RotateCcw,
   Trash2,
 } from 'lucide-react';
 import {
@@ -360,22 +358,17 @@ function resolveChromePrimary(args: {
   status: ProjectStatus;
   canMutate: boolean;
   canMarkProduced: boolean;
-  hasChangeStatus: boolean;
   hasMarkProduced: boolean;
   hasExport: boolean;
   hasOpenInProduction: boolean;
 }): ChromePrimary {
   const {
     status,
-    canMutate,
     canMarkProduced,
-    hasChangeStatus,
     hasMarkProduced,
     hasExport,
     hasOpenInProduction,
   } = args;
-  if (status === 'draft' && canMutate && hasChangeStatus) return 'send';
-  if (status === 'quoted' && canMutate && hasChangeStatus) return 'accept';
   if (
     (status === 'accepted' || status === 'produced') &&
     hasOpenInProduction
@@ -398,15 +391,6 @@ function resolveChromePrimary(args: {
   }
   return null;
 }
-
-const CONFIRM_SEND =
-  '¿Enviar cotización al cliente?\n\nSe congelan precios y el diseño queda en solo lectura. Si el cliente pide cambios, podés reabrir a borrador antes de aceptar.';
-const CONFIRM_ACCEPT =
-  '¿Aceptar esta cotización?\n\nEl pedido pasa a fábrica. Después de aceptar no se puede volver a borrador: solo ver y producir.';
-const CONFIRM_REOPEN =
-  '¿Reabrir a borrador?\n\nSe descongelan los precios y vuelve a ser editable. Usalo si el cliente pidió cambios antes de aceptar.';
-const CONFIRM_REOPEN_FORCE =
-  '¿Reabrir a borrador una cotización ya aceptada/en producción?\n\nEsto es una excepción de admin/gerente. Se descongelan precios y el diseño vuelve a ser editable.';
 
 function ProjectDetailViewInner(): ReactNode {
   const ctx = useProjectDetail();
@@ -468,21 +452,10 @@ function ProjectDetailViewInner(): ReactNode {
     status: project.status,
     canMutate,
     canMarkProduced,
-    hasChangeStatus: Boolean(onChangeStatus),
     hasMarkProduced: Boolean(onMarkProduced),
     hasExport: Boolean(ctx.onExport),
     hasOpenInProduction,
   });
-
-  const requestStatus = (next: ProjectStatus, message: string) => {
-    if (!onChangeStatus) return;
-    setPendingConfirm({
-      title: next === 'quoted' ? 'Enviar cotización' : 'Aceptar obra (flujo clásico)',
-      message,
-      confirmLabel: next === 'quoted' ? 'Enviar' : 'Aceptar',
-      onConfirm: () => onChangeStatus(project.id, next),
-    });
-  };
 
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
     const sections: DropdownMenuSection[] = [];
@@ -564,38 +537,6 @@ function ProjectDetailViewInner(): ReactNode {
         onSelect: () => onSaveAsTemplate(project.id),
       });
     }
-    if (
-      project.status === 'draft' &&
-      canMutate &&
-      onChangeStatus
-    ) {
-      metaItems.push({
-        id: 'accept-direct',
-        label: 'Aceptar obra (flujo clásico)…',
-        icon: <Check size={16} strokeWidth={1.5} aria-hidden />,
-        onSelect: () => requestStatus('accepted', CONFIRM_ACCEPT),
-      });
-    }
-    const reopenQuoted = canReopen && project.status === 'quoted';
-    const reopenClosed =
-      canForceReopenClosed &&
-      (project.status === 'accepted' || project.status === 'produced');
-    if ((reopenQuoted || reopenClosed) && onRequestReopen) {
-      metaItems.push({
-        id: 'reopen',
-        label: 'Reabrir a borrador…',
-        icon: <RotateCcw size={16} strokeWidth={1.5} aria-hidden />,
-        onSelect: () => {
-          const msg = reopenClosed ? CONFIRM_REOPEN_FORCE : CONFIRM_REOPEN;
-          setPendingConfirm({
-            title: 'Reabrir a borrador',
-            message: msg,
-            confirmLabel: 'Reabrir',
-            onConfirm: () => onRequestReopen(),
-          });
-        },
-      });
-    }
     if (canDelete) {
       metaItems.push({
         id: 'delete',
@@ -612,17 +553,14 @@ function ProjectDetailViewInner(): ReactNode {
   }, [
     canDelete,
     canMutate,
-    canReopen,
-    canForceReopenClosed,
     exportMenu.sections,
     hasOpenInProduction,
-    onChangeStatus,
     onDuplicate,
     onOpenInProduction,
     onOpenFurnitureMatrix,
     onOpenDesigns,
+    onOpenReconciliation,
     onRequestDelete,
-    onRequestReopen,
     onSaveAsTemplate,
     productionExportOk,
     project.id,
@@ -641,9 +579,6 @@ function ProjectDetailViewInner(): ReactNode {
         chromeSale={chromeSale}
         moreSections={moreSections}
         exportMenuClose={exportMenu.onClose}
-        onRequestStatus={requestStatus}
-        confirmSendText={CONFIRM_SEND}
-        confirmAcceptText={CONFIRM_ACCEPT}
       />
 
       {project.status === 'accepted' || project.status === 'produced' ? (

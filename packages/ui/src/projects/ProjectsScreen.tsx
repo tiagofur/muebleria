@@ -61,6 +61,7 @@ import type { SurveyHandlers } from './components/SiteSurveyPanel';
 import type { ProjectOverviewNav } from './components/ProjectOverviewPanel';
 import { ProjectsListView } from './components/ProjectsListView';
 import { ProjectModalsContainer } from './components/ProjectModalsContainer';
+import type { ProjectCommercialSummary } from '@granete/storage';
 import {
   formatProjectMoney,
   type AddItemDraft,
@@ -73,6 +74,11 @@ export type { ProjectDraft, AddItemDraft };
 export { ExportIssueList, type ExportIssueListProps } from './ExportIssueList';
 
 export interface ProjectsScreenProps {
+  /** Authoritative QuoteRevision commercial summaries (#642 / 2A). */
+  readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
+  readonly commercialSummariesLoading?: boolean;
+  readonly commercialSummariesError?: string | null;
+  readonly onRetryCommercialSummaries?: () => void;
   /** When true, show section loading (workspace/async gate). */
   readonly loading?: boolean;
   readonly projects: readonly Project[];
@@ -444,6 +450,10 @@ export interface ProjectsScreenProps {
 }
 
 export function ProjectsScreen({
+  commercialSummaries,
+  commercialSummariesLoading = false,
+  commercialSummariesError = null,
+  onRetryCommercialSummaries,
   projects,
   modules,
   categories = [],
@@ -565,6 +575,7 @@ export function ProjectsScreen({
 }: ProjectsScreenProps): ReactNode {
   const state = useProjectsScreenState({
     projects,
+    commercialSummaries,
     modules,
     materials,
     edges,
@@ -888,6 +899,10 @@ export function ProjectsScreen({
           projectTemplates={projectTemplates}
           search={state.search}
           statusFilter={state.statusFilter}
+          commercialSummaries={commercialSummaries}
+          commercialSummariesLoading={commercialSummariesLoading}
+          commercialSummariesError={commercialSummariesError}
+          onRetryCommercialSummaries={onRetryCommercialSummaries}
           isTrulyEmpty={state.isTrulyEmpty}
           isFilterEmpty={state.isFilterEmpty}
           canMutate={canMutate}

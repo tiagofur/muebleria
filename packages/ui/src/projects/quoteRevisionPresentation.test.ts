@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { QuoteCommercialSnapshot, QuoteRevisionItem } from '@granete/storage';
+import type { Project } from '@granete/domain';
+import type {
+  ProjectCommercialSummary,
+  QuoteCommercialSnapshot,
+  QuoteRevisionItem,
+} from '@granete/storage';
 import {
   buildRevisionLines,
+  filterProjectsByCommercialStatus,
+  formatCommercialSummaryBadge,
   formatLifecycleStatus,
   formatRevisionUnitDimensions,
 } from './quoteRevisionPresentation';
@@ -199,6 +206,204 @@ describe('quoteRevisionPresentation', () => {
       expect(line.units).toHaveLength(1);
       expect(line.units[0]!.lifecycleStatus).toBe('removed');
       expect(line.units[0]!.dimensionsFormatted).toBe('500×720×400 mm');
+    });
+  });
+
+  describe('formatCommercialSummaryBadge', () => {
+    it('formats none/undefined as Sin cotización with draft modifier', () => {
+      expect(formatCommercialSummaryBadge(undefined)).toEqual({
+        label: 'Sin cotización',
+        modifier: 'status-badge--draft',
+        ariaLabel: 'Estado comercial: sin cotización',
+      });
+
+      const summaryNone: ProjectCommercialSummary = {
+        projectId: 'p-none',
+        projectName: 'Obra Sin Cotización',
+        quoteStatus: 'none',
+        isLegacy: false,
+        furnitureQuantity: 0,
+        currency: 'MXN',
+        commercialActivityAt: '2026-09-10T12:00:00Z',
+      };
+      expect(formatCommercialSummaryBadge(summaryNone)).toEqual({
+        label: 'Sin cotización',
+        modifier: 'status-badge--draft',
+        ariaLabel: 'Estado comercial: sin cotización',
+      });
+    });
+
+    it('formats accepted with revision prefix and accepted modifier', () => {
+      const summaryAccepted: ProjectCommercialSummary = {
+        projectId: 'p-acc',
+        projectName: 'Obra Aceptada',
+        quoteStatus: 'accepted',
+        quoteRevisionId: 'rev-1',
+        quoteRevisionNumber: 2,
+        isLegacy: false,
+        furnitureQuantity: 3,
+        saleTotal: 5000,
+        currency: 'MXN',
+        commercialActivityAt: '2026-09-10T12:00:00Z',
+      };
+      expect(formatCommercialSummaryBadge(summaryAccepted)).toEqual({
+        label: 'Q2 · Aceptada',
+        modifier: 'status-badge--accepted',
+        ariaLabel: 'Estado comercial: Q2 aceptada',
+      });
+    });
+
+    it('formats published with revision prefix and quoted modifier', () => {
+      const summaryPublished: ProjectCommercialSummary = {
+        projectId: 'p-pub',
+        projectName: 'Obra Publicada',
+        quoteStatus: 'published',
+        quoteRevisionId: 'rev-1',
+        quoteRevisionNumber: 1,
+        isLegacy: false,
+        furnitureQuantity: 1,
+        saleTotal: 2500,
+        currency: 'MXN',
+        commercialActivityAt: '2026-09-10T12:00:00Z',
+      };
+      expect(formatCommercialSummaryBadge(summaryPublished)).toEqual({
+        label: 'Q1 · Publicada',
+        modifier: 'status-badge--quoted',
+        ariaLabel: 'Estado comercial: Q1 publicada',
+      });
+    });
+
+    it('formats draft with draft modifier', () => {
+      const summaryDraft: ProjectCommercialSummary = {
+        projectId: 'p-draft',
+        projectName: 'Obra Borrador',
+        quoteStatus: 'draft',
+        quoteRevisionId: 'rev-d',
+        quoteRevisionNumber: 1,
+        isLegacy: false,
+        furnitureQuantity: 2,
+        currency: 'MXN',
+        commercialActivityAt: '2026-09-10T12:00:00Z',
+      };
+      expect(formatCommercialSummaryBadge(summaryDraft)).toEqual({
+        label: 'Q1 · Borrador',
+        modifier: 'status-badge--draft',
+        ariaLabel: 'Estado comercial: Q1 borrador',
+      });
+    });
+
+    it('formats superseded with inactive modifier', () => {
+      const summarySuperseded: ProjectCommercialSummary = {
+        projectId: 'p-sup',
+        projectName: 'Obra Reemplazada',
+        quoteStatus: 'superseded',
+        quoteRevisionId: 'rev-old',
+        quoteRevisionNumber: 1,
+        isLegacy: false,
+        furnitureQuantity: 1,
+        currency: 'MXN',
+        commercialActivityAt: '2026-09-10T12:00:00Z',
+      };
+      expect(formatCommercialSummaryBadge(summarySuperseded)).toEqual({
+        label: 'Q1 · Reemplazada',
+        modifier: 'status-badge--inactive',
+        ariaLabel: 'Estado comercial: Q1 reemplazada',
+      });
+    });
+  });
+
+  describe('filterProjectsByCommercialStatus', () => {
+    const makeProject = (id: string, name: string): Project =>
+      ({
+        id,
+        name,
+        customerId: '',
+        status: 'draft',
+        items: [],
+        createdAt: '2026-09-10T10:00:00Z',
+        updatedAt: '2026-09-10T10:00:00Z',
+        currency: 'MXN',
+        marginFactor: 1.35,
+      }) as unknown as Project;
+
+    const projects = [
+      makeProject('p-1', 'Cocina Central'),
+      makeProject('p-2', 'Placard Dormitorio'),
+      makeProject('p-3', 'Mueble TV'),
+      makeProject('p-4', 'Sin Cotizar'),
+    ];
+
+    const summaries = new Map<string, ProjectCommercialSummary>([
+      [
+        'p-1',
+        {
+          projectId: 'p-1',
+          projectName: 'Cocina Central',
+          quoteStatus: 'accepted',
+          quoteRevisionNumber: 2,
+          isLegacy: false,
+          furnitureQuantity: 4,
+          currency: 'MXN',
+          commercialActivityAt: '2026-09-10T10:00:00Z',
+        },
+      ],
+      [
+        'p-2',
+        {
+          projectId: 'p-2',
+          projectName: 'Placard Dormitorio',
+          quoteStatus: 'published',
+          quoteRevisionNumber: 1,
+          isLegacy: false,
+          furnitureQuantity: 1,
+          currency: 'MXN',
+          commercialActivityAt: '2026-09-10T10:00:00Z',
+        },
+      ],
+      [
+        'p-3',
+        {
+          projectId: 'p-3',
+          projectName: 'Mueble TV',
+          quoteStatus: 'draft',
+          quoteRevisionNumber: 1,
+          isLegacy: false,
+          furnitureQuantity: 1,
+          currency: 'MXN',
+          commercialActivityAt: '2026-09-10T10:00:00Z',
+        },
+      ],
+    ]);
+
+    it('returns all projects when filter is all', () => {
+      const result = filterProjectsByCommercialStatus(projects, '', 'all', [], summaries);
+      expect(result).toHaveLength(4);
+    });
+
+    it('filters by commercial status: accepted, published, draft, none', () => {
+      expect(
+        filterProjectsByCommercialStatus(projects, '', 'accepted', [], summaries).map((p) => p.id),
+      ).toEqual(['p-1']);
+
+      expect(
+        filterProjectsByCommercialStatus(projects, '', 'published', [], summaries).map((p) => p.id),
+      ).toEqual(['p-2']);
+
+      expect(
+        filterProjectsByCommercialStatus(projects, '', 'draft', [], summaries).map((p) => p.id),
+      ).toEqual(['p-3']);
+
+      expect(
+        filterProjectsByCommercialStatus(projects, '', 'none', [], summaries).map((p) => p.id),
+      ).toEqual(['p-4']);
+    });
+
+    it('combines text query with commercial status filter', () => {
+      const result = filterProjectsByCommercialStatus(projects, 'cocina', 'accepted', [], summaries);
+      expect(result.map((p) => p.id)).toEqual(['p-1']);
+
+      const noMatch = filterProjectsByCommercialStatus(projects, 'placard', 'accepted', [], summaries);
+      expect(noMatch).toEqual([]);
     });
   });
 });
