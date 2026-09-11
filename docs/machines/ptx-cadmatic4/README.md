@@ -76,9 +76,24 @@ determinista queda sólo para texto auxiliar. MATERIALS.BOOK emite el valor
 conservador 1: el dossier sólo documenta que cuenta tableros [S03 pp.134–135]
 y "total de tableros del job" NO está establecido.
 `ptx/cutPlanPtxGolden.ts` congela un candidato real de laboratorio
-etiquetado `LAB_FIXTURE NOT_MACHINE_VALIDATED`. El compilador sigue sin
-conectarse al perfil CADmatic 4, al adapter productivo, al botón de descarga
-o al exportador legacy `ptxCutPlanExport`.
+etiquetado `LAB_FIXTURE NOT_MACHINE_VALIDATED`.
+
+**Integración candidata (#650 PR 6):** el perfil `ptx-cadmatic-4@r2`
+(`PTX_CADMATIC_4_CANDIDATE_PROFILE`, nueva revisión inmutable; r1 se conserva
+como constante histórica) declara como dimensiones efectivas —con evidencia
+de implementación en este repo— headerVersion 1, mm, ASCII+CRLF (elección
+conservadora, no requisito del receptor), decimalPlaces 2 con preflight de
+representabilidad exacta, includeVectors false, supportsPositiveTrim false y
+el subconjunto FUNCTION 0..3; lo que sigue sin evidencia es del receptor
+(fieldAvailability/recordOrdering/caracteres/nombres de archivo) y el estado
+sigue NOT_TESTED. El adapter `granete-ptx` v1.1.0 rutea POR REVISIÓN EXACTA:
+r2 → compilador documentado (preflight real: ready ⇒ serialize), cualquier
+otra revisión → serializer legacy inalterado (golden #348 intacto). La
+descarga EXISTENTE (#591: unified/by-material/ZIP + manifest con
+cutPlan/profile/adapter/hash, claim `notClaimed`) entrega el candidato
+cuando el usuario selecciona ese perfil; sin botón paralelo. Paridad
+Go/TS actualizada (catálogo compartido). Todo sigue sin certificar
+CADLink/CADmatic ni habilitar fabricación.
 
 ## Relación con autoridades existentes
 

@@ -55,17 +55,40 @@ describe('resolveManufacturingOutputTarget', () => {
     expect(result.readiness.reasons).toEqual([]);
   });
 
-  it('blocked CADmatic 4 surfaces missing-evidence reasons and NEVER falls back', () => {
-    const result = resolveManufacturingOutputTarget(cuttingSelection('ptx-cadmatic-4'), 'cutting');
-    expect(result.status).toBe('CONFIGURED');
-    if (result.status !== 'CONFIGURED') return;
-    expect(result.profileLabel).toBe('ptx-cadmatic-4@r1');
-    expect(result.readiness.ready).toBe(false);
-    const codes = result.readiness.reasons.map((r) => r.code);
-    expect(codes).toContain('FIELD_FORMAT_EVIDENCE_REQUIRED');
-    expect(codes).not.toContain('SERIALIZER_NOT_IMPLEMENTED');
-    // The selected profile stays CADmatic 4 — no generic substitution.
-    expect(result.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
+  it('CADmatic 4: la revisión candidata r2 resuelve lista; el pin histórico r1 queda stale sin fallback', () => {
+    const current = resolveManufacturingOutputTarget(cuttingSelection('ptx-cadmatic-4'), 'cutting');
+    expect(current.status).toBe('CONFIGURED');
+    if (current.status !== 'CONFIGURED') return;
+    expect(current.profileLabel).toBe('ptx-cadmatic-4@r2');
+    expect(current.supportStatus).toBe('NOT_TESTED');
+    expect(current.readiness.ready).toBe(true);
+    expect(current.readiness.reasons).toEqual([]);
+
+    const stale = {
+      ...cuttingSelection('ptx-cadmatic-4'),
+      outputCompatibilityProfileRevisionId: 'r1',
+    };
+    const staleResult = resolveManufacturingOutputTarget(stale, 'cutting');
+    expect(staleResult.status).toBe('CONFIGURED');
+    if (staleResult.status !== 'CONFIGURED') return;
+    expect(staleResult.profileLabel).toBe('ptx-cadmatic-4@r2');
+    expect(staleResult.readiness.ready).toBe(false);
+    expect(staleResult.readiness.reasons.map((r) => r.code)).toContain('PROFILE_DIGEST_MISMATCH');
+    // Still the selected profile — no generic substitution.
+    expect(staleResult.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
+  });
+
+  it('CADmatic 3/5 siguen bloqueados por evidencia ausente y NUNCA caen al genérico', () => {
+    for (const profileId of ['ptx-cadmatic-3', 'ptx-cadmatic-5']) {
+      const result = resolveManufacturingOutputTarget(cuttingSelection(profileId), 'cutting');
+      expect(result.status).toBe('CONFIGURED');
+      if (result.status !== 'CONFIGURED') return;
+      expect(result.readiness.ready).toBe(false);
+      const codes = result.readiness.reasons.map((r) => r.code);
+      expect(codes).toContain('FIELD_FORMAT_EVIDENCE_REQUIRED');
+      expect(codes).not.toContain('SERIALIZER_NOT_IMPLEMENTED');
+      expect(result.selection.outputCompatibilityProfileId).toBe(profileId);
+    }
   });
 
   it('machining with pending MPR serializer surfaces SERIALIZER_NOT_IMPLEMENTED', () => {
@@ -221,7 +244,7 @@ describe('generateSelectedCuttingOutput — bundling mode (#591)', () => {
   it('a blocked target still throws before any mode is applied (no silent fallback)', async () => {
     const plan = fixturePlan();
     await expect(
-      generateSelectedCuttingOutput(plan, cuttingSelection('ptx-cadmatic-4'), 'by-material'),
+      generateSelectedCuttingOutput(plan, cuttingSelection('ptx-cadmatic-3'), 'by-material'),
     ).rejects.toThrow();
   });
 

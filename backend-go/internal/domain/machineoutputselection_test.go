@@ -33,8 +33,8 @@ func validCuttingSelection() MachineOutputSelection {
 		OutputProfileID:             "ptx-generic",
 		OutputProfileRevisionID:     "r1",
 		AdapterID:                   "granete-ptx",
-		AdapterVersion:              "1.0.0",
-		AdapterImplementationDigest: "39df10ba24528b5d402a940ac2e6f9fc20b735011468013090cfc78f88511a28",
+		AdapterVersion:              "1.1.0",
+		AdapterImplementationDigest: "b56de3839ac9a0da94aa9c90b62d56cad19aefea27d365ff934cac46c1f70d8b",
 	}
 }
 

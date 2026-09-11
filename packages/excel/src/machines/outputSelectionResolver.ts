@@ -15,11 +15,16 @@ import {
   ResolvedManufacturingOutputTarget,
 } from '@granete/domain';
 import {
+  divideRegion,
+  type CutPlanPlacedPiece,
+  type CutProgramInput,
+} from '@granete/domain';
+import {
   CLIENT_A_BHX050_PROFILE,
   CLIENT_A_HPP250_PROFILE,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_3_PROFILE,
-  PTX_CADMATIC_4_PROFILE,
+  PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
@@ -37,7 +42,10 @@ export const KNOWN_MACHINE_PROFILES: readonly ClientMachineProfileData[] = [
 export const KNOWN_OUTPUT_PROFILES: readonly OutputCompatibilityProfile[] = [
   PTX_GENERIC_PROFILE,
   PTX_CADMATIC_3_PROFILE,
-  PTX_CADMATIC_4_PROFILE,
+  // r2 (documented-PTX compiler route) is the CURRENT selectable revision of
+  // the CADmatic 4 profile; r1 keeps existing as a historical constant, and
+  // selections pinned to it surface an actionable stale-revision blocker.
+  PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
@@ -129,7 +137,7 @@ export function resolveManufacturingOutputTarget(
   if (adapter && profile && machine && reasons.length === 0) {
     const placeholderJob =
       operation === 'cutting'
-        ? { jobId: 'readiness-probe', provenance: emptyProvenance(), cutPlan: emptyCutPlan() }
+        ? { jobId: 'readiness-probe', provenance: emptyProvenance(), cutPlan: probeCutPlan() }
         : { jobId: 'readiness-probe', provenance: emptyProvenance(), drilling: emptyDrilling() };
     reasons.push(...adapter.canSerialize(placeholderJob as never, profile).reasons);
   }
@@ -154,34 +162,110 @@ function emptyProvenance() {
   return { projectId: 'readiness-probe', generatedAt: '1970-01-01T00:00:00.000Z' };
 }
 
-function emptyCutPlan() {
-  // Minimal shape for readiness probing: canSerialize only inspects
-  // dimensions/profiles (and machining operations), never plan contents.
+/**
+ * Representative COMPILABLE probe plan: the CADmatic 4 candidate revision
+ * runs a real compilation preflight inside canSerialize, so the resolver's
+ * readiness probe must be a plan the documented compiler accepts (trim 0,
+ * uniform kerf, ASCII identities, one validated program). Profiles routed to
+ * the legacy serializer never inspect plan contents, so they are unaffected.
+ */
+function probeCutPlan(): CutPlan {
+  const board = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 400 };
+  const division = divideRegion(board, 'x', 300, 4);
+  const program: CutProgramInput = {
+    schemaVersion: 'granete.cut-program.v1',
+    boardRegionId: 'board',
+    regions: [
+      { regionId: 'board', rect: board },
+      { regionId: 'probe:kept', rect: division.keptRect },
+      { regionId: 'probe:rest', rect: division.restRect! },
+    ],
+    divisions: [
+      {
+        cutId: 'probe-cut-1',
+        parentRegionId: 'board',
+        axis: 'x',
+        keptExtentMm: 300,
+        kerfMm: 4,
+        keptRegionId: 'probe:kept',
+        restRegionId: 'probe:rest',
+      },
+    ],
+    terminals: [
+      { regionId: 'probe:kept', kind: 'piece', pieceRef: 'probe-piece-s0' },
+      { regionId: 'probe:rest', kind: 'waste' },
+    ],
+  };
+  const piece: CutPlanPlacedPiece = {
+    id: 'probe-piece-s0',
+    partCode: 'PROBE',
+    partName: 'Probe',
+    moduleCode: 'M0',
+    labelRef: 'probe-piece-s0',
+    materialName: 'Probe Board 18',
+    materialCode: 'PROBE18',
+    xMm: 0,
+    yMm: 0,
+    lengthMm: 300,
+    widthMm: 400,
+    originalLengthMm: 300,
+    originalWidthMm: 400,
+    grain: 1,
+    rotated: false,
+    L1: 0,
+    L2: 0,
+    W1: 0,
+    W2: 0,
+    thicknessMm: 18,
+    sheetIndex: 0,
+    stripIndex: 0,
+    cutSequenceNumber: 1,
+  };
   return {
-    id: 'probe',
+    id: 'readiness-probe',
     projectId: 'readiness-probe',
     generatedAt: '1970-01-01T00:00:00.000Z',
     version: 1,
     isFrozen: true,
     config: {
-      sawKerfMm: 4.4,
-      trim: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
+      sawKerfMm: 4,
+      trim: { topMm: 0, bottomMm: 0, leftMm: 0, rightMm: 0 },
       deductEdgeBand: true,
       allowRotationNoGrain: true,
       minRemnantWidthMm: 400,
       minRemnantLengthMm: 600,
       preferLongitudinalRips: true,
     },
-    sheets: [],
+    sheets: [
+      {
+        sheetIndex: 0,
+        strategy: 'saw-guillotine',
+        materialCode: 'PROBE18',
+        materialName: 'Probe Board 18',
+        sheetWidthMm: 400,
+        sheetLengthMm: 600,
+        thicknessMm: 18,
+        pieces: [piece],
+        remnants: [],
+        instructions: [],
+        cutProgram: program,
+        netPiecesAreaM2: 0.12,
+        grossSheetAreaM2: 0.24,
+        usableRemnantAreaM2: 0,
+        wasteAreaM2: 0.12,
+        wastePercent: 50,
+        yieldPercent: 50,
+      },
+    ],
     stats: {
-      totalSheets: 0,
-      totalPieces: 0,
-      totalGrossAreaM2: 0,
-      totalNetPiecesAreaM2: 0,
+      totalSheets: 1,
+      totalPieces: 1,
+      totalGrossAreaM2: 0.24,
+      totalNetPiecesAreaM2: 0.12,
       totalUsefulRemnantsAreaM2: 0,
-      totalWasteAreaM2: 0,
-      globalWastePercent: 0,
-      globalYieldPercent: 0,
+      totalWasteAreaM2: 0.12,
+      globalWastePercent: 50,
+      globalYieldPercent: 50,
       byMaterial: [],
     },
     usefulRemnants: [],

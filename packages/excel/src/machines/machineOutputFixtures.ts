@@ -13,7 +13,14 @@ import type {
   ResolvedCuttingJob,
   ResolvedMachiningJob,
 } from '@granete/domain';
+import { optimizeCutPlan } from '@granete/domain';
 import { buildPtxValidationCutPlan, PTX_VALIDATION_FIXTURE_ID } from '../ptxValidationFixture';
+import {
+  GOLDEN_CONFIG,
+  GOLDEN_MATERIALS,
+  GOLDEN_PROJECT_ID,
+  GOLDEN_ROWS,
+} from '../ptx/cutPlanPtxGolden';
 
 export const FIXTURE_CUTTING_JOB_ID = 'fixture-cutting-001';
 export const FIXTURE_MACHINING_JOB_ID = 'fixture-machining-001';
@@ -51,6 +58,26 @@ export function buildFixtureCuttingJobPartialProvenance(): ResolvedCuttingJob {
   const { productionReleaseId: _r, designRevisionId: _d, bomFingerprint: _b, ...partial } =
     job.provenance;
   return { ...job, provenance: partial };
+}
+
+/**
+ * Cutting job the DOCUMENTED PTX compiler route accepts (#650 CADmatic 4
+ * candidate): a real optimizeCutPlan result over the frozen #657 golden
+ * input (deterministic, trim 0, every sheet carries its validated
+ * CutProgram). Used to exercise the candidate adapter end to end.
+ */
+export function buildCad4CandidateCuttingJob(): ResolvedCuttingJob {
+  const cutPlan = optimizeCutPlan(GOLDEN_PROJECT_ID, GOLDEN_ROWS, GOLDEN_MATERIALS, GOLDEN_CONFIG);
+  return {
+    jobId: 'fixture-cad4-candidate-001',
+    provenance: {
+      projectId: GOLDEN_PROJECT_ID,
+      generatedAt: FIXTURE_JOB_GENERATED_AT,
+      cutPlanId: cutPlan.id,
+      cutPlanVersion: cutPlan.version,
+    },
+    cutPlan,
+  };
 }
 
 const FIXTURE_MACHINING_PATTERN = {

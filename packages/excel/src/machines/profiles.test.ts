@@ -5,6 +5,7 @@ import {
   CLIENT_A_HPP250_PROFILE,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_3_PROFILE,
+  PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_4_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
@@ -16,6 +17,7 @@ const ALL_PROFILES = [
   PTX_GENERIC_PROFILE,
   PTX_CADMATIC_3_PROFILE,
   PTX_CADMATIC_4_PROFILE,
+  PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
@@ -51,6 +53,40 @@ describe('machine output profiles', () => {
       expect(profile.targetSoftware?.provenance).toBe('FIELD_VERIFICATION_REQUIRED');
       expect(profile.supportStatus).toBe('NOT_TESTED');
     }
+  });
+
+  it('CADmatic 4 r2 (candidato) declara todas las opciones efectivas y sigue NOT_TESTED', () => {
+    expect(PTX_CADMATIC_4_CANDIDATE_PROFILE.ref).toEqual({
+      outputCompatibilityProfileId: 'ptx-cadmatic-4',
+      revisionId: 'r2',
+    });
+    expect(PTX_CADMATIC_4_CANDIDATE_PROFILE.dimensions).toEqual({
+      fileExtension: 'ptx',
+      encoding: 'ascii',
+      lineEnding: 'crlf',
+      decimalPlaces: 2,
+      headerVersion: '1',
+      unit: 'mm',
+      headerOrigin: 0,
+      trimType: 1,
+      includeVectors: false,
+      supportsPositiveTrim: false,
+      supportedFunctions: '0,1,2,3',
+    });
+    // Lo que sigue sin evidencia es del RECEPTOR, no de la sintaxis que este
+    // repo implementa: el estado de campo NO se promueve por metadata.
+    expect(PTX_CADMATIC_4_CANDIDATE_PROFILE.pendingEvidence).toEqual([
+      'fieldAvailability',
+      'recordOrdering',
+      'characterRestrictions',
+      'filenameConstraints',
+    ]);
+    expect(PTX_CADMATIC_4_CANDIDATE_PROFILE.supportStatus).toBe('NOT_TESTED');
+    expect(PTX_CADMATIC_4_CANDIDATE_PROFILE.targetSoftware).toEqual({
+      name: 'CADmatic',
+      version: '4',
+      provenance: 'FIELD_VERIFICATION_REQUIRED',
+    });
   });
 
   it('SAW and MPR profiles declare zero evidenced dimensions', () => {
