@@ -40,7 +40,81 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
     onImportNesting,
     quoteAuthority,
   } = useProjectDetail();
-  const currency = quoteAuthority?.kind === 'ready' ? quoteAuthority.currency : project.currency;
+  if (quoteAuthority) {
+    const isReady = quoteAuthority.kind === 'ready';
+    return (
+      <aside
+        className={`project-totals project-totals--sticky${isReady && breakdown ? '' : ' project-totals--blocked'}`}
+        aria-label="Totales de cotización"
+        aria-live="polite"
+      >
+        <div className="project-totals__header">
+          <div className="project-totals__heading">
+            <h3 className="project-totals__title">
+              {isReady ? `Totales congelados · Q${quoteAuthority.revisionNumber}` : 'Totales no disponibles'}
+            </h3>
+            {isReady ? (
+              <span
+                className="project-totals__frozen-badge"
+                title={`Precios capturados el ${formatIsoDate(quoteAuthority.capturedAt)}`}
+              >
+                Precios congelados
+              </span>
+            ) : null}
+          </div>
+          {quoteAuthority.kind === 'loading' ? (
+            <InlineLoading label="Cargando totales congelados…" data-testid="breakdown-loading" />
+          ) : null}
+        </div>
+
+        {quoteAuthority.kind === 'error' || quoteAuthority.kind === 'empty' || quoteAuthority.kind === 'legacy' ? (
+          <p className="project-totals__error" role="alert" data-testid="breakdown-error">
+            <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
+            <span>{quoteAuthority.message}</span>
+            {quoteAuthority.kind === 'error' ? (
+              <button type="button" className="btn btn--secondary btn--small" onClick={quoteAuthority.onRetry}>
+                Reintentar
+              </button>
+            ) : null}
+          </p>
+        ) : null}
+        {isReady && quoteAuthority.staleMessage ? (
+          <p className="project-totals__error" role="alert">
+            <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
+            <span>{quoteAuthority.staleMessage}</span>
+            <button type="button" className="btn btn--secondary btn--small" onClick={quoteAuthority.onRetry}>
+              Reintentar
+            </button>
+          </p>
+        ) : null}
+
+        {isReady && breakdown ? (
+          <dl className="project-totals__grid">
+            {showCosts ? (
+              <>
+                <div><dt>Materiales</dt><dd>{formatProjectMoney(breakdown.materialsCost, quoteAuthority.currency)}</dd></div>
+                <div><dt>Cantos</dt><dd>{formatProjectMoney(breakdown.edgeTotal, quoteAuthority.currency)}</dd></div>
+                <div><dt>Herrajes</dt><dd>{formatProjectMoney(breakdown.hardwareTotal, quoteAuthority.currency)}</dd></div>
+                <div><dt>Costo directo</dt><dd>{formatProjectMoney(breakdown.directCost, quoteAuthority.currency)}</dd></div>
+                <div><dt>MO modular</dt><dd>{formatProjectMoney(breakdown.laborModular, quoteAuthority.currency)}</dd></div>
+                <div><dt>Factor margen</dt><dd>{breakdown.marginFactor.toFixed(2)}</dd></div>
+              </>
+            ) : null}
+            <div className="project-totals__sale-row">
+              <dt>Precio de venta</dt>
+              <dd className="project-totals__sale">{formatProjectMoney(breakdown.salePrice, quoteAuthority.currency)}</dd>
+            </div>
+          </dl>
+        ) : isReady ? (
+          <p className="project-totals__error" role="alert">
+            El snapshot exacto no contiene totales disponibles. Creá una nueva revisión.
+          </p>
+        ) : null}
+      </aside>
+    );
+  }
+
+  const currency = project.currency;
 
   return (
     <aside
@@ -55,37 +129,18 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
       <div className="project-totals__header">
         <div className="project-totals__heading">
           <h3 className="project-totals__title">
-            {quoteAuthority?.kind === 'ready'
-              ? `Totales congelados · Q${quoteAuthority.revisionNumber}`
-              : 'Totales'}
+            Totales
           </h3>
-          {quoteAuthority?.kind === 'ready' ? (
-            <span
-              className="project-totals__frozen-badge"
-              title={`Precios capturados el ${formatIsoDate(quoteAuthority.capturedAt ?? '')}`}
-            >
-              Precios congelados
-            </span>
-          ) : null}
         </div>
         {breakdownLoading ? (
           <InlineLoading label="Recalculando…" data-testid="breakdown-loading" />
         ) : null}
       </div>
 
-      {breakdownError || (quoteAuthority && 'message' in quoteAuthority) ? (
+      {breakdownError ? (
         <p className="project-totals__error" role="alert" data-testid="breakdown-error">
           <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
-          <span>{breakdownError ?? (quoteAuthority && 'message' in quoteAuthority ? quoteAuthority.message : '')}</span>
-        </p>
-      ) : null}
-      {quoteAuthority?.staleMessage ? (
-        <p className="project-totals__error" role="alert">
-          <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
-          <span>{quoteAuthority.staleMessage}</span>
-          <button type="button" className="btn btn--secondary btn--small" onClick={quoteAuthority.onRetry}>
-            Reintentar
-          </button>
+          <span>{breakdownError}</span>
         </p>
       ) : null}
 

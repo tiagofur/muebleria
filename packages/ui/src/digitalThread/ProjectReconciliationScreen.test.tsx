@@ -462,7 +462,7 @@ function renderScreen(props: {
   });
   const keys = projectReconciliationQueryKeys(['session', 'scope-a'], PROJECT_ID);
 
-  return render(
+  const rendered = render(
     <QueryClientProvider client={queryClient}>
       <ProjectReconciliationScreen
         baseUrl={API}
@@ -479,6 +479,7 @@ function renderScreen(props: {
       />
     </QueryClientProvider>,
   );
+  return { ...rendered, queryClient, keys };
 }
 
 describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
@@ -495,6 +496,13 @@ describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
   it('query keys carry session scope, project and exact Q/R context', () => {
     const keys = projectReconciliationQueryKeys(['session', 'gen-1', 'org-1'], PROJECT_ID);
     expect(keys.root).toEqual(['project-reconciliation', 'session', 'gen-1', 'org-1', PROJECT_ID]);
+    expect(keys.quoteAuthority).toEqual([
+      'quote-revision-authority',
+      'session',
+      'gen-1',
+      'org-1',
+      PROJECT_ID,
+    ]);
     expect(keys.reconciliation('q1', 'r1')).not.toEqual(keys.reconciliation('q2', 'r1'));
     expect(keys.reconciliation('q1', 'r1')).not.toEqual(keys.reconciliation('q1', 'r2'));
   });
@@ -1142,10 +1150,11 @@ describe('Quote revision lifecycle UI (#571 / WEB-DT-4)', () => {
       status: 'draft',
     };
     const fetchMock = setupFetchMock({ quoteRevisions: [mockQuoteRevisions[0]!, draftQuote] });
-    renderScreen({
+    const { queryClient, keys } = renderScreen({
       initialContext: { quoteRevisionId: draftQuote.id, designId: DESIGN_1_ID, designRevisionId: REV_1_ID },
       canMutateQuote: true,
     });
+    queryClient.setQueryData(keys.quoteAuthority, [draftQuote]);
 
     await waitFor(() => {
       expect(screen.getByTestId('quote-lifecycle-panel')).toBeVisible();
@@ -1161,6 +1170,7 @@ describe('Quote revision lifecycle UI (#571 / WEB-DT-4)', () => {
         expect.objectContaining({ method: 'POST' }),
       );
     });
+    expect(queryClient.getQueryState(keys.quoteAuthority)?.isInvalidated).toBe(true);
   });
 
   it('renders accept button for published revision, opens confirmation modal, and accepts', async () => {

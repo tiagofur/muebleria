@@ -42,6 +42,34 @@ export interface ProjectDetailCatalogs {
   readonly hardware: readonly Hardware[];
 }
 
+export type ProjectDetailQuoteAuthority =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'error'; readonly message: string; readonly onRetry: () => void }
+  | { readonly kind: 'empty'; readonly message: string }
+  | {
+      readonly kind: 'legacy';
+      readonly revisionId: string;
+      readonly revisionNumber: number;
+      readonly status: 'draft' | 'published' | 'accepted' | 'superseded';
+      readonly message: string;
+      readonly staleMessage?: string;
+      readonly onRetry: () => void;
+    }
+  | {
+      readonly kind: 'ready';
+      readonly revisionId: string;
+      readonly revisionNumber: number;
+      readonly status: 'draft' | 'published' | 'accepted' | 'superseded';
+      readonly projectName: string;
+      readonly customerId: string;
+      readonly customerName: string;
+      readonly furnitureQuantity: number;
+      readonly currency: string;
+      readonly capturedAt: string;
+      readonly staleMessage?: string;
+      readonly onRetry: () => void;
+    };
+
 // ─── Item handlers ──────────────────────────────────────────────────
 
 export interface ProjectDetailItemHandlers {
@@ -95,19 +123,7 @@ export interface ProjectDetailContextValue {
   readonly catalogStructures: readonly Structure[];
   readonly customers: readonly Customer[];
   readonly ownerLabels: Readonly<Record<string, string>>;
-  readonly quoteAuthority?: {
-    readonly kind: 'loading' | 'error' | 'empty' | 'legacy' | 'ready';
-    readonly revisionId?: string;
-    readonly revisionNumber?: number;
-    readonly status?: 'draft' | 'published' | 'accepted' | 'superseded';
-    readonly projectName?: string;
-    readonly customerName?: string;
-    readonly currency?: string;
-    readonly capturedAt?: string;
-    readonly message?: string;
-    readonly staleMessage?: string;
-    readonly onRetry?: () => void;
-  };
+  readonly quoteAuthority?: ProjectDetailQuoteAuthority;
 
   // --- Breakdown / totals ---
   readonly breakdown: QuoteBreakdown | null;

@@ -933,11 +933,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     baseUrl: DEFAULT_API_BASE,
     token: session === 'auth' ? authToken : null,
     projectId: selectedProjectId,
-    queryKey: [
-      'quote-revision-authority',
-      ...(sessionScope ? sessionScopeKey(sessionScope) : ['no-session']),
-      selectedProjectId,
-    ],
+    queryKey: projectReconciliationQueryKeys(
+      sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+      selectedProjectId ?? 'no-project',
+    ).quoteAuthority,
   });
   const quoteAuthorityView = quoteAuthority.kind === 'idle'
     ? undefined
@@ -948,7 +947,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           revisionNumber: quoteAuthority.revision.revisionNumber,
           status: quoteAuthority.revision.status,
           projectName: quoteAuthority.snapshot.project.name,
+          customerId: quoteAuthority.snapshot.customer.id,
           customerName: quoteAuthority.snapshot.customer.name,
+          furnitureQuantity: quoteAuthority.snapshot.lines.reduce(
+            (total, line) => total + line.quantity,
+            0,
+          ),
           currency: quoteAuthority.snapshot.currency,
           capturedAt: quoteAuthority.snapshot.capturedAt,
           staleMessage: quoteAuthority.staleMessage,

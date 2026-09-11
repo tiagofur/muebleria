@@ -90,6 +90,13 @@ export function ProjectDetailHeader({
     canMarkProduced &&
     !hasOpenInProduction;
 
+  const frozenAuthority = quoteAuthority?.kind === 'ready' ? quoteAuthority : null;
+  const frozenCustomer = frozenAuthority
+    ? customers.find((customer) => customer.id === frozenAuthority.customerId)
+    : null;
+  const identityUnavailable = quoteAuthority && !frozenAuthority;
+  const detailCurrency = frozenAuthority?.currency ?? (!quoteAuthority ? project.currency : null);
+
   return (
     <header className="workspace-chrome" data-testid="project-detail-chrome">
       <div className="workspace-chrome__lead">
@@ -105,7 +112,13 @@ export function ProjectDetailHeader({
         <div className="workspace-chrome__identity">
           <div className="workspace-chrome__title-row">
             <h2 className="workspace-chrome__title">
-              {quoteAuthority?.kind === 'ready' ? quoteAuthority.projectName : project.name}
+              {frozenAuthority
+                ? frozenAuthority.projectName
+                : quoteAuthority?.kind === 'loading'
+                  ? 'Cargando cotización…'
+                  : identityUnavailable
+                    ? 'Cotización comercial no disponible'
+                    : project.name}
             </h2>
             {quoteAuthority?.kind === 'ready' ? (
               <span className={`status-badge status-badge--${quoteAuthority.status === 'accepted' ? 'accepted' : quoteAuthority.status === 'published' ? 'quoted' : 'draft'}`}>
@@ -169,31 +182,41 @@ export function ProjectDetailHeader({
           </div>
 
           <p className="workspace-chrome__subtitle">
-            {quoteAuthority?.kind === 'ready'
-              ? quoteAuthority.customerName
-              : resolveCustomerName(project.customerId, customers)}
-            {(() => {
-              const cust = customers.find((c) => c.id === project.customerId);
-              return cust?.phone ? (
+            {frozenAuthority
+              ? frozenAuthority.customerName
+              : quoteAuthority
+                ? 'Identidad, moneda y cantidades no disponibles sin una revisión exacta.'
+                : resolveCustomerName(project.customerId, customers)}
+            {frozenAuthority ? (
+              frozenCustomer?.phone ? (
                 <>
                   <span className="workspace-chrome__dot" aria-hidden>·</span>
                   <WhatsAppButton
-                    customerName={quoteAuthority?.kind === 'ready' ? quoteAuthority.customerName : cust.name}
-                    phone={cust.phone}
-                    projectName={quoteAuthority?.kind === 'ready' ? quoteAuthority.projectName : project.name}
-                    quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, quoteAuthority?.kind === 'ready' ? quoteAuthority.currency : project.currency) : undefined}
+                    customerName={frozenAuthority.customerName}
+                    phone={frozenCustomer.phone}
+                    projectName={frozenAuthority.projectName}
+                    quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, frozenAuthority.currency) : undefined}
                     workshopName={ctx.workshopName}
                     compact
                     label="WhatsApp"
                   />
                 </>
-              ) : null;
-            })()}
-            <span className="workspace-chrome__dot" aria-hidden>·</span>
-            {project.items.length} mueble{project.items.length === 1 ? '' : 's'}
-            <span className="workspace-chrome__dot" aria-hidden>·</span>
-            {quoteAuthority?.kind === 'ready' ? quoteAuthority.currency : project.currency}
-            {ctx.showCosts ? (
+              ) : (
+                <>
+                  <span className="workspace-chrome__dot" aria-hidden>·</span>
+                  Teléfono no disponible para Q{frozenAuthority.revisionNumber}
+                </>
+              )
+            ) : null}
+            {frozenAuthority || !quoteAuthority ? (
+              <>
+                <span className="workspace-chrome__dot" aria-hidden>·</span>
+                {frozenAuthority?.furnitureQuantity ?? project.items.length} mueble{(frozenAuthority?.furnitureQuantity ?? project.items.length) === 1 ? '' : 's'}
+                <span className="workspace-chrome__dot" aria-hidden>·</span>
+                {detailCurrency}
+              </>
+            ) : null}
+            {!quoteAuthority && ctx.showCosts ? (
               <>
                 <span className="workspace-chrome__dot" aria-hidden>·</span>
                 Margen ×{project.marginFactor.toFixed(2)}
@@ -205,7 +228,7 @@ export function ProjectDetailHeader({
       <div className="workspace-chrome__total" data-testid="project-detail-total">
         <span className="workspace-chrome__total-label">Precio de venta</span>
         <span className={chromeSale == null ? 'workspace-chrome__total-value workspace-chrome__total-value--muted' : 'workspace-chrome__total-value'}>
-          {chromeSale == null ? '—' : formatProjectMoney(chromeSale, quoteAuthority?.kind === 'ready' ? quoteAuthority.currency : project.currency)}
+          {chromeSale == null || !detailCurrency ? '—' : formatProjectMoney(chromeSale, detailCurrency)}
         </span>
       </div>
       <div
@@ -231,7 +254,10 @@ export function ProjectDetailHeader({
           <button
             type="button"
             className="btn btn--primary"
-            onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+            onClick={() => onOpenReconciliation(
+              project.id,
+              quoteAuthority.kind === 'legacy' ? quoteAuthority.revisionId : undefined,
+            )}
           >
             Crear nueva revisión
           </button>

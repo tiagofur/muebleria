@@ -538,6 +538,17 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId('command-error-alert')).toContainText('aceptada');
     await expect(page.getByTestId('approval-success')).toHaveCount(0);
 
+    // Prime the Cotizaciones authority cache while Q1 is still accepted. The
+    // lifecycle commands below must invalidate this exact tenant/session key,
+    // otherwise returning within the query stale window would keep showing Q1.
+    await page.goto(`/quotes/${seeded.projectId}`);
+    await expect(page.getByTestId('project-detail-chrome')).toContainText('Q1 · Aceptada');
+    await page.goto(
+      `/quotes/${seeded.projectId}/reconciliacion?qrev=${q2DraftValue}&design=${seeded.designId}&rev=${seeded.r2Id}`,
+    );
+    await expect(page.getByTestId('exact-context-header')).toContainText('Q2');
+    await expect(page.getByTestId('exact-context-header')).toContainText('Borrador');
+
     // ------------------------------------------------------------------
     // 7. Commercial lifecycle: publish and accept Q2 through Web action,
     //    atomically superseding Q1 server-side in one transaction (no SQL!).

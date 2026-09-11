@@ -641,3 +641,17 @@ EOL.
 - User-authorized correction on `feat/640-design-artifact-health`, including the cohesive `size:exception` already applied to the PR.
 - Scope: enforce owner-partition and immutable integrity pins through signed GET; remove bearer-only artifact reads; add API/app-role RLS and post-mint mutation proofs; fail preview closed on unknown health; repair UI tokens/icons and evidence.
 - No merge or issue closure. Delivery remains `IMPLEMENTED_PENDING_REVIEW` after verification and exact remote SHA readback.
+
+## PR #653 — issue #642 Slice 2a review correction
+
+- Cotizaciones now fails closed across loading/error/empty/legacy identity and
+  totals states; ready UI uses only exact QuoteRevision snapshot identity,
+  currency, quantity and permitted frozen totals.
+- WhatsApp resolves the phone by the snapshot customer ID, never the mutable
+  Project customer, and lifecycle commands invalidate the shared scoped
+  authority key so a return after Q1→Q2 acceptance cannot show cached Q1.
+- Evidence: focused UI 82/82; full workspace JS PASS (UI 1695/1695, web
+  444/444); typecheck/OpenAPI/diff PASS; real Chromium + Go + PostgreSQL 4/4.
+- No merge, issue closure or size-governance mutation. Status remains
+  `IMPLEMENTED_PENDING_REVIEW`; see
+  `progress/implementation_642_quote_revision_consumers.md`.
