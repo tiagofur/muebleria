@@ -1,3 +1,23 @@
+# Issue #642 — Entrega 1: coherencia de líneas y detalle comercial en QuoteRevision exacta
+
+- Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base `origin/main@b285cf314d3dae9caadfdc45f479ba8ce8e9da89`. Rama `feat/642-quote-revision-detail-lines`. Single writer.
+- Started: 2026-09-11 11:16 CST.
+- Result: `IMPLEMENTED_PENDING_REVIEW` → `progress/implementation_642_quote_revision_detail_lines.md`.
+- Scope completado:
+  1. Conexión de `snapshot` e `items` en `quoteAuthorityView` (`ShellView.tsx`) y `projectDetailContext.tsx`.
+  2. Funciones puras en `quoteRevisionPresentation.ts` (`buildRevisionLines`, `formatRevisionUnitDimensions`) que asocian líneas, unidades físicas e items estrictamente por `quoteLineId` y `furnitureInstanceId`, preservando líneas distintas con idéntico nombre y desglosando unidades en `quantity > 1`.
+  3. `ProjectItemsSection.tsx` actualizado para renderizar desde la autoridad comercial (`ready`, `loading`, `error`, `legacy`) en modo de solo lectura con badge `Q{N} · Solo lectura`, sin fallback mutable a `project.items`, mostrando ausencia honesta de medidas u opciones. El flujo de borrador inicial previo a Q1 (`empty` o sin autoridad) permanece intacto con toda su edición y drag & drop.
+  4. Ocultación de controles de edición mutable (`ProjectOptionsSection.tsx`, `ProjectMeasureDefaults.tsx`, `project-detail__tools`) cuando se visualiza una revisión histórica de cotización.
+  5. Contrato CSS en `projects.css` alineado a los tokens canónicos del design system (`--surface-input`, `--surface-muted`, `--border-subtle`).
+  6. Actualización de §16A en `docs/architecture/project-design-digital-thread.md`.
+  7. Suite de pruebas verde:
+     - Pure unit: `quoteRevisionPresentation.test.ts` (5/5 PASS).
+     - Component integration: `ProjectsScreen.test.tsx` (49/49 PASS).
+     - Design system gate: `designSystem.test.ts` (9/9 PASS).
+     - Full monorepo: `pnpm test` (0 errores en todo el monorepo), `pnpm typecheck` (0 errores en 7 proyectos), `go test ./...` (OK en backend-go), `pnpm openapi:check` (0 drift), `git diff --check` (limpio).
+     - Browser E2E: aserciones de muebles, dimensiones congeladas y solo lectura integradas en `tests/organization/project-reconciliation.spec.ts` para viewports 390, 768 y 1280.
+
+
 # Issue #650 — PR 6: perfil CADmatic 4 efectivo + adapter + descarga candidata
 
 - Approval: prompt del propietario (2026-09-11), siguiente incremento de #650. Dependencia verificada: PR #657 MERGED en origin/main@598253d322e68a08f76adebf8324fa96ec633f9c. Frente Cotización/Diseño (agente paralelo, rama docs/642) fuera de alcance.

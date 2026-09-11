@@ -17,14 +17,15 @@ export const ProjectOptionsSection = memo(function ProjectOptionsSection(): Reac
     updateProjectLevelChoice,
     onUpdateProjectLevelChoices,
     canEditContent,
+    quoteAuthority,
   } = useProjectDetail();
 
   if (optionGroups.length === 0 || !onUpdateProjectLevelChoices) {
     return null;
   }
 
-  // Closed quotes: hide project-level option editor (view-only).
-  if (!canEditContent) {
+  // Revision mode or closed quotes: hide project-level option editor.
+  if (!canEditContent || (quoteAuthority && quoteAuthority.kind !== 'empty')) {
     return null;
   }
 

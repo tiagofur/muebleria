@@ -571,6 +571,254 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByTestId('project-detail-total').textContent).not.toContain('$202.50');
   });
 
+  it('renders exact QuoteRevision furniture, dimensions and finishes from commercial snapshot instead of mutable project.items', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: sampleBreakdown,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerId: 'cust-bruno',
+        customerName: 'Cliente congelado Q2',
+        furnitureQuantity: 2,
+        currency: 'MXN',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+        snapshot: {
+          schema: 'granete.quote-commercial-snapshot.v1',
+          capturedAt: '2026-09-10T12:00:00Z',
+          currency: 'MXN',
+          customer: { id: 'cust-bruno', name: 'Cliente congelado Q2' },
+          project: { id: 'prj-1', name: 'Cocina congelada Q2' },
+          breakdown: {
+            materialsCost: 100,
+            edgeTotal: 20,
+            hardwareTotal: 30,
+            directCost: 150,
+            laborModular: 50,
+            laborFixedCost: 50,
+            marginFactor: 1.35,
+            salePrice: 270,
+          },
+          lines: [
+            {
+              quoteLineId: 'line-q2-1',
+              quantity: 1,
+              furnitureInstanceIds: ['fi-inst-1'],
+              amounts: { materialsCost: 60, edgeTotal: 10, hardwareTotal: 15, directCost: 85, laborModular: 25, salePrice: 140 },
+            },
+            {
+              quoteLineId: 'line-q2-2',
+              quantity: 1,
+              furnitureInstanceIds: ['fi-inst-2'],
+              amounts: { materialsCost: 40, edgeTotal: 10, hardwareTotal: 15, directCost: 65, laborModular: 25, salePrice: 110 },
+            },
+          ],
+          units: [
+            {
+              furnitureInstanceId: 'fi-inst-1',
+              quoteLineId: 'line-q2-1',
+              moduleCode: 'MOD-ALAC-01',
+              moduleName: 'Alacena Especial Q2',
+              lifecycleStatus: 'active',
+              options: [
+                { groupCode: 'FRENTE', groupLabel: 'Frente', choiceId: 'mat-c', choiceLabel: 'Nougat Acabado Q2' },
+              ],
+            },
+            {
+              furnitureInstanceId: 'fi-inst-2',
+              quoteLineId: 'line-q2-2',
+              moduleCode: 'MOD-GAB-02',
+              moduleName: 'Gabinete 650 mm Q2',
+              lifecycleStatus: 'active',
+              options: [
+                { groupCode: 'INTERIOR', groupLabel: 'Interior', choiceId: 'mat-b', choiceLabel: 'Roble Veta Q2' },
+              ],
+            },
+          ],
+        },
+        items: [
+          {
+            furnitureInstanceId: 'fi-inst-1',
+            furnitureDefinitionId: 'mod-alac',
+            parameters: { widthMm: 800, heightMm: 720, depthMm: 350 },
+            materialChoices: { FRENTE: 'mat-c' },
+            lifecycleStatus: 'active',
+          },
+          {
+            furnitureInstanceId: 'fi-inst-2',
+            furnitureDefinitionId: 'mod-gab',
+            parameters: { widthMm: 650, heightMm: 720, depthMm: 560 },
+            materialChoices: { INTERIOR: 'mat-b' },
+            lifecycleStatus: 'active',
+          },
+        ],
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const detail = screen.getByTestId('project-detail');
+
+    // Historical Q2 content must be rendered from snapshot & items:
+    expect(within(detail).getByText('Alacena Especial Q2 — MOD-ALAC-01')).toBeTruthy();
+    expect(within(detail).getByText('Gabinete 650 mm Q2 — MOD-GAB-02')).toBeTruthy();
+    expect(within(detail).getByText(/800×720×350 mm/)).toBeTruthy();
+    expect(within(detail).getByText(/650×720×560 mm/)).toBeTruthy();
+    expect(within(detail).getByText(/Frente: Nougat Acabado Q2/)).toBeTruthy();
+    expect(within(detail).getByText(/Interior: Roble Veta Q2/)).toBeTruthy();
+
+    // Mutable project item ("Bajo mesada — MOD-GAB-01") must NOT be rendered:
+    expect(within(detail).queryByText(/Bajo mesada — MOD-GAB-01/)).toBeNull();
+
+    // Mutable editing controls must NOT be present in historical revision view:
+    expect(within(detail).queryByRole('button', { name: /Agregar mueble/i })).toBeNull();
+    expect(within(detail).queryByRole('button', { name: /Quitar/i })).toBeNull();
+    expect(within(detail).queryByLabelText(/Cantidad/i)).toBeNull();
+    expect(within(detail).queryByLabelText(/Medida/i)).toBeNull();
+    expect(screen.queryByTestId('project-level-options')).toBeNull();
+    expect(screen.queryByTestId('project-quote-tools')).toBeNull();
+  });
+
+  it('preserves distinct lines with identical names and renders quantity > 1 with unit configurations', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: sampleBreakdown,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerId: 'cust-bruno',
+        customerName: 'Cliente congelado Q2',
+        furnitureQuantity: 3,
+        currency: 'MXN',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+        snapshot: {
+          schema: 'granete.quote-commercial-snapshot.v1',
+          capturedAt: '2026-09-10T12:00:00Z',
+          currency: 'MXN',
+          customer: { id: 'cust-bruno', name: 'Cliente congelado Q2' },
+          project: { id: 'prj-1', name: 'Cocina congelada Q2' },
+          breakdown: {
+            materialsCost: 150,
+            edgeTotal: 30,
+            hardwareTotal: 40,
+            directCost: 220,
+            laborModular: 80,
+            laborFixedCost: 50,
+            marginFactor: 1.35,
+            salePrice: 380,
+          },
+          lines: [
+            {
+              quoteLineId: 'line-identical-A',
+              quantity: 1,
+              furnitureInstanceIds: ['fi-single-1'],
+              amounts: { materialsCost: 50, edgeTotal: 10, hardwareTotal: 10, directCost: 70, laborModular: 20, salePrice: 110 },
+            },
+            {
+              quoteLineId: 'line-identical-B',
+              quantity: 2,
+              furnitureInstanceIds: ['fi-multi-u1', 'fi-multi-u2'],
+              amounts: { materialsCost: 100, edgeTotal: 20, hardwareTotal: 30, directCost: 150, laborModular: 60, salePrice: 270 },
+            },
+          ],
+          units: [
+            {
+              furnitureInstanceId: 'fi-single-1',
+              quoteLineId: 'line-identical-A',
+              moduleCode: 'MOD-GAB-01',
+              moduleName: 'Gabinete Bajo',
+              lifecycleStatus: 'active',
+              options: [{ groupCode: 'FRENTE', groupLabel: 'Frente', choiceId: 'mat-a', choiceLabel: 'Blanco' }],
+            },
+            {
+              furnitureInstanceId: 'fi-multi-u1',
+              quoteLineId: 'line-identical-B',
+              moduleCode: 'MOD-GAB-01',
+              moduleName: 'Gabinete Bajo',
+              lifecycleStatus: 'active',
+              options: [{ groupCode: 'FRENTE', groupLabel: 'Frente', choiceId: 'mat-a', choiceLabel: 'Blanco' }],
+            },
+            {
+              furnitureInstanceId: 'fi-multi-u2',
+              quoteLineId: 'line-identical-B',
+              moduleCode: 'MOD-GAB-01',
+              moduleName: 'Gabinete Bajo',
+              lifecycleStatus: 'active',
+              options: [{ groupCode: 'FRENTE', groupLabel: 'Frente', choiceId: 'mat-b', choiceLabel: 'Roble Especial' }],
+            },
+          ],
+        },
+        items: [
+          {
+            furnitureInstanceId: 'fi-single-1',
+            parameters: { widthMm: 600, heightMm: 720, depthMm: 560 },
+            materialChoices: { FRENTE: 'mat-a' },
+            lifecycleStatus: 'active',
+          },
+          {
+            furnitureInstanceId: 'fi-multi-u1',
+            parameters: { widthMm: 600, heightMm: 720, depthMm: 560 },
+            materialChoices: { FRENTE: 'mat-a' },
+            lifecycleStatus: 'active',
+          },
+          {
+            furnitureInstanceId: 'fi-multi-u2',
+            parameters: { widthMm: 650, heightMm: 720, depthMm: 560 },
+            materialChoices: { FRENTE: 'mat-b' },
+            lifecycleStatus: 'active',
+          },
+        ],
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const detail = screen.getByTestId('project-detail');
+
+    // Both lines must be preserved as distinct cards (data-testid with quoteLineId):
+    expect(screen.getByTestId('quote-line-line-identical-A')).toBeTruthy();
+    expect(screen.getByTestId('quote-line-line-identical-B')).toBeTruthy();
+
+    // Line B has 2 units with different width and options:
+    const lineB = screen.getByTestId('quote-line-line-identical-B');
+    expect(within(lineB).getByText(/600×720×560 mm/)).toBeTruthy();
+    expect(within(lineB).getByText(/650×720×560 mm/)).toBeTruthy();
+    expect(within(lineB).getByText(/Roble Especial/)).toBeTruthy();
+  });
+
+  it('shows dedicated loading and error states for items without fallback to mutable project.items', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderScreen({
+      breakdown: null,
+      quoteAuthority: { kind: 'loading' },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const detail = screen.getByTestId('project-detail');
+    expect(within(detail).getByText(/Cargando muebles de la cotización/i)).toBeTruthy();
+    expect(within(detail).queryByText(/Bajo mesada — MOD-GAB-01/)).toBeNull();
+
+    unmount();
+
+    const onRetry = vi.fn();
+    renderScreen({
+      breakdown: null,
+      quoteAuthority: { kind: 'error', message: 'Fallo de red al obtener la cotización.', onRetry },
+    });
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const errorDetail = screen.getByTestId('project-detail');
+    expect(within(screen.getByTestId('project-items-error')).getByText(/Fallo de red al obtener la cotización/i)).toBeTruthy();
+    expect(within(errorDetail).queryByText(/Bajo mesada — MOD-GAB-01/)).toBeNull();
+    await user.click(within(errorDetail).getAllByRole('button', { name: /Reintentar/i })[0]!);
+    expect(onRetry).toHaveBeenCalled();
+  });
+
   it('shows loading status in totals when breakdownLoading', async () => {
     const user = userEvent.setup();
     renderScreen({

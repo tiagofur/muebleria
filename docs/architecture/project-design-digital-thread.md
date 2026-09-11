@@ -846,6 +846,7 @@ Inventario de consumidores runtime (Slice 2):
 | Consumer | Estado |
 |---|---|
 | Detalle de Cotizaciones: identidad, estado, totales y Enviar/Aceptar | Migrado: QuoteRevision aceptada o última exacta; lifecycle exacto |
+| Detalle de Cotizaciones: muebles, líneas y medidas congeladas (#642) | Migrado: renderiza líneas/unidades del snapshot y parámetros congelados de QuoteRevision exacta; sin fallback a `project.items` mutable; desglosa unidades físicas (`quantity > 1`); badges `Q{N} · Solo lectura` |
 | Lista de Cotizaciones y `projectEstimates` | Pendiente: todavía usa Project/priceSnapshot o cálculo vivo |
 | Dashboard Inicio/Ventas (`dashboardStats`, `dashboardRecent`, funnel) | Pendiente: misma dependencia legacy |
 | Operaciones/Producción (`ProductionQueue`, workspace) | Pendiente: separar aceptación comercial de etapa operativa |

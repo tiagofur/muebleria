@@ -17,9 +17,13 @@ const TYPE_LABELS: Record<FurnitureType, string> = {
 };
 
 export const ProjectMeasureDefaults = memo(function ProjectMeasureDefaults(): ReactNode {
-  const { project, modules, onUpdateMeasureDefaults } = useProjectDetail();
+  const { project, modules, onUpdateMeasureDefaults, quoteAuthority } = useProjectDetail();
 
-  if (!onUpdateMeasureDefaults || isProjectClosed(project.status)) {
+  if (
+    !onUpdateMeasureDefaults ||
+    isProjectClosed(project.status) ||
+    (quoteAuthority && quoteAuthority.kind !== 'empty')
+  ) {
     return null;
   }
 
