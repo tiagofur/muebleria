@@ -16,7 +16,10 @@
  */
 
 import {
+  describePtxCutFunction,
   isDocumentedPtxCutFunctionCode,
+  isSupportedPtxCutFunctionCode,
+  PTX_SUPPORTED_CUT_FUNCTION_CODES,
   type PtxBoardRecord,
   type PtxCutRecord,
   type PtxDocument,
@@ -42,6 +45,7 @@ export type PtxValidationCode =
   | 'UNKNOWN_OFFCUT_REFERENCE'
   | 'UNKNOWN_CUT_REFERENCE'
   | 'INVALID_FUNCTION_CODE'
+  | 'UNSUPPORTED_FUNCTION_CODE'
   | 'INVALID_MAGNITUDE'
   | 'INVALID_QUANTITY'
   | 'INVALID_VERSION';
@@ -52,6 +56,22 @@ export interface PtxValidationIssue {
 }
 
 type Issue = PtxValidationIssue;
+
+/**
+ * Thrown by validated boundaries (assertValidPtxDocument,
+ * serializePtxDocument) — never a generic Error without cause: it carries the
+ * validation issues that blocked the document.
+ */
+export class PtxDocumentInvalidError extends Error {
+  constructor(readonly issues: readonly PtxValidationIssue[]) {
+    super(
+      `PTX document is not valid (${issues.length} issue(s)): ${issues
+        .map((issue) => issue.message)
+        .join('; ')}`,
+    );
+    this.name = 'PtxDocumentInvalidError';
+  }
+}
 
 function isPrintableAscii(value: string): boolean {
   for (const ch of value) {
@@ -76,6 +96,15 @@ function textIssues(value: string | undefined, label: string, required: boolean,
 }
 
 function magnitudeIssue(value: number, label: string, minExclusive: boolean, issues: Issue[]): void {
+  // Finite first: NaN escapes `<= 0` and Infinity passes as positive, and the
+  // validator — not the serializer — owns the "valid ⇒ representable" contract.
+  if (!Number.isFinite(value)) {
+    issues.push({
+      code: 'INVALID_MAGNITUDE',
+      message: `${label}=${value} must be a finite number`,
+    });
+    return;
+  }
   if (minExclusive ? value <= 0 : value < 0) {
     issues.push({
       code: 'INVALID_MAGNITUDE',
@@ -246,7 +275,7 @@ function checkHeader(doc: PtxDocument, issues: Issue[]): void {
 }
 
 function checkJob(record: PtxJobRecord, issues: Issue[]): void {
-  quantityIssue(record.jobIndex, `${recordLabel(record)} JOB_INDEX`, 1, issues);
+  // JOB_INDEX is checked centrally by checkIndexFields.
   textIssues(record.name, `${recordLabel(record)} NAME`, true, issues);
   textIssues(record.description, `${recordLabel(record)} DESC`, false, issues);
   textIssues(record.orderDate, `${recordLabel(record)} ORD_DATE`, false, issues);
@@ -337,6 +366,18 @@ function checkCut(record: PtxCutRecord, issues: Issue[]): void {
       code: 'INVALID_FUNCTION_CODE',
       message: `${recordLabel(record)} FUNCTION=${record.functionCode} is outside the documented dictionary (0 head, 1 rip, 2 cross, 3..9 recut phase, 90..99 trim/waste)`,
     });
+  } else if (!isSupportedPtxCutFunctionCode(record.functionCode)) {
+    // Documented by the interface dictionary, but the current Granete
+    // candidate does not produce/accept it yet — a different failure from
+    // "unknown code", with the documented meaning attached.
+    issues.push({
+      code: 'UNSUPPORTED_FUNCTION_CODE',
+      message: `${recordLabel(record)} FUNCTION=${record.functionCode} (${describePtxCutFunction(
+        record.functionCode,
+      )}) is documented but unsupported by the current Granete PTX candidate subset [${PTX_SUPPORTED_CUT_FUNCTION_CODES.join(
+        ',',
+      )}]`,
+    });
   }
   // DIMENSION is the relative measure of the sub-panel, never a coordinate —
   // it must be positive even for trim rows (investigation §5).
@@ -360,6 +401,46 @@ function checkVector(record: PtxVectorRecord, issues: Issue[]): void {
 }
 
 /**
+ * Index fields of every record must be finite integers ≥ 1 — NaN/Infinity
+ * must fail here, not later as a confusing reference error.
+ */
+function checkIndexFields(record: PtxRecord, issues: Issue[]): void {
+  const label = recordLabel(record);
+  quantityIssue(record.jobIndex, `${label} JOB_INDEX`, 1, issues);
+  switch (record.type) {
+    case 'PARTS_REQ':
+      quantityIssue(record.partIndex, `${label} PART_INDEX`, 1, issues);
+      quantityIssue(record.materialIndex, `${label} MAT_INDEX`, 1, issues);
+      break;
+    case 'BOARDS':
+      quantityIssue(record.boardIndex, `${label} BRD_INDEX`, 1, issues);
+      quantityIssue(record.materialIndex, `${label} MAT_INDEX`, 1, issues);
+      break;
+    case 'MATERIALS':
+      quantityIssue(record.materialIndex, `${label} MAT_INDEX`, 1, issues);
+      break;
+    case 'PATTERNS':
+      quantityIssue(record.patternIndex, `${label} PTN_INDEX`, 1, issues);
+      quantityIssue(record.boardIndex, `${label} BRD_INDEX`, 1, issues);
+      break;
+    case 'CUTS':
+      quantityIssue(record.patternIndex, `${label} PTN_INDEX`, 1, issues);
+      quantityIssue(record.cutIndex, `${label} CUT_INDEX`, 1, issues);
+      break;
+    case 'OFFCUTS':
+      quantityIssue(record.offcutIndex, `${label} OFFCUT_INDEX`, 1, issues);
+      quantityIssue(record.materialIndex, `${label} MAT_INDEX`, 1, issues);
+      break;
+    case 'VECTORS':
+      quantityIssue(record.patternIndex, `${label} PTN_INDEX`, 1, issues);
+      quantityIssue(record.cutIndex, `${label} CUT_INDEX`, 1, issues);
+      break;
+    default:
+      break;
+  }
+}
+
+/**
  * Validates relations, index tables and magnitudes. An empty result means the
  * document is consistent for this subset; it does NOT certify receiver
  * compatibility (field validation stays a separate concern, investigation §3.2).
@@ -371,6 +452,7 @@ export function validatePtxDocument(doc: PtxDocument): readonly Issue[] {
   const tables = buildTables(doc);
 
   for (const record of doc.records) {
+    checkIndexFields(record, issues);
     switch (record.type) {
       case 'JOBS':
         checkJob(record, issues);
@@ -444,10 +526,10 @@ export function validatePtxDocument(doc: PtxDocument): readonly Issue[] {
   return issues;
 }
 
-/** Throws with the first issue when the document is not valid. */
+/** Throws PtxDocumentInvalidError (with every issue) when the document is not valid. */
 export function assertValidPtxDocument(doc: PtxDocument): void {
   const issues = validatePtxDocument(doc);
   if (issues.length > 0) {
-    throw new Error(`Invalid PTX document (${issues.length} issue(s)): ${issues.map((i) => i.message).join('; ')}`);
+    throw new PtxDocumentInvalidError(issues);
   }
 }

@@ -7,7 +7,7 @@ import type {
   PtxRecord,
 } from './records';
 import { buildLabGuillotineDocument } from './fixtures';
-import { validatePtxDocument } from './validate';
+import { assertValidPtxDocument, validatePtxDocument } from './validate';
 
 function codes(doc: PtxDocument): string[] {
   return validatePtxDocument(doc).map((issue) => issue.code);
@@ -152,8 +152,6 @@ describe('validatePtxDocument', () => {
         'INVALID_FUNCTION_CODE',
       );
     }
-    // 90..99 are documented trim/waste codes.
-    expect(codes(mapCuts(doc, 1, (c) => ({ ...c, functionCode: 90 })))).toEqual([]);
   });
 
   it('rejects out-of-subset enums on hand-built records', () => {
@@ -187,5 +185,75 @@ describe('validatePtxDocument', () => {
     expect(
       codes(mapRecords(doc, (r) => (r.type === 'JOBS' ? { ...r, description: '' } : r))),
     ).toContain('INVALID_TEXT');
+  });
+});
+
+describe('review R1 — documented FUNCTION codes vs supported by the Granete candidate', () => {
+  it('accepts exactly 0/1/2/3 as supported', () => {
+    const doc = buildLabGuillotineDocument();
+    for (const code of [0, 1, 2, 3]) {
+      expect(codes(mapCuts(doc, 1, (c) => ({ ...c, functionCode: code }))), `code ${code}`).toEqual([]);
+    }
+  });
+
+  it('rejects documented-but-unsupported codes with UNSUPPORTED_FUNCTION_CODE, not as unknown', () => {
+    const doc = buildLabGuillotineDocument();
+    for (const code of [4, 5, 9, 90, 95, 99]) {
+      const issues = validatePtxDocument(mapCuts(doc, 1, (c) => ({ ...c, functionCode: code })));
+      const issueCodes = issues.map((i) => i.code);
+      expect(issueCodes, `code ${code}`).toContain('UNSUPPORTED_FUNCTION_CODE');
+      expect(issueCodes, `code ${code}`).not.toContain('INVALID_FUNCTION_CODE');
+      expect(issues[0]?.message, `code ${code}`).toContain('documented but unsupported');
+    }
+  });
+
+  it('rejects codes outside the documented dictionary (81 tension included) with INVALID_FUNCTION_CODE', () => {
+    const doc = buildLabGuillotineDocument();
+    for (const code of [10, 50, 81, 100]) {
+      const issueCodes = validatePtxDocument(mapCuts(doc, 1, (c) => ({ ...c, functionCode: code }))).map(
+        (i) => i.code,
+      );
+      expect(issueCodes, `code ${code}`).toContain('INVALID_FUNCTION_CODE');
+      expect(issueCodes, `code ${code}`).not.toContain('UNSUPPORTED_FUNCTION_CODE');
+    }
+  });
+});
+
+describe('review R2 — non-finite magnitudes must fail validation', () => {
+  it('rejects NaN/Infinity magnitudes with INVALID_MAGNITUDE', () => {
+    const doc = buildLabGuillotineDocument();
+    expect(codes(mapCuts(doc, 1, (c) => ({ ...c, dimension: Number.NaN })))).toContain('INVALID_MAGNITUDE');
+    expect(codes(mapCuts(doc, 1, (c) => ({ ...c, dimension: Number.POSITIVE_INFINITY })))).toContain(
+      'INVALID_MAGNITUDE',
+    );
+    expect(
+      codes(mapRecords(doc, (r) => (r.type === 'MATERIALS' ? { ...r, thickness: Number.POSITIVE_INFINITY } : r))),
+    ).toContain('INVALID_MAGNITUDE');
+    expect(
+      codes(mapRecords(doc, (r) => (r.type === 'BOARDS' ? { ...r, length: Number.NaN } : r))),
+    ).toContain('INVALID_MAGNITUDE');
+    expect(
+      codes(mapRecords(doc, (r) => (r.type === 'VECTORS' ? { ...r, xEnd: Number.POSITIVE_INFINITY } : r))),
+    ).toContain('INVALID_MAGNITUDE');
+  });
+
+  it('rejects non-finite optional magnitudes and quantities', () => {
+    const doc = buildLabGuillotineDocument();
+    expect(
+      codes(mapRecords(doc, (r) => (r.type === 'JOBS' ? { ...r, cutTime: Number.NaN } : r))),
+    ).toContain('INVALID_MAGNITUDE');
+    expect(
+      codes(mapRecords(doc, (r) => (r.type === 'MATERIALS' ? { ...r, trimHead: Number.POSITIVE_INFINITY } : r))),
+    ).toContain('INVALID_MAGNITUDE');
+    // Quantities/index fields must not admit NaN either.
+    expect(
+      codes(mapRecords(doc, (r) => (r.type === 'PARTS_REQ' ? { ...r, requiredQuantity: Number.NaN } : r))),
+    ).toContain('INVALID_QUANTITY');
+    expect(codes(mapCuts(doc, 1, (c) => ({ ...c, jobIndex: Number.NaN })))).toContain('INVALID_QUANTITY');
+  });
+
+  it('assertValidPtxDocument also fails on non-finite magnitudes', () => {
+    const doc = mapCuts(buildLabGuillotineDocument(), 1, (c) => ({ ...c, dimension: Number.NaN }));
+    expect(() => assertValidPtxDocument(doc)).toThrow();
   });
 });

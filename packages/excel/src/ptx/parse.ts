@@ -90,7 +90,9 @@ const FAMILY_SPECS: Readonly<Record<string, FamilySpec>> = {
       'JOB_INDEX', 'PART_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH',
       'QTY_REQ', 'QTY_OVER', 'QTY_UNDER', 'GRAIN', 'QTY_PROD',
     ],
-    required: 8,
+    // GRAIN is required and sits AFTER the optional QTY_OVER/QTY_UNDER: the
+    // prefix must physically reach it (`...,QTY_REQ,,,GRAIN` is fine).
+    required: 10,
   },
   BOARDS: {
     columns: ['JOB_INDEX', 'BRD_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH', 'QTY_STOCK', 'QTY_USED'],
@@ -102,7 +104,8 @@ const FAMILY_SPECS: Readonly<Record<string, FamilySpec>> = {
       'TRIM_FRIP', 'TRIM_VRIP', 'TRIM_FXCT', 'TRIM_VXCT', 'TRIM_HEAD', 'TRIM_FRCT', 'TRIM_VRCT',
       'RULE1', 'RULE2', 'RULE3', 'RULE4',
     ],
-    required: 7,
+    // KERF_XCT is required too (both kerfs are mandatory in this subset).
+    required: 8,
   },
   PATTERNS: {
     columns: ['JOB_INDEX', 'PTN_INDEX', 'BRD_INDEX', 'TYPE', 'QTY_RUN', 'QTY_CYCLES', 'MAX_BOOK'],

@@ -81,6 +81,26 @@ export function isDocumentedPtxCutFunctionCode(code: number): boolean {
 }
 
 /**
+ * FUNCTION codes the current Granete PTX candidate is willing to produce,
+ * parse and validate: 0 head, 1 rip, 2 cross, 3 third-phase recut.
+ *
+ * Deliberately NOT supported yet (documented ≠ supported — "the manual
+ * enumerates the code" is never "Granete can emit it"):
+ * - 4 fourth-phase recut: waits for an explicit phase-4 fixture with its
+ *   semantics before being enabled;
+ * - 5..9 deeper recut phases: no case needs them;
+ * - 81 tension: excluded from the first candidate (investigation §9);
+ * - 90..99 trims/waste: wait for the CutProgram compiler and an explicit
+ *   decision on which code/phase each generated trim maps to.
+ */
+export const PTX_SUPPORTED_CUT_FUNCTION_CODES = [0, 1, 2, 3] as const;
+
+/** Whether the code belongs to the subset supported by the current candidate. */
+export function isSupportedPtxCutFunctionCode(code: number): boolean {
+  return (PTX_SUPPORTED_CUT_FUNCTION_CODES as readonly number[]).includes(code);
+}
+
+/**
  * CUTS PART_INDEX reference dictionary [S03 pp.142–145]:
  * `0` no part, positive integer = PARTS_REQ index within the same job,
  * `Xn` = OFFCUTS index n within the same job. `X3` is NOT an axis or a turn.

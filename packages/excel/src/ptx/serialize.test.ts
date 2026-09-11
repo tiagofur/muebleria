@@ -1,8 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { PTX_RECORD_CONTENT_WIDTH } from './records';
-import type { PtxDocument, PtxMaterialRecord } from './records';
+import type { PtxCutRecord, PtxDocument, PtxMaterialRecord } from './records';
 import { buildLabGuillotineDocument } from './fixtures';
-import { PtxFormatError, serializePtxDocument, serializePtxDocumentBytes } from './serialize';
+import {
+  PtxFormatError,
+  serializePtxDocument,
+  serializePtxDocumentBytes,
+  serializePtxDocumentUnchecked,
+} from './serialize';
+
+function mapCuts(
+  doc: PtxDocument,
+  cutIndex: number,
+  mutate: (cut: PtxCutRecord) => PtxCutRecord,
+): PtxDocument {
+  return {
+    ...doc,
+    records: doc.records.map((record) =>
+      record.type === 'CUTS' && record.cutIndex === cutIndex ? mutate(record) : record,
+    ),
+  };
+}
+
+function mapRecords(
+  doc: PtxDocument,
+  mutate: (record: PtxDocument['records'][number]) => PtxDocument['records'][number],
+): PtxDocument {
+  return { ...doc, records: doc.records.map(mutate) };
+}
 
 function captureFormatError(fn: () => unknown): PtxFormatError {
   try {
@@ -85,8 +110,8 @@ describe('serializePtxDocument', () => {
       kerfRip: 4,
       kerfCrosscut: 4,
     };
-    const withZero = serializePtxDocument(minimalDoc([{ ...base, trimFRip: 0 }]));
-    const absent = serializePtxDocument(minimalDoc([base]));
+    const withZero = serializePtxDocumentUnchecked(minimalDoc([{ ...base, trimFRip: 0 }]));
+    const absent = serializePtxDocumentUnchecked(minimalDoc([base]));
     expect(withZero).toContain('MATERIALS,1,1,MAT,,18,1,4,4,0,');
     expect(absent).toContain('MATERIALS,1,1,MAT,,18,1,4,4,,');
     expect(withZero).not.toBe(absent);
@@ -108,38 +133,40 @@ describe('serializePtxDocument', () => {
   });
 
   it('quotes CSV text only when needed and doubles quotes (S06)', () => {
-    const comma = serializePtxDocument(
+    const comma = serializePtxDocumentUnchecked(
       minimalDoc([{ type: 'JOBS', jobIndex: 1, name: 'A,B' }]),
     );
     expect(comma).toContain('JOBS,1,"A,B"');
-    const quoted = serializePtxDocument(
+    const quoted = serializePtxDocumentUnchecked(
       minimalDoc([{ type: 'JOBS', jobIndex: 1, name: 'A"B' }]),
     );
     expect(quoted).toContain('JOBS,1,"A""B"');
-    const plain = serializePtxDocument(minimalDoc([{ type: 'JOBS', jobIndex: 1, name: 'LAB-1' }]));
+    const plain = serializePtxDocumentUnchecked(minimalDoc([{ type: 'JOBS', jobIndex: 1, name: 'LAB-1' }]));
     expect(plain).toContain('JOBS,1,LAB-1');
   });
 
   it('rejects non-ASCII or control text instead of silently rewriting it', () => {
     expect(
       captureFormatError(() =>
-        serializePtxDocument({ ...minimalDoc([]), header: { ...minimalDoc([]).header, title: 'Café' } }),
+        serializePtxDocumentUnchecked({ ...minimalDoc([]), header: { ...minimalDoc([]).header, title: 'Café' } }),
       ).code,
     ).toBe('TEXT_NOT_PRINTABLE_ASCII');
     expect(
       captureFormatError(() =>
-        serializePtxDocument({ ...minimalDoc([]), header: { ...minimalDoc([]).header, title: 'A\tB' } }),
+        serializePtxDocumentUnchecked({ ...minimalDoc([]), header: { ...minimalDoc([]).header, title: 'A\tB' } }),
       ).code,
     ).toBe('TEXT_NOT_PRINTABLE_ASCII');
   });
 
   it('rejects empty strings for required and optional text (undefined means absent)', () => {
     expect(
-      captureFormatError(() => serializePtxDocument(minimalDoc([{ type: 'JOBS', jobIndex: 1, name: '' }]))).code,
+      captureFormatError(() =>
+        serializePtxDocumentUnchecked(minimalDoc([{ type: 'JOBS', jobIndex: 1, name: '' }])),
+      ).code,
     ).toBe('EMPTY_REQUIRED_TEXT');
     expect(
       captureFormatError(() =>
-        serializePtxDocument(minimalDoc([{ type: 'JOBS', jobIndex: 1, name: 'X', description: '' }])),
+        serializePtxDocumentUnchecked(minimalDoc([{ type: 'JOBS', jobIndex: 1, name: 'X', description: '' }])),
       ).code,
     ).toBe('EMPTY_OPTIONAL_TEXT');
   });
@@ -147,12 +174,12 @@ describe('serializePtxDocument', () => {
   it('rejects non-finite and oversized numbers', () => {
     expect(
       captureFormatError(() =>
-        serializePtxDocument(minimalDoc([{ type: 'JOBS', jobIndex: Number.NaN, name: 'X' }])),
+        serializePtxDocumentUnchecked(minimalDoc([{ type: 'JOBS', jobIndex: Number.NaN, name: 'X' }])),
       ).code,
     ).toBe('NUMBER_NOT_FINITE');
     expect(
       captureFormatError(() =>
-        serializePtxDocument(minimalDoc([{ type: 'JOBS', jobIndex: 1e12, name: 'X' }])),
+        serializePtxDocumentUnchecked(minimalDoc([{ type: 'JOBS', jobIndex: 1e12, name: 'X' }])),
       ).code,
     ).toBe('NUMBER_OUT_OF_RANGE');
   });
@@ -163,7 +190,7 @@ describe('serializePtxDocument', () => {
     expect(serializePtxDocument({ ...base, header: { ...base.header, version: 1.08 } })).toContain('HEADER,1.08,');
     expect(
       captureFormatError(() =>
-        serializePtxDocument({ ...base, header: { ...base.header, version: 1.234 } }),
+        serializePtxDocumentUnchecked({ ...base, header: { ...base.header, version: 1.234 } }),
       ).code,
     ).toBe('VERSION_NOT_REPRESENTABLE');
   });
@@ -172,5 +199,50 @@ describe('serializePtxDocument', () => {
     const text = serializePtxDocument(minimalDoc([]), { lineEnding: '\n' });
     expect(text).toBe('HEADER,1,LAB,0,0,1\n');
     expect(text.includes('\r')).toBe(false);
+  });
+});
+
+describe('review R3 — public serialization boundary is fail-closed', () => {
+  it('serializes a valid document through the public API', () => {
+    const text = serializePtxDocument(buildLabGuillotineDocument());
+    expect(text.startsWith('HEADER,1,GRANETE-LAB-NONPRODUCTION,0,0,1')).toBe(true);
+  });
+
+  it('refuses to produce text/bytes for documents the validator rejects', () => {
+    const base = buildLabGuillotineDocument();
+    const unsupportedFunction = mapCuts(base, 1, (c) => ({ ...c, functionCode: 5 }));
+    const unknownFunction = mapCuts(base, 1, (c) => ({ ...c, functionCode: 81 }));
+    const missingPart = mapCuts(base, 2, (c) => ({
+      ...c,
+      partReference: { kind: 'part' as const, partIndex: 9 },
+    }));
+    const missingMaterial = mapRecords(base, (r) => (r.type === 'BOARDS' ? { ...r, materialIndex: 9 } : r));
+    const duplicateCut = mapCuts(base, 4, (c) => ({ ...c, cutIndex: 1 }));
+    const nonFinite = mapCuts(base, 1, (c) => ({ ...c, dimension: Number.NaN }));
+    const missingJob = mapRecords(base, (r) => (r.type === 'VECTORS' ? { ...r, jobIndex: 2 } : r));
+
+    for (const [name, doc] of [
+      ['unsupported FUNCTION', unsupportedFunction],
+      ['unknown FUNCTION', unknownFunction],
+      ['missing part reference', missingPart],
+      ['missing MAT_INDEX', missingMaterial],
+      ['duplicate CUT_INDEX', duplicateCut],
+      ['non-finite dimension', nonFinite],
+      ['missing job', missingJob],
+    ] as const) {
+      expect(() => serializePtxDocument(doc), name).toThrow();
+      expect(() => serializePtxDocumentBytes(doc), name).toThrow();
+    }
+  });
+
+  it('keeps the validation cause in the thrown error', () => {
+    const doc = mapCuts(buildLabGuillotineDocument(), 1, (c) => ({ ...c, functionCode: 5 }));
+    let error: { issues?: { code: string }[] } | undefined;
+    try {
+      serializePtxDocument(doc);
+    } catch (e) {
+      error = e as { issues?: { code: string }[] };
+    }
+    expect(error?.issues?.map((i) => i.code)).toContain('UNSUPPORTED_FUNCTION_CODE');
   });
 });

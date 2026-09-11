@@ -14,6 +14,14 @@
  *   that is not exactly representable at that resolution is an ERROR: no
  *   silent per-end rounding (investigation §7 quantization rule).
  *
+ * Public boundary is fail-closed: serializePtxDocument (and the Bytes
+ * variant) first runs validatePtxDocument and throws PtxDocumentInvalidError
+ * with the blocking issues, so `bytes returned ⇒ document valid`. The
+ * relational rules stay in validate.ts — nothing is duplicated here.
+ * serializePtxDocumentUnchecked skips validation on purpose: it is the
+ * format-level helper for unit tests of CSV/number emission and is NOT
+ * exported from the package index.
+ *
  * This module never imports the parser: readback independence is the point.
  */
 
@@ -28,6 +36,7 @@ import type {
   PtxPatternRecord,
   PtxVectorRecord,
 } from './records';
+import { PtxDocumentInvalidError, validatePtxDocument } from './validate';
 
 export type PtxFormatErrorCode =
   | 'TEXT_NOT_PRINTABLE_ASCII'
@@ -323,8 +332,30 @@ function makeFmt(decimalPlaces: number): Fmt {
   };
 }
 
-/** Serializes the document to PTX text (ASCII, deterministic). */
+/**
+ * Serializes the document to PTX text (ASCII, deterministic).
+ *
+ * Fail-closed public boundary: validates first and throws
+ * PtxDocumentInvalidError (carrying the issues) when the model is not valid,
+ * so no bytes can be produced for a document validatePtxDocument rejects.
+ */
 export function serializePtxDocument(
+  doc: PtxDocument,
+  options: PtxSerializationOptions = {},
+): string {
+  const issues = validatePtxDocument(doc);
+  if (issues.length > 0) {
+    throw new PtxDocumentInvalidError(issues);
+  }
+  return serializePtxDocumentUnchecked(doc, options);
+}
+
+/**
+ * Format-level serialization without the validation pass. Internal helper
+ * for unit tests of CSV/number emission ONLY — never exported from the
+ * package index; every real caller goes through serializePtxDocument.
+ */
+export function serializePtxDocumentUnchecked(
   doc: PtxDocument,
   options: PtxSerializationOptions = {},
 ): string {
@@ -364,7 +395,7 @@ export function serializePtxDocument(
   return `${lines.join(lineEnding)}${lineEnding}`;
 }
 
-/** Serializes the document to bytes (ASCII inside a Uint8Array). */
+/** Serializes a VALIDATED document to bytes (ASCII inside a Uint8Array). */
 export function serializePtxDocumentBytes(
   doc: PtxDocument,
   options: PtxSerializationOptions = {},

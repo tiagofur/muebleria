@@ -218,6 +218,25 @@ describe('parsePtxText syntax rules', () => {
     );
     expect(captureParseError(() => parsePtxText('PATTERNS,1,1,1,9')).code).toBe('INVALID_ENUM_VALUE');
   });
+
+  it('review R4 — PARTS_REQ required prefix reaches GRAIN past empty optionals', () => {
+    // 10 content columns: QTY_OVER/QTY_UNDER empty, GRAIN present, QTY_PROD absent.
+    expect(() => parsePtxText('PARTS_REQ,1,1,P,1,10,20,1,,,0')).not.toThrow();
+    // Physically truncated before GRAIN: TOO_FEW_COLUMNS, not a later empty-required fluke.
+    expect(captureParseError(() => parsePtxText('PARTS_REQ,1,1,P,1,10,20,1,,')).code).toBe('TOO_FEW_COLUMNS');
+    // Same width with GRAIN physically empty: REQUIRED_FIELD_EMPTY.
+    expect(captureParseError(() => parsePtxText('PARTS_REQ,1,1,P,1,10,20,1,,,')).code).toBe(
+      'REQUIRED_FIELD_EMPTY',
+    );
+  });
+
+  it('review R4 — MATERIALS required prefix reaches KERF_XCT', () => {
+    expect(() => parsePtxText('MATERIALS,1,1,M,D,18,1,4,4')).not.toThrow();
+    expect(captureParseError(() => parsePtxText('MATERIALS,1,1,M,D,18,1,4')).code).toBe('TOO_FEW_COLUMNS');
+    expect(captureParseError(() => parsePtxText('MATERIALS,1,1,M,D,18,1,4,')).code).toBe(
+      'REQUIRED_FIELD_EMPTY',
+    );
+  });
 });
 
 describe('parser column tables (independent witness of the documented layouts)', () => {

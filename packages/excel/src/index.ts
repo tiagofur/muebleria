@@ -164,10 +164,12 @@ export {
   PTX_GRAIN,
   PTX_PATTERN_TYPE,
   PTX_RECORD_CONTENT_WIDTH,
+  PTX_SUPPORTED_CUT_FUNCTION_CODES,
   PTX_TRIM_TYPE,
   PTX_UNITS,
   describePtxCutFunction,
   isDocumentedPtxCutFunctionCode,
+  isSupportedPtxCutFunctionCode,
   type PtxBoardRecord,
   type PtxCutRecord,
   type PtxDocument,
@@ -204,6 +206,7 @@ export {
   type PtxRecordsReadback,
 } from './ptx/parse';
 export {
+  PtxDocumentInvalidError,
   assertValidPtxDocument,
   validatePtxDocument,
   type PtxValidationCode,
