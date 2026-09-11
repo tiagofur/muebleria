@@ -47,8 +47,38 @@ optimizador. Limitaciones registradas: columnas documentadas fuera del
 subconjunto (p. ej. OFFCUTS más allá de `JOB_INDEX..WIDTH`, MATERIALS tras
 `RULE4`) fallan cerrado por la ambigüedad de inventario de §9 de la
 investigación; PARTS_INF/PARTS_UDI/PARTS_DST/PTN_UDI/NOTES no están
-implementados. Este núcleo todavía no está conectado al CutProgram real, al
-perfil CADmatic 4 ni al exportador legacy.
+implementados.
+
+Sobre ese núcleo, `ptx/compileCutPlan.ts` compila el CutPlan/CutProgram real
+del optimizador en un `PtxDocument` validado con tabla inversa de índices
+(hacia adelante y hacia atrás: cutId↔CUT_INDEX, pieza↔PART_INDEX,
+hoja↔PTN_INDEX, retazo↔Xn), y `ptx/verifyCutPlanPtxReadback.ts` comprueba
+semánticamente los bytes leídos contra el programa original re-ejecutado
+(`optimizeCutPlan → compile → validate → serialize → parse → readback`). El
+verifier es semánticamente independiente del compiler: importa sólo sus
+tipos y re-deriva por separado (duplicado deliberado de comprobación cruzada)
+la fase/FUNCTION, el preorder estructural, el TYPE, las liberaciones y las
+líneas de vectores — un test de guard de fuente lo hace cumplir, de modo que
+un bug industrial del writer no puede verificarse a sí mismo.
+Decisiones de candidato documentadas en el módulo, no claims de receptor: la
+fase de staging determina FUNCTION (fase 3 sobre X sigue siendo 3; fase > 3
+falla cerrado), las filas CUTS van en preorder estructural con CUT_INDEX y
+llevan SEQUENCE de ejecución independiente (como el fragmento 03), las
+liberaciones de retazos son filas QTY_RPT=0, el exact-fit no genera filas
+ficticias, DIMENSION siempre es la medida relativa conservada (280, no 734),
+las magnitudes deben ser representables en la resolución configurada o
+fallan cerrado, y los planes con refilados positivos se rechazan
+(`ptx_compile.trim_unsupported`) porque no hay mapping documentado para
+90..99 ni para head. Identidad ASCII crítica (códigos de material, CODE de
+PARTS_REQ, claves de mapeo) falla cerrado (`ptx_compile.identity_not_ascii`)
+en lugar de filtrarse: 'MDFÁ' y 'MDF' nunca se fusionan; el filtrado
+determinista queda sólo para texto auxiliar. MATERIALS.BOOK emite el valor
+conservador 1: el dossier sólo documenta que cuenta tableros [S03 pp.134–135]
+y "total de tableros del job" NO está establecido.
+`ptx/cutPlanPtxGolden.ts` congela un candidato real de laboratorio
+etiquetado `LAB_FIXTURE NOT_MACHINE_VALIDATED`. El compilador sigue sin
+conectarse al perfil CADmatic 4, al adapter productivo, al botón de descarga
+o al exportador legacy `ptxCutPlanExport`.
 
 ## Relación con autoridades existentes
 
