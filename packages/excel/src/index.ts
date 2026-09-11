@@ -214,6 +214,32 @@ export {
 } from './ptx/validate';
 export { ptxDocumentDifference, ptxDocumentsEqual } from './ptx/equivalence';
 
+// --- CutProgram → PTX compiler (#650 PR 5): compiles the real optimizer cut
+// program into the documented PTX subset above, with an inverse index mapping
+// and an independent semantic readback check. Not connected to the productive
+// adapter, the download flow or the legacy ptxCutPlanExport. ---
+export {
+  PtxCompilationError,
+  compileCutPlanToPtxDocument,
+  ptxAscii,
+  ptxDivisionVector,
+  ptxPatternTypeForSheet,
+  ptxQuantize,
+  planCutProgramDivisions,
+  planSheetReleases,
+  type CompileCutPlanToPtxOptions,
+  type CompiledPtxCandidate,
+  type PtxCompiledSheetMapping,
+  type PtxCompilationErrorCode,
+  type PtxCompilationMapping,
+  type PtxDivisionPlan,
+  type PtxReleasePlan,
+} from './ptx/compileCutPlan';
+export {
+  verifyCutPlanPtxReadback,
+  type CutPlanPtxReadbackIssue,
+} from './ptx/verifyCutPlanPtxReadback';
+
 
 
 // --- Machine output adapters and profiles (#351 foundation) ---

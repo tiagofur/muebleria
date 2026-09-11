@@ -1,3 +1,17 @@
+# Issue #650 — PR 5: compilar CutProgram real a PTX documentado
+
+- Approval: prompt del propietario (2026-09-11), PR 5 de #650. Dependencia verificada: PR #656 MERGED en origin/main@25c2cbb55f86d379ffba9c47844ce850552b09f9.
+- Started: 2026-09-11. Branch `feat/650-ptx-compiler`, base `origin/main@25c2cbb5`. Single writer.
+- Result: `IMPLEMENTED_PENDING_REVIEW` → `progress/implementation_650_ptx_compiler.md`. Compilador `compileCutPlanToPtxDocument` + verificación `verifyCutPlanPtxReadback` en `packages/excel/src/ptx/`; cadena completa demostrada sobre plan real de optimizeCutPlan (con y sin vectores) y sobre el ejercicio didáctico del dossier (CUT_A..CUT_D reproducidos por la heurística strip real). 24 tests nuevos; fase > 3, cnc-nesting, programa ausente, espesor ausente y kerf no uniforme fallan cerrado. Sin conexión a adapter productivo, descarga, ptxCutPlanExport ni claims CADmatic 4.
+- Evidence: `@granete/excel` 35 archivos / 250 tests (+3 skipped hardware preexistentes); monorepo domain 105/1407, ui 160/1704, web 35/444, storage 12/191, desktop 3/17, mobile 10/73; `pnpm typecheck` 7/7; `pnpm openapi:check` sin drift; `git diff --check` limpio.
+- Scope: compilador `CutPlan/CutProgram → PtxDocument` sobre el núcleo #656 (packages/excel/src/ptx/compileCutPlan.ts + verificación semántica de readback). Sin conectar adapter productivo, sin tocar botón de descarga, sin sustituir ptxCutPlanExport.ts, sin claim CADmatic 4, sin cinco cocinas.
+- Plan:
+  1. `compileCutPlanToPtxDocument(cutPlan, options) → { document, mapping }`: un job, MATERIALS por código, PARTS_REQ por pieza colocada (sin agregación), BOARDS+PATTERNS por tablero, CUTS por división en orden de programa + filas de liberación de retazos (QTY_RPT=0/SEQUENCE=0), OFFCUTS por terminal remnant, VECTORS opcionales (Y invertida a origen superior izquierdo).
+  2. Política FUNCTION documentada: fase = generación de la región padre (kept sube, rest conserva, trims transparentes); fase ≤ 2 → 1 rip (eje y) / 2 cross (eje x); fase 3 → 3; fase > 3 fail closed. TYPE 0 si primera división no-trim eje y, si no 4. Kerf uniforme exigido. MATERIALS trims vacíos (la geometría vive en CUTS; ambigüedad §9).
+  3. `verifyPtxCutPlanReadback(parsed, cutPlan, mapping, options)`: re-ejecuta executeCutProgram (independiente del compilador) y comprueba bytes↔programa vía mapping: orden/fila por división, dimensión cuantizada, función, secuencia, referencias de pieza/retazo, materiales/kerf, vectores absolutos.
+  4. Tests: cadena completa sobre plan real de optimizeCutPlan (con y sin vectores), emisión determinista con trims, detección de mutaciones semánticas (dimensión, reorden, PART_INDEX cruzado, kerf, fila borrada, vector mutado) y fail-closed (fase 4, cnc-nesting, programa ausente, espesor ausente, kerf no uniforme).
+  5. Exportar desde index.ts; `pnpm test`/`typecheck` de @granete/excel.
+
 # Issue #650 — PR #655: correcciones finales R1–R5 antes de PTX
 
 - Approval: prompt del propietario (2026-09-11) sobre el HEAD revisado `95626a10ed603beba66bd0e8428c2593ad3bdb5c` del PR #655. Alcance: únicamente R1–R5 del informe de revisión final; mismo PR, sin avanzar a PTX.

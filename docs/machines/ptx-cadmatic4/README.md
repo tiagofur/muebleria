@@ -47,8 +47,17 @@ optimizador. Limitaciones registradas: columnas documentadas fuera del
 subconjunto (p. ej. OFFCUTS más allá de `JOB_INDEX..WIDTH`, MATERIALS tras
 `RULE4`) fallan cerrado por la ambigüedad de inventario de §9 de la
 investigación; PARTS_INF/PARTS_UDI/PARTS_DST/PTN_UDI/NOTES no están
-implementados. Este núcleo todavía no está conectado al CutProgram real, al
-perfil CADmatic 4 ni al exportador legacy.
+implementados.
+
+Sobre ese núcleo, `ptx/compileCutPlan.ts` compila el CutPlan/CutProgram real
+del optimizador en un `PtxDocument` validado con tabla inversa de índices, y
+`ptx/verifyCutPlanPtxReadback.ts` comprueba semánticamente los bytes leídos
+contra el programa original (`optimizeCutPlan → compile → validate →
+serialize → parse → readback`). La política de FUNCTION/fases, liberaciones de
+retazos y vectores está documentada en el propio módulo como decisiones de
+candidato, no como claims de receptor; la fase > 3 falla cerrada. El compilador
+sigue sin conectarse al perfil CADmatic 4, al adapter productivo, al botón de
+descarga o al exportador legacy `ptxCutPlanExport`.
 
 ## Relación con autoridades existentes
 
