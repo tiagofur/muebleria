@@ -81,3 +81,21 @@ PDF/XLSX exports, geometry and machine output were untouched.
   gate also passed 4/4 in 34.1 s and regenerated the six reviewed screenshots.
 - The immutable final branch head and exact authored additions/deletions are
   recorded in the live PR #653 body after push/readback.
+
+## Integration readback and scope clarification — 2026-09-11
+
+PR #653 is merged (`41e8a0bdc303753df9bc0d8bfb78aaaec1aa2505`). The status and
+exact-head evidence above are preserved as the original implementation report,
+not a claim that the PR remains pending today.
+
+At `main@25c2cbb55f86d379ffba9c47844ce850552b09f9`, the delivered authority
+covers the header, identity, aggregate quantity, totals and lifecycle entry.
+`ProjectItemsSection` still reads `project.items` and the current catalog;
+`productionExportOk` still checks the legacy project status. Therefore this
+report must not be used as proof that all detail lines or operational consumers
+have migrated. The existing accepted-revision edit guard remains valid.
+
+Continue with [the bounded quote-authority plan](../docs/demo/quote-authority-continuation-2026-09-11.md)
+under the still-open #642. Its first deliverable is historical detail-line
+coherence; global consumers, legacy retirement and exports remain later work.
+This addendum changes no product code, test assertions or historical test result.
