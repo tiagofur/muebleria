@@ -126,10 +126,29 @@ Antes de código, el agente debe:
 3. Proponer cambios mínimos de contrato, persistencia/seguridad y pruebas, con exclusiones y presupuesto, para aprobación humana.
 4. Implementar sólo el incremento aprobado, con generated contracts y pruebas aplicables; mantener activo el mismo owner hasta una entrega publicada/revisada.
 
-No iniciar #668 porque el esquema esté dibujado; el milestone requerido debe estar integrado. Los PRs parciales usan `Refs #667`/`Refs #666`. Sin merge, cierres, etiqueta protegida, cambio de datos reales o ejecución física automáticos.
+No iniciar #668 porque el esquema esté dibujado; el milestone requerido debe estar integrado. Cada PR parcial usa una sola línea de vinculación a su issue propietaria: para M1, `Refs #667` como primera línea no vacía; el programa se menciona después como `Programa: #666`, sin una segunda línea de vinculación. El PR documental #672 conserva como único target la META #666. Sin merge, cierres, etiqueta protegida, cambio de datos reales o ejecución física automáticos.
 
 ## 9. Evidencia de esta entrega documental
 
 Esta entrega inspecciona fuentes y crea documentación/issues; no ejecuta migraciones, tests de producto, conversores, SketchUp ni máquinas. La comprobación documental y readback remoto se registran en el PR. `progress/current.md`, `feature_list.json`, código funcional y ramas activas de producto permanecen fuera del diff.
 
 El repositorio tenía PR #664 de Cotizaciones abierto en la colección consultada. La consulta general por `is:pr` devolvió también issues, por lo que no se usó como evidencia del inventario de PRs; se consultó la colección `/pulls?state=open` directamente. Revalidar el estado al comenzar el trabajo futuro.
+
+## 10. Gate de publicación de PRs — corrección de la preparación
+
+`scripts/check_pr_metadata.py` exige una única referencia de vinculación en la primera línea no vacía, exactamente una etiqueta de tipo soportada en el PR y la issue vinculada abierta con una única etiqueta de estado `status:approved`. Se permiten menciones de otras issues en prosa normal, pero no un segundo target mediante palabras de vinculación, ni siquiera dentro de un bloque Markdown.
+
+Ejemplo para el futuro PR de M1:
+
+```text
+Refs #667
+
+Programa: #666.
+Entrega: M1 de recursos 3D; no cierra la issue ni el programa.
+```
+
+Esta regla también se aplica a PRs documentales y en borrador: `type:docs` y `draft` no eximen de aprobación humana. El estado aprobado debe registrarlo el propietario sobre la issue que realmente gobierna el alcance; los agentes no se autoconceden la etiqueta ni cambian el target a una issue ajena para pasar el control. Aprobar la planificación no aprueba automáticamente las entregas hijas ni su merge.
+
+Diagnóstico del PR #672 sobre `47896a6640c469bf14bdbbff7a02caaca2d7c981`: CI run `34654840602` terminó en success; PR Publication run `34655155781` falló en «Check current PR and approved issue». El PR tenía un único target (#666) y `type:docs`, pero #666 no tenía aprobación registrada. Este es un bloqueo de metadata, no evidencia de fallo de compilación ni motivo para modificar el workflow.
+
+Cambiar la etiqueta de una issue no es uno de los eventos `pull_request` que escucha `.github/workflows/pr-publication.yml`. Después de registrar la aprobación humana debe reejecutarse el job fallido o producirse un evento de PR válido y comprobarse el resultado del HEAD actual. No gastar ejecuciones repitiendo el job mientras la aprobación siga ausente. Una reproducción local con etiquetas simuladas no equivale a aprobación real ni a Actions verde.
