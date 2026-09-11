@@ -14,7 +14,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { CutPlanSheet, CutPlanPlacedPiece, CutProgramStepView } from '@granete/domain';
+import { formatMm, type CutPlanSheet, type CutPlanPlacedPiece, type CutProgramStepView } from '@granete/domain';
 import type {
   BoardCutLayout,
   PlacedPieceLegacy,
@@ -312,7 +312,7 @@ export function ProductionBoardSvg({
               fill="#ffffff"
               textAnchor="middle"
             >
-              Región activa {Math.round(activeStep.parentRect.lengthMm)}×{Math.round(activeStep.parentRect.widthMm)} mm
+              Región activa {formatMm(activeStep.parentRect.lengthMm)}×{formatMm(activeStep.parentRect.widthMm)} mm
             </text>
           </g>
 
@@ -378,7 +378,7 @@ export function ProductionBoardSvg({
                 fill="#ffffff"
                 textAnchor="middle"
               >
-                Corte #{activeStep.stepNumber} ({Math.round(activeStep.relativeMeasureMm)}mm)
+                Corte #{activeStep.stepNumber} ({formatMm(activeStep.cutOffsetMm)}mm)
               </text>
             </g>
           ) : (
@@ -399,7 +399,7 @@ export function ProductionBoardSvg({
                 fill="#ffffff"
                 textAnchor="middle"
               >
-                Corte #{activeStep.stepNumber} ({Math.round(activeStep.relativeMeasureMm)}mm)
+                Corte #{activeStep.stepNumber} ({formatMm(activeStep.cutOffsetMm)}mm)
               </text>
             </g>
           )}

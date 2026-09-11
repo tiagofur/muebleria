@@ -158,11 +158,12 @@ test.describe('Cut Program Preview & Step-by-Step UI (#650 PR 3)', () => {
     await expect(btnNext).toBeVisible();
     await btnNext.click();
 
-    // 10. Resumen de paso visible con número de pasada y medida relativa
+    // 10. Resumen de paso visible con offset local de línea y cantidad de refilado
     const stepSummary = page.locator('[data-testid="step-info-summary"]');
     await expect(stepSummary).toBeVisible();
     await expect(stepSummary).toContainText('Pasada #1');
-    await expect(stepSummary).toContainText('Medida:');
+    await expect(stepSummary).toContainText('Línea:');
+    await expect(stepSummary).toContainText('Refilado:');
     await expect(stepSummary).toContainText('Región:');
 
     // 11. Verificar que en el SVG se renderiza la región activa y línea de corte

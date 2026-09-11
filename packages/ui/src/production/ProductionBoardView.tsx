@@ -22,11 +22,12 @@ import {
   TriangleAlert,
   Zap,
 } from 'lucide-react';
-import type {
-  ProductionCutRow,
-  CutPlanSheet,
-  CutPlanPlacedPiece,
-  CutProgramStepView,
+import {
+  formatMm,
+  type ProductionCutRow,
+  type CutPlanSheet,
+  type CutPlanPlacedPiece,
+  type CutProgramStepView,
 } from '@granete/domain';
 import './productionBoardView.css';
 import {
@@ -111,14 +112,14 @@ export function ProductionBoardView({
     }
   };
 
-  // Reconcile/reset selection whenever the sheet changes so we don't hold a stale index
-  const sheetIdentityKey = sheet
-    ? `${sheet.sheetIndex}-${sheet.materialCode}-${sheet.cutProgram ? 'prog' : 'noprog'}`
-    : 'empty';
-
+  // Reconcile/reset selection whenever the sheet or its actual program object
+  // changes (a regenerated program for the same sheet/material must not keep a
+  // stale step index). Reference identity is deterministic and never
+  // serializes the program on every render (#650 PR #655 R5).
+  const programRef = sheet?.cutProgram;
   useEffect(() => {
     handleSelectStep(null);
-  }, [sheetIdentityKey]);
+  }, [sheet, programRef]);
 
   const activeStep: CutProgramStepView | null =
     activeStepIndex != null &&
@@ -368,7 +369,11 @@ export function ProductionBoardView({
                 <option value="">Vista general ({totalSteps} cortes)</option>
                 {steps.map((s) => (
                   <option key={s.cutId} value={s.stepIndex}>
-                    #{s.stepNumber}: {s.isTrim ? 'Refilado' : s.producedPiece ? `Pieza [${s.producedPiece.partCode}]` : 'Separación'} ({Math.round(s.relativeMeasureMm)} mm)
+                    #{s.stepNumber}: {s.isTrim
+                      ? `Refilado (${formatMm(s.trimAmountMm ?? 0)} mm · línea ${formatMm(s.cutOffsetMm)} mm)`
+                      : s.producedPiece
+                        ? `Pieza [${s.producedPiece.partCode}]`
+                        : 'Separación'} ({formatMm(s.cutOffsetMm)} mm)
                   </option>
                 ))}
               </select>
@@ -402,12 +407,13 @@ export function ProductionBoardView({
               <strong style={{ color: 'var(--warning-700)' }}>
                 Pasada #{activeStep.stepNumber} de {totalSteps}:
               </strong>{' '}
-              Medida: <strong>{Math.round(activeStep.relativeMeasureMm)} mm</strong> (eje {activeStep.axis.toUpperCase()}) ·{' '}
-              Disco: <strong>{activeStep.nominalKerfMm} mm</strong>{' '}
+              Línea: <strong>{formatMm(activeStep.cutOffsetMm)} mm</strong> desde el origen de la región (eje {activeStep.axis.toUpperCase()})
+              {activeStep.isTrim ? <> · Refilado: <strong>{formatMm(activeStep.trimAmountMm ?? 0)} mm</strong></> : ''} ·{' '}
+              Disco: <strong>{formatMm(activeStep.nominalKerfMm)} mm</strong>{' '}
               {activeStep.bladeExitsParent
-                ? `(consumo local: ${activeStep.consumedKerfMm} mm, salida verificada) · `
+                ? `(consumo local: ${formatMm(activeStep.consumedKerfMm)} mm, salida verificada) · `
                 : '· '}
-              Región: {Math.round(activeStep.parentRect.lengthMm)}×{Math.round(activeStep.parentRect.widthMm)} mm
+              Región: {formatMm(activeStep.parentRect.lengthMm)}×{formatMm(activeStep.parentRect.widthMm)} mm
               {activeStep.producedPiece && (
                 <span style={{ color: 'var(--success-700)', fontWeight: 600 }}>
                   {' '}· Obtiene: [{activeStep.producedPiece.partCode}] {activeStep.producedPiece.partName}
@@ -415,7 +421,7 @@ export function ProductionBoardView({
               )}
               {activeStep.producedRemnant && (
                 <span style={{ color: 'var(--success-700)', fontWeight: 600 }}>
-                  {' '}· Retazo útil: {Math.round(activeStep.producedRemnant.lengthMm)}×{Math.round(activeStep.producedRemnant.widthMm)} mm
+                  {' '}· Retazo útil: {formatMm(activeStep.producedRemnant.lengthMm)}×{formatMm(activeStep.producedRemnant.widthMm)} mm
                 </span>
               )}
             </div>

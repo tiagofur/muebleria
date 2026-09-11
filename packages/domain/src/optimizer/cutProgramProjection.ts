@@ -24,6 +24,7 @@ import {
   type CutProgramTrace,
   type CutProgramTraceDivision,
 } from './cutProgram';
+import { formatMm } from './formatMm';
 import type { PlacementResult } from './pieces';
 import type {
   CutInstruction,
@@ -42,8 +43,22 @@ export interface CutProgramStepView {
   readonly parentRegionId: string;
   readonly axis: CutProgramAxis;
   readonly parentRect: CutProgramRect;
-  /** Relative measure (mm) kept from the parent origin along the advance axis. */
+  /** Kept extent along the axis (size of the kept child, mm) — PTX will need it. */
+  readonly keptExtentMm: number;
+  /**
+   * Kept extent alias kept for display compatibility; identical to
+   * keptExtentMm. Kept explicit so it never gets reused as a cut position.
+   */
   readonly relativeMeasureMm: number;
+  /**
+   * Position of the cut line from the parent region's near origin along the
+   * axis (mm) — local, never a global board coordinate. Equals the kept
+   * extent on normal layouts; the blade distance from the near edge on
+   * leadingBand passes (trim:left margin 10 → offset 10, kept 2430).
+   */
+  readonly cutOffsetMm: number;
+  /** For trim passes: total amount removed from that edge (mm); else null. */
+  readonly trimAmountMm: number | null;
   /** Nominal saw blade kerf (mm). */
   readonly nominalKerfMm: number;
   /** Actual kerf consumed from the parent (mm). */
@@ -146,10 +161,12 @@ export interface CutProgramBoardProjection {
 }
 
 /**
- * Calculates the cut edge coordinate and line across the parent region.
+ * Calculates the cut edge coordinate (global), its LOCAL offset from the
+ * parent origin, and the line across the parent region.
  */
 function computeDivisionCutGeometry(division: CutProgramTraceDivision): {
   readonly cutCoordinate: number;
+  readonly cutOffsetMm: number;
   readonly cutLine: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number };
   readonly nominalFootprintRect: CutProgramRect;
   readonly consumedKerfMm: number;
@@ -160,6 +177,7 @@ function computeDivisionCutGeometry(division: CutProgramTraceDivision): {
     const cutCoordinate = leadingBand
       ? parentRect.xMm + parentRect.lengthMm - keptExtentMm
       : parentRect.xMm + keptExtentMm;
+    const cutOffsetMm = cutCoordinate - parentRect.xMm;
 
     const cutLine = {
       x1: cutCoordinate,
@@ -175,12 +193,13 @@ function computeDivisionCutGeometry(division: CutProgramTraceDivision): {
       widthMm: parentRect.widthMm,
     };
 
-    return { cutCoordinate, cutLine, nominalFootprintRect, consumedKerfMm };
+    return { cutCoordinate, cutOffsetMm, cutLine, nominalFootprintRect, consumedKerfMm };
   } else {
     const consumedKerfMm = division.kerfBandRect.widthMm;
     const cutCoordinate = leadingBand
       ? parentRect.yMm + parentRect.widthMm - keptExtentMm
       : parentRect.yMm + keptExtentMm;
+    const cutOffsetMm = cutCoordinate - parentRect.yMm;
 
     const cutLine = {
       x1: parentRect.xMm,
@@ -196,7 +215,7 @@ function computeDivisionCutGeometry(division: CutProgramTraceDivision): {
       widthMm: kerfMm,
     };
 
-    return { cutCoordinate, cutLine, nominalFootprintRect, consumedKerfMm };
+    return { cutCoordinate, cutOffsetMm, cutLine, nominalFootprintRect, consumedKerfMm };
   }
 }
 
@@ -232,6 +251,7 @@ function buildCutInstruction(
   isTrim: boolean,
   cutLineLengthMm: number,
   consumedKerfMm: number,
+  cutOffsetMm: number,
   producedPiece?: CutPlanPlacedPiece | null,
   producedRemnant?: CutPlanRemnant | null,
 ): CutInstruction {
@@ -239,9 +259,13 @@ function buildCutInstruction(
   let cutType: 'trim' | 'rip' | 'cross' = 'rip';
   let description = '';
 
-  const parentDesc = `${Math.round(division.parentRect.lengthMm)}×${Math.round(division.parentRect.widthMm)} mm`;
-  const kerfDesc = `disco: ${division.kerfMm} mm`;
+  const parentDesc = `${formatMm(division.parentRect.lengthMm)}×${formatMm(division.parentRect.widthMm)} mm`;
+  const kerfDesc = `disco: ${formatMm(division.kerfMm)} mm`;
   const exitNote = division.bladeExitsParent ? ' [salida de disco verificada]' : '';
+  const parentExtentMm = division.axis === 'x'
+    ? division.parentRect.lengthMm
+    : division.parentRect.widthMm;
+  const trimAmountMm = parentExtentMm - division.keptExtentMm;
 
   if (isTrim) {
     phase = 1;
@@ -249,24 +273,21 @@ function buildCutInstruction(
     const trimSide = division.axis === 'x'
       ? (division.leadingBand ? 'izquierdo (X=0)' : 'derecho')
       : (division.leadingBand ? 'inferior (Y=0)' : 'superior');
-    const trimMm = division.axis === 'x'
-      ? division.parentRect.lengthMm - division.keptExtentMm
-      : division.parentRect.widthMm - division.keptExtentMm;
-    description = `Refilar borde ${trimSide}: ${Math.round(trimMm)} mm (${kerfDesc})${exitNote}`;
+    description = `Refilar borde ${trimSide}: ${formatMm(trimAmountMm)} mm · línea a ${formatMm(cutOffsetMm)} mm del origen (${kerfDesc})${exitNote}`;
   } else if (producedPiece) {
     phase = 3;
     cutType = 'cross';
-    description = `Trocear pieza [${producedPiece.partCode}] ${producedPiece.partName} a ${Math.round(division.keptExtentMm)} mm (${producedPiece.lengthMm}×${producedPiece.widthMm} mm, ${kerfDesc})${exitNote}`;
+    description = `Trocear pieza [${producedPiece.partCode}] ${producedPiece.partName} a ${formatMm(cutOffsetMm)} mm (${formatMm(producedPiece.lengthMm)}×${formatMm(producedPiece.widthMm)} mm, ${kerfDesc})${exitNote}`;
   } else if (producedRemnant) {
     phase = 2;
     cutType = 'rip';
     const orientation = division.axis === 'x' ? 'columna' : 'tira';
-    description = `Separar ${orientation} a ${Math.round(division.keptExtentMm)} mm sobre región de ${parentDesc} (${kerfDesc}) · retazo útil ${Math.round(producedRemnant.lengthMm)}×${Math.round(producedRemnant.widthMm)} mm${exitNote}`;
+    description = `Separar ${orientation} a ${formatMm(cutOffsetMm)} mm sobre región de ${parentDesc} (${kerfDesc}) · retazo útil ${formatMm(producedRemnant.lengthMm)}×${formatMm(producedRemnant.widthMm)} mm${exitNote}`;
   } else {
     phase = 2;
     cutType = 'rip';
     const orientation = division.axis === 'x' ? 'columna' : 'tira';
-    description = `Separar ${orientation} a ${Math.round(division.keptExtentMm)} mm sobre región de ${parentDesc} (${kerfDesc})${exitNote}`;
+    description = `Separar ${orientation} a ${formatMm(cutOffsetMm)} mm sobre región de ${parentDesc} (${kerfDesc})${exitNote}`;
   }
 
   return {
@@ -274,11 +295,13 @@ function buildCutInstruction(
     phase,
     cutType,
     description,
-    positionMm: division.keptExtentMm,
+    positionMm: cutOffsetMm,
     lengthMm: cutLineLengthMm,
     cutId: division.cutId,
     parentRegionId: division.parentRegionId,
     axis: division.axis,
+    cutOffsetMm,
+    ...(isTrim ? { trimAmountMm } : {}),
     relativeMeasureMm: division.keptExtentMm,
     kerfMm: division.kerfMm,
     nominalKerfMm: division.kerfMm,
@@ -328,7 +351,7 @@ export function projectCutProgram(
     const isTrim = isTrimDivision(division, liberatedWasteIds);
     const isPrimaryCut = i === 0;
 
-    const { cutCoordinate, cutLine, nominalFootprintRect, consumedKerfMm } =
+    const { cutCoordinate, cutOffsetMm, cutLine, nominalFootprintRect, consumedKerfMm } =
       computeDivisionCutGeometry(division);
 
     const cutLineLengthMm = division.axis === 'x'
@@ -367,9 +390,14 @@ export function projectCutProgram(
       isTrim,
       cutLineLengthMm,
       consumedKerfMm,
+      cutOffsetMm,
       producedPiece,
       producedRemnant,
     );
+
+    const parentExtentMm = division.axis === 'x'
+      ? division.parentRect.lengthMm
+      : division.parentRect.widthMm;
 
     const stepView: CutProgramStepView = {
       stepIndex: i,
@@ -378,7 +406,10 @@ export function projectCutProgram(
       parentRegionId: division.parentRegionId,
       axis: division.axis,
       parentRect: division.parentRect,
+      keptExtentMm: division.keptExtentMm,
       relativeMeasureMm: division.keptExtentMm,
+      cutOffsetMm,
+      trimAmountMm: isTrim ? parentExtentMm - division.keptExtentMm : null,
       nominalKerfMm: division.kerfMm,
       consumedKerfMm,
       kerfBandRect: division.kerfBandRect,
@@ -426,8 +457,8 @@ export function projectCutProgram(
       : firstStep.cutLine.y1;
     const axisLabel = firstStep.axis.toUpperCase();
     const label = firstStep.isTrim
-      ? `1er corte (refilado ${axisLabel}): ${axisLabel} = ${Math.round(coordMm)} mm`
-      : `1er corte: ${axisLabel} = ${Math.round(coordMm)} mm`;
+      ? `1er corte (refilado ${axisLabel}): ${axisLabel} = ${formatMm(coordMm)} mm`
+      : `1er corte: ${axisLabel} = ${formatMm(coordMm)} mm`;
 
     primaryCut = {
       axis: firstStep.axis,

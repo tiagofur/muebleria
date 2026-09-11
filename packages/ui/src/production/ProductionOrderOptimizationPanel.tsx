@@ -23,6 +23,7 @@ import {
   estimateBoardSheets,
   generateProjectMaterialSummary,
   optimizeCutPlan,
+  projectSheetCutProgram,
   DEFAULT_CUT_PLAN_CONFIG,
   DEFAULT_TOOL_SPACING_MM,
   type Catalog,
@@ -204,6 +205,16 @@ export function ProductionOrderOptimizationPanel({
   };
 
   const activeSheet = currentCutPlan?.sheets[activeSheetIndex] ?? null;
+  // The sequence sidebar is governed by the SAME validated projection the
+  // board view uses: stale sheet.instructions are never a visual authority
+  // when a cutProgram exists and must be validated (#650 PR #655 R3).
+  const activeProjection = useMemo(
+    () => (activeSheet ? projectSheetCutProgram(activeSheet) : null),
+    [activeSheet],
+  );
+  // Result rendering follows the GENERATED plan, not the live selector: the
+  // selector only sets the parameters of the NEXT generation (R4).
+  const activePlanIsNesting = activeSheet?.strategy === 'cnc-nesting';
   // Exports follow the GENERATED plan, not the live selector: the file must
   // always match the strategy that produced the layout on screen.
   const planStrategy = currentCutPlan?.config.cutStrategy ?? cutStrategy;
@@ -514,10 +525,7 @@ export function ProductionOrderOptimizationPanel({
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns:
-                    !isNesting && (activeSheet.instructions.length > 0 || !activeSheet.cutProgram)
-                      ? '1fr 300px'
-                      : '1fr',
+                  gridTemplateColumns: !activePlanIsNesting ? '1fr 300px' : '1fr',
                   gap: 16,
                 }}
               >
@@ -529,7 +537,7 @@ export function ProductionOrderOptimizationPanel({
                     onRegeneratePlan={handleGenerateCutPlan}
                   />
                 </div>
-                {activeSheet.instructions.length > 0 ? (
+                {activeProjection && !activePlanIsNesting && activeProjection.status === 'valid' && activeProjection.steps.length > 0 ? (
                   <div
                     style={{
                       background: 'var(--surface-card)',
@@ -551,7 +559,7 @@ export function ProductionOrderOptimizationPanel({
                       }}
                     >
                       <h4 style={{ margin: 0, fontSize: '0.95em', fontWeight: 600 }}>
-                        Secuencia de Corte ({activeSheet.instructions.length} pasos)
+                        Secuencia de Corte ({activeProjection.steps.length} pasos)
                       </h4>
                       {selectedStepIndex !== null && (
                         <button
@@ -564,11 +572,11 @@ export function ProductionOrderOptimizationPanel({
                       )}
                     </div>
                     <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.45 }}>
-                      {activeSheet.instructions.map((inst, idx) => {
+                      {activeProjection.steps.map((step, idx) => {
                         const isSelected = selectedStepIndex === idx;
                         return (
                           <li
-                            key={inst.step}
+                            key={step.instruction.step}
                             style={{
                               marginBottom: 6,
                               cursor: 'pointer',
@@ -588,15 +596,41 @@ export function ProductionOrderOptimizationPanel({
                               }
                             }}
                           >
-                            <span style={{ fontWeight: inst.phase === 1 || isSelected ? 600 : 400 }}>
-                              {inst.description}
+                            <span style={{ fontWeight: step.instruction.phase === 1 || isSelected ? 600 : 400 }}>
+                              {step.instruction.description}
                             </span>
                           </li>
                         );
                       })}
                     </ol>
                   </div>
-                ) : !isNesting && !activeSheet.cutProgram ? (
+                ) : activeProjection && !activePlanIsNesting && activeProjection.status === 'invalid' ? (
+                  <div
+                    style={{
+                      background: 'var(--surface-card)',
+                      border: '1px solid var(--danger-500)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: 14,
+                      fontSize: '0.85em',
+                      color: 'var(--danger-700)',
+                    }}
+                    data-testid="prod-opt-invalid-program-sidebar"
+                  >
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95em', fontWeight: 600 }}>
+                      Secuencia bloqueada
+                    </h4>
+                    <p style={{ margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                      El programa de corte de este tablero no es válido: {activeProjection.errorMessage}. Regenerá el plan para volver a disponer de la secuencia.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={handleGenerateCutPlan}
+                    >
+                      <Zap size={14} strokeWidth={1.5} aria-hidden /> Regenerar plan
+                    </button>
+                  </div>
+                ) : activeProjection && !activePlanIsNesting && activeProjection.status === 'missing' ? (
                   <div
                     style={{
                       background: 'var(--surface-card)',
@@ -604,7 +638,7 @@ export function ProductionOrderOptimizationPanel({
                       borderRadius: 'var(--radius-md)',
                       padding: 14,
                       fontSize: '0.85em',
-                      color: 'var(--text-secondary, #475569)',
+                      color: 'var(--text-secondary)',
                     }}
                     data-testid="prod-opt-missing-program-sidebar"
                   >

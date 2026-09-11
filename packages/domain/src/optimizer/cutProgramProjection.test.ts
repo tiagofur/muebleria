@@ -544,7 +544,8 @@ describe('cutProgramProjection (dominio)', () => {
       for (const inst of sheet.instructions) {
         expect(inst.cutId).toBeDefined();
         expect(inst.positionMm).toBeGreaterThan(0);
-        expect(inst.relativeMeasureMm).toBe(inst.positionMm);
+        // positionMm always mirrors the local cut line offset.
+        expect(inst.positionMm).toBe(inst.cutOffsetMm);
         for (const ch of inst.description) {
           expect(ch.codePointAt(0)!).toBeLessThanOrEqual(0xff);
         }
@@ -626,5 +627,140 @@ describe('cutProgramProjection (dominio)', () => {
         widthMm: sheet.sheetWidthMm,
       });
     }
+  });
+
+  it('R1: cutOffsetMm es local al padre — 280 de medida, nunca 734 de posición global', () => {
+    // Canonical example: a block starting at X=454 with measure 280 ends its
+    // cut line at global X=734 — the LOCAL offset from the parent origin is 280.
+    const builder = new CutProgramSheetBuilder({
+      boardRegionId: 'board',
+      x: 0,
+      y: 0,
+      length: 1200,
+      width: 1000,
+    });
+    const first = builder.divide({
+      parentRegionId: 'board',
+      axis: 'x',
+      keptExtentMm: 450,
+      kerfMm: 4,
+      cutId: 'head',
+    });
+    builder.markTerminal(first.kept.regionId, 'waste');
+    if (first.rest) {
+      // Parent of the next cut starts exactly at X=454.
+      const second = builder.divide({
+        parentRegionId: first.rest.regionId,
+        axis: 'x',
+        keptExtentMm: 280,
+        kerfMm: 4,
+        cutId: 'block',
+      });
+      builder.markTerminal(second.kept.regionId, 'waste');
+      if (second.rest) {
+        builder.markTerminal(second.rest.regionId, 'waste');
+      }
+    }
+    const projection = projectCutProgram(executeCutProgram(builder.build()));
+
+    const block = projection.steps[1]!;
+    expect(block.parentRect.xMm).toBe(454);
+    expect(block.cutLine.x1).toBe(734);
+    expect(block.keptExtentMm).toBe(280);
+    expect(block.cutOffsetMm).toBe(280);
+    expect(block.instruction.cutOffsetMm).toBe(280);
+    expect(block.instruction.positionMm).toBe(280);
+    expect(block.instruction.relativeMeasureMm).toBe(280);
+    expect(block.instruction.description).toContain('a 280 mm');
+    expect(block.instruction.description).not.toContain('734');
+  });
+
+  it('R1: leadingBand distingue kept extent, offset local de línea y cantidad de refilado', () => {
+    const builder = new CutProgramSheetBuilder({
+      boardRegionId: 'board',
+      x: 0,
+      y: 0,
+      length: 2440,
+      width: 1830,
+    });
+    const usable = registerTrimDivisions(
+      builder,
+      { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
+      4,
+    );
+    builder.markTerminal(usable.regionId, 'waste');
+    const projection = projectCutProgram(executeCutProgram(builder.build()));
+
+    // Refilado izquierdo (leadingBand): kept 2430, línea local a 10, retirado 10.
+    const left = projection.steps[0]!;
+    expect(left.cutId).toBe('trim:left');
+    expect(left.keptExtentMm).toBe(2430);
+    expect(left.cutOffsetMm).toBe(10);
+    expect(left.trimAmountMm).toBe(10);
+    expect(left.instruction.cutOffsetMm).toBe(10);
+    expect(left.instruction.trimAmountMm).toBe(10);
+    expect(left.instruction.description).toContain('10 mm');
+    expect(left.instruction.description).toContain('línea a 10 mm');
+
+    // Refilado derecho (normal): padre x 10..2440, kept 2420, línea local a
+    // 2420 desde el origen del padre, retirado 10.
+    const right = projection.steps[1]!;
+    expect(right.cutId).toBe('trim:right');
+    expect(right.keptExtentMm).toBe(2420);
+    expect(right.cutOffsetMm).toBe(2420);
+    expect(right.trimAmountMm).toBe(10);
+    expect(right.instruction.description).toContain('Refilar borde derecho: 10 mm');
+    expect(right.instruction.description).toContain('línea a 2420 mm');
+
+    // Inferior (leadingBand sobre Y) y superior (normal sobre Y).
+    const bottom = projection.steps[2]!;
+    expect(bottom.cutId).toBe('trim:bottom');
+    expect(bottom.keptExtentMm).toBe(1820);
+    expect(bottom.cutOffsetMm).toBe(10);
+    expect(bottom.trimAmountMm).toBe(10);
+
+    const top = projection.steps[3]!;
+    expect(top.cutId).toBe('trim:top');
+    expect(top.keptExtentMm).toBe(1810);
+    expect(top.cutOffsetMm).toBe(1810);
+    expect(top.trimAmountMm).toBe(10);
+  });
+
+  it('R2: medida decimal 333.3 se conserva estructurada y visible, con disco 3.2', () => {
+    const builder = new CutProgramSheetBuilder({
+      boardRegionId: 'board',
+      x: 0,
+      y: 0,
+      length: 1000,
+      width: 500,
+    });
+    const sep = builder.divide({
+      parentRegionId: 'board',
+      axis: 'x',
+      keptExtentMm: 333.3,
+      kerfMm: 3.2,
+      cutId: 'decimal-cut',
+    });
+    builder.markTerminal(sep.kept.regionId, 'waste');
+    if (sep.rest) {
+      builder.markTerminal(sep.rest.regionId, 'waste');
+    }
+    const projection = projectCutProgram(executeCutProgram(builder.build()));
+
+    // El número estructurado sigue siendo exactamente 333.3.
+    expect(projection.steps[0]!.keptExtentMm).toBeCloseTo(333.3, 9);
+    expect(projection.steps[0]!.cutOffsetMm).toBeCloseTo(333.3, 9);
+
+    // La instrucción muestra 333.3 y el disco 3.2, sin redondeo a entero.
+    const inst = projection.steps[0]!.instruction;
+    expect(inst.relativeMeasureMm).toBeCloseTo(333.3, 9);
+    expect(inst.cutOffsetMm).toBeCloseTo(333.3, 9);
+    expect(inst.description).toContain('a 333.3 mm');
+    expect(inst.description).not.toContain('333 mm');
+    expect(inst.description).toContain('disco: 3.2 mm');
+    expect(inst.description).not.toContain('disco: 3 mm');
+
+    // El label del primer corte también preserva el decimal.
+    expect(projection.primaryCut?.label).toContain('X = 333.3 mm');
   });
 });

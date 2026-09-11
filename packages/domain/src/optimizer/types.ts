@@ -159,7 +159,11 @@ export interface CutInstruction {
   readonly phase: 1 | 2 | 3; // 1: Trim, 2: Rip strip, 3: Cross cut
   readonly cutType: 'trim' | 'rip' | 'cross';
   readonly description: string;
-  /** Relative measure (mm) along the advance axis from the parent origin. */
+  /**
+   * Cut line position (mm) from the parent region's near origin along the
+   * axis — same value as cutOffsetMm when the program projection produced
+   * this instruction. Kept as the historical field name.
+   */
   readonly positionMm: number;
   /** Cut line extent across the parent region (mm). */
   readonly lengthMm: number;
@@ -167,9 +171,27 @@ export interface CutInstruction {
   readonly cutId?: string;
   /** Program-local active parent region identity. */
   readonly parentRegionId?: string;
-  /** Axis of advance ('x' | 'y'). */
+  /** Division axis of advance ('x' | 'y'). */
   readonly axis?: CutProgramAxis;
-  /** Kept extent (mm) along the advance axis. */
+  /**
+   * Position of the cut line measured from the NEAR ORIGIN of the parent
+   * region along the axis (mm). Local to the parent — never a global board
+   * coordinate. For normal layouts it equals the kept extent; for
+   * leadingBand passes it is the distance from the parent's origin to the
+   * blade (e.g. trim:left with margin 10 cuts at offset 10, kept 2430).
+   */
+  readonly cutOffsetMm?: number;
+  /**
+   * Total amount removed from that edge by a trim pass (mm): parent extent
+   * minus kept extent. Only meaningful when cutType is 'trim'.
+   */
+  readonly trimAmountMm?: number;
+  /**
+   * Kept extent along the axis from the parent origin (mm) — the size of the
+   * region the pass keeps, NOT the cut line position. Compat alias of the
+   * program's keptExtentMm; kept explicit so future consumers (PTX) never
+   * mistake it for cutOffsetMm.
+   */
   readonly relativeMeasureMm?: number;
   /** Nominal saw blade kerf (mm). */
   readonly kerfMm?: number;

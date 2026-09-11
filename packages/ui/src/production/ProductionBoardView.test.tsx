@@ -348,4 +348,150 @@ describe('ProductionBoardView — integración con programa de corte (#650 PR 3)
       expect(testId.startsWith(`cut-line-b${sheetB.sheetIndex}-`)).toBe(true);
     }
   });
+
+  it('R5: reemplazo real del programa en mismo sheet/material reinicia la selección', () => {
+    // Two plans over the same board/material: sheets[0] share sheetIndex and
+    // materialCode but carry DIFFERENT cutProgram objects.
+    const board: MaterialBoard = {
+      id: 'mat-small',
+      code: 'MDF18',
+      name: 'MDF Blanco 18mm',
+      widthMm: 600,
+      lengthMm: 1000,
+      thicknessMm: 18,
+      grainDefault: true,
+      boardPrice: 100,
+      wastePercent: 10,
+      costPerM2: 25,
+      active: true,
+    };
+    const mkRows = (len: number): ProductionCutRow[] => [
+      {
+        description: 'Pieza',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: len,
+        widthMm: 560,
+        quantity: 1,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+    const config: CutPlanConfig = {
+      sawKerfMm: 4,
+      trim: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
+      deductEdgeBand: false,
+      allowRotationNoGrain: false,
+      minRemnantLengthMm: 500,
+      minRemnantWidthMm: 400,
+      preferLongitudinalRips: true,
+      heuristic: 'guillotine-hybrid',
+      cutStrategy: 'saw-guillotine',
+    };
+    const planA = optimizeCutPlan('proj-r5a', mkRows(880), [board], config);
+    const planB = optimizeCutPlan('proj-r5b', mkRows(660), [board], config);
+    const sheetA = planA.sheets[0]!;
+    const sheetB = planB.sheets[0]!;
+    expect(sheetA.sheetIndex).toBe(sheetB.sheetIndex);
+    expect(sheetA.materialCode).toBe(sheetB.materialCode);
+    expect(sheetA.cutProgram).not.toBe(sheetB.cutProgram);
+
+    // Uncontrolled selection on program A.
+    const { rerender } = render(<ProductionBoardView sheet={sheetA} />);
+    fireEvent.click(screen.getByTestId('step-nav-next'));
+    expect(screen.getByTestId('step-info-summary')).toBeTruthy();
+
+    // A different program for the same sheet/material must reset it.
+    rerender(<ProductionBoardView sheet={sheetB} />);
+    expect(screen.queryByTestId('step-info-summary')).toBeNull();
+  });
+
+  it('R2: medida decimal 333.3 visible en resumen, selector y badge — sin redondeo', () => {
+    const sheet: CutPlanSheet = {
+      sheetIndex: 0,
+      materialCode: 'MDF18',
+      materialName: 'MDF Blanco 18mm',
+      sheetWidthMm: 500,
+      sheetLengthMm: 1000,
+      pieces: [
+        {
+          id: 'DEC-1',
+          partCode: 'DEC-01',
+          partName: 'Decimal',
+          moduleCode: 'M01',
+          labelRef: 'D1',
+          materialName: 'MDF Blanco 18mm',
+          materialCode: 'MDF18',
+          xMm: 0,
+          yMm: 0,
+          lengthMm: 333.3,
+          widthMm: 500,
+          originalLengthMm: 333.3,
+          originalWidthMm: 500,
+          grain: 0,
+          rotated: false,
+          L1: 0,
+          L2: 0,
+          W1: 0,
+          W2: 0,
+          thicknessMm: 18,
+          sheetIndex: 0,
+          stripIndex: 0,
+          cutSequenceNumber: 1,
+          status: 'pending',
+        },
+      ],
+      remnants: [],
+      instructions: [],
+      netPiecesAreaM2: 0.17,
+      grossSheetAreaM2: 0.5,
+      usableRemnantAreaM2: 0,
+      wasteAreaM2: 0.33,
+      wastePercent: 66,
+      yieldPercent: 34,
+      cutProgram: {
+        schemaVersion: 'granete.cut-program.v1',
+        boardRegionId: 'board',
+        regions: [
+          { regionId: 'board', rect: { xMm: 0, yMm: 0, lengthMm: 1000, widthMm: 500 } },
+          { regionId: 'piece', rect: { xMm: 0, yMm: 0, lengthMm: 333.3, widthMm: 500 } },
+          { regionId: 'rest', rect: { xMm: 336.5, yMm: 0, lengthMm: 663.5, widthMm: 500 } },
+        ],
+        divisions: [
+          {
+            cutId: 'cut-dec',
+            parentRegionId: 'board',
+            axis: 'x',
+            keptExtentMm: 333.3,
+            kerfMm: 3.2,
+            keptRegionId: 'piece',
+            restRegionId: 'rest',
+          },
+        ],
+        terminals: [
+          { regionId: 'piece', kind: 'piece', pieceRef: 'DEC-1' },
+          { regionId: 'rest', kind: 'waste' },
+        ],
+      },
+    };
+
+    const { container } = render(<ProductionBoardView sheet={sheet} />);
+
+    // Selector option shows 333.3, not 333/334.
+    const select = screen.getByTestId('step-nav-select') as HTMLSelectElement;
+    expect(select.textContent).toContain('333.3');
+    expect(select.textContent).not.toContain('333 mm');
+
+    // Step summary keeps the decimal.
+    fireEvent.change(select, { target: { value: '0' } });
+    const summary = screen.getByTestId('step-info-summary');
+    expect(summary.textContent).toContain('333.3 mm');
+    expect(summary.textContent).toContain('3.2 mm');
+
+    // SVG badge keeps the decimal too.
+    expect(container.textContent).toContain('Corte #1 (333.3mm)');
+    expect(container.textContent).not.toContain('Corte #1 (333mm)');
+  });
 });
