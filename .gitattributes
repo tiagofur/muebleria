@@ -1,1 +1,2 @@
 *.ptx -text
+docs/machines/ptx-cadmatic4/field/*.ptx.txt -text

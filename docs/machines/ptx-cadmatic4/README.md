@@ -1,102 +1,117 @@
 # PTX / CADmatic 4 — expediente de implementación
 
-Issue de implementación: [#650](https://github.com/tiagofur/muebleria/issues/650).
-Preparación documental solicitada por el propietario el 2026-09-10. Este directorio importa y adapta los artefactos de investigación de esa conversación; no implementa el serializador ni modifica código de producto.
+Issue base técnica: [#650](https://github.com/tiagofur/muebleria/issues/650).
+Follow-up de refilados positivos: [#661](https://github.com/tiagofur/muebleria/issues/661).
+
+Este directorio conserva investigación, evidencia y contratos de implementación. La compatibilidad real con CADLink/CADmatic está separada de la implementación interna.
 
 ## Alcance vigente
 
-**Dos entregas técnicas: A → B.** Conservar el programa guillotina real y conectar la vista existente; después implementar el PTX documentado, aplicar el perfil CAD4 y verificar los bytes con un lector independiente.
+#650 entregó el candidato técnico r2: programa guillotina real, preview/instrucciones desde el mismo programa, PTX documentado, readback/verifier independiente, perfil efectivo y descarga existente. r2 sólo representa planes con `trim=0`.
 
-**Fuera de #650:** generar las cinco cocinas y verificar con el cliente. El propietario realizará esas actividades y traerá los resultados. No son criterios de aceptación ni bloquean el cierre técnico de A+B. Sí están incluidos los fixtures pequeños y sintéticos necesarios para pruebas automatizadas.
+#661 es el incremento r3: soportar **refilados positivos dentro de un subconjunto demostrado**, sin modificar r2 ni convertir observaciones de dos muestras en reglas universales.
 
-Implementación no equivale a compatibilidad: `NOT_TESTED/notClaimed` permanece hasta evidencia externa. #348 y los dossiers de cliente conservan la autoridad para import/readback y sign-off; no se cierran ni se omiten sus gates productivos con esta preparación.
+**Fuera de #650/#661:** generar las cinco cocinas y verificar con el cliente. Implementación no equivale a compatibilidad: `NOT_TESTED/notClaimed` permanece hasta evidencia externa. #348 y los dossiers de cliente conservan la autoridad para import/readback y sign-off.
 
 ## Lectura
 
 1. [Investigación y contrato](01_investigacion_y_contrato.md): fuentes primarias, localizadores, registros/códigos PTX, coordenadas y auditoría del código.
-2. [Plan de implementación](02_plan_de_implementacion.md): A+B, criterios y prompt para empezar por el programa de corte compartido.
+2. [Plan de implementación](02_plan_de_implementacion.md): plan histórico A+B de #650.
 3. [Ejemplos parciales](examples/README.md): fragmentos propios y traza geométrica.
 4. [Comprobación acotada](validation/verification_result.json): resultados del ejercicio y contraejemplo reducido.
-5. [Manifiesto original de procedencia](source-artifact-manifest.json): checksums del paquete de conversación antes de adaptar documentos/índice. No describe los documentos editados de este PR; no usarlo como manifiesto de fabricación.
+5. [Manifiesto original de procedencia](source-artifact-manifest.json): checksums del paquete de conversación original; no usar como manifiesto de fabricación.
+6. [Evidencia de campo y base segura para r3](03_evidencia_campo.md): qué muestran las dos muestras reales saneadas en [field/](field/README.md).
+7. [Contrato conservador de refilados r3](04_contrato_r3_refilados.md): qué puede implementar #661 sin inventar semántica.
 
-La investigación conserva un procedimiento de campo como contexto, expresamente fuera de alcance. El plan activo y #650 prevalecen sobre las antiguas referencias a una tercera entrega comercial.
+La secuencia de autoridad r3 es:
+
+```text
+Pattern Exchange documentado
++ evidencia de field/
++ CutProgram ejecutado de Granete
+→ 03_evidencia_campo.md (observación)
+→ 04_contrato_r3_refilados.md (decisión implementable)
+→ #661 (producto)
+```
+
+Si el 03 y el 04 difieren en fuerza de una conclusión, **prevalece el 04 para implementación**.
+
+## Discovery r3 — cerrado para el subconjunto inicial
+
+```text
+G1 RESOLVED
+  Los ~9.8/9.9 mm observados se explican por el fixed rip trim de 10 mm.
+  DIMENSION sigue relativa al subpanel/raíz útil.
+
+G2 SPEC_POLICY_READY
+  TRIM_TYPE=1, frame no girado:
+  near/leading → fixed trim; far → minimum falling waste.
+
+G3 PROFILE_POLICY
+  HEAD/recut no se derivan de los 4 márgenes; quedan blank/no-override
+  en la primera r3.
+
+G4 RESOLVED
+  El margen total incluye kerf; PTX compila desde raíz útil y no vuelve
+  a emitir las divisiones perimetrales como CUTS.
+
+G5 RESOLVED_SUBSET
+  FUNCTION 92 + Xn sólo para rest-side remnant de phase 2 bajo el contrato
+  geométrico/scheduling del 04.
+```
+
+**#661 ya puede comenzar con tests/código cuando haya agente disponible.** Fuera de ese frame, fail closed.
+
+## Handoff al implementador
+
+El próximo agente NO debe volver a investigar desde cero ni ampliar scope. Debe leer, en este orden:
+
+```text
+04_contrato_r3_refilados.md
+→ #661
+→ compileCutPlan.ts / verifyCutPlanPtxReadback.ts
+→ tests r2 existentes
+```
+
+Y ejecutar un único PR de #661 en tres pasos internos:
+
+```text
+RED planner/proyección trim
+→ compiler + verifier + scheduler 92
+→ profile r3 + adapter + download/parity/UI
+```
+
+No absorber TYPE=1, BOOK stacking, PARTS_INF/UDI/NOTES, CADmatic 3/5, SAW/MPR ni pruebas del cliente.
+
+## Núcleo PTX r2 integrado
+
+`packages/excel/src/ptx/` contiene el modelo tipado, validator, serializer determinista, parser independiente y verifier semántico. `compileCutPlan.ts` compila el CutProgram real con tabla inversa de índices y `verifyCutPlanPtxReadback.ts` comprueba los bytes contra el programa re-ejecutado.
+
+Decisiones r2 relevantes:
+
+- staging determina FUNCTION;
+- CUT_INDEX conserva estructura y SEQUENCE orden operativo;
+- DIMENSION es relativa al subpanel (280, no 734);
+- identidad ASCII crítica y magnitudes no representables fallan cerrado;
+- `MATERIALS.BOOK=1` es política conservadora;
+- trim positivo queda bloqueado por r2.
+
+`ptx-cadmatic-4@r2` + `granete-ptx@1.1.0` conectan el compiler a la descarga existente unified/by-material/ZIP manteniendo `NOT_TESTED/notClaimed`.
 
 ## Artefactos no productivos
 
-Los `.ptx.txt` son **parciales**: no enviarlos a CADLink, no renombrarlos para ejecutar ni usarlos como programas de máquina. No son las cinco cocinas. No se incluyen manuales del fabricante, licencias, información de clientes ni binarios del conversor. Los artefactos se publican descomprimidos para poder revisarlos; no se duplica el ZIP dentro de Git.
+Los `.ptx.txt` de `examples/` son parciales. Los fixtures de `field/` son evidencia saneada. Ninguno debe enviarse a CADLink como programa de máquina.
 
 ## Verificación documental
-
-Desde la raíz del repo:
 
 ```sh
 python3 docs/machines/ptx-cadmatic4/validation/verify_examples.py
 ```
 
-Comprueba aritmética, disponibilidad de regiones, conservación de área, columnas de un fragmento y reproducción reducida de reglas de eje. **No importa TypeScript, no ejecuta suites del producto, no valida un PTX completo y no sustituye CADLink/CADmatic.** El futuro código debe convertir el contraejemplo en test real.
-
-## Núcleo PTX documentado (código)
-
-`packages/excel/src/ptx/` implementa el subconjunto documentado del formato
-(HEADER, JOBS, PARTS_REQ, BOARDS, MATERIALS, PATTERNS, CUTS + OFFCUTS y
-VECTORS cuando las pruebas los necesitan): modelo tipado, serialización
-determinista, parser/readback independiente, validación de
-relaciones/columnas/magnitudes y equivalencia. Demuestra
-`records → serialize → bytes → parse → modelo equivalente` sin depender del
-optimizador. Limitaciones registradas: columnas documentadas fuera del
-subconjunto (p. ej. OFFCUTS más allá de `JOB_INDEX..WIDTH`, MATERIALS tras
-`RULE4`) fallan cerrado por la ambigüedad de inventario de §9 de la
-investigación; PARTS_INF/PARTS_UDI/PARTS_DST/PTN_UDI/NOTES no están
-implementados.
-
-Sobre ese núcleo, `ptx/compileCutPlan.ts` compila el CutPlan/CutProgram real
-del optimizador en un `PtxDocument` validado con tabla inversa de índices
-(hacia adelante y hacia atrás: cutId↔CUT_INDEX, pieza↔PART_INDEX,
-hoja↔PTN_INDEX, retazo↔Xn), y `ptx/verifyCutPlanPtxReadback.ts` comprueba
-semánticamente los bytes leídos contra el programa original re-ejecutado
-(`optimizeCutPlan → compile → validate → serialize → parse → readback`). El
-verifier es semánticamente independiente del compiler: importa sólo sus
-tipos y re-deriva por separado (duplicado deliberado de comprobación cruzada)
-la fase/FUNCTION, el preorder estructural, el TYPE, las liberaciones y las
-líneas de vectores — un test de guard de fuente lo hace cumplir, de modo que
-un bug industrial del writer no puede verificarse a sí mismo.
-Decisiones de candidato documentadas en el módulo, no claims de receptor: la
-fase de staging determina FUNCTION (fase 3 sobre X sigue siendo 3; fase > 3
-falla cerrado), las filas CUTS van en preorder estructural con CUT_INDEX y
-llevan SEQUENCE de ejecución independiente (como el fragmento 03), las
-liberaciones de retazos son filas QTY_RPT=0, el exact-fit no genera filas
-ficticias, DIMENSION siempre es la medida relativa conservada (280, no 734),
-las magnitudes deben ser representables en la resolución configurada o
-fallan cerrado, y los planes con refilados positivos se rechazan
-(`ptx_compile.trim_unsupported`) porque no hay mapping documentado para
-90..99 ni para head. Identidad ASCII crítica (códigos de material, CODE de
-PARTS_REQ, claves de mapeo) falla cerrado (`ptx_compile.identity_not_ascii`)
-en lugar de filtrarse: 'MDFÁ' y 'MDF' nunca se fusionan; el filtrado
-determinista queda sólo para texto auxiliar. MATERIALS.BOOK emite el valor
-conservador 1: el dossier sólo documenta que cuenta tableros [S03 pp.134–135]
-y "total de tableros del job" NO está establecido.
-`ptx/cutPlanPtxGolden.ts` congela un candidato real de laboratorio
-etiquetado `LAB_FIXTURE NOT_MACHINE_VALIDATED`.
-
-**Integración candidata (#650 PR 6):** el perfil `ptx-cadmatic-4@r2`
-(`PTX_CADMATIC_4_CANDIDATE_PROFILE`, nueva revisión inmutable; r1 se conserva
-como constante histórica) declara como dimensiones efectivas —con evidencia
-de implementación en este repo— headerVersion 1, mm, ASCII+CRLF (elección
-conservadora, no requisito del receptor), decimalPlaces 2 con preflight de
-representabilidad exacta, includeVectors false, supportsPositiveTrim false y
-el subconjunto FUNCTION 0..3; lo que sigue sin evidencia es del receptor
-(fieldAvailability/recordOrdering/caracteres/nombres de archivo) y el estado
-sigue NOT_TESTED. El adapter `granete-ptx` v1.1.0 rutea POR REVISIÓN EXACTA:
-r2 → compilador documentado (preflight real: ready ⇒ serialize), cualquier
-otra revisión → serializer legacy inalterado (golden #348 intacto). La
-descarga EXISTENTE (#591: unified/by-material/ZIP + manifest con
-cutPlan/profile/adapter/hash, claim `notClaimed`) entrega el candidato
-cuando el usuario selecciona ese perfil; sin botón paralelo. Paridad
-Go/TS actualizada (catálogo compartido). Todo sigue sin certificar
-CADLink/CADmatic ni habilitar fabricación.
+Es una comprobación offline acotada; no sustituye TypeScript, CADLink ni CADmatic.
 
 ## Relación con autoridades existentes
 
-Reutilizar [machine profiles/adapters](../../architecture/machine-profiles-and-adapters.md), selección #591, preflight #347 y trazabilidad de liberación. No crear otro optimizador ni convertir React en autoridad industrial. La gramática documentada permite implementar un candidato no productivo sin esperar campo; las capacidades concretas de la máquina, compatibilidad y permiso productivo no se infieren del manual.
+Reutilizar [machine profiles/adapters](../../architecture/machine-profiles-and-adapters.md), selección #591, preflight #347 y trazabilidad de liberación. No crear otro optimizador ni convertir React en autoridad industrial.
 
-El PR preparatorio utiliza `Refs #650`; no es entrega completa, no cierra la issue y no concede autorización de merge ni ejecución de máquinas.
+r2 queda inmutable. r3 será otra revisión inmutable y sólo podrá elevar su evidencia después de importación/readback real.
