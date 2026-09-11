@@ -26,6 +26,7 @@ import {
   checkExpectedPieces,
   cutProgramRectMatches,
   executeCutProgram,
+  type CutProgramInput,
   type CutProgramRect,
 } from './cutProgram';
 import {
@@ -35,6 +36,55 @@ import {
 } from './cutProgramBuilder';
 import { optimizeSingleMaterialNesting } from './nesting';
 import { isUsefulRemnant, unrollRows, type PieceToPlace, type PlacementResult } from './pieces';
+
+/**
+ * One source of truth for remnants (#654 R3): derives the sheet remnant list
+ * from the program's own terminal regions. Useful leftovers are the
+ * 'remnant'-kind terminals (classified by the shared isUsefulRemnant policy
+ * when the program registered them); waste leftovers above the historical
+ * presentation threshold stay visible for continuity. Trim garbage stays out
+ * of the presentation list while the program still accounts for it. Candidate
+ * comparison and result statistics consume this same list, so program and
+ * metrics cannot disagree. No coordinate reconstruction, no duplicated
+ * usefulness rules, no duplicates.
+ */
+function deriveSheetRemnants(
+  cutProgram: CutProgramInput,
+  trimRegionIds: ReadonlySet<string>,
+  sheetIndex: number,
+  materialCode: string,
+  materialName: string,
+  presentationMinMm: number,
+): CutPlanRemnant[] {
+  const rectByRegion = new Map(cutProgram.regions.map((region) => [region.regionId, region.rect]));
+  const derived: CutPlanRemnant[] = [];
+  for (const terminal of cutProgram.terminals) {
+    if (terminal.kind === 'piece' || trimRegionIds.has(terminal.regionId)) {
+      continue;
+    }
+    const rect = rectByRegion.get(terminal.regionId);
+    if (!rect) {
+      continue;
+    }
+    const isUseful = terminal.kind === 'remnant';
+    if (!isUseful && (rect.lengthMm <= presentationMinMm || rect.widthMm <= presentationMinMm)) {
+      continue;
+    }
+    derived.push({
+      id: `rem-s${sheetIndex}-${derived.length + 1}`,
+      sheetIndex,
+      xMm: rect.xMm,
+      yMm: rect.yMm,
+      lengthMm: rect.lengthMm,
+      widthMm: rect.widthMm,
+      areaM2: (rect.lengthMm * rect.widthMm) / 1_000_000,
+      materialName,
+      materialCode,
+      isUseful,
+    });
+  }
+  return derived.sort((a, b) => b.areaM2 - a.areaM2);
+}
 
 /**
  * Packs pieces onto a single sheet using Guillotine Best-Fit with axis-aligned splits.
@@ -70,7 +120,7 @@ export function packSingleSheetGuillotineBestFit(
     length: sheetLengthMm,
     width: sheetWidthMm,
   });
-  const usableRegion = registerTrimDivisions(program, trim);
+  const usableRegion = registerTrimDivisions(program, trim, kerf);
 
   const freeRects: RegisteredRegion[] = [usableRegion];
 
@@ -190,31 +240,21 @@ export function packSingleSheetGuillotineBestFit(
     }
   }
 
-  // Convert remaining free rectangles to remnants
-  const remnants: CutPlanRemnant[] = freeRects
-    .filter((r) => r.length > 5 && r.width > 5)
-    .map((r, idx) => {
-      const isUseful = isUsefulRemnant(r.length, r.width, config);
-      return {
-        id: `rem-s${sheetIndex}-${idx + 1}`,
-        sheetIndex,
-        xMm: r.x,
-        yMm: r.y,
-        lengthMm: r.length,
-        widthMm: r.width,
-        areaM2: (r.length * r.width) / 1_000_000,
-        materialName,
-        materialCode,
-        isUseful,
-      };
-    })
-    .sort((a, b) => b.areaM2 - a.areaM2);
-
   // Every unconsumed region is a real terminal in the program — including
-  // leftovers the historical remnant list omits for readability.
+  // leftovers the presentation list omits for readability.
   for (const freeRect of freeRects) {
     program.markLeftoverTerminal(freeRect, config);
   }
+
+  const cutProgram = program.build();
+  const remnants = deriveSheetRemnants(
+    cutProgram,
+    program.getLiberatedWasteRegionIds(),
+    sheetIndex,
+    materialCode,
+    materialName,
+    5,
+  );
 
   // Generate step-by-step cutting instructions
   const instructions = generateCuttingInstructions(placedPieces, config, sheetLengthMm, sheetWidthMm);
@@ -230,7 +270,7 @@ export function packSingleSheetGuillotineBestFit(
       materialCode,
       materialName,
       thicknessMm,
-      cutProgram: program.build(),
+      cutProgram,
     },
     remaining: notPlaced,
   };
@@ -273,7 +313,7 @@ export function packSingleSheetStrip(
     length: sheetLengthMm,
     width: sheetWidthMm,
   });
-  let sheetRestRegion: RegisteredRegion | null = registerTrimDivisions(program, trim);
+  let sheetRestRegion: RegisteredRegion | null = registerTrimDivisions(program, trim, kerf);
 
   let currentY = minY;
   let cutSequence = 0;
@@ -281,7 +321,6 @@ export function packSingleSheetStrip(
 
   const placedPieces: CutPlanPlacedPiece[] = [];
   const placedIds = new Set<string>();
-  const remnants: CutPlanRemnant[] = [];
 
   while (currentY < maxY) {
     const unplaced = piecesRemaining.filter((p) => !placedIds.has(p.id));
@@ -465,26 +504,9 @@ export function packSingleSheetStrip(
       }
     }
 
-    // Leftover in this strip at the right end
-    if (maxX - currentX > 10) {
-      const remL = maxX - currentX;
-      const remW = stripHeight;
-      const isUseful = isUsefulRemnant(remL, remW, config);
-      remnants.push({
-        id: `rem-s${sheetIndex}-str${stripIdx}`,
-        sheetIndex,
-        xMm: currentX,
-        yMm: currentY,
-        lengthMm: remL,
-        widthMm: remW,
-        areaM2: (remL * remW) / 1_000_000,
-        materialName,
-        materialCode,
-        isUseful,
-      });
-    }
-
-    // Program truth: the strip leftover is a real terminal of any size.
+    // Program truth: the strip leftover is a real terminal of any size; the
+    // presentation-level remnant list is derived from the program terminals
+    // once packing finishes (deriveSheetRemnants below).
     if (stripRestRegion) {
       program.markLeftoverTerminal(stripRestRegion, config);
     }
@@ -492,33 +514,20 @@ export function packSingleSheetStrip(
     currentY += stripHeight + kerf;
   }
 
-  // Leftover at the top of the board
-  if (maxY - currentY > 10) {
-    const remL = maxX - minX;
-    const remW = maxY - currentY;
-    const isUseful =
-      ((remL >= config.minRemnantLengthMm && remW >= config.minRemnantWidthMm) ||
-       (remL >= config.minRemnantWidthMm && remW >= config.minRemnantLengthMm)) &&
-      (remL * remW) / 1_000_000 >= 0.24;
-    remnants.push({
-      id: `rem-s${sheetIndex}-top`,
-      sheetIndex,
-      xMm: minX,
-      yMm: currentY,
-      lengthMm: remL,
-      widthMm: remW,
-      areaM2: (remL * remW) / 1_000_000,
-      materialName,
-      materialCode,
-      isUseful,
-    });
-  }
-
   if (sheetRestRegion) {
     program.markLeftoverTerminal(sheetRestRegion, config);
   }
 
   const notPlaced = piecesRemaining.filter((p) => !placedIds.has(p.id));
+  const cutProgram = program.build();
+  const remnants = deriveSheetRemnants(
+    cutProgram,
+    program.getLiberatedWasteRegionIds(),
+    sheetIndex,
+    materialCode,
+    materialName,
+    10,
+  );
   const instructions = generateCuttingInstructions(placedPieces, config, sheetLengthMm, sheetWidthMm);
 
   return {
@@ -532,7 +541,7 @@ export function packSingleSheetStrip(
       materialCode,
       materialName,
       thicknessMm,
-      cutProgram: program.build(),
+      cutProgram,
     },
     remaining: notPlaced,
   };

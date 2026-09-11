@@ -190,6 +190,114 @@ describe('optimizer cut programs — registro durante el empaquetado', () => {
     expect(leafB!.rect).toEqual({ xMm: 454, yMm: 0, lengthMm: 280, widthMm: 210 });
   });
 
+  it('R3: el retazo útil del recorte de franja (500×796) aparece en sheet.remnants y en el programa', () => {
+    const config: CutPlanConfig = {
+      ...flatConfig,
+      allowRotationNoGrain: false,
+    };
+    const rows = [
+      makeRow({ quantity: 1, lengthMm: 600, widthMm: 1000, grain: 1, partCode: 'A' }),
+      makeRow({ quantity: 1, lengthMm: 500, widthMm: 200, grain: 1, partCode: 'B' }),
+    ];
+    const { sheet } = packSingleSheetStrip(
+      unrollRows(rows), 0, 1200, 1000, config, 'TEST', 'Tablero Test 18mm', 18,
+    );
+
+    // El recorte de B (franja 1000, pieza 200) libera 500×796 en X=604, Y=204.
+    const useful = sheet.remnants.find(
+      (r) => r.lengthMm === 500 && r.widthMm === 796,
+    );
+    expect(useful).toBeDefined();
+    expect(useful).toMatchObject({ xMm: 604, yMm: 204, isUseful: true });
+    expect(useful!.areaM2).toBeCloseTo(0.398, 6);
+
+    const trace = validateSheetProgram(sheet);
+    const terminal = trace.terminals.find(
+      (t) => t.rect.lengthMm === 500 && t.rect.widthMm === 796,
+    );
+    expect(terminal?.kind).toBe('remnant');
+    expect(terminal?.rect).toEqual({ xMm: 604, yMm: 204, lengthMm: 500, widthMm: 796 });
+
+    // El sobrante derecho de 92×1000 sigue presente (política de presentación)
+    // aunque no cumpla los umbrales de retazo útil.
+    const rightLeftover = sheet.remnants.find((r) => r.lengthMm === 92);
+    expect(rightLeftover).toBeDefined();
+    expect(rightLeftover!.isUseful).toBe(false);
+  });
+
+  it('R3: correspondencia bidireccional entre terminales útiles del programa y lista de retazos', () => {
+    const config: CutPlanConfig = {
+      ...flatConfig,
+      allowRotationNoGrain: false,
+    };
+    const rows = [
+      makeRow({ quantity: 1, lengthMm: 600, widthMm: 1000, grain: 1, partCode: 'A' }),
+      makeRow({ quantity: 1, lengthMm: 500, widthMm: 200, grain: 1, partCode: 'B' }),
+      makeRow({ quantity: 1, lengthMm: 480, widthMm: 300, grain: 1, partCode: 'C' }),
+    ];
+    const { sheet } = packSingleSheetStrip(
+      unrollRows(rows), 0, 1200, 1000, config, 'TEST', 'Tablero Test 18mm', 18,
+    );
+
+    const trace = validateSheetProgram(sheet);
+    const usefulTerminals = trace.terminals.filter((t) => t.kind === 'remnant');
+    const usefulRemnants = sheet.remnants.filter((r) => r.isUseful);
+    expect(usefulRemnants.length).toBe(usefulTerminals.length);
+    const missing = usefulTerminals.filter(
+      (terminal) =>
+        !usefulRemnants.some(
+          (r) =>
+            r.xMm === terminal.rect.xMm &&
+            r.yMm === terminal.rect.yMm &&
+            r.lengthMm === terminal.rect.lengthMm &&
+            r.widthMm === terminal.rect.widthMm,
+        ),
+    );
+    expect(missing.map((t) => t.regionId)).toEqual([]);
+    // Sin duplicados: ninguna geometría repetida en la lista.
+    const keys = sheet.remnants.map((r) => `${r.xMm}:${r.yMm}:${r.lengthMm}x${r.widthMm}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    // Área útil coincidente entre programa y resultado.
+    const programUseful = usefulTerminals.reduce(
+      (sum, t) => sum + (t.rect.lengthMm * t.rect.widthMm) / 1_000_000,
+      0,
+    );
+    const resultUseful = usefulRemnants.reduce((sum, r) => sum + r.areaM2, 0);
+    expect(resultUseful).toBeCloseTo(programUseful, 9);
+  });
+
+  it('R3: varios tableros y materiales conservan la correspondencia retazos↔terminales', () => {
+    const rows = [
+      makeRow({ quantity: 3, lengthMm: 450, widthMm: 300, grain: 1, partCode: 'LAT' }),
+      makeRow({ quantity: 2, lengthMm: 280, widthMm: 210, grain: 1, partCode: 'BASE' }),
+      makeRow({ quantity: 2, lengthMm: 300, widthMm: 200, grain: 1, partCode: 'T2', materialName: 'Tablero Alt 15mm' }),
+    ];
+    const plan = optimizeCutPlan('proj-r3-multi', rows, catalogMaterials, flatConfig);
+    expect(plan.stats.byMaterial).toHaveLength(2);
+    for (const sheet of plan.sheets) {
+      const trace = validateSheetProgram(sheet);
+      const usefulTerminals = trace.terminals.filter((t) => t.kind === 'remnant');
+      const usefulRemnants = sheet.remnants.filter((r) => r.isUseful);
+      expect(usefulRemnants.length).toBe(usefulTerminals.length);
+      const missing = usefulTerminals.filter(
+        (terminal) =>
+          !usefulRemnants.some(
+            (r) =>
+              r.xMm === terminal.rect.xMm &&
+              r.yMm === terminal.rect.yMm &&
+              r.lengthMm === terminal.rect.lengthMm &&
+              r.widthMm === terminal.rect.widthMm &&
+              r.materialCode === sheet.materialCode &&
+              r.sheetIndex === sheet.sheetIndex,
+          ),
+      );
+      expect(missing.map((t) => `${t.regionId} en sheet ${sheet.sheetIndex}`)).toEqual([]);
+      // Las estadísticas del tablero usan la misma verdad.
+      const expectedUsefulM2 = usefulRemnants.reduce((sum, r) => sum + r.areaM2, 0);
+      expect(sheet.usableRemnantAreaM2).toBeCloseTo(expectedUsefulM2, 6);
+    }
+  });
+
   it('la candidata ganadora conserva piezas, programa y terminales de la misma ejecución', () => {
     const rows = [
       makeRow({ quantity: 3, lengthMm: 450, widthMm: 300, grain: 1, partCode: 'LAT' }),
@@ -257,7 +365,7 @@ describe('optimizer cut programs — geometría y cantidades', () => {
     expect(plan.sheets[0]!.pieces[0]!.lengthMm).toBeCloseTo(333.3, 9);
   });
 
-  it('trims asimétricos quedan como separaciones sólidas explícitas con kerf 0', () => {
+  it('trims asimétricos con kerf real: desperdicio sólido, banda de disco y área útil por separado', () => {
     const config: CutPlanConfig = {
       ...flatConfig,
       trim: { topMm: 7, bottomMm: 13, leftMm: 5, rightMm: 11 },
@@ -266,23 +374,139 @@ describe('optimizer cut programs — geometría y cantidades', () => {
     const plan = optimizeCutPlan('proj-trim', rows, catalogMaterials, config);
 
     const sheet = plan.sheets[0]!;
+    // Coordenadas del área útil conservadas bajo la semántica de margen total.
     expect(sheet.pieces[0]).toMatchObject({ xMm: 5, yMm: 13, lengthMm: 900, widthMm: 500 });
     const trace = validateSheetProgram(sheet);
 
     const byCut = new Map(trace.divisions.map((d) => [d.cutId, d]));
-    expect(byCut.get('trim:left')!.keptRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 5, widthMm: 600 });
-    expect(byCut.get('trim:right')!.restRect).toEqual({ xMm: 989, yMm: 0, lengthMm: 11, widthMm: 600 });
-    expect(byCut.get('trim:bottom')!.keptRect).toEqual({ xMm: 5, yMm: 0, lengthMm: 984, widthMm: 13 });
-    expect(byCut.get('trim:top')!.restRect).toEqual({ xMm: 5, yMm: 593, lengthMm: 984, widthMm: 7 });
-    for (const cutId of ['trim:left', 'trim:right', 'trim:bottom', 'trim:top']) {
-      expect(byCut.get(cutId)!.kerfMm).toBe(0);
-    }
+    // Izquierda (margen 5, disco 4): sólido 0..1, banda 1..5, útil desde 5.
+    const left = byCut.get('trim:left')!;
+    expect(left.leadingBand).toBe(true);
+    expect(left.kerfMm).toBe(4);
+    expect(left.restRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 1, widthMm: 600 });
+    expect(left.kerfBandRect).toEqual({ xMm: 1, yMm: 0, lengthMm: 4, widthMm: 600 });
+    expect(left.keptRect.xMm).toBe(5);
+    // Derecha (margen 11, disco 4): útil hasta 989, banda 989..993, sólido 993..1000.
+    const right = byCut.get('trim:right')!;
+    expect(right.leadingBand).toBe(false);
+    expect(right.kerfMm).toBe(4);
+    expect(right.keptRect).toEqual({ xMm: 5, yMm: 0, lengthMm: 984, widthMm: 600 });
+    expect(right.kerfBandRect).toEqual({ xMm: 989, yMm: 0, lengthMm: 4, widthMm: 600 });
+    expect(right.restRect).toEqual({ xMm: 993, yMm: 0, lengthMm: 7, widthMm: 600 });
+    // Abajo (margen 13, disco 4): sólido y 0..9, banda 9..13, útil desde 13.
+    const bottom = byCut.get('trim:bottom')!;
+    expect(bottom.leadingBand).toBe(true);
+    expect(bottom.restRect).toEqual({ xMm: 5, yMm: 0, lengthMm: 984, widthMm: 9 });
+    expect(bottom.kerfBandRect).toEqual({ xMm: 5, yMm: 9, lengthMm: 984, widthMm: 4 });
+    expect(bottom.keptRect.yMm).toBe(13);
+    // Arriba (margen 7, disco 4): útil hasta 593, banda 593..597, sólido 597..600.
+    const top = byCut.get('trim:top')!;
+    expect(top.leadingBand).toBe(false);
+    expect(top.kerfBandRect).toEqual({ xMm: 5, yMm: 593, lengthMm: 984, widthMm: 4 });
+    expect(top.restRect).toEqual({ xMm: 5, yMm: 597, lengthMm: 984, widthMm: 3 });
+
+    // Identidad padre/hijas: el padre de cada trim es la región viva de la cadena.
+    expect(left.parentRegionId).toBe('board');
+    expect(right.parentRegionId).toBe(left.keptRegionId);
+    expect(bottom.parentRegionId).toBe(right.keptRegionId);
+    expect(top.parentRegionId).toBe(bottom.keptRegionId);
+
+    // Separación desperdicio sólido / kerf y conservación del tablero crudo.
     const trimTerminals = trace.terminals.filter((t) => t.regionId.startsWith('trim:'));
     expect(trimTerminals).toHaveLength(4);
     expect(trimTerminals.every((t) => t.kind === 'waste')).toBe(true);
-    // El área útil (984×580) no valida los refilados por sí sola: el tablero
-    // crudo completo se conserva en el programa.
+    const solidArea = trimTerminals.reduce((sum, t) => sum + t.rect.lengthMm * t.rect.widthMm, 0);
+    const trimBandArea = [left, right, bottom, top].reduce(
+      (sum, d) => sum + d.kerfBandRect.lengthMm * d.kerfBandRect.widthMm,
+      0,
+    );
+    expect(solidArea).toBe((1 + 7) * 600 + (9 + 3) * 984);
+    expect(trimBandArea).toBe((4 + 4) * 600 + (4 + 4) * 984);
     expect(trace.boardRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 1000, widthMm: 600 });
+    expect(trace.leafAreaMm2 + trace.kerfAreaMm2).toBe(600000);
+  });
+
+  it('margen izquierdo 10 con disco 4: sólido 0..6, banda 6..10, útil desde 10, sin doble conteo', () => {
+    const config: CutPlanConfig = {
+      ...flatConfig,
+      trim: { topMm: 0, bottomMm: 0, leftMm: 10, rightMm: 0 },
+    };
+    const rows = [makeRow({ quantity: 1, lengthMm: 900, widthMm: 500, grain: 1, partCode: 'TR' })];
+    const plan = optimizeCutPlan('proj-trim-left', rows, catalogMaterials, config);
+
+    const sheet = plan.sheets[0]!;
+    expect(sheet.pieces[0]!.xMm).toBe(10);
+    const trace = validateSheetProgram(sheet);
+    const left = trace.divisions.find((d) => d.cutId === 'trim:left')!;
+    expect(left.restRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 6, widthMm: 600 });
+    expect(left.kerfBandRect).toEqual({ xMm: 6, yMm: 0, lengthMm: 4, widthMm: 600 });
+    expect(left.keptRect.xMm).toBe(10);
+    // 3600 de sólido + 2400 de disco = 6000 retirados; ni 6000+2400 ni disco de área cero.
+    expect(left.restRect!.lengthMm * left.restRect!.widthMm).toBe(3600);
+    expect(left.kerfBandRect.lengthMm * left.kerfBandRect.widthMm).toBe(2400);
+  });
+
+  it('margen igual al kerf: toda la banda retirada es disco, sin sólido ni región de área cero', () => {
+    const config: CutPlanConfig = {
+      ...flatConfig,
+      trim: { topMm: 0, bottomMm: 0, leftMm: 4, rightMm: 4 },
+    };
+    const rows = [makeRow({ quantity: 1, lengthMm: 900, widthMm: 500, grain: 1, partCode: 'TR' })];
+    const plan = optimizeCutPlan('proj-trim-eq', rows, catalogMaterials, config);
+
+    const sheet = plan.sheets[0]!;
+    expect(sheet.pieces[0]!.xMm).toBe(4);
+    expect(sheet.pieces[0]!.xMm + sheet.pieces[0]!.lengthMm).toBe(904);
+    const trace = validateSheetProgram(sheet);
+    const left = trace.divisions.find((d) => d.cutId === 'trim:left')!;
+    expect(left.restRect).toBeNull();
+    expect(left.kerfBandRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 4, widthMm: 600 });
+    const right = trace.divisions.find((d) => d.cutId === 'trim:right')!;
+    expect(right.restRect).toBeNull();
+    expect(right.kerfBandRect).toEqual({ xMm: 996, yMm: 0, lengthMm: 4, widthMm: 600 });
+    expect(
+      left.kerfBandRect.lengthMm * left.kerfBandRect.widthMm +
+        right.kerfBandRect.lengthMm * right.kerfBandRect.widthMm,
+    ).toBe(4800);
+  });
+
+  it('margen menor que el kerf: banda recortada al margen y disco que sale del tablero, con política explícita', () => {
+    const config: CutPlanConfig = {
+      ...flatConfig,
+      trim: { topMm: 0, bottomMm: 0, leftMm: 2, rightMm: 0 },
+    };
+    const rows = [makeRow({ quantity: 1, lengthMm: 900, widthMm: 500, grain: 1, partCode: 'TR' })];
+    const plan = optimizeCutPlan('proj-trim-lt', rows, catalogMaterials, config);
+
+    const sheet = plan.sheets[0]!;
+    expect(sheet.pieces[0]!.xMm).toBe(2);
+    const trace = validateSheetProgram(sheet);
+    const left = trace.divisions.find((d) => d.cutId === 'trim:left')!;
+    expect(left.bladeExitsParent).toBe(true);
+    expect(left.leadingBand).toBe(true);
+    expect(left.kerfMm).toBe(4);
+    expect(left.kerfBandRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 2, widthMm: 600 });
+    expect(left.restRect).toBeNull();
+    expect(left.kerfBandRect.lengthMm * left.kerfBandRect.widthMm).toBe(1200);
+  });
+
+  it('kerf configurado a cero: el sólido cubre todo el margen y la banda es nula, sin confundir configuraciones', () => {
+    const zeroKerfConfig: CutPlanConfig = {
+      ...flatConfig,
+      sawKerfMm: 0,
+      trim: { topMm: 0, bottomMm: 0, leftMm: 10, rightMm: 0 },
+    };
+    const rows = [makeRow({ quantity: 1, lengthMm: 900, widthMm: 500, grain: 1, partCode: 'TR' })];
+    const plan = optimizeCutPlan('proj-trim-zero', rows, catalogMaterials, zeroKerfConfig);
+
+    const sheet = plan.sheets[0]!;
+    expect(sheet.pieces[0]!.xMm).toBe(10);
+    const trace = validateSheetProgram(sheet);
+    const left = trace.divisions.find((d) => d.cutId === 'trim:left')!;
+    expect(left.kerfMm).toBe(0);
+    expect(left.restRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 10, widthMm: 600 });
+    expect(left.kerfBandRect.lengthMm).toBe(0);
+    expect(trace.kerfAreaMm2).toBe(0);
   });
 
   it('el canto se deduce una sola vez: la hoja mide exactamente la medida de corte', () => {

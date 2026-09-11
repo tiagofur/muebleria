@@ -5,6 +5,7 @@ import {
   checkExpectedPieces,
   divideRegion,
   executeCutProgram,
+  separateExtent,
   type CutProgramInput,
 } from './cutProgram';
 import {
@@ -481,13 +482,13 @@ describe('executeCutProgram — rechazos', () => {
     );
   });
 
-  it('medida fuera de límites dentro de un programa', () => {
+  it('medida fuera de límites dentro de un programa: la pieza no cabe en el padre', () => {
     const program = cloneProgram(threePhaseExerciseProgram);
     program.divisions[0]!.keptExtentMm = 704;
     expectCutProgramError(
       () => executeCutProgram(program),
-      'cut_program.cut_at_border_unsupported',
-      { cutId: 'CUT_A', keptExtentMm: 704, kerfMm: 4, parentExtent: 700 },
+      'cut_program.kept_exceeds_parent',
+      { cutId: 'CUT_A', keptExtentMm: 704, parentExtent: 700 },
     );
   });
 
@@ -1062,6 +1063,188 @@ describe('cutProgram — extensión PR 2: kerf-only y salida explícita de disco
     expectCutProgramError(() => executeCutProgram(program), 'cut_program.blade_exit_mismatch', {
       cutId: 'CUT1',
     });
+  });
+});
+
+describe('cutProgram — corrección PR2-R2: límites y garantía de salida de disco', () => {
+  it('medida mayor que el padre siempre falla, incluso con allowBladeExit (eje X)', () => {
+    const parent = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 };
+    expectCutProgramError(
+      () => divideRegion(parent, 'x', 601, 4, { allowBladeExit: true }),
+      'cut_program.kept_exceeds_parent',
+      { keptExtentMm: 601, parentExtent: 600 },
+    );
+  });
+
+  it('medida mayor que el padre siempre falla (eje Y)', () => {
+    const parent = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 };
+    expectCutProgramError(
+      () => divideRegion(parent, 'y', 301, 4, { allowBladeExit: true }),
+      'cut_program.kept_exceeds_parent',
+      { keptExtentMm: 301, parentExtent: 300 },
+    );
+  });
+
+  it('separateExtent clasifica la pieza fuera del padre y las entradas no finitas como inválidas', () => {
+    expect(separateExtent(600, 601, 4).kind).toBe('kept_exceeds_parent');
+    expect(separateExtent(600, 602, 4).kind).toBe('kept_exceeds_parent');
+    expect(separateExtent(Number.NaN, 5, 4).kind).toBe('kept_exceeds_parent');
+    expect(separateExtent(600, Number.NaN, 4).kind).toBe('kept_exceeds_parent');
+    expect(separateExtent(600, 5, Number.NaN).kind).toBe('kept_exceeds_parent');
+    // La pieza fuera del padre no es salida de disco: la herramienta sale, no la pieza.
+    expect(separateExtent(600, 596, 4).kind).toBe('kerf_only');
+    expect(separateExtent(600, 590, 4).kind).toBe('solid_rest');
+  });
+
+  it('ninguna función devuelve banda negativa: la geometría blade-exit conserva banda positiva', () => {
+    const parent = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 };
+    const geometry = divideRegion(parent, 'x', 597, 4, { allowBladeExit: true });
+    expect(geometry.kerfBandRect.lengthMm).toBe(3);
+    expect(geometry.kerfBandRect.lengthMm).toBeGreaterThan(0);
+    expect(geometry.restRect).toBeNull();
+  });
+
+  it('la huella completa del disco es coherente con el kerf nominal: banda + sobre-marcha = kerf', () => {
+    const parent = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 };
+    const geometry = divideRegion(parent, 'x', 597, 12, { allowBladeExit: true });
+    const band = geometry.kerfBandRect.lengthMm;
+    const overhang = geometry.keptExtentMm + 12 - parent.lengthMm;
+    expect(band).toBe(3);
+    expect(overhang).toBe(9);
+    expect(band + overhang).toBe(12);
+  });
+});
+
+describe('cutProgram — corrección PR2-R2: cobertura verificada de la salida de disco', () => {
+  it('acepta la salida hacia espacio previamente consumido suficiente (banda anterior, mismos kerfs)', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 1000, widthMm: 100 } },
+        { regionId: 'K1', rect: { xMm: 0, yMm: 0, lengthMm: 500, widthMm: 100 } },
+        { regionId: 'R1', rect: { xMm: 512, yMm: 0, lengthMm: 488, widthMm: 100 } },
+        { regionId: 'PIECE', rect: { xMm: 0, yMm: 0, lengthMm: 499, widthMm: 100 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1', parentRegionId: 'BOARD', axis: 'x',
+          keptExtentMm: 500, kerfMm: 12, keptRegionId: 'K1', restRegionId: 'R1',
+        },
+        {
+          cutId: 'CUT2', parentRegionId: 'K1', axis: 'x',
+          keptExtentMm: 499, kerfMm: 12, keptRegionId: 'PIECE',
+          bladeExitsParent: true,
+        },
+      ],
+      terminals: [
+        { regionId: 'PIECE', kind: 'piece', pieceRef: 'P1' },
+        { regionId: 'R1', kind: 'waste' },
+      ],
+    };
+    // La huella completa de CUT2 (499..511) cae sobre la banda previa 500..512.
+    const trace = executeCutProgram(program);
+    expect(trace.divisions[1]!.bladeExitsParent).toBe(true);
+    expect(trace.divisions[1]!.kerfBandRect).toEqual({ xMm: 499, yMm: 0, lengthMm: 1, widthMm: 100 });
+  });
+
+  it('rechaza el contraejemplo: con kerfs distintos la huella invade material vivo del subpanel derecho', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 1000, widthMm: 100 } },
+        { regionId: 'K1', rect: { xMm: 0, yMm: 0, lengthMm: 500, widthMm: 100 } },
+        { regionId: 'R1', rect: { xMm: 504, yMm: 0, lengthMm: 496, widthMm: 100 } },
+        { regionId: 'PIECE', rect: { xMm: 0, yMm: 0, lengthMm: 499, widthMm: 100 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1', parentRegionId: 'BOARD', axis: 'x',
+          keptExtentMm: 500, kerfMm: 4, keptRegionId: 'K1', restRegionId: 'R1',
+        },
+        {
+          cutId: 'CUT2', parentRegionId: 'K1', axis: 'x',
+          keptExtentMm: 499, kerfMm: 12, keptRegionId: 'PIECE',
+          bladeExitsParent: true,
+        },
+      ],
+      terminals: [
+        { regionId: 'PIECE', kind: 'piece', pieceRef: 'P1' },
+        { regionId: 'R1', kind: 'waste' },
+      ],
+    };
+    // La huella 500..511 sólo está cubierta hasta 504 por la banda anterior;
+    // 504..511 invade la región viva R1.
+    expectCutProgramError(
+      () => executeCutProgram(program),
+      'cut_program.blade_overhang_obstructed',
+      { cutId: 'CUT2' },
+    );
+  });
+
+  it('acepta la salida cuya sobre-marcha cae íntegramente fuera del tablero', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 1000, widthMm: 100 } },
+        { regionId: 'PIECE', rect: { xMm: 0, yMm: 0, lengthMm: 998, widthMm: 100 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1', parentRegionId: 'BOARD', axis: 'x',
+          keptExtentMm: 998, kerfMm: 12, keptRegionId: 'PIECE',
+          bladeExitsParent: true,
+        },
+      ],
+      terminals: [{ regionId: 'PIECE', kind: 'piece', pieceRef: 'P1' }],
+    };
+    const trace = executeCutProgram(program);
+    expect(trace.leafAreaMm2).toBe(99800);
+    expect(trace.kerfAreaMm2).toBe(200);
+  });
+
+  it('acepta la salida sobre desperdicio explícitamente liberado y la rechaza sin esa declaración', () => {
+    const buildProgram = (liberated: boolean): CutProgramInput => ({
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 1000, widthMm: 600 } },
+        { regionId: 'TRIM_SOLID', rect: { xMm: 0, yMm: 0, lengthMm: 6, widthMm: 600 } },
+        { regionId: 'USABLE', rect: { xMm: 10, yMm: 0, lengthMm: 990, widthMm: 600 } },
+        { regionId: 'PIECE', rect: { xMm: 13, yMm: 0, lengthMm: 987, widthMm: 600 } },
+      ],
+      divisions: [
+        {
+          cutId: 'TRIM', parentRegionId: 'BOARD', axis: 'x',
+          keptExtentMm: 990, kerfMm: 4, keptRegionId: 'USABLE', restRegionId: 'TRIM_SOLID',
+          leadingBand: true,
+        },
+        {
+          cutId: 'CUT2', parentRegionId: 'USABLE', axis: 'x',
+          keptExtentMm: 987, kerfMm: 20, keptRegionId: 'PIECE',
+          leadingBand: true, bladeExitsParent: true,
+        },
+      ],
+      terminals: [
+        { regionId: 'TRIM_SOLID', kind: 'waste', liberated },
+        { regionId: 'PIECE', kind: 'piece', pieceRef: 'P1' },
+      ],
+    });
+
+    // Con el desperdicio declarado liberado, la sobre-marcha [-7..10) queda
+    // cubierta por el sólido 0..6 (liberado) y la banda 6..10 (previa).
+    const trace = executeCutProgram(buildProgram(true));
+    expect(trace.divisions[1]!.bladeExitsParent).toBe(true);
+    expect(trace.divisions[1]!.kerfBandRect).toEqual({ xMm: 10, yMm: 0, lengthMm: 3, widthMm: 600 });
+
+    // Sin la declaración, el sólido 0..6 sigue siendo material en la mesa.
+    expectCutProgramError(
+      () => executeCutProgram(buildProgram(false)),
+      'cut_program.blade_overhang_obstructed',
+      { cutId: 'CUT2' },
+    );
   });
 });
 

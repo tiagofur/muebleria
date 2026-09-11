@@ -57,6 +57,7 @@ export class CutProgramSheetBuilder {
   private readonly outRegions: CutProgramRegion[] = [];
   private readonly outDivisions: CutProgramDivision[] = [];
   private readonly outTerminals: CutProgramTerminalDeclaration[] = [];
+  private readonly liberatedWasteRegionIds = new Set<string>();
   private cutSeq = 0;
 
   constructor(board: {
@@ -93,10 +94,10 @@ export class CutProgramSheetBuilder {
    * recomputing the children geometry with the core. Exact fits register no
    * pass (the parent region is returned as the kept region). A remainder
    * smaller than the blade band is admitted as an explicit blade-exit pass
-   * (band clipped to the parent): every region produced by these heuristics
-   * has its far edges on board/trim borders or earlier kerf boundaries, so
-   * the blade overhang never cuts live material. Hand-built programs must
-   * only declare such passes when that physical guarantee holds.
+   * (band clipped to the parent); executeCutProgram verifies at validation
+   * time that the overhang covers no live material. `leadingBand` mirrors the
+   * layout ([rest][band][kept], kept anchored at the far end) for near-side
+   * trim passes.
    */
   divide(params: {
     readonly parentRegionId: string;
@@ -107,16 +108,21 @@ export class CutProgramSheetBuilder {
     readonly keptRegionId?: string;
     readonly restRegionId?: string;
     readonly pieceRef?: string;
+    readonly leadingBand?: boolean;
   }): SeparateRegionResult {
     const parent = this.region(params.parentRegionId);
-    const parentExtentMm = params.axis === 'x' ? parent.length : parent.width;
-    const separation = separateExtent(parentExtentMm, params.keptExtentMm, params.kerfMm);
+    const separation = separateExtent(
+      params.axis === 'x' ? parent.length : parent.width,
+      params.keptExtentMm,
+      params.kerfMm,
+    );
     if (separation.kind === 'exact_fit') {
       return { kept: parent, rest: null, cutHappened: false };
     }
 
     const geometry = divideRegion(toRect(parent), params.axis, params.keptExtentMm, params.kerfMm, {
       allowBladeExit: true,
+      leadingBand: params.leadingBand === true,
     });
     const cutId = params.cutId ?? `cut-${++this.cutSeq}`;
     const keptRegionId = params.keptRegionId ?? `${cutId}:kept`;
@@ -130,6 +136,7 @@ export class CutProgramSheetBuilder {
     this.register(kept);
     let rest: RegisteredRegion | null = null;
     const bladeExitsParent = geometry.bladeExitsParent ? true : undefined;
+    const leadingBand = params.leadingBand === true ? true : undefined;
     if (geometry.restRect) {
       const restRegionId = params.restRegionId ?? `${cutId}:rest`;
       rest = {
@@ -149,6 +156,7 @@ export class CutProgramSheetBuilder {
         keptRegionId,
         restRegionId,
         bladeExitsParent,
+        leadingBand,
       });
     } else {
       this.outDivisions.push({
@@ -159,18 +167,34 @@ export class CutProgramSheetBuilder {
         kerfMm: params.kerfMm,
         keptRegionId,
         bladeExitsParent,
+        leadingBand,
       });
     }
     return { kept, rest, cutHappened: true };
   }
 
-  markTerminal(regionId: string, kind: CutProgramTerminalKind, pieceRef?: string): void {
+  markTerminal(
+    regionId: string,
+    kind: CutProgramTerminalKind,
+    pieceRef?: string,
+    options?: { readonly liberated?: boolean },
+  ): void {
     this.region(regionId);
-    this.outTerminals.push({ regionId, kind, pieceRef });
+    this.outTerminals.push({ regionId, kind, pieceRef, liberated: options?.liberated });
   }
 
   markPieceTerminal(regionId: string, pieceRef: string): void {
     this.markTerminal(regionId, 'piece', pieceRef);
+  }
+
+  /**
+   * Waste leaf whose material leaves the working surface with its producing
+   * division (trim strips are discarded with the trim pass). This explicit
+   * handling precondition is what later blade overhangs may cross.
+   */
+  markLiberatedWasteTerminal(regionId: string): void {
+    this.liberatedWasteRegionIds.add(regionId);
+    this.markTerminal(regionId, 'waste', undefined, { liberated: true });
   }
 
   /**
@@ -183,6 +207,15 @@ export class CutProgramSheetBuilder {
       ? 'remnant'
       : 'waste';
     this.markTerminal(region.regionId, kind);
+  }
+
+  /**
+   * Region ids of waste leaves declared liberated (trim strips). Used to keep
+   * the presentation-level remnant list free of trim garbage while the
+   * program still accounts for it.
+   */
+  getLiberatedWasteRegionIds(): ReadonlySet<string> {
+    return this.liberatedWasteRegionIds;
   }
 
   build(): CutProgramInput {
@@ -212,17 +245,29 @@ export class CutProgramSheetBuilder {
  * Registers the raw board and its trim margins as explicit divisions, in a
  * fixed order (left, right, bottom, top), and returns the usable region.
  *
- * Each margin is one solid-waste separation with kerf 0: under the existing
- * optimizer semantics the margin is the whole band removed from the raw
- * board, so every retired surface is counted exactly once and stays distinct
- * from the saw kerf bands. How trims are later serialized to PTX is a
- * separate decision (#650 entrega B), not represented here. Mapping is
- * explicit — bottom margin at the Y origin, top at the far edge — with no
- * silent top/bottom or Y-axis inversion.
+ * Semantics of the TOTAL margin (the optimizer's existing convention): the
+ * margin is the whole band removed from the raw board, so under a configured
+ * blade of `kerfMm` each trim pass yields solid waste of `margin - kerfMm`
+ * plus a real blade band of `kerfMm` adjacent to the usable region — e.g.
+ * margin 10 with blade 4 leaves solid 0..6, band 6..10 and usable from 10.
+ * The blade is never added on top of the margin (no 6000 + 2400 double
+ * count) and a zero-area band is never recorded for a positive blade.
+ *
+ * Edge cases are explicit: margin == kerf consumes the whole margin as a
+ * kerf-only pass; margin < kerf clips the band to the margin and lets the
+ * blade exit through the board edge (bladeExitsParent), instead of hiding
+ * the situation behind a zero-kerf partition. Near-side trims (left/bottom)
+ * use leading bands ([solid][band][kept]); far-side trims (right/top) use
+ * the normal layout ([kept][band][solid]). Mapping is explicit — bottom
+ * margin at the Y origin, top at the far edge — with no silent top/bottom or
+ * Y-axis inversion. Usable coordinates and piece positions are unchanged by
+ * this representation; how trims are later serialized to PTX is a separate
+ * decision (#650 entrega B).
  */
 export function registerTrimDivisions(
   builder: CutProgramSheetBuilder,
   trim: CutTrimMargins,
+  kerfMm: number,
 ): RegisteredRegion {
   let region = builder.region('board');
 
@@ -230,48 +275,58 @@ export function registerTrimDivisions(
     const sep = builder.divide({
       parentRegionId: region.regionId,
       axis: 'x',
-      keptExtentMm: trim.leftMm,
-      kerfMm: 0,
+      leadingBand: true,
+      keptExtentMm: region.length - trim.leftMm,
+      kerfMm,
       cutId: 'trim:left',
-      keptRegionId: 'trim:left',
+      restRegionId: 'trim:left',
     });
-    builder.markTerminal(sep.kept.regionId, 'waste');
-    region = sep.rest ?? region;
+    if (sep.rest) {
+      builder.markLiberatedWasteTerminal(sep.rest.regionId);
+    }
+    region = sep.kept;
   }
   if (trim.rightMm > 0) {
     const sep = builder.divide({
       parentRegionId: region.regionId,
       axis: 'x',
       keptExtentMm: region.length - trim.rightMm,
-      kerfMm: 0,
+      kerfMm,
       cutId: 'trim:right',
       restRegionId: 'trim:right',
     });
-    builder.markTerminal(sep.rest!.regionId, 'waste');
+    if (sep.rest) {
+      builder.markLiberatedWasteTerminal(sep.rest.regionId);
+    }
     region = sep.kept;
   }
   if (trim.bottomMm > 0) {
     const sep = builder.divide({
       parentRegionId: region.regionId,
       axis: 'y',
-      keptExtentMm: trim.bottomMm,
-      kerfMm: 0,
+      leadingBand: true,
+      keptExtentMm: region.width - trim.bottomMm,
+      kerfMm,
       cutId: 'trim:bottom',
-      keptRegionId: 'trim:bottom',
+      restRegionId: 'trim:bottom',
     });
-    builder.markTerminal(sep.kept.regionId, 'waste');
-    region = sep.rest ?? region;
+    if (sep.rest) {
+      builder.markLiberatedWasteTerminal(sep.rest.regionId);
+    }
+    region = sep.kept;
   }
   if (trim.topMm > 0) {
     const sep = builder.divide({
       parentRegionId: region.regionId,
       axis: 'y',
       keptExtentMm: region.width - trim.topMm,
-      kerfMm: 0,
+      kerfMm,
       cutId: 'trim:top',
       restRegionId: 'trim:top',
     });
-    builder.markTerminal(sep.rest!.regionId, 'waste');
+    if (sep.rest) {
+      builder.markLiberatedWasteTerminal(sep.rest.regionId);
+    }
     region = sep.kept;
   }
 
