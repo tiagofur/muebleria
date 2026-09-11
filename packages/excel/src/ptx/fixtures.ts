@@ -1,0 +1,198 @@
+/**
+ * Canonical lab fixture for the PTX core tests (#650 PR 4).
+ *
+ * Synthetic end-to-end document assembled from the dossier fragments under
+ * docs/machines/ptx-cadmatic4/examples/ (02 prefix + 01 cuts + the 04 offcut
+ * release row + the 05 auxiliary vector), extended to exercise every family
+ * implemented by the core. Lab data only — no client data, and explicitly
+ * NOT a machine program (the dossier README rule for these fragments).
+ *
+ * Board 1200×700, kerf 4, top-left origin, no outer trims — the deliberate
+ * assumptions of the didactic exercise (investigation §5).
+ */
+
+import type { PtxDocument, PtxRecord } from './records';
+
+export function buildLabGuillotineDocument(): PtxDocument {
+  const records: readonly PtxRecord[] = [
+    {
+      type: 'JOBS',
+      jobIndex: 1,
+      name: 'C4D001',
+      description: 'EXAMPLE ONLY',
+      orderDate: '10/09/2026',
+      cutDate: undefined,
+      customer: 'LAB',
+      status: 1,
+    },
+    {
+      type: 'PARTS_REQ',
+      jobIndex: 1,
+      partIndex: 1,
+      code: 'PART_A',
+      materialIndex: 1,
+      length: 450,
+      width: 320,
+      requiredQuantity: 1,
+      overQuantity: 0,
+      underQuantity: 0,
+      grain: 0,
+      producedQuantity: 1,
+    },
+    {
+      type: 'PARTS_REQ',
+      jobIndex: 1,
+      partIndex: 2,
+      code: 'PART_B',
+      materialIndex: 1,
+      length: 280,
+      width: 210,
+      requiredQuantity: 1,
+      overQuantity: 0,
+      underQuantity: 0,
+      grain: 0,
+      producedQuantity: 1,
+    },
+    {
+      type: 'BOARDS',
+      jobIndex: 1,
+      boardIndex: 1,
+      code: 'BOARD_LAB',
+      materialIndex: 1,
+      length: 1200,
+      width: 700,
+      stockQuantity: 1,
+      usedQuantity: 1,
+    },
+    {
+      type: 'MATERIALS',
+      jobIndex: 1,
+      materialIndex: 1,
+      code: 'MDF_LAB18',
+      description: 'LAB',
+      thickness: 18,
+      bookQuantity: 1,
+      kerfRip: 4,
+      kerfCrosscut: 4,
+      trimFRip: 0,
+      trimVRip: 0,
+      trimFXct: 0,
+      trimVXct: 0,
+      trimHead: 0,
+      trimFRct: 0,
+      trimVRct: 0,
+      rule1: 3,
+      rule2: 0,
+      rule3: 0,
+      rule4: 0,
+    },
+    {
+      type: 'PATTERNS',
+      jobIndex: 1,
+      patternIndex: 1,
+      boardIndex: 1,
+      patternType: 0,
+      runQuantity: 1,
+      cyclesQuantity: 1,
+      maxBook: 1,
+    },
+    {
+      type: 'CUTS',
+      jobIndex: 1,
+      patternIndex: 1,
+      cutIndex: 1,
+      sequence: 1,
+      functionCode: 1,
+      dimension: 320,
+      repeatQuantity: 1,
+      partReference: { kind: 'none' },
+      producedQuantity: 0,
+      comment: 'CUT_A',
+    },
+    {
+      type: 'CUTS',
+      jobIndex: 1,
+      patternIndex: 1,
+      cutIndex: 2,
+      sequence: 2,
+      functionCode: 2,
+      dimension: 450,
+      repeatQuantity: 1,
+      partReference: { kind: 'part', partIndex: 1 },
+      producedQuantity: 1,
+      comment: 'CUT_B',
+    },
+    {
+      type: 'CUTS',
+      jobIndex: 1,
+      patternIndex: 1,
+      cutIndex: 3,
+      sequence: 3,
+      functionCode: 2,
+      dimension: 280,
+      repeatQuantity: 1,
+      partReference: { kind: 'none' },
+      producedQuantity: 0,
+      comment: 'CUT_C',
+    },
+    {
+      type: 'CUTS',
+      jobIndex: 1,
+      patternIndex: 1,
+      cutIndex: 4,
+      sequence: 4,
+      functionCode: 3,
+      dimension: 210,
+      repeatQuantity: 1,
+      partReference: { kind: 'part', partIndex: 2 },
+      producedQuantity: 1,
+      comment: 'CUT_D',
+    },
+    {
+      // Fragment 04: offcut release row — QTY_RPT=0 and SEQUENCE=0 mean NO
+      // new saw pass (investigation §4 CUTS parser rule).
+      type: 'CUTS',
+      jobIndex: 1,
+      patternIndex: 1,
+      cutIndex: 5,
+      sequence: 0,
+      functionCode: 2,
+      dimension: 462,
+      repeatQuantity: 0,
+      partReference: { kind: 'offcut', offcutIndex: 1 },
+      producedQuantity: 1,
+      comment: 'RESTO',
+    },
+    {
+      type: 'OFFCUTS',
+      jobIndex: 1,
+      offcutIndex: 1,
+      code: 'OFFCUT_LAB',
+      materialIndex: 1,
+      length: 462,
+      width: 320,
+    },
+    {
+      type: 'VECTORS',
+      jobIndex: 1,
+      patternIndex: 1,
+      cutIndex: 1,
+      xStart: 0,
+      yStart: 324,
+      xEnd: 1200,
+      yEnd: 324,
+    },
+  ];
+
+  return {
+    header: {
+      type: 'HEADER',
+      version: 1,
+      title: 'GRANETE-LAB-NONPRODUCTION',
+      units: 0,
+      origin: 0,
+      trimType: 1,
+    },
+    records,
+  };
+}
