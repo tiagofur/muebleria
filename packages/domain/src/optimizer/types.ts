@@ -6,6 +6,7 @@
  */
 
 import type { CutStrategy, Grain, ProductionCutRow } from '../types';
+import type { CutProgramInput } from './cutProgram';
 
 /**
  * Configurable trim (refilado) margins per side (mm).
@@ -186,6 +187,14 @@ export interface CutPlanSheet {
   readonly wastePercent: number;
   /** Material yield percentage (net area / gross area * 100) */
   readonly yieldPercent: number;
+  /**
+   * Guillotine cut program registered while packing (#650 PR 2). Serializable
+   * CutProgramInput, validated with executeCutProgram at generation time for
+   * accepted saw-guillotine candidates. Absent for legacy persisted plans and
+   * cnc-nesting sheets; absence never means a verified program exists, and no
+   * program may be derived retrospectively from stored piece coordinates.
+   */
+  readonly cutProgram?: CutProgramInput;
 }
 
 /**

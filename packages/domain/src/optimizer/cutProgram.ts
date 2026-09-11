@@ -58,7 +58,31 @@ export interface CutProgramDivision {
   /** Blade band consumed along the axis (mm); zero kerf is admitted. */
   readonly kerfMm: number;
   readonly keptRegionId: string;
-  readonly restRegionId: string;
+  /**
+   * Region produced on the far side of the kerf band. Omitted ONLY when no
+   * solid rest exists: kerf-only divisions (blade consumes the remainder
+   * exactly) and blade-exit divisions (remainder smaller than the blade).
+   * A solid rest must always be declared.
+   */
+  readonly restRegionId?: string;
+  /**
+   * Explicit marker that this pass lets the blade overhang the parent
+   * (remainder smaller than the blade band). Valid only when the full
+   * footprint beyond the parent is verified to consume no live material
+   * (board exterior, earlier kerf bands or explicitly liberated waste).
+   * The recorded band is clipped to the parent, so the blade is counted
+   * exactly once and nothing live is cut.
+   */
+  readonly bladeExitsParent?: boolean;
+  /**
+   * Band placement along the axis. Default (absent/false): kept region at the
+   * parent origin, band after it, rest beyond ([kept][band][rest]). True:
+   * mirrored layout with the kept region at the parent's far end
+   * ([rest][band][kept]) — the minimal form needed by near-side trim passes,
+   * where the solid waste sits at the parent origin and the blade runs right
+   * before the usable region.
+   */
+  readonly leadingBand?: boolean;
 }
 
 /** Terminal declaration: a leaf that is a piece, remnant/offcut or waste. */
@@ -71,6 +95,14 @@ export interface CutProgramTerminalDeclaration {
    * the leaf to a demand that already exists elsewhere.
    */
   readonly pieceRef?: string;
+  /**
+   * Explicit handling precondition for waste leaves: the material leaves the
+   * working surface as soon as its producing division executes (trim strips
+   * are discarded with the trim pass). Blade overhangs may only cross such
+   * regions when they were produced by an earlier division. Declaring it on
+   * a non-waste leaf is rejected.
+   */
+  readonly liberated?: boolean;
 }
 
 /** Program input: board region, all declared regions, divisions, terminals. */
@@ -89,7 +121,59 @@ export interface CutProgramDivisionGeometry {
   readonly kerfMm: number;
   readonly keptRect: CutProgramRect;
   readonly kerfBandRect: CutProgramRect;
-  readonly restRect: CutProgramRect;
+  /** null when no solid rest exists (kerf-only or blade-exit divisions). */
+  readonly restRect: CutProgramRect | null;
+  /** True when the blade band was clipped to the parent (gap < kerf). */
+  readonly bladeExitsParent: boolean;
+}
+
+/**
+ * How a kept extent separates from a parent extent under one kerf, under the
+ * arithmetic policy of this module. This classifier is the single source of
+ * the exact-fit / kerf-only / solid-rest / blade-exits policy (#650 PR 2):
+ * heuristics must not re-implement it.
+ *
+ * - exact_fit: the kept extent already spans the parent (within noise). No
+ *   pass exists; the region is a terminal leaf as-is.
+ * - kerf_only: the remainder equals the blade band. A real pass separates the
+ *   kept child and consumes the whole remainder as kerf; no solid rest.
+ * - solid_rest: a normal division with kept + kerf + solid rest.
+ * - blade_exits_parent: the remainder is smaller than the blade band, so the
+ *   TOOL overhangs the parent. Admissible only under the explicit, verified
+ *   blade-exit policy (see divideRegion); never a silently trimmed blade.
+ * - kept_exceeds_parent: the kept extent is larger than the parent beyond
+ *   arithmetic noise, or an input is non-finite. Always invalid: the blade
+ *   exiting the parent means the tool outside the parent, never the piece.
+ */
+export type CutProgramSeparation =
+  | { readonly kind: 'exact_fit' }
+  | { readonly kind: 'kerf_only' }
+  | { readonly kind: 'solid_rest'; readonly restExtentMm: number }
+  | { readonly kind: 'blade_exits_parent' }
+  | { readonly kind: 'kept_exceeds_parent' };
+
+export function separateExtent(
+  parentExtentMm: number,
+  keptExtentMm: number,
+  kerfMm: number,
+): CutProgramSeparation {
+  const gapMm = parentExtentMm - keptExtentMm;
+  if (!Number.isFinite(gapMm) || !Number.isFinite(kerfMm)) {
+    return { kind: 'kept_exceeds_parent' };
+  }
+  if (sameMeasure(gapMm, 0)) {
+    return { kind: 'exact_fit' };
+  }
+  if (gapMm < 0) {
+    return { kind: 'kept_exceeds_parent' };
+  }
+  if (sameMeasure(gapMm, kerfMm)) {
+    return { kind: 'kerf_only' };
+  }
+  if (gapMm > kerfMm) {
+    return { kind: 'solid_rest', restExtentMm: gapMm - kerfMm };
+  }
+  return { kind: 'blade_exits_parent' };
 }
 
 /** Kerf band of an executed division; not a region and never a leaf. */
@@ -110,10 +194,12 @@ export interface CutProgramTraceDivision {
   readonly kerfMm: number;
   readonly keptRegionId: string;
   readonly keptRect: CutProgramRect;
-  readonly restRegionId: string;
-  readonly restRect: CutProgramRect;
+  readonly restRegionId?: string;
+  readonly restRect: CutProgramRect | null;
   readonly kerfBandId: string;
   readonly kerfBandRect: CutProgramRect;
+  readonly bladeExitsParent: boolean;
+  readonly leadingBand: boolean;
 }
 
 /** Terminal leaf with authoritative geometry. */
@@ -122,6 +208,7 @@ export interface CutProgramTerminalRegion {
   readonly rect: CutProgramRect;
   readonly kind: CutProgramTerminalKind;
   readonly pieceRef?: string;
+  readonly liberated?: boolean;
 }
 
 /** Full validated reproduction of a cut program. */
@@ -181,6 +268,16 @@ function sameRect(a: CutProgramRect, b: CutProgramRect): boolean {
   );
 }
 
+/**
+ * Whether a claimed rect matches an executed rect under the arithmetic
+ * policy. The optimizer integration uses it to prove that executed piece
+ * leaves correspond to the real placements, position included; it accepts
+ * representation noise only, never real geometric differences.
+ */
+export function cutProgramRectMatches(claim: CutProgramRect, executed: CutProgramRect): boolean {
+  return sameRect(claim, executed);
+}
+
 function rectArea(rect: CutProgramRect): number {
   return rect.lengthMm * rect.widthMm;
 }
@@ -210,32 +307,110 @@ function kerfBandIdOf(cutId: string): string {
   return `kerf:${cutId}`;
 }
 
+function pointInRect(px: number, py: number, r: CutProgramRect): boolean {
+  return (
+    atLeast(px, r.xMm) &&
+    atMost(px, r.xMm + r.lengthMm) &&
+    atLeast(py, r.yMm) &&
+    atMost(py, r.yMm + r.widthMm)
+  );
+}
+
+/**
+ * Whether the part of `target` inside the raw board is fully covered by the
+ * union of `covers` (axis-aligned rects, checked by coordinate sweep under
+ * the arithmetic policy). An overhang entirely outside the board is free air.
+ */
+function overhangCoveredBy(
+  target: CutProgramRect,
+  board: CutProgramRect,
+  covers: readonly CutProgramRect[],
+): boolean {
+  const x1 = Math.max(target.xMm, board.xMm);
+  const x2 = Math.min(target.xMm + target.lengthMm, board.xMm + board.lengthMm);
+  const y1 = Math.max(target.yMm, board.yMm);
+  const y2 = Math.min(target.yMm + target.widthMm, board.yMm + board.widthMm);
+  if (!(x2 > x1 && y2 > y1)) {
+    return true;
+  }
+  const clipped = { xMm: x1, yMm: y1, lengthMm: x2 - x1, widthMm: y2 - y1 };
+  const xs = [x1, x2];
+  const ys = [y1, y2];
+  for (const cover of covers) {
+    xs.push(cover.xMm, cover.xMm + cover.lengthMm);
+    ys.push(cover.yMm, cover.yMm + cover.widthMm);
+  }
+  xs.sort((a, b) => a - b);
+  ys.sort((a, b) => a - b);
+  for (let i = 0; i < xs.length - 1; i++) {
+    const xa = xs[i]!;
+    const xb = xs[i + 1]!;
+    if (xb <= xa) {
+      continue;
+    }
+    for (let j = 0; j < ys.length - 1; j++) {
+      const ya = ys[j]!;
+      const yb = ys[j + 1]!;
+      if (yb <= ya) {
+        continue;
+      }
+      const cx = (xa + xb) / 2;
+      const cy = (ya + yb) / 2;
+      if (!pointInRect(cx, cy, clipped)) {
+        continue;
+      }
+      if (!covers.some((cover) => pointInRect(cx, cy, cover))) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 /**
  * Divides an available rectangular region along an axis.
  *
  * The kept child occupies the first `keptExtentMm` of the parent along the
  * axis, starting at the parent origin. The kerf band of `kerfMm` follows it;
- * the rest child fills the remainder of the parent on the other side of the
- * band. All three are contained in the parent, pairwise disjoint, and conserve
- * the parent's surface.
+ * when a solid remainder exists, the rest child fills the far side of the
+ * parent. All parts are contained in the parent, pairwise disjoint, and
+ * conserve the parent's surface.
  *
- * Supported domain (edge cases made explicit):
+ * Supported domain (edge cases made explicit, policy owned by separateExtent):
  * - all measures must be finite; NaN/Infinity are rejected;
  * - parent dimensions must be positive;
  * - `keptExtentMm` must be > 0 and `kerfMm` >= 0;
- * - `keptExtentMm + kerfMm` must be < the parent extent along the axis, so the
- *   rest child always keeps a positive extent. A cut at the border (rest would
- *   be empty) is NOT supported: a piece that already matches an available
- *   region is represented as a terminal leaf, never as a fictitious pass. The
- *   blade is never silently shortened nor counted twice;
+ * - kept_exceeds_parent (kept larger than the parent beyond noise) always
+ *   fails: the blade exiting the parent is the tool outside the parent,
+ *   never the piece;
+ * - exact_fit (kept already spans the parent) is NOT a division: the region
+ *   is declared a terminal leaf with no fictitious pass;
+ * - kerf_only (remainder equals the blade band) is a valid division that
+ *   produces only the kept child plus the kerf band — no zero-area rest
+ *   region is fabricated;
+ * - blade_exits_parent (remainder smaller than the blade band) is rejected by
+ *   default. With the explicit `allowBladeExit` option the pass is admitted
+ *   as a band clipped to the parent; executeCutProgram then VERIFIES that the
+ *   full nominal footprint beyond the parent covers no live material (board
+ *   exterior, earlier kerf bands, explicitly liberated waste). This is the
+ *   only admitted clipping and it is always visible through bladeExitsParent
+ *   plus the band width — never a silent trim, and the blade is counted
+ *   exactly once;
+ * - `leadingBand: true` mirrors the layout along the axis: [rest][band][kept]
+ *   with the kept region anchored at the parent's far end. This is the
+ *   minimal form required by near-side trim passes (solid waste at the
+ *   origin, blade right before the usable region), including their kerf-only
+ *   and blade-exit edge cases (blade exiting through the board edge);
  * - kerf 0 is admitted: the band is reported with zero area and is never a
- *   physical region, so no invalid region is fabricated.
+ *   physical region, so no invalid region is fabricated. A zero-kerf band is
+ *   a zero-kerf configuration — it never stands in for a positive blade.
  */
 export function divideRegion(
   parent: CutProgramRect,
   axis: CutProgramAxis,
   keptExtentMm: number,
   kerfMm: number,
+  options?: { readonly allowBladeExit?: boolean; readonly leadingBand?: boolean },
 ): CutProgramDivisionGeometry {
   assertRect(parent, 'padre', {});
   if (axis !== 'x' && axis !== 'y') {
@@ -252,17 +427,42 @@ export function divideRegion(
   }
 
   const parentExtent = axis === 'x' ? parent.lengthMm : parent.widthMm;
-  const restExtent = parentExtent - keptExtentMm - kerfMm;
-  // The rest must keep a positive extent beyond arithmetic-representation
-  // noise: a mathematically-zero rest that only float rounding "saves" is
-  // still a cut at the border, never a zero-area region.
-  if (!(restExtent > 0) || sameMeasure(restExtent, 0)) {
+  const separation = separateExtent(parentExtent, keptExtentMm, kerfMm);
+  if (separation.kind === 'exact_fit') {
     fail(
       'cut_program.cut_at_border_unsupported',
-      'Corte al borde no soportado: el resto quedaría sin extensión positiva; una pieza que coincide con la región se declara hoja terminal sin pasada',
+      'La región ya coincide con la medida: declárala hoja terminal, no una pasada ficticia',
+      { keptExtentMm, kerfMm, parentExtent, axis, separation: separation.kind },
+    );
+  }
+  if (separation.kind === 'kept_exceeds_parent') {
+    fail(
+      'cut_program.kept_exceeds_parent',
+      'La medida conservada no cabe en la región padre: la salida del disco es la herramienta fuera del padre, no la pieza',
       { keptExtentMm, kerfMm, parentExtent, axis },
     );
   }
+  if (separation.kind === 'blade_exits_parent' && options?.allowBladeExit !== true) {
+    fail(
+      'cut_program.cut_at_border_unsupported',
+      'Corte al borde no soportado: el disco saldría del padre sin autorización explícita',
+      { keptExtentMm, kerfMm, parentExtent, axis, separation: separation.kind },
+    );
+  }
+
+  // Blade-exit policy (explicit, verified by executeCutProgram): the remainder
+  // is smaller than the blade band, so the pass consumes the whole remainder
+  // as a band clipped to the parent and the tool overhang continues into
+  // space that must be proven free of live material (board exterior, earlier
+  // kerf bands, or waste explicitly declared liberated). The caller opts in
+  // with allowBladeExit; executeCutProgram verifies the coverage claim. The
+  // band inside the parent counts the blade exactly once; the overhang adds
+  // no material from live regions. This is the only admitted clipping and it
+  // is always visible through bladeExitsParent and the band width.
+  const gapMm = parentExtent - keptExtentMm;
+  const bandExtentMm = separation.kind === 'blade_exits_parent' ? gapMm : kerfMm;
+  const restExtentMm = separation.kind === 'solid_rest' ? separation.restExtentMm : null;
+  const leading = options?.leadingBand === true;
 
   const geometry =
     axis === 'x'
@@ -270,24 +470,45 @@ export function divideRegion(
           axis,
           keptExtentMm,
           kerfMm,
-          keptRect: { xMm: parent.xMm, yMm: parent.yMm, lengthMm: keptExtentMm, widthMm: parent.widthMm },
-          kerfBandRect: { xMm: parent.xMm + keptExtentMm, yMm: parent.yMm, lengthMm: kerfMm, widthMm: parent.widthMm },
-          restRect: { xMm: parent.xMm + keptExtentMm + kerfMm, yMm: parent.yMm, lengthMm: restExtent, widthMm: parent.widthMm },
+          keptRect: leading
+            ? { xMm: parent.xMm + parent.lengthMm - keptExtentMm, yMm: parent.yMm, lengthMm: keptExtentMm, widthMm: parent.widthMm }
+            : { xMm: parent.xMm, yMm: parent.yMm, lengthMm: keptExtentMm, widthMm: parent.widthMm },
+          kerfBandRect: leading
+            ? { xMm: parent.xMm + parent.lengthMm - keptExtentMm - bandExtentMm, yMm: parent.yMm, lengthMm: bandExtentMm, widthMm: parent.widthMm }
+            : { xMm: parent.xMm + keptExtentMm, yMm: parent.yMm, lengthMm: bandExtentMm, widthMm: parent.widthMm },
+          restRect:
+            restExtentMm === null
+              ? null
+              : leading
+                ? { xMm: parent.xMm, yMm: parent.yMm, lengthMm: restExtentMm, widthMm: parent.widthMm }
+                : { xMm: parent.xMm + keptExtentMm + kerfMm, yMm: parent.yMm, lengthMm: restExtentMm, widthMm: parent.widthMm },
+          bladeExitsParent: separation.kind === 'blade_exits_parent',
         }
       : {
           axis,
           keptExtentMm,
           kerfMm,
-          keptRect: { xMm: parent.xMm, yMm: parent.yMm, lengthMm: parent.lengthMm, widthMm: keptExtentMm },
-          kerfBandRect: { xMm: parent.xMm, yMm: parent.yMm + keptExtentMm, lengthMm: parent.lengthMm, widthMm: kerfMm },
-          restRect: { xMm: parent.xMm, yMm: parent.yMm + keptExtentMm + kerfMm, lengthMm: parent.lengthMm, widthMm: restExtent },
+          keptRect: leading
+            ? { xMm: parent.xMm, yMm: parent.yMm + parent.widthMm - keptExtentMm, lengthMm: parent.lengthMm, widthMm: keptExtentMm }
+            : { xMm: parent.xMm, yMm: parent.yMm, lengthMm: parent.lengthMm, widthMm: keptExtentMm },
+          kerfBandRect: leading
+            ? { xMm: parent.xMm, yMm: parent.yMm + parent.widthMm - keptExtentMm - bandExtentMm, lengthMm: parent.lengthMm, widthMm: bandExtentMm }
+            : { xMm: parent.xMm, yMm: parent.yMm + keptExtentMm, lengthMm: parent.lengthMm, widthMm: bandExtentMm },
+          restRect:
+            restExtentMm === null
+              ? null
+              : leading
+                ? { xMm: parent.xMm, yMm: parent.yMm, lengthMm: parent.lengthMm, widthMm: restExtentMm }
+                : { xMm: parent.xMm, yMm: parent.yMm + keptExtentMm + kerfMm, lengthMm: parent.lengthMm, widthMm: restExtentMm },
+          bladeExitsParent: separation.kind === 'blade_exits_parent',
         };
 
-  const representable = (r: CutProgramRect): boolean =>
-    Number.isFinite(r.xMm) &&
-    Number.isFinite(r.yMm) &&
-    Number.isFinite(r.lengthMm) &&
-    Number.isFinite(r.widthMm);
+  const representable = (r: CutProgramRect | null): boolean =>
+    r === null ||
+    (Number.isFinite(r.xMm) &&
+      Number.isFinite(r.yMm) &&
+      Number.isFinite(r.lengthMm) &&
+      Number.isFinite(r.widthMm));
   if (
     !representable(geometry.keptRect) ||
     !representable(geometry.kerfBandRect) ||
@@ -318,14 +539,85 @@ function assertDivisionPartition(
     atLeast(r.yMm, parentRect.yMm) &&
     atMost(r.xMm + r.lengthMm, parentRect.xMm + parentRect.lengthMm) &&
     atMost(r.yMm + r.widthMm, parentRect.yMm + parentRect.widthMm);
-  const areasSum = rectArea(keptRect) + rectArea(kerfBandRect) + rectArea(restRect);
-  if (!contained(keptRect) || !contained(kerfBandRect) || !contained(restRect)) {
+  const areasSum =
+    rectArea(keptRect) + rectArea(kerfBandRect) + (restRect ? rectArea(restRect) : 0);
+  if (!contained(keptRect) || !contained(kerfBandRect) || (restRect && !contained(restRect))) {
     fail('cut_program.invariant_violated', 'Resultado fuera del padre', { cutId });
   }
   if (!sameMeasure(areasSum, rectArea(parentRect))) {
     fail('cut_program.invariant_violated', 'Hijos + kerf no conservan la superficie del padre', {
       cutId,
     });
+  }
+}
+
+/**
+ * Verified free-space guarantee for a blade-exit pass. The full nominal
+ * footprint (kept + kerf) overhangs the parent; the part of the overhang
+ * inside the raw board must be covered exclusively by space that holds no
+ * live material at the moment of this division: kerf bands of EARLIER
+ * divisions, or waste terminals explicitly declared liberated whose region
+ * was already produced (present in executedRects — trim strips discarded
+ * with the trim pass). Board exterior is free air by definition. Anything
+ * else — pieces, remnants, available regions, not-yet-produced leaves —
+ * obstructs the footprint and rejects the program. Local area sums never
+ * substitute for this check.
+ */
+function assertBladeOverhangClear(
+  program: CutProgramInput,
+  parentRect: CutProgramRect,
+  division: CutProgramDivision,
+  geometry: CutProgramDivisionGeometry,
+  boardRect: CutProgramRect,
+  kerfBandsSoFar: readonly { cutId: string; bandId: string; rect: CutProgramRect }[],
+  executedRects: ReadonlyMap<string, CutProgramRect>,
+  cutContext: Record<string, unknown>,
+): void {
+  const leading = division.leadingBand === true;
+  const alongX = division.axis === 'x';
+  const parentFar = alongX
+    ? parentRect.xMm + parentRect.lengthMm
+    : parentRect.yMm + parentRect.widthMm;
+  const parentNear = alongX ? parentRect.xMm : parentRect.yMm;
+  const keptNear = alongX ? geometry.keptRect.xMm : geometry.keptRect.yMm;
+  const keptCutEdge = alongX
+    ? geometry.keptRect.xMm + geometry.keptRect.lengthMm
+    : geometry.keptRect.yMm + geometry.keptRect.widthMm;
+  // Full nominal footprint along the axis: [cutEdge, cutEdge + kerf) for the
+  // normal layout (cut edge = kept far edge) and [cutEdge - kerf, cutEdge)
+  // for the leading layout (cut edge = kept near edge).
+  const footprintEdge = leading ? keptNear - division.kerfMm : keptCutEdge + division.kerfMm;
+  const overhangLength = leading ? parentNear - footprintEdge : footprintEdge - parentFar;
+  const overhangRect: CutProgramRect = alongX
+    ? {
+        xMm: leading ? footprintEdge : parentFar,
+        yMm: parentRect.yMm,
+        lengthMm: overhangLength,
+        widthMm: parentRect.widthMm,
+      }
+    : {
+        xMm: parentRect.xMm,
+        yMm: leading ? footprintEdge : parentFar,
+        lengthMm: parentRect.lengthMm,
+        widthMm: overhangLength,
+      };
+
+  const covers: CutProgramRect[] = kerfBandsSoFar.map((band) => band.rect);
+  for (const terminal of program.terminals) {
+    if (terminal.kind === 'waste' && terminal.liberated === true) {
+      const rect = executedRects.get(terminal.regionId);
+      if (rect) {
+        covers.push(rect);
+      }
+    }
+  }
+
+  if (!overhangCoveredBy(overhangRect, boardRect, covers)) {
+    fail(
+      'cut_program.blade_overhang_obstructed',
+      'La huella completa del disco invade material vivo no liberado: se requiere retirar/reposicionar el subpanel vecino o replantear el corte',
+      { ...cutContext, overhangRect },
+    );
   }
 }
 
@@ -398,21 +690,28 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
   }
 
   const terminalRegionIds = new Set<string>();
-  const terminalByRegion = new Map<string, CutProgramTerminalDeclaration>();
-  for (const terminal of program.terminals) {
-    if (terminalByRegion.has(terminal.regionId)) {
-      fail('cut_program.terminal_duplicate', 'Región declarada terminal dos veces', {
-        regionId: terminal.regionId,
-      });
+    const terminalByRegion = new Map<string, CutProgramTerminalDeclaration>();
+    for (const terminal of program.terminals) {
+      if (terminalByRegion.has(terminal.regionId)) {
+        fail('cut_program.terminal_duplicate', 'Región declarada terminal dos veces', {
+          regionId: terminal.regionId,
+        });
+      }
+      terminalByRegion.set(terminal.regionId, terminal);
+      terminalRegionIds.add(terminal.regionId);
+      if (terminal.kind === 'piece' && (!terminal.pieceRef || terminal.pieceRef.length === 0)) {
+        fail('cut_program.piece_ref_required', 'Terminal de pieza sin referencia de pieza', {
+          regionId: terminal.regionId,
+        });
+      }
+      if (terminal.liberated === true && terminal.kind !== 'waste') {
+        fail(
+          'cut_program.liberated_invalid',
+          'Sólo un terminal de desperdicio puede declararse liberado de la mesa de trabajo',
+          { regionId: terminal.regionId, kind: terminal.kind },
+        );
+      }
     }
-    terminalByRegion.set(terminal.regionId, terminal);
-    terminalRegionIds.add(terminal.regionId);
-    if (terminal.kind === 'piece' && (!terminal.pieceRef || terminal.pieceRef.length === 0)) {
-      fail('cut_program.piece_ref_required', 'Terminal de pieza sin referencia de pieza', {
-        regionId: terminal.regionId,
-      });
-    }
-  }
   const pieceRefs = new Set<string>();
   for (const terminal of program.terminals) {
     if (terminal.kind === 'piece' && terminal.pieceRef) {
@@ -461,12 +760,25 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
 
     let geometry: CutProgramDivisionGeometry;
     try {
-      geometry = divideRegion(parentRect, division.axis, division.keptExtentMm, division.kerfMm);
+      geometry = divideRegion(parentRect, division.axis, division.keptExtentMm, division.kerfMm, {
+        allowBladeExit: division.bladeExitsParent === true,
+        leadingBand: division.leadingBand === true,
+      });
     } catch (error) {
       if (error instanceof ValidationError && error.context && !('cutId' in error.context)) {
         throw new ValidationError(error.message, { ...error.context, ...cutContext });
       }
       throw error;
+    }
+    if (geometry.bladeExitsParent !== (division.bladeExitsParent === true)) {
+      fail(
+        'cut_program.blade_exit_mismatch',
+        'La declaración de salida de disco no coincide con la geometría recalculada',
+        { ...cutContext, declared: division.bladeExitsParent === true },
+      );
+    }
+    if (geometry.bladeExitsParent) {
+      assertBladeOverhangClear(program, parentRect, division, geometry, boardRect, kerfBands, executedRects, cutContext);
     }
 
     const keptDeclared = declaredRects.get(division.keptRegionId);
@@ -476,8 +788,27 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
         regionId: division.keptRegionId,
       });
     }
-    const restDeclared = declaredRects.get(division.restRegionId);
-    if (!restDeclared) {
+    const hasRestRegion = division.restRegionId !== undefined;
+    if (hasRestRegion && geometry.restRect === null) {
+      fail(
+        'cut_program.unexpected_rest_region',
+        'La división consume el resto exclusivamente como kerf: no declare una región resto que no existe',
+        { ...cutContext, regionId: division.restRegionId },
+      );
+    }
+    if (!hasRestRegion && geometry.restRect !== null) {
+      fail(
+        'cut_program.missing_rest_region',
+        'La división produce un resto sólido que no está declarado: no se descarta superficie',
+        {
+          ...cutContext,
+          restExtentMm:
+            division.axis === 'x' ? geometry.restRect.lengthMm : geometry.restRect.widthMm,
+        },
+      );
+    }
+    const restDeclared = hasRestRegion ? declaredRects.get(division.restRegionId!) : undefined;
+    if (hasRestRegion && !restDeclared) {
       fail('cut_program.reference_missing', 'Región resultado (rest) no declarada', {
         ...cutContext,
         regionId: division.restRegionId,
@@ -486,7 +817,7 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
 
     for (const [childId, producingCut] of [
       [division.keptRegionId, division.cutId],
-      [division.restRegionId, division.cutId],
+      ...(hasRestRegion ? ([[division.restRegionId!, division.cutId]] as const) : []),
     ] as const) {
       if (childId === program.boardRegionId) {
         fail('cut_program.region_produced_twice', 'El tablero no puede ser resultado de un corte', {
@@ -505,10 +836,13 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
       producedBy.set(childId, producingCut);
     }
 
-    for (const [childId, declared, expected] of [
-      [division.keptRegionId, keptDeclared, geometry.keptRect],
-      [division.restRegionId, restDeclared, geometry.restRect],
-    ] as const) {
+    const declaredChildren: (readonly [string, CutProgramRect, CutProgramRect])[] = [
+      [division.keptRegionId, keptDeclared!, geometry.keptRect],
+    ];
+    if (hasRestRegion && restDeclared && geometry.restRect) {
+      declaredChildren.push([division.restRegionId!, restDeclared, geometry.restRect]);
+    }
+    for (const [childId, declared, expected] of declaredChildren) {
       if (!sameRect(declared, expected)) {
         fail(
           'cut_program.geometry_mismatch',
@@ -523,7 +857,9 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
     const bandId = kerfBandIdOf(division.cutId);
     consumedBy.add(division.parentRegionId);
     executedRects.set(division.keptRegionId, geometry.keptRect);
-    executedRects.set(division.restRegionId, geometry.restRect);
+    if (division.restRegionId !== undefined && geometry.restRect) {
+      executedRects.set(division.restRegionId, geometry.restRect);
+    }
     kerfBands.push({ cutId: division.cutId, bandId, rect: geometry.kerfBandRect });
     traceDivisions.push({
       order: index + 1,
@@ -539,6 +875,8 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
       restRect: geometry.restRect,
       kerfBandId: bandId,
       kerfBandRect: geometry.kerfBandRect,
+      bladeExitsParent: geometry.bladeExitsParent,
+      leadingBand: division.leadingBand === true,
     });
   }
 
@@ -570,6 +908,7 @@ export function executeCutProgram(program: CutProgramInput): CutProgramTrace {
       rect,
       kind: terminal.kind,
       pieceRef: terminal.pieceRef,
+      liberated: terminal.liberated,
     };
   });
 

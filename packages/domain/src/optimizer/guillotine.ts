@@ -3,9 +3,15 @@
  *
  * Implements multi-heuristic guillotine packing with strict saw kerf,
  * 4-sided trim margins, grain direction, edge band deduction, and remnant detection.
+ *
+ * Since #650 PR 2, the heuristics register their real divisions while packing
+ * (CutProgramSheetBuilder) and every accepted candidate carries the validated
+ * CutProgramInput of the placement that candidate produced. The program is
+ * never reconstructed from piece coordinates after the fact.
  */
 
 import type { MaterialBoard, ProductionCutRow } from '../types';
+import { ValidationError } from '../errors';
 import type {
   CutInstruction,
   CutPlanConfig,
@@ -16,20 +22,84 @@ import type {
   CutPlanStats,
 } from './types';
 import { DEFAULT_CUT_PLAN_CONFIG } from './types';
+import {
+  checkExpectedPieces,
+  cutProgramRectMatches,
+  executeCutProgram,
+  type CutProgramInput,
+  type CutProgramRect,
+} from './cutProgram';
+import {
+  CutProgramSheetBuilder,
+  registerTrimDivisions,
+  type RegisteredRegion,
+} from './cutProgramBuilder';
 import { optimizeSingleMaterialNesting } from './nesting';
 import { isUsefulRemnant, unrollRows, type PieceToPlace, type PlacementResult } from './pieces';
 
-interface FreeRect {
-  x: number;
-  y: number;
-  length: number; // Dimension along board length (X)
-  width: number;  // Dimension along board width (Y)
+/**
+ * One source of truth for remnants (#654 R3): derives the sheet remnant list
+ * from the program's own terminal regions. Useful leftovers are the
+ * 'remnant'-kind terminals (classified by the shared isUsefulRemnant policy
+ * when the program registered them); waste leftovers above the historical
+ * presentation threshold stay visible for continuity. Trim garbage stays out
+ * of the presentation list while the program still accounts for it. Candidate
+ * comparison and result statistics consume this same list, so program and
+ * metrics cannot disagree. No coordinate reconstruction, no duplicated
+ * usefulness rules, no duplicates.
+ */
+function deriveSheetRemnants(
+  cutProgram: CutProgramInput,
+  trimRegionIds: ReadonlySet<string>,
+  sheetIndex: number,
+  materialCode: string,
+  materialName: string,
+  presentationMinMm: number,
+): CutPlanRemnant[] {
+  const rectByRegion = new Map(cutProgram.regions.map((region) => [region.regionId, region.rect]));
+  const derived: CutPlanRemnant[] = [];
+  for (const terminal of cutProgram.terminals) {
+    if (terminal.kind === 'piece' || trimRegionIds.has(terminal.regionId)) {
+      continue;
+    }
+    const rect = rectByRegion.get(terminal.regionId);
+    if (!rect) {
+      continue;
+    }
+    const isUseful = terminal.kind === 'remnant';
+    if (!isUseful && (rect.lengthMm <= presentationMinMm || rect.widthMm <= presentationMinMm)) {
+      continue;
+    }
+    derived.push({
+      id: `rem-s${sheetIndex}-${derived.length + 1}`,
+      sheetIndex,
+      xMm: rect.xMm,
+      yMm: rect.yMm,
+      lengthMm: rect.lengthMm,
+      widthMm: rect.widthMm,
+      areaM2: (rect.lengthMm * rect.widthMm) / 1_000_000,
+      materialName,
+      materialCode,
+      isUseful,
+    });
+  }
+  return derived.sort((a, b) => b.areaM2 - a.areaM2);
 }
 
 /**
  * Packs pieces onto a single sheet using Guillotine Best-Fit with axis-aligned splits.
+ *
+ * The two separations that isolate each piece are registered as real program
+ * divisions while packing: variant `preferVerticalSplit` separates on X first
+ * (piece column with a full-height rest to the right, then the piece within
+ * the column), the other variant separates on Y first (piece band with a
+ * full-width rest below, then the piece within the band). The free rects the
+ * heuristic keeps iterating on ARE the program regions those divisions
+ * produce, so placement and program share one geometry source.
+ *
+ * @internal Exported for bounded tests of the packing instrumentation only.
  */
-function packSingleSheetGuillotineBestFit(
+export function packSingleSheetGuillotineBestFit(
   piecesRemaining: PieceToPlace[],
   sheetIndex: number,
   sheetLengthMm: number,
@@ -43,19 +113,16 @@ function packSingleSheetGuillotineBestFit(
   const kerf = config.sawKerfMm;
   const trim = config.trim;
 
-  const minX = trim.leftMm;
-  const minY = trim.bottomMm;
-  const usableLength = Math.max(0, sheetLengthMm - trim.leftMm - trim.rightMm);
-  const usableWidth = Math.max(0, sheetWidthMm - trim.topMm - trim.bottomMm);
+  const program = new CutProgramSheetBuilder({
+    boardRegionId: 'board',
+    x: 0,
+    y: 0,
+    length: sheetLengthMm,
+    width: sheetWidthMm,
+  });
+  const usableRegion = registerTrimDivisions(program, trim, kerf);
 
-  const freeRects: FreeRect[] = [
-    {
-      x: minX,
-      y: minY,
-      length: usableLength,
-      width: usableWidth,
-    },
-  ];
+  const freeRects: RegisteredRegion[] = [usableRegion];
 
   const placedPieces: CutPlanPlacedPiece[] = [];
   const notPlaced: PieceToPlace[] = [];
@@ -104,9 +171,10 @@ function packSingleSheetGuillotineBestFit(
     if (bestRectIdx >= 0) {
       const rect = freeRects.splice(bestRectIdx, 1)[0]!;
       cutSequence++;
+      const placementRef = `${piece.id}-s${sheetIndex}`;
 
       placedPieces.push({
-        id: `${piece.id}-s${sheetIndex}`,
+        id: placementRef,
         partCode: piece.originalRow.partCode || `P${cutSequence}`,
         partName: piece.originalRow.partName || piece.originalRow.description || 'Pieza',
         moduleCode: piece.originalRow.moduleCode || '',
@@ -135,71 +203,58 @@ function packSingleSheetGuillotineBestFit(
         status: 'pending',
       });
 
-      // Guillotine Split of the remaining free rectangle into 2 sub-rectangles
-      const remL = rect.length - placedL - kerf;
-      const remW = rect.width - placedW - kerf;
-
-      if (preferVerticalSplit) {
-        // Cut along length first (X split)
-        if (remL > 0) {
-          freeRects.push({
-            x: rect.x + placedL + kerf,
-            y: rect.y,
-            length: remL,
-            width: rect.width,
-          });
-        }
-        if (remW > 0) {
-          freeRects.push({
-            x: rect.x,
-            y: rect.y + placedW + kerf,
-            length: placedL,
-            width: remW,
-          });
-        }
-      } else {
-        // Cut along width first (Y split)
-        if (remW > 0) {
-          freeRects.push({
-            x: rect.x,
-            y: rect.y + placedW + kerf,
-            length: rect.length,
-            width: remW,
-          });
-        }
-        if (remL > 0) {
-          freeRects.push({
-            x: rect.x + placedL + kerf,
-            y: rect.y,
-            length: remL,
-            width: placedW,
-          });
-        }
+      // Guillotine split of the consumed free rectangle, registered as the
+      // real program divisions. Variant V splits on X first, variant H on Y
+      // first; the rests become the next free rects with their program
+      // identity. Exact fits register no pass; a remainder smaller than the
+      // blade band fails with an identified non-representable placement.
+      const firstAxis = preferVerticalSplit ? 'x' : 'y';
+      const secondAxis = preferVerticalSplit ? 'y' : 'x';
+      const first = program.divide({
+        parentRegionId: rect.regionId,
+        axis: firstAxis,
+        keptExtentMm: firstAxis === 'x' ? placedL : placedW,
+        kerfMm: kerf,
+        cutId: `place-${cutSequence}-1`,
+        keptRegionId: `piece:${placementRef}:column`,
+        pieceRef: placementRef,
+      });
+      if (first.rest) {
+        freeRects.push(first.rest);
       }
+      const second = program.divide({
+        parentRegionId: first.kept.regionId,
+        axis: secondAxis,
+        keptExtentMm: secondAxis === 'x' ? placedL : placedW,
+        kerfMm: kerf,
+        cutId: `place-${cutSequence}-2`,
+        keptRegionId: `piece:${placementRef}`,
+        pieceRef: placementRef,
+      });
+      if (second.rest) {
+        freeRects.push(second.rest);
+      }
+      program.markPieceTerminal(second.kept.regionId, placementRef);
     } else {
       notPlaced.push(piece);
     }
   }
 
-  // Convert remaining free rectangles to remnants
-  const remnants: CutPlanRemnant[] = freeRects
-    .filter((r) => r.length > 5 && r.width > 5)
-    .map((r, idx) => {
-      const isUseful = isUsefulRemnant(r.length, r.width, config);
-      return {
-        id: `rem-s${sheetIndex}-${idx + 1}`,
-        sheetIndex,
-        xMm: r.x,
-        yMm: r.y,
-        lengthMm: r.length,
-        widthMm: r.width,
-        areaM2: (r.length * r.width) / 1_000_000,
-        materialName,
-        materialCode,
-        isUseful,
-      };
-    })
-    .sort((a, b) => b.areaM2 - a.areaM2);
+  // Every unconsumed region is a real terminal in the program — including
+  // leftovers the presentation list omits for readability.
+  for (const freeRect of freeRects) {
+    program.markLeftoverTerminal(freeRect, config);
+  }
+
+  const cutProgram = program.build();
+  const remnants = deriveSheetRemnants(
+    cutProgram,
+    program.getLiberatedWasteRegionIds(),
+    sheetIndex,
+    materialCode,
+    materialName,
+    5,
+  );
 
   // Generate step-by-step cutting instructions
   const instructions = generateCuttingInstructions(placedPieces, config, sheetLengthMm, sheetWidthMm);
@@ -215,6 +270,7 @@ function packSingleSheetGuillotineBestFit(
       materialCode,
       materialName,
       thicknessMm,
+      cutProgram,
     },
     remaining: notPlaced,
   };
@@ -222,8 +278,18 @@ function packSingleSheetGuillotineBestFit(
 
 /**
  * Packs pieces onto a sheet using Strip / Shelf Guillotine layout (longitudinal rips).
+ *
+ * Program registration happens while packing: each strip is separated from the
+ * region above it with a real kerf pass; each in-strip placement separates its
+ * column along X and then the piece within the column along Y — that second
+ * pass is the explicit recut required when a piece is narrower than its strip
+ * (e.g. a 210 mm piece in a 320 mm strip leaves a 106 mm solid remainder plus
+ * the blade). Strip leftovers and the final top leftover are real terminals,
+ * never erased to balance figures.
+ *
+ * @internal Exported for bounded tests of the packing instrumentation only.
  */
-function packSingleSheetStrip(
+export function packSingleSheetStrip(
   piecesRemaining: PieceToPlace[],
   sheetIndex: number,
   sheetLengthMm: number,
@@ -235,11 +301,19 @@ function packSingleSheetStrip(
 ): { sheet: PlacementResult; remaining: PieceToPlace[] } {
   const kerf = config.sawKerfMm;
   const trim = config.trim;
-
   const minX = trim.leftMm;
   const minY = trim.bottomMm;
   const maxX = sheetLengthMm - trim.rightMm;
   const maxY = sheetWidthMm - trim.topMm;
+
+  const program = new CutProgramSheetBuilder({
+    boardRegionId: 'board',
+    x: 0,
+    y: 0,
+    length: sheetLengthMm,
+    width: sheetWidthMm,
+  });
+  let sheetRestRegion: RegisteredRegion | null = registerTrimDivisions(program, trim, kerf);
 
   let currentY = minY;
   let cutSequence = 0;
@@ -247,7 +321,6 @@ function packSingleSheetStrip(
 
   const placedPieces: CutPlanPlacedPiece[] = [];
   const placedIds = new Set<string>();
-  const remnants: CutPlanRemnant[] = [];
 
   while (currentY < maxY) {
     const unplaced = piecesRemaining.filter((p) => !placedIds.has(p.id));
@@ -289,41 +362,96 @@ function packSingleSheetStrip(
     const stripHeight = bestSeedWidth;
     let currentX = minX;
 
+    // Separate the strip from the region above with a real kerf pass.
+    const stripSep = program.divide({
+      parentRegionId: sheetRestRegion!.regionId,
+      axis: 'y',
+      keptExtentMm: stripHeight,
+      kerfMm: kerf,
+      cutId: `strip-${stripIdx}`,
+      keptRegionId: `strip-${stripIdx}:body`,
+    });
+    let stripRestRegion: RegisteredRegion | null = stripSep.kept;
+    sheetRestRegion = stripSep.rest;
+
+    const placeOnStrip = (piece: PieceToPlace, rotated: boolean, candL: number, candW: number, x: number): void => {
+      cutSequence++;
+      placedIds.add(piece.id);
+      const placementRef = `${piece.id}-s${sheetIndex}`;
+
+      placedPieces.push({
+        id: placementRef,
+        partCode: piece.originalRow.partCode || `P${cutSequence}`,
+        partName: piece.originalRow.partName || piece.originalRow.description || 'Pieza',
+        moduleCode: piece.originalRow.moduleCode || '',
+        labelRef: piece.originalRow.labelRef || piece.id,
+        materialName: piece.originalRow.materialName || materialName,
+        materialCode: piece.originalRow.materialCode || materialCode,
+        xMm: x,
+        yMm: currentY,
+        lengthMm: candL,
+        widthMm: candW,
+        originalLengthMm: piece.originalRow.lengthMm,
+        originalWidthMm: piece.originalRow.widthMm,
+        grain: piece.grain,
+        rotated: rotated,
+        L1: piece.originalRow.L1,
+        L2: piece.originalRow.L2,
+        W1: piece.originalRow.W1,
+        W2: piece.originalRow.W2,
+        edgeBandCode: piece.originalRow.edgeBandCode,
+        edgeBandName: piece.originalRow.edgeBandName,
+        edgeBandThicknessMm: piece.originalRow.edgeBandThicknessMm,
+        thicknessMm: piece.originalRow.thicknessMm ?? thicknessMm,
+        sheetIndex,
+        stripIndex: stripIdx,
+        cutSequenceNumber: cutSequence,
+        status: 'pending',
+      });
+
+      if (!stripRestRegion) {
+        throw new ValidationError(
+          'Colocación sin región de franja disponible: el programa y la colocación divergen',
+          {
+            code: 'cut_plan.placement_not_representable',
+            pieceRef: placementRef,
+            stripIndex: stripIdx,
+          },
+        );
+      }
+
+      // Column separation along X within the strip...
+      const column = program.divide({
+        parentRegionId: stripRestRegion.regionId,
+        axis: 'x',
+        keptExtentMm: candL,
+        kerfMm: kerf,
+        cutId: `place-${cutSequence}-x`,
+        keptRegionId: `piece:${placementRef}:column`,
+        pieceRef: placementRef,
+      });
+      stripRestRegion = column.rest;
+      // ...and the piece inside its column along Y — the explicit recut when
+      // the piece is narrower than the strip, with its blade accounted for.
+      const pieceSep = program.divide({
+        parentRegionId: column.kept.regionId,
+        axis: 'y',
+        keptExtentMm: candW,
+        kerfMm: kerf,
+        cutId: `place-${cutSequence}-y`,
+        keptRegionId: `piece:${placementRef}`,
+        pieceRef: placementRef,
+      });
+      if (pieceSep.rest) {
+        program.markLeftoverTerminal(pieceSep.rest, config);
+      }
+      program.markPieceTerminal(pieceSep.kept.regionId, placementRef);
+    };
+
     // First, place the seed piece
-    placedIds.add(bestSeedPiece.id);
-    cutSequence++;
     const seedL = bestSeedRotated ? bestSeedPiece.width : bestSeedPiece.length;
     const seedW = bestSeedRotated ? bestSeedPiece.length : bestSeedPiece.width;
-
-    placedPieces.push({
-      id: `${bestSeedPiece.id}-s${sheetIndex}`,
-      partCode: bestSeedPiece.originalRow.partCode || `P${cutSequence}`,
-      partName: bestSeedPiece.originalRow.partName || bestSeedPiece.originalRow.description || 'Pieza',
-      moduleCode: bestSeedPiece.originalRow.moduleCode || '',
-      labelRef: bestSeedPiece.originalRow.labelRef || bestSeedPiece.id,
-      materialName: bestSeedPiece.originalRow.materialName || materialName,
-      materialCode: bestSeedPiece.originalRow.materialCode || materialCode,
-      xMm: currentX,
-      yMm: currentY,
-      lengthMm: seedL,
-      widthMm: seedW,
-      originalLengthMm: bestSeedPiece.originalRow.lengthMm,
-      originalWidthMm: bestSeedPiece.originalRow.widthMm,
-      grain: bestSeedPiece.grain,
-      rotated: bestSeedRotated,
-      L1: bestSeedPiece.originalRow.L1,
-      L2: bestSeedPiece.originalRow.L2,
-      W1: bestSeedPiece.originalRow.W1,
-      W2: bestSeedPiece.originalRow.W2,
-      edgeBandCode: bestSeedPiece.originalRow.edgeBandCode,
-      edgeBandName: bestSeedPiece.originalRow.edgeBandName,
-      edgeBandThicknessMm: bestSeedPiece.originalRow.edgeBandThicknessMm,
-      thicknessMm: bestSeedPiece.originalRow.thicknessMm ?? thicknessMm,
-      sheetIndex,
-      stripIndex: stripIdx,
-      cutSequenceNumber: cutSequence,
-      status: 'pending',
-    });
+    placeOnStrip(bestSeedPiece, bestSeedRotated, seedL, seedW, currentX);
 
     currentX += seedL + kerf;
 
@@ -370,88 +498,36 @@ function packSingleSheetStrip(
       }
 
       if (bestCand) {
-        placedIds.add(bestCand.id);
-        cutSequence++;
-        placedPieces.push({
-          id: `${bestCand.id}-s${sheetIndex}`,
-          partCode: bestCand.originalRow.partCode || `P${cutSequence}`,
-          partName: bestCand.originalRow.partName || bestCand.originalRow.description || 'Pieza',
-          moduleCode: bestCand.originalRow.moduleCode || '',
-          labelRef: bestCand.originalRow.labelRef || bestCand.id,
-          materialName: bestCand.originalRow.materialName || materialName,
-          materialCode: bestCand.originalRow.materialCode || materialCode,
-          xMm: currentX,
-          yMm: currentY,
-          lengthMm: candL,
-          widthMm: candW,
-          originalLengthMm: bestCand.originalRow.lengthMm,
-          originalWidthMm: bestCand.originalRow.widthMm,
-          grain: bestCand.grain,
-          rotated: candRotated,
-          L1: bestCand.originalRow.L1,
-          L2: bestCand.originalRow.L2,
-          W1: bestCand.originalRow.W1,
-          W2: bestCand.originalRow.W2,
-          edgeBandCode: bestCand.originalRow.edgeBandCode,
-          edgeBandName: bestCand.originalRow.edgeBandName,
-          edgeBandThicknessMm: bestCand.originalRow.edgeBandThicknessMm,
-          thicknessMm: bestCand.originalRow.thicknessMm ?? thicknessMm,
-          sheetIndex,
-          stripIndex: stripIdx,
-          cutSequenceNumber: cutSequence,
-          status: 'pending',
-        });
-
+        placeOnStrip(bestCand, candRotated, candL, candW, currentX);
         currentX += candL + kerf;
         foundNextInStrip = true;
       }
     }
 
-    // Leftover in this strip at the right end
-    if (maxX - currentX > 10) {
-      const remL = maxX - currentX;
-      const remW = stripHeight;
-      const isUseful = isUsefulRemnant(remL, remW, config);
-      remnants.push({
-        id: `rem-s${sheetIndex}-str${stripIdx}`,
-        sheetIndex,
-        xMm: currentX,
-        yMm: currentY,
-        lengthMm: remL,
-        widthMm: remW,
-        areaM2: (remL * remW) / 1_000_000,
-        materialName,
-        materialCode,
-        isUseful,
-      });
+    // Program truth: the strip leftover is a real terminal of any size; the
+    // presentation-level remnant list is derived from the program terminals
+    // once packing finishes (deriveSheetRemnants below).
+    if (stripRestRegion) {
+      program.markLeftoverTerminal(stripRestRegion, config);
     }
 
     currentY += stripHeight + kerf;
   }
 
-  // Leftover at the top of the board
-  if (maxY - currentY > 10) {
-    const remL = maxX - minX;
-    const remW = maxY - currentY;
-    const isUseful =
-      ((remL >= config.minRemnantLengthMm && remW >= config.minRemnantWidthMm) ||
-       (remL >= config.minRemnantWidthMm && remW >= config.minRemnantLengthMm)) &&
-      (remL * remW) / 1_000_000 >= 0.24;
-    remnants.push({
-      id: `rem-s${sheetIndex}-top`,
-      sheetIndex,
-      xMm: minX,
-      yMm: currentY,
-      lengthMm: remL,
-      widthMm: remW,
-      areaM2: (remL * remW) / 1_000_000,
-      materialName,
-      materialCode,
-      isUseful,
-    });
+  if (sheetRestRegion) {
+    program.markLeftoverTerminal(sheetRestRegion, config);
   }
 
   const notPlaced = piecesRemaining.filter((p) => !placedIds.has(p.id));
+  const cutProgram = program.build();
+  const remnants = deriveSheetRemnants(
+    cutProgram,
+    program.getLiberatedWasteRegionIds(),
+    sheetIndex,
+    materialCode,
+    materialName,
+    10,
+  );
   const instructions = generateCuttingInstructions(placedPieces, config, sheetLengthMm, sheetWidthMm);
 
   return {
@@ -465,6 +541,7 @@ function packSingleSheetStrip(
       materialCode,
       materialName,
       thicknessMm,
+      cutProgram,
     },
     remaining: notPlaced,
   };
@@ -524,6 +601,249 @@ function generateCuttingInstructions(
   return instructions;
 }
 
+/** Rejection cause of a packing candidate: identifiable, never silent. */
+export interface StrategyCandidateRejection {
+  readonly code: string;
+  readonly message: string;
+  readonly context?: Record<string, unknown>;
+}
+
+/**
+ * One complete packing candidate: placed pieces, its own registered program,
+ * terminals, remnants and any unplaced demand — all from the same strategy
+ * run. Pieces of one candidate are never combined with the program of
+ * another.
+ */
+export interface StrategyCandidate {
+  readonly strategy: 'best-fit-v' | 'best-fit-h' | 'strip';
+  readonly sheets: PlacementResult[];
+  readonly remaining: PieceToPlace[];
+  readonly rejection?: StrategyCandidateRejection;
+}
+
+function pieceToPlaceSummary(piece: PieceToPlace): Record<string, unknown> {
+  return {
+    id: piece.id,
+    partCode: piece.originalRow.partCode ?? null,
+    lengthMm: piece.length,
+    widthMm: piece.width,
+    grain: piece.grain,
+  };
+}
+
+function rejectionFromError(error: unknown, strategy: StrategyCandidate['strategy']): StrategyCandidateRejection {
+  if (error instanceof ValidationError) {
+    const context = error.context ?? {};
+    return {
+      code: typeof context.code === 'string' ? context.code : 'cut_plan.strategy_failed',
+      message: error.message,
+      context: { strategy, ...context },
+    };
+  }
+  return {
+    code: 'cut_plan.strategy_failed',
+    message: error instanceof Error ? error.message : 'Fallo desconocido de la estrategia',
+    context: { strategy },
+  };
+}
+
+/**
+ * Validates the programs of one candidate against its own placements before
+ * that candidate may compete: executes every sheet program, checks the
+ * expected pieces by identity and placed dimensions (rotation included, edge
+ * band never re-deducted), proves each executed leaf corresponds to the real
+ * placement position, and confirms the expanded demand is fully covered.
+ */
+function validateCandidatePrograms(
+  candidate: StrategyCandidate,
+  unrolled: readonly PieceToPlace[],
+): StrategyCandidateRejection | undefined {
+  const placedTotal = candidate.sheets.reduce((sum, sheet) => sum + sheet.pieces.length, 0);
+  if (placedTotal !== unrolled.length) {
+    return {
+      code: 'cut_plan.piece_count_mismatch',
+      message: 'El número de piezas colocadas no cubre la demanda expandida',
+      context: { strategy: candidate.strategy, expected: unrolled.length, placed: placedTotal },
+    };
+  }
+
+  for (const sheet of candidate.sheets) {
+    if (!sheet.cutProgram) {
+      return {
+        code: 'cut_plan.program_missing',
+        message: 'Resultado guillotina aceptado sin programa de cortes',
+        context: { strategy: candidate.strategy, sheetIndex: sheet.sheetIndex },
+      };
+    }
+    try {
+      const trace = executeCutProgram(sheet.cutProgram);
+      checkExpectedPieces(
+        trace,
+        sheet.pieces.map((piece) => ({
+          pieceRef: piece.id,
+          lengthMm: piece.lengthMm,
+          widthMm: piece.widthMm,
+        })),
+      );
+      for (const piece of sheet.pieces) {
+        const leaf = trace.terminals.find(
+          (terminal) => terminal.kind === 'piece' && terminal.pieceRef === piece.id,
+        );
+        const claimed: CutProgramRect = {
+          xMm: piece.xMm,
+          yMm: piece.yMm,
+          lengthMm: piece.lengthMm,
+          widthMm: piece.widthMm,
+        };
+        if (!leaf || !cutProgramRectMatches(claimed, leaf.rect)) {
+          return {
+            code: 'cut_plan.placement_leaf_mismatch',
+            message: 'Hoja ejecutada no corresponde con la colocación real (posición incluida)',
+            context: {
+              strategy: candidate.strategy,
+              sheetIndex: sheet.sheetIndex,
+              pieceRef: piece.id,
+              claimed,
+              executed: leaf?.rect ?? null,
+            },
+          };
+        }
+      }
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return rejectionFromError(error, candidate.strategy);
+      }
+      throw error;
+    }
+  }
+  return undefined;
+}
+
+function runPackingStrategy(
+  strategy: StrategyCandidate['strategy'],
+  unrolled: PieceToPlace[],
+  sheetLengthMm: number,
+  sheetWidthMm: number,
+  materialCode: string,
+  materialName: string,
+  thicknessMm: number | undefined,
+  config: CutPlanConfig,
+): StrategyCandidate {
+  const sheets: PlacementResult[] = [];
+  let remainingToPlace = [...unrolled];
+  let sheetIdx = 0;
+
+  try {
+    while (remainingToPlace.length > 0) {
+      const res =
+        strategy === 'strip'
+          ? packSingleSheetStrip(
+              remainingToPlace,
+              sheetIdx,
+              sheetLengthMm,
+              sheetWidthMm,
+              config,
+              materialCode,
+              materialName,
+              thicknessMm,
+            )
+          : packSingleSheetGuillotineBestFit(
+              remainingToPlace,
+              sheetIdx,
+              sheetLengthMm,
+              sheetWidthMm,
+              config,
+              materialCode,
+              materialName,
+              thicknessMm,
+              strategy === 'best-fit-v',
+            );
+      if (res.sheet.pieces.length === 0) {
+        // Piece larger than usable sheet (or nothing placeable): the demand is
+        // not satisfied on this strategy — recorded as a rejection cause, the
+        // candidate must not compete as if it were complete.
+        break;
+      }
+      sheets.push(res.sheet);
+      remainingToPlace = res.remaining;
+      sheetIdx++;
+    }
+  } catch (error) {
+    // Non-representable geometry (e.g. blade would exit its parent): the
+    // candidate is excluded with this identified cause; it is never hidden
+    // with a silent continue. If no candidate survives, the optimizer fails
+    // loudly with every cause.
+    return {
+      strategy,
+      sheets,
+      remaining: remainingToPlace,
+      rejection: rejectionFromError(error, strategy),
+    };
+  }
+
+  if (remainingToPlace.length > 0) {
+    return {
+      strategy,
+      sheets,
+      remaining: remainingToPlace,
+      rejection: {
+        code: 'cut_plan.pieces_not_placed',
+        message: 'La estrategia dejó piezas de la demanda sin colocar',
+        context: {
+          strategy,
+          pieces: remainingToPlace.map(pieceToPlaceSummary),
+        },
+      },
+    };
+  }
+
+  const programRejection = validateCandidatePrograms({ strategy, sheets, remaining: remainingToPlace }, unrolled);
+  if (programRejection) {
+    return { strategy, sheets, remaining: remainingToPlace, rejection: programRejection };
+  }
+  return { strategy, sheets, remaining: remainingToPlace };
+}
+
+/**
+ * Picks the winning candidate among complete, program-validated ones using
+ * the existing deterministic criteria (fewest sheets, then most useful
+ * remnant area). Incomplete or non-representable candidates are excluded
+ * BEFORE comparison: none can win by sheet count while leaving demand
+ * unplaced. If nothing satisfies the demand, fails with every rejection
+ * cause instead of returning a partial plan presented as complete.
+ *
+ * @internal Exported for bounded tests of the selection policy only.
+ */
+export function pickWinningStrategyCandidate(candidates: StrategyCandidate[]): StrategyCandidate {
+  const valid = candidates.filter((candidate) => !candidate.rejection);
+  if (valid.length === 0) {
+    throw new ValidationError(
+      'Ninguna candidata guillotina representa la demanda completa: revisa piezas o restricciones',
+      {
+        code: 'cut_plan.no_representable_candidate',
+        rejections: candidates.map((candidate) => ({
+          strategy: candidate.strategy,
+          ...(candidate.rejection ?? {}),
+        })),
+      },
+    );
+  }
+
+  const usefulRemnantArea = (candidate: StrategyCandidate): number =>
+    candidate.sheets.reduce(
+      (sum, sheet) =>
+        sum +
+        sheet.remnants.reduce((remSum, rem) => (rem.isUseful ? remSum + rem.areaM2 : remSum), 0),
+      0,
+    );
+
+  const sorted = [...valid].sort((a, b) => {
+    if (a.sheets.length !== b.sheets.length) return a.sheets.length - b.sheets.length;
+    return usefulRemnantArea(b) - usefulRemnantArea(a);
+  });
+  return sorted[0]!;
+}
+
 /**
  * Optimizes a list of cut rows for a single material across multiple sheets.
  */
@@ -552,101 +872,21 @@ function optimizeSingleMaterial(
   // Sort descending by area and longer dimension
   unrolled.sort((a, b) => b.length * b.width - a.length * a.width || b.length - a.length);
 
-  // Strategy A: Best Fit with Vertical Splits
-  const sheetsBestFitV: PlacementResult[] = [];
-  let remainingA = [...unrolled];
-  let sheetIdxA = 0;
-  while (remainingA.length > 0) {
-    const res = packSingleSheetGuillotineBestFit(
-      remainingA,
-      sheetIdxA,
-      sheetLengthMm,
-      sheetWidthMm,
-      config,
-      materialCode,
-      materialName,
-      thicknessMm,
-      true,
-    );
-    if (res.sheet.pieces.length === 0) {
-      // Piece larger than usable sheet
-      break;
-    }
-    sheetsBestFitV.push(res.sheet);
-    remainingA = res.remaining;
-    sheetIdxA++;
+  // Strategy A: Best Fit with vertical (X-first) splits; B: horizontal
+  // (Y-first) splits; C: Strip / Shelf packing. Each candidate keeps its own
+  // placements, program, terminals and remnants together.
+  const candidates = [
+    runPackingStrategy('best-fit-v', unrolled, sheetLengthMm, sheetWidthMm, materialCode, materialName, thicknessMm, config),
+    runPackingStrategy('best-fit-h', unrolled, sheetLengthMm, sheetWidthMm, materialCode, materialName, thicknessMm, config),
+    runPackingStrategy('strip', unrolled, sheetLengthMm, sheetWidthMm, materialCode, materialName, thicknessMm, config),
+  ];
+
+  // Empty demand is a valid, compatible case: no sheets, no programs.
+  if (unrolled.length === 0) {
+    return [];
   }
 
-  // Strategy B: Best Fit with Horizontal Splits
-  const sheetsBestFitH: PlacementResult[] = [];
-  let remainingB = [...unrolled];
-  let sheetIdxB = 0;
-  while (remainingB.length > 0) {
-    const res = packSingleSheetGuillotineBestFit(
-      remainingB,
-      sheetIdxB,
-      sheetLengthMm,
-      sheetWidthMm,
-      config,
-      materialCode,
-      materialName,
-      thicknessMm,
-      false,
-    );
-    if (res.sheet.pieces.length === 0) break;
-    sheetsBestFitH.push(res.sheet);
-    remainingB = res.remaining;
-    sheetIdxB++;
-  }
-
-  // Strategy C: Strip / Shelf packing
-  const sheetsStrip: PlacementResult[] = [];
-  let remainingC = [...unrolled];
-  let sheetIdxC = 0;
-  while (remainingC.length > 0) {
-    const res = packSingleSheetStrip(
-      remainingC,
-      sheetIdxC,
-      sheetLengthMm,
-      sheetWidthMm,
-      config,
-      materialCode,
-      materialName,
-      thicknessMm,
-    );
-    if (res.sheet.pieces.length === 0) break;
-    sheetsStrip.push(res.sheet);
-    remainingC = res.remaining;
-    sheetIdxC++;
-  }
-
-  // Pick the winning strategy: lowest sheet count, then highest useful remnants
-  const candidates = [sheetsBestFitV, sheetsBestFitH, sheetsStrip].filter(
-    (cand) => cand.length > 0,
-  );
-
-  candidates.sort((a, b) => {
-    if (a.length !== b.length) return a.length - b.length;
-    const remA = a.reduce(
-      (sum, s) =>
-        sum +
-        s.remnants
-          .filter((r) => r.isUseful)
-          .reduce((rsum, r) => rsum + r.areaM2, 0),
-      0,
-    );
-    const remB = b.reduce(
-      (sum, s) =>
-        sum +
-        s.remnants
-          .filter((r) => r.isUseful)
-          .reduce((rsum, r) => rsum + r.areaM2, 0),
-      0,
-    );
-    return remB - remA; // More useful remnants is better
-  });
-
-  return candidates[0] ?? [];
+  return pickWinningStrategyCandidate(candidates).sheets;
 }
 
 /**
@@ -687,6 +927,7 @@ function buildSheetModels(placements: readonly PlacementResult[]): CutPlanSheet[
       pieces: p.pieces,
       remnants: p.remnants,
       instructions: p.instructions,
+      cutProgram: p.cutProgram,
       netPiecesAreaM2,
       grossSheetAreaM2,
       usableRemnantAreaM2,
