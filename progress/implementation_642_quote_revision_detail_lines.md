@@ -29,8 +29,8 @@ Con esta entrega y su ronda de correcciones R1–R5:
 ### R1 — Moneda congelada de los importes
 - Se eliminó el formateo cableado con `$` fijo y `toLocaleString('es-AR')` en `ProjectItemsSection.tsx`.
 - Se reutiliza `formatProjectMoney(line.salePrice, quoteAuthority.currency)` consumiendo la moneda congelada de la `QuoteRevision` exacta.
+- Se preserva el código de moneda histórico (probado con `EUR`). Cabe señalar que el formateador compartido `formatMoneyDisplay` todavía antepone `$` a cualquier código de divisa (`$0.00 EUR`); no se modificó el formateador global en esta entrega ni se afirman símbolos dedicados sin `$`.
 - No se realiza conversión cambiaria ni recálculo de importes.
-- Probado unitariamente y en integración con monedas no-dólar (EUR) donde se muestra el código y símbolo correcto sin forzar `$`.
 
 ### R2 — Cero real frente a importe oculto
 - En `buildRevisionLines`, se eliminó la condición `salePrice > 0` como heurística de autorización.
@@ -50,9 +50,9 @@ Con esta entrega y su ronda de correcciones R1–R5:
 ### R4 — Cobertura y navegador real
 - Se añadieron 4 pruebas exhaustivas de integración en `packages/ui/src/projects/ProjectsScreen.test.tsx`:
   1. Q2 aceptada preserva nombres, materiales y dimensiones tras modificar deliberadamente el catálogo y el proyecto mutable.
-  2. Cambio de proyecto/contexto con respuestas asíncronas fuera de orden: sin mezcla de cabecera y líneas de autoridades diferentes.
-  3. Flujo pre-Q1 utilizable: agregar muebles, pickers de medidas, opciones de obra y botón funcional de `Crear nueva revisión`.
-  4. Moneda no-dólar (EUR), cero visible legítimo, importe oculto y unidades terminales.
+  2. Cambio de proyecto y autoridad sin mezcla visual: el test valida que al alternar entre proyectos y autoridades se renderizan limpiamente la cabecera y filas correspondientes sin contaminación cruzada; no demuestra una respuesta HTTP tardía real en red.
+  3. Flujo borrador pre-Q1: el test demuestra que bajo autoridad vacía los controles existentes de borrador (botón de agregar mueble, selectores de medidas y cantidad) continúan montados y disponibles, y que se puede continuar hacia "Crear nueva revisión" (no ejecuta el pipeline completo de mutaciones).
+  4. Moneda histórica preservada (EUR), cero visible legítimo, importe oculto y unidades terminales.
 - En `tests/organization/project-reconciliation.spec.ts`, las aserciones de badge `Q2 · Solo lectura`, medidas congeladas `650×720×{depthMm} mm` y ausencia de botones/inputs mutables se movieron **dentro del bucle de viewports (390 compact, 768 medium, 1280 expanded)**, verificándose en cada resolución.
 - Se ejecutó el gate de navegador real (`scripts/organization-browser-gate.sh`) con Chromium, backend Go y PostgreSQL en Docker aislado: 4/4 pasaron en 28.1s. Capturas reales guardadas como artefactos.
 
