@@ -16,8 +16,12 @@ import {
   optionLabelForId,
   optionsForGroup,
   furnitureTypeLabel,
+  formatProjectMoney,
 } from '../projectHelpers';
-import { buildRevisionLines } from '../quoteRevisionPresentation';
+import {
+  buildRevisionLines,
+  formatLifecycleStatus,
+} from '../quoteRevisionPresentation';
 
 /** Drag-over visual feedback state. */
 type DropPosition = 'above' | 'below' | null;
@@ -41,6 +45,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
     onDismissPostAddPlaceCue,
     onOpenSpatialStudioUnplaced,
     quoteAuthority,
+    showCosts,
   } = useProjectDetail();
 
   // ─── Drag & drop state ────────────────────────────────────────────────
@@ -206,7 +211,9 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
       );
     }
 
-    const revisionLines = buildRevisionLines(quoteAuthority.snapshot, quoteAuthority.items);
+    const revisionLines = buildRevisionLines(quoteAuthority.snapshot, quoteAuthority.items, {
+      amountsVisible: showCosts,
+    });
 
     return (
       <section className="project-detail__section project-detail__items" aria-label="Ítems de cotización">
@@ -247,7 +254,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                   </div>
                   {line.salePrice !== null ? (
                     <div className="project-item-card__price">
-                      ${line.salePrice.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {formatProjectMoney(line.salePrice, quoteAuthority.currency)}
                     </div>
                   ) : null}
                 </div>
@@ -265,10 +272,15 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                         data-testid={`quote-unit-${unit.furnitureInstanceId}`}
                       >
                         <div className="project-revision-unit-card__header">
-                          <span>Unidad {uIdx + 1} ({unit.furnitureInstanceId})</span>
-                          {unit.lifecycleStatus && unit.lifecycleStatus !== 'active' ? (
-                            <span className="badge badge--subtle">{unit.lifecycleStatus}</span>
-                          ) : null}
+                          <span className="project-revision-unit-card__title">Unidad {uIdx + 1}</span>
+                          <span className={`badge ${unit.lifecycleStatus === 'active' ? 'badge--subtle' : 'badge--warning'}`}>
+                            {formatLifecycleStatus(unit.lifecycleStatus)}
+                          </span>
+                        </div>
+                        <div className="project-revision-unit-card__meta">
+                          <span className="project-item-readonly-uuid" title={unit.furnitureInstanceId}>
+                            ID: {unit.furnitureInstanceId}
+                          </span>
                         </div>
                         <div className="project-editor__grid">
                           {unit.dimensionsFormatted ? (
@@ -297,10 +309,23 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
                   <div>
                     {line.units[0] ? (
                       <div data-testid={`quote-unit-${line.units[0].furnitureInstanceId}`}>
+                        <div className="project-revision-unit-card__meta" style={{ marginBottom: '0.5rem' }}>
+                          <span className="project-item-readonly-uuid" title={line.units[0].furnitureInstanceId}>
+                            ID: {line.units[0].furnitureInstanceId}
+                          </span>
+                        </div>
                         <div className="project-editor__grid">
                           <div className="catalog-form__field">
                             <span className="catalog-form__label">Cantidad</span>
                             <div className="project-item-readonly-value">{line.quantity}</div>
+                          </div>
+                          <div className="catalog-form__field">
+                            <span className="catalog-form__label">Estado</span>
+                            <div className="project-item-readonly-value">
+                              <span className={`badge ${line.units[0].lifecycleStatus === 'active' ? 'badge--subtle' : 'badge--warning'}`}>
+                                {formatLifecycleStatus(line.units[0].lifecycleStatus)}
+                              </span>
+                            </div>
                           </div>
                           {line.units[0].dimensionsFormatted ? (
                             <div className="catalog-form__field">

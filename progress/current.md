@@ -1,21 +1,33 @@
 # Issue #642 — Entrega 1: coherencia de líneas y detalle comercial en QuoteRevision exacta
 
-- Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base `origin/main@b285cf314d3dae9caadfdc45f479ba8ce8e9da89`. Rama `feat/642-quote-revision-detail-lines`. Single writer.
+- Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base exacta `origin/main@b285cf316ab87bc95003de4dd6b4c00cbb713312` (verificada por `git merge-base`). Rama `feat/642-quote-revision-detail-lines`. PR #663. Single writer.
 - Started: 2026-09-11 11:16 CST.
 - Result: `IMPLEMENTED_PENDING_REVIEW` → `progress/implementation_642_quote_revision_detail_lines.md`.
-- Scope completado:
+- Scope completado (incluye correcciones R1–R5 de revisión):
   1. Conexión de `snapshot` e `items` en `quoteAuthorityView` (`ShellView.tsx`) y `projectDetailContext.tsx`.
-  2. Funciones puras en `quoteRevisionPresentation.ts` (`buildRevisionLines`, `formatRevisionUnitDimensions`) que asocian líneas, unidades físicas e items estrictamente por `quoteLineId` y `furnitureInstanceId`, preservando líneas distintas con idéntico nombre y desglosando unidades en `quantity > 1`.
-  3. `ProjectItemsSection.tsx` actualizado para renderizar desde la autoridad comercial (`ready`, `loading`, `error`, `legacy`) en modo de solo lectura con badge `Q{N} · Solo lectura`, sin fallback mutable a `project.items`, mostrando ausencia honesta de medidas u opciones. El flujo de borrador inicial previo a Q1 (`empty` o sin autoridad) permanece intacto con toda su edición y drag & drop.
-  4. Ocultación de controles de edición mutable (`ProjectOptionsSection.tsx`, `ProjectMeasureDefaults.tsx`, `project-detail__tools`) cuando se visualiza una revisión histórica de cotización.
-  5. Contrato CSS en `projects.css` alineado a los tokens canónicos del design system (`--surface-input`, `--surface-muted`, `--border-subtle`).
-  6. Actualización de §16A en `docs/architecture/project-design-digital-thread.md`.
-  7. Suite de pruebas verde:
-     - Pure unit: `quoteRevisionPresentation.test.ts` (5/5 PASS).
-     - Component integration: `ProjectsScreen.test.tsx` (49/49 PASS).
-     - Design system gate: `designSystem.test.ts` (9/9 PASS).
-     - Full monorepo: `pnpm test` (0 errores en todo el monorepo), `pnpm typecheck` (0 errores en 7 proyectos), `go test ./...` (OK en backend-go), `pnpm openapi:check` (0 drift), `git diff --check` (limpio).
-     - Browser E2E: aserciones de muebles, dimensiones congeladas y solo lectura integradas en `tests/organization/project-reconciliation.spec.ts` para viewports 390, 768 y 1280.
+  2. Funciones puras en `quoteRevisionPresentation.ts` (`buildRevisionLines`, `formatRevisionUnitDimensions`, `formatLifecycleStatus`) que asocian líneas, unidades físicas e items estrictamente por `quoteLineId` y `furnitureInstanceId`, preservando líneas distintas con idéntico nombre y desglosando unidades en `quantity > 1`.
+  3. [R1] Moneda congelada de la cotización: `ProjectItemsSection.tsx` utiliza `formatProjectMoney(line.salePrice, quoteAuthority.currency)` eliminando `$` y `es-AR` fijos; probado con monedas no-dólar (EUR).
+  4. [R2] Cero real vs importe oculto: `buildRevisionLines` no usa `salePrice > 0` como heurística de autorización; conserva el cero legítimo (`salePrice: 0`) si los importes son visibles y mapea a `null` si están ocultos por visibilidad comercial.
+  5. [R3] Estados de ciclo de vida por unidad (`Activa`, `Retirada`, `Cancelada`) consistentes en líneas simples y múltiples con UUID técnico accesible; encabezado simplificado a `Unidad {n}` sin UUID en título; regresión con unidad terminal cancelada y cantidad 0 sin revivir demanda.
+  6. [R4] Cobertura extendida y navegador real:
+     - 4 pruebas de integración en `ProjectsScreen.test.tsx` (independencia post-mutación de catálogo/proyecto, switch de contexto fuera de orden sin mezclar cabecera/líneas, flujo borrador pre-Q1 editable, y casos de moneda/cero/unidades terminales).
+     - Browser E2E (`tests/organization/project-reconciliation.spec.ts`) ejecutado con Chromium + Go + PostgreSQL en gate aislado: aserciones de badge `Q2 · Solo lectura`, dimensiones exactas `650×720×{depth} mm` y ausencia de controles mutables verificadas **dentro del bucle de viewports 390, 768 y 1280**, con capturas reales guardadas.
+  7. Ocultación de controles de edición mutable (`ProjectOptionsSection.tsx`, `ProjectMeasureDefaults.tsx`, `project-detail__tools`) cuando se visualiza una revisión histórica de cotización.
+  8. Contrato CSS en `projects.css` alineado a los tokens canónicos del design system (`--surface-input`, `--surface-muted`, `--border-subtle`).
+  9. Actualización de §16A en `docs/architecture/project-design-digital-thread.md`.
+  10. Suite de pruebas verde:
+      - `@granete/ui`: 161 archivos / 1719 tests pasados (incluye `quoteRevisionPresentation.test.ts` 6/6, `ProjectsScreen.test.tsx` 53/53, `designSystem.test.ts` 9/9).
+      - `@granete/domain`: 105 archivos / 1407 tests pasados.
+      - `@granete/storage`: 12 archivos / 191 tests pasados.
+      - `@granete/excel`: 37 archivos / 299 tests pasados (+3 skipped).
+      - `apps/web`: 35 archivos / 445 tests pasados.
+      - `apps/desktop`: 3 archivos / 17 tests pasados.
+      - `apps/mobile`: 10 archivos / 73 tests pasados.
+      - `backend-go`: `go test ./...` OK en todos los paquetes.
+      - `pnpm typecheck`: 7 de 7 paquetes pasados (0 errores).
+      - `pnpm openapi:check`: 0 drift.
+      - `git diff --check`: limpio.
+      - Browser E2E: `scripts/organization-browser-gate.sh` 4/4 passed (28.1s).
 
 
 # Issue #650 — PR 6: perfil CADmatic 4 efectivo + adapter + descarga candidata

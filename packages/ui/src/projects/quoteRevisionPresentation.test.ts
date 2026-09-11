@@ -2,10 +2,21 @@ import { describe, expect, it } from 'vitest';
 import type { QuoteCommercialSnapshot, QuoteRevisionItem } from '@granete/storage';
 import {
   buildRevisionLines,
+  formatLifecycleStatus,
   formatRevisionUnitDimensions,
 } from './quoteRevisionPresentation';
 
 describe('quoteRevisionPresentation', () => {
+  describe('formatLifecycleStatus', () => {
+    it('translates lifecycle status values into Spanish UI copy', () => {
+      expect(formatLifecycleStatus('active')).toBe('Activa');
+      expect(formatLifecycleStatus('removed')).toBe('Retirada');
+      expect(formatLifecycleStatus('cancelled')).toBe('Cancelada');
+      expect(formatLifecycleStatus(undefined)).toBe('—');
+      expect(formatLifecycleStatus('')).toBe('—');
+    });
+  });
+
   describe('formatRevisionUnitDimensions', () => {
     it('formats numeric widthMm, heightMm, depthMm into mm string', () => {
       expect(
@@ -131,14 +142,63 @@ describe('quoteRevisionPresentation', () => {
       expect(line2.quoteLineId).toBe('line-2');
       expect(line2.quantity).toBe(1);
       expect(line2.isMultiUnit).toBe(false);
-      // Redacted or zero price is mapped to null
-      expect(line2.salePrice).toBeNull();
+      // Legitimate zero price is preserved when amounts are visible
+      expect(line2.salePrice).toBe(0);
       expect(line2.units[0]?.dimensionsFormatted).toBe('800×720×350 mm');
+    });
+
+    it('maps salePrice to null when amountsVisible is false without converting to 0', () => {
+      const result = buildRevisionLines(sampleSnapshot, sampleItems, { amountsVisible: false });
+      expect(result).toHaveLength(2);
+      // Hidden amounts must not show as $0.00
+      expect(result[0]!.salePrice).toBeNull();
+      expect(result[1]!.salePrice).toBeNull();
     });
 
     it('handles missing item parameters by showing null dimensions', () => {
       const result = buildRevisionLines(sampleSnapshot, []);
       expect(result[0]?.units[0]?.dimensionsFormatted).toBeNull();
+    });
+
+    it('faithfully preserves a single removed or cancelled unit with zero active quantity', () => {
+      const terminalSnapshot: QuoteCommercialSnapshot = {
+        ...sampleSnapshot,
+        lines: [
+          {
+            quoteLineId: 'line-terminal',
+            quantity: 0,
+            furnitureInstanceIds: ['fi-term-1'],
+            amounts: { materialsCost: 0, edgeTotal: 0, hardwareTotal: 0, directCost: 0, laborModular: 0, salePrice: 0 },
+          },
+        ],
+        units: [
+          {
+            furnitureInstanceId: 'fi-term-1',
+            quoteLineId: 'line-terminal',
+            moduleCode: 'MOD-TERM-01',
+            moduleName: 'Mueble Cancelado',
+            lifecycleStatus: 'removed',
+            options: [],
+          },
+        ],
+      };
+      const terminalItems: QuoteRevisionItem[] = [
+        {
+          furnitureInstanceId: 'fi-term-1',
+          parameters: { widthMm: 500, heightMm: 720, depthMm: 400 },
+          materialChoices: {},
+          lifecycleStatus: 'removed',
+        },
+      ];
+
+      const result = buildRevisionLines(terminalSnapshot, terminalItems);
+      expect(result).toHaveLength(1);
+      const line = result[0]!;
+      expect(line.quantity).toBe(0);
+      expect(line.isMultiUnit).toBe(false);
+      expect(line.units).toHaveLength(1);
+      expect(line.units[0]!.lifecycleStatus).toBe('removed');
+      expect(line.units[0]!.dimensionsFormatted).toBe('500×720×400 mm');
     });
   });
 });

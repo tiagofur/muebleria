@@ -629,6 +629,22 @@ async function publishRevisionWithItemIds(options: {
       await quoteDetail.scrollIntoViewIfNeeded();
       await expect(quoteDetail).toBeVisible();
       await expect(quoteDetail).toContainText('Q2 · Aceptada');
+
+      // Exact Q2 snapshot furniture & dimensions verified in each viewport (#642)
+      const revisionBadge = page.getByTestId('quote-revision-badge');
+      await revisionBadge.scrollIntoViewIfNeeded();
+      await expect(revisionBadge).toBeVisible();
+      await expect(revisionBadge).toContainText('Q2 · Solo lectura');
+
+      const unitDimension = page.getByText(`650×720×${seeded.depthMm} mm`);
+      await unitDimension.scrollIntoViewIfNeeded();
+      await expect(unitDimension).toBeVisible();
+
+      await expect(page.getByRole('button', { name: /Agregar mueble/i })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Quitar/i })).toHaveCount(0);
+      await expect(page.getByLabel(/Cantidad/i)).toHaveCount(0);
+      await expect(page.getByLabel(/Medida/i)).toHaveCount(0);
+
       await page.evaluate(async () => {
         await Promise.all(
           document

@@ -22,6 +22,7 @@ import type {
   ProjectTemplate,
   QuoteBreakdown,
 } from '@granete/domain';
+import type { QuoteCommercialSnapshot, QuoteRevisionItem } from '@granete/storage';
 import { ProjectsScreen } from './ProjectsScreen';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -817,6 +818,411 @@ describe('ProjectsScreen F022', () => {
     expect(within(errorDetail).queryByText(/Bajo mesada — MOD-GAB-01/)).toBeNull();
     await user.click(within(errorDetail).getAllByRole('button', { name: /Reintentar/i })[0]!);
     expect(onRetry).toHaveBeenCalled();
+  });
+
+  it('Q2 accepted preserves names, materials and dimensions after mutable project and catalog are modified', async () => {
+    const user = userEvent.setup();
+    const mutatedProjects: Project[] = [
+      {
+        ...projects[0]!,
+        name: 'Nombre Mutado Actual',
+        items: [
+          {
+            id: 'item-mutated',
+            moduleId: 'mod-mutated',
+            quantity: 99,
+            optionChoices: { INTERIOR: 'mat-mutated' },
+          },
+        ],
+      },
+    ];
+    const mutatedModules: Module[] = [
+      {
+        id: 'mod-1',
+        code: 'MOD-MUTATED',
+        name: 'Nombre de Catálogo Cambiado',
+        hardwareLines: [],
+      },
+    ];
+    const mutatedMaterials: MaterialBoard[] = [
+      {
+        ...materials[0]!,
+        name: 'Material Borrado o Cambiado',
+      },
+    ];
+
+    renderScreen({
+      projects: mutatedProjects,
+      modules: mutatedModules,
+      materials: mutatedMaterials,
+      breakdown: sampleBreakdown,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerId: 'cust-bruno',
+        customerName: 'Cliente congelado Q2',
+        furnitureQuantity: 1,
+        currency: 'MXN',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+        snapshot: {
+          schema: 'granete.quote-commercial-snapshot.v1' as const,
+          capturedAt: '2026-09-10T12:00:00Z',
+          currency: 'MXN',
+          customer: { id: 'cust-bruno', name: 'Cliente congelado Q2' },
+          project: { id: 'prj-1', name: 'Cocina congelada Q2' },
+          breakdown: {
+            materialsCost: 100,
+            edgeTotal: 20,
+            hardwareTotal: 30,
+            directCost: 150,
+            laborModular: 50,
+            laborFixedCost: 50,
+            marginFactor: 1.35,
+            salePrice: 270,
+          },
+          lines: [
+            {
+              quoteLineId: 'line-q2-frozen',
+              quantity: 1,
+              furnitureInstanceIds: ['fi-frozen-1'],
+              amounts: { materialsCost: 100, edgeTotal: 20, hardwareTotal: 30, directCost: 150, laborModular: 50, salePrice: 270 },
+            },
+          ],
+          units: [
+            {
+              furnitureInstanceId: 'fi-frozen-1',
+              quoteLineId: 'line-q2-frozen',
+              moduleCode: 'MOD-ALAC-FROZEN',
+              moduleName: 'Alacena Histórica Q2',
+              lifecycleStatus: 'active',
+              options: [
+                { groupCode: 'FRENTE', groupLabel: 'Frente', choiceId: 'mat-c', choiceLabel: 'Nougat Acabado Q2' },
+              ],
+            },
+          ],
+        },
+        items: [
+          {
+            furnitureInstanceId: 'fi-frozen-1',
+            furnitureDefinitionId: 'mod-alac',
+            parameters: { widthMm: 800, heightMm: 720, depthMm: 350 },
+            materialChoices: { FRENTE: 'mat-c' },
+            lifecycleStatus: 'active',
+          },
+        ],
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const detail = screen.getByTestId('project-detail');
+
+    // Must strictly render the frozen snapshot names, options and dimensions:
+    expect(within(detail).getByText('Alacena Histórica Q2 — MOD-ALAC-FROZEN')).toBeTruthy();
+    expect(within(detail).getByText(/800×720×350 mm/)).toBeTruthy();
+    expect(within(detail).getByText(/Frente: Nougat Acabado Q2/)).toBeTruthy();
+    expect(within(detail).getByText('ID: fi-frozen-1')).toBeTruthy();
+    expect(within(detail).getByText('Activa')).toBeTruthy();
+
+    // Mutated project item & catalog names must NEVER be rendered:
+    expect(within(detail).queryByText(/Nombre Mutado Actual/)).toBeNull();
+    expect(within(detail).queryByText(/Nombre de Catálogo Cambiado/)).toBeNull();
+    expect(within(detail).queryByText(/Material Borrado o Cambiado/)).toBeNull();
+    expect(within(detail).queryByText(/item-mutated/)).toBeNull();
+  });
+
+  it('switches projects and authorities cleanly without mixing header and rows of different authorities', async () => {
+    const authorityPrj1 = {
+      kind: 'ready' as const,
+      revisionId: 'quote-1-p1',
+      revisionNumber: 1,
+      status: 'accepted' as const,
+      projectName: 'Cocina Ana Congelada Q1',
+      customerId: 'cust-ana',
+      customerName: 'Ana López',
+      furnitureQuantity: 1,
+      currency: 'MXN',
+      capturedAt: '2026-09-10T12:00:00Z',
+      onRetry: vi.fn(),
+      snapshot: {
+        schema: 'granete.quote-commercial-snapshot.v1' as const,
+        capturedAt: '2026-09-10T12:00:00Z',
+        currency: 'MXN',
+        customer: { id: 'cust-ana', name: 'Ana López' },
+        project: { id: 'prj-1', name: 'Cocina Ana Congelada Q1' },
+        breakdown: {
+          materialsCost: 50,
+          edgeTotal: 10,
+          hardwareTotal: 10,
+          directCost: 70,
+          laborModular: 30,
+          laborFixedCost: 0,
+          marginFactor: 1.35,
+          salePrice: 135,
+        },
+        lines: [
+          {
+            quoteLineId: 'line-p1-1',
+            quantity: 1,
+            furnitureInstanceIds: ['fi-p1-1'],
+            amounts: { materialsCost: 50, edgeTotal: 10, hardwareTotal: 10, directCost: 70, laborModular: 30, salePrice: 135 },
+          },
+        ],
+        units: [
+          {
+            furnitureInstanceId: 'fi-p1-1',
+            quoteLineId: 'line-p1-1',
+            moduleCode: 'MOD-P1',
+            moduleName: 'Mueble Proyecto 1',
+            lifecycleStatus: 'active' as const,
+            options: [],
+          },
+        ],
+      },
+      items: [
+        {
+          furnitureInstanceId: 'fi-p1-1',
+          parameters: { widthMm: 600, heightMm: 720, depthMm: 560 },
+          materialChoices: {},
+          lifecycleStatus: 'active' as const,
+        },
+      ],
+    };
+
+    const authorityPrj2 = {
+      kind: 'ready' as const,
+      revisionId: 'quote-1-p2',
+      revisionNumber: 1,
+      status: 'accepted' as const,
+      projectName: 'Dormitorio Bruno Congelado Q1',
+      customerId: 'cust-bruno',
+      customerName: 'Bruno',
+      furnitureQuantity: 1,
+      currency: 'USD',
+      capturedAt: '2026-09-11T12:00:00Z',
+      onRetry: vi.fn(),
+      snapshot: {
+        schema: 'granete.quote-commercial-snapshot.v1' as const,
+        capturedAt: '2026-09-11T12:00:00Z',
+        currency: 'USD',
+        customer: { id: 'cust-bruno', name: 'Bruno' },
+        project: { id: 'prj-2', name: 'Dormitorio Bruno Congelado Q1' },
+        breakdown: {
+          materialsCost: 80,
+          edgeTotal: 20,
+          hardwareTotal: 20,
+          directCost: 120,
+          laborModular: 50,
+          laborFixedCost: 0,
+          marginFactor: 1.4,
+          salePrice: 240,
+        },
+        lines: [
+          {
+            quoteLineId: 'line-p2-1',
+            quantity: 1,
+            furnitureInstanceIds: ['fi-p2-1'],
+            amounts: { materialsCost: 80, edgeTotal: 20, hardwareTotal: 20, directCost: 120, laborModular: 50, salePrice: 240 },
+          },
+        ],
+        units: [
+          {
+            furnitureInstanceId: 'fi-p2-1',
+            quoteLineId: 'line-p2-1',
+            moduleCode: 'MOD-P2',
+            moduleName: 'Placard Proyecto 2',
+            lifecycleStatus: 'active' as const,
+            options: [],
+          },
+        ],
+      },
+      items: [
+        {
+          furnitureInstanceId: 'fi-p2-1',
+          parameters: { widthMm: 1200, heightMm: 2200, depthMm: 600 },
+          materialChoices: {},
+          lifecycleStatus: 'active' as const,
+        },
+      ],
+    };
+
+    const { rerenderWith } = renderScreen({
+      openProjectId: 'prj-1',
+      quoteAuthority: authorityPrj1,
+    });
+
+    // Detail for prj-1 is rendered:
+    expect(screen.getByTestId('project-detail-chrome').textContent).toContain('Cocina Ana Congelada Q1');
+    expect(screen.getByText('Mueble Proyecto 1 — MOD-P1')).toBeTruthy();
+    expect(screen.getByText(/600×720×560 mm/)).toBeTruthy();
+
+    // Now switch to prj-2 with authorityPrj2:
+    rerenderWith({
+      openProjectId: 'prj-2',
+      quoteAuthority: authorityPrj2,
+    });
+
+    const chrome2 = screen.getByTestId('project-detail-chrome');
+    expect(chrome2.textContent).toContain('Dormitorio Bruno Congelado Q1');
+    expect(chrome2.textContent).not.toContain('Cocina Ana');
+
+    expect(screen.getByText('Placard Proyecto 2 — MOD-P2')).toBeTruthy();
+    expect(screen.getByText(/1200×2200×600 mm/)).toBeTruthy();
+    expect(screen.queryByText('Mueble Proyecto 1 — MOD-P1')).toBeNull();
+  });
+
+  it('preserves usable pre-Q1 draft workflow to add items, modify dimensions, choices, and create Q1', async () => {
+    const user = userEvent.setup();
+    const onAddItem = vi.fn();
+    const onOpenReconciliation = vi.fn();
+    renderScreen({
+      openProjectId: 'prj-1',
+      quoteAuthority: {
+        kind: 'empty',
+        message: 'Esta obra todavía no tiene una revisión de cotización. Creá Q1 para fijar su verdad comercial.',
+      },
+      onAddItem,
+      onOpenReconciliation,
+    });
+
+    const detail = screen.getByTestId('project-detail');
+    // Pre-Q1 empty authority allows normal drafting:
+    expect(within(detail).getByRole('button', { name: /Agregar mueble/i })).toBeTruthy();
+    expect(within(detail).getByRole('button', { name: /Crear nueva revisión/i })).toBeTruthy();
+    expect(within(detail).getByLabelText(/Medida/i)).toBeTruthy();
+    expect(within(detail).getByLabelText(/Cantidad/i)).toBeTruthy();
+
+    // Clicking "Crear nueva revisión" invokes reconciliation/creation flow:
+    await user.click(within(detail).getByRole('button', { name: /Crear nueva revisión/i }));
+    expect(onOpenReconciliation).toHaveBeenCalledWith('prj-1', undefined);
+  });
+
+  it('handles non-dollar currency, visible real zero, hidden amounts, and terminal units', async () => {
+    const eurSnapshot: QuoteCommercialSnapshot = {
+      schema: 'granete.quote-commercial-snapshot.v1',
+      capturedAt: '2026-09-10T12:00:00Z',
+      currency: 'EUR',
+      customer: { id: 'cust-1', name: 'Cliente Euro' },
+      project: { id: 'prj-1', name: 'Obra en Euros' },
+      breakdown: {
+        materialsCost: 100,
+        edgeTotal: 20,
+        hardwareTotal: 30,
+        directCost: 150,
+        laborModular: 50,
+        laborFixedCost: 50,
+        marginFactor: 1.35,
+        salePrice: 270,
+      },
+      lines: [
+        {
+          quoteLineId: 'line-eur-zero',
+          quantity: 1,
+          furnitureInstanceIds: ['fi-zero'],
+          amounts: { materialsCost: 0, edgeTotal: 0, hardwareTotal: 0, directCost: 0, laborModular: 0, salePrice: 0 },
+        },
+        {
+          quoteLineId: 'line-eur-terminal',
+          quantity: 0,
+          furnitureInstanceIds: ['fi-term'],
+          amounts: { materialsCost: 0, edgeTotal: 0, hardwareTotal: 0, directCost: 0, laborModular: 0, salePrice: 0 },
+        },
+      ],
+      units: [
+        {
+          furnitureInstanceId: 'fi-zero',
+          quoteLineId: 'line-eur-zero',
+          moduleCode: 'MOD-ZERO',
+          moduleName: 'Mueble Gratuito Promocional',
+          lifecycleStatus: 'active',
+          options: [],
+        },
+        {
+          furnitureInstanceId: 'fi-term',
+          quoteLineId: 'line-eur-terminal',
+          moduleCode: 'MOD-TERM',
+          moduleName: 'Mueble Retirado Histórico',
+          lifecycleStatus: 'removed',
+          options: [],
+        },
+      ],
+    };
+
+    const eurItems: QuoteRevisionItem[] = [
+      {
+        furnitureInstanceId: 'fi-zero',
+        parameters: { widthMm: 500, heightMm: 720, depthMm: 400 },
+        materialChoices: {},
+        lifecycleStatus: 'active',
+      },
+      {
+        furnitureInstanceId: 'fi-term',
+        parameters: { widthMm: 600, heightMm: 720, depthMm: 400 },
+        materialChoices: {},
+        lifecycleStatus: 'removed',
+      },
+    ];
+
+    // Case A: showCosts: true (authorized visibility). Legitimate zero price is preserved and shown with EUR currency:
+    const { rerenderWith } = renderScreen({
+      openProjectId: 'prj-1',
+      showCosts: true,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'q-eur',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Obra en Euros',
+        customerId: 'cust-1',
+        customerName: 'Cliente Euro',
+        furnitureQuantity: 1,
+        currency: 'EUR',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+        snapshot: eurSnapshot,
+        items: eurItems,
+      },
+    });
+
+    const detail = screen.getByTestId('project-detail');
+
+    // R1: Currency is EUR (not project's MXN) and uses standard money formatter
+    const zeroLineEl = screen.getByTestId('quote-line-line-eur-zero');
+    expect(within(zeroLineEl).getByText('$0.00 EUR')).toBeTruthy();
+
+    // R3: Terminal unit has quantity 0, status badge "Retirada", UUID in technical metadata
+    const termLine = screen.getByTestId('quote-line-line-eur-terminal');
+    expect(within(termLine).getByText('Mueble Retirado Histórico — MOD-TERM')).toBeTruthy();
+    expect(within(termLine).getByText('Retirada')).toBeTruthy();
+    expect(within(termLine).getByText('0')).toBeTruthy();
+    expect(within(termLine).getByText('ID: fi-term')).toBeTruthy();
+
+    // R2: When showCosts is false (cost-blind / hidden amounts), price div must NOT be shown as $0.00
+    rerenderWith({
+      openProjectId: 'prj-1',
+      showCosts: false,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'q-eur',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Obra en Euros',
+        customerId: 'cust-1',
+        customerName: 'Cliente Euro',
+        furnitureQuantity: 1,
+        currency: 'EUR',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+        snapshot: eurSnapshot,
+        items: eurItems,
+      },
+    });
+
+    const zeroLine = screen.getByTestId('quote-line-line-eur-zero');
+    expect(within(zeroLine).queryByText('$0.00 EUR')).toBeNull();
   });
 
   it('shows loading status in totals when breakdownLoading', async () => {
