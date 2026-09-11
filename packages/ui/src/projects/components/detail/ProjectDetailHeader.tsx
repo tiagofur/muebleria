@@ -70,6 +70,8 @@ export function ProjectDetailHeader({
     onChangeStatus,
     canMutate,
     canMarkProduced,
+    quoteAuthority,
+    onOpenReconciliation,
   } = ctx;
 
   const hasOpenInProduction = Boolean(onOpenInProduction);
@@ -88,6 +90,13 @@ export function ProjectDetailHeader({
     canMarkProduced &&
     !hasOpenInProduction;
 
+  const frozenAuthority = quoteAuthority?.kind === 'ready' ? quoteAuthority : null;
+  const frozenCustomer = frozenAuthority
+    ? customers.find((customer) => customer.id === frozenAuthority.customerId)
+    : null;
+  const identityUnavailable = quoteAuthority && !frozenAuthority;
+  const detailCurrency = frozenAuthority?.currency ?? (!quoteAuthority ? project.currency : null);
+
   return (
     <header className="workspace-chrome" data-testid="project-detail-chrome">
       <div className="workspace-chrome__lead">
@@ -102,8 +111,24 @@ export function ProjectDetailHeader({
         </button>
         <div className="workspace-chrome__identity">
           <div className="workspace-chrome__title-row">
-            <h2 className="workspace-chrome__title">{project.name}</h2>
-            <StatusBadge status={project.status} />
+            <h2 className="workspace-chrome__title">
+              {frozenAuthority
+                ? frozenAuthority.projectName
+                : quoteAuthority?.kind === 'loading'
+                  ? 'Cargando cotización…'
+                  : identityUnavailable
+                    ? 'Cotización comercial no disponible'
+                    : project.name}
+            </h2>
+            {quoteAuthority?.kind === 'ready' ? (
+              <span className={`status-badge status-badge--${quoteAuthority.status === 'accepted' ? 'accepted' : quoteAuthority.status === 'published' ? 'quoted' : 'draft'}`}>
+                Q{quoteAuthority.revisionNumber} · {quoteAuthority.status === 'accepted' ? 'Aceptada' : quoteAuthority.status === 'published' ? 'Publicada' : quoteAuthority.status === 'superseded' ? 'Reemplazada' : 'Borrador'}
+              </span>
+            ) : quoteAuthority ? (
+              <span className="badge badge--warning-subtle">Sin autoridad comercial</span>
+            ) : (
+              <StatusBadge status={project.status} />
+            )}
             <span
               className="badge badge--neutral-subtle"
               title="Etapa Operativa del Proyecto"
@@ -157,29 +182,41 @@ export function ProjectDetailHeader({
           </div>
 
           <p className="workspace-chrome__subtitle">
-            {resolveCustomerName(project.customerId, customers)}
-            {(() => {
-              const cust = customers.find((c) => c.id === project.customerId);
-              return cust?.phone ? (
+            {frozenAuthority
+              ? frozenAuthority.customerName
+              : quoteAuthority
+                ? 'Identidad, moneda y cantidades no disponibles sin una revisión exacta.'
+                : resolveCustomerName(project.customerId, customers)}
+            {frozenAuthority ? (
+              frozenCustomer?.phone ? (
                 <>
                   <span className="workspace-chrome__dot" aria-hidden>·</span>
                   <WhatsAppButton
-                    customerName={cust.name}
-                    phone={cust.phone}
-                    projectName={project.name}
-                    quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, project.currency) : undefined}
+                    customerName={frozenAuthority.customerName}
+                    phone={frozenCustomer.phone}
+                    projectName={frozenAuthority.projectName}
+                    quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, frozenAuthority.currency) : undefined}
                     workshopName={ctx.workshopName}
                     compact
                     label="WhatsApp"
                   />
                 </>
-              ) : null;
-            })()}
-            <span className="workspace-chrome__dot" aria-hidden>·</span>
-            {project.items.length} mueble{project.items.length === 1 ? '' : 's'}
-            <span className="workspace-chrome__dot" aria-hidden>·</span>
-            {project.currency}
-            {ctx.showCosts ? (
+              ) : (
+                <>
+                  <span className="workspace-chrome__dot" aria-hidden>·</span>
+                  Teléfono no disponible para Q{frozenAuthority.revisionNumber}
+                </>
+              )
+            ) : null}
+            {frozenAuthority || !quoteAuthority ? (
+              <>
+                <span className="workspace-chrome__dot" aria-hidden>·</span>
+                {frozenAuthority?.furnitureQuantity ?? project.items.length} mueble{(frozenAuthority?.furnitureQuantity ?? project.items.length) === 1 ? '' : 's'}
+                <span className="workspace-chrome__dot" aria-hidden>·</span>
+                {detailCurrency}
+              </>
+            ) : null}
+            {!quoteAuthority && ctx.showCosts ? (
               <>
                 <span className="workspace-chrome__dot" aria-hidden>·</span>
                 Margen ×{project.marginFactor.toFixed(2)}
@@ -191,14 +228,41 @@ export function ProjectDetailHeader({
       <div className="workspace-chrome__total" data-testid="project-detail-total">
         <span className="workspace-chrome__total-label">Precio de venta</span>
         <span className={chromeSale == null ? 'workspace-chrome__total-value workspace-chrome__total-value--muted' : 'workspace-chrome__total-value'}>
-          {chromeSale == null ? '—' : formatProjectMoney(chromeSale, project.currency)}
+          {chromeSale == null || !detailCurrency ? '—' : formatProjectMoney(chromeSale, detailCurrency)}
         </span>
       </div>
       <div
         className="workspace-chrome__actions project-detail__chrome-actions"
         data-testid="project-chrome-actions"
       >
-        {primary === 'send' && onChangeStatus ? (
+        {quoteAuthority?.kind === 'ready' && onOpenReconciliation && quoteAuthority.status !== 'accepted' ? (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+            data-testid="quote-revision-lifecycle-action"
+          >
+            Gestionar Q{quoteAuthority.revisionNumber}
+          </button>
+        ) : null}
+        {quoteAuthority?.kind === 'error' ? (
+          <button type="button" className="btn btn--secondary" onClick={quoteAuthority.onRetry}>
+            Reintentar carga
+          </button>
+        ) : null}
+        {(quoteAuthority?.kind === 'empty' || quoteAuthority?.kind === 'legacy') && onOpenReconciliation ? (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => onOpenReconciliation(
+              project.id,
+              quoteAuthority.kind === 'legacy' ? quoteAuthority.revisionId : undefined,
+            )}
+          >
+            Crear nueva revisión
+          </button>
+        ) : null}
+        {!quoteAuthority && primary === 'send' && onChangeStatus ? (
           <button
             type="button"
             className="btn btn--primary"
@@ -209,7 +273,7 @@ export function ProjectDetailHeader({
             <Send size={16} strokeWidth={1.5} aria-hidden /> Enviar al cliente
           </button>
         ) : null}
-        {primary === 'accept' && onChangeStatus ? (
+        {!quoteAuthority && primary === 'accept' && onChangeStatus ? (
           <button
             type="button"
             className="btn btn--primary"

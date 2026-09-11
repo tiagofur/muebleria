@@ -83,6 +83,7 @@ export interface ProjectReconciliationContextState {
 
 export interface ProjectReconciliationQueryKeys {
   readonly root: QueryKey;
+  readonly quoteAuthority: QueryKey;
   readonly quoteRevisions: QueryKey;
   readonly designs: QueryKey;
   readonly designRevisions: (designId: string) => QueryKey;
@@ -98,6 +99,7 @@ export function projectReconciliationQueryKeys(
   const root: QueryKey = ['project-reconciliation', ...scopeKey, projectId];
   return {
     root,
+    quoteAuthority: ['quote-revision-authority', ...scopeKey, projectId],
     quoteRevisions: [...root, 'quote-revisions'],
     designs: [...root, 'designs'],
     designRevisions: (designId: string) => [...root, 'designs', designId, 'revisions'],
@@ -370,6 +372,14 @@ export function ProjectReconciliationScreen({
 
   // ---- Commands (no optimistic business success) ---------------------------------
 
+  const invalidateQuoteRevisionReads = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.quoteAuthority }),
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.root, 'reconciliation'] }),
+    ]);
+  };
+
   // Commercial QuoteRevision lifecycle commands (#571 / WEB-DT-4)
   const handleCreateInitialQuote = async () => {
     setCreateQuoteSubmitting(true);
@@ -377,10 +387,7 @@ export function ProjectReconciliationScreen({
     setQuoteLifecycleNotice(null);
     try {
       const created = await api.createInitialProjectQuoteRevision(token, projectId, {});
-      await queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions });
-      await queryClient.invalidateQueries({
-        queryKey: [...queryKeys.root, 'reconciliation'],
-      });
+      await invalidateQuoteRevisionReads();
       setQuoteRevisionId(created.id);
       onContextChange?.({
         quoteRevisionId: created.id,
@@ -406,10 +413,7 @@ export function ProjectReconciliationScreen({
         projectId,
         selectedQuoteRevision.id,
       );
-      await queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions });
-      await queryClient.invalidateQueries({
-        queryKey: [...queryKeys.root, 'reconciliation'],
-      });
+      await invalidateQuoteRevisionReads();
       setQuoteLifecycleNotice(`Revisión Q${published.revisionNumber} publicada.`);
     } catch (err) {
       setPublishQuoteError(describeCommandError(err));
@@ -428,10 +432,7 @@ export function ProjectReconciliationScreen({
         projectId,
         selectedQuoteRevision.id,
       );
-      await queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions });
-      await queryClient.invalidateQueries({
-        queryKey: [...queryKeys.root, 'reconciliation'],
-      });
+      await invalidateQuoteRevisionReads();
       if (activeDesignId && designRevisionId) {
         await queryClient.invalidateQueries({
           queryKey: queryKeys.preflight(activeDesignId, designRevisionId),
@@ -476,10 +477,7 @@ export function ProjectReconciliationScreen({
       });
       // Success only AFTER the authoritative response: refresh the exact
       // scopes (quote revisions + every reconciliation pair of this project).
-      await queryClient.invalidateQueries({ queryKey: queryKeys.quoteRevisions });
-      await queryClient.invalidateQueries({
-        queryKey: [...queryKeys.root, 'reconciliation'],
-      });
+      await invalidateQuoteRevisionReads();
       setRequoteResult({
         quoteRevision: result.quoteRevision,
         sourceQuoteRevisionId: quoteRevisionId,

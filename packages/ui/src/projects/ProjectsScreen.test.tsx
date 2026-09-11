@@ -108,11 +108,13 @@ const customers: Customer[] = [
   {
     id: 'cust-ana',
     name: 'Ana López',
+    phone: '+52 322 100 0001',
     active: true,
   },
   {
     id: 'cust-bruno',
     name: 'Bruno',
+    phone: '+52 322 100 0002',
     active: true,
   },
 ];
@@ -486,6 +488,87 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByTestId('project-detail-total').textContent).toMatch(
       /\$202\.50 MXN/,
     );
+  });
+
+  it('renders the exact accepted revision instead of conflicting project status', async () => {
+    const user = userEvent.setup();
+    const onOpenReconciliation = vi.fn();
+    renderScreen({
+      breakdown: sampleBreakdown,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerId: 'cust-bruno',
+        customerName: 'Cliente congelado Q2',
+        furnitureQuantity: 7,
+        currency: 'USD',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+      },
+      onChangeStatus: vi.fn(),
+      onOpenReconciliation,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const detail = screen.getByTestId('project-detail');
+    expect(within(detail).getByRole('heading', { name: 'Cocina congelada Q2' })).toBeTruthy();
+    expect(screen.getByTestId('project-detail-chrome').textContent).toContain('Cliente congelado Q2');
+    expect(screen.getByTestId('project-detail-chrome').textContent).toContain('7 muebles');
+    expect(screen.getByTestId('project-detail-chrome').textContent).not.toContain('Margen ×1.35');
+    expect(screen.queryByTestId('project-material-summary')).toBeNull();
+    expect(within(detail).getByText('Q2 · Aceptada')).toBeTruthy();
+    expect(screen.getByTestId('project-detail-total').textContent).toContain('$202.50 USD');
+    expect(screen.queryByTestId('project-chrome-edit')).toBeNull();
+    expect(screen.queryByTestId('project-send-quote')).toBeNull();
+    expect(screen.queryByTestId('project-accept-quote')).toBeNull();
+
+    await user.click(screen.getByTitle('Enviar WhatsApp a Cliente congelado Q2'));
+    expect((screen.getByLabelText('Número de Teléfono / WhatsApp:') as HTMLInputElement).value).toBe('+52 322 100 0002');
+    expect((screen.getByLabelText('Mensaje a Enviar:') as HTMLTextAreaElement).value).toContain('Cocina congelada Q2');
+  });
+
+  it.each([
+    ['loading', { kind: 'loading' as const }],
+    ['error', { kind: 'error' as const, message: 'No se pudo cargar.', onRetry: vi.fn() }],
+    ['empty', { kind: 'empty' as const, message: 'Creá Q1.' }],
+  ])('does not leak mutable project identity while authority is %s', async (_label, quoteAuthority) => {
+    const user = userEvent.setup();
+    renderScreen({ breakdown: null, quoteAuthority });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const chrome = screen.getByTestId('project-detail-chrome');
+    expect(chrome.textContent).not.toContain('Cocina Ana');
+    expect(chrome.textContent).not.toContain('Ana López');
+    expect(chrome.textContent).not.toContain('MXN');
+    expect(chrome.textContent).not.toContain('Margen ×1.35');
+    expect(chrome.textContent).not.toContain('1 mueble');
+    expect(screen.queryByTestId('project-material-summary')).toBeNull();
+  });
+
+  it('fails closed for a legacy revision without a commercial snapshot', async () => {
+    const user = userEvent.setup();
+    const onOpenReconciliation = vi.fn();
+    renderScreen({
+      breakdown: null,
+      quoteAuthority: {
+        kind: 'legacy',
+        revisionId: 'quote-1',
+        revisionNumber: 1,
+        status: 'published',
+        message: 'Q1 no contiene un snapshot comercial. Creá una nueva revisión.',
+        onRetry: vi.fn(),
+      },
+      onOpenReconciliation,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    expect(screen.getByRole('alert').textContent).toContain('no contiene un snapshot');
+    await user.click(screen.getByRole('button', { name: 'Crear nueva revisión' }));
+    expect(onOpenReconciliation).toHaveBeenCalledWith('prj-1', 'quote-1');
+    expect(screen.getByTestId('project-detail-total').textContent).not.toContain('$202.50');
   });
 
   it('shows loading status in totals when breakdownLoading', async () => {
