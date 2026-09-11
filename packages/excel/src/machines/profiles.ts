@@ -205,6 +205,64 @@ export const PTX_CADMATIC_4_CANDIDATE_PROFILE: OutputCompatibilityProfile = {
   evidenceUri: 'docs/machines/ptx-cadmatic4/README.md',
 };
 
+/**
+ * `ptx-cadmatic-4` r3 — the positive-trim candidate revision (#661), routed
+ * to the same documented PTX compiler with the evidenced subset of
+ * docs/machines/ptx-cadmatic4/04_contrato_r3_refilados.md enabled.
+ *
+ * EVIDENCE STATUS: repo implementation of the r3 contract built from two
+ * sane field samples (03_evidencia_campo.md) + the Pattern Exchange
+ * inventory (01). NOT receiver evidence: supportStatus stays NOT_TESTED and
+ * the same receiving-side unknowns as r2 remain in pendingEvidence.
+ *
+ * Effective options (govern the bytes through the adapter): identical to r2
+ * except
+ * - supportsPositiveTrim: true — enables the r3 compiler policy ONLY (the
+ *   fixed frame of contract §3: TRIM_TYPE=1, no initial rotation, VECTORS
+ *   off, one fixed margin per side, trims projected to MATERIALS.TRIM_*
+ *   with TRIM_HEAD/FRCT/VRCT absent). NOT a universal trim claim: anything
+ *   outside the frame fails closed (trim_frame_unsupported,
+ *   trim_structure_invalid, trim_mapping_ambiguous).
+ * - supportedFunctions '0,1,2,3,92' — adds the demonstrated phase-2
+ *   offcut-release pass (FUNCTION 92 + Xn) with its scheduler; 90/91/93..99
+ *   stay unsupported.
+ *
+ * r2 stays an immutable historical constant: selections pinned to r2 keep
+ * their exact tuple and surface a stale-revision blocker (never an
+ * automatic retarget to r3).
+ */
+export const PTX_CADMATIC_4_R3_PROFILE: OutputCompatibilityProfile = {
+  ref: { outputCompatibilityProfileId: 'ptx-cadmatic-4', revisionId: 'r3' },
+  formatFamily: 'ptx',
+  targetSoftware: {
+    name: 'CADmatic',
+    version: '4',
+    provenance: 'FIELD_VERIFICATION_REQUIRED',
+  },
+  dimensions: {
+    fileExtension: 'ptx',
+    encoding: 'ascii',
+    lineEnding: 'crlf',
+    decimalPlaces: 2,
+    headerVersion: '1',
+    unit: 'mm',
+    headerOrigin: 0,
+    trimType: 1,
+    includeVectors: false,
+    supportsPositiveTrim: true,
+    supportedFunctions: '0,1,2,3,92',
+  },
+  pendingEvidence: [
+    'fieldAvailability',
+    'recordOrdering',
+    'characterRestrictions',
+    'filenameConstraints',
+  ],
+  supportStatus: 'NOT_TESTED',
+  digest: '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537',
+  evidenceUri: 'docs/machines/ptx-cadmatic4/04_contrato_r3_refilados.md',
+};
+
 // ---------------------------------------------------------------------------
 // Output compatibility profiles — SAW family
 // ---------------------------------------------------------------------------

@@ -79,14 +79,19 @@ interface LocalDivisionExpectation {
 }
 
 /**
- * Staging generations, re-derived: board = 1; dividing a generation-g region
- * is a phase-g pass; the kept child moves to g+1, the rest child stays at g.
- * FUNCTION: phases ≤ 2 by axis role (y→1 rip, x→2 cross), phase 3 → 3.
- * Returns null when the trace needs a phase beyond the supported subset
- * (the compiler must have rejected such a plan already).
+ * Staging generations, re-derived: the staging root (raw board, or the r3
+ * usable root after the trim projection) is generation 1; dividing a
+ * generation-g region is a phase-g pass; the kept child moves to g+1, the
+ * rest child stays at g. FUNCTION: phases ≤ 2 by axis role (y→1 rip, x→2
+ * cross), phase 3 → 3. Divisions whose parent has no generation (the r3 trim
+ * prefix) are skipped. Returns null when the trace needs a phase beyond the
+ * supported subset (the compiler must have rejected such a plan already).
  */
-function deriveDivisionExpectations(trace: CutProgramTrace): readonly LocalDivisionExpectation[] | null {
-  const generation = new Map<string, number>([[trace.boardRegionId, 1]]);
+function deriveDivisionExpectations(
+  trace: CutProgramTrace,
+  stagingRootRegionId: string,
+): readonly LocalDivisionExpectation[] | null {
+  const generation = new Map<string, number>([[stagingRootRegionId, 1]]);
   const pieceByRegion = new Map<string, string>();
   for (const terminal of trace.terminals) {
     if (terminal.kind === 'piece' && terminal.pieceRef) {
@@ -95,7 +100,8 @@ function deriveDivisionExpectations(trace: CutProgramTrace): readonly LocalDivis
   }
   const expectations: LocalDivisionExpectation[] = [];
   for (const division of trace.divisions) {
-    const parentGeneration = generation.get(division.parentRegionId) ?? 1;
+    const parentGeneration = generation.get(division.parentRegionId);
+    if (parentGeneration === undefined) continue;
     const phase = parentGeneration;
     if (phase > 3) return null;
     generation.set(division.keptRegionId, parentGeneration + 1);
@@ -114,13 +120,88 @@ function deriveDivisionExpectations(trace: CutProgramTrace): readonly LocalDivis
 }
 
 /**
- * Structural preorder, re-derived: kept subtree first, then the rest
- * subtree, from the board root. CUT_INDEX must follow this order while
- * SEQUENCE carries execution order — the two coincide on simple fixtures
- * but are checked independently (dossier fragment 03). Null when the tree
- * is not reachable from the board.
+ * r3 trim projection, re-derived independently of the writer's planner
+ * (#661): the perimeter trim prefix must be a chain of trim divisions from
+ * the raw board to ONE usable root, and each executed margin
+ * (parentExtent − keptExtent, the TOTAL including kerf) maps by
+ * axis + leadingBand to the fixed-frame slot:
+ *   y + leadingBand → FRIP · y + far → VRIP · x + leadingBand → FXCT ·
+ *   x + far → VXCT.
+ * Returns null when the structure does not match this contract (the writer
+ * must have failed closed already — a parsed document that reaches this
+ * state is an issue by itself).
  */
-function deriveStructuralPreorder(trace: CutProgramTrace): readonly CutProgramTraceDivision[] | null {
+interface LocalTrimProjection {
+  readonly usableRootRegionId: string;
+  readonly trimFripMm?: number;
+  readonly trimVripMm?: number;
+  readonly trimFxctMm?: number;
+  readonly trimVXctMm?: number;
+}
+
+function deriveTrimProjection(trace: CutProgramTrace): LocalTrimProjection | null {
+  const divisionByParent = new Map<string, CutProgramTraceDivision>();
+  for (const division of trace.divisions) {
+    divisionByParent.set(division.parentRegionId, division);
+  }
+  const chain: CutProgramTraceDivision[] = [];
+  let current = trace.boardRegionId;
+  for (;;) {
+    const division = divisionByParent.get(current);
+    if (!division || division.trim !== true) break;
+    chain.push(division);
+    current = division.keptRegionId;
+  }
+  const chainCutIds = new Set(chain.map((division) => division.cutId));
+  for (const division of trace.divisions) {
+    if (division.trim === true && !chainCutIds.has(division.cutId)) {
+      return null;
+    }
+  }
+  const margins: Record<'frip' | 'vrip' | 'fxct' | 'vxct', number[]> = {
+    frip: [],
+    vrip: [],
+    fxct: [],
+    vxct: [],
+  };
+  for (const division of chain) {
+    const parentExtentMm =
+      division.axis === 'x' ? division.parentRect.lengthMm : division.parentRect.widthMm;
+    const marginMm = parentExtentMm - division.keptExtentMm;
+    if (!Number.isFinite(marginMm) || marginMm <= 0) return null;
+    const slot =
+      division.axis === 'y'
+        ? division.leadingBand
+          ? 'frip'
+          : 'vrip'
+        : division.leadingBand
+          ? 'fxct'
+          : 'vxct';
+    margins[slot].push(marginMm);
+  }
+  for (const slot of Object.keys(margins) as (keyof typeof margins)[]) {
+    if (margins[slot].length > 1) return null;
+  }
+  return {
+    usableRootRegionId: current,
+    trimFripMm: margins.frip[0],
+    trimVripMm: margins.vrip[0],
+    trimFxctMm: margins.fxct[0],
+    trimVXctMm: margins.vxct[0],
+  };
+}
+
+/**
+ * Structural preorder, re-derived: kept subtree first, then the rest
+ * subtree, from the staging root (usable root under r3). CUT_INDEX must
+ * follow this order while SEQUENCE carries the scheduled execution order —
+ * the two coincide on simple fixtures but are checked independently
+ * (dossier fragment 03). Null when the tree is not reachable from the root.
+ */
+function deriveStructuralPreorder(
+  trace: CutProgramTrace,
+  stagingRootRegionId: string,
+): readonly CutProgramTraceDivision[] | null {
   const divisionByParentRegion = new Map<string, CutProgramTraceDivision>();
   for (const division of trace.divisions) {
     divisionByParentRegion.set(division.parentRegionId, division);
@@ -133,13 +214,14 @@ function deriveStructuralPreorder(trace: CutProgramTrace): readonly CutProgramTr
     visit(division.keptRegionId);
     if (division.restRegionId) visit(division.restRegionId);
   };
-  visit(trace.boardRegionId);
-  return out.length === trace.divisions.length ? out : null;
+  visit(stagingRootRegionId);
+  const expectedCount = trace.divisions.filter((division) => division.trim !== true).length;
+  return out.length === expectedCount ? out : null;
 }
 
-/** PATTERNS.TYPE, re-derived: 0 (longitudinal rip) when the first division advances along y, else 4. */
+/** PATTERNS.TYPE, re-derived: 0 (longitudinal rip) when the first productive division advances along y, else 4. */
 function derivePatternType(trace: CutProgramTrace): number {
-  const first = trace.divisions[0];
+  const first = trace.divisions.find((division) => division.trim !== true);
   return first && first.axis === 'y' ? 0 : 4;
 }
 
@@ -150,17 +232,29 @@ interface LocalReleaseExpectation {
   readonly pieceRef?: string;
   readonly dimensionMm: number;
   readonly functionCode: number;
+  /** r3: cutId of the producing division (scheduler anchor). */
+  readonly producerOrder?: number;
+  /** r3: true when the row must be a physical FUNCTION 92 pass. */
+  readonly offcutRelease92?: boolean;
 }
 
 /**
  * Release rows, re-derived: remnant leaves (attribution via Xn, fragment
- * 04) and a rest-side piece of a double-piece division get a QTY_RPT=0
- * row whose DIMENSION is the leaf extent along its producing division's
- * axis. Exact-fit terminals never get a fictitious row.
+ * 04) and a rest-side piece of a double-piece division get a QTY_RPT=0 row
+ * whose DIMENSION is the leaf extent along its producing division's axis.
+ * Exact-fit terminals never get a fictitious row.
+ *
+ * r3 (#661): a remnant additionally REQUIRES a physical FUNCTION 92 row
+ * when it is the rest-side terminal of a productive phase-2/FUNCTION-2
+ * producer with a known extent and productive kept-side content (a
+ * consuming division or a piece) — the demonstrated subset of
+ * 04_contrato_r3_refilados.md §6.2. Every other remnant must keep the
+ * relational QTY_RPT=0 representation.
  */
 function deriveReleases(
   trace: CutProgramTrace,
   expectations: readonly LocalDivisionExpectation[],
+  offcutRelease92: boolean,
 ): readonly LocalReleaseExpectation[] {
   const expectationByLeafRegion = new Map<string, LocalDivisionExpectation>();
   for (const expectation of expectations) {
@@ -169,6 +263,7 @@ function deriveReleases(
       expectationByLeafRegion.set(expectation.division.restRegionId, expectation);
     }
   }
+  const productiveCutIds = new Set(expectations.map((e) => e.division.cutId));
   const releases: LocalReleaseExpectation[] = [];
   for (const terminal of trace.terminals) {
     const producing = expectationByLeafRegion.get(terminal.regionId);
@@ -178,11 +273,29 @@ function deriveReleases(
     const restExtentMm =
       division.axis === 'x' ? division.restRect?.lengthMm : division.restRect?.widthMm;
     if (terminal.kind === 'remnant') {
+      const eligible =
+        offcutRelease92 &&
+        !isKept &&
+        producing.phase === 2 &&
+        producing.functionCode === 2 &&
+        restExtentMm !== undefined &&
+        Number.isFinite(restExtentMm) &&
+        restExtentMm > 0 &&
+        productiveCutIds.has(division.cutId) &&
+        (trace.divisions.some(
+          (candidate) =>
+            candidate.trim !== true && candidate.parentRegionId === division.keptRegionId,
+        ) ||
+          trace.terminals.some(
+            (candidate) => candidate.regionId === division.keptRegionId && candidate.kind === 'piece',
+          ));
       releases.push({
         regionId: terminal.regionId,
         kind: 'offcut',
         dimensionMm: isKept ? division.keptExtentMm : restExtentMm!,
-        functionCode: producing.functionCode,
+        functionCode: eligible ? 92 : producing.functionCode,
+        producerOrder: eligible ? division.order : undefined,
+        offcutRelease92: eligible ? true : undefined,
       });
       continue;
     }
@@ -202,6 +315,41 @@ function deriveReleases(
     }
   }
   return releases;
+}
+
+/**
+ * r3 SEQUENCE expectation, re-derived with a different formulation than the
+ * writer's insertion scheduler: every productive division keeps the rank of
+ * its execution order, and each FUNCTION 92 release takes the fractional
+ * slot right after its producer (producer.order + 0.5). Sorting those keys
+ * and numbering 1..M must reproduce the writer's contiguous schedule — and
+ * any mutation that moves a 92 out of `producer < 92 < dependent recut`
+ * breaks a row's expected SEQUENCE.
+ */
+function deriveScheduledSequences(
+  expectations: readonly LocalDivisionExpectation[],
+  releases: readonly LocalReleaseExpectation[],
+): { readonly sequenceByCutId: ReadonlyMap<string, number>; readonly sequenceByRegionId: ReadonlyMap<string, number> } {
+  const events: { readonly key: number; readonly kind: 'division' | 'offcut_release'; readonly id: string }[] = [];
+  for (const expectation of expectations) {
+    events.push({ key: expectation.division.order, kind: 'division', id: expectation.division.cutId });
+  }
+  for (const release of releases) {
+    if (release.offcutRelease92 === true && release.producerOrder !== undefined) {
+      events.push({ key: release.producerOrder + 0.5, kind: 'offcut_release', id: release.regionId });
+    }
+  }
+  events.sort((a, b) => a.key - b.key);
+  const sequenceByCutId = new Map<string, number>();
+  const sequenceByRegionId = new Map<string, number>();
+  events.forEach((event, index) => {
+    if (event.kind === 'division') {
+      sequenceByCutId.set(event.id, index + 1);
+    } else {
+      sequenceByRegionId.set(event.id, index + 1);
+    }
+  });
+  return { sequenceByCutId, sequenceByRegionId };
 }
 
 /**
@@ -279,7 +427,10 @@ export function verifyCutPlanPtxReadback(
     push('header.title', `TITLE='${parsed.header.title}' ≠ '${options.title}'`);
   }
 
-  // 3. Table views in file order.
+  // 4. Table views in file order. The traces (and, under r3, the trim
+  //    projections) are re-executed first: every later expectation derives
+  //    from the executed programs, never from the parsed bytes.
+  const r3 = options.supportsPositiveTrim === true;
   const jobRows = parsed.records.filter((r): r is PtxJobRecord => r.type === 'JOBS');
   const materialRows = parsed.records.filter((r): r is PtxMaterialRecord => r.type === 'MATERIALS');
   const partsRows = parsed.records.filter((r): r is PtxPartsReqRecord => r.type === 'PARTS_REQ');
@@ -293,6 +444,64 @@ export function verifyCutPlanPtxReadback(
     const list = cutsByPattern.get(row.patternIndex) ?? [];
     list.push(row);
     cutsByPattern.set(row.patternIndex, list);
+  }
+
+  const globalOffcutIndexByRegion = new Map<string, number>();
+  let runningOffcutIndex = 1;
+  const sheetTraces = new Map<number, CutProgramTrace>();
+  const sheetProjections = new Map<number, LocalTrimProjection | null>();
+  for (const sheet of cutPlan.sheets) {
+    if (!sheet.cutProgram) {
+      push('sheet.program_missing', `la hoja ${sheet.sheetIndex} no trae programa de cortes`);
+      continue;
+    }
+    try {
+      const trace = executeCutProgram(sheet.cutProgram);
+      sheetTraces.set(sheet.sheetIndex, trace);
+      sheetProjections.set(sheet.sheetIndex, deriveTrimProjection(trace));
+      for (const terminal of trace.terminals) {
+        if (terminal.kind === 'remnant') {
+          globalOffcutIndexByRegion.set(terminal.regionId, runningOffcutIndex++);
+        }
+      }
+    } catch {
+      push('sheet.program_invalid', `la hoja ${sheet.sheetIndex} no ejecuta un programa válido`);
+    }
+  }
+
+  // MATERIALS.TRIM_* expectation (r3 only): re-derived per sheet from the
+  // executed trims, then required to agree across the sheets of one material
+  // (one MATERIALS row cannot carry two different executed margins).
+  const expectedTrimsByMaterial = new Map<string, LocalTrimProjection | 'inconsistent'>();
+  if (r3) {
+    const byMaterial = new Map<string, LocalTrimProjection[]>();
+    for (const sheet of cutPlan.sheets) {
+      const projection = sheetProjections.get(sheet.sheetIndex);
+      if (!projection) continue;
+      const list = byMaterial.get(sheet.materialCode) ?? [];
+      list.push(projection);
+      byMaterial.set(sheet.materialCode, list);
+    }
+    for (const [code, projections] of byMaterial) {
+      const slots = [
+        ['trimFripMm', projections.map((p) => p.trimFripMm)],
+        ['trimVripMm', projections.map((p) => p.trimVripMm)],
+        ['trimFxctMm', projections.map((p) => p.trimFxctMm)],
+        ['trimVXctMm', projections.map((p) => p.trimVXctMm)],
+      ] as const;
+      let consistent = true;
+      for (const [, values] of slots) {
+        const defined = values.filter((value) => value !== undefined);
+        if (defined.length === 0) continue;
+        if (
+          defined.length !== values.length ||
+          defined.some((value) => !close(value, defined[0]!))
+        ) {
+          consistent = false;
+        }
+      }
+      expectedTrimsByMaterial.set(code, consistent ? projections[0]! : 'inconsistent');
+    }
   }
 
   if (jobRows.length !== 1 || jobRows[0]!.jobIndex !== mapping.jobIndex) {
@@ -347,6 +556,42 @@ export function verifyCutPlanPtxReadback(
     }
     if (row.bookQuantity !== 1) {
       push('materials.book', `MATERIALS '${row.code}' BOOK=${row.bookQuantity} ≠ 1 (política documentada: cuenta tableros, un tablero por ciclo; el total del job NO está establecido en S03)`);
+    }
+    if (r3) {
+      // r3 (#661): the four trims must equal the independently re-derived
+      // executed margins (totals including kerf); a side without a trim pass
+      // must stay ABSENT; HEAD/FRCT/VRCT must never carry an override (G3).
+      const expected = expectedTrimsByMaterial.get(row.code);
+      if (!expected) {
+        push('materials.trims', `MATERIALS '${row.code}' sin proyección de trims derivable para su material`);
+      } else if (expected === 'inconsistent') {
+        push('materials.trims', `MATERIALS '${row.code}': hojas del mismo material con refilados ejecutados distintos`);
+      } else {
+        const trimChecks = [
+          ['TRIM_FRIP', row.trimFRip, expected.trimFripMm],
+          ['TRIM_VRIP', row.trimVRip, expected.trimVripMm],
+          ['TRIM_FXCT', row.trimFXct, expected.trimFxctMm],
+          ['TRIM_VXCT', row.trimVXct, expected.trimVXctMm],
+        ] as const;
+        for (const [field, actual, expectedMm] of trimChecks) {
+          if (expectedMm === undefined) {
+            if (actual !== undefined) {
+              push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE (sin refilo ejecutado en ese lado; ausente ≠ 0)`);
+            }
+          } else if (actual === undefined || !close(actual, snap(expectedMm))) {
+            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual ?? 'ausente'} ≠ margen ejecutado ${snap(expectedMm)} (total incluyendo kerf)`);
+          }
+        }
+        for (const [field, actual] of [
+          ['TRIM_HEAD', row.trimHead],
+          ['TRIM_FRCT', row.trimFRct],
+          ['TRIM_VRCT', row.trimVRct],
+        ] as const) {
+          if (actual !== undefined) {
+            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE (G3: los cuatro márgenes no alimentan HEAD/recut)`);
+          }
+        }
+      }
     }
   }
 
@@ -407,27 +652,6 @@ export function verifyCutPlanPtxReadback(
     }
   });
 
-  const globalOffcutIndexByRegion = new Map<string, number>();
-  let runningOffcutIndex = 1;
-  const sheetTraces = new Map<number, CutProgramTrace>();
-  for (const sheet of cutPlan.sheets) {
-    if (!sheet.cutProgram) {
-      push('sheet.program_missing', `la hoja ${sheet.sheetIndex} no trae programa de cortes`);
-      continue;
-    }
-    try {
-      const trace = executeCutProgram(sheet.cutProgram);
-      sheetTraces.set(sheet.sheetIndex, trace);
-      for (const terminal of trace.terminals) {
-        if (terminal.kind === 'remnant') {
-          globalOffcutIndexByRegion.set(terminal.regionId, runningOffcutIndex++);
-        }
-      }
-    } catch {
-      push('sheet.program_invalid', `la hoja ${sheet.sheetIndex} no ejecuta un programa válido`);
-    }
-  }
-
   cutPlan.sheets.forEach((sheet, sheetPosition) => {
     const trace = sheetTraces.get(sheet.sheetIndex);
     const sheetMapping = mapping.sheets.find((s) => s.sheetIndex === sheet.sheetIndex);
@@ -456,14 +680,23 @@ export function verifyCutPlanPtxReadback(
   });
 
   // 7. Family-level completeness: no extra records beyond the contract.
+  //    Under r3 the compiled CUTS are the PRODUCTIVE divisions only (the
+  //    perimeter trims live in MATERIALS.TRIM_*) plus the releases.
   const totalDivisions = [...sheetTraces.values()].reduce(
-    (sum, trace) => sum + trace.divisions.length,
+    (sum, trace) =>
+      sum + (r3 ? trace.divisions.filter((division) => division.trim !== true).length : trace.divisions.length),
     0,
   );
   let totalReleases = 0;
-  for (const trace of sheetTraces.values()) {
-    const expectations = deriveDivisionExpectations(trace);
-    if (expectations) totalReleases += deriveReleases(trace, expectations).length;
+  for (const sheet of cutPlan.sheets) {
+    const trace = sheetTraces.get(sheet.sheetIndex);
+    if (!trace) continue;
+    const projection = sheetProjections.get(sheet.sheetIndex);
+    const stagingRoot = r3 && projection ? projection.usableRootRegionId : trace.boardRegionId;
+    const expectations = deriveDivisionExpectations(trace, stagingRoot);
+    if (expectations) {
+      totalReleases += deriveReleases(trace, expectations, r3).length;
+    }
   }
   if (cutRows.length !== totalDivisions + totalReleases) {
     push('cuts.count', `CUTS=${cutRows.length} ≠ divisiones ${totalDivisions} + liberaciones ${totalReleases}`);
@@ -520,14 +753,24 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     expectedComment,
   } = ctx;
 
-  const expectations = deriveDivisionExpectations(trace);
-  const preorder = deriveStructuralPreorder(trace);
+  const r3 = options.supportsPositiveTrim === true;
+  // r3 (#661): the PTX pattern starts at the usable root after the perimeter
+  // trim prefix; re-derived independently from the executed trace.
+  const projection = deriveTrimProjection(trace);
+  if (r3 && !projection) {
+    push('sheet.trim_unprojectable', `hoja ${sheet.sheetIndex}: el prefijo de refilos no cuadra con la proyección r3`);
+    return;
+  }
+  const stagingRoot = r3 && projection ? projection.usableRootRegionId : trace.boardRegionId;
+  const expectations = deriveDivisionExpectations(trace, stagingRoot);
+  const preorder = deriveStructuralPreorder(trace, stagingRoot);
   if (!expectations || !preorder) {
     push('sheet.phase_unsupported', `hoja ${sheet.sheetIndex}: estructura no representable en el subconjunto`);
     return;
   }
   const expectationByCutId = new Map(expectations.map((e) => [e.division.cutId, e]));
-  const releases = deriveReleases(trace, expectations);
+  const releases = deriveReleases(trace, expectations, r3);
+  const schedule = r3 ? deriveScheduledSequences(expectations, releases) : undefined;
 
   if (!boardRow) {
     push('boards.missing', `hoja ${sheet.sheetIndex} sin fila BOARDS`);
@@ -587,6 +830,23 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
   recordExtent(trace.boardRegionId, 'x', boardLengthBytes);
   recordExtent(trace.boardRegionId, 'y', boardWidthBytes);
   const kerfBytes = materialKerfBytes(ctx);
+  if (r3 && projection) {
+    // The usable root's extents derive from BYTES: raw BOARDS extents minus
+    // the MATERIALS.TRIM_* margins of each side (the demonstrated fixed
+    // frame). Byte-absent sides fall back to the re-derived projection — the
+    // materials.trims check already reports that absence.
+    const trimBytes = materialTrimBytes(ctx, projection);
+    recordExtent(
+      stagingRoot,
+      'x',
+      boardLengthBytes - (trimBytes.trimFXct ?? 0) - (trimBytes.trimVXct ?? 0),
+    );
+    recordExtent(
+      stagingRoot,
+      'y',
+      boardWidthBytes - (trimBytes.trimFRip ?? 0) - (trimBytes.trimVRip ?? 0),
+    );
+  }
 
   preorder.forEach((division, position) => {
     const row = rows[position];
@@ -597,10 +857,14 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     if (expectedCutIndex === undefined || row.cutIndex !== expectedCutIndex || expectedCutIndex !== position + 1) {
       push('cuts.index', `${label}: CUT_INDEX=${row.cutIndex} ≠ ${expectedCutIndex ?? '?'} (posición preorder ${position + 1})`);
     }
-    // SEQUENCE is checked against the EXECUTION order — derived
-    // independently from the row position (fragment 03).
-    if (row.sequence !== division.order) {
-      push('cuts.sequence', `${label}: SEQUENCE=${row.sequence} ≠ orden de ejecución ${division.order}`);
+    // SEQUENCE: r2 = the program's execution order; r3 = the scheduled event
+    // order re-derived with the fractional-key formulation (fragment 03).
+    const expectedSequence = schedule ? schedule.sequenceByCutId.get(division.cutId) : division.order;
+    if (row.sequence !== expectedSequence) {
+      push(
+        'cuts.sequence',
+        `${label}: SEQUENCE=${row.sequence} ≠ ${schedule ? 'secuencia programada' : 'orden de ejecución'} ${expectedSequence}`,
+      );
     }
     if (row.functionCode !== expectation.functionCode) {
       push('cuts.function', `${label}: FUNCTION=${row.functionCode} ≠ política documentada (${expectation.functionCode}, fase ${expectation.phase}, eje ${division.axis})`);
@@ -664,6 +928,47 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     const row = rows[preorder.length + position];
     const label = `liberación '${release.regionId}' (patrón ${sheetMapping.patternIndex})`;
     if (!row) return;
+    if (release.offcutRelease92 === true) {
+      // r3 physical FUNCTION 92 pass (#661 contract §6.2/§19): QTY_RPT=1,
+      // QTY_PARTS ABSENT, FUNCTION 92, scheduled after the producer and
+      // before every dependent recut.
+      const expectedSequence = schedule?.sequenceByRegionId.get(release.regionId);
+      if (row.sequence === undefined || expectedSequence === undefined || row.sequence !== expectedSequence) {
+        push('release.sequence', `${label}: SEQUENCE=${row.sequence} ≠ secuencia programada ${expectedSequence ?? '?'} (productor < 92 < recut dependiente)`);
+      }
+      if (row.repeatQuantity !== 1) {
+        push('release.no_pass', `${label}: QTY_RPT=${row.repeatQuantity} ≠ 1 (una pasada física 92, no una fila relacional)`);
+      }
+      if (row.producedQuantity !== undefined) {
+        push('release.produced', `${label}: QTY_PARTS=${row.producedQuantity} debe estar AUSENTE (la 92 libera un Xn, no una pieza de PARTS_REQ)`);
+      }
+      if (row.functionCode !== 92) {
+        push('release.function', `${label}: FUNCTION=${row.functionCode} ≠ 92`);
+      }
+      if (!close(row.dimension, snap(release.dimensionMm))) {
+        push('release.dimension', `${label}: DIMENSION=${row.dimension} ≠ ${snap(release.dimensionMm)}`);
+      }
+      if (row.comment !== expectedComment(release.regionId)) {
+        push('release.comment', `${label}: COMMENT='${row.comment}' ≠ '${expectedComment(release.regionId) ?? ''}'`);
+      }
+      const expectedCutIndex = sheetMapping.releaseCutIndexByRegionId.get(release.regionId);
+      if (expectedCutIndex === undefined || row.cutIndex !== expectedCutIndex) {
+        push('release.index', `${label}: CUT_INDEX=${row.cutIndex} ≠ ${expectedCutIndex ?? '?'}`);
+      }
+      if (release.kind === 'offcut') {
+        const expectedOffcutIndex = globalOffcutIndexByRegion.get(release.regionId);
+        if (
+          row.partReference.kind !== 'offcut' ||
+          expectedOffcutIndex === undefined ||
+          row.partReference.offcutIndex !== expectedOffcutIndex
+        ) {
+          push('release.offcut_ref', `${label}: PART_INDEX no referencia X${expectedOffcutIndex ?? '?'}`);
+        }
+      } else {
+        push('release.function', `${label}: una release 92 debe referenciar un offcut`);
+      }
+      return;
+    }
     if (row.sequence !== 0 || row.repeatQuantity !== 0) {
       push('release.no_pass', `${label}: SEQUENCE=${row.sequence}/QTY_RPT=${row.repeatQuantity} ≠ 0/0 (una liberación no es una pasada)`);
     }
@@ -699,6 +1004,24 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
       push('release.part_ref', `${label}: PART_INDEX no referencia la pieza ${release.pieceRef}`);
     }
   });
+
+  // r3 (#661 M8): no Xn may back two physical release events — duplicates and
+  // missing expected references are both concrete failures.
+  if (r3) {
+    const fn92Rows = (cutsByPattern.get(sheetMapping.patternIndex) ?? []).filter(
+      (row) => row.functionCode === 92,
+    );
+    const seenXn = new Map<number, number>();
+    for (const row of fn92Rows) {
+      if (row.partReference.kind !== 'offcut') continue;
+      const previous = seenXn.get(row.partReference.offcutIndex);
+      if (previous !== undefined) {
+        push('release.offcut_duplicate', `patrón ${sheetMapping.patternIndex}: X${row.partReference.offcutIndex} respaldado por dos releases físicas (filas CUT_INDEX ${previous} y ${row.cutIndex})`);
+      } else {
+        seenXn.set(row.partReference.offcutIndex, row.cutIndex);
+      }
+    }
+  }
 
   // --- OFFCUTS rows for this sheet's remnant leaves ----------------------
   const remnantTerminals = trace.terminals.filter((t) => t.kind === 'remnant');
@@ -756,9 +1079,36 @@ function materialKerfBytes(ctx: SheetVerificationContext): number {
   // missing — the corresponding materials issue has already been reported.
   const index = ctx.mapping.materialIndexByCode.get(ctx.sheet.materialCode);
   for (const record of ctx.parsed.records) {
-    if (record.type === 'MATERIALS' && (index === undefined || record.materialIndex === index)) {
+    if (record.type === 'MATERIALS' && record.materialIndex === index) {
       return record.kerfRip;
     }
   }
   return ctx.trace.divisions[0]?.kerfMm ?? 0;
+}
+
+/**
+ * TRIM_* values as parsed from the sheet material's bytes (extent-derivation
+ * input for the usable root under r3). A byte-absent side falls back to the
+ * independently re-derived margin; the absence itself is reported by the
+ * materials.trims check, so the fallback only keeps the extent derivation
+ * running.
+ */
+function materialTrimBytes(
+  ctx: SheetVerificationContext,
+  projection: LocalTrimProjection,
+): { readonly trimFRip?: number; readonly trimVRip?: number; readonly trimFXct?: number; readonly trimVXct?: number } {
+  const index = ctx.mapping.materialIndexByCode.get(ctx.sheet.materialCode);
+  let row: PtxMaterialRecord | undefined;
+  for (const record of ctx.parsed.records) {
+    if (record.type === 'MATERIALS' && record.materialIndex === index) {
+      row = record;
+      break;
+    }
+  }
+  return {
+    trimFRip: row?.trimFRip ?? projection.trimFripMm,
+    trimVRip: row?.trimVRip ?? projection.trimVripMm,
+    trimFXct: row?.trimFXct ?? projection.trimFxctMm,
+    trimVXct: row?.trimVXct ?? projection.trimVXctMm,
+  };
 }

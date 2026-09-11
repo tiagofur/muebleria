@@ -1419,6 +1419,8 @@ describe('R1 — el verifier no comparte lógica productiva con el compiler', ()
       'ptxStructuralPreorder',
       'ptxPatternTypeForSheet',
       'planSheetReleases',
+      'planSheetTrimProjection',
+      'schedulePtxExecutionEvents',
       'ptxDivisionVector',
       'ptxAscii',
       'ptxResolveMagnitude',

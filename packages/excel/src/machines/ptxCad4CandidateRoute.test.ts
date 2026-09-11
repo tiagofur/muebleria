@@ -45,7 +45,11 @@ import {
   generateSelectedCuttingOutput,
   resolveManufacturingOutputTarget,
 } from './outputSelectionResolver';
-import { CLIENT_A_HPP250_PROFILE, PTX_CADMATIC_4_CANDIDATE_PROFILE } from './profiles';
+import {
+  CLIENT_A_HPP250_PROFILE,
+  PTX_CADMATIC_4_CANDIDATE_PROFILE,
+  PTX_CADMATIC_4_R3_PROFILE,
+} from './profiles';
 import {
   PTX_CANDIDATE_TITLE,
   PTX_POSTPROCESSOR_ADAPTER,
@@ -54,7 +58,10 @@ import {
 } from './ptxAdapter';
 import type { MachineOutputSelection } from '@granete/domain';
 
-const CANDIDATE = PTX_CADMATIC_4_CANDIDATE_PROFILE;
+/** Current selectable CADmatic 4 revision (#661 r3): the download-route candidate. */
+const CANDIDATE = PTX_CADMATIC_4_R3_PROFILE;
+/** Historical r2 candidate: kept immutable; its trim=0 policy stays routed. */
+const CANDIDATE_R2 = PTX_CADMATIC_4_CANDIDATE_PROFILE;
 
 function candidateSelection(): MachineOutputSelection {
   return {
@@ -386,7 +393,7 @@ describe('CADmatic 4 candidato (ptx-cadmatic-4@r2) — ruta del compilador docum
     expectBlockedWithDetail(job, profileVariant({ encoding: 'utf-8' }), 'encoding');
     expectBlockedWithDetail(job, profileVariant({ lineEnding: 'cr' }), 'lineEnding');
     expectBlockedWithDetail(job, profileVariant({ decimalPlaces: 9 }), 'decimalPlaces');
-    expectBlockedWithDetail(job, profileVariant({ supportsPositiveTrim: true }), 'supportsPositiveTrim');
+    expectBlockedWithDetail(job, profileVariant({ supportsPositiveTrim: 'yes' }), 'supportsPositiveTrim');
     expectBlockedWithDetail(job, profileVariant({ unit: 'in' }), 'unit');
     // Dimensión efectiva ausente → evidencia faltante (copia profunda: el
     // perfil constante es compartido e inmutable para el resto de la suite).
@@ -422,12 +429,12 @@ describe('CADmatic 4 candidato — preflight bloquea con causa específica', () 
     expectBlockedWithDetail(jobWithSheet(sheet, TRIM0_CONFIG), CANDIDATE, 'ptx_compile.nesting_not_representable');
   });
 
-  it('refilados positivos: el candidato no inventa el mapping de trims', () => {
+  it('r2 inmutable: refilados positivos siguen bloqueados con trim_unsupported', () => {
     const rows = [makeRow({ quantity: 1, lengthMm: 450, widthMm: 320, grain: 1, partCode: 'A' })];
     const plan = optimizeCutPlan('lab-650-trims', rows, GOLDEN_MATERIALS, DEFAULT_CUT_PLAN_CONFIG);
     expectBlockedWithDetail(
       { jobId: 'lab-trims', provenance: { projectId: 'lab-650', generatedAt: '2026-09-11T00:00:00.000Z' }, cutPlan: plan },
-      CANDIDATE,
+      CANDIDATE_R2,
       'ptx_compile.trim_unsupported',
     );
   });
@@ -521,7 +528,7 @@ describe('CADmatic 4 candidato — preflight bloquea con causa específica', () 
 // ---------------------------------------------------------------------------
 
 describe('CADmatic 4 candidato — descarga existente (#591) y manifest exacto', () => {
-  it('unified: un bundle con manifest r2 + adapter 1.1.0 y hashes deterministas', async () => {
+  it('unified: un bundle con manifest r3 + adapter 1.2.0 y hashes deterministas', async () => {
     const plan = candidateJob().cutPlan;
     const bundles = await generateSelectedCuttingOutput(plan, candidateSelection());
     expect(bundles).toHaveLength(1);
@@ -531,11 +538,11 @@ describe('CADmatic 4 candidato — descarga existente (#591) y manifest exacto',
 
     expect(bundle!.manifest.outputCompatibilityProfile).toEqual({
       outputCompatibilityProfileId: 'ptx-cadmatic-4',
-      revisionId: 'r2',
+      revisionId: 'r3',
     });
     expect(bundle!.manifest.postprocessorAdapter).toEqual({
       postprocessorAdapterId: 'granete-ptx',
-      adapterVersion: '1.1.0',
+      adapterVersion: '1.2.0',
       implementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
     });
     expect(bundle!.manifest.validationStatus).toBe('NOT_TESTED');
@@ -566,11 +573,11 @@ describe('CADmatic 4 candidato — descarga existente (#591) y manifest exacto',
     for (const bundle of bundles) {
       const text = new TextDecoder().decode(bundle.artifact.bytes);
       expect(text.startsWith('HEADER,')).toBe(true);
-      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r2');
+      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r3');
     }
   });
 
-  it('golden end-to-end: selección r2 → adapter → bytes descargados → parser → verifier === []', async () => {
+  it('golden end-to-end: selección r3 → adapter → bytes descargados → parser → verifier === []', async () => {
     const plan = optimizeCutPlan(GOLDEN_PROJECT_ID, GOLDEN_ROWS, GOLDEN_MATERIALS, GOLDEN_CONFIG);
     const resolved = resolveManufacturingOutputTarget(candidateSelection(), 'cutting');
     expect(resolved.status === 'CONFIGURED' && resolved.readiness.ready).toBe(true);

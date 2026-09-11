@@ -45,6 +45,7 @@ export type PtxValidationCode =
   | 'UNKNOWN_OFFCUT_REFERENCE'
   | 'UNKNOWN_CUT_REFERENCE'
   | 'INVALID_FUNCTION_CODE'
+  | 'INVALID_FUNCTION_SEMANTICS'
   | 'UNSUPPORTED_FUNCTION_CODE'
   | 'INVALID_MAGNITUDE'
   | 'INVALID_QUANTITY'
@@ -379,11 +380,43 @@ function checkCut(record: PtxCutRecord, issues: Issue[]): void {
       )}]`,
     });
   }
+  // FUNCTION 92 row semantics (#661, 04_contrato_r3_refilados.md §6.2/§19):
+  // a physical phase-2 offcut release pass — QTY_RPT=1, positive SEQUENCE,
+  // PART_INDEX referencing an OFFCUTS row via Xn, positive DIMENSION. Never
+  // the relational QTY_RPT=0/SEQUENCE=0 representation.
+  if (record.functionCode === 92) {
+    if (record.repeatQuantity !== 1) {
+      issues.push({
+        code: 'INVALID_FUNCTION_SEMANTICS',
+        message: `${recordLabel(record)} FUNCTION=92 QTY_RPT=${record.repeatQuantity} must be 1 (a physical release pass, not a relational attribution row)`,
+      });
+    }
+    if (record.sequence < 1) {
+      issues.push({
+        code: 'INVALID_FUNCTION_SEMANTICS',
+        message: `${recordLabel(record)} FUNCTION=92 SEQUENCE=${record.sequence} must be > 0 (scheduled after its producer pass)`,
+      });
+    }
+    if (record.partReference.kind !== 'offcut') {
+      issues.push({
+        code: 'INVALID_FUNCTION_SEMANTICS',
+        message: `${recordLabel(record)} FUNCTION=92 PART_INDEX must reference an OFFCUTS row as Xn`,
+      });
+    }
+    if (record.producedQuantity !== undefined) {
+      issues.push({
+        code: 'INVALID_FUNCTION_SEMANTICS',
+        message: `${recordLabel(record)} FUNCTION=92 QTY_PARTS must be ABSENT (the pass releases an Xn offcut, not a PARTS_REQ part)`,
+      });
+    }
+  }
   // DIMENSION is the relative measure of the sub-panel, never a coordinate —
   // it must be positive even for trim rows (investigation §5).
   magnitudeIssue(record.dimension, `${recordLabel(record)} DIMENSION`, true, issues);
   quantityIssue(record.repeatQuantity, `${recordLabel(record)} QTY_RPT`, 0, issues);
-  quantityIssue(record.producedQuantity, `${recordLabel(record)} QTY_PARTS`, 0, issues);
+  if (record.producedQuantity !== undefined) {
+    quantityIssue(record.producedQuantity, `${recordLabel(record)} QTY_PARTS`, 0, issues);
+  }
   textIssues(record.comment, `${recordLabel(record)} COMMENT`, false, issues);
 }
 

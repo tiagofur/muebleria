@@ -278,7 +278,9 @@ function cutLine(r: PtxCutRecord, f: Fmt): string {
     f.real(r.dimension, 'CUTS.DIMENSION'),
     f.int(r.repeatQuantity, 'CUTS.QTY_RPT'),
     partReferenceCell(r),
-    f.int(r.producedQuantity, 'CUTS.QTY_PARTS'),
+    // Absent only on FUNCTION 92 offcut-release passes (#661): empty cell,
+    // never 0 — the pass produces an Xn offcut, not a PARTS_REQ part.
+    f.optInt(r.producedQuantity, 'CUTS.QTY_PARTS'),
     f.optText(r.comment, 'CUTS.COMMENT'),
   ].join(',');
 }

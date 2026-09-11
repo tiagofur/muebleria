@@ -114,13 +114,13 @@ const MachineOutputCatalogJSON = `{
   "outputProfiles": [
     {"outputCompatibilityProfileId": "ptx-generic", "revisionId": "r1", "formatFamily": "ptx", "supportStatus": "NOT_TESTED", "digest": "d05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595"},
     {"outputCompatibilityProfileId": "ptx-cadmatic-3", "revisionId": "r1", "formatFamily": "ptx", "supportStatus": "NOT_TESTED", "digest": "c4ef85133a395b051da68a8411917217eba167a47950482270b202b160b9b7d1"},
-    {"outputCompatibilityProfileId": "ptx-cadmatic-4", "revisionId": "r2", "formatFamily": "ptx", "supportStatus": "NOT_TESTED", "digest": "822221a6324199e63ec432966cfdd84b41dd8821fe09da1a3d1970e9fbae3c4a"},
+    {"outputCompatibilityProfileId": "ptx-cadmatic-4", "revisionId": "r3", "formatFamily": "ptx", "supportStatus": "NOT_TESTED", "digest": "4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537"},
     {"outputCompatibilityProfileId": "ptx-cadmatic-5", "revisionId": "r1", "formatFamily": "ptx", "supportStatus": "NOT_TESTED", "digest": "0679fada5b4d97ee5f2ec173d5c7ddebbf14cd8b226bf1ebe12ff95da9288bc1"},
     {"outputCompatibilityProfileId": "saw-homag", "revisionId": "r1", "formatFamily": "saw", "supportStatus": "NOT_TESTED", "digest": "2cccceea22fbba8ec7c7df948473b8cb713223f0de1c3d07216e5614c7c3e112"},
     {"outputCompatibilityProfileId": "mpr-woodwop", "revisionId": "r1", "formatFamily": "mpr", "supportStatus": "NOT_TESTED", "digest": "28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1"}
   ],
   "adapters": [
-    {"postprocessorAdapterId": "granete-ptx", "adapterVersion": "1.1.0", "implementationDigest": "b56de3839ac9a0da94aa9c90b62d56cad19aefea27d365ff934cac46c1f70d8b", "producedFormatFamily": "ptx", "serializerImplemented": true},
+    {"postprocessorAdapterId": "granete-ptx", "adapterVersion": "1.2.0", "implementationDigest": "954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236", "producedFormatFamily": "ptx", "serializerImplemented": true},
     {"postprocessorAdapterId": "homag-saw", "adapterVersion": "0.1.0", "implementationDigest": "c6278fffdde1296eb508772d7a240c06695bba8b4bcac2e59b64761b38a74e9e", "producedFormatFamily": "saw", "serializerImplemented": false},
     {"postprocessorAdapterId": "woodwop-mpr", "adapterVersion": "0.1.0", "implementationDigest": "4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782", "producedFormatFamily": "mpr", "serializerImplemented": false}
   ]

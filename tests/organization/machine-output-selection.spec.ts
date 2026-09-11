@@ -19,14 +19,14 @@ const CUTTING_GENERIC = {
   outputProfileId: 'ptx-generic',
   outputProfileRevisionId: 'r1',
   adapterId: 'granete-ptx',
-  adapterVersion: '1.1.0',
-  adapterImplementationDigest: 'b56de3839ac9a0da94aa9c90b62d56cad19aefea27d365ff934cac46c1f70d8b',
+  adapterVersion: '1.2.0',
+  adapterImplementationDigest: '954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236',
 } as const;
 
 const CUTTING_CADMATIC4_CANDIDATE = {
   ...CUTTING_GENERIC,
   outputProfileId: 'ptx-cadmatic-4',
-  outputProfileRevisionId: 'r2',
+  outputProfileRevisionId: 'r3',
 } as const;
 
 async function api() {
@@ -108,7 +108,7 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     await page.getByText('Detalle técnico').click();
     const tech = page.getByTestId('machine-output-cutting');
     await expect(tech.getByText('profile: ptx-generic@r1')).toBeVisible();
-    await expect(tech.getByText('adapter: granete-ptx@1.1.0')).toBeVisible();
+    await expect(tech.getByText('adapter: granete-ptx@1.2.0')).toBeVisible();
 
     // Server read model: exactly ONE configured target, no blockers.
     const readModel = await repository.getMachineOutputSelections();
@@ -159,7 +159,7 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     );
   });
 
-  test('CADmatic 4 candidate (r2, #650) resolves ready while staying an unvalidated candidate', async ({ page }) => {
+  test('CADmatic 4 candidate (r3, #661) resolves ready while staying an unvalidated candidate', async ({ page }) => {
     test.setTimeout(90_000);
 
     const { repository } = await api();
@@ -176,7 +176,7 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     const readModel = await repository.getMachineOutputSelections();
     const cutting = readModel.selections.find((s) => s.selection.selection.operation === 'cutting');
     expect(cutting!.selection.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
-    expect(cutting!.selection.selection.outputCompatibilityProfileRevisionId).toBe('r2');
+    expect(cutting!.selection.selection.outputCompatibilityProfileRevisionId).toBe('r3');
     expect(cutting!.blockers).toEqual([]);
     expect(cutting!.supportStatus).toBe('NOT_TESTED');
   });

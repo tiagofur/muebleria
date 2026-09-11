@@ -24,7 +24,7 @@ import {
   CLIENT_A_HPP250_PROFILE,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_3_PROFILE,
-  PTX_CADMATIC_4_CANDIDATE_PROFILE,
+  PTX_CADMATIC_4_R3_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
@@ -42,10 +42,11 @@ export const KNOWN_MACHINE_PROFILES: readonly ClientMachineProfileData[] = [
 export const KNOWN_OUTPUT_PROFILES: readonly OutputCompatibilityProfile[] = [
   PTX_GENERIC_PROFILE,
   PTX_CADMATIC_3_PROFILE,
-  // r2 (documented-PTX compiler route) is the CURRENT selectable revision of
-  // the CADmatic 4 profile; r1 keeps existing as a historical constant, and
-  // selections pinned to it surface an actionable stale-revision blocker.
-  PTX_CADMATIC_4_CANDIDATE_PROFILE,
+  // r3 (#661, evidenced positive-trim subset) is the CURRENT selectable
+  // revision of the CADmatic 4 profile. r1/r2 keep existing as immutable
+  // historical constants, and selections pinned to them surface an
+  // actionable stale-revision blocker — never an automatic retarget.
+  PTX_CADMATIC_4_R3_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,

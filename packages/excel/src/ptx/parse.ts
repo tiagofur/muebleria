@@ -116,7 +116,9 @@ const FAMILY_SPECS: Readonly<Record<string, FamilySpec>> = {
       'JOB_INDEX', 'PTN_INDEX', 'CUT_INDEX', 'SEQUENCE', 'FUNCTION', 'DIMENSION',
       'QTY_RPT', 'PART_INDEX', 'QTY_PARTS', 'COMMENT',
     ],
-    required: 9,
+    // QTY_PARTS is optional (empty cell): a FUNCTION 92 offcut-release pass
+    // carries it ABSENT (#661). COMMENT stays optional after it.
+    required: 8,
   },
   OFFCUTS: { columns: ['JOB_INDEX', 'OFFCUT_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH'], required: 6 },
   VECTORS: {
@@ -428,7 +430,8 @@ function parseRecordRow(family: string, cells: readonly string[], lineNo: number
         dimension: c.real(5, 'DIMENSION'),
         repeatQuantity: c.int(6, 'QTY_RPT'),
         partReference: parsePartReference(c.text(7, 'PART_INDEX'), lineNo),
-        producedQuantity: c.int(8, 'QTY_PARTS'),
+        // Empty cell = absent (FUNCTION 92 release pass); never coerced to 0.
+        producedQuantity: c.optionalInt(8, 'QTY_PARTS'),
         comment: c.optionalText(9),
       };
     case 'OFFCUTS':

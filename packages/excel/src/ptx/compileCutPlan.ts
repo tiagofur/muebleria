@@ -43,7 +43,8 @@
  *   by the producing division that actually made it available.
  *
  * - FUNCTION policy. The cut phase of a division is the staging generation of
- *   its parent region: the board is generation 1; a division over a
+ *   its parent region: the staging root (the raw board, or the r3 usable
+ *   root after the trim projection) is generation 1; a division over a
  *   generation-g region is a phase-g pass; the kept child moves to generation
  *   g+1 while the rest child stays at g (material still on the bench is not
  *   re-staged). This reproduces the dossier exercise: strip separation =
@@ -54,16 +55,29 @@
  *   fails closed: code 4 waits for an explicit phase-4 fixture (#656
  *   records.ts).
  *
- * - Trims/refilados FAIL CLOSED: the 90..99 trim/waste codes stay unsupported
- *   and no unequivocal documented mapping to FUNCTION 0/head exists in the
- *   frozen dossier, so a program containing trim divisions is rejected with
- *   ptx_compile.trim_unsupported instead of guessing a machine mapping
- *   (silently dropping, zero-filling or duplicating them is forbidden). The
- *   first candidate therefore supports trim = 0 plans only.
+ * - Trims/refilados. TWO revision policies, selected by
+ *   options.supportsPositiveTrim (the profile declares it as a dimension):
+ *   - r2 (false/absent, the historical bytes): any positive trim fails
+ *     closed with ptx_compile.trim_unsupported — the 90..99 codes stay
+ *     disabled and no unequivocal documented trim→head mapping exists.
+ *   - r3 (#661, true — 04_contrato_r3_refilados.md): the perimeter trim
+ *     prefix (chain of divisions with trim=true from the raw board to ONE
+ *     usable root) is projected to MATERIALS.TRIM_FRIP/VRIP/FXCT/VXCT —
+ *     each the TOTAL margin including kerf, mapped by executed
+ *     axis + leadingBand on the fixed frame (y+leading→FRIP, y+far→VRIP,
+ *     x+leading→FXCT, x+far→VXCT; TRIM_TYPE=1, no initial rotation,
+ *     VECTORS off). TRIM_HEAD/TRIM_FRCT/TRIM_VRCT stay ABSENT (G3: no
+ *     override is derived from the four margins; absent ≠ 0). The
+ *     productive subtree is compiled relative to the usable root with
+ *     staging reset (usable root = phase 1), so CUTS.DIMENSION stays
+ *     relative (G1) and no trim pass is emitted as a CUTS row (G4). Every
+ *     non-conforming shape fails closed with a specific trim_* code.
  *
- * - PATTERNS.TYPE: 0 (longitudinal rip staging) when the first division
- *   advances along y, 4 (cutting only, no staging claim) otherwise. Types
- *   1/2/3 (turn/heads) are never claimed.
+ * - PATTERNS.TYPE: 0 (longitudinal rip staging) when the first productive
+ *   division advances along y, 4 (cutting only, no staging claim)
+ *   otherwise. Types 1/2/3 (turn/heads) are never claimed — the r3 fixed
+ *   frame is expressed through TRIM_TYPE + MATERIALS.TRIM_*, never through
+ *   an initial board rotation.
  *
  * - MATERIALS: THICK/BOOK/KERF_RIP/KERF_XCT are mandatory from the real plan
  *   (missing thickness fails closed; no hardcoded 4/18 mm); both kerf fields
@@ -73,9 +87,9 @@
  *   [S03 pp.134–135] — "total boards of the material in the job" is NOT
  *   documented, so the candidate emits the conservative one-board-per-cycle
  *   value BOOK = 1 (consistent with MAX_BOOK=1/QTY_CYCLES=1 and one BOARDS
- *   row per sheet). TRIM_* and RULE1..4 stay EMPTY: their per-class receiver
- *   semantics are a documented §9 ambiguity and the trim geometry would live
- *   in CUTS rows — which are rejected anyway by the trim policy above.
+ *   row per sheet). RULE1..4 stay EMPTY: their per-class receiver semantics
+ *   are a documented §9 ambiguity. TRIM_* are empty under r2 and carry the
+ *   r3 projected margins (or stay absent per side without a trim pass).
  *
  * - Quantization: decimalPlaces is explicit and every magnitude must be
  *   exactly representable at that resolution, absorbing IEEE-754 arithmetic
@@ -139,6 +153,17 @@ export interface CompileCutPlanToPtxOptions {
   readonly decimalPlaces: number;
   /** Emit one VECTORS row per division (absolute cut lines, top-left origin). Default false. */
   readonly includeVectors?: boolean;
+  /**
+   * r3 candidate policy (#661, 04_contrato_r3_refilados.md). When true the
+   * compiler enables the evidenced subset: perimeter trims are projected to
+   * MATERIALS.TRIM_* (fixed frame, TRIM_TYPE=1, no initial rotation), the
+   * productive subtree is compiled from the usable root (generation 1), the
+   * event scheduler assigns SEQUENCE, and eligible rest-side phase-2
+   * remnants become physical FUNCTION 92 + Xn passes. When false/absent the
+   * historical r2 behavior applies unchanged: any positive trim fails closed
+   * with ptx_compile.trim_unsupported and releases stay QTY_RPT=0 rows.
+   */
+  readonly supportsPositiveTrim?: boolean;
 }
 
 /** Per-sheet slice of the inverse table linking durable identities to local PTX indexes. */
@@ -186,6 +211,12 @@ export type PtxCompilationErrorCode =
   | 'ptx_compile.program_invalid'
   | 'ptx_compile.phase_unsupported'
   | 'ptx_compile.trim_unsupported'
+  | 'ptx_compile.trim_frame_unsupported'
+  | 'ptx_compile.trim_structure_invalid'
+  | 'ptx_compile.trim_mapping_ambiguous'
+  | 'ptx_compile.trim_geometry_mismatch'
+  | 'ptx_compile.offcut_release_92_unsupported'
+  | 'ptx_compile.offcut_release_duplicate'
   | 'ptx_compile.kerf_not_uniform'
   | 'ptx_compile.magnitude_not_representable'
   | 'ptx_compile.identity_not_ascii'
@@ -280,7 +311,7 @@ export function ptxResolveMagnitude(
 /** Cut phase / FUNCTION plan of one executed trace division (documented staging model). */
 export interface PtxDivisionPlan {
   readonly division: CutProgramTraceDivision;
-  /** Staging phase: 1 for board-level passes, +1 per kept-side nesting level. */
+  /** Staging phase: 1 for usable-root-level passes, +1 per kept-side nesting level. */
   readonly phase: number;
   /** Emitted CUTS.FUNCTION: phases ≤ 2 by axis role (y→1 rip, x→2 cross), phase 3 → 3. */
   readonly functionCode: number;
@@ -290,15 +321,293 @@ export interface PtxDivisionPlan {
   readonly restPieceRef?: string;
 }
 
+// ---------------------------------------------------------------------------
+// r3 trim projection (#661 — 04_contrato_r3_refilados.md §3/§5)
+// ---------------------------------------------------------------------------
+
+/** The four evidenced MATERIALS.TRIM_* slots plus the never-override recut trio. */
+export interface PtxMaterialTrims {
+  /** Fixed rip trim (near y side) — total margin including kerf. */
+  readonly trimFrip?: number;
+  /** Minimum/falling-waste rip trim (far y side). */
+  readonly trimVrip?: number;
+  /** Fixed crosscut trim (near x side). */
+  readonly trimFxct?: number;
+  /** Minimum/falling-waste crosscut trim (far x side). */
+  readonly trimVXct?: number;
+  /** G3: never derived from the four margins — absent means no override. */
+  readonly trimHead?: number;
+  readonly trimFrct?: number;
+  readonly trimVrct?: number;
+}
+
 /**
- * Staging generations: board = 1; dividing a generation-g region is a phase-g
- * pass; the kept child moves to g+1 while the rest child stays at g. Matches
- * the dossier exercise where the strip remainder keeps receiving phase-2
- * crosscuts and only the separated block is reprocessed at phase 3 — an X
- * pass at phase 3 is FUNCTION 3, never FUNCTION 1.
+ * r3 PTX projection of one executed program (contract §5 "Proyección
+ * requerida"): the perimeter trim prefix becomes MATERIALS.TRIM_* and the
+ * productive CUTS start at the single usable root. The CutProgram itself is
+ * never modified — this is a read-only view over the executed trace.
  */
-export function planCutProgramDivisions(trace: CutProgramTrace): readonly PtxDivisionPlan[] {
-  const generation = new Map<string, number>([[trace.boardRegionId, 1]]);
+export interface PtxTrimPlan {
+  /** Kept region after the trim prefix (the raw board when no trims exist). */
+  readonly usableRootRegionId: string;
+  /** Trim margins in millimetres (totals including kerf); absent = no such pass. */
+  readonly materialTrims: PtxMaterialTrims;
+  /** cutIds of the divisions INSIDE the usable-root subtree (compiled as CUTS). */
+  readonly productiveDivisionIds: readonly string[];
+}
+
+/**
+ * Projects the executed trace into the r3 PTX view. Fail-closed per contract
+ * §3.3/§7: the trims must form the structural perimeter prefix
+ * (raw board → trim chain → ONE usable root), every discarded band must be
+ * liberated waste, the fixed frame admits exactly one margin per side, and
+ * all sheets of one material must agree (checked by the caller).
+ *
+ * The side authority is the executed geometry (axis + leadingBand), never
+ * the cutId name: axis y + leadingBand → TRIM_FRIP (near/fixed-first),
+ * axis y + far side → TRIM_VRIP, axis x + leadingBand → TRIM_FXCT,
+ * axis x + far side → TRIM_VXCT. Each margin is parentExtent − keptExtent
+ * from the executed trace — the TOTAL including the kerf (G4: never the
+ * solid remainder alone, never the margin plus a second kerf).
+ */
+export function planSheetTrimProjection(trace: CutProgramTrace): PtxTrimPlan {
+  const divisionByParent = new Map<string, CutProgramTraceDivision>();
+  for (const division of trace.divisions) {
+    divisionByParent.set(division.parentRegionId, division);
+  }
+  const terminalByRegion = new Map(trace.terminals.map((terminal) => [terminal.regionId, terminal]));
+
+  // 1. Walk the trim chain from the raw board: consecutive trim divisions,
+  //    each consuming the previous kept region, until a productive division
+  //    (or a leaf) is reached — that kept region is the usable root.
+  const chain: CutProgramTraceDivision[] = [];
+  let current = trace.boardRegionId;
+  for (;;) {
+    const division = divisionByParent.get(current);
+    if (!division || division.trim !== true) break;
+    chain.push(division);
+    current = division.keptRegionId;
+  }
+  const usableRootRegionId = current;
+
+  // 2. Every trim division must sit in that chain. A trim deeper in the
+  //    productive tree (or inside a discarded band) has no evidenced mapping.
+  const chainCutIds = new Set(chain.map((division) => division.cutId));
+  for (const division of trace.divisions) {
+    if (division.trim === true && !chainCutIds.has(division.cutId)) {
+      throw new PtxCompilationError(
+        'ptx_compile.trim_structure_invalid',
+        'División de trim fuera del prefijo perimetral: la proyección r3 sólo soporta la cadena de refilos desde el tablero crudo hasta una única raíz útil',
+        { cutId: division.cutId, parentRegionId: division.parentRegionId },
+      );
+    }
+  }
+
+  // 3. Each discarded band must be liberated waste: the trim strip leaves the
+  //    bench with its pass, which is what makes TRIM_* the honest projection.
+  for (const division of chain) {
+    if (division.restRegionId === undefined) continue;
+    const terminal = terminalByRegion.get(division.restRegionId);
+    if (!terminal || terminal.kind !== 'waste' || terminal.liberated !== true) {
+      throw new PtxCompilationError(
+        'ptx_compile.trim_structure_invalid',
+        'La banda descartada por un refilo no es desperdicio liberado: no se proyecta a MATERIALS.TRIM_* material que permanece en la mesa',
+        { cutId: division.cutId, restRegionId: division.restRegionId },
+      );
+    }
+  }
+
+  // 4. Defensive closure: everything outside the usable-root subtree must be
+  //    exactly the chain bands (already validated above). The executed tree
+  //    makes other shapes impossible; the check keeps the projection honest
+  //    against future structural changes.
+  const subtree = new Set<string>([usableRootRegionId]);
+  const productiveDivisions = trace.divisions.filter((division) => division.trim !== true);
+  for (const division of trace.divisions) {
+    if (chainCutIds.has(division.cutId)) continue;
+    if (subtree.has(division.parentRegionId)) {
+      subtree.add(division.keptRegionId);
+      if (division.restRegionId) subtree.add(division.restRegionId);
+    }
+  }
+  for (const division of trace.divisions) {
+    if (chainCutIds.has(division.cutId)) continue;
+    if (!subtree.has(division.parentRegionId)) {
+      throw new PtxCompilationError(
+        'ptx_compile.trim_structure_invalid',
+        'División productiva fuera de la raíz útil proyectada',
+        { cutId: division.cutId, parentRegionId: division.parentRegionId },
+      );
+    }
+  }
+
+  // 5. Map each chain trim to its fixed-frame slot. Two trims competing for
+  //    one side cannot be expressed as the single fixed margin PTX declares:
+  //    that needs a frame transform (e.g. PATTERNS.TYPE=1) r3 does not
+  //    implement → trim_frame_unsupported.
+  const slotOrder: { readonly key: 'frip' | 'vrip' | 'fxct' | 'vxct'; readonly divisions: { readonly cutId: string; readonly marginMm: number }[] }[] = [
+    { key: 'frip', divisions: [] },
+    { key: 'vrip', divisions: [] },
+    { key: 'fxct', divisions: [] },
+    { key: 'vxct', divisions: [] },
+  ];
+  const slotOf = (division: CutProgramTraceDivision): 'frip' | 'vrip' | 'fxct' | 'vxct' =>
+    division.axis === 'y'
+      ? division.leadingBand
+        ? 'frip'
+        : 'vrip'
+      : division.leadingBand
+        ? 'fxct'
+        : 'vxct';
+  for (const division of chain) {
+    const parentExtentMm =
+      division.axis === 'x' ? division.parentRect.lengthMm : division.parentRect.widthMm;
+    const marginMm = parentExtentMm - division.keptExtentMm;
+    if (!Number.isFinite(marginMm) || marginMm <= 0) {
+      throw new PtxCompilationError(
+        'ptx_compile.trim_geometry_mismatch',
+        'Margen de refilo no representable desde la geometría ejecutada (parentExtent − keptExtent)',
+        { cutId: division.cutId, parentExtentMm, keptExtentMm: division.keptExtentMm },
+      );
+    }
+    slotOrder.find((slot) => slot.key === slotOf(division))!.divisions.push({
+      cutId: division.cutId,
+      marginMm,
+    });
+  }
+  for (const slot of slotOrder) {
+    if (slot.divisions.length > 1) {
+      throw new PtxCompilationError(
+        'ptx_compile.trim_frame_unsupported',
+        'Dos o más refilos del mismo lado del frame fijo: expresarlos exigiría una transformación de frame (PATTERNS.TYPE=1) no implementada en r3',
+        {
+          slot: slot.key,
+          cutIds: slot.divisions.map((entry) => entry.cutId),
+          marginsMm: slot.divisions.map((entry) => entry.marginMm),
+        },
+      );
+    }
+  }
+
+  const marginBySlot = new Map(slotOrder.map((slot) => [slot.key, slot.divisions[0]?.marginMm]));
+  const materialTrims: PtxMaterialTrims = {
+    trimFrip: marginBySlot.get('frip'),
+    trimVrip: marginBySlot.get('vrip'),
+    trimFxct: marginBySlot.get('fxct'),
+    // Field name is trimVXct (capital X per the PTX dictionary); never a
+    // zero-fill: a side without a trim pass stays absent (undefined ≠ 0).
+    trimVXct: marginBySlot.get('vxct'),
+  };
+
+  return {
+    usableRootRegionId,
+    materialTrims,
+    productiveDivisionIds: productiveDivisions.map((division) => division.cutId),
+  };
+}
+
+/**
+ * Deterministic PTX event schedule for the r3 candidate (#661 contract §6.3).
+ * r2 reused division.order as SEQUENCE; r3 adds physical FUNCTION 92 events,
+ * so SEQUENCE must come from an explicit schedule: every productive division
+ * keeps its relative execution order, and each 92 release is inserted
+ * immediately after its producer phase-2 pass — which also places it before
+ * every dependent recut (a recut of the producer's kept region always
+ * executes after the producer). Sequences are contiguous 1..M.
+ */
+export interface PtxExecutionEvent {
+  readonly eventId: string;
+  readonly type: 'division' | 'offcut_release';
+  /** Division cutId (type 'division') or released leaf regionId (type 'offcut_release'). */
+  readonly sourceId: string;
+  readonly sequence: number;
+}
+
+export interface PtxExecutionSchedule {
+  readonly events: readonly PtxExecutionEvent[];
+  /** cutId → SEQUENCE for productive divisions. */
+  readonly sequenceByCutId: ReadonlyMap<string, number>;
+  /** Released leaf regionId → SEQUENCE for FUNCTION 92 events. */
+  readonly sequenceByRegionId: ReadonlyMap<string, number>;
+}
+
+export function schedulePtxExecutionEvents(
+  executionPlans: readonly PtxDivisionPlan[],
+  releases: readonly PtxReleasePlan[],
+): PtxExecutionSchedule {
+  const releaseByProducer = new Map<string, PtxReleasePlan[]>();
+  for (const release of releases) {
+    if (release.offcutRelease92 !== true) continue;
+    const producerCutId = releaseByProducerKey(release);
+    if (!producerCutId) {
+      throw new PtxCompilationError(
+        'ptx_compile.offcut_release_92_unsupported',
+        'Release 92 sin división productora identificada: el scheduler no puede ordenar el evento físico',
+        { regionId: release.regionId },
+      );
+    }
+    const list = releaseByProducer.get(producerCutId) ?? [];
+    list.push(release);
+    releaseByProducer.set(producerCutId, list);
+  }
+
+  const events: PtxExecutionEvent[] = [];
+  const sequenceByCutId = new Map<string, number>();
+  const sequenceByRegionId = new Map<string, number>();
+  let sequence = 0;
+  for (const plan of executionPlans) {
+    sequence += 1;
+    sequenceByCutId.set(plan.division.cutId, sequence);
+    events.push({
+      eventId: `division:${plan.division.cutId}`,
+      type: 'division',
+      sourceId: plan.division.cutId,
+      sequence,
+    });
+    for (const release of releaseByProducer.get(plan.division.cutId) ?? []) {
+      sequence += 1;
+      sequenceByRegionId.set(release.regionId, sequence);
+      events.push({
+        eventId: `offcut_release:${release.regionId}`,
+        type: 'offcut_release',
+        sourceId: release.regionId,
+        sequence,
+      });
+    }
+  }
+  const scheduled92 = [...sequenceByRegionId.keys()];
+  if (scheduled92.length !== releases.filter((release) => release.offcutRelease92 === true).length) {
+    throw new PtxCompilationError(
+      'ptx_compile.offcut_release_92_unsupported',
+      'Una release 92 no pudo programarse después de su productor phase-2',
+      { scheduled: scheduled92 },
+    );
+  }
+  return { events, sequenceByCutId, sequenceByRegionId };
+}
+
+/** The producer cutId of a 92 release (set by planSheetReleases). */
+function releaseByProducerKey(release: PtxReleasePlan): string | undefined {
+  return release.producerCutId;
+}
+
+/**
+ * Staging generations: the staging root (the raw board, or the usable root
+ * after the r3 trim projection) is generation 1; dividing a generation-g
+ * region is a phase-g pass; the kept child moves to g+1 while the rest child
+ * stays at g. Matches the dossier exercise where the strip remainder keeps
+ * receiving phase-2 crosscuts and only the separated block is reprocessed at
+ * phase 3 — an X pass at phase 3 is FUNCTION 3, never FUNCTION 1.
+ *
+ * Divisions whose parent is not in the generation map (the r3 trim prefix:
+ * their regions were projected to MATERIALS.TRIM_*) are skipped — projected
+ * trims never consume PTX staging phases (#661 contract §5 rule 5).
+ */
+export function planCutProgramDivisions(
+  trace: CutProgramTrace,
+  usableRootRegionId: string = trace.boardRegionId,
+): readonly PtxDivisionPlan[] {
+  const generation = new Map<string, number>([[usableRootRegionId, 1]]);
   const pieceByRegion = new Map<string, string>();
   for (const terminal of trace.terminals) {
     if (terminal.kind === 'piece' && terminal.pieceRef) {
@@ -308,7 +617,12 @@ export function planCutProgramDivisions(trace: CutProgramTrace): readonly PtxDiv
 
   const plans: PtxDivisionPlan[] = [];
   for (const division of trace.divisions) {
-    const parentGeneration = generation.get(division.parentRegionId) ?? 1;
+    const parentGeneration = generation.get(division.parentRegionId);
+    if (parentGeneration === undefined) {
+      // Outside the staged subtree: the r3 trim prefix (or a region consumed
+      // by an earlier failed shape — the projection rejects those first).
+      continue;
+    }
     const phase = parentGeneration;
     if (phase > 3) {
       throw new PtxCompilationError(
@@ -335,12 +649,15 @@ export function planCutProgramDivisions(trace: CutProgramTrace): readonly PtxDiv
 
 /**
  * Structural preorder of the division tree: kept subtree first, then the
- * rest subtree (each region is consumed by at most one division, guaranteed
- * by executeCutProgram). CUT_INDEX follows this order; SEQUENCE carries the
- * program's execution order instead — the two coincide on simple fixtures
+ * rest subtree, from the staging root (the usable root when the r3 trim
+ * projection applies). CUT_INDEX follows this order; SEQUENCE carries the
+ * scheduled execution order instead — the two coincide on simple fixtures
  * but are derived independently (dossier fragment 03).
  */
-export function ptxStructuralPreorder(trace: CutProgramTrace): readonly CutProgramTraceDivision[] {
+export function ptxStructuralPreorder(
+  trace: CutProgramTrace,
+  usableRootRegionId: string = trace.boardRegionId,
+): readonly CutProgramTraceDivision[] {
   const divisionByParentRegion = new Map<string, CutProgramTraceDivision>();
   for (const division of trace.divisions) {
     divisionByParentRegion.set(division.parentRegionId, division);
@@ -353,24 +670,27 @@ export function ptxStructuralPreorder(trace: CutProgramTrace): readonly CutProgr
     visit(division.keptRegionId);
     if (division.restRegionId) visit(division.restRegionId);
   };
-  visit(trace.boardRegionId);
-  if (out.length !== trace.divisions.length) {
+  visit(usableRootRegionId);
+  const expectedCount = trace.divisions.filter((division) => division.trim !== true).length;
+  if (out.length !== expectedCount) {
     throw new PtxCompilationError(
       'ptx_compile.program_invalid',
-      'El árbol de divisiones no es alcanzable desde el tablero',
-      { divisions: trace.divisions.length, reachable: out.length },
+      'El árbol de divisiones productivas no es alcanzable desde la raíz de staging',
+      { divisions: expectedCount, reachable: out.length },
     );
   }
   return out;
 }
 
 /**
- * PATTERNS.TYPE policy: longitudinal rip staging (0) when the first division
- * advances along y; cutting only (4) otherwise. Turn/heading types are never
- * claimed.
+ * PATTERNS.TYPE policy: longitudinal rip staging (0) when the first
+ * productive division advances along y; cutting only (4) otherwise. Turn and
+ * heading types (1/2/3) are never claimed — with trims included, the r3
+ * fixed frame is expressed through TRIM_TYPE + MATERIALS.TRIM_*, not through
+ * an initial board rotation.
  */
 export function ptxPatternTypeForSheet(trace: CutProgramTrace): PtxPatternType {
-  const first = trace.divisions[0];
+  const first = trace.divisions.find((division) => division.trim !== true);
   return first && first.axis === 'y'
     ? PTX_PATTERN_TYPE.longitudinalRip
     : PTX_PATTERN_TYPE.cuttingOnly;
@@ -420,7 +740,7 @@ interface MaterialRow {
   hasBoards: boolean;
 }
 
-/** A leaf released by a dedicated QTY_RPT=0 row: remnants (Xn) and rest-side pieces. */
+/** A leaf released by a dedicated row: remnants (Xn) and rest-side pieces. */
 export interface PtxReleasePlan {
   readonly regionId: string;
   readonly kind: 'offcut' | 'part';
@@ -428,19 +748,36 @@ export interface PtxReleasePlan {
   /** Extent of the released leaf along its producing division's axis. */
   readonly dimensionMm: number;
   readonly functionCode: number;
+  /** cutId of the producing division (attribution + scheduler anchor). */
+  readonly producerCutId?: string;
+  /**
+   * r3 only (#661 contract §6.2): true when this release is the demonstrated
+   * physical FUNCTION 92 pass — a rest-side remnant of a phase-2/FUNCTION-2
+   * producer whose kept side carries productive content. Emitted with
+   * QTY_RPT=1, QTY_PARTS absent and a scheduled positive SEQUENCE.
+   */
+  readonly offcutRelease92?: boolean;
 }
 
 /**
- * Leaves that need a dedicated QTY_RPT=0/SEQUENCE=0 release row: every
- * remnant/offcut terminal (production attribution via Xn, dossier fragment
- * 04) and a piece isolated on the rest side of a division whose kept side is
- * also a piece (the main row already references the kept one). Exact-fit
- * terminals never get a fictitious row — the producing division's row
- * carries the reference.
+ * Leaves that need a dedicated release row: every remnant/offcut terminal
+ * (production attribution via Xn, dossier fragment 04) and a piece isolated
+ * on the rest side of a division whose kept side is also a piece (the main
+ * row already references the kept one). Exact-fit terminals never get a
+ * fictitious row — the producing division's row carries the reference.
+ *
+ * Under the r3 policy (`offcutRelease92: true`) a remnant additionally
+ * becomes a physical FUNCTION 92 pass when ALL of the demonstrated subset
+ * holds (contract §6.2): rest side of its producer, producer at phase 2 with
+ * FUNCTION 2 (cross), extent over the producer axis known, and productive
+ * content (a consuming division or a piece) on the kept side. Every other
+ * remnant keeps the r2 QTY_RPT=0/SEQUENCE=0 representation — never silently
+ * converted.
  */
 export function planSheetReleases(
   trace: CutProgramTrace,
   plans: readonly PtxDivisionPlan[],
+  options?: { readonly offcutRelease92?: boolean },
 ): readonly PtxReleasePlan[] {
   const planByLeafRegion = new Map<string, PtxDivisionPlan>();
   for (const plan of plans) {
@@ -449,6 +786,7 @@ export function planSheetReleases(
       planByLeafRegion.set(plan.division.restRegionId, plan);
     }
   }
+  const productiveCutIds = new Set(plans.map((plan) => plan.division.cutId));
 
   const releases: PtxReleasePlan[] = [];
   for (const terminal of trace.terminals) {
@@ -456,7 +794,9 @@ export function planSheetReleases(
     if (!producing) {
       // Only child regions can be attributed leaves; the board itself can
       // never be "produced" by a pass, so a board-level terminal cannot be
-      // referenced by any CUTS row.
+      // referenced by any CUTS row. Trim bands are liberated waste and are
+      // projected to MATERIALS.TRIM_* — they never reach this loop as
+      // remnants/pieces (the projection rejects anything else).
       if (terminal.kind === 'remnant') {
         throw new PtxCompilationError(
           'ptx_compile.remnant_unattributable',
@@ -484,6 +824,12 @@ export function planSheetReleases(
         kind: 'offcut',
         dimensionMm: isKept ? division.keptExtentMm : restExtentMm!,
         functionCode: producing.functionCode,
+        producerCutId: producing.division.cutId,
+        offcutRelease92:
+          options?.offcutRelease92 === true &&
+          isOffcutRelease92Eligible(trace, producing, { isKept, restExtentMm: restExtentMm! })
+            ? true
+            : undefined,
       });
       continue;
     }
@@ -499,10 +845,41 @@ export function planSheetReleases(
         pieceRef: terminal.pieceRef,
         dimensionMm: restExtentMm!,
         functionCode: producing.functionCode,
+        producerCutId: producing.division.cutId,
       });
     }
   }
   return releases;
+}
+
+/**
+ * FUNCTION 92 eligibility (contract §6.2 — every condition must hold):
+ * 1. rest-side terminal of the producer (kept side is something else);
+ * 2. producer at PTX phase 2 with normal FUNCTION 2 (cross);
+ * 3. extent over the producer axis known (solid rest exists);
+ * 4. productive content on the other side: the producer's kept region is
+ *    consumed by another division or is a piece — a kept remnant/waste means
+ *    the "offcut" is not a by-product of productive cutting;
+ * 5. producer itself is a compiled (productive) division — projected trim
+ *    passes never release offcuts;
+ * 6. Xn uniqueness is enforced by the caller (offcut_release_duplicate).
+ */
+function isOffcutRelease92Eligible(
+  trace: CutProgramTrace,
+  producing: PtxDivisionPlan,
+  measures: { readonly isKept: boolean; readonly restExtentMm: number },
+): boolean {
+  if (measures.isKept) return false;
+  if (producing.phase !== 2 || producing.functionCode !== 2) return false;
+  if (!Number.isFinite(measures.restExtentMm) || measures.restExtentMm <= 0) return false;
+  const keptRegionId = producing.division.keptRegionId;
+  const keptHasDivision = trace.divisions.some(
+    (division) => division.trim !== true && division.parentRegionId === keptRegionId,
+  );
+  const keptIsPiece = trace.terminals.some(
+    (terminal) => terminal.regionId === keptRegionId && terminal.kind === 'piece',
+  );
+  return keptHasDivision || keptIsPiece;
 }
 
 interface CompiledSheet {
@@ -511,6 +888,10 @@ interface CompiledSheet {
   /** Division plans in STRUCTURAL PREORDER (emission order for CUT_INDEX). */
   readonly plans: readonly PtxDivisionPlan[];
   readonly releases: readonly PtxReleasePlan[];
+  /** r3 projection of the perimeter trims (usable root + MATERIALS.TRIM_*). */
+  readonly trimPlan: PtxTrimPlan;
+  /** r3 event schedule (sequence per division / per 92 release); undefined under r2 policy. */
+  readonly schedule?: PtxExecutionSchedule;
 }
 
 function assertSheetCompilable(sheet: CutPlanSheet): void {
@@ -530,7 +911,11 @@ function assertSheetCompilable(sheet: CutPlanSheet): void {
   }
 }
 
-function compileSheet(sheet: CutPlanSheet, kerfMm: number): CompiledSheet {
+function compileSheet(
+  sheet: CutPlanSheet,
+  kerfMm: number,
+  options: CompileCutPlanToPtxOptions,
+): CompiledSheet {
   assertSheetCompilable(sheet);
   let trace: CutProgramTrace;
   try {
@@ -546,19 +931,29 @@ function compileSheet(sheet: CutPlanSheet, kerfMm: number): CompiledSheet {
     throw error;
   }
 
-  const trimDivisions = trace.divisions.filter((division) => division.trim);
-  if (trimDivisions.length > 0) {
-    // Trim/refilado policy: the 90..99 codes are unsupported and no
-    // unequivocal documented trim→head mapping exists — fail closed instead
-    // of guessing, dropping, zero-filling or duplicating them.
-    throw new PtxCompilationError(
-      'ptx_compile.trim_unsupported',
-      'El plan incluye refilados positivos y el candidato PTX todavía no tiene mapping documentado para pasadas de trim (90..99 deshabilitados); configura trim = 0',
-      {
-        sheetIndex: sheet.sheetIndex,
-        trimCutIds: trimDivisions.map((division) => division.cutId),
-      },
-    );
+  const r3TrimPolicy = options.supportsPositiveTrim === true;
+  let trimPlan: PtxTrimPlan;
+  if (r3TrimPolicy) {
+    // r3: project the perimeter trim prefix to MATERIALS.TRIM_* and compile
+    // the productive subtree from the usable root. Fail-closed shapes throw
+    // specific trim_* codes from the planner.
+    trimPlan = planSheetTrimProjection(trace);
+  } else {
+    const trimDivisions = trace.divisions.filter((division) => division.trim);
+    if (trimDivisions.length > 0) {
+      // Trim/refilado policy (r2, unchanged): the 90..99 codes are unsupported
+      // and no unequivocal documented trim→head mapping exists — fail closed
+      // instead of guessing, dropping, zero-filling or duplicating them.
+      throw new PtxCompilationError(
+        'ptx_compile.trim_unsupported',
+        'El plan incluye refilados positivos y el candidato PTX todavía no tiene mapping documentado para pasadas de trim (90..99 deshabilitados); configura trim = 0',
+        {
+          sheetIndex: sheet.sheetIndex,
+          trimCutIds: trimDivisions.map((division) => division.cutId),
+        },
+      );
+    }
+    trimPlan = planSheetTrimProjection(trace);
   }
 
   for (const division of trace.divisions) {
@@ -599,14 +994,23 @@ function compileSheet(sheet: CutPlanSheet, kerfMm: number): CompiledSheet {
     }
   }
 
-  const executionPlans = planCutProgramDivisions(trace);
+  // Staging resets at the usable root under r3: projected trims never consume
+  // PTX phases, so the first productive pass is phase 1 again.
+  const executionPlans = planCutProgramDivisions(trace, trimPlan.usableRootRegionId);
   const planByCutId = new Map(executionPlans.map((plan) => [plan.division.cutId, plan]));
-  const plans = ptxStructuralPreorder(trace).map(
+  const plans = ptxStructuralPreorder(trace, trimPlan.usableRootRegionId).map(
     (division) => planByCutId.get(division.cutId)!,
   );
-  const releases = planSheetReleases(trace, executionPlans);
+  const releases = planSheetReleases(trace, executionPlans, {
+    offcutRelease92: r3TrimPolicy,
+  });
 
-  return { sheet, trace, plans, releases };
+  let schedule: PtxExecutionSchedule | undefined;
+  if (r3TrimPolicy) {
+    schedule = schedulePtxExecutionEvents(executionPlans, releases);
+  }
+
+  return { sheet, trace, plans, releases, trimPlan, schedule };
 }
 
 function materialCodeOf(sheet: CutPlanSheet): string {
@@ -715,7 +1119,7 @@ export function compileCutPlanToPtxDocument(
   const q = (value: number, field: string) => ptxResolveMagnitude(value, decimalPlaces, field);
   const kerfMm = cutPlan.config.sawKerfMm;
 
-  const compiledSheets = cutPlan.sheets.map((sheet) => compileSheet(sheet, kerfMm));
+  const compiledSheets = cutPlan.sheets.map((sheet) => compileSheet(sheet, kerfMm, options));
 
   // --- Material table: sheets first, then any piece-only material ---------
   const materials = new Map<string, MaterialRow>();
@@ -744,6 +1148,43 @@ export function compileCutPlanToPtxDocument(
       );
     }
     material.index = nextMaterialIndex++;
+  }
+
+  // --- MATERIALS.TRIM_* (#661): one row per material must agree across all
+  // --- of its sheets; disagreeing executed margins cannot share a row.
+  const trimByMaterial = new Map<string, PtxMaterialTrims>();
+  for (const material of materials.values()) {
+    const sheetPlans = compiledSheets
+      .filter(({ sheet }) => materialCodeOf(sheet) === material.code)
+      .map(({ trimPlan }) => trimPlan.materialTrims);
+    if (sheetPlans.length === 0) continue;
+    const slots = [
+      'trimFrip',
+      'trimVrip',
+      'trimFxct',
+      'trimVXct',
+    ] as const;
+    for (const slot of slots) {
+      const values = sheetPlans.map((trims) => trims[slot]);
+      const defined = values.filter((value) => value !== undefined);
+      const allDefined = values.every((value) => value !== undefined);
+      if (defined.length === 0) continue;
+      if (
+        !allDefined ||
+        defined.some((value) => Math.abs(value! - defined[0]!) > 1e-9 * Math.max(1, defined[0]!))
+      ) {
+        throw new PtxCompilationError(
+          'ptx_compile.trim_mapping_ambiguous',
+          'Hojas del mismo material con refilados ejecutados distintos: la fila MATERIALS no puede representar un único TRIM_*',
+          {
+            code: material.code,
+            slot,
+            executedMarginsMm: values,
+          },
+        );
+      }
+    }
+    trimByMaterial.set(material.code, sheetPlans[0]!);
   }
 
   // --- Parts table: one row per placed piece, no aggregation --------------
@@ -805,6 +1246,7 @@ export function compileCutPlanToPtxDocument(
     const sampleSheet = compiledSheets.find(
       ({ sheet }) => materialCodeOf(sheet) === material.code,
     )!.sheet;
+    const trims = trimByMaterial.get(material.code);
     records.push({
       type: 'MATERIALS',
       jobIndex: 1,
@@ -819,8 +1261,15 @@ export function compileCutPlanToPtxDocument(
       bookQuantity: 1,
       kerfRip: q(kerfMm, `MATERIALS '${material.code}' KERF_RIP`),
       kerfCrosscut: q(kerfMm, `MATERIALS '${material.code}' KERF_XCT`),
-      // TRIM_* and RULE1..4 deliberately empty: per-class trim semantics are
-      // a §9 ambiguity and trim plans are rejected anyway.
+      // r3 (#661): the four evidenced trims, each the TOTAL margin including
+      // kerf (G4), mapped by executed axis + leadingBand (G2). A side without
+      // a trim pass stays ABSENT (undefined → empty cell, never 0). G3:
+      // TRIM_HEAD/TRIM_FRCT/TRIM_VRCT are never derived — no override.
+      trimFRip: trims?.trimFrip !== undefined ? q(trims.trimFrip, `MATERIALS '${material.code}' TRIM_FRIP`) : undefined,
+      trimVRip: trims?.trimVrip !== undefined ? q(trims.trimVrip, `MATERIALS '${material.code}' TRIM_VRIP`) : undefined,
+      trimFXct: trims?.trimFxct !== undefined ? q(trims.trimFxct, `MATERIALS '${material.code}' TRIM_FXCT`) : undefined,
+      trimVXct: trims?.trimVXct !== undefined ? q(trims.trimVXct, `MATERIALS '${material.code}' TRIM_VXCT`) : undefined,
+      // RULE1..4 deliberately empty: receiver semantics stay unresolved (§9).
     });
   }
 
@@ -833,7 +1282,7 @@ export function compileCutPlanToPtxDocument(
   const sheetIndexByPatternIndex: number[] = [];
   let offcutIndex = 1;
 
-  compiledSheets.forEach(({ sheet, trace, plans, releases }, sheetPosition) => {
+  compiledSheets.forEach(({ sheet, trace, plans, releases, schedule }, sheetPosition) => {
     const patternIndex = sheetPosition + 1;
     const materialIndex = materials.get(materialCodeOf(sheet))!.index;
     const patternType = ptxPatternTypeForSheet(trace);
@@ -877,7 +1326,10 @@ export function compileCutPlanToPtxDocument(
         jobIndex: 1,
         patternIndex,
         cutIndex,
-        sequence: division.order,
+        // r2: the program's execution order. r3: the explicit event schedule
+        // (division events keep their relative order; FUNCTION 92 releases
+        // interleave right after their producer — contract §6.3).
+        sequence: schedule?.sequenceByCutId.get(division.cutId) ?? division.order,
         functionCode: plan.functionCode,
         dimension: q(division.keptExtentMm, `CUTS ${patternIndex}/${cutIndex} (${division.cutId}) DIMENSION`),
         repeatQuantity: 1,
@@ -899,6 +1351,7 @@ export function compileCutPlanToPtxDocument(
     const terminalByRegion = new Map(trace.terminals.map((t) => [t.regionId, t]));
     const releaseCutIndexByRegionId = new Map<string, number>();
     const offcutIndexByRegionId = new Map<string, number>();
+    const offcutIndexBy92Release = new Map<string, string>();
     releases.forEach((release, i) => {
       const cutIndex = plans.length + i + 1;
       releaseCutIndexByRegionId.set(release.regionId, cutIndex);
@@ -906,17 +1359,34 @@ export function compileCutPlanToPtxDocument(
         release.kind === 'offcut'
           ? { kind: 'offcut', offcutIndex }
           : { kind: 'part', partIndex: partIndexByPieceRef.get(release.pieceRef!)! };
+      // r3 FUNCTION 92 (contract §6.2): a PHYSICAL release pass — QTY_RPT=1,
+      // QTY_PARTS absent, positive scheduled SEQUENCE. Every other release
+      // keeps the r2 relational representation: QTY_RPT=0/SEQUENCE=0.
+      const isPhysical92 = release.offcutRelease92 === true;
+      if (isPhysical92) {
+        const previous = offcutIndexBy92Release.get(`X${offcutIndex}`);
+        if (previous !== undefined || release.producerCutId === undefined) {
+          throw new PtxCompilationError(
+            'ptx_compile.offcut_release_duplicate',
+            'El mismo Xn tendría dos eventos físicos de release: ninguna referencia de retazo puede liberarse dos veces',
+            { regionId: release.regionId, offcutIndex, previousRegionId: previous },
+          );
+        }
+        offcutIndexBy92Release.set(`X${offcutIndex}`, release.regionId);
+      }
       records.push({
         type: 'CUTS',
         jobIndex: 1,
         patternIndex,
         cutIndex,
-        sequence: 0,
-        functionCode: release.functionCode,
+        sequence: isPhysical92
+          ? schedule!.sequenceByRegionId.get(release.regionId)!
+          : 0,
+        functionCode: isPhysical92 ? 92 : release.functionCode,
         dimension: q(release.dimensionMm, `CUTS ${patternIndex}/${cutIndex} (release ${release.regionId}) DIMENSION`),
-        repeatQuantity: 0,
+        repeatQuantity: isPhysical92 ? 1 : 0,
         partReference: reference,
-        producedQuantity: 1,
+        producedQuantity: isPhysical92 ? undefined : 1,
         comment: ptxAscii(release.regionId) || undefined,
       });
       if (release.kind === 'offcut') {
