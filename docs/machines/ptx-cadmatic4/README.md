@@ -36,6 +36,34 @@ manual / contrato Pattern Exchange
 
 Si el 03 y el 04 difieren en fuerza de una conclusión, **prevalece el 04 para implementación**, porque ya incorpora la revisión conservadora posterior.
 
+## Estado de los gates r3
+
+```text
+G1 RESOLVED
+  Los ~9.8/9.9 mm observados se explican por el fixed rip trim de 10 mm.
+  DIMENSION sigue relativa al subpanel/raíz útil.
+
+G2 SPEC_POLICY_READY
+  Para TRIM_TYPE=1 y frame no girado:
+  near/leading → fixed trim; far → minimum falling waste.
+
+G3 PROFILE_POLICY
+  HEAD/recut no se derivan de los 4 márgenes y quedan blank/no-override
+  en la primera r3.
+
+G4 RESOLVED
+  El margen total incluye kerf; la representación PTX empieza en la raíz útil
+  y las divisiones perimetrales no vuelven a emitirse como CUTS.
+
+G5 RESOLVED_SUBSET
+  FUNCTION 92 + Xn sólo para rest-side remnant de phase 2 bajo el contrato
+  geométrico y de scheduling de 04_contrato_r3_refilados.md.
+```
+
+Eso significa que #661 ya no necesita otra ronda abierta de investigación antes
+de comenzar tests/código. El implementador debe obedecer el subconjunto y fallar
+cerrado fuera de él.
+
 ## Artefactos no productivos
 
 Los `.ptx.txt` de `examples/` son **parciales**: no enviarlos a CADLink, no renombrarlos para ejecutar ni usarlos como programas de máquina.
@@ -84,25 +112,6 @@ El perfil `ptx-cadmatic-4@r2` y adapter `granete-ptx@1.1.0` conectan ese compile
 Las muestras de campo confirman para ese entorno varios supuestos de r2 (HEADER version 1, mm, origin 0, trim type 1, CUT_INDEX separado de SEQUENCE, FUNCTION 1/2/3), y aportan evidencia nueva de trims en `MATERIALS.TRIM_*` y de filas `FUNCTION 92 + Xn` asociadas a offcuts.
 
 No obstante, dos muestras no son una especificación universal. El contrato r3 fija explícitamente qué parte puede implementarse ahora y qué debe quedar fail-closed.
-
-Puntos centrales de `04_contrato_r3_refilados.md`:
-
-```text
-G1 RESOLVED
-  DIMENSION sigue relativa; la diferencia ~10 mm observada corresponde al fixed rip trim.
-
-G2 SPEC_POLICY_READY
-  TRIM_TYPE=1, sin giro inicial: near/leading → fixed trim; far → minimum falling waste.
-
-G3 PROFILE_POLICY
-  HEAD/recut no se derivan de los cuatro márgenes; quedan sin override en la primera r3.
-
-G4 RESOLVED
-  trim total ya incluye kerf; el PTX compila desde una raíz útil y no emite otra vez las divisiones perimetrales.
-
-G5 RESOLVED_SUBSET
-  FUNCTION 92 + Xn sólo para un rest-side remnant de phase 2 que cumpla el contrato geométrico.
-```
 
 ## Relación con autoridades existentes
 
