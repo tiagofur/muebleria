@@ -222,7 +222,7 @@ describe('exportCutPlanPtx', () => {
   });
 });
 
-describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r2, #650)', () => {
+describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r3, #661)', () => {
   it('by-material: el PTX documentado del compilador llega dentro del ZIP, un archivo por material', async () => {
     const { fakeAnchor, deps, blobs } = captureDeps();
 
@@ -311,7 +311,7 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r2, #650)', () => {
     }
     // Manifest exacto por material dentro del propio bundle.
     for (const bundle of bundles) {
-      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r2');
+      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r3');
       expect(bundle.manifest.validationStatus).toBe('NOT_TESTED');
       expect(bundle.manifest.compatibilityEvidence.claim).toBe('notClaimed');
     }
@@ -324,7 +324,7 @@ function cad4Selection(): MachineOutputSelection {
     machineProfileId: 'client-a-machine-b-hpp250',
     machineProfileRevisionId: 'r1',
     outputCompatibilityProfileId: 'ptx-cadmatic-4',
-    outputCompatibilityProfileRevisionId: 'r2',
+    outputCompatibilityProfileRevisionId: 'r3',
     postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
     postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
     postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,

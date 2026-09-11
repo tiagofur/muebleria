@@ -84,11 +84,15 @@ export function checkFormatFamily(
 /** Fixed candidate label written to HEADER.TITLE — honest, deterministic, receiver-agnostic. */
 export const PTX_CANDIDATE_TITLE = 'GRANETE-PTX-CANDIDATE NOT_MACHINE_VALIDATED';
 
-/** Exact profile revisions routed to the documented PTX compiler (#650). */
+/**
+ * Exact profile revisions routed to the documented PTX compiler: r2 (#650,
+ * trim = 0 only) and r3 (#661, evidenced positive-trim subset). Selection is
+ * by EXACT revision — never by name or family.
+ */
 export function profileUsesDocumentedPtxCompiler(profile: OutputCompatibilityProfile): boolean {
   return (
     profile.ref.outputCompatibilityProfileId === 'ptx-cadmatic-4' &&
-    profile.ref.revisionId === 'r2'
+    (profile.ref.revisionId === 'r2' || profile.ref.revisionId === 'r3')
   );
 }
 
@@ -155,8 +159,12 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
   if (typeof includeVectors !== 'boolean') {
     unsupported(`includeVectors '${String(dims.includeVectors)}' no es booleano`);
   }
-  if (dims.supportsPositiveTrim !== false) {
-    unsupported('supportsPositiveTrim=true no implementado: los códigos 90..99 siguen deshabilitados y el compilador rechaza refilados positivos');
+  // r2 keeps supportsPositiveTrim=false (trims fail closed); r3 enables the
+  // evidenced fixed-frame subset of 04_contrato_r3_refilados.md — the option
+  // is forwarded verbatim so the compiler runs the exact revision policy.
+  const supportsPositiveTrim = dims.supportsPositiveTrim;
+  if (typeof supportsPositiveTrim !== 'boolean') {
+    unsupported(`supportsPositiveTrim '${String(dims.supportsPositiveTrim)}' no es booleano`);
   }
   const supportedFunctionsRaw = String(dims.supportedFunctions)
     .split(',')
@@ -183,6 +191,7 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
         title: PTX_CANDIDATE_TITLE,
         decimalPlaces: decimalPlaces as number,
         includeVectors: (includeVectors as boolean) === true ? true : undefined,
+        supportsPositiveTrim: (supportsPositiveTrim as boolean) === true ? true : undefined,
       },
       lineEnding,
       allowedFunctions,
@@ -267,18 +276,22 @@ function serializeWithDocumentedCompiler(
  * v1.1.0: adds the revision-bound documented-PTX compiler route for
  * ptx-cadmatic-4@r2 (#650). The legacy route for other revisions is
  * unchanged and keeps its byte identity.
+ * v1.2.0: routes ptx-cadmatic-4@r3 (#661) through the same compiler with the
+ * evidenced positive-trim subset (supportsPositiveTrim + FUNCTION 92) and
+ * forwards the flag to the compile options. r2 routing and the legacy route
+ * are unchanged and keep their byte identities.
  */
 export const PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
   postprocessorAdapterId: 'granete-ptx',
-  adapterVersion: '1.1.0',
+  adapterVersion: '1.2.0',
   producedFormatFamily: 'ptx',
-  generator: 'packages/excel/src/machines/ptxAdapter.ts@2',
+  generator: 'packages/excel/src/machines/ptxAdapter.ts@3',
 } as const;
 
 export const PTX_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob> = {
   postprocessorAdapterId: 'granete-ptx',
-  adapterVersion: '1.1.0',
-  implementationDigest: 'b56de3839ac9a0da94aa9c90b62d56cad19aefea27d365ff934cac46c1f70d8b',
+  adapterVersion: '1.2.0',
+  implementationDigest: '954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236',
   producedFormatFamily: 'ptx',
   requiredDimensions: PTX_REQUIRED_DIMENSIONS,
 

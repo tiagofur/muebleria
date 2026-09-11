@@ -55,27 +55,31 @@ describe('resolveManufacturingOutputTarget', () => {
     expect(result.readiness.reasons).toEqual([]);
   });
 
-  it('CADmatic 4: la revisión candidata r2 resuelve lista; el pin histórico r1 queda stale sin fallback', () => {
+  it('CADmatic 4: la revisión candidata r3 resuelve lista; los pins históricos r1/r2 quedan stale sin fallback', () => {
     const current = resolveManufacturingOutputTarget(cuttingSelection('ptx-cadmatic-4'), 'cutting');
     expect(current.status).toBe('CONFIGURED');
     if (current.status !== 'CONFIGURED') return;
-    expect(current.profileLabel).toBe('ptx-cadmatic-4@r2');
+    expect(current.profileLabel).toBe('ptx-cadmatic-4@r3');
     expect(current.supportStatus).toBe('NOT_TESTED');
     expect(current.readiness.ready).toBe(true);
     expect(current.readiness.reasons).toEqual([]);
 
-    const stale = {
-      ...cuttingSelection('ptx-cadmatic-4'),
-      outputCompatibilityProfileRevisionId: 'r1',
-    };
-    const staleResult = resolveManufacturingOutputTarget(stale, 'cutting');
-    expect(staleResult.status).toBe('CONFIGURED');
-    if (staleResult.status !== 'CONFIGURED') return;
-    expect(staleResult.profileLabel).toBe('ptx-cadmatic-4@r2');
-    expect(staleResult.readiness.ready).toBe(false);
-    expect(staleResult.readiness.reasons.map((r) => r.code)).toContain('PROFILE_DIGEST_MISMATCH');
-    // Still the selected profile — no generic substitution.
-    expect(staleResult.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
+    for (const staleRevision of ['r1', 'r2']) {
+      const stale = {
+        ...cuttingSelection('ptx-cadmatic-4'),
+        outputCompatibilityProfileRevisionId: staleRevision,
+      };
+      const staleResult = resolveManufacturingOutputTarget(stale, 'cutting');
+      expect(staleResult.status).toBe('CONFIGURED');
+      if (staleResult.status !== 'CONFIGURED') return;
+      expect(staleResult.profileLabel).toBe('ptx-cadmatic-4@r3');
+      expect(staleResult.readiness.ready).toBe(false);
+      expect(staleResult.readiness.reasons.map((r) => r.code)).toContain('PROFILE_DIGEST_MISMATCH');
+      // Still the selected profile — no generic substitution and no automatic
+      // retarget to the current revision.
+      expect(staleResult.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
+      expect(staleResult.selection.outputCompatibilityProfileRevisionId).toBe(staleRevision);
+    }
   });
 
   it('CADmatic 3/5 siguen bloqueados por evidencia ausente y NUNCA caen al genérico', () => {
