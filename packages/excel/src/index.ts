@@ -157,6 +157,60 @@ export {
   PTX_VALIDATION_FIXTURE_REVISION,
 } from './ptxValidationFixture';
 
+// --- Documented PTX core (#650): typed records, deterministic serializer,
+// independent parser/readback, validation and equivalence. Not yet connected
+// to CutProgram, the CADmatic profiles or the legacy ptxCutPlanExport. ---
+export {
+  PTX_GRAIN,
+  PTX_PATTERN_TYPE,
+  PTX_RECORD_CONTENT_WIDTH,
+  PTX_TRIM_TYPE,
+  PTX_UNITS,
+  describePtxCutFunction,
+  isDocumentedPtxCutFunctionCode,
+  type PtxBoardRecord,
+  type PtxCutRecord,
+  type PtxDocument,
+  type PtxGrain,
+  type PtxHeaderRecord,
+  type PtxJobRecord,
+  type PtxMaterialRecord,
+  type PtxOffcutRecord,
+  type PtxPartReference,
+  type PtxPartsReqRecord,
+  type PtxPatternRecord,
+  type PtxPatternType,
+  type PtxRecord,
+  type PtxRecordType,
+  type PtxTrimType,
+  type PtxUnits,
+  type PtxVectorRecord,
+} from './ptx/records';
+export {
+  PtxFormatError,
+  serializePtxDocument,
+  serializePtxDocumentBytes,
+  type PtxFormatErrorCode,
+  type PtxSerializationOptions,
+} from './ptx/serialize';
+export {
+  PtxParseError,
+  PTX_PARSER_FAMILY_SPECS,
+  parsePtxDocumentBytes,
+  parsePtxDocumentText,
+  parsePtxText,
+  type PtxParseErrorCode,
+  type PtxParserFamilySpec,
+  type PtxRecordsReadback,
+} from './ptx/parse';
+export {
+  assertValidPtxDocument,
+  validatePtxDocument,
+  type PtxValidationCode,
+  type PtxValidationIssue,
+} from './ptx/validate';
+export { ptxDocumentDifference, ptxDocumentsEqual } from './ptx/equivalence';
+
 
 
 // --- Machine output adapters and profiles (#351 foundation) ---

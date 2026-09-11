@@ -35,6 +35,21 @@ python3 docs/machines/ptx-cadmatic4/validation/verify_examples.py
 
 Comprueba aritmética, disponibilidad de regiones, conservación de área, columnas de un fragmento y reproducción reducida de reglas de eje. **No importa TypeScript, no ejecuta suites del producto, no valida un PTX completo y no sustituye CADLink/CADmatic.** El futuro código debe convertir el contraejemplo en test real.
 
+## Núcleo PTX documentado (código)
+
+`packages/excel/src/ptx/` implementa el subconjunto documentado del formato
+(HEADER, JOBS, PARTS_REQ, BOARDS, MATERIALS, PATTERNS, CUTS + OFFCUTS y
+VECTORS cuando las pruebas los necesitan): modelo tipado, serialización
+determinista, parser/readback independiente, validación de
+relaciones/columnas/magnitudes y equivalencia. Demuestra
+`records → serialize → bytes → parse → modelo equivalente` sin depender del
+optimizador. Limitaciones registradas: columnas documentadas fuera del
+subconjunto (p. ej. OFFCUTS más allá de `JOB_INDEX..WIDTH`, MATERIALS tras
+`RULE4`) fallan cerrado por la ambigüedad de inventario de §9 de la
+investigación; PARTS_INF/PARTS_UDI/PARTS_DST/PTN_UDI/NOTES no están
+implementados. Este núcleo todavía no está conectado al CutProgram real, al
+perfil CADmatic 4 ni al exportador legacy.
+
 ## Relación con autoridades existentes
 
 Reutilizar [machine profiles/adapters](../../architecture/machine-profiles-and-adapters.md), selección #591, preflight #347 y trazabilidad de liberación. No crear otro optimizador ni convertir React en autoridad industrial. La gramática documentada permite implementar un candidato no productivo sin esperar campo; las capacidades concretas de la máquina, compatibilidad y permiso productivo no se infieren del manual.
