@@ -538,6 +538,17 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId('command-error-alert')).toContainText('aceptada');
     await expect(page.getByTestId('approval-success')).toHaveCount(0);
 
+    // Prime the Cotizaciones authority cache while Q1 is still accepted. The
+    // lifecycle commands below must invalidate this exact tenant/session key,
+    // otherwise returning within the query stale window would keep showing Q1.
+    await page.goto(`/quotes/${seeded.projectId}`);
+    await expect(page.getByTestId('project-detail-chrome')).toContainText('Q1 · Aceptada');
+    await page.goto(
+      `/quotes/${seeded.projectId}/reconciliacion?qrev=${q2DraftValue}&design=${seeded.designId}&rev=${seeded.r2Id}`,
+    );
+    await expect(page.getByTestId('exact-context-header')).toContainText('Q2');
+    await expect(page.getByTestId('exact-context-header')).toContainText('Borrador');
+
     // ------------------------------------------------------------------
     // 7. Commercial lifecycle: publish and accept Q2 through Web action,
     //    atomically superseding Q1 server-side in one transaction (no SQL!).
@@ -579,6 +590,81 @@ async function publishRevisionWithItemIds(options: {
       doubleAcceptRejected = (err as { status?: number }).status === 409;
     }
     expect(doubleAcceptRejected).toBe(true);
+
+    // Cotizaciones consumes the exact accepted revision even while the legacy
+    // Project.status deliberately remains draft.
+    const acceptedRevision = (await lifecycleClient.listProjectQuoteRevisions(
+      lifecycleOwner.token,
+      seeded.projectId,
+    )).find((revision) => revision.status === 'accepted');
+    expect(acceptedRevision?.commercialSnapshot).toBeTruthy();
+    const legacyProjects = await new APIWorkspaceRepository(required('ORGANIZATION_API_BASE'), {
+      getAccessToken: () => lifecycleOwner.token,
+    }).getProjects();
+    expect(legacyProjects.find((project) => project.id === seeded.projectId)?.status).toBe('draft');
+    await page.goto(`/quotes/${seeded.projectId}`);
+    const quoteDetail = page.getByTestId('project-detail-chrome');
+    await expect(quoteDetail).toContainText('Q2 · Aceptada');
+    await expect(quoteDetail).toContainText(acceptedRevision!.commercialSnapshot!.project.name);
+    await expect(page.getByTestId('project-detail-total')).toContainText(
+      acceptedRevision!.commercialSnapshot!.breakdown.salePrice.toFixed(2),
+    );
+    await expect(page.getByTestId('project-send-quote')).toHaveCount(0);
+    const quoteVisualDirectory = process.env.QUOTE_VISUAL_DIR;
+    if (quoteVisualDirectory) {
+      if (!isAbsolute(quoteVisualDirectory)) throw new Error('QUOTE_VISUAL_DIR must be absolute');
+      await mkdir(quoteVisualDirectory, { recursive: true });
+    }
+    for (const viewport of [
+      { name: 'compact', width: 390, height: 844 },
+      { name: 'medium', width: 768, height: 900 },
+      { name: 'expanded', width: 1280, height: 800 },
+    ] as const) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await quoteDetail.scrollIntoViewIfNeeded();
+      await expect(quoteDetail).toBeVisible();
+      await expect(quoteDetail).toContainText('Q2 · Aceptada');
+      await page.evaluate(async () => {
+        await Promise.all(
+          document
+            .getAnimations()
+            .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+            .map((animation) => animation.finished.catch(() => undefined)),
+        );
+      });
+      const pageGeometry = await page.locator('html').evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(pageGeometry.scrollWidth).toBeLessThanOrEqual(pageGeometry.clientWidth);
+      const detailBounds = await page.getByTestId('project-detail').boundingBox();
+      expect(detailBounds).not.toBeNull();
+      expect(detailBounds!.width).toBeLessThanOrEqual(viewport.width);
+      if (quoteVisualDirectory) {
+        await page.screenshot({
+          path: join(quoteVisualDirectory, `cotizaciones-${viewport.name}-${viewport.width}.png`),
+          fullPage: true,
+        });
+      }
+      const totals = page.getByLabel('Totales de cotización');
+      await totals.scrollIntoViewIfNeeded();
+      await expect(totals).toBeVisible();
+      const totalsBounds = await totals.boundingBox();
+      expect(totalsBounds).not.toBeNull();
+      expect(totalsBounds!.width).toBeLessThanOrEqual(viewport.width);
+      if (quoteVisualDirectory) {
+        await page.screenshot({
+          path: join(
+            quoteVisualDirectory,
+            `cotizaciones-${viewport.name}-${viewport.width}-totals.png`,
+          ),
+          fullPage: true,
+        });
+      }
+    }
+    await page.goto(
+      `/quotes/${seeded.projectId}/reconciliacion?qrev=${q2DraftValue}&design=${seeded.designId}&rev=${seeded.r2Id}`,
+    );
 
     // Now approve exact R2 against accepted Q2:
     await page.getByTestId('design-revision-select').selectOption(seeded.r2Id);

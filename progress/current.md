@@ -1,3 +1,15 @@
+# Issue #642 — Slice 2a: exact QuoteRevision authority in quote detail
+
+- Current base `origin/main@e1d2e832b07e936bbdb7884021b7bf3c6f0ca307`; branch
+  `feat/642-quote-revision-consumers`; partial PR #653; issue remains open.
+- Bounded partition: authenticated Cotizaciones detail only. Identity, status,
+  totals and lifecycle navigation use the accepted (otherwise newest exact)
+  QuoteRevision snapshot; missing/legacy authority fails closed.
+- Remaining list/dashboard/operations consumers stay inventoried for Slice 2b;
+  PDF/XLSX/export handlers remain Slice 3. See implementation report.
+- Current-main merge preserved the integrated #650 record below; post-merge
+  focused/full/type/OpenAPI/diff and real browser 4/4 evidence is green.
+
 # Issue #650 — PR 1: núcleo ejecutable del programa de corte guillotina
 
 - Approval: issue #650 `status:approved`; prompt del propietario autoriza únicamente el primer incremento técnico (núcleo de dominio para representar, validar y reproducir un programa de cortes guillotina), con publicación como PR parcial `Refs #650`.
@@ -645,3 +657,24 @@ EOL.
 - User-authorized correction on `feat/640-design-artifact-health`, including the cohesive `size:exception` already applied to the PR.
 - Scope: enforce owner-partition and immutable integrity pins through signed GET; remove bearer-only artifact reads; add API/app-role RLS and post-mint mutation proofs; fail preview closed on unknown health; repair UI tokens/icons and evidence.
 - No merge or issue closure. Delivery remains `IMPLEMENTED_PENDING_REVIEW` after verification and exact remote SHA readback.
+
+## PR #653 — issue #642 Slice 2a review correction
+
+- Cotizaciones now fails closed across loading/error/empty/legacy identity and
+  totals states; ready UI uses only exact QuoteRevision snapshot identity,
+  currency, quantity and permitted frozen totals.
+- WhatsApp resolves the phone by the snapshot customer ID, never the mutable
+  Project customer, and lifecycle commands invalidate the shared scoped
+  authority key so a return after Q1→Q2 acceptance cannot show cached Q1.
+- Evidence: focused UI 82/82; full workspace JS PASS (UI 1695/1695, web
+  444/444); typecheck/OpenAPI/diff PASS; real Chromium + Go + PostgreSQL 4/4.
+- No merge, issue closure or size-governance mutation. Status remains
+  `IMPLEMENTED_PENDING_REVIEW`; see
+  `progress/implementation_642_quote_revision_consumers.md`.
+- UI DoD rereview added real 390/768/1280 no-overflow/bounded-panel assertions
+  and six reviewed screenshots under
+  `test-results/issue-642-slice2a-responsive-rereview/`; browser gate 4/4 PASS.
+- The original Go job hit the global 600.211 s timeout without an assertion.
+  Exact rerun attempt 2 passed (job `103123806142`, 9m51s;
+  `internal/storage` 275.163 s), confirming suite-load flakiness with no backend
+  change.

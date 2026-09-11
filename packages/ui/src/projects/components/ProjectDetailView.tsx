@@ -98,6 +98,7 @@ export interface ProjectDetailViewProps {
   readonly catalogStructures?: readonly Structure[];
   readonly customers: readonly Customer[];
   readonly ownerLabels: Readonly<Record<string, string>>;
+  readonly quoteAuthority?: ProjectDetailContextValue['quoteAuthority'];
 
   // --- Breakdown / totals ---
   readonly breakdown?: QuoteBreakdown | null;
@@ -126,7 +127,7 @@ export interface ProjectDetailViewProps {
   readonly onOpenInProduction?: (projectId: string) => void;
   /** WEB-DT-1 (#500): open the server-backed Project Furniture matrix. */
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
-  readonly onOpenReconciliation?: (projectId: string) => void;
+  readonly onOpenReconciliation?: (projectId: string, quoteRevisionId?: string) => void;
   /** WEB-DT-2 (#501): open the server-backed Designs and revisions workspace. */
   readonly onOpenDesigns?: (projectId: string) => void;
 
@@ -776,6 +777,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     catalogStructures = [],
     customers,
     ownerLabels,
+    quoteAuthority,
     breakdown = null,
     materialSummary = null,
     breakdownLoading = false,
@@ -796,6 +798,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onOpenInProduction,
     onOpenFurnitureMatrix,
     onOpenDesigns,
+    onOpenReconciliation,
     itemHandlers,
     removeConfirm,
     updateProjectLevelChoice,
@@ -886,6 +889,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       catalogStructures,
       customers,
       ownerLabels,
+      quoteAuthority,
       breakdown,
       materialSummary,
       breakdownLoading,
@@ -918,6 +922,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onOpenInProduction,
       onOpenFurnitureMatrix,
       onOpenDesigns,
+      onOpenReconciliation,
       itemHandlers,
       removeConfirm,
       updateProjectLevelChoice,
@@ -997,6 +1002,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       catalogStructures,
       customers,
       ownerLabels,
+      quoteAuthority,
       breakdown,
       materialSummary,
       breakdownLoading,
@@ -1017,6 +1023,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onOpenInProduction,
       onOpenFurnitureMatrix,
       onOpenDesigns,
+      onOpenReconciliation,
       itemHandlers,
       removeConfirm,
       updateProjectLevelChoice,

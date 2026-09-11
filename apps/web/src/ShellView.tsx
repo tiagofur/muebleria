@@ -225,7 +225,6 @@ import { useQuoteDerivations } from './derivations/useQuoteDerivations';
 import {
   computeModuleCostPreview,
   computeSelectedProjectBreakdown,
-  resolveDisplayBreakdown,
 } from './derivations/breakdown';
 import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
@@ -281,6 +280,7 @@ import {
 import { organizationKeys } from './shared/query/queryKeys';
 import { sessionScopeKey } from './shared/query/sessionScope';
 import type { SessionScope } from './shared/query/sessionScope';
+import { useQuoteRevisionAuthority } from './quoteRevisionAuthority';
 import {
   DEFAULT_API_BASE,
   isAdminRole,
@@ -648,10 +648,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     sessionScope,
     authUser,
     orgType,
-    backendBreakdown,
     boardOverrides,
-    breakdownError,
-    breakdownLoading,
     canAssignOwner,
     canDeleteProjects,
     canExportProduction,
@@ -664,7 +661,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     canReopenProjects,
     catalog,
     categories,
-    changeProjectStatus,
     commandItems,
     components,
     createAgregado,
@@ -933,6 +929,50 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     () => projectReconciliationFromPath(location.pathname, location.search),
     [location.pathname, location.search],
   );
+  const quoteAuthority = useQuoteRevisionAuthority({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    projectId: selectedProjectId,
+    queryKey: projectReconciliationQueryKeys(
+      sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+      selectedProjectId ?? 'no-project',
+    ).quoteAuthority,
+  });
+  const quoteAuthorityView = quoteAuthority.kind === 'idle'
+    ? undefined
+    : quoteAuthority.kind === 'ready'
+      ? {
+          kind: 'ready' as const,
+          revisionId: quoteAuthority.revision.id,
+          revisionNumber: quoteAuthority.revision.revisionNumber,
+          status: quoteAuthority.revision.status,
+          projectName: quoteAuthority.snapshot.project.name,
+          customerId: quoteAuthority.snapshot.customer.id,
+          customerName: quoteAuthority.snapshot.customer.name,
+          furnitureQuantity: quoteAuthority.snapshot.lines.reduce(
+            (total, line) => total + line.quantity,
+            0,
+          ),
+          currency: quoteAuthority.snapshot.currency,
+          capturedAt: quoteAuthority.snapshot.capturedAt,
+          staleMessage: quoteAuthority.staleMessage,
+          onRetry: quoteAuthority.retry,
+        }
+      : quoteAuthority.kind === 'legacy'
+        ? {
+            kind: 'legacy' as const,
+            revisionId: quoteAuthority.revision.id,
+            revisionNumber: quoteAuthority.revision.revisionNumber,
+            status: quoteAuthority.revision.status,
+            message: quoteAuthority.message,
+            staleMessage: quoteAuthority.staleMessage,
+            onRetry: quoteAuthority.retry,
+          }
+        : quoteAuthority.kind === 'error'
+          ? { kind: 'error' as const, message: quoteAuthority.message, onRetry: quoteAuthority.retry }
+          : quoteAuthority.kind === 'empty'
+            ? { kind: 'empty' as const, message: quoteAuthority.message }
+            : { kind: 'loading' as const };
   const canRequoteDesignChanges = session === 'auth' && anyRole(actorRoles, roleCanMutateProjects);
   const canApproveDesignRevisionsHint =
     session === 'auth' && anyRole(actorRoles, roleCanApproveDesignRevisions);
@@ -2085,6 +2125,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           canAssignOwner={canAssignOwner}
           assignableOwners={assignableOwners}
           ownerLabels={ownerLabels}
+          quoteAuthority={quoteAuthorityView}
           onCreate={createProject}
           onUpdate={updateProject}
           onDelete={deleteProject}
@@ -2114,15 +2155,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onUpdateInstallationChecklist={updateInstallationChecklist}
           onImportNesting={importNestingResult}
           onSelectionChange={onProjectSelectionChange}
-          breakdown={resolveDisplayBreakdown(
-            projectQuote.breakdown,
-            backendBreakdown,
-            showCosts,
-          )}
+          breakdown={quoteAuthority.kind === 'ready' ? quoteAuthority.snapshot.breakdown : null}
           materialSummary={materialSummary}
-          breakdownLoading={breakdownLoading}
-          breakdownError={breakdownError ?? projectQuote.breakdownError}
-          previewBlocked={projectQuote.previewBlocked}
+          breakdownLoading={quoteAuthority.kind === 'loading'}
+          breakdownError={'message' in quoteAuthority ? quoteAuthority.message : null}
+          previewBlocked={false}
           missingGroups={projectQuote.missingGroups}
           groupLabels={groupLabels}
           onExport={
@@ -2165,8 +2202,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             const target = projectFurniturePath(projectId);
             if (location.pathname + location.search !== target) navigate(target);
           }}
-          onOpenReconciliation={(projectId) => {
-            const target = projectReconciliationPath(projectId);
+          onOpenReconciliation={(projectId, quoteRevisionId) => {
+            const target = projectReconciliationPath(projectId, {
+              quoteRevisionId:
+                quoteRevisionId ??
+                (quoteAuthority.kind === 'ready' || quoteAuthority.kind === 'legacy'
+                  ? quoteAuthority.revision.id
+                  : null),
+              designId: null,
+              designRevisionId: null,
+            });
             if (location.pathname !== target) navigate(target);
           }}
           onOpenDesigns={(projectId) => {
@@ -2195,7 +2240,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           canForceReopenClosed={canForceReopenClosed}
           canMarkProduced={canMarkProduced}
           onMarkProduced={markProjectProduced}
-          onChangeStatus={changeProjectStatus}
           onReopen={reopenProject}
           onRestoreVersion={restoreProjectVersion}
           showCosts={showCosts}
