@@ -82,18 +82,23 @@ export function isDocumentedPtxCutFunctionCode(code: number): boolean {
 
 /**
  * FUNCTION codes the current Granete PTX candidate is willing to produce,
- * parse and validate: 0 head, 1 rip, 2 cross, 3 third-phase recut.
+ * parse and validate: 0 head, 1 rip, 2 cross, 3 third-phase recut, and 92 —
+ * the phase-2 trim/waste pass demonstrated by the two field samples
+ * (04_contrato_r3_refilados.md §6; #661). FUNCTION 92 rows carry extra
+ * semantic requirements enforced by validate.ts (QTY_RPT=1, PART_INDEX=Xn,
+ * SEQUENCE > 0) and are emitted ONLY by the r3 candidate policy for the
+ * demonstrated rest-side phase-2 remnant subset.
  *
- * Deliberately NOT supported yet (documented ≠ supported — "the manual
+ * Deliberately NOT supported (documented ≠ supported — "the manual
  * enumerates the code" is never "Granete can emit it"):
  * - 4 fourth-phase recut: waits for an explicit phase-4 fixture with its
  *   semantics before being enabled;
  * - 5..9 deeper recut phases: no case needs them;
  * - 81 tension: excluded from the first candidate (investigation §9);
- * - 90..99 trims/waste: wait for the CutProgram compiler and an explicit
- *   decision on which code/phase each generated trim maps to.
+ * - 90, 91, 93..99 trims/waste: no demonstrated mapping from Granete
+ *   geometry; the perimeter trims are projected to MATERIALS.TRIM_* instead.
  */
-export const PTX_SUPPORTED_CUT_FUNCTION_CODES = [0, 1, 2, 3] as const;
+export const PTX_SUPPORTED_CUT_FUNCTION_CODES = [0, 1, 2, 3, 92] as const;
 
 /** Whether the code belongs to the subset supported by the current candidate. */
 export function isSupportedPtxCutFunctionCode(code: number): boolean {
@@ -250,6 +255,11 @@ export interface PtxPatternRecord {
  * nesting; SEQUENCE expresses execution order — reordering rows by SEQUENCE
  * destroys the tree. QTY_RPT=0 rows (e.g. an offcut release) are valid and
  * must not be animated as an extra saw pass.
+ *
+ * QTY_PARTS is OPTIONAL: a physical FUNCTION 92 offcut-release pass (#661,
+ * 04_contrato_r3_refilados.md §6.2) carries it ABSENT — an empty cell, never
+ * 0 and never 1 — because the pass produces an Xn offcut, not a PARTS_REQ
+ * part. Every other row emits an explicit value (0 or 1) as before.
  */
 export interface PtxCutRecord {
   readonly type: 'CUTS';
@@ -261,7 +271,7 @@ export interface PtxCutRecord {
   readonly dimension: number;
   readonly repeatQuantity: number;
   readonly partReference: PtxPartReference;
-  readonly producedQuantity: number;
+  readonly producedQuantity?: number;
   /** Auxiliary description; never machining authority. */
   readonly comment?: string;
 }
