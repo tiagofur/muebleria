@@ -8,6 +8,10 @@
 > implementación**. Dos muestras reales son evidencia fuerte del dialecto usado por
 > el cliente, pero no prueban por sí solas una regla universal de CADLink/CADmatic.
 > `NOT_TESTED/notClaimed` permanece hasta importación/readback real.
+>
+> Las decisiones implementables derivadas de esta evidencia se congelan en
+> [`04_contrato_r3_refilados.md`](04_contrato_r3_refilados.md). Este archivo conserva
+> el análisis; el 04 es la autoridad de implementación para #661.
 
 ## 1. Evidencia que refuerza decisiones de r2
 
@@ -59,7 +63,7 @@ Conclusión permitida:
 > política de refilado mediante `MATERIALS.TRIM_*`; Granete r3 debe poder emitir
 > esos campos cuando exista un mapping demostrado desde su geometría.
 
-No se concluye todavía una tabla fija `left/right/top/bottom → TRIM_*`.
+No se concluye una tabla universal `left/right/top/bottom → TRIM_*`.
 
 ### 2.2 Evidencia aritmética de bandas totales
 
@@ -74,18 +78,28 @@ Muestra B, tablero, eje X: 1200 + 4.4 + 20 + 1215.590 = 2439.99
 Muestra B, tablero, eje Y: 350 + 4.4 + 845.601 + 20 = 1220.001
 ```
 
+Además, las dos rips que inicialmente parecían tener un delta inexplicable
+quedan explicadas por el fixed rip trim de 10 mm:
+
+```text
+Muestra A: 333.0 + 4.4 + 872.4  + 10.0 = 1219.8 ≈ 1220
+Muestra B: 1200  + 4.4 + 1225.5 + 10.0 = 2439.9 ≈ 2440
+```
+
+Esto cierra G1: no hay evidencia para cambiar `CUTS.DIMENSION` a coordenada
+global. La implementación debe compilar sobre una raíz útil después de proyectar
+los trims, conservando medidas relativas.
+
 La lectura consistente es que el patrón está expresado sobre un área ya
-condicionada por trims y que algunos `TRIM_*` representan bandas totales.
+condicionada por trims y que los `TRIM_*` representan magnitudes totales que
+incluyen kerf.
 
-Pero **no** está resuelto todavía:
+Sigue sin estar demostrado únicamente por las muestras:
 
-- cómo participan exactamente `TRIM_FRIP=10` y `TRIM_FXCT=10`;
-- por qué `TRIM_HEAD=20` y `TRIM_FRCT=20` son 20 en estas muestras;
-- si CADLink recomputa trims desde MATERIALS o espera geometría ya reducida;
-- si la relación observada se mantiene para trims asimétricos.
-
-Por tanto queda prohibido implementar fórmulas como `HEAD = 2 × trim` o
-`FRCT = 2 × trim` sólo a partir de estas dos muestras.
+- cómo participa cada campo de trim bajo todos los giros/orígenes;
+- cuál de `TRIM_HEAD`/`TRIM_FRCT` explica los 20 mm internos, porque ambos tienen
+  el mismo valor;
+- si un entorno distinto utiliza los mismos parámetros.
 
 ### 2.3 Observación: FUNCTION 92 aparece asociado a X1/offcut
 
@@ -101,25 +115,44 @@ En esas filas:
 - `SEQUENCE > 0`;
 - `QTY_RPT = 1`;
 - `PART_INDEX = X1`;
-- la magnitud está alineada con una dimensión del retazo referido.
+- la magnitud está alineada con el extent del retazo sobre el eje productor.
+
+Además, el patrón estructural se repite exactamente:
+
+```text
+phase-2 producer (FUNCTION 2)
+→ release física 92/X1
+→ recut dependiente phase 3
+```
+
+Muestra A:
+
+```text
+FN2  DIM=697.0   SEQ=5
+FN92 DIM=1718.6  SEQ=6  X1
+FN3  DIM=333.0   SEQ=7
+```
+
+Muestra B:
+
+```text
+FN2  DIM=350.0   SEQ=14
+FN92 DIM=845.6   SEQ=15 X1
+FN3  DIM=1200.0  SEQ=16
+```
 
 Conclusión permitida:
 
-> En las dos muestras observadas, `FUNCTION 92 + Xn` representa una pasada
-> física asociada a la producción/liberación de un retazo.
+> Para el subconjunto documentado en el contrato r3, un rest-side remnant
+> producido por una división phase 2 puede representarse como una pasada física
+> `FUNCTION 92 + Xn` cuando cumple todas las precondiciones geométricas.
 
-Esto **no autoriza** convertir toda liberación relacional de r2
-`QTY_RPT=0/SEQUENCE=0` en FUNCTION 92 automáticamente.
-
-Para r3 sólo se emitirá FUNCTION 92 cuando la geometría, fase y relación con el
-retazo coincidan con una regla documentada/evidenciada. Los demás casos deben
-seguir fail-closed hasta contar con evidencia suficiente.
+Esto **no autoriza** convertir toda liberación relacional de r2 en FUNCTION 92.
 
 ## 3. Otras observaciones — fuera del núcleo obligatorio de r3 trims
 
 Las muestras también enseñan capacidades/dialectos útiles, pero no forman parte
-obligatoria del próximo incremento de refilados salvo que una dependencia real
-lo haga necesario:
+obligatoria del próximo incremento de refilados salvo dependencia real:
 
 1. `PATTERNS.TYPE=1` aparece en la muestra B.
 2. Dos `PATTERNS` pueden referenciar una misma fila `BOARDS`.
@@ -133,113 +166,56 @@ lo haga necesario:
    `NOTES`.
 9. `JOBS` contiene campos operativos adicionales.
 
-Estas observaciones quedan registradas como cantera de futuras revisiones. No
-se deben incorporar a r3 únicamente por “parecer más parecido” al archivo del
-cliente.
+Estas observaciones quedan como cantera de futuras revisiones. No incorporarlas
+a r3 únicamente por parecerse más al archivo externo.
 
-## 4. Preguntas que deben cerrarse antes de escribir el mapping de trims
+## 4. Resultado de las preguntas G1–G5
 
-### G1 — semántica de DIMENSION en las rips observadas
+La investigación posterior a estas muestras produjo el contrato de
+[`04_contrato_r3_refilados.md`](04_contrato_r3_refilados.md):
 
-Hay diferencias aproximadas de 9.8/9.9 mm entre algunas magnitudes CUTS y los
-restos geométricos reconstruidos. Antes de modificar la política
-`DIMENSION = keptExtentMm`, hay que explicar esas diferencias con una regla
-consistente o declarar el caso no representable.
+| Gate | Estado |
+|---|---|
+| G1 — DIMENSION | `RESOLVED` |
+| G2 — four-side mapping | `SPEC_POLICY_READY` para `TRIM_TYPE=1` y frame sin giro inicial |
+| G3 — HEAD/recut | `PROFILE_POLICY`: no derivar; blank/no override en primera r3 |
+| G4 — double counting | `RESOLVED`: trims totales + raíz útil PTX |
+| G5 — FUNCTION 92 | `RESOLVED_SUBSET`: sólo rest-side remnant de phase 2 con contrato geométrico |
 
-### G2 — mapping de los cuatro refilados físicos
-
-Granete configura:
-
-```text
-left / right / bottom / top
-```
-
-PTX ofrece:
-
-```text
-TRIM_FRIP / TRIM_VRIP
-TRIM_FXCT / TRIM_VXCT
-TRIM_HEAD
-TRIM_FRCT / TRIM_VRCT
-```
-
-No existe todavía un mapping demostrado uno-a-uno. La resolución debe depender
-de la clase de pasada, orientación del patrón, lado fijo/variable, `leadingBand`
-y `TRIM_TYPE`; no de una tabla por nombre de lado.
-
-### G3 — HEAD y recut trims
-
-Las muestras usan `TRIM_HEAD=20` y `TRIM_FRCT=20`, pero dos archivos no prueban
-cómo derivarlos para cualquier configuración. Si no se consigue una regla
-inequívoca, r3 debe exponer una política explícita de perfil o bloquear los
-casos que necesiten esos campos; nunca inventar valores.
-
-### G4 — MATERIALS vs geometría emitida
-
-Debe decidirse si r3:
-
-1. elimina las divisiones de trim sólo de la representación PTX y compila el
-   árbol sobre el área útil; o
-2. necesita otro ajuste para evitar que MATERIALS y CUTS contabilicen dos veces
-   el mismo margen.
-
-La prueba obligatoria es conservación geométrica sin doble kerf/trim.
-
-### G5 — FUNCTION 92
-
-Hay que definir exactamente qué terminal/remnant y qué fase permiten sustituir
-una relación r2 por una pasada física 92. La ausencia de esa prueba implica
-fail-closed, no una conversión por defecto.
+Cualquier combinación fuera de ese subconjunto falla cerrado; no se amplía por
+suposición.
 
 ## 5. Alcance recomendado para r3
 
 r3 debe ser deliberadamente pequeño: **hacer utilizable CADmatic 4 con refilos
-positivos**, sin convertir la evidencia en un proyecto de compatibilidad total.
+positivos dentro del frame demostrado**, sin convertir la evidencia en un
+proyecto de compatibilidad total.
 
-### Incluido
+Incluye:
 
-1. Planner/mapping explícito desde la geometría ejecutada del `CutProgram` a
-   los `MATERIALS.TRIM_*` que puedan demostrarse.
-2. Los `TRIM_*` representan magnitudes totales según el contrato documentado;
-   no sumar kerf dos veces.
-3. Compilar el área útil sin emitir filas ficticias de refilo perimetral.
-4. FUNCTION 92 + Xn únicamente para la clase de offcut demostrada por regla;
-   otros releases permanecen con la semántica vigente o bloquean si ambas
-   representaciones serían incompatibles.
-5. Verificador independiente para `TRIM_*`, geometría útil y cualquier 92
-   soportado, con mutation tests.
-6. Golden propio de Granete con trim > 0, marcado `LAB_FIXTURE` /
-   `NOT_MACHINE_VALIDATED`.
-7. Nueva revisión inmutable `ptx-cadmatic-4@r3`, nuevo adapter version/digest y
-   paridad Go/TS cuando cambie comportamiento industrial.
-8. Descarga existente unified/by-material/ZIP, sin botón paralelo.
-9. UI permanece `Candidato — no validado en máquina`.
+1. planner/mapping desde `CutProgramTrace` a `MATERIALS.TRIM_*`;
+2. proyección de una raíz útil sin volver a emitir las divisiones perimetrales;
+3. no double-counting de kerf/trim;
+4. `FUNCTION 92 + Xn` sólo para el release phase-2 demostrado;
+5. scheduler PTX que inserte el evento físico sin confundir CUT_INDEX y SEQUENCE;
+6. verifier independiente y mutation tests;
+7. golden trim>0 de Granete;
+8. nueva revisión `ptx-cadmatic-4@r3`, adapter versionado/paridad y descarga
+   existente;
+9. UI todavía `Candidato — no validado en máquina`.
 
-### Fuera del incremento salvo dependencia demostrada
+Fuera salvo dependencia demostrada:
 
 - `PATTERNS.TYPE=1`;
 - BOOK/MAX_BOOK > 1;
 - compartir un BOARDS entre varios patterns;
-- familias `PARTS_INF` / `PARTS_UDI` / `NOTES`;
+- `PARTS_INF` / `PARTS_UDI` / `NOTES`;
 - parser tolerante del dialecto externo;
 - CADmatic 3/5;
 - SAW/MPR/drilling;
 - cinco cocinas y validación del cliente.
 
-## 6. Criterio para comenzar código
-
-No comenzar la implementación r3 hasta tener una tabla/algoritmo de mapping con
-estas columnas como mínimo:
-
-| Granete | Contexto | PTX | Magnitud | Evidencia | Si no aplica |
-|---|---|---|---|---|---|
-| trim físico | eje/fase/lado/leadingBand | `TRIM_*` | total incl. kerf | manual + fixture | fail closed |
-| remnant release | fase + terminal + geometría | FUNCTION 92/Xn cuando demostrado | relativa al subpanel | manual + muestras | conservar semántica soportada o fail closed |
-
-La tabla debe explicar casos simétricos, asimétricos, `trim == kerf`,
-`trim < kerf` y trim cero.
-
-## 7. Estado de compatibilidad
+## 6. Estado de compatibilidad
 
 Nada de esta evidencia prueba todavía que un PTX generado por Granete sea
 aceptado por CADLink/CADmatic 4. Hasta importación real:
