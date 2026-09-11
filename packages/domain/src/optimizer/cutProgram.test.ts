@@ -101,8 +101,8 @@ describe('divideRegion', () => {
     const parent = { xMm: 0, yMm: 0, lengthMm: 1000, widthMm: 600 };
     const geometry = divideRegion(parent, 'x', 333.3, 4);
     expect(geometry.kerfBandRect.xMm).toBeCloseTo(333.3, 9);
-    expect(geometry.restRect.xMm).toBeCloseTo(337.3, 9);
-    expect(geometry.restRect.lengthMm).toBeCloseTo(662.7, 9);
+    expect(geometry.restRect?.xMm).toBeCloseTo(337.3, 9);
+    expect(geometry.restRect?.lengthMm).toBeCloseTo(662.7, 9);
   });
 
   it('kerf cero es válido: banda de área nula que no fabrica una región física', () => {
@@ -888,6 +888,180 @@ describe('executeCutProgram — regresión R2: aislamiento entre input y traza e
       'cut_program.geometry_mismatch',
       { cutId: 'CUT1', regionId: 'KEPT' },
     );
+  });
+});
+
+describe('cutProgram — extensión PR 2: kerf-only y salida explícita de disco', () => {
+  it('divideRegion admite la pasada kerf-only: el resto se consume exactamente como disco', () => {
+    const parent = { xMm: 0, yMm: 0, lengthMm: 1200, widthMm: 700 };
+    const geometry = divideRegion(parent, 'x', 1196, 4);
+    expect(geometry.keptRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 1196, widthMm: 700 });
+    expect(geometry.kerfBandRect).toEqual({ xMm: 1196, yMm: 0, lengthMm: 4, widthMm: 700 });
+    expect(geometry.restRect).toBeNull();
+    expect(geometry.bladeExitsParent).toBe(false);
+    expect(geometry.keptRect.lengthMm * geometry.keptRect.widthMm +
+      geometry.kerfBandRect.lengthMm * geometry.kerfBandRect.widthMm).toBe(840000);
+  });
+
+  it('divideRegion con allowBladeExit registra la banda recortada al padre y el marcador explícito', () => {
+    const parent = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 };
+    const geometry = divideRegion(parent, 'x', 597, 4, { allowBladeExit: true });
+    expect(geometry.keptRect).toEqual({ xMm: 0, yMm: 0, lengthMm: 597, widthMm: 300 });
+    expect(geometry.kerfBandRect).toEqual({ xMm: 597, yMm: 0, lengthMm: 3, widthMm: 300 });
+    expect(geometry.restRect).toBeNull();
+    expect(geometry.bladeExitsParent).toBe(true);
+    expect(geometry.keptRect.lengthMm * 300 + geometry.kerfBandRect.lengthMm * 300).toBe(180000);
+  });
+
+  it('sin allowBladeExit la salida de disco sigue siendo una limitación identificable', () => {
+    const parent = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 };
+    expectCutProgramError(
+      () => divideRegion(parent, 'x', 597, 4),
+      'cut_program.cut_at_border_unsupported',
+      { separation: 'blade_exits_parent' },
+    );
+  });
+
+  it('executeCutProgram valida un programa con división kerf-only', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 596, widthMm: 300 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 596,
+          kerfMm: 4,
+          keptRegionId: 'KEPT',
+        },
+      ],
+      terminals: [{ regionId: 'KEPT', kind: 'piece', pieceRef: 'P1' }],
+    };
+    const trace = executeCutProgram(program);
+    expect(trace.leafAreaMm2).toBe(178800);
+    expect(trace.kerfAreaMm2).toBe(1200);
+    expect(trace.boardAreaMm2).toBe(180000);
+    expect(trace.divisions[0]!.restRegionId).toBeUndefined();
+    expect(trace.divisions[0]!.bladeExitsParent).toBe(false);
+  });
+
+  it('executeCutProgram valida una pasada con salida de disco declarada y banda recortada', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 597, widthMm: 300 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 597,
+          kerfMm: 4,
+          keptRegionId: 'KEPT',
+          bladeExitsParent: true,
+        },
+      ],
+      terminals: [{ regionId: 'KEPT', kind: 'piece', pieceRef: 'P1' }],
+    };
+    const trace = executeCutProgram(program);
+    expect(trace.divisions[0]!.bladeExitsParent).toBe(true);
+    expect(trace.divisions[0]!.kerfBandRect).toEqual({ xMm: 597, yMm: 0, lengthMm: 3, widthMm: 300 });
+    expect(trace.leafAreaMm2 + trace.kerfAreaMm2).toBe(180000);
+  });
+
+  it('rechaza declarar una región resto que la geometría kerf-only no produce', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 596, widthMm: 300 } },
+        { regionId: 'GHOST_REST', rect: { xMm: 600, yMm: 0, lengthMm: 1, widthMm: 300 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 596,
+          kerfMm: 4,
+          keptRegionId: 'KEPT',
+          restRegionId: 'GHOST_REST',
+        },
+      ],
+      terminals: [
+        { regionId: 'KEPT', kind: 'piece', pieceRef: 'P1' },
+        { regionId: 'GHOST_REST', kind: 'waste' },
+      ],
+    };
+    expectCutProgramError(() => executeCutProgram(program), 'cut_program.unexpected_rest_region', {
+      cutId: 'CUT1',
+    });
+  });
+
+  it('rechaza omitir la región resto cuando existe un resto sólido real', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 400, widthMm: 300 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 400,
+          kerfMm: 4,
+          keptRegionId: 'KEPT',
+        },
+      ],
+      terminals: [{ regionId: 'KEPT', kind: 'piece', pieceRef: 'P1' }],
+    };
+    expectCutProgramError(() => executeCutProgram(program), 'cut_program.missing_rest_region', {
+      cutId: 'CUT1',
+      restExtentMm: 196,
+    });
+  });
+
+  it('rechaza un marcador de salida de disco inconsistente con la geometría', () => {
+    const program: CutProgramInput = {
+      schemaVersion: CUT_PROGRAM_SCHEMA_VERSION,
+      boardRegionId: 'BOARD',
+      regions: [
+        { regionId: 'BOARD', rect: { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 300 } },
+        { regionId: 'KEPT', rect: { xMm: 0, yMm: 0, lengthMm: 400, widthMm: 300 } },
+        { regionId: 'REST', rect: { xMm: 404, yMm: 0, lengthMm: 196, widthMm: 300 } },
+      ],
+      divisions: [
+        {
+          cutId: 'CUT1',
+          parentRegionId: 'BOARD',
+          axis: 'x',
+          keptExtentMm: 400,
+          kerfMm: 4,
+          keptRegionId: 'KEPT',
+          restRegionId: 'REST',
+          bladeExitsParent: true,
+        },
+      ],
+      terminals: [
+        { regionId: 'KEPT', kind: 'piece', pieceRef: 'P1' },
+        { regionId: 'REST', kind: 'waste' },
+      ],
+    };
+    expectCutProgramError(() => executeCutProgram(program), 'cut_program.blade_exit_mismatch', {
+      cutId: 'CUT1',
+    });
   });
 });
 

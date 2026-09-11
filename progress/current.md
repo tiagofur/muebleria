@@ -1,3 +1,16 @@
+# Issue #650 — PR 2: conservar el programa real del optimizador
+
+- Approval: continuación autorizada por el prompt del propietario (2026-09-10) tras la fusión de PR #652 (`main@e1d2e832`, correcciones R1/R2 verificadas). Alcance: únicamente la integración del núcleo cutProgram con las heurísticas existentes.
+- Started: 2026-09-10 20:48 CST. Branch `feat/650-optimizer-cut-program`, base `origin/main@e1d2e832b07e936bbdb7884021b7bf3c6f0ca307`. Single writer.
+- Scope: registrar el programa de divisiones DURANTE el empaquetado (Best-Fit X/Y + Strip/Shelf), validar candidatas completas y transportar el programa serializable hasta `CutPlanSheet`. Sin vista previa, instrucciones, PTX ni backend.
+- Plan:
+  1. Extensión mínima del núcleo: `separateExtent` (clasificador único exact_fit/kerf_only/solid_rest/blade_exits), divisiones kerf-only (resto consumido exactamente como disco) y política explícita de salida de disco (`allowBladeExit`, banda recortada al padre, flag validado).
+  2. `cutProgramBuilder.ts`: helper interno compartido por las heurísticas (regiones/cortes/terminales + cadena de trims kerf 0), sin duplicar reglas del núcleo.
+  3. Instrumentar Best-Fit V/H (dos separaciones por colocación, orden por variante) y Strip (franja, troceado X, recorte Y de pieza menor, sobrantes reales de cualquier tamaño).
+  4. Candidatas: demanda completa obligatoria, validación programa↔colocación (identidad, medidas colocadas, posición), exclusión con causa y selección determinista; error claro si ninguna candidata satisface.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Best-Fit X/Y y Strip registran su programa real durante el empaquetado; candidatas completas validadas (demanda, geometría, correspondencia hoja↔colocación) y seleccionadas con los criterios deterministas existentes; `CutPlanSheet.cutProgram` serializable y validado. Colocaciones idénticas a las históricas (tests previos sin cambios). Extensión mínima del núcleo: `separateExtent` + kerf-only + política explícita de salida de disco (banda recortada, flag validado). Detalle: `progress/implementation_650_optimizer_cut_program.md`.
+- Evidence: cutProgram 64/64; optimizerCutProgram 24/24 (nuevo); optimizer 7/7 y nesting 5/5 sin cambios; domain 103 archivos / 1371 tests; `pnpm typecheck` raíz 0 errores; `pnpm test` monorepo verde; `git diff --check` limpio. Vista/instrucciones/PTX/persistencia/validación externa: pendientes, no reclamadas.
+
 # Issue #650 — PR 1: núcleo ejecutable del programa de corte guillotina
 
 - Approval: issue #650 `status:approved`; prompt del propietario autoriza únicamente el primer incremento técnico (núcleo de dominio para representar, validar y reproducir un programa de cortes guillotina), con publicación como PR parcial `Refs #650`.

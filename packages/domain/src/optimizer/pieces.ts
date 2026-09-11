@@ -4,6 +4,7 @@
  */
 
 import type { ProductionCutRow } from '../types';
+import type { CutProgramInput } from './cutProgram';
 import type {
   CutInstruction,
   CutPlanConfig,
@@ -32,6 +33,14 @@ export interface PlacementResult {
   materialName: string;
   thicknessMm?: number;
   strategy?: CutStrategy;
+  /**
+   * Guillotine cut program registered while packing (saw strategies only,
+   * #650 PR 2). Serializable CutProgramInput, validated with
+   * executeCutProgram before a candidate is accepted. Absent for cnc-nesting
+   * results and legacy placements; absence never means a verified program
+   * exists.
+   */
+  cutProgram?: CutProgramInput;
 }
 
 /**
