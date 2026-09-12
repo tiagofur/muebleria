@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { optimizeCutPlan } from '@granete/domain';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { required } from './support/api';
 
@@ -28,6 +30,7 @@ const CUTTING_CADMATIC4_CANDIDATE = {
   outputProfileId: 'ptx-cadmatic-4',
   outputProfileRevisionId: 'r3',
 } as const;
+const EXPORT_PROJECT_ID = '77777777-6910-4691-8691-777777777777';
 
 async function api() {
   const base = required('ORGANIZATION_API_BASE');
@@ -89,6 +92,23 @@ async function saveCuttingSelection(
   await page.getByTestId('machine-output-cutting-profile').selectOption({ label: profileLabel });
   await page.getByTestId('machine-output-cutting-save').click();
   await waitForCuttingProfile(repository, expectedProfileId);
+}
+
+async function seedCuttingProject(repository: APIWorkspaceRepository): Promise<void> {
+  const catalog = await repository.getCatalog();
+  const customer = { id: 'c0000000-6910-4691-8691-000000000000', name: 'CAD4 E2E', active: true };
+  await repository.saveCatalog({ ...catalog, customers: [...(catalog.customers ?? []), customer] });
+  const now = new Date().toISOString();
+  const cutPlan = optimizeCutPlan(EXPORT_PROJECT_ID, [{
+    quantity: 1, lengthMm: 600, widthMm: 400, description: 'Panel E2E',
+    materialName: 'MDF E2E', materialCode: 'MDF-E2E', thicknessMm: 18,
+    grain: 0, L1: 0, L2: 0, W1: 0, W2: 0,
+  }], [], undefined, 'Salida CADmatic 4 E2E');
+  await repository.saveProject({
+    id: EXPORT_PROJECT_ID, name: 'Salida CADmatic 4 E2E', customerId: customer.id,
+    currency: 'MXN', marginFactor: 1.3, laborFixedCost: 0, status: 'draft',
+    createdAt: now, updatedAt: now, items: [], cutPlan,
+  });
 }
 
 test.describe.serial('Machine output selection (#591) browser E2E', () => {
@@ -167,6 +187,8 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     await openEngineeringSettings(page);
     // Switching is an explicit user action — never an automatic fallback.
     await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4', 'ptx-cadmatic-4');
+    await page.reload();
+    await page.getByTestId('settings-tab-tab-ingenieria').click();
 
     // Ready (the revision's real compilation preflight passes) but honest
     // about field state: candidate, not validated on the machine.
@@ -179,6 +201,18 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     expect(cutting!.selection.selection.outputCompatibilityProfileRevisionId).toBe('r3');
     expect(cutting!.blockers).toEqual([]);
     expect(cutting!.supportStatus).toBe('NOT_TESTED');
+
+    await seedCuttingProject(repository);
+    await page.goto(`/engineering/${EXPORT_PROJECT_ID}`);
+    await page.getByTestId('eng-tab-optimizacion').click();
+    const exportButton = page.getByTestId('prod-opt-export-ptx');
+    await expect(exportButton).toBeEnabled();
+    const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);
+    const path = await download.path();
+    const text = new TextDecoder().decode(await readFile(path!));
+    expect(download.suggestedFilename()).toMatch(/^corte-.*\.ptx$/);
+    expect(text.startsWith('HEADER,')).toBe(true);
+    expect(text).not.toContain('[HEADER]');
   });
 
   test('stale editor gets a typed VERSION_CONFLICT, never a silent overwrite', async () => {
@@ -216,35 +250,35 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     expect(readModelB.selections).toEqual([]);
   });
 
-  test('selection request failure stays visible and recovers — it is never presented as empty', async ({ page }) => {
+  for (const lateStatus of [200, 500]) test(`late org A ${lateStatus} cannot govern org B`, async ({ page }) => {
     test.setTimeout(90_000);
-    await page.route('**/api/machine-output-selections', (route) => {
-      if (route.request().method() !== 'GET') return route.continue();
-      return route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          code: 'INTERNAL_ERROR',
-          message: 'synthetic machine-output failure',
-          fieldErrors: {},
-          requestId: 'machine-output-failure',
-          retryable: true,
-          details: {},
-        }),
-      });
+    let releaseA = () => undefined;
+    let markAStarted = () => undefined;
+    const started = new Promise<void>((resolve) => { markAStarted = resolve; });
+    const gate = new Promise<void>((resolve) => { releaseA = resolve; });
+    let firstGet = true;
+    await page.route('**/api/machine-output-selections', async (route) => {
+      if (route.request().method() !== 'GET' || !firstGet) return route.continue();
+      firstGet = false;
+      const response = await route.fetch();
+      markAStarted();
+      await gate;
+      return lateStatus === 200
+        ? route.fulfill({ response }).catch(() => undefined)
+        : route.fulfill({ status: 500, body: '{}' }).catch(() => undefined);
     });
 
     await loginToA(page);
-    await page.goto('/settings');
-    await page.getByTestId('settings-tab-tab-ingenieria').click();
-    await expect(page.getByTestId('machine-output-load-error')).toContainText(
-      'No se pudo cargar la configuración de salida de máquina',
+    await started;
+    const bResponse = page.waitForResponse((response) =>
+      response.url().includes('/api/machine-output-selections'),
     );
-    await expect(page.getByTestId('machine-output-cutting')).toHaveCount(0);
-
-    await page.unroute('**/api/machine-output-selections');
-    await page.getByTestId('machine-output-retry').click();
-    await expect(page.getByTestId('machine-output-cutting')).toBeVisible();
+    await page.getByLabel('Cambiar organización').selectOption({ label: 'Browser Gate B' });
+    await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
+    expect((await bResponse).status()).toBe(403);
+    releaseA();
+    await page.waitForTimeout(150);
+    await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
   });
 
   test.afterAll(async () => {

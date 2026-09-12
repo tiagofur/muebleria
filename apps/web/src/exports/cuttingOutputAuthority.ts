@@ -1,10 +1,6 @@
 import type { MachineOutputSelection } from '@granete/domain';
 
-/**
- * Request truth for the cutting MachineOutputSelection. A successful empty
- * response is intentionally distinct from every state where the server truth
- * is unknown or the exact tuple cannot be used.
- */
+/** Request truth: only successful empty is allowed to use legacy output. */
 export type CuttingOutputSelectionState =
   | { readonly status: 'loading'; readonly scopeKey: string | null }
   | { readonly status: 'error'; readonly scopeKey: string; readonly error: string }
@@ -31,11 +27,7 @@ export class CuttingOutputUnavailableError extends Error {
   }
 }
 
-/**
- * A response from another session/organization is unknown for the current
- * scope. Convert it to loading synchronously, before effects have a chance to
- * reset state, so one render can never expose the previous tenant's policy.
- */
+/** Scope mismatch becomes loading before effects can expose stale policy. */
 export function forCurrentMachineOutputScope(
   state: CuttingOutputSelectionState,
   currentScopeKey: string | null,
@@ -52,10 +44,7 @@ export function isCurrentMachineOutputRequest(
   return requestedScopeKey === currentScopeKey;
 }
 
-/**
- * Single policy boundary shared by direct cutting downloads and Production
- * Pack. Legacy is legal only after a successful, confirmed-empty response.
- */
+/** Shared direct/pack policy; only confirmed-empty may route to legacy. */
 export async function runWithCuttingOutputAuthority<T>(
   state: CuttingOutputSelectionState,
   routes: {

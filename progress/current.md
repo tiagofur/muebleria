@@ -27,8 +27,8 @@
 - Evidence: focused web 13/13 y UI 21/21; `pnpm test` PASS (domain 1407,
   storage 191, excel 341 + 3 skipped,
   desktop 17, mobile 73, ui 1754, web 471); `pnpm typecheck` 7/7;
-  `pnpm openapi:check` sin drift; `git diff --check` limpio. Browser E2E de error/retry
-  agregado; ejecución real Go+PostgreSQL+Chromium queda serializada por el coordinador.
+  `pnpm openapi:check` sin drift; `git diff --check` limpio. Browser Go+PostgreSQL+
+  Chromium 7/7: save+reload+bytes r3 (CSV, no legacy INI) y late A 200/500 sobre B.
 # Issue #667 — M2: administración de recursos 3D desde React (Correcciones R1–R3 sobre PR #690)
 
 - Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. PR #690 en rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree dedicado (`.worktrees/feat-667-hardware-3d-catalog-ui`).
