@@ -859,7 +859,9 @@ Inventario de consumidores runtime (Slice 2):
 | Dashboard Inicio/Ventas (`dashboardStats`, `dashboardRecent`, funnel) | Pendiente: misma dependencia legacy |
 | Operaciones/Producción (`ProductionQueue`, workspace) | Pendiente: separar aceptación comercial de etapa operativa |
 | Costing/version history | Pendiente: clasificar autoridad comercial vs. costo operativo |
-| PDF/XLSX y export handlers | Slice 3; excluido de esta partición |
+| PDF comercial (cliente) | Migrado (#642 / 3): un único modelo de export `ExactCommercialQuoteExportModel` derivado exclusivamente de `QuoteRevision + commercialSnapshot` alimenta los renderers PDF y XLSX (`@granete/excel`). El PDF identifica la revisión exacta (`Cotización Q{n}`, título/metadata/estado), usa identidad congelada (obra/cliente/moneda del snapshot), fecha real de lifecycle (`acceptedAt → publishedAt → createdAt`), líneas/unidades exactas y total de venta congelado. Filename `Cotizacion-{obra}-{cliente}-Q{n}-{variante}.pdf` |
+| XLSX comercial (cliente) | Migrado (#642 / 3): mismo modelo exacto que el PDF; el workbook reproduce la misma Q{n} (identidad congelada, líneas con cantidad/medidas/opciones por unidad, precio de línea sólo si la política de visibilidad lo autoriza, total congelado). Filename `Cotizacion-{obra}-{cliente}-Q{n}.xlsx`. El stack de costos interno (materiales/cantos/herrajes/MO/costo directo/margen) ya NO se escribe en el documento de cliente — nunca, ni para roles con visibilidad de costos |
+| Export handlers (`useExportHandlers`) y botones del detalle | Migrado (#642 / 3): los handlers comerciales reciben la autoridad exacta visible del detalle (`QuoteRevisionAuthority`) y resuelven fail-closed por estado (legacy/empty/loading/error) con mensaje accionable; sin fallback a `Project`/`project.items`/`priceSnapshot`/catálogo vivo. Los botones nombran la revisión (`Exportar cotización Q{n}`); sin autoridad (sesión guest/local) no se ofrecen. Legacy sin snapshot → mensaje "creá una nueva revisión actualizada", nunca un PDF "aproximado" |
 | `Project.commercialStatus` CRM | Fuera: estado de oportunidad, no lifecycle de QuoteRevision |
 
 ---
