@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import ExcelJS from 'exceljs';
 import { PDFDocument } from 'pdf-lib';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { required } from './support/api';
 
 /**
  * #642 / Delivery 3 — exact commercial PDF/XLSX exports, real browser E2E
@@ -28,6 +28,10 @@ const QUOTE_LINE_ID = '88888888-5555-4888-8888-555555555555';
 const CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000055';
 const REC_HW = '71000000-0000-4000-8000-000000000071';
 const REC_STRUCT = '71000000-0000-4000-8000-000000000072';
+const EXPORT_MODULE_ID = '71000000-0000-4000-8000-000000000073';
+const LEGACY_MODULE_ID = '71000000-0000-4000-8000-000000000074';
+const FROZEN_MODULE_NAME = 'Bajo Export E2E';
+const RENAMED_MODULE_NAME = 'Bajo RENOMBRADO actual';
 const FROZEN_PROJECT_NAME = 'Cocina Export E2E';
 const RENAMED_PROJECT_NAME = 'Cocina RENOMBRADA E2E';
 const FROZEN_CUSTOMER_NAME = 'Cliente Export E2E';
@@ -53,6 +57,24 @@ async function loginToA(page: Page): Promise<void> {
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 }
 
+/**
+ * Fixture upserts occasionally hit a transient 500 (retryable per contract)
+ * when the shared gate backend is serving many specs back to back. Retry a
+ * couple of times before letting the fixture failure fail the test.
+ */
+async function withFixtureRetry<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+    }
+  }
+  throw lastError;
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
@@ -68,31 +90,37 @@ test.beforeAll(async () => {
   const repository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => token });
 
   const catalog = await repository.getCatalog();
-  const template = catalog.modules.find((m) => m.id === GATE_MODULE_A_ID) ?? catalog.modules[0]!;
+  const template = catalog.modules[0]!;
   const depthMm = template.externalDims?.depth || 590;
-  await repository.saveCatalog({
+  await withFixtureRetry(() => repository.saveCatalog({
     ...catalog,
     structures: [...(catalog.structures ?? []).filter((s) => s.id !== REC_STRUCT), { id: REC_STRUCT, code: 'EXPORT-STRUCT', name: 'Cuerpo', externalDims: { width: 600, height: 720, depth: depthMm }, components: [], active: true }],
     hardware: [...catalog.hardware.filter((h) => h.id !== REC_HW), { id: REC_HW, code: 'EXPORT-HW', name: 'Herraje export', unit: 'piece', costPerUnit: 10, active: true }],
+    // The gate fixture module (GATE_MODULE_A_ID) is SHARED by other specs
+    // (switch.spec pins its name): this spec only ever mutates its OWN
+    // module/structure/hardware/customer/project fixtures. New modules are
+    // CLEAN literals — the POST /catalog/modules path rejects spreads of
+    // existing modules.
     modules: [
-      ...catalog.modules.filter((m) => m.id !== GATE_MODULE_A_ID),
+      ...catalog.modules.filter((m) => m.id !== EXPORT_MODULE_ID),
       {
-        ...template,
-        id: GATE_MODULE_A_ID,
+        id: EXPORT_MODULE_ID,
+        code: 'EXPORT-MOD-1',
+        name: FROZEN_MODULE_NAME,
+        externalDims: { width: 600, height: 720, depth: depthMm },
         structureId: REC_STRUCT,
         components: [],
         hardwareLines: [{ id: 'export-hardware-line', hardwareId: REC_HW, quantity: 1, optionRole: '' }],
-        externalDims: { width: 600, height: 720, depth: depthMm },
       },
     ],
     customers: [
       ...(catalog.customers ?? []).filter((c) => c.id !== CUSTOMER_ID),
       { id: CUSTOMER_ID, name: FROZEN_CUSTOMER_NAME, active: true },
     ],
-  });
+  }));
 
   const now = new Date().toISOString();
-  await repository.saveProject({
+  await withFixtureRetry(() => repository.saveProject({
     id: PROJECT_ID,
     name: FROZEN_PROJECT_NAME,
     customerId: CUSTOMER_ID,
@@ -102,8 +130,8 @@ test.beforeAll(async () => {
     status: 'draft' as const,
     createdAt: now,
     updatedAt: now,
-    items: [{ id: QUOTE_LINE_ID, moduleId: GATE_MODULE_A_ID, quantity: 1, optionChoices: REC_CHOICES }],
-  });
+    items: [{ id: QUOTE_LINE_ID, moduleId: EXPORT_MODULE_ID, quantity: 1, optionChoices: REC_CHOICES }],
+  }));
 
   const mat = await client.materializeQuoteLineFurniture(
     token,
@@ -130,7 +158,7 @@ test.beforeAll(async () => {
   );
   await client.updateDesignWorkingCopy(token, design.id, {
     items: [
-      { furniture_instance_id: instanceId, furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 650, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
+      { furniture_instance_id: instanceId, furniture_definition_id: EXPORT_MODULE_ID, parameters: { widthMm: 650, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
     ],
   });
   const r1 = await client.publishDesignRevision(
@@ -152,9 +180,9 @@ test.beforeAll(async () => {
   const projects = await repository.getProjects();
   const stored = projects.find((p) => p.id === PROJECT_ID);
   if (!stored) throw new Error('fixture project vanished');
-  await repository.saveProject({ ...stored, name: RENAMED_PROJECT_NAME, status: 'draft' as const });
+  await withFixtureRetry(() => repository.saveProject({ ...stored, name: RENAMED_PROJECT_NAME, status: 'draft' as const }));
   const catalogAfter = await repository.getCatalog();
-  await repository.saveCatalog({
+  await withFixtureRetry(() => repository.saveCatalog({
     ...catalogAfter,
     customers: (catalogAfter.customers ?? []).map((c) =>
       c.id === CUSTOMER_ID ? { ...c, name: RENAMED_CUSTOMER_NAME } : c,
@@ -162,9 +190,9 @@ test.beforeAll(async () => {
     // Live catalog mutation: the module's current label no longer matches the
     // frozen commercial truth.
     modules: catalogAfter.modules.map((m) =>
-      m.id === GATE_MODULE_A_ID ? { ...m, name: 'Bajo RENOMBRADO actual' } : m,
+      m.id === EXPORT_MODULE_ID ? { ...m, name: RENAMED_MODULE_NAME } : m,
     ),
-  });
+  }));
 
   // Frozen-truth readback after the mutations: Q1 keeps 600 mm and Q2 keeps
   // 650 mm with the original identity — the exact data the exports consume.
@@ -278,17 +306,28 @@ test('legacy snapshot-less revision fails closed with the actionable CTA', async
   // row shape predates migration 000130 — no API can produce it, so the gate
   // DSN seeds it (fixture only; the verified flow is pure UI).
   const catalog = await repository.getCatalog();
-  const template = catalog.modules.find((m) => m.id === GATE_MODULE_A_ID) ?? catalog.modules[0]!;
-  const depthMm = template.externalDims?.depth || 590;
-  await repository.saveCatalog({
+  const depthMm = catalog.modules[0]?.externalDims?.depth || 590;
+  await withFixtureRetry(() => repository.saveCatalog({
     ...catalog,
+    modules: [
+      ...catalog.modules.filter((m) => m.id !== LEGACY_MODULE_ID),
+      {
+        id: LEGACY_MODULE_ID,
+        code: 'EXPORT-LEG-1',
+        name: 'Bajo Legacy Export E2E',
+        externalDims: { width: 600, height: 720, depth: depthMm },
+        structureId: REC_STRUCT,
+        components: [],
+        hardwareLines: [],
+      },
+    ],
     customers: [
       ...(catalog.customers ?? []).filter((c) => c.id !== LEGACY_CUSTOMER_ID),
       { id: LEGACY_CUSTOMER_ID, name: 'Cliente Legacy Export E2E', active: true },
     ],
-  });
+  }));
   const now = new Date().toISOString();
-  await repository.saveProject({
+  await withFixtureRetry(() => repository.saveProject({
     id: LEGACY_PROJECT_ID,
     name: 'Obra Legacy Export E2E',
     customerId: LEGACY_CUSTOMER_ID,
@@ -298,8 +337,8 @@ test('legacy snapshot-less revision fails closed with the actionable CTA', async
     status: 'draft' as const,
     createdAt: now,
     updatedAt: now,
-    items: [{ id: LEGACY_LINE_ID, moduleId: GATE_MODULE_A_ID, quantity: 1, optionChoices: {} }],
-  });
+    items: [{ id: LEGACY_LINE_ID, moduleId: LEGACY_MODULE_ID, quantity: 1, optionChoices: {} }],
+  }));
   const legacyMat = await client.materializeQuoteLineFurniture(
     token,
     LEGACY_PROJECT_ID,
@@ -335,7 +374,7 @@ test('legacy snapshot-less revision fails closed with the actionable CTA', async
         organizationId,
         LEGACY_PROJECT_ID,
         legacyInstanceId,
-        GATE_MODULE_A_ID,
+        LEGACY_MODULE_ID,
         JSON.stringify({ widthMm: 600, heightMm: 720, depthMm }),
       ],
     );
