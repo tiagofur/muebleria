@@ -1,3 +1,5 @@
+# Issue #691 — autoridad de selección CADmatic 4 sin fallback legacy
+- `IMPLEMENTED_PENDING_REVIEW` en `fix/691-machine-output-authority`: loading/error/blocked no exportan, configured usa la tupla exacta y sólo confirmed-empty habilita legacy; directa/Production Pack comparten autoridad scoped. Evidencia pos-merge: browser Go+PostgreSQL+Chromium 8/8 (retry real, empty→legacy, Settings→CAD4 r3→reload→CSV y A tardía 200/500 sin gobernar B), focused web 13/13, UI 21/21, typecheck 7/7, OpenAPI/diff limpios. Diff: 724 altas + 76 bajas = 800 authored; sin #692/#693 ni PTX/profiles/adapters.
 # Issue #667 — M2: administración de recursos 3D desde React (Correcciones R1–R3 sobre PR #690)
 
 - Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. PR #690 en rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree dedicado (`.worktrees/feat-667-hardware-3d-catalog-ui`).

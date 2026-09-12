@@ -31,7 +31,15 @@ import {
   assemblySheetsPdfExport,
   cutPreviewPdfExport,
   ptxCutPlanExport,
+  generateSelectedCuttingOutput,
+  type MachineArtifactBundle,
 } from '@granete/excel';
+import type { MachineOutputSelection } from '@granete/domain';
+import {
+  CuttingOutputUnavailableError,
+  runWithCuttingOutputAuthority,
+  type CuttingOutputSelectionState,
+} from './exports/cuttingOutputAuthority';
 
 export type ExportProductionPackResult =
   | {
@@ -42,6 +50,12 @@ export type ExportProductionPackResult =
       readonly omissions: readonly string[];
     }
   | { readonly ok: false; readonly issues: readonly ExportIssue[] };
+
+export interface ProductionPackCuttingOutputOptions {
+  readonly cuttingOutputState: CuttingOutputSelectionState;
+  readonly generateSelected?: typeof generateSelectedCuttingOutput;
+  readonly generateLegacy?: typeof ptxCutPlanExport;
+}
 
 /** Safe default file name: pack-produccion-{projectName}.zip */
 export function productionPackFileName(projectName: string): string {
@@ -71,6 +85,7 @@ export async function buildProductionPackExport(
   project: Project,
   catalog: Catalog,
   customerName?: string,
+  cuttingOptions?: ProductionPackCuttingOutputOptions,
 ): Promise<ExportProductionPackResult> {
   const issues = collectExportIssues(project, catalog);
   if (issues.length > 0) {
@@ -246,18 +261,52 @@ export async function buildProductionPackExport(
       omissions.push('etiquetas de muebles');
     }
 
-    // 12. PTX Cut Plan for automatic beam saws (SCM, Homag, Biesse, Giben)
+    // 12. Cutting output. #691: this uses the same explicit request authority
+    // as direct download. Unknown/error/blocked states fail the whole pack;
+    // only a confirmed-empty response may preserve the legacy PTX.
     if (project.cutPlan && project.cutPlan.sheets.length > 0) {
-      try {
-        const ptxBytes = ptxCutPlanExport({
-          cutPlan: project.cutPlan,
-          projectName: project.name,
-          customerName,
-          projectCode: project.id,
-        });
-        zip.file(`seccionadora_${baseName}.ptx`, ptxBytes);
-      } catch {
-        omissions.push('corte PTX seccionadora');
+      const selectedGenerator =
+        cuttingOptions?.generateSelected ?? generateSelectedCuttingOutput;
+      const legacyGenerator = cuttingOptions?.generateLegacy ?? ptxCutPlanExport;
+      const cuttingFiles = await runWithCuttingOutputAuthority(
+        cuttingOptions?.cuttingOutputState ?? {
+          status: 'loading',
+          scopeKey: null,
+        },
+        {
+          selected: async (selection: MachineOutputSelection) => {
+            const bundles: readonly MachineArtifactBundle[] =
+              await selectedGenerator(project.cutPlan!, selection, 'unified');
+            if (bundles.length === 0) {
+              throw new Error('La salida de corte configurada no generó archivos.');
+            }
+            return bundles.map((bundle) => ({
+              fileName: bundle.artifact.fileName,
+              bytes: bundle.artifact.bytes,
+            }));
+          },
+          legacy: () => {
+            try {
+              return [
+                {
+                  fileName: `seccionadora_${baseName}.ptx`,
+                  bytes: legacyGenerator({
+                    cutPlan: project.cutPlan!,
+                    projectName: project.name,
+                    customerName,
+                    projectCode: project.id,
+                  }),
+                },
+              ];
+            } catch {
+              omissions.push('corte PTX seccionadora');
+              return [];
+            }
+          },
+        },
+      );
+      for (const file of cuttingFiles) {
+        zip.file(file.fileName, file.bytes);
       }
     }
 
@@ -272,6 +321,12 @@ export async function buildProductionPackExport(
   } catch (error) {
     if (error instanceof DomainError) {
       return { ok: false, issues: [domainErrorToExportIssue(error)] };
+    }
+    if (error instanceof CuttingOutputUnavailableError) {
+      return {
+        ok: false,
+        issues: [{ message: error.message, field: 'machineOutputSelection' }],
+      };
     }
     return {
       ok: false,

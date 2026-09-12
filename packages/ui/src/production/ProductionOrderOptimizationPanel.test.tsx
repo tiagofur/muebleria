@@ -444,6 +444,46 @@ describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, m
     ).toBe(true);
   });
 
+  it.each([
+    {
+      profileLabel: 'Cargando configuración…',
+      blockerMessage: 'Esperá a que termine de cargar la configuración.',
+    },
+    {
+      profileLabel: 'Configuración no disponible',
+      blockerMessage: 'No se pudo cargar la configuración de salida de máquina.',
+    },
+  ])(
+    '$profileLabel bloquea la descarga y presenta la causa',
+    ({ profileLabel, blockerMessage }) => {
+      render(
+        <ProductionOrderOptimizationPanel
+          project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+          catalog={null}
+          cutRows={[]}
+          cuttingOutputTarget={{
+            machineLabel: 'Salida de máquina',
+            formatLabel: 'PTX',
+            profileLabel,
+            ready: false,
+            blockerMessage,
+          }}
+          onExportCutPlanPtx={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId('prod-opt-cutting-output').textContent).toContain(
+        profileLabel,
+      );
+      expect(screen.getByTestId('prod-opt-cutting-output-blocked').textContent).toContain(
+        blockerMessage,
+      );
+      expect(
+        (screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled,
+      ).toBe(true);
+    },
+  );
+
   it('modo por material: preview cuenta materiales → archivos dentro de un ZIP y los lista', () => {
     render(
       <ProductionOrderOptimizationPanel
