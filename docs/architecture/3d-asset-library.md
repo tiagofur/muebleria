@@ -5,7 +5,7 @@
 This file is the umbrella architecture, not proof that every asset capability is implemented.
 At inspected `main@96360841187dbcc1ee4964b555eb4e88cd9e8e9d`, the hardware form has photo/shape/finish controls but no SKP picker; the SketchUp asset resolver searches local bundle/cache files and its loader places them by translation, otherwise hardware can fall back to a box. Documentation issue #372 and the #350/#415 foundations do not certify the complete catalog-to-host asset workflow.
 
-The proposed implementation contract is [Hardware 3D assets and assemblies](hardware-3d-assets-and-assemblies.md); the issue sequence, milestone gates and evidence ownership are in [Hardware 3D execution plan](../hardware-3d-execution-plan.md). Program #666 coordinates #667–#671. This is planning only until the corresponding implementation is approved, integrated and tested.
+The proposed implementation contract is [Hardware 3D assets and assemblies](hardware-3d-assets-and-assemblies.md); the issue sequence, milestone gates and evidence ownership are in [Hardware 3D execution plan](../hardware-3d-execution-plan.md). Program #666 coordinates #667–#671. #667 M1 is now implemented at the contract/persistence layer (status below); everything else remains planning until its implementation is approved, integrated and tested.
 
 Decisions for this program:
 
@@ -16,6 +16,50 @@ Decisions for this program:
 - Pin resource/recipe revisions in the existing Design lifecycle. Never silently replace historical resources with latest.
 - Reuse #529 for presentation motion and #643 for Proyectar lifecycle convergence. Fixed carcass hardware and moving drawer members must be explicitly distinguished.
 - An exact resource, generic procedural shape, missing/corrupt/incompatible resource and user-hidden object are different states. A fallback box must not be presented as the exact product.
+
+## Implementation status — versioned hardware 3D assets (#667 M1, 2026-09-11)
+
+M1 of #667 (program #666) is implemented and tested at the contract/persistence
+layer. What EXISTS today (verified by API + real PostgreSQL tests):
+
+- **Versioned assets**: `hardware_assets` (tenant-owned identity, declared
+  provenance/license, `active|retired`) with immutable
+  `hardware_asset_revisions` per representation (`skp | glb | thumbnail`),
+  server-computed `size_bytes` + `sha256`, canonical storage keys under the
+  organization media namespace, and validated optional origin metadata
+  (finite source units, up-axis, anchor offset in mm).
+- **Staged uploads**: start → receive (multipart, streaming SHA-256,
+  configurable per-representation byte caps) → finalize (disk re-verification;
+  the ONLY writer of revisions; idempotent replay) → consult → cancel.
+  A temp/partial file can never read as a finished asset. Uploads may target
+  an existing active asset to append the next immutable revision
+  (replace-with-new-revision).
+- **Separate load vs validation**: received-and-verified bytes
+  (`integrity_verified_at`) are distinct from host compatibility, which is
+  always derived from append-only `hardware_asset_validations` evidence bound
+  to revision + digest + tool + result (producer arrives with #668; until then
+  every revision reads `pending`). No client-declared boolean is ever evidence.
+- **Exact hardware binding**: `hardwares.visual_asset_id/revision_id` with
+  composite foreign keys — a cross-organization or cross-asset reference is
+  impossible even via direct SQL. Payloads carry identifiers only; the server
+  resolves representation/digest/state. Retired assets are refused for NEW
+  bindings; thumbnails cannot be a hardware's model.
+- **Publish pins**: `design_revision_hardware_assets` freezes
+  {revision, hardware} → exact asset revision + representation + digest inside
+  the DesignRevision publish transaction (both the legacy and #392 staged
+  paths). Pins derive from the same authoritative layout resolve; R1 never
+  follows a later rebind; historical rows are immutable; a catalog without
+  assets produces explicit absence, never invented references.
+- **Authorized downloads**: short-lived signed grants (dedicated `hwasset/`
+  resource class, integrity pins mandatory, 3-minute TTL capped by the
+  minting session) served from `/api/hardware-assets/files/{key}` with
+  per-read size+digest re-verification. No session JWT in URLs; the plugin
+  consumes the same grant mechanism.
+
+NOT yet implemented (do not assume otherwise): React administration UI
+(#667 M2), SketchUp host consumption/validation/cache (#668), GLB preparation
+and web rendering (#669), Agregado recipes/MERIVOBOX (#670). The
+`FurnitureLayout` contract and the Ruby parser are untouched by M1.
 
 ## Purpose
 
