@@ -749,6 +749,18 @@ async function publishRevisionWithItemIds(options: {
     await page.getByTestId('design-revision-select').selectOption(seeded.r3Id);
     await expect(page.getByTestId('contextual-release-badge')).toHaveCount(0);
 
+    // ------------------------------------------------------------------
+    // 9b. #642 review: the manufacturing authority Cotizaciones honors is
+    //     the canonical ProductionRelease P1(Q2,R2) — NOT Project.status
+    //     (still draft here) and not the accepted quote alone. 'Abrir en
+    //     Producción' appears; the legacy mark-produced stays bound to the
+    //     literal lifecycle and must NOT appear for a draft project.
+    // ------------------------------------------------------------------
+    await page.goto(`/quotes/${seeded.projectId}`);
+    await expect(page.getByTestId('project-detail-chrome')).toBeVisible();
+    await expect(page.getByTestId('project-open-in-production')).toBeVisible();
+    await expect(page.getByTestId('project-mark-produced')).toHaveCount(0);
+
     // One real fixture continues the SAME accepted Q2/R2/P1 into warehouse.
     // Hardware demand is genuine; this is explicitly not a complete physical
     // golden path and does not manufacture a no-CNC receipt for the fixture.

@@ -55,6 +55,7 @@ import {
 import '../catalogs/catalogs.css';
 import { ExportIssueList } from './ExportIssueList';
 import { ProjectDetailView } from './components/ProjectDetailView';
+import { projectAllowsProductionChrome } from './components/projectDetailContext';
 import type { CostingHandlers } from './components/CostingPanel';
 import type { CostingPanelView } from './costingView';
 import type { SurveyHandlers } from './components/SiteSurveyPanel';
@@ -617,11 +618,15 @@ export function ProjectsScreen({
   /** Block export when shell says so or options incomplete; still allow retry after listed issues. */
   const exportDisabled =
     exportBusy || exportBlocked || previewBlocked || !state.selectedProject;
-  /** F041: Optimizer/herrajes only for accepted/produced (plant-ready). */
+  /** F041: Optimizer/herrajes only for plant-ready work — manufacturing
+   * authority, never commercial acceptance (#642/#577). One shared rule with
+   * the detail chrome: canonical ProductionRelease for modern projects;
+   * legacy accepted/produced statuses compatibility-only when we POSITIVELY
+   * know the project has no Digital Thread quote authority (authority not
+   * wired / empty); loading and error fail closed. */
   const productionExportOk =
     state.selectedProject != null &&
-    (state.selectedProject.status === 'accepted' ||
-      state.selectedProject.status === 'produced');
+    projectAllowsProductionChrome(state.selectedProject, quoteAuthority);
   const productionExportDisabled = exportDisabled || !productionExportOk;
   const canMutateCommercialDraft = canMutate && (
     !quoteAuthority || quoteAuthority.kind === 'empty' ||
