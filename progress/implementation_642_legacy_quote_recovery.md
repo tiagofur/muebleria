@@ -61,6 +61,22 @@ Crea Q2 draft desde el estado comercial editable actual con snapshot canónico
 nuevo, pineando la legacy como base. La fila legacy queda byte-idéntica
 (probado); aceptar Q2 suprime la baseline legacy aceptada atómicamente.
 
+## 5b. Re-entry: modernizar sólo si la legacy es la EXACT latest (#642 review)
+
+La modernización sólo se ofrece mientras la revisión legacy sea la **exact
+latest** del proyecto — por `revisionNumber`, nunca por orden de array ni por
+status accepted (la autoridad comercial aceptada y la latest son cosas
+distintas: Q1 accepted sigue siendo autoridad visible mientras Q2 draft
+existe). Si ya hay una revisión moderna más reciente, la UI NO vuelve a
+ofrecer "Crear nueva revisión actualizada" sobre la base stale (el backend la
+rechazaría); en su lugar:
+
+- Detalle: CTA "Continuar QN" (+ meta "QN en borrador") — `newerRevisionNumber`
+  sale de la MISMA lista de revisiones ya consultada, sin queries extra.
+- Reconciliación: panel honesto "Ya existe una revisión moderna más reciente:
+  QN · <estado>" con "Abrir QN", que cambia el contexto a la revisión moderna
+  sin mintar nada (sin Q3). El backend stale-base guard queda intacto.
+
 ## 6. Tests
 
 - Storage (PostgreSQL real, `quote_legacy_recovery_test.go`, 4/4):
@@ -68,10 +84,14 @@ nuevo, pineando la legacy como base. La fila legacy queda byte-idéntica
   byte-idéntica + lifecycle moderno); modernize desde legacy ACCEPTED
   (supersede atómico, Q1 sigue sin snapshot); rechazo tipado con última
   moderna; conflictos de base stale/baseless.
-- UI (`ProjectsScreen.test.tsx` 67/67): Test A (3 muebles visibles,
+- UI (`ProjectsScreen.test.tsx` 68/68): Test A (3 muebles visibles,
   parámetros/materiales, sin "Sin cotización", sin empty), Test B (precio
   no disponible, ni 0 ni estimación), Test C (campos persistidos invariantes
-  ante mutación de catálogo; sólo cambia la etiqueta marcada), CTA routing.
+  ante mutación de catálogo; sólo cambia la etiqueta marcada), CTA routing,
+  y re-entry (con Q2 existente: sin `legacy-modernize-btn`, CTA "Continuar Q2").
+  Reconciliación (`ProjectReconciliationScreen.test.tsx` 38/38): resume panel
+  cuando la legacy seleccionada no es latest (nunca segundo mint) y modernize
+  CTA intacto cuando sí lo es.
 
 ## 7. Browser E2E
 
@@ -80,15 +100,18 @@ PostgreSQL efímero): seed del row-shape pre-migración vía DSN admin del gate
 (`ORGANIZATION_TEST_DATABASE_URL`, sólo fixture — el flujo verificado es
 API/UI real): legacy Q1 accepted con 3 unidades → lista honesta → detalle con
 muebles persistidos y precio no disponible → "Crear nueva revisión
-actualizada" → Q2 moderna con snapshot → detalle migrado a autoridad moderna
-→ Q1 intacta (accepted, snapshot null, 3 items).
+actualizada" → Q2 moderna con snapshot → re-entry (volver al detalle: Q1
+sigue siendo autoridad visible, SIN CTA de modernizar, "Continuar Q2" →
+reconciliación muestra "Ya existe una revisión moderna más reciente" y abre
+Q2 sin mintar; revisiones = 2) → publish/accept Q2 → detalle migrado a
+autoridad moderna → Q1 superseded (snapshot null, 3 items, 2 revisiones).
 
 ## 8. Gates
 
 - Go storage enfocado: `TestQuoteLegacyRecovery*` 4/4 PASS (PostgreSQL real, 4.9s).
 - Go completo: `go test ./... -count=1 -p 1` exit 0 en todos los paquetes sobre PostgreSQL efímero dedicado (storage 463.2s, pilotreadiness 250.4s). Las corridas iniciales contra el `muebles-postgres` compartido (puerto 5445) fallaron por contención multi-lane (`53300 too many clients` / colisión de migraciones) — documentada como limitación del entorno local, no de esta rama.
 - UI: `ProjectsScreen.test.tsx` 67/67; `digitalThread` 157/157.
-- Browser E2E (`scripts/organization-browser-gate.sh tests/organization/quote-legacy-recovery.spec.ts`): 1/1 PASS (9.4s) — seed legacy accepted con 3 unidades vía DSN admin del gate, flujo íntegro por API/UI real.
+- Browser E2E (`scripts/organization-browser-gate.sh tests/organization/quote-legacy-recovery.spec.ts`): 1/1 PASS (15.4s) — seed legacy accepted con 3 unidades vía DSN admin del gate, flujo íntegro por API/UI real, incluyendo el arco de re-entry completo.
 - Specs vecinos afectados: `quote-list-authority` + `project-reconciliation` — PASS.
 - `pnpm typecheck`: 7/7; `pnpm openapi:check`: 0 drift; `git diff --check`: limpio.
 
