@@ -75,7 +75,14 @@ export function useQuoteRevisionAuthority(args: {
     return {
       kind: 'legacy',
       revision,
-      message: `Q${revision.revisionNumber} no contiene un snapshot comercial. Creá una nueva revisión; no se recalculará desde la obra actual.`,
+      // #642 legacy recovery: user-facing copy — never technical jargon. The
+      // persisted furniture/configurations ARE shown read-only elsewhere;
+      // this message explains what cannot be verified, not that the quote
+      // "broke".
+      message:
+        'Esta revisión fue creada antes del historial comercial congelado. ' +
+        'Los muebles y configuraciones originales siguen disponibles; algunos datos ' +
+        'históricos, como el precio total exacto, no pueden verificarse con el nuevo modelo.',
       staleMessage,
       retry,
     };

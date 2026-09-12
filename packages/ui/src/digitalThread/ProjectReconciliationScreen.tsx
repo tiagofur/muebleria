@@ -296,6 +296,12 @@ export function ProjectReconciliationScreen({
     () => quoteRevisions.find((q) => q.id === quoteRevisionId) ?? null,
     [quoteRevisions, quoteRevisionId],
   );
+  // #642 legacy recovery: the selected revision predates canonical commercial
+  // snapshots — its persisted furniture stays readable, but the modern
+  // continuation is minting the NEXT revision from the current editable state.
+  const selectedQuoteIsLegacy = Boolean(
+    selectedQuoteRevision && !selectedQuoteRevision.commercialSnapshot,
+  );
   const isInvalidExplicitQuote = Boolean(
     quoteRevisionId &&
       quoteRevisionsQuery.isSuccess &&
@@ -392,7 +398,17 @@ export function ProjectReconciliationScreen({
     setCreateQuoteError(null);
     setQuoteLifecycleNotice(null);
     try {
-      const created = await api.createInitialProjectQuoteRevision(token, projectId, {});
+      // #642 legacy recovery: when the selected revision is a snapshot-less
+      // legacy row, the create command modernizes it — the next revision is
+      // minted from the CURRENT editable state with a canonical snapshot,
+      // pinned to that exact legacy latest as its base.
+      const created = await api.createInitialProjectQuoteRevision(
+        token,
+        projectId,
+        selectedQuoteIsLegacy && selectedQuoteRevision
+          ? { baseQuoteRevisionId: selectedQuoteRevision.id }
+          : {},
+      );
       await invalidateQuoteRevisionReads();
       setQuoteRevisionId(created.id);
       onContextChange?.({
@@ -400,7 +416,11 @@ export function ProjectReconciliationScreen({
         designId: activeDesignId,
         designRevisionId,
       });
-      setQuoteLifecycleNotice(`Revisión Q${created.revisionNumber} creada como borrador.`);
+      setQuoteLifecycleNotice(
+        selectedQuoteIsLegacy
+          ? `Revisión Q${created.revisionNumber} creada como borrador moderno a partir de la cotización anterior.`
+          : `Revisión Q${created.revisionNumber} creada como borrador.`,
+      );
     } catch (err) {
       setCreateQuoteError(describeCommandError(err));
     } finally {
@@ -629,6 +649,37 @@ export function ProjectReconciliationScreen({
           </div>
         }
       />
+
+      {/* #642 legacy recovery: modernize panel for a snapshot-less selected
+          revision. Rendered independently of design context — modernization
+          mints the next revision from the current editable commercial state
+          and needs no DesignRevision. */}
+      {selectedQuoteIsLegacy && selectedQuoteRevision ? (
+        <div
+          className="pd-card pr-panel"
+          data-testid="legacy-modernize-panel"
+          style={{ marginBottom: '1rem', alignItems: 'flex-start' }}
+        >
+          <h4 className="pr-panel__title">
+            Q{selectedQuoteRevision.revisionNumber} · Cotización anterior
+          </h4>
+          <p className="pr-panel__why" style={{ margin: 0 }}>
+            Esta revisión fue creada antes del historial comercial congelado: sus muebles y
+            configuraciones siguen disponibles en el detalle, pero no puede publicarse ni
+            aceptarse. Creá la siguiente revisión para fijar una nueva base comercial exacta.
+          </p>
+          <CommandErrorAlert error={createQuoteError} />
+          <button
+            type="button"
+            className="btn btn--primary"
+            data-testid="legacy-modernize-btn"
+            disabled={createQuoteSubmitting || !canMutateQuote}
+            onClick={() => void handleCreateInitialQuote()}
+          >
+            {createQuoteSubmitting ? 'Creando revisión…' : 'Crear nueva revisión actualizada'}
+          </button>
+        </div>
+      ) : null}
 
       {designs.length === 0 || quoteRevisions.length === 0 ? (
         <div className="pd-card pr-panel" style={{ padding: '2rem', alignItems: 'center' }}>

@@ -22,7 +22,7 @@ import {
 import { DropdownMenu, type DropdownMenuSection } from '../../../common';
 import { WhatsAppButton } from '../../../crm/WhatsAppButton';
 import { StatusBadge } from '../StatusBadge';
-import { formatProjectMoney, resolveCustomerName } from '../../projectHelpers';
+import { formatIsoDate, formatProjectMoney, resolveCustomerName } from '../../projectHelpers';
 import { useProjectDetail } from '../projectDetailContext';
 
 export type ChromePrimary =
@@ -87,7 +87,11 @@ export function ProjectDetailHeader({
   const frozenCustomer = frozenAuthority
     ? customers.find((customer) => customer.id === frozenAuthority.customerId)
     : null;
-  const identityUnavailable = quoteAuthority && !frozenAuthority;
+  // #642 legacy recovery: a legacy revision keeps the workspace title (the
+  // live project label — never presented as frozen commercial identity); only
+  // error/empty remain "commercially unavailable".
+  const legacyAuthority = quoteAuthority?.kind === 'legacy' ? quoteAuthority : null;
+  const identityUnavailable = quoteAuthority && !frozenAuthority && !legacyAuthority;
   const detailCurrency = frozenAuthority?.currency ?? (!quoteAuthority ? project.currency : null);
 
   return (
@@ -116,6 +120,14 @@ export function ProjectDetailHeader({
             {quoteAuthority?.kind === 'ready' ? (
               <span className={`status-badge status-badge--${quoteAuthority.status === 'accepted' ? 'accepted' : quoteAuthority.status === 'published' ? 'quoted' : 'draft'}`}>
                 Q{quoteAuthority.revisionNumber} · {quoteAuthority.status === 'accepted' ? 'Aceptada' : quoteAuthority.status === 'published' ? 'Publicada' : quoteAuthority.status === 'superseded' ? 'Reemplazada' : 'Borrador'}
+              </span>
+            ) : legacyAuthority ? (
+              <span
+                className="badge badge--warning-subtle"
+                data-testid="quote-legacy-header-badge"
+                title={`Revisión anterior (${legacyAuthority.status}) creada antes del historial comercial congelado`}
+              >
+                Q{legacyAuthority.revisionNumber} · Cotización anterior
               </span>
             ) : quoteAuthority ? (
               <span className="badge badge--warning-subtle">Sin autoridad comercial</span>
@@ -174,12 +186,21 @@ export function ProjectDetailHeader({
             ) : null}
           </div>
 
-          <p className="workspace-chrome__subtitle">
+          <p className="workspace-chrome__subtitle" data-testid={legacyAuthority ? 'quote-legacy-meta' : undefined}>
             {frozenAuthority
               ? frozenAuthority.customerName
-              : quoteAuthority
-                ? 'Identidad, moneda y cantidades no disponibles sin una revisión exacta.'
-                : resolveCustomerName(project.customerId, customers)}
+              : legacyAuthority
+                ? [
+                    `${legacyAuthority.items?.length ?? 0} mueble${(legacyAuthority.items?.length ?? 0) === 1 ? '' : 's'} conservado${(legacyAuthority.items?.length ?? 0) === 1 ? '' : 's'}`,
+                    legacyAuthority.createdAt ? `creada ${formatIsoDate(legacyAuthority.createdAt)}` : null,
+                    legacyAuthority.publishedAt ? `publicada ${formatIsoDate(legacyAuthority.publishedAt)}` : null,
+                    legacyAuthority.acceptedAt ? `aceptada ${formatIsoDate(legacyAuthority.acceptedAt)}` : null,
+                  ]
+                    .filter((part) => part !== null)
+                    .join(' · ')
+                : quoteAuthority
+                  ? 'Identidad, moneda y cantidades no disponibles sin una revisión exacta.'
+                  : resolveCustomerName(project.customerId, customers)}
             {frozenAuthority ? (
               frozenCustomer?.phone ? (
                 <>
@@ -251,8 +272,11 @@ export function ProjectDetailHeader({
               project.id,
               quoteAuthority.kind === 'legacy' ? quoteAuthority.revisionId : undefined,
             )}
+            data-testid={quoteAuthority.kind === 'legacy' ? 'legacy-modernize-btn' : undefined}
           >
-            Crear nueva revisión
+            {quoteAuthority.kind === 'legacy'
+              ? 'Crear nueva revisión actualizada'
+              : 'Crear nueva revisión'}
           </button>
         ) : null}
         {primary === 'open-production' && onOpenInProduction ? (
