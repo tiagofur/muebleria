@@ -47,6 +47,7 @@ import type {
   ApprovalType,
   CommercialStatus,
 } from '@granete/domain';
+import { releaseAuthorityOf } from '@granete/domain';
 
 import {
   type DropdownMenuSection,
@@ -617,16 +618,24 @@ export function ProjectsScreen({
   /** Block export when shell says so or options incomplete; still allow retry after listed issues. */
   const exportDisabled =
     exportBusy || exportBlocked || previewBlocked || !state.selectedProject;
-  /** F041: Optimizer/herrajes only for plant-ready work. #642: commercial
-   * readiness is the exact QuoteRevision authority (an accepted quote keeps
-   * the operational project in draft); legacy accepted/produced statuses
-   * still count for pre-Digital-Thread projects. */
+  /** F041: Optimizer/herrajes only for plant-ready work — manufacturing
+   * authority, never commercial acceptance (#642/#577). A modern Digital
+   * Thread project is plant-ready when the server-resolved canonical
+   * ProductionRelease exists; an accepted QuoteRevision alone is NOT
+   * enough. Legacy accepted/produced statuses stay compatibility-only for
+   * true pre-DT projects (no Digital Thread quote revisions) and never
+   * bypass the release authority on a modern project. */
+  const releaseAuthority = state.selectedProject
+    ? releaseAuthorityOf(state.selectedProject)
+    : undefined;
+  const modernQuoteAuthority =
+    quoteAuthority?.kind === 'ready' || quoteAuthority?.kind === 'legacy';
   const productionExportOk =
     state.selectedProject != null &&
-    ((state.selectedProject.status === 'accepted' ||
-      state.selectedProject.status === 'produced') ||
-      (quoteAuthority?.kind === 'ready' &&
-        quoteAuthority.status === 'accepted'));
+    (releaseAuthority?.source === 'canonical' ||
+      (!modernQuoteAuthority &&
+        (state.selectedProject.status === 'accepted' ||
+          state.selectedProject.status === 'produced')));
   const productionExportDisabled = exportDisabled || !productionExportOk;
   const canMutateCommercialDraft = canMutate && (
     !quoteAuthority || quoteAuthority.kind === 'empty' ||

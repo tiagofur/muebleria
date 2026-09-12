@@ -32,6 +32,7 @@ import type {
   WarrantyPhotoKind,
   WarrantyTicket,
 } from '@granete/domain';
+import { releaseAuthorityOf } from '@granete/domain';
 
 import {
   Copy,
@@ -356,7 +357,7 @@ export interface ProjectDetailViewProps {
 
 function resolveChromePrimary(args: {
   status: ProjectStatus;
-  commerciallyAccepted: boolean;
+  hasProductionReleaseAuthority: boolean;
   canMutate: boolean;
   canMarkProduced: boolean;
   hasMarkProduced: boolean;
@@ -365,21 +366,21 @@ function resolveChromePrimary(args: {
 }): ChromePrimary {
   const {
     status,
-    commerciallyAccepted,
+    hasProductionReleaseAuthority,
     canMarkProduced,
     hasMarkProduced,
     hasExport,
     hasOpenInProduction,
   } = args;
-  // #642: advancing to production from Cotizaciones follows the exact
-  // QuoteRevision authority — an accepted quote keeps the operational
-  // project in draft, so commerciallyAccepted unlocks the same CTAs the
-  // legacy accepted/produced statuses unlocked. mark-produced stays bound to
-  // the literal project status: it mutates that legacy lifecycle itself.
-  if (
-    ((status === 'accepted' || status === 'produced') || commerciallyAccepted) &&
-    hasOpenInProduction
-  ) {
+  // #642/#577: advancing to production from Cotizaciones follows the
+  // MANUFACTURING authority — the canonical ProductionRelease the server
+  // resolved for this project. Commercial acceptance (an accepted
+  // QuoteRevision) is a precondition for creating a release, never a
+  // substitute for having one. hasProductionReleaseAuthority keeps the
+  // legacy accepted/produced statuses only as pre-Digital-Thread
+  // compatibility; mark-produced stays bound to the literal project status:
+  // it mutates that legacy lifecycle itself.
+  if (hasProductionReleaseAuthority && hasOpenInProduction) {
     return 'open-production';
   }
   if (
@@ -390,10 +391,7 @@ function resolveChromePrimary(args: {
   ) {
     return 'mark-produced';
   }
-  if (
-    ((status === 'accepted' || status === 'produced') || commerciallyAccepted) &&
-    hasExport
-  ) {
+  if (hasProductionReleaseAuthority && hasExport) {
     return 'export';
   }
   return null;
@@ -455,12 +453,20 @@ function ProjectDetailViewInner(): ReactNode {
     canMutate &&
     project.status === 'draft' &&
     (!ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty');
-  const commerciallyAccepted =
-    ctx.quoteAuthority?.kind === 'ready' &&
-    ctx.quoteAuthority.status === 'accepted';
+  // #642/#577: the manufacturing authority is the server-resolved canonical
+  // ProductionRelease — never commercial acceptance. An accepted
+  // QuoteRevision alone (project still draft, no release) must NOT unlock
+  // production. Legacy accepted/produced statuses remain compatibility-only
+  // for true pre-DT projects (no Digital Thread quote revisions).
+  const modernQuoteAuthority =
+    ctx.quoteAuthority?.kind === 'ready' || ctx.quoteAuthority?.kind === 'legacy';
+  const hasProductionReleaseAuthority =
+    releaseAuthorityOf(project)?.source === 'canonical' ||
+    (!modernQuoteAuthority &&
+      (project.status === 'accepted' || project.status === 'produced'));
   const primary = resolveChromePrimary({
     status: project.status,
-    commerciallyAccepted,
+    hasProductionReleaseAuthority,
     canMutate,
     canMarkProduced,
     hasMarkProduced: Boolean(onMarkProduced),

@@ -43,10 +43,12 @@ DEPENDENCIA 2 — guards UI del chrome de Cotizaciones
 → comportamiento anterior: 'Abrir en Producción' / export de producción sólo
   con project.status accepted|produced; con Q aceptada y proyecto draft los
   CTAs de avance comercial→producción nunca aparecían.
-→ autoridad nueva: quoteAuthority exacta (kind ready + status accepted)
-  habilita open-production/export; 'Marcar producida' permanece ligado al
+→ autoridad nueva (tras corrección de review): releaseAuthorityOf(project)
+  canónico — el ProductionRelease exacto que el server resolvió. Una
+  QuoteRevision aceptada NO habilita producción por sí sola; los statuses
+  accepted|produced quedan compatibility-only para obras pre-DT (sin
+  revisiones del Digital Thread). 'Marcar producida' permanece ligado al
   status literal del proyecto (es una transición de ese lifecycle legacy).
-  ProjectsScreen conserva accepted|produced como OR para proyectos pre-DT.
 
 DEPENDENCIA 3 — observada, deliberadamente FUERA de alcance
 → tests/organization/project-reconciliation.spec.ts:755–761: tras P1, para
@@ -73,25 +75,48 @@ Lo que faltaba eran las aserciones que la fijan y el retiro de la simulación.
    estampado accepted + Q3 published); restore a draft y verificación de que
    P1 sigue siendo el único release.
 3. `packages/ui/src/projects/ProjectsScreen.tsx` — `productionExportOk`
-   acepta autoridad comercial exacta.
+   gobernado por `releaseAuthorityOf(project)?.source === 'canonical'`.
 4. `packages/ui/src/projects/components/ProjectDetailView.tsx` —
-   `resolveChromePrimary` recibe `commerciallyAccepted`.
+   `resolveChromePrimary` recibe `hasProductionReleaseAuthority`.
 5. `packages/ui/src/projects/components/detail/ProjectDetailHeader.tsx` —
-   copy del title de export alineada a la autoridad nueva.
-6. `packages/ui/src/projects/ProjectsScreen.test.tsx` — 2 tests #642
-   (accepted authority + project draft habilita 'Abrir en Producción';
-   published authority mantiene el chrome cerrado).
+   copy del title de export alineada a la autoridad de fabricación.
+6. `packages/ui/src/projects/ProjectsScreen.test.tsx` — tests #642.
 7. `docs/architecture/project-design-digital-thread.md` — §16A regla 2 con
    `QuoteRevision.accepted ≠ Project.status accepted` + cadena de autoridad;
    §17 'Autoridad del release: par exacto, nunca Project.status'; fila nueva
    en el inventario de consumidores.
 
+## 3b. Corrección de review (mismo PR #673)
+
+La primera iteración equiparó, en la UI, `QuoteRevision accepted` con
+plant-ready (`commerciallyAccepted`). La revisión independiente lo rechazó:
+aceptación comercial ≠ autorización de fabricación. Corrección aplicada:
+
+- `productionExportOk` y `resolveChromePrimary` ya NO consumen el status de la
+  QuoteRevision. La condición moderna es
+  `releaseAuthorityOf(project)?.source === 'canonical'` — el
+  ProductionRelease exacto que el server resolvió (`resolved_production_release`).
+- Legacy compatibility clasificada: los statuses `accepted|produced` sólo
+  habilitan producción cuando la obra NO tiene revisiones de cotización del
+  Digital Thread (`quoteAuthority` ausente/empty). En una obra moderna con
+  QuoteRevisions, un `Project.status=accepted` accidental NO autoriza
+  producción sin release — la UI cuenta la misma historia que el backend, que
+  rechaza el comando.
+- 'Marcar producida' permanece ligado al lifecycle literal (untouched).
+- Tests UI reescritos (4 casos): quote aceptada sin release ⇒ cerrado; release
+  canónico con project draft ⇒ 'Abrir en Producción'; stamp legacy sobre obra
+  moderna ⇒ cerrado; obra pre-DT ⇒ compatibilidad preservada.
+- E2E: `quote-list-authority.spec.ts` prueba pre-P1 (Q aceptada, sin release ⇒
+  sin chrome de producción); `project-reconciliation.spec.ts` prueba post-P1
+  (P1 canónico + Project.status draft ⇒ 'Abrir en Producción' visible, sin
+  'Marcar producida').
+
 ## 4. Cadena de autoridad (después)
 
 ```text
-QuoteRevision     → aceptación comercial
+QuoteRevision     → aceptación comercial (condición para crear el release)
 DesignRevision    → aprobación técnica/diseño (contra la QuoteRevision compatible)
-ProductionRelease → autoridad de fabricación, congela (QN, RN)
+ProductionRelease → autoridad de fabricación, congela (QN, RN); habilita producción en UI
 Project.status    → workflow operativo/legacy; fuera de la cadena comercial
 ```
 

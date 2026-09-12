@@ -854,7 +854,7 @@ Inventario de consumidores runtime (Slice 2):
 |---|---|
 | Detalle de Cotizaciones: identidad, estado, totales y Enviar/Aceptar | Migrado: QuoteRevision aceptada o última exacta; lifecycle exacto |
 | Detalle de Cotizaciones: muebles, líneas y medidas congeladas (#642) | Migrado: renderiza líneas/unidades del snapshot y parámetros congelados de QuoteRevision exacta; sin fallback a `project.items` mutable; desglosa unidades físicas (`quantity > 1`); badges `Q{N} · Solo lectura` |
-| Chrome de avance comercial→producción en Cotizaciones (`Abrir en Producción`, export de producción F041) | Migrado: `resolveChromePrimary`/`productionExportOk` se habilitan por autoridad comercial exacta (QuoteRevision aceptada) además de los statuses operativos accepted/produced legacy; `Marcar producida` permanece ligado al lifecycle literal del proyecto |
+| Chrome de avance a producción en Cotizaciones (`Abrir en Producción`, export de producción F041) | Migrado a autoridad de fabricación: `resolveChromePrimary`/`productionExportOk` se habilitan por `releaseAuthorityOf(project)` canónico (el ProductionRelease exacto que resolvió el server). Una QuoteRevision aceptada es condición para CREAR el release, nunca un sustituto de tenerlo. Los statuses accepted/produced quedan compatibility-only para obras pre-DT (sin revisiones de cotización del Digital Thread) y nunca autorizan producción en una obra moderna; `Marcar producida` permanece ligado al lifecycle literal del proyecto |
 | Lista de Cotizaciones y `projectEstimates` | Migrado en #664 (#642 / 2A): el Shell carga UN batch `GET /projects/commercial-summaries` por scope de sesión/organización; cada tarjeta consume la QuoteRevision exacta (badge, filtros, total, cantidad activa). Un snapshot válido congela identidad (nombre de obra, cliente, moneda); `commercialActivityAt` es un evento real de la revisión o null; error de request ≠ `none`; sin fallback a `projectEstimates`/`project.items`/`Project.updatedAt`. La ordenación de la pantalla sigue siendo la del workspace de proyectos (el endpoint ordena determinista, no por actividad comercial) |
 | Dashboard Inicio/Ventas (`dashboardStats`, `dashboardRecent`, funnel) | Pendiente: misma dependencia legacy |
 | Operaciones/Producción (`ProductionQueue`, workspace) | Pendiente: separar aceptación comercial de etapa operativa |
@@ -923,6 +923,24 @@ P1
 NUNCA autoriza un release — el guard de regresión vive en
 `TestProductionRelease_AuthorityIsQuoteRevisionNotProjectStatus` y en el stage 10
 del E2E golden.
+
+La UI cuenta la misma historia (corrección de review del PR #673): la aceptación
+comercial (`QuoteRevision.accepted`) es condición para CREAR un release, nunca un
+sustituto de tenerlo. Las superficies de producción desde Cotizaciones
+(`Abrir en Producción`, export de producción) se habilitan por
+`releaseAuthorityOf(project)?.source === 'canonical'` — el ProductionRelease
+exacto que el server resolvió — y NO por una QuoteRevision aceptada sin release.
+Los statuses `accepted|produced` quedan compatibility-only para obras pre-DT
+(sin revisiones de cotización del Digital Thread); en una obra moderna con
+QuoteRevisions, un `Project.status=accepted` accidental no vuelve a autorizar
+producción silenciosamente. UI y backend rechazan lo mismo.
+
+```text
+Aceptación comercial            → QuoteRevision.accepted
+Aprobación técnica              → DesignRevision exacta + QuoteRevision compatible
+Autoridad para fabricar/abrir Producción → ProductionRelease canónico (QN, RN)
+Project.status accepted/produced → compatibility/operational legacy
+```
 
 ---
 

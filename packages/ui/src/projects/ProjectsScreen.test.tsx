@@ -1837,7 +1837,7 @@ describe('ProjectsScreen project templates (#110)', () => {
     ).toBeNull();
   });
 
-  it('#642: accepted QuoteRevision authority unlocks the production chrome while Project.status stays draft', async () => {
+  it('#642: an accepted QuoteRevision without a ProductionRelease is NOT plant-ready', async () => {
     const user = userEvent.setup();
     const onOpenInProduction = vi.fn();
     const draftWithAcceptedQuote: Project = {
@@ -1850,8 +1850,6 @@ describe('ProjectsScreen project templates (#110)', () => {
       projects: [draftWithAcceptedQuote],
       projectEstimates: { 'prj-draft-q2': 500 },
       onOpenInProduction,
-      onMarkProduced: vi.fn(),
-      canMarkProduced: true,
       quoteAuthority: {
         kind: 'ready',
         revisionId: 'quote-2',
@@ -1869,27 +1867,44 @@ describe('ProjectsScreen project templates (#110)', () => {
 
     await user.click(screen.getByTestId('project-card-prj-draft-q2'));
 
-    // Exact commercial authority (not Project.status) unlocks production.
-    const openBtn = screen.getByTestId('project-open-in-production');
-    expect(openBtn.className).toMatch(/btn--primary/);
-    // mark-produced stays bound to the literal project lifecycle (draft here).
+    // Commercial acceptance alone never unlocks manufacturing surfaces.
+    expect(screen.queryByTestId('project-open-in-production')).toBeNull();
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
     expect(screen.queryByTestId('project-mark-produced')).toBeNull();
-
-    await user.click(openBtn);
-    expect(onOpenInProduction).toHaveBeenCalledWith('prj-draft-q2');
+    expect(onOpenInProduction).not.toHaveBeenCalled();
   });
 
-  it('#642: non-accepted quote authority keeps the production chrome closed', async () => {
+  it('#642: a canonical ProductionRelease unlocks the production chrome while Project.status stays draft', async () => {
     const user = userEvent.setup();
     const onOpenInProduction = vi.fn();
+    const releasedDraft: Project = {
+      ...projects[0]!,
+      id: 'prj-released-draft',
+      name: 'Obra liberada P1',
+      status: 'draft',
+      resolvedProductionRelease: {
+        source: 'canonical',
+        releaseId: 'rel-p1',
+        releaseNumber: 1,
+        quoteRevisionId: 'quote-2',
+        designRevisionId: 'rev-r2',
+        designRevisionNumber: 2,
+        frozenRouting: true,
+        status: 'active',
+      },
+    };
     renderScreen({
+      projects: [releasedDraft],
+      projectEstimates: { 'prj-released-draft': 500 },
       onOpenInProduction,
+      onMarkProduced: vi.fn(),
+      canMarkProduced: true,
       quoteAuthority: {
         kind: 'ready',
-        revisionId: 'quote-1',
-        revisionNumber: 1,
-        status: 'published',
-        projectName: 'Cocina Ana',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Obra liberada P1',
         customerId: 'cust-ana',
         customerName: 'Ana López',
         furnitureQuantity: 1,
@@ -1899,11 +1914,81 @@ describe('ProjectsScreen project templates (#110)', () => {
       },
     });
 
-    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByTestId('project-card-prj-released-draft'));
 
+    // The canonical manufacturing authority — not Project.status, not the
+    // accepted quote alone — unlocks production.
+    const openBtn = screen.getByTestId('project-open-in-production');
+    expect(openBtn.className).toMatch(/btn--primary/);
+    // mark-produced stays bound to the literal project lifecycle (draft here).
+    expect(screen.queryByTestId('project-mark-produced')).toBeNull();
+
+    await user.click(openBtn);
+    expect(onOpenInProduction).toHaveBeenCalledWith('prj-released-draft');
+  });
+
+  it('#642: a legacy accepted Project.status never bypasses the release authority on a modern project', async () => {
+    const user = userEvent.setup();
+    const onOpenInProduction = vi.fn();
+    const legacyStampedModern: Project = {
+      ...projects[0]!,
+      id: 'prj-legacy-stamp',
+      name: 'Obra con stamp legacy',
+      status: 'accepted',
+    };
+    renderScreen({
+      projects: [legacyStampedModern],
+      projectEstimates: { 'prj-legacy-stamp': 500 },
+      onOpenInProduction,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-3',
+        revisionNumber: 3,
+        status: 'published',
+        projectName: 'Obra con stamp legacy',
+        customerId: 'cust-ana',
+        customerName: 'Ana López',
+        furnitureQuantity: 1,
+        currency: 'MXN',
+        capturedAt: '2026-09-11T12:00:00Z',
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-legacy-stamp'));
+
+    // Modern project (Digital Thread quote revisions exist): the accidental
+    // legacy status must NOT silently authorize production without a
+    // canonical ProductionRelease — the UI tells the same story as the
+    // server, which rejects the release command.
     expect(screen.queryByTestId('project-open-in-production')).toBeNull();
     expect(screen.queryByTestId('project-chrome-export')).toBeNull();
-    expect(screen.queryByTestId('project-mark-produced')).toBeNull();
+    expect(onOpenInProduction).not.toHaveBeenCalled();
+  });
+
+  it('#642: true pre-DT projects keep the legacy accepted/produced compatibility', async () => {
+    const user = userEvent.setup();
+    const onOpenInProduction = vi.fn();
+    const preDT: Project = {
+      ...projects[0]!,
+      id: 'prj-predt',
+      name: 'Obra pre-Digital Thread',
+      status: 'accepted',
+    };
+    renderScreen({
+      projects: [preDT],
+      projectEstimates: { 'prj-predt': 500 },
+      onOpenInProduction,
+      // No Digital Thread quote revisions exist: compatibility-only branch.
+      quoteAuthority: { kind: 'empty', message: 'Esta obra todavía no tiene una revisión de cotización.' },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-predt'));
+
+    const openBtn = screen.getByTestId('project-open-in-production');
+    expect(openBtn.className).toMatch(/btn--primary/);
+    await user.click(openBtn);
+    expect(onOpenInProduction).toHaveBeenCalledWith('prj-predt');
   });
 
   it('management modal lists templates with a delete button', async () => {
