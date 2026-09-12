@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -915,4 +916,291 @@ func assertHardwareAssetsSchema(t *testing.T, pool *pgxpool.Pool) {
 	).Scan(&fkCount); err != nil || fkCount != 2 {
 		t.Fatalf("hardware binding FKs = %d err=%v", fkCount, err)
 	}
+}
+
+// --- Ronda de corrección R2/R4 (#667 M1): pruebas registradas en RED primero ---
+
+// R2: el listado debe cargar las revisiones igual que el detalle (la versión
+// revisada devuelve copias con el slice de revisiones vacío).
+func TestHardwareAssets_ListMatchesDetail(t *testing.T) {
+	w := newHwAssetWorld(t)
+	first := stageAndFinalizeAsset(t, w, "Recurso uno", "")
+	second := stageAndFinalizeAssetDigest(t, w, "Recurso dos", "", "77")
+	_ = second
+	secondV2 := stageAndFinalizeAssetDigest(t, w, "Recurso dos v2", second.ID, "88")
+
+	var list []domain.HardwareAsset
+	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		var err error
+		list, err = w.fx.store.ListHardwareAssets(ctx)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("list length = %d", len(list))
+	}
+	byName := map[string]*domain.HardwareAsset{}
+	for i := range list {
+		byName[list[i].DisplayName] = &list[i]
+	}
+	detailOne := mustGetAsset(t, w, first.ID)
+	detailTwo := mustGetAsset(t, w, second.ID)
+
+	// Recurso uno: una revisión, mismos hechos que el detalle.
+	lv := byName["Recurso uno"]
+	if lv == nil || len(lv.Revisions) != 1 {
+		t.Fatalf("list 'Recurso uno' revisions = %+v", lv)
+	}
+	if lv.Revisions[0].ID != detailOne.Revisions[0].ID ||
+		lv.Revisions[0].RevisionNumber != detailOne.Revisions[0].RevisionNumber ||
+		lv.Revisions[0].SHA256 != detailOne.Revisions[0].SHA256 ||
+		lv.Revisions[0].Representation != detailOne.Revisions[0].Representation ||
+		lv.Revisions[0].ValidationState != detailOne.Revisions[0].ValidationState {
+		t.Fatalf("list vs detail (uno): %+v vs %+v", lv.Revisions[0], detailOne.Revisions[0])
+	}
+
+	// Recurso dos: DOS revisiones en el listado, igual que el detalle.
+	lv2 := byName["Recurso dos"]
+	if lv2 == nil {
+		t.Fatal("list missing 'Recurso dos'")
+	}
+	if len(lv2.Revisions) != 2 || len(detailTwo.Revisions) != 2 {
+		t.Fatalf("list revisions = %d, detail revisions = %d (want 2/2)", len(lv2.Revisions), len(detailTwo.Revisions))
+	}
+	for i, lr := range lv2.Revisions {
+		dr := detailTwo.Revisions[i]
+		if lr.ID != dr.ID || lr.RevisionNumber != dr.RevisionNumber ||
+			lr.SHA256 != dr.SHA256 || lr.Representation != dr.Representation ||
+			lr.ValidationState != dr.ValidationState {
+			t.Fatalf("list vs detail (dos, rev %d): %+v vs %+v", i, lr, dr)
+		}
+	}
+	_ = secondV2
+}
+
+// R4: los pins provienen del contexto semántico exacto, no del conjunto
+// filtrado para dibujar placeholders. Un herraje con recurso SKP asociado y
+// SIN previewShape debe congelarse; las hardware_lines del módulo también son
+// referencias semánticas. R1 conserva A tras rebind a B y publicar R2.
+func TestHardwareAssets_PinsFromSemanticCompositionWithoutPreview(t *testing.T) {
+	w := newHwAssetWorld(t)
+
+	// Tercer herraje SIN previewShape (el fixture a1 lo tiene; a3 no) y
+	// cuarto herraje referenciado sólo por una hardware_line (sin placement).
+	multiOrgExec(t, w.fx.admin, `INSERT INTO hardwares (id, code, name, unit, cost_per_unit, active, organization_id)
+		VALUES ('74000000-0000-0000-0000-0000000000a3', 'HW-NO-PREVIEW', 'Tirador real', 'piece', 15, TRUE, '`+rlsOrgA+`')`)
+	multiOrgExec(t, w.fx.admin, `INSERT INTO hardwares (id, code, name, unit, cost_per_unit, active, organization_id)
+		VALUES ('74000000-0000-0000-0000-0000000000a4', 'HW-LINE-ONLY', 'Guía costos', 'piece', 8, TRUE, '`+rlsOrgA+`')`)
+	multiOrgExec(t, w.fx.admin, `UPDATE structure_components
+		SET overrides = '{"hardwarePlacements":[
+			{"hardwareId":"74000000-0000-0000-0000-0000000000a1","anchorFace":"front","relativePosition":{"xMm":50,"yMm":50}},
+			{"hardwareId":"74000000-0000-0000-0000-0000000000a3","anchorFace":"front","relativePosition":{"xMm":150,"yMm":50}}]}'
+		WHERE structure_id='71000000-0000-0000-0000-000000000001'
+		  AND component_id='71000000-0000-0000-0000-000000000002'`)
+	multiOrgExec(t, w.fx.admin, `INSERT INTO hardware_lines (module_id, quantity, option_role, hardware_id, organization_id)
+		VALUES ('`+fiModuleA+`', 2, 'GUIA', '74000000-0000-0000-0000-0000000000a4', '`+rlsOrgA+`')`)
+
+	assetA1 := stageAndFinalizeAsset(t, w, "Control con preview", "")
+	assetA3 := stageAndFinalizeAssetDigest(t, w, "Tirador real v1", "", "33")
+	assetA4 := stageAndFinalizeAssetDigest(t, w, "Guía v1", "", "44")
+	bindHardwareToRevision(t, w, "74000000-0000-0000-0000-0000000000a1", assetA1)
+	bindHardwareToRevision(t, w, "74000000-0000-0000-0000-0000000000a3", assetA3)
+	bindHardwareToRevision(t, w, "74000000-0000-0000-0000-0000000000a4", assetA4)
+
+	rev1 := publishDesignRev(t, w, "")
+	pins1 := mustListPins(t, w, rev1.ID)
+	pinned := map[string]domain.DesignRevisionHardwareAssetPin{}
+	for _, p := range pins1 {
+		pinned[p.HardwareID] = p
+	}
+	// a1 (con preview) y a3 (SIN preview, con recurso) y a4 (sólo línea).
+	for _, hwID := range []string{
+		"74000000-0000-0000-0000-0000000000a1",
+		"74000000-0000-0000-0000-0000000000a3",
+		"74000000-0000-0000-0000-0000000000a4",
+	} {
+		p, ok := pinned[hwID]
+		if !ok {
+			t.Fatalf("R1 debe congelar el pin del herraje %s (contexto semántico, no preview): pins=%+v", hwID, pins1)
+		}
+		if p.Representation != domain.HardwareAssetRepresentationSKP || p.SHA256 == "" {
+			t.Fatalf("pin incoherente para %s: %+v", hwID, p)
+		}
+	}
+	if pinned["74000000-0000-0000-0000-0000000000a3"].AssetRevisionID != assetA3.Revisions[0].ID {
+		t.Fatalf("pin a3 = %+v", pinned["74000000-0000-0000-0000-0000000000a3"])
+	}
+
+	// Coherencia referencial de cada pin: digest/representación coinciden con
+	// la fila de la revisión referenciada (una sola lectura consistente).
+	assertPinCoherence(t, w, rev1.ID)
+
+	// Rebind de a3 a una nueva revisión y publicación de R2: R1 conserva A.
+	assetA3v2 := stageAndFinalizeAssetDigest(t, w, "Tirador real v2", assetA3.ID, "55")
+	bindHardwareToRevision(t, w, "74000000-0000-0000-0000-0000000000a3", assetA3v2)
+
+	rev2 := publishDesignRev(t, w, rev1.ID)
+	pins2 := mustListPins(t, w, rev2.ID)
+	pinned2 := map[string]domain.DesignRevisionHardwareAssetPin{}
+	for _, p := range pins2 {
+		pinned2[p.HardwareID] = p
+	}
+	if pinned2["74000000-0000-0000-0000-0000000000a3"].AssetRevisionID != assetA3v2.Revisions[1].ID {
+		t.Fatalf("R2 debe congelar la revisión nueva de a3: %+v", pins2)
+	}
+	pins1After := mustListPins(t, w, rev1.ID)
+	for _, p := range pins1After {
+		if p.HardwareID == "74000000-0000-0000-0000-0000000000a3" && p.AssetRevisionID != assetA3.Revisions[0].ID {
+			t.Fatalf("R1 mutó tras el rebind: %+v", p)
+		}
+	}
+	assertPinCoherence(t, w, rev2.ID)
+}
+
+// assertPinCoherence: cada pin coincide con la revisión que referencia
+// (digest + representación leídos de la propia fila de la revisión).
+func assertPinCoherence(t *testing.T, w *hwAssetWorld, revisionID string) {
+	t.Helper()
+	rows, err := w.fx.admin.Query(context.Background(), `
+		SELECT p.hardware_id, p.asset_revision_id, p.representation, p.sha256, r.representation, r.sha256, r.asset_id, p.asset_id
+		FROM design_revision_hardware_assets p
+		JOIN hardware_asset_revisions r ON r.id = p.asset_revision_id
+		WHERE p.design_revision_id = $1`, revisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var hwID, pinRev, pinRep, pinSHA, rowRep, rowSHA, rowAsset, pinAsset string
+		if err := rows.Scan(&hwID, &pinRev, &pinRep, &pinSHA, &rowRep, &rowSHA, &rowAsset, &pinAsset); err != nil {
+			t.Fatal(err)
+		}
+		if pinRep != rowRep || pinSHA != rowSHA || pinAsset != rowAsset {
+			t.Fatalf("pin incoherente para %s: pin=(%s,%s,%s) revisión=(%s,%s,%s)",
+				hwID, pinRev, pinRep, pinSHA[:16], rowAsset, rowRep, rowSHA[:16])
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// R4: composición rota (estructura referenciada inexistente) → la publicación
+// falla con error; jamás desaparición silenciosa de pins.
+func TestHardwareAssets_PublishFailsOnBrokenComposition(t *testing.T) {
+	w := newHwAssetWorld(t)
+	asset := stageAndFinalizeAsset(t, w, "Tirador roto", "")
+	bindHardwareToRevision(t, w, "74000000-0000-0000-0000-0000000000a1", asset)
+	// Composición rota: la estructura referencia un agregado inexistente
+	// (JSONB sin FK — el único camino real de drift referencial).
+	multiOrgExec(t, w.fx.admin, `UPDATE structures SET agregados = '[{"agregado_id":"99000000-0000-0000-0000-0000000000aa","quantity":1}]'
+		WHERE id='71000000-0000-0000-0000-000000000001'`)
+
+	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		_, err := w.fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:   w.designID,
+			SourceType: domain.DesignRevisionSourceSketchup,
+			ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err == nil {
+		t.Fatal("la publicación con composición rota debe fallar (nunca pins silenciosamente ausentes)")
+	}
+}
+
+// R4: ausencia legítima — un ítem sin definición no inventa pins y no bloquea
+// la publicación.
+func TestHardwareAssets_PublishLegitimateAbsenceWithoutDefinition(t *testing.T) {
+	w := newHwAssetWorld(t)
+	asset := stageAndFinalizeAsset(t, w, "Sin uso", "")
+	bindHardwareToRevision(t, w, "74000000-0000-0000-0000-0000000000a1", asset)
+
+	// Working copy con DOS ítems: el definido (fi) y uno SIN definición.
+	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		fi, err := w.fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID:   fiSharedProject,
+			Origin:      domain.FurnitureInstanceOriginDesign,
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		_, err = w.fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID:   w.designID,
+			SourceType: domain.DesignRevisionSourceSketchup,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
+				{
+					FurnitureInstanceID:  w.fi, // con definición (fiModuleA)
+					FurnitureDefinitionID: fiModuleA,
+					Parameters:            map[string]any{"widthMm": 600.0},
+					Transform: domain.Transform3D{TranslationMm: [3]float64{0, 0, 0}, RotationDeg: [3]float64{0, 0, 0}},
+				},
+				{
+					FurnitureInstanceID: fi.ID, // sin definición
+					Transform: domain.Transform3D{TranslationMm: [3]float64{600, 0, 0}, RotationDeg: [3]float64{0, 0, 0}},
+				},
+			},
+			ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("working copy: %v", err)
+	}
+
+	rev := publishDesignRev(t, w, "")
+	// El ítem sin definición no aporta pins; el publicado con definición sí
+	// (el fixture a1 sigue referenciado por la composición).
+	pins := mustListPins(t, w, rev.ID)
+	found := false
+	for _, p := range pins {
+		if p.HardwareID == "74000000-0000-0000-0000-0000000000a1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("el ítem CON definición debe aportar su pin: %+v", pins)
+	}
+}
+
+// R4: publicación concurrente con rebind — cada fila de pin debe seguir
+// siendo coherente con exactamente una revisión (integridad bajo carrera
+// real con barreras).
+func TestHardwareAssets_ConcurrentRebindDuringPublish(t *testing.T) {
+	w := newHwAssetWorld(t)
+	asset := stageAndFinalizeAsset(t, w, "Concurrente v1", "")
+	bindHardwareToRevision(t, w, "74000000-0000-0000-0000-0000000000a1", asset)
+	assetV2 := stageAndFinalizeAssetDigest(t, w, "Concurrente v2", asset.ID, "66")
+
+	barrier := make(chan struct{})
+	publishErr := make(chan error, 1)
+	go func() {
+		<-barrier
+		rev := publishDesignRev(t, w, "")
+		if rev != nil {
+			publishErr <- nil
+			return
+		}
+		publishErr <- fmt.Errorf("publish devolvió revisión nula")
+	}()
+	go func() {
+		<-barrier
+		bindHardwareToRevision(t, w, "74000000-0000-0000-0000-0000000000a1", assetV2)
+	}()
+	close(barrier)
+	if err := <-publishErr; err != nil {
+		t.Fatalf("publish concurrente: %v", err)
+	}
+
+	// Sea cual sea el interleaving, cada pin es coherente con su revisión.
+	var revisionID string
+	if err := w.fx.admin.QueryRow(context.Background(),
+		`SELECT id FROM design_revisions WHERE design_id = $1 ORDER BY revision_number DESC LIMIT 1`, w.designID,
+	).Scan(&revisionID); err != nil {
+		t.Fatal(err)
+	}
+	assertPinCoherence(t, w, revisionID)
 }

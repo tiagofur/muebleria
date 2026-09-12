@@ -107,20 +107,28 @@ func TestHardwareAssets_BytesContentInspection(t *testing.T) {
 		Representation: domain.HardwareAssetRepresentationSKP,
 		ExpiresAt:      time.Now().Add(time.Hour),
 	}}
+	// R3: each upload targets a different representation, so the test aligns
+	// the stub session's representation with the URL before each call.
+	setSessionRepresentation := func(rep domain.HardwareAssetRepresentation) {
+		store.assetSession.Representation = rep
+	}
 	srv := &Server{Store: store, MediaDir: dir}
 	sessionID := "54000000-0000-0000-0000-000000000001"
 
 	// GLB without the format magic → refused even with .glb extension.
+	setSessionRepresentation(domain.HardwareAssetRepresentationGLB)
 	rr := hwAssetMultipart(t, srv, sessionID, "glb", "fake.glb", string(domain.RoleAdmin), []byte("not a gltf file at all"))
 	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "glTF") {
 		t.Fatalf("fake glb = %d %s", rr.Code, rr.Body.String())
 	}
 	// Thumbnail that is not an image → refused.
+	setSessionRepresentation(domain.HardwareAssetRepresentationThumbnail)
 	rr = hwAssetMultipart(t, srv, sessionID, "thumbnail", "fake.png", string(domain.RoleAdmin), []byte("definitely not an image"))
 	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "miniatura") {
 		t.Fatalf("fake thumbnail = %d %s", rr.Code, rr.Body.String())
 	}
 	// SKP is opaque binary: accepted with .skp name, server computes facts.
+	setSessionRepresentation(domain.HardwareAssetRepresentationSKP)
 	content := []byte("opaque sketchup container bytes")
 	store.recordAssetBytesArmed = true
 	rr = hwAssetMultipart(t, srv, sessionID, "skp", "real.skp", string(domain.RoleAdmin), content)
@@ -161,7 +169,8 @@ func TestHardwareAssets_ConfigurableLimit(t *testing.T) {
 	srv := &Server{
 		Store: &stubStore{assetSession: &domain.HardwareAssetUploadSession{
 			ID: "54000000-0000-0000-0000-000000000001", Status: "prepared",
-			ExpiresAt: time.Now().Add(time.Hour),
+			Representation: domain.HardwareAssetRepresentationSKP,
+			ExpiresAt:      time.Now().Add(time.Hour),
 		}},
 		MediaDir: dir,
 	}
@@ -397,9 +406,11 @@ func hwAssetE2EStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 // audit requires a real user id (never a test label).
 const hwAssetE2EActor = "21000000-0000-0000-0000-0000000000e2"
 
-// 1: el recorrido completo — iniciar carga, recibir bytes, finalizar con
-// verificación real, consultar, autorizar y recuperar los bytes exactos.
-func TestHardwareAssets_EndToEndByteRoundTrip(t *testing.T) {
+// Handler-level walkthrough (NOT the router E2E — the router/auth/idempotency
+// proof lives in hardware_assets_router_test.go): iniciar carga, recibir
+// bytes, finalizar con verificación real, consultar, autorizar y recuperar
+// los bytes exactos con handlers directos.
+func TestHardwareAssets_HandlerLevelByteWalkthrough(t *testing.T) {
 	store, pool := hwAssetE2EStore(t)
 
 	mediaAuthority, err := auth.NewMediaAuthority("hardware-asset-e2e-media-key-0123456789")
