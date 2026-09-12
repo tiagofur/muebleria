@@ -40,6 +40,7 @@ test.describe.serial('#642 legacy quote recovery', () => {
   let token: string;
   let client: GraneteApiClient;
   let instanceIds: string[];
+  let templateDepthMm: number;
 
   test.beforeAll(async () => {
     const apiBase = required('ORGANIZATION_API_BASE');
@@ -80,6 +81,7 @@ test.describe.serial('#642 legacy quote recovery', () => {
     });
 
     // Materialize the line's 3 physical units through the supported API.
+    templateDepthMm = depthMm;
     const mat = await client.materializeQuoteLineFurniture(
       token,
       PROJECT_ID,
@@ -161,7 +163,7 @@ test.describe.serial('#642 legacy quote recovery', () => {
     for (const instanceId of instanceIds) {
       await expect(detail.getByTestId(`quote-legacy-unit-${instanceId}`)).toBeVisible();
     }
-    await expect(detail.getByTestId('quote-legacy-dimensions-' + instanceIds[0]!)).toContainText('600×720×560 mm');
+    await expect(detail.getByTestId('quote-legacy-dimensions-' + instanceIds[0]!)).toContainText(`600×720×${templateDepthMm} mm`);
     await expect(detail.getByTestId('project-items-legacy')).toContainText('antes del historial comercial congelado');
 
     // Honest money: unavailable, never zero, never recalculated.
