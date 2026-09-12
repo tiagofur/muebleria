@@ -24,20 +24,35 @@ import (
 // instead of silently passing. This mirrors the httptest.ResponseRecorder style
 // of middleware_test.go and avoids any database dependency.
 type stubStore struct {
-	createCustomerErr    error
-	createMaterialErr    error
-	createProjectErr     error
-	updateProjectErr     error
-	customerReturnedByID *domain.Customer
-	customerGetByIDErr   error
-	projectReturnedByID  *domain.Project
-	projectGetByIDErr    error
-	listCustomers        []domain.Customer
-	listProjects         []domain.Project
-	listMaterials        []domain.MaterialBoard
-	lastCreatedCustomer  *domain.Customer
-	lastCreatedProject   *domain.Project
-	lastUpdatedProject   *domain.Project
+	// Hardware 3D assets (#667 M1)
+	assetSessionResult     *storage.HardwareAssetUploadSessionResult
+	assetSession           *domain.HardwareAssetUploadSession
+	assetSessionErr        error
+	recordAssetBytesCmd    *storage.RecordHardwareAssetSessionBytesCommand
+	recordAssetBytesErr    error
+	recordAssetBytesArmed  bool
+	assetFinalized         *domain.HardwareAsset
+	assetFinalizeCmd       *storage.FinalizeHardwareAssetUploadCommand
+	assetFinalizeErr       error
+	assetCancelledCmd      *storage.CancelHardwareAssetUploadSessionCommand
+	assetResolvedBinding   *domain.HardwareVisualAssetBinding
+	assetResolveBindingCmd *[2]string
+	assetRevisionResult    *domain.HardwareAssetRevision
+	listHardwareAssets     []domain.HardwareAsset
+	createCustomerErr      error
+	createMaterialErr      error
+	createProjectErr       error
+	updateProjectErr       error
+	customerReturnedByID   *domain.Customer
+	customerGetByIDErr     error
+	projectReturnedByID    *domain.Project
+	projectGetByIDErr      error
+	listCustomers          []domain.Customer
+	listProjects           []domain.Project
+	listMaterials          []domain.MaterialBoard
+	lastCreatedCustomer    *domain.Customer
+	lastCreatedProject     *domain.Project
+	lastUpdatedProject     *domain.Project
 	// Project furniture identity (#385 / DT-1)
 	furnitureInstancesByID map[string]domain.FurnitureInstance
 	listFurnitureInstances []domain.FurnitureInstance
@@ -3588,4 +3603,68 @@ func (s *stubStore) ResolveProjectReleaseAuthority(_ context.Context, _ string, 
 		return domain.ResolvedFromCanonicalRelease(s.latestProductionRelease), nil
 	}
 	return domain.ResolveLegacyProductionRelease(legacyBlob), nil
+}
+
+// --- #667 M1: hardware 3D asset stubs (no behavior; API tests use the real
+// PostgreSQL store for the asset flow) ---
+
+func (s *stubStore) CreateHardwareAssetUploadSession(_ context.Context, cmd storage.CreateHardwareAssetUploadSessionCommand) (*storage.HardwareAssetUploadSessionResult, error) {
+	if s.assetSessionResult == nil {
+		return nil, errors.New("not configured in stubStore")
+	}
+	if s.assetSessionResult.Session != nil && cmd.DisplayName != "" {
+		s.assetSessionResult.Session.DisplayName = cmd.DisplayName
+	}
+	return s.assetSessionResult, s.assetSessionErr
+}
+func (s *stubStore) GetHardwareAssetUploadSession(_ context.Context, _ string) (*domain.HardwareAssetUploadSession, error) {
+	if s.assetSession == nil {
+		return nil, domain.ErrHardwareAssetSessionNotFound
+	}
+	return s.assetSession, nil
+}
+func (s *stubStore) RecordHardwareAssetSessionBytes(_ context.Context, cmd storage.RecordHardwareAssetSessionBytesCommand) error {
+	if !s.recordAssetBytesArmed {
+		return errors.New("not configured in stubStore")
+	}
+	s.recordAssetBytesCmd = &cmd
+	return s.recordAssetBytesErr
+}
+func (s *stubStore) FinalizeHardwareAssetUpload(_ context.Context, cmd storage.FinalizeHardwareAssetUploadCommand) (*domain.HardwareAsset, error) {
+	s.assetFinalizeCmd = &cmd
+	if s.assetFinalized == nil {
+		return nil, errors.New("not configured in stubStore")
+	}
+	return s.assetFinalized, s.assetFinalizeErr
+}
+func (s *stubStore) CancelHardwareAssetUploadSession(_ context.Context, cmd storage.CancelHardwareAssetUploadSessionCommand) error {
+	s.assetCancelledCmd = &cmd
+	return nil
+}
+func (s *stubStore) ListHardwareAssets(_ context.Context) ([]domain.HardwareAsset, error) {
+	return s.listHardwareAssets, nil
+}
+func (s *stubStore) GetHardwareAsset(_ context.Context, _ string) (*domain.HardwareAsset, error) {
+	if s.assetFinalized == nil {
+		return nil, domain.ErrHardwareAssetNotFound
+	}
+	return s.assetFinalized, nil
+}
+func (s *stubStore) GetHardwareAssetRevision(_ context.Context, _, _ string) (*domain.HardwareAssetRevision, error) {
+	if s.assetRevisionResult == nil {
+		return nil, domain.ErrHardwareAssetRevisionNotFound
+	}
+	return s.assetRevisionResult, nil
+}
+func (s *stubStore) RetireHardwareAsset(_ context.Context, _ storage.RetireHardwareAssetCommand) error {
+	return nil
+}
+func (s *stubStore) ResolveHardwareVisualAssetBinding(_ context.Context, assetID, revisionID string) (*domain.HardwareVisualAssetBinding, error) {
+	if s.assetResolveBindingCmd != nil {
+		(*s.assetResolveBindingCmd) = [2]string{assetID, revisionID}
+	}
+	if s.assetResolvedBinding == nil {
+		return nil, domain.ErrHardwareAssetBindingInvalid
+	}
+	return s.assetResolvedBinding, nil
 }
