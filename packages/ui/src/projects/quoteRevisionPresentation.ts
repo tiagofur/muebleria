@@ -63,6 +63,24 @@ export function formatRevisionUnitDimensions(
 }
 
 /**
+ * Formats a QuoteRevision lifecycle status into Spanish UI copy (#642/3).
+ */
+export function formatQuoteRevisionStatus(status: string): string {
+  switch (status) {
+    case 'draft':
+      return 'Borrador';
+    case 'published':
+      return 'Publicada';
+    case 'accepted':
+      return 'Aceptada';
+    case 'superseded':
+      return 'Reemplazada';
+    default:
+      return status;
+  }
+}
+
+/**
  * Formats a furniture instance lifecycle status into Spanish UI copy (#642).
  */
 export function formatLifecycleStatus(status?: string): string {

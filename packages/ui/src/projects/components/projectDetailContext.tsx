@@ -79,6 +79,12 @@ export type ProjectDetailQuoteAuthority =
       readonly furnitureQuantity: number;
       readonly currency: string;
       readonly capturedAt: string;
+      /**
+       * #642/3: org-policy redaction (manufacturing-only caller) — the served
+       * snapshot copy carries zeroed retail amounts. Honest absence in the
+       * totals aside and per-line prices, never a misleading 0.
+       */
+      readonly amountsWithheld?: boolean;
       readonly staleMessage?: string;
       readonly onRetry: () => void;
       readonly snapshot?: import('@granete/storage').QuoteCommercialSnapshot;

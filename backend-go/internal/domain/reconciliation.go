@@ -99,10 +99,17 @@ type QuoteRevisionItem struct {
 // #642: CommercialSnapshot is the frozen commercial authority; NULL means the
 // revision never froze one (legacy) and consumers must fail closed — never
 // recalculate from mutable state.
+// #642/3: CommercialAmountsWithheld marks a read-time org policy redaction —
+// a caller whose organization reaches the project only as manufacturing
+// organization is not authorized for the frozen retail amounts (mirrors the
+// commercial-summaries saleTotal rule). The stored snapshot is intact; the
+// served copy carries zeroed retail amounts plus this flag so clients render
+// honest absence instead of a misleading 0.
 type QuoteRevisionDetail struct {
 	QuoteRevision
-	CreatedAt time.Time
-	Items     []QuoteRevisionItem
+	CreatedAt                  time.Time
+	Items                      []QuoteRevisionItem
+	CommercialAmountsWithheld bool `json:"commercialAmountsWithheld,omitempty"`
 }
 
 // StructuredDifference captures a specific property difference between quote and design.

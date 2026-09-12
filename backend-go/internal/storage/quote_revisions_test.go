@@ -250,3 +250,149 @@ func TestListQuoteRevisionsByProject_FailsClosedOnCorruptSnapshot(t *testing.T) 
 		t.Fatalf("error = %v, want ErrInvalidRevisionSnapshot", err)
 	}
 }
+
+// #642/3 RISK 3: the frozen retail price is org-authorized. The owner
+// organization and the sales organization read the full frozen snapshot; a
+// caller that only manufactures the project receives the frozen identity,
+// lines and units (production truth) with the retail amounts zeroed and the
+// explicit withheld flag — honest absence, never the raw amount and never a
+// silently faked 0. Mirrors the commercial-summaries saleTotal policy.
+func TestListQuoteRevisionsByProject_MultiOrgRetailAmountsWithheld(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+
+	var instance *domain.FurnitureInstance
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		var txErr error
+		instance, txErr = fx.store.CreateFurnitureInstance(txCtx, storage.CreateFurnitureInstanceCommand{
+			ProjectID:   fiSharedProject,
+			Origin:      domain.FurnitureInstanceOriginManual,
+			ActorUserID: rlsUserA,
+			RequestID:   "qr-withheld-instance",
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+
+	item := storage.CreateQuoteRevisionItemCommand{
+		FurnitureInstanceID: instance.ID,
+		QuoteLineID:         "3c100000-0000-0000-0000-000000000011",
+		LifecycleStatus:     "active",
+	}
+	snapshot := fixtureCommercialSnapshot(fiSharedProject, []storage.CreateQuoteRevisionItemCommand{item})
+	// A REAL priced snapshot: the retail amounts the manufacturing-only org
+	// must never receive.
+	snapshot.Breakdown = domain.QuoteBreakdown{
+		MaterialsCost: 100, EdgeTotal: 10, HardwareTotal: 5,
+		DirectCost: 115, LaborModular: 0, LaborFixedCost: 0,
+		MarginFactor: 1.3, SalePrice: 149.5,
+	}
+	for i := range snapshot.Lines {
+		snapshot.Lines[i].Amounts = domain.QuoteCommercialLineAmounts{
+			MaterialsCost: 100, EdgeTotal: 10, HardwareTotal: 5,
+			DirectCost: 115, LaborModular: 0, SalePrice: 149.5,
+		}
+	}
+
+	var revision *domain.QuoteRevision
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		var txErr error
+		revision, txErr = fx.store.CreateQuoteRevision(txCtx, storage.CreateQuoteRevisionCommand{
+			OrganizationID:     rlsOrgA,
+			ProjectID:          fiSharedProject,
+			Status:             "draft",
+			SourceType:         "manual",
+			CreatedBy:          rlsUserA,
+			Items:              []storage.CreateQuoteRevisionItemCommand{item},
+			CommercialSnapshot: snapshot,
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("create revision: %v", err)
+	}
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		_, txErr := fx.store.UpdateQuoteRevisionStatus(txCtx, storage.UpdateQuoteRevisionStatusCommand{
+			QuoteRevisionID: revision.ID,
+			Status:          "published",
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("publish revision: %v", err)
+	}
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		_, txErr := fx.store.UpdateQuoteRevisionStatus(txCtx, storage.UpdateQuoteRevisionStatusCommand{
+			QuoteRevisionID: revision.ID,
+			Status:          "accepted",
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("accept revision: %v", err)
+	}
+
+	// Case A — owner/sales organization (org A): the full frozen snapshot,
+	// amounts authorized, no withholding marker.
+	var orgA []domain.QuoteRevisionDetail
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		var txErr error
+		orgA, txErr = fx.store.ListQuoteRevisionsByProject(txCtx, fiSharedProject)
+		return txErr
+	}); err != nil {
+		t.Fatalf("org A list: %v", err)
+	}
+	_ = orgA
+	if len(orgA) != 1 {
+		t.Fatalf("org A revisions = %d, want 1", len(orgA))
+	}
+	orgASnapshot := orgA[0].CommercialSnapshot
+	if orgASnapshot == nil {
+		t.Fatal("org A must receive the commercial snapshot")
+	}
+	if orgASnapshot.Breakdown.SalePrice != 149.5 {
+		t.Fatalf("org A breakdown.salePrice = %v, want 149.5", orgASnapshot.Breakdown.SalePrice)
+	}
+	for _, line := range orgASnapshot.Lines {
+		if line.Amounts.SalePrice != 149.5 {
+			t.Fatalf("org A line salePrice = %v, want 149.5", line.Amounts.SalePrice)
+		}
+	}
+	if orgA[0].CommercialAmountsWithheld {
+		t.Fatal("org A must NOT be marked amounts-withheld")
+	}
+
+	// Case B — manufacturing-only organization (org B): the read is allowed
+	// (RLS names the manufacturing org) but the retail amounts are REDACTED
+	// server-side with the explicit withheld flag. Identity, lines and units
+	// survive (production truth); the sale price never crosses the wire.
+	var orgB []domain.QuoteRevisionDetail
+	if err := fiTx(t, fx.store, fiActorB(), func(txCtx context.Context) error {
+		var txErr error
+		orgB, txErr = fx.store.ListQuoteRevisionsByProject(txCtx, fiSharedProject)
+		return txErr
+	}); err != nil {
+		t.Fatalf("org B list: %v", err)
+	}
+	if len(orgB) != 1 {
+		t.Fatalf("org B revisions = %d, want 1", len(orgB))
+	}
+	orgBSnapshot := orgB[0].CommercialSnapshot
+	if orgBSnapshot == nil {
+		t.Fatal("org B must still receive the frozen identity/lines/units")
+	}
+	if orgBSnapshot.Project.Name != "Fixture project" || orgBSnapshot.Customer.Name != "Fixture customer" {
+		t.Fatalf("org B lost frozen identity: %+v", orgBSnapshot.Project)
+	}
+	if len(orgBSnapshot.Lines) != 1 || len(orgBSnapshot.Units) != 1 {
+		t.Fatalf("org B lost frozen lines/units: %d lines, %d units", len(orgBSnapshot.Lines), len(orgBSnapshot.Units))
+	}
+	if orgBSnapshot.Breakdown.SalePrice != 0 {
+		t.Fatalf("org B breakdown.salePrice = %v, want 0 (redacted)", orgBSnapshot.Breakdown.SalePrice)
+	}
+	for _, line := range orgBSnapshot.Lines {
+		if line.Amounts.SalePrice != 0 {
+			t.Fatalf("org B line salePrice = %v, want 0 (redacted)", line.Amounts.SalePrice)
+		}
+	}
+	if !orgB[0].CommercialAmountsWithheld {
+		t.Fatal("org B must be marked amounts-withheld so clients render honest absence")
+	}
+}

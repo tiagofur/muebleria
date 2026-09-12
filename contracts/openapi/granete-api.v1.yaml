@@ -9128,6 +9128,10 @@
           "commercialSnapshot": {
             "$ref": "#/components/schemas/QuoteCommercialSnapshot"
           },
+          "commercialAmountsWithheld": {
+            "description": "#642/3: true when the caller's organization reaches the project only as manufacturing organization — the served snapshot copy carries zeroed retail amounts and this flag, so clients render honest absence instead of a misleading 0. Absent (false) means the frozen retail amounts are authorized for this caller.",
+            "type": "boolean"
+          },
           "items": {
             "type": "array",
             "items": {

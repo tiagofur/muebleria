@@ -225,7 +225,9 @@ test('exports XLSX + PDF of the exact Q2 with frozen identity after mutations', 
   });
   const revisions = await client.listProjectQuoteRevisions(aOwner.token, PROJECT_ID);
   const q2 = revisions.find((r) => r.revisionNumber === 2)!;
-  const snapshot = q2.commercialSnapshot!;
+  const q2Snapshot = q2.commercialSnapshot!;
+  const q1 = revisions.find((r) => r.revisionNumber === 1)!;
+  const q1Snapshot = q1.commercialSnapshot!;
   const depthMm = q2.items[0]!.parameters.depthMm as number;
 
   await loginToA(page);
@@ -233,11 +235,40 @@ test('exports XLSX + PDF of the exact Q2 with frozen identity after mutations', 
   const detail = page.getByTestId('project-detail');
   await expect(detail.getByTestId('quote-revision-badge')).toContainText('Q2 · Solo lectura', { timeout: 20_000 });
 
-  // The commercial buttons name the exact visible revision.
+  // The export picker offers BOTH exact revisions (newest first), each item
+  // bound to that revision's id — not only the visible authority.
   await page.getByRole('button', { name: /^Más$/i }).click();
   await expect(page.getByRole('menuitem', { name: /Exportar cotización Q2/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Exportar cotización Q1/ })).toBeVisible();
+  await expect(page.getByText('Q1 · Reemplazada')).toBeVisible();
+
+  // ── XLSX Q1 (historical, selected from the picker): frozen 600 mm ──
+  const [q1Download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('menuitem', { name: /Exportar cotización Q1/ }).click(),
+  ]);
+  expect(q1Download.suggestedFilename()).toBe(
+    'Cotizacion-Cocina-Export-E2E-Cliente-Export-E2E-Q1.xlsx',
+  );
+  const q1Workbook = new ExcelJS.Workbook();
+  await q1Workbook.xlsx.readFile(await q1Download.path());
+  const q1Sheet = q1Workbook.getWorksheet('Cotización')!;
+  expect(q1Sheet.getCell('A1').value).toBe('Cotización Q1');
+  expect(q1Sheet.getCell('B5').value).toBe('Q1');
+  expect(q1Sheet.getCell('D5').value).toBe('Reemplazada');
+  expect(q1Sheet.getCell('B3').value).toBe(FROZEN_PROJECT_NAME);
+  expect(q1Sheet.getCell('B4').value).toBe(FROZEN_CUSTOMER_NAME);
+  // Q1 = 600 mm and Q1 totals — the exact historical truth.
+  expect(q1Sheet.getCell('D9').value).toBe(`600×720×${depthMm} mm`);
+  let q1TotalCell: ExcelJS.Cell | undefined;
+  q1Sheet.eachRow((row) => {
+    if (row.getCell(1).value === 'Total (precio de venta)') q1TotalCell = row.getCell(2);
+  });
+  expect(q1TotalCell?.value).toBe(q1Snapshot.breakdown.salePrice);
+  await expect(page.getByText('✓ Cotizacion-Cocina-Export-E2E-Cliente-Export-E2E-Q1.xlsx descargado')).toBeVisible({ timeout: 10_000 });
 
   // ── XLSX Q2: download, filename and semantic workbook readback ──
+  await page.getByRole('button', { name: /^Más$/i }).click();
   const [xlsxDownload] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('menuitem', { name: /Exportar cotización Q2/ }).click(),
@@ -257,8 +288,8 @@ test('exports XLSX + PDF of the exact Q2 with frozen identity after mutations', 
   expect(sheet.getCell('D4').value).toBe('MXN');
   expect(sheet.getCell('B6').value).toBe('Congelados (revisión Q2)');
   // Exact frozen line: module descriptor + 650 mm dimensions of Q2.
-  expect(sheet.getCell('A9').value).toBe(snapshot.units[0]!.moduleCode);
-  expect(sheet.getCell('B9').value).toBe(snapshot.units[0]!.moduleName);
+  expect(sheet.getCell('A9').value).toBe(q2Snapshot.units[0]!.moduleCode);
+  expect(sheet.getCell('B9').value).toBe(q2Snapshot.units[0]!.moduleName);
   expect(sheet.getCell('C9').value).toBe(1);
   expect(sheet.getCell('D9').value).toBe(`650×720×${depthMm} mm`);
   // Authorized sale amounts: frozen line price + total, from the snapshot.
@@ -266,7 +297,7 @@ test('exports XLSX + PDF of the exact Q2 with frozen identity after mutations', 
   sheet.eachRow((row) => {
     if (row.getCell(1).value === 'Total (precio de venta)') totalCell = row.getCell(2);
   });
-  expect(totalCell?.value).toBe(snapshot.breakdown.salePrice);
+  expect(totalCell?.value).toBe(q2Snapshot.breakdown.salePrice);
   // The mutated present must not leak into the frozen document.
   const cellTexts: string[] = [];
   sheet.eachRow((row) => {
@@ -275,10 +306,22 @@ test('exports XLSX + PDF of the exact Q2 with frozen identity after mutations', 
     });
   });
   const sharedText = cellTexts.join('\n');
-  for (const mutated of [RENAMED_PROJECT_NAME, RENAMED_CUSTOMER_NAME, 'Bajo RENOMBRADO actual', '600×720']) {
+  for (const mutated of [RENAMED_PROJECT_NAME, RENAMED_CUSTOMER_NAME, RENAMED_MODULE_NAME, '600×720']) {
     expect(sharedText).not.toContain(mutated);
   }
   await expect(page.getByText(`✓ ${EXPECTED_XLSX_NAME} descargado`)).toBeVisible({ timeout: 10_000 });
+
+  // ── PDF Q1: the historical revision reproduces itself in PDF too ──
+  await page.getByRole('button', { name: /^Más$/i }).click();
+  const [q1PdfDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('menuitem', { name: /PDF listado Q1/ }).click(),
+  ]);
+  expect(q1PdfDownload.suggestedFilename()).toBe(
+    'Cotizacion-Cocina-Export-E2E-Cliente-Export-E2E-Q1-listado.pdf',
+  );
+  const q1PdfDoc = await PDFDocument.load(Buffer.from(readFileSync(await q1PdfDownload.path())));
+  expect(q1PdfDoc.getTitle()).toBe(`Cotización Q1 — ${FROZEN_PROJECT_NAME} — ${FROZEN_CUSTOMER_NAME}`);
 
   // ── PDF Q2: same exact revision, filename identifies QN ──
   await page.getByRole('button', { name: /^Más$/i }).click();
@@ -396,12 +439,22 @@ test('legacy snapshot-less revision fails closed with the actionable CTA', async
   const detail = page.getByTestId('project-detail');
   await expect(detail.getByTestId('quote-legacy-badge')).toContainText('Q1 · Cotización anterior', { timeout: 20_000 });
 
-  // The export button EXISTS (discoverable) and fails closed with the honest
-  // CTA — no approximated PDF, no Project fallback, no download.
+  // The legacy revision stays discoverable in the export picker but is
+  // BLOCKED upfront with the honest hint — no approximated PDF, no Project
+  // fallback, no download. (The resolver also fails closed on it should the
+  // gate ever change.)
   await page.getByRole('button', { name: /^Más$/i }).click();
-  await page.getByRole('menuitem', { name: /Exportar cotización Q1/ }).click();
-  const alert = page.getByRole('alert');
-  await expect(alert).toBeVisible();
-  await expect(alert).toContainText('no tiene historial comercial congelado');
-  await expect(alert).toContainText('Creá una nueva revisión actualizada');
+  const legacyItem = page.getByRole('menuitem', { name: /Exportar cotización Q1/ });
+  await expect(legacyItem).toBeVisible();
+  await expect(legacyItem).toHaveAttribute('aria-disabled', 'true');
+  // All three format items of the legacy revision carry the honest hint.
+  await expect(page.getByText('Sin historial comercial congelado')).toHaveCount(3);
+  // A forced click on the disabled item triggers no flow: no download event
+  // and no success toast while the menu stays open.
+  let downloaded = false;
+  page.on('download', () => { downloaded = true; });
+  await legacyItem.click({ force: true }).catch(() => undefined);
+  await page.waitForTimeout(500);
+  expect(downloaded).toBe(false);
+  await expect(page.getByText(/descargado/)).toHaveCount(0);
 });

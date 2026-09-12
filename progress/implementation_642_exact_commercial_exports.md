@@ -196,6 +196,52 @@ gate `scripts/organization-browser-gate.sh`):
 - **Guest/local**: sin QuoteRevisions no hay export comercial (botones
   ausentes por diseño); el flujo local legacy se retiró de este consumer.
 
+## Correcciones de revisión (misma rama / PR #689)
+
+1. **Determinismo PDF cross-second (CI)**: pdf-lib estampa creation/modification
+   con resolución de segundos — dos builds que cruzan un límite de segundo
+   difieren. El documento ahora fija `setCreationDate/setModificationDate` al
+   `capturedAt` congelado; verificado determinista tras un gap forzado de 2 s.
+2. **Aislamiento de fixtures E2E**: los ids `4444` colisionaban con la obra del
+   demo-golden-path (ProductionRelease canónico → 500 determinista en el upsert
+   del proyecto legacy en orden full-suite) y `5555` con
+   project-designs-first-design. Fixtures propios en los bloques libres
+   `9999`/`7777`; módulos nuevos como literales limpios (el POST de módulos
+   rechaza spreads de módulos existentes); retries de 500 transitorios en
+   upserts de fixture. Gate completo local: 51/51.
+3. **BLOCKER 1 — selección de revisión histórica desde UI**: el menú Comercial
+   del detalle ahora renderiza una sección `Q{n} · {estado}` por revisión
+   (más nueva primero) con XLSX/PDF listado/PDF resumen por revisión; cada
+   acción actúa sobre un `quoteRevisionId` EXACTO resuelto contra la lista ya
+   cacheada de `listProjectQuoteRevisions` (`useQuoteRevisionAuthority`
+   devuelve `{authority, revisions}`; sin query duplicada). Nada de "latest
+   implícito" ni "sólo la autoridad visible". E2E real: seleccionar Q1 →
+   XLSX `…-Q1.xlsx` con `600×720×{depth} mm`, estado Reemplazada y totales Q1;
+   seleccionar Q2 → `…-Q2.xlsx` con 650 y totales Q2; PDF listado por
+   revisión con title `Cotización Q{n} — …`.
+4. **BLOCKER 2 — gate sin `Project.items`**: el gate de habilitación es el
+   snapshot congelado de la revisión (`lines.length > 0`); `Project.items` y
+   gates mutables ya no tocan el export comercial. Una Q2 con líneas
+   congeladas sigue exportable aunque `project.items` quede vacío (test UI
+   dedicado "BLOCKER 2" + assertions del E2E).
+5. **RISK 3 — montos minoristas por organización**: verificado que
+   `ListQuoteRevisionsByProject` devolvía el snapshot COMPLETO (incluido
+   `breakdown.salePrice`) a una org manufacturing-only. Corregido server-side
+   en el read model (misma política org que los commercial summaries):
+   owner/sales ven el snapshot íntegro; manufacturing-only recibe
+   identidad/líneas/unidades con los montos minoristas
+   (`breakdown.salePrice` + `amounts.salePrice` por línea) CEROS y el flag
+   explícito `commercialAmountsWithheld: true` (campo opcional nuevo del
+   contrato, OpenAPI regenerado Go/TS). UI honesta: el detalle muestra "No
+   disponible para tu organización" (nunca $0 disfrazado) y el export falla
+   cerrado con mensaje accionable; los ítems de revisión withheld van
+   deshabilitados en el picker con hint honesto. Test Go real
+   `TestListQuoteRevisionsByProject_MultiOrgRetailAmountsWithheld` (Caso A
+   owner/sales ve 149.5 íntegro; Caso B manufacturing ve 0 + flag y jamás
+   recibe el monto). COST-01/COST-02 intactos: vendedor/sales siguen viendo
+   precio de venta; la redacción por rol de costos
+   (`RedactQuoteCommercialSnapshot`) no cambia.
+
 ## Verificación
 
 - `pnpm typecheck` — 7/7 paquetes, 0 errores.

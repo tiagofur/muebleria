@@ -24,9 +24,9 @@ import { useUiStore } from '../stores/uiStore';
 import { buildCommercialQuoteExport } from '../exportCommercialQuote';
 import { buildCommercialQuotePdfExport } from '../exportCommercialQuotePdf';
 import {
-  resolveExactCommercialExportSource,
+  resolveExactRevisionExportSource,
 } from './exactCommercialQuoteModel';
-import type { QuoteRevisionAuthority } from '../quoteRevisionAuthority';
+import type { QuoteRevisionDetail } from '@granete/storage';
 import { buildHardwareListExport } from '../exportHardwareList';
 import {
   buildPieceLabelsExport,
@@ -624,14 +624,15 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
   );
 
   /**
-   * #642/3: commercial exports act on the EXACT QuoteRevision authority of
-   * the visible detail — never on the mutable Project. Non-ready states
-   * (legacy snapshot-less, empty, loading, error) fail closed with an
-   * actionable inline issue.
+   * #642/3: commercial exports act on ONE exact QuoteRevision selected by id
+   * from the shell's cached revision list (blocker 1) — never on the mutable
+   * Project, an implicit "latest", or the visible authority only. Unknown
+   * ids, legacy snapshot-less revisions and org-withheld retail amounts
+   * (manufacturing-only callers) fail closed with an actionable inline issue.
    */
   const handleExportCommercialQuote = useCallback(
-    async (authority: QuoteRevisionAuthority) => {
-      const resolved = resolveExactCommercialExportSource(authority);
+    async (revisions: ReadonlyArray<QuoteRevisionDetail>, quoteRevisionId: string) => {
+      const resolved = resolveExactRevisionExportSource(revisions, quoteRevisionId);
       if (!resolved.ok) {
         await runExport({ build: async () => resolved });
         return;
@@ -645,8 +646,12 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
   );
 
   const handleExportCommercialQuotePdf = useCallback(
-    async (authority: QuoteRevisionAuthority, variant: 'detailed' | 'summary') => {
-      const resolved = resolveExactCommercialExportSource(authority);
+    async (
+      revisions: ReadonlyArray<QuoteRevisionDetail>,
+      quoteRevisionId: string,
+      variant: 'detailed' | 'summary',
+    ) => {
+      const resolved = resolveExactRevisionExportSource(revisions, quoteRevisionId);
       if (!resolved.ok) {
         await runExport({ build: async () => resolved });
         return;

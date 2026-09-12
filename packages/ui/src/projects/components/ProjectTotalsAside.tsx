@@ -117,7 +117,18 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
             ) : null}
             <div className="project-totals__sale-row">
               <dt>Precio de venta</dt>
-              <dd className="project-totals__sale">{formatProjectMoney(breakdown.salePrice, quoteAuthority.currency)}</dd>
+              <dd className="project-totals__sale">
+                {quoteAuthority.amountsWithheld === true ? (
+                  <span
+                    className="project-totals__sale project-totals__sale--muted"
+                    data-testid="withheld-sale-total"
+                  >
+                    — No disponible para tu organización
+                  </span>
+                ) : (
+                  formatProjectMoney(breakdown.salePrice, quoteAuthority.currency)
+                )}
+              </dd>
             </div>
           </dl>
         ) : isReady ? (

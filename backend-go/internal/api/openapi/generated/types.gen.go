@@ -1433,20 +1433,21 @@ type QuoteRevisionItem struct {
 }
 
 type QuoteRevisionDetail struct {
-	ID                     string                   `json:"id"`
-	ProjectId              string                   `json:"projectId"`
-	RevisionNumber         int64                    `json:"revisionNumber"`
-	Status                 QuoteRevisionStatus      `json:"status"`
-	SourceType             QuoteRevisionSourceType  `json:"sourceType"`
-	BaseQuoteRevisionId    *string                  `json:"baseQuoteRevisionId,omitempty"`
-	SourceDesignRevisionId *string                  `json:"sourceDesignRevisionId,omitempty"`
-	Notes                  *string                  `json:"notes,omitempty"`
-	CreatedBy              *string                  `json:"createdBy,omitempty"`
-	CreatedAt              string                   `json:"createdAt"`
-	PublishedAt            *string                  `json:"publishedAt,omitempty"`
-	AcceptedAt             *string                  `json:"acceptedAt,omitempty"`
-	CommercialSnapshot     *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`
-	Items                  []QuoteRevisionItem      `json:"items"`
+	ID                        string                   `json:"id"`
+	ProjectId                 string                   `json:"projectId"`
+	RevisionNumber            int64                    `json:"revisionNumber"`
+	Status                    QuoteRevisionStatus      `json:"status"`
+	SourceType                QuoteRevisionSourceType  `json:"sourceType"`
+	BaseQuoteRevisionId       *string                  `json:"baseQuoteRevisionId,omitempty"`
+	SourceDesignRevisionId    *string                  `json:"sourceDesignRevisionId,omitempty"`
+	Notes                     *string                  `json:"notes,omitempty"`
+	CreatedBy                 *string                  `json:"createdBy,omitempty"`
+	CreatedAt                 string                   `json:"createdAt"`
+	PublishedAt               *string                  `json:"publishedAt,omitempty"`
+	AcceptedAt                *string                  `json:"acceptedAt,omitempty"`
+	CommercialSnapshot        *QuoteCommercialSnapshot `json:"commercialSnapshot,omitempty"`
+	CommercialAmountsWithheld *bool                    `json:"commercialAmountsWithheld,omitempty"`
+	Items                     []QuoteRevisionItem      `json:"items"`
 }
 
 type QuoteCommercialSnapshot struct {

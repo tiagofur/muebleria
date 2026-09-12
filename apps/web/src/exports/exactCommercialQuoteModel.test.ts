@@ -6,9 +6,8 @@ import type {
 import {
   buildExactCommercialQuoteExportModel,
   commercialLifecycleTimestamp,
-  resolveExactCommercialExportSource,
+  resolveExactRevisionExportSource,
 } from './exactCommercialQuoteModel';
-import type { QuoteRevisionAuthority } from '../quoteRevisionAuthority';
 
 function snapshotFixture(overrides?: Partial<QuoteCommercialSnapshot>): QuoteCommercialSnapshot {
   return {
@@ -213,34 +212,41 @@ describe('buildExactCommercialQuoteExportModel (#642)', () => {
   });
 });
 
-describe('resolveExactCommercialExportSource — fail-closed states (#642)', () => {
-  const retry = () => undefined;
-
-  it('resolves the exact revision + snapshot when ready', () => {
+describe('resolveExactRevisionExportSource — exact id + fail-closed states (#642/3)', () => {
+  it('resolves the exact revision + snapshot by id from the loaded list', () => {
     const revision = revisionFixture();
     const snapshot = snapshotFixture();
-    const authority: QuoteRevisionAuthority = {
-      kind: 'ready',
-      revision,
-      snapshot,
-      retry,
-    };
-    const result = resolveExactCommercialExportSource(authority);
+    const other = revisionFixture({ id: '41111111-1111-4111-8111-111111111111', revisionNumber: 1 });
+    const result = resolveExactRevisionExportSource(
+      [
+        { ...other, commercialSnapshot: undefined },
+        { ...revision, commercialSnapshot: snapshot },
+      ],
+      revision.id,
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.source.revision.id).toBe(revision.id);
+      expect(result.source.revision.revisionNumber).toBe(2);
       expect(result.source.snapshot).toBe(snapshot);
     }
   });
 
+  it('fails closed for an unknown revision id (no implicit latest)', () => {
+    const revision = revisionFixture();
+    const result = resolveExactRevisionExportSource(
+      [{ ...revision, commercialSnapshot: snapshotFixture() }],
+      '61111111-1111-4111-8111-111111111111',
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues[0]!.message).toContain('No se encontró la revisión solicitada');
+    }
+  });
+
   it('legacy snapshot-less revision fails closed with the actionable CTA', () => {
-    const authority: QuoteRevisionAuthority = {
-      kind: 'legacy',
-      revision: revisionFixture({ revisionNumber: 1, commercialSnapshot: undefined }),
-      message: 'legacy',
-      retry,
-    };
-    const result = resolveExactCommercialExportSource(authority);
+    const revision = revisionFixture({ revisionNumber: 1, commercialSnapshot: undefined });
+    const result = resolveExactRevisionExportSource([revision], revision.id);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.issues[0]!.message).toContain(
@@ -250,18 +256,15 @@ describe('resolveExactCommercialExportSource — fail-closed states (#642)', () 
     }
   });
 
-  it('empty, loading and error states fail closed with actionable messages', () => {
-    const cases: QuoteRevisionAuthority[] = [
-      { kind: 'empty', message: 'sin revisión' },
-      { kind: 'loading' },
-      { kind: 'error', message: 'No se pudo cargar la autoridad comercial.', retry },
-    ];
-    for (const authority of cases) {
-      const result = resolveExactCommercialExportSource(authority);
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.issues[0]!.message.length).toBeGreaterThan(10);
-      }
+  it('org-withheld retail amounts (manufacturing-only) fail closed — never a faked 0', () => {
+    const revision = revisionFixture({ commercialAmountsWithheld: true });
+    const result = resolveExactRevisionExportSource(
+      [{ ...revision, commercialSnapshot: snapshotFixture() }],
+      revision.id,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues[0]!.message).toContain('no está disponible para tu organización');
     }
   });
 });

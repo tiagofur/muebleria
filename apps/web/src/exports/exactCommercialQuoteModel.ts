@@ -21,7 +21,6 @@ import type {
   QuoteRevisionDetail,
   QuoteRevisionStatus,
 } from '@granete/storage';
-import type { QuoteRevisionAuthority } from '../quoteRevisionAuthority';
 
 export interface ExactCommercialQuoteExportSource {
   readonly revision: QuoteRevisionDetail;
@@ -117,75 +116,60 @@ export type ResolveExactCommercialExportResult =
   | { readonly ok: false; readonly issues: readonly ExportIssue[] };
 
 /**
- * Resolves the exportable authority from the shell's QuoteRevisionAuthority
- * state. Every non-ready state fails closed with an actionable message —
- * including legacy snapshot-less revisions, which must never produce a
- * "modern-looking" export from mutable Project state.
+ * Resolves ONE exact revision from the shell's cached revision list by its
+ * exact `quoteRevisionId` (#642/3 blocker 1). Every non-exportable state
+ * fails closed with an actionable message:
+ * - unknown id → the exact revision was not found in the loaded list;
+ * - legacy snapshot-less revision → the honest "create a new revision" CTA;
+ *   the current Project state is never a fallback;
+ * - org-policy withheld retail amounts (manufacturing-only caller) → the
+ *   commercial export is not available, never a faked 0 total.
  */
-export function resolveExactCommercialExportSource(
-  authority: QuoteRevisionAuthority,
+export function resolveExactRevisionExportSource(
+  revisions: ReadonlyArray<QuoteRevisionDetail>,
+  quoteRevisionId: string,
 ): ResolveExactCommercialExportResult {
-  switch (authority.kind) {
-    case 'ready':
-      return {
-        ok: true,
-        source: { revision: authority.revision, snapshot: authority.snapshot },
-      };
-    case 'legacy':
-      return {
-        ok: false,
-        issues: [
-          {
-            message:
-              'Esta cotización anterior no tiene historial comercial congelado. ' +
-              'Creá una nueva revisión actualizada para exportarla con precisión.',
-            field: 'export',
-          },
-        ],
-      };
-    case 'empty':
-      return {
-        ok: false,
-        issues: [
-          {
-            message:
-              'Esta obra todavía no tiene una revisión de cotización. ' +
-              'Creá Q1 para fijar su verdad comercial y poder exportarla.',
-            field: 'export',
-          },
-        ],
-      };
-    case 'loading':
-      return {
-        ok: false,
-        issues: [
-          {
-            message:
-              'La revisión comercial todavía se está cargando. Reintentá en unos instantes.',
-            field: 'export',
-          },
-        ],
-      };
-    case 'error':
-      return {
-        ok: false,
-        issues: [
-          {
-            message: `${authority.message} Reintentá la carga antes de exportar.`,
-            field: 'export',
-          },
-        ],
-      };
-    case 'idle':
-      return {
-        ok: false,
-        issues: [
-          {
-            message:
-              'No hay autoridad comercial disponible para exportar con precisión.',
-            field: 'export',
-          },
-        ],
-      };
+  const revision = revisions.find((candidate) => candidate.id === quoteRevisionId);
+  if (!revision) {
+    return {
+      ok: false,
+      issues: [
+        {
+          message:
+            'No se encontró la revisión solicitada. Recargá las revisiones de la obra e intentá de nuevo.',
+          field: 'export',
+        },
+      ],
+    };
   }
+  if (!revision.commercialSnapshot) {
+    return {
+      ok: false,
+      issues: [
+        {
+          message:
+            'Esta cotización anterior no tiene historial comercial congelado. ' +
+            'Creá una nueva revisión actualizada para exportarla con precisión.',
+          field: 'export',
+        },
+      ],
+    };
+  }
+  if (revision.commercialAmountsWithheld === true) {
+    return {
+      ok: false,
+      issues: [
+        {
+          message:
+            'El precio comercial de esta cotización no está disponible para tu organización ' +
+            '(sólo fabricación). El export comercial lo maneja la organización que cotizó.',
+          field: 'export',
+        },
+      ],
+    };
+  }
+  return {
+    ok: true,
+    source: { revision, snapshot: revision.commercialSnapshot },
+  };
 }

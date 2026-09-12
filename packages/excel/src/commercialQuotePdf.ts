@@ -275,6 +275,14 @@ export async function commercialQuotePdfExport(
   const doc = await PDFDocument.create();
   doc.setTitle(`Cotización Q${model.revisionNumber} — ${model.projectName} — ${model.customerName}`);
   doc.setCreator('Granete');
+  // The document metadata carries the FROZEN capture instant, not the export
+  // moment — byte-determinism for the same exact model and an honest document
+  // date (the exported revision, not when it was downloaded).
+  const captured = new Date(model.capturedAt);
+  if (!Number.isNaN(captured.getTime())) {
+    doc.setCreationDate(captured);
+    doc.setModificationDate(captured);
+  }
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const page = doc.addPage([PAGE_W, PAGE_H]);

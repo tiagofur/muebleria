@@ -26,23 +26,31 @@ func (s *PostgresStore) ListQuoteRevisionsByProject(ctx context.Context, project
 		return nil, domain.ErrQuoteRevisionNotFound
 	}
 	orgID := OrgFromCtx(ctx)
+	if !isValidUUID(projectID) {
+		return nil, domain.ErrQuoteRevisionNotFound
+	}
 	// Mirror the quote_revisions RLS read policy in plain SQL (caller's
 	// organization must be explicitly named by the project) so the repository
 	// stays tenant-safe even on connections where RLS is not the enforcement
-	// layer (tests, admin tooling).
-	var visible int
+	// layer (tests, admin tooling). The project's org naming also drives the
+	// retail-amount visibility policy (#642/3): the owner organization and
+	// the sales organization are authorized for the frozen sale price; a
+	// caller that only manufactures the project is not (multi-org
+	// distribution model §14 — same rule as the commercial summaries).
+	var projectOrgID, salesOrgID string
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT 1
+		SELECT p.organization_id::text, COALESCE(p.sales_organization_id::text, '')
 		FROM projects p
 		WHERE p.id = $1
 		  AND (p.organization_id = $2 OR p.sales_organization_id = $2 OR p.manufacturing_organization_id = $2)
-	`, projectID, orgID).Scan(&visible)
+	`, projectID, orgID).Scan(&projectOrgID, &salesOrgID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrQuoteRevisionNotFound
 		}
 		return nil, err
 	}
+	saleAmountsVisible := projectOrgID == orgID || salesOrgID == orgID
 
 	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, organization_id, project_id, revision_number, status, source_type,
@@ -88,6 +96,18 @@ func (s *PostgresStore) ListQuoteRevisionsByProject(ctx context.Context, project
 		snapshot, err := parseQuoteCommercialSnapshot(commercialSnapshot)
 		if err != nil {
 			return nil, err
+		}
+		// #642/3: the frozen retail price is org-authorized, not just
+		// role-authorized. A manufacturing-only caller receives the frozen
+		// identity/lines/units (production truth) with the retail amounts
+		// zeroed AND the explicit withheld flag — honest absence, never a
+		// misleading 0 dressed as a real price, and never the raw amount.
+		if !saleAmountsVisible && snapshot != nil {
+			snapshot.Breakdown.SalePrice = 0
+			for i := range snapshot.Lines {
+				snapshot.Lines[i].Amounts.SalePrice = 0
+			}
+			d.CommercialAmountsWithheld = true
 		}
 		d.CommercialSnapshot = snapshot
 		details = append(details, d)

@@ -280,7 +280,11 @@ import {
 import { organizationKeys } from './shared/query/queryKeys';
 import { sessionScopeKey } from './shared/query/sessionScope';
 import type { SessionScope } from './shared/query/sessionScope';
-import { useQuoteRevisionAuthority, type QuoteRevisionAuthority } from './quoteRevisionAuthority';
+import {
+  useQuoteRevisionAuthority,
+  type QuoteRevisionAuthority,
+  type QuoteRevisionsQuery,
+} from './quoteRevisionAuthority';
 import { useProjectsCommercialSummaries } from './projectsCommercialSummaries';
 import {
   DEFAULT_API_BASE,
@@ -431,8 +435,8 @@ export interface ShellViewCtx {
   readonly handleEmitPurchaseOrder: (id: string) => Promise<void>;
   readonly handleExportAssemblySheets: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCncPilot: (projectId?: string | undefined) => Promise<void>;
-  readonly handleExportCommercialQuote: (authority: QuoteRevisionAuthority) => Promise<void>;
-  readonly handleExportCommercialQuotePdf: (authority: QuoteRevisionAuthority, variant: "detailed" | "summary") => Promise<void>;
+  readonly handleExportCommercialQuote: (revisions: QuoteRevisionsQuery["revisions"], quoteRevisionId: string) => Promise<void>;
+  readonly handleExportCommercialQuotePdf: (revisions: QuoteRevisionsQuery["revisions"], quoteRevisionId: string, variant: "detailed" | "summary") => Promise<void>;
   readonly handleExportCutListCsv: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCutPlanPdf: (cutPlan: CutPlan) => Promise<void>;
   readonly handleExportCutPlanDxf: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => Promise<void>;
@@ -930,7 +934,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     () => projectReconciliationFromPath(location.pathname, location.search),
     [location.pathname, location.search],
   );
-  const quoteAuthority = useQuoteRevisionAuthority({
+  const {
+    authority: quoteAuthority,
+    revisions: quoteRevisions,
+  } = useQuoteRevisionAuthority({
     baseUrl: DEFAULT_API_BASE,
     token: session === 'auth' ? authToken : null,
     projectId: selectedProjectId,
@@ -966,6 +973,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           ),
           currency: quoteAuthority.snapshot.currency,
           capturedAt: quoteAuthority.snapshot.capturedAt,
+          amountsWithheld: quoteAuthority.amountsWithheld === true,
           staleMessage: quoteAuthority.staleMessage,
           onRetry: quoteAuthority.retry,
           snapshot: quoteAuthority.snapshot,
@@ -2261,21 +2269,27 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             if (location.pathname + location.search !== target) navigate(target);
           }}
           onExportCommercialQuote={
-            // #642/3: client exports act on the exact visible revision only.
-            // Idle authority (guest/local session or no obra selected) has no
-            // exact revision to export — the buttons are absent rather than
-            // pretending. Every other state stays visible and fails closed
-            // with an actionable message (legacy/empty/loading/error).
+            // #642/3: client exports act on ONE exact revision picked from the
+            // cached revision list. Idle authority (guest/local session or no
+            // obra selected) has no exact revisions to export — the buttons
+            // are absent rather than pretending. Every other state stays
+            // visible and fails closed with an actionable message.
             filterProjectsToPlant || quoteAuthority.kind === 'idle'
               ? undefined
-              : () => handleExportCommercialQuote(quoteAuthority)
+              : (quoteRevisionId) =>
+                  handleExportCommercialQuote(quoteRevisions, quoteRevisionId)
           }
           onExportCommercialQuotePdf={
             filterProjectsToPlant || quoteAuthority.kind === 'idle'
               ? undefined
-              : (variant) => {
-                  void handleExportCommercialQuotePdf(quoteAuthority, variant);
+              : (quoteRevisionId, variant) => {
+                  void handleExportCommercialQuotePdf(quoteRevisions, quoteRevisionId, variant);
                 }
+          }
+          quoteRevisions={
+            filterProjectsToPlant || quoteAuthority.kind === 'idle'
+              ? undefined
+              : quoteRevisions
           }
           exportErrors={exportErrors}
           exportBusy={exportBusy}
