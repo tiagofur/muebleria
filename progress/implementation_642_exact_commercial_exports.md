@@ -149,11 +149,20 @@ total.
 `tests/organization/quote-exact-exports.spec.ts` (Chromium + Go + PostgreSQL,
 gate `scripts/organization-browser-gate.sh`):
 
+- Aislamiento de fixtures: el spec usa módulos/estructura/herrajes/cliente/
+  obra PROPIOS (nuevos módulos como literales limpios — el POST
+  `/catalog/modules` rechaza spreads de módulos existentes). NUNCA muta el
+  módulo compartido del gate (`GATE_MODULE_A_ID`, cuyo nombre fija
+  `switch.spec`); los upserts de fixture reintentan 500 transitorios
+  (retryable por contrato). Verificado: spec + switch + legacy-recovery +
+  list-authority en la MISMA corrida del gate → 9/9 PASS.
+
 1. BeforeAll por API real: catálogo + obra + materialización; Q1
    create/publish/accept (600 mm); cambio real 600→650 por provenance de
    diseño (working copy + R1) + requote → Q2 publish/accept; mutaciones
-   deliberadas post-congelamiento (renombrar obra, cliente y label del módulo).
-   Readback: Q1 sigue 600/superseded con identidad congelada; Q2 650/accepted.
+   deliberadas post-congelamiento (renombrar obra, cliente y label del módulo
+   propio). Readback: Q1 sigue 600/superseded con identidad congelada; Q2
+   650/accepted.
 2. Test 1: detalle muestra `Q2 · Solo lectura`; descarga XLSX con filename
    `Cotizacion-Cocina-Export-E2E-Cliente-Export-E2E-Q2.xlsx`; workbook leído
    con ExcelJS: `Cotización Q2`, identidad congelada (NO los renombres),
