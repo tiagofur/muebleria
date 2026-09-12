@@ -1329,4 +1329,201 @@ describe('catalogStore — save serialization (P1-4)', () => {
 
     expect(customerCreates).toBe(1);
   });
+
+  describe('C1 — save reconciliation and rollback isolation', () => {
+    it('queued mutation B is preserved and persisted when prior mutation A fails', async () => {
+      let resolveA: () => void = () => {};
+      let rejectA: (err: Error) => void = () => {};
+      const promiseA = new Promise<void>((res, rej) => {
+        resolveA = res;
+        rejectA = rej;
+      });
+
+      let resolveB: () => void = () => {};
+      const promiseB = new Promise<void>((res) => {
+        resolveB = res;
+      });
+
+      const savedPayloads: Catalog[] = [];
+      let callCount = 0;
+      const { deps } = makeDeps({
+        saveCatalog: async (c) => {
+          callCount++;
+          savedPayloads.push(c);
+          if (callCount === 1) {
+            await promiseA;
+          } else {
+            await promiseB;
+          }
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(seedCatalog());
+
+      // 1. A starts a write and its response is held pending
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-FAIL-A' });
+      expect(callCount).toBe(1);
+
+      // 2. B applies a different change and is queued
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-KEEP-B' });
+      expect(callCount).toBe(1); // B is queued behind A
+
+      // 3. A fails
+      rejectA(new Error('Network error on save A'));
+
+      // Wait for B's task to be triggered
+      await vi.waitFor(() => expect(callCount).toBe(2));
+
+      // 4. B finishes
+      resolveB();
+      await vi.waitFor(() => {
+        const finalCatalog = store.getState().catalog!;
+        expect(finalCatalog.materials.some((m) => m.code === 'MAT-KEEP-B')).toBe(true);
+      });
+
+      const finalCatalog = store.getState().catalog!;
+      expect(finalCatalog.materials.some((m) => m.code === 'MAT-FAIL-A')).toBe(false);
+      expect(finalCatalog.materials.some((m) => m.code === 'MAT-KEEP-B')).toBe(true);
+
+      // Verify payload actually sent by B: contains B, does NOT contain A
+      const payloadB = savedPayloads[1]!;
+      expect(payloadB.materials.some((m) => m.code === 'MAT-KEEP-B')).toBe(true);
+      expect(payloadB.materials.some((m) => m.code === 'MAT-FAIL-A')).toBe(false);
+    });
+
+    it('queued mutation B is rejected and never declared saved if B itself fails', async () => {
+      let rejectA: (err: Error) => void = () => {};
+      const promiseA = new Promise<void>((_, rej) => {
+        rejectA = rej;
+      });
+
+      let rejectB: (err: Error) => void = () => {};
+      const promiseB = new Promise<void>((_, rej) => {
+        rejectB = rej;
+      });
+
+      let callCount = 0;
+      const { deps } = makeDeps({
+        saveCatalog: async () => {
+          callCount++;
+          if (callCount === 1) {
+            await promiseA;
+          } else {
+            await promiseB;
+          }
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(seedCatalog());
+
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-FAIL-A' });
+      const bPromise = store.getState().createHardware({
+        code: 'HW-B',
+        name: 'Hardware B',
+        unit: 'piece',
+        costPerUnit: 10,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      rejectA(new Error('A failed'));
+      await vi.waitFor(() => expect(callCount).toBe(2));
+
+      rejectB(new Error('B failed'));
+      await expect(bPromise).rejects.toThrow('B failed');
+
+      const finalCatalog = store.getState().catalog!;
+      expect(finalCatalog.materials.some((m) => m.code === 'MAT-FAIL-A')).toBe(false);
+      expect(finalCatalog.hardware.some((h) => h.code === 'HW-B')).toBe(false);
+    });
+
+    it('save rejection racing logout does not restore catalog into logged out context', async () => {
+      let rejectA: (err: Error) => void = () => {};
+      const promiseA = new Promise<void>((_, rej) => {
+        rejectA = rej;
+      });
+
+      const { deps, toasts } = makeDeps({
+        saveCatalog: async () => {
+          await promiseA;
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(seedCatalog());
+
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-A' });
+
+      // User logs out before rejection
+      useWorkspaceStore.setState({ session: null });
+      store.getState().setCatalog(null);
+
+      // Now A fails
+      rejectA(new Error('A failed late'));
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Catalog in store must remain null! Not repopulated with old catalog snapshot!
+      expect(store.getState().catalog).toBeNull();
+      // No error toast on logout screen
+      expect(toasts).toHaveLength(0);
+    });
+
+    it('save rejection racing organization switch does not overwrite new organization catalog', async () => {
+      let rejectA: (err: Error) => void = () => {};
+      const promiseA = new Promise<void>((_, rej) => {
+        rejectA = rej;
+      });
+
+      const { deps } = makeDeps({
+        saveCatalog: async () => {
+          await promiseA;
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(seedCatalog());
+
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-A' });
+
+      // Org switch happens before rejection
+      const newOrgCatalog: Catalog = {
+        ...seedCatalog(),
+        materials: [],
+      };
+      useWorkspaceStore.setState({
+        activeOrg: {
+          id: 'org-target-2',
+          name: 'Target 2',
+          slug: 'target-2',
+          type: 'factory',
+          status: 'active',
+          license: { plan: 'pro', status: 'active', expires_at: null },
+        },
+        workspaceSeq: 99,
+      });
+      store.getState().setCatalog(newOrgCatalog);
+
+      // Now A fails
+      rejectA(new Error('A failed late'));
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Must remain newOrgCatalog, NOT restored to old Org 1 snapshot!
+      expect(store.getState().catalog).toBe(newOrgCatalog);
+      expect(store.getState().catalog?.materials).toHaveLength(0);
+    });
+  });
 });

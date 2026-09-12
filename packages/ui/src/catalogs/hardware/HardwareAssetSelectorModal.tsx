@@ -4,7 +4,7 @@
  * retiring assets with explicit confirmation.
  */
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { HardwareVisualAssetBinding } from '@granete/domain';
 import type { HardwareAsset, HardwareAssetRevision, HardwareAssetService } from '@granete/storage';
 import { AlertCircle, Archive, Box, Check, Loader2, RefreshCw } from 'lucide-react';
@@ -38,16 +38,24 @@ export function HardwareAssetSelectorModal({
   const [retireError, setRetireError] = useState<string | null>(null);
 
   const searchInputId = useId();
+  const fetchGenRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchAssets = () => {
     if (!assetService) return;
+    const currentGen = ++fetchGenRef.current;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     setError(null);
     setRetireError(null);
-    const controller = new AbortController();
+
     assetService
       .listAssets(controller.signal)
       .then((data) => {
+        if (fetchGenRef.current !== currentGen || controller.signal.aborted) return;
         setAssets(data);
         if (data.length > 0 && !selectedAssetId) {
           // Pre-select current bound asset if in list, else first
@@ -61,11 +69,12 @@ export function HardwareAssetSelectorModal({
         }
       })
       .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
+        if (fetchGenRef.current !== currentGen || controller.signal.aborted) return;
         const msg = err instanceof Error ? err.message : 'Error al cargar los recursos 3D';
         setError(msg);
       })
       .finally(() => {
+        if (fetchGenRef.current !== currentGen || controller.signal.aborted) return;
         setLoading(false);
       });
   };
@@ -77,6 +86,10 @@ export function HardwareAssetSelectorModal({
       setRetireError(null);
       fetchAssets();
     }
+    return () => {
+      fetchGenRef.current++;
+      abortControllerRef.current?.abort();
+    };
   }, [open, assetService]);
 
   const filteredAssets = useMemo(() => {

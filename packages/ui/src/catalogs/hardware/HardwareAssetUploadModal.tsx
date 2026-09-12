@@ -4,7 +4,7 @@
  * explicit session query on finalize, and exact revision verification.
  */
 
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { HardwareVisualAssetBinding } from '@granete/domain';
 import type {
   HardwareAsset,
@@ -60,14 +60,15 @@ export function HardwareAssetUploadModal({
   const [provenance, setProvenance] = useState('');
   const [license, setLicense] = useState('');
 
-  // Advanced physical origin configuration
+  // Advanced physical origin configuration (C4)
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [hasConfiguredOrigin, setHasConfiguredOrigin] = useState(false);
   const [sourceUnits, setSourceUnits] = useState<'mm' | 'cm' | 'm' | 'inch'>('mm');
   const [upAxis, setUpAxis] = useState<'y' | 'z'>('z');
   const [hasAnchorOffset, setHasAnchorOffset] = useState(false);
-  const [anchorX, setAnchorX] = useState('0');
-  const [anchorY, setAnchorY] = useState('0');
-  const [anchorZ, setAnchorZ] = useState('0');
+  const [anchorX, setAnchorX] = useState('');
+  const [anchorY, setAnchorY] = useState('');
+  const [anchorZ, setAnchorZ] = useState('');
 
   // Upload operation state
   const [stage, setStage] = useState<UploadStage>('idle');
@@ -78,22 +79,53 @@ export function HardwareAssetUploadModal({
   const [startKey, setStartKey] = useState<string>(() => newIdempotencyKey());
   const [finalizeKey, setFinalizeKey] = useState<string>(() => newIdempotencyKey());
 
+  // Cancellation and operation scope tracking (C3)
+  const opGenerationRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const resetForm = () => {
     setFile(null);
     setDisplayName(targetAssetName ?? '');
     setProvenance('');
     setLicense('');
     setAdvancedOpen(false);
+    setHasConfiguredOrigin(false);
+    setSourceUnits('mm');
+    setUpAxis('z');
     setHasAnchorOffset(false);
-    setAnchorX('0');
-    setAnchorY('0');
-    setAnchorZ('0');
+    setAnchorX('');
+    setAnchorY('');
+    setAnchorZ('');
     setStage('idle');
     setError(null);
     setSession(null);
     setStartKey(newIdempotencyKey());
     setFinalizeKey(newIdempotencyKey());
+    if (successTimerRef.current) {
+      clearTimeout(successTimerRef.current);
+      successTimerRef.current = null;
+    }
   };
+
+  useEffect(() => {
+    if (!open) {
+      opGenerationRef.current++;
+      abortControllerRef.current?.abort();
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+    }
+    return () => {
+      opGenerationRef.current++;
+      abortControllerRef.current?.abort();
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+    };
+  }, [open]);
 
   const handleClose = () => {
     if (stage === 'starting' || stage === 'uploading' || stage === 'finalizing') {
@@ -103,6 +135,12 @@ export function HardwareAssetUploadModal({
       if (session && assetService) {
         void assetService.cancelUpload(session.id);
       }
+    }
+    opGenerationRef.current++;
+    abortControllerRef.current?.abort();
+    if (successTimerRef.current) {
+      clearTimeout(successTimerRef.current);
+      successTimerRef.current = null;
     }
     resetForm();
     onClose();
@@ -115,29 +153,42 @@ export function HardwareAssetUploadModal({
     return null;
   };
 
-  const buildOrigin = (): HardwareAssetOrigin | undefined => {
-    if (!advancedOpen) return undefined;
+  // C4: Origin configuration does NOT depend on accordion open state
+  const buildOrigin = (): { origin?: HardwareAssetOrigin; error?: string } => {
+    if (!hasConfiguredOrigin) return { origin: undefined };
     const origin: HardwareAssetOrigin = {
       source_units: sourceUnits,
       up_axis: upAxis,
     };
     if (hasAnchorOffset) {
+      if (anchorX.trim() === '' || anchorY.trim() === '' || anchorZ.trim() === '') {
+        return {
+          error:
+            'Las coordenadas de desplazamiento de anclaje (X, Y, Z) son obligatorias si se activa la opción.',
+        };
+      }
       const x = Number(anchorX);
       const y = Number(anchorY);
       const z = Number(anchorZ);
-      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
         return {
-          ...origin,
-          anchor_offset_mm: { x_mm: x, y_mm: y, z_mm: z },
+          error:
+            'Las coordenadas de desplazamiento de anclaje deben ser números finitos válidos.',
         };
       }
+      return {
+        origin: {
+          ...origin,
+          anchor_offset_mm: { x_mm: x, y_mm: y, z_mm: z },
+        },
+      };
     }
-    return origin;
+    return { origin };
   };
 
   const runUploadProcess = async (
     targetFile: File,
-    currentSession: HardwareAssetUploadSession | null,
+    sessionToResume: HardwareAssetUploadSession | null,
   ) => {
     if (!assetService) {
       setError('Servicio de recursos no disponible');
@@ -152,10 +203,65 @@ export function HardwareAssetUploadModal({
       return;
     }
 
+    const originResult = buildOrigin();
+    if (originResult.error) {
+      setError(originResult.error);
+      setStage('error');
+      return;
+    }
+
+    const currentGen = ++opGenerationRef.current;
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    if (successTimerRef.current) {
+      clearTimeout(successTimerRef.current);
+      successTimerRef.current = null;
+    }
+
+    const isStale = () =>
+      opGenerationRef.current !== currentGen || abortController.signal.aborted;
+
     setError(null);
-    let activeSession = currentSession;
+    let activeSession = sessionToResume;
 
     try {
+      // C2: If resuming an existing session, query authoritative state from the server first
+      if (activeSession) {
+        try {
+          activeSession = await assetService.getSession(
+            activeSession.id,
+            abortController.signal,
+          );
+          if (isStale()) return;
+          setSession(activeSession);
+        } catch (err: unknown) {
+          if (isStale()) return;
+          const msg =
+            err instanceof Error ? err.message : 'Error al consultar la sesión';
+          setError(`No se pudo verificar el estado de la sesión de carga: ${msg}`);
+          setStage('error');
+          return;
+        }
+
+        if (activeSession.status === 'cancelled') {
+          setError('La sesión de carga fue cancelada en el servidor. Inicia una nueva carga.');
+          setStage('error');
+          setSession(null);
+          return;
+        }
+
+        if (activeSession.status !== 'finalized') {
+          const expiresAtMs = new Date(activeSession.expires_at).getTime();
+          if (Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) {
+            setError('La sesión de carga ha expirado. Inicia una nueva carga.');
+            setStage('error');
+            setSession(null);
+            return;
+          }
+        }
+      }
+
       // Step 1: Start upload session if not already started
       if (!activeSession) {
         setStage('starting');
@@ -164,63 +270,96 @@ export function HardwareAssetUploadModal({
           display_name: targetAssetName ?? (displayName.trim() || targetFile.name),
           ...(provenance.trim() ? { provenance: provenance.trim() } : {}),
           ...(license.trim() ? { license: license.trim() } : {}),
-          ...(buildOrigin() ? { origin: buildOrigin() } : {}),
+          ...(originResult.origin ? { origin: originResult.origin } : {}),
           ...(targetAssetId ? { asset_id: targetAssetId } : {}),
         };
-        activeSession = await assetService.startUpload(req, startKey);
+        const startedSession = await assetService.startUpload(
+          req,
+          startKey,
+          abortController.signal,
+        );
+        if (isStale()) {
+          // C3: If modal closed or cancelled while start was in flight, cancel the remote session
+          void assetService.cancelUpload(startedSession.id);
+          return;
+        }
+        activeSession = startedSession;
         setSession(activeSession);
       }
 
-      // Step 2: Upload binary bytes if not already staged
-      if (!activeSession.staged) {
+      // Step 2: Upload binary bytes if prepared and not already staged (C2)
+      if (activeSession.status === 'prepared' && !activeSession.staged) {
         setStage('uploading');
-        await assetService.uploadBytes(
+        const staged = await assetService.uploadBytes(
           activeSession.id,
           rep,
           targetFile,
           targetFile.name,
+          abortController.signal,
         );
+        if (isStale()) return;
+        activeSession = { ...activeSession, staged };
+        setSession(activeSession);
       }
 
-      // Step 3: Finalize upload session
-      setStage('finalizing');
-      await assetService.finalizeUpload(activeSession.id, finalizeKey);
-
-      // Step 4: Query session authoritatively for exact finalized IDs (prompt §5.2)
-      const freshSession = await assetService.getSession(activeSession.id);
-      setSession(freshSession);
-
-      const assetId = freshSession.finalized_asset_id;
-      const revisionId = freshSession.finalized_revision_id;
-      if (!assetId || !revisionId) {
-        throw new Error('La sesión no devolvió las identidades definitivas del recurso');
-      }
-
-      // Step 5: Readback exact asset and locate the exact revision created by THIS session
-      const asset = await assetService.getAsset(assetId);
-      const exactRev = asset.revisions.find((r) => r.id === revisionId);
-      if (!exactRev) {
-        throw new Error(
-          `No se encontró la revisión creada (${revisionId}) en el recurso ${assetId}`,
+      // Step 3: Finalize upload session if prepared (C2: skip if already finalized)
+      if (activeSession.status === 'prepared') {
+        setStage('finalizing');
+        await assetService.finalizeUpload(
+          activeSession.id,
+          finalizeKey,
+          abortController.signal,
         );
+        if (isStale()) return;
+
+        // Query session to get finalized_asset_id and finalized_revision_id
+        activeSession = await assetService.getSession(
+          activeSession.id,
+          abortController.signal,
+        );
+        if (isStale()) return;
+        setSession(activeSession);
       }
 
-      // Step 6: Success!
-      setStage('confirmed');
-      const binding: HardwareVisualAssetBinding = {
-        assetId: asset.id,
-        assetRevisionId: exactRev.id,
-        representation: exactRev.representation,
-        sha256: exactRev.sha256,
-        validationState: exactRev.validation_state,
-      };
+      // Step 4: Session is finalized: read asset and select exact revision
+      if (activeSession.status === 'finalized') {
+        const assetId = activeSession.finalized_asset_id;
+        const revisionId = activeSession.finalized_revision_id;
+        if (!assetId || !revisionId) {
+          throw new Error('La sesión finalizada no devolvió las identidades definitivas del recurso');
+        }
 
-      setTimeout(() => {
-        onSuccess(binding, asset);
-        resetForm();
-        onClose();
-      }, 300);
+        const asset = await assetService.getAsset(assetId, abortController.signal);
+        if (isStale()) return;
+
+        const exactRev = asset.revisions.find((r) => r.id === revisionId);
+        if (!exactRev) {
+          throw new Error(
+            `No se encontró la revisión creada (${revisionId}) en el recurso ${assetId}`,
+          );
+        }
+
+        // Step 5: Success!
+        setStage('confirmed');
+        const binding: HardwareVisualAssetBinding = {
+          assetId: asset.id,
+          assetRevisionId: exactRev.id,
+          representation: exactRev.representation,
+          sha256: exactRev.sha256,
+          validationState: exactRev.validation_state,
+        };
+
+        successTimerRef.current = setTimeout(() => {
+          if (isStale()) return;
+          onSuccess(binding, asset);
+          resetForm();
+          onClose();
+        }, 300);
+      } else {
+        throw new Error(`Estado de sesión no reconocido: ${activeSession.status}`);
+      }
     } catch (err: unknown) {
+      if (isStale()) return;
       const msg = err instanceof Error ? err.message : 'Error durante la carga del archivo';
       setError(msg);
       setStage('error');
@@ -239,7 +378,7 @@ export function HardwareAssetUploadModal({
 
   const handleRetry = () => {
     if (!file) return;
-    // Reuse session and keys for retry of the same command
+    // C2: Resume from the existing session state
     void runUploadProcess(file, session);
   };
 
@@ -255,7 +394,13 @@ export function HardwareAssetUploadModal({
       dataTestId="hardware-asset-upload-modal"
       footer={
         <>
-          <button type="button" className="btn" onClick={handleClose} disabled={isBusy}>
+          <button
+            type="button"
+            className="btn"
+            onClick={handleClose}
+            disabled={isBusy}
+            data-testid="hardware-asset-upload-cancel-btn"
+          >
             Cancelar
           </button>
           {stage === 'error' ? (
@@ -411,80 +556,136 @@ export function HardwareAssetUploadModal({
                 Normalización física del archivo. Si no se modifica, se conservan los valores
                 predeterminados del archivo.
               </p>
-              <div className="catalog-form__row">
-                <label className="catalog-form__field">
-                  <span>Unidades de origen</span>
-                  <select
-                    value={sourceUnits}
-                    onChange={(e) =>
-                      setSourceUnits(e.target.value as 'mm' | 'cm' | 'm' | 'inch')
-                    }
-                    disabled={isBusy}
-                  >
-                    <option value="mm">Milímetros (mm)</option>
-                    <option value="cm">Centímetros (cm)</option>
-                    <option value="m">Metros (m)</option>
-                    <option value="inch">Pulgadas (inch)</option>
-                  </select>
-                </label>
-                <label className="catalog-form__field">
-                  <span>Eje vertical (Up Axis)</span>
-                  <select
-                    value={upAxis}
-                    onChange={(e) => setUpAxis(e.target.value as 'y' | 'z')}
-                    disabled={isBusy}
-                  >
-                    <option value="z">Z arriba (SketchUp estándar)</option>
-                    <option value="y">Y arriba (glTF / WebGL estándar)</option>
-                  </select>
-                </label>
-              </div>
-
               <div className="catalog-form__field">
                 <label className="catalog-form__checkbox-label">
                   <input
                     type="checkbox"
-                    checked={hasAnchorOffset}
-                    onChange={(e) => setHasAnchorOffset(e.target.checked)}
+                    checked={hasConfiguredOrigin}
+                    onChange={(e) => {
+                      setHasConfiguredOrigin(e.target.checked);
+                      setSession(null);
+                      setStartKey(newIdempotencyKey());
+                      setFinalizeKey(newIdempotencyKey());
+                    }}
                     disabled={isBusy}
+                    data-testid="hardware-upload-configure-origin-checkbox"
                   />
-                  <span>Especificar desplazamiento de anclaje (Anchor Offset)</span>
+                  <span>Declarar normalización física de origen y montaje</span>
                 </label>
               </div>
 
-              {hasAnchorOffset ? (
-                <div className="catalog-form__row">
-                  <label className="catalog-form__field">
-                    <span>X (mm)</span>
-                    <input
-                      type="number"
-                      step="any"
-                      value={anchorX}
-                      onChange={(e) => setAnchorX(e.target.value)}
-                      disabled={isBusy}
-                    />
-                  </label>
-                  <label className="catalog-form__field">
-                    <span>Y (mm)</span>
-                    <input
-                      type="number"
-                      step="any"
-                      value={anchorY}
-                      onChange={(e) => setAnchorY(e.target.value)}
-                      disabled={isBusy}
-                    />
-                  </label>
-                  <label className="catalog-form__field">
-                    <span>Z (mm)</span>
-                    <input
-                      type="number"
-                      step="any"
-                      value={anchorZ}
-                      onChange={(e) => setAnchorZ(e.target.value)}
-                      disabled={isBusy}
-                    />
-                  </label>
-                </div>
+              {hasConfiguredOrigin ? (
+                <>
+                  <div className="catalog-form__row">
+                    <label className="catalog-form__field">
+                      <span>Unidades de origen</span>
+                      <select
+                        value={sourceUnits}
+                        onChange={(e) => {
+                          setSourceUnits(e.target.value as 'mm' | 'cm' | 'm' | 'inch');
+                          setSession(null);
+                          setStartKey(newIdempotencyKey());
+                          setFinalizeKey(newIdempotencyKey());
+                        }}
+                        disabled={isBusy}
+                        data-testid="hardware-upload-source-units"
+                      >
+                        <option value="mm">Milímetros (mm)</option>
+                        <option value="cm">Centímetros (cm)</option>
+                        <option value="m">Metros (m)</option>
+                        <option value="inch">Pulgadas (inch)</option>
+                      </select>
+                    </label>
+                    <label className="catalog-form__field">
+                      <span>Eje vertical (Up Axis)</span>
+                      <select
+                        value={upAxis}
+                        onChange={(e) => {
+                          setUpAxis(e.target.value as 'y' | 'z');
+                          setSession(null);
+                          setStartKey(newIdempotencyKey());
+                          setFinalizeKey(newIdempotencyKey());
+                        }}
+                        disabled={isBusy}
+                        data-testid="hardware-upload-up-axis"
+                      >
+                        <option value="z">Z arriba (SketchUp estándar)</option>
+                        <option value="y">Y arriba (glTF / WebGL estándar)</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="catalog-form__field">
+                    <label className="catalog-form__checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={hasAnchorOffset}
+                        onChange={(e) => {
+                          setHasAnchorOffset(e.target.checked);
+                          setSession(null);
+                          setStartKey(newIdempotencyKey());
+                          setFinalizeKey(newIdempotencyKey());
+                        }}
+                        disabled={isBusy}
+                        data-testid="hardware-upload-has-anchor-offset"
+                      />
+                      <span>Especificar desplazamiento de anclaje (Anchor Offset)</span>
+                    </label>
+                  </div>
+
+                  {hasAnchorOffset ? (
+                    <div className="catalog-form__row">
+                      <label className="catalog-form__field">
+                        <span>X (mm)</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={anchorX}
+                          onChange={(e) => {
+                            setAnchorX(e.target.value);
+                            setSession(null);
+                            setStartKey(newIdempotencyKey());
+                            setFinalizeKey(newIdempotencyKey());
+                          }}
+                          disabled={isBusy}
+                          data-testid="hardware-upload-anchor-x"
+                        />
+                      </label>
+                      <label className="catalog-form__field">
+                        <span>Y (mm)</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={anchorY}
+                          onChange={(e) => {
+                            setAnchorY(e.target.value);
+                            setSession(null);
+                            setStartKey(newIdempotencyKey());
+                            setFinalizeKey(newIdempotencyKey());
+                          }}
+                          disabled={isBusy}
+                          data-testid="hardware-upload-anchor-y"
+                        />
+                      </label>
+                      <label className="catalog-form__field">
+                        <span>Z (mm)</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={anchorZ}
+                          onChange={(e) => {
+                            setAnchorZ(e.target.value);
+                            setSession(null);
+                            setStartKey(newIdempotencyKey());
+                            setFinalizeKey(newIdempotencyKey());
+                          }}
+                          disabled={isBusy}
+                          data-testid="hardware-upload-anchor-z"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : null}

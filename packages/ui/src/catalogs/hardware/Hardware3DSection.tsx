@@ -75,16 +75,21 @@ export function Hardware3DSection({
       setBoundAsset(null);
       return;
     }
+    let active = true;
     const controller = new AbortController();
     assetService
       .getAsset(draft.visualAsset.assetId, controller.signal)
       .then((asset) => {
+        if (!active || controller.signal.aborted) return;
         setBoundAsset(asset);
       })
       .catch(() => {
         // Leave boundAsset null, fallback to binding ID info
       });
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [draft.visualAsset?.assetId, assetService]);
 
   const selectedFinishId = matchHardwareFinish({

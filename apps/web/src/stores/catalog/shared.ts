@@ -180,8 +180,8 @@ export function defaultNewId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function optionalNotes(notes: string): string | undefined {
-  const trimmed = notes.trim();
+export function optionalNotes(notes: string | undefined): string | undefined {
+  const trimmed = notes?.trim();
   return trimmed ? trimmed : undefined;
 }
 
@@ -250,6 +250,23 @@ export interface CatalogStoreCtx {
    * @returns false when the server delete failed (caller should not claim success).
    */
   hardDeleteOnAuth(path: string): Promise<boolean>;
+
+  /**
+   * Resets confirmed base catalog and clears in-flight pending ops
+   * on wholesale catalog replacement (e.g. login, logout, org switch).
+   */
+  resetCatalog(catalog: Catalog | null): void;
+}
+
+interface PendingOp {
+  readonly id: number;
+  readonly updater: (catalog: Catalog) => Catalog;
+  readonly scope: string;
+}
+
+function getContextScope(): string {
+  const ws = useWorkspaceStore.getState();
+  return `${ws.session ?? 'none'}|${ws.activeOrg?.id ?? 'none'}|${ws.workspaceSeq}`;
 }
 
 export function makeCatalogStoreCtx(
@@ -264,48 +281,104 @@ export function makeCatalogStoreCtx(
   const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
   const baseUrl = deps.baseUrl;
 
-  // P1-4 (pre-demo audit): double-clicks fire several patches before the
-  // first save finishes; concurrent saveCatalog fan-outs interleave and the
-  // upsert POSTs duplicate rows (audit repro: one "Guardar" triple-click
-  // created the same customer twice 3 ms apart). Serialize saves per store:
-  // a queued save re-reads the latest catalog, so by the time it runs the
-  // first save already created the entity and the upsert PUTs instead of
-  // POSTing a duplicate.
   let saveInFlight: Promise<void> | null = null;
+  let confirmedCatalog: Catalog | null = null;
+  const pendingOps: PendingOp[] = [];
+  let nextOpId = 1;
+
+  function resetCatalog(catalog: Catalog | null): void {
+    confirmedCatalog = catalog;
+    pendingOps.length = 0;
+    saveInFlight = null;
+  }
 
   function patch(updater: (catalog: Catalog) => Catalog): Promise<void> {
-    const prev = get().catalog;
-    if (!prev) return Promise.resolve();
-    const nextCatalog = updater(prev);
+    const current = get().catalog;
+    if (!current) return Promise.resolve();
+    if (confirmedCatalog === null) {
+      confirmedCatalog = current;
+    }
+
+    const scope = getContextScope();
+    const opId = nextOpId++;
+    const op: PendingOp = { id: opId, updater, scope };
+    pendingOps.push(op);
+
+    const nextCatalog = updater(current);
     set({ catalog: nextCatalog });
-    const task = (): Promise<void> =>
-      saveCatalog(get().catalog ?? nextCatalog).then(
-        () => {
-          // P0-3 mitigation: tell other tabs their catalog copy is stale.
-          notifyCatalogMutated();
-        },
-        (err: unknown) => {
-          console.error('Error al guardar catálogo:', err);
-          // Rollback optimistic update on save failure
-          set({ catalog: prev });
-          // F118 S2: no error toasts from saves that raced a logout — the
-          // login screen must stay clean.
-          if (useWorkspaceStore.getState().session === null) {
-            throw err;
+
+    const task = async (): Promise<void> => {
+      // Guard against stale session / organization
+      if (getContextScope() !== scope || useWorkspaceStore.getState().session === null) {
+        const idx = pendingOps.findIndex((p) => p.id === opId);
+        if (idx !== -1) pendingOps.splice(idx, 1);
+        throw new Error('Operación cancelada: sesión u organización no coinciden');
+      }
+
+      const catalogToSave = get().catalog ?? nextCatalog;
+      try {
+        await saveCatalog(catalogToSave);
+
+        // Guard against scope change that occurred during saveCatalog
+        if (getContextScope() !== scope || useWorkspaceStore.getState().session === null) {
+          const idx = pendingOps.findIndex((p) => p.id === opId);
+          if (idx !== -1) pendingOps.splice(idx, 1);
+          return;
+        }
+
+        // Mutation saved successfully!
+        const idx = pendingOps.findIndex((p) => p.id === opId);
+        if (idx !== -1) pendingOps.splice(idx, 1);
+
+        if (confirmedCatalog) {
+          try {
+            confirmedCatalog = updater(confirmedCatalog);
+          } catch {
+            confirmedCatalog = catalogToSave;
           }
-          toast({
-            type: 'error',
-            message: 'Error de conexión al sincronizar cambios',
-          });
-          // Reject so callers do not toast "guardado" on failed sync.
+        } else {
+          confirmedCatalog = catalogToSave;
+        }
+
+        notifyCatalogMutated();
+      } catch (err: unknown) {
+        console.error('Error al guardar catálogo:', err);
+
+        const currentSession = useWorkspaceStore.getState().session;
+        // Do NOT rollback or toast if session ended or organization changed
+        if (getContextScope() !== scope || currentSession === null) {
+          const idx = pendingOps.findIndex((p) => p.id === opId);
+          if (idx !== -1) pendingOps.splice(idx, 1);
           throw err;
-        },
-      );
+        }
+
+        // Remove failed op
+        const idx = pendingOps.findIndex((p) => p.id === opId);
+        if (idx !== -1) pendingOps.splice(idx, 1);
+
+        // Recompute optimistic catalog from confirmed base + remaining pending ops
+        if (confirmedCatalog) {
+          let recomputed = confirmedCatalog;
+          for (const remaining of pendingOps) {
+            try {
+              recomputed = remaining.updater(recomputed);
+            } catch {
+              // Ignore updater failure against rolled-back base
+            }
+          }
+          set({ catalog: recomputed });
+        }
+
+        toast({
+          type: 'error',
+          message: 'Error de conexión al sincronizar cambios',
+        });
+        throw err;
+      }
+    };
+
     if (!saveInFlight) {
-      // Idle: start immediately (same timing as the pre-serialization code).
       const run = task();
-      // The chain tracker observes the failure (so it never surfaces as an
-      // unhandled rejection) and frees the slot once the save settles.
       const tracked = run.catch(() => undefined);
       saveInFlight = tracked;
       void tracked.then(() => {
@@ -313,16 +386,11 @@ export function makeCatalogStoreCtx(
       });
       return run;
     }
-    // Busy: queue after the in-flight save settles; then(task, task) runs the
-    // next save on success OR failure — errors must not poison the chain. The
-    // queued save re-reads the latest catalog, so the entity the first save
-    // created is already there and the upsert PUTs (no duplicate).
+
     const run = saveInFlight.then(task, task);
     const tracked = run.catch(() => undefined);
     saveInFlight = tracked;
     void tracked.then(() => {
-      // An older save must never clear a newer queued tail. Otherwise a
-      // mutation arriving while that newer save runs starts concurrently.
       if (saveInFlight === tracked) saveInFlight = null;
     });
     return run;
@@ -396,5 +464,6 @@ export function makeCatalogStoreCtx(
     saveAndToast,
     patchSaved,
     hardDeleteOnAuth,
+    resetCatalog,
   };
 }

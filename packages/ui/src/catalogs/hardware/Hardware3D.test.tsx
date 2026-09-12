@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Hardware, HardwareVisualAssetBinding } from '@granete/domain';
@@ -116,7 +116,7 @@ function makeMockService(overrides?: Partial<HardwareAssetService>): HardwareAss
       display_name: 'Nuevo modelo',
       status: 'prepared',
       created_at: '2026-09-12T10:00:00Z',
-      expires_at: '2026-09-12T10:30:00Z',
+      expires_at: new Date(Date.now() + 1800000).toISOString(),
     })),
     getSession: vi.fn().mockImplementation(async (id: string) => ({
       id,
@@ -124,7 +124,7 @@ function makeMockService(overrides?: Partial<HardwareAssetService>): HardwareAss
       display_name: 'Nuevo modelo',
       status: 'finalized',
       created_at: '2026-09-12T10:00:00Z',
-      expires_at: '2026-09-12T10:30:00Z',
+      expires_at: new Date(Date.now() + 1800000).toISOString(),
       finalized_asset_id: 'asset-uuid-1',
       finalized_revision_id: 'rev-uuid-2',
     })),
@@ -140,7 +140,7 @@ function makeMockService(overrides?: Partial<HardwareAssetService>): HardwareAss
       display_name: 'Cancelado',
       status: 'cancelled',
       created_at: '2026-09-12T10:00:00Z',
-      expires_at: '2026-09-12T10:30:00Z',
+      expires_at: new Date(Date.now() + 1800000).toISOString(),
     })),
     retireAsset: vi.fn().mockImplementation(async (id: string) => ({
       ...mockAssetActive,
@@ -270,7 +270,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       expect(service.uploadBytes).toHaveBeenCalledTimes(1);
       expect(service.finalizeUpload).toHaveBeenCalledTimes(1);
       expect(service.getSession).toHaveBeenCalledTimes(1);
-      expect(service.getAsset).toHaveBeenCalledWith('asset-uuid-1');
+      expect(service.getAsset).toHaveBeenCalledWith('asset-uuid-1', expect.anything());
     });
   });
 
@@ -431,5 +431,401 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     expect(screen.getByTestId('hardware-change-asset-btn')).toBeDisabled();
     expect(screen.getByTestId('hardware-add-revision-btn')).toBeDisabled();
     expect(screen.getByTestId('hardware-unbind-asset-btn')).toBeDisabled();
+  });
+
+  it('9. C2 - Reintento tras pérdida de respuesta de finalize recupera la revisión exacta sin re-subir bytes ni duplicar', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+
+    let finalizeAttempts = 0;
+    const service = makeMockService({
+      startUpload: vi.fn().mockResolvedValue({
+        id: 'session-c2',
+        representation: 'skp',
+        display_name: 'Manija C2',
+        status: 'prepared',
+        created_at: '2026-09-12T10:00:00Z',
+        expires_at: new Date(Date.now() + 1800000).toISOString(),
+      }),
+      finalizeUpload: vi.fn().mockImplementation(async () => {
+        finalizeAttempts += 1;
+        if (finalizeAttempts === 1) {
+          // Simulate network drop after server committed
+          throw new Error('Conexión perdida con el servidor tras confirmación');
+        }
+        return mockAssetActive;
+      }),
+      getSession: vi.fn().mockImplementation(async (id: string) => {
+        // After finalize was attempted once, server shows finalized!
+        if (finalizeAttempts >= 1) {
+          return {
+            id,
+            representation: 'skp',
+            display_name: 'Manija C2',
+            status: 'finalized',
+            created_at: '2026-09-12T10:00:00Z',
+            expires_at: new Date(Date.now() + 1800000).toISOString(),
+            finalized_asset_id: 'asset-uuid-1',
+            finalized_revision_id: 'rev-uuid-2',
+          };
+        }
+        return {
+          id,
+          representation: 'skp',
+          display_name: 'Manija C2',
+          status: 'prepared',
+          created_at: '2026-09-12T10:00:00Z',
+          expires_at: new Date(Date.now() + 1800000).toISOString(),
+        };
+      }),
+    });
+
+    render(
+      <HardwareCatalog
+        hardware={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={service}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.type(screen.getByLabelText('Código'), 'HER-C2');
+    await user.type(screen.getByLabelText('Nombre'), 'Herraje C2');
+
+    await user.click(screen.getByTestId('hardware-3d-section-toggle'));
+    await user.click(screen.getByTestId('hardware-3d-tab-file'));
+    await user.click(screen.getByTestId('hardware-open-upload-btn'));
+
+    const file = new File(['fake-skp'], 'c2.skp', { type: 'application/octet-stream' });
+    await user.upload(screen.getByTestId('hardware-asset-file-input'), file);
+
+    // Initial submit: finalize will fail with network drop
+    fireEvent.submit(screen.getByTestId('hardware-asset-upload-modal').querySelector('form')!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hardware-upload-error')).toBeTruthy();
+      expect(screen.getByTestId('hardware-asset-upload-retry-btn')).toBeTruthy();
+    });
+
+    expect(service.uploadBytes).toHaveBeenCalledTimes(1);
+    expect(service.finalizeUpload).toHaveBeenCalledTimes(1);
+
+    // User clicks "Reintentar"
+    await user.click(screen.getByTestId('hardware-asset-upload-retry-btn'));
+
+    // Should detect finalized session, skip uploadBytes and finalizeUpload, and read asset
+    await waitFor(() => {
+      // Must NOT repeat uploadBytes against a finalized session
+      expect(service.uploadBytes).toHaveBeenCalledTimes(1);
+      // Must NOT repeat finalizeUpload
+      expect(service.finalizeUpload).toHaveBeenCalledTimes(1);
+      // Must read asset and revision
+      expect(service.getAsset).toHaveBeenCalledWith('asset-uuid-1', expect.anything());
+    });
+
+    // Form should now have visualAsset bound to rev-uuid-2
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('hardware-bound-card')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
+
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    const draft = onCreate.mock.calls[0]![0] as { visualAsset?: HardwareVisualAssetBinding };
+    expect(draft.visualAsset?.assetRevisionId).toBe('rev-uuid-2');
+  });
+
+  it('10. C2 - Fallo de consulta de asset posterior a finalize muestra error y permite reintentar sin re-subir', async () => {
+    const user = userEvent.setup();
+    let getAssetAttempts = 0;
+    const service = makeMockService({
+      getAsset: vi.fn().mockImplementation(async (id: string) => {
+        getAssetAttempts += 1;
+        if (getAssetAttempts === 1) {
+          throw new Error('Fallo al leer recurso tras finalizar');
+        }
+        return mockAssetActive;
+      }),
+    });
+
+    render(
+      <HardwareCatalog
+        hardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={service}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-3d-section-toggle'));
+    await user.click(screen.getByTestId('hardware-3d-tab-file'));
+    await user.click(screen.getByTestId('hardware-open-upload-btn'));
+
+    const file = new File(['fake-skp'], 'c2-read.skp', { type: 'application/octet-stream' });
+    await user.upload(screen.getByTestId('hardware-asset-file-input'), file);
+
+    fireEvent.submit(screen.getByTestId('hardware-asset-upload-modal').querySelector('form')!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hardware-upload-error')).toBeTruthy();
+      expect(screen.getByText(/Fallo al leer recurso tras finalizar/)).toBeTruthy();
+    });
+
+    // Reintentar
+    await user.click(screen.getByTestId('hardware-asset-upload-retry-btn'));
+
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('hardware-bound-card')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
+    // Upload bytes and finalize were only called in the initial attempt
+    expect(service.uploadBytes).toHaveBeenCalledTimes(1);
+    expect(service.finalizeUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it('11. C3 - Cerrar el uploader mientras startUpload está pendiente no aplica binding al resolver y cancela la sesión', async () => {
+    const user = userEvent.setup();
+    let resolveStart!: (s: HardwareAssetUploadSession) => void;
+    const startPromise = new Promise<HardwareAssetUploadSession>((res) => {
+      resolveStart = res;
+    });
+
+    const service = makeMockService({
+      startUpload: vi.fn().mockImplementation(() => startPromise),
+    });
+
+    render(
+      <HardwareCatalog
+        hardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={service}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-3d-section-toggle'));
+    await user.click(screen.getByTestId('hardware-3d-tab-file'));
+    await user.click(screen.getByTestId('hardware-open-upload-btn'));
+
+    const file = new File(['fake-skp'], 'c3.skp', { type: 'application/octet-stream' });
+    await user.upload(screen.getByTestId('hardware-asset-file-input'), file);
+
+    // Submit upload form (startUpload will remain pending)
+    fireEvent.submit(screen.getByTestId('hardware-asset-upload-modal').querySelector('form')!);
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    // Modal is in 'starting' stage; user closes it via the upload modal's close button
+    const closeBtn = within(screen.getByTestId('hardware-asset-upload-modal')).getByRole('button', {
+      name: 'Cerrar',
+    });
+    await user.click(closeBtn);
+
+    // Now resolve the startUpload promise
+    resolveStart({
+      id: 'session-c3-abandoned',
+      representation: 'skp',
+      display_name: 'C3 Abandonada',
+      status: 'prepared',
+      created_at: '2026-09-12T10:00:00Z',
+      expires_at: new Date(Date.now() + 1800000).toISOString(),
+    });
+
+    await waitFor(() => {
+      // Remote session must be explicitly cancelled
+      expect(service.cancelUpload).toHaveBeenCalledWith('session-c3-abandoned');
+    });
+
+    // Binding must NOT have been applied
+    expect(screen.queryByTestId('hardware-bound-card')).toBeNull();
+    expect(screen.getByTestId('hardware-unbound-card')).toBeTruthy();
+  });
+
+  it('12. C3 - Cerrar A y abrir B; resolver resultados tardíos de A no modifica B', async () => {
+    const user = userEvent.setup();
+    let resolveGetAssetA!: (a: HardwareAsset) => void;
+    const getAssetAPromise = new Promise<HardwareAsset>((res) => {
+      resolveGetAssetA = res;
+    });
+
+    const assetA: HardwareAsset = {
+      ...mockAssetActive,
+      id: 'asset-a',
+      display_name: 'Asset A',
+    };
+
+    const service = makeMockService({
+      getAsset: vi.fn().mockImplementation(async (id: string) => {
+        if (id === 'asset-a') return getAssetAPromise;
+        return mockAssetActive;
+      }),
+    });
+
+    const hwA: Hardware = {
+      ...sampleHardwareWithBinding,
+      id: 'hw-a',
+      code: 'HER-A',
+      name: 'Herraje A',
+      visualAsset: {
+        assetId: 'asset-a',
+        assetRevisionId: 'rev-uuid-1',
+        representation: 'skp',
+        sha256: 'sha256-a',
+        validationState: 'pending',
+      },
+    };
+
+    const hwB: Hardware = {
+      ...sampleHardwareWithBinding,
+      id: 'hw-b',
+      code: 'HER-B',
+      name: 'Herraje B',
+      visualAsset: undefined,
+    };
+
+    render(
+      <HardwareCatalog
+        hardware={[hwA, hwB]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={service}
+      />,
+    );
+
+    // Open A
+    await user.click(screen.getByText('HER-A'));
+    await user.click(screen.getByRole('button', { name: 'Editar HER-A' }));
+
+    // Close A modal
+    await user.click(screen.getByRole('button', { name: 'Cerrar' }));
+
+    // Open B
+    await user.click(screen.getByText('HER-B'));
+    await user.click(screen.getByRole('button', { name: 'Editar HER-B' }));
+
+    // Resolve A's pending getAsset
+    resolveGetAssetA(assetA);
+
+    // B must remain unbound and not inherit A's asset
+    expect(screen.queryByText('Asset A')).toBeNull();
+    expect(screen.getByTestId('hardware-unbound-card')).toBeTruthy();
+  });
+
+  it('13. C4 - Configurar origin, colapsar el panel y enviar conserva exactamente origin en el payload', async () => {
+    const user = userEvent.setup();
+    const service = makeMockService();
+
+    render(
+      <HardwareCatalog
+        hardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={service}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-3d-section-toggle'));
+    await user.click(screen.getByTestId('hardware-3d-tab-file'));
+    await user.click(screen.getByTestId('hardware-open-upload-btn'));
+
+    const file = new File(['fake-skp'], 'origin.skp', { type: 'application/octet-stream' });
+    await user.upload(screen.getByTestId('hardware-asset-file-input'), file);
+
+    // Open advanced disclosure
+    await user.click(screen.getByTestId('hardware-upload-advanced-toggle'));
+
+    // Check configure origin
+    await user.click(screen.getByTestId('hardware-upload-configure-origin-checkbox'));
+
+    // Select units cm and up-axis y
+    await user.selectOptions(screen.getByTestId('hardware-upload-source-units'), 'cm');
+    await user.selectOptions(screen.getByTestId('hardware-upload-up-axis'), 'y');
+
+    // Enable anchor offset and set coordinates
+    await user.click(screen.getByTestId('hardware-upload-has-anchor-offset'));
+    await user.type(screen.getByTestId('hardware-upload-anchor-x'), '12.5');
+    await user.type(screen.getByTestId('hardware-upload-anchor-y'), '24.0');
+    await user.type(screen.getByTestId('hardware-upload-anchor-z'), '-8.2');
+
+    // COLLAPSE disclosure panel (C4 requirement: collapsing must not lose configured data!)
+    await user.click(screen.getByTestId('hardware-upload-advanced-toggle'));
+    expect(screen.queryByTestId('hardware-upload-source-units')).toBeNull();
+
+    // Submit form
+    fireEvent.submit(screen.getByTestId('hardware-asset-upload-modal').querySelector('form')!);
+
+    await waitFor(() => {
+      expect(service.startUpload).toHaveBeenCalledTimes(1);
+    });
+
+    const startPayload = (service.startUpload as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(startPayload.origin).toEqual({
+      source_units: 'cm',
+      up_axis: 'y',
+      anchor_offset_mm: {
+        x_mm: 12.5,
+        y_mm: 24.0,
+        z_mm: -8.2,
+      },
+    });
+  });
+
+  it('14. C4 - Coordenadas inválidas o incompletas de anclaje muestran error y no envían el formulario', async () => {
+    const user = userEvent.setup();
+    const service = makeMockService();
+
+    render(
+      <HardwareCatalog
+        hardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={service}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-3d-section-toggle'));
+    await user.click(screen.getByTestId('hardware-3d-tab-file'));
+    await user.click(screen.getByTestId('hardware-open-upload-btn'));
+
+    const file = new File(['fake-skp'], 'invalid-origin.skp', { type: 'application/octet-stream' });
+    await user.upload(screen.getByTestId('hardware-asset-file-input'), file);
+
+    // Open disclosure, enable origin and anchor offset
+    await user.click(screen.getByTestId('hardware-upload-advanced-toggle'));
+    await user.click(screen.getByTestId('hardware-upload-configure-origin-checkbox'));
+    await user.click(screen.getByTestId('hardware-upload-has-anchor-offset'));
+
+    // Set X, but leave Y and Z empty
+    await user.type(screen.getByTestId('hardware-upload-anchor-x'), '10');
+
+    // Submit form
+    fireEvent.submit(screen.getByTestId('hardware-asset-upload-modal').querySelector('form')!);
+
+    // Form should reject with validation error
+    expect(
+      screen.getByText(/Las coordenadas de desplazamiento de anclaje/i),
+    ).toBeTruthy();
+    expect(service.startUpload).not.toHaveBeenCalled();
   });
 });
