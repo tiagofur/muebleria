@@ -222,4 +222,9 @@ jobs:
         # PostgreSQL migration/race suites share cluster-level role DDL; keep
         # package execution serial so independent ephemeral DB fixtures cannot
         # concurrently mutate pg_auth_members.
-        run: go test -p 1 -v ./...
+        # -timeout is PER PACKAGE (go default 10m): the internal/storage suite
+        # runs every migration + RLS/direct-SQL proof against real PostgreSQL
+        # and has been measured between 8 and 16.5 minutes depending on runner
+        # load — the implicit default failed the whole package on a marginal
+        # overrun (#667 M1 residual round CI evidence). More time, same tests.
+        run: go test -p 1 -timeout=30m -v ./...
