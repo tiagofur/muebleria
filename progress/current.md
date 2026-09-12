@@ -1,17 +1,19 @@
-# Issue #667 — M2: administración de recursos 3D desde React
+# Issue #667 — M2: administración de recursos 3D desde React (Correcciones C1–C4)
 
-- Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. Base `origin/main@009360e2` (PR #674 M1 integrado). Rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree aislado.
-- Started: 2026-09-12 10:30 CST.
-- Result: `IMPLEMENTED_PENDING_REVIEW`. M2 entrega la administración completa de recursos 3D desde React sobre la base de M1 (PR #674).
-  - Transporte: `uploadHardwareAssetBytes` multipart nativo en `GraneteApiClient`, `resolveHardwareAssetFileUrl` canónico anti `/api/api/...`, `HardwareAssetService` desacoplado consumido vía DI por la capa de aplicación.
-  - Dominio y draft: `HardwareVisualAssetBinding` exportado y preservado en `HardwareDraft`, `toDraft`, mutaciones de catálogo y sincronización remota sin borrado accidental ante cambios de nombre o precio.
-  - UI Catálogo Herrajes: sección "Modelo 3D y montaje" con `WorkspaceTabs` (`file` vs `generic`), selector modal con búsqueda, detalle de revisiones, exclusión de thumbnails como modelos, badges claros y retiro de recursos con diálogo explícito de confirmación. Modal de subida con estados observables reales, claves de idempotencia estables por intento lógico, detección de formato y configuración física de origen.
-  - Backend compatibilidad: `HandleHardwareByID` preserva bindings existentes intactos frente a recursos retirados en ediciones de otros campos y sincronizaciones del catálogo (retirar sólo impide selecciones nuevas).
+- Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. PR #690 en rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree aislado.
+- Commit C1-C4: `b7ee3c734a1eff17bd1e069629fa3ac607b30cc4`.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Correcciones C1–C4 resueltas de punta a punta:
+  - **C1 — Guardado sin rollback obsoleto** (`apps/web/src/stores/catalog/shared.ts`): `makeCatalogStoreCtx` gestiona `confirmedCatalog` y cola `pendingOps`. Al fallar una mutación aislada, sólo se descarta esa tarea y el catálogo optimista se recalcula proyectando las mutaciones restantes sobre el confirmed. Si la sesión o el scope de organización cambió, se suprimen el rollback destructivo y el toast.
+  - **C2 — Reanudación desde estado real de sesión** (`packages/ui/src/catalogs/hardware/HardwareAssetUploadModal.tsx`): `runUploadProcess` consulta server-side `getSession`. Si ya está `finalized` (pérdida de respuesta del finalize previo), recupera `finalized_asset_id` y `finalized_revision_id` y enlaza directamente sin re-subir bytes ni duplicar. Si está `prepared` con `staged`, salta `uploadBytes` y procede a `finalizeUpload`.
+  - **C3 — Cancelación y aislamiento de respuestas tardías** (`HardwareAssetUploadModal.tsx`, `HardwareAssetSelectorModal.tsx`, `Hardware3DSection.tsx`): generación de operación (`opGenerationRef`), `AbortController` por intento y limpieza estricta de `successTimerRef`. Cancelación remota vía `assetService.cancelUpload` si el uploader se cierra con `startUpload` en vuelo. Abort en selector de catálogo al cerrar/desmontar.
+  - **C4 — Montaje independiente del disclosure** (`HardwareAssetUploadModal.tsx`): desacoplamiento entre `advancedOpen` y `hasConfiguredOrigin`. Colapsar el acordeón no descarta datos configurados. Validación estricta de campos finitos en `anchor_offset_mm`.
 - Evidence:
-  - Browser E2E real (`./scripts/organization-browser-gate.sh tests/organization/hardware-3d-catalog.spec.ts`): PASS completo contra PostgreSQL real, backend Go y frontend React a 390px, 768px y 1280px (10/10 puntos del prompt verificados).
-  - Unitarias backend: `go test -v ./internal/api -run TestHardwarePut_ExistingBindingToRetiredAssetPreserved` PASS.
-  - Monorepo checks: `pnpm openapi:check` PASS (0 drift), `pnpm typecheck` PASS (7/7 packages), `pnpm test` en domain (1407 tests), storage (206 tests), ui (1752 tests) y web (450 tests) PASS. Design system tokens y tabs rollout checks PASS.
-- Exclusiones respetadas: sin Three.js/WebGL en Herrajes, sin Ruby, sin render SKP, sin assemblies (#670), sin validador (#668).
+  - Unitarias UI (`packages/ui/src/catalogs/hardware/Hardware3D.test.tsx`): 14/14 tests PASS (incluyendo pruebas RED->GREEN para C2, C3 y C4).
+  - Unitarias Web (`apps/web/src/stores/catalogStore.test.ts`): 47/47 tests PASS (incluyendo 4 pruebas de aislamiento de rollback, rechazo de mutación en cola y guards de logout/switch org).
+  - Browser E2E real (`./scripts/organization-browser-gate.sh tests/organization/hardware-3d-catalog.spec.ts`): PASS completo (10/10 puntos, 27.0s).
+  - Foundation Gate A (`./scripts/foundation-gate-a.sh`): PASS (50/50 escenarios de auth/browser/MFA/tenant + `git diff --check` limpio).
+  - Monorepo checks: `pnpm openapi:check` PASS (0 drift), `pnpm typecheck` PASS (7/7 paquetes), `pnpm test` PASS monorepo completo.
+- Exclusiones respetadas: sin merge de #667/#666, sin inicio de #668, sin Three.js/WebGL en herrajes, sin Ruby, sin conjuntos (#670).
 
 # Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
 
