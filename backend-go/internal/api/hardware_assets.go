@@ -80,6 +80,9 @@ func respondWithHardwareAssetError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrHardwareAssetRetired):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
 			"El recurso está retirado y no puede asociarse a nuevas selecciones", nil)
+	case errors.Is(err, domain.ErrHardwareAssetRevisionConflict):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			"Otra carga agregó una revisión al mismo recurso; reintentá la finalización", nil)
 	case errors.Is(err, domain.ErrHardwareAssetBindingInvalid),
 		errors.Is(err, domain.ErrHardwareAssetInvalid):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
@@ -339,6 +342,15 @@ func (s *Server) HandleHardwareAssetUploadBytes(w http.ResponseWriter, r *http.R
 		respondWithHardwareAssetError(w, domain.ErrHardwareAssetSessionNotPrepared)
 		return
 	}
+	// The SESSION's representation is authoritative (#667 R3): the URL
+	// segment must match it before any limit, content inspection or byte is
+	// written. A thumbnail payload on an SKP session can never become a
+	// revision labeled SKP, and a refused upload leaves no staged state.
+	if sess.Representation != representation {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest,
+			"La representación de la carga no coincide con la sesión ("+string(sess.Representation)+"); usá /bytes/"+string(sess.Representation), nil)
+		return
+	}
 
 	maxBytes := s.hardwareAssetLimit(representation)
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1<<20)
@@ -460,8 +472,16 @@ func (s *Server) HandleHardwareAssetUploadBytes(w http.ResponseWriter, r *http.R
 		SizeBytes:   size,
 		SHA256:      sha,
 	}); err != nil {
-		// Keep the namespace clean: the staging row is the metadata truth.
-		s.removeHardwareAssetFile(r.Context(), storageKey)
+		// #667 R5: a failed record NEVER deletes the file. The key is
+		// content-addressed: if a concurrent identical upload or a finalize
+		// won the race, this exact key may be the staged or FINALIZED blob —
+		// deleting it would destroy referenced bytes. The loser's file is at
+		// most an orphan for a future clean-media pass (logged, never
+		// removed). Only the replaced-key cleanup below — with the row
+		// already committed to OUR key — may delete, and only the previous
+		// key.
+		slog.Warn("hardware asset upload: staged bytes not recorded (session no longer accepts them); file left for orphan cleanup",
+			"storage_key", storageKey, "error", err)
 		respondWithHardwareAssetError(w, err)
 		return
 	}

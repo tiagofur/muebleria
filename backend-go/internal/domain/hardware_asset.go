@@ -118,7 +118,14 @@ var (
 	ErrHardwareAssetSessionNotFound    = errors.New("hardware asset upload session not found")
 	ErrHardwareAssetSessionNotPrepared = errors.New("hardware asset upload session is not prepared")
 	ErrHardwareAssetRetired            = errors.New("hardware asset is retired")
-	ErrHardwareAssetBytesMissing       = errors.New("hardware asset bytes missing")
+	// ErrCompositionUnresolvable: a published item's composition references
+	// an entity that cannot be resolved (#667 R4). The publish fails closed —
+	// references never disappear silently.
+	ErrCompositionUnresolvable = errors.New("module composition cannot be resolved for publication")
+	// ErrHardwareAssetRevisionConflict: two finalizes raced to append the
+	// next revision of the same asset. Typed conflict with a safe retry.
+	ErrHardwareAssetRevisionConflict = errors.New("hardware asset revision number conflict; retry the finalize")
+	ErrHardwareAssetBytesMissing     = errors.New("hardware asset bytes missing")
 	// ErrHardwareAssetIntegrityMismatch: the stored bytes no longer match the
 	// finalized digest — fail closed, never serve.
 	ErrHardwareAssetIntegrityMismatch = errors.New("hardware asset bytes integrity mismatch")

@@ -10,7 +10,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
-	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
 // #667 / M1: persistence for versioned hardware 3D assets — staged upload
@@ -355,6 +354,14 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 	if sess.Staged == nil {
 		return nil, fmt.Errorf("%w: no bytes were uploaded", domain.ErrHardwareAssetBytesMissing)
 	}
+	// Storage-frontier coherence (#667 R3): the staged content type must
+	// belong to the session's representation. The API layer enforces this at
+	// upload time; this guard makes the finalize itself refuse any
+	// representation/metadata mismatch that reached the row by another path.
+	if !hardwareAssetContentTypeMatchesRepresentation(sess.Representation, sess.Staged.ContentType) {
+		return nil, fmt.Errorf("%w: el contenido almacenado (%s) no corresponde a la representación %s",
+			domain.ErrHardwareAssetInvalid, sess.Staged.ContentType, sess.Representation)
+	}
 
 	var createdBy *string
 	if isValidUUID(cmd.ActorUserID) {
@@ -364,8 +371,10 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 	var existing *domain.HardwareAsset
 	if sess.TargetAssetID != nil && *sess.TargetAssetID != "" {
 		// Replace-with-new-revision: the target asset must still exist and be
-		// active under the finalize lock.
-		a, err := s.getHardwareAssetRow(ctx, *sess.TargetAssetID)
+		// active. FOR UPDATE serializes every append (and the concurrent
+		// retire) on the asset row, so two sessions can never compute the
+		// same next revision number (#667 R5).
+		a, err := s.lockHardwareAssetRow(ctx, *sess.TargetAssetID)
 		if err != nil {
 			return nil, err
 		}
@@ -439,6 +448,12 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 		&revision.SHA256, &originRaw, &revision.IntegrityVerifiedAt, &revisionCreatedBy, &revision.CreatedAt,
 	)
 	if err != nil {
+		if isUniqueViolationOn(err, "uq_hardware_asset_revisions_number") {
+			// Belt and braces for the FOR UPDATE serialization: a same-asset
+			// numbering collision is a typed conflict with a safe retry,
+			// never a raw constraint failure.
+			return nil, domain.ErrHardwareAssetRevisionConflict
+		}
 		return nil, fmt.Errorf("insert hardware asset revision: %w", err)
 	}
 	if revisionCreatedBy != nil {
@@ -523,8 +538,10 @@ func (s *PostgresStore) ListHardwareAssets(ctx context.Context) ([]domain.Hardwa
 	}
 	defer rows.Close()
 
-	var assets []domain.HardwareAsset
-	byID := map[string]*domain.HardwareAsset{}
+	assets := []domain.HardwareAsset{}
+	// Index by POSITION in the slice (not pointers to copies): revisions and
+	// derived states must land in the elements the caller receives.
+	indexByID := map[string]int{}
 	for rows.Next() {
 		var a domain.HardwareAsset
 		var createdBy *string
@@ -535,7 +552,7 @@ func (s *PostgresStore) ListHardwareAssets(ctx context.Context) ([]domain.Hardwa
 			a.CreatedBy = *createdBy
 		}
 		a.Revisions = []domain.HardwareAssetRevision{}
-		byID[a.ID] = &a
+		indexByID[a.ID] = len(assets)
 		assets = append(assets, a)
 	}
 	if err := rows.Err(); err != nil {
@@ -565,8 +582,8 @@ func (s *PostgresStore) ListHardwareAssets(ctx context.Context) ([]domain.Hardwa
 		if err != nil {
 			return nil, err
 		}
-		if a, ok := byID[rev.AssetID]; ok {
-			a.Revisions = append(a.Revisions, *rev)
+		if idx, ok := indexByID[rev.AssetID]; ok {
+			assets[idx].Revisions = append(assets[idx].Revisions, *rev)
 			revisionIDs = append(revisionIDs, rev.ID)
 		}
 	}
@@ -889,11 +906,28 @@ func (s *PostgresStore) RecordHardwareAssetValidation(ctx context.Context, cmd R
 
 // freezeDesignRevisionHardwareAssets pins, inside the publish transaction,
 // the exact hardware→asset-revision references of every furniture item being
-// published. Items are resolved through the SAME authoritative engine as
-// everywhere else; an item whose definition cannot resolve simply contributes
-// no pins (explicit visual absence — never invented references, spec §15).
-// Historical revisions are never rewritten: R1 keeps asset A after the
-// catalog rebinds to revision B and R2 publishes.
+// published (#667 M1, R4 correction).
+//
+// The reference set comes from the item's SEMANTIC composition — structure
+// components' placement overrides, module components' overrides, agregado
+// instances' components and hardware lines, and the module's own hardware
+// lines — NOT from layout.Hardware, which the engine filters to
+// preview-drawable placeholders (a hardware bound to a real SKP with no
+// previewShape would silently lose its pin).
+//
+// Failure contract (never silent disappearance):
+//   - item without FurnitureDefinitionID, or a definition that no longer
+//     exists → legitimate absence (the #639 unavailable-legacy precedent);
+//   - a definition whose composition cannot be resolved (referenced
+//     structure or agregado missing) → the publish FAILS with a typed error;
+//   - parameters do not gate membership in the M1 contract (no
+//     parameter-conditional bindings exist), so the walk freezes the
+//     definition's full reference set — a conservative superset: over-pinning
+//     keeps history, under-pinning loses it.
+//
+// The pin INSERT is a single statement joining hardwares with their bound
+// revision: representation and digest always come from the same read as the
+// revision id, so a concurrent rebind can never produce a mixed pin.
 func (s *PostgresStore) freezeDesignRevisionHardwareAssets(ctx context.Context, designOrgID, projectID, designRevisionID string, items []PublishDesignRevisionItemCommand) (int, error) {
 	hardwareIDs := map[string]struct{}{}
 	modules := map[string]*domain.Module{}
@@ -903,19 +937,23 @@ func (s *PostgresStore) freezeDesignRevisionHardwareAssets(ctx context.Context, 
 		if !isValidUUID(item.FurnitureDefinitionID) {
 			continue
 		}
-		module, ok := modules[item.FurnitureDefinitionID]
-		if !ok {
-			m, err := s.GetModuleByID(ctx, item.FurnitureDefinitionID)
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					modules[item.FurnitureDefinitionID] = nil
-					continue
-				}
-				return 0, err
-			}
-			modules[item.FurnitureDefinitionID] = m
-			module = m
+		if _, cached := modules[item.FurnitureDefinitionID]; cached {
+			continue
 		}
+		m, err := s.GetModuleByID(ctx, item.FurnitureDefinitionID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Historical/legacy definition: explicit absence, no invented
+				// pins (same precedent as the presentation snapshot).
+				modules[item.FurnitureDefinitionID] = nil
+				continue
+			}
+			return 0, err
+		}
+		modules[item.FurnitureDefinitionID] = m
+	}
+
+	for _, module := range modules {
 		if module == nil {
 			continue
 		}
@@ -926,16 +964,12 @@ func (s *PostgresStore) freezeDesignRevisionHardwareAssets(ctx context.Context, 
 			}
 			catalog = &cat
 		}
-		layout, err := engine.ResolveFurnitureLayout(*module, *catalog, dimsOverrideFromItemParameters(module, item.Parameters), nil)
+		ids, err := compositionHardwareIDs(*module, *catalog)
 		if err != nil {
-			// Visual pins are additive: an unresolvable definition carries an
-			// explicit absence of pins, never a publish failure.
-			continue
+			return 0, err
 		}
-		for _, hw := range layout.Hardware {
-			if hw.HardwareID != "" {
-				hardwareIDs[hw.HardwareID] = struct{}{}
-			}
+		for id := range ids {
+			hardwareIDs[id] = struct{}{}
 		}
 	}
 	if len(hardwareIDs) == 0 {
@@ -946,45 +980,109 @@ func (s *PostgresStore) freezeDesignRevisionHardwareAssets(ctx context.Context, 
 	for id := range hardwareIDs {
 		ids = append(ids, id)
 	}
-	rows, err := s.db(ctx).Query(ctx, `
-		SELECT h.id, r.id, r.representation, r.sha256
-		FROM hardwares h
-		JOIN hardware_asset_revisions r
-		  ON r.id = h.visual_asset_revision_id AND r.asset_id = h.visual_asset_id
-		WHERE h.organization_id = $1 AND h.visual_asset_id IS NOT NULL AND h.id = ANY($2::uuid[])
-		ORDER BY h.id ASC
-	`, designOrgID, ids)
+	// One atomic statement: the revision id, representation and digest of
+	// each pin come from the SAME read of hardwares × hardware_asset_revisions.
+	pinned, err := s.db(ctx).Query(ctx, `
+		WITH inserted AS (
+			INSERT INTO design_revision_hardware_assets
+				(organization_id, project_id, design_revision_id, hardware_id, asset_id, asset_revision_id, representation, sha256)
+			SELECT $1, $2, $3, h.id, r.asset_id, r.id, r.representation, r.sha256
+			FROM hardwares h
+			JOIN hardware_asset_revisions r
+			  ON r.id = h.visual_asset_revision_id AND r.asset_id = h.visual_asset_id
+			WHERE h.organization_id = $1 AND h.visual_asset_id IS NOT NULL AND h.id = ANY($4::uuid[])
+			RETURNING 1
+		)
+		SELECT count(*) FROM inserted
+	`, designOrgID, projectID, designRevisionID, ids)
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer pinned.Close()
+	var count int
+	if pinned.Next() {
+		if err := pinned.Scan(&count); err != nil {
+			return 0, err
+		}
+	}
+	return count, pinned.Err()
+}
 
-	pinned := 0
-	type pinRow struct{ hardwareID, revisionID, representation, sha256 string }
-	var pins []pinRow
-	for rows.Next() {
-		var p pinRow
-		if err := rows.Scan(&p.hardwareID, &p.revisionID, &p.representation, &p.sha256); err != nil {
-			return 0, err
+// compositionHardwareIDs walks one module's SEMANTIC composition and returns
+// every hardware id it references: placement overrides on structure and
+// module component instances, agregado instances' component placements and
+// hardware lines, and the module's own hardware lines. A referenced
+// structure or agregado that cannot be found is a resolution error — the
+// caller fails the publish instead of silently dropping references.
+func compositionHardwareIDs(module domain.Module, catalog domain.Catalog) (map[string]struct{}, error) {
+	out := map[string]struct{}{}
+	addPlacement := func(hardwareID string) {
+		if strings.TrimSpace(hardwareID) != "" {
+			out[hardwareID] = struct{}{}
 		}
-		pins = append(pins, p)
 	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-	for _, p := range pins {
-		if _, err := s.db(ctx).Exec(ctx, `
-			INSERT INTO design_revision_hardware_assets
-				(organization_id, project_id, design_revision_id, hardware_id, asset_id, asset_revision_id, representation, sha256)
-			SELECT $1, $2, $3, h.id, h.visual_asset_id, h.visual_asset_revision_id, $4, $5
-			FROM hardwares h
-			WHERE h.id = $6 AND h.organization_id = $1
-		`, designOrgID, projectID, designRevisionID, p.representation, p.sha256, p.hardwareID); err != nil {
-			return 0, err
+	addInstances := func(instances []domain.ComponentInstance) {
+		for _, ci := range instances {
+			if ci.Overrides == nil {
+				continue
+			}
+			for _, hp := range ci.Overrides.HardwarePlacements {
+				addPlacement(hp.HardwareID)
+			}
 		}
-		pinned++
 	}
-	return pinned, nil
+	addAgregadoInstances := func(instances []domain.ModuleAgregadoInstance) error {
+		for _, ai := range instances {
+			agregado, ok := findCatalogAgregado(catalog, ai.AgregadoID)
+			if !ok {
+				return fmt.Errorf("%w: el módulo %s referencia el agregado %s y no existe en el catálogo",
+					domain.ErrCompositionUnresolvable, module.Code, ai.AgregadoID)
+			}
+			addInstances(agregado.Components)
+			for _, hl := range agregado.HardwareLines {
+				addPlacement(hl.HardwareID)
+			}
+		}
+		return nil
+	}
+
+	if strings.TrimSpace(module.StructureID) != "" {
+		structure, ok := findCatalogStructure(catalog, module.StructureID)
+		if !ok {
+			return nil, fmt.Errorf("%w: el módulo %s referencia la estructura %s y no existe en el catálogo",
+				domain.ErrCompositionUnresolvable, module.Code, module.StructureID)
+		}
+		addInstances(structure.Components)
+		if err := addAgregadoInstances(structure.Agregados); err != nil {
+			return nil, err
+		}
+	}
+	addInstances(module.Components)
+	if err := addAgregadoInstances(module.Agregados); err != nil {
+		return nil, err
+	}
+	for _, hl := range module.HardwareLines {
+		addPlacement(hl.HardwareID)
+	}
+	return out, nil
+}
+
+func findCatalogStructure(catalog domain.Catalog, structureID string) (domain.Structure, bool) {
+	for _, st := range catalog.Structures {
+		if st.ID == structureID {
+			return st, true
+		}
+	}
+	return domain.Structure{}, false
+}
+
+func findCatalogAgregado(catalog domain.Catalog, agregadoID string) (domain.Agregado, bool) {
+	for _, ag := range catalog.Agregados {
+		if ag.ID == agregadoID {
+			return ag, true
+		}
+	}
+	return domain.Agregado{}, false
 }
 
 // publishResolutionCatalog loads the composition the authoritative resolver
@@ -1019,62 +1117,6 @@ func (s *PostgresStore) publishResolutionCatalog(ctx context.Context) (domain.Ca
 	return cat, nil
 }
 
-// dimsOverrideFromItemParameters extracts the width/height/depth overrides a
-// working item carries so pin resolution matches the published dimensions.
-// Unset or malformed axes fall back to the definition's own dimensions (the
-// same fallback the layout endpoint applies); nil when the item carries no
-// dimensions at all. Visual placement existence is composition-driven, so
-// this is a resolution hint, not a gate.
-func dimsOverrideFromItemParameters(module *domain.Module, parameters map[string]interface{}) *engine.LayoutDims {
-	dims := engine.LayoutDims{WidthMm: module.WidthMm, HeightMm: module.HeightMm, DepthMm: module.DepthMm}
-	overrides := map[string]*int{
-		"widthMm":  nil,
-		"heightMm": nil,
-		"depthMm":  nil,
-	}
-	anyOverride := false
-	for name := range overrides {
-		raw, ok := parameters[name]
-		if !ok {
-			continue
-		}
-		v, ok := toPositiveInt(raw)
-		if !ok {
-			continue
-		}
-		anyOverride = true
-		switch name {
-		case "widthMm":
-			dims.WidthMm = v
-		case "heightMm":
-			dims.HeightMm = v
-		case "depthMm":
-			dims.DepthMm = v
-		}
-	}
-	if !anyOverride || dims.WidthMm <= 0 || dims.HeightMm <= 0 || dims.DepthMm <= 0 {
-		return nil
-	}
-	return &dims
-}
-
-func toPositiveInt(raw interface{}) (int, bool) {
-	switch v := raw.(type) {
-	case float64:
-		if v > 0 && v == float64(int(v)) && v < 1e9 {
-			return int(v), true
-		}
-	case int:
-		if v > 0 {
-			return v, true
-		}
-	case json.Number:
-		if f, err := v.Float64(); err == nil && f > 0 && f == float64(int(f)) {
-			return int(f), true
-		}
-	}
-	return 0, false
-}
 
 // ListDesignRevisionHardwareAssets reads the frozen pins of one revision
 // (readback for consumers and tests).
@@ -1166,4 +1208,51 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		binding.ValidationState = states[binding.AssetRevisionID]
 	}
 	return nil
+}
+
+// hardwareAssetContentTypeMatchesRepresentation is the storage-frontier
+// coherence table (#667 R3): which staged content types may finalize under
+// each representation.
+func hardwareAssetContentTypeMatchesRepresentation(rep domain.HardwareAssetRepresentation, contentType string) bool {
+	switch rep {
+	case domain.HardwareAssetRepresentationSKP:
+		return contentType == "application/octet-stream"
+	case domain.HardwareAssetRepresentationGLB:
+		return contentType == "model/gltf-binary"
+	case domain.HardwareAssetRepresentationThumbnail:
+		return contentType == "image/png" || contentType == "image/jpeg" || contentType == "image/webp"
+	default:
+		return false
+	}
+}
+
+// lockHardwareAssetRow reads one asset row FOR UPDATE: every append of a new
+// revision (and the retire transition) serializes on it (#667 R5).
+func (s *PostgresStore) lockHardwareAssetRow(ctx context.Context, assetID string) (*domain.HardwareAsset, error) {
+	var a domain.HardwareAsset
+	var createdBy *string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT id, organization_id, display_name, provenance, license, status, created_by, created_at, updated_at
+		FROM hardware_assets WHERE id = $1 AND organization_id = $2
+		FOR UPDATE
+	`, assetID, OrgFromCtx(ctx)).Scan(&a.ID, &a.OrganizationID, &a.DisplayName, &a.Provenance, &a.License, &a.Status, &createdBy, &a.CreatedAt, &a.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrHardwareAssetNotFound
+		}
+		return nil, err
+	}
+	if createdBy != nil {
+		a.CreatedBy = *createdBy
+	}
+	return &a, nil
+}
+
+// isUniqueViolationOn reports whether err is a 23505 on the given constraint.
+func isUniqueViolationOn(err error, constraint string) bool {
+	var pgErr interface{ SQLState() string }
+	if !errors.As(err, &pgErr) || pgErr.SQLState() != "23505" {
+		return false
+	}
+	return strings.Contains(err.Error(), constraint)
 }
