@@ -23,9 +23,9 @@ import { required } from './support/api';
  *     actionable "create a new revision" CTA — never an approximated PDF.
  */
 
-const PROJECT_ID = '77777777-5555-4777-8777-555555555555';
-const QUOTE_LINE_ID = '88888888-5555-4888-8888-555555555555';
-const CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000055';
+const PROJECT_ID = '77777777-9999-4777-8777-999999999999';
+const QUOTE_LINE_ID = '88888888-9999-4888-8888-999999999999';
+const CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000099';
 const REC_HW = '71000000-0000-4000-8000-000000000071';
 const REC_STRUCT = '71000000-0000-4000-8000-000000000072';
 const EXPORT_MODULE_ID = '71000000-0000-4000-8000-000000000073';
@@ -40,10 +40,13 @@ const EXPECTED_XLSX_NAME = 'Cotizacion-Cocina-Export-E2E-Cliente-Export-E2E-Q2.x
 const EXPECTED_PDF_NAME = 'Cotizacion-Cocina-Export-E2E-Cliente-Export-E2E-Q2-listado.pdf';
 const REC_CHOICES = {};
 
-const LEGACY_PROJECT_ID = '77777777-4444-4777-8777-444444444444';
-const LEGACY_LINE_ID = '88888888-4444-4888-8888-444444444444';
-const LEGACY_CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000044';
-const LEGACY_REVISION_ID = '99999999-4444-4888-8888-444444444444';
+// Legacy fixture ids live in their own 7777 block: the 4444 block belongs to
+// the demo-golden-path obra (canonical ProductionRelease + frozen executions),
+// whose presence makes the legacy project upsert 500 in the full-suite order.
+const LEGACY_PROJECT_ID = '77777777-7777-4777-8777-777777777777';
+const LEGACY_LINE_ID = '88888888-7777-4888-8888-777777777777';
+const LEGACY_CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000077';
+const LEGACY_REVISION_ID = '99999999-7777-4888-8888-777777777777';
 
 async function loginToA(page: Page): Promise<void> {
   await page.goto('/');
