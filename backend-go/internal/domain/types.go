@@ -238,6 +238,11 @@ type Hardware struct {
 	// Machining is the CNC drilling footprint (F127): operations per structural
 	// part, in the part-local frame of the placement anchor. Nil = cost-only.
 	Machining *HardwareMachiningProfile `json:"machining,omitempty"`
+	// VisualAsset is the exact versioned 3D asset revision bound to this
+	// hardware (#667 M1). Client payloads carry identifiers only;
+	// representation, digest and validation state are resolved server-side.
+	// Nil = no exact model associated (generic procedural preview).
+	VisualAsset *HardwareVisualAssetBinding `json:"visual_asset,omitempty"`
 	Active    bool                      `json:"active"`
 	CreatedAt time.Time                 `json:"created_at"`
 	UpdatedAt time.Time                 `json:"updated_at"`

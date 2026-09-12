@@ -454,11 +454,18 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		return nil, err
 	}
 
+	pinnedAssets, err := s.freezeDesignRevisionHardwareAssets(ctx, designOrgID, projectID, rev.ID, itemsToPublish)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.advanceWorkingCopyBaseForPublish(ctx, cmd.DesignID, designOrgID, projectID, rev, cmd.ActorUserID); err != nil {
 		return nil, err
 	}
 
-	if err := s.auditDesignRevisionPublished(ctx, rev, cmd.ActorUserID, cmd.IP, cmd.RequestID, nil); err != nil {
+	if err := s.auditDesignRevisionPublished(ctx, rev, cmd.ActorUserID, cmd.IP, cmd.RequestID, map[string]interface{}{
+		"hardware_asset_pins": pinnedAssets,
+	}); err != nil {
 		return nil, err
 	}
 
