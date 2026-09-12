@@ -931,9 +931,13 @@ sustituto de tenerlo. Las superficies de producción desde Cotizaciones
 `releaseAuthorityOf(project)?.source === 'canonical'` — el ProductionRelease
 exacto que el server resolvió — y NO por una QuoteRevision aceptada sin release.
 Los statuses `accepted|produced` quedan compatibility-only para obras pre-DT
-(sin revisiones de cotización del Digital Thread); en una obra moderna con
+(sin revisiones de cotización del Digital Thread — la compatibilidad aplica sólo
+cuando la autoridad de cotización está ausente o responde `empty`, es decir,
+cuando se sabe positivamente que no hay QuoteRevision); en una obra moderna con
 QuoteRevisions, un `Project.status=accepted` accidental no vuelve a autorizar
-producción silenciosamente. UI y backend rechazan lo mismo.
+producción silenciosamente, y `loading`/`error` son UNKNOWN — no pre-DT — y
+fallan cerrado (regla única `projectAllowsProductionChrome`). UI y backend
+rechazan lo mismo.
 
 ```text
 Aceptación comercial            → QuoteRevision.accepted

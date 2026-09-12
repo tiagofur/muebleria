@@ -32,7 +32,7 @@ import type {
   WarrantyPhotoKind,
   WarrantyTicket,
 } from '@granete/domain';
-import { releaseAuthorityOf } from '@granete/domain';
+import { projectAllowsProductionChrome } from './projectDetailContext';
 
 import {
   Copy,
@@ -453,17 +453,14 @@ function ProjectDetailViewInner(): ReactNode {
     canMutate &&
     project.status === 'draft' &&
     (!ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty');
-  // #642/#577: the manufacturing authority is the server-resolved canonical
-  // ProductionRelease — never commercial acceptance. An accepted
-  // QuoteRevision alone (project still draft, no release) must NOT unlock
-  // production. Legacy accepted/produced statuses remain compatibility-only
-  // for true pre-DT projects (no Digital Thread quote revisions).
-  const modernQuoteAuthority =
-    ctx.quoteAuthority?.kind === 'ready' || ctx.quoteAuthority?.kind === 'legacy';
-  const hasProductionReleaseAuthority =
-    releaseAuthorityOf(project)?.source === 'canonical' ||
-    (!modernQuoteAuthority &&
-      (project.status === 'accepted' || project.status === 'produced'));
+  // #642/#577: ONE shared rule with the list chrome (projectAllowsProductionChrome):
+  // canonical ProductionRelease for modern projects; legacy statuses only when
+  // we POSITIVELY know there is no Digital Thread quote authority (undefined /
+  // empty). loading and error are UNKNOWN, not pre-DT — fail closed.
+  const hasProductionReleaseAuthority = projectAllowsProductionChrome(
+    project,
+    ctx.quoteAuthority,
+  );
   const primary = resolveChromePrimary({
     status: project.status,
     hasProductionReleaseAuthority,

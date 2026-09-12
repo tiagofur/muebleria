@@ -47,7 +47,6 @@ import type {
   ApprovalType,
   CommercialStatus,
 } from '@granete/domain';
-import { releaseAuthorityOf } from '@granete/domain';
 
 import {
   type DropdownMenuSection,
@@ -56,6 +55,7 @@ import {
 import '../catalogs/catalogs.css';
 import { ExportIssueList } from './ExportIssueList';
 import { ProjectDetailView } from './components/ProjectDetailView';
+import { projectAllowsProductionChrome } from './components/projectDetailContext';
 import type { CostingHandlers } from './components/CostingPanel';
 import type { CostingPanelView } from './costingView';
 import type { SurveyHandlers } from './components/SiteSurveyPanel';
@@ -619,23 +619,14 @@ export function ProjectsScreen({
   const exportDisabled =
     exportBusy || exportBlocked || previewBlocked || !state.selectedProject;
   /** F041: Optimizer/herrajes only for plant-ready work — manufacturing
-   * authority, never commercial acceptance (#642/#577). A modern Digital
-   * Thread project is plant-ready when the server-resolved canonical
-   * ProductionRelease exists; an accepted QuoteRevision alone is NOT
-   * enough. Legacy accepted/produced statuses stay compatibility-only for
-   * true pre-DT projects (no Digital Thread quote revisions) and never
-   * bypass the release authority on a modern project. */
-  const releaseAuthority = state.selectedProject
-    ? releaseAuthorityOf(state.selectedProject)
-    : undefined;
-  const modernQuoteAuthority =
-    quoteAuthority?.kind === 'ready' || quoteAuthority?.kind === 'legacy';
+   * authority, never commercial acceptance (#642/#577). One shared rule with
+   * the detail chrome: canonical ProductionRelease for modern projects;
+   * legacy accepted/produced statuses compatibility-only when we POSITIVELY
+   * know the project has no Digital Thread quote authority (authority not
+   * wired / empty); loading and error fail closed. */
   const productionExportOk =
     state.selectedProject != null &&
-    (releaseAuthority?.source === 'canonical' ||
-      (!modernQuoteAuthority &&
-        (state.selectedProject.status === 'accepted' ||
-          state.selectedProject.status === 'produced')));
+    projectAllowsProductionChrome(state.selectedProject, quoteAuthority);
   const productionExportDisabled = exportDisabled || !productionExportOk;
   const canMutateCommercialDraft = canMutate && (
     !quoteAuthority || quoteAuthority.kind === 'empty' ||

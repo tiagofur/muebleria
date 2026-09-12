@@ -1966,6 +1966,34 @@ describe('ProjectsScreen project templates (#110)', () => {
     expect(onOpenInProduction).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['loading', { kind: 'loading' as const }],
+    ['error', { kind: 'error' as const, message: 'No se pudo cargar la autoridad comercial.', onRetry: vi.fn() }],
+  ])('#642: quote authority %s is UNKNOWN, not pre-DT — legacy fallback fails closed', async (_label, quoteAuthority) => {
+    const user = userEvent.setup();
+    const onOpenInProduction = vi.fn();
+    const stampedWhileUnknown: Project = {
+      ...projects[0]!,
+      id: 'prj-unknown-authority',
+      name: 'Obra con autoridad desconocida',
+      status: 'accepted',
+    };
+    renderScreen({
+      projects: [stampedWhileUnknown],
+      projectEstimates: { 'prj-unknown-authority': 500 },
+      onOpenInProduction,
+      quoteAuthority,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-unknown-authority'));
+
+    // A residual legacy status must never unlock production while we still
+    // don't know whether a modern Digital Thread quote exists.
+    expect(screen.queryByTestId('project-open-in-production')).toBeNull();
+    expect(screen.queryByTestId('project-chrome-export')).toBeNull();
+    expect(onOpenInProduction).not.toHaveBeenCalled();
+  });
+
   it('#642: true pre-DT projects keep the legacy accepted/produced compatibility', async () => {
     const user = userEvent.setup();
     const onOpenInProduction = vi.fn();

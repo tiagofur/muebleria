@@ -96,16 +96,22 @@ aceptación comercial ≠ autorización de fabricación. Corrección aplicada:
   QuoteRevision. La condición moderna es
   `releaseAuthorityOf(project)?.source === 'canonical'` — el
   ProductionRelease exacto que el server resolvió (`resolved_production_release`).
-- Legacy compatibility clasificada: los statuses `accepted|produced` sólo
-  habilitan producción cuando la obra NO tiene revisiones de cotización del
-  Digital Thread (`quoteAuthority` ausente/empty). En una obra moderna con
-  QuoteRevisions, un `Project.status=accepted` accidental NO autoriza
-  producción sin release — la UI cuenta la misma historia que el backend, que
-  rechaza el comando.
+- Legacy compatibility clasificada (ronda final de review): UNA sola regla
+  compartida — `projectAllowsProductionChrome(project, quoteAuthority)` en
+  `projectDetailContext` — consume lista y detalle. Los statuses
+  `accepted|produced` sólo habilitan producción cuando sabemos POSITIVAMENTE
+  que la obra no tiene autoridad de cotización Digital Thread: `quoteAuthority`
+  ausente (modo pre-DT/local) o `empty` (el server respondió que no hay
+  revisiones). `loading` y `error` son UNKNOWN — no pre-DT — y fallan cerrado:
+  un `Project.status=accepted` residual nunca desbloquea producción mientras
+  no sepamos si existe una quote moderna. En una obra moderna con
+  QuoteRevisions, el stamp accidental NO autoriza producción sin release — la
+  UI cuenta la misma historia que el backend, que rechaza el comando.
 - 'Marcar producida' permanece ligado al lifecycle literal (untouched).
-- Tests UI reescritos (4 casos): quote aceptada sin release ⇒ cerrado; release
-  canónico con project draft ⇒ 'Abrir en Producción'; stamp legacy sobre obra
-  moderna ⇒ cerrado; obra pre-DT ⇒ compatibilidad preservada.
+- Tests UI (6 casos): quote aceptada sin release ⇒ cerrado; release canónico
+  con project draft ⇒ 'Abrir en Producción'; stamp legacy sobre obra moderna ⇒
+  cerrado; obra pre-DT (empty) ⇒ compatibilidad preservada; loading con stamp
+  legacy ⇒ cerrado; error con stamp legacy ⇒ cerrado.
 - E2E: `quote-list-authority.spec.ts` prueba pre-P1 (Q aceptada, sin release ⇒
   sin chrome de producción); `project-reconciliation.spec.ts` prueba post-P1
   (P1 canónico + Project.status draft ⇒ 'Abrir en Producción' visible, sin
