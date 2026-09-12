@@ -62,6 +62,10 @@ type Server struct {
 	// hardwareAssetLimits holds the configurable per-representation byte caps
 	// for hardware 3D asset uploads (#667 M1); nil = package defaults.
 	hardwareAssetLimits map[domain.HardwareAssetRepresentation]int64
+	// hardwareAssetUnlink is a TEST seam over the collector's file removal:
+	// when set it replaces removeHardwareAssetPath so regressions can stop
+	// the collector inside its critical section. nil in production.
+	hardwareAssetUnlink func(ownerOrgID, storageKey string) error
 	// MFASecrets encrypts TOTP secrets and keys recovery verifiers under the
 	// dedicated MFA_ENCRYPTION_KEYS keyring (#460 SEC-7). Nil fails closed:
 	// every MFA endpoint refuses to operate, and step-up-gated commands stay

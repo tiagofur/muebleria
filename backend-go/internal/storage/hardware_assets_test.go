@@ -134,12 +134,15 @@ func stageAndFinalizeAssetDigest(t *testing.T, w *hwAssetWorld, displayName stri
 			t.Fatalf("session status = %q", session.Status)
 		}
 		storageKey := "hardware-assets/" + session.ID + "/skp-aabbccddeeff.skp"
-		if err := w.fx.store.RecordHardwareAssetSessionBytes(ctx, storage.RecordHardwareAssetSessionBytesCommand{
-			SessionID:   session.ID,
-			StorageKey:  storageKey,
-			ContentType: "application/octet-stream",
-			SizeBytes:   1234,
-			SHA256:      hwAssetSHA(digestSeed),
+		// Metadata-only promote (nil Promote): storage tests exercise the
+		// critical section without a filesystem.
+		if _, err := w.fx.store.PromoteHardwareAssetSessionBytes(ctx, storage.PromoteHardwareAssetSessionBytesCommand{
+			SessionID:      session.ID,
+			StorageKey:     storageKey,
+			ContentType:    "application/octet-stream",
+			SizeBytes:      1234,
+			SHA256:         hwAssetSHA(digestSeed),
+			Representation: domain.HardwareAssetRepresentationSKP,
 		}); err != nil {
 			return err
 		}
@@ -343,13 +346,15 @@ func TestHardwareAssets_FinalizeIdempotentAndImmutable(t *testing.T) {
 	}
 
 	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
-		return w.fx.store.RecordHardwareAssetSessionBytes(ctx, storage.RecordHardwareAssetSessionBytesCommand{
-			SessionID:   mustSessionIDForAsset(t, w, asset.ID),
-			StorageKey:  "hardware-assets/x/skp-000000000000.skp",
-			ContentType: "application/octet-stream",
-			SizeBytes:   99,
-			SHA256:      hwAssetSHA("ff"),
+		_, err := w.fx.store.PromoteHardwareAssetSessionBytes(ctx, storage.PromoteHardwareAssetSessionBytesCommand{
+			SessionID:      mustSessionIDForAsset(t, w, asset.ID),
+			StorageKey:     "hardware-assets/x/skp-000000000000.skp",
+			ContentType:    "application/octet-stream",
+			SizeBytes:      99,
+			SHA256:         hwAssetSHA("ff"),
+			Representation: domain.HardwareAssetRepresentationSKP,
 		})
+		return err
 	})
 	if !errors.Is(err, domain.ErrHardwareAssetSessionNotPrepared) {
 		t.Fatalf("staged bytes after finalize must fail not-prepared, got %v", err)
@@ -526,12 +531,13 @@ func TestHardwareAssets_BindingReferenceRejections(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if err := w.fx.store.RecordHardwareAssetSessionBytes(ctx, storage.RecordHardwareAssetSessionBytesCommand{
-			SessionID:   res.Session.ID,
-			StorageKey:  "hardware-assets/" + res.Session.ID + "/thumbnail-aabbccddeeff.png",
-			ContentType: "image/png",
-			SizeBytes:   555,
-			SHA256:      hwAssetSHA("33"),
+		if _, err := w.fx.store.PromoteHardwareAssetSessionBytes(ctx, storage.PromoteHardwareAssetSessionBytesCommand{
+			SessionID:      res.Session.ID,
+			StorageKey:     "hardware-assets/" + res.Session.ID + "/thumbnail-aabbccddeeff.png",
+			ContentType:    "image/png",
+			SizeBytes:      555,
+			SHA256:         hwAssetSHA("33"),
+			Representation: domain.HardwareAssetRepresentationThumbnail,
 		}); err != nil {
 			return err
 		}

@@ -28,8 +28,9 @@ type stubStore struct {
 	assetSessionResult     *storage.HardwareAssetUploadSessionResult
 	assetSession           *domain.HardwareAssetUploadSession
 	assetSessionErr        error
-	recordAssetBytesCmd    *storage.RecordHardwareAssetSessionBytesCommand
-	recordAssetBytesErr    error
+	promoteAssetBytesCmd   *storage.PromoteHardwareAssetSessionBytesCommand
+	promoteAssetBytesErr   error
+	assetPreviousStagedKey string
 	recordAssetBytesArmed  bool
 	assetFinalized         *domain.HardwareAsset
 	assetFinalizeCmd       *storage.FinalizeHardwareAssetUploadCommand
@@ -3623,12 +3624,17 @@ func (s *stubStore) GetHardwareAssetUploadSession(_ context.Context, _ string) (
 	}
 	return s.assetSession, nil
 }
-func (s *stubStore) RecordHardwareAssetSessionBytes(_ context.Context, cmd storage.RecordHardwareAssetSessionBytesCommand) error {
+func (s *stubStore) PromoteHardwareAssetSessionBytes(_ context.Context, cmd storage.PromoteHardwareAssetSessionBytesCommand) (string, error) {
 	if !s.recordAssetBytesArmed {
-		return errors.New("not configured in stubStore")
+		return "", errors.New("not configured in stubStore")
 	}
-	s.recordAssetBytesCmd = &cmd
-	return s.recordAssetBytesErr
+	s.promoteAssetBytesCmd = &cmd
+	if cmd.Promote != nil {
+		if err := cmd.Promote(); err != nil {
+			return "", err
+		}
+	}
+	return s.assetPreviousStagedKey, s.promoteAssetBytesErr
 }
 func (s *stubStore) FinalizeHardwareAssetUpload(_ context.Context, cmd storage.FinalizeHardwareAssetUploadCommand) (*domain.HardwareAsset, error) {
 	s.assetFinalizeCmd = &cmd

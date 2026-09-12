@@ -1058,3 +1058,159 @@ func TestHardwareAssets_RouterExpirySweepCommitFailurePreservesBytes(t *testing.
 		t.Fatalf("committed sweep must collect the abandoned staged file post-commit: stat err=%v", err)
 	}
 }
+
+// RED (concurrencia promoción/recolección): A→B confirmado con sesión
+// prepared; el recolector de A se detiene tras tomar el lock y antes de
+// eliminar; un re-upload concurrente de EXACTAMENTE A debe terminar con el
+// archivo existente (tamaño/SHA correctos) y finalize+authorize leyendo esos
+// mismos bytes. La barrera detecta la espera real del lock en
+// pg_stat_activity (deadline acotado), así el orden conflictivo no depende
+// del scheduler.
+func TestHardwareAssets_RouterReUploadSameKeyDuringCollection(t *testing.T) {
+	e := newHwAssetRouterEnv(t)
+
+	rr := e.do(t, http.MethodPost, "/api/hardware-assets/uploads",
+		`{"representation":"skp","display_name":"Promote vs collect"}`, "hwasset-pc-start-0001")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("start = %d %s", rr.Code, rr.Body.String())
+	}
+	var session struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+
+	contentA := []byte(strings.Repeat("same-key-bytes-A-", 128))
+	if rr := e.uploadBytes(t, session.ID, "skp", "a.skp", contentA); rr.Code != http.StatusOK {
+		t.Fatalf("bytes A = %d %s", rr.Code, rr.Body.String())
+	}
+	keyA, onDisk := e.hwAssetStagedFileOnDisk(t, session.ID)
+	if !bytes.Equal(onDisk, contentA) {
+		t.Fatal("fixture: A bytes mismatch")
+	}
+
+	// Seam de prueba: el unlink del recolector se detiene DESPUÉS de tomar el
+	// lock de la fila y ANTES de eliminar el archivo.
+	unlinkStarted := make(chan struct{})
+	unlinkRelease := make(chan struct{})
+	e.srv.hardwareAssetUnlink = func(ownerOrgID, storageKey string) error {
+		if strings.HasSuffix(storageKey, filepath.Base(keyA)) {
+			onceClose(unlinkStarted)
+			<-unlinkRelease
+		}
+		return e.srv.removeHardwareAssetPath(ownerOrgID, storageKey)
+	}
+	t.Cleanup(func() { e.srv.hardwareAssetUnlink = nil })
+
+	// Re-upload B (contenido distinto): su commit dispara la recolección
+	// post-commit de A, que queda detenida dentro de la sección crítica.
+	bDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		rec := e.uploadBytes(t, session.ID, "skp", "b.skp", []byte(strings.Repeat("other-bytes-B-", 96)))
+		bDone <- rec
+	}()
+	select {
+	case <-unlinkStarted:
+	case <-time.After(30 * time.Second):
+		t.Fatal("collector never reached the blocked unlink (staged B not confirmed?)")
+	}
+
+	// Re-upload concurrente de EXACTAMENTE A: su registro debe esperar el
+	// lock del recolector. La espera real se observa en pg_stat_activity.
+	aDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		rec := e.uploadBytes(t, session.ID, "skp", "a-again.skp", contentA)
+		aDone <- rec
+	}()
+	waitForSessionLockWaiter(t, e.pool)
+
+	// Liberar el recolector: elimina el A viejo y confirma; el upload de A
+	// continúa desde su sección crítica.
+	close(unlinkRelease)
+
+	select {
+	case rec := <-bDone:
+		if rec.Code != http.StatusOK {
+			t.Fatalf("upload B = %d %s", rec.Code, rec.Body.String())
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("upload B did not finish")
+	}
+	var stagedRR *httptest.ResponseRecorder
+	select {
+	case stagedRR = <-aDone:
+		if stagedRR.Code != http.StatusOK {
+			t.Fatalf("re-upload A = %d %s", stagedRR.Code, stagedRR.Body.String())
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("re-upload A did not finish")
+	}
+	shaA := sha256.Sum256(contentA)
+	if !strings.Contains(stagedRR.Body.String(), hex.EncodeToString(shaA[:])) {
+		t.Fatalf("re-upload A response does not carry A's digest: %s", stagedRR.Body.String())
+	}
+
+	// El archivo en la clave A existe con los bytes EXACTOS (tamaño y SHA).
+	path := filepath.Join(e.mediaDir, hwRouterOrg, filepath.FromSlash(keyA))
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("key A file missing after successful re-upload (promoted file destroyed by the collector): %v", err)
+	}
+	if !bytes.Equal(got, contentA) {
+		t.Fatalf("key A content mismatch: %d bytes", len(got))
+	}
+	gotSha := sha256.Sum256(got)
+	if hex.EncodeToString(gotSha[:]) != hex.EncodeToString(shaA[:]) {
+		t.Fatal("key A digest mismatch")
+	}
+
+	// Finalize y descarga autorizada leen esos mismos bytes.
+	rr = e.do(t, http.MethodPost, "/api/hardware-assets/uploads/"+session.ID+":finalize", "", "hwasset-pc-fin-0001")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("finalize = %d %s", rr.Code, rr.Body.String())
+	}
+	var asset hwAssetJSON
+	if err := json.Unmarshal(rr.Body.Bytes(), &asset); err != nil {
+		t.Fatal(err)
+	}
+	if asset.Revisions[0].Sha256 != "sha256-"+hex.EncodeToString(shaA[:]) {
+		t.Fatalf("revision digest = %s, want A's", asset.Revisions[0].Sha256)
+	}
+	rr = e.do(t, http.MethodPost,
+		"/api/hardware-assets/"+asset.ID+"/revisions/"+asset.Revisions[0].ID+":authorize", "", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("authorize = %d %s", rr.Code, rr.Body.String())
+	}
+	var grant struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &grant); err != nil {
+		t.Fatal(err)
+	}
+	if rr := e.readWithGrant(t, grant.URL); rr.Code != http.StatusOK || !bytes.Equal(rr.Body.Bytes(), contentA) {
+		t.Fatalf("grant read = %d (%d bytes, want %d)", rr.Code, rr.Body.Len(), len(contentA))
+	}
+}
+
+// waitForSessionLockWaiter polls (bounded by deadline) until a backend other
+// than ours waits on a lock touching hardware_asset_upload_sessions — the
+// observable signal that the re-upload's record reached the session's
+// critical section.
+func waitForSessionLockWaiter(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		var waiters int
+		if err := pool.QueryRow(context.Background(), `
+			SELECT count(*) FROM pg_stat_activity
+			WHERE wait_event_type = 'Lock'
+			  AND query LIKE '%hardware_asset_upload_sessions%'`).Scan(&waiters); err == nil && waiters > 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("no backend observed waiting on the session row lock (deadline)")
+}
+
+func onceClose(ch chan struct{}) { close(ch) }

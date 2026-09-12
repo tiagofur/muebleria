@@ -115,7 +115,7 @@ type Store interface {
 	// Hardware 3D assets (#667 M1)
 	CreateHardwareAssetUploadSession(ctx context.Context, cmd storage.CreateHardwareAssetUploadSessionCommand) (*storage.HardwareAssetUploadSessionResult, error)
 	GetHardwareAssetUploadSession(ctx context.Context, sessionID string) (*domain.HardwareAssetUploadSession, error)
-	RecordHardwareAssetSessionBytes(ctx context.Context, cmd storage.RecordHardwareAssetSessionBytesCommand) error
+	PromoteHardwareAssetSessionBytes(ctx context.Context, cmd storage.PromoteHardwareAssetSessionBytesCommand) (string, error)
 	FinalizeHardwareAssetUpload(ctx context.Context, cmd storage.FinalizeHardwareAssetUploadCommand) (*domain.HardwareAsset, error)
 	CancelHardwareAssetUploadSession(ctx context.Context, cmd storage.CancelHardwareAssetUploadSessionCommand) error
 	ListHardwareAssets(ctx context.Context) ([]domain.HardwareAsset, error)

@@ -48,6 +48,25 @@ type RecordHardwareAssetSessionBytesCommand struct {
 	SHA256      string
 }
 
+// PromoteHardwareAssetSessionBytesCommand carries one received-and-verified
+// upload into the session's critical section (#667 R5 concurrency): the file
+// was streamed and hashed into a unique temp OUTSIDE any lock; Promote moves
+// it to the content-addressed StorageKey INSIDE the row-locked section so
+// promotion and record share one protocol with post-commit collection.
+type PromoteHardwareAssetSessionBytesCommand struct {
+	SessionID   string
+	StorageKey  string
+	ContentType string
+	SizeBytes   int64
+	SHA256      string
+	// Representation is the session representation the caller addressed (the
+	// URL segment); the critical section re-validates it against the row.
+	Representation domain.HardwareAssetRepresentation
+	// Promote performs the temp→key move while the session row lock is held.
+	// It may be nil (metadata-only record, exercised by storage tests).
+	Promote func() error
+}
+
 type FinalizeHardwareAssetUploadCommand struct {
 	SessionID   string
 	ActorUserID string
@@ -268,31 +287,78 @@ func scanHardwareAssetUploadSession(row pgx.Row) (*domain.HardwareAssetUploadSes
 	return &sess, nil
 }
 
-// RecordHardwareAssetSessionBytes replaces the staged bytes metadata of a
-// prepared session (re-upload semantics, retry-safe by upsert). The file
-// itself was already written by the API layer; the row is the metadata truth.
-func (s *PostgresStore) RecordHardwareAssetSessionBytes(ctx context.Context, cmd RecordHardwareAssetSessionBytesCommand) error {
+// PromoteHardwareAssetSessionBytes replaces the staged bytes of a prepared
+// session under the session's critical section: it takes FOR UPDATE of the
+// session row — the SAME lock the post-commit collector takes — re-validates
+// status/expiry/representation from the locked row, moves the received file
+// to its content-addressed key WHILE the lock is held, and records the
+// staged metadata. A concurrent re-upload of exactly the key being collected
+// therefore serializes with the collector: whoever wins the lock decides,
+// and the loser re-validates and re-promotes after it. Returns the previous
+// staged storage key ("" when none) so the caller registers the
+// authoritative replaced-key collection; on any failure the transaction
+// rolls back and the previous staged state (and its bytes) is untouched.
+func (s *PostgresStore) PromoteHardwareAssetSessionBytes(ctx context.Context, cmd PromoteHardwareAssetSessionBytesCommand) (string, error) {
 	if !isValidUUID(cmd.SessionID) {
-		return domain.ErrHardwareAssetSessionNotFound
+		return "", domain.ErrHardwareAssetSessionNotFound
 	}
-	tag, err := s.db(ctx).Exec(ctx, `
+	if transactionFromContext(ctx) == nil {
+		actor, _ := TenantActorFromCtx(ctx)
+		if actor.OrganizationID == "" {
+			actor.OrganizationID = OrgFromCtx(ctx)
+		}
+		var previous string
+		err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+			prev, err := s.PromoteHardwareAssetSessionBytes(txCtx, cmd)
+			previous = prev
+			return err
+		})
+		return previous, err
+	}
+
+	var previous *string
+	var status, representation string
+	var expiresAt time.Time
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT staged_storage_key, status, representation, expires_at
+		FROM hardware_asset_upload_sessions
+		WHERE id = $1 AND organization_id = $2
+		FOR UPDATE
+	`, cmd.SessionID, OrgFromCtx(ctx)).Scan(&previous, &status, &representation, &expiresAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", domain.ErrHardwareAssetSessionNotFound
+		}
+		return "", err
+	}
+	if status != "prepared" {
+		return "", fmt.Errorf("%w: session status is %s", domain.ErrHardwareAssetSessionNotPrepared, status)
+	}
+	if !time.Now().Before(expiresAt) {
+		return "", fmt.Errorf("%w: session expired at %s", domain.ErrHardwareAssetSessionNotPrepared, expiresAt.Format(time.RFC3339))
+	}
+	if domain.HardwareAssetRepresentation(representation) != cmd.Representation {
+		return "", fmt.Errorf("%w: la representación de la carga no coincide con la sesión (%s)",
+			domain.ErrHardwareAssetInvalid, representation)
+	}
+	if cmd.Promote != nil {
+		if err := cmd.Promote(); err != nil {
+			// Rollback: the staged row (and the bytes it references) keeps
+			// its previous committed state.
+			return "", err
+		}
+	}
+	if _, err := s.db(ctx).Exec(ctx, `
 		UPDATE hardware_asset_upload_sessions
 		SET staged_storage_key = $2, staged_content_type = $3, staged_size_bytes = $4, staged_sha256 = $5, updated_at = NOW()
-		WHERE id = $1 AND status = 'prepared' AND expires_at > NOW()
-	`, cmd.SessionID, cmd.StorageKey, cmd.ContentType, cmd.SizeBytes, cmd.SHA256)
-	if err != nil {
-		return err
+		WHERE id = $1
+	`, cmd.SessionID, cmd.StorageKey, cmd.ContentType, cmd.SizeBytes, cmd.SHA256); err != nil {
+		return "", err
 	}
-	if tag.RowsAffected() == 0 {
-		// Distinguish a missing session from one that can no longer accept
-		// bytes so the API can answer precisely.
-		sess, err := s.GetHardwareAssetUploadSession(ctx, cmd.SessionID)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("%w: status %s", domain.ErrHardwareAssetSessionNotPrepared, sess.Status)
+	if previous != nil {
+		return *previous, nil
 	}
-	return nil
+	return "", nil
 }
 
 // FinalizeHardwareAssetUpload is the ONLY writer of hardware_assets and

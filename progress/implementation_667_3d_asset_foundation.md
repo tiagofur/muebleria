@@ -377,3 +377,68 @@ Verificación independiente de esta sesión (worktree dedicado):
   `git diff --check` limpio; `pnpm openapi:check` PASS (sin cambios de
   contrato). Storage sin cambios en esta ronda (verificado por el commit
   residual y la CI del PR).
+
+## Ronda R5-concurrencia: promoción y recolección bajo el mismo protocolo (2026-09-12)
+
+Hallazgo sobre `db295bc0`: el handler promueve el temporal con `os.Rename`
+ANTES de `RecordHardwareAssetSessionBytes`; el recolector decide y elimina bajo
+`FOR UPDATE` de la fila de sesión. El rename no participa de ese lock: un
+re-upload con EXACTAMENTE el contenido A (misma clave content-addressed) sobre
+una sesión `prepared` con staged=B renombra sobre la clave A, su UPDATE espera
+el lock del recolector, el recolector elimina A y confirma, y el UPDATE
+confirma staged=A con el archivo ausente (200 válido aparente; finalize luego
+falla en verificación).
+
+Plan (mínimo, sin arquitectura paralela):
+
+- El registro de bytes pasa a ser `PromoteHardwareAssetSessionBytes`: dentro
+  de la transacción toma `FOR UPDATE` de la fila de sesión, re-valida
+  autoritativamente estado/expiración/representación, invoca el callback de
+  promoción (el rename) CON el lock tomado, aplica el UPDATE y devuelve la
+  clave staged previa. El recolector ya usa el mismo lock → exclusión mutua
+  real entre promoción y recolección.
+- Recepción/verificación del archivo (temporal + hashing) permanece FUERA del
+  lock; el lock sólo cubre validar+rename+update (rápido). Sin lock durante la
+  transferencia.
+- El handler conserva la lectura temprana como fast-fail; la validación
+  autoritativa es la de la sección crítica. La clave reemplazada que se
+  registra para recolección post-commit pasa a ser la devuelta por la sección
+  crítica (no la lectura temprana, posiblemente stale — aunque el recolector
+  revalida bajo lock en cualquier caso).
+- Fallo tras promover pero antes de confirmar → rollback del estado; el
+  archivo en la clave queda como huérfano logueado (nunca se borra; política
+  conservadora ya vigente).
+- Regresión RED→GREEN con barreras: hook de unlink bloqueante (seam de prueba
+  documentado en Server) detiene al recolector tras tomar el lock y antes de
+  eliminar; el re-upload concurrente de exactamente A se detecta esperando el
+  lock vía `pg_stat_activity` (deadline acotado, polling no como
+  sincronización primaria); al liberar, el upload debe terminar 200 con
+  archivo existente, tamaño y SHA correctos, y finalize+authorize leen esos
+  mismos bytes. En el código revisado el rename ocurre antes de esperar → el
+  recolector borra el archivo recién promovido → RED determinista.
+
+### Ronda R5-concurrencia — resultado (2026-09-12)
+
+- RED: `TestHardwareAssets_RouterReUploadSameKeyDuringCollection` sobre el
+  código revisado → `key A file missing after successful re-upload` (el
+  recolector borró el archivo promovido; el upload respondió 200). Barreras
+  reales: seam de unlink bloqueante detiene al recolector tras el lock y antes
+  de eliminar; la espera del lock del re-upload se observa en
+  `pg_stat_activity` (deadline acotado; sin sleeps como sincronización).
+- Corrección: `PromoteHardwareAssetSessionBytes` mueve la promoción del
+  temporal DENTRO de la sección crítica de la sesión (FOR UPDATE de la fila,
+  mismo lock del recolector), re-valida autoritativamente
+  estado/expiración/representación desde la fila bloqueada, aplica el rename y
+  el UPDATE, y devuelve la clave staged previa real (la recolección
+  post-commit se registra con ella). Recepción/verificación (temporal +
+  hashing) permanecen fuera del lock; sin lock durante la transferencia. El
+  registro metadata-only de los tests usa Promote=nil. El seam de unlink
+  (`Server.hardwareAssetUnlink`, nil en producción) documenta el punto de
+  prueba.
+- GREEN: la regresión de concurrencia pasa (archivo existente con tamaño y
+  SHA exactos, finalize+authorize leen los mismos bytes); las 11 pruebas de
+  router y la suite completa de `internal/api` pasan.
+- Nota de entorno: durante la verificación local, otra lane (shell de sesión
+  ajena, checkout compartido main) ejecutaba `go test ./...` sobre la misma BD
+  desechable compartida; la suite completa de storage se re-ejecuta al quedar
+  libre (el flake 57P01 ya documentado no se reatribuye sin evidencia).

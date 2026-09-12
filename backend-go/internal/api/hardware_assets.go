@@ -330,9 +330,13 @@ func (s *Server) removeHardwareAssetPath(ownerOrgID, storageKey string) error {
 // scope the hook never runs: conservative retention, orphans documented for
 // a future clean-media pass.
 func (s *Server) collectHardwareAssetStagedKey(ctx context.Context, ownerOrgID, sessionID, replacedKey string) {
+	unlink := s.hardwareAssetUnlink
+	if unlink == nil {
+		unlink = s.removeHardwareAssetPath
+	}
 	storage.OnCommit(ctx, func(hookCtx context.Context) {
 		collected, err := s.Store.CollectHardwareAssetStagedFile(hookCtx, sessionID, ownerOrgID, replacedKey, func() error {
-			return s.removeHardwareAssetPath(ownerOrgID, replacedKey)
+			return unlink(ownerOrgID, replacedKey)
 		})
 		if err != nil {
 			// The file remains on disk (still needed or IO failure): an
@@ -501,41 +505,39 @@ func (s *Server) HandleHardwareAssetUploadBytes(w http.ResponseWriter, r *http.R
 		respondWithError(w, http.StatusBadRequest, "ruta inválida")
 		return
 	}
-	if err := os.Rename(tmpPath, destPath); err != nil {
-		respondWithInternalError(w, err, "hardware asset store")
-		return
-	}
 
-	replacedKey := ""
-	if sess.Staged != nil && sess.Staged.StorageKey != storageKey {
-		replacedKey = sess.Staged.StorageKey
-	}
-	if err := s.Store.RecordHardwareAssetSessionBytes(r.Context(), storage.RecordHardwareAssetSessionBytesCommand{
-		SessionID:   sessionID,
-		StorageKey:  storageKey,
-		ContentType: contentType,
-		SizeBytes:   size,
-		SHA256:      sha,
-	}); err != nil {
-		// #667 R5: a failed record NEVER deletes the file. The key is
-		// content-addressed: if a concurrent identical upload or a finalize
-		// won the race, this exact key may be the staged or FINALIZED blob —
-		// deleting it would destroy referenced bytes. The loser's file is at
-		// most an orphan for a future clean-media pass (logged, never
-		// removed). Only the replaced-key cleanup below — with the row
-		// already committed to OUR key — may delete, and only the previous
-		// key.
+	// #667 R5 concurrency: the temp→key promotion happens INSIDE the
+	// session's critical section (row lock held), together with the staged
+	// record and under the same lock the post-commit collector takes. The
+	// early session read above is only a fast-fail; status/expiry/
+	// representation are re-validated authoritatively from the locked row.
+	previousKey, err := s.Store.PromoteHardwareAssetSessionBytes(r.Context(), storage.PromoteHardwareAssetSessionBytesCommand{
+		SessionID:      sessionID,
+		StorageKey:     storageKey,
+		ContentType:    contentType,
+		SizeBytes:      size,
+		SHA256:         sha,
+		Representation: representation,
+		Promote: func() error {
+			return os.Rename(tmpPath, destPath)
+		},
+	})
+	if err != nil {
+		// #667 R5: a failed record NEVER deletes the file. If the promotion
+		// ran, the file at the key is at most an orphan for a future
+		// clean-media pass (logged, never removed); the rolled-back staged
+		// row keeps referencing the PREVIOUS bytes, which were never touched.
 		slog.Warn("hardware asset upload: staged bytes not recorded (session no longer accepts them); file left for orphan cleanup",
 			"storage_key", storageKey, "error", err)
 		respondWithHardwareAssetError(w, err)
 		return
 	}
-	// The replaced key is collected POST-COMMIT (#667 R5 residual): the
-	// staged UPDATE above is not durable until the AuthMiddleware transaction
-	// commits, and deleting the previous file inline destroyed the bytes a
-	// rollback must restore.
-	if replacedKey != "" {
-		s.collectHardwareAssetStagedKey(r.Context(), storage.OrgFromCtx(r.Context()), sessionID, replacedKey)
+	// The replaced key — the one the critical section actually displaced — is
+	// collected POST-COMMIT (#667 R5): the staged UPDATE is not durable until
+	// the AuthMiddleware transaction commits, and the collector re-validates
+	// references under the same lock before unlinking.
+	if previousKey != "" && previousKey != storageKey {
+		s.collectHardwareAssetStagedKey(r.Context(), storage.OrgFromCtx(r.Context()), sessionID, previousKey)
 	}
 
 	respondWithJSON(w, http.StatusOK, openapi.HardwareAssetUploadStaged{

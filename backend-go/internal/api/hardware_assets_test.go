@@ -147,11 +147,11 @@ func TestHardwareAssets_BytesContentInspection(t *testing.T) {
 	if staged.Sha256 != "sha256-"+hex.EncodeToString(sum[:]) || staged.Size != int64(len(content)) {
 		t.Fatalf("server-side digest/size = %+v", staged)
 	}
-	if store.recordAssetBytesCmd == nil || !strings.HasPrefix(store.recordAssetBytesCmd.StorageKey, "hardware-assets/"+sessionID+"/skp-") {
-		t.Fatalf("canonical storage key = %+v", store.recordAssetBytesCmd)
+	if store.promoteAssetBytesCmd == nil || !strings.HasPrefix(store.promoteAssetBytesCmd.StorageKey, "hardware-assets/"+sessionID+"/skp-") {
+		t.Fatalf("canonical storage key = %+v", store.promoteAssetBytesCmd)
 	}
 	// The staged file lives on disk under the org partition.
-	path := filepath.Join(dir, storage.InitialOrganizationID, filepath.FromSlash(store.recordAssetBytesCmd.StorageKey))
+	path := filepath.Join(dir, storage.InitialOrganizationID, filepath.FromSlash(store.promoteAssetBytesCmd.StorageKey))
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("staged file missing: %v", err)
 	}
