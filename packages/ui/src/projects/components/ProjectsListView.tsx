@@ -304,6 +304,14 @@ export function ProjectsListView({
                       <span className="project-card__price-value">
                         {formattedTotal}
                       </span>
+                    ) : summariesReady && summary?.isLegacy ? (
+                      <span
+                        className="project-card__price-value project-card__price-value--muted"
+                        data-testid={`project-card-price-legacy-${project.id}`}
+                        title="Precio histórico no disponible: esta revisión se creó antes del historial comercial congelado."
+                      >
+                        No disponible
+                      </span>
                     ) : (
                       <span className="project-card__price-value project-card__price-value--muted">
                         —

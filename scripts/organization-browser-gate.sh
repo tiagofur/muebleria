@@ -13,7 +13,7 @@ cleanup() {
   fi
   docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
   rm -rf "${TMP_ROOT}"
-  unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MFA_ENCRYPTION_KEY ADMIN_PASSWORD
+  unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MFA_ENCRYPTION_KEY ADMIN_PASSWORD ORGANIZATION_TEST_DATABASE_URL
 }
 trap cleanup EXIT INT TERM
 
@@ -154,6 +154,12 @@ export ORGANIZATION_GATE_PASSWORD="${ADMIN_PASSWORD}"
 export ORGANIZATION_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
 export VITE_API_BASE="${ORGANIZATION_API_BASE}"
 export ORGANIZATION_TEST_OUTPUT="${TMP_ROOT}/playwright-output"
+# #642 legacy recovery: specs may seed PRE-migration row shapes (snapshot-less
+# quote revisions) that no API can produce — the modern commands always freeze
+# a snapshot. Read-only-from-app perspective: admin DSN for fixture seeding
+# only; the verified FLOW always goes through the real API.
+GATE_DB_PORT="$(docker port "${CONTAINER}" 5432/tcp | head -1 | awk -F: '{print $NF}')"
+export ORGANIZATION_TEST_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${GATE_DB_PORT}/granete_gate?sslmode=disable"
 
 cd "${ROOT}"
 pnpm exec playwright test --config=playwright.organization.config.ts "$@"

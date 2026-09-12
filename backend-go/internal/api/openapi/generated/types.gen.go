@@ -1622,7 +1622,8 @@ type ProjectFurnitureWorkspace struct {
 }
 
 type CreateInitialQuoteRevisionRequest struct {
-	Notes *string `json:"notes,omitempty"`
+	Notes               *string `json:"notes,omitempty"`
+	BaseQuoteRevisionId *string `json:"baseQuoteRevisionId,omitempty"`
 }
 
 type RequoteProjectQuoteRequest struct {

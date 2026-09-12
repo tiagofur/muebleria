@@ -585,7 +585,82 @@ describe('ProjectsScreen F022', () => {
     expect(screen.queryByTestId('project-material-summary')).toBeNull();
   });
 
-  it('fails closed for a legacy revision without a commercial snapshot', async () => {
+  it('#642 legacy recovery: shows persisted furniture read-only, honest unavailability and modernize action', async () => {
+    const user = userEvent.setup();
+    const onOpenReconciliation = vi.fn();
+    const legacyItems = [
+      {
+        furnitureInstanceId: 'fi-legacy-1',
+        furnitureDefinitionId: 'mod-1',
+        parameters: { widthMm: 600, heightMm: 720, depthMm: 560 },
+        materialChoices: { INTERIOR: 'mat-a' },
+        lifecycleStatus: 'active' as const,
+      },
+      {
+        furnitureInstanceId: 'fi-legacy-2',
+        furnitureDefinitionId: 'mod-1',
+        parameters: { widthMm: 650, heightMm: 720, depthMm: 560 },
+        materialChoices: { INTERIOR: 'mat-b' },
+        lifecycleStatus: 'active' as const,
+      },
+      {
+        furnitureInstanceId: 'fi-legacy-3',
+        furnitureDefinitionId: 'mod-1',
+        parameters: { widthMm: 700, heightMm: 720, depthMm: 560 },
+        materialChoices: { INTERIOR: 'mat-b' },
+        lifecycleStatus: 'removed' as const,
+      },
+    ];
+    renderScreen({
+      breakdown: null,
+      quoteAuthority: {
+        kind: 'legacy',
+        revisionId: 'quote-1',
+        revisionNumber: 1,
+        status: 'published',
+        items: legacyItems,
+        createdAt: '2026-01-10T10:00:00Z',
+        publishedAt: '2026-01-11T10:00:00Z',
+        acceptedAt: null,
+        message:
+          'Esta revisión fue creada antes del historial comercial congelado. Los muebles y configuraciones originales siguen disponibles; algunos datos históricos, como el precio total exacto, no pueden verificarse.',
+        onRetry: vi.fn(),
+      },
+      onOpenReconciliation,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    // Test A — the persisted units render; no empty screen, no "Sin cotización".
+    const detail = screen.getByTestId('project-detail');
+    expect(within(detail).getByTestId('quote-legacy-badge').textContent).toContain('Q1 · Cotización anterior');
+    for (const item of legacyItems) {
+      expect(within(detail).getByTestId(`quote-legacy-unit-${item.furnitureInstanceId}`)).toBeTruthy();
+    }
+    expect(within(detail).getByTestId('quote-legacy-dimensions-fi-legacy-2').textContent).toBe('650×720×560 mm');
+    expect(within(detail).getAllByText(/Material INTERIOR: mat-/)).toHaveLength(3);
+    expect(within(detail).getAllByText(/Definición: mod-1/)).toHaveLength(3);
+    expect(detail.textContent).not.toContain('Sin cotización');
+
+    // Current catalog names assist recognition but are explicitly marked —
+    // never presented as frozen history of the legacy revision.
+    expect(within(detail).getAllByText(/\(etiqueta actual\)/).length).toBeGreaterThan(0);
+
+    // Real lifecycle timestamps surface in the chrome meta.
+    expect(within(detail).getByTestId('quote-legacy-meta').textContent).toContain('publicada');
+
+    // Test B — no fake money: the historical total is honestly unavailable.
+    expect(within(detail).getByTestId('legacy-price-unavailable').textContent).toContain('No disponible con precisión');
+    expect(within(detail).getByTestId('project-detail-total').textContent).not.toContain('$202.50');
+    expect(within(detail).getByTestId('project-detail-total').textContent).not.toContain('$0');
+
+    // The modernize action routes to the reconciliation flow with the exact
+    // legacy revision; the legacy revision itself is never edited.
+    await user.click(within(detail).getAllByTestId('legacy-modernize-btn')[0]!);
+    expect(onOpenReconciliation).toHaveBeenCalledWith('prj-1', 'quote-1');
+  });
+
+  it('#642 legacy re-entry: with a newer modern draft the detail offers continuing it, never a second modernization', async () => {
     const user = userEvent.setup();
     const onOpenReconciliation = vi.fn();
     renderScreen({
@@ -594,18 +669,78 @@ describe('ProjectsScreen F022', () => {
         kind: 'legacy',
         revisionId: 'quote-1',
         revisionNumber: 1,
-        status: 'published',
-        message: 'Q1 no contiene un snapshot comercial. Creá una nueva revisión.',
+        status: 'accepted',
+        items: [
+          {
+            furnitureInstanceId: 'fi-legacy-1',
+            furnitureDefinitionId: 'mod-1',
+            parameters: { widthMm: 600, heightMm: 720, depthMm: 560 },
+            materialChoices: {},
+            lifecycleStatus: 'active' as const,
+          },
+        ],
+        newerRevisionNumber: 2,
+        message: 'Esta revisión fue creada antes del historial comercial congelado.',
         onRetry: vi.fn(),
       },
       onOpenReconciliation,
     });
 
     await user.click(screen.getByTestId('project-card-prj-1'));
-    expect(screen.getByRole('alert').textContent).toContain('no contiene un snapshot');
-    await user.click(screen.getByRole('button', { name: 'Crear nueva revisión' }));
+
+    // Q2 already exists as the exact latest: the stale-base modernize CTA is
+    // gone and the honest action continues the existing modern revision.
+    expect(screen.queryByTestId('legacy-modernize-btn')).toBeNull();
+    const continueBtn = screen.getAllByTestId('legacy-continue-btn')[0]!;
+    expect(continueBtn.textContent).toContain('Continuar Q2');
+    // The chrome meta names the modern draft without faking authority.
+    expect(screen.getByTestId('quote-legacy-meta').textContent).toContain('Q2 en borrador');
+
+    await user.click(continueBtn);
     expect(onOpenReconciliation).toHaveBeenCalledWith('prj-1', 'quote-1');
-    expect(screen.getByTestId('project-detail-total').textContent).not.toContain('$202.50');
+  });
+
+  it('#642 legacy recovery: persisted fields never change with the mutable catalog — only marked current labels do', async () => {
+    const user = userEvent.setup();
+    const legacyAuthority = {
+      kind: 'legacy' as const,
+      revisionId: 'quote-1',
+      revisionNumber: 1,
+      status: 'accepted' as const,
+      items: [
+        {
+          furnitureInstanceId: 'fi-legacy-1',
+          furnitureDefinitionId: 'mod-1',
+          parameters: { widthMm: 600, heightMm: 720, depthMm: 560 },
+          materialChoices: { INTERIOR: 'mat-a' },
+          lifecycleStatus: 'active' as const,
+        },
+      ],
+      createdAt: '2026-01-10T10:00:00Z',
+      message: 'Esta revisión fue creada antes del historial comercial congelado.',
+      onRetry: vi.fn(),
+    };
+    const { rerenderWith } = renderScreen({ breakdown: null, quoteAuthority: legacyAuthority });
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const unitBefore = screen.getByTestId('quote-legacy-unit-fi-legacy-1').textContent;
+    expect(unitBefore).toContain('Definición: mod-1');
+    expect(unitBefore).toContain('Material INTERIOR: mat-a');
+
+    // Catalog names change afterwards (module + material): the persisted ids,
+    // parameters and choices stay identical — only the explicitly marked
+    // "etiqueta actual" hint follows the live catalog.
+    rerenderWith({
+      modules: [{ ...modules[0]!, name: 'Módulo Renombrado 2027' }],
+      materials: materials.map((m) => ({ ...m, name: `${m.name} v2` })),
+      breakdown: null,
+      quoteAuthority: legacyAuthority,
+    });
+    const unitAfter = screen.getByTestId('quote-legacy-unit-fi-legacy-1').textContent;
+    expect(unitAfter).toContain('Definición: mod-1');
+    expect(unitAfter).toContain('Material INTERIOR: mat-a');
+    expect(unitAfter).toContain('600×720×560 mm');
+    expect(unitAfter).not.toContain('Bajo mesada');
+    expect(unitAfter).toContain('(etiqueta actual)');
   });
 
   it('renders exact QuoteRevision furniture, dimensions and finishes from commercial snapshot instead of mutable project.items', async () => {
