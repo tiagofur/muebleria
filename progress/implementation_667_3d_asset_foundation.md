@@ -1,8 +1,127 @@
 # Issue #667 — M1: base de recursos 3D versionados (contrato, persistencia, carga segura, binding y pins)
 
-- Estado: `IMPLEMENTED_PENDING_REVIEW`. Base exacta
-  `origin/main@ab3bcdb3c1ef8a025ef92a1dc2dd435949f5fa72`; rama
-  `feat/667-3d-asset-foundation`. Single writer: GLM. Sin merge ni cierre de issues.
+- Estado: `IMPLEMENTED_PENDING_REVIEW` + **ronda de corrección R1–R5** (revisión del
+  propietario sobre HEAD `c97b85c4`, base `dee5e7a8`). Base de la corrección:
+  `origin/main@a453cd00` (merge de #673) + merge `721a74ca`; worktree dedicado
+  `muebles-667-wt` (el compartido se devolvió a `main`; sin repetir el incidente).
+  Sin merge, cierre, labels protegidas ni re-ejecución del gate de publicación.
+
+## Plan de corrección R1–R5 (registrado antes de editar código)
+
+- **R1 — forma canónica única**: la forma canónica es la del contrato generado
+  (`/hardware-assets/{assetId}`, `:retire`, `/revisions/{revisionId}:authorize`),
+  ya documentada en OpenAPI/cliente TS. El router se alinea: se elimina el segmento
+  `/asset/`; un único `POST /api/hardware-assets/{assetCommand...}` despacha
+  `{assetId}:retire` y `{assetId}/revisions/{revisionId}:authorize` (patrón
+  `{sessionCommand...}` de design publish; `uploads/{cmd...}` es subconjunto
+  estricto → sin conflicto ServeMux). `finalize` y `retire` quedan envueltos en
+  `RequireIdempotency` por-handler (el cliente generado declara claves para ambos;
+  `cancel` no declara clave y queda sin wrapper). Prueba: walkthrough por
+  `RegisterRoutes` + PostgreSQL desechable + JWT real, usando las URLs EXACTAS del
+  cliente generado, incluyendo bytes; matriz de idempotencia (clave ausente 400,
+  replay, reúso incompatible 409).
+- **R2 — listado con revisiones**: `ListHardwareAssets` indexa por posición del
+  slice (no punteros a copias desconectadas); listado y detalle exponen ids,
+  números, digests, representación y estado de validación idénticos. Prueba con 2
+  recursos y 2 revisiones, por storage y por API.
+- **R3 — representación autoritativa de la sesión**: `HandleHardwareAssetUploadBytes`
+  exige igualdad entre el segmento de URL y `session.Representation` ANTES de
+  inspeccionar/limitar/escribir; defensa adicional en la frontera de storage
+  (coherencia representación↔content-type al finalizar). Estado anterior
+  conservado ante error. Pruebas cruzadas SKP/GLB/thumbnail + re-upload válido.
+- **R4 — pins semánticos**: el conjunto de referencias se obtiene del contexto
+  semántico exacto (overrides de placements de componentes de structure/module/
+  agregados + hardware_lines del módulo y del agregado), NO de `layout.Hardware`
+  (filtrado por previewShape). Contrato de errores: defID vacío o módulo
+  inexistente → ausencia legítima (precedente legacy de #639); composición rota
+  (estructura/agregado referenciado y ausente, JSON inválido) → error tipado, nunca
+  `continue` silencioso. INSERT del pin en una sola sentencia (JOIN hardwares×
+  revisions) → digest/representación siempre coherentes con la revisión insertada.
+  Serialización por asset y pruebas de rebind/publicación concurrente. La selección
+  alternativa por ítem no existe en el contrato M1 (documentado).
+- **R5 — ownership de carga y serialización**: la compensación de upload NUNCA
+  elimina el archivo cuando el record falla (puede ser el blob de la revisión
+  finalizada; sólo se borran claves reemplazadas con el row ya confirmado o staged
+  de sesiones canceladas por su propio camino). `FinalizeHardwareAssetUpload` toma
+  `FOR UPDATE` la fila del asset objetivo → serializa numeración `MAX+1` y coordina
+  retiro concurrente; violación única de numeración → conflicto tipado con reintento
+  seguro. Pruebas con barreras reales (blocking reader), dos sesiones sobre el mismo
+  asset y retiro vs nueva revisión.
+
+## Resultado de la corrección (evidencia RED/GREEN real)
+
+RED ejecutado sobre HEAD `721a74ca` (antes de tocar producto), PostgreSQL real:
+
+- R1: `TestHardwareAssets_RouterCanonicalClientWalkthrough` → `detail (client URL) = 404`
+  (el cliente generado no puede alcanzar las rutas `/asset/…` del router).
+- R1-idempotencia: `finalize without key = 201 … (want 400)` (el contrato declarado
+  no estaba conectado al mecanismo real).
+- R3: `cross-representation upload = 200 …content_type":"image/png"… (want 400)`
+  (PNG aceptado en sesión SKP; en el HEAD revisado esa combinación produce una
+  revisión etiquetada SKP con bytes de imagen).
+- R2: `list 'Recurso uno' revisions = … Revisions:[]` (el listado devuelve copias
+  sin revisiones; el detalle sí).
+- R4: `R1 debe congelar el pin del herraje …a3 (contexto semántico, no preview): pins=[a1]`
+  (herraje con recurso SKP y sin previewShape pierde su pin);
+  `la publicación con composición rota debe fallar (nunca pins silenciosamente ausentes)`
+  (agregado referenciado inexistente → publicación seguía sin error y sin pins).
+- R5: `racing upload destroyed the finalized blob: … skp-8fa192a8a29e.skp: no such
+  file or directory` — interleave real con barreras (upload en vuelo mientras
+  finalize confirma; la compensación del tardío borra el blob de la revisión
+  finalizada); `detail = 404` tras dos finalizaciones sobre el mismo asset
+  (numeración `MAX+1` sin serializar por asset).
+
+GREEN (tras las correcciones, mismos tests):
+
+- `internal/api` completa: **ok** (incluye 6 tests de router sobre `RegisterRoutes`
+  + PostgreSQL desechable + JWT/sesión/membership reales: walkthrough por las URLs
+  exactas del cliente generado —detail/list/retire/authorize/bytes—, contrato de
+  idempotencia (clave ausente 400, replay mismo asset, reúso incompatible 409),
+  mismatch de representación (400 sin staged ni archivos, re-upload válido
+  posterior), late upload con contenido igual y distinto (blob intacto, digest
+  verificado por authorize/grant), barrera de interleave upload/finalize y dos
+  sesiones sobre el mismo asset (3 revisiones, números únicos, sin 500).
+- `internal/storage` enfocado: TestHardwareAssets_* + TestDesignPublish* +
+  TestDesigns_* ok (listado=detalle con 2 recursos/2 revisiones, pins semánticos
+  sin previewShape + hardware_lines, composición rota falla la publicación,
+  ausencia legítima sin definición, rebind concurrente con coherencia de pin,
+  regresión original R1→R2).
+- R1 forma canónica elegida y documentada en `routes.go`: la del contrato generado
+  (`/hardware-assets/{assetId}`, `{assetId}:retire`,
+  `{assetId}/revisions/{revisionId}:authorize`); el router ahora usa un único
+  despachador de comandos (sin segmento `/asset/`), OpenAPI/cliente sin cambios
+  (`pnpm openapi:check` PASS) y sin parches en React.
+- Idempotencia real: `finalize` y `retire` ahora bajo `RequireIdempotency`
+  (operaciones `hardware-assets.finalize-upload` / `hardware-assets.retire`);
+  `cancel` no declara clave en el cliente y queda directa.
+- R4 elección documentada: pins desde el walk del contexto semántico (overrides de
+  placements en structure/module/agregados + hardware_lines), INSERT único
+  hardwares×revisions (digest/representación de la misma lectura), error tipado
+  `ErrCompositionUnresolvable` para composición rota, ausencia legítima para ítem
+  sin definición/módulo inexistente. La selección alternativa por ítem no existe en
+  el contrato M1 (no hay estado que la sustente; queda para el contrato de #667
+  posterior, documentado).
+- R5: compensación de upload nunca elimina la clave cuando el record falla (puede
+  ser el blob finalizado; huérfanos quedan para limpieza con log);
+  `FinalizeHardwareAssetUpload` toma `FOR UPDATE` del asset objetivo (serializa
+  numeración y retiro concurrente); violación de numeración → 409 tipado con
+  reintento seguro; guard de frontera coherencia representación↔content-type.
+
+Verificación de cierre: suites completas `internal/api` ok + `internal/storage` +
+domain ok (secuencial, PostgreSQL real), `pnpm openapi:check` PASS, `git diff
+--check` limpio (typecheck monorepo al cierre). CI remota del HEAD final: se
+registra en el PR.
+
+Nota de diagnóstico (no es un defecto de esta rama): durante la verificación, una
+serie de fallos `57P01 terminating connection` en tests de auth (ajenos al cambio)
+se trazó a un proceso `go test ./...` HUÉRFANO de una ejecución anterior que
+seguía vivo y competía por la BD desechable compartida `muebles_multiorg_test`
+(4097 `terminating connection` en los logs de Postgres; "CREATE DATABASE … already
+exists" seguido de FORCE-drop). Tras terminar ese proceso de prueba, los tests de
+auth pasan aislados y la suite completa corre limpia. El test de barrera R5
+también detectó y corrigió un defecto del propio test: el gate de sesión corre
+ANTES de leer el body, así que el interleave correcto exige que el upload pase el
+gate con la sesión aún prepared y se bloquee después (barrera), no al revés.
 
 ## Resultado implementado
 
