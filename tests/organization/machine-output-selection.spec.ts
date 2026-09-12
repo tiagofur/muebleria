@@ -216,6 +216,37 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     expect(readModelB.selections).toEqual([]);
   });
 
+  test('selection request failure stays visible and recovers — it is never presented as empty', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.route('**/api/machine-output-selections', (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'INTERNAL_ERROR',
+          message: 'synthetic machine-output failure',
+          fieldErrors: {},
+          requestId: 'machine-output-failure',
+          retryable: true,
+          details: {},
+        }),
+      });
+    });
+
+    await loginToA(page);
+    await page.goto('/settings');
+    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await expect(page.getByTestId('machine-output-load-error')).toContainText(
+      'No se pudo cargar la configuración de salida de máquina',
+    );
+    await expect(page.getByTestId('machine-output-cutting')).toHaveCount(0);
+
+    await page.unroute('**/api/machine-output-selections');
+    await page.getByTestId('machine-output-retry').click();
+    await expect(page.getByTestId('machine-output-cutting')).toBeVisible();
+  });
+
   test.afterAll(async () => {
     // Leave org A in a clean, ready state for other suites. Re-read the
     // version right before the write and retry once on conflict.

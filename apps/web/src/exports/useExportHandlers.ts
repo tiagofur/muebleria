@@ -55,8 +55,11 @@ import {
   type CuttingDownloadResult,
 } from '../exportCutPlanPtx';
 import { generateSelectedCuttingOutput } from '@granete/excel';
-import type { MachineOutputSelection } from '@granete/domain';
 import { runExport, type ExportDelivery } from './runExport';
+import {
+  runWithCuttingOutputAuthority,
+  type CuttingOutputSelectionState,
+} from './cuttingOutputAuthority';
 
 export interface ExportHandlersDeps {
   readonly projects: readonly Project[];
@@ -66,8 +69,8 @@ export interface ExportHandlersDeps {
   readonly session: SessionMode | null;
   readonly actorRole: Parameters<typeof canExportProductionForProject>[0];
   readonly workspaceSettings: WorkshopSettings | undefined;
-  /** #591: exact selected cutting target. When set, normal generation uses ONLY this tuple. */
-  readonly machineOutputCuttingSelection?: MachineOutputSelection | null;
+  /** #691: scoped request truth; only confirmed-empty may use legacy PTX. */
+  readonly cuttingOutputSelectionState: CuttingOutputSelectionState;
   /**
    * #642/3: existing COST-01/COST-02 shell policy — when false, line amounts
    * are not authorized and render as absence in commercial exports.
@@ -96,7 +99,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     session,
     actorRole,
     workspaceSettings,
-    machineOutputCuttingSelection = null,
+    cuttingOutputSelectionState,
     showCosts = true,
     toast,
     stampEngineeringGeneration,
@@ -503,26 +506,30 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         // reason surfaced) and never fall back to the legacy generic PTX. The
         // bundling mode still applies: by-material yields one file per
         // material, bundled in a .zip.
-        let result: CuttingDownloadResult;
-        if (machineOutputCuttingSelection) {
-          const bundles = await generateSelectedCuttingOutput(
-            cutPlan,
-            machineOutputCuttingSelection,
-            selectedMode,
-          );
-          result = await downloadCuttingArtifactBundles(
-            bundles,
-            cutPlan.projectName || cutPlan.projectId,
-            undefined,
-            selectedMode,
-          );
-        } else {
-          result = await downloadCutPlanPtx(cutPlan, {
-            projectName: cutPlan.projectName,
-            projectCode: cutPlan.projectId,
-            mode: selectedMode,
-          });
-        }
+        const result: CuttingDownloadResult = await runWithCuttingOutputAuthority(
+          cuttingOutputSelectionState,
+          {
+            selected: async (selection) => {
+              const bundles = await generateSelectedCuttingOutput(
+                cutPlan,
+                selection,
+                selectedMode,
+              );
+              return downloadCuttingArtifactBundles(
+                bundles,
+                cutPlan.projectName || cutPlan.projectId,
+                undefined,
+                selectedMode,
+              );
+            },
+            legacy: () =>
+              downloadCutPlanPtx(cutPlan, {
+                projectName: cutPlan.projectName,
+                projectCode: cutPlan.projectId,
+                mode: selectedMode,
+              }),
+          },
+        );
         const kindLabel = result.kind.toUpperCase();
         toast({
           type: 'success',
@@ -542,7 +549,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         setExportBusy(false);
       }
     },
-    [toast, machineOutputCuttingSelection],
+    [toast, cuttingOutputSelectionState],
   );
 
   const handleReleaseToDelivery = useCallback(
@@ -573,12 +580,12 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
 
   const handleExportProductionPack = useCallback(
     async (projectId?: string) => {
-            const project =
+      const project =
         projectId != null
           ? projects.find((p) => p.id === projectId)
           : selectedProject;
       if (!project || !catalog) return;
-            if (
+      if (
         session === 'auth' &&
         !canExportProductionForProject(actorRole, project.status)
       ) {
@@ -597,16 +604,19 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             project,
             catalog,
             resolveCustomerName(project.customerId, customers),
+            { cuttingOutputState: cuttingOutputSelectionState },
           );
           if (result.ok && result.omissions.length > 0) {
             omissionNote = ` (sin: ${result.omissions.join(', ')})`;
           }
           return result;
         },
-        onIssues: () =>
+        onIssues: (issues) =>
           toast({
             type: 'error',
             message:
+              issues.find((issue) => issue.field === 'machineOutputSelection')
+                ?.message ??
               'No se pudo armar el pack: revisá el pedido (falta el corte Optimizer)',
           }),
         // PROD-3.2 — stamp OP export revision so stale detection works.
@@ -620,7 +630,17 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             : `✓ ${fileName} descargado${omissionNote}`,
       });
     },
-    [selectedProject, projects, catalog, customers, toast, session, actorRole, recordProductionExport],
+    [
+      selectedProject,
+      projects,
+      catalog,
+      customers,
+      toast,
+      session,
+      actorRole,
+      recordProductionExport,
+      cuttingOutputSelectionState,
+    ],
   );
 
   /**

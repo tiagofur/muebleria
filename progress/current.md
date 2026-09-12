@@ -1,3 +1,35 @@
+# Issue #691 — autoridad de selección CADmatic 4 sin fallback legacy
+
+- Approval: prompt explícito del propietario (2026-09-12) para implementar completa
+  la issue #691; issue OPEN con `status:approved` y `type:bug` verificados.
+- Base exacta: `origin/main@f9b800cd584daf7ff499405e8c454c1a51665114`;
+  branch `fix/691-machine-output-authority`; worktree aislado porque el checkout
+  principal contiene trabajo activo ajeno de #642. Inicio: 2026-09-12 13:49 CST.
+- Scope: distinguir loading/error/confirmed-empty/configured/blocked; permitir PTX
+  legacy sólo tras empty confirmado; usar la selección exacta o bloquear en descarga
+  directa y Production Pack; invalidar respuestas tardías al cambiar organización.
+- Plan:
+  1. Fijar regresiones RED para loading/error/empty/configured/stale y callers legacy.
+  2. Introducir una autoridad pequeña y explícita de estado/routing compartida por
+     descarga directa y Production Pack.
+  3. Conectar AppContent/handlers preservando scope tenant/session y bloquear late responses.
+  4. Añadir integración de Production Pack y browser Go+PostgreSQL+Chromium; ejecutar
+     gates enfocados, monorepo, OpenAPI, Go, diff y CI exact-head.
+- Exclusiones: sin #692/#693, PTX core, profiles/adapters r3, CADmatic 3/5,
+  SAW/MPR/drilling, Quote/Design/SketchUp/Proyectar ni claims de compatibilidad física.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. La descarga directa y Production Pack
+  comparten una autoridad scoped: loading/error/blocked no generan ningún archivo,
+  configured usa exclusivamente la tupla exacta y sólo confirmed-empty habilita PTX legacy.
+  El render invalida inmediatamente estado de otro scope y respuestas tardías no committean.
+- Caller audit: los únicos bypasses productivos eran `downloadCutPlanPtx` en el handler
+  directo y `ptxCutPlanExport` en Production Pack; ambos quedaron detrás de la autoridad.
+- RED: web falló por módulo ausente y 3 regresiones del pack; luego GREEN.
+- Evidence: focused web 13/13 y UI 21/21; `pnpm test` PASS (domain 1407,
+  storage 191, excel 341 + 3 skipped,
+  desktop 17, mobile 73, ui 1754, web 471); `pnpm typecheck` 7/7;
+  `pnpm openapi:check` sin drift; `git diff --check` limpio. Browser E2E de error/retry
+  agregado; ejecución real Go+PostgreSQL+Chromium queda serializada por el coordinador.
+
 # Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
 
 - Approval: prompt del propietario (2026-09-11) autoriza exclusivamente M1; #667 sigue

@@ -851,7 +851,7 @@ export function ProductionOrderOptimizationPanel({
                       }}
                       data-testid="prod-opt-cutting-output-blocked"
                     >
-                      ⚠ {cuttingOutputTarget.blockerMessage} Configurá una salida compatible en Ajustes → Ingeniería antes de descargar.
+                      ⚠ {cuttingOutputTarget.blockerMessage} Revisá Ajustes → Ingeniería antes de descargar.
                     </p>
                   ) : null}
                   <div role="radiogroup" aria-label="Modo de descarga" data-testid="prod-opt-ptx-mode" style={{ marginBottom: 8 }}>
