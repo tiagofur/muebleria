@@ -342,6 +342,44 @@ func TestHardwarePut_VisualBindingResolvedServerSide(t *testing.T) {
 	}
 }
 
+// Existing binding to a retired asset survives non-visual updates (e.g. name/price).
+func TestHardwarePut_ExistingBindingToRetiredAssetPreserved(t *testing.T) {
+	existingBinding := &domain.HardwareVisualAssetBinding{
+		AssetID:         "74000000-0000-0000-0000-000000000001",
+		AssetRevisionID: "75000000-0000-0000-0000-000000000001",
+		Representation:  domain.HardwareAssetRepresentationSKP,
+		SHA256:          "sha256-" + strings.Repeat("a", 64),
+		ValidationState: domain.HardwareAssetValidationPending,
+	}
+	store := &stubStore{
+		hardwareReturnedByID: &domain.Hardware{
+			ID:          "66000000-0000-0000-0000-000000000001",
+			Code:        "HW-VIS",
+			Name:        "Tirador Original",
+			VisualAsset: existingBinding,
+		},
+		// If resolution is attempted, nil causes failure
+		assetResolvedBinding: nil,
+	}
+	srv := &Server{Store: store}
+
+	body := `{"id":"66000000-0000-0000-0000-000000000001","code":"HW-VIS","name":"Tirador Renombrado","unit":"piece","cost_per_unit":15,"active":true,
+		"visual_asset":{"assetId":"74000000-0000-0000-0000-000000000001","assetRevisionId":"75000000-0000-0000-0000-000000000001"}}`
+	req := hwAssetRequest(http.MethodPut, "/api/catalog/hardware/66000000-0000-0000-0000-000000000001", body, string(domain.RoleAdmin))
+	req.SetPathValue("id", "66000000-0000-0000-0000-000000000001")
+	rr := httptest.NewRecorder()
+	srv.HandleHardwareByID(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("put existing binding = %d %s", rr.Code, rr.Body.String())
+	}
+	if store.updateHardwareReceived == nil || store.updateHardwareReceived.Name != "Tirador Renombrado" {
+		t.Fatalf("update not called with new name: %+v", store.updateHardwareReceived)
+	}
+	if store.updateHardwareReceived.VisualAsset == nil || store.updateHardwareReceived.VisualAsset.AssetRevisionID != "75000000-0000-0000-0000-000000000001" {
+		t.Fatalf("existing binding lost or altered: %+v", store.updateHardwareReceived.VisualAsset)
+	}
+}
+
 // --- End-to-end: real throwaway PostgreSQL + real filesystem ----------------
 
 func hwAssetE2EStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {

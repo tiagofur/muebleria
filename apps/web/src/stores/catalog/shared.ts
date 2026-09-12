@@ -85,9 +85,9 @@ export interface CatalogState {
   readonly setEdgeActive: (id: string, active: boolean) => void;
 
   // --- Hardware ---
-  readonly createHardware: (draft: HardwareDraft) => void;
-  readonly updateHardware: (id: string, draft: HardwareDraft) => void;
-  readonly setHardwareActive: (id: string, active: boolean) => void;
+  readonly createHardware: (draft: HardwareDraft) => Promise<void>;
+  readonly updateHardware: (id: string, draft: HardwareDraft) => Promise<void>;
+  readonly setHardwareActive: (id: string, active: boolean) => Promise<void>;
 
   // --- Ambient materials (presentation-only: finishes & scene textures) ---
   readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => void;
@@ -286,6 +286,8 @@ export function makeCatalogStoreCtx(
         },
         (err: unknown) => {
           console.error('Error al guardar catálogo:', err);
+          // Rollback optimistic update on save failure
+          set({ catalog: prev });
           // F118 S2: no error toasts from saves that raced a logout — the
           // login screen must stay clean.
           if (useWorkspaceStore.getState().session === null) {
@@ -331,14 +333,13 @@ export function makeCatalogStoreCtx(
     message: string | null,
     type: 'success' | 'info' = 'success',
   ): Promise<void> {
-    return patch(updater).then(
+    const promise = patch(updater).then(
       () => {
         if (message) toast({ type, message });
       },
-      () => {
-        /* error toast already shown by patch */
-      },
     );
+    promise.catch(() => undefined);
+    return promise;
   }
 
   async function patchSaved(

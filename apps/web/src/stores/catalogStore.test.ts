@@ -341,6 +341,7 @@ describe('catalogStore — hardware / optionGroups / components', () => {
       previewClearcoat: '',
       partFinishes: { body: '', base: '', grip: '' },
       machining: null,
+      visualAsset: null,
     });
     expect(
       store.getState().catalog!.hardware.some((h) => h.code === 'HW-1'),
@@ -387,6 +388,7 @@ describe('catalogStore — hardware / optionGroups / components', () => {
           },
         ],
       },
+      visualAsset: null,
     });
     const created = store
       .getState()
@@ -397,11 +399,115 @@ describe('catalogStore — hardware / optionGroups / components', () => {
           id: 'cam',
           role: 'cam',
           operations: [
-            { id: 'cam-15', kind: 'blind_hole', diameterMm: 15, depthMm: 13, xMm: 0, yMm: 0, face: 'anchor' },
+            {
+              id: 'cam-15',
+              kind: 'blind_hole',
+              diameterMm: 15,
+              depthMm: 13,
+              xMm: 0,
+              yMm: 0,
+              face: 'anchor',
+            },
           ],
         },
       ],
     });
+  });
+
+  it('createHardware y updateHardware gestionan visualAsset (#667 M2)', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+
+    const binding = {
+      assetId: '11111111-1111-4111-8111-111111111111',
+      assetRevisionId: '22222222-2222-4222-8222-222222222222',
+      representation: 'skp' as const,
+      sha256: 'sha256-abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+      validationState: 'pending' as const,
+    };
+
+    await store.getState().createHardware({
+      code: 'HW-3D',
+      name: 'Manija 3D',
+      unit: 'piece',
+      costPerUnit: 12,
+      packageSize: '',
+      imageUrl: '',
+      notes: '',
+      previewShape: 'bar-pull',
+      previewColor: '#ffffff',
+      previewSizeMm: '128',
+      previewDiameterMm: '10',
+      previewProjectionMm: '25',
+      previewRoughness: '0.4',
+      previewMetalness: '0.8',
+      previewClearcoat: '0',
+      partFinishes: { body: '', base: '', grip: '' },
+      machining: null,
+      visualAsset: binding,
+    });
+
+    const created = store
+      .getState()
+      .catalog!.hardware.find((h) => h.code === 'HW-3D');
+    expect(created).toBeDefined();
+    expect(created?.visualAsset).toEqual(binding);
+
+    // Editing only non-visual fields keeps visualAsset intact
+    await store.getState().updateHardware(created!.id, {
+      code: 'HW-3D-EDITED',
+      name: 'Manija 3D Editada',
+      unit: 'piece',
+      costPerUnit: 15,
+      packageSize: '',
+      imageUrl: '',
+      notes: 'Notas actualizadas',
+      previewShape: 'bar-pull',
+      previewColor: '#ffffff',
+      previewSizeMm: '128',
+      previewDiameterMm: '10',
+      previewProjectionMm: '25',
+      previewRoughness: '0.4',
+      previewMetalness: '0.8',
+      previewClearcoat: '0',
+      partFinishes: { body: '', base: '', grip: '' },
+      machining: null,
+      visualAsset: created!.visualAsset ?? null,
+    });
+
+    const updated = store
+      .getState()
+      .catalog!.hardware.find((h) => h.id === created!.id);
+    expect(updated?.name).toBe('Manija 3D Editada');
+    expect(updated?.visualAsset).toEqual(binding);
+
+    // Unbinding explicitly removes visualAsset
+    await store.getState().updateHardware(created!.id, {
+      code: 'HW-3D-EDITED',
+      name: 'Manija 3D Sin Modelo',
+      unit: 'piece',
+      costPerUnit: 15,
+      packageSize: '',
+      imageUrl: '',
+      notes: '',
+      previewShape: 'bar-pull',
+      previewColor: '#ffffff',
+      previewSizeMm: '128',
+      previewDiameterMm: '10',
+      previewProjectionMm: '25',
+      previewRoughness: '0.4',
+      previewMetalness: '0.8',
+      previewClearcoat: '0',
+      partFinishes: { body: '', base: '', grip: '' },
+      machining: null,
+      visualAsset: null,
+    });
+
+    const unbound = store
+      .getState()
+      .catalog!.hardware.find((h) => h.id === created!.id);
+    expect(unbound?.visualAsset).toBeUndefined();
   });
 
   it('deleteOptionGroup removes by id (guest, no backend DELETE)', async () => {

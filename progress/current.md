@@ -1,3 +1,18 @@
+# Issue #667 — M2: administración de recursos 3D desde React
+
+- Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. Base `origin/main@009360e2` (PR #674 M1 integrado). Rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree aislado.
+- Started: 2026-09-12 10:30 CST.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. M2 entrega la administración completa de recursos 3D desde React sobre la base de M1 (PR #674).
+  - Transporte: `uploadHardwareAssetBytes` multipart nativo en `GraneteApiClient`, `resolveHardwareAssetFileUrl` canónico anti `/api/api/...`, `HardwareAssetService` desacoplado consumido vía DI por la capa de aplicación.
+  - Dominio y draft: `HardwareVisualAssetBinding` exportado y preservado en `HardwareDraft`, `toDraft`, mutaciones de catálogo y sincronización remota sin borrado accidental ante cambios de nombre o precio.
+  - UI Catálogo Herrajes: sección "Modelo 3D y montaje" con `WorkspaceTabs` (`file` vs `generic`), selector modal con búsqueda, detalle de revisiones, exclusión de thumbnails como modelos, badges claros y retiro de recursos con diálogo explícito de confirmación. Modal de subida con estados observables reales, claves de idempotencia estables por intento lógico, detección de formato y configuración física de origen.
+  - Backend compatibilidad: `HandleHardwareByID` preserva bindings existentes intactos frente a recursos retirados en ediciones de otros campos y sincronizaciones del catálogo (retirar sólo impide selecciones nuevas).
+- Evidence:
+  - Browser E2E real (`./scripts/organization-browser-gate.sh tests/organization/hardware-3d-catalog.spec.ts`): PASS completo contra PostgreSQL real, backend Go y frontend React a 390px, 768px y 1280px (10/10 puntos del prompt verificados).
+  - Unitarias backend: `go test -v ./internal/api -run TestHardwarePut_ExistingBindingToRetiredAssetPreserved` PASS.
+  - Monorepo checks: `pnpm openapi:check` PASS (0 drift), `pnpm typecheck` PASS (7/7 packages), `pnpm test` en domain (1407 tests), storage (206 tests), ui (1752 tests) y web (450 tests) PASS. Design system tokens y tabs rollout checks PASS.
+- Exclusiones respetadas: sin Three.js/WebGL en Herrajes, sin Ruby, sin render SKP, sin assemblies (#670), sin validador (#668).
+
 # Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
 
 - Approval: prompt del propietario (2026-09-11) autoriza exclusivamente M1; #667 sigue

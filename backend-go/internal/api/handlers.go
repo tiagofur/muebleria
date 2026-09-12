@@ -1798,19 +1798,27 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &h) {
 			return
 		}
-		// #667 M1: the visual asset binding is resolved and validated before
-		// persistence; the payload's echoed facts are replaced server-side.
-		// A failed validation leaves the previous association untouched.
-		if !s.resolveHardwareVisualBindingForWrite(r, w, &h) {
-			return
-		}
 		// Snapshot current media URL so we can clean up the replaced file after
 		// a successful commit.
 		prevImage := ""
-		if cur, err := s.Store.GetHardwareByID(r.Context(), id); err == nil && cur != nil {
+		cur, err := s.Store.GetHardwareByID(r.Context(), id)
+		if err == nil && cur != nil {
 			prevImage = cur.ImageURL
 		}
-		err := s.Store.UpdateHardware(r.Context(), id, &h)
+		// #667 M1: the visual asset binding is resolved and validated before
+		// persistence; the payload's echoed facts are replaced server-side.
+		// A failed validation leaves the previous association untouched.
+		// If the binding is identical to the currently persisted binding on this
+		// hardware, it is preserved as-is (retiring an asset only prevents NEW
+		// selections, not keeping existing bindings).
+		if cur != nil && cur.VisualAsset != nil && h.VisualAsset != nil &&
+			cur.VisualAsset.AssetID == h.VisualAsset.AssetID &&
+			cur.VisualAsset.AssetRevisionID == h.VisualAsset.AssetRevisionID {
+			h.VisualAsset = cur.VisualAsset
+		} else if !s.resolveHardwareVisualBindingForWrite(r, w, &h) {
+			return
+		}
+		err = s.Store.UpdateHardware(r.Context(), id, &h)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
