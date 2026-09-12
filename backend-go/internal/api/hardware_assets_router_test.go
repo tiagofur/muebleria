@@ -978,3 +978,83 @@ func TestHardwareAssets_RouterConcurrentReUploadsBarrier(t *testing.T) {
 	}
 	_ = finalKey
 }
+
+// RED 2b (expiración): el sweep perezoso abandona sesiones expiradas DENTRO
+// de la transacción del start-upload. Con fallo AL CONFIRMAR ese request, la
+// sesión vieja debe volver a prepared con su referencia y bytes intactos; el
+// borrado inline del HEAD revisado los destruía antes del commit.
+func TestHardwareAssets_RouterExpirySweepCommitFailurePreservesBytes(t *testing.T) {
+	e := newHwAssetRouterEnv(t)
+
+	// Sesión vieja preparada con bytes staged, ya expirada.
+	rr := e.do(t, http.MethodPost, "/api/hardware-assets/uploads",
+		`{"representation":"skp","display_name":"Vieja expirada"}`, "hwasset-ex-start-0001")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("start old = %d %s", rr.Code, rr.Body.String())
+	}
+	var oldSession struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &oldSession); err != nil {
+		t.Fatal(err)
+	}
+	contentOld := []byte(strings.Repeat("expired-session-bytes-", 64))
+	if rr := e.uploadBytes(t, oldSession.ID, "skp", "old.skp", contentOld); rr.Code != http.StatusOK {
+		t.Fatalf("bytes old = %d %s", rr.Code, rr.Body.String())
+	}
+	if _, err := e.pool.Exec(context.Background(),
+		`UPDATE hardware_asset_upload_sessions SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = $1`, oldSession.ID); err != nil {
+		t.Fatalf("expire old session: %v", err)
+	}
+	keyOld, gotOld := e.hwAssetStagedFileOnDisk(t, oldSession.ID)
+	if !bytes.Equal(gotOld, contentOld) {
+		t.Fatal("fixture: staged bytes mismatch before sweep")
+	}
+
+	// El siguiente start ejecuta el sweep dentro de SU transacción; el
+	// trigger diferido revienta el COMMIT (la sesión vieja fue actualizada).
+	hwAssetInstallCommitFailsOnSessionUpdate(t, e.pool)
+	rr = e.do(t, http.MethodPost, "/api/hardware-assets/uploads",
+		`{"representation":"skp","display_name":"Barre expiradas"}`, "hwasset-ex-start-0002")
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("start with forced commit failure = %d (want 500)", rr.Code)
+	}
+
+	// Rollback: la sesión vieja sigue prepared, referencia y bytes intactos.
+	var status, stagedKey *string
+	if err := e.pool.QueryRow(context.Background(),
+		`SELECT status::text, staged_storage_key FROM hardware_asset_upload_sessions WHERE id = $1`, oldSession.ID,
+	).Scan(&status, &stagedKey); err != nil {
+		t.Fatal(err)
+	}
+	if status == nil || *status != "prepared" || stagedKey == nil || *stagedKey != keyOld {
+		t.Fatalf("old session after rolled-back sweep: status=%v staged=%v (want prepared/%s)", status, stagedKey, keyOld)
+	}
+	path := filepath.Join(e.mediaDir, hwRouterOrg, filepath.FromSlash(keyOld))
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, contentOld) {
+		t.Fatalf("old session staged bytes destroyed by rolled-back sweep: err=%v len=%d", err, len(got))
+	}
+
+	// Sin el trigger, el mismo start commitea: el sweep abandona la sesión y
+	// la recolección post-commit elimina SUS bytes (no los de nadie más).
+	if _, err := e.pool.Exec(context.Background(),
+		`DROP TRIGGER IF EXISTS hwasset_fail_commit_after_update ON hardware_asset_upload_sessions`); err != nil {
+		t.Fatalf("drop trigger: %v", err)
+	}
+	rr = e.do(t, http.MethodPost, "/api/hardware-assets/uploads",
+		`{"representation":"skp","display_name":"Barre expiradas 2"}`, "hwasset-ex-start-0003")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("start after trigger removal = %d %s", rr.Code, rr.Body.String())
+	}
+	if err := e.pool.QueryRow(context.Background(),
+		`SELECT status::text FROM hardware_asset_upload_sessions WHERE id = $1`, oldSession.ID,
+	).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status == nil || *status != "cancelled" {
+		t.Fatalf("old session after committed sweep: status=%v (want cancelled)", status)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("committed sweep must collect the abandoned staged file post-commit: stat err=%v", err)
+	}
+}

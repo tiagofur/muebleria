@@ -343,3 +343,37 @@ cambios en `FurnitureLayout`/contratos Ruby, sin seed comercial en migraciones.
 neutro en la suite de pins. Migración: fixture fresh+upgrade+down + direct-SQL.
 Ejecutadas/fallidas/pendientes por capa se registran al cierre; sin claims de
 navegador/WebGL/SketchUp (no aplican en M1).
+
+## Ronda residual R5 — cierre y verificación independiente (2026-09-12)
+
+El hueco residual (borrado de archivos antes del commit externo) fue corregido
+en `ba021657` (mismo PR): `storage.OnCommit` registra callbacks que
+`WithinTenantTx` ejecuta sólo tras un commit ganador (descartados en rollback;
+no-op fuera de un scope de commit → retención conservadora);
+`CollectHardwareAssetStagedFile` decide bajo `FOR UPDATE` de la fila de sesión
+si la clave sigue necesaria (staged de sesión prepared o blob de revisión
+inmutable) y desvincula CON el lock tomado; un unlink fallido revierte la
+decisión y retiene el archivo. Los tres puntos de limpieza (re-upload, cancel,
+sweep de expiración) registran el recolector post-commit. Sin cambios al
+middleware de autenticación, sin servicio de GC; huérfanos retenidos quedan
+logueados con su storage key para el clean-media documentado.
+
+Verificación independiente de esta sesión (worktree dedicado):
+
+- GREEN en HEAD `761e17c2`: las 5 regresiones residuales existentes pasan
+  (re-upload con commit fallido, cancel con rollback, barrera de re-uploads
+  concurrentes, late-upload vs finalize, numeración por asset).
+- RED reproducido de forma aislada contra la base revisada `2e9641a3`
+  (worktree temporal detached con sólo el archivo de tests del HEAD): ambas
+  regresiones de rollback fallan exactamente con el hallazgo
+  (`staged file …: no such file or directory` tras el commit fallido).
+- **Gap cubierto**: la regresión de EXPIRACIÓN con rollback faltaba (el
+  encargo exige cancelación/expiración). Nueva
+  `TestHardwareAssets_RouterExpirySweepCommitFailurePreservesBytes`:
+  RED en `2e9641a3` (`old session staged bytes destroyed by rolled-back
+  sweep`), GREEN en HEAD. Cubre además la recolección post-commit del archivo
+  abandonado cuando el mismo start commitea sin el trigger.
+- Suites: `internal/api` completa ok (27.0s); `go vet ./...` limpio;
+  `git diff --check` limpio; `pnpm openapi:check` PASS (sin cambios de
+  contrato). Storage sin cambios en esta ronda (verificado por el commit
+  residual y la CI del PR).
