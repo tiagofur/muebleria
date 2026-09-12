@@ -13,15 +13,10 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Hardware, HardwareUnit } from '@granete/domain';
-import {
-  HARDWARE_FINISHES,
-  HARDWARE_PART_ROLE_LABELS_ES,
-  hardwarePartRolesForShape,
-  matchHardwareFinish,
-} from '@granete/domain';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { HardwareUnit } from '@granete/domain';
+import type { HardwareAssetService } from '@granete/storage';
 import { CatalogImage, Modal } from '../../common';
+import { Hardware3DSection } from './Hardware3DSection';
 import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { UNIT_LABELS, type HardwareDraft } from './hardwareDraft';
 
@@ -33,6 +28,8 @@ export interface HardwareFormModalProps {
   readonly setDraft: Dispatch<SetStateAction<HardwareDraft>>;
   readonly error: string | null;
   readonly canMutate: boolean;
+  readonly saving?: boolean;
+  readonly assetService?: HardwareAssetService;
   readonly onUploadImage?: (file: File) => Promise<string>;
   readonly resolveImageUrl: (url: string | undefined) => string | undefined;
   readonly onSubmit: (e: FormEvent) => void;
@@ -47,62 +44,33 @@ export function HardwareFormModal({
   setDraft,
   error,
   canMutate,
+  saving = false,
+  assetService,
   onUploadImage,
   resolveImageUrl,
   onSubmit,
   onClose,
 }: HardwareFormModalProps): ReactNode {
-  const [preview3dOpen, setPreview3dOpen] = useState(false);
-
-  // Reset the disclosure each time the modal opens: editing an item with a
-  // configured shape opens it, creating starts collapsed (F117 fix).
-  const [wasOpen, setWasOpen] = useState(false);
-  if (open && !wasOpen) {
-    setWasOpen(true);
-    setPreview3dOpen(Boolean(draft.previewShape));
-  } else if (!open && wasOpen) {
-    setWasOpen(false);
-  }
-
-  const selectedFinishId = matchHardwareFinish({
-    color: draft.previewColor,
-    metalness: draft.previewMetalness,
-    roughness: draft.previewRoughness,
-    clearcoat: draft.previewClearcoat,
-  });
-
-  /** F080: part-finish selectors appear for multi-part shapes only. */
-  const partRoles = (() => {
-    const validShapes: readonly string[] = [
-      'knob',
-      'bar-pull',
-      'cup-pull',
-      'hinge',
-      'slide',
-      'rail',
-      'leg',
-    ];
-    if (!validShapes.includes(draft.previewShape)) return [];
-    const roles = hardwarePartRolesForShape(
-      draft.previewShape as NonNullable<Hardware['previewShape']>,
-    );
-    return roles.length >= 2 ? roles : [];
-  })();
-
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={editingId ? 'Editar herraje' : 'Nuevo herraje'}
-      size="sm"
+      size="md"
       dataTestId="hardware-form-modal"
       footer={
         <>
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>
             Cancelar
           </button>
-          <button type="submit" className="btn btn--primary" form={formId}>
-            Guardar
+          <button
+            type="submit"
+            className="btn btn--primary"
+            form={formId}
+            disabled={saving}
+            data-testid="hardware-form-submit-btn"
+          >
+            {saving ? 'Guardando...' : 'Guardar'}
           </button>
         </>
       }
@@ -238,138 +206,13 @@ export function HardwareFormModal({
           </div>
         </fieldset>
 
-        {/* F069: 3D preview — shape + finish preset + color (progressive disclosure) */}
-        <div className="catalog-form__disclosure" data-testid="hardware-preview-3d">
-          <button
-            type="button"
-            className="catalog-form__disclosure-header"
-            aria-expanded={preview3dOpen}
-            onClick={() => setPreview3dOpen((o) => !o)}
-            data-testid="hardware-preview-3d-toggle"
-          >
-            {preview3dOpen ? (
-              <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
-            ) : (
-              <ChevronRight size={16} strokeWidth={1.5} aria-hidden />
-            )}
-            <span className="catalog-form__disclosure-title">Vista 3D</span>
-            <span className="catalog-form__disclosure-summary">
-              {draft.previewShape
-                ? 'Configurado'
-                : 'Opcional — forma, acabado y color'}
-            </span>
-          </button>
-          {preview3dOpen ? (
-            <div
-              className="catalog-form__disclosure-body"
-              data-testid="hardware-preview-3d-body"
-            >
-              <div className="catalog-form__row">
-                <label className="catalog-form__field">
-                  <span>Forma (3D)</span>
-                  <select
-                    value={draft.previewShape}
-                    onChange={(e) => setDraft({ ...draft, previewShape: e.target.value })}
-                    data-testid="hardware-form-shape"
-                  >
-                    <option value="">— Sin forma —</option>
-                    <option value="knob">Tirador (perilla)</option>
-                    <option value="bar-pull">Tirador (barra)</option>
-                    <option value="cup-pull">Tirador (copa)</option>
-                    <option value="hinge">Bisagra</option>
-                    <option value="slide">Corredera</option>
-                    <option value="rail">Riel</option>
-                    <option value="leg">Pata</option>
-                  </select>
-                </label>
-                <label className="catalog-form__field">
-                  <span>Acabado</span>
-                  <select
-                    value={selectedFinishId}
-                    onChange={(e) => {
-                      const finish = HARDWARE_FINISHES.find((f) => f.id === e.target.value);
-                      if (finish) {
-                        setDraft({
-                          ...draft,
-                          previewColor: finish.color,
-                          previewMetalness: String(finish.metalness),
-                          previewRoughness: String(finish.roughness),
-                          previewClearcoat: String(finish.clearcoat),
-                        });
-                      }
-                    }}
-                    data-testid="hardware-form-finish"
-                  >
-                    <option value="">— Personalizado —</option>
-                    {HARDWARE_FINISHES.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="catalog-form__row">
-                <label className="catalog-form__field">
-                  <span>Color</span>
-                  <input
-                    type="color"
-                    value={draft.previewColor || '#9aa0a6'}
-                    onChange={(e) => setDraft({ ...draft, previewColor: e.target.value })}
-                    data-testid="hardware-form-color"
-                  />
-                </label>
-                {draft.previewColor ? (
-                  <span
-                    className="material-color-swatch"
-                    style={{ backgroundColor: draft.previewColor }}
-                    aria-label={draft.previewColor}
-                    data-testid="hardware-form-color-swatch"
-                  />
-                ) : null}
-              </div>
-              {partRoles.length > 0 ? (
-                <>
-                  <div
-                    className="catalog-form__row"
-                    data-testid="hardware-form-part-finishes"
-                  >
-                    {partRoles.map((role) => (
-                      <label
-                        key={role}
-                        className="catalog-form__field"
-                      >
-                        <span>Acabado · {HARDWARE_PART_ROLE_LABELS_ES[role]}</span>
-                        <select
-                          value={draft.partFinishes[role]}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft,
-                              partFinishes: {
-                                ...draft.partFinishes,
-                                [role]: e.target.value,
-                              },
-                            })
-                          }
-                          data-testid={`hardware-form-finish-${role}`}
-                        >
-                          <option value="">Igual al acabado general</option>
-                          {HARDWARE_FINISHES.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="catalog-form__hint">
-                    Cada parte puede llevar su propio acabado (F080). Vacío =
-                    usa el acabado general de arriba.
-                  </p>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        {/* #667 M2: 3D model & mounting + generic procedural preview */}
+        <Hardware3DSection
+          draft={draft}
+          setDraft={setDraft}
+          canMutate={canMutate}
+          assetService={assetService}
+        />
 
         {/* F127: CNC machining footprint (parts + drilling operations). */}
         <HardwareMachiningSection

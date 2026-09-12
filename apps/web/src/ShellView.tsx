@@ -215,6 +215,8 @@ import {
   LocalStorageWorkspaceRepository,
   breakdownFromApi,
   createSeedWorkspace,
+  GraneteApiClient,
+  createApiHardwareAssetService,
 } from '@granete/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
@@ -956,6 +958,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       selectedProjectId ?? 'no-project',
     ).commercialSummaries,
   });
+  const hardwareAssetService = useMemo(() => {
+    if (session !== 'auth' || !authToken) return undefined;
+    return createApiHardwareAssetService(
+      new GraneteApiClient(DEFAULT_API_BASE),
+      authToken,
+    );
+  }, [session, authToken]);
   const quoteAuthorityView = quoteAuthority.kind === 'idle'
     ? undefined
     : quoteAuthority.kind === 'ready'
@@ -1720,6 +1729,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           canMutate={canMutateCatalog}
           showCosts={showCosts}
           resolveImageUrl={resolveMediaUrl}
+          assetService={hardwareAssetService}
           onUploadImage={
             canMutateCatalog && session === 'auth' && authToken
               ? uploadCatalogImage
