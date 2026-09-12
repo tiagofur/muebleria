@@ -86,7 +86,7 @@ actualizada" → Q2 moderna con snapshot → detalle migrado a autoridad moderna
 ## 8. Gates
 
 - Go storage enfocado: `TestQuoteLegacyRecovery*` 4/4 PASS (PostgreSQL real, 4.9s).
-- Go completo: `go test ./... -count=1 -p 1` exit 0 en todos los paquetes (ver limitación sobre la carrera paralela preexistente).
+- Go completo: `go test ./... -count=1 -p 1` exit 0 en todos los paquetes sobre PostgreSQL efímero dedicado (storage 463.2s, pilotreadiness 250.4s). Las corridas iniciales contra el `muebles-postgres` compartido (puerto 5445) fallaron por contención multi-lane (`53300 too many clients` / colisión de migraciones) — documentada como limitación del entorno local, no de esta rama.
 - UI: `ProjectsScreen.test.tsx` 67/67; `digitalThread` 157/157.
 - Browser E2E (`scripts/organization-browser-gate.sh tests/organization/quote-legacy-recovery.spec.ts`): 1/1 PASS (9.4s) — seed legacy accepted con 3 unidades vía DSN admin del gate, flujo íntegro por API/UI real.
 - Specs vecinos afectados: `quote-list-authority` + `project-reconciliation` — PASS.
