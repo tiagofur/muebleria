@@ -1,19 +1,16 @@
 /**
- * Web commercial quote PDF pipeline (F045 / #90).
- * Reuses the same domain breakdown path as Excel; PDF is sale-price only.
+ * Web commercial quote PDF pipeline (#642 / Delivery 3).
+ *
+ * Reuses the SAME exact-revision export model as the XLSX path: the PDF
+ * reproduces exactly the same QN, frozen identity, lines and authorized
+ * amounts. Sale total only — the workshop cost stack never reaches the
+ * client document.
  */
 
 import {
-  calcProjectBreakdown,
   domainErrorToExportIssue,
   DomainError,
-  effectiveOptionChoices,
-  isProjectClosed,
-  type Catalog,
-  type Customer,
   type ExportIssue,
-  type Project,
-  type WorkshopSettings,
 } from '@granete/domain';
 import {
   commercialQuotePdfExport,
@@ -23,72 +20,45 @@ import {
   downloadOptimizerXlsx,
   type DownloadDeps,
 } from './exportOptimizer';
+import {
+  buildExactCommercialQuoteExportModel,
+  type BuildExactCommercialQuoteExportModelOptions,
+  type ExactCommercialQuoteExportSource,
+} from './exports/exactCommercialQuoteModel';
 
 export type ExportCommercialQuotePdfResult =
   | { readonly ok: true; readonly fileName: string; readonly bytes: Uint8Array }
   | { readonly ok: false; readonly issues: readonly ExportIssue[] };
 
-const STATUS_LABELS: Record<Project['status'], string> = {
-  draft: 'Borrador',
-  quoted: 'Cotizado',
-  accepted: 'Aceptado',
-  produced: 'En producción',
+const VARIANT_SUFFIX: Record<CommercialQuotePdfVariant, string> = {
+  detailed: 'listado',
+  summary: 'resumen',
 };
 
-export function commercialQuotePdfFileName(
-  projectName: string,
-  variant: CommercialQuotePdfVariant,
-): string {
-  const trimmed = projectName.trim();
-  const safe =
-    trimmed
+function slugifyPart(value: string): string {
+  return (
+    value
+      .trim()
       .replace(/[^\p{L}\p{N}\-_ ]+/gu, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'cotizacion';
-  const suffix = variant === 'summary' ? 'resumen' : 'listado';
-  return `cotizacion-${safe}-${suffix}.pdf`;
+      .replace(/^-|-$/g, '') ?? ''
+  );
 }
 
-function resolveCustomerName(
-  customerId: string,
-  customers: readonly Customer[],
+/**
+ * Exact-revision file name: `Cotizacion-{obra}-{cliente}-Q{n}-{variant}.pdf`.
+ */
+export function commercialQuotePdfFileName(
+  projectName: string,
+  customerName: string,
+  revisionNumber: number,
+  variant: CommercialQuotePdfVariant,
 ): string {
-  const hit = customers.find((c) => c.id === customerId);
-  return hit?.name ?? (customerId || '—');
-}
-
-function optionLabel(optionId: string, catalog: Catalog): string {
-  const mat = catalog.materials.find((m) => m.id === optionId);
-  if (mat) return mat.name;
-  const edge = catalog.edges.find((e) => e.id === optionId);
-  if (edge) return edge.name;
-  const hw = catalog.hardware.find((h) => h.id === optionId);
-  if (hw) return hw.name;
-  return optionId;
-}
-
-function optionsSummary(
-  choices: Project['items'][number]['optionChoices'],
-  catalog: Catalog,
-): string {
-  const parts: string[] = [];
-  for (const [code, optionId] of Object.entries(choices)) {
-    const group = catalog.optionGroups.find((g) => g.code === code);
-    const label = group?.name ?? code;
-    parts.push(`${label}: ${optionLabel(optionId, catalog)}`);
-  }
-  return parts.join('; ');
-}
-
-function formatDateLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
+  const project = slugifyPart(projectName);
+  const customer = slugifyPart(customerName);
+  const identity = [project, customer].filter(Boolean).join('-') || 'cotizacion';
+  return `Cotizacion-${identity}-Q${revisionNumber}-${VARIANT_SUFFIX[variant]}.pdf`;
 }
 
 function toUint8Array(data: ArrayBuffer | Uint8Array): Uint8Array {
@@ -97,68 +67,32 @@ function toUint8Array(data: ArrayBuffer | Uint8Array): Uint8Array {
 }
 
 /**
- * Build commercial quote PDF.
- * - detailed: furniture list + project header + sale total
- * - summary: project info + sale total (no furniture lines)
- * Client PDF never includes workshop costs.
+ * Build the client-facing commercial PDF for ONE exact QuoteRevision.
+ * - detailed: furniture list + revision header + sale total
+ * - summary: revision header + sale total (no furniture lines)
  */
 export async function buildCommercialQuotePdfExport(
-  project: Project,
-  catalog: Catalog,
-  customers: readonly Customer[] = [],
-  variant: CommercialQuotePdfVariant = 'detailed',
-  workshopSettings?: WorkshopSettings,
+  source: ExactCommercialQuoteExportSource,
+  options?: {
+    variant?: CommercialQuotePdfVariant;
+    workshopName?: string;
+  } & BuildExactCommercialQuoteExportModelOptions,
 ): Promise<ExportCommercialQuotePdfResult> {
-  if (project.items.length === 0) {
-    return {
-      ok: false,
-      issues: [
-        {
-          message: 'Agregá al menos un mueble antes de exportar la cotización.',
-          field: 'items',
-        },
-      ],
-    };
-  }
-
   try {
-    const pricesFrozen =
-      isProjectClosed(project.status) && Boolean(project.priceSnapshot);
-    const breakdown =
-      pricesFrozen && project.priceSnapshot
-        ? project.priceSnapshot.breakdown
-        : calcProjectBreakdown(project, catalog);
-
-    const items = project.items.map((item) => {
-      const mod = catalog.modules.find((m) => m.id === item.moduleId);
-      const choices = effectiveOptionChoices(
-        item.optionChoices,
-        project.projectLevelChoices,
-      );
-      return {
-        moduleCode: mod?.code ?? item.moduleId,
-        moduleName: mod?.name ?? 'Mueble desconocido',
-        quantity: item.quantity,
-        optionsSummary: optionsSummary(choices, catalog),
-      };
-    });
-
+    const model = buildExactCommercialQuoteExportModel(source, options);
     const buffer = await commercialQuotePdfExport({
-      projectName: project.name,
-      customerName: resolveCustomerName(project.customerId, customers),
-      currency: project.currency || 'MXN',
-      statusLabel: STATUS_LABELS[project.status] ?? project.status,
-      dateLabel: formatDateLabel(project.updatedAt),
-      items,
-      salePrice: breakdown.salePrice,
-      pricesFrozen,
-      variant,
-      workshopName: workshopSettings?.workshopName,
+      model,
+      variant: options?.variant ?? 'detailed',
+      workshopName: options?.workshopName,
     });
-
     return {
       ok: true,
-      fileName: commercialQuotePdfFileName(project.name, variant),
+      fileName: commercialQuotePdfFileName(
+        model.projectName,
+        model.customerName,
+        model.revisionNumber,
+        options?.variant ?? 'detailed',
+      ),
       bytes: toUint8Array(buffer),
     };
   } catch (error) {

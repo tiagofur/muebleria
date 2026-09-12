@@ -17,14 +17,15 @@ export {
 
 export {
   commercialQuoteExport,
-  type CommercialQuoteExportInput,
-  type CommercialQuoteLine,
-  type CommercialQuoteTotals,
+  type ExactCommercialQuoteExportLine,
+  type ExactCommercialQuoteExportModel,
+  type ExactCommercialQuoteExportUnit,
 } from './commercialQuoteExport';
 
 export {
   commercialQuotePdfExport,
   type CommercialQuotePdfInput,
+  type CommercialQuotePdfPhoto,
   type CommercialQuotePdfVariant,
 } from './commercialQuotePdf';
 

@@ -1,45 +1,57 @@
 /**
- * Web commercial quote pipeline: domain breakdown → xlsx → download (F030 / #36).
+ * Web commercial quote pipeline (#642 / Delivery 3): exact QuoteRevision +
+ * commercialSnapshot → shared export model → xlsx → download.
+ *
+ * The ONLY commercial authority is the selected exact revision. Mutable
+ * Project state, live catalog prices, legacy priceSnapshot and current
+ * customer names have no path into this export.
  */
 
 import {
-  calcProjectBreakdown,
   domainErrorToExportIssue,
   DomainError,
-  effectiveOptionChoices,
-  isProjectClosed,
-  type Catalog,
-  type Customer,
   type ExportIssue,
-  type Project,
 } from '@granete/domain';
 import { commercialQuoteExport } from '@granete/excel';
 import {
   downloadOptimizerXlsx,
   type DownloadDeps,
 } from './exportOptimizer';
+import {
+  buildExactCommercialQuoteExportModel,
+  type BuildExactCommercialQuoteExportModelOptions,
+  type ExactCommercialQuoteExportSource,
+} from './exports/exactCommercialQuoteModel';
 
 export type ExportCommercialQuoteResult =
   | { readonly ok: true; readonly fileName: string; readonly bytes: Uint8Array }
   | { readonly ok: false; readonly issues: readonly ExportIssue[] };
 
-const STATUS_LABELS: Record<Project['status'], string> = {
-  draft: 'Borrador',
-  quoted: 'Cotizado',
-  accepted: 'Aceptado',
-  produced: 'En producción',
-};
-
-/** Safe file name: cotizacion-{projectName}.xlsx */
-export function commercialQuoteFileName(projectName: string): string {
-  const trimmed = projectName.trim();
-  const safe =
-    trimmed
+function slugifyPart(value: string): string {
+  return (
+    value
+      .trim()
       .replace(/[^\p{L}\p{N}\-_ ]+/gu, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'cotizacion';
-  return `cotizacion-${safe}.xlsx`;
+      .replace(/^-|-$/g, '') ?? ''
+  );
+}
+
+/**
+ * Exact-revision file name: `Cotizacion-{obra}-{cliente}-Q{n}.xlsx`.
+ * The revision number is mandatory — an ambiguous `cotizacion.xlsx` is never
+ * acceptable once multiple revisions can exist.
+ */
+export function commercialQuoteFileName(
+  projectName: string,
+  customerName: string,
+  revisionNumber: number,
+): string {
+  const project = slugifyPart(projectName);
+  const customer = slugifyPart(customerName);
+  const identity = [project, customer].filter(Boolean).join('-') || 'cotizacion';
+  return `Cotizacion-${identity}-Q${revisionNumber}.xlsx`;
 }
 
 function toUint8Array(data: ArrayBuffer | Uint8Array): Uint8Array {
@@ -47,116 +59,25 @@ function toUint8Array(data: ArrayBuffer | Uint8Array): Uint8Array {
   return new Uint8Array(data);
 }
 
-function resolveCustomerName(
-  customerId: string,
-  customers: readonly Customer[],
-): string {
-  const hit = customers.find((c) => c.id === customerId);
-  return hit?.name ?? (customerId || '—');
-}
-
-function optionLabel(
-  optionId: string,
-  catalog: Catalog,
-): string {
-  const mat = catalog.materials.find((m) => m.id === optionId);
-  if (mat) return mat.name;
-  const edge = catalog.edges.find((e) => e.id === optionId);
-  if (edge) return edge.name;
-  const hw = catalog.hardware.find((h) => h.id === optionId);
-  if (hw) return hw.name;
-  return optionId;
-}
-
-function optionsSummary(
-  choices: Project['items'][number]['optionChoices'],
-  catalog: Catalog,
-): string {
-  const parts: string[] = [];
-  for (const [code, optionId] of Object.entries(choices)) {
-    const group = catalog.optionGroups.find((g) => g.code === code);
-    const label = group?.name ?? code;
-    parts.push(`${label}: ${optionLabel(optionId, catalog)}`);
-  }
-  return parts.join('; ');
-}
-
-function formatDateLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-}
-
 /**
- * Build commercial quote workbook for the client.
- * Closed projects use priceSnapshot; drafts use live calcProjectBreakdown.
+ * Build the client-facing commercial workbook for ONE exact QuoteRevision.
+ * Line amounts render only when the existing cost-visibility policy
+ * authorizes them; the frozen sale total is always shown.
  */
 export async function buildCommercialQuoteExport(
-  project: Project,
-  catalog: Catalog,
-  customers: readonly Customer[] = [],
+  source: ExactCommercialQuoteExportSource,
+  options?: BuildExactCommercialQuoteExportModelOptions,
 ): Promise<ExportCommercialQuoteResult> {
-  if (project.items.length === 0) {
-    return {
-      ok: false,
-      issues: [
-        {
-          message: 'Agregá al menos un mueble antes de exportar la cotización.',
-          field: 'items',
-        },
-      ],
-    };
-  }
-
   try {
-    const pricesFrozen =
-      isProjectClosed(project.status) && Boolean(project.priceSnapshot);
-    const breakdown =
-      pricesFrozen && project.priceSnapshot
-        ? project.priceSnapshot.breakdown
-        : calcProjectBreakdown(project, catalog);
-
-    const items = project.items.map((item) => {
-      const mod = catalog.modules.find((m) => m.id === item.moduleId);
-      const choices = effectiveOptionChoices(
-        item.optionChoices,
-        project.projectLevelChoices,
-      );
-      return {
-        moduleCode: mod?.code ?? item.moduleId,
-        moduleName: mod?.name ?? 'Mueble desconocido',
-        quantity: item.quantity,
-        optionsSummary: optionsSummary(choices, catalog),
-      };
-    });
-
-    const buffer = await commercialQuoteExport({
-      projectName: project.name,
-      customerName: resolveCustomerName(project.customerId, customers),
-      currency: project.currency || 'MXN',
-      statusLabel: STATUS_LABELS[project.status] ?? project.status,
-      dateLabel: formatDateLabel(project.updatedAt),
-      items,
-      totals: {
-        materialsCost: breakdown.materialsCost,
-        edgeTotal: breakdown.edgeTotal,
-        hardwareTotal: breakdown.hardwareTotal,
-        laborModular: breakdown.laborModular,
-        laborFixedCost: breakdown.laborFixedCost,
-        directCost: breakdown.directCost,
-        marginFactor: breakdown.marginFactor,
-        salePrice: breakdown.salePrice,
-      },
-      pricesFrozen,
-    });
-
+    const model = buildExactCommercialQuoteExportModel(source, options);
+    const buffer = await commercialQuoteExport(model);
     return {
       ok: true,
-      fileName: commercialQuoteFileName(project.name),
+      fileName: commercialQuoteFileName(
+        model.projectName,
+        model.customerName,
+        model.revisionNumber,
+      ),
       bytes: toUint8Array(buffer),
     };
   } catch (error) {

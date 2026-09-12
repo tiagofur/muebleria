@@ -12,6 +12,15 @@ export {
 } from './ProjectsScreen';
 
 export {
+  buildRevisionLines,
+  formatLifecycleStatus,
+  formatRevisionUnitDimensions,
+  type BuildRevisionLinesOptions,
+  type ProjectRevisionLineView,
+  type ProjectRevisionUnitView,
+} from './quoteRevisionPresentation';
+
+export {
   InternalCommsPanel,
   type InternalCommsPanelProps,
 } from './components/InternalCommsPanel';
