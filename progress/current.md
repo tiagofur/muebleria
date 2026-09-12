@@ -1,3 +1,29 @@
+# Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
+
+- Approval: prompt del propietario (2026-09-11) autoriza exclusivamente M1; #667 sigue
+  OPEN sin `status:approved` — el gate de publicación exige la label, no se autoconcede.
+- Base exacta `origin/main@ab3bcdb3c1ef8a025ef92a1dc2dd435949f5fa72`; rama
+  `feat/667-3d-asset-foundation`. Single writer GLM. Sin merge ni cierre.
+- Scope: contrato OpenAPI generado (recursos, revisiones, sesiones de carga,
+  validaciones, pins), migración 000131 aditiva (tenant-owned + RLS + FKs compuestas
+  cross-tenant-proof + inmutabilidad + auditoría durable), carga segura con SHA-256
+  server-side y límites configurables, separación carga/validación (estado derivado de
+  evidencia append-only; productor real = #668), binding exacto herraje↔revisión con
+  hechos resueltos server-side, pins congelados en la publicación de DesignRevision
+  (ambos caminos) con R1 inmutable ante rebind + R2, descarga autorizada vía grants
+  `hwasset/` con pins de integridad y re-verificación por lectura.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Detalle:
+  `progress/implementation_667_3d_asset_foundation.md`.
+- Evidence: storage 8/8 nuevos sobre PostgreSQL real (rol app real; RLS/direct-SQL
+  incluidos) + migración fresh/upgrade; API con E2E real PG+filesystem 3/3
+  (start→bytes→finalize→consult→authorize→readback); `GOFLAGS=-p=1 go test ./...` PASS
+  (pilotreadiness flaky bajo carga parallel-migraciones, PASS aislado);
+  `pnpm openapi:check` / `typecheck` / `test` (monorepo) PASS; `git diff --check`
+  limpio. Sin claims de navegador/WebGL/SketchUp: no aplican en M1 (M2/#668/#669).
+- Exclusiones: sin UI React, sin Ruby/host, sin GLB, sin Agregado/MERIVOBOX, sin
+  cambios en `FurnitureLayout`/parser Ruby. Validador simulado sólo en pruebas
+  etiquetadas, sin bypass productivo.
+
 # Issue #642 — Legacy Quote Recovery para presupuestos existentes
 
 - Approval: prompt del propietario (2026-09-11); issue #642 OPEN `status:approved`. Base exacta `origin/main@a453cd000a89bc490b8282aab66fec26db77d6dd` (post-merge PR #673). Rama `feat/642-legacy-quote-recovery`. Single writer; worktree aislado.

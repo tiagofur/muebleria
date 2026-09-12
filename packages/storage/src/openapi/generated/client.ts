@@ -38,6 +38,9 @@ import type {
   ExchangePairingGrantRequest,
   FactoryOrganization,
   FurnitureInstance,
+  HardwareAsset,
+  HardwareAssetRevisionGrant,
+  HardwareAssetUploadSession,
   Invitation,
   LoginRequest,
   LoginResponse,
@@ -105,6 +108,7 @@ import type {
   SelectOrganizationRequest,
   SessionDirectory,
   SessionRevokeResponse,
+  StartHardwareAssetUploadRequest,
   StartSupportSessionRequest,
   SupportSessionResponse,
   SuspendMembershipRequest,
@@ -242,4 +246,12 @@ export abstract class GeneratedGraneteApiClient {
   cancelDesignPairingGrant(token: string, projectId: string, designId: string, grantId: string, signal?: AbortSignal): Promise<PairingGrantStatus> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/pairing-grants/${encodeURIComponent(grantId)}:cancel`, { schema: "PairingGrantStatus", token, signal }); }
   exchangeDesignPairingGrant(token: string, body: ExchangePairingGrantRequest, signal?: AbortSignal): Promise<PairingGrantExchange> { return this.request("POST", "/design-pairing-grants:exchange", { schema: "PairingGrantExchange", token, bodySchema: "ExchangePairingGrantRequest", body, signal }); }
   confirmDesignPairingGrant(token: string, grantId: string, body: ConfirmPairingGrantRequest, signal?: AbortSignal): Promise<PairingGrantStatus> { return this.request("POST", `/design-pairing-grants/${encodeURIComponent(grantId)}:confirm`, { schema: "PairingGrantStatus", token, bodySchema: "ConfirmPairingGrantRequest", body, signal }); }
+  startHardwareAssetUpload(token: string, body: StartHardwareAssetUploadRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<HardwareAssetUploadSession> { return this.request("POST", "/hardware-assets/uploads", { schema: "HardwareAssetUploadSession", token, bodySchema: "StartHardwareAssetUploadRequest", body, idempotencyKey: key, signal }); }
+  getHardwareAssetUploadSession(token: string, sessionId: string, signal?: AbortSignal): Promise<HardwareAssetUploadSession> { return this.request("GET", `/hardware-assets/uploads/${encodeURIComponent(sessionId)}`, { schema: "HardwareAssetUploadSession", token, signal }); }
+  finalizeHardwareAssetUpload(token: string, sessionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<HardwareAsset> { return this.request("POST", `/hardware-assets/uploads/${encodeURIComponent(sessionId)}:finalize`, { schema: "HardwareAsset", token, idempotencyKey: key, signal }); }
+  cancelHardwareAssetUpload(token: string, sessionId: string, signal?: AbortSignal): Promise<HardwareAssetUploadSession> { return this.request("POST", `/hardware-assets/uploads/${encodeURIComponent(sessionId)}:cancel`, { schema: "HardwareAssetUploadSession", token, signal }); }
+  listHardwareAssets(token: string, signal?: AbortSignal): Promise<ReadonlyArray<HardwareAsset>> { return this.request("GET", "/hardware-assets", { arrayOf: "HardwareAsset", token, signal }); }
+  getHardwareAsset(token: string, assetId: string, signal?: AbortSignal): Promise<HardwareAsset> { return this.request("GET", `/hardware-assets/${encodeURIComponent(assetId)}`, { schema: "HardwareAsset", token, signal }); }
+  retireHardwareAsset(token: string, assetId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<HardwareAsset> { return this.request("POST", `/hardware-assets/${encodeURIComponent(assetId)}:retire`, { schema: "HardwareAsset", token, idempotencyKey: key, signal }); }
+  authorizeHardwareAssetRevision(token: string, assetId: string, revisionId: string, signal?: AbortSignal): Promise<HardwareAssetRevisionGrant> { return this.request("POST", `/hardware-assets/${encodeURIComponent(assetId)}/revisions/${encodeURIComponent(revisionId)}:authorize`, { schema: "HardwareAssetRevisionGrant", token, signal }); }
 }

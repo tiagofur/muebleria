@@ -408,6 +408,11 @@ export function hardwareToApi(h: Hardware): Record<string, unknown> {
     // CNC machining footprint (F127); normalized so the payload always holds
     // a clean profile (null = cost-only hardware / legacy row).
     machining: normalizeMachiningProfile(h.machining) ?? null,
+    // Versioned 3D asset binding (#667 M1): identifiers only; the server
+    // resolves and returns representation/digest/validation state.
+    visual_asset: h.visualAsset
+      ? { assetId: h.visualAsset.assetId, assetRevisionId: h.visualAsset.assetRevisionId }
+      : null,
   };
 }
 
@@ -449,6 +454,42 @@ export function hardwareFromApi(raw: Record<string, unknown>): Hardware {
     ...(partFinishes ? { partFinishes } : {}),
     // CNC machining footprint (F127) — sanitized on ingest.
     ...(machining ? { machining } : {}),
+    // Versioned 3D asset binding (#667 M1) — identifiers plus the
+    // server-resolved facts; malformed shapes never enter the catalog.
+    ...normalizeVisualAsset(raw.visual_asset ?? raw.visualAsset),
+  };
+}
+
+/**
+ * Exact versioned 3D asset binding (#667 M1). Accepts identifiers and the
+ * server-resolved facts; a malformed or identifier-less shape is dropped so
+ * garbage never enters the catalog state.
+ */
+function normalizeVisualAsset(
+  raw: unknown,
+): Pick<Hardware, 'visualAsset'> | {} {
+  if (!raw || typeof raw !== 'object') return {};
+  const value = raw as Record<string, unknown>;
+  const assetId = str(value.assetId ?? value.asset_id);
+  const assetRevisionId = str(value.assetRevisionId ?? value.asset_revision_id);
+  if (!assetId || !assetRevisionId) return {};
+  const representationRaw = str(value.representation);
+  const validRepresentations = ['skp', 'glb', 'thumbnail'];
+  const stateRaw = str(value.validationState ?? value.validation_state);
+  const validStates = ['pending', 'validated', 'failed'];
+  const shaRaw = str(value.sha256);
+  return {
+    visualAsset: {
+      assetId,
+      assetRevisionId,
+      ...(validRepresentations.includes(representationRaw)
+        ? { representation: representationRaw as 'skp' | 'glb' | 'thumbnail' }
+        : {}),
+      ...(shaRaw.startsWith('sha256-') ? { sha256: shaRaw } : {}),
+      ...(validStates.includes(stateRaw)
+        ? { validationState: stateRaw as 'pending' | 'validated' | 'failed' }
+        : {}),
+    },
   };
 }
 

@@ -98,7 +98,10 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pool := multiOrgFreshDB(t)
-			identityApplyThrough(t, pool, 103)
+			// Applied through CURRENT (000131, #667 M1): the typed-definition
+			// rejection is schema-version-independent and the catalog read now
+			// includes the hardware asset binding columns.
+			identityApplyThrough(t, pool, 131)
 			_, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,$2,$2,$3::jsonb)`, multiOrgInitialOrgID, "BAD-"+tt.name, tt.raw)
 			if err != nil {
 				t.Fatalf("seed direct SQL: %v", err)

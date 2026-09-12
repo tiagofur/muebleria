@@ -626,7 +626,12 @@ func (s *PostgresStore) FinalizeDesignPublish(ctx context.Context, cmd FinalizeD
 		return nil, fmt.Errorf("finalize design publish session: %w", err)
 	}
 
-	// 10. Durable audit with artifact references (#392 §35).
+	// 10. Freeze the hardware 3D asset pins of this revision (#667 M1) and
+	// write the durable audit with artifact references (#392 §35).
+	pinnedAssets, err := s.freezeDesignRevisionHardwareAssets(ctx, designOrgID, projectID, rev.ID, workingItems)
+	if err != nil {
+		return nil, err
+	}
 	artifactRefs := make([]map[string]interface{}, 0, len(artifacts))
 	for _, a := range artifacts {
 		artifactRefs = append(artifactRefs, map[string]interface{}{
@@ -637,11 +642,12 @@ func (s *PostgresStore) FinalizeDesignPublish(ctx context.Context, cmd FinalizeD
 		})
 	}
 	extras := map[string]interface{}{
-		"publish_session_id": session.ID,
-		"artifacts":          artifactRefs,
-		"authoring_client":   session.Source.Client,
-		"sketchup_version":   session.Source.SketchUpVersion,
-		"plugin_version":     session.Source.PluginVersion,
+		"publish_session_id":  session.ID,
+		"artifacts":           artifactRefs,
+		"authoring_client":    session.Source.Client,
+		"sketchup_version":    session.Source.SketchUpVersion,
+		"plugin_version":      session.Source.PluginVersion,
+		"hardware_asset_pins": pinnedAssets,
 	}
 	if err := s.auditDesignRevisionPublished(ctx, rev,
 		nonEmptyOrDefault(cmd.ActorUserID, session.CreatedBy), cmd.IP, cmd.RequestID, extras); err != nil {

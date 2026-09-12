@@ -1861,3 +1861,102 @@ type DesignRevisionPresentationSnapshot struct {
 	Materials     []DesignRevisionMaterialDescriptor  `json:"materials"`
 	Room          DesignRevisionRoomDescriptor        `json:"room"`
 }
+
+type HardwareAssetRepresentation string
+
+const (
+	HardwareAssetRepresentationSkp       HardwareAssetRepresentation = "skp"
+	HardwareAssetRepresentationGlb       HardwareAssetRepresentation = "glb"
+	HardwareAssetRepresentationThumbnail HardwareAssetRepresentation = "thumbnail"
+)
+
+type HardwareAssetStatus string
+
+const (
+	HardwareAssetStatusActive  HardwareAssetStatus = "active"
+	HardwareAssetStatusRetired HardwareAssetStatus = "retired"
+)
+
+type HardwareAssetValidationState string
+
+const (
+	HardwareAssetValidationStatePending   HardwareAssetValidationState = "pending"
+	HardwareAssetValidationStateValidated HardwareAssetValidationState = "validated"
+	HardwareAssetValidationStateFailed    HardwareAssetValidationState = "failed"
+)
+
+type HardwareAssetAnchor struct {
+	XMm float64 `json:"x_mm"`
+	YMm float64 `json:"y_mm"`
+	ZMm float64 `json:"z_mm"`
+}
+
+type HardwareAssetOrigin struct {
+	SourceUnits    string               `json:"source_units"`
+	UpAxis         string               `json:"up_axis"`
+	AnchorOffsetMm *HardwareAssetAnchor `json:"anchor_offset_mm,omitempty"`
+}
+
+type HardwareAssetRevision struct {
+	ID                  string                       `json:"id"`
+	AssetID             string                       `json:"asset_id"`
+	RevisionNumber      int64                        `json:"revision_number"`
+	Representation      HardwareAssetRepresentation  `json:"representation"`
+	ContentType         string                       `json:"content_type"`
+	SizeBytes           int64                        `json:"size_bytes"`
+	Sha256              string                       `json:"sha256"`
+	Origin              *HardwareAssetOrigin         `json:"origin,omitempty"`
+	IntegrityVerifiedAt string                       `json:"integrity_verified_at"`
+	ValidationState     HardwareAssetValidationState `json:"validation_state"`
+	CreatedAt           string                       `json:"created_at"`
+}
+
+type HardwareAsset struct {
+	ID          string                  `json:"id"`
+	DisplayName string                  `json:"display_name"`
+	Provenance  *string                 `json:"provenance,omitempty"`
+	License     *string                 `json:"license,omitempty"`
+	Status      HardwareAssetStatus     `json:"status"`
+	Revisions   []HardwareAssetRevision `json:"revisions"`
+	CreatedAt   string                  `json:"created_at"`
+	UpdatedAt   string                  `json:"updated_at"`
+}
+
+type StartHardwareAssetUploadRequest struct {
+	Representation HardwareAssetRepresentation `json:"representation"`
+	DisplayName    string                      `json:"display_name"`
+	Provenance     *string                     `json:"provenance,omitempty"`
+	License        *string                     `json:"license,omitempty"`
+	Origin         *HardwareAssetOrigin        `json:"origin,omitempty"`
+	AssetID        *string                     `json:"asset_id,omitempty"`
+}
+
+type HardwareAssetUploadStaged struct {
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+	Sha256      string `json:"sha256"`
+}
+
+type HardwareAssetUploadSession struct {
+	ID                  string                      `json:"id"`
+	Representation      HardwareAssetRepresentation `json:"representation"`
+	DisplayName         string                      `json:"display_name"`
+	Provenance          *string                     `json:"provenance,omitempty"`
+	License             *string                     `json:"license,omitempty"`
+	Origin              *HardwareAssetOrigin        `json:"origin,omitempty"`
+	Staged              *HardwareAssetUploadStaged  `json:"staged,omitempty"`
+	Status              string                      `json:"status"`
+	CreatedAt           string                      `json:"created_at"`
+	ExpiresAt           string                      `json:"expires_at"`
+	FinalizedAssetID    *string                     `json:"finalized_asset_id,omitempty"`
+	FinalizedRevisionID *string                     `json:"finalized_revision_id,omitempty"`
+	TargetAssetID       *string                     `json:"target_asset_id,omitempty"`
+}
+
+type HardwareAssetRevisionGrant struct {
+	Representation HardwareAssetRepresentation `json:"representation"`
+	Sha256         string                      `json:"sha256"`
+	SizeBytes      int64                       `json:"size_bytes"`
+	URL            string                      `json:"url"`
+	ExpiresAt      string                      `json:"expires_at"`
+}
