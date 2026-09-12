@@ -85,7 +85,12 @@ actualizada" → Q2 moderna con snapshot → detalle migrado a autoridad moderna
 
 ## 8. Gates
 
-Ver sección final (se actualiza tras la batería completa).
+- Go storage enfocado: `TestQuoteLegacyRecovery*` 4/4 PASS (PostgreSQL real, 4.9s).
+- Go completo: `go test ./... -count=1 -p 1` exit 0 en todos los paquetes (ver limitación sobre la carrera paralela preexistente).
+- UI: `ProjectsScreen.test.tsx` 67/67; `digitalThread` 157/157.
+- Browser E2E (`scripts/organization-browser-gate.sh tests/organization/quote-legacy-recovery.spec.ts`): 1/1 PASS (9.4s) — seed legacy accepted con 3 unidades vía DSN admin del gate, flujo íntegro por API/UI real.
+- Specs vecinos afectados: `quote-list-authority` + `project-reconciliation` — PASS.
+- `pnpm typecheck`: 7/7; `pnpm openapi:check`: 0 drift; `git diff --check`: limpio.
 
 ## 9. Fuera de alcance
 
