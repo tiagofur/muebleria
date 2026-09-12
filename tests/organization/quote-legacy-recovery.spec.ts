@@ -223,12 +223,18 @@ test.describe.serial('#642 legacy quote recovery', () => {
     // Walk Q2 through the normal modern lifecycle (draft → published →
     // accepted); acceptance atomically supersedes the legacy baseline.
     await client.publishProjectQuoteRevision(token, PROJECT_ID, q2!.id, 'gate-legacy-q2-publish');
-    await client.acceptProjectQuoteRevision(token, PROJECT_ID, q2!.id, 'gate-legacy-q2-accept');
+    const acceptedResponse = await client.acceptProjectQuoteRevision(token, PROJECT_ID, q2!.id, 'gate-legacy-q2-accept');
+    expect(acceptedResponse.status).toBe('accepted');
+    const acceptedViaApi = await client.listProjectQuoteRevisions(token, PROJECT_ID);
+    expect(acceptedViaApi.find((r) => r.id === q2!.id)?.status).toBe('accepted');
 
-    // The detail now renders the modern frozen authority...
+    // The detail now renders the modern frozen authority... (the re-entry arc
+    // ended on the reconciliation page — navigate back to the obra first).
+    await page.goto(`/quotes/${PROJECT_ID}`);
     await page.reload();
     const modernDetail = page.getByTestId('project-detail');
-    await expect(modernDetail.getByTestId('quote-revision-badge')).toContainText('Q2 · Solo lectura');
+    await expect(modernDetail).toBeVisible({ timeout: 20_000 });
+    await expect(modernDetail.getByTestId('quote-revision-badge')).toContainText('Q2 · Solo lectura', { timeout: 20_000 });
     await expect(modernDetail.getByTestId('quote-legacy-badge')).toHaveCount(0);
     await expect(modernDetail.getByTestId('legacy-price-unavailable')).toHaveCount(0);
 
