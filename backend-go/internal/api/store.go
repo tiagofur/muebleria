@@ -123,6 +123,10 @@ type Store interface {
 	GetHardwareAssetRevision(ctx context.Context, assetID, revisionID string) (*domain.HardwareAssetRevision, error)
 	RetireHardwareAsset(ctx context.Context, cmd storage.RetireHardwareAssetCommand) error
 	ResolveHardwareVisualAssetBinding(ctx context.Context, assetID, revisionID string) (*domain.HardwareVisualAssetBinding, error)
+	// CollectHardwareAssetStagedFile decides under the session row lock
+	// whether a superseded staged key is still needed and, when not, runs the
+	// caller's removal while the lock is held (#667 R5 residual).
+	CollectHardwareAssetStagedFile(ctx context.Context, sessionID, organizationID, storageKey string, remove func() error) (bool, error)
 
 	// Catalog: materials
 	ListMaterialBoards(ctx context.Context) ([]domain.MaterialBoard, error)

@@ -3668,3 +3668,13 @@ func (s *stubStore) ResolveHardwareVisualAssetBinding(_ context.Context, assetID
 	}
 	return s.assetResolvedBinding, nil
 }
+
+func (s *stubStore) CollectHardwareAssetStagedFile(_ context.Context, _, _, _ string, remove func() error) (bool, error) {
+	// Handler-level stub: conservative retention without reference checks.
+	if remove != nil {
+		if err := remove(); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}

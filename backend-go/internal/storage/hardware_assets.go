@@ -1256,3 +1256,67 @@ func isUniqueViolationOn(err error, constraint string) bool {
 	}
 	return strings.Contains(err.Error(), constraint)
 }
+
+// CollectHardwareAssetStagedFile decides, under the session row lock, whether
+// a staged storage key is still needed; when it is not, it invokes remove()
+// WHILE the lock is held so a concurrent staging of the same
+// content-addressed key can never observe a missing file, and only then
+// commits the decision. A key is still needed when it is the staged bytes of
+// a PREPARED session (the state a rollback restores) or when any immutable
+// revision references it (the finalized blob). Cancelled/expired sessions
+// keep their staged metadata, so their keys are collectable. Returns whether
+// the file was collected.
+func (s *PostgresStore) CollectHardwareAssetStagedFile(ctx context.Context, sessionID, organizationID, storageKey string, remove func() error) (bool, error) {
+	if !isValidUUID(sessionID) || storageKey == "" {
+		return false, nil
+	}
+	actor, _ := TenantActorFromCtx(ctx)
+	if actor.OrganizationID == "" {
+		actor.OrganizationID = organizationID
+	}
+	collected := false
+	err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+		var (
+			staged     *string
+			status     string
+			revisionRefs int
+		)
+		if err := s.db(txCtx).QueryRow(txCtx, `
+			SELECT staged_storage_key, status
+			FROM hardware_asset_upload_sessions
+			WHERE id = $1 AND organization_id = $2
+			FOR UPDATE
+		`, sessionID, organizationID).Scan(&staged, &status); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Session row gone (or foreign org): nothing can restore a
+				// reference to the key through it; revision refs below still
+				// guard finalized blobs.
+				staged, status = nil, ""
+			} else {
+				return err
+			}
+		}
+		if err := s.db(txCtx).QueryRow(txCtx, `
+			SELECT count(*) FROM hardware_asset_revisions
+			WHERE organization_id = $1 AND storage_key = $2
+		`, organizationID, storageKey).Scan(&revisionRefs); err != nil {
+			return err
+		}
+		liveStaging := staged != nil && *staged == storageKey && status == "prepared"
+		if liveStaging || revisionRefs > 0 {
+			return nil // still needed: prepared bytes or a finalized blob
+		}
+		if remove == nil {
+			return nil
+		}
+		if err := remove(); err != nil {
+			return err // decision tx rolls back; the file stays for a retry
+		}
+		collected = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return collected, nil
+}

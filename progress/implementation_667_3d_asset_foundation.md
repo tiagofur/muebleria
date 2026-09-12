@@ -6,6 +6,52 @@
   `muebles-667-wt` (el compartido se devolvió a `main`; sin repetir el incidente).
   Sin merge, cierre, labels protegidas ni re-ejecución del gate de publicación.
 
+## Cierre residual R5 (2026-09-12, segunda revisión sobre `2e9641a3`)
+
+Hallazgo: la limpieza de la clave reemplazada en `HandleHardwareAssetUploadBytes`
+corría DENTRO de la transacción de `AuthMiddleware` — que el UPDATE hubiera
+funcionado no implica commit; un fallo al confirmar dejaba la fila staged
+referenciando bytes ya borrados. El mismo patrón afectaba a cancelación y al
+sweep perezoso de expiración de la familia.
+
+Corrección (mecanismo mínimo, sin nuevo servicio de GC ni cambios al middleware):
+
+- `storage.OnCommit(ctx, fn)`: registro de callbacks que `WithinTenantTx`
+  ejecuta SÓLO tras un COMMIT ganador; en rollback el registro muere con el
+  scope; fuera de todo scope el registro es no-op (retención conservadora,
+  nunca limpieza prematura).
+- `storage.CollectHardwareAssetStagedFile`: decide bajo `FOR UPDATE` de la
+  sesión si la clave sigue necesaria (staged de una sesión PREPARED, o
+  referenciada por cualquier revisión inmutable) y ejecuta el unlink CON el
+  lock retenido — un re-staging concurrente de la misma clave
+  content-addressed jamás observa un archivo faltante. Si el unlink falla, la
+  transacción de decisión hace rollback (el archivo queda para reintento).
+- Los tres sitios (re-upload con clave reemplazada, cancelación, sweep de
+  expiración) registran la recolección como hook post-commit; los huérfanos
+  (IO fallido o sin scope de commit) quedan identificados por log con su
+  storage_key para una futura pasada de limpieza documentada.
+
+Pruebas RED→GREEN (router real + PG desechable + filesystem real; fallo de
+commit inyectado con trigger de constraint DIFERIDO local al fixture, sin
+matar conexiones ni reiniciar el clúster):
+
+- Re-upload B sobre A staged con fallo al confirmar → 500; RED: archivo A
+  borrado con la fila aún en A; GREEN: A preservado byte a byte; tras retirar
+  el trigger, el re-upload B tiene éxito y A se recolecta post-commit.
+- Cancelación con fallo al confirmar → 500; RED: bytes perdidos con sesión
+  preparada; GREEN: sesión sigue prepared con sus bytes; cancelación exitosa
+  posterior recolecta post-commit.
+- Dos re-uploads concurrentes con barreras (ambos estancados mid-body tras
+  pasar el gate, luego liberados): ambos 200; la clave elegida final existe
+  con su contenido exacto (sha mapeado a contenido) y la clave reemplazada A
+  se recolecta; nunca se destruyen los bytes de la elección vigente.
+- Las regresiones de upload tardío idéntico/distinto frente a finalize y la
+  numeración concurrente sobre el mismo asset se conservan sin cambios.
+
+Verificación: `internal/api` completa ok (50.2s), `internal/storage` completa
+ok (986s, secuencial, 0 fallos/0 skips), `go vet ./...` limpio, `git diff
+--check` limpio, `pnpm openapi:check` PASS (contrato sin cambios).
+
 ## Plan de corrección R1–R5 (registrado antes de editar código)
 
 - **R1 — forma canónica única**: la forma canónica es la del contrato generado

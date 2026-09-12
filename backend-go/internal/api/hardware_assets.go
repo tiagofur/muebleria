@@ -253,10 +253,13 @@ func (s *Server) HandleHardwareAssetUploadStart(w http.ResponseWriter, r *http.R
 		respondWithHardwareAssetError(w, err)
 		return
 	}
-	// Best-effort removal of files staged by sessions abandoned in the lazy
-	// expiry sweep (documented orphan-collection strategy).
+	// Files staged by sessions abandoned in the lazy expiry sweep are
+	// collected AFTER this request's transaction commits: the sweep UPDATE
+	// participates in the same transaction, and deleting before the commit
+	// would destroy bytes a rollback must restore (#667 R5 residual). Outside
+	// a commit scope the hook is a no-op (conservative retention).
 	for _, key := range result.AbandonedStagedKeys {
-		s.removeHardwareAssetFile(r.Context(), key)
+		s.collectHardwareAssetStagedKey(r.Context(), storage.OrgFromCtx(r.Context()), result.Session.ID, key)
 	}
 	respondWithJSON(w, http.StatusCreated, toHardwareAssetSessionDTO(*result.Session))
 }
@@ -301,6 +304,48 @@ func (s *Server) removeHardwareAssetFile(ctx context.Context, storageKey string)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		slog.Warn("hardware asset cleanup: failed to remove file", "path", path, "error", err)
 	}
+}
+
+// removeHardwareAssetPath is the error-returning removal used by the
+// post-commit collector: the storage decision transaction rolls back when the
+// unlink fails, keeping the file for a later attempt.
+func (s *Server) removeHardwareAssetPath(ownerOrgID, storageKey string) error {
+	path, ok := s.hardwareAssetStoragePath(ownerOrgID, storageKey)
+	if !ok {
+		return fmt.Errorf("clave de recurso no canónica: %s", storageKey)
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// collectHardwareAssetStagedKey registers a POST-COMMIT collection of one
+// superseded staged key (#667 R5 residual): the handler runs inside the
+// AuthMiddleware tenant transaction, so deleting the replaced file inline
+// destroyed bytes the transaction could still restore on rollback. The hook
+// runs only after the SQL commit wins and decides under the session row
+// lock — the key is collected only when it is neither a prepared session's
+// staged bytes nor referenced by any revision. Outside an enclosing commit
+// scope the hook never runs: conservative retention, orphans documented for
+// a future clean-media pass.
+func (s *Server) collectHardwareAssetStagedKey(ctx context.Context, ownerOrgID, sessionID, replacedKey string) {
+	storage.OnCommit(ctx, func(hookCtx context.Context) {
+		collected, err := s.Store.CollectHardwareAssetStagedFile(hookCtx, sessionID, ownerOrgID, replacedKey, func() error {
+			return s.removeHardwareAssetPath(ownerOrgID, replacedKey)
+		})
+		if err != nil {
+			// The file remains on disk (still needed or IO failure): an
+			// explicitly retained orphan, never a destroyed reference.
+			slog.Warn("hardware asset cleanup: superseded staged key retained",
+				"storage_key", replacedKey, "error", err)
+			return
+		}
+		if !collected {
+			slog.Info("hardware asset cleanup: superseded staged key still referenced; retained",
+				"storage_key", replacedKey)
+		}
+	})
 }
 
 // HandleHardwareAssetUploadBytes: PUT (multipart) /api/hardware-assets/uploads/{sessionId}/bytes.
@@ -485,8 +530,12 @@ func (s *Server) HandleHardwareAssetUploadBytes(w http.ResponseWriter, r *http.R
 		respondWithHardwareAssetError(w, err)
 		return
 	}
+	// The replaced key is collected POST-COMMIT (#667 R5 residual): the
+	// staged UPDATE above is not durable until the AuthMiddleware transaction
+	// commits, and deleting the previous file inline destroyed the bytes a
+	// rollback must restore.
 	if replacedKey != "" {
-		s.removeHardwareAssetFile(r.Context(), replacedKey)
+		s.collectHardwareAssetStagedKey(r.Context(), storage.OrgFromCtx(r.Context()), sessionID, replacedKey)
 	}
 
 	respondWithJSON(w, http.StatusOK, openapi.HardwareAssetUploadStaged{
@@ -586,8 +635,11 @@ func (s *Server) HandleHardwareAssetUploadCancel(w http.ResponseWriter, r *http.
 		respondWithHardwareAssetError(w, err)
 		return
 	}
+	// Same post-commit rule as the re-upload path (#667 R5 residual): the
+	// cancelled state only exists once the transaction commits; a rolled-back
+	// cancel keeps the session prepared WITH its staged bytes.
 	if sess.Staged != nil {
-		s.removeHardwareAssetFile(r.Context(), sess.Staged.StorageKey)
+		s.collectHardwareAssetStagedKey(r.Context(), storage.OrgFromCtx(r.Context()), sessionID, sess.Staged.StorageKey)
 	}
 	updated, err := s.Store.GetHardwareAssetUploadSession(r.Context(), sessionID)
 	if err != nil {

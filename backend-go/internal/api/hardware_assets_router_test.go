@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
@@ -104,12 +106,12 @@ func newHwAssetRouterEnv(t *testing.T) *hwRouterEnv {
 		t.Fatalf("create auth session: %v", err)
 	}
 	tc := auth.TokenContext{
-		Roles:                      []string{"admin"},
-		OrgID:                      hwRouterOrg,
-		MembershipID:               membershipID,
-		MembershipCredentialVersion:  membershipVersion,
+		Roles:                         []string{"admin"},
+		OrgID:                         hwRouterOrg,
+		MembershipID:                  membershipID,
+		MembershipCredentialVersion:   membershipVersion,
 		OrganizationCredentialVersion: orgVersion,
-		SessionID:                  session.ID,
+		SessionID:                     session.ID,
 	}
 	token, err := authority.IssueTransportTokenUntil(hwRouterUser, hwRouterEmail, tc, "web", session.AbsoluteExpiresAt)
 	if err != nil {
@@ -139,7 +141,7 @@ func (e *hwRouterEnv) do(t *testing.T, method, target, body string, idemKey stri
 		reader = strings.NewReader(body)
 	}
 	req := httptest.NewRequest(method, target, reader)
-	req.Header.Set("Authorization", "Bearer " + e.token)
+	req.Header.Set("Authorization", "Bearer "+e.token)
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -169,7 +171,7 @@ func (e *hwRouterEnv) uploadBytes(t *testing.T, sessionID, representation, filen
 	}
 	req := httptest.NewRequest(http.MethodPut,
 		"/api/hardware-assets/uploads/"+sessionID+"/bytes/"+representation, &buf)
-	req.Header.Set("Authorization", "Bearer " + e.token)
+	req.Header.Set("Authorization", "Bearer "+e.token)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	rr := httptest.NewRecorder()
 	e.router.ServeHTTP(rr, req)
@@ -571,7 +573,7 @@ func TestHardwareAssets_RouterConcurrentUploadWithFinalizeBarrier(t *testing.T) 
 	blocker := &blockingReader{inner: bytes.NewReader(body.Bytes()), started: make(chan struct{}), release: make(chan struct{})}
 	req := httptest.NewRequest(http.MethodPut,
 		"/api/hardware-assets/uploads/"+session.ID+"/bytes/skp", blocker)
-	req.Header.Set("Authorization", "Bearer " + e.token)
+	req.Header.Set("Authorization", "Bearer "+e.token)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	rrCh := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
@@ -631,7 +633,9 @@ func TestHardwareAssets_RouterTwoSessionsSameAssetSerialize(t *testing.T) {
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("start 1 = %d %s", rr.Code, rr.Body.String())
 	}
-	var s1 struct{ ID string `json:"id"` }
+	var s1 struct {
+		ID string `json:"id"`
+	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &s1); err != nil {
 		t.Fatal(err)
 	}
@@ -654,7 +658,9 @@ func TestHardwareAssets_RouterTwoSessionsSameAssetSerialize(t *testing.T) {
 		if rr.Code != http.StatusCreated {
 			t.Fatalf("start %s = %d %s", name, rr.Code, rr.Body.String())
 		}
-		var s struct{ ID string `json:"id"` }
+		var s struct {
+			ID string `json:"id"`
+		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &s); err != nil {
 			t.Fatal(err)
 		}
@@ -669,7 +675,7 @@ func TestHardwareAssets_RouterTwoSessionsSameAssetSerialize(t *testing.T) {
 		t.Fatalf("bytes 3 = %d", rr.Code)
 	}
 
- barrier := make(chan struct{})
+	barrier := make(chan struct{})
 	results := make(chan *httptest.ResponseRecorder, 2)
 	finalize := func(sessionID, key string) {
 		<-barrier
@@ -707,4 +713,268 @@ func TestHardwareAssets_RouterTwoSessionsSameAssetSerialize(t *testing.T) {
 		}
 		seen[r.RevisionNumber] = true
 	}
+}
+
+// --- Ronda residual R5: limpieza de archivos DESPUÉS del commit externo ------
+
+// hwAssetInstallCommitFailsOnSessionUpdate instala, en la BD desechable de esta
+// prueba, un trigger de constraint DIFERIDO que revienta el COMMIT cuando la
+// sesión se actualiza. Es la inyección local que fuerza el fallo AL CONFIRMAR,
+// después de que el handler haya renderizado (nunca mata conexiones ajenas).
+func hwAssetInstallCommitFailsOnSessionUpdate(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `
+		CREATE OR REPLACE FUNCTION hwasset_raise_at_commit() RETURNS trigger
+		LANGUAGE plpgsql AS $$
+		BEGIN
+			RAISE EXCEPTION 'hwasset: forced commit failure';
+		END; $$;`); err != nil {
+		t.Fatalf("install raise function: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		CREATE CONSTRAINT TRIGGER hwasset_fail_commit_after_update
+		AFTER UPDATE ON hardware_asset_upload_sessions
+		DEFERRABLE INITIALLY DEFERRED
+		FOR EACH ROW EXECUTE FUNCTION hwasset_raise_at_commit()`); err != nil {
+		t.Fatalf("install deferred trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS hwasset_fail_commit_after_update ON hardware_asset_upload_sessions`)
+		_, _ = pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS hwasset_raise_at_commit()`)
+	})
+}
+
+// hwAssetStagedFileOnDisk devuelve el contenido actual del archivo staged de
+// la sesión (clave leída de la fila confirmada).
+func (e *hwRouterEnv) hwAssetStagedFileOnDisk(t *testing.T, sessionID string) (key string, content []byte) {
+	t.Helper()
+	if err := e.pool.QueryRow(context.Background(),
+		`SELECT staged_storage_key FROM hardware_asset_upload_sessions WHERE id = $1`, sessionID,
+	).Scan(&key); err != nil {
+		t.Fatalf("read staged key: %v", err)
+	}
+	path := filepath.Join(e.mediaDir, hwRouterOrg, filepath.FromSlash(key))
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("staged file %s: %v", key, err)
+	}
+	return key, content
+}
+
+// RED 1: re-upload B sobre A staged con fallo AL CONFIRMAR la transacción
+// externa: la referencia A y sus bytes deben sobrevivir intactos.
+func TestHardwareAssets_RouterReUploadCommitFailurePreservesPreviousBytes(t *testing.T) {
+	e := newHwAssetRouterEnv(t)
+
+	rr := e.do(t, http.MethodPost, "/api/hardware-assets/uploads",
+		`{"representation":"skp","display_name":"Reupload"}`, "hwasset-ru-start-0001")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("start = %d %s", rr.Code, rr.Body.String())
+	}
+	var session struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+
+	contentA := []byte(strings.Repeat("bytes-A-original-", 100))
+	if rr := e.uploadBytes(t, session.ID, "skp", "a.skp", contentA); rr.Code != http.StatusOK {
+		t.Fatalf("bytes A = %d %s", rr.Code, rr.Body.String())
+	}
+	keyA, storedA := e.hwAssetStagedFileOnDisk(t, session.ID)
+	if !bytes.Equal(storedA, contentA) {
+		t.Fatalf("setup: staged A content mismatch")
+	}
+
+	// Fallo al confirmar: el handler ya corrió (y con el código revisado ya
+	// habría borrado A) cuando el COMMIT revienta.
+	hwAssetInstallCommitFailsOnSessionUpdate(t, e.pool)
+	contentB := []byte(strings.Repeat("bytes-B-nuevo-", 100))
+	rr = e.uploadBytes(t, session.ID, "skp", "b.skp", contentB)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("re-upload with forced commit failure = %d (want 500)", rr.Code)
+	}
+
+	// El estado confirmado sigue siendo A y sus bytes existen.
+	keyAfter, storedAfter := e.hwAssetStagedFileOnDisk(t, session.ID)
+	if keyAfter != keyA {
+		t.Fatalf("staged key after rollback = %s, want %s", keyAfter, keyA)
+	}
+	if !bytes.Equal(storedAfter, contentA) {
+		t.Fatalf("staged A bytes were lost across the commit failure")
+	}
+
+	// Con el trigger retirado explícitamente (el cleanup del fixture corre al
+	// final del test), el re-upload B tiene éxito y A se recolecta de forma
+	// segura (post-commit, con lock de sesión).
+	if _, err := e.pool.Exec(context.Background(),
+		`DROP TRIGGER IF EXISTS hwasset_fail_commit_after_update ON hardware_asset_upload_sessions`); err != nil {
+		t.Fatalf("drop trigger: %v", err)
+	}
+	rr = e.uploadBytes(t, session.ID, "skp", "b-again.skp", contentB)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("re-upload after trigger removal = %d %s", rr.Code, rr.Body.String())
+	}
+	keyB, storedB := e.hwAssetStagedFileOnDisk(t, session.ID)
+	if !bytes.Equal(storedB, contentB) {
+		t.Fatalf("staged B content mismatch after successful re-upload")
+	}
+	if _, err := os.Stat(filepath.Join(e.mediaDir, hwRouterOrg, filepath.FromSlash(keyA))); !os.IsNotExist(err) {
+		t.Fatalf("replaced key A was not collected after the successful commit: %v", err)
+	}
+	_ = keyB
+}
+
+// RED 2: cancelación con fallo al confirmar: la sesión preparada conservada
+// debe seguir teniendo sus bytes.
+func TestHardwareAssets_RouterCancelCommitFailurePreservesBytes(t *testing.T) {
+	e := newHwAssetRouterEnv(t)
+
+	rr := e.do(t, http.MethodPost, "/api/hardware-assets/uploads",
+		`{"representation":"skp","display_name":"Cancel"}`, "hwasset-ca-start-0001")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("start = %d %s", rr.Code, rr.Body.String())
+	}
+	var session struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+	contentA := []byte(strings.Repeat("cancel-bytes-", 100))
+	if rr := e.uploadBytes(t, session.ID, "skp", "a.skp", contentA); rr.Code != http.StatusOK {
+		t.Fatalf("bytes A = %d", rr.Code)
+	}
+	keyA, _ := e.hwAssetStagedFileOnDisk(t, session.ID)
+
+	hwAssetInstallCommitFailsOnSessionUpdate(t, e.pool)
+	rr = e.do(t, http.MethodPost, "/api/hardware-assets/uploads/"+session.ID+":cancel", "", "")
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("cancel with forced commit failure = %d (want 500)", rr.Code)
+	}
+
+	// Rollback: la sesión sigue prepared y sus bytes existen.
+	rr = e.do(t, http.MethodGet, "/api/hardware-assets/uploads/"+session.ID, "", "")
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"prepared"`) {
+		t.Fatalf("session after rolled-back cancel = %d %s", rr.Code, rr.Body.String())
+	}
+	keyAfter, storedAfter := e.hwAssetStagedFileOnDisk(t, session.ID)
+	if keyAfter != keyA || !bytes.Equal(storedAfter, contentA) {
+		t.Fatalf("staged bytes lost across the rolled-back cancel")
+	}
+
+	// Cancelación exitosa posterior (trigger retirado explícitamente): la
+	// sesión queda cancelled y los bytes staged se recolectan post-commit.
+	if _, err := e.pool.Exec(context.Background(),
+		`DROP TRIGGER IF EXISTS hwasset_fail_commit_after_update ON hardware_asset_upload_sessions`); err != nil {
+		t.Fatalf("drop trigger: %v", err)
+	}
+	rr = e.do(t, http.MethodPost, "/api/hardware-assets/uploads/"+session.ID+":cancel", "", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("cancel after trigger removal = %d %s", rr.Code, rr.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(e.mediaDir, hwRouterOrg, filepath.FromSlash(keyA))); !os.IsNotExist(err) {
+		t.Fatalf("staged file was not collected after the successful cancel: %v", err)
+	}
+}
+
+// RED 3: dos re-uploads concurrentes sobre la MISMA sesión con barreras:
+// los bytes elegidos por el intento ganador nunca desaparecen y la clave
+// reemplazada se recolecta exactamente una vez.
+func TestHardwareAssets_RouterConcurrentReUploadsBarrier(t *testing.T) {
+	e := newHwAssetRouterEnv(t)
+
+	rr := e.do(t, http.MethodPost, "/api/hardware-assets/uploads",
+		`{"representation":"skp","display_name":"Race"}`, "hwasset-ra-start-0001")
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("start = %d %s", rr.Code, rr.Body.String())
+	}
+	var session struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+	contentA := []byte(strings.Repeat("race-A-", 120))
+	if rr := e.uploadBytes(t, session.ID, "skp", "a.skp", contentA); rr.Code != http.StatusOK {
+		t.Fatalf("bytes A = %d", rr.Code)
+	}
+	keyA, _ := e.hwAssetStagedFileOnDisk(t, session.ID)
+
+	// Dos uploads en vuelo, ambos estancados mid-body tras pasar el gate de
+	// sesión (aún prepared).
+	contentB1 := []byte(strings.Repeat("race-B1-", 120))
+	contentB2 := []byte(strings.Repeat("race-B2-", 120))
+	startStalled := func(content []byte, name string) (*blockingReader, chan *httptest.ResponseRecorder) {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		part, err := writer.CreateFormFile("file", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(content); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		blocker := &blockingReader{inner: bytes.NewReader(body.Bytes()), started: make(chan struct{}), release: make(chan struct{})}
+		req := httptest.NewRequest(http.MethodPut,
+			"/api/hardware-assets/uploads/"+session.ID+"/bytes/skp", blocker)
+		req.Header.Set("Authorization", "Bearer "+e.token)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		rrCh := make(chan *httptest.ResponseRecorder, 1)
+		go func() {
+			rec := httptest.NewRecorder()
+			e.router.ServeHTTP(rec, req)
+			rrCh <- rec
+		}()
+		return blocker, rrCh
+	}
+	b1, ch1 := startStalled(contentB1, "b1.skp")
+	b2, ch2 := startStalled(contentB2, "b2.skp")
+	<-b1.started
+	<-b2.started
+
+	close(b1.release)
+	close(b2.release)
+	for _, ch := range []chan *httptest.ResponseRecorder{ch1, ch2} {
+		select {
+		case rec := <-ch:
+			if rec.Code != http.StatusOK {
+				t.Fatalf("concurrent re-upload = %d %s", rec.Code, rec.Body.String())
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("concurrent re-upload did not finish")
+		}
+	}
+
+	// La elección final (confirmada) tiene sus bytes en disco con contenido
+	// exacto; la clave reemplazada A fue recolectada.
+	finalKey, finalContent := e.hwAssetStagedFileOnDisk(t, session.ID)
+	known := map[string][]byte{}
+	sum := func(b []byte) string {
+		s := sha256.Sum256(b)
+		return "sha256-" + hex.EncodeToString(s[:])
+	}
+	known[sum(contentB1)] = contentB1
+	known[sum(contentB2)] = contentB2
+	var stagedSHA string
+	if err := e.pool.QueryRow(context.Background(),
+		`SELECT staged_sha256 FROM hardware_asset_upload_sessions WHERE id = $1`, session.ID,
+	).Scan(&stagedSHA); err != nil {
+		t.Fatal(err)
+	}
+	expected, ok := known[stagedSHA]
+	if !ok {
+		t.Fatalf("staged sha %s no corresponde a ningún concurrente", stagedSHA)
+	}
+	if !bytes.Equal(finalContent, expected) {
+		t.Fatalf("los bytes elegidos por el intento ganador fueron alterados/destruidos")
+	}
+	if _, err := os.Stat(filepath.Join(e.mediaDir, hwRouterOrg, filepath.FromSlash(keyA))); !os.IsNotExist(err) {
+		t.Fatalf("la clave reemplazada A no fue recolectada: %v", err)
+	}
+	_ = finalKey
 }
