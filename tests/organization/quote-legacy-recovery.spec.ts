@@ -113,11 +113,12 @@ test.describe.serial('#642 legacy quote recovery', () => {
       for (const instanceId of instanceIds) {
         await pool.query(
           `INSERT INTO quote_revision_items
-             (quote_revision_id, furniture_instance_id, furniture_definition_id,
+             (quote_revision_id, organization_id, furniture_instance_id, furniture_definition_id,
               parameters, material_choices, lifecycle_status)
-           VALUES ($1, $2, $3, $4, '{}'::jsonb, 'active')`,
+           VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, 'active')`,
           [
             LEGACY_REVISION_ID,
+            organizationId,
             instanceId,
             GATE_MODULE_A_ID,
             JSON.stringify({ widthMm: 600, heightMm: 720, depthMm }),
