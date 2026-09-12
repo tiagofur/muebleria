@@ -252,12 +252,6 @@ export interface ProjectDetailContextValue {
   readonly onEditMeta: (project: Project) => void;
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;
-  readonly onMarkProduced?: (projectId: string) => void;
-  readonly onChangeStatus?: (
-    projectId: string,
-    status: import('@granete/domain').ProjectStatus,
-  ) => void;
-  readonly onRequestReopen: () => void;
   readonly onRequestDelete: () => void;
 
   // --- Kitchen / scenarios / checklist / nesting ---
@@ -321,10 +315,6 @@ export interface ProjectDetailContextValue {
    */
   readonly canEditContent: boolean;
   readonly canDelete: boolean;
-  readonly canReopen: boolean;
-  /** Admin/gerente: reopen accepted|produced (#257). */
-  readonly canForceReopenClosed: boolean;
-  readonly canMarkProduced: boolean;
   readonly projectTemplates?: readonly ProjectTemplate[];
 
   // --- CRM & Project Photos (CRM Phase 1) ---
@@ -386,7 +376,6 @@ export interface ProjectDetailContextValue {
   ) => void;
 
   // --- Project Lifecycle & Operational Core (OC-010..OC-024) ---
-  readonly onOpenReleaseModal?: () => void;
   readonly onOpenChangeOrderModal?: () => void;
   readonly onReleaseToProduction?: (
     projectId: string,

@@ -22,7 +22,6 @@ import type {
   ProjectMaterialSummary,
   ProjectPhoto,
   ProjectPhotoStage,
-  ProjectStatus,
   ProjectTechnicalStatus,
   ProjectInternalMessage,
   ProjectInternalMessageType,
@@ -40,7 +39,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
-  ConfirmDialog,
   type DropdownMenuItem,
   type DropdownMenuSection,
 } from '../../common';
@@ -171,10 +169,6 @@ export interface ProjectDetailViewProps {
   readonly onEditMeta: (project: Project) => void;
   readonly onDuplicate?: (id: string) => void;
   readonly onSaveAsTemplate?: (projectId: string) => void;
-  readonly onMarkProduced?: (projectId: string) => void;
-  /** Transition status: draft→quoted, quoted→accepted (gap #3). */
-  readonly onChangeStatus?: (projectId: string, status: ProjectStatus) => void;
-  readonly onRequestReopen: () => void;
   readonly onRequestDelete: () => void;
 
   // --- Kitchen layout / scenarios / checklist / nesting callbacks ---
@@ -232,9 +226,6 @@ export interface ProjectDetailViewProps {
   // --- Permission flags ---
   readonly canMutate: boolean;
   readonly canDelete: boolean;
-  readonly canReopen: boolean;
-  readonly canForceReopenClosed?: boolean;
-  readonly canMarkProduced: boolean;
   readonly projectTemplates?: readonly ProjectTemplate[];
 
   // --- CRM & Project Photos (CRM Phase 1) ---
@@ -356,40 +347,21 @@ export interface ProjectDetailViewProps {
 // ─── Inner component (consumes context) ─────────────────────────────
 
 function resolveChromePrimary(args: {
-  status: ProjectStatus;
   hasProductionReleaseAuthority: boolean;
-  canMutate: boolean;
-  canMarkProduced: boolean;
-  hasMarkProduced: boolean;
   hasExport: boolean;
   hasOpenInProduction: boolean;
 }): ChromePrimary {
-  const {
-    status,
-    hasProductionReleaseAuthority,
-    canMarkProduced,
-    hasMarkProduced,
-    hasExport,
-    hasOpenInProduction,
-  } = args;
+  const { hasProductionReleaseAuthority, hasExport, hasOpenInProduction } = args;
   // #642/#577: advancing to production from Cotizaciones follows the
   // MANUFACTURING authority — the canonical ProductionRelease the server
   // resolved for this project. Commercial acceptance (an accepted
   // QuoteRevision) is a precondition for creating a release, never a
   // substitute for having one. hasProductionReleaseAuthority keeps the
   // legacy accepted/produced statuses only as pre-Digital-Thread
-  // compatibility; mark-produced stays bound to the literal project status:
-  // it mutates that legacy lifecycle itself.
+  // compatibility. The literal legacy "mark produced" transition lives in
+  // the Production workspace (operational lifecycle), never in this chrome.
   if (hasProductionReleaseAuthority && hasOpenInProduction) {
     return 'open-production';
-  }
-  if (
-    status === 'accepted' &&
-    canMarkProduced &&
-    hasMarkProduced &&
-    !hasOpenInProduction
-  ) {
-    return 'mark-produced';
   }
   if (hasProductionReleaseAuthority && hasExport) {
     return 'export';
@@ -413,15 +385,9 @@ function ProjectDetailViewInner(): ReactNode {
     onOpenPresentation,
     onDuplicate,
     onSaveAsTemplate,
-    onMarkProduced,
-    onChangeStatus,
-    onRequestReopen,
     onRequestDelete,
     canMutate,
     canDelete,
-    canReopen,
-    canForceReopenClosed,
-    canMarkProduced,
   } = ctx;
 
   // #642/3 — WITHHELD ≠ ZERO: when the caller's organization reaches the obra
@@ -438,12 +404,6 @@ function ProjectDetailViewInner(): ReactNode {
   const [toolsPanel, setToolsPanel] = useState<QuoteToolsPanel>(null);
   const [releaseModalOpen, setReleaseModalOpen] = useState(false);
   const [changeOrderModalOpen, setChangeOrderModalOpen] = useState(false);
-  const [pendingConfirm, setPendingConfirm] = useState<{
-    title: string;
-    message: string;
-    confirmLabel: string;
-    onConfirm: () => void;
-  } | null>(null);
 
   const kitchenUnplacedCount = useMemo(() => {
     const fps = allFootprints(project, modules);
@@ -472,11 +432,7 @@ function ProjectDetailViewInner(): ReactNode {
     ctx.quoteAuthority,
   );
   const primary = resolveChromePrimary({
-    status: project.status,
     hasProductionReleaseAuthority,
-    canMutate,
-    canMarkProduced,
-    hasMarkProduced: Boolean(onMarkProduced),
     hasExport: Boolean(ctx.onExport),
     hasOpenInProduction,
   });
@@ -588,7 +544,6 @@ function ProjectDetailViewInner(): ReactNode {
     onSaveAsTemplate,
     productionExportOk,
     project.id,
-    project.status,
     onOpenPresentation,
   ]);
 
@@ -605,7 +560,11 @@ function ProjectDetailViewInner(): ReactNode {
         exportMenuClose={exportMenu.onClose}
       />
 
-      {project.status === 'accepted' || project.status === 'produced' ? (
+      {/* #642 demo flow: the floor strip follows the MANUFACTURING authority
+          (canonical ProductionRelease, or legacy accepted/produced only for
+          pre-Digital-Thread projects) — never the literal Project.status,
+          which stays draft forever on modern Digital Thread projects. */}
+      {hasProductionReleaseAuthority ? (
         <ProjectFloorProgressStrip project={project} />
       ) : null}
 
@@ -618,9 +577,17 @@ function ProjectDetailViewInner(): ReactNode {
         <p className="project-detail__notes">{project.notes}</p>
       ) : null}
 
+      {/* The legacy OC-022 re-release modal is pre-Digital-Thread
+          compatibility ONLY: a project with Digital Thread quote authority
+          re-releases through Reconciliation (approve + release), never
+          through the legacy blob modal. */}
       <ProjectStalenessBanner
         project={project}
-        onOpenReleaseModal={() => setReleaseModalOpen(true)}
+        onOpenReleaseModal={
+          !ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty'
+            ? () => setReleaseModalOpen(true)
+            : undefined
+        }
         onOpenChangeOrderModal={() => setChangeOrderModalOpen(true)}
       />
 
@@ -706,24 +673,6 @@ function ProjectDetailViewInner(): ReactNode {
           }
         }}
       />
-
-      <ConfirmDialog
-        open={pendingConfirm !== null}
-        title={pendingConfirm?.title ?? ''}
-        message={pendingConfirm?.message ?? ''}
-        confirmLabel={pendingConfirm?.confirmLabel ?? 'Confirmar'}
-        tone="primary"
-        onConfirm={() => {
-          // P0-2b: the store action toasts its own errors now, but a throw
-          // must never leave the dialog stuck open — close in finally.
-          try {
-            pendingConfirm?.onConfirm();
-          } finally {
-            setPendingConfirm(null);
-          }
-        }}
-        onClose={() => setPendingConfirm(null)}
-      />
     </div>
   );
 }
@@ -780,9 +729,6 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onEditMeta,
     onDuplicate,
     onSaveAsTemplate,
-    onMarkProduced,
-    onChangeStatus,
-    onRequestReopen,
     onRequestDelete,
     onUpdateKitchenLayout,
     onApplyScenarioB,
@@ -806,9 +752,6 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onRestoreVersion,
     canMutate,
     canDelete,
-    canReopen,
-    canForceReopenClosed = false,
-    canMarkProduced,
     projectTemplates,
     photos,
     onUploadPhotos,
@@ -907,9 +850,6 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onEditMeta,
       onDuplicate,
       onSaveAsTemplate,
-      onMarkProduced,
-      onChangeStatus,
-      onRequestReopen,
       onRequestDelete,
       onUpdateKitchenLayout,
       onApplyScenarioB,
@@ -922,9 +862,6 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       canMutate,
       canEditContent,
       canDelete,
-      canReopen,
-      canForceReopenClosed,
-      canMarkProduced,
       projectTemplates,
       photos,
       onUploadPhotos,
@@ -1008,9 +945,6 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       onEditMeta,
       onDuplicate,
       onSaveAsTemplate,
-      onMarkProduced,
-      onChangeStatus,
-      onRequestReopen,
       onRequestDelete,
       onUpdateKitchenLayout,
       onApplyScenarioB,
@@ -1023,9 +957,6 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       canMutate,
       canEditContent,
       canDelete,
-      canReopen,
-      canForceReopenClosed,
-      canMarkProduced,
       projectTemplates,
       photos,
       onUploadPhotos,

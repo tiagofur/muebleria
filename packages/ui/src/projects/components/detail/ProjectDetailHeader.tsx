@@ -17,7 +17,6 @@ import {
   PROJECT_STAGE_LABELS_ES,
   deriveProjectStage,
   isProjectStaleForProduction,
-  type ProjectStatus,
 } from '@granete/domain';
 import { DropdownMenu, type DropdownMenuSection } from '../../../common';
 import { WhatsAppButton } from '../../../crm/WhatsAppButton';
@@ -27,7 +26,6 @@ import { useProjectDetail } from '../projectDetailContext';
 
 export type ChromePrimary =
   | 'open-production'
-  | 'mark-produced'
   | 'export'
   | null;
 
@@ -36,9 +34,6 @@ export interface ProjectDetailHeaderProps {
   readonly chromeSale: number | null;
   readonly moreSections: readonly DropdownMenuSection[];
   readonly exportMenuClose?: () => void;
-  readonly onRequestStatus?: (next: ProjectStatus, message: string) => void;
-  readonly confirmSendText?: string;
-  readonly confirmAcceptText?: string;
 }
 
 export function ProjectDetailHeader({
@@ -59,10 +54,7 @@ export function ProjectDetailHeader({
     onBackToList,
     onOpenSpatialStudio,
     onEditMeta,
-    onMarkProduced,
-    onChangeStatus,
     canMutate,
-    canMarkProduced,
     quoteAuthority,
     onOpenReconciliation,
   } = ctx;
@@ -76,12 +68,6 @@ export function ProjectDetailHeader({
 
   const showExportInChrome =
     Boolean(onExport) && productionExportOk && !hasOpenInProduction;
-
-  const showMarkProducedInChrome =
-    primary === 'mark-produced' &&
-    Boolean(onMarkProduced) &&
-    canMarkProduced &&
-    !hasOpenInProduction;
 
   const frozenAuthority = quoteAuthority?.kind === 'ready' ? quoteAuthority : null;
   const frozenCustomer = frozenAuthority
@@ -324,18 +310,6 @@ export function ProjectDetailHeader({
           >
             <Factory size={16} strokeWidth={1.5} aria-hidden /> Abrir en
             Producción
-          </button>
-        ) : null}
-
-        {showMarkProducedInChrome && onMarkProduced ? (
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => onMarkProduced(project.id)}
-            data-testid="project-mark-produced"
-          >
-            <Factory size={16} strokeWidth={1.5} aria-hidden /> Marcar en
-            producción
           </button>
         ) : null}
 

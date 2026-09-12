@@ -1278,6 +1278,36 @@ New DesignRevision R4 published later
 → R4 may create a new release only after validation/approval
 ```
 
+### 25.7 Demo happy-path UX contract (#642)
+
+The Web reconciliation surface keeps the sophisticated internals but presents
+the happy path as one plain verdict plus one action:
+
+- A leading banner renders the verbatim server classification of the SELECTED
+  pair: conflict → "El diseño tiene conflictos frente a QN"; commercial
+  changes → "El cambio del diseño afecta el precio o la configuración
+  comercial" with the single next action "Crear cotización actualizada";
+  otherwise → synced (technical/spatial changes explicitly do not affect the
+  quote). The detailed counters stay below for whoever needs them.
+- Q→R selection follows exact data linkage: picking QN pins
+  `QN.sourceDesignRevisionId` as the design revision when present (option
+  labeled "origen de esta cotización"); an explicit user choice still wins.
+- The approval button names the pair ("Aprobar R para Q") and is disabled
+  pre-emptively with an honest hint when the pair classification is
+  `requiresResolution` or `requiresRequote` — the same truth
+  `EvaluateReleaseCommercialGate` enforces server-side. An unknown
+  reconciliation never blocks (the server remains the fail-closed gate).
+- A successful requote selects the newly created revision (publish/accept act
+  on it next); a successful release offers the contextual "Abrir en
+  Producción" exit to the factory order workspace.
+- Cotizaciones chrome: the only production action is "Abrir en Producción",
+  driven by the manufacturing authority (`releaseAuthorityOf`); the legacy
+  "Marcar en producción" transition lives exclusively in the Production
+  workspace (operational lifecycle), and the legacy OC-022 release modal is
+  reachable only for projects positively known to be pre-Digital-Thread (no
+  quote authority). The floor progress strip follows the same authority, not
+  `Project.status`.
+
 ---
 
 ## 26. Anti-patterns — forbidden implementation shortcuts

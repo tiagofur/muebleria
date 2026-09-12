@@ -153,7 +153,6 @@ export function useProjectsScreenState({
   const [addItemModalOpen, setAddItemModalOpen] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmReopen, setConfirmReopen] = useState(false);
   const [showPresentation, setShowPresentationRaw] = useState(false);
   // F148 — única puerta de la presentación: toda apertura/cierre (menú, URL
   // ?present=, Escape, onGoToProyectar) queda como evento del benchmark.
@@ -513,8 +512,6 @@ export function useProjectsScreenState({
     setItemError,
     confirmDelete,
     setConfirmDelete,
-    confirmReopen,
-    setConfirmReopen,
     showPresentation,
     setShowPresentation,
     showSpatialStudio,

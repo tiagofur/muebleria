@@ -28,7 +28,6 @@ import type {
   ProjectMaterialSummary,
   ProjectPhoto,
   ProjectPhotoStage,
-  ProjectStatus,
   ProjectTechnicalStatus,
   ProjectInternalMessage,
   ProjectInternalMessageType,
@@ -323,17 +322,6 @@ export interface ProjectsScreenProps {
   readonly canMutate?: boolean;
   /** F035: hide delete (gerente/admin only). */
   readonly canDelete?: boolean;
-  /** F036: reopen closed quote → draft (clears snapshot). */
-  readonly canReopen?: boolean;
-  /** Admin/gerente: reopen accepted|produced → draft (#257). */
-  readonly canForceReopenClosed?: boolean;
-  /** F036: mark accepted → produced (click-only). */
-  readonly canMarkProduced?: boolean;
-  /** Shell applies status transition (snapshot rules). */
-  readonly onMarkProduced?: (projectId: string) => void;
-  /** Transition status: draft→quoted, quoted→accepted (gap #3). */
-  readonly onChangeStatus?: (projectId: string, status: ProjectStatus) => void;
-  readonly onReopen?: (projectId: string) => void;
   /** #200: restore a project to a previous version snapshot. */
   readonly onRestoreVersion?: (projectId: string, version: number) => void;
   /** F039: hide margin and cost breakdown. */
@@ -554,12 +542,6 @@ export function ProjectsScreen({
   workshopSettings = null,
   canMutate = true,
   canDelete = true,
-  canReopen = false,
-  canForceReopenClosed = false,
-  canMarkProduced = false,
-  onMarkProduced,
-  onChangeStatus,
-  onReopen,
   onRestoreVersion,
   showCosts = true,
   autoPresentId = null,
@@ -838,9 +820,6 @@ export function ProjectsScreen({
               ? () => state.startSaveAsTemplate()
               : undefined
           }
-          onMarkProduced={onMarkProduced}
-          onChangeStatus={onChangeStatus}
-          onRequestReopen={() => state.setConfirmReopen(true)}
           onRequestDelete={() => state.setConfirmDelete(true)}
           onUpdateKitchenLayout={onUpdateKitchenLayout}
           onApplyScenarioB={onApplyScenarioB}
@@ -864,9 +843,6 @@ export function ProjectsScreen({
           canMutate={canMutateCommercialDraft}
           canDelete={canDelete}
           onRestoreVersion={onRestoreVersion ? (version) => onRestoreVersion(state.selectedProject!.id, version) : undefined}
-          canReopen={canReopen}
-          canForceReopenClosed={canForceReopenClosed}
-          canMarkProduced={canMarkProduced}
           projectTemplates={projectTemplates}
           photos={photos}
           onUploadPhotos={
@@ -965,14 +941,11 @@ export function ProjectsScreen({
         assignableOwners={assignableOwners}
         showCosts={showCosts}
         canMutate={canMutateCommercialDraft}
-        canReopen={canReopen}
-        canMarkProduced={canMarkProduced}
         metaModalOpen={state.metaModalOpen}
         metaEditingId={state.metaEditingId}
         metaDraft={state.metaDraft}
         addItemModalOpen={state.addItemModalOpen}
         confirmDelete={state.confirmDelete}
-        confirmReopen={state.confirmReopen}
         showPresentation={state.showPresentation}
         showSpatialStudio={state.showSpatialStudio}
         show3DModal={state.show3DModal}
@@ -995,11 +968,6 @@ export function ProjectsScreen({
         onAddItemSubmit={state.handleAddItemSubmit}
         onCancelDelete={() => state.setConfirmDelete(false)}
         onConfirmDelete={(id) => state.handleDelete(id)}
-        onCancelReopen={() => state.setConfirmReopen(false)}
-        onConfirmReopen={(id) => {
-          onReopen?.(id);
-          state.setConfirmReopen(false);
-        }}
         onClosePresentation={() => state.setShowPresentation(false)}
         onGoToProyectar={
           onUpdateKitchenLayout

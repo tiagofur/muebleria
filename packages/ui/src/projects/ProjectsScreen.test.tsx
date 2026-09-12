@@ -357,7 +357,7 @@ describe('ProjectsScreen F022', () => {
 
   it('draft chrome has advanced tools collapsed and no legacy send action', async () => {
     const user = userEvent.setup();
-    renderScreen({ onChangeStatus: vi.fn() });
+    renderScreen({});
 
     await user.click(screen.getByTestId('project-card-prj-1'));
 
@@ -545,7 +545,6 @@ describe('ProjectsScreen F022', () => {
         capturedAt: '2026-09-10T12:00:00Z',
         onRetry: vi.fn(),
       },
-      onChangeStatus: vi.fn(),
       onOpenReconciliation,
     });
 
@@ -1924,7 +1923,6 @@ describe('ProjectsScreen project templates (#110)', () => {
   it('PROD-0.2: plant-ready chrome prefers Abrir en Producción; factory exports leave quote Más', async () => {
     const user = userEvent.setup();
     const onOpenInProduction = vi.fn();
-    const onMarkProduced = vi.fn();
     const accepted: Project = {
       ...projects[0]!,
       id: 'prj-acc',
@@ -1935,8 +1933,6 @@ describe('ProjectsScreen project templates (#110)', () => {
       projects: [accepted],
       projectEstimates: { 'prj-acc': 500 },
       onOpenInProduction,
-      onMarkProduced,
-      canMarkProduced: true,
       onExportProductionPack: vi.fn(),
       onExportHardware: vi.fn(),
       onExportPieceLabels: vi.fn(),
@@ -2032,8 +2028,6 @@ describe('ProjectsScreen project templates (#110)', () => {
       projects: [releasedDraft],
       projectEstimates: { 'prj-released-draft': 500 },
       onOpenInProduction,
-      onMarkProduced: vi.fn(),
-      canMarkProduced: true,
       quoteAuthority: {
         kind: 'ready',
         revisionId: 'quote-2',

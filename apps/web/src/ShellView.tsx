@@ -370,16 +370,13 @@ export interface ShellViewCtx {
   readonly canAssignOwner: boolean;
   readonly canDeleteProjects: boolean;
   readonly canExportProduction: boolean;
-  readonly canForceReopenClosed: boolean;
   readonly canMarkProduced: boolean;
   readonly canMutateCatalog: boolean;
   readonly canMutateModules: boolean;
   readonly canMutateProjects: boolean;
   readonly canOpenFabric: boolean;
-  readonly canReopenProjects: boolean;
   readonly catalog: Catalog;
   readonly categories: readonly CategoryNode[];
-  readonly changeProjectStatus: (id: string, status: ProjectStatus) => void;
   readonly commandItems: CommandPaletteItem[];
   readonly components: readonly Component[];
   readonly createAgregado: (item: Agregado) => void;
@@ -551,7 +548,6 @@ export interface ShellViewCtx {
   readonly releasePlanEditSession: (projectId: string) => void;
   readonly removeProjectItem: (projectId: string, itemId: string) => void;
   readonly renewPlanEditSession: (projectId: string) => boolean;
-  readonly reopenProject: (id: string) => void;
   readonly resolveMediaUrl: (url: string | undefined) => string | undefined;
   readonly restoreProjectItems: (
     projectId: string,
@@ -657,13 +653,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     canAssignOwner,
     canDeleteProjects,
     canExportProduction,
-    canForceReopenClosed,
     canMarkProduced,
     canMutateCatalog,
     canMutateModules,
     canMutateProjects,
     canOpenFabric,
-    canReopenProjects,
     catalog,
     categories,
     commandItems,
@@ -828,7 +822,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     releasePlanEditSession,
     removeProjectItem,
     renewPlanEditSession,
-    reopenProject,
     resolveMediaUrl,
     restoreProjectItems,
     restoreProjectVersion,
@@ -2112,6 +2105,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                 });
                 if (location.pathname + location.search !== target) navigate(target);
               }}
+              onOpenInProduction={
+                useProductionWorkspace
+                  ? (projectId) => {
+                      const target = productionOrderPath(projectId);
+                      if (location.pathname !== target) navigate(target);
+                    }
+                  : undefined
+              }
               canRequote={canRequoteDesignChanges}
               canApprove={canApproveDesignRevisionsHint}
               canRelease={canReleaseProductionHint}
@@ -2299,11 +2300,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           workshopSettings={workshopSettings}
           canMutate={canMutateProjects}
           canDelete={canDeleteProjects}
-          canReopen={canReopenProjects}
-          canForceReopenClosed={canForceReopenClosed}
-          canMarkProduced={canMarkProduced}
-          onMarkProduced={markProjectProduced}
-          onReopen={reopenProject}
           onRestoreVersion={restoreProjectVersion}
           showCosts={showCosts}
           costingViewByProject={costingViewByProject}

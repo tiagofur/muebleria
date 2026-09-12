@@ -1,3 +1,22 @@
+# Demo Flow Audit & Cleanup — happy path simplification (Refs #642)
+
+- Approval: prompt del propietario (2026-09-12). Rama `feat/642-demo-flow-happy-path`,
+  base `origin/main@009360e2`. Single writer GLM. Sin merge ni cierre.
+- Auditoría completa del flujo (Cotizaciones→Reconciliación→Diseños→Producción):
+  backend ya correcto (accept Q NO toca Project.status; ProductionRelease única
+  autoridad de fabricación; gates fail-closed). Hallazgos P0: ninguno nuevo; 10 P1
+  de UX/confusión implementados; P2 documentados sin absorber.
+- Entrega: banner veredicto simple (conflictos/afecta precio/sincronizado) con
+  acción única de requote; linkage exacto Q→R (sourceDesignRevisionId, opción
+  "origen de esta cotización"); aprobación "Aprobar R para Q" bloqueada
+  preemptivamente con la MISMA verdad server del gate comercial; auto-pin de la
+  Q tras requote; CTA contextual "Abrir en Producción" tras P1; FloorStrip por
+  release authority (no Project.status); retirados del chrome: "Marcar en
+  producción", botón no-op "Evaluar 6 Gates", modal OC-022 para proyectos DT,
+  cadenas muertas onChangeStatus/onReopen/confirmReopen/pendingConfirm + copy
+  huérfano. E2E browser real nuevo con transiciones UI y assertions UX.
+- Detalle: `progress/implementation_demo_flow_cleanup.md`.
+
 # Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
 
 - Approval: prompt del propietario (2026-09-11) autoriza exclusivamente M1; #667 sigue

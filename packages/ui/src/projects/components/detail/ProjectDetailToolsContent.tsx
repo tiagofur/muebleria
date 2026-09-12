@@ -76,7 +76,6 @@ export function ProjectDetailToolsContent({
       {toolsPanel === 'lifecycle' ? (
         <LifecyclePanel
           project={project}
-          onOpenReleaseModal={ctx.onOpenReleaseModal ?? (() => {})}
           onOpenChangeOrderModal={ctx.onOpenChangeOrderModal ?? (() => {})}
           onCreateRevision={ctx.onCreateRevision}
           onDecideApproval={ctx.onDecideApproval}
