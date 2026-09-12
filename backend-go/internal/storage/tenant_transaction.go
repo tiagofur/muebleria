@@ -132,6 +132,49 @@ func authorizeTenantOrganizations(ctx context.Context, ids ...string) error {
 	return err
 }
 
+// commitHooksKey carries the post-commit callback registry of the enclosing
+// WithinTenantTx scope.
+type commitHooksKey struct{}
+
+// OnCommit registers a callback that runs AFTER the enclosing tenant
+// transaction commits successfully. Outside a WithinTenantTx scope (no
+// registry in ctx) the registration is a deliberate no-op: side effects that
+// must not precede the commit simply never run, and their subject stays in
+// its pre-transaction state (fail-safe retention, never premature cleanup).
+// Callbacks run synchronously after the SQL commit and must treat themselves
+// as best-effort: log their own failures, never surface them as request
+// errors. On rollback the registry dies with the scope — callbacks are
+// discarded, never run.
+func OnCommit(ctx context.Context, callback func(context.Context)) {
+	if callback == nil {
+		return
+	}
+	hooks, ok := ctx.Value(commitHooksKey{}).(*[]func(context.Context))
+	if !ok {
+		return
+	}
+	*hooks = append(*hooks, callback)
+}
+
+// runCommitHooks executes the registered callbacks with the ORIGINAL (already
+// committed) context — the transaction marker is absent from it, so a hook
+// may open its own fresh transaction.
+func runCommitHooks(hooks *[]func(context.Context), ctx context.Context) {
+	if hooks == nil {
+		return
+	}
+	for _, hook := range *hooks {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					_ = r // a panicking cleanup never fails the committed request
+				}
+			}()
+			hook(ctx)
+		}()
+	}
+}
+
 // WithinTenantTx executes one application transaction with pool-safe SET LOCAL
 // actor context. Commit and rollback both discard every app.* setting.
 func (s *PostgresStore) WithinTenantTx(
@@ -151,6 +194,8 @@ func (s *PostgresStore) WithinTenantTx(
 		if err := setTenantContext(ctx, existing, actor); err != nil {
 			return err
 		}
+		// Nested execution shares the OUTER commit: hooks registered here run
+		// when the enclosing transaction commits.
 		return execute(WithTenantActorCtx(ctx, actor))
 	}
 
@@ -167,13 +212,18 @@ func (s *PostgresStore) WithinTenantTx(
 	if err := setTenantContext(ctx, tx, actor); err != nil {
 		return err
 	}
+	hooks := &[]func(context.Context){}
 	txCtx := context.WithValue(WithTenantActorCtx(ctx, actor), transactionContextKey{}, tx)
+	txCtx = context.WithValue(txCtx, commitHooksKey{}, hooks)
 	if err := execute(txCtx); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tenant transaction: %w", err)
 	}
+	// The SQL commit won: post-commit cleanups may now run. A later failure
+	// here is logged by the hook, never surfaced as a request error.
+	runCommitHooks(hooks, ctx)
 	return nil
 }
 

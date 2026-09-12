@@ -3981,6 +3981,235 @@
           }
         }
       }
+    },
+    "/hardware-assets/uploads": {
+      "post": {
+        "operationId": "startHardwareAssetUpload",
+        "summary": "Start a staged hardware 3D asset upload (#667 M1)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartHardwareAssetUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upload session prepared; send the bytes next",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareAssetUploadSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/hardware-assets/uploads/{sessionId}": {
+      "get": {
+        "operationId": "getHardwareAssetUploadSession",
+        "summary": "Consult one staged hardware asset upload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload session state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareAssetUploadSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/hardware-assets/uploads/{sessionId}:finalize": {
+      "post": {
+        "operationId": "finalizeHardwareAssetUpload",
+        "summary": "Finalize a staged upload into an active asset with immutable revision #1",
+        "description": "Verifies the staged bytes on disk (size + SHA-256) before creating the asset and its immutable first revision; replays return the same asset. The revision's validation state starts pending until an authorized host validator records evidence (#668).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Asset finalized with revision #1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareAsset"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/hardware-assets/uploads/{sessionId}:cancel": {
+      "post": {
+        "operationId": "cancelHardwareAssetUpload",
+        "summary": "Cancel a staged upload; any previous hardware association is untouched",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload session cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareAssetUploadSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/hardware-assets": {
+      "get": {
+        "operationId": "listHardwareAssets",
+        "summary": "List the organization's versioned 3D assets with their revisions",
+        "responses": {
+          "200": {
+            "description": "Assets in display-name order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HardwareAsset"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/hardware-assets/{assetId}": {
+      "get": {
+        "operationId": "getHardwareAsset",
+        "summary": "Read one versioned 3D asset with its revisions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HardwareAssetId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Asset detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareAsset"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/hardware-assets/{assetId}:retire": {
+      "post": {
+        "operationId": "retireHardwareAsset",
+        "summary": "Retire an asset from new hardware selections (historical references untouched)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HardwareAssetId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Asset retired (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareAsset"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/hardware-assets/{assetId}/revisions/{revisionId}:authorize": {
+      "post": {
+        "operationId": "authorizeHardwareAssetRevision",
+        "summary": "Mint a short-lived signed read for one exact asset revision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HardwareAssetId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed grant bound to the exact bytes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareAssetRevisionGrant"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4137,6 +4366,15 @@
           "format": "uuid"
         },
         "description": "Pairing grant identifier."
+      },
+      "HardwareAssetId": {
+        "name": "assetId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
       }
     },
     "headers": {
@@ -9339,12 +9577,30 @@
           "salePrice"
         ],
         "properties": {
-          "materialsCost": { "type": "number", "minimum": 0 },
-          "edgeTotal": { "type": "number", "minimum": 0 },
-          "hardwareTotal": { "type": "number", "minimum": 0 },
-          "directCost": { "type": "number", "minimum": 0 },
-          "laborModular": { "type": "number", "minimum": 0 },
-          "salePrice": { "type": "number", "minimum": 0 }
+          "materialsCost": {
+            "type": "number",
+            "minimum": 0
+          },
+          "edgeTotal": {
+            "type": "number",
+            "minimum": 0
+          },
+          "hardwareTotal": {
+            "type": "number",
+            "minimum": 0
+          },
+          "directCost": {
+            "type": "number",
+            "minimum": 0
+          },
+          "laborModular": {
+            "type": "number",
+            "minimum": 0
+          },
+          "salePrice": {
+            "type": "number",
+            "minimum": 0
+          }
         }
       },
       "QuoteCommercialOption": {
@@ -10644,6 +10900,364 @@
           },
           "room": {
             "$ref": "#/components/schemas/DesignRevisionRoomDescriptor"
+          }
+        }
+      },
+      "HardwareAssetRepresentation": {
+        "type": "string",
+        "enum": [
+          "skp",
+          "glb",
+          "thumbnail"
+        ],
+        "description": "Accepted visual representation of a hardware 3D asset (#667 M1): native SketchUp model, self-contained glTF binary for web consumers, or a rendered preview image."
+      },
+      "HardwareAssetStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "retired"
+        ],
+        "description": "Retirement withdraws the asset from NEW hardware bindings only; historical bindings and published DesignRevision pins are never rewritten."
+      },
+      "HardwareAssetValidationState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "validated",
+          "failed"
+        ],
+        "description": "Host compatibility state, derived exclusively from authorized validation evidence (#668 producer). Received/verified bytes are never self-declared validated."
+      },
+      "HardwareAssetAnchor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "x_mm",
+          "y_mm",
+          "z_mm"
+        ],
+        "properties": {
+          "x_mm": {
+            "type": "number",
+            "format": "double"
+          },
+          "y_mm": {
+            "type": "number",
+            "format": "double"
+          },
+          "z_mm": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "HardwareAssetOrigin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_units",
+          "up_axis"
+        ],
+        "description": "Declared physical normalization of the file: explicit source units, the file's up-axis convention and the optional visual anchor offset in millimeters. Finite values only; no renderer fits a mesh to a received bounding box.",
+        "properties": {
+          "source_units": {
+            "type": "string",
+            "enum": [
+              "mm",
+              "cm",
+              "m",
+              "inch"
+            ]
+          },
+          "up_axis": {
+            "type": "string",
+            "enum": [
+              "y",
+              "z"
+            ]
+          },
+          "anchor_offset_mm": {
+            "$ref": "#/components/schemas/HardwareAssetAnchor"
+          }
+        }
+      },
+      "HardwareAssetRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "asset_id",
+          "revision_number",
+          "representation",
+          "content_type",
+          "size_bytes",
+          "sha256",
+          "integrity_verified_at",
+          "validation_state",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "asset_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "representation": {
+            "$ref": "#/components/schemas/HardwareAssetRepresentation"
+          },
+          "content_type": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 255
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$",
+            "description": "Server-computed digest over the received bytes."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/HardwareAssetOrigin"
+          },
+          "integrity_verified_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server-side observation that the stored bytes matched size+SHA-256 at finalize. Distinct from host compatibility."
+          },
+          "validation_state": {
+            "$ref": "#/components/schemas/HardwareAssetValidationState"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "HardwareAsset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "display_name",
+          "status",
+          "revisions",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "provenance": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "license": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "status": {
+            "$ref": "#/components/schemas/HardwareAssetStatus"
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HardwareAssetRevision"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StartHardwareAssetUploadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "representation",
+          "display_name"
+        ],
+        "properties": {
+          "representation": {
+            "$ref": "#/components/schemas/HardwareAssetRepresentation"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "provenance": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "license": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "origin": {
+            "$ref": "#/components/schemas/HardwareAssetOrigin"
+          },
+          "asset_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "When set, finalize appends the next immutable revision to THIS existing active asset instead of creating a new one (replace-with-new-revision flow). Omitted: a new asset is created."
+          }
+        }
+      },
+      "HardwareAssetUploadStaged": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "content_type",
+          "size_bytes",
+          "sha256"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 255
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          }
+        }
+      },
+      "HardwareAssetUploadSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "representation",
+          "display_name",
+          "status",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "representation": {
+            "$ref": "#/components/schemas/HardwareAssetRepresentation"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "provenance": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "license": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "origin": {
+            "$ref": "#/components/schemas/HardwareAssetOrigin"
+          },
+          "staged": {
+            "$ref": "#/components/schemas/HardwareAssetUploadStaged"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "prepared",
+              "finalized",
+              "cancelled"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finalized_asset_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "finalized_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "target_asset_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Set when this upload appends a revision to an existing asset instead of creating a new one."
+          }
+        }
+      },
+      "HardwareAssetRevisionGrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "representation",
+          "sha256",
+          "size_bytes",
+          "url",
+          "expires_at"
+        ],
+        "description": "Short-lived signed read for exactly one asset revision; minted only after the bytes are observed to exist and match the persisted digest. No session credential ever appears in the URL.",
+        "properties": {
+          "representation": {
+            "$ref": "#/components/schemas/HardwareAssetRepresentation"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

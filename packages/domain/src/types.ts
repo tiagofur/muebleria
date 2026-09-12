@@ -191,6 +191,28 @@ export interface Hardware {
    * Resolution to concrete per-piece holes is the drilling engine (F128).
    */
   readonly machining?: HardwareMachiningProfile;
+  /**
+   * Exact versioned 3D asset revision bound to this hardware (#667 M1).
+   * The client only ever sets `assetId`/`assetRevisionId`; the server
+   * resolves and returns representation, digest and validation state.
+   * Omitted = no exact model associated (generic procedural preview).
+   */
+  readonly visualAsset?: HardwareVisualAssetBinding;
+}
+
+/**
+ * Visual binding of one hardware to one EXACT versioned 3D asset revision
+ * (#667 M1). `representation`/`sha256`/`validationState` are server-resolved
+ * facts, never client-declared: a binding request only carries identifiers.
+ * `validationState: 'pending'` means bytes received and verified — host
+ * compatibility evidence arrives with the SketchUp validator (#668).
+ */
+export interface HardwareVisualAssetBinding {
+  readonly assetId: string;
+  readonly assetRevisionId: string;
+  readonly representation?: 'skp' | 'glb' | 'thumbnail';
+  readonly sha256?: string;
+  readonly validationState?: 'pending' | 'validated' | 'failed';
 }
 
 /**

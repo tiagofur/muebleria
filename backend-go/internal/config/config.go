@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
+	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 // Config holds all server configuration sourced from the environment.
@@ -49,6 +50,10 @@ type Config struct {
 	RateLimitBurst int      // maximum burst for auth endpoints
 	// MediaDir is the filesystem root for catalog image uploads (F040).
 	MediaDir string
+	// HardwareAssetLimits are the configurable per-representation byte caps
+	// for hardware 3D asset uploads (#667 M1). Nil/absent = package defaults
+	// (skp 256 MiB, glb 128 MiB, thumbnail 16 MiB).
+	HardwareAssetLimits map[domain.HardwareAssetRepresentation]int64
 	// WebRefreshCookieInsecureLocalDev opts the Web refresh cookie out of the
 	// Secure attribute (#460 SEC-4A). It may only become true outside
 	// production: LoadConfig refuses an insecure Web refresh cookie whenever
@@ -146,6 +151,8 @@ func LoadConfig() (Config, error) {
 		mediaDir = filepath.Join(home, ".muebles-media")
 	}
 
+	hardwareAssetLimits := parseHardwareAssetLimitsEnv()
+
 	return Config{
 		Port:                 port,
 		DatabaseURL:          dbURL,
@@ -160,9 +167,38 @@ func LoadConfig() (Config, error) {
 		RateLimitRPS:         rps,
 		RateLimitBurst:       burst,
 		MediaDir:             mediaDir,
+		HardwareAssetLimits:  hardwareAssetLimits,
 
 		WebRefreshCookieInsecureLocalDev: cookieInsecure,
 	}, nil
+}
+
+// parseHardwareAssetLimitsEnv reads the optional HARDWARE_ASSET_MAX_*_BYTES
+// overrides (#667 M1). Invalid or non-positive values fall back to the
+// package defaults instead of failing boot: they are operational caps, not
+// security boundaries.
+func parseHardwareAssetLimitsEnv() map[domain.HardwareAssetRepresentation]int64 {
+	envs := map[domain.HardwareAssetRepresentation]string{
+		domain.HardwareAssetRepresentationSKP:       "HARDWARE_ASSET_MAX_SKP_BYTES",
+		domain.HardwareAssetRepresentationGLB:       "HARDWARE_ASSET_MAX_GLB_BYTES",
+		domain.HardwareAssetRepresentationThumbnail: "HARDWARE_ASSET_MAX_THUMBNAIL_BYTES",
+	}
+	var limits map[domain.HardwareAssetRepresentation]int64
+	for rep, env := range envs {
+		raw := strings.TrimSpace(os.Getenv(env))
+		if raw == "" {
+			continue
+		}
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || v <= 0 {
+			continue
+		}
+		if limits == nil {
+			limits = map[domain.HardwareAssetRepresentation]int64{}
+		}
+		limits[rep] = v
+	}
+	return limits
 }
 
 // parseMFAKeyringEnv resolves the MFA secret keyring (#460 SEC-7).
