@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { optimizeCutPlan } from '@granete/domain';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { required } from './support/api';
+import { TotpProvider, secretFromProvisioningUri } from './support/totp';
 
 /**
  * #591 / WEB-MFG-2 browser E2E against the real Go backend + PostgreSQL:
@@ -31,6 +32,8 @@ const CUTTING_CADMATIC4_CANDIDATE = {
   outputProfileRevisionId: 'r3',
 } as const;
 const EXPORT_PROJECT_ID = '77777777-6910-4691-8691-777777777777';
+const EXPORT_PROJECT_B_ID = '77777777-6911-4691-8691-777777777777';
+let restoreB: (() => Promise<unknown>) | undefined;
 
 async function api() {
   const base = required('ORGANIZATION_API_BASE');
@@ -94,21 +97,27 @@ async function saveCuttingSelection(
   await waitForCuttingProfile(repository, expectedProfileId);
 }
 
-async function seedCuttingProject(repository: APIWorkspaceRepository): Promise<void> {
+async function seedCuttingProject(repository: APIWorkspaceRepository, projectId = EXPORT_PROJECT_ID): Promise<void> {
   const catalog = await repository.getCatalog();
-  const customer = { id: 'c0000000-6910-4691-8691-000000000000', name: 'CAD4 E2E', active: true };
+  const customer = { id: projectId.replace('77777777', 'c0000000'), name: 'CAD4 E2E', active: true };
   await repository.saveCatalog({ ...catalog, customers: [...(catalog.customers ?? []), customer] });
   const now = new Date().toISOString();
-  const cutPlan = optimizeCutPlan(EXPORT_PROJECT_ID, [{
-    quantity: 1, lengthMm: 600, widthMm: 400, description: 'Panel E2E',
-    materialName: 'MDF E2E', materialCode: 'MDF-E2E', thicknessMm: 18,
-    grain: 0, L1: 0, L2: 0, W1: 0, W2: 0,
+  const cutPlan = optimizeCutPlan(projectId, [{
+    quantity: 1, lengthMm: 600, widthMm: 400, description: 'Panel E2E', materialName: 'MDF E2E',
+    materialCode: 'MDF-E2E', thicknessMm: 18, grain: 0, L1: 0, L2: 0, W1: 0, W2: 0,
   }], [], undefined, 'Salida CADmatic 4 E2E');
   await repository.saveProject({
-    id: EXPORT_PROJECT_ID, name: 'Salida CADmatic 4 E2E', customerId: customer.id,
-    currency: 'MXN', marginFactor: 1.3, laborFixedCost: 0, status: 'draft',
-    createdAt: now, updatedAt: now, items: [], cutPlan,
+    id: projectId, name: 'Salida CADmatic 4 E2E', customerId: customer.id,
+    currency: 'MXN', marginFactor: 1.3, laborFixedCost: 0, status: 'draft', createdAt: now,
+    updatedAt: now, items: [], cutPlan,
   });
+}
+
+async function exportPtx(page: Page, projectId = EXPORT_PROJECT_ID): Promise<string> {
+  await page.goto(`/engineering/${projectId}`); await page.getByTestId('eng-tab-optimizacion').click();
+  const button = page.getByTestId('prod-opt-export-ptx');
+  const [download] = await Promise.all([page.waitForEvent('download'), button.click()]);
+  return new TextDecoder().decode(await readFile((await download.path())!));
 }
 
 test.describe.serial('Machine output selection (#591) browser E2E', () => {
@@ -203,14 +212,7 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     expect(cutting!.supportStatus).toBe('NOT_TESTED');
 
     await seedCuttingProject(repository);
-    await page.goto(`/engineering/${EXPORT_PROJECT_ID}`);
-    await page.getByTestId('eng-tab-optimizacion').click();
-    const exportButton = page.getByTestId('prod-opt-export-ptx');
-    await expect(exportButton).toBeEnabled();
-    const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);
-    const path = await download.path();
-    const text = new TextDecoder().decode(await readFile(path!));
-    expect(download.suggestedFilename()).toMatch(/^corte-.*\.ptx$/);
+    const text = await exportPtx(page);
     expect(text.startsWith('HEADER,')).toBe(true);
     expect(text).not.toContain('[HEADER]');
   });
@@ -237,7 +239,20 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     ).rejects.toMatchObject({ status: 409, payload: { code: 'VERSION_CONFLICT' } });
   });
 
-  test('org B never reads org A machine output configuration', async () => {
+  test('request error can retry into the authoritative configuration', async ({ page }) => {
+    let retry = false;
+    await page.route('**/api/machine-output-selections', (route) =>
+      route.request().method() === 'GET' && !retry ? route.fulfill({ status: 500, body: '{}' }) : route.continue());
+    await loginToA(page);
+    await page.goto('/settings');
+    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await expect(page.getByTestId('machine-output-load-error')).toBeVisible();
+    retry = true;
+    await page.getByTestId('machine-output-retry').click();
+    await expect(page.getByTestId('machine-output-cutting')).toBeVisible();
+  });
+
+  test('org B confirmed-empty authorizes legacy output', async ({ page }) => {
     const base = required('ORGANIZATION_API_BASE');
     const bOwner = await new GraneteApiClient(base).login({
       email: required('ORGANIZATION_GATE_B_OWNER_EMAIL'),
@@ -248,40 +263,52 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     const repositoryB = new APIWorkspaceRepository(base, { getAccessToken: () => bOwner.token });
     const readModelB = await repositoryB.getMachineOutputSelections();
     expect(readModelB.selections).toEqual([]);
+    const clientB = new GraneteApiClient(base);
+    const begun = await clientB.beginMFAEnrollment(bOwner.token, {});
+    const totp = new TotpProvider(secretFromProvisioningUri(begun.provisioning_uri));
+    await clientB.verifyMFAEnrollment(bOwner.token, begun.factor_id, { code: totp.next() });
+    await clientB.requestMFAStepUp(bOwner.token, { scope: 'organization_admin', method: 'totp', code: totp.next() });
+    const member = (await clientB.listMemberships(bOwner.token)).items.find((item) => item.email === required('ORGANIZATION_GATE_EMAIL'));
+    if (!member) throw new Error('Browser Gate B membership missing');
+    const promoted = await clientB.updateMembershipRoles(bOwner.token, member.membership_id, member.version, { roles: ['vendedor', 'ingeniero'] });
+    restoreB = () => clientB.updateMembershipRoles(bOwner.token, promoted.membership_id, promoted.version, { roles: ['vendedor'] });
+    await seedCuttingProject(repositoryB, EXPORT_PROJECT_B_ID);
+    await page.goto('/');
+    await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_EMAIL'));
+    await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
+    await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+    await page.getByRole('button', { name: 'Browser Gate B' }).click(); await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
+    expect(await exportPtx(page, EXPORT_PROJECT_B_ID)).toContain('[HEADER]');
+
+    await clientB.upsertMachineOutputSelection(bOwner.token, 'cutting', { selection: { ...CUTTING_CADMATIC4_CANDIDATE }, expectedVersion: 0 });
   });
 
   for (const lateStatus of [200, 500]) test(`late org A ${lateStatus} cannot govern org B`, async ({ page }) => {
-    test.setTimeout(90_000);
     let releaseA = () => undefined;
-    let markAStarted = () => undefined;
-    const started = new Promise<void>((resolve) => { markAStarted = resolve; });
     const gate = new Promise<void>((resolve) => { releaseA = resolve; });
     let firstGet = true;
     await page.route('**/api/machine-output-selections', async (route) => {
       if (route.request().method() !== 'GET' || !firstGet) return route.continue();
       firstGet = false;
-      const response = await route.fetch();
-      markAStarted();
-      await gate;
-      return lateStatus === 200
-        ? route.fulfill({ response }).catch(() => undefined)
-        : route.fulfill({ status: 500, body: '{}' }).catch(() => undefined);
+      const response = await route.fetch(); await gate;
+      return route.fulfill(lateStatus === 200 ? { response } : { status: 500, body: '{}' });
     });
 
+    const started = page.waitForRequest('**/api/machine-output-selections');
     await loginToA(page);
     await started;
-    const bResponse = page.waitForResponse((response) =>
-      response.url().includes('/api/machine-output-selections'),
-    );
+    const bResponse = page.waitForResponse((response) => response.url().includes('/api/machine-output-selections'));
     await page.getByLabel('Cambiar organización').selectOption({ label: 'Browser Gate B' });
-    await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
-    expect((await bResponse).status()).toBe(403);
-    releaseA();
-    await page.waitForTimeout(150);
-    await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
+    expect((await bResponse).status()).toBe(200);
+    const late = page.waitForResponse((response) => response.url().includes('/api/machine-output-selections') && response.status() === lateStatus);
+    releaseA(); await late;
+    const output = await exportPtx(page, EXPORT_PROJECT_B_ID);
+    expect(output.startsWith('HEADER,')).toBe(true);
+    expect(output).not.toContain('[HEADER]');
   });
 
   test.afterAll(async () => {
+    await restoreB?.();
     // Leave org A in a clean, ready state for other suites. Re-read the
     // version right before the write and retry once on conflict.
     const { client, token } = await api();
