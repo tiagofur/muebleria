@@ -10,7 +10,7 @@ import { useWorkspaceStore } from './workspaceStore';
 afterEach(() => {
   useUiStore.getState().disposeUi();
   // F118 S2 tests: restore the no-session default.
-  useWorkspaceStore.setState({ session: null });
+  useWorkspaceStore.setState({ session: null, activeOrg: null, workspaceSeq: 0 });
 });
 
 // ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ function makeDeps(overrides: Partial<CatalogStoreDeps> = {}): {
   });
   // F118 S2: the patch error-toast guard silences saves that raced a logout
   // (session === null). Simulate an active session for these tests.
-  useWorkspaceStore.setState({ session: 'guest' });
+  useWorkspaceStore.setState({ session: 'guest', activeOrg: null, workspaceSeq: 0 });
   const deps: CatalogStoreDeps = {
     newId: () => `id-${Math.random().toString(36).slice(2, 8)}`,
     saveCatalog: async (c) => {
@@ -1524,6 +1524,327 @@ describe('catalogStore — save serialization (P1-4)', () => {
       // Must remain newOrgCatalog, NOT restored to old Org 1 snapshot!
       expect(store.getState().catalog).toBe(newOrgCatalog);
       expect(store.getState().catalog?.materials).toHaveLength(0);
+    });
+
+    it('R1 — payload enviado y confirmedCatalog representan exactamente la misma unidad de confirmación', async () => {
+      const initialCatalog: Catalog = {
+        ...seedCatalog(),
+        hardware: [
+          {
+            id: 'hw-a',
+            code: 'HW-A',
+            name: 'A initial',
+            unit: 'piece',
+            costPerUnit: 10,
+            active: true,
+          },
+          {
+            id: 'hw-b',
+            code: 'HW-B',
+            name: 'B initial',
+            unit: 'piece',
+            costPerUnit: 20,
+            active: true,
+          },
+          {
+            id: 'hw-c',
+            code: 'HW-C',
+            name: 'C initial',
+            unit: 'piece',
+            costPerUnit: 30,
+            active: true,
+          },
+        ],
+      };
+
+      let resolveA!: () => void;
+      const promiseA = new Promise<void>((r) => { resolveA = r; });
+      let resolveB!: () => void;
+      const promiseB = new Promise<void>((r) => { resolveB = r; });
+
+      const savedPayloads: Catalog[] = [];
+      let callCount = 0;
+      const { deps } = makeDeps({
+        saveCatalog: async (cat: Catalog) => {
+          callCount++;
+          const snapshot = JSON.parse(JSON.stringify(cat)) as Catalog;
+          savedPayloads.push(snapshot);
+          if (callCount === 1) {
+            await promiseA;
+          } else if (callCount === 2) {
+            await promiseB;
+          } else if (callCount === 3) {
+            throw new Error('C network failure before server write');
+          }
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(initialCatalog);
+
+      // 1. Change A, holding its save in promiseA
+      const pA = store.getState().updateHardware('hw-a', {
+        code: 'HW-A',
+        name: 'A updated',
+        unit: 'piece',
+        costPerUnit: 10,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      // 2. Change B and C; both operations get queued in pendingOps
+      const pB = store.getState().updateHardware('hw-b', {
+        code: 'HW-B',
+        name: 'B updated',
+        unit: 'piece',
+        costPerUnit: 20,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      const pC = store.getState().updateHardware('hw-c', {
+        code: 'HW-C',
+        name: 'C updated',
+        unit: 'piece',
+        costPerUnit: 30,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      // 3. Confirm A
+      resolveA();
+      await pA;
+
+      // 4. B is now executing. Check B's payload!
+      await vi.waitFor(() => expect(callCount).toBe(2));
+      const payloadB = savedPayloads[1]!;
+      expect(payloadB.hardware.find((h) => h.id === 'hw-a')?.name).toBe('A updated');
+      expect(payloadB.hardware.find((h) => h.id === 'hw-b')?.name).toBe('B updated');
+      // B must NOT include C's unconfirmed optimistic changes
+      expect(payloadB.hardware.find((h) => h.id === 'hw-c')?.name).toBe('C initial');
+
+      // 5. Confirm B
+      resolveB();
+      await pB;
+
+      const simulatedServerState = JSON.parse(JSON.stringify(payloadB)) as Catalog;
+
+      // 6. C fails before any write of its own
+      await expect(pC).rejects.toThrow('C network failure before server write');
+
+      // 7. Verification of final state
+      const storeCatalog = store.getState().catalog!;
+      expect(storeCatalog.hardware.find((h) => h.id === 'hw-c')?.name).toBe('C initial');
+      expect(simulatedServerState.hardware.find((h) => h.id === 'hw-c')?.name).toBe('C initial');
+      expect(storeCatalog.hardware.find((h) => h.id === 'hw-b')?.name).toBe('B updated');
+      expect(simulatedServerState.hardware.find((h) => h.id === 'hw-b')?.name).toBe('B updated');
+    });
+
+    it('R2 — guard posterior a await no resuelve patch ni emite toast de éxito tras logout', async () => {
+      let resolveSave!: () => void;
+      const savePromise = new Promise<void>((r) => { resolveSave = r; });
+
+      const { deps, toasts } = makeDeps({
+        saveCatalog: async () => {
+          await savePromise;
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      const catalog = seedCatalog();
+      const targetHw = catalog.hardware[0]!;
+      store.getState().setCatalog(catalog);
+
+      const updatePromise = store.getState().updateHardware(targetHw.id, {
+        code: targetHw.code,
+        name: 'Hardware Updated',
+        unit: targetHw.unit,
+        costPerUnit: targetHw.costPerUnit,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      // User logs out and clears catalog while save is in flight
+      useWorkspaceStore.setState({ session: null });
+      store.getState().setCatalog(null);
+
+      // Now save resolves on the server
+      resolveSave();
+
+      // updatePromise must reject, NOT resolve as success
+      await expect(updatePromise).rejects.toThrow(/sesión|organización|ContextInvalidated/i);
+
+      // Must NOT toast "✓ Cambios guardados"
+      expect(toasts).toHaveLength(0);
+
+      // Catalog must remain null in logged out context
+      expect(store.getState().catalog).toBeNull();
+    });
+
+    it('R2 — guard posterior a await no resuelve patch ni emite toast de éxito tras cambio de organización', async () => {
+      let resolveSave!: () => void;
+      const savePromise = new Promise<void>((r) => { resolveSave = r; });
+
+      const { deps, toasts } = makeDeps({
+        saveCatalog: async () => {
+          await savePromise;
+        },
+      });
+
+      // Start in Org 1
+      useWorkspaceStore.setState({
+        session: 'auth',
+        activeOrg: {
+          id: 'org-source-1',
+          name: 'Source 1',
+          slug: 'source-1',
+          type: 'factory',
+          status: 'active',
+          license: { plan: 'pro', status: 'active', expires_at: null },
+        },
+        workspaceSeq: 1,
+      });
+
+      const store = createCatalogStore({ deps });
+      const catalog = seedCatalog();
+      const targetHw = catalog.hardware[0]!;
+      store.getState().setCatalog(catalog);
+
+      const updatePromise = store.getState().updateHardware(targetHw.id, {
+        code: targetHw.code,
+        name: 'Hardware Updated Org1',
+        unit: targetHw.unit,
+        costPerUnit: targetHw.costPerUnit,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      // Org switch happens while save is in flight: switch to Org 2
+      const org2Catalog: Catalog = {
+        ...seedCatalog(),
+        hardware: [],
+      };
+      useWorkspaceStore.setState({
+        activeOrg: {
+          id: 'org-target-2',
+          name: 'Target 2',
+          slug: 'target-2',
+          type: 'factory',
+          status: 'active',
+          license: { plan: 'pro', status: 'active', expires_at: null },
+        },
+        workspaceSeq: 2,
+      });
+      store.getState().setCatalog(org2Catalog);
+
+      // Now save resolves
+      resolveSave();
+
+      // Must reject, NOT succeed
+      await expect(updatePromise).rejects.toThrow(/sesión|organización|ContextInvalidated/i);
+
+      // Must NOT toast success
+      expect(toasts).toHaveLength(0);
+
+      // Catalog in store must remain org2Catalog with 0 hardware
+      expect(store.getState().catalog?.hardware).toHaveLength(0);
+    });
+
+    it('R2 — consumidor de patchSaved devuelve false y no autoriza operaciones dependientes tras invalidar contexto', async () => {
+      let resolveSave!: () => void;
+      const savePromise = new Promise<void>((r) => { resolveSave = r; });
+
+      let hardDeleteCalled = false;
+      const { deps } = makeDeps({
+        saveCatalog: async () => {
+          await savePromise;
+        },
+        fetchImpl: (async () => {
+          hardDeleteCalled = true;
+          return new Response(null, { status: 204 });
+        }) as unknown as typeof fetch,
+        getSession: () => 'auth',
+        getAuthToken: () => 'token-test',
+      });
+
+      const store = createCatalogStore({ deps });
+      const initialCat: Catalog = {
+        ...seedCatalog(),
+        categories: [{ id: 'cat-to-delete', name: 'Cat Delete', sortOrder: 0 }],
+      };
+      store.getState().setCatalog(initialCat);
+
+      const deletePromise = store.getState().deleteCategory('cat-to-delete');
+
+      // User logs out or changes org while local save is in flight
+      useWorkspaceStore.setState({ session: null });
+      store.getState().setCatalog(null);
+
+      resolveSave();
+      await deletePromise;
+
+      // hardDeleteOnAuth must NOT have been called because patchSaved must return false when context is invalidated!
+      expect(hardDeleteCalled).toBe(false);
     });
   });
 });

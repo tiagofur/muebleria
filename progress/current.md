@@ -1,19 +1,27 @@
-# Issue #667 — M2: administración de recursos 3D desde React (Correcciones C1–C4)
+# Issue #667 — M2: administración de recursos 3D desde React (Correcciones R1–R3 sobre PR #690)
 
-- Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. PR #690 en rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree aislado.
-- Commit C1-C4: `b7ee3c734a1eff17bd1e069629fa3ac607b30cc4`.
-- Result: `IMPLEMENTED_PENDING_REVIEW`. Correcciones C1–C4 resueltas de punta a punta:
-  - **C1 — Guardado sin rollback obsoleto** (`apps/web/src/stores/catalog/shared.ts`): `makeCatalogStoreCtx` gestiona `confirmedCatalog` y cola `pendingOps`. Al fallar una mutación aislada, sólo se descarta esa tarea y el catálogo optimista se recalcula proyectando las mutaciones restantes sobre el confirmed. Si la sesión o el scope de organización cambió, se suprimen el rollback destructivo y el toast.
-  - **C2 — Reanudación desde estado real de sesión** (`packages/ui/src/catalogs/hardware/HardwareAssetUploadModal.tsx`): `runUploadProcess` consulta server-side `getSession`. Si ya está `finalized` (pérdida de respuesta del finalize previo), recupera `finalized_asset_id` y `finalized_revision_id` y enlaza directamente sin re-subir bytes ni duplicar. Si está `prepared` con `staged`, salta `uploadBytes` y procede a `finalizeUpload`.
-  - **C3 — Cancelación y aislamiento de respuestas tardías** (`HardwareAssetUploadModal.tsx`, `HardwareAssetSelectorModal.tsx`, `Hardware3DSection.tsx`): generación de operación (`opGenerationRef`), `AbortController` por intento y limpieza estricta de `successTimerRef`. Cancelación remota vía `assetService.cancelUpload` si el uploader se cierra con `startUpload` en vuelo. Abort en selector de catálogo al cerrar/desmontar.
-  - **C4 — Montaje independiente del disclosure** (`HardwareAssetUploadModal.tsx`): desacoplamiento entre `advancedOpen` y `hasConfiguredOrigin`. Colapsar el acordeón no descarta datos configurados. Validación estricta de campos finitos en `anchor_offset_mm`.
+- Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. PR #690 en rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree dedicado (`.worktrees/feat-667-hardware-3d-catalog-ui`).
+- Base revisada: `94d72be9e11253bf15ff415c2ace776e466892b2`.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Correcciones R1–R3 resueltas conservando C2 (resunción de sesión finalizada) y C4 (origen preservado con disclosure colapsado):
+  - **R1 — Unidad coherente de guardado y confirmación en cola** (`apps/web/src/stores/catalog/shared.ts`):
+    - *Problema:* `task()` enviaba `get().catalog` (proyección optimista completa con mutaciones posteriores en cola). Al confirmar, solo se incorporaba el updater propio a `confirmedCatalog`. Si fallaba una operación posterior (C), el servidor ya había recibido y persistido C dentro del payload de B, pero la UI la revertía al valor inicial en pantalla.
+    - *Solución:* La unidad de guardado es `op.updater(confirmedCatalog ?? current)`. Las operaciones posteriores en cola permanecen aisladas en `pendingOps`. Al resolver `saveCatalog`, se actualiza `confirmedCatalog = catalogToSave`. Si C falla antes de su escritura, servidor y cliente concuerdan exactamente sin desfasar el estado confirmado ni revertir efectos ya persistidos.
+    - *Evidencia:* Test RED reproducido (`expected 'C updated' to be 'C initial'`), corregido a GREEN en `apps/web/src/stores/catalogStore.test.ts`.
+  - **R2 — Invalidez de contexto tipada y rechazo explícito** (`apps/web/src/stores/catalog/shared.ts`, `apps/web/src/stores/catalogStore.ts`):
+    - *Problema:* El guard posterior al `await saveCatalog` hacía un `return;` silencioso, resolviendo la promesa de `patch()`. Por tanto, `saveAndToast` emitía `✓ Cambios guardados` tras logout o cambio de organización, y `patchSaved` retornaba `true`, habilitando escrituras dependientes (como `hardDeleteOnAuth`) sobre un contexto ajeno.
+    - *Solución:* Introducción y exportación de `ContextInvalidatedError`. `task()` lanza `ContextInvalidatedError` si el `workspaceSeq` cambia antes o después de `saveCatalog`. `saveAndToast` no emite toast de éxito ante invalidación de contexto y propaga el error tipado. `patchSaved` captura `ContextInvalidatedError` y retorna `false`, impidiendo continuaciones dependientes.
+    - *Evidencia:* Tests RED reproducidos (toast indebido y continuación de hard delete), corregidos a GREEN en `apps/web/src/stores/catalogStore.test.ts`.
+  - **R3 — Invalidación centralizada y control ocupado durante retry / confirmación** (`packages/ui/src/catalogs/hardware/HardwareAssetUploadModal.tsx`):
+    - *Problema:* Durante el reintento mientras `getSession` estaba en curso o durante el delay de confirmación de 300 ms, `isBusy` era `false` y el input de archivo permanecía habilitado. Cambiar el archivo no invalidaba `opGenerationRef`, no abortaba la petición en vuelo ni cancelaba el temporizador, provocando que una resolución tardía de A asociara el asset A y cerrara el modal del archivo B.
+    - *Solución:* Se añadió la etapa `'resuming'` al tipo `UploadStage` y se marca inmediatamente al consultar una sesión existente. `isBusy` abarca tanto `'resuming'` como `'confirmed'`. El input de archivo se deshabilita mientras `isBusy`. Se centralizó la invalidación activa en `invalidateActiveAttempt()` (`opGenerationRef++`, `abortController.abort()`, limpieza de `successTimerRef`) ejecutándose al iniciar un nuevo proceso, al desmontar/cerrar el modal, en `resetForm` y en el `onChange` del archivo. Al cancelar remotamente, se verifica `session.status !== 'finalized'` para no cancelar recursos ya completados.
+    - *Evidencia:* Tests RED reproducidos (`fileInput.disabled === false` durante retry y durante confirmed), corregidos a GREEN en `packages/ui/src/catalogs/hardware/Hardware3D.test.tsx` (16/16 PASS).
 - Evidence:
-  - Unitarias UI (`packages/ui/src/catalogs/hardware/Hardware3D.test.tsx`): 14/14 tests PASS (incluyendo pruebas RED->GREEN para C2, C3 y C4).
-  - Unitarias Web (`apps/web/src/stores/catalogStore.test.ts`): 47/47 tests PASS (incluyendo 4 pruebas de aislamiento de rollback, rechazo de mutación en cola y guards de logout/switch org).
-  - Browser E2E real (`./scripts/organization-browser-gate.sh tests/organization/hardware-3d-catalog.spec.ts`): PASS completo (10/10 puntos, 27.0s).
-  - Foundation Gate A (`./scripts/foundation-gate-a.sh`): PASS (50/50 escenarios de auth/browser/MFA/tenant + `git diff --check` limpio).
-  - Monorepo checks: `pnpm openapi:check` PASS (0 drift), `pnpm typecheck` PASS (7/7 paquetes), `pnpm test` PASS monorepo completo.
-- Exclusiones respetadas: sin merge de #667/#666, sin inicio de #668, sin Three.js/WebGL en herrajes, sin Ruby, sin conjuntos (#670).
+  - Unitarias UI (`packages/ui/src/catalogs/hardware/Hardware3D.test.tsx`): 16/16 tests PASS.
+  - Unitarias Web (`apps/web/src/stores/catalogStore.test.ts`): 51/51 tests PASS.
+  - Monorepo unitarias completas: `@granete/ui` 162/162 archivos (1760/1760 PASS), `@granete/web` 36/36 archivos (458/458 PASS).
+  - Browser E2E real (`./scripts/organization-browser-gate.sh tests/organization/hardware-3d-catalog.spec.ts`): 10/10 PASS (27.1s en PostgreSQL desechable aislado).
+  - Integridad y contratos: `pnpm openapi:check` PASS (0 drift), `pnpm typecheck` PASS (7/7 paquetes), `git diff --check` limpio (0 errores de whitespace).
+- Exclusiones respetadas: sin merge de #690, sin cierre de #667/#666, sin inicio de #668/#669/#670, sin cambios de RLS, permisos o migraciones de M1, sin etiquetas protegidas alteradas.
 
 # Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
 

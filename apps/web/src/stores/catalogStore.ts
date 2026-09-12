@@ -32,6 +32,7 @@ import { createCustomersActions } from './catalog/customers';
 import { createMediaActions } from './catalog/media';
 
 export type { CatalogState, CatalogStoreDeps, ToastFn };
+export { ContextInvalidatedError } from './catalog/shared';
 
 export function createCatalogStore(options: {
   readonly deps: CatalogStoreDeps;

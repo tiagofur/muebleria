@@ -258,6 +258,13 @@ export interface CatalogStoreCtx {
   resetCatalog(catalog: Catalog | null): void;
 }
 
+export class ContextInvalidatedError extends Error {
+  constructor(message = 'Operación cancelada: sesión u organización no coinciden') {
+    super(message);
+    this.name = 'ContextInvalidatedError';
+  }
+}
+
 interface PendingOp {
   readonly id: number;
   readonly updater: (catalog: Catalog) => Catalog;
@@ -312,45 +319,53 @@ export function makeCatalogStoreCtx(
       if (getContextScope() !== scope || useWorkspaceStore.getState().session === null) {
         const idx = pendingOps.findIndex((p) => p.id === opId);
         if (idx !== -1) pendingOps.splice(idx, 1);
-        throw new Error('Operación cancelada: sesión u organización no coinciden');
+        throw new ContextInvalidatedError();
       }
 
-      const catalogToSave = get().catalog ?? nextCatalog;
+      // R1: A coherent unit of confirmation:
+      // We send confirmedCatalog + this op's mutation. Subsequent queued optimistic
+      // mutations remain separate in pendingOps and are NOT leaked into this payload.
+      const base = confirmedCatalog ?? current;
+      let catalogToSave: Catalog;
+      try {
+        catalogToSave = op.updater(base);
+      } catch {
+        catalogToSave = base;
+      }
+
       try {
         await saveCatalog(catalogToSave);
 
-        // Guard against scope change that occurred during saveCatalog
+        // Guard against scope change that occurred during saveCatalog (R2)
         if (getContextScope() !== scope || useWorkspaceStore.getState().session === null) {
           const idx = pendingOps.findIndex((p) => p.id === opId);
           if (idx !== -1) pendingOps.splice(idx, 1);
-          return;
+          throw new ContextInvalidatedError();
         }
 
         // Mutation saved successfully!
         const idx = pendingOps.findIndex((p) => p.id === opId);
         if (idx !== -1) pendingOps.splice(idx, 1);
 
-        if (confirmedCatalog) {
-          try {
-            confirmedCatalog = updater(confirmedCatalog);
-          } catch {
-            confirmedCatalog = catalogToSave;
-          }
-        } else {
-          confirmedCatalog = catalogToSave;
-        }
+        confirmedCatalog = catalogToSave;
 
         notifyCatalogMutated();
       } catch (err: unknown) {
-        console.error('Error al guardar catálogo:', err);
-
         const currentSession = useWorkspaceStore.getState().session;
         // Do NOT rollback or toast if session ended or organization changed
-        if (getContextScope() !== scope || currentSession === null) {
+        if (
+          err instanceof ContextInvalidatedError ||
+          getContextScope() !== scope ||
+          currentSession === null
+        ) {
           const idx = pendingOps.findIndex((p) => p.id === opId);
           if (idx !== -1) pendingOps.splice(idx, 1);
-          throw err;
+          throw err instanceof ContextInvalidatedError
+            ? err
+            : new ContextInvalidatedError();
         }
+
+        console.error('Error al guardar catálogo:', err);
 
         // Remove failed op
         const idx = pendingOps.findIndex((p) => p.id === opId);
@@ -401,12 +416,20 @@ export function makeCatalogStoreCtx(
     message: string | null,
     type: 'success' | 'info' = 'success',
   ): Promise<void> {
+    const scope = getContextScope();
     const promise = patch(updater).then(
       () => {
+        if (getContextScope() !== scope || useWorkspaceStore.getState().session === null) {
+          throw new ContextInvalidatedError();
+        }
         if (message) toast({ type, message });
       },
     );
-    promise.catch(() => undefined);
+    promise.catch((err) => {
+      if (err instanceof ContextInvalidatedError) {
+        return;
+      }
+    });
     return promise;
   }
 
@@ -415,6 +438,9 @@ export function makeCatalogStoreCtx(
   ): Promise<boolean> {
     try {
       await patch(updater);
+      if (useWorkspaceStore.getState().session === null) {
+        return false;
+      }
       return true;
     } catch {
       return false;

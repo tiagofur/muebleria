@@ -32,6 +32,7 @@ export type UploadStage =
   | 'starting'
   | 'uploading'
   | 'finalizing'
+  | 'resuming'
   | 'confirmed'
   | 'error'
   | 'cancelled';
@@ -79,12 +80,23 @@ export function HardwareAssetUploadModal({
   const [startKey, setStartKey] = useState<string>(() => newIdempotencyKey());
   const [finalizeKey, setFinalizeKey] = useState<string>(() => newIdempotencyKey());
 
-  // Cancellation and operation scope tracking (C3)
+  // Cancellation and operation scope tracking (C3 / R3)
   const opGenerationRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const invalidateActiveAttempt = () => {
+    opGenerationRef.current++;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    if (successTimerRef.current) {
+      clearTimeout(successTimerRef.current);
+      successTimerRef.current = null;
+    }
+  };
+
   const resetForm = () => {
+    invalidateActiveAttempt();
     setFile(null);
     setDisplayName(targetAssetName ?? '');
     setProvenance('');
@@ -102,46 +114,27 @@ export function HardwareAssetUploadModal({
     setSession(null);
     setStartKey(newIdempotencyKey());
     setFinalizeKey(newIdempotencyKey());
-    if (successTimerRef.current) {
-      clearTimeout(successTimerRef.current);
-      successTimerRef.current = null;
-    }
   };
 
   useEffect(() => {
     if (!open) {
-      opGenerationRef.current++;
-      abortControllerRef.current?.abort();
-      if (successTimerRef.current) {
-        clearTimeout(successTimerRef.current);
-        successTimerRef.current = null;
-      }
+      invalidateActiveAttempt();
     }
     return () => {
-      opGenerationRef.current++;
-      abortControllerRef.current?.abort();
-      if (successTimerRef.current) {
-        clearTimeout(successTimerRef.current);
-        successTimerRef.current = null;
-      }
+      invalidateActiveAttempt();
     };
   }, [open]);
 
   const handleClose = () => {
-    if (stage === 'starting' || stage === 'uploading' || stage === 'finalizing') {
+    if (stage === 'starting' || stage === 'uploading' || stage === 'finalizing' || stage === 'resuming') {
       if (!window.confirm('Hay una carga en curso. ¿Deseas cancelarla?')) {
         return;
       }
-      if (session && assetService) {
+      if (session && assetService && session.status !== 'finalized') {
         void assetService.cancelUpload(session.id);
       }
     }
-    opGenerationRef.current++;
-    abortControllerRef.current?.abort();
-    if (successTimerRef.current) {
-      clearTimeout(successTimerRef.current);
-      successTimerRef.current = null;
-    }
+    invalidateActiveAttempt();
     resetForm();
     onClose();
   };
@@ -210,20 +203,21 @@ export function HardwareAssetUploadModal({
       return;
     }
 
-    const currentGen = ++opGenerationRef.current;
-    abortControllerRef.current?.abort();
+    invalidateActiveAttempt();
+    const currentGen = opGenerationRef.current;
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
-    if (successTimerRef.current) {
-      clearTimeout(successTimerRef.current);
-      successTimerRef.current = null;
-    }
 
     const isStale = () =>
       opGenerationRef.current !== currentGen || abortController.signal.aborted;
 
     setError(null);
     let activeSession = sessionToResume;
+
+    // R3: Model session querying / resuming as busy stage immediately
+    if (activeSession) {
+      setStage('resuming');
+    }
 
     try {
       // C2: If resuming an existing session, query authoritative state from the server first
@@ -323,6 +317,7 @@ export function HardwareAssetUploadModal({
 
       // Step 4: Session is finalized: read asset and select exact revision
       if (activeSession.status === 'finalized') {
+        setStage('finalizing');
         const assetId = activeSession.finalized_asset_id;
         const revisionId = activeSession.finalized_revision_id;
         if (!assetId || !revisionId) {
@@ -383,7 +378,11 @@ export function HardwareAssetUploadModal({
   };
 
   const isBusy =
-    stage === 'starting' || stage === 'uploading' || stage === 'finalizing';
+    stage === 'starting' ||
+    stage === 'uploading' ||
+    stage === 'finalizing' ||
+    stage === 'resuming' ||
+    stage === 'confirmed';
 
   return (
     <Modal
@@ -408,6 +407,7 @@ export function HardwareAssetUploadModal({
               type="button"
               className="btn btn--primary"
               onClick={handleRetry}
+              disabled={isBusy}
               data-testid="hardware-asset-upload-retry-btn"
             >
               <RefreshCw size={14} aria-hidden /> Reintentar
@@ -416,7 +416,7 @@ export function HardwareAssetUploadModal({
             <button
               type="button"
               className="btn btn--primary"
-              disabled={!file || isBusy || stage === 'confirmed'}
+              disabled={!file || isBusy}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -424,13 +424,15 @@ export function HardwareAssetUploadModal({
               }}
               data-testid="hardware-asset-upload-submit-btn"
             >
-              {isBusy ? (
+              {isBusy && stage !== 'confirmed' ? (
                 <>
                   <Loader2 className="catalog-spin" size={14} aria-hidden />
                   {stage === 'starting'
                     ? 'Iniciando...'
                     : stage === 'uploading'
                     ? 'Subiendo archivo...'
+                    : stage === 'resuming'
+                    ? 'Consultando sesión...'
                     : 'Finalizando...'}
                 </>
               ) : (
@@ -470,6 +472,7 @@ export function HardwareAssetUploadModal({
             accept=".skp,.glb,model/gltf-binary,application/octet-stream"
             disabled={isBusy}
             onChange={(e) => {
+              invalidateActiveAttempt();
               const selected = e.target.files?.[0] ?? null;
               setFile(selected);
               if (selected && !targetAssetId && !displayName) {

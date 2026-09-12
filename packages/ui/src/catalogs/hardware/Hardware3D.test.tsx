@@ -828,4 +828,144 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     ).toBeTruthy();
     expect(service.startUpload).not.toHaveBeenCalled();
   });
+
+  it('15. R3 - Retry con getSession demorado marca uploader como ocupado e invalidar/cambiar archivo no aplica binding de A', async () => {
+    const user = userEvent.setup();
+    let finalizeAttempts = 0;
+    let resolveGetSessionA!: (s: HardwareAssetUploadSession) => void;
+    const getSessionAPromise = new Promise<HardwareAssetUploadSession>((res) => {
+      resolveGetSessionA = res;
+    });
+
+    const service = makeMockService({
+      startUpload: vi.fn().mockResolvedValue({
+        id: 'session-A',
+        representation: 'skp',
+        display_name: 'Modelo A',
+        status: 'prepared',
+        created_at: '2026-09-12T10:00:00Z',
+        expires_at: new Date(Date.now() + 1800000).toISOString(),
+      }),
+      finalizeUpload: vi.fn().mockImplementation(async () => {
+        finalizeAttempts++;
+        if (finalizeAttempts === 1) {
+          throw new Error('Simulated network drop on finalize response');
+        }
+        return mockAssetActive;
+      }),
+      getSession: vi.fn().mockImplementation(async (id: string) => {
+        if (id === 'session-A') {
+          return getSessionAPromise;
+        }
+        return {
+          id,
+          representation: 'skp',
+          display_name: 'Modelo B',
+          status: 'finalized',
+          created_at: '2026-09-12T10:00:00Z',
+          expires_at: new Date(Date.now() + 1800000).toISOString(),
+          finalized_asset_id: 'asset-uuid-1',
+          finalized_revision_id: 'rev-uuid-2',
+        };
+      }),
+    });
+
+    const onCreate = vi.fn();
+    render(
+      <HardwareCatalog
+        hardware={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={service}
+      />,
+    );
+
+    // Open new hardware modal
+    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-3d-section-toggle'));
+    await user.click(screen.getByTestId('hardware-3d-tab-file'));
+    await user.click(screen.getByTestId('hardware-open-upload-btn'));
+
+    const fileA = new File(['fake-skp-A'], 'modelA.skp', { type: 'application/octet-stream' });
+    const fileInput = screen.getByTestId('hardware-asset-file-input') as HTMLInputElement;
+    await user.upload(fileInput, fileA);
+
+    // Submit upload for file A
+    fireEvent.submit(screen.getByTestId('hardware-asset-upload-modal').querySelector('form')!);
+
+    // Wait for finalize failure and error state
+    await waitFor(() => {
+      expect(screen.getByTestId('hardware-upload-error')).toBeTruthy();
+      expect(screen.getByTestId('hardware-asset-upload-retry-btn')).toBeTruthy();
+    });
+
+    // Click retry -> calls runUploadProcess(fileA, sessionA) which awaits getSession('session-A')
+    await user.click(screen.getByTestId('hardware-asset-upload-retry-btn'));
+
+    // R3 requirement 1: while getSession is in flight, the uploader MUST be busy and file input disabled!
+    // In buggy code: stage remains 'error', isBusy is false, so fileInput is NOT disabled!
+    expect(fileInput.disabled).toBe(true);
+
+    // User selects file B (e.g. user changes file input)
+    const fileB = new File(['fake-skp-B'], 'modelB.skp', { type: 'application/octet-stream' });
+    // Trigger file change
+    fireEvent.change(fileInput, { target: { files: [fileB] } });
+
+    // Now resolve session A's getSession as finalized
+    resolveGetSessionA({
+      id: 'session-A',
+      representation: 'skp',
+      display_name: 'Modelo A',
+      status: 'finalized',
+      created_at: '2026-09-12T10:00:00Z',
+      expires_at: new Date(Date.now() + 1800000).toISOString(),
+      finalized_asset_id: 'asset-uuid-1',
+      finalized_revision_id: 'rev-uuid-1',
+    });
+
+    // Wait short time to ensure any asynchronous handlers run
+    await new Promise((r) => setTimeout(r, 50));
+
+    // File A must NOT have succeeded or closed the modal or bound to form
+    // The upload modal must still be open and file A's revision must NOT be bound
+    expect(screen.getByTestId('hardware-asset-upload-modal')).toBeTruthy();
+  });
+
+  it('16. R3 - Input de archivo está deshabilitado durante el estado confirmed (retraso 300ms)', async () => {
+    const user = userEvent.setup();
+    const service = makeMockService();
+
+    render(
+      <HardwareCatalog
+        hardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        assetService={service}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo herraje/i }));
+    await user.click(screen.getByTestId('hardware-3d-section-toggle'));
+    await user.click(screen.getByTestId('hardware-3d-tab-file'));
+    await user.click(screen.getByTestId('hardware-open-upload-btn'));
+
+    const file = new File(['fake-skp'], 'test.skp', { type: 'application/octet-stream' });
+    const fileInput = screen.getByTestId('hardware-asset-file-input') as HTMLInputElement;
+    await user.upload(fileInput, file);
+
+    fireEvent.submit(screen.getByTestId('hardware-asset-upload-modal').querySelector('form')!);
+
+    // Wait until confirmed banner is rendered
+    await waitFor(() => {
+      expect(screen.getByTestId('hardware-upload-success')).toBeTruthy();
+    });
+
+    // During confirmed stage before 300ms timer fires:
+    // File input MUST be disabled!
+    expect(fileInput.disabled).toBe(true);
+  });
 });
