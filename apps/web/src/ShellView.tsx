@@ -983,6 +983,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             createdAt: quoteAuthority.revision.createdAt,
             publishedAt: quoteAuthority.revision.publishedAt,
             acceptedAt: quoteAuthority.revision.acceptedAt,
+            newerRevisionNumber: quoteAuthority.newerRevisionNumber,
             message: quoteAuthority.message,
             staleMessage: quoteAuthority.staleMessage,
             onRetry: quoteAuthority.retry,

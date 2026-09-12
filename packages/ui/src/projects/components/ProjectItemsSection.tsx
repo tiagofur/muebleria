@@ -207,14 +207,27 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
         >
           <p>{quoteAuthority.message}</p>
           {onOpenReconciliation ? (
-            <button
-              type="button"
-              className="btn btn--primary btn--small"
-              onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
-              data-testid="legacy-modernize-btn"
-            >
-              Crear nueva revisión actualizada
-            </button>
+            quoteAuthority.newerRevisionNumber != null ? (
+              // #642 re-entry: a newer modern revision exists — continue it,
+              // never offer a second modernization of the stale legacy base.
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+                data-testid="legacy-continue-btn"
+              >
+                Continuar Q{quoteAuthority.newerRevisionNumber}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+                data-testid="legacy-modernize-btn"
+              >
+                Crear nueva revisión actualizada
+              </button>
+            )
           ) : null}
           {quoteAuthority.staleMessage ? (
             <p style={{ fontSize: '0.85rem' }}>{quoteAuthority.staleMessage}</p>

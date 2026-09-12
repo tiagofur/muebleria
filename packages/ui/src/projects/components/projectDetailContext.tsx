@@ -62,6 +62,8 @@ export type ProjectDetailQuoteAuthority =
       readonly createdAt?: string;
       readonly publishedAt?: string | null;
       readonly acceptedAt?: string | null;
+      /** #642 re-entry: a newer revision exists — continue it, never re-mint. */
+      readonly newerRevisionNumber?: number;
       readonly message: string;
       readonly staleMessage?: string;
       readonly onRetry: () => void;

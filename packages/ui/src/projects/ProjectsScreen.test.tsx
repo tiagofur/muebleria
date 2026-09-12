@@ -660,6 +660,46 @@ describe('ProjectsScreen F022', () => {
     expect(onOpenReconciliation).toHaveBeenCalledWith('prj-1', 'quote-1');
   });
 
+  it('#642 legacy re-entry: with a newer modern draft the detail offers continuing it, never a second modernization', async () => {
+    const user = userEvent.setup();
+    const onOpenReconciliation = vi.fn();
+    renderScreen({
+      breakdown: null,
+      quoteAuthority: {
+        kind: 'legacy',
+        revisionId: 'quote-1',
+        revisionNumber: 1,
+        status: 'accepted',
+        items: [
+          {
+            furnitureInstanceId: 'fi-legacy-1',
+            furnitureDefinitionId: 'mod-1',
+            parameters: { widthMm: 600, heightMm: 720, depthMm: 560 },
+            materialChoices: {},
+            lifecycleStatus: 'active' as const,
+          },
+        ],
+        newerRevisionNumber: 2,
+        message: 'Esta revisión fue creada antes del historial comercial congelado.',
+        onRetry: vi.fn(),
+      },
+      onOpenReconciliation,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+
+    // Q2 already exists as the exact latest: the stale-base modernize CTA is
+    // gone and the honest action continues the existing modern revision.
+    expect(screen.queryByTestId('legacy-modernize-btn')).toBeNull();
+    const continueBtn = screen.getAllByTestId('legacy-continue-btn')[0]!;
+    expect(continueBtn.textContent).toContain('Continuar Q2');
+    // The chrome meta names the modern draft without faking authority.
+    expect(screen.getByTestId('quote-legacy-meta').textContent).toContain('Q2 en borrador');
+
+    await user.click(continueBtn);
+    expect(onOpenReconciliation).toHaveBeenCalledWith('prj-1', 'quote-1');
+  });
+
   it('#642 legacy recovery: persisted fields never change with the mutable catalog — only marked current labels do', async () => {
     const user = userEvent.setup();
     const legacyAuthority = {

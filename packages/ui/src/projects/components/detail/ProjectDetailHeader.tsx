@@ -195,6 +195,9 @@ export function ProjectDetailHeader({
                     legacyAuthority.createdAt ? `creada ${formatIsoDate(legacyAuthority.createdAt)}` : null,
                     legacyAuthority.publishedAt ? `publicada ${formatIsoDate(legacyAuthority.publishedAt)}` : null,
                     legacyAuthority.acceptedAt ? `aceptada ${formatIsoDate(legacyAuthority.acceptedAt)}` : null,
+                    legacyAuthority.newerRevisionNumber != null
+                      ? `Q${legacyAuthority.newerRevisionNumber} en borrador`
+                      : null,
                   ]
                     .filter((part) => part !== null)
                     .join(' · ')
@@ -265,19 +268,33 @@ export function ProjectDetailHeader({
           </button>
         ) : null}
         {(quoteAuthority?.kind === 'empty' || quoteAuthority?.kind === 'legacy') && onOpenReconciliation ? (
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => onOpenReconciliation(
-              project.id,
-              quoteAuthority.kind === 'legacy' ? quoteAuthority.revisionId : undefined,
-            )}
-            data-testid={quoteAuthority.kind === 'legacy' ? 'legacy-modernize-btn' : undefined}
-          >
-            {quoteAuthority.kind === 'legacy'
-              ? 'Crear nueva revisión actualizada'
-              : 'Crear nueva revisión'}
-          </button>
+          quoteAuthority.kind === 'legacy' && quoteAuthority.newerRevisionNumber != null ? (
+            // #642 re-entry: a newer modern revision already exists — the
+            // honest action is continuing it in reconciliation (which
+            // highlights it), never a second modernization of the stale base.
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+              data-testid="legacy-continue-btn"
+            >
+              Continuar Q{quoteAuthority.newerRevisionNumber}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => onOpenReconciliation(
+                project.id,
+                quoteAuthority.kind === 'legacy' ? quoteAuthority.revisionId : undefined,
+              )}
+              data-testid={quoteAuthority.kind === 'legacy' ? 'legacy-modernize-btn' : undefined}
+            >
+              {quoteAuthority.kind === 'legacy'
+                ? 'Crear nueva revisión actualizada'
+                : 'Crear nueva revisión'}
+            </button>
+          )
         ) : null}
         {primary === 'open-production' && onOpenInProduction ? (
           <button

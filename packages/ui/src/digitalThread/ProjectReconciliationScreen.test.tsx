@@ -507,6 +507,98 @@ describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
     expect(keys.reconciliation('q1', 'r1')).not.toEqual(keys.reconciliation('q1', 'r2'));
   });
 
+  describe('#642 legacy recovery re-entry', () => {
+    const legacyQ1: QuoteRevisionDetail = {
+      id: QUOTE_1_ID,
+      projectId: PROJECT_ID,
+      revisionNumber: 1,
+      status: 'accepted',
+      sourceType: 'manual',
+      baseQuoteRevisionId: null,
+      sourceDesignRevisionId: null,
+      createdBy: null,
+      createdAt: '2026-01-01T09:00:00Z',
+      items: [],
+    };
+    const modernQ2Draft: QuoteRevisionDetail = {
+      id: QUOTE_2_ID,
+      projectId: PROJECT_ID,
+      revisionNumber: 2,
+      status: 'draft',
+      sourceType: 'manual',
+      baseQuoteRevisionId: QUOTE_1_ID,
+      sourceDesignRevisionId: null,
+      createdBy: null,
+      createdAt: '2026-01-02T09:00:00Z',
+      commercialSnapshot: {
+        schema: 'granete.quote-commercial-snapshot.v1',
+        capturedAt: '2026-01-02T09:00:00Z',
+        currency: 'MXN',
+        customer: { id: 'cust-1', name: 'Cliente' },
+        project: { id: PROJECT_ID, name: 'Obra' },
+        breakdown: {
+          materialsCost: 100,
+          edgeTotal: 10,
+          hardwareTotal: 20,
+          directCost: 130,
+          laborModular: 0,
+          laborFixedCost: 0,
+          marginFactor: 1.3,
+          salePrice: 169,
+        },
+        lines: [],
+        units: [],
+      },
+      items: [],
+    };
+
+    it('offers resume (never a second mint) when the selected legacy is NOT the exact latest', async () => {
+      const user = userEvent.setup();
+      const onContextChange = vi.fn();
+      setupFetchMock({
+        quoteRevisions: [legacyQ1, modernQ2Draft],
+        designs: [],
+      });
+      renderScreen({
+        initialContext: { quoteRevisionId: QUOTE_1_ID, designId: null, designRevisionId: null },
+        onContextChange,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('legacy-resume-latest-panel')).toBeVisible();
+      });
+      expect(screen.getByTestId('legacy-resume-latest-panel').textContent).toContain('Q2');
+      expect(screen.getByTestId('legacy-resume-latest-panel').textContent).toContain('Ya existe una revisión moderna más reciente');
+      // The stale modernize CTA must be gone: the backend would reject the base.
+      expect(screen.queryByTestId('legacy-modernize-panel')).toBeNull();
+      expect(screen.queryByTestId('legacy-modernize-btn')).toBeNull();
+
+      await user.click(screen.getByTestId('legacy-resume-latest-btn'));
+      expect(onContextChange).toHaveBeenCalledWith(
+        expect.objectContaining({ quoteRevisionId: QUOTE_2_ID }),
+      );
+      // Context moved to the modern Q2: both legacy panels disappear.
+      expect(screen.queryByTestId('legacy-resume-latest-panel')).toBeNull();
+      expect(screen.queryByTestId('legacy-modernize-panel')).toBeNull();
+    });
+
+    it('keeps the modernize CTA when the legacy revision is the exact latest', async () => {
+      setupFetchMock({
+        quoteRevisions: [legacyQ1],
+        designs: [],
+      });
+      renderScreen({
+        initialContext: { quoteRevisionId: QUOTE_1_ID, designId: null, designRevisionId: null },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('legacy-modernize-panel')).toBeVisible();
+      });
+      expect(screen.getByTestId('legacy-modernize-btn')).toBeEnabled();
+      expect(screen.queryByTestId('legacy-resume-latest-panel')).toBeNull();
+    });
+  });
+
   it('renders exact Q1/R1 header with server statuses and contextual release badge', async () => {
     setupFetchMock();
     renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });

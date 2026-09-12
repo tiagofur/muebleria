@@ -201,6 +201,25 @@ test.describe.serial('#642 legacy quote recovery', () => {
     const draftStageDetail = page.getByTestId('project-detail');
     await expect(draftStageDetail.getByTestId('quote-legacy-badge')).toContainText('Q1 · Cotización anterior');
 
+    // #642 re-entry: with the modern Q2 already existing, coming back to the
+    // detail must NOT offer a second modernization of the stale legacy base —
+    // the honest action resumes the existing modern draft.
+    await expect(draftStageDetail.getByTestId('legacy-modernize-btn')).toHaveCount(0);
+    const continueBtn = draftStageDetail.getByTestId('legacy-continue-btn').first();
+    await expect(continueBtn).toContainText('Continuar Q2');
+    await continueBtn.click();
+
+    // Reconciliation highlights the existing modern draft: no modernize CTA
+    // for the stale legacy, and opening Q2 changes the context without
+    // minting anything (no Q3).
+    await expect(page.getByTestId('legacy-resume-latest-panel')).toBeVisible();
+    await expect(page.getByTestId('legacy-resume-latest-panel')).toContainText('Ya existe una revisión moderna más reciente');
+    await expect(page.getByTestId('legacy-modernize-btn')).toHaveCount(0);
+    await page.getByTestId('legacy-resume-latest-btn').click();
+    await expect(page.getByTestId('legacy-resume-latest-panel')).toHaveCount(0);
+    await expect(page.getByTestId('legacy-modernize-panel')).toHaveCount(0);
+    expect(await client.listProjectQuoteRevisions(token, PROJECT_ID)).toHaveLength(2);
+
     // Walk Q2 through the normal modern lifecycle (draft → published →
     // accepted); acceptance atomically supersedes the legacy baseline.
     await client.publishProjectQuoteRevision(token, PROJECT_ID, q2!.id, 'gate-legacy-q2-publish');
@@ -216,6 +235,7 @@ test.describe.serial('#642 legacy quote recovery', () => {
     // ...and the legacy row is only superseded — never rewritten, never
     // backfilled: snapshot still NULL, items still 3.
     const afterAccept = await client.listProjectQuoteRevisions(token, PROJECT_ID);
+    expect(afterAccept).toHaveLength(2);
     const q1After = afterAccept.find((r) => r.id === LEGACY_REVISION_ID);
     expect(q1After?.status).toBe('superseded');
     expect(q1After?.commercialSnapshot ?? null).toBeNull();
