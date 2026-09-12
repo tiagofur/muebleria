@@ -2335,6 +2335,73 @@ describe('#642 / 2A commercial summaries dataset states', () => {
   });
 });
 
+describe('WITHHELD ≠ ZERO — org-redacted retail amount in the detail chrome (#642/3)', () => {
+  const withheldBreakdown = { ...sampleBreakdown, salePrice: 0 } as typeof sampleBreakdown;
+
+  const readyAuthority = (amountsWithheld?: boolean) => ({
+    kind: 'ready' as const,
+    revisionId: 'quote-2',
+    revisionNumber: 2,
+    status: 'accepted' as const,
+    projectName: 'Cocina congelada Q2',
+    customerId: 'cust-bruno',
+    customerName: 'Cliente congelado Q2',
+    furnitureQuantity: 7,
+    currency: 'USD',
+    capturedAt: '2026-09-10T12:00:00Z',
+    ...(amountsWithheld ? { amountsWithheld: true } : {}),
+    onRetry: vi.fn(),
+  });
+
+  it('manufacturing-only (amountsWithheld) never sees a $0 header — honest absence instead', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: withheldBreakdown,
+      quoteAuthority: readyAuthority(true),
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const total = screen.getByTestId('project-detail-total');
+    expect(total.textContent).toContain('Precio de venta');
+    expect(total.textContent).toContain('No disponible para tu organización');
+    expect(total.textContent).not.toContain('$0');
+    expect(total.textContent).not.toContain('0.00');
+  });
+
+  it('manufacturing-only WhatsApp message omits the amount entirely (no redacted $0)', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: withheldBreakdown,
+      quoteAuthority: readyAuthority(true),
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByTitle('Enviar WhatsApp a Cliente congelado Q2'));
+    const message = screen.getByLabelText('Mensaje a Enviar:') as HTMLTextAreaElement;
+    expect(message.value).toContain('Cocina congelada Q2');
+    expect(message.value).not.toContain('$0');
+    expect(message.value).not.toContain('$ 0');
+    expect(message.value).not.toMatch(/0\.00/);
+  });
+
+  it('owner/sales (no withholding) keeps the real price in header and WhatsApp', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: { ...sampleBreakdown, salePrice: 15000 },
+      quoteAuthority: readyAuthority(undefined),
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const total = screen.getByTestId('project-detail-total');
+    expect(total.textContent).toContain('$15,000.00 USD');
+    expect(total.textContent).not.toContain('No disponible');
+
+    await user.click(screen.getByTitle('Enviar WhatsApp a Cliente congelado Q2'));
+    const message = screen.getByLabelText('Mensaje a Enviar:') as HTMLTextAreaElement;
+    expect(message.value).toContain('$15,000.00 USD');
+  });
+});
+
 describe('commercial export picker acts on exact revisions (#642/3)', () => {
   const q2Detail = {
     id: 'quote-2',

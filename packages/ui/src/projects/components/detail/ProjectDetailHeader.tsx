@@ -212,6 +212,9 @@ export function ProjectDetailHeader({
                     customerName={frozenAuthority.customerName}
                     phone={frozenCustomer.phone}
                     projectName={frozenAuthority.projectName}
+                    // #642/3: when retail amounts are org-withheld, chromeSale
+                    // is null upstream → the message omits the amount (never
+                    // a redacted $0). Owner/sales keep the real amount.
                     quoteAmount={chromeSale != null ? formatProjectMoney(chromeSale, frozenAuthority.currency) : undefined}
                     workshopName={ctx.workshopName}
                     compact
@@ -244,8 +247,23 @@ export function ProjectDetailHeader({
       </div>
       <div className="workspace-chrome__total" data-testid="project-detail-total">
         <span className="workspace-chrome__total-label">Precio de venta</span>
-        <span className={chromeSale == null ? 'workspace-chrome__total-value workspace-chrome__total-value--muted' : 'workspace-chrome__total-value'}>
-          {chromeSale == null || !detailCurrency ? '—' : formatProjectMoney(chromeSale, detailCurrency)}
+        <span
+          className={
+            chromeSale == null
+              ? 'workspace-chrome__total-value workspace-chrome__total-value--muted'
+              : 'workspace-chrome__total-value'
+          }
+          data-testid={frozenAuthority?.amountsWithheld === true ? 'withheld-chrome-total' : undefined}
+        >
+          {frozenAuthority?.amountsWithheld === true ? (
+            // #642/3 — WITHHELD ≠ ZERO: the org-level redacted amount is
+            // honest absence, never a fake $0.
+            '— No disponible para tu organización'
+          ) : chromeSale == null || !detailCurrency ? (
+            '—'
+          ) : (
+            formatProjectMoney(chromeSale, detailCurrency)
+          )}
         </span>
       </div>
       <div
