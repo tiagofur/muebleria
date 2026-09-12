@@ -149,8 +149,9 @@ test.describe.serial('#642 legacy quote recovery', () => {
     await expect(card).toContainText('Cotización anterior');
     await expect(card).toContainText('3 muebles');
     await expect(card.getByTestId(`project-card-price-legacy-${PROJECT_ID}`)).toContainText('No disponible');
-    expect(card.textContent()).not.toContain('$0');
-    expect(card.textContent()).not.toContain('Sin cotización');
+    const cardText = await card.textContent();
+    expect(cardText).not.toContain('$0');
+    expect(cardText).not.toContain('Sin cotización');
 
     // The DETAIL renders the persisted units read-only — no empty screen.
     await card.click();
@@ -165,7 +166,7 @@ test.describe.serial('#642 legacy quote recovery', () => {
 
     // Honest money: unavailable, never zero, never recalculated.
     await expect(detail.getByTestId('legacy-price-unavailable')).toContainText('No disponible con precisión');
-    expect(detail.getByTestId('project-detail-total').textContent()).not.toContain('$0');
+    expect(await detail.getByTestId('project-detail-total').textContent()).not.toContain('$0');
 
     // Modernize: the CTA routes to reconciliation with the exact legacy base.
     await detail.getByTestId('legacy-modernize-btn').first().click();
