@@ -175,18 +175,16 @@ test.describe.serial('#642 legacy quote recovery', () => {
     await expect(page.getByTestId('legacy-modernize-panel')).toBeVisible();
     await expect(page.getByTestId('legacy-modernize-panel')).toContainText('Q1 · Cotización anterior');
 
-    // Mint the modern Q2 through the real command.
+    // Mint the modern Q2 through the real command. This fixture has NO design
+    // context on purpose: modernization mints the next revision from the
+    // current editable commercial state and must work without one. Success is
+    // the panel switching off (the context now pins the modern Q2) plus the
+    // API readback below.
     await page.getByTestId('legacy-modernize-btn').click();
-    await expect(page.getByTestId('quote-lifecycle-success')).toContainText('Q2');
-    await expect(page.getByTestId('quote-revision-select')).toContainText('Q2');
+    await expect(page.getByTestId('legacy-modernize-panel')).toHaveCount(0);
 
-    // Back on the detail: the modern authority now owns the surface.
-    await page.goto(`/quotes/${PROJECT_ID}`);
-    const modernDetail = page.getByTestId('project-detail');
-    await expect(modernDetail.getByTestId('quote-revision-badge')).toContainText('Q2 · Solo lectura');
-    await expect(modernDetail.getByTestId('legacy-price-unavailable')).toHaveCount(0);
-
-    // Q1 is intact: still accepted, still snapshot-less, items untouched.
+    // Q2 exists as a modern draft; Q1 is byte-intact (still accepted, still
+    // snapshot-less, items untouched).
     const revisions = await client.listProjectQuoteRevisions(token, PROJECT_ID);
     const q1 = revisions.find((r) => r.id === LEGACY_REVISION_ID);
     const q2 = revisions.find((r) => r.revisionNumber === 2);
@@ -196,5 +194,31 @@ test.describe.serial('#642 legacy quote recovery', () => {
     expect(q2?.status).toBe('draft');
     expect(q2?.commercialSnapshot).toBeTruthy();
     expect(q2?.baseQuoteRevisionId).toBe(LEGACY_REVISION_ID);
+
+    // While Q2 is only a draft, the accepted legacy Q1 REMAINS the commercial
+    // authority of the detail (accepted wins until superseded — 2A rule).
+    await page.goto(`/quotes/${PROJECT_ID}`);
+    const draftStageDetail = page.getByTestId('project-detail');
+    await expect(draftStageDetail.getByTestId('quote-legacy-badge')).toContainText('Q1 · Cotización anterior');
+
+    // Walk Q2 through the normal modern lifecycle (draft → published →
+    // accepted); acceptance atomically supersedes the legacy baseline.
+    await client.publishProjectQuoteRevision(token, PROJECT_ID, q2!.id, 'gate-legacy-q2-publish');
+    await client.acceptProjectQuoteRevision(token, PROJECT_ID, q2!.id, 'gate-legacy-q2-accept');
+
+    // The detail now renders the modern frozen authority...
+    await page.reload();
+    const modernDetail = page.getByTestId('project-detail');
+    await expect(modernDetail.getByTestId('quote-revision-badge')).toContainText('Q2 · Solo lectura');
+    await expect(modernDetail.getByTestId('quote-legacy-badge')).toHaveCount(0);
+    await expect(modernDetail.getByTestId('legacy-price-unavailable')).toHaveCount(0);
+
+    // ...and the legacy row is only superseded — never rewritten, never
+    // backfilled: snapshot still NULL, items still 3.
+    const afterAccept = await client.listProjectQuoteRevisions(token, PROJECT_ID);
+    const q1After = afterAccept.find((r) => r.id === LEGACY_REVISION_ID);
+    expect(q1After?.status).toBe('superseded');
+    expect(q1After?.commercialSnapshot ?? null).toBeNull();
+    expect(q1After?.items).toHaveLength(3);
   });
 });
