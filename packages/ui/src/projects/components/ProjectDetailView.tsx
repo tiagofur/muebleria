@@ -32,6 +32,7 @@ import type {
   WarrantyPhotoKind,
   WarrantyTicket,
 } from '@granete/domain';
+import { projectAllowsProductionChrome } from './projectDetailContext';
 
 import {
   Copy,
@@ -356,6 +357,7 @@ export interface ProjectDetailViewProps {
 
 function resolveChromePrimary(args: {
   status: ProjectStatus;
+  hasProductionReleaseAuthority: boolean;
   canMutate: boolean;
   canMarkProduced: boolean;
   hasMarkProduced: boolean;
@@ -364,15 +366,21 @@ function resolveChromePrimary(args: {
 }): ChromePrimary {
   const {
     status,
+    hasProductionReleaseAuthority,
     canMarkProduced,
     hasMarkProduced,
     hasExport,
     hasOpenInProduction,
   } = args;
-  if (
-    (status === 'accepted' || status === 'produced') &&
-    hasOpenInProduction
-  ) {
+  // #642/#577: advancing to production from Cotizaciones follows the
+  // MANUFACTURING authority — the canonical ProductionRelease the server
+  // resolved for this project. Commercial acceptance (an accepted
+  // QuoteRevision) is a precondition for creating a release, never a
+  // substitute for having one. hasProductionReleaseAuthority keeps the
+  // legacy accepted/produced statuses only as pre-Digital-Thread
+  // compatibility; mark-produced stays bound to the literal project status:
+  // it mutates that legacy lifecycle itself.
+  if (hasProductionReleaseAuthority && hasOpenInProduction) {
     return 'open-production';
   }
   if (
@@ -383,10 +391,7 @@ function resolveChromePrimary(args: {
   ) {
     return 'mark-produced';
   }
-  if (
-    (status === 'accepted' || status === 'produced') &&
-    hasExport
-  ) {
+  if (hasProductionReleaseAuthority && hasExport) {
     return 'export';
   }
   return null;
@@ -448,8 +453,17 @@ function ProjectDetailViewInner(): ReactNode {
     canMutate &&
     project.status === 'draft' &&
     (!ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty');
+  // #642/#577: ONE shared rule with the list chrome (projectAllowsProductionChrome):
+  // canonical ProductionRelease for modern projects; legacy statuses only when
+  // we POSITIVELY know there is no Digital Thread quote authority (undefined /
+  // empty). loading and error are UNKNOWN, not pre-DT — fail closed.
+  const hasProductionReleaseAuthority = projectAllowsProductionChrome(
+    project,
+    ctx.quoteAuthority,
+  );
   const primary = resolveChromePrimary({
     status: project.status,
+    hasProductionReleaseAuthority,
     canMutate,
     canMarkProduced,
     hasMarkProduced: Boolean(onMarkProduced),

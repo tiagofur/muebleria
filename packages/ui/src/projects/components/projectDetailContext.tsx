@@ -27,6 +27,7 @@ import type {
   QuoteBreakdown,
   Structure,
 } from '@granete/domain';
+import { releaseAuthorityOf } from '@granete/domain';
 
 import type { DropdownMenuSection } from '../../common';
 import type { CostingHandlers } from './CostingPanel';
@@ -71,6 +72,37 @@ export type ProjectDetailQuoteAuthority =
       readonly snapshot?: import('@granete/storage').QuoteCommercialSnapshot;
       readonly items?: ReadonlyArray<import('@granete/storage').QuoteRevisionItem>;
     };
+
+/**
+ * #642/#577 review: does the Cotizaciones production chrome (`Abrir en
+ * Producción`, production exports) apply to this project? The answer follows
+ * the MANUFACTURING authority — the canonical ProductionRelease the server
+ * resolved (`releaseAuthorityOf`) — never commercial acceptance: an accepted
+ * QuoteRevision is a precondition for creating a release, not a substitute
+ * for having one.
+ *
+ * Legacy `accepted|produced` statuses stay compatibility-only and apply ONLY
+ * when we positively know the project has no Digital Thread quote authority:
+ * the authority surface is not wired at all (`undefined`, true pre-DT/local
+ * mode) or the server answered that no quote revision exists (`empty`).
+ * `loading` and `error` mean UNKNOWN, not pre-Digital-Thread: they fail
+ * closed — a residual legacy status must never unlock production while we
+ * still don't know whether a modern quote exists.
+ */
+export function projectAllowsProductionChrome(
+  project: Project,
+  quoteAuthority: ProjectDetailQuoteAuthority | undefined,
+): boolean {
+  if (releaseAuthorityOf(project)?.source === 'canonical') {
+    return true;
+  }
+  const allowLegacyCompatibility =
+    quoteAuthority === undefined || quoteAuthority.kind === 'empty';
+  return (
+    allowLegacyCompatibility &&
+    (project.status === 'accepted' || project.status === 'produced')
+  );
+}
 
 // ─── Item handlers ──────────────────────────────────────────────────
 

@@ -243,6 +243,14 @@ test('2A: Q1 accepted through the Web UI lands on the list as the commercial aut
   const projects = await repository.getProjects();
   const stored = projects.find((p) => p.id === seeded.projectId);
   expect(stored?.status).toBe('draft');
+
+  // #642 review: commercial acceptance is NOT manufacturing authority. Q1 is
+  // accepted and the project is draft, but NO ProductionRelease exists — the
+  // Cotizaciones chrome must not offer production surfaces.
+  await page.goto(`/quotes/${seeded.projectId}`);
+  await expect(page.getByTestId('project-detail-chrome')).toBeVisible();
+  await expect(page.getByTestId('project-open-in-production')).toHaveCount(0);
+  await expect(page.getByTestId('project-chrome-export')).toHaveCount(0);
 });
 
 test('2A: Q2 accepted wins, identity stays frozen, Q3 draft stays secondary, viewports hold', async ({ page }) => {
