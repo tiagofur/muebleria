@@ -2,6 +2,8 @@ import { GraneteApiError, GraneteNetworkError, parseApiError } from './apiErrors
 import {
   parseGenerated,
   parseGeneratedArray,
+  type HardwareAssetRepresentation,
+  type HardwareAssetUploadStaged,
 } from './openapi/generated/types';
 import { GeneratedGraneteApiClient, type GeneratedRequestOptions } from './openapi/generated/client';
 
@@ -84,5 +86,56 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
     if (options.arrayOf) return parseGeneratedArray<T>(options.arrayOf, value) as T;
     if (options.schema) return parseGenerated<T>(options.schema, value);
     return value as T;
+  }
+
+  async uploadHardwareAssetBytes(
+    token: string,
+    sessionId: string,
+    representation: HardwareAssetRepresentation,
+    file: Blob | File,
+    filenameOrSignal?: string | AbortSignal,
+    signal?: AbortSignal,
+  ): Promise<HardwareAssetUploadStaged> {
+    const filename = typeof filenameOrSignal === 'string' ? filenameOrSignal : undefined;
+    const resolvedSignal = typeof filenameOrSignal === 'string' ? signal : filenameOrSignal;
+    const formData = new FormData();
+    if (filename) {
+      formData.append('file', file, filename);
+    } else {
+      formData.append('file', file);
+    }
+    const headers = new Headers({ 'X-Request-ID': requestId() });
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const path = `/hardware-assets/uploads/${encodeURIComponent(sessionId)}/bytes/${encodeURIComponent(representation)}`;
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method: 'PUT',
+        headers,
+        body: formData,
+        signal: resolvedSignal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      if (error instanceof TypeError) throw new GraneteNetworkError(error);
+      throw error;
+    }
+    const value = response.status === 204 ? undefined : await readResponseJSON(response);
+    if (!response.ok) {
+      let payload;
+      try { payload = parseApiError(value); }
+      catch {
+        payload = {
+          code: 'INTERNAL_ERROR' as const,
+          message: `Invalid API error response (${response.status})`,
+          fieldErrors: {},
+          requestId: response.headers.get('X-Request-ID') ?? '',
+          retryable: response.status >= 500,
+          details: { invalidEnvelope: true },
+        };
+      }
+      throw new GraneteApiError(response.status, payload);
+    }
+    return parseGenerated<HardwareAssetUploadStaged>('HardwareAssetUploadStaged', value);
   }
 }

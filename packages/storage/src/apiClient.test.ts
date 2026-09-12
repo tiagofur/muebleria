@@ -330,4 +330,128 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
 
     await expect(client.getSession('token')).rejects.toBe(abortError);
   });
+
+  describe('Hardware asset multipart upload & lifecycle methods (#667 M2)', () => {
+    it('sends multipart FormData without manual Content-Type and parses staged result', async () => {
+      const staged = {
+        content_type: 'application/octet-stream',
+        size_bytes: 1024,
+        sha256: 'sha256-abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+      };
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(staged));
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+
+      const file = new Blob(['skp-binary-content'], { type: 'application/octet-stream' });
+      const result = await client.uploadHardwareAssetBytes('auth-token', 'sess-123', 'skp', file);
+
+      expect(result).toEqual(staged);
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      expect(url).toBe('http://api.test/api/hardware-assets/uploads/sess-123/bytes/skp');
+      expect(init?.method).toBe('PUT');
+      expect(init?.body).toBeInstanceOf(FormData);
+      const headers = new Headers(init?.headers);
+      expect(headers.get('Authorization')).toBe('Bearer auth-token');
+      expect(headers.get('X-Request-ID')).toBeTruthy();
+      // Crucial: Content-Type must NOT be set to application/json so browser handles multipart boundary
+      expect(headers.get('Content-Type')).toBeNull();
+    });
+
+    it('handles upload errors and maps to GraneteApiError', async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+        json(
+          {
+            code: 'BAD_REQUEST',
+            message: 'archivo demasiado grande',
+            fieldErrors: {},
+            requestId: 'req-1',
+            retryable: false,
+            details: {},
+          },
+          413,
+        ),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+
+      const file = new Blob(['too-large'], { type: 'application/octet-stream' });
+      const error = await client
+        .uploadHardwareAssetBytes('token', 'sess-1', 'skp', file)
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(GraneteApiError);
+      expect((error as GraneteApiError).status).toBe(413);
+      expect((error as GraneteApiError).payload.message).toBe('archivo demasiado grande');
+    });
+
+    it('uploadHardwareAssetBytes preserves AbortError when aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+
+      const file = new Blob(['data']);
+      await expect(
+        client.uploadHardwareAssetBytes('token', 'sess-1', 'skp', file, controller.signal),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+    });
+
+    it('invokes generated hardware asset methods with expected paths and stable idempotency keys', async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes(':finalize')) {
+          return json({
+            id: 'asset-1',
+            display_name: 'Tirador Bar',
+            status: 'active',
+            revisions: [],
+            created_at: '2026-09-12T00:00:00Z',
+            updated_at: '2026-09-12T00:00:00Z',
+          });
+        }
+        if (url.includes('/hardware-assets/uploads')) {
+          return json({
+            id: 'sess-1',
+            representation: 'skp',
+            display_name: 'Tirador Bar',
+            status: 'prepared',
+            created_at: '2026-09-12T00:00:00Z',
+            expires_at: '2026-09-12T01:00:00Z',
+          });
+        }
+        if (url.includes(':retire')) {
+          return json({
+            id: 'asset-1',
+            display_name: 'Tirador Bar',
+            status: 'retired',
+            revisions: [],
+            created_at: '2026-09-12T00:00:00Z',
+            updated_at: '2026-09-12T00:00:00Z',
+          });
+        }
+        return json({});
+      });
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+
+      // Start upload
+      const session = await client.startHardwareAssetUpload(
+        'token',
+        { representation: 'skp', display_name: 'Tirador Bar' },
+        'key-start-1',
+      );
+      expect(session.id).toBe('sess-1');
+      expect(fetchImpl.mock.calls[0]![0]).toBe('http://api.test/api/hardware-assets/uploads');
+      expect(new Headers(fetchImpl.mock.calls[0]![1]?.headers).get('Idempotency-Key')).toBe('key-start-1');
+
+      // Finalize upload with stable key
+      const finalized = await client.finalizeHardwareAssetUpload('token', 'sess-1', 'key-fin-1');
+      expect(finalized.id).toBe('asset-1');
+      expect(fetchImpl.mock.calls[1]![0]).toBe('http://api.test/api/hardware-assets/uploads/sess-1:finalize');
+      expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get('Idempotency-Key')).toBe('key-fin-1');
+
+      // Retire with stable key
+      const retired = await client.retireHardwareAsset('token', 'asset-1', 'key-ret-1');
+      expect(retired.status).toBe('retired');
+      expect(fetchImpl.mock.calls[2]![0]).toBe('http://api.test/api/hardware-assets/asset-1:retire');
+      expect(new Headers(fetchImpl.mock.calls[2]![1]?.headers).get('Idempotency-Key')).toBe('key-ret-1');
+    });
+  });
 });
