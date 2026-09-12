@@ -94,38 +94,37 @@ func hardwareAssetSessionCommandRouter(commands map[string]http.Handler) http.Ha
 	})
 }
 
-// hardwareAssetRevisionCommandRouter dispatches "{revisionId}:{command}" for
-// hardware asset revision commands (#667 M1).
-func hardwareAssetRevisionCommandRouter(commands map[string]http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		segment := r.PathValue("revisionCommand")
-		revisionID, command, ok := strings.Cut(segment, ":")
-		if !ok || revisionID == "" || command == "" || strings.Contains(command, ":") {
-			http.NotFound(w, r)
-			return
-		}
-		handler, ok := commands[command]
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		r.SetPathValue("revisionId", revisionID)
-		handler.ServeHTTP(w, r)
-	})
-}
-
-// hardwareAssetRetireCommandRouter dispatches "{assetId}:{command}" for
-// hardware asset lifecycle commands (#667 M1).
-func hardwareAssetRetireCommandRouter(commands map[string]http.Handler) http.Handler {
+// hardwareAssetCommandRouter dispatches the canonical asset command shapes
+// (#667 M1 R1) — "{assetId}:{command}" and
+// "{assetId}/revisions/{revisionId}:{command}" — binding the exact path
+// values the handlers expect.
+func hardwareAssetCommandRouter(commands map[string]http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		segment := r.PathValue("assetCommand")
+		if assetPrefix, revisionRest, hasRevision := strings.Cut(segment, "/revisions/"); hasRevision {
+			revisionID, command, ok := strings.Cut(revisionRest, ":")
+			if !ok || !isValidUUID(assetPrefix) || !isValidUUID(revisionID) ||
+				command == "" || strings.ContainsAny(command, ":/") {
+				http.NotFound(w, r)
+				return
+			}
+			handler, found := commands[command]
+			if !found {
+				http.NotFound(w, r)
+				return
+			}
+			r.SetPathValue("assetId", assetPrefix)
+			r.SetPathValue("revisionId", revisionID)
+			handler.ServeHTTP(w, r)
+			return
+		}
 		assetID, command, ok := strings.Cut(segment, ":")
-		if !ok || assetID == "" || command == "" || strings.Contains(command, ":") {
+		if !ok || !isValidUUID(assetID) || command == "" || strings.ContainsAny(command, ":/") {
 			http.NotFound(w, r)
 			return
 		}
-		handler, ok := commands[command]
-		if !ok {
+		handler, found := commands[command]
+		if !found {
 			http.NotFound(w, r)
 			return
 		}
@@ -420,20 +419,23 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/hardware-assets/uploads", noStoreMiddleware(authMW(server.RequireIdempotency("hardware-assets.start-upload", http.HandlerFunc(server.HandleHardwareAssetUploadStart)))))
 	mux.Handle("PUT /api/hardware-assets/uploads/{sessionId}/bytes/{representation}", authMW(http.HandlerFunc(server.HandleHardwareAssetUploadBytes)))
 	mux.Handle("POST /api/hardware-assets/uploads/{sessionCommand...}", noStoreMiddleware(authMW(hardwareAssetSessionCommandRouter(map[string]http.Handler{
-		"finalize": http.HandlerFunc(server.HandleHardwareAssetUploadFinalize),
+		// The generated client sends an Idempotency-Key for finalize; the
+		// receipt now actually guards the command (retry replays the same
+		// asset). cancel declares no key and stays direct.
+		"finalize": server.RequireIdempotency("hardware-assets.finalize-upload", http.HandlerFunc(server.HandleHardwareAssetUploadFinalize)),
 		"cancel":   http.HandlerFunc(server.HandleHardwareAssetUploadCancel),
 	}))))
 	mux.Handle("GET /api/hardware-assets/uploads/{sessionId}", authMW(http.HandlerFunc(server.HandleHardwareAssetUploadGet)))
 	mux.Handle("GET /api/hardware-assets", authMW(http.HandlerFunc(server.HandleHardwareAssets)))
-	mux.Handle("GET /api/hardware-assets/asset/{assetId}", authMW(http.HandlerFunc(server.HandleHardwareAssetByID)))
-	// Literal "asset"/"uploads" namespaces keep the ServeMux multi-wildcard
-	// patterns conflict-free (same structure as the designs/{id}/revisions
-	// command routes). The generated OpenAPI keeps the canonical
-	// /hardware-assets/{assetId}:verb command forms.
-	mux.Handle("POST /api/hardware-assets/asset/{assetCommand...}", noStoreMiddleware(authMW(hardwareAssetRetireCommandRouter(map[string]http.Handler{
-		"retire": http.HandlerFunc(server.HandleHardwareAssetRetire),
-	}))))
-	mux.Handle("POST /api/hardware-assets/asset/{assetId}/revisions/{revisionCommand...}", noStoreMiddleware(authMW(hardwareAssetRevisionCommandRouter(map[string]http.Handler{
+	mux.Handle("GET /api/hardware-assets/{assetId}", authMW(http.HandlerFunc(server.HandleHardwareAssetByID)))
+	// Canonical command surface (#667 M1 R1): exactly the OpenAPI/generated
+	// client forms — "{assetId}:retire" and
+	// "{assetId}/revisions/{revisionId}:authorize". One catch-all dispatches
+	// both shapes; the "uploads/{sessionCommand...}" pattern above is a strict
+	// subset of this one (literal segment beats the wildcard), so ServeMux
+	// accepts the pair without conflicts.
+	mux.Handle("POST /api/hardware-assets/{assetCommand...}", noStoreMiddleware(authMW(hardwareAssetCommandRouter(map[string]http.Handler{
+		"retire":    server.RequireIdempotency("hardware-assets.retire", http.HandlerFunc(server.HandleHardwareAssetRetire)),
 		"authorize": http.HandlerFunc(server.HandleHardwareAssetRevisionAuthorize),
 	}))))
 	mux.Handle("GET /api/hardware-assets/files/{key...}", server.hardwareAssetFileGetAuth(http.HandlerFunc(server.HandleHardwareAssetFileGet)))
