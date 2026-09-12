@@ -49,6 +49,7 @@ import type {
 } from '@granete/domain';
 
 import {
+  type DropdownMenuItem,
   type DropdownMenuSection,
   PageLoading,
 } from '../common';
@@ -69,6 +70,7 @@ import {
 } from './projectHelpers';
 import { useProjectsScreenState } from './helpers/useProjectsScreenState';
 import type { CommercialSummariesStatus } from './quoteRevisionPresentation';
+import { formatQuoteRevisionStatus } from './quoteRevisionPresentation';
 import './projects.css';
 
 export type { ProjectDraft, AddItemDraft };
@@ -274,18 +276,28 @@ export interface ProjectsScreenProps {
   readonly onOpenDesigns?: (projectId: string) => void;
   readonly onOpenReconciliation?: (projectId: string, quoteRevisionId?: string) => void;
   /**
-   * Commercial quote export for client (F030 / #36).
-   * Shell owns breakdown → xlsx → download.
+   * Commercial quote export for client (F030 / #36; exact per revision in
+   * #642/3). The revisionId is an EXACT QuoteRevision picked from the
+   * cached revision list — never "latest", the mutable Project, or the
+   * visible authority only.
    */
-  readonly onExportCommercialQuote?: () => void | Promise<void>;
+  readonly onExportCommercialQuote?: (quoteRevisionId: string) => void | Promise<void>;
   /**
-   * Commercial quote PDF for client (F045 / #90).
+   * Commercial quote PDF for client (F045 / #90; exact per revision in
+   * #642/3).
    * - detailed: listado de muebles + total de venta
    * - summary: solo datos del proyecto + total de venta
    */
   readonly onExportCommercialQuotePdf?: (
+    quoteRevisionId: string,
     variant: 'detailed' | 'summary',
   ) => void | Promise<void>;
+  /**
+   * #642/3 blocker 1: the exact QuoteRevision list of the selected obra
+   * (shell's cached query, no extra fetch). Drives the per-revision export
+   * menu and the export gates — the mutable `project.items` never does.
+   */
+  readonly quoteRevisions?: ReadonlyArray<import('@granete/storage').QuoteRevisionDetail>;
   readonly exportErrors?: readonly ExportIssue[];
   readonly exportBusy?: boolean;
   /** When true, export buttons stay disabled (shell already blocked). */
@@ -531,6 +543,7 @@ export function ProjectsScreen({
   onOpenReconciliation,
   onExportCommercialQuote,
   onExportCommercialQuotePdf,
+  quoteRevisions,
   exportErrors = [],
   exportBusy = false,
   exportBlocked = false,
@@ -638,50 +651,75 @@ export function ProjectsScreen({
     readonly onClose?: () => void;
   }>(() => {
     if (!state.selectedProject) return { sections: [] };
-    const itemsEmpty = state.selectedProject.items.length === 0;
+    if (!onExportCommercialQuote && !onExportCommercialQuotePdf) {
+      return { sections: [] };
+    }
+    // #642/3: one section per EXACT revision (newest first), each action
+    // bound to that revision's id. The gate is the revision's own frozen
+    // snapshot — `Project.items` (mutable) never enables or disables a
+    // commercial export: a revision whose snapshot has lines stays
+    // exportable even if the obra's editable items were emptied later.
+    // Legacy snapshot-less revisions render disabled with the honest hint;
+    // org-withheld retail amounts (manufacturing-only) too.
+    const revisions = [...(quoteRevisions ?? [])].sort(
+      (a, b) => b.revisionNumber - a.revisionNumber,
+    );
+    if (revisions.length === 0) return { sections: [] };
 
-    const commercialItems = [
-      onExportCommercialQuote
-        ? {
-            id: 'quote',
-            label: 'Exportar cotización',
-            hint: 'Para el cliente (.xlsx)',
-            disabled: exportBusy || exportBlocked || itemsEmpty,
-            onSelect: () => void onExportCommercialQuote(),
-          }
-        : null,
-      onExportCommercialQuotePdf
-        ? {
-            id: 'pdf-list',
-            label: 'PDF listado',
-            hint: 'Muebles + total de venta',
-            disabled: exportBusy || exportBlocked || itemsEmpty,
-            onSelect: () => void onExportCommercialQuotePdf('detailed'),
-          }
-        : null,
-      onExportCommercialQuotePdf
-        ? {
-            id: 'pdf-summary',
-            label: 'PDF resumen',
-            hint: 'Datos + total, sin listado',
-            disabled: exportBusy || exportBlocked || itemsEmpty,
-            onSelect: () => void onExportCommercialQuotePdf('summary'),
-          }
-        : null,
-    ].filter((x): x is NonNullable<typeof x> => x !== null);
-
-    if (commercialItems.length === 0) return { sections: [] };
-    return {
-      sections: [
-        {
-          id: 'commercial',
-          label: 'Comercial',
-          items: commercialItems,
-        },
-      ],
-    };
+    const commercialSections = revisions.map((revision) => {
+      const statusLabel = formatQuoteRevisionStatus(revision.status);
+      const sectionLabel = `Q${revision.revisionNumber} · ${statusLabel}`;
+      const exportable =
+        revision.commercialSnapshot != null &&
+        revision.commercialSnapshot.lines.length > 0 &&
+        revision.commercialAmountsWithheld !== true;
+      const disabled =
+        !exportable || exportBusy || exportBlocked;
+      const hint = revision.commercialSnapshot == null
+        ? 'Sin historial comercial congelado'
+        : revision.commercialAmountsWithheld === true
+          ? 'Precio comercial no disponible para tu organización'
+          : exportable
+            ? undefined
+            : 'La revisión congelada no tiene líneas';
+      const items: DropdownMenuItem[] = [];
+      if (onExportCommercialQuote) {
+        items.push({
+          id: `quote-${revision.id}`,
+          label: `Exportar cotización Q${revision.revisionNumber}`,
+          hint: hint ?? 'Para el cliente (.xlsx)',
+          disabled,
+          onSelect: () => void onExportCommercialQuote(revision.id),
+        });
+      }
+      if (onExportCommercialQuotePdf) {
+        items.push(
+          {
+            id: `pdf-list-${revision.id}`,
+            label: `PDF listado Q${revision.revisionNumber}`,
+            hint: hint ?? 'Muebles + total de venta',
+            disabled,
+            onSelect: () => void onExportCommercialQuotePdf(revision.id, 'detailed'),
+          },
+          {
+            id: `pdf-summary-${revision.id}`,
+            label: `PDF resumen Q${revision.revisionNumber}`,
+            hint: hint ?? 'Datos + total, sin listado',
+            disabled,
+            onSelect: () => void onExportCommercialQuotePdf(revision.id, 'summary'),
+          },
+        );
+      }
+      return {
+        id: `commercial-${revision.id}`,
+        label: sectionLabel,
+        items,
+      };
+    });
+    return { sections: commercialSections };
   }, [
     state.selectedProject,
+    quoteRevisions,
     onExportCommercialQuote,
     onExportCommercialQuotePdf,
     exportBusy,

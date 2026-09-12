@@ -1,15 +1,18 @@
 /**
- * Commercial quote PDF writer — client-facing (F045 / #90).
- * Sale price only: never embeds workshop cost stack (even for admin).
+ * Exact commercial quote PDF writer — client-facing (#642 / 3).
+ *
+ * Renders the SAME shared export model as the XLSX renderer, derived
+ * exclusively from one exact QuoteRevision + commercialSnapshot. Sale price
+ * only: never embeds the workshop cost stack (even for admin).
  *
  * Variants:
- * - detailed: project header + furniture lines + sale total
- * - summary: project header + sale total only (no furniture list)
+ * - detailed: revision header + frozen furniture lines + sale total
+ * - summary: revision header + sale total only (no furniture list)
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { ValidationError } from '@granete/domain';
-import type { CommercialQuoteLine } from './commercialQuoteExport';
+import type { ExactCommercialQuoteExportModel } from './commercialQuoteExport';
 
 export type CommercialQuotePdfVariant = 'detailed' | 'summary';
 
@@ -20,15 +23,8 @@ export type CommercialQuotePdfPhoto = {
 };
 
 export type CommercialQuotePdfInput = {
-  readonly projectName: string;
-  readonly customerName: string;
-  readonly currency: string;
-  readonly statusLabel: string;
-  readonly dateLabel: string;
-  readonly items: readonly CommercialQuoteLine[];
-  /** Client-facing total only. */
-  readonly salePrice: number;
-  readonly pricesFrozen: boolean;
+  /** The single exact-revision export model (shared with the XLSX renderer). */
+  readonly model: ExactCommercialQuoteExportModel;
   readonly variant: CommercialQuotePdfVariant;
   /** Workshop name shown in footer branding. */
   readonly workshopName?: string;
@@ -70,7 +66,7 @@ function drawBrandMark(
   });
   // Panel strokes (3 horizontal lines)
   const lineY1 = y + 20.5 * s;
-  const lineY2 = y + 16 * s;
+  const lineY2 = y + 16.5 * s;
   const lineY3 = y + 11.5 * s;
   const lx = x + 8 * s;
   const lw1 = 16 * s;
@@ -238,22 +234,55 @@ function drawKeyValue(
   }
 }
 
+/** Per-unit options for the PDF line cell: identical units collapse to one
+ * summary; distinct frozen configurations are listed per unit (never merged). */
+function unitOptionsSummary(
+  units: ReadonlyArray<{ optionsSummary: string }>,
+): string {
+  if (units.length === 0) return '';
+  const first = units[0]!.optionsSummary;
+  const allEqual = units.every((u) => u.optionsSummary === first);
+  if (allEqual) return first;
+  return units.map((u, i) => `U${i + 1}: ${u.optionsSummary || '—'}`).join('  ');
+}
+
+function unitDimensionsSummary(
+  units: ReadonlyArray<{ dimensionsLabel: string | null }>,
+): string {
+  if (units.length === 0) return '';
+  const first = units[0]!.dimensionsLabel;
+  const allEqual = units.every((u) => u.dimensionsLabel === first);
+  if (allEqual) return first ?? '';
+  return units
+    .map((u, i) => `U${i + 1}: ${u.dimensionsLabel ?? '—'}`)
+    .join('  ');
+}
+
 /**
- * Build a client-facing commercial quote PDF.
+ * Build a client-facing commercial quote PDF for one exact QuoteRevision.
  * Client never receives cost/margin internals.
  */
 export async function commercialQuotePdfExport(
   input: CommercialQuotePdfInput,
 ): Promise<Uint8Array> {
-  if (input.items.length === 0) {
+  const { model } = input;
+  if (model.lines.length === 0) {
     throw new ValidationError('no hay muebles en la cotización', {
       field: 'items',
     });
   }
 
   const doc = await PDFDocument.create();
-  doc.setTitle(`Cotización — ${input.projectName}`);
+  doc.setTitle(`Cotización Q${model.revisionNumber} — ${model.projectName} — ${model.customerName}`);
   doc.setCreator('Granete');
+  // The document metadata carries the FROZEN capture instant, not the export
+  // moment — byte-determinism for the same exact model and an honest document
+  // date (the exported revision, not when it was downloaded).
+  const captured = new Date(model.capturedAt);
+  if (!Number.isNaN(captured.getTime())) {
+    doc.setCreationDate(captured);
+    doc.setModificationDate(captured);
+  }
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const page = doc.addPage([PAGE_W, PAGE_H]);
@@ -279,11 +308,11 @@ export async function commercialQuotePdfExport(
   // Brand mark (geometric tile + panel strokes)
   drawBrandMark(page, MARGIN, PAGE_H - MARGIN - bannerH + 18, 24, BRAND_LIGHT);
 
-  // Title
+  // Title — the revision is the document's identity
   const title =
     input.variant === 'summary'
-      ? 'Cotización comercial — Resumen'
-      : 'Cotización comercial — Listado';
+      ? `Cotización Q${model.revisionNumber} — Resumen`
+      : `Cotización Q${model.revisionNumber} — Listado`;
   page.drawText(title, {
     x: MARGIN + 34,
     y: PAGE_H - MARGIN - 18,
@@ -292,8 +321,8 @@ export async function commercialQuotePdfExport(
     color: BRAND_LIGHT,
   });
 
-  // Subtitle: project + customer
-  const subtitle = `${input.projectName}  ·  ${input.customerName || 'Cliente'}`;
+  // Subtitle: frozen project + customer identity
+  const subtitle = `${model.projectName}  ·  ${model.customerName || 'Cliente'}`;
   page.drawText(subtitle, {
     x: MARGIN + 34,
     y: PAGE_H - MARGIN - 34,
@@ -304,14 +333,13 @@ export async function commercialQuotePdfExport(
 
   ctx.y = PAGE_H - MARGIN - bannerH - 16;
 
-  drawKeyValue(ctx, 'Proyecto', input.projectName);
-  drawKeyValue(ctx, 'Cliente', input.customerName);
-  drawKeyValue(ctx, 'Fecha', input.dateLabel);
-  drawKeyValue(ctx, 'Moneda', input.currency);
-  drawKeyValue(ctx, 'Estado', input.statusLabel);
-  if (input.pricesFrozen) {
-    drawKeyValue(ctx, 'Precios', 'Congelados (snapshot)');
-  }
+  drawKeyValue(ctx, 'Proyecto', model.projectName);
+  drawKeyValue(ctx, 'Cliente', model.customerName);
+  drawKeyValue(ctx, 'Fecha', model.dateLabel);
+  drawKeyValue(ctx, 'Moneda', model.currency);
+  drawKeyValue(ctx, 'Revisión', `Q${model.revisionNumber}`);
+  drawKeyValue(ctx, 'Estado', model.statusLabel);
+  drawKeyValue(ctx, 'Precios', `Congelados (revisión Q${model.revisionNumber})`);
 
   ctx.y -= 10;
 
@@ -369,20 +397,24 @@ export async function commercialQuotePdfExport(
       color: rgb(0.75, 0.76, 0.78),
     });
 
-    for (const item of input.items) {
-      ensureSpace(ctx, 28);
-      const nameLines = wrapText(item.moduleName, font, 10, 200);
-      const optLines = wrapText(item.optionsSummary || '—', font, 9, 180);
+    for (const line of model.lines) {
+      const dimsLabel = unitDimensionsSummary(line.units);
+      const nameBlock = dimsLabel
+        ? `${line.moduleName} (${dimsLabel})`
+        : line.moduleName;
+      const nameLines = wrapText(nameBlock, font, 10, 200);
+      const optLines = wrapText(unitOptionsSummary(line.units) || '—', font, 9, 180);
       const blockLines = Math.max(nameLines.length, optLines.length, 1);
+      ensureSpace(ctx, 28);
 
-      ctx.page.drawText(item.moduleCode.slice(0, 14), {
+      ctx.page.drawText(line.moduleCode.slice(0, 14), {
         x: colX.code,
         y: ctx.y,
         size: 9,
         font,
         color: rgb(0.12, 0.12, 0.14),
       });
-      ctx.page.drawText(String(item.quantity), {
+      ctx.page.drawText(String(line.quantity), {
         x: colX.qty,
         y: ctx.y,
         size: 10,
@@ -417,8 +449,8 @@ export async function commercialQuotePdfExport(
       ctx.y -= 16;
     }
   } else {
-    // summary: project-only narrative without furniture breakdown
-    const totalQty = input.items.reduce((s, it) => s + it.quantity, 0);
+    // summary: revision-only narrative without furniture breakdown
+    const totalQty = model.lines.reduce((s, l) => s + l.quantity, 0);
     drawLine(ctx, 'Resumen del proyecto', {
       size: 13,
       bold: true,
@@ -427,7 +459,7 @@ export async function commercialQuotePdfExport(
     ctx.y -= 4;
     drawLine(
       ctx,
-      `Incluye ${input.items.length} tipo${input.items.length === 1 ? '' : 's'} de mueble` +
+      `Incluye ${model.lines.length} tipo${model.lines.length === 1 ? '' : 's'} de mueble` +
         ` (${totalQty} unidad${totalQty === 1 ? '' : 'es'} en total).`,
       { size: 11 },
     );
@@ -452,7 +484,7 @@ export async function commercialQuotePdfExport(
     bold: true,
     color: rgb(0.12, 0.1, 0.35),
   });
-  drawLine(ctx, money(input.salePrice, input.currency), {
+  drawLine(ctx, money(model.saleTotal, model.currency), {
     size: 16,
     bold: true,
     color: rgb(0.18, 0.15, 0.45),
@@ -460,7 +492,7 @@ export async function commercialQuotePdfExport(
 
   drawLine(
     ctx,
-    'Documento comercial para el cliente. No incluye costos internos del taller.',
+    `Documento comercial para el cliente (revisión exacta Q${model.revisionNumber}). No incluye costos internos del taller.`,
     { size: 8, color: rgb(0.45, 0.47, 0.5) },
   );
 
@@ -542,6 +574,8 @@ export async function commercialQuotePdfExport(
     drawFooter(p, font, i, pageCount, input.workshopName);
   }
 
-  const bytes = await doc.save();
+  // useObjectStreams: false keeps content streams directly inspectable (exact
+  // golden/semantic verification of the frozen revision text) and byte-stable.
+  const bytes = await doc.save({ useObjectStreams: false });
   return bytes;
 }

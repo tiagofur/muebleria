@@ -1,41 +1,68 @@
 /**
- * Commercial quote Excel writer — client-facing cotización (F030 / issue #36).
- * Presentation only: totals and lines are supplied by the shell (domain-calculated).
+ * Exact commercial quote XLSX writer — client-facing cotización (#642 / 3).
+ *
+ * Renders ONE shared export model derived exclusively from an exact
+ * QuoteRevision + commercialSnapshot (frozen identity, lines, units, totals).
+ * The same model feeds the PDF renderer; presentation rules live here, never
+ * commercial joins. Client-facing policy: sale amounts only — the workshop
+ * cost stack (materials/edge/hardware/labor/direct cost/margin) is never
+ * written, even for cost-visible actors.
  */
 
 import ExcelJS from 'exceljs';
 import { ValidationError } from '@granete/domain';
 import { workbookBytes } from './optimizerExport';
 
-export type CommercialQuoteLine = {
-  readonly moduleCode: string;
-  readonly moduleName: string;
-  readonly quantity: number;
+/**
+ * Frozen per-unit configuration of one exported line. Order is the snapshot's
+ * own unit order; distinct configurations between units of the same line are
+ * preserved (never merged into a single pretended-identical summary).
+ */
+export type ExactCommercialQuoteExportUnit = {
+  readonly furnitureInstanceId: string;
+  readonly lifecycleStatusLabel: string;
+  /** `${w}×${h}×${d} mm` or null when the frozen parameters carry no dims. */
+  readonly dimensionsLabel: string | null;
+  /** Frozen `GroupLabel: ChoiceLabel` pairs joined with `; `. */
   readonly optionsSummary: string;
 };
 
-export type CommercialQuoteTotals = {
-  readonly materialsCost: number;
-  readonly edgeTotal: number;
-  readonly hardwareTotal: number;
-  readonly laborModular: number;
-  readonly laborFixedCost: number;
-  readonly directCost: number;
-  readonly marginFactor: number;
-  readonly salePrice: number;
+export type ExactCommercialQuoteExportLine = {
+  readonly quoteLineId: string;
+  readonly moduleCode: string;
+  readonly moduleName: string;
+  /** Commercial quantity of the line (snapshot truth, not unit count). */
+  readonly quantity: number;
+  /**
+   * Line total sale amount. `null` = not authorized for this actor — a
+   * redacted amount must render as absence, never as a misleading 0.
+   */
+  readonly salePrice: number | null;
+  readonly units: readonly ExactCommercialQuoteExportUnit[];
 };
 
-export type CommercialQuoteExportInput = {
+/**
+ * The single export projection shared by the XLSX and PDF renderers (#642
+ * Delivery 3). Every field is frozen commercial truth of one exact revision:
+ * mutable Project/catalog/customer state has no representation here.
+ */
+export type ExactCommercialQuoteExportModel = {
+  /** QN — identifies the exported revision in title, status rows and filename. */
+  readonly revisionNumber: number;
+  readonly statusLabel: string;
+  /** Commercial lifecycle date label (acceptedAt → publishedAt → createdAt). */
+  readonly dateLabel: string;
   readonly projectName: string;
   readonly customerName: string;
   readonly currency: string;
-  readonly statusLabel: string;
-  /** Display date (already formatted or ISO). */
-  readonly dateLabel: string;
-  readonly items: readonly CommercialQuoteLine[];
-  readonly totals: CommercialQuoteTotals;
-  /** True when prices come from priceSnapshot (quoted/accepted). */
-  readonly pricesFrozen: boolean;
+  /**
+   * Frozen snapshot capture instant — owns the workbook metadata timestamps so
+   * the document reflects the frozen revision, not the export moment.
+   */
+  readonly capturedAt: string;
+  readonly lines: readonly ExactCommercialQuoteExportLine[];
+  /** Client-facing total only (frozen snapshot breakdown salePrice). */
+  readonly saleTotal: number;
 };
 
 const SHEET_NAME = 'Cotización';
@@ -73,28 +100,43 @@ const DATA_FONT: Partial<ExcelJS.Font> = {
   name: 'Calibri',
 };
 
-const LINE_HEADERS = [
-  'Código',
-  'Mueble',
-  'Cantidad',
-  'Opciones',
-] as const;
+/**
+ * One display value per line column. When the units of a line disagree the
+ * per-unit values are joined (`U1: …; U2: …`) so distinct frozen
+ * configurations are never silently merged.
+ */
+function perUnitValue(
+  units: readonly ExactCommercialQuoteExportUnit[],
+  pick: (unit: ExactCommercialQuoteExportUnit) => string | null,
+): string {
+  const values = units.map(pick);
+  if (values.length <= 1) return values[0] ?? '';
+  const allEqual = values.every((v) => v === values[0]);
+  if (allEqual) return values[0] ?? '';
+  return values.map((v, i) => `U${i + 1}: ${v ?? '—'}`).join('  ');
+}
 
 /**
- * Build a simple client-facing quote workbook.
+ * Build the client-facing workbook for one exact QuoteRevision.
  */
 export async function commercialQuoteExport(
-  input: CommercialQuoteExportInput,
+  input: ExactCommercialQuoteExportModel,
 ): Promise<Uint8Array> {
-  if (input.items.length === 0) {
+  if (input.lines.length === 0) {
     throw new ValidationError('no hay muebles en la cotización', {
       field: 'items',
     });
   }
 
+  const showLinePrices = input.lines.some((line) => line.salePrice !== null);
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Granete';
-  workbook.created = new Date();
+  // The workbook metadata carries the FROZEN capture instant, not the export
+  // moment — the document belongs to the exact revision it reproduces.
+  const captured = new Date(input.capturedAt);
+  workbook.created = Number.isNaN(captured.getTime()) ? new Date(0) : captured;
+  workbook.modified = workbook.created;
 
   const sheet = workbook.addWorksheet(SHEET_NAME, {
     views: [{ state: 'frozen', ySplit: 8 }],
@@ -102,14 +144,15 @@ export async function commercialQuoteExport(
 
   sheet.getColumn(1).width = 14;
   sheet.getColumn(2).width = 32;
-  sheet.getColumn(3).width = 12;
-  sheet.getColumn(4).width = 48;
-  sheet.getColumn(5).width = 16;
+  sheet.getColumn(3).width = 10;
+  sheet.getColumn(4).width = 26;
+  sheet.getColumn(5).width = 44;
+  sheet.getColumn(6).width = 16;
 
   // Title block
-  sheet.mergeCells('A1:D1');
+  sheet.mergeCells('A1:F1');
   const title = sheet.getCell('A1');
-  title.value = 'Cotización comercial';
+  title.value = `Cotización Q${input.revisionNumber}`;
   title.font = TITLE_FONT;
 
   sheet.getCell('A3').value = 'Proyecto / nombre';
@@ -132,22 +175,28 @@ export async function commercialQuoteExport(
   sheet.getCell('D4').value = input.currency;
   sheet.getCell('D4').font = DATA_FONT;
 
-  sheet.getCell('A5').value = 'Estado';
+  sheet.getCell('A5').value = 'Revisión';
   sheet.getCell('A5').font = LABEL_FONT;
-  sheet.getCell('B5').value = input.statusLabel;
+  sheet.getCell('B5').value = `Q${input.revisionNumber}`;
   sheet.getCell('B5').font = DATA_FONT;
 
-  if (input.pricesFrozen) {
-    sheet.getCell('C5').value = 'Precios';
-    sheet.getCell('C5').font = LABEL_FONT;
-    sheet.getCell('D5').value = 'Congelados (snapshot)';
-    sheet.getCell('D5').font = DATA_FONT;
-  }
+  sheet.getCell('C5').value = 'Estado';
+  sheet.getCell('C5').font = LABEL_FONT;
+  sheet.getCell('D5').value = input.statusLabel;
+  sheet.getCell('D5').font = DATA_FONT;
+
+  sheet.getCell('A6').value = 'Precios';
+  sheet.getCell('A6').font = LABEL_FONT;
+  sheet.getCell('B6').value = `Congelados (revisión Q${input.revisionNumber})`;
+  sheet.getCell('B6').font = DATA_FONT;
 
   // Line items table
-  const headerRowIndex = 7;
+  const headerRowIndex = 8;
   const headerRow = sheet.getRow(headerRowIndex);
-  LINE_HEADERS.forEach((h, i) => {
+  const headers = showLinePrices
+    ? ['Código', 'Mueble', 'Cant.', 'Medidas', 'Opciones', 'Precio línea']
+    : ['Código', 'Mueble', 'Cant.', 'Medidas', 'Opciones'];
+  headers.forEach((h, i) => {
     const cell = headerRow.getCell(i + 1);
     cell.value = h;
     cell.font = HEADER_FONT;
@@ -156,54 +205,41 @@ export async function commercialQuoteExport(
   });
   headerRow.height = 18;
 
-  input.items.forEach((line, index) => {
+  input.lines.forEach((line, index) => {
     const row = sheet.getRow(headerRowIndex + 1 + index);
     row.getCell(1).value = line.moduleCode;
     row.getCell(2).value = line.moduleName;
     row.getCell(3).value = line.quantity;
-    row.getCell(4).value = line.optionsSummary || '—';
-    for (let c = 1; c <= 4; c++) {
+    row.getCell(4).value = perUnitValue(line.units, (u) => u.dimensionsLabel);
+    row.getCell(5).value = perUnitValue(line.units, (u) => u.optionsSummary || null);
+    if (showLinePrices) {
+      row.getCell(6).value = line.salePrice ?? '';
+    }
+    const lastCol = showLinePrices ? 6 : 5;
+    for (let c = 1; c <= lastCol; c++) {
       row.getCell(c).font = DATA_FONT;
     }
     row.getCell(3).alignment = { horizontal: 'right' };
+    if (showLinePrices) {
+      const priceCell = row.getCell(6);
+      priceCell.alignment = { horizontal: 'right' };
+      priceCell.numFmt = '#,##0.00';
+    }
     row.height = 16;
   });
 
-  // Totals block
-  const totalsStart = headerRowIndex + 1 + input.items.length + 2;
-  const t = input.totals;
-  const totalRows: [string, number | string, boolean?][] = [
-    ['Materiales', t.materialsCost, true],
-    ['Cantos', t.edgeTotal, true],
-    ['Herrajes', t.hardwareTotal, true],
-    ['MO modular', t.laborModular, true],
-    ['MO fija', t.laborFixedCost, true],
-    ['Costo directo', t.directCost, true],
-    ['Factor margen', t.marginFactor, false],
-    ['Precio de venta', t.salePrice, true],
-  ];
-
+  // Totals block — client-facing total only.
+  const totalsStart = headerRowIndex + 1 + input.lines.length + 2;
   sheet.getCell(`A${totalsStart}`).value = 'Totales';
   sheet.getCell(`A${totalsStart}`).font = TITLE_FONT;
 
-  totalRows.forEach(([label, value, isMoney], i) => {
-    const r = totalsStart + 1 + i;
-    sheet.getCell(`A${r}`).value = label;
-    sheet.getCell(`A${r}`).font =
-      label === 'Precio de venta' ? { ...LABEL_FONT, bold: true } : LABEL_FONT;
-    const cell = sheet.getCell(`B${r}`);
-    cell.value = value;
-    cell.font = DATA_FONT;
-    cell.alignment = { horizontal: 'right' };
-    if (isMoney) {
-      cell.numFmt = '#,##0.00';
-    } else {
-      cell.numFmt = '0.00';
-    }
-    if (label === 'Precio de venta') {
-      cell.font = { ...DATA_FONT, bold: true, size: 12 };
-    }
-  });
+  sheet.getCell(`A${totalsStart + 1}`).value = 'Total (precio de venta)';
+  sheet.getCell(`A${totalsStart + 1}`).font = { ...LABEL_FONT, bold: true };
+  const totalCell = sheet.getCell(`B${totalsStart + 1}`);
+  totalCell.value = input.saleTotal;
+  totalCell.font = { ...DATA_FONT, bold: true, size: 12 };
+  totalCell.alignment = { horizontal: 'right' };
+  totalCell.numFmt = '#,##0.00';
 
   const raw = await workbook.xlsx.writeBuffer();
   return workbookBytes(raw as ArrayBuffer | Uint8Array);

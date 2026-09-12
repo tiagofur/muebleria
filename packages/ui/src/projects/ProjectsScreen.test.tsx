@@ -2334,3 +2334,273 @@ describe('#642 / 2A commercial summaries dataset states', () => {
     expect(within(screen.getByTestId('project-card-prj-1')).getByText('Q3 en borrador')).toBeTruthy();
   });
 });
+
+describe('WITHHELD ≠ ZERO — org-redacted retail amount in the detail chrome (#642/3)', () => {
+  const withheldBreakdown = { ...sampleBreakdown, salePrice: 0 } as typeof sampleBreakdown;
+
+  const readyAuthority = (amountsWithheld?: boolean) => ({
+    kind: 'ready' as const,
+    revisionId: 'quote-2',
+    revisionNumber: 2,
+    status: 'accepted' as const,
+    projectName: 'Cocina congelada Q2',
+    customerId: 'cust-bruno',
+    customerName: 'Cliente congelado Q2',
+    furnitureQuantity: 7,
+    currency: 'USD',
+    capturedAt: '2026-09-10T12:00:00Z',
+    ...(amountsWithheld ? { amountsWithheld: true } : {}),
+    onRetry: vi.fn(),
+  });
+
+  it('manufacturing-only (amountsWithheld) never sees a $0 header — honest absence instead', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: withheldBreakdown,
+      quoteAuthority: readyAuthority(true),
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const total = screen.getByTestId('project-detail-total');
+    expect(total.textContent).toContain('Precio de venta');
+    expect(total.textContent).toContain('No disponible para tu organización');
+    expect(total.textContent).not.toContain('$0');
+    expect(total.textContent).not.toContain('0.00');
+  });
+
+  it('manufacturing-only WhatsApp message omits the amount entirely (no redacted $0)', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: withheldBreakdown,
+      quoteAuthority: readyAuthority(true),
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByTitle('Enviar WhatsApp a Cliente congelado Q2'));
+    const message = screen.getByLabelText('Mensaje a Enviar:') as HTMLTextAreaElement;
+    expect(message.value).toContain('Cocina congelada Q2');
+    expect(message.value).not.toContain('$0');
+    expect(message.value).not.toContain('$ 0');
+    expect(message.value).not.toMatch(/0\.00/);
+  });
+
+  it('owner/sales (no withholding) keeps the real price in header and WhatsApp', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      breakdown: { ...sampleBreakdown, salePrice: 15000 },
+      quoteAuthority: readyAuthority(undefined),
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    const total = screen.getByTestId('project-detail-total');
+    expect(total.textContent).toContain('$15,000.00 USD');
+    expect(total.textContent).not.toContain('No disponible');
+
+    await user.click(screen.getByTitle('Enviar WhatsApp a Cliente congelado Q2'));
+    const message = screen.getByLabelText('Mensaje a Enviar:') as HTMLTextAreaElement;
+    expect(message.value).toContain('$15,000.00 USD');
+  });
+});
+
+describe('commercial export picker acts on exact revisions (#642/3)', () => {
+  const q2Detail = {
+    id: 'quote-2',
+    projectId: 'prj-1',
+    revisionNumber: 2,
+    status: 'accepted' as const,
+    sourceType: 'requote' as const,
+    createdAt: '2026-09-10T09:00:00Z',
+    commercialAmountsWithheld: undefined,
+    commercialSnapshot: {
+      schema: 'granete.quote-commercial-snapshot.v1' as const,
+      capturedAt: '2026-09-10T09:00:00Z',
+      currency: 'USD',
+      customer: { id: 'cust-bruno', name: 'Cliente congelado Q2' },
+      project: { id: 'prj-1', name: 'Cocina congelada Q2' },
+      breakdown: {
+        materialsCost: 10, edgeTotal: 1, hardwareTotal: 1, directCost: 12,
+        laborModular: 0, laborFixedCost: 0, marginFactor: 1.3, salePrice: 15.6,
+      },
+      lines: [
+        {
+          quoteLineId: 'line-a',
+          quantity: 1,
+          furnitureInstanceIds: ['inst-a'],
+          amounts: { materialsCost: 10, edgeTotal: 1, hardwareTotal: 1, directCost: 12, laborModular: 0, salePrice: 15.6 },
+        },
+      ],
+      units: [
+        {
+          furnitureInstanceId: 'inst-a',
+          quoteLineId: 'line-a',
+          moduleCode: 'MOD-1',
+          moduleName: 'Mueble 1',
+          lifecycleStatus: 'active' as const,
+          options: [],
+        },
+      ],
+    },
+    items: [],
+  };
+
+  it('renders one export section per exact revision, newest first', async () => {
+    const user = userEvent.setup();
+    const onExportCommercialQuote = vi.fn();
+    const onExportCommercialQuotePdf = vi.fn();
+    const q1 = {
+      ...q2Detail,
+      id: 'quote-1',
+      revisionNumber: 1,
+      status: 'superseded' as const,
+      commercialAmountsWithheld: undefined,
+    };
+    renderScreen({
+      onExportCommercialQuote,
+      onExportCommercialQuotePdf,
+      quoteRevisions: [q2Detail, q1],
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerId: 'cust-bruno',
+        customerName: 'Cliente congelado Q2',
+        furnitureQuantity: 1,
+        currency: 'USD',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    // Both revisions offer exact-revision exports; the picker is QN-labelled.
+    expect(screen.getByRole('menuitem', { name: /Exportar cotización Q2/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Exportar cotización Q1/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /PDF listado Q1/ })).toBeTruthy();
+    // Section labels coexist with the detail badge text — assert presence.
+    expect(screen.getAllByText('Q2 · Aceptada').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Q1 · Reemplazada').length).toBeGreaterThan(0);
+
+    // Each action carries the EXACT revision id — no implicit latest.
+    await user.click(screen.getByRole('menuitem', { name: /Exportar cotización Q1/ }));
+    expect(onExportCommercialQuote).toHaveBeenCalledWith('quote-1');
+  });
+
+  it('BLOCKER 2: exports stay enabled with empty Project.items when the frozen snapshot has lines', async () => {
+    const user = userEvent.setup();
+    const onExportCommercialQuote = vi.fn();
+    const onExportCommercialQuotePdf = vi.fn();
+    renderScreen({
+      projects: projects.map((project) =>
+        project.id === 'prj-1' ? { ...project, items: [] } : project,
+      ),
+      onExportCommercialQuote,
+      onExportCommercialQuotePdf,
+      quoteRevisions: [q2Detail],
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerId: 'cust-bruno',
+        customerName: 'Cliente congelado Q2',
+        furnitureQuantity: 1,
+        currency: 'USD',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    const xlsxItem = screen.getByRole('menuitem', { name: /Exportar cotización Q2/ }) as HTMLElement;
+    expect(xlsxItem.getAttribute('aria-disabled')).toBeNull();
+    const pdfItem = screen.getByRole('menuitem', { name: /PDF listado Q2/ }) as HTMLElement;
+    expect(pdfItem.getAttribute('aria-disabled')).toBeNull();
+
+    await user.click(xlsxItem);
+    expect(onExportCommercialQuote).toHaveBeenCalledWith('quote-2');
+  });
+
+  it('disables legacy snapshot-less revisions with the honest hint', async () => {
+    const user = userEvent.setup();
+    const onExportCommercialQuote = vi.fn();
+    renderScreen({
+      onExportCommercialQuote,
+      onExportCommercialQuotePdf: undefined,
+      quoteRevisions: [
+        {
+          ...q2Detail,
+          id: 'quote-1',
+          revisionNumber: 1,
+          status: 'superseded' as const,
+          commercialSnapshot: undefined,
+        },
+      ],
+      quoteAuthority: {
+        kind: 'legacy',
+        revisionId: 'quote-1',
+        revisionNumber: 1,
+        status: 'accepted',
+        items: [],
+        createdAt: '2026-09-01T00:00:00Z',
+        message: 'legacy',
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    const item = screen.getByRole('menuitem', { name: /Exportar cotización Q1/ }) as HTMLElement;
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByText('Sin historial comercial congelado')).toBeTruthy();
+  });
+
+  it('disables org-withheld revisions with the honest hint (manufacturing-only)', async () => {
+    const user = userEvent.setup();
+    const onExportCommercialQuote = vi.fn();
+    renderScreen({
+      onExportCommercialQuote,
+      onExportCommercialQuotePdf: undefined,
+      quoteRevisions: [{ ...q2Detail, commercialAmountsWithheld: true }],
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerId: 'cust-bruno',
+        customerName: 'Cliente congelado Q2',
+        furnitureQuantity: 1,
+        currency: 'USD',
+        capturedAt: '2026-09-10T12:00:00Z',
+        amountsWithheld: true,
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    const item = screen.getByRole('menuitem', { name: /Exportar cotización Q2/ }) as HTMLElement;
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByText('Precio comercial no disponible para tu organización')).toBeTruthy();
+  });
+
+  it('hides the commercial sections entirely when no exact-revision handler exists (guest/local)', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      onExportCommercialQuote: undefined,
+      onExportCommercialQuotePdf: undefined,
+      quoteRevisions: [q2Detail],
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    // Other "Más acciones" entries (templates) still exist — but no commercial export.
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(screen.queryByRole('menuitem', { name: /Exportar cotización/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /PDF listado/ })).toBeNull();
+  });
+});

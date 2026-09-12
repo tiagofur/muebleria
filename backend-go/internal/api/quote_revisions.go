@@ -122,21 +122,29 @@ func toQuoteRevisionDetailDTO(d domain.QuoteRevisionDetail) openapi.QuoteRevisio
 		acceptedAt = &accepted
 	}
 
+	// #642/3: org-policy retail redaction marker (manufacturing-only callers).
+	var amountsWithheld *bool
+	if d.CommercialAmountsWithheld {
+		withheld := true
+		amountsWithheld = &withheld
+	}
+
 	return openapi.QuoteRevisionDetail{
-		ID:                     d.ID,
-		ProjectId:              d.ProjectID,
-		RevisionNumber:         int64(d.RevisionNumber),
-		Status:                 openapi.QuoteRevisionStatus(d.Status),
-		SourceType:             openapi.QuoteRevisionSourceType(d.SourceType),
-		BaseQuoteRevisionId:    baseRevisionID,
-		SourceDesignRevisionId: sourceDesignRevisionID,
-		Notes:                  notes,
-		CreatedBy:              createdBy,
-		CreatedAt:              d.CreatedAt.UTC().Format(time.RFC3339Nano),
-		PublishedAt:            publishedAt,
-		AcceptedAt:             acceptedAt,
-		CommercialSnapshot:     toQuoteCommercialSnapshotDTO(d.CommercialSnapshot),
-		Items:                  items,
+		ID:                         d.ID,
+		ProjectId:                  d.ProjectID,
+		RevisionNumber:             int64(d.RevisionNumber),
+		Status:                     openapi.QuoteRevisionStatus(d.Status),
+		SourceType:                 openapi.QuoteRevisionSourceType(d.SourceType),
+		BaseQuoteRevisionId:        baseRevisionID,
+		SourceDesignRevisionId:     sourceDesignRevisionID,
+		Notes:                      notes,
+		CreatedBy:                  createdBy,
+		CreatedAt:                  d.CreatedAt.UTC().Format(time.RFC3339Nano),
+		PublishedAt:                publishedAt,
+		AcceptedAt:                 acceptedAt,
+		CommercialAmountsWithheld: amountsWithheld,
+		CommercialSnapshot:         toQuoteCommercialSnapshotDTO(d.CommercialSnapshot),
+		Items:                      items,
 	}
 }
 

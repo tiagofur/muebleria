@@ -117,13 +117,37 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
             ) : null}
             <div className="project-totals__sale-row">
               <dt>Precio de venta</dt>
-              <dd className="project-totals__sale">{formatProjectMoney(breakdown.salePrice, quoteAuthority.currency)}</dd>
+              <dd className="project-totals__sale">
+                {quoteAuthority.amountsWithheld === true ? (
+                  <span
+                    className="project-totals__sale project-totals__sale--muted"
+                    data-testid="withheld-sale-total"
+                  >
+                    — No disponible para tu organización
+                  </span>
+                ) : (
+                  formatProjectMoney(breakdown.salePrice, quoteAuthority.currency)
+                )}
+              </dd>
             </div>
           </dl>
         ) : isReady ? (
           <p className="project-totals__error" role="alert">
             El snapshot exacto no contiene totales disponibles. Creá una nueva revisión.
           </p>
+        ) : null}
+
+        {/* #642/3: fail-closed commercial export issues (e.g. legacy revision
+            without frozen history) surface here — the same actionable inline
+            list as the pre-DT aside. */}
+        {exportBlockMessage ? (
+          <p className="project-totals__export-msg" role="status">
+            {exportBlockMessage}
+          </p>
+        ) : null}
+
+        {exportErrors.length > 0 ? (
+          <ExportIssueList issues={exportErrors} />
         ) : null}
       </aside>
     );

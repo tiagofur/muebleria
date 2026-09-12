@@ -424,7 +424,17 @@ function ProjectDetailViewInner(): ReactNode {
     canMarkProduced,
   } = ctx;
 
-  const chromeSale = breakdown?.salePrice ?? null;
+  // #642/3 — WITHHELD ≠ ZERO: when the caller's organization reaches the obra
+  // only as manufacturing org, the server redacts the retail amounts to 0 in
+  // the served snapshot copy. That internal 0 is NOT a real price: the
+  // commercial amount maps to absence here so the header total, WhatsApp and
+  // every other chromeSale consumer omit the amount entirely. This is
+  // org-level retail redaction — a different policy from showCosts (internal
+  // cost visibility); owner/sales orgs keep the real price.
+  const retailWithheld =
+    ctx.quoteAuthority?.kind === 'ready' &&
+    ctx.quoteAuthority.amountsWithheld === true;
+  const chromeSale = retailWithheld ? null : breakdown?.salePrice ?? null;
   const [toolsPanel, setToolsPanel] = useState<QuoteToolsPanel>(null);
   const [releaseModalOpen, setReleaseModalOpen] = useState(false);
   const [changeOrderModalOpen, setChangeOrderModalOpen] = useState(false);

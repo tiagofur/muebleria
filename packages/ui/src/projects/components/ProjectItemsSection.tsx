@@ -314,7 +314,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
     }
 
     const revisionLines = buildRevisionLines(quoteAuthority.snapshot, quoteAuthority.items, {
-      amountsVisible: showCosts,
+      amountsVisible: showCosts && quoteAuthority.amountsWithheld !== true,
     });
 
     return (
