@@ -59,6 +59,9 @@ type Server struct {
 	// dedicated MEDIA_SIGNING_KEY (#460 SEC-3). Nil fails closed: a server
 	// built without one neither mints nor accepts media grants.
 	MediaTokens *auth.MediaAuthority
+	// hardwareAssetLimits holds the configurable per-representation byte caps
+	// for hardware 3D asset uploads (#667 M1); nil = package defaults.
+	hardwareAssetLimits map[domain.HardwareAssetRepresentation]int64
 	// MFASecrets encrypts TOTP secrets and keys recovery verifiers under the
 	// dedicated MFA_ENCRYPTION_KEYS keyring (#460 SEC-7). Nil fails closed:
 	// every MFA endpoint refuses to operate, and step-up-gated commands stay
@@ -1742,6 +1745,11 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &h) {
 			return
 		}
+		// #667 M1: the visual asset binding is resolved and validated before
+		// persistence; the payload's echoed facts are replaced server-side.
+		if !s.resolveHardwareVisualBindingForWrite(r, w, &h) {
+			return
+		}
 		h.Active = true
 		err := s.Store.CreateHardware(r.Context(), &h)
 		if err != nil {
@@ -1784,6 +1792,12 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		}
 		var h domain.Hardware
 		if !decodeJSONBody(w, r, &h) {
+			return
+		}
+		// #667 M1: the visual asset binding is resolved and validated before
+		// persistence; the payload's echoed facts are replaced server-side.
+		// A failed validation leaves the previous association untouched.
+		if !s.resolveHardwareVisualBindingForWrite(r, w, &h) {
 			return
 		}
 		// Snapshot current media URL so we can clean up the replaced file after
