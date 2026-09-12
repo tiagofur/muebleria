@@ -10021,12 +10021,17 @@
       },
       "CreateInitialQuoteRevisionRequest": {
         "type": "object",
-        "description": "Explicit decision to create the FIRST QuoteRevision of a project (#571 / WEB-DT-4). The server snapshots the project's current editable commercial state authoritatively — the client never sends commercial values, identities or quantities.",
+        "description": "Explicit decision to create the FIRST QuoteRevision of a project (#571 / WEB-DT-4), or — with baseQuoteRevisionId — the NEXT revision that modernizes an exactly-latest legacy revision without commercial snapshot (#642 legacy recovery). The server snapshots the project's current editable commercial state authoritatively — the client never sends commercial values, identities or quantities.",
         "additionalProperties": false,
         "properties": {
           "notes": {
             "type": "string",
             "description": "Optional human note recorded with the revision. Immutable once the revision is published."
+          },
+          "baseQuoteRevisionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Legacy modernization base (#642): the exact latest revision when it is a snapshot-less legacy row. Required once the project has quote revisions; rejected when the latest revision already carries canonical commercial truth (use requote instead)."
           }
         }
       },

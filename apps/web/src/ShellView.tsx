@@ -977,6 +977,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             revisionId: quoteAuthority.revision.id,
             revisionNumber: quoteAuthority.revision.revisionNumber,
             status: quoteAuthority.revision.status,
+            // #642 legacy recovery: the persisted per-unit rows travel with
+            // the authority so the detail can render them read-only.
+            items: quoteAuthority.revision.items,
+            createdAt: quoteAuthority.revision.createdAt,
+            publishedAt: quoteAuthority.revision.publishedAt,
+            acceptedAt: quoteAuthority.revision.acceptedAt,
+            newerRevisionNumber: quoteAuthority.newerRevisionNumber,
             message: quoteAuthority.message,
             staleMessage: quoteAuthority.staleMessage,
             onRetry: quoteAuthority.retry,

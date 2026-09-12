@@ -12,6 +12,14 @@ export type QuoteRevisionAuthority =
   | {
       readonly kind: 'legacy';
       readonly revision: QuoteRevisionDetail;
+      /**
+       * #642 legacy recovery re-entry: when a NEWER revision than this legacy
+       * one already exists (e.g. a modern draft minted from it), the detail
+       * must offer continuing that revision — never a second modernization
+       * (the backend rejects a stale base). Data comes from the same fetched
+       * revision list; no extra query.
+       */
+      readonly newerRevisionNumber?: number;
       readonly message: string;
       readonly staleMessage?: string;
       readonly retry: () => void;
@@ -72,10 +80,21 @@ export function useQuoteRevisionAuthority(args: {
     ? 'No se pudo actualizar la revisión. Se muestran datos anteriores; reintentá antes de decidir.'
     : undefined;
   if (!revision.commercialSnapshot) {
+    const newerRevisionNumber = query.data
+      .filter((candidate) => candidate.revisionNumber > revision.revisionNumber)
+      .reduce((max, candidate) => Math.max(max, candidate.revisionNumber), 0);
     return {
       kind: 'legacy',
       revision,
-      message: `Q${revision.revisionNumber} no contiene un snapshot comercial. Creá una nueva revisión; no se recalculará desde la obra actual.`,
+      newerRevisionNumber: newerRevisionNumber > 0 ? newerRevisionNumber : undefined,
+      // #642 legacy recovery: user-facing copy — never technical jargon. The
+      // persisted furniture/configurations ARE shown read-only elsewhere;
+      // this message explains what cannot be verified, not that the quote
+      // "broke".
+      message:
+        'Esta revisión fue creada antes del historial comercial congelado. ' +
+        'Los muebles y configuraciones originales siguen disponibles; algunos datos ' +
+        'históricos, como el precio total exacto, no pueden verificarse con el nuevo modelo.',
       staleMessage,
       retry,
     };

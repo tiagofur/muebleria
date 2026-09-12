@@ -35,12 +35,23 @@ import (
 // command carries no commercial payload: the server builds the whole snapshot
 // from authoritative state (quote lines, materialized FurnitureInstances,
 // design truth and catalog definitions).
+//
+// BaseQuoteRevisionID (#642 legacy recovery) extends the same command to
+// MODERNIZE a project whose exact latest revision is a legacy row without
+// commercial snapshot: the next revision is minted from the CURRENT editable
+// commercial state with a fresh canonical snapshot, basing on that legacy
+// revision. The legacy row is never mutated, backfilled or replaced — a modern
+// revision with a snapshot already in place must go through requote instead.
 type CreateInitialQuoteRevisionCommand struct {
 	ProjectID   string
 	Notes       string
 	ActorUserID string
 	IP          string
 	RequestID   string
+	// BaseQuoteRevisionID is required when the project already has quote
+	// revisions (the #393 writer enforces exact-latest); it must reference a
+	// snapshot-less legacy latest revision or the command rejects typed.
+	BaseQuoteRevisionID string
 }
 
 // CreateInitialQuoteRevisionResult returns the created draft revision plus the
@@ -59,7 +70,9 @@ type AcceptQuoteRevisionResult struct {
 }
 
 // CreateInitialQuoteRevision converts the project's current editable
-// commercial state into the FIRST QuoteRevision (draft).
+// commercial state into the FIRST QuoteRevision (draft), or — with
+// BaseQuoteRevisionID — into the NEXT revision that modernizes an exactly
+// latest legacy revision without commercial snapshot (#642 legacy recovery).
 //
 // Business atomicity: per-line materialization convergence (#386, idempotent
 // and only permitted while the project is still draft/quoted), snapshot
@@ -70,6 +83,9 @@ type AcceptQuoteRevisionResult struct {
 // instead of minting a second revision.
 func (s *PostgresStore) CreateInitialQuoteRevision(ctx context.Context, cmd CreateInitialQuoteRevisionCommand) (*CreateInitialQuoteRevisionResult, error) {
 	if !isValidUUID(cmd.ProjectID) {
+		return nil, domain.ErrInvalidRevisionID
+	}
+	if cmd.BaseQuoteRevisionID != "" && !isValidUUID(cmd.BaseQuoteRevisionID) {
 		return nil, domain.ErrInvalidRevisionID
 	}
 	if transactionFromContext(ctx) == nil {
@@ -106,7 +122,39 @@ func (s *PostgresStore) CreateInitialQuoteRevision(ctx context.Context, cmd Crea
 	if projectOrgID != OrgFromCtx(ctx) {
 		return nil, domain.ErrFurnitureInstanceProjectNotWritable
 	}
-	if projectStatus != "draft" && projectStatus != "quoted" {
+	if cmd.BaseQuoteRevisionID != "" {
+		// #642 legacy recovery: the next revision may be minted from the
+		// current editable state ONLY over an exactly-latest legacy revision
+		// without commercial snapshot. A latest revision that already carries
+		// canonical commercial truth has requote as its only path — this
+		// command never competes with it or bypasses its semantics.
+		var latestID string
+		var latestHasSnapshot bool
+		err = s.db(ctx).QueryRow(ctx, `
+			SELECT id::text, commercial_snapshot IS NOT NULL
+			FROM quote_revisions
+			WHERE project_id = $1
+			ORDER BY revision_number DESC
+			LIMIT 1
+		`, cmd.ProjectID).Scan(&latestID, &latestHasSnapshot)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, fmt.Errorf("%w: base revision specified (%s) but project has no previous quote revisions", domain.ErrQuoteRevisionConflict, cmd.BaseQuoteRevisionID)
+			}
+			return nil, err
+		}
+		if latestID != cmd.BaseQuoteRevisionID {
+			// The #393 writer would reject with the same typed conflict; fail
+			// here with the precise reason before doing any work.
+			return nil, fmt.Errorf("%w: base revision %s is stale; latest is %s", domain.ErrQuoteRevisionConflict, cmd.BaseQuoteRevisionID, latestID)
+		}
+		if latestHasSnapshot {
+			return nil, domain.ErrQuoteRevisionNotLegacy
+		}
+		// Modernize deliberately does NOT gate on the legacy Project.status
+		// pin: commercial progress from here on flows through QuoteRevision
+		// lifecycle commands, and Project.status stays operational-only (#673).
+	} else if projectStatus != "draft" && projectStatus != "quoted" {
 		// Same authority as #386: the editable commercial state is pinned once
 		// the legacy quote is accepted — later changes need a new revision.
 		return nil, domain.ErrQuoteRevisionAccepted
@@ -181,12 +229,21 @@ func (s *PostgresStore) CreateInitialQuoteRevision(ctx context.Context, cmd Crea
 
 	// 5. Single #393 writer: no base revision is only legal while the project
 	// has none — a retry/concurrent create fails typed instead of minting Q2.
+	// With a base (legacy modernize), the writer pins the new revision to that
+	// exact latest revision under the same optimistic-concurrency rules.
+	notes := nonEmptyOrDefault(cmd.Notes, "Revisión inicial creada desde el estado comercial editable de la obra.")
+	auditSource := "project_editable_state"
+	if cmd.BaseQuoteRevisionID != "" {
+		notes = nonEmptyOrDefault(cmd.Notes, "Revisión modernizada desde el estado comercial editable de la obra.")
+		auditSource = "legacy_modernization"
+	}
 	rev, err := s.CreateQuoteRevision(ctx, CreateQuoteRevisionCommand{
 		ProjectID:          cmd.ProjectID,
 		OrganizationID:     projectOrgID,
+		BaseRevisionID:     cmd.BaseQuoteRevisionID,
 		Status:             "draft",
 		SourceType:         "manual",
-		Notes:              nonEmptyOrDefault(cmd.Notes, "Revisión inicial creada desde el estado comercial editable de la obra."),
+		Notes:              notes,
 		CreatedBy:          nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
 		Items:              items,
 		CommercialSnapshot: commercialSnapshot,
@@ -196,21 +253,25 @@ func (s *PostgresStore) CreateInitialQuoteRevision(ctx context.Context, cmd Crea
 	}
 
 	// 6. Durable audit in the SAME transaction.
+	auditDetails := map[string]interface{}{
+		"project_id":                 cmd.ProjectID,
+		"quote_revision_id":          rev.ID,
+		"revision_number":            rev.RevisionNumber,
+		"status":                     rev.Status,
+		"source":                     auditSource,
+		"item_count":                 len(items),
+		"created_furniture_instance": createdInstanceIDs,
+	}
+	if cmd.BaseQuoteRevisionID != "" {
+		auditDetails["base_quote_revision_id"] = cmd.BaseQuoteRevisionID
+	}
 	auditErr := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
 		EventType:      "quote_revision_created",
 		ActorUserID:    nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
 		OrganizationID: projectOrgID,
 		IP:             cmd.IP,
 		RequestID:      cmd.RequestID,
-		Details: map[string]interface{}{
-			"project_id":                 cmd.ProjectID,
-			"quote_revision_id":          rev.ID,
-			"revision_number":            rev.RevisionNumber,
-			"status":                     rev.Status,
-			"source":                     "project_editable_state",
-			"item_count":                 len(items),
-			"created_furniture_instance": createdInstanceIDs,
-		},
+		Details:        auditDetails,
 	})
 	if auditErr != nil {
 		return nil, fmt.Errorf("audit quote_revision_created: %w", auditErr)

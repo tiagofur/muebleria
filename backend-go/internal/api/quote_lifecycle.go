@@ -72,13 +72,24 @@ func (s *Server) HandleCreateInitialQuoteRevision(w http.ResponseWriter, r *http
 	if payload.Notes != nil {
 		notes = strings.TrimSpace(*payload.Notes)
 	}
+	// #642 legacy recovery: an explicit exact base modernizes a snapshot-less
+	// legacy latest revision into the next revision with canonical authority.
+	baseQuoteRevisionID := ""
+	if payload.BaseQuoteRevisionId != nil {
+		baseQuoteRevisionID = strings.TrimSpace(*payload.BaseQuoteRevisionId)
+		if baseQuoteRevisionID != "" && !isValidUUID(baseQuoteRevisionID) {
+			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "baseQuoteRevisionId debe ser un UUID válido", nil)
+			return
+		}
+	}
 
 	result, err := s.Store.CreateInitialQuoteRevision(r.Context(), storage.CreateInitialQuoteRevisionCommand{
-		ProjectID:   projectID,
-		Notes:       notes,
-		ActorUserID: claims.UserID,
-		IP:          clientIP(r),
-		RequestID:   RequestIDFromContext(r.Context()),
+		ProjectID:           projectID,
+		Notes:               notes,
+		BaseQuoteRevisionID: baseQuoteRevisionID,
+		ActorUserID:         claims.UserID,
+		IP:                  clientIP(r),
+		RequestID:           RequestIDFromContext(r.Context()),
 	})
 	if err != nil {
 		respondWithQuoteLifecycleError(w, err, "create")
@@ -181,6 +192,10 @@ func respondWithQuoteLifecycleError(w http.ResponseWriter, err error, command st
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La cotización no puede publicarse desde su estado actual: sólo un borrador se publica, y lo publicado/aceptado/reemplazado es histórico inmutable.", nil)
 	case errors.Is(err, domain.ErrQuoteCommercialSnapshotMissing):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "Esta revisión no congeló su verdad comercial (legado): creá una nueva revisión de cotización para publicar. Nunca se recalcula la histórica.", nil)
+	case errors.Is(err, domain.ErrQuoteRevisionNotLegacy):
+		// #642 legacy recovery: modernization only applies to snapshot-less
+		// legacy rows; a modern latest revision continues through requote.
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La última revisión ya tiene autoridad comercial moderna: usá re-cotización para crear la siguiente", nil)
 	case errors.Is(err, domain.ErrInvalidRevisionSnapshot):
 		// Discriminates only the payload copy: the typed error carries the
 		// exact snapshot defect (missing lines, corrupt frozen payload,

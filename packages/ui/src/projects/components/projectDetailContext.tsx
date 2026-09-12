@@ -52,6 +52,18 @@ export type ProjectDetailQuoteAuthority =
       readonly revisionId: string;
       readonly revisionNumber: number;
       readonly status: 'draft' | 'published' | 'accepted' | 'superseded';
+      /**
+       * #642 legacy recovery: the persisted per-unit rows of the legacy
+       * revision (quote_revision_items), shown read-only as the honest
+       * recoverable truth. Commercial amounts and frozen customer-facing
+       * labels never existed for this revision and are never fabricated.
+       */
+      readonly items?: ReadonlyArray<import('@granete/storage').QuoteRevisionItem>;
+      readonly createdAt?: string;
+      readonly publishedAt?: string | null;
+      readonly acceptedAt?: string | null;
+      /** #642 re-entry: a newer revision exists — continue it, never re-mint. */
+      readonly newerRevisionNumber?: number;
       readonly message: string;
       readonly staleMessage?: string;
       readonly onRetry: () => void;

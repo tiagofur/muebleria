@@ -24,6 +24,17 @@
   cambios en `FurnitureLayout`/parser Ruby. Validador simulado sólo en pruebas
   etiquetadas, sin bypass productivo.
 
+# Issue #642 — Legacy Quote Recovery para presupuestos existentes
+
+- Approval: prompt del propietario (2026-09-11); issue #642 OPEN `status:approved`. Base exacta `origin/main@a453cd000a89bc490b8282aab66fec26db77d6dd` (post-merge PR #673). Rama `feat/642-legacy-quote-recovery`. Single writer; worktree aislado.
+- Started: 2026-09-11 21:00 CST.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Las QuoteRevisions pre-#642 sin `commercialSnapshot` muestran ahora su verdad persistida read-only (muebles, parámetros, dimensiones, materiales como ids estables, lifecycle, timestamps reales) con labels actuales marcados "(etiqueta actual)", precio histórico "No disponible con precisión" (ni 0 ni recálculo) y CTA "Crear nueva revisión actualizada". Modernización: `POST /projects/{id}/quote-revisions` con `baseQuoteRevisionId` exacto (comando inicial extendido, OpenAPI regenerado) crea la siguiente revisión con snapshot canónico desde el estado editable actual, pineando la legacy como base; rechazo tipado `ErrQuoteRevisionNotLegacy` si la última ya es moderna (requote es ese camino); la fila legacy queda byte-idéntica y aceptar la moderna suprime la baseline legacy atómicamente. Lista honesta: "Cotización anterior" + precio "No disponible". Sin migraciones ni backfill. Detalle: `progress/implementation_642_legacy_quote_recovery.md`.
+- Evidence:
+  - Storage PG real: `TestQuoteLegacyRecovery*` 4/4 (modernize draft/accepted, rechazo moderno, conflictos de base).
+  - UI: ProjectsScreen 67/67 (tests A/B/C legacy), digitalThread 157/157.
+  - Browser E2E real: `quote-legacy-recovery.spec.ts` 1/1 PASS (seed pre-migración vía DSN admin; flujo por API/UI); specs vecinos PASS.
+  - Batería completa y CI: ver PR.
+
 # Issue #642 — Golden path Q2+R2 → ProductionRelease sin `Project.status = accepted`
 
 - Approval: prompt del propietario (2026-09-11); issue #642 OPEN `status:approved`. Base exacta `origin/main@dee5e7a8aea5e60b808933f3d02482853bc98ff2` (sólo docs desde el merge del PR #664). Rama `feat/642-release-without-project-accepted`. Single writer; worktree aislado (lane #667 editaba el principal).

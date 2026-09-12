@@ -67,7 +67,22 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
           ) : null}
         </div>
 
-        {quoteAuthority.kind === 'error' || quoteAuthority.kind === 'empty' || quoteAuthority.kind === 'legacy' ? (
+        {quoteAuthority.kind === 'legacy' ? (
+          // #642 legacy recovery: honest unavailability is not an error — the
+          // historical total simply cannot be verified. Never 0, never
+          // recalculated from the mutable project or the current catalog.
+          <div data-testid="legacy-price-unavailable" className="project-totals__sale-row" style={{ alignItems: 'center' }}>
+            <dt>Precio histórico</dt>
+            <dd className="project-totals__sale project-totals__sale--muted">
+              — No disponible con precisión
+            </dd>
+            <p className="catalog-form__hint" style={{ margin: 0 }}>
+              Esta revisión se creó antes del historial comercial congelado; el total exacto no puede verificarse.
+              Creá una nueva revisión actualizada para fijar precios actuales.
+            </p>
+          </div>
+        ) : null}
+        {quoteAuthority.kind === 'error' || quoteAuthority.kind === 'empty' ? (
           <p className="project-totals__error" role="alert" data-testid="breakdown-error">
             <AlertCircle size={16} strokeWidth={1.5} aria-hidden />
             <span>{quoteAuthority.message}</span>

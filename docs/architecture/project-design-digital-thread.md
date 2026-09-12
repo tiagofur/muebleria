@@ -864,6 +864,45 @@ Inventario de consumidores runtime (Slice 2):
 
 ---
 
+## 16B. Legacy QuoteRevision recovery (#642)
+
+Las revisiones pre-#642 sin `commercialSnapshot` no están "rotas": conservan
+verdad persistida real y la UI la muestra. La política es fail-closed **por
+campo**, nunca por revisión completa.
+
+**Se conserva (mostrar read-only, exactamente persistido):**
+
+```text
+quote_revision_items: furnitureInstanceId · furnitureDefinitionId · definitionVersion
+                      parameters (dimensiones derivadas de esos parámetros)
+                      materialChoices (ids estables) · lifecycleStatus
+revision: revisionNumber · status · createdAt/publishedAt/acceptedAt reales
+lista: cantidad = ítems activos; isLegacy; saleTotal = null
+```
+
+**No puede reconstruirse (mostrar honestamente no disponible):** moneda
+congelada, identidad comercial congelada, breakdown/montos por línea, precio
+histórico total, labels customer-facing congelados de módulo/opción/material.
+El precio histórico se muestra "No disponible con precisión" — nunca `0`, nunca
+recalculado desde `Project`, catálogo actual o `priceSnapshot` legacy.
+
+**Jamás debe inventarse:** backfill del snapshot (el trigger lo prohíbe y la
+política también), labels actuales presentados como historia congelada (los
+nombres actuales de catálogo pueden asistir como "etiqueta actual",
+explícitamente marcados), unión por índice/nombre con `project.items` o con la
+última DesignRevision.
+
+**Modernización (Q1 legacy → Q2 moderna):** el comando
+`POST /projects/{id}/quote-revisions` con `baseQuoteRevisionId` exacto crea la
+SIGUIENTE revisión desde el estado comercial editable actual, congelando un
+snapshot canónico nuevo y pineando la legacy como base. Reglas: la base debe
+ser la última exacta y carecer de snapshot (`ErrQuoteRevisionNotLegacy` si ya
+tiene autoridad moderna — requote es ese camino); sin gate de `Project.status`
+(la autoridad comercial fluye por QuoteRevision, #673); la fila legacy queda
+byte-idéntica. La revisión moderna sigue el lifecycle normal
+draft → published → accepted; aceptarla suprime la baseline legacy aceptada
+atómicamente.
+
 ## 17. Approval y ProductionRelease
 
 Una revisión puede publicarse sin estar todavía aprobada.

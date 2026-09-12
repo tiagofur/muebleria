@@ -33,6 +33,12 @@ const QuoteCommercialSnapshotSchema = "granete.quote-commercial-snapshot.v1"
 // current editable state — never recalculating history from mutable inputs.
 var ErrQuoteCommercialSnapshotMissing = errors.New("quote revision commercial snapshot missing: la revisión no congeló su verdad comercial; creá una nueva revisión de cotización en lugar de recalcular la histórica")
 
+// ErrQuoteRevisionNotLegacy rejects a legacy-modernization command whose base
+// revision already carries canonical commercial truth (#642 legacy recovery).
+// That revision's continuation is the normal requote flow — modernization is
+// exclusively the recovery path for snapshot-less legacy rows.
+var ErrQuoteRevisionNotLegacy = errors.New("quote revision is not legacy: la última revisión ya tiene autoridad comercial moderna; usá re-cotización para cambiarla")
+
 // QuoteCommercialIdentity is a frozen commercial identity reference: the exact
 // id plus the customer-facing label captured at revision creation.
 type QuoteCommercialIdentity struct {

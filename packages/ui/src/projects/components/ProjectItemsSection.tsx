@@ -21,6 +21,7 @@ import {
 import {
   buildRevisionLines,
   formatLifecycleStatus,
+  formatRevisionUnitDimensions,
 } from '../quoteRevisionPresentation';
 
 /** Drag-over visual feedback state. */
@@ -44,6 +45,7 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
     postAddPlaceCue,
     onDismissPostAddPlaceCue,
     onOpenSpatialStudioUnplaced,
+    onOpenReconciliation,
     quoteAuthority,
     showCosts,
   } = useProjectDetail();
@@ -174,17 +176,62 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
   }
 
   if (quoteAuthority?.kind === 'legacy') {
+    // #642 legacy recovery: show the persisted quote_revision_items read-only
+    // — the honest recoverable truth. Fail-closed per FIELD, not per revision:
+    // furniture, parameters, materials and lifecycle persisted here are real;
+    // amounts and frozen customer-facing labels never existed and are never
+    // invented. Current catalog names may assist recognition, always marked as
+    // "etiqueta actual" — never as frozen history of this revision.
+    const legacyItems = quoteAuthority.items ?? [];
+    const currentModuleLabel = (definitionId?: string | null): string | null => {
+      if (!definitionId) return null;
+      return modules.find((m) => m.id === definitionId)?.name ?? null;
+    };
+    const currentMaterialLabel = (materialId: string): string | null =>
+      catalogs.materials.find((m) => m.id === materialId)?.name ?? null;
+
     return (
       <section className="project-detail__section project-detail__items" aria-label="Ítems de cotización">
         <div className="project-detail__section-header">
-          <h3 className="project-detail__section-title">Muebles</h3>
-          <span className="badge badge--warning">
-            Q{quoteAuthority.revisionNumber} · Legacy
+          <h3 className="project-detail__section-title">Muebles ({legacyItems.length})</h3>
+          <span className="badge badge--warning" data-testid="quote-legacy-badge">
+            Q{quoteAuthority.revisionNumber} · Cotización anterior
           </span>
         </div>
-        <div className="catalog-form__error" data-testid="project-items-legacy" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}>
+
+        <div
+          className="catalog-form__error"
+          role="status"
+          data-testid="project-items-legacy"
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-start' }}
+        >
           <p>{quoteAuthority.message}</p>
-          {quoteAuthority.staleMessage ? <p style={{ fontSize: '0.85rem' }}>{quoteAuthority.staleMessage}</p> : null}
+          {onOpenReconciliation ? (
+            quoteAuthority.newerRevisionNumber != null ? (
+              // #642 re-entry: a newer modern revision exists — continue it,
+              // never offer a second modernization of the stale legacy base.
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+                data-testid="legacy-continue-btn"
+              >
+                Continuar Q{quoteAuthority.newerRevisionNumber}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
+                data-testid="legacy-modernize-btn"
+              >
+                Crear nueva revisión actualizada
+              </button>
+            )
+          ) : null}
+          {quoteAuthority.staleMessage ? (
+            <p style={{ fontSize: '0.85rem' }}>{quoteAuthority.staleMessage}</p>
+          ) : null}
           <button
             type="button"
             className="btn btn--small"
@@ -194,6 +241,61 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
             Reintentar
           </button>
         </div>
+
+        {legacyItems.length === 0 ? (
+          <p className="project-detail__empty">Esta revisión no conserva muebles registrados.</p>
+        ) : (
+          <div className="project-item-list">
+            {legacyItems.map((item, index) => {
+              const dimensions = formatRevisionUnitDimensions(item.parameters);
+              const moduleLabel = currentModuleLabel(item.furnitureDefinitionId);
+              const materialEntries = Object.entries(item.materialChoices ?? {});
+              return (
+                <div
+                  key={item.furnitureInstanceId}
+                  className="project-item-card project-item-card--readonly"
+                  data-testid={`quote-legacy-unit-${item.furnitureInstanceId}`}
+                >
+                  <div className="project-item-card__header">
+                    <div className="project-item-card__header-left">
+                      <span className="project-item-card__index">{index + 1}.</span>
+                      <h4 className="project-item-card__title">Unidad física</h4>
+                    </div>
+                    <span className={`badge ${item.lifecycleStatus === 'active' ? 'badge--subtle' : 'badge--warning'}`}>
+                      {formatLifecycleStatus(item.lifecycleStatus)}
+                    </span>
+                  </div>
+                  <div className="project-item-card__body" style={{ display: 'grid', gap: '0.35rem' }}>
+                    {dimensions != null ? (
+                      <span data-testid={`quote-legacy-dimensions-${item.furnitureInstanceId}`}>
+                        {dimensions}
+                      </span>
+                    ) : null}
+                    <span className="project-item-readonly-value">
+                      Definición: {item.furnitureDefinitionId || '—'}
+                      {item.definitionVersion != null ? ` · v${item.definitionVersion}` : ''}
+                    </span>
+                    {moduleLabel != null ? (
+                      <span className="catalog-form__hint" style={{ margin: 0 }}>
+                        {moduleLabel} (etiqueta actual)
+                      </span>
+                    ) : null}
+                    {materialEntries.map(([groupCode, materialId]) => (
+                      <span key={groupCode} className="project-item-readonly-value">
+                        Material {groupCode}: {materialId}
+                        {currentMaterialLabel(materialId) != null ? (
+                          <span className="catalog-form__hint" style={{ marginLeft: '0.35rem' }}>
+                            {currentMaterialLabel(materialId)} (etiqueta actual)
+                          </span>
+                        ) : null}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     );
   }

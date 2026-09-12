@@ -296,6 +296,32 @@ export function ProjectReconciliationScreen({
     () => quoteRevisions.find((q) => q.id === quoteRevisionId) ?? null,
     [quoteRevisions, quoteRevisionId],
   );
+  // #642 legacy recovery: the selected revision predates canonical commercial
+  // snapshots — its persisted furniture stays readable, but the modern
+  // continuation is minting the NEXT revision from the current editable state.
+  // Modernization is only valid while the legacy revision is the EXACT latest:
+  // if a newer revision exists (e.g. a modern draft already minted from it),
+  // the honest continuation is resuming that revision — never a second mint
+  // (the backend rejects a stale base regardless; #642 review).
+  const selectedQuoteIsLegacy = Boolean(
+    selectedQuoteRevision && !selectedQuoteRevision.commercialSnapshot,
+  );
+  const latestQuoteRevision = useMemo(
+    () =>
+      quoteRevisions.reduce<typeof quoteRevisions[number] | null>(
+        (latest, revision) =>
+          !latest || revision.revisionNumber > latest.revisionNumber ? revision : latest,
+        null,
+      ),
+    [quoteRevisions],
+  );
+  const selectedLegacyIsLatest = Boolean(
+    selectedQuoteIsLegacy &&
+      selectedQuoteRevision &&
+      selectedQuoteRevision.id === latestQuoteRevision?.id,
+  );
+  const newerRevisionThanSelectedLegacy =
+    selectedQuoteIsLegacy && !selectedLegacyIsLatest ? latestQuoteRevision : null;
   const isInvalidExplicitQuote = Boolean(
     quoteRevisionId &&
       quoteRevisionsQuery.isSuccess &&
@@ -392,7 +418,18 @@ export function ProjectReconciliationScreen({
     setCreateQuoteError(null);
     setQuoteLifecycleNotice(null);
     try {
-      const created = await api.createInitialProjectQuoteRevision(token, projectId, {});
+      // #642 legacy recovery: when the selected revision is a snapshot-less
+      // legacy row that is still the EXACT latest, the create command
+      // modernizes it — the next revision is minted from the CURRENT editable
+      // state with a canonical snapshot, pinned to that exact legacy latest.
+      // When a newer revision exists, the UI routes to resume it instead of
+      // offering this command (the backend would reject a stale base).
+      const modernizeLegacy = selectedQuoteIsLegacy && selectedLegacyIsLatest && selectedQuoteRevision;
+      const created = await api.createInitialProjectQuoteRevision(
+        token,
+        projectId,
+        modernizeLegacy ? { baseQuoteRevisionId: selectedQuoteRevision.id } : {},
+      );
       await invalidateQuoteRevisionReads();
       setQuoteRevisionId(created.id);
       onContextChange?.({
@@ -400,7 +437,11 @@ export function ProjectReconciliationScreen({
         designId: activeDesignId,
         designRevisionId,
       });
-      setQuoteLifecycleNotice(`Revisión Q${created.revisionNumber} creada como borrador.`);
+      setQuoteLifecycleNotice(
+        modernizeLegacy
+          ? `Revisión Q${created.revisionNumber} creada como borrador moderno a partir de la cotización anterior.`
+          : `Revisión Q${created.revisionNumber} creada como borrador.`,
+      );
     } catch (err) {
       setCreateQuoteError(describeCommandError(err));
     } finally {
@@ -629,6 +670,69 @@ export function ProjectReconciliationScreen({
           </div>
         }
       />
+
+      {/* #642 legacy recovery: modernize panel for a snapshot-less selected
+          revision — ONLY while it is the exact latest. If a newer revision
+          already exists (a modern draft was already minted), the honest path
+          is resuming it, never minting another one. Rendered independently of
+          design context. */}
+      {selectedQuoteIsLegacy && selectedQuoteRevision && selectedLegacyIsLatest ? (
+        <div
+          className="pd-card pr-panel"
+          data-testid="legacy-modernize-panel"
+          style={{ marginBottom: '1rem', alignItems: 'flex-start' }}
+        >
+          <h4 className="pr-panel__title">
+            Q{selectedQuoteRevision.revisionNumber} · Cotización anterior
+          </h4>
+          <p className="pr-panel__why" style={{ margin: 0 }}>
+            Esta revisión fue creada antes del historial comercial congelado: sus muebles y
+            configuraciones siguen disponibles en el detalle, pero no puede publicarse ni
+            aceptarse. Creá la siguiente revisión para fijar una nueva base comercial exacta.
+          </p>
+          <CommandErrorAlert error={createQuoteError} />
+          <button
+            type="button"
+            className="btn btn--primary"
+            data-testid="legacy-modernize-btn"
+            disabled={createQuoteSubmitting || !canMutateQuote}
+            onClick={() => void handleCreateInitialQuote()}
+          >
+            {createQuoteSubmitting ? 'Creando revisión…' : 'Crear nueva revisión actualizada'}
+          </button>
+        </div>
+      ) : null}
+      {newerRevisionThanSelectedLegacy ? (
+        <div
+          className="pd-card pr-panel"
+          data-testid="legacy-resume-latest-panel"
+          style={{ marginBottom: '1rem', alignItems: 'flex-start' }}
+        >
+          <h4 className="pr-panel__title">
+            Q{selectedQuoteRevision!.revisionNumber} · Cotización anterior
+          </h4>
+          <p className="pr-panel__why" style={{ margin: 0 }}>
+            Ya existe una revisión moderna más reciente: Q{newerRevisionThanSelectedLegacy.revisionNumber} ·{' '}
+            {quoteStatusLabelOf(newerRevisionThanSelectedLegacy)}. Continuá el trabajo sobre esa
+            revisión para fijar la nueva base comercial.
+          </p>
+          <button
+            type="button"
+            className="btn btn--primary"
+            data-testid="legacy-resume-latest-btn"
+            onClick={() => {
+              setQuoteRevisionId(newerRevisionThanSelectedLegacy.id);
+              onContextChange?.({
+                quoteRevisionId: newerRevisionThanSelectedLegacy.id,
+                designId: activeDesignId,
+                designRevisionId,
+              });
+            }}
+          >
+            Abrir Q{newerRevisionThanSelectedLegacy.revisionNumber}
+          </button>
+        </div>
+      ) : null}
 
       {designs.length === 0 || quoteRevisions.length === 0 ? (
         <div className="pd-card pr-panel" style={{ padding: '2rem', alignItems: 'center' }}>
