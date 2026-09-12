@@ -126,11 +126,12 @@ Project.status    → workflow operativo/legacy; fuera de la cadena comercial
 - Go storage (PostgreSQL real `localhost:5445`):
   `TestProductionRelease_AuthorityIsQuoteRevisionNotProjectStatus` PASS;
   suites `TestProductionRelease*|TestApproveDesignRevision*|TestDigitalThreadE2E*|TestRequote*|TestQuoteLifecycle*` PASS (80.077s).
-- Go completo `go test ./... -count=1`: OK en todos los paquetes (storage 559.629s sobre PostgreSQL real; pilotreadiness 247.200s).
-- `pnpm test`: domain 1407 / storage 191 / excel 335 (+3 skip hardware preexistentes) / desktop 17 / mobile 73 / ui 1736 / web 449 — todos PASS.
+- Go completo `go test ./... -count=1`: OK en todos los paquetes en ambos heads (storage 559.6s/538.0s sobre PostgreSQL real; pilotreadiness 247.2s/270.0s).
+- `pnpm test` (head de corrección): domain 1407 / storage 191 / excel 335 (+3 skip hardware preexistentes) / desktop 17 / mobile 73 / ui 1738 / web 449 — todos PASS.
 - `pnpm typecheck`: 7/7 paquetes, 0 errores.
 - `pnpm openapi:check`: sin drift (sin cambios de contrato).
-- Browser gate completo (`scripts/organization-browser-gate.sh`, Chromium + Go + PostgreSQL efímero): 48/48 PASS (3.2m). Incluye `demo-golden-path.spec.ts` 10/10 con ledger final `Project.status=draft / Q1=superseded / Q2=accepted / R1=published / R2=approved / P1=active` y la negative proof del stage 10.
+- Browser gate completo (head inicial, Chromium + Go + PostgreSQL efímero): 48/48 PASS (3.2m). Incluye `demo-golden-path.spec.ts` 10/10 con ledger final `Project.status=draft / Q1=superseded / Q2=accepted / R1=published / R2=approved / P1=active` y la negative proof del stage 10.
+- Browser gate specs modificados por la corrección de review (head final): `quote-list-authority.spec.ts` 3/3 + `project-reconciliation.spec.ts` 4/4 = 7/7 PASS (56.1s), incluyendo las dos evidencias nuevas de autoridad de fabricación (pre-P1 cerrado; post-P1 'Abrir en Producción' con Project.status draft).
 - `git diff --check`: limpio.
 
 ## 6. Fuera de alcance (documentado)
