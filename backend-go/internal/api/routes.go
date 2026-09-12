@@ -74,6 +74,66 @@ func publishCommandRouter(commands map[string]http.Handler) http.Handler {
 // designRevisionArtifactCommandRouter adapts
 // /api/designs/{designId}/revisions/{revisionId}/artifacts/{kind}:authorize
 // the same way (#392 / DT-8).
+// hardwareAssetSessionCommandRouter dispatches "{sessionId}:{command}" for
+// the staged hardware asset upload flow (#667 M1).
+func hardwareAssetSessionCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("sessionCommand")
+		sessionID, command, ok := strings.Cut(segment, ":")
+		if !ok || sessionID == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("sessionId", sessionID)
+		handler.ServeHTTP(w, r)
+	})
+}
+
+// hardwareAssetRevisionCommandRouter dispatches "{revisionId}:{command}" for
+// hardware asset revision commands (#667 M1).
+func hardwareAssetRevisionCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("revisionCommand")
+		revisionID, command, ok := strings.Cut(segment, ":")
+		if !ok || revisionID == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("revisionId", revisionID)
+		handler.ServeHTTP(w, r)
+	})
+}
+
+// hardwareAssetRetireCommandRouter dispatches "{assetId}:{command}" for
+// hardware asset lifecycle commands (#667 M1).
+func hardwareAssetRetireCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("assetCommand")
+		assetID, command, ok := strings.Cut(segment, ":")
+		if !ok || assetID == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("assetId", assetID)
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func designRevisionArtifactCommandRouter(commands map[string]http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		segment := r.PathValue("artifactCommand")
@@ -349,6 +409,34 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/catalog/hardware/{id}", authMW(http.HandlerFunc(server.HandleHardwareByID)))
 	mux.Handle("PUT /api/catalog/hardware/{id}", authMW(http.HandlerFunc(server.HandleHardwareByID)))
 	mux.Handle("DELETE /api/catalog/hardware/{id}", authMW(http.HandlerFunc(server.HandleHardwareByID)))
+
+	// #667 / M1: versioned 3D assets for the hardware catalog. start/finalize
+	// are durable commands behind the idempotency receipt (a lost finalize
+	// response replays the SAME asset, never a second one); the multipart
+	// byte upload is a replace-semantics upsert of staging state and stays
+	// outside the generated OpenAPI surface, same as design publish
+	// artifacts and catalog media. Bytes are read through short-lived
+	// integrity-pinned grants only (#460) — the consumer surface for #668.
+	mux.Handle("POST /api/hardware-assets/uploads", noStoreMiddleware(authMW(server.RequireIdempotency("hardware-assets.start-upload", http.HandlerFunc(server.HandleHardwareAssetUploadStart)))))
+	mux.Handle("PUT /api/hardware-assets/uploads/{sessionId}/bytes/{representation}", authMW(http.HandlerFunc(server.HandleHardwareAssetUploadBytes)))
+	mux.Handle("POST /api/hardware-assets/uploads/{sessionCommand...}", noStoreMiddleware(authMW(hardwareAssetSessionCommandRouter(map[string]http.Handler{
+		"finalize": http.HandlerFunc(server.HandleHardwareAssetUploadFinalize),
+		"cancel":   http.HandlerFunc(server.HandleHardwareAssetUploadCancel),
+	}))))
+	mux.Handle("GET /api/hardware-assets/uploads/{sessionId}", authMW(http.HandlerFunc(server.HandleHardwareAssetUploadGet)))
+	mux.Handle("GET /api/hardware-assets", authMW(http.HandlerFunc(server.HandleHardwareAssets)))
+	mux.Handle("GET /api/hardware-assets/asset/{assetId}", authMW(http.HandlerFunc(server.HandleHardwareAssetByID)))
+	// Literal "asset"/"uploads" namespaces keep the ServeMux multi-wildcard
+	// patterns conflict-free (same structure as the designs/{id}/revisions
+	// command routes). The generated OpenAPI keeps the canonical
+	// /hardware-assets/{assetId}:verb command forms.
+	mux.Handle("POST /api/hardware-assets/asset/{assetCommand...}", noStoreMiddleware(authMW(hardwareAssetRetireCommandRouter(map[string]http.Handler{
+		"retire": http.HandlerFunc(server.HandleHardwareAssetRetire),
+	}))))
+	mux.Handle("POST /api/hardware-assets/asset/{assetId}/revisions/{revisionCommand...}", noStoreMiddleware(authMW(hardwareAssetRevisionCommandRouter(map[string]http.Handler{
+		"authorize": http.HandlerFunc(server.HandleHardwareAssetRevisionAuthorize),
+	}))))
+	mux.Handle("GET /api/hardware-assets/files/{key...}", server.hardwareAssetFileGetAuth(http.HandlerFunc(server.HandleHardwareAssetFileGet)))
 
 	// Catálogo: Grupos de Opciones
 	mux.Handle("GET /api/catalog/option-groups", authMW(http.HandlerFunc(server.HandleOptionGroups)))

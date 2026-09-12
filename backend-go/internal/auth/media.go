@@ -50,6 +50,15 @@ var mediaFilenamePattern = regexp.MustCompile(`^[0-9a-f]{32}\.(jpg|png|webp)$`)
 const designArtifactResourcePrefix = "designart/"
 
 var designArtifactKeyPattern = regexp.MustCompile(`^designs/publish/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(model|manifest|preview)-[0-9a-f]{12}\.(skp|json|png|jpg)$`)
+
+// hardwareAssetResourcePrefix and hardwareAssetKeyPattern define the third
+// canonical resource class (#667 M1): signed read grants for hardware 3D
+// asset revisions. Keys are server-generated at upload time
+// ("hardware-assets/<upload-session>/<representation>-<sha256-12>.<ext>") —
+// never client input — and the full key is part of the signed material.
+const hardwareAssetResourcePrefix = "hwasset/"
+
+var hardwareAssetKeyPattern = regexp.MustCompile(`^hardware-assets/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(skp|glb|thumbnail)-[0-9a-f]{12}\.(skp|glb|png|jpg|webp)$`)
 var canonicalSHA256Pattern = regexp.MustCompile(`^sha256-[0-9a-f]{64}$`)
 
 // MediaResourceKey builds the canonical signed resource key for a catalog
@@ -84,12 +93,44 @@ func DesignArtifactKeyFromResource(resource string) string {
 	return key
 }
 
+// HardwareAssetResourceKey builds the canonical signed resource key for a
+// hardware 3D asset revision storage key. Non-canonical input yields "".
+func HardwareAssetResourceKey(storageKey string) string {
+	if !hardwareAssetKeyPattern.MatchString(storageKey) {
+		return ""
+	}
+	return hardwareAssetResourcePrefix + storageKey
+}
+
+// HardwareAssetKeyFromResource recovers the storage key of a canonical
+// hardware asset resource; anything else yields "".
+func HardwareAssetKeyFromResource(resource string) string {
+	if len(resource) <= len(hardwareAssetResourcePrefix) {
+		return ""
+	}
+	key := resource[len(hardwareAssetResourcePrefix):]
+	if HardwareAssetResourceKey(key) != resource {
+		return ""
+	}
+	return key
+}
+
 // resourceKeyBelongsToGrantClass reports whether the resource key is a
-// canonical member of any grantable resource class (media or design
-// artifacts). Grants for anything else are refused at mint and validate.
+// canonical member of any grantable resource class (catalog media, design
+// artifacts or hardware assets). Grants for anything else are refused at
+// mint and validate.
 func resourceKeyBelongsToGrantClass(resource string) bool {
 	return MediaFilenameFromResource(resource) != "" ||
-		DesignArtifactKeyFromResource(resource) != ""
+		DesignArtifactKeyFromResource(resource) != "" ||
+		HardwareAssetKeyFromResource(resource) != ""
+}
+
+// pinnedResourceClasses (design artifacts and hardware assets) require exact
+// integrity pins: their bytes are immutable published content, so a grant
+// without the persisted size/digest pair is invalid at mint and validate.
+func resourceRequiresIntegrityPins(resource string) bool {
+	return DesignArtifactKeyFromResource(resource) != "" ||
+		HardwareAssetKeyFromResource(resource) != ""
 }
 
 // MediaFilenameFromResource recovers the filename of a canonical resource
@@ -179,10 +220,10 @@ func (m *MediaAuthority) Issue(req MediaIssueRequest) (string, *MediaClaims, err
 	if req.OrgID == "" {
 		return "", nil, errors.New("media grant requires an organization")
 	}
-	isDesignArtifact := DesignArtifactKeyFromResource(req.ResourceKey) != ""
-	if isDesignArtifact {
+	isPinnedArtifact := resourceRequiresIntegrityPins(req.ResourceKey)
+	if isPinnedArtifact {
 		if req.ExpectedSizeBytes == nil || *req.ExpectedSizeBytes < 0 || !canonicalSHA256Pattern.MatchString(req.ExpectedSHA256) {
-			return "", nil, errors.New("design artifact grant requires canonical integrity pins")
+			return "", nil, errors.New("pinned artifact grant requires canonical integrity pins")
 		}
 	} else if req.ExpectedSizeBytes != nil || req.ExpectedSHA256 != "" {
 		return "", nil, errors.New("catalog media grant cannot carry design artifact integrity pins")
@@ -266,8 +307,8 @@ func (m *MediaAuthority) Validate(tokenStr string) (*MediaClaims, error) {
 		claims.OrgID == "" {
 		return nil, errors.New("invalid media grant")
 	}
-	isDesignArtifact := DesignArtifactKeyFromResource(claims.Resource) != ""
-	if isDesignArtifact {
+	isPinnedArtifact := resourceRequiresIntegrityPins(claims.Resource)
+	if isPinnedArtifact {
 		if claims.ExpectedSizeBytes == nil || *claims.ExpectedSizeBytes < 0 || !canonicalSHA256Pattern.MatchString(claims.ExpectedSHA256) {
 			return nil, errors.New("invalid media grant")
 		}
