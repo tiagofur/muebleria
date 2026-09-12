@@ -76,6 +76,15 @@ function profileHumanLabel(profileId: string, family: string): string {
   return `${profileId} (${family})`;
 }
 
+function profileKey(profile: MachineOutputCatalogView['outputProfiles'][number]): string {
+  return `${profile.outputCompatibilityProfileId}@${profile.revisionId}#${profile.digest}`;
+}
+
+function persistedProfileKey(record: MachineOutputSelectionRecord): string {
+  const selection = record.selection;
+  return `historical:${selection.outputCompatibilityProfileId}@${selection.outputCompatibilityProfileRevisionId}#${selection.outputCompatibilityProfileDigest ?? 'unpinned'}`;
+}
+
 const SUPPORT_LABELS: Record<string, string> = {
   // NOT_TESTED is deliberately explicit: serializing a candidate never
   // promotes a compatibility claim — the workshop reads "candidate, not
@@ -108,19 +117,37 @@ function MachineOutputOperationCard({
   const profiles = catalog.outputProfiles.filter((p) => families.includes(p.formatFamily));
 
   const [machineId, setMachineId] = useState(record?.selection.machineProfileId ?? '');
-  const [profileId, setProfileId] = useState(
-    record?.selection.outputCompatibilityProfileId ?? '',
+  const exactPersistedProfile = record
+    ? profiles.find(
+        (profile) =>
+          profile.outputCompatibilityProfileId === record.selection.outputCompatibilityProfileId &&
+          profile.revisionId === record.selection.outputCompatibilityProfileRevisionId &&
+          profile.digest === record.selection.outputCompatibilityProfileDigest,
+      )
+    : undefined;
+  const [selectedProfileKey, setSelectedProfileKey] = useState(
+    exactPersistedProfile
+      ? profileKey(exactPersistedProfile)
+      : record
+        ? persistedProfileKey(record)
+        : '',
   );
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
 
   useEffect(() => {
     setMachineId(record?.selection.machineProfileId ?? '');
-    setProfileId(record?.selection.outputCompatibilityProfileId ?? '');
-  }, [record?.selection.machineProfileId, record?.selection.outputCompatibilityProfileId]);
+    setSelectedProfileKey(
+      exactPersistedProfile
+        ? profileKey(exactPersistedProfile)
+        : record
+          ? persistedProfileKey(record)
+          : '',
+    );
+  }, [record, exactPersistedProfile]);
 
   const machine = machines.find((m) => m.machineProfileId === machineId);
-  const profile = profiles.find((p) => p.outputCompatibilityProfileId === profileId);
+  const profile = profiles.find((candidate) => profileKey(candidate) === selectedProfileKey);
   const adapter = profile
     ? catalog.adapters.find((a) => a.producedFormatFamily === profile.formatFamily)
     : undefined;
@@ -133,6 +160,7 @@ function MachineOutputOperationCard({
           machineProfileRevisionId: machine.machineProfileRevisionId,
           outputCompatibilityProfileId: profile.outputCompatibilityProfileId,
           outputCompatibilityProfileRevisionId: profile.revisionId,
+          outputCompatibilityProfileDigest: profile.digest,
           postprocessorAdapterId: adapter.postprocessorAdapterId,
           postprocessorAdapterVersion: adapter.adapterVersion,
           postprocessorImplementationDigest: adapter.implementationDigest,
@@ -140,6 +168,9 @@ function MachineOutputOperationCard({
       : null;
 
   const configured = resolved?.status === 'CONFIGURED' ? resolved : null;
+  const stale = Boolean(
+    configured?.readiness.reasons.some((reason) => reason.code === 'PROFILE_DIGEST_MISMATCH'),
+  );
   const supportStatus = configured?.supportStatus ?? profile?.supportStatus ?? 'NOT_TESTED';
   const ready = configured?.readiness.ready ?? false;
   const blockerMessage = configured && !ready
@@ -187,14 +218,19 @@ function MachineOutputOperationCard({
         <label>
           Software / perfil de salida
           <select
-            value={profileId}
-            onChange={(e) => setProfileId(e.target.value)}
+            value={selectedProfileKey}
+            onChange={(e) => setSelectedProfileKey(e.target.value)}
             data-testid={`machine-output-${operation}-profile`}
           >
             <option value="">— Sin configurar —</option>
+            {record && !exactPersistedProfile ? (
+              <option value={persistedProfileKey(record)} disabled>
+                {record.selection.outputCompatibilityProfileId}@{record.selection.outputCompatibilityProfileRevisionId} · desactualizada
+              </option>
+            ) : null}
             {profiles.map((p) => (
-              <option key={p.outputCompatibilityProfileId} value={p.outputCompatibilityProfileId}>
-                {profileHumanLabel(p.outputCompatibilityProfileId, p.formatFamily)}
+              <option key={profileKey(p)} value={profileKey(p)}>
+                {profileHumanLabel(p.outputCompatibilityProfileId, p.formatFamily)} · {p.revisionId}
               </option>
             ))}
           </select>
@@ -221,7 +257,32 @@ function MachineOutputOperationCard({
           <div>
             <dt>Generación</dt>
             <dd data-testid={`machine-output-${operation}-readiness`}>
-              {record && !ready ? 'Bloqueado' : ready ? 'Listo' : '—'}
+              {stale
+                ? 'Desactualizada'
+                : configured && !ready
+                  ? 'Bloqueado'
+                  : record
+                    ? 'Configurada'
+                    : '—'}
+            </dd>
+          </div>
+        </dl>
+      ) : record && stale ? (
+        <dl className="machine-output-meta">
+          <div>
+            <dt>Perfil guardado</dt>
+            <dd>{record.selection.outputCompatibilityProfileId}@{record.selection.outputCompatibilityProfileRevisionId}</dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd data-testid={`machine-output-${operation}-status`}>Desactualizada</dd>
+          </div>
+          <div>
+            <dt>Versión vigente</dt>
+            <dd>
+              {profiles.find((candidate) =>
+                candidate.outputCompatibilityProfileId === record.selection.outputCompatibilityProfileId,
+              )?.revisionId ?? 'No disponible'}
             </dd>
           </div>
         </dl>
@@ -231,14 +292,23 @@ function MachineOutputOperationCard({
           {blockerMessage}
         </p>
       ) : null}
+      {stale ? (
+        <p className="machine-output-intro">
+          Seleccioná explícitamente la versión vigente y guardá para actualizar este pin.
+        </p>
+      ) : null}
       {record ? (
         <details className="machine-output-tech">
           <summary>Detalle técnico</summary>
           <ul>
             <li>machine: {record.selection.machineProfileId}@{record.selection.machineProfileRevisionId}</li>
             <li>profile: {record.selection.outputCompatibilityProfileId}@{record.selection.outputCompatibilityProfileRevisionId}</li>
+            <li>profile digest: {record.selection.outputCompatibilityProfileDigest ?? 'histórico sin pin'}</li>
             <li>adapter: {record.selection.postprocessorAdapterId}@{record.selection.postprocessorAdapterVersion}</li>
-            <li>digest: {record.selection.postprocessorImplementationDigest}</li>
+            <li>adapter digest: {record.selection.postprocessorImplementationDigest}</li>
+            {configured?.readiness.reasons.map((reason) => (
+              <li key={`${reason.code}:${reason.detail}`}>blocker: {reason.code}</li>
+            ))}
             <li>versión: {record.version}</li>
           </ul>
         </details>

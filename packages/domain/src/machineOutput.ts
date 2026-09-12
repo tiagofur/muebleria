@@ -157,9 +157,11 @@ export interface AdapterBlockReason {
     | 'FORMAT_FAMILY_MISMATCH'
     | 'OPERATION_NOT_REPRESENTABLE'
     | 'PROFILE_DIGEST_MISMATCH'
-    | 'SERIALIZER_NOT_IMPLEMENTED';
+    | 'SERIALIZER_NOT_IMPLEMENTED'
+    | `ptx_compile.${string}`;
   readonly detail: string;
   readonly dimension?: string;
+  readonly context?: Readonly<Record<string, unknown>>;
 }
 
 export interface AdapterReadiness {
@@ -235,6 +237,7 @@ export interface MachineArtifact {
 }
 
 export interface ArtifactManifest {
+  readonly manifestSchemaVersion: 'granete.machine-artifact-manifest.v2';
   readonly artifactSetId: string;
   readonly jobId: string;
   readonly provenance: ManufacturingJobProvenance;
@@ -243,6 +246,7 @@ export interface ArtifactManifest {
   readonly machineProfile?: MachineProfileRef;
   readonly machineProfileSupportedCapabilities?: readonly MachineCapability[];
   readonly outputCompatibilityProfile: OutputCompatibilityProfileRef;
+  readonly outputCompatibilityProfileDigest: string;
   readonly postprocessorAdapter: {
     readonly postprocessorAdapterId: string;
     readonly adapterVersion: string;
@@ -253,8 +257,13 @@ export interface ArtifactManifest {
     readonly artifactId: string;
     readonly kind: ArtifactKind;
     readonly schemaVersion: string;
+    readonly fileName: string;
     readonly sha256: string;
   }[];
+  readonly delivery: {
+    readonly mode: 'unified' | 'by-material';
+    readonly material?: { readonly code: string; readonly name: string };
+  };
   readonly createdAt: string;
   readonly validationStatus: MachineOutputSupportStatus;
   readonly nonProductionValidationArtifact: true;

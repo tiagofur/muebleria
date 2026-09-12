@@ -445,6 +445,9 @@ export interface ShellViewCtx {
   readonly handleExportCutPlanPtx: (cutPlan: CutPlan, mode?: 'unified' | 'by-material') => Promise<void>;
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
+  readonly resolveCuttingOutputTarget?: (
+    cutPlan: import('@granete/domain').CutPlan,
+  ) => CuttingOutputTargetView | null;
   readonly handleExportDespiecePdf: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportElevations: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportHardwareList: (projectId?: string | undefined) => Promise<void>;
@@ -730,6 +733,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleExportCutPlanDxf,
     handleExportCutPlanPtx,
     cuttingOutputTarget = null,
+    resolveCuttingOutputTarget,
     handleExportDespiecePdf,
     handleExportElevations,
     handleExportHardwareList,
@@ -1388,6 +1392,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
             onExportCutPlanPtx={(plan, mode) => { void handleExportCutPlanPtx(plan, mode); }}
             cuttingOutputTarget={cuttingOutputTarget}
+            resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             canImportNesting={canMarkProduced || canExportProductionUnion}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
             exportBusy={exportBusy}

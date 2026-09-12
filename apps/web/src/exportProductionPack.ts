@@ -280,10 +280,16 @@ export async function buildProductionPackExport(
             if (bundles.length === 0) {
               throw new Error('La salida de corte configurada no generó archivos.');
             }
-            return bundles.map((bundle) => ({
-              fileName: bundle.artifact.fileName,
-              bytes: bundle.artifact.bytes,
-            }));
+            return bundles.flatMap((bundle) => [
+              {
+                fileName: bundle.artifact.fileName,
+                bytes: bundle.artifact.bytes,
+              },
+              {
+                fileName: `${bundle.artifact.fileName}.manifest.json`,
+                bytes: new TextEncoder().encode(bundle.manifestJson),
+              },
+            ]);
           },
           legacy: () => {
             try {

@@ -1,3 +1,20 @@
+# Issue #692 — readiness real, identidad multi-sheet y provenance CADmatic 4
+
+- Approval: prompt del propietario (2026-09-12); issue #692 OPEN con labels `status:approved`, `type:bug`, `high`, `domain`. PR #694 / issue #691 verificados como integrados en `origin/main`.
+- Base exacta: `origin/main@4623205d2031ffd78769ebeedf89f1d40e363e56`.
+- Rama/worktree: `fix/692-cadmatic4-readiness` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-692`; índice CodeGraph propio inicializado.
+- Started: 2026-09-12 17:05 CST.
+- Delivery: PR único autorizado explícitamente por el propietario el 2026-09-12, con `size:exception` sobre el presupuesto recomendado de 800 líneas authored.
+- Scope autorizado: identidad de región `(sheetIndex, regionId)`, readiness contra el `CutPlan` activo, errores `ptx_compile.*` preservados, manifest/provenance durable en descarga directa/ZIP/Production Pack, pin exacto de digest de profile (estrategia A) y presentación histórica stale honesta.
+- Result: `IMPLEMENTED_PENDING_CI`. `ScopedRegionRef` elimina colisiones job-wide y la regresión de dos hojas conserva X1/X2 con readback/mutación semántica; readiness y descarga comparten `evaluateSelectedCuttingOutputReadiness` sobre el `CutPlan` activo; errores `ptx_compile.*` llegan tipados a UI; selección persiste digest exacto con migración 000132 nullable sólo para históricos; r1/r2 quedan stale sin retarget; salida configurada entrega manifest v2 directo, por material y en Production Pack con hash de los bytes entregados.
+- Evidence local: `pnpm test` PASS (372 archivos, 4302 tests; 3 skips preexistentes de fixtures/evidence), `pnpm typecheck` PASS (7/7), `pnpm openapi:check` PASS, `GOFLAGS='-p=1' go test ./...` PASS (incluye migration fresh + upgrade/historical NULL), browser real Go + PostgreSQL 16 + Chromium PASS 9/9 (Settings→save r3→reload→CutPlan real→readiness→PTX+manifest→SHA/readback; bloqueado específico antes de descarga; late org A 200/500 no gobierna B), `git diff --check` limpio.
+- Plan:
+  1. Fijar RED multi-sheet con ids locales repetidos y mutación semántica X1/X2; centralizar identidad scoped sin cambiar `CutProgram.regionId`.
+  2. Persistir el digest exacto del profile mediante migración aditiva forward-only y regenerar el contrato OpenAPI/cliente.
+  3. Unificar evaluación y generación sobre el `CutPlan` real, conservando error tipado y contexto hasta la UI.
+  4. Entregar manifests deterministas con hashes/pins exactos y mostrar selecciones stale sin reinterpretarlas como r3.
+  5. Ejecutar pruebas enfocadas, migraciones fresh/upgrade, suites completas, browser real, push/PR y readback de CI sobre el HEAD exacto.
+
 # Issue #691 — autoridad de selección CADmatic 4 sin fallback legacy
 - `IMPLEMENTED_PENDING_REVIEW` en `fix/691-machine-output-authority`: loading/error/blocked no exportan, configured usa la tupla exacta y sólo confirmed-empty habilita legacy; directa/Production Pack comparten autoridad scoped. Evidencia pos-merge: browser Go+PostgreSQL+Chromium 8/8 (retry real, empty→legacy, Settings→CAD4 r3→reload→CSV y A tardía 200/500 sin gobernar B), focused web 13/13, UI 21/21, typecheck 7/7, OpenAPI/diff limpios. Diff: 724 altas + 76 bajas = 800 authored; sin #692/#693 ni PTX/profiles/adapters.
 # Issue #667 — M2: administración de recursos 3D desde React (Correcciones R1–R3 sobre PR #690)

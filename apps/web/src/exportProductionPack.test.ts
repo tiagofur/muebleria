@@ -14,6 +14,7 @@ const cadmatic4Selection: MachineOutputSelection = {
   machineProfileRevisionId: 'r1',
   outputCompatibilityProfileId: 'ptx-cadmatic-4',
   outputCompatibilityProfileRevisionId: 'r3',
+  outputCompatibilityProfileDigest: '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537',
   postprocessorAdapterId: 'granete-ptx',
   postprocessorAdapterVersion: '1.2.0',
   postprocessorImplementationDigest:
@@ -116,6 +117,8 @@ describe('buildProductionPackExport (Issue #134)', () => {
           bytes: new TextEncoder().encode('SELECTED-CADMATIC4-R3'),
           sha256: 'selected',
         },
+        manifest: {},
+        manifestJson: '{"manifestSchemaVersion":"granete.machine-artifact-manifest.v2"}\n',
       },
     ] as never);
     const legacy = vi.fn(() => new Uint8Array([1, 2, 3]));
@@ -136,6 +139,9 @@ describe('buildProductionPackExport (Issue #134)', () => {
     expect(await zip.file('corte-cadmatic4-r3.ptx')?.async('string')).toBe(
       'SELECTED-CADMATIC4-R3',
     );
+    expect(
+      await zip.file('corte-cadmatic4-r3.ptx.manifest.json')?.async('string'),
+    ).toContain('granete.machine-artifact-manifest.v2');
     expect(Object.keys(zip.files)).not.toContain('seccionadora_Demo_plantilla.ptx');
     expect(selected).toHaveBeenCalledWith(project.cutPlan, cadmatic4Selection, 'unified');
     expect(legacy).not.toHaveBeenCalled();

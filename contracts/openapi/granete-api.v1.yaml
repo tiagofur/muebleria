@@ -10092,6 +10092,7 @@
           "machineProfileRevisionId",
           "outputProfileId",
           "outputProfileRevisionId",
+          "outputProfileDigest",
           "adapterId",
           "adapterVersion",
           "adapterImplementationDigest"
@@ -10116,6 +10117,10 @@
           "outputProfileRevisionId": {
             "type": "string"
           },
+          "outputProfileDigest": {
+            "description": "SHA-256 of the exact OutputCompatibilityProfile data. Null only for historical rows created before digest pinning; new writes reject null.",
+            "type": ["string", "null"]
+          },
           "adapterId": {
             "type": "string"
           },
@@ -10136,6 +10141,7 @@
           "machineProfileRevisionId",
           "outputProfileId",
           "outputProfileRevisionId",
+          "outputProfileDigest",
           "adapterId",
           "adapterVersion",
           "adapterImplementationDigest",
@@ -10162,6 +10168,10 @@
           },
           "outputProfileRevisionId": {
             "type": "string"
+          },
+          "outputProfileDigest": {
+            "description": "SHA-256 of the exact OutputCompatibilityProfile data; null marks an unpinned historical selection.",
+            "type": ["string", "null"]
           },
           "adapterId": {
             "type": "string"
@@ -10196,7 +10206,8 @@
           "code": {
             "type": "string",
             "enum": [
-              "SERIALIZER_NOT_IMPLEMENTED"
+              "SERIALIZER_NOT_IMPLEMENTED",
+              "PROFILE_DIGEST_MISMATCH"
             ]
           },
           "detail": {

@@ -42,6 +42,7 @@ import { verifyCutPlanPtxReadback } from '../ptx/verifyCutPlanPtxReadback';
 import { sha256Hex } from './digest';
 import { buildCad4CandidateCuttingJob, buildFixtureCuttingJob } from './machineOutputFixtures';
 import {
+  evaluateSelectedCuttingOutputReadiness,
   generateSelectedCuttingOutput,
   resolveManufacturingOutputTarget,
 } from './outputSelectionResolver';
@@ -70,6 +71,7 @@ function candidateSelection(): MachineOutputSelection {
     machineProfileRevisionId: CLIENT_A_HPP250_PROFILE.ref.machineProfileRevisionId,
     outputCompatibilityProfileId: CANDIDATE.ref.outputCompatibilityProfileId,
     outputCompatibilityProfileRevisionId: CANDIDATE.ref.revisionId,
+    outputCompatibilityProfileDigest: CANDIDATE.digest,
     postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
     postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
     postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
@@ -280,6 +282,14 @@ function expectBlockedWithDetail(job: ResolvedCuttingJob, profile: OutputCompati
   expect(details).toContain(detailContains);
 }
 
+function expectSelectedReadinessBlocked(job: ResolvedCuttingJob, code: string): void {
+  const resolved = evaluateSelectedCuttingOutputReadiness(job.cutPlan, candidateSelection());
+  expect(resolved.status).toBe('CONFIGURED');
+  if (resolved.status !== 'CONFIGURED') return;
+  expect(resolved.readiness.ready).toBe(false);
+  expect(resolved.readiness.reasons.map((reason) => reason.code)).toContain(code);
+}
+
 // ---------------------------------------------------------------------------
 // Ruta candidata: ready ⇒ serialize, bytes gobernados por el perfil
 // ---------------------------------------------------------------------------
@@ -418,7 +428,9 @@ describe('CADmatic 4 candidato (ptx-cadmatic-4@r2) — ruta del compilador docum
 
 describe('CADmatic 4 candidato — preflight bloquea con causa específica', () => {
   it('hoja sin cutProgram (plan legado del fixture #348)', () => {
-    expectBlockedWithDetail(buildFixtureCuttingJob(), CANDIDATE, 'ptx_compile.missing_cut_program');
+    const job = buildFixtureCuttingJob();
+    expectBlockedWithDetail(job, CANDIDATE, 'ptx_compile.missing_cut_program');
+    expectSelectedReadinessBlocked(job, 'ptx_compile.missing_cut_program');
   });
 
   it('CNC nesting no es representable en guillotina', () => {
@@ -474,7 +486,9 @@ describe('CADmatic 4 candidato — preflight bloquea con causa específica', () 
       ],
     };
     const sheet = sheetWithProgram(program, [labPiece('p1-s0', d4.keptRect, 'P1')]);
-    expectBlockedWithDetail(jobWithSheet(sheet, TRIM0_CONFIG), CANDIDATE, 'ptx_compile.phase_unsupported');
+    const job = jobWithSheet(sheet, TRIM0_CONFIG);
+    expectBlockedWithDetail(job, CANDIDATE, 'ptx_compile.phase_unsupported');
+    expectSelectedReadinessBlocked(job, 'ptx_compile.phase_unsupported');
   });
 
   it('espesor ausente: sin default industrial', () => {

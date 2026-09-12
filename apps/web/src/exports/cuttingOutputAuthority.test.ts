@@ -15,6 +15,7 @@ const selection: MachineOutputSelection = {
   machineProfileRevisionId: 'r1',
   outputCompatibilityProfileId: 'ptx-cadmatic-4',
   outputCompatibilityProfileRevisionId: 'r3',
+  outputCompatibilityProfileDigest: '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537',
   postprocessorAdapterId: 'granete-ptx',
   postprocessorAdapterVersion: '1.2.0',
   postprocessorImplementationDigest:

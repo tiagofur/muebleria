@@ -203,8 +203,11 @@ export const GOLDEN_MAPPING = {
     "A-1-s0",
     "B-2-s0"
   ],
-  "offcutRegionIdByOffcutIndex": [
-    "place-1-1:rest"
+  "offcutRegionRefByOffcutIndex": [
+    {
+      "sheetIndex": 0,
+      "regionId": "place-1-1:rest"
+    }
   ],
   "sheetIndexByPatternIndex": [
     0

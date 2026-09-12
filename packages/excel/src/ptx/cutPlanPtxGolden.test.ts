@@ -38,7 +38,7 @@ function buildGoldenMapping(): PtxCompilationMapping {
     materialIndexByCode: new Map(Object.entries(GOLDEN_MAPPING.materialIndexByCode)),
     partIndexByPieceRef: new Map(Object.entries(GOLDEN_MAPPING.partIndexByPieceRef)),
     pieceRefByPartIndex: [...GOLDEN_MAPPING.pieceRefByPartIndex],
-    offcutRegionIdByOffcutIndex: [...GOLDEN_MAPPING.offcutRegionIdByOffcutIndex],
+    offcutRegionRefByOffcutIndex: [...GOLDEN_MAPPING.offcutRegionRefByOffcutIndex],
     sheetIndexByPatternIndex: [...GOLDEN_MAPPING.sheetIndexByPatternIndex],
     sheets: GOLDEN_MAPPING.sheets.map((sheet) => ({
       sheetIndex: sheet.sheetIndex,
@@ -64,8 +64,8 @@ describe('golden candidato LAB_FIXTURE NOT_MACHINE_VALIDATED', () => {
       Object.entries(GOLDEN_MAPPING.partIndexByPieceRef),
     );
     expect(compiled.mapping.pieceRefByPartIndex).toEqual([...GOLDEN_MAPPING.pieceRefByPartIndex]);
-    expect(compiled.mapping.offcutRegionIdByOffcutIndex).toEqual([
-      ...GOLDEN_MAPPING.offcutRegionIdByOffcutIndex,
+    expect(compiled.mapping.offcutRegionRefByOffcutIndex).toEqual([
+      ...GOLDEN_MAPPING.offcutRegionRefByOffcutIndex,
     ]);
     expect(compiled.mapping.sheets[0]!.cutIdByCutIndex).toEqual([
       ...GOLDEN_MAPPING.sheets[0]!.cutIdByCutIndex,
@@ -95,7 +95,10 @@ describe('golden candidato LAB_FIXTURE NOT_MACHINE_VALIDATED', () => {
     // ¿Qué sheet produjo PTN_INDEX 1?
     expect(mapping.sheetIndexByPatternIndex[0]).toBe(0);
     // ¿Qué remnant produjo X1?
-    expect(mapping.offcutRegionIdByOffcutIndex[0]).toBe('place-1-1:rest');
+    expect(mapping.offcutRegionRefByOffcutIndex[0]).toEqual({
+      sheetIndex: 0,
+      regionId: 'place-1-1:rest',
+    });
   });
 
   it('está etiquetado como candidato de laboratorio sin claims de receptor', () => {

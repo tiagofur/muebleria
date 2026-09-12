@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { MachineOutputSelection } from '@granete/domain';
+import {
+  DEFAULT_CUT_PLAN_CONFIG,
+  optimizeCutPlan,
+  type AdapterBlockReason,
+  type MachineOutputSelection,
+  type ProductionCutRow,
+} from '@granete/domain';
 import {
   KNOWN_MACHINE_PROFILES,
   KNOWN_OUTPUT_PROFILES,
+  evaluateSelectedCuttingOutputReadiness,
   generateSelectedCuttingOutput,
   resolveManufacturingOutputTarget,
 } from './outputSelectionResolver';
@@ -26,10 +33,48 @@ function cuttingSelection(profileId: string): MachineOutputSelection {
     machineProfileRevisionId: CLIENT_A_HPP250_PROFILE.ref.machineProfileRevisionId,
     outputCompatibilityProfileId: profile.ref.outputCompatibilityProfileId,
     outputCompatibilityProfileRevisionId: profile.ref.revisionId,
+    outputCompatibilityProfileDigest: profile.digest,
     postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
     postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
     postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
   };
+}
+
+function validCad4Plan() {
+  const row: ProductionCutRow = {
+    quantity: 1,
+    lengthMm: 450,
+    widthMm: 320,
+    description: 'Panel lab',
+    materialName: 'Lab Board 18',
+    materialCode: 'LAB18',
+    grain: 1,
+    L1: 0,
+    L2: 0,
+    W1: 0,
+    W2: 0,
+    partCode: 'P1',
+    partName: 'Panel lab',
+    moduleCode: 'M01',
+    thicknessMm: 18,
+  };
+  return optimizeCutPlan('readiness-real-plan', [row], [{
+    id: 'lab18',
+    code: 'LAB18',
+    name: 'Lab Board 18',
+    costPerM2: 10,
+    wastePercent: 10,
+    lengthMm: 1200,
+    widthMm: 700,
+    thicknessMm: 18,
+    grainDefault: true,
+    boardPrice: 8,
+    active: true,
+  }], {
+    ...DEFAULT_CUT_PLAN_CONFIG,
+    sawKerfMm: 4,
+    trim: { topMm: 0, bottomMm: 0, leftMm: 0, rightMm: 0 },
+  });
 }
 
 describe('resolveManufacturingOutputTarget', () => {
@@ -72,7 +117,7 @@ describe('resolveManufacturingOutputTarget', () => {
       const staleResult = resolveManufacturingOutputTarget(stale, 'cutting');
       expect(staleResult.status).toBe('CONFIGURED');
       if (staleResult.status !== 'CONFIGURED') return;
-      expect(staleResult.profileLabel).toBe('ptx-cadmatic-4@r3');
+      expect(staleResult.profileLabel).toBe(`ptx-cadmatic-4@${staleRevision}`);
       expect(staleResult.readiness.ready).toBe(false);
       expect(staleResult.readiness.reasons.map((r) => r.code)).toContain('PROFILE_DIGEST_MISMATCH');
       // Still the selected profile — no generic substitution and no automatic
@@ -84,7 +129,10 @@ describe('resolveManufacturingOutputTarget', () => {
 
   it('CADmatic 3/5 siguen bloqueados por evidencia ausente y NUNCA caen al genérico', () => {
     for (const profileId of ['ptx-cadmatic-3', 'ptx-cadmatic-5']) {
-      const result = resolveManufacturingOutputTarget(cuttingSelection(profileId), 'cutting');
+      const result = evaluateSelectedCuttingOutputReadiness(
+        buildFixtureCuttingJob().cutPlan,
+        cuttingSelection(profileId),
+      );
       expect(result.status).toBe('CONFIGURED');
       if (result.status !== 'CONFIGURED') return;
       expect(result.readiness.ready).toBe(false);
@@ -102,6 +150,7 @@ describe('resolveManufacturingOutputTarget', () => {
       machineProfileRevisionId: 'r1',
       outputCompatibilityProfileId: 'mpr-woodwop',
       outputCompatibilityProfileRevisionId: 'r1',
+      outputCompatibilityProfileDigest: MPR_WOODWOP_PROFILE.digest,
       postprocessorAdapterId: 'woodwop-mpr',
       postprocessorAdapterVersion: '0.1.0',
       postprocessorImplementationDigest: '4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782',
@@ -124,8 +173,21 @@ describe('resolveManufacturingOutputTarget', () => {
     expect(result.readiness.ready).toBe(false);
     expect(result.readiness.reasons.map((r) => r.code)).toContain('PROFILE_DIGEST_MISMATCH');
     // Still the selected profile — never another one.
-    expect(result.profileLabel).toBe('ptx-generic@r1');
+    expect(result.profileLabel).toBe('ptx-generic@r0');
     expect(result.selection.outputCompatibilityProfileRevisionId).toBe('r0');
+  });
+
+  it('un registro histórico sin digest queda stale aunque id y revisión coincidan', () => {
+    const historical = {
+      ...cuttingSelection('ptx-cadmatic-4'),
+      outputCompatibilityProfileDigest: null,
+    };
+    const result = resolveManufacturingOutputTarget(historical, 'cutting');
+    expect(result.status).toBe('CONFIGURED');
+    if (result.status !== 'CONFIGURED') return;
+    expect(result.profileLabel).toBe('ptx-cadmatic-4@r3');
+    expect(result.readiness.ready).toBe(false);
+    expect(result.readiness.reasons[0]?.detail).toContain('sin digest histórico');
   });
 
   it('at most one target per operation — the resolver returns a single tuple, never a list', () => {
@@ -134,6 +196,43 @@ describe('resolveManufacturingOutputTarget', () => {
     }
     const result = resolveManufacturingOutputTarget(cuttingSelection('ptx-generic'), 'cutting');
     expect(Array.isArray((result as { selection?: unknown }).selection)).toBe(false);
+  });
+
+  it('evalúa readiness contra el CutPlan activo y ready=true genera sin otro fallo de representabilidad', async () => {
+    const plan = validCad4Plan();
+    const selection = cuttingSelection('ptx-cadmatic-4');
+    const evaluated = evaluateSelectedCuttingOutputReadiness(plan, selection);
+    expect(evaluated.status).toBe('CONFIGURED');
+    if (evaluated.status !== 'CONFIGURED') return;
+    expect(evaluated.readiness).toEqual({ ready: true, reasons: [] });
+    await expect(generateSelectedCuttingOutput(plan, selection)).resolves.toHaveLength(1);
+  });
+
+  it('invalida inmediatamente un plan activo sin cutProgram y preserva ptx_compile.*', async () => {
+    const valid = validCad4Plan();
+    const invalid = {
+      ...valid,
+      id: `${valid.id}-missing-program`,
+      version: valid.version + 1,
+      sheets: valid.sheets.map((sheet, index) =>
+        index === 0 ? { ...sheet, cutProgram: undefined } : sheet,
+      ),
+    };
+    const selection = cuttingSelection('ptx-cadmatic-4');
+    const evaluated = evaluateSelectedCuttingOutputReadiness(invalid, selection);
+    expect(evaluated.status).toBe('CONFIGURED');
+    if (evaluated.status !== 'CONFIGURED') return;
+    expect(evaluated.readiness.ready).toBe(false);
+    expect(evaluated.readiness.reasons[0]?.code).toBe('ptx_compile.missing_cut_program');
+    expect(evaluated.readiness.reasons[0]?.context).toMatchObject({ sheetIndex: 0 });
+
+    const thrown = await generateSelectedCuttingOutput(invalid, selection).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as { context?: { reasons?: AdapterBlockReason[] } }).context?.reasons?.[0]?.code)
+      .toBe('ptx_compile.missing_cut_program');
   });
 
   it('generating through the resolved ready target produces exactly one output byte-identical to the golden', async () => {
