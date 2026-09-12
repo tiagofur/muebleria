@@ -639,12 +639,19 @@ export function ProjectsScreen({
   }>(() => {
     if (!state.selectedProject) return { sections: [] };
     const itemsEmpty = state.selectedProject.items.length === 0;
+    // #642/3: commercial buttons name the exact revision they will export
+    // (the one the detail is showing) — never an ambiguous "current quote".
+    const revisionTag =
+      quoteAuthority &&
+      (quoteAuthority.kind === 'ready' || quoteAuthority.kind === 'legacy')
+        ? ` Q${quoteAuthority.revisionNumber}`
+        : '';
 
     const commercialItems = [
       onExportCommercialQuote
         ? {
             id: 'quote',
-            label: 'Exportar cotización',
+            label: `Exportar cotización${revisionTag}`,
             hint: 'Para el cliente (.xlsx)',
             disabled: exportBusy || exportBlocked || itemsEmpty,
             onSelect: () => void onExportCommercialQuote(),
@@ -653,7 +660,7 @@ export function ProjectsScreen({
       onExportCommercialQuotePdf
         ? {
             id: 'pdf-list',
-            label: 'PDF listado',
+            label: `PDF listado${revisionTag}`,
             hint: 'Muebles + total de venta',
             disabled: exportBusy || exportBlocked || itemsEmpty,
             onSelect: () => void onExportCommercialQuotePdf('detailed'),
@@ -662,7 +669,7 @@ export function ProjectsScreen({
       onExportCommercialQuotePdf
         ? {
             id: 'pdf-summary',
-            label: 'PDF resumen',
+            label: `PDF resumen${revisionTag}`,
             hint: 'Datos + total, sin listado',
             disabled: exportBusy || exportBlocked || itemsEmpty,
             onSelect: () => void onExportCommercialQuotePdf('summary'),
@@ -682,6 +689,7 @@ export function ProjectsScreen({
     };
   }, [
     state.selectedProject,
+    quoteAuthority,
     onExportCommercialQuote,
     onExportCommercialQuotePdf,
     exportBusy,

@@ -23,6 +23,10 @@ import { useUiStore } from '../stores/uiStore';
 
 import { buildCommercialQuoteExport } from '../exportCommercialQuote';
 import { buildCommercialQuotePdfExport } from '../exportCommercialQuotePdf';
+import {
+  resolveExactCommercialExportSource,
+} from './exactCommercialQuoteModel';
+import type { QuoteRevisionAuthority } from '../quoteRevisionAuthority';
 import { buildHardwareListExport } from '../exportHardwareList';
 import {
   buildPieceLabelsExport,
@@ -64,6 +68,11 @@ export interface ExportHandlersDeps {
   readonly workspaceSettings: WorkshopSettings | undefined;
   /** #591: exact selected cutting target. When set, normal generation uses ONLY this tuple. */
   readonly machineOutputCuttingSelection?: MachineOutputSelection | null;
+  /**
+   * #642/3: existing COST-01/COST-02 shell policy — when false, line amounts
+   * are not authorized and render as absence in commercial exports.
+   */
+  readonly showCosts?: boolean;
   readonly toast: ToastFn;
   /** Stamps generatedBy/At on the project's engineering log. */
   readonly stampEngineeringGeneration: (projectId?: string) => void;
@@ -88,6 +97,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     actorRole,
     workspaceSettings,
     machineOutputCuttingSelection = null,
+    showCosts = true,
     toast,
     stampEngineeringGeneration,
     recordProductionExport,
@@ -613,28 +623,44 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     [selectedProject, projects, catalog, customers, toast, session, actorRole, recordProductionExport],
   );
 
-  const handleExportCommercialQuote = useCallback(async () => {
-    if (!selectedProject || !catalog) return;
-    await runExport({
-      build: () => buildCommercialQuoteExport(selectedProject, catalog, customers),
-    });
-  }, [selectedProject, catalog, customers]);
-
-  const handleExportCommercialQuotePdf = useCallback(
-    async (variant: 'detailed' | 'summary') => {
-      if (!selectedProject || !catalog) return;
+  /**
+   * #642/3: commercial exports act on the EXACT QuoteRevision authority of
+   * the visible detail — never on the mutable Project. Non-ready states
+   * (legacy snapshot-less, empty, loading, error) fail closed with an
+   * actionable inline issue.
+   */
+  const handleExportCommercialQuote = useCallback(
+    async (authority: QuoteRevisionAuthority) => {
+      const resolved = resolveExactCommercialExportSource(authority);
+      if (!resolved.ok) {
+        await runExport({ build: async () => resolved });
+        return;
+      }
       await runExport({
         build: () =>
-          buildCommercialQuotePdfExport(
-            selectedProject,
-            catalog,
-            customers,
-            variant,
-            workspaceSettings,
-          ),
+          buildCommercialQuoteExport(resolved.source, { amountsVisible: showCosts }),
       });
     },
-    [selectedProject, catalog, customers, workspaceSettings],
+    [showCosts],
+  );
+
+  const handleExportCommercialQuotePdf = useCallback(
+    async (authority: QuoteRevisionAuthority, variant: 'detailed' | 'summary') => {
+      const resolved = resolveExactCommercialExportSource(authority);
+      if (!resolved.ok) {
+        await runExport({ build: async () => resolved });
+        return;
+      }
+      await runExport({
+        build: () =>
+          buildCommercialQuotePdfExport(resolved.source, {
+            amountsVisible: showCosts,
+            variant,
+            workshopName: workspaceSettings?.workshopName,
+          }),
+      });
+    },
+    [showCosts, workspaceSettings],
   );
 
   return {

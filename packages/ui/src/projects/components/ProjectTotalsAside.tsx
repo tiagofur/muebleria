@@ -125,6 +125,19 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
             El snapshot exacto no contiene totales disponibles. Creá una nueva revisión.
           </p>
         ) : null}
+
+        {/* #642/3: fail-closed commercial export issues (e.g. legacy revision
+            without frozen history) surface here — the same actionable inline
+            list as the pre-DT aside. */}
+        {exportBlockMessage ? (
+          <p className="project-totals__export-msg" role="status">
+            {exportBlockMessage}
+          </p>
+        ) : null}
+
+        {exportErrors.length > 0 ? (
+          <ExportIssueList issues={exportErrors} />
+        ) : null}
       </aside>
     );
   }

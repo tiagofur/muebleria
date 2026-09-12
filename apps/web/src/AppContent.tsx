@@ -2885,6 +2885,7 @@ export function AppContent({
     actorRole,
     workspaceSettings: workspace?.settings,
     machineOutputCuttingSelection,
+    showCosts,
     toast,
     stampEngineeringGeneration,
     recordProductionExport,

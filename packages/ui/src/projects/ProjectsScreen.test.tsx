@@ -2334,3 +2334,74 @@ describe('#642 / 2A commercial summaries dataset states', () => {
     expect(within(screen.getByTestId('project-card-prj-1')).getByText('Q3 en borrador')).toBeTruthy();
   });
 });
+
+describe('commercial export buttons act on the exact visible revision (#642/3)', () => {
+  it('labels the export actions with the visible QN when authority is ready', async () => {
+    const user = userEvent.setup();
+    const onExportCommercialQuote = vi.fn();
+    const onExportCommercialQuotePdf = vi.fn();
+    renderScreen({
+      onExportCommercialQuote,
+      onExportCommercialQuotePdf,
+      quoteAuthority: {
+        kind: 'ready',
+        revisionId: 'quote-2',
+        revisionNumber: 2,
+        status: 'accepted',
+        projectName: 'Cocina congelada Q2',
+        customerId: 'cust-bruno',
+        customerName: 'Cliente congelado Q2',
+        furnitureQuantity: 7,
+        currency: 'USD',
+        capturedAt: '2026-09-10T12:00:00Z',
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(screen.getByRole('menuitem', { name: /Exportar cotización Q2/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /PDF listado Q2/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /PDF resumen Q2/ })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /^Exportar cotización$/ })).toBeNull();
+  });
+
+  it('keeps the commercial actions visible for a legacy authority (fails closed on click)', async () => {
+    const user = userEvent.setup();
+    const onExportCommercialQuote = vi.fn().mockResolvedValue(undefined);
+    renderScreen({
+      onExportCommercialQuote,
+      onExportCommercialQuotePdf: undefined,
+      quoteAuthority: {
+        kind: 'legacy',
+        revisionId: 'quote-1',
+        revisionNumber: 1,
+        status: 'accepted',
+        items: [],
+        createdAt: '2026-09-01T00:00:00Z',
+        message: 'legacy',
+        onRetry: vi.fn(),
+      },
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    const item = screen.getByRole('menuitem', { name: /Exportar cotización Q1/ });
+    expect(item).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /PDF listado/ })).toBeNull();
+  });
+
+  it('hides the commercial section entirely when no exact-revision handler exists (guest/local)', async () => {
+    const user = userEvent.setup();
+    renderScreen({
+      onExportCommercialQuote: undefined,
+      onExportCommercialQuotePdf: undefined,
+    });
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    // Other "Más acciones" entries (templates) still exist — but no commercial export.
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(screen.queryByRole('menuitem', { name: /Exportar cotización/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /PDF listado/ })).toBeNull();
+  });
+});

@@ -280,7 +280,7 @@ import {
 import { organizationKeys } from './shared/query/queryKeys';
 import { sessionScopeKey } from './shared/query/sessionScope';
 import type { SessionScope } from './shared/query/sessionScope';
-import { useQuoteRevisionAuthority } from './quoteRevisionAuthority';
+import { useQuoteRevisionAuthority, type QuoteRevisionAuthority } from './quoteRevisionAuthority';
 import { useProjectsCommercialSummaries } from './projectsCommercialSummaries';
 import {
   DEFAULT_API_BASE,
@@ -431,8 +431,8 @@ export interface ShellViewCtx {
   readonly handleEmitPurchaseOrder: (id: string) => Promise<void>;
   readonly handleExportAssemblySheets: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCncPilot: (projectId?: string | undefined) => Promise<void>;
-  readonly handleExportCommercialQuote: () => Promise<void>;
-  readonly handleExportCommercialQuotePdf: (variant: "detailed" | "summary") => Promise<void>;
+  readonly handleExportCommercialQuote: (authority: QuoteRevisionAuthority) => Promise<void>;
+  readonly handleExportCommercialQuotePdf: (authority: QuoteRevisionAuthority, variant: "detailed" | "summary") => Promise<void>;
   readonly handleExportCutListCsv: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCutPlanPdf: (cutPlan: CutPlan) => Promise<void>;
   readonly handleExportCutPlanDxf: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => Promise<void>;
@@ -2261,13 +2261,20 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             if (location.pathname + location.search !== target) navigate(target);
           }}
           onExportCommercialQuote={
-            filterProjectsToPlant ? undefined : handleExportCommercialQuote
+            // #642/3: client exports act on the exact visible revision only.
+            // Idle authority (guest/local session or no obra selected) has no
+            // exact revision to export — the buttons are absent rather than
+            // pretending. Every other state stays visible and fails closed
+            // with an actionable message (legacy/empty/loading/error).
+            filterProjectsToPlant || quoteAuthority.kind === 'idle'
+              ? undefined
+              : () => handleExportCommercialQuote(quoteAuthority)
           }
           onExportCommercialQuotePdf={
-            filterProjectsToPlant
+            filterProjectsToPlant || quoteAuthority.kind === 'idle'
               ? undefined
               : (variant) => {
-                  void handleExportCommercialQuotePdf(variant);
+                  void handleExportCommercialQuotePdf(quoteAuthority, variant);
                 }
           }
           exportErrors={exportErrors}
