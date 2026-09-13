@@ -23,23 +23,21 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		return nil, domain.ErrDesignNotFound
 	}
 	orgID := OrgFromCtx(ctx)
-	var ownerOrgID, salesOrgID string
+	var authorized bool
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT p.organization_id::text, COALESCE(p.sales_organization_id::text, '')
+		SELECT true
 		FROM designs d
 		JOIN projects p ON p.id = d.project_id
 		WHERE d.id = $1 AND d.project_id = $2
-		  AND (p.organization_id = $3 OR p.sales_organization_id = $3 OR p.manufacturing_organization_id = $3)
+		  AND p.organization_id = $3
 		FOR SHARE OF d
-	`, designID, projectID, orgID).Scan(&ownerOrgID, &salesOrgID)
+	`, designID, projectID, orgID).Scan(&authorized)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignNotFound
 		}
 		return nil, err
 	}
-	saleVisible := ownerOrgID == orgID || salesOrgID == orgID
-
 	wc, err := s.GetDesignWorkingCopy(ctx, designID)
 	if err != nil || wc.ProjectID != projectID {
 		if err == nil {
@@ -69,7 +67,7 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		ProjectID: projectID, DesignID: designID, WorkingVersion: workingVersion,
 		WorkingFingerprint: workingFingerprint, PricingAuthority: "calc-project-breakdown",
 		CalculatedAt: now, Currency: envelope.Currency, ItemCount: len(wc.Items), Issues: []string{},
-		SaleAmountsWithheld: !saleVisible,
+		SaleAmountsWithheld: false,
 	}
 
 	pricingItems := make([]domain.ProjectItem, 0, len(wc.Items))
@@ -138,9 +136,6 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			result.ProjectionFingerprint = &projectionFingerprint
 			result.Amounts = domain.CommercialProjectionAmountsFromBreakdown(breakdown)
 			result.Status = domain.CommercialProjectionCurrent
-			if !saleVisible {
-				result.Amounts.SaleTotal = nil
-			}
 			result.Comparison = compareCommercialProjection(result)
 		}
 	}

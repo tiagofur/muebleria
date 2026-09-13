@@ -5788,6 +5788,11 @@
             bindingRebindReview.style.display = "none";
             modelBindingState.pendingTarget = null;
             renderModelBindingStatus(result.status);
+            // A connect/rebind result is already the authoritative status for
+            // this operation. Update the commercial context immediately rather
+            // than waiting for a later get_model_binding callback, which could
+            // leave the previous Design total visible after a rebind.
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(result.status);
             if (result.pairing) {
               pairingInput.value = "";
               if (result.confirmationFailed) {

@@ -272,10 +272,16 @@ function runTests() {
   });
 
   test('ok result renders the fresh status', (sandbox) => {
+    const bindings = [];
+    sandbox.window.GraneteCommercialProjection = {
+      setBinding: (status) => bindings.push(status)
+    };
     sandbox.window.GraneteDialog.onModelBindingResult({ ok: true, status: connectedStatus() });
     assert.equal(el(sandbox, 'model-binding-badge').textContent, 'Conectado');
     assert.ok(!visible(el(sandbox, 'model-binding-picker')));
     assert.ok(!visible(el(sandbox, 'model-binding-rebind-review')));
+    assert.equal(bindings.length, 1, 'successful connect updates the commercial Design context');
+    assert.equal(bindings[0].binding.designId, DESIGN_ID);
   });
 
   test('refresh action asks Ruby to revalidate', (sandbox) => {
