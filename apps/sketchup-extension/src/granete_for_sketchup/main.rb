@@ -23,6 +23,7 @@ module Granete
         connection/panel_state
         connection/project_furniture_contract
         connection/project_furniture
+        connection/commercial_projection
         connection/duplicate_resolver
         connection/design_publish
         library/catalog_parameter_contract

@@ -1862,6 +1862,24 @@
              project furniture, with pending/placed derived from the design
              working copy. The panel never edits business identity. -->
         <section id="pane-project" class="tab-pane" role="tabpanel">
+          <div id="commercial-projection-card" class="card" style="display: none; margin-bottom: var(--space-3);" aria-live="polite">
+            <div class="library-header-row">
+              <div>
+                <div class="card-title">Presupuesto de mobiliario</div>
+                <p id="commercial-projection-status" class="subhead" style="margin: var(--space-1) 0 0; font-size: var(--text-xs);">Calculando…</p>
+              </div>
+              <span id="commercial-projection-badge" class="status-badge pending">Estimado</span>
+            </div>
+            <div id="commercial-projection-values" style="display: none; margin-top: var(--space-2);">
+              <div class="kv-row"><span class="k">Total estimado</span><span class="v" id="commercial-projection-total">--</span></div>
+              <div id="commercial-projection-cost-row" class="kv-row" style="display: none;"><span class="k">Costo directo estimado</span><span class="v" id="commercial-projection-cost">--</span></div>
+              <div id="commercial-projection-margin-row" class="kv-row" style="display: none;"><span class="k">Factor margen</span><span class="v" id="commercial-projection-margin">--</span></div>
+              <div class="kv-row"><span class="k">Referencia</span><span class="v" id="commercial-projection-reference">Sin cotización de referencia</span></div>
+              <div id="commercial-projection-published-row" class="kv-row" style="display: none;"><span class="k">Emitida más reciente</span><span class="v" id="commercial-projection-published">--</span></div>
+              <div id="commercial-projection-delta-row" class="kv-row" style="display: none;"><span class="k">Diferencia</span><span class="v" id="commercial-projection-delta">--</span></div>
+            </div>
+            <button id="btn-commercial-projection-refresh" class="btn btn-secondary" style="width: auto; margin-top: var(--space-2);">Actualizar presupuesto</button>
+          </div>
           <div id="project-furniture-state-area">
             <!-- State cards: every state is distinct, none collapses. -->
             <div id="pf-unbound-state" class="card empty-state" style="display: none;">
@@ -4142,6 +4160,7 @@
           },
 
           onLoginResult: function (result) {
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.invalidateSession();
             this.clearEnrollmentTimers();
             loginFormArea.style.display = "block";
             enrollCodeArea.style.display = "none";
@@ -4151,13 +4170,28 @@
               } else {
                 showToast("success", "✓ Dispositivo vinculado. Biblioteca del taller cargada.");
               }
+              if (!result.loggedOut && window.sketchup && window.sketchup.get_model_binding) {
+                window.sketchup.get_model_binding();
+              }
             } else {
               showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar sesión"));
             }
           },
 
           // #388 model binding bridge — delegates to the binding section.
-          onModelBindingStatus: function (status) { renderModelBindingStatus(status); },
+          onModelBindingStatus: function (status) {
+            renderModelBindingStatus(status);
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(status);
+          },
+          onCommercialProjection: function (payload) {
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receive(payload);
+          },
+          onCommercialProjectionSynchronization: function (payload) {
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.applySynchronization(payload);
+          },
+          onCommercialProjectionLocalMutation: function () {
+            document.dispatchEvent(new CustomEvent("granete-mutation-state", { detail: { phase: "committed" } }));
+          },
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
           onPublishProgress: function (payload) { renderPublishProgress(payload); },
           onPublishResult: function (result) { handlePublishResult(result); },
@@ -5757,6 +5791,11 @@
             bindingRebindReview.style.display = "none";
             modelBindingState.pendingTarget = null;
             renderModelBindingStatus(result.status);
+            // A connect/rebind result is already the authoritative status for
+            // this operation. Update the commercial context immediately rather
+            // than waiting for a later get_model_binding callback, which could
+            // leave the previous Design total visible after a rebind.
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(result.status);
             if (result.pairing) {
               pairingInput.value = "";
               if (result.confirmationFailed) {
@@ -5791,8 +5830,16 @@
             return;
           }
 
-          if (result.status) renderModelBindingStatus(result.status);
-          else if (result.state) renderModelBindingStatus({ state: result.state, reason: result.reason });
+          var failureStatus = null;
+          if (result.status) failureStatus = result.status;
+          else if (result.state) failureStatus = { state: result.state, reason: result.reason };
+          if (failureStatus) {
+            renderModelBindingStatus(failureStatus);
+            // A failed validation makes any previously rendered amount stale.
+            // Fail closed with the same authoritative binding state instead of
+            // leaving the card marked as current.
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(failureStatus);
+          }
           if (result.pairing) {
             if (result.code === "invalid_code") {
               showPairingMessage("error", result.reason || "Código inválido.");
@@ -6382,6 +6429,7 @@
     <script src="js/granete-state.js"></script>
     <script src="js/granete-bridge.js"></script>
     <script src="js/granete-mutation.js"></script>
+    <script src="js/granete-commercial-projection.js"></script>
     <script src="js/granete-manufacturing.js"></script>
     <script src="js/granete-preflight-review.js"></script>
   </body>

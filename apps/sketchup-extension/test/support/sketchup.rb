@@ -605,6 +605,8 @@ module SketchupStub
   end
 
   class ModelStub
+    include AttributeContainer
+
     attr_reader :active_entities, :selection, :definitions, :materials, :operations,
                 :selected_tools
     attr_accessor :active_view

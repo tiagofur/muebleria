@@ -863,6 +863,35 @@ Inventario de consumidores runtime (Slice 2):
 | XLSX comercial (cliente) | Migrado (#642 / 3): mismo modelo exacto que el PDF; el workbook reproduce la misma Q{n} (identidad congelada, líneas con cantidad/medidas/opciones por unidad, precio de línea sólo si la política de visibilidad lo autoriza, total congelado). Filename `Cotizacion-{obra}-{cliente}-Q{n}.xlsx`. El stack de costos interno (materiales/cantos/herrajes/MO/costo directo/margen) ya NO se escribe en el documento de cliente — nunca, ni para roles con visibilidad de costos |
 | Export handlers (`useExportHandlers`) y botones del detalle | Migrado (#642 / 3): cada acción comercial recibe un `quoteRevisionId` EXACTO elegido en el menú "Comercial" del detalle (una sección `Q{n} · {estado}` por revisión, más nueva primero; reutiliza la lista ya cacheada de `listProjectQuoteRevisions`, sin query nueva) y resuelve fail-closed por estado (id desconocido / legacy sin snapshot / montos minoristas withhold por organización) con mensaje accionable; sin fallback a `Project`/`project.items`/`priceSnapshot`/catálogo vivo. El GATE de habilitación es el snapshot congelado de la revisión (`lines.length > 0`), NUNCA `Project.items`: una revisión con líneas sigue exportable aunque la obra editable se vacíe después. Sin revisiones exactas (sesión guest/local) no se ofrecen botones |
 | Montos minoristas por organización (#642 / 3) | Migrado: `ListQuoteRevisionsByProject` aplica la MISMA política org que los commercial summaries — owner y sales organization leen el snapshot completo; una organización que sólo fabrica recibe identidad/líneas/unidades congeladas con los montos minoristas (`breakdown.salePrice` y `amounts.salePrice` por línea) CEROS y el flag `commercialAmountsWithheld: true`. El detalle muestra ausencia honesta ("No disponible para tu organización", nunca $0) y el export comercial falla cerrado — el precio de venta jamás cruza el wire hacia la fábrica |
+
+### 16B. Proyección comercial no vinculante del Design (#677, primera entrega)
+
+`GET /projects/{projectId}/designs/{designId}/commercial-projection` calcula una
+	estimación sobre la `DesignWorkingCopy` exacta dentro de una transacción tenant
+	`REPEATABLE READ`, conservando el acceso de lectura multi-organización. Reutiliza
+`CalcProjectBreakdown`; SketchUp y Web sólo consumen el contrato generado
+`granete.commercial-projection.v1` y nunca recalculan importes.
+
+La respuesta identifica versión/huella del working copy, catálogo e input de
+pricing, y compara contra la revisión aceptada (o la más nueva si no existe una
+aceptada), conservando además la referencia publicada más reciente. Es
+read-only: no crea ni modifica `QuoteRevision`. Datos incompletos y permisos
+redactados se representan como ausencia explícita, nunca como cero inventado.
+
+La etiqueta `current` exige dos pruebas a la vez: la huella exacta devuelta por
+el backend y una generación local del mismo Project/Design sin cambios
+pendientes. Esa generación se persiste en metadata del modelo SketchUp, no en
+el ciclo de vida del HtmlDialog. Una sincronización parcial conserva cualquier
+otro cambio local pendiente; sólo una sincronización completa comprobada puede
+limpiarlo. La lectura toma la generación antes y después del request y descarta
+el resultado si el modelo cambió durante el cálculo.
+La ausencia del registro o del contexto se conserva como coincidencia no
+confirmada: vincular Project/Design/baseRevision no demuestra igualdad del
+contenido. Una sincronización parcial tampoco inicializa esa prueba; una
+sincronización completa comprobada sí la persiste y permite lecturas posteriores
+sin bloquearlas. Mientras el runtime compartido esté en `resolving` o
+`applying_host_mutation`, no se inicia ni acepta una lectura etiquetable como
+actual del modelo local.
 | `Project.commercialStatus` CRM | Fuera: estado de oportunidad, no lifecycle de QuoteRevision |
 
 ---

@@ -11,9 +11,6 @@ require 'uri'
 module Granete
   module SketchUpExtension
     module Transport
-      # Network errors are wrapped so callers never see raw socket exceptions.
-      class RequestError < StandardError; end
-
       # Minimal JSON-over-HTTPS adapter for the Granete API. Implements the
       # Transport::Adapter port: request payloads are
       # { 'method' => 'GET'|'POST', 'path' => '/api/...', 'body' => <hash|nil> }

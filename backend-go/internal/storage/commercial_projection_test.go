@@ -1,0 +1,118 @@
+package storage
+
+import (
+	"testing"
+	"time"
+
+	"github.com/tiagofur/muebles-backend/internal/domain"
+)
+
+func TestSelectCommercialProjectionReferences_PrefersAcceptedAndKeepsNewerPublished(t *testing.T) {
+	acceptedAt := time.Now().Add(-time.Hour)
+	publishedAt := time.Now()
+	revisions := []domain.QuoteRevisionDetail{
+		{QuoteRevision: domain.QuoteRevision{ID: "q2", RevisionNumber: 2, Status: "accepted", AcceptedAt: &acceptedAt, PublishedAt: &acceptedAt, CommercialSnapshot: projectionSnapshot(100)}},
+		{QuoteRevision: domain.QuoteRevision{ID: "q3", RevisionNumber: 3, Status: "published", PublishedAt: &publishedAt, CommercialSnapshot: projectionSnapshot(120)}},
+	}
+	selected, accepted, latestPublished := selectCommercialProjectionReferences(revisions)
+	if selected == nil || selected.QuoteRevisionID != "q2" || accepted.QuoteRevisionID != "q2" {
+		t.Fatalf("accepted reference not authoritative: %#v %#v", selected, accepted)
+	}
+	if latestPublished == nil || latestPublished.QuoteRevisionID != "q3" {
+		t.Fatalf("newer published reference lost: %#v", latestPublished)
+	}
+}
+
+func TestCompareCommercialProjection_ZeroReferenceHasAbsoluteDeltaWithoutFakePercentage(t *testing.T) {
+	zero, current := 0.0, 25.0
+	currency := "MXN"
+	p := &domain.CommercialProjection{Currency: currency, Amounts: &domain.CommercialProjectionAmounts{SaleTotal: &current}, Reference: &domain.CommercialProjectionReference{Currency: &currency, SaleTotal: &zero}}
+	comparison := compareCommercialProjection(p)
+	if comparison == nil || comparison.AbsoluteDelta != 25 || comparison.PercentageDelta != nil {
+		t.Fatalf("comparison=%#v", comparison)
+	}
+}
+
+func TestCompareCommercialProjection_CurrencyMismatchHasNoComparison(t *testing.T) {
+	reference, current := 100.0, 125.0
+	currency := "USD"
+	p := &domain.CommercialProjection{
+		Currency:  "MXN",
+		Amounts:   &domain.CommercialProjectionAmounts{SaleTotal: &current},
+		Reference: &domain.CommercialProjectionReference{Currency: &currency, SaleTotal: &reference},
+	}
+	if comparison := compareCommercialProjection(p); comparison != nil {
+		t.Fatalf("currency mismatch comparison=%#v", comparison)
+	}
+}
+
+func TestCommercialProjectionReference_LegacySnapshotKeepsUnknownCurrency(t *testing.T) {
+	ref := commercialProjectionReference(domain.QuoteRevisionDetail{QuoteRevision: domain.QuoteRevision{
+		ID: "3f7b6c5d-0000-4000-8000-000000000010", RevisionNumber: 1, Status: "published",
+	}})
+	if ref.Currency != nil || ref.SaleTotal != nil {
+		t.Fatalf("legacy reference invented commercial values: %#v", ref)
+	}
+}
+
+func TestMapDesignPricingPlacements_DropsUnitsAbsentFromWorkingCopy(t *testing.T) {
+	placements := []any{
+		map[string]any{"itemId": "line-1", "instanceIndex": float64(0), "wallId": "wall-1"},
+		map[string]any{"itemId": "line-1", "instanceIndex": float64(1), "wallId": "wall-1"},
+	}
+	mapped := mapDesignPricingPlacements(
+		placements,
+		map[string][]string{"line-1": {"unit-current", "unit-absent"}},
+		map[string]struct{}{"unit-current": {}},
+	)
+	if len(mapped) != 1 {
+		t.Fatalf("mapped placements=%d want only the working-copy unit", len(mapped))
+	}
+	placement, ok := mapped[0].(map[string]any)
+	if !ok || placement["itemId"] != "unit-current" {
+		t.Fatalf("mapped placement=%#v", mapped[0])
+	}
+}
+
+func TestCommercialProjectionParametersPriceable_FailsClosedOutsideCompleteDimensions(t *testing.T) {
+	if !commercialProjectionParametersPriceable(map[string]any{}) {
+		t.Fatal("empty parameters should use the catalog definition")
+	}
+	if !commercialProjectionParametersPriceable(map[string]any{
+		"widthMm": float64(600), "heightMm": float64(720), "depthMm": float64(560),
+	}) {
+		t.Fatal("complete dimensions should be priceable")
+	}
+	for _, parameters := range []map[string]any{
+		{"widthMm": float64(600)},
+		{"shelfCount": float64(3)},
+		{"widthMm": float64(600), "heightMm": float64(720), "depthMm": float64(560), "hasBack": false},
+	} {
+		if commercialProjectionParametersPriceable(parameters) {
+			t.Fatalf("parameters %#v must fail closed", parameters)
+		}
+	}
+}
+
+func TestCommercialProjectionCostsVisibleToOrganization_OwningAuthorityOnly(t *testing.T) {
+	project := &domain.Project{
+		OrganizationID: "store-owner", SalesOrganizationID: "store-owner", ManufacturingOrganizationID: "manufacturer",
+	}
+	if commercialProjectionCostsVisibleToOrganization(project, &domain.Organization{ID: "store-owner", Type: domain.OrganizationTypeStore}) {
+		t.Fatal("store ownership must not grant factory-internal cost authority")
+	}
+	if !commercialProjectionCostsVisibleToOrganization(project, &domain.Organization{ID: "manufacturer", Type: domain.OrganizationTypeFactory}) {
+		t.Fatal("assigned factory lost manufacturing cost authority")
+	}
+	project.OrganizationID = "factory-owner"
+	if !commercialProjectionCostsVisibleToOrganization(project, &domain.Organization{ID: "factory-owner", Type: domain.OrganizationTypeFactory}) {
+		t.Fatal("factory owner lost cost authority")
+	}
+	if commercialProjectionCostsVisibleToOrganization(project, &domain.Organization{ID: "unrelated", Type: domain.OrganizationTypeFactory}) {
+		t.Fatal("unrelated factory received cost authority")
+	}
+}
+
+func projectionSnapshot(total float64) *domain.QuoteCommercialSnapshot {
+	return &domain.QuoteCommercialSnapshot{Currency: "MXN", Breakdown: domain.QuoteBreakdown{SalePrice: total}}
+}

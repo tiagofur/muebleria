@@ -535,6 +535,10 @@ var extensionClientGetPatterns = []*regexp.Regexp{
 	// furnitureInstanceId. Read-only; identity creation stays #390 and is NOT
 	// granted here.
 	regexp.MustCompile(`^/api/projects/[^/]+/furniture-instances$`),
+	// #677: read-only commercial projection for the exact connected
+	// Project/Design. The server remains the pricing authority; the extension
+	// receives no broader project, quote, or commercial mutation access.
+	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/commercial-projection$`),
 	regexp.MustCompile(`^/api/designs/[^/]+/working-copy$`),
 }
 

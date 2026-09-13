@@ -78,6 +78,11 @@ module Granete
           tracker: mutation_coordinator.preflight_tracker,
           logger: logger
         )
+        commercial_projection_service = Connection::CommercialProjection::Service.new(
+          transport: @transport,
+          auth_provider: @auth_provider,
+          logger: logger
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
@@ -90,7 +95,8 @@ module Granete
           entities_observer: @entities_observer,
           design_publisher: @design_publisher,
           mutation_coordinator: mutation_coordinator,
-          publication_gate: @publication_preflight_gate
+          publication_gate: @publication_preflight_gate,
+          commercial_projection_service: commercial_projection_service
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),

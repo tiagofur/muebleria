@@ -1,3 +1,77 @@
+# Issues #642 → #677 — presupuesto del diseño actual dentro de SketchUp
+
+- Approval: prompt del propietario (2026-09-13). #642 y #677 permanecen OPEN;
+  #677 fue verificada con `status:approved`, `type:feature` y `size:exception`.
+  No se modifican labels, no se cierran issues y no se hace merge.
+- Base exacta: `origin/main@cc38c87a4cb29b14544708896be309aa6af68dd6`
+  (PR #697 integrado). Rama `feat/642-677-sketchup-budget`; worktree aislado
+  `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-677-commercial-projection`.
+- Started: 2026-09-13 08:17 CST. Un solo implementador; revisión independiente
+  secuencial al finalizar. Modelo solicitado: Codex Sol, razonamiento medio.
+- Scope autorizado: CommercialProjection backend-owned sobre la versión de
+  trabajo exacta, contrato OpenAPI generado, lectura autenticada con credencial
+  SketchUp, panel compacto y actualización tras mutaciones confirmadas, pruebas,
+  documentación y PR parcial con `Refs #642` / `Refs #677`.
+- Baseline: `./init.sh` pasó typecheck y toda la batería TypeScript; el Go completo
+  sufrió contención del PostgreSQL compartido (`tuple concurrently updated` en
+  migration 000094). La validación PostgreSQL final se ejecutará serializada o
+  contra instancia temporal aislada.
+- Plan:
+  1. Reutilizar `CalcProjectBreakdown` con FurnitureInstances del working copy
+     exacto y selección comercial de referencia explícita.
+  2. Añadir el read model role-safe y su ruta OpenAPI sin crear ni mutar Q/R.
+  3. Consumirlo desde el runtime/credencial existente del plugin y proteger
+     versiones, cambios de contexto y respuestas tardías.
+  4. Presentar estados honestos y el total/delta en el panel compacto, con costo
+     y margen sólo cuando el backend los autorice.
+  5. Ejecutar pruebas focalizadas, PostgreSQL real aislado, contratos/Ruby/JS,
+     empaquetado RBZ, gates finales, revisión independiente y publicación del PR.
+- Result: `IMPLEMENTED_PENDING_REREVIEW`. El endpoint calcula contra el
+  `DesignWorkingCopy` exacto y el catálogo vigente mediante
+  `CalcProjectBreakdown`, sin crear ni mutar QuoteRevision. Expone huellas de
+  working copy/catálogo/proyección, toma la aceptada como referencia (o la
+  emitida más reciente si no existe), conserva una emitida posterior visible,
+  omite porcentaje con base cero y toda comparación entre monedas distintas.
+  El panel usa credencial de dispositivo, oculta costos/venta por autoridad,
+  distingue estados incompletos y descarta respuestas tardías por sesión y
+  Project/Design.
+- Evidence local: `pnpm test` PASS (domain 1411, storage 207, excel 350 + 3
+  skips preexistentes, desktop 17, mobile 73, UI 1782, web 481);
+  `pnpm typecheck` 7/7 y `pnpm openapi:check` PASS; Go completo PASS por
+  paquetes sobre PostgreSQL 16 aislado (API y demás paquetes, luego storage
+  serial 338.351s) tras descartar la corrida contra el PostgreSQL compartido
+  por agotamiento de conexiones; `bundle exec rake verify` PASS (Ruby 648/648,
+  boundary 6/6, RuboCop, syntax y package); JS comercial 7/7; RBZ exacto
+  `47170b058cdaf406f2593a922033e0856b1df63e0cf887dadbff208331c8cbaf`.
+- Independent review R1: `CHANGES_REQUESTED` sobre
+  `c48b82231314170c28e3035f3c11b6bae334f97c` por enum Ruby divergente,
+  request pre-mutation no invalidado y callbacks de alta/colocación sin refresh.
+  Los tres defects quedaron corregidos con regresiones; falta readback del
+  revisor independiente sobre el nuevo HEAD.
+- Host evidence: `NOT_TESTED`. SketchUp 2026 estaba abierto con una sesión del
+  usuario; el intento de una segunda instancia con el RBZ exacto terminó sin
+  ejecutar TestUp por el comportamiento singleton. La instalación anterior se
+  restauró byte por byte. El próximo gate es reiniciar SketchUp de forma segura
+  con un modelo descartable, instalar ese RBZ y ejecutar el smoke de HtmlDialog.
+
+## Corrección de review R1/R2 — 2026-09-13
+
+- RED reproducido: un `committed` local sin fase previa aceptaba la respuesta ya
+  solicitada; una sincronización parcial limpiaba globalmente `localUnsynced`.
+- GREEN local: la autoridad `LocalWorkState` persiste por Project/Design y
+  generación en metadata del modelo. Mutaciones locales marcan pendiente;
+  confirmaciones parciales avanzan generación sin limpiar cambios ajenos; sólo
+  publicación completa exitosa limpia. El bridge compara generación antes y
+  después del fetch, y JavaScript invalida pendientes ante todo cambio.
+- Mensajes incompletos distinguen parámetros no admitidos, datos comerciales
+  faltantes, diseño vacío e importes no autorizados sin mostrar errores internos.
+- Evidence: JS comercial 15/15; Ruby `commercial_projection_test` 14/14;
+  `dialog_controller_test` 31/31; `bundle exec rake verify` PASS (659 runs,
+  4488 assertions; boundary 6/2567; RuboCop/syntax green). RBZ SHA-256
+  `592516ff4e1cc5455888832279bf075ff3911e7575caf7f90315c27a6099271a`.
+- Host real: `NOT_TESTED` hasta disponer de una sesión/modelo descartables sin
+  cerrar ni sustituir la extensión activa del usuario.
+
 # PR #697 — corrección final de acceso a Producción (Refs #642)
 
 - Approval: prompt del propietario (2026-09-12). PR existente #697, rama
@@ -960,3 +1034,58 @@ EOL.
   Exact rerun attempt 2 passed (job `103123806142`, 9m51s;
   `internal/storage` 275.163 s), confirming suite-load flakiness with no backend
   change.
+# PR #702 / issue #677 — corrección de sincronización comercial local
+
+- Approval: solicitud explícita del propietario (2026-09-13) para corregir R1/R2 en el mismo PR #702.
+- Head revisado: `90d17863c9c0d1ffcbe87a93560e646f931a6e2d`; rama/worktree existentes, limpios y alineados con remoto.
+- Started: 2026-09-13 12:00 CST.
+- Scope: preservar cambios locales pendientes ante sincronizaciones parciales, invalidar lecturas anteriores a cualquier mutación, persistir el estado por Project/Design en el modelo y mejorar motivos incompletos conocidos. Sin sincronización general, SSE, Change Orders, Proyectar ni nuevas funciones comerciales.
+- Plan:
+  1. Fijar regresiones RED para A pendiente + B parcialmente sincronizado, respuestas tardías, refresh manual y reapertura/cambio de diseño.
+  2. Reutilizar binding/model metadata y runtime de mutaciones para una autoridad persistente y design-scoped de coincidencia local↔servidor.
+  3. Separar sincronización parcial de completa; sólo una completa comprobada puede limpiar el estado pendiente.
+  4. Validar callbacks reales Ruby→HtmlDialog, mensajes incompletos, suites Ruby/JS, RBZ y gates aplicables.
+  5. Push al mismo PR, revisión independiente y readback exact-head de CI/publicación, sin merge ni cierre.
+
+## PR #702 / issue #677 — corrección incremental R1-B/R2-B
+
+- Approval: solicitud explícita del propietario (2026-09-13) para continuar en el mismo PR.
+- Head remoto revalidado: `f73277bc2e38d9f159eb55ef47c633f3c88e861a`; PR abierto, limpio y mergeable; worktree sin cambios ajenos antes de agregar las regresiones.
+- Started: 2026-09-13 13:38 CST.
+- Scope: distinguir seguimiento ausente de coincidencia probada y cerrar lecturas iniciadas o recibidas durante `resolving|applying_host_mutation`; sin tocar backend comercial, Proyectar, SSE, #679 ni el runtime compartido de mutaciones.
+- Plan:
+  1. Capturar RED real para modelo/contexto sin evidencia y sincronización parcial desde estado no confirmado.
+  2. Capturar RED real para refresh/receive durante las fases activas del runtime de mutaciones.
+  3. Corregir únicamente `LocalWorkState`, bridge/panel y pruebas, preservando pendientes previos ante rechazo/cancelación/aborto.
+  4. Ejecutar pruebas focalizadas, `rake verify`, OpenAPI/typecheck y gates aplicables; construir y hashear el RBZ final.
+  5. Actualizar el mismo PR y verificar head/checks/publicación sin mergear ni cerrar issues.
+- RED confirmado:
+  - JavaScript aceptaba como `true` una respuesta obtenida por `refresh()` durante `resolving` y podía volver a mostrar `Actualizado` antes del outcome.
+  - Ruby: 3 fallos demostraron que metadata ausente, contexto ausente y `partial` desde contexto no seguido se convertían en `localChangesPending:false`.
+- Corrección:
+  - `LocalWorkState` persiste `matchConfirmed` separado de `localChangesPending`; ausencia/corrupción/contexto nuevo y registros v1 previos sin esa prueba quedan no confirmados. `partial` preserva desconocido o pendiente; sólo `full` confirma.
+  - Un importe consultado al servidor sin prueba local se muestra como `Servidor no verificado`, nunca `Actualizado`; no requiere crear/aprobar QuoteRevision ni publicar DesignRevision.
+  - `request` y `receive` rechazan lecturas durante `resolving|applying_host_mutation`; outcomes terminales restauran únicamente la clasificación anterior válida y una cancelación no limpia pendientes.
+- GREEN focalizado final:
+  - JS comercial real: 21/21.
+  - `commercial_projection_test.rb`: 20 runs / 46 assertions.
+  - `dialog_controller_test.rb`: 31 runs / 192 assertions.
+  - RuboCop focalizado: sin offenses.
+- Gates finales ejecutados:
+  - `bundle exec rake verify`: 665 runs / 4516 assertions + boundary 6 runs / 2567 assertions, sin fallos; RBZ SHA256 `c41e3270c146dc84b3141dadbaf6b820a588550297cb657c47b9943d9b0e48cc`.
+  - `pnpm openapi:check`: PASS.
+  - `pnpm typecheck`: PASS, 7 workspaces.
+  - `pnpm test`: PASS completo.
+  - `git diff --check`: PASS.
+- Host real: `NOT_TESTED`. SketchUp 2026 continúa abierto con una sesión activa del usuario (PID 44023); no se cerró ni reemplazó y no se usó Ruby/JS como sustituto de evidencia host.
+
+## PR #702 / issue #677 — recuperación tras pérdida temporal de vinculación
+
+- Approval: solicitud explícita del propietario (2026-09-13) para corregir el único hallazgo incremental en el mismo PR.
+- Head revisado y remoto revalidado: `6b6c537f7682549ef6ffaf927fe57944afe2c00f`; PR abierto, `type:feature`, limpio y mergeable al iniciar.
+- Alcance: sólo reconciliar el ciclo de vida de `GraneteMutation` con el panel comercial cuando el binding desaparece temporalmente; sin tocar cálculo, permisos, contratos, historial, Proyectar, PTX/CNC ni trabajo GLM.
+- RED real: el harness cargando `granete-mutation.js` reprodujo `resolving → unreachable → unavailable → reconnect → refresh`; falló `false !== true` porque el outcome terminal no liberaba `mutationInFlight` con `binding == null`.
+- Corrección: el panel sigue el lifecycle aunque no haya binding, captura el Project/Design al iniciar y sólo aplica consecuencias si el contexto coincide. Al reconectar consulta `GraneteMutation.phase()`; una operación realmente activa sigue bloqueando y un outcome de otro contexto sólo provoca readback autoritativo del contexto actual.
+- GREEN focalizado: módulo comercial 26/26; todos los harness JavaScript de la extensión PASS; Ruby comercial 20 runs / 46 assertions y dialog controller 31 runs / 192 assertions.
+- Gates finales locales: `bundle exec rake verify` PASS (665 runs / 4516 assertions; boundary 6 runs / 2567 assertions; RuboCop 170 archivos); RBZ SHA256 `38fc433e9912e71a339b132a516540ff7e164abf461278124123b336f1d67fc0`; `pnpm openapi:check`, `pnpm typecheck` y `pnpm test` PASS; `git diff --check` PASS.
+- Host real: `NOT_TESTED`; no se cerró ni reemplazó la sesión activa de SketchUp del usuario y las pruebas Ruby/JavaScript no se presentan como evidencia del host.

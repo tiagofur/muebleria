@@ -648,6 +648,25 @@ A required layer cannot be skipped and still reported green.
 ## 21. Global Definition of Done
 
 Granete for SketchUp reaches cross-surface excellence when a real workshop can administer the catalog in React, author professionally in SketchUp, preserve Project-owned identity, publish and understand exact revisions, reconcile/approve/release in React, generate evidence-backed machine artifacts, operate safely across organizations, update/migrate/diagnose the plugin and prove the whole path with real browser/PostgreSQL/SketchUp/machine evidence—without any duplicated business or manufacturing authority.
+
+### Presupuesto actual dentro de SketchUp (#677, primera entrega)
+
+El panel Proyecto puede mostrar una proyección comercial compacta del Design
+conectado. Ruby obtiene Project/Design exclusivamente del `ModelBinding`, agrega
+la credencial del dispositivo fuera del HtmlDialog y consume el endpoint Go;
+JavaScript sólo presenta el DTO. Una mutación confirmada invalida el total y
+dispara refresh; respuestas tardías se descartan por correlación, contexto y
+generación del trabajo local. El estado pendiente se guarda por Project/Design
+en metadata del modelo para sobrevivir desconexión y cierre/reapertura. Una
+confirmación parcial nunca prueba coincidencia del diseño completo: conserva el
+pendiente previo, mientras una sincronización completa comprobada sí habilita
+una nueva lectura.
+Un modelo/contexto sin ese registro empieza como coincidencia no confirmada,
+nunca como limpio por defecto; el binding por sí solo no prueba contenido. La
+confirmación parcial preserva ese desconocimiento y las fases compartidas
+`resolving|applying_host_mutation` bloquean tanto `request` como `receive` hasta
+su resultado terminal.
+No incluye modo Presentación, creación de QuoteRevision ni pricing local.
 ## Historical presentation ownership (#639)
 
 SketchUp publishes technical authoring truth into the working copy; the Go publication
