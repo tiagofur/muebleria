@@ -127,9 +127,15 @@ export function ProjectAddItemModal({
   const [addCategoryL3, setAddCategoryL3] = useState('');
 
   // Keep the draft's module valid if the catalog changes underneath us.
+  // An explicit "Quitar selección" is a deliberate empty state for the rest
+  // of this open session: catalog refreshes must not re-select a module.
+  const explicitlyClearedRef = useRef(false);
   useEffect(() => {
     setAddItem((prev) => {
       if (prev.moduleId && modules.some((m) => m.id === prev.moduleId)) {
+        return prev;
+      }
+      if (explicitlyClearedRef.current) {
         return prev;
       }
       return emptyAddItemDraft(
@@ -147,6 +153,7 @@ export function ProjectAddItemModal({
   const prevOpen = useRef(open);
   useEffect(() => {
     if (!prevOpen.current && open) {
+      explicitlyClearedRef.current = false;
       setAddItem(
         emptyAddItemDraft(
           modules,
@@ -207,6 +214,7 @@ export function ProjectAddItemModal({
   );
 
   const selectModuleForAdd = (moduleId: string) => {
+    explicitlyClearedRef.current = false;
     const mod = modules.find((m) => m.id === moduleId);
     // Prefill only groups without a project-level default (F029 inherit).
     // P0-2b: plinth modules also seed ZOCLO when no ZOCLO/FRENTE default
@@ -236,6 +244,19 @@ export function ProjectAddItemModal({
         ? pickPresetByMeasureDefaults(mod, measureDefaults)
         : undefined,
     });
+  };
+
+  // "Quitar selección" discards the module draft but keeps the user-entered
+  // quantity (even if transiently invalid) and the category filters.
+  const clearModuleForAdd = () => {
+    explicitlyClearedRef.current = true;
+    setAddItem({
+      moduleId: '',
+      quantity: addItem.quantity,
+      optionChoices: {},
+      measurePresetId: undefined,
+    });
+    setItemError(null);
   };
 
   function handleSubmit(e: FormEvent) {
@@ -319,7 +340,9 @@ export function ProjectAddItemModal({
             type="submit"
             className="btn btn--primary"
             form={formId}
-            disabled={modulesForAdd.length === 0 || selectionHidden}
+            // A hidden module and an explicit "Quitar selección" are equally
+            // invalid submission states: both leave no effective selection.
+            disabled={!addModule}
           >
             Agregar
           </button>
@@ -409,7 +432,11 @@ export function ProjectAddItemModal({
               searchPlaceholder="Buscar mueble…"
               value={selectionHidden ? '' : addItem.moduleId}
               onChange={(moduleId) => {
-                if (moduleId) selectModuleForAdd(moduleId);
+                if (!moduleId) {
+                  clearModuleForAdd();
+                  return;
+                }
+                selectModuleForAdd(moduleId);
               }}
               items={modulesForAdd.map((m) => ({
                 id: m.id,
