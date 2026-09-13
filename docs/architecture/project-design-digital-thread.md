@@ -1261,12 +1261,20 @@ Debe mostrar:
 2. Insert FurnitureDefinition from Catalog in SketchUp.
 3. Backend creates FI-010 origin=design.
 4. Plugin renders FI-010 and stores its ID.
-5. Publish DesignRevision.
-6. Reconciliation reports modeled_not_quoted.
-7. User creates/updates QuoteRevision explicitly.
-8. Reconciliation becomes clean.
-9. Approve/release.
+5. User explicitly creates Q1 from the exact canonical working version + fingerprint.
+6. Server creates/adopts canonical QuoteLines, preserves FI-010 and freezes Q1 through the same pricing/CommercialSnapshot/QuoteRevision writer as quote-first.
+7. Q1 pins Design + working version + fingerprint; it does not publish or approve a DesignRevision.
+8. Publish DesignRevision, reconcile explicitly and create later QuoteRevisions only through requote.
+9. Reconciliation becomes clean; approve/release exact revisions.
 ```
+
+Quote-first and design-first are two controlled inputs into ONE commercial
+authority. They never create a parallel “SketchUp quote”: exact readers,
+publish/accept, exports and history consume the same immutable QuoteRevision.
+The working tokens pin authoring state; catalog price/configuration remains the
+existing server authority evaluated at command time, so a legitimate catalog
+change after a projection may change Q1 while never changing which Design
+state was frozen.
 
 ### 25.3 Quantity > 1
 

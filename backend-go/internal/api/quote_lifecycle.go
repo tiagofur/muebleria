@@ -99,6 +99,46 @@ func (s *Server) HandleCreateInitialQuoteRevision(w http.ResponseWriter, r *http
 	respondWithJSON(w, http.StatusCreated, toQuoteRevisionDTO(result.Revision))
 }
 
+// HandleCreateInitialDesignQuoteRevision serves the design-first Q1 command.
+func (s *Server) HandleCreateInitialDesignQuoteRevision(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateProjects), "no tenés permiso para crear revisiones de cotización en esta obra") {
+		return
+	}
+	projectID, designID := r.PathValue("projectId"), r.PathValue("designId")
+	if !isValidUUID(projectID) || !isValidUUID(designID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "projectId o designId inválido", nil)
+		return
+	}
+	var payload openapi.CreateInitialDesignQuoteRevisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || strings.TrimSpace(payload.WorkingVersion) == "" || strings.TrimSpace(payload.WorkingFingerprint) == "" {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "workingVersion y workingFingerprint son obligatorios", nil)
+		return
+	}
+	notes := ""
+	if payload.Notes != nil {
+		notes = strings.TrimSpace(*payload.Notes)
+	}
+	result, err := s.Store.CreateInitialDesignQuoteRevision(r.Context(), storage.CreateInitialDesignQuoteRevisionCommand{
+		ProjectID: projectID, DesignID: designID,
+		WorkingVersion: strings.TrimSpace(payload.WorkingVersion), WorkingFingerprint: strings.TrimSpace(payload.WorkingFingerprint),
+		Notes: notes, ActorUserID: claims.UserID, IP: clientIP(r), RequestID: RequestIDFromContext(r.Context()),
+	})
+	if err != nil {
+		if errors.Is(err, domain.ErrDesignRevisionConflict) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeVersionConflict, "El working copy del diseño cambió: actualizá la proyección antes de cotizar", nil)
+			return
+		}
+		respondWithQuoteLifecycleError(w, err, "create")
+		return
+	}
+	respondWithJSON(w, http.StatusCreated, toQuoteRevisionDTO(result.Revision))
+}
+
 // HandleQuoteRevisionPublish serves POST
 // /api/projects/{projectId}/quote-revisions/{quoteRevisionId}:publish.
 func (s *Server) HandleQuoteRevisionPublish(w http.ResponseWriter, r *http.Request) {
