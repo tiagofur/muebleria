@@ -1,3 +1,18 @@
+# PR #697 — corrección final de acceso a Producción (Refs #642)
+
+- Approval: prompt del propietario (2026-09-12). PR existente #697, rama
+  `feat/642-demo-flow-happy-path`; sin PR/issue nuevos, merge ni cierre de #642.
+- Started: 2026-09-12 20:02 CST.
+- Scope: cerrar el fallback legacy de `Project.status=accepted|produced` para
+  proyectos Digital Thread modernos sin `ProductionRelease`, conservar acceso
+  compatibility-only para proyectos positivamente pre-DT, integrar `main`,
+  ejecutar gates completos y verificar CI/publication/mergeability exact-head.
+- Plan:
+  1. Proyectar en el read model una señal server-owned de contexto Digital Thread.
+  2. Centralizar acceso a Producción en una regla canónica fail-closed.
+  3. Cubrir moderno con stamp residual, pre-DT accepted/produced y respuestas PUT.
+  4. Integrar la rama remota/main sin perder commits paralelos y validar local/remoto.
+
 # Issue #692 — readiness real, identidad multi-sheet y provenance CADmatic 4
 
 - Approval: prompt del propietario (2026-09-12); issue #692 OPEN con labels `status:approved`, `type:bug`, `high`, `domain`. PR #694 / issue #691 verificados como integrados en `origin/main`.
