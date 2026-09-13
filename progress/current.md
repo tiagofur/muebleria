@@ -1078,3 +1078,14 @@ EOL.
   - `pnpm test`: PASS completo.
   - `git diff --check`: PASS.
 - Host real: `NOT_TESTED`. SketchUp 2026 continúa abierto con una sesión activa del usuario (PID 44023); no se cerró ni reemplazó y no se usó Ruby/JS como sustituto de evidencia host.
+
+## PR #702 / issue #677 — recuperación tras pérdida temporal de vinculación
+
+- Approval: solicitud explícita del propietario (2026-09-13) para corregir el único hallazgo incremental en el mismo PR.
+- Head revisado y remoto revalidado: `6b6c537f7682549ef6ffaf927fe57944afe2c00f`; PR abierto, `type:feature`, limpio y mergeable al iniciar.
+- Alcance: sólo reconciliar el ciclo de vida de `GraneteMutation` con el panel comercial cuando el binding desaparece temporalmente; sin tocar cálculo, permisos, contratos, historial, Proyectar, PTX/CNC ni trabajo GLM.
+- RED real: el harness cargando `granete-mutation.js` reprodujo `resolving → unreachable → unavailable → reconnect → refresh`; falló `false !== true` porque el outcome terminal no liberaba `mutationInFlight` con `binding == null`.
+- Corrección: el panel sigue el lifecycle aunque no haya binding, captura el Project/Design al iniciar y sólo aplica consecuencias si el contexto coincide. Al reconectar consulta `GraneteMutation.phase()`; una operación realmente activa sigue bloqueando y un outcome de otro contexto sólo provoca readback autoritativo del contexto actual.
+- GREEN focalizado: módulo comercial 26/26; todos los harness JavaScript de la extensión PASS; Ruby comercial 20 runs / 46 assertions y dialog controller 31 runs / 192 assertions.
+- Gates finales locales: `bundle exec rake verify` PASS (665 runs / 4516 assertions; boundary 6 runs / 2567 assertions; RuboCop 170 archivos); RBZ SHA256 `38fc433e9912e71a339b132a516540ff7e164abf461278124123b336f1d67fc0`; `pnpm openapi:check`, `pnpm typecheck` y `pnpm test` PASS; `git diff --check` PASS.
+- Host real: `NOT_TESTED`; no se cerró ni reemplazó la sesión activa de SketchUp del usuario y las pruebas Ruby/JavaScript no se presentan como evidencia del host.

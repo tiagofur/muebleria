@@ -12,6 +12,7 @@
   var workEpoch = 0;
   var workStates = {};
   var mutationInFlight = false;
+  var mutationContextKey = null;
   var lastProjectionMatchConfirmed = false;
 
   function element(id) { return document.getElementById(id); }
@@ -45,6 +46,26 @@
 
   function contextKey(value) {
     return value ? value.projectId + "/" + value.designId : null;
+  }
+
+  function activeMutationPhase(phase) {
+    return ["editing_intent", "resolving", "applying_host_mutation"].indexOf(phase) !== -1;
+  }
+
+  function terminalMutationPhase(phase) {
+    return ["committed", "rejected", "cancelled", "aborted", "unavailable", "stale"].indexOf(phase) !== -1;
+  }
+
+  function reconcileMutationRuntime() {
+    if (!window.GraneteMutation || typeof window.GraneteMutation.phase !== "function") return;
+    var phase = window.GraneteMutation.phase();
+    if (activeMutationPhase(phase)) {
+      if (!mutationInFlight) mutationContextKey = null;
+      mutationInFlight = true;
+    } else if (phase === "idle" || terminalMutationPhase(phase)) {
+      mutationInFlight = false;
+      mutationContextKey = null;
+    }
   }
 
   function currentWorkState() {
@@ -159,6 +180,7 @@
     pending = null;
     lastProjection = null;
     binding = next;
+    reconcileMutationRuntime();
     show("commercial-projection-card", !!binding);
     show("commercial-projection-values", false);
     if (binding) request({ probe: true });
@@ -236,16 +258,30 @@
   if (document && document.addEventListener) {
     document.addEventListener("granete-mutation-state", function (event) {
       var phase = event && event.detail && event.detail.phase;
-      if (!binding) return;
-      if (phase === "resolving" || phase === "applying_host_mutation") {
+      if (activeMutationPhase(phase)) {
+        if (!mutationInFlight) mutationContextKey = contextKey(binding);
         mutationInFlight = true;
+        if (!binding) return;
         workEpoch += 1;
         sequence += 1;
         pending = null;
         show("commercial-projection-values", false);
         setState("pending_sync", "Cambio en curso; el total anterior no se presenta como actual.");
-      } else if (phase === "committed") {
-        mutationInFlight = false;
+        return;
+      }
+      if (!terminalMutationPhase(phase)) return;
+
+      var trackedContextKey = mutationContextKey;
+      var wasInFlight = mutationInFlight;
+      mutationInFlight = false;
+      mutationContextKey = null;
+      if (!binding) return;
+      if (wasInFlight && trackedContextKey !== contextKey(binding)) {
+        request({ probe: true });
+        return;
+      }
+
+      if (phase === "committed") {
         workEpoch += 1;
         sequence += 1;
         pending = null;
@@ -258,13 +294,10 @@
         show("commercial-projection-values", false);
         setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
       } else if (["rejected", "cancelled", "aborted"].indexOf(phase) !== -1 && lastProjection) {
-        mutationInFlight = false;
         renderProjection(lastProjection, lastProjectionMatchConfirmed);
       } else if (["rejected", "cancelled", "aborted"].indexOf(phase) !== -1) {
-        mutationInFlight = false;
         request();
       } else if (phase === "stale" || phase === "unavailable") {
-        mutationInFlight = false;
         workEpoch += 1;
         sequence += 1;
         pending = null;

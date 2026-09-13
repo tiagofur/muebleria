@@ -4,6 +4,7 @@ const vm = require('vm');
 const assert = require('assert');
 
 const source = fs.readFileSync(path.resolve(__dirname, '../../src/granete_for_sketchup/resources/js/granete-commercial-projection.js'), 'utf8');
+const mutationSource = fs.readFileSync(path.resolve(__dirname, '../../src/granete_for_sketchup/resources/js/granete-mutation.js'), 'utf8');
 const dialogSource = fs.readFileSync(path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html'), 'utf8');
 let passed = 0;
 function test(_name, fn) { fn(); passed += 1; }
@@ -12,27 +13,38 @@ function sandbox() {
   const elements = {};
   const documentListeners = {};
   const calls = [];
+  let messageSequence = 0;
   function node(id) {
     return elements[id] || (elements[id] = {
-      id, style: {}, textContent: '', className: '',
+      id, style: {}, textContent: '', className: '', hidden: false,
+      setAttribute: function (name, value) { this[name] = value; },
       addEventListener: (name, callback) => { elements[id].listeners[name] = callback; }, listeners: {}
     });
   }
   const context = {
     console, JSON, Intl, isFinite,
+    CustomEvent: function CustomEvent(type, options) { this.type = type; this.detail = options && options.detail; },
     document: {
       getElementById: node,
-      addEventListener: (name, callback) => { documentListeners[name] = callback; }
+      addEventListener: (name, callback) => { documentListeners[name] = callback; },
+      dispatchEvent: (event) => {
+        if (documentListeners[event.type]) documentListeners[event.type](event);
+      }
     },
     window: { sketchup: {
       get_model_binding: () => calls.push({ action: 'binding' }),
-      get_commercial_projection: (payload) => calls.push({ action: 'projection', payload: JSON.parse(payload) })
+      get_commercial_projection: (payload) => calls.push({ action: 'projection', payload: JSON.parse(payload) }),
+      update_furniture: (payload) => calls.push({ action: 'mutation', payload: JSON.parse(payload) })
+    }, GraneteBridge: {
+      nextMessageId: () => `mutation-${++messageSequence}`,
+      validate: () => ({ ok: true })
     }}
   };
   context.__elements = elements;
   context.__calls = calls;
   context.__events = documentListeners;
   vm.createContext(context);
+  vm.runInContext(mutationSource, context);
   vm.runInContext(source, context);
   return context;
 }
@@ -57,6 +69,16 @@ function projectionResponse(requestId, binding, value) {
     },
     projection: value
   };
+}
+
+function startRuntimeMutation(s) {
+  assert.strictEqual(s.window.GraneteMutation.submitUpdate({}, { furnitureInstanceId: 'f-a' }), 'sent');
+}
+
+function finishRuntimeMutation(s, outcome) {
+  return s.window.GraneteMutation.handleMutationState({
+    kind: 'mutation_state', schemaVersion: 1, inReplyTo: s.window.GraneteMutation.pendingMessageId(), outcome
+  });
 }
 
 test('renders a legitimate zero rather than missing', () => {
@@ -271,6 +293,85 @@ test('authoritative pending work survives temporary unavailability and panel-sty
   });
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
+test('terminal unavailability while binding is lost does not leave a phantom mutation', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const first = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(first, bindingA, projection(100, 80)));
+  startRuntimeMutation(s);
+  s.window.GraneteCommercialProjection.setBinding({ state: 'unreachable', binding: bindingA.binding });
+  finishRuntimeMutation(s, 'unavailable');
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.refresh(), true);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Calculando');
+});
+
+test('cancelled or rejected while binding is lost does not leave a phantom mutation', () => {
+  ['cancelled', 'rejected'].forEach((outcome) => {
+    const s = sandbox();
+    s.window.GraneteCommercialProjection.setBinding(bindingA);
+    const first = s.__calls[s.__calls.length - 1].payload.requestId;
+    s.window.GraneteCommercialProjection.receive(projectionResponse(first, bindingA, projection(100, 80)));
+    startRuntimeMutation(s);
+    s.window.GraneteCommercialProjection.setBinding({ state: 'unreachable', binding: bindingA.binding });
+    finishRuntimeMutation(s, outcome);
+    s.window.GraneteCommercialProjection.setBinding(bindingA);
+
+    assert.strictEqual(s.window.GraneteCommercialProjection.refresh(), true, outcome);
+  });
+});
+
+test('commit while binding is lost rechecks local authority and preserves pending work', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  startRuntimeMutation(s);
+  s.window.GraneteCommercialProjection.setBinding({ state: 'unreachable', binding: bindingA.binding });
+  finishRuntimeMutation(s, 'committed');
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const reconnect = s.__calls[s.__calls.length - 1].payload.requestId;
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive({
+    requestId: reconnect, projectId: 'p-a', designId: 'd-a',
+    workState: { projectId: 'p-a', designId: 'd-a', generation: 5, localChangesPending: true, matchConfirmed: false },
+    state: 'stale'
+  }), true);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
+  assert.notStrictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualizado');
+});
+
+test('reconnecting while the runtime mutation is active still blocks request and receive', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  startRuntimeMutation(s);
+  s.window.GraneteCommercialProjection.setBinding({ state: 'unreachable', binding: bindingA.binding });
+  const before = s.__calls.length;
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.refresh(), false);
+  assert.strictEqual(s.__calls.length, before);
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(
+    projectionResponse('commercial-blocked', bindingA, projection(120, 80))
+  ), false);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Sincronizando');
+});
+
+test('an old context outcome only releases lifecycle and rechecks the new context', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  startRuntimeMutation(s);
+  s.window.GraneteCommercialProjection.setBinding(bindingB);
+  const before = s.__calls.length;
+  finishRuntimeMutation(s, 'committed');
+
+  assert.strictEqual(s.__calls.length, before + 1);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(
+    projectionResponse(request, bindingB, projection(200, 150))
+  ), true);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualizado');
 });
 
 test('pending work state is scoped by project and design', () => {
