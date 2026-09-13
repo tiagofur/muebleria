@@ -1,37 +1,18 @@
 # Machine Profiles & Postprocessor Adapters
 
-> **Preparation scope — 2026-09-10:** [#650](https://github.com/tiagofur/muebleria/issues/650)
-> define programa de corte único, preview fiel y serialización PTX documentada
-> para un candidato CADLink/CAD4. El [dossier](../machines/ptx-cadmatic4/README.md)
-> importa la investigación y ejemplos de la conversación. Es preparación, no
-> implementación nueva. A+B se verifican internamente; generar cinco cocinas y
-> verificar con el cliente quedan a cargo del propietario y fuera del cierre
-> técnico. Esta separación permite desarrollar sin esperar #348, pero no
+> **Estado CADmatic 4 — v0.7 (2026-09-12):** el pipeline interno está
+> implementado dentro del subconjunto soportado mediante #650/#661/#665/#691/#692
+> y endurecido por #693. La selección exacta vigente es
+> `client-a-machine-b-hpp250@r1` + `ptx-cadmatic-4@r3` +
+> `granete-ptx@1.2.0`; compiler, readback independiente, trims r3, FUNCTION 92,
+> multi-sheet, readiness real y manifests se verifican internamente.
+>
+> **Implementación ≠ validación.** El estado permanece `NOT_TESTED/notClaimed`:
+> siguen pendientes importación CADLink, readback `.rlt`, validación del operador
+> y corte físico HPP 250. Ningún test interno, marca/modelo o documentación pública
 > promueve compatibilidad/capabilities ni elimina gates productivos.
-
-> **Execution status — 2026-09-06:** FOUNDATION IMPLEMENTED, nothing validated.
-> Tras el fallo real de conversión PTX en Client A
-> (`docs/machines/client-a/ptx-conversion-failure.md`), el owner autorizó
-> avanzar la implementación del lane de machine-output. Implementado en
-> `packages/domain/src/machineOutput.ts` (contrato neutral) +
-> `packages/excel/src/machines/` (adapters y perfiles DATA):
 >
-> - `PostprocessorAdapter` boundary + `OutputCompatibilityProfile` versionado
->   (concepto nuevo, ver §"OutputCompatibilityProfile" más abajo) con
->   fail-closed sobre toda dimensión sin evidencia;
-> - perfiles `ptx-generic` r1 (dialeto actual del repo, byte-identical al
->   golden de #348), `ptx-cadmatic-3/4/5`, `saw-homag`, `mpr-woodwop` — todos
->   los últimos sin dimensiones evidenciadas → no generan bytes;
-> - MachineProfiles HPP 250/BHX 050 (identidad OWNER_CONFIRMED, cero
->   capabilities inferidas) y ArtifactManifest determinista (provenance
->   exacta, claim `notClaimed`, banner non-production).
->
-> **Implementación ≠ validación.** #348 (import/readback + sign-off) sigue
-> abierto y gobierna todo claim; los dossiers #352/#353 siguen siendo la
-> fuente de evidencia de campo. Este contrato no es un claim de compatibilidad
-> para combinación alguna de máquina/controlador/software.
->
-> **Invariante:** SketchUp owns authoring/interaction; Granete owns manufacturing
+> **Invariante:** SketchUp posee autoría/interacción; Granete posee manufacturing
 > truth. Los adapters serializan; no inventan reglas.
 
 ## Purpose
@@ -54,7 +35,7 @@ MachineProfile
 PostprocessorAdapter
  ├── postprocessorAdapterId
  ├── postprocessorAdapterVersion (semver)
- ├── implementationDigest (hash del código que produce los bytes)
+ ├── implementationDigest (identidad del contrato industrial canónico)
  ├── inputSchema (DTOs resueltos: p.ej. ResolvedBoardPart + drilling)
  ├── requiredCapabilities (qué capabilities exige del profile)
  └── producedArtifacts (kinds: ptx | dxf | csv | pdf | label)
@@ -77,6 +58,10 @@ Reglas:
 - **Un adapter nuevo no modifica cálculos.** Conformance ADR-0001: consume
   DTOs resueltos; paridad vía contract fixtures compartidos si una regla
   viviera en TS y Go.
+- **El digest no hashea archivos fuente completos.** Se vincula a un descriptor
+  canónico, revisiones/opciones efectivas, markers semánticos y hashes de bytes
+  golden. Así un cambio industrial exige identidad nueva sin hacerla sensible a
+  imports, comentarios o formato irrelevante.
 
 ## OutputCompatibilityProfile (decisión 2026-09-06, alcance precisado 2026-09-10)
 
@@ -119,10 +104,11 @@ primaria de interfaz**, con fuente y localizador, para pruebas internas/candidat
 no productivo. Eso es distinto de deducir sintaxis de artículos genéricos o llenar
 capacidades físicas de una máquina desde su nombre.
 
-#650 propone publicar una nueva revisión de perfil CAD4 y versión/digest del
-serializer que apliquen realmente sus parámetros. El serializador consumirá el
+#650 publicó el candidato r2 y #661 su revisión r3. El serializador consume el
 mismo programa de corte que la preview, sin reconstruir por clustering X/Y ni
-reoptimizar. Un lector independiente verificará los bytes contra ese programa.
+reoptimizar; un lector/verifier independiente comprueba los bytes contra el
+programa re-ejecutado. #693 fija guards r3, terminales descartados, gobernanza de
+identidad y paridad TS↔contrato↔Go sin cambiar bytes ni digests históricos.
 
 Distinguir serialización posible, evidencia de receptor y permiso productivo.
 La especificación pública no promueve `NOT_TESTED` a `PARTIAL/VALIDATED`, no
@@ -186,9 +172,9 @@ No se implementan otros formatos de máquina con esta preparación.
 selección #591/PR #592 y robustez de descargas/ZIP PR #595/#598/#599.
 El perfil disponible en una lista no demuestra gramática ni compatibilidad.
 
-**Preparado, pendiente de implementar:** #650 A+B (programa real + preview y
-serializer PTX + lector independiente), con diccionario y ejemplos bajo
-[`docs/machines/ptx-cadmatic4/`](../machines/ptx-cadmatic4/README.md).
+**Implementado internamente:** #650 A+B y sus hardenings #661/#665/#691/#692/#693.
+El estado operativo v0.7, sus límites, el audit legacy y la condición de retiro
+están en [`docs/machines/ptx-cadmatic4/`](../machines/ptx-cadmatic4/README.md).
 
 **Pendiente de field evidence:** compatibilidad de la combinación exacta y
 capacidades reales (#348/#352/#353). Cinco cocinas y verificación con el cliente
@@ -219,7 +205,9 @@ Normal production: exactamente UN tuple configurado por operación
 - El resolver autoritativo (`resolveManufacturingOutputTarget` en la capa de
   export) devuelve `NO_OUTPUT_CONFIGURED | CONFIGURED{tuple+readiness}` —
   nunca sustituye un perfil bloqueado ni genera candidatos en bulk.
-- Un objetivo bloqueado produce **cero archivos** con la razón exacta
+- Un objetivo loading/error/stale/configured-blocked produce **cero archivos**
+  con la razón exacta
   (`machineOutputBlockerMessageEs`); el flujo legacy sin configurar se
-  mantiene intacto y documentado. #650 debe mantener la ausencia de fallback
-  y comunicar por separado candidato no productivo y compatibilidad real.
+  permite únicamente tras respuesta autoritativa confirmed-empty. Nunca hay
+  fallback por error. El retiro del legacy exige que todos los talleres
+  soportados hayan migrado y que ningún flujo confirmed-empty dependa de él.

@@ -90,10 +90,10 @@ negocio ni cambian este vocabulario persistido.
 
 ## Infraestructura común de validación
 
-- [Investigación y plan PTX/CADmatic 4](./ptx-cadmatic4/README.md) — #650:
-  fuentes primarias y campos/códigos, programa de corte único para preview y
-  PTX, ejemplos parciales y comprobador matemático. Preparación documental;
-  no entrega runtime, cocinas ni evidencia de máquina. Plan activo A → B.
+- [PTX/CADmatic 4 — estado operativo v0.7](./ptx-cadmatic4/README.md):
+  runtime interno #650/#661/#665/#691/#692/#693, contrato r3, audit de fallback
+  legacy y gate externo pendiente. Implementación completa dentro del
+  subconjunto soportado; `NOT_TESTED/notClaimed` hasta CADLink/readback/operador.
 - Auditoría del PTX actual, fixture sintético congelado `fixture-board-001` r1
   (golden con SHA-256), expected readback, contrato de comparación y runbook
   operator-safe: [`ptx-validation.md`](./ptx-validation.md) — preparación de
