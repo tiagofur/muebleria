@@ -867,8 +867,8 @@ Inventario de consumidores runtime (Slice 2):
 ### 16B. Proyección comercial no vinculante del Design (#677, primera entrega)
 
 `GET /projects/{projectId}/designs/{designId}/commercial-projection` calcula una
-estimación sobre la `DesignWorkingCopy` exacta, dentro de la transacción tenant y
-con lock compartido contra escrituras concurrentes. Reutiliza
+	estimación sobre la `DesignWorkingCopy` exacta dentro de una transacción tenant
+	`REPEATABLE READ`, conservando el acceso de lectura multi-organización. Reutiliza
 `CalcProjectBreakdown`; SketchUp y Web sólo consumen el contrato generado
 `granete.commercial-projection.v1` y nunca recalculan importes.
 

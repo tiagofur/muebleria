@@ -16,22 +16,25 @@ import (
 )
 
 // GetDesignCommercialProjection calculates a non-binding estimate from the
-// exact Design working copy inside the request's tenant transaction. The
-// shared lock serializes this read with UpdateDesignWorkingCopy's FOR UPDATE.
+// exact Design working copy inside the request's repeatable-read tenant
+// transaction. Explicitly shared organizations keep their established read
+// access even though they cannot acquire write-oriented row locks.
 func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, projectID, designID string) (*domain.CommercialProjection, error) {
 	if !isValidUUID(projectID) || !isValidUUID(designID) {
 		return nil, domain.ErrDesignNotFound
 	}
+	project, err := s.GetProjectByID(ctx, projectID)
+	if err != nil || project == nil {
+		return nil, domain.ErrDesignNotFound
+	}
 	orgID := OrgFromCtx(ctx)
+	saleAmountsVisible := project.OrganizationID == orgID || project.SalesOrganizationID == orgID
 	var authorized bool
-	err := s.db(ctx).QueryRow(ctx, `
+	err = s.db(ctx).QueryRow(ctx, `
 		SELECT true
-		FROM designs d
-		JOIN projects p ON p.id = d.project_id
-		WHERE d.id = $1 AND d.project_id = $2
-		  AND p.organization_id = $3
-		FOR SHARE OF d
-	`, designID, projectID, orgID).Scan(&authorized)
+		FROM designs
+		WHERE id = $1 AND project_id = $2
+	`, designID, projectID).Scan(&authorized)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignNotFound
@@ -45,11 +48,6 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		}
 		return nil, err
 	}
-	envelope, err := s.loadQuoteCommercialEnvelope(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-
 	workingFingerprint, err := hashJSON(struct {
 		BaseRevisionID *string                    `json:"baseRevisionId"`
 		Items          []domain.DesignWorkingItem `json:"items"`
@@ -66,7 +64,7 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		Schema: domain.CommercialProjectionSchema, Status: domain.CommercialProjectionIncomplete,
 		ProjectID: projectID, DesignID: designID, WorkingVersion: workingVersion,
 		WorkingFingerprint: workingFingerprint, PricingAuthority: "calc-project-breakdown",
-		CalculatedAt: now, Currency: envelope.Currency, ItemCount: len(wc.Items), Issues: []string{},
+		CalculatedAt: now, Currency: project.Currency, ItemCount: len(wc.Items), Issues: []string{},
 		SaleAmountsWithheld: false,
 	}
 
@@ -96,6 +94,17 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		return nil, err
 	}
 	result.Reference, result.AcceptedReference, result.LatestPublishedReference = selectCommercialProjectionReferences(revisions)
+	if !saleAmountsVisible {
+		result.CostsWithheld = true
+		result.SaleAmountsWithheld = true
+		result.Issues = append(result.Issues, "commercial_amounts_withheld_for_organization")
+		return result, nil
+	}
+
+	envelope, err := s.loadQuoteCommercialEnvelope(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(result.Issues) == 0 {
 		levelChoices, choicesErr := s.loadProjectLevelChoices(ctx, projectID)

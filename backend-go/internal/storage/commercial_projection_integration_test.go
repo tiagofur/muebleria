@@ -3,6 +3,7 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -109,7 +110,43 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 		t.Fatalf("projection refresh created a QuoteRevision: got %d", got)
 	}
 
+	multiOrgExec(t, fx.admin, `
+		ALTER TABLE projects DISABLE TRIGGER protect_project_organization_ownership;
+		UPDATE projects
+		SET manufacturing_organization_id = '`+rlsOrgB+`'
+		WHERE id = '`+csProject+`';
+		ALTER TABLE projects ENABLE TRIGGER protect_project_organization_ownership;`)
+	var manufacturingOrg string
+	if readErr := fx.admin.QueryRow(context.Background(),
+		`SELECT manufacturing_organization_id::text FROM projects WHERE id=$1`, csProject).Scan(&manufacturingOrg); readErr != nil {
+		t.Fatalf("read manufacturing assignment: %v", readErr)
+	}
+	if manufacturingOrg != rlsOrgB {
+		t.Fatalf("manufacturing assignment=%s want %s", manufacturingOrg, rlsOrgB)
+	}
 	err = fiTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
+		if _, workingErr := fx.store.GetDesignWorkingCopy(ctx, designID); workingErr != nil {
+			return fmt.Errorf("manufacturing working copy: %w", workingErr)
+		}
+		if _, revisionsErr := fx.store.ListQuoteRevisionsByProject(ctx, csProject); revisionsErr != nil {
+			return fmt.Errorf("manufacturing quote references: %w", revisionsErr)
+		}
+		var readErr error
+		projection, readErr = fx.store.GetDesignCommercialProjection(ctx, csProject, designID)
+		return readErr
+	})
+	if err != nil {
+		t.Fatalf("manufacturing projection: %v", err)
+	}
+	if projection.Status != domain.CommercialProjectionIncomplete || projection.Amounts != nil ||
+		!projection.CostsWithheld || !projection.SaleAmountsWithheld || projection.Comparison != nil {
+		t.Fatalf("manufacturing projection disclosed commercial amounts: %+v", projection)
+	}
+	if projection.Reference == nil || projection.Reference.SaleTotal != nil {
+		t.Fatalf("manufacturing reference disclosure=%+v", projection.Reference)
+	}
+
+	err = fiTx(t, fx.store, storage.TenantActor{OrganizationID: rlsOrgC, UserID: rlsUserA}, func(ctx context.Context) error {
 		_, readErr := fx.store.GetDesignCommercialProjection(ctx, csProject, designID)
 		return readErr
 	})
