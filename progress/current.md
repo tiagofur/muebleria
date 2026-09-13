@@ -6,7 +6,7 @@
 - Corrección autorizada: #711 OPEN con `status:approved` + `size:exception` verificadas; R1 reutiliza `actorCanViewCosts`/`RedactQuoteCommercialSnapshot` y prueba vendedor sin costos vs. Admin.
 - Corrección R2: ownership/status se leen y validan bajo el mismo `FOR UPDATE`; una carrera determinística confirma rollback si `accepted` gana el lock.
 - Corrección R3: `decodeGeneratedJSONBody` rechaza campos desconocidos/JSON trailing y el fingerprint no canónico responde `BAD_REQUEST` sin llamar storage.
-- Gates: API focalizado + completo, storage focalizado, `pnpm openapi:check`, `pnpm typecheck`, `pnpm test` y `git diff --check` PASS; diff autoral autorizado = 868 líneas (828 altas + 40 bajas).
+- Concurrencia FI: RED confirmó que remove podía finalizar junto con Q1; `FOR UPDATE OF fi` bloquea sólo la fila no-nullable del `LEFT JOIN`, en el orden estable por FurnitureInstanceID. Remove-wins prueba rollback sin Q1/líneas. Focalizados PASS; full Go falló primero por contención DB compartida y PASS aislado con PostgreSQL dedicado, `-p=1 -parallel=1` (storage 326.420s; pilot 234.045s); `git diff --check` PASS.
 
 # Issues #642 → #677 — presupuesto del diseño actual dentro de SketchUp
 

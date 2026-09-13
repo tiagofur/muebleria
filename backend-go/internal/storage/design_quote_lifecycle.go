@@ -128,6 +128,7 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 			LEFT JOIN quote_line_furniture_instances qli ON qli.furniture_instance_id=fi.id AND qli.project_id=fi.project_id AND qli.state='current'
 			LEFT JOIN project_items pi ON pi.id=qli.quote_line_id AND pi.project_id=qli.project_id
 			WHERE fi.id=$1 AND fi.project_id=$2
+			FOR UPDATE OF fi
 		`, working.FurnitureInstanceID, cmd.ProjectID).Scan(&lifecycle, &lineID, &moduleID, &quantity, &dimsRaw)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignNotFound

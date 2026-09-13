@@ -279,3 +279,48 @@ func TestCreateInitialDesignQuoteRevision_RejectsTerminalStatusCommittedWhileWai
 		t.Fatalf("terminal rollback revisions/lines=%d/%d", revisions, lines)
 	}
 }
+
+func TestCreateInitialDesignQuoteRevision_RemoveWinsWhileQuoteWaitsForInstanceLock(t *testing.T) {
+	fx := setupDesignQuoteFixture(t)
+	locked, release, removed := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	releaseRemove := sync.OnceFunc(func() { close(release) })
+	defer releaseRemove()
+	go func() {
+		removed <- fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			_, err := fx.store.RemoveFurnitureInstance(ctx, storage.RemoveFurnitureInstanceCommand{FurnitureInstanceID: fx.instances[0], ExpectedVersion: 1, ActorUserID: rlsUserA})
+			if err == nil {
+				close(locked)
+				<-release
+			}
+			return err
+		})
+	}()
+	select {
+	case <-locked:
+	case err := <-removed:
+		t.Fatalf("remove before lock barrier: %v", err)
+	}
+
+	const applicationName = "design-q1-instance-race"
+	quoteStore := newNamedRuntimeOrganizationStore(t, applicationName)
+	quoted := make(chan error, 1)
+	go func() {
+		quoted <- fiTx(t, quoteStore, fiActorA(), func(ctx context.Context) error {
+			_, err := quoteStore.CreateInitialDesignQuoteRevision(ctx, storage.CreateInitialDesignQuoteRevisionCommand{ProjectID: csProject, DesignID: fx.designID, WorkingVersion: fx.version, WorkingFingerprint: fx.fingerprint, ActorUserID: rlsUserA})
+			return err
+		})
+	}()
+	waitForOrganizationLockWait(t, fx.admin, applicationName)
+	releaseRemove()
+	if err := awaitSectorRaceResult(t, removed); err != nil {
+		t.Fatalf("remove commit: %v", err)
+	}
+	if err := awaitSectorRaceResult(t, quoted); !errors.Is(err, domain.ErrFurnitureInstanceLifecycleConflict) {
+		t.Fatalf("quote after remove err=%v", err)
+	}
+	var revisions, lines int
+	_ = fx.admin.QueryRow(context.Background(), `SELECT count(*), (SELECT count(*) FROM project_items WHERE project_id=$1) FROM quote_revisions WHERE project_id=$1`, csProject).Scan(&revisions, &lines)
+	if revisions != 0 || lines != 0 {
+		t.Fatalf("remove-wins rollback revisions/lines=%d/%d", revisions, lines)
+	}
+}
