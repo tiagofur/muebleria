@@ -1,5 +1,6 @@
 import type {
   Catalog,
+  Customer,
   Project,
   ProjectInternalMessage,
   ProjectInternalMessageType,
@@ -86,6 +87,7 @@ import {
   categoryToApi,
   componentToApi,
   customerToApi,
+  customerFromApi,
   edgeToApi,
   hardwareToApi,
   materialToApi,
@@ -650,6 +652,78 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     if (res.ok) return;
     const text = await res.text().catch(() => '');
     if (isConflict(res.status, text)) return;
+    console.error(`API create failed /projects: ${res.status} ${text}`);
+    throw new Error(`Failed to create project: ${res.status} ${text}`);
+  }
+
+  /**
+   * #712 — atomic "new quote + new customer" create. The server persists both
+   * in ONE transaction and returns the project plus the customer it minted;
+   * the project sent by the caller must NOT carry a customer_id (the UI never
+   * fabricates one). A 409 means the project id already exists — the existing
+   * conflict-as-idempotent-success contract — so the retry is reconciled by
+   * reading the persisted pair back instead of creating duplicates.
+   */
+  async createProjectWithInlineCustomer(
+    project: Project,
+    inlineCustomerName: string,
+  ): Promise<{ project: Project; customer: Customer }> {
+    const res = await this.fetch(`${this.baseUrl}/projects`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        ...projectToApi(project),
+        customer_id: '',
+        inline_customer_name: inlineCustomerName,
+      }),
+    });
+    if (res.ok) {
+      const raw = (await res.json()) as Record<string, unknown>;
+      const inline = raw.inline_customer as Record<string, unknown> | undefined;
+      if (!inline) {
+        throw new Error('Server did not return the inline customer identity');
+      }
+      return {
+        project: projectFromApi(raw),
+        customer: customerFromApi(inline),
+      };
+    }
+    const text = await res.text().catch(() => '');
+    if (isConflict(res.status, text)) {
+      // Same intention replayed with the same project id: reconcile from the
+      // server truth instead of creating a second customer.
+      const projectRes = await this.fetch(
+        `${this.baseUrl}/projects/${project.id}`,
+        { headers: this.getHeaders() },
+      );
+      if (!projectRes.ok) {
+        throw new Error(
+          `Failed to reconcile project after conflict: ${projectRes.status}`,
+        );
+      }
+      const existing = projectFromApi(
+        (await projectRes.json()) as Record<string, unknown>,
+      );
+      if (!existing.customerId) {
+        throw new Error(
+          `Conflict on /projects without a resolvable customer for ${project.id}`,
+        );
+      }
+      const customerRes = await this.fetch(
+        `${this.baseUrl}/customers/${existing.customerId}`,
+        { headers: this.getHeaders() },
+      );
+      if (!customerRes.ok) {
+        throw new Error(
+          `Failed to reconcile inline customer after conflict: ${customerRes.status}`,
+        );
+      }
+      const customerRaw = (await customerRes.json()) as Record<string, unknown>;
+      return {
+        project: existing,
+        customer: customerFromApi(customerRaw),
+      };
+    }
     console.error(`API create failed /projects: ${res.status} ${text}`);
     throw new Error(`Failed to create project: ${res.status} ${text}`);
   }

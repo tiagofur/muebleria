@@ -1282,9 +1282,25 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), "no tenés permiso para crear cotizaciones") {
 			return
 		}
-		var p domain.Project
-		if !decodeJSONBody(w, r, &p) {
+		// #712: optional inline-customer create command. Embedded decode keeps
+		// the flat legacy payload 100% backward compatible — existing clients
+		// simply omit inline_customer_name.
+		var req createProjectRequest
+		if !decodeJSONBody(w, r, &req) {
 			return
+		}
+		p := req.Project
+		inlineName := strings.TrimSpace(req.InlineCustomerName)
+		switch {
+		case inlineName != "" && p.CustomerID != "":
+			respondWithError(w, http.StatusBadRequest, "enviá un cliente existente o un cliente nuevo, no ambos")
+			return
+		case inlineName != "":
+			// The inline transition also writes a customer: the caller needs
+			// both permissions, checked together before anything persists.
+			if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCustomers), "no tenés permiso para crear clientes") {
+				return
+			}
 		}
 		// #577: the resolved release authority projection is computed on read;
 		// a client-sent copy is never persisted.
@@ -1304,7 +1320,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		if !s.authorizeProjectOrgOwnership(w, r, &p) {
 			return
 		}
-		if !validateProjectPayloadRequiredIDs(w, &p) {
+		if !validateProjectPayloadRequiredIDs(w, &p, inlineName != "") {
 			return
 		}
 
@@ -1313,14 +1329,28 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		if p.Currency == "" {
 			p.Currency = "MXN"
 		}
-		err := s.Store.CreateProject(r.Context(), &p)
-		if err != nil {
-			if isDuplicateKey(err) {
-				respondWithError(w, http.StatusConflict, "El registro ya existe")
+
+		// #712: "nueva cotización + nuevo cliente" runs as ONE server-side
+		// transaction. The customer id is minted and persisted by the server,
+		// the project references exactly that row, and any failure rolls both
+		// back — the FK never sees an unpersisted identity again.
+		var inlineCustomer *domain.Customer
+		if inlineName != "" {
+			inlineCustomer = &domain.Customer{
+				Name:        inlineName,
+				OwnerUserID: domain.ResolveOwnerOnCreateRoles(uid, roles, p.OwnerUserID),
+			}
+			err := s.Store.CreateProjectWithInlineCustomer(r.Context(), &p, inlineCustomer)
+			if err != nil {
+				respondWithProjectCreateError(w, err)
 				return
 			}
-			respondWithInternalError(w, err, "handler")
-			return
+		} else {
+			err := s.Store.CreateProject(r.Context(), &p)
+			if err != nil {
+				respondWithProjectCreateError(w, err)
+				return
+			}
 		}
 		if !orgSeesManufacturing(claims, &p) {
 			domain.RedactProjectManufacturing(&p)
@@ -1328,11 +1358,48 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(&p)
 		}
+		if inlineCustomer != nil {
+			respondWithJSON(w, http.StatusCreated, createProjectResponse{Project: p, InlineCustomer: inlineCustomer})
+			return
+		}
 		respondWithJSON(w, http.StatusCreated, p)
 
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// createProjectRequest decodes the legacy flat POST /projects payload plus
+// the optional #712 inline-customer command. The embedded struct keeps every
+// existing field at the top level, so older clients decode unchanged.
+type createProjectRequest struct {
+	domain.Project
+	InlineCustomerName string `json:"inline_customer_name,omitempty"`
+}
+
+// createProjectResponse embeds the created project (same flat shape clients
+// already parse) and, only for the inline transition, the customer the
+// server created so the caller can reconcile local state with the persisted
+// identity.
+type createProjectResponse struct {
+	domain.Project
+	InlineCustomer *domain.Customer `json:"inline_customer,omitempty"`
+}
+
+// respondWithProjectCreateError maps the create-path storage failures:
+// duplicate id → 409 (existing idempotent-create contract), invisible
+// customer → the neutral 404 also used for missing rows (never a cross-org
+// oracle, #712 §8), anything else → 500.
+func respondWithProjectCreateError(w http.ResponseWriter, err error) {
+	if isDuplicateKey(err) {
+		respondWithError(w, http.StatusConflict, "El registro ya existe")
+		return
+	}
+	if errors.Is(err, storage.ErrCustomerNotFound) {
+		respondWithError(w, http.StatusNotFound, "El cliente indicado no existe")
+		return
+	}
+	respondWithInternalError(w, err, "handler")
 }
 
 func isValidUUID(value string) bool {
@@ -1356,9 +1423,11 @@ func isValidUUID(value string) bool {
 }
 
 // validateProjectPayloadRequiredIDs rejects malformed UUIDs before they reach
-// Postgres and become 22P02 internal errors (pre-demo audit P1-5).
-func validateProjectPayloadRequiredIDs(w http.ResponseWriter, p *domain.Project) bool {
-	if !isValidUUID(p.CustomerID) {
+// Postgres and become 22P02 internal errors (pre-demo audit P1-5). The
+// customer check is skipped for the #712 inline transition — the server mints
+// that id itself inside the atomic transaction.
+func validateProjectPayloadRequiredIDs(w http.ResponseWriter, p *domain.Project, inlineCustomer bool) bool {
+	if !inlineCustomer && !isValidUUID(p.CustomerID) {
 		respondWithError(w, http.StatusBadRequest, "la cotización necesita un cliente válido")
 		return false
 	}
@@ -1475,7 +1544,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !orgSeesManufacturing(claims, existing) {
 			domain.RestoreProjectManufacturing(&p, existing)
 		}
-		if !validateProjectPayloadRequiredIDs(w, &p) {
+		if !validateProjectPayloadRequiredIDs(w, &p, false) {
 			return
 		}
 

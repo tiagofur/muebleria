@@ -1120,4 +1120,129 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
       Reflect.deleteProperty(globalThis, 'localStorage');
     }
   });
+
+  // --- #712: atomic inline-customer create ---
+  describe('createProjectWithInlineCustomer', () => {
+    const draftProject = {
+      id: 'p-712',
+      name: 'Cocina Ana',
+      customerId: 'must-be-ignored',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft' as const,
+      items: [],
+      createdAt: '2026-09-13T00:00:00.000Z',
+      updatedAt: '2026-09-13T00:00:00.000Z',
+    };
+
+    const serverPair = {
+      id: 'p-712',
+      name: 'Cocina Ana',
+      customer_id: 'c-srv-1',
+      currency: 'MXN',
+      margin_factor: 1.35,
+      labor_fixed_cost: 0,
+      status: 'draft',
+      items: [],
+      created_at: '2026-09-13T00:00:01.000Z',
+      updated_at: '2026-09-13T00:00:01.000Z',
+      inline_customer: {
+        id: 'c-srv-1',
+        name: 'Ana López',
+        email: '',
+        phone: '',
+        address: '',
+        notes: '',
+        active: true,
+        owner_user_id: '',
+      },
+    };
+
+    it('sends inline_customer_name with an empty customer_id and returns the server pair', async () => {
+      const fetchMock = vi.fn(async (_input: string | URL, _init?: RequestInit) => ({
+        ok: true,
+        json: async () => serverPair,
+      } as Response));
+      const repo = new APIWorkspaceRepository('http://test/api', {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+      });
+
+      const created = await repo.createProjectWithInlineCustomer!(
+        draftProject,
+        'Ana López',
+      );
+
+      expect(created.project.customerId).toBe('c-srv-1');
+      expect(created.customer).toMatchObject({ id: 'c-srv-1', name: 'Ana López', active: true });
+
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toBe('http://test/api/projects');
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      // The UI never fabricates a customer id: the payload forces the field
+      // empty so the server's minted identity is the only one in play.
+      expect(body.customer_id).toBe('');
+      expect(body.inline_customer_name).toBe('Ana López');
+      expect(body.id).toBe('p-712');
+    });
+
+    it('reconciles from the server truth on a 409 replay instead of duplicating', async () => {
+      const fetchMock = vi.fn(async (input: string | URL, _init?: RequestInit) => {
+        const url = String(input);
+        if (url === 'http://test/api/projects' ) {
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({}),
+            text: async () => 'El registro ya existe',
+          } as Response;
+        }
+        if (url === 'http://test/api/projects/p-712') {
+          return {
+            ok: true,
+            json: async () => ({ ...serverPair, inline_customer: undefined }),
+          } as Response;
+        }
+        if (url === 'http://test/api/customers/c-srv-1') {
+          return {
+            ok: true,
+            json: async () => serverPair.inline_customer,
+          } as Response;
+        }
+        throw new Error('unexpected fetch ' + url);
+      });
+      const repo = new APIWorkspaceRepository('http://test/api', {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+      });
+
+      const created = await repo.createProjectWithInlineCustomer!(
+        draftProject,
+        'Ana López',
+      );
+
+      expect(created.project.customerId).toBe('c-srv-1');
+      expect(created.customer.id).toBe('c-srv-1');
+      // Exactly one POST — the replay read the pair back, never re-created it.
+      const posts = fetchMock.mock.calls.filter(
+        (c) => (c[1] as RequestInit | undefined)?.method === 'POST',
+      );
+      expect(posts).toHaveLength(1);
+    });
+
+    it('fails honestly on a non-conflict server error', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({}),
+        text: async () => 'boom',
+      } as Response));
+      const repo = new APIWorkspaceRepository('http://test/api', {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+      });
+
+      await expect(
+        repo.createProjectWithInlineCustomer!(draftProject, 'Ana López'),
+      ).rejects.toThrow('Failed to create project: 500');
+    });
+  });
 });

@@ -243,6 +243,183 @@ describe('projectStore — createProject (cross-store customers)', () => {
   });
 });
 
+describe('projectStore — createProject with inline customer (#712 atomic path)', () => {
+  const serverCustomer: Customer = {
+    id: 'server-cust-1',
+    name: 'New Customer',
+    active: true,
+  };
+
+  // The server echo DELIBERATELY differs from what the UI sent: timestamps
+  // are minted by PostgreSQL, ownership is resolved server-side. The local
+  // store must adopt this entity verbatim — a test where the server echoes
+  // the payload unchanged could not detect a local reconstruction.
+  const SERVER_CREATED_AT = '2026-09-13T10:00:00.000Z';
+  const SERVER_UPDATED_AT = '2026-09-13T10:00:01.000Z';
+  const SERVER_OWNER = 'server-resolved-owner';
+
+  let lastServerProject: Project | null = null;
+
+  function makeAtomicDeps(fail = false, newId?: () => string) {
+    const atomicCalls: Array<{ projectId: string; name: string }> = [];
+    const base = makeDeps();
+    const deps: ProjectStoreDeps = {
+      ...base.deps,
+      newId: newId ?? base.deps.newId,
+      canCreateProjectWithInlineCustomer: () => true,
+      createProjectWithInlineCustomer: async (p, name) => {
+        atomicCalls.push({ projectId: p.id, name });
+        if (fail) {
+          throw new Error('boom: atomic transition failed');
+        }
+        lastServerProject = {
+          ...p,
+          customerId: serverCustomer.id,
+          ownerUserId: SERVER_OWNER,
+          createdAt: SERVER_CREATED_AT,
+          updatedAt: SERVER_UPDATED_AT,
+        };
+        return { project: lastServerProject, customer: serverCustomer };
+      },
+    };
+    return { ...base, deps, atomicCalls };
+  }
+
+  it('server mode: one atomic transition, no optimistic state, server entities win', async () => {
+    const { deps, createdProjects, toasts, atomicCalls } = makeAtomicDeps();
+    const store = createProjectStore({ deps });
+    const cat = seedCatalog();
+    const initialCustomers = (cat.customers ?? []).length;
+
+    store.getState().createProject(projectDraft, cat, { id: 'user-1' });
+
+    // No optimistic project: the pair exists only after the server commits.
+    expect(store.getState().projects).toHaveLength(0);
+    expect(toasts).toHaveLength(0);
+
+    await vi.waitFor(() => {
+      expect(store.getState().projects).toHaveLength(1);
+    });
+
+    // Exactly ONE persistence call — the legacy POST and the unordered
+    // catalog-save channel are out of this path entirely.
+    expect(atomicCalls).toHaveLength(1);
+    expect(atomicCalls[0]!.name).toBe('New Customer');
+    expect(createdProjects).toHaveLength(0);
+
+    // The local Project IS the server-returned entity — full structural
+    // equality, including the fields only the server could know.
+    expect(store.getState().projects[0]).toEqual(lastServerProject);
+    expect(store.getState().projects[0]!.customerId).toBe(serverCustomer.id);
+    expect(store.getState().projects[0]!.createdAt).toBe(SERVER_CREATED_AT);
+    expect(store.getState().projects[0]!.ownerUserId).toBe(SERVER_OWNER);
+
+    // The customer lands in local catalog state for immediate rendering.
+    const customers = getCatalogStoreState().catalog?.customers ?? [];
+    expect(customers.length).toBe(initialCustomers + 1);
+    expect(customers.some((c) => c.id === serverCustomer.id)).toBe(true);
+
+    // Success is toasted only after the server accepted the write.
+    expect(toasts[0]).toMatchObject({ type: 'success' });
+  });
+
+  it('server mode failure: nothing local survives, honest error, no orphan', async () => {
+    const { deps, toasts, atomicCalls } = makeAtomicDeps(true);
+    const store = createProjectStore({ deps });
+    const cat = seedCatalog();
+    const initialCustomers = (cat.customers ?? []).length;
+
+    store.getState().createProject(projectDraft, cat, { id: 'user-1' });
+
+    await vi.waitFor(() => {
+      expect(toasts[0]).toMatchObject({
+        type: 'error',
+        message: 'No se pudo guardar la cotización en el servidor',
+      });
+    });
+
+    expect(atomicCalls).toHaveLength(1);
+    expect(store.getState().projects).toHaveLength(0);
+    const customers = getCatalogStoreState().catalog?.customers ?? [];
+    expect(customers.length).toBe(initialCustomers);
+  });
+
+  it('server mode + existing customerId: keeps the legacy optimistic path', () => {
+    const { deps, createdProjects, atomicCalls } = makeAtomicDeps();
+    const store = createProjectStore({ deps });
+    const cat = seedCatalog();
+
+    store.getState().createProject(
+      { ...projectDraft, customerId: 'existing-cust', customerName: '' },
+      cat,
+      { id: 'user-1' },
+    );
+
+    expect(atomicCalls).toHaveLength(0);
+    expect(createdProjects).toHaveLength(1);
+    expect(store.getState().projects).toHaveLength(1);
+    expect(store.getState().projects[0]!.customerId).toBe('existing-cust');
+  });
+
+  it('guest mode (no atomic capability): keeps the local-optimistic path', () => {
+    const { deps, createdProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    const cat = seedCatalog();
+
+    store.getState().createProject(projectDraft, cat, { id: 'user-1' });
+
+    expect(createdProjects).toHaveLength(1);
+    expect(store.getState().projects).toHaveLength(1);
+    // Local customer resolution (single local store, no FK boundary).
+    expect(store.getState().projects[0]!.customerId).not.toBe('');
+    const customers = getCatalogStoreState().catalog?.customers ?? [];
+    expect(customers.some((c) => c.name === 'New Customer')).toBe(true);
+  });
+
+  it('reconciles the customer by id — no duplicate entries, server data wins', async () => {
+    const { deps } = makeAtomicDeps();
+    const store = createProjectStore({ deps });
+    const cat = seedCatalog();
+    // A concurrent load already brought this identity in with stale data.
+    const stale = { ...serverCustomer, name: 'Stale Name' };
+    getCatalogStoreState().setCatalog({
+      ...cat,
+      customers: [...(cat.customers ?? []), stale],
+    });
+    const before = (getCatalogStoreState().catalog?.customers ?? []).length;
+
+    store.getState().createProject(projectDraft, cat, { id: 'user-1' });
+    await vi.waitFor(() => {
+      expect(store.getState().projects).toHaveLength(1);
+    });
+
+    const customers = getCatalogStoreState().catalog?.customers ?? [];
+    expect(customers.length).toBe(before); // upsert, not append
+    const matches = customers.filter((c) => c.id === serverCustomer.id);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.name).toBe(serverCustomer.name); // authoritative
+  });
+
+  it('reconciles the project by id — a concurrent insert cannot duplicate it', async () => {
+    const { deps } = makeAtomicDeps(false, () => 'p-fixed');
+    const store = createProjectStore({ deps });
+    const cat = seedCatalog();
+    // Simulate a concurrent reconciliation that already inserted the id.
+    store.getState().setProjects([
+      makeProject({ id: 'p-fixed', name: 'Concurrent stale copy' }),
+    ]);
+
+    store.getState().createProject(projectDraft, cat, { id: 'user-1' });
+    await vi.waitFor(() => {
+      expect(store.getState().projects[0]).toEqual(lastServerProject);
+    });
+
+    expect(store.getState().projects).toHaveLength(1);
+    expect(store.getState().projects[0]!.id).toBe('p-fixed');
+    expect(store.getState().projects[0]!.name).not.toBe('Concurrent stale copy');
+  });
+});
+
 describe('projectStore — updateProject', () => {
   it('updates project + persists', () => {
     const { deps, savedProjects, toasts } = makeDeps();

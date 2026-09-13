@@ -514,6 +514,17 @@ export function AppContent({
   ensureProjectStore({
     newId,
     createProject: (p) => getRepository().createProject(p) as Promise<void>,
+    canCreateProjectWithInlineCustomer: () =>
+      getRepository().createProjectWithInlineCustomer != null,
+    createProjectWithInlineCustomer: (p, name) => {
+      const repo = getRepository();
+      if (!repo.createProjectWithInlineCustomer) {
+        return Promise.reject(
+          new Error('El repositorio activo no soporta crear cliente inline'),
+        );
+      }
+      return repo.createProjectWithInlineCustomer(p, name);
+    },
     saveProject: (p) => getRepository().saveProject(p) as Promise<void>,
     deleteProject: (id) => getRepository().deleteProject(id) as Promise<void>,
     createProjectTemplate: (t) =>

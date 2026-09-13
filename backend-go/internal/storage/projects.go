@@ -1096,6 +1096,53 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 }
 
 func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) error {
+	tx, err := s.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := createProjectTx(ctx, tx, p); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// CreateProjectWithInlineCustomer is the atomic "nueva cotización + nuevo
+// cliente" transition (#712): the customer is inserted with a server-owned id
+// and the project references exactly that row inside the SAME transaction.
+// Any failure rolls both back — no orphan customer residue, and the FK is
+// never consulted with an unpersisted identity.
+func (s *PostgresStore) CreateProjectWithInlineCustomer(ctx context.Context, p *domain.Project, inline *domain.Customer) error {
+	if strings.TrimSpace(inline.Name) == "" {
+		return fmt.Errorf("inline customer name is required")
+	}
+	inline.Active = true
+
+	tx, err := s.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := createCustomerTx(ctx, tx, inline, OrgFromCtx(ctx)); err != nil {
+		return err
+	}
+	p.CustomerID = inline.ID
+
+	if err := createProjectTx(ctx, tx, p); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// createProjectTx holds the project insert shared by every create path. It
+// first enforces the logical scope of customer_id (same organization, #712
+// §8 — RI checks bypass RLS, so the storage owns this guard) and then runs
+// the insert plus its child collections on the given transaction.
+func createProjectTx(ctx context.Context, tx pgx.Tx, p *domain.Project) error {
 	var createdBy *string
 	if p.CreatedBy != "" {
 		createdBy = &p.CreatedBy
@@ -1125,15 +1172,14 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	p.ManufacturingOrganizationID = mfgOrg
 	p.OrganizationID = OrgFromCtx(ctx)
 
-	tx, err := s.beginTx(ctx)
-	if err != nil {
+	if err := ensureCustomerInOrgTx(ctx, tx, p.CustomerID, p.OrganizationID); err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
 
 	// Prefer the client-provided id so the FE id stays stable (matches every
 	// other Create* resource). Without this the DB generated its own id, the FE
 	// kept the one it minted, and later calls (calculate, update) 404'd.
+	var err error
 	if p.ID != "" {
 		query := `
 			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, organization_id, sales_organization_id, manufacturing_organization_id)
@@ -1168,7 +1214,7 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 		return err
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, item *domain.ProjectItem) error {
@@ -1283,6 +1329,20 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	// exists, calculate later 404s, and the row is never written.
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("project not found")
+	}
+
+	// #712 §8: the update rewrites customer_id, so the same logical FK scope
+	// applies here. The customer must belong to the project's OWNING
+	// organization (shared sales/manufacturing orgs may update the project but
+	// never re-point it at a customer outside the owner tenant). Checked in
+	// this transaction, so a rejection rolls the whole update back.
+	var projectOrg string
+	if err := tx.QueryRow(ctx,
+		`SELECT organization_id FROM projects WHERE id = $1`, id).Scan(&projectOrg); err != nil {
+		return err
+	}
+	if err := ensureCustomerInOrgTx(ctx, tx, p.CustomerID, projectOrg); err != nil {
+		return err
 	}
 
 	if err := replaceProjectItemsTx(ctx, tx, id, p.Items); err != nil {

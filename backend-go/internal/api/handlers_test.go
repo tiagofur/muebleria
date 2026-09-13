@@ -43,6 +43,7 @@ type stubStore struct {
 	createCustomerErr          error
 	createMaterialErr          error
 	createProjectErr           error
+	createProjectWithInlineErr error
 	updateProjectErr           error
 	customerReturnedByID       *domain.Customer
 	customerGetByIDErr         error
@@ -54,6 +55,7 @@ type stubStore struct {
 	listMaterials              []domain.MaterialBoard
 	lastCreatedCustomer        *domain.Customer
 	lastCreatedProject         *domain.Project
+	lastInlineCustomer         *domain.Customer
 	lastUpdatedProject         *domain.Project
 	// Project furniture identity (#385 / DT-1)
 	furnitureInstancesByID map[string]domain.FurnitureInstance
@@ -460,6 +462,23 @@ func (s *stubStore) CreateProject(ctx context.Context, p *domain.Project) error 
 	}
 	cp := *p
 	s.lastCreatedProject = &cp
+	return nil
+}
+func (s *stubStore) CreateProjectWithInlineCustomer(ctx context.Context, p *domain.Project, inline *domain.Customer) error {
+	if s.createProjectWithInlineErr != nil {
+		return s.createProjectWithInlineErr
+	}
+	cp := *p
+	s.lastCreatedProject = &cp
+	ic := *inline
+	// Mirrors the real storage: the server mints the authoritative identity
+	// and the project references exactly it.
+	ic.ID = "70000000-0000-0000-0000-000000000712"
+	ic.Active = true
+	p.CustomerID = ic.ID
+	inline.ID = ic.ID
+	inline.Active = true
+	s.lastInlineCustomer = &ic
 	return nil
 }
 func (s *stubStore) GetCustomerByID(ctx context.Context, id string) (*domain.Customer, error) {
@@ -2284,6 +2303,129 @@ func TestHandleProjectsCreateEchoesClientId(t *testing.T) {
 	}
 	if got.Status != domain.StatusDraft {
 		t.Errorf("status = %q, want %q", got.Status, domain.StatusDraft)
+	}
+}
+
+// #712 — the inline "nuevo cliente" create command on POST /projects.
+func TestHandleProjectsCreateWithInlineCustomer(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"id":"88888888-9999-0000-1111-222222222222","name":"Cocina Ana","customer_id":"","inline_customer_name":"  Ana López  ","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjects(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+	var got struct {
+		domain.Project
+		InlineCustomer *domain.Customer `json:"inline_customer"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	const stubMintedID = "70000000-0000-0000-0000-000000000712"
+	if got.CustomerID != stubMintedID {
+		t.Fatalf("project.customer_id = %q, want the server-minted id %q", got.CustomerID, stubMintedID)
+	}
+	if got.InlineCustomer == nil {
+		t.Fatal("response must include the created inline_customer for local reconciliation")
+	}
+	if got.InlineCustomer.ID != stubMintedID {
+		t.Fatalf("inline_customer.id = %q, want %q", got.InlineCustomer.ID, stubMintedID)
+	}
+	// The name is trimmed at the command boundary — same rule every UI sends.
+	if got.InlineCustomer.Name != "Ana López" {
+		t.Fatalf("inline_customer.name = %q, want the trimmed name", got.InlineCustomer.Name)
+	}
+	if !got.InlineCustomer.Active {
+		t.Fatal("inline customer must be created active")
+	}
+}
+
+func TestHandleProjectsCreateInlinePlusExistingCustomerReturns400(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"name":"X","customer_id":"10000000-0000-0000-0000-000000000001","inline_customer_name":"Ana López","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjects(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "no ambos") {
+		t.Errorf("error message = %q, want it to reject the ambiguous intent", msg)
+	}
+}
+
+func TestHandleProjectsCreateInlineWhitespaceNameReturns400(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"name":"X","customer_id":"","inline_customer_name":"   ","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjects(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "cliente") {
+		t.Errorf("error message = %q, want it to mention the cliente", msg)
+	}
+}
+
+func TestHandleProjectsCreateInlineStillValidatesItems(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"name":"X","customer_id":"","inline_customer_name":"Ana López","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"i1","module_id":"no-un-uuid","quantity":1,"option_choices":{}}]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjects(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "mueble") {
+		t.Errorf("error message = %q, want item validation to keep applying", msg)
+	}
+}
+
+// The invisible-customer storage guard surfaces as the neutral 404 — the same
+// verdict for missing and other-tenant ids, never a cross-org oracle (#712 §8).
+func TestHandleProjectsCreateInvisibleCustomerReturns404Neutral(t *testing.T) {
+	srv := &Server{Store: &stubStore{createProjectErr: storage.ErrCustomerNotFound}}
+	body := strings.NewReader(`{"name":"X","customer_id":"10000000-0000-0000-0000-0000000009ff","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjects(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); strings.Contains(msg, "otra organización") || strings.Contains(msg, "tenant") {
+		t.Errorf("error message = %q, must stay neutral about other tenants", msg)
+	}
+}
+
+func TestHandleProjectsCreateWithInlineDuplicateProjectReturns409(t *testing.T) {
+	srv := &Server{Store: &stubStore{createProjectWithInlineErr: dupErr("error creating project")}}
+	body := strings.NewReader(`{"id":"77777777-8888-9999-0000-111111111111","name":"Dup","customer_id":"","inline_customer_name":"Ana López","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjects(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body=%s)", rr.Code, rr.Body.String())
 	}
 }
 
