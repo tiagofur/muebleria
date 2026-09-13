@@ -99,8 +99,15 @@ test('only a server-synchronized commit refreshes while local commits stay stale
   assert.strictEqual(s.__calls.length, before);
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
-  s.__events['granete-mutation-state']({ detail: { phase: 'committed', serverSynchronized: true } });
+  s.__elements['btn-commercial-projection-refresh'].listeners.click();
+  assert.strictEqual(s.__calls.length, before);
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  assert.strictEqual(s.__calls.length, before);
+  s.window.GraneteCommercialProjection.setBinding(bindingB);
   assert.strictEqual(s.__calls.length, before + 1);
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  s.__events['granete-mutation-state']({ detail: { phase: 'committed', serverSynchronized: true } });
+  assert.strictEqual(s.__calls.length, before + 3);
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
 });
 

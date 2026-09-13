@@ -9,6 +9,7 @@
   var sequence = 0;
   var pending = null;
   var lastProjection = null;
+  var localUnsynced = false;
 
   function element(id) { return document.getElementById(id); }
   function show(id, visible) { var node = element(id); if (node) node.style.display = visible ? "" : "none"; }
@@ -76,6 +77,10 @@
   }
 
   function request() {
+    if (localUnsynced) {
+      setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
+      return;
+    }
     if (!binding || !window.sketchup || typeof window.sketchup.get_commercial_projection !== "function") {
       setState("unavailable", "Conectá un modelo y una sesión para ver el presupuesto.");
       return;
@@ -88,9 +93,11 @@
 
   function setBinding(status) {
     var next = status && status.state === "connected" && status.binding ? status.binding : null;
+    var sameContext = binding && next && binding.projectId === next.projectId && binding.designId === next.designId;
     sequence += 1;
     pending = null;
     lastProjection = null;
+    if (!sameContext) localUnsynced = false;
     binding = next;
     show("commercial-projection-card", !!binding);
     show("commercial-projection-values", false);
@@ -126,10 +133,12 @@
         show("commercial-projection-values", false);
         setState("pending_sync", "Cambio en curso; el total anterior no se presenta como actual.");
       } else if (phase === "committed" && event.detail.serverSynchronized === true) {
+        localUnsynced = false;
         lastProjection = null;
         show("commercial-projection-values", false);
         request();
       } else if (phase === "committed") {
+        localUnsynced = true;
         lastProjection = null;
         show("commercial-projection-values", false);
         setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
