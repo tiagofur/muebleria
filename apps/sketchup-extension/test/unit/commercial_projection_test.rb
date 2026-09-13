@@ -64,6 +64,20 @@ class CommercialProjectionTest < Minitest::Test
     assert_nil parsed.dig('amounts', 'saleTotal')
   end
 
+  def test_contract_rejects_omitted_required_amount
+    body = projection
+    body['amounts'].delete('saleTotal')
+
+    assert_raises(ArgumentError) { CP::Contract.parse!(body) }
+  end
+
+  def test_contract_rejects_omitted_nullable_top_level_field
+    body = projection
+    body.delete('comparison')
+
+    assert_raises(ArgumentError) { CP::Contract.parse!(body) }
+  end
+
   def test_contract_fails_closed_on_unknown_schema
     body = projection.merge('schema' => 'granete.commercial-projection.v2')
     assert_raises(ArgumentError) { CP::Contract.parse!(body) }

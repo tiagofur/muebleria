@@ -22,7 +22,7 @@ func projectionRequest(role string) *http.Request {
 func TestHandleDesignCommercialProjection_PreservesLegitimateZeroAndReference(t *testing.T) {
 	zero := 0.0
 	currency := "MXN"
-	store := &stubStore{commercialProjection: &domain.CommercialProjection{
+	store := &stubStore{projectReturnedByID: &domain.Project{ID: qrTestProjectID, OwnerUserID: "admin-1"}, commercialProjection: &domain.CommercialProjection{
 		Schema: domain.CommercialProjectionSchema, Status: domain.CommercialProjectionCurrent,
 		ProjectID: qrTestProjectID, DesignID: projectionDesignID, WorkingVersion: "v1",
 		WorkingFingerprint: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -50,7 +50,7 @@ func TestHandleDesignCommercialProjection_PreservesLegitimateZeroAndReference(t 
 
 func TestHandleDesignCommercialProjection_RedactsCostsForCostBlindRole(t *testing.T) {
 	value := 25.0
-	store := &stubStore{commercialProjection: &domain.CommercialProjection{
+	store := &stubStore{projectReturnedByID: &domain.Project{ID: qrTestProjectID, OwnerUserID: "admin-1"}, commercialProjection: &domain.CommercialProjection{
 		Schema: domain.CommercialProjectionSchema, Status: domain.CommercialProjectionCurrent,
 		ProjectID: qrTestProjectID, DesignID: projectionDesignID, WorkingVersion: "v1",
 		WorkingFingerprint: "sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -83,5 +83,17 @@ func TestHandleDesignCommercialProjection_DeniesUnrelatedRoleBeforeRead(t *testi
 	(&Server{Store: store}).HandleDesignCommercialProjection(rr, projectionRequest(string(domain.RoleAlmacen)))
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status=%d want 403", rr.Code)
+	}
+}
+
+func TestHandleDesignCommercialProjection_HidesAnotherSellersProject(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID:  &domain.Project{ID: qrTestProjectID, OwnerUserID: "seller-2"},
+		commercialProjection: &domain.CommercialProjection{},
+	}
+	rr := httptest.NewRecorder()
+	(&Server{Store: store}).HandleDesignCommercialProjection(rr, projectionRequest(string(domain.RoleVendedor)))
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status=%d body=%s, want portfolio-safe 404", rr.Code, rr.Body.String())
 	}
 }

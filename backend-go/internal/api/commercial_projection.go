@@ -25,6 +25,11 @@ func (s *Server) HandleDesignCommercialProjection(w http.ResponseWriter, r *http
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "projectId o designId inválido", nil)
 		return
 	}
+	project, err := s.Store.GetProjectByID(r.Context(), projectID)
+	if err != nil || project == nil || !domain.CanAccessOwnedResourceRoles(claims.UserID, actorRoles(claims), project.OwnerUserID) {
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "diseño no encontrado", nil)
+		return
+	}
 	projection, err := s.Store.GetDesignCommercialProjection(r.Context(), projectID, designID)
 	if err != nil {
 		if errors.Is(err, domain.ErrDesignNotFound) || errors.Is(err, domain.ErrQuoteRevisionNotFound) {

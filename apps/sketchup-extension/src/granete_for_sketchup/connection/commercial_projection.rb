@@ -24,6 +24,7 @@ module Granete
 
           def validate_identity!(value)
             raise ArgumentError, 'respuesta comercial inválida' unless value.is_a?(Hash)
+            require_keys!(value, %w[schema status projectId designId])
             unless value['schema'] == 'granete.commercial-projection.v1'
               raise ArgumentError, 'schema comercial incompatible'
             end
@@ -35,6 +36,8 @@ module Granete
           end
 
           def validate_metadata!(value)
+            require_keys!(value, %w[workingVersion workingFingerprint catalogFingerprint projectionFingerprint
+                                    pricingAuthority calculatedAt currency itemCount])
             raise ArgumentError, 'versión de diseño inválida' if value['workingVersion'].to_s.empty?
             unless value['workingFingerprint'].to_s.match?(SHA256_PATTERN)
               raise ArgumentError, 'huella de diseño inválida'
@@ -61,6 +64,8 @@ module Granete
           end
 
           def validate_payload!(value)
+            require_keys!(value, %w[amounts costsWithheld saleAmountsWithheld reference acceptedReference
+                                    latestPublishedReference comparison issues])
             %w[costsWithheld saleAmountsWithheld].each do |key|
               raise ArgumentError, "#{key} inválido" unless [true, false].include?(value[key])
             end
@@ -78,6 +83,8 @@ module Granete
 
             %w[materialsCost edgeTotal hardwareTotal directCost laborModular laborFixedCost marginFactor
                saleTotal].each do |key|
+              raise ArgumentError, "#{key} ausente" unless amounts.key?(key)
+
               amount = amounts[key]
               next if amount.nil? || (amount.is_a?(Numeric) && amount.finite?)
 
@@ -109,6 +116,11 @@ module Granete
             return if value.is_a?(Numeric) && value.finite?
 
             raise ArgumentError, message
+          end
+
+          def require_keys!(value, keys)
+            missing = keys.reject { |key| value.key?(key) }
+            raise ArgumentError, "campos comerciales ausentes: #{missing.join(', ')}" unless missing.empty?
           end
         end
 
