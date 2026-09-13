@@ -583,6 +583,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// (materialization convergence included), the client sends no commercial
 	// payload. Q1-only by contract: subsequent revisions come from requote.
 	mux.Handle("POST /api/projects/{projectId}/quote-revisions", noStoreMiddleware(authMW(server.RequireIdempotency("quote.create-revision", http.HandlerFunc(server.HandleCreateInitialQuoteRevision)))))
+	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/quote-revisions", noStoreMiddleware(authMW(server.RequireIdempotency("quote.create-design-revision", http.HandlerFunc(server.HandleCreateInitialDesignQuoteRevision)))))
 	// #571 / WEB-DT-4: explicit lifecycle commands on an EXACT revision —
 	// publish (draft→published) and accept (published→accepted, atomically
 	// superseding the previously accepted revision of the project in the same

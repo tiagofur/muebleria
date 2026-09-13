@@ -90,17 +90,25 @@ type QuoteCommercialLine struct {
 	Amounts              QuoteCommercialLineAmounts `json:"amounts"`
 }
 
+// QuoteCommercialDesignSource pins exact design-first working-copy provenance.
+type QuoteCommercialDesignSource struct {
+	DesignID           string `json:"designId"`
+	WorkingVersion     string `json:"workingVersion"`
+	WorkingFingerprint string `json:"workingFingerprint"`
+}
+
 // QuoteCommercialSnapshot is the complete frozen commercial payload of one
 // exact QuoteRevision.
 type QuoteCommercialSnapshot struct {
-	Schema     string                  `json:"schema"`
-	CapturedAt time.Time               `json:"capturedAt"`
-	Currency   string                  `json:"currency"`
-	Customer   QuoteCommercialIdentity `json:"customer"`
-	Project    QuoteCommercialIdentity `json:"project"`
-	Breakdown  QuoteBreakdown          `json:"breakdown"`
-	Lines      []QuoteCommercialLine   `json:"lines"`
-	Units      []QuoteCommercialUnit   `json:"units"`
+	Schema       string                       `json:"schema"`
+	CapturedAt   time.Time                    `json:"capturedAt"`
+	Currency     string                       `json:"currency"`
+	Customer     QuoteCommercialIdentity      `json:"customer"`
+	Project      QuoteCommercialIdentity      `json:"project"`
+	Breakdown    QuoteBreakdown               `json:"breakdown"`
+	Lines        []QuoteCommercialLine        `json:"lines"`
+	Units        []QuoteCommercialUnit        `json:"units"`
+	DesignSource *QuoteCommercialDesignSource `json:"designSource,omitempty"`
 }
 
 // ValidateQuoteCommercialSnapshot enforces the structural contract fail-closed:
@@ -124,6 +132,17 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 	}
 	if snapshot.CapturedAt.IsZero() {
 		return fmt.Errorf("%w: commercial snapshot capturedAt is zero", ErrInvalidRevisionSnapshot)
+	}
+	if source := snapshot.DesignSource; source != nil {
+		if _, err := uuid.Parse(source.DesignID); err != nil || strings.TrimSpace(source.WorkingVersion) == "" ||
+			len(source.WorkingFingerprint) != 71 || !strings.HasPrefix(source.WorkingFingerprint, "sha256-") {
+			return fmt.Errorf("%w: design working-copy provenance is invalid", ErrInvalidRevisionSnapshot)
+		}
+		for _, c := range source.WorkingFingerprint[7:] {
+			if !strings.ContainsRune("0123456789abcdef", c) {
+				return fmt.Errorf("%w: design working-copy fingerprint is invalid", ErrInvalidRevisionSnapshot)
+			}
+		}
 	}
 	breakdown := snapshot.Breakdown
 	for field, value := range map[string]float64{

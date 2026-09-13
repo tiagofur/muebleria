@@ -2837,6 +2837,26 @@
         }
       }
     },
+    "/projects/{projectId}/designs/{designId}/quote-revisions": {
+      "post": {
+        "operationId": "createInitialDesignQuoteRevision",
+        "summary": "Create Q1 from one exact canonical Design working copy (#711)",
+        "description": "Design-first entry into the same QuoteRevision and pricing authority. The client supplies only both canonical working-copy concurrency tokens; the server adopts or creates exact one-unit commercial lines, preserves FurnitureInstance identity, freezes the working configuration and creates at most Q1 atomically. Requires Idempotency-Key.",
+        "parameters": [
+          { "$ref": "#/components/parameters/ProjectId" },
+          { "$ref": "#/components/parameters/DesignId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateInitialDesignQuoteRevisionRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "The created initial draft QuoteRevision", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QuoteRevision" } } } },
+          "default": { "$ref": "#/components/responses/ApiError" }
+        }
+      }
+    },
     "/projects/{projectId}/quote-revisions:requote": {
       "post": {
         "operationId": "requoteProjectQuote",
@@ -9459,7 +9479,21 @@
               "$ref": "#/components/schemas/QuoteCommercialUnit"
             },
             "minItems": 1
+          },
+          "designSource": {
+            "$ref": "#/components/schemas/QuoteCommercialDesignSource"
           }
+        }
+      },
+      "QuoteCommercialDesignSource": {
+        "type": "object",
+        "description": "Immutable provenance for a design-first Q1. A working copy is not a DesignRevision, so the exact source is identified by Design plus both canonical concurrency tokens.",
+        "additionalProperties": false,
+        "required": ["designId", "workingVersion", "workingFingerprint"],
+        "properties": {
+          "designId": { "type": "string", "format": "uuid" },
+          "workingVersion": { "type": "string", "minLength": 1 },
+          "workingFingerprint": { "type": "string", "pattern": "^sha256-[0-9a-f]{64}$" }
         }
       },
       "QuoteCommercialIdentity": {
@@ -10066,6 +10100,17 @@
             "format": "uuid",
             "description": "Legacy modernization base (#642): the exact latest revision when it is a snapshot-less legacy row. Required once the project has quote revisions; rejected when the latest revision already carries canonical commercial truth (use requote instead)."
           }
+        }
+      },
+      "CreateInitialDesignQuoteRevisionRequest": {
+        "type": "object",
+        "description": "Explicit design-first Q1 decision. workingVersion and workingFingerprint must be the exact canonical tokens returned for this Design working copy; no commercial values or identities are accepted from the client.",
+        "additionalProperties": false,
+        "required": ["workingVersion", "workingFingerprint"],
+        "properties": {
+          "workingVersion": { "type": "string", "minLength": 1 },
+          "workingFingerprint": { "type": "string", "pattern": "^sha256-[0-9a-f]{64}$" },
+          "notes": { "type": "string" }
         }
       },
       "RequoteProjectQuoteRequest": {

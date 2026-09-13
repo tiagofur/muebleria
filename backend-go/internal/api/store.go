@@ -357,6 +357,7 @@ type Store interface {
 	// draft→published transition and the atomic published→accepted transition
 	// that supersedes the previously accepted revision in one transaction.
 	CreateInitialQuoteRevision(ctx context.Context, cmd storage.CreateInitialQuoteRevisionCommand) (*storage.CreateInitialQuoteRevisionResult, error)
+	CreateInitialDesignQuoteRevision(ctx context.Context, cmd storage.CreateInitialDesignQuoteRevisionCommand) (*storage.CreateInitialQuoteRevisionResult, error)
 	PublishQuoteRevision(ctx context.Context, cmd storage.QuoteRevisionLifecycleCommand) (*domain.QuoteRevision, error)
 	AcceptQuoteRevision(ctx context.Context, cmd storage.QuoteRevisionLifecycleCommand) (*storage.AcceptQuoteRevisionResult, error)
 	// #395 / DT-11: explicit DesignRevision approval (published→approved

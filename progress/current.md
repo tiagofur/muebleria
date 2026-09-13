@@ -1,3 +1,13 @@
+# Issue #711 — primera QuoteRevision desde Design working copy
+- Approval/base: issue #711 OPEN con `status:approved`, autorización “listo”, `origin/main@84fc820a444e9d536808afb490b1109290a2ee50`.
+- Rama/worktree: `feat/711-design-first-initial-quote` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-711-design-first-quote`.
+- Started: 2026-09-13 15:06 CST. Un solo implementador; sin push, PR, merge, cierre ni labels.
+- Scope: comando server/API design-first para crear Q1 desde el working copy canónico exacto, preservando FurnitureInstance IDs y reutilizando pricing, CommercialSnapshot, QuoteRevision writer, RLS/capabilities e idempotencia existentes. Sin `apps/sketchup-extension/**` ni `backend-go/internal/storage/projects.go`.
+- Corrección autorizada: #711 OPEN con `status:approved` + `size:exception` verificadas; R1 reutiliza `actorCanViewCosts`/`RedactQuoteCommercialSnapshot` y prueba vendedor sin costos vs. Admin.
+- Corrección R2: ownership/status se leen y validan bajo el mismo `FOR UPDATE`; una carrera determinística confirma rollback si `accepted` gana el lock.
+- Corrección R3: `decodeGeneratedJSONBody` rechaza campos desconocidos/JSON trailing y el fingerprint no canónico responde `BAD_REQUEST` sin llamar storage.
+- Concurrencia FI: RED confirmó que remove podía finalizar junto con Q1; `FOR UPDATE OF fi` bloquea sólo la fila no-nullable del `LEFT JOIN`, en el orden estable por FurnitureInstanceID. Remove-wins prueba rollback sin Q1/líneas. Focalizados PASS; full Go falló primero por contención DB compartida y PASS aislado con PostgreSQL dedicado, `-p=1 -parallel=1` (storage 326.420s; pilot 234.045s); `git diff --check` PASS.
+
 # Issues #642 → #677 — presupuesto del diseño actual dentro de SketchUp
 
 - Approval: prompt del propietario (2026-09-13). #642 y #677 permanecen OPEN;
