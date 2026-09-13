@@ -79,4 +79,14 @@ class CommercialProjectionTest < Minitest::Test
 
     assert_raises(ArgumentError) { CP::Contract.parse!(body) }
   end
+
+  def test_contract_accepts_generated_published_reference_status
+    body = projection
+    body['reference'] = {
+      'quoteRevisionId' => PROJECT_ID, 'revisionNumber' => 1, 'status' => 'published',
+      'currency' => 'MXN', 'saleTotal' => 100.0
+    }
+
+    assert_equal 'published', CP::Contract.parse!(body).dig('reference', 'status')
+  end
 end

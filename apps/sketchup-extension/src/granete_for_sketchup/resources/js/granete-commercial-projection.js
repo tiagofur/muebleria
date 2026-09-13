@@ -121,6 +121,9 @@
       var phase = event && event.detail && event.detail.phase;
       if (!binding) return;
       if (phase === "resolving" || phase === "applying_host_mutation") {
+        sequence += 1;
+        pending = null;
+        show("commercial-projection-values", false);
         setState("pending_sync", "Cambio en curso; el total anterior no se presenta como actual.");
       } else if (phase === "committed") {
         request();

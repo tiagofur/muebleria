@@ -4,6 +4,7 @@ const vm = require('vm');
 const assert = require('assert');
 
 const source = fs.readFileSync(path.resolve(__dirname, '../../src/granete_for_sketchup/resources/js/granete-commercial-projection.js'), 'utf8');
+const dialogSource = fs.readFileSync(path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html'), 'utf8');
 let passed = 0;
 function test(_name, fn) { fn(); passed += 1; }
 
@@ -73,6 +74,15 @@ test('drops a late response after the device session changes', () => {
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Sin sesión');
 });
 
+test('drops a response that predates an in-flight mutation', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const old = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive({ requestId: old, projectId: 'p-a', designId: 'd-a', projection: projection(90, 80) }), false);
+  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
 test('confirmed mutation refreshes while rejected mutation restores prior truth', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
@@ -99,6 +109,11 @@ test('withheld amounts are explicit and cost rows stay hidden', () => {
   s.window.GraneteCommercialProjection.receive({ requestId: request, projectId: 'p-a', designId: 'd-a', projection: p });
   assert.strictEqual(s.__elements['commercial-projection-total'].textContent, 'No disponible para esta organización');
   assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, 'none');
+});
+
+test('successful working-copy placement callbacks publish a committed refresh', () => {
+  assert.ok(dialogSource.includes('function notifyCommercialProjectionCommitted()'));
+  assert.strictEqual((dialogSource.match(/notifyCommercialProjectionCommitted\(\);/g) || []).length, 3);
 });
 
 console.log(`commercial projection tests passed: ${passed}`);

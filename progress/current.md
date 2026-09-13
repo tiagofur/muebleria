@@ -27,7 +27,7 @@
      y margen sólo cuando el backend los autorice.
   5. Ejecutar pruebas focalizadas, PostgreSQL real aislado, contratos/Ruby/JS,
      empaquetado RBZ, gates finales, revisión independiente y publicación del PR.
-- Result: `IMPLEMENTED_PENDING_REVIEW`. El endpoint calcula contra el
+- Result: `IMPLEMENTED_PENDING_REREVIEW`. El endpoint calcula contra el
   `DesignWorkingCopy` exacto y el catálogo vigente mediante
   `CalcProjectBreakdown`, sin crear ni mutar QuoteRevision. Expone huellas de
   working copy/catálogo/proyección, toma la aceptada como referencia (o la
@@ -41,9 +41,14 @@
   `pnpm typecheck` 7/7 y `pnpm openapi:check` PASS; Go completo PASS por
   paquetes sobre PostgreSQL 16 aislado (API y demás paquetes, luego storage
   serial 338.351s) tras descartar la corrida contra el PostgreSQL compartido
-  por agotamiento de conexiones; `bundle exec rake verify` PASS (Ruby 647/647,
-  boundary 6/6, RuboCop, syntax y package); JS comercial 5/5; RBZ exacto
-  `d604d083488fb97b539bfba5a648d6227780f00d6c0f6540a9d7f7294ca73607`.
+  por agotamiento de conexiones; `bundle exec rake verify` PASS (Ruby 648/648,
+  boundary 6/6, RuboCop, syntax y package); JS comercial 7/7; RBZ exacto
+  `47170b058cdaf406f2593a922033e0856b1df63e0cf887dadbff208331c8cbaf`.
+- Independent review R1: `CHANGES_REQUESTED` sobre
+  `c48b82231314170c28e3035f3c11b6bae334f97c` por enum Ruby divergente,
+  request pre-mutation no invalidado y callbacks de alta/colocación sin refresh.
+  Los tres defects quedaron corregidos con regresiones; falta readback del
+  revisor independiente sobre el nuevo HEAD.
 - Host evidence: `NOT_TESTED`. SketchUp 2026 estaba abierto con una sesión del
   usuario; el intento de una segunda instancia con el RBZ exacto terminó sin
   ejecutar TestUp por el comportamiento singleton. La instalación anterior se
