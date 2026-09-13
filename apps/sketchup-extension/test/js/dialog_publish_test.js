@@ -283,7 +283,7 @@ function runTests() {
     const btn = el(sandbox, 'btn-binding-publish');
     assert.ok(!btn.disabled);
     assert.ok(sandbox.__bridge.some((c) => c.action === 'get_model_binding'));
-    assert.ok(sandbox.__bridge.some((c) => c.action === 'document_event' &&
+    assert.ok(!sandbox.__bridge.some((c) => c.action === 'document_event' &&
       c.event.type === 'granete-mutation-state' && c.event.detail.serverSynchronized === true));
   });
 

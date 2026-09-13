@@ -9,7 +9,8 @@
   var sequence = 0;
   var pending = null;
   var lastProjection = null;
-  var localUnsynced = false;
+  var workEpoch = 0;
+  var workStates = {};
 
   function element(id) { return document.getElementById(id); }
   function show(id, visible) { var node = element(id); if (node) node.style.display = visible ? "" : "none"; }
@@ -37,6 +38,26 @@
 
   function quoteStatus(value) {
     return { draft: "Borrador", published: "Publicada", accepted: "Aceptada", superseded: "Reemplazada" }[value] || "Estado no disponible";
+  }
+
+  function contextKey(value) {
+    return value ? value.projectId + "/" + value.designId : null;
+  }
+
+  function currentWorkState() {
+    return binding ? workStates[contextKey(binding)] : null;
+  }
+
+  function hasPendingLocalWork() {
+    var state = currentWorkState();
+    return !!(state && state.localChangesPending === true);
+  }
+
+  function validWorkState(value) {
+    return !!value && typeof value === "object" && binding &&
+      value.projectId === binding.projectId && value.designId === binding.designId &&
+      Number.isInteger(value.generation) && value.generation >= 0 &&
+      typeof value.localChangesPending === "boolean";
   }
 
   function renderProjection(projection) {
@@ -77,11 +98,31 @@
     }
 
     if (projection.status === "current") setState("current", "Estimación no vinculante del diseño conectado.");
-    else setState("incomplete", "Faltan datos para calcular este diseño; no se muestra cero como reemplazo.");
+    else setState("incomplete", incompleteReason(projection.issues));
   }
 
-  function request() {
-    if (localUnsynced) {
+  function incompleteReason(issues) {
+    var values = Array.isArray(issues) ? issues : [];
+    if (values.indexOf("working_item_parameters_not_priceable") !== -1) {
+      return "El diseño contiene parámetros que este presupuesto todavía no admite.";
+    }
+    if (values.indexOf("commercial_amounts_withheld_for_organization") !== -1) {
+      return "Los importes comerciales no están disponibles para esta organización.";
+    }
+    if (values.indexOf("working_copy_empty") !== -1) {
+      return "El diseño todavía no contiene muebles que puedan presupuestarse.";
+    }
+    if (values.some(function (value) {
+      return value === "working_item_missing_furniture_definition" ||
+        value === "working_item_pricing_context_missing" || value.indexOf("pricing_inputs_incomplete:") === 0;
+    })) {
+      return "Faltan datos comerciales para calcular este diseño.";
+    }
+    return "Faltan datos para calcular este diseño; no se muestra cero como reemplazo.";
+  }
+
+  function request(options) {
+    if (hasPendingLocalWork() && !(options && options.probe === true)) {
       setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
       return;
     }
@@ -90,35 +131,73 @@
       return;
     }
     sequence += 1;
-    pending = { requestId: "commercial-" + sequence, projectId: binding.projectId, designId: binding.designId };
+    pending = { requestId: "commercial-" + sequence, projectId: binding.projectId, designId: binding.designId,
+      workEpoch: workEpoch };
     setState("calculating", "Calculando con precios y reglas actuales del servidor…");
     window.sketchup.get_commercial_projection(JSON.stringify({ requestId: pending.requestId }));
   }
 
   function setBinding(status) {
     var next = status && status.state === "connected" && status.binding ? status.binding : null;
-    var sameContext = binding && next && binding.projectId === next.projectId && binding.designId === next.designId;
     sequence += 1;
     pending = null;
     lastProjection = null;
-    if (!sameContext) localUnsynced = false;
     binding = next;
     show("commercial-projection-card", !!binding);
     show("commercial-projection-values", false);
-    if (binding) request();
+    if (binding) request({ probe: true });
   }
 
   function receive(payload) {
     if (!pending || !payload || payload.requestId !== pending.requestId) return false;
+    if (pending.workEpoch !== workEpoch) return false;
     if (payload.projectId && (payload.projectId !== pending.projectId || payload.designId !== pending.designId)) return false;
     pending = null;
+    if (payload.projection && !validWorkState(payload.workState)) {
+      show("commercial-projection-values", false);
+      setState("incompatible", "No se pudo confirmar si el presupuesto corresponde al modelo local.");
+      return true;
+    }
+    if (payload.workState) {
+      if (!validWorkState(payload.workState)) return false;
+      workStates[contextKey(binding)] = payload.workState;
+      if (payload.workState.localChangesPending === true) {
+        show("commercial-projection-values", false);
+        setState("stale", payload.error || "El cambio local todavía no se sincronizó con el diseño del servidor.");
+        return true;
+      }
+    }
     if (payload.projection) renderProjection(payload.projection);
     else { show("commercial-projection-values", false); setState(payload.state || "unavailable", payload.error); }
     return true;
   }
 
+  function applySynchronization(payload) {
+    if (!validWorkState(payload) || ["local", "partial", "full", "unconfirmed"].indexOf(payload.scope) === -1) {
+      workEpoch += 1;
+      sequence += 1;
+      pending = null;
+      show("commercial-projection-values", false);
+      if (binding) setState("stale", "No se pudo confirmar la sincronización del diseño local.");
+      return false;
+    }
+    workStates[contextKey(binding)] = payload;
+    workEpoch += 1;
+    sequence += 1;
+    pending = null;
+    lastProjection = null;
+    show("commercial-projection-values", false);
+    if (payload.localChangesPending === true) {
+      setState("stale", "Hay cambios locales de este diseño que todavía no están sincronizados.");
+    } else {
+      request({ probe: true });
+    }
+    return true;
+  }
+
   function invalidateSession() {
     sequence += 1;
+    workEpoch += 1;
     pending = null;
     lastProjection = null;
     show("commercial-projection-values", false);
@@ -132,17 +211,20 @@
       var phase = event && event.detail && event.detail.phase;
       if (!binding) return;
       if (phase === "resolving" || phase === "applying_host_mutation") {
+        workEpoch += 1;
         sequence += 1;
         pending = null;
         show("commercial-projection-values", false);
         setState("pending_sync", "Cambio en curso; el total anterior no se presenta como actual.");
-      } else if (phase === "committed" && event.detail.serverSynchronized === true) {
-        localUnsynced = false;
-        lastProjection = null;
-        show("commercial-projection-values", false);
-        request();
       } else if (phase === "committed") {
-        localUnsynced = true;
+        workEpoch += 1;
+        sequence += 1;
+        pending = null;
+        workStates[contextKey(binding)] = {
+          projectId: binding.projectId, designId: binding.designId,
+          generation: ((currentWorkState() || {}).generation || 0) + 1,
+          localChangesPending: true, scope: "local"
+        };
         lastProjection = null;
         show("commercial-projection-values", false);
         setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
@@ -151,13 +233,18 @@
       } else if (["rejected", "cancelled", "aborted"].indexOf(phase) !== -1) {
         request();
       } else if (phase === "stale" || phase === "unavailable") {
+        workEpoch += 1;
+        sequence += 1;
+        pending = null;
+        show("commercial-projection-values", false);
         setState("stale", "No se pudo confirmar la versión comercial del cambio.");
       }
     });
   }
 
   window.GraneteCommercialProjection = {
-    setBinding: setBinding, receive: receive, refresh: request, invalidateSession: invalidateSession
+    setBinding: setBinding, receive: receive, refresh: request,
+    applySynchronization: applySynchronization, invalidateSession: invalidateSession
   };
   if (window.sketchup && typeof window.sketchup.get_model_binding === "function") window.sketchup.get_model_binding();
 })();

@@ -18,6 +18,101 @@ module Granete
         REFERENCE_KEYS = %w[quoteRevisionId revisionNumber status currency saleTotal].freeze
         COMPARISON_KEYS = %w[absoluteDelta percentageDelta].freeze
 
+        # Design-scoped evidence that the local SketchUp model still contains
+        # confirmed authoring work not represented by the server working copy.
+        # It lives with the canonical model binding so it survives dialog and
+        # model close/reopen. A partial working-copy PUT advances the evidence
+        # generation but NEVER clears another furniture's pending local work.
+        class LocalWorkState
+          DICTIONARY = 'com.granete.project'
+          KEY = 'granete.commercial-projection-local-work.v1'
+          SCHEMA_VERSION = 1
+
+          def initialize(model)
+            @model = model
+          end
+
+          def snapshot(project_id:, design_id:)
+            payload = read_payload
+            return unconfirmed(project_id, design_id) unless payload
+
+            entry = payload.fetch('contexts', {})[context_key(project_id, design_id)]
+            return unconfirmed(project_id, design_id) if entry && !valid_entry?(entry)
+
+            state(project_id, design_id, entry || { 'generation' => 0, 'localChangesPending' => false })
+          end
+
+          def mark_pending!(project_id:, design_id:)
+            update(project_id, design_id, pending: true, scope: 'local')
+          end
+
+          def record_sync!(project_id:, design_id:, scope:)
+            normalized = scope.to_s
+            unless %w[partial full].include?(normalized)
+              raise ArgumentError, 'commercial synchronization scope must be partial or full'
+            end
+
+            current = snapshot(project_id: project_id, design_id: design_id)
+            pending = normalized == 'full' ? false : current['localChangesPending']
+            update(project_id, design_id, pending: pending, scope: normalized)
+          end
+
+          private
+
+          def update(project_id, design_id, pending:, scope:)
+            payload = read_payload || empty_payload
+            contexts = payload['contexts']
+            key = context_key(project_id, design_id)
+            previous = contexts[key]
+            generation = (valid_entry?(previous) ? previous['generation'] : 0) + 1
+            contexts[key] = { 'generation' => generation, 'localChangesPending' => pending }
+            @model.set_attribute(DICTIONARY, KEY, JSON.generate(payload))
+            state(project_id, design_id, contexts[key]).merge('scope' => scope)
+          end
+
+          def read_payload
+            return nil unless @model.respond_to?(:get_attribute) && @model.respond_to?(:set_attribute)
+
+            raw = @model.get_attribute(DICTIONARY, KEY)
+            return empty_payload if raw.nil? || raw.to_s.empty?
+
+            payload = JSON.parse(raw)
+            return nil unless payload.is_a?(Hash) && payload['schemaVersion'] == SCHEMA_VERSION
+            return nil unless payload['contexts'].is_a?(Hash)
+
+            payload
+          rescue JSON::ParserError
+            nil
+          end
+
+          def empty_payload
+            { 'schemaVersion' => SCHEMA_VERSION, 'contexts' => {} }
+          end
+
+          def context_key(project_id, design_id)
+            "#{project_id}/#{design_id}"
+          end
+
+          def state(project_id, design_id, entry)
+            {
+              'projectId' => project_id,
+              'designId' => design_id,
+              'generation' => entry['generation'].to_i,
+              'localChangesPending' => entry['localChangesPending'] == true
+            }
+          end
+
+          def valid_entry?(entry)
+            entry.is_a?(Hash) && entry['generation'].is_a?(Integer) && entry['generation'] >= 0 &&
+              [true, false].include?(entry['localChangesPending'])
+          end
+
+          def unconfirmed(project_id, design_id)
+            state(project_id, design_id, 'generation' => 0, 'localChangesPending' => true)
+              .merge('scope' => 'unconfirmed')
+          end
+        end
+
         module Contract # rubocop:disable Metrics/ModuleLength
           module_function
 

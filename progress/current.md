@@ -1,9 +1,8 @@
 # Issues #642 → #677 — presupuesto del diseño actual dentro de SketchUp
 
-- Approval: prompt del propietario (2026-09-13). #642 permanece OPEN con
-  `status:approved`; #677 permanece OPEN sin label protegida y se consume sólo
-  como referencia de alcance. No se modifican labels, no se cierran issues y no
-  se hace merge.
+- Approval: prompt del propietario (2026-09-13). #642 y #677 permanecen OPEN;
+  #677 fue verificada con `status:approved`, `type:feature` y `size:exception`.
+  No se modifican labels, no se cierran issues y no se hace merge.
 - Base exacta: `origin/main@cc38c87a4cb29b14544708896be309aa6af68dd6`
   (PR #697 integrado). Rama `feat/642-677-sketchup-budget`; worktree aislado
   `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-677-commercial-projection`.
@@ -54,6 +53,24 @@
   ejecutar TestUp por el comportamiento singleton. La instalación anterior se
   restauró byte por byte. El próximo gate es reiniciar SketchUp de forma segura
   con un modelo descartable, instalar ese RBZ y ejecutar el smoke de HtmlDialog.
+
+## Corrección de review R1/R2 — 2026-09-13
+
+- RED reproducido: un `committed` local sin fase previa aceptaba la respuesta ya
+  solicitada; una sincronización parcial limpiaba globalmente `localUnsynced`.
+- GREEN local: la autoridad `LocalWorkState` persiste por Project/Design y
+  generación en metadata del modelo. Mutaciones locales marcan pendiente;
+  confirmaciones parciales avanzan generación sin limpiar cambios ajenos; sólo
+  publicación completa exitosa limpia. El bridge compara generación antes y
+  después del fetch, y JavaScript invalida pendientes ante todo cambio.
+- Mensajes incompletos distinguen parámetros no admitidos, datos comerciales
+  faltantes, diseño vacío e importes no autorizados sin mostrar errores internos.
+- Evidence: JS comercial 15/15; Ruby `commercial_projection_test` 14/14;
+  `dialog_controller_test` 31/31; `bundle exec rake verify` PASS (659 runs,
+  4488 assertions; boundary 6/2567; RuboCop/syntax green). RBZ SHA-256
+  `592516ff4e1cc5455888832279bf075ff3911e7575caf7f90315c27a6099271a`.
+- Host real: `NOT_TESTED` hasta disponer de una sesión/modelo descartables sin
+  cerrar ni sustituir la extensión activa del usuario.
 
 # PR #697 — corrección final de acceso a Producción (Refs #642)
 
@@ -1017,3 +1034,15 @@ EOL.
   Exact rerun attempt 2 passed (job `103123806142`, 9m51s;
   `internal/storage` 275.163 s), confirming suite-load flakiness with no backend
   change.
+# PR #702 / issue #677 — corrección de sincronización comercial local
+
+- Approval: solicitud explícita del propietario (2026-09-13) para corregir R1/R2 en el mismo PR #702.
+- Head revisado: `90d17863c9c0d1ffcbe87a93560e646f931a6e2d`; rama/worktree existentes, limpios y alineados con remoto.
+- Started: 2026-09-13 12:00 CST.
+- Scope: preservar cambios locales pendientes ante sincronizaciones parciales, invalidar lecturas anteriores a cualquier mutación, persistir el estado por Project/Design en el modelo y mejorar motivos incompletos conocidos. Sin sincronización general, SSE, Change Orders, Proyectar ni nuevas funciones comerciales.
+- Plan:
+  1. Fijar regresiones RED para A pendiente + B parcialmente sincronizado, respuestas tardías, refresh manual y reapertura/cambio de diseño.
+  2. Reutilizar binding/model metadata y runtime de mutaciones para una autoridad persistente y design-scoped de coincidencia local↔servidor.
+  3. Separar sincronización parcial de completa; sólo una completa comprobada puede limpiar el estado pendiente.
+  4. Validar callbacks reales Ruby→HtmlDialog, mensajes incompletos, suites Ruby/JS, RBZ y gates aplicables.
+  5. Push al mismo PR, revisión independiente y readback exact-head de CI/publicación, sin merge ni cierre.

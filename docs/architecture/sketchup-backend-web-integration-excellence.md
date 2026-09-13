@@ -655,7 +655,12 @@ El panel Proyecto puede mostrar una proyección comercial compacta del Design
 conectado. Ruby obtiene Project/Design exclusivamente del `ModelBinding`, agrega
 la credencial del dispositivo fuera del HtmlDialog y consume el endpoint Go;
 JavaScript sólo presenta el DTO. Una mutación confirmada invalida el total y
-dispara refresh; respuestas tardías se descartan por correlación + contexto.
+dispara refresh; respuestas tardías se descartan por correlación, contexto y
+generación del trabajo local. El estado pendiente se guarda por Project/Design
+en metadata del modelo para sobrevivir desconexión y cierre/reapertura. Una
+confirmación parcial nunca prueba coincidencia del diseño completo: conserva el
+pendiente previo, mientras una sincronización completa comprobada sí habilita
+una nueva lectura.
 No incluye modo Presentación, creación de QuoteRevision ni pricing local.
 ## Historical presentation ownership (#639)
 

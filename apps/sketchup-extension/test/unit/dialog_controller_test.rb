@@ -9,6 +9,8 @@ require_relative '../../src/granete_for_sketchup/assets/texture_cache'
 require_relative '../../src/granete_for_sketchup/auth/provider'
 require_relative '../../src/granete_for_sketchup/transport/adapter'
 require_relative '../../src/granete_for_sketchup/transport/http_adapter'
+require_relative '../../src/granete_for_sketchup/connection/commercial_projection'
+require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
@@ -28,6 +30,40 @@ require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
 
 class DialogControllerTest < Minitest::Test
+  PROJECTION_PROJECT_ID = '41000000-0000-0000-0000-000000000001'
+  PROJECTION_DESIGN_ID = '52000000-0000-0000-0000-000000000001'
+
+  class ProjectionBindingConnector
+    attr_reader :service
+
+    def initialize
+      @service = Object.new
+    end
+
+    def status
+      {
+        'state' => 'connected',
+        'binding' => { 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID }
+      }
+    end
+  end
+
+  class ProjectionService
+    attr_accessor :on_fetch
+    attr_reader :calls
+
+    def initialize
+      @calls = 0
+    end
+
+    def fetch(project_id, design_id)
+      @calls += 1
+      @on_fetch&.call
+      { 'status' => 'current', 'projectId' => project_id, 'designId' => design_id,
+        'currency' => 'MXN', 'amounts' => { 'saleTotal' => 100.0 }, 'issues' => [] }
+    end
+  end
+
   class StatusProvider
     def call
       { heading: 'Conectado', message: 'Listo', state: 'configured' }
@@ -919,5 +955,71 @@ class DialogControllerTest < Minitest::Test
     refute_nil poll_script
     assert_includes poll_script, '"http_status":429'
     assert_includes poll_script, '"success":false'
+  end
+
+  def test_commercial_projection_bridge_uses_persistent_work_state_and_rejects_mid_fetch_change
+    service = ProjectionService.new
+    controller = projection_controller(service)
+    dialog = controller.show
+    callback = dialog.callbacks.fetch('get_commercial_projection')
+
+    callback.call(nil, JSON.generate({ 'requestId' => 'commercial-1' }))
+    assert_equal 1, service.calls
+    assert_includes dialog.executed_scripts.last, '"localChangesPending":false'
+    assert_includes dialog.executed_scripts.last, '"projection"'
+
+    state = projection_work_state
+    state.mark_pending!(project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID)
+    callback.call(nil, JSON.generate({ 'requestId' => 'commercial-2' }))
+    assert_equal 1, service.calls, 'pending local work must block a stale backend estimate'
+    assert_includes dialog.executed_scripts.last, '"state":"stale"'
+
+    state.record_sync!(project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, scope: :full)
+    service.on_fetch = lambda do
+      state.mark_pending!(project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID)
+    end
+    callback.call(nil, JSON.generate({ 'requestId' => 'commercial-3' }))
+    assert_equal 2, service.calls
+    assert_includes dialog.executed_scripts.last, '"state":"stale"'
+    refute_includes dialog.executed_scripts.last, '"projection"'
+  end
+
+  def test_commercial_projection_sync_callback_keeps_partial_pending_and_full_clears
+    controller = projection_controller(ProjectionService.new)
+    dialog = controller.show
+    controller.mark_commercial_projection_local_work
+
+    partial = controller.notify_commercial_projection_synchronization(:partial)
+    assert partial['localChangesPending']
+    assert_includes dialog.executed_scripts.last, 'onCommercialProjectionSynchronization'
+    assert_includes dialog.executed_scripts.last, '"scope":"partial"'
+
+    full = controller.notify_commercial_projection_synchronization(:full)
+    refute full['localChangesPending']
+    assert_includes dialog.executed_scripts.last, '"scope":"full"'
+  end
+
+  private
+
+  def projection_controller(service)
+    binding = Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
+      project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, base_revision_id: nil
+    )
+    @model.set_attribute(
+      Granete::SketchUpExtension::Connection::ModelBinding::DICTIONARY,
+      Granete::SketchUpExtension::Connection::ModelBinding::BINDING_KEY,
+      JSON.generate(binding.to_h)
+    )
+    Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store,
+      model_binding_connector: ProjectionBindingConnector.new,
+      commercial_projection_service: service
+    )
+  end
+
+  def projection_work_state
+    Granete::SketchUpExtension::Connection::CommercialProjection::LocalWorkState.new(@model)
   end
 end

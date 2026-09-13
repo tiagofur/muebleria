@@ -235,22 +235,8 @@ module Granete
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           request_id = payload['requestId'].to_s
           status = model_binding_connector.status
-          unless status['state'] == 'connected' && status['binding'].is_a?(Hash)
-            error = 'el modelo debe estar conectado y actualizado para calcular el presupuesto'
-            return execute_bridge(dialog, 'onCommercialProjection', {
-                                    'requestId' => request_id, 'state' => status['state'] || 'unavailable',
-                                    'error' => error
-                                  })
-          end
-
-          binding = status['binding']
-          project_id = binding['projectId']
-          design_id = binding['designId']
-          projection = @commercial_projection_service.fetch(project_id, design_id)
-          execute_bridge(dialog, 'onCommercialProjection', {
-                           'requestId' => request_id, 'projectId' => project_id, 'designId' => design_id,
-                           'state' => projection['status'], 'projection' => projection
-                         })
+          result = commercial_projection_response(request_id, status)
+          execute_bridge(dialog, 'onCommercialProjection', result)
         rescue Connection::CommercialProjection::Service::Error => e
           @logger.error('commercial_projection_failed', error: e)
           execute_bridge(dialog, 'onCommercialProjection', {
@@ -262,6 +248,77 @@ module Granete
           execute_bridge(dialog, 'onCommercialProjection', {
                            'requestId' => request_id, 'state' => 'unavailable', 'error' => error
                          })
+        end
+
+        def commercial_projection_response(request_id, status)
+          unless status['state'] == 'connected' && status['binding'].is_a?(Hash)
+            error = 'el modelo debe estar conectado y actualizado para calcular el presupuesto'
+            return { 'requestId' => request_id, 'state' => status['state'] || 'unavailable', 'error' => error }
+          end
+
+          binding = status['binding']
+          project_id = binding['projectId']
+          design_id = binding['designId']
+          started_work = commercial_projection_local_work(project_id, design_id)
+          if started_work['localChangesPending']
+            return commercial_projection_stale_response(
+              request_id, project_id, design_id, started_work,
+              'hay cambios locales que todavía no están sincronizados'
+            )
+          end
+
+          projection = @commercial_projection_service.fetch(project_id, design_id)
+          finished_work = commercial_projection_local_work(project_id, design_id)
+          if finished_work['localChangesPending'] ||
+             finished_work['generation'] != started_work['generation']
+            return commercial_projection_stale_response(
+              request_id, project_id, design_id, finished_work,
+              'el modelo cambió mientras se calculaba el presupuesto'
+            )
+          end
+
+          { 'requestId' => request_id, 'projectId' => project_id, 'designId' => design_id,
+            'state' => projection['status'], 'projection' => projection, 'workState' => finished_work }
+        end
+
+        def commercial_projection_stale_response(request_id, project_id, design_id, work_state, error)
+          { 'requestId' => request_id, 'projectId' => project_id, 'designId' => design_id,
+            'state' => 'stale', 'workState' => work_state, 'error' => error }
+        end
+
+        def commercial_projection_local_work(project_id, design_id)
+          Connection::CommercialProjection::LocalWorkState.new(active_model).snapshot(
+            project_id: project_id, design_id: design_id
+          )
+        end
+
+        def mark_commercial_projection_local_work
+          binding = commercial_projection_binding
+          return nil unless binding
+
+          Connection::CommercialProjection::LocalWorkState.new(active_model).mark_pending!(
+            project_id: binding.project_id, design_id: binding.design_id
+          )
+        end
+
+        def notify_commercial_projection_synchronization(scope = :partial)
+          binding = commercial_projection_binding
+          return nil unless binding
+
+          state = Connection::CommercialProjection::LocalWorkState.new(active_model).record_sync!(
+            project_id: binding.project_id, design_id: binding.design_id, scope: scope
+          )
+          execute_bridge(@dialog, 'onCommercialProjectionSynchronization', state) if @dialog&.visible?
+          state
+        end
+
+        private
+
+        def commercial_projection_binding
+          model = active_model
+          return nil unless model
+
+          Connection::ModelBinding::Store.new(model).read
         end
       end
 
@@ -336,6 +393,7 @@ module Granete
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           result = project_furniture_placer.confirm_placement(payload['furnitureInstanceId'].to_s)
           execute_bridge(dialog, 'onConfirmPlacementResult', result)
+          notify_commercial_projection_synchronization(:partial) if result['ok']
           handle_get_project_furniture(dialog) if result['ok']
         rescue StandardError => e
           @logger.error('project_furniture_confirm_failed', error: e)
@@ -445,6 +503,7 @@ module Granete
             execute_bridge(dialog, 'onPublishProgress', { 'step' => step })
           end
           result = @design_publisher.publish(on_progress: on_progress)
+          notify_commercial_projection_synchronization(:full) if result['ok']
           execute_bridge(dialog, 'onPublishResult', result)
           # The binding base label and capabilities follow the new revision.
           handle_get_model_binding(dialog) if result['ok']
@@ -922,6 +981,7 @@ module Granete
         end
 
         def push_mutation_outcome(dialog, outcome, in_reply_to:)
+          mark_commercial_projection_local_work if outcome.committed?
           execute_bridge(dialog, 'onMutationState', outcome.to_envelope(in_reply_to: in_reply_to))
           if outcome.committed? && mutation_coordinator.preflight_tracker
             # #466: the post-mutation invalidation push carries entries AND
@@ -1637,7 +1697,7 @@ module Granete
           @duplicate_resolver = duplicate_resolver
           @entities_observer = entities_observer
           if @entities_observer.respond_to?(:on_working_copy_committed=)
-            @entities_observer.on_working_copy_committed = method(:notify_commercial_projection_committed)
+            @entities_observer.on_working_copy_committed = method(:notify_commercial_projection_synchronization)
           end
           @design_publisher = design_publisher
           @mutation_coordinator = mutation_coordinator
@@ -1663,12 +1723,6 @@ module Granete
             on_selection_change: method(:handle_selection_change),
             model_provider: method(:active_model)
           )
-        end
-
-        def notify_commercial_projection_committed
-          return unless @dialog&.visible?
-
-          execute_bridge(@dialog, 'onCommercialProjectionMutationCommitted', {})
         end
 
         def show
@@ -1881,10 +1935,15 @@ module Granete
           end
 
           execute_bridge(dialog, 'onSelectionChange', nil)
-          execute_bridge(dialog, 'onCommercialProjectionLocalMutation', {}) if deleted
+          notify_commercial_projection_local_delete(dialog) if deleted
         rescue StandardError => e
           @logger.error('furniture_delete_failed', error: e)
           execute_bridge(dialog, 'onSelectionChange', nil)
+        end
+
+        def notify_commercial_projection_local_delete(dialog)
+          mark_commercial_projection_local_work
+          execute_bridge(dialog, 'onCommercialProjectionLocalMutation', {})
         end
 
         def active_model

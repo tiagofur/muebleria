@@ -877,6 +877,14 @@ pricing, y compara contra la revisión aceptada (o la más nueva si no existe un
 aceptada), conservando además la referencia publicada más reciente. Es
 read-only: no crea ni modifica `QuoteRevision`. Datos incompletos y permisos
 redactados se representan como ausencia explícita, nunca como cero inventado.
+
+La etiqueta `current` exige dos pruebas a la vez: la huella exacta devuelta por
+el backend y una generación local del mismo Project/Design sin cambios
+pendientes. Esa generación se persiste en metadata del modelo SketchUp, no en
+el ciclo de vida del HtmlDialog. Una sincronización parcial conserva cualquier
+otro cambio local pendiente; sólo una sincronización completa comprobada puede
+limpiarlo. La lectura toma la generación antes y después del request y descarta
+el resultado si el modelo cambió durante el cálculo.
 | `Project.commercialStatus` CRM | Fuera: estado de oportunidad, no lifecycle de QuoteRevision |
 
 ---

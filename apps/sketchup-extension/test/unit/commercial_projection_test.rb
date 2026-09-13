@@ -28,6 +28,20 @@ class CommercialProjectionTest < Minitest::Test
     end
   end
 
+  class LocalStateModel
+    def initialize
+      @attributes = {}
+    end
+
+    def get_attribute(dictionary, key)
+      @attributes[[dictionary, key]]
+    end
+
+    def set_attribute(dictionary, key, value)
+      @attributes[[dictionary, key]] = value
+    end
+  end
+
   def projection
     {
       'schema' => 'granete.commercial-projection.v1', 'status' => 'current',
@@ -140,5 +154,45 @@ class CommercialProjectionTest < Minitest::Test
 
     error = assert_raises(CP::Service::Error) { service.fetch(PROJECT_ID, DESIGN_ID) }
     assert_equal :incompatible, error.kind
+  end
+
+  def test_local_work_state_preserves_pending_across_partial_sync_and_reopen
+    model = LocalStateModel.new
+    state = CP::LocalWorkState.new(model)
+
+    dirty = state.mark_pending!(project_id: PROJECT_ID, design_id: DESIGN_ID)
+    partial = CP::LocalWorkState.new(model).record_sync!(
+      project_id: PROJECT_ID, design_id: DESIGN_ID, scope: :partial
+    )
+
+    assert dirty['localChangesPending']
+    assert partial['localChangesPending']
+    assert_equal 'partial', partial['scope']
+    assert_operator partial['generation'], :>, dirty['generation']
+  end
+
+  def test_only_full_sync_clears_exact_context_without_mixing_designs
+    model = LocalStateModel.new
+    state = CP::LocalWorkState.new(model)
+    other_design = '52000000-0000-0000-0000-000000000002'
+    state.mark_pending!(project_id: PROJECT_ID, design_id: DESIGN_ID)
+    state.mark_pending!(project_id: PROJECT_ID, design_id: other_design)
+
+    clean = state.record_sync!(project_id: PROJECT_ID, design_id: DESIGN_ID, scope: :full)
+
+    refute clean['localChangesPending']
+    assert CP::LocalWorkState.new(model).snapshot(
+      project_id: PROJECT_ID, design_id: other_design
+    )['localChangesPending']
+  end
+
+  def test_corrupt_local_work_state_fails_closed
+    model = LocalStateModel.new
+    model.set_attribute(CP::LocalWorkState::DICTIONARY, CP::LocalWorkState::KEY, '{broken')
+
+    snapshot = CP::LocalWorkState.new(model).snapshot(project_id: PROJECT_ID, design_id: DESIGN_ID)
+
+    assert snapshot['localChangesPending']
+    assert_equal 'unconfirmed', snapshot['scope']
   end
 end

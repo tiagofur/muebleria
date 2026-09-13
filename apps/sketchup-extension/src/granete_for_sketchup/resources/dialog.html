@@ -4186,8 +4186,8 @@
           onCommercialProjection: function (payload) {
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receive(payload);
           },
-          onCommercialProjectionMutationCommitted: function () {
-            notifyCommercialProjectionCommitted();
+          onCommercialProjectionSynchronization: function (payload) {
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.applySynchronization(payload);
           },
           onCommercialProjectionLocalMutation: function () {
             document.dispatchEvent(new CustomEvent("granete-mutation-state", { detail: { phase: "committed" } }));
@@ -5688,7 +5688,6 @@
           }
           if (result.ok) {
             showToast("success", "✓ Diseño publicado como revisión inmutable R" + (result.revisionNumber || "?") + ".");
-            notifyCommercialProjectionCommitted();
             refreshModelBinding();
           } else {
             showToast("error", PUBLISH_ERROR_COPY[result.code] || "No se pudo publicar el diseño.");
@@ -6211,7 +6210,6 @@
               showToast("info", "Mueble insertado: ubicalo con la herramienta Mover y confirmá su posición final.");
             } else {
               showToast("success", "✓ Mueble colocado y guardado en el borrador del diseño.");
-              notifyCommercialProjectionCommitted();
             }
             return;
           }
@@ -6231,7 +6229,6 @@
           delete pfConfirming[result.instanceId];
           if (result.ok) {
             showToast("success", "✓ Mueble colocado y guardado en el borrador del diseño.");
-            notifyCommercialProjectionCommitted();
             return;
           }
           if (button) {
@@ -6266,7 +6263,6 @@
               showToast("info", "✓ Mueble agregado al proyecto: ubicalo con la herramienta Mover y confirmá su posición final en la pestaña Proyecto.");
             } else {
               showToast("success", "✓ Mueble creado y agregado al proyecto.");
-              notifyCommercialProjectionCommitted();
             }
             switchTab("project");
             requestProjectFurniture();
@@ -6278,12 +6274,6 @@
           } else {
             showToast("error", pfPlaceFailureMessage(result));
           }
-        }
-
-        function notifyCommercialProjectionCommitted() {
-          document.dispatchEvent(new CustomEvent("granete-mutation-state", {
-            detail: { phase: "committed", serverSynchronized: true }
-          }));
         }
 
         function pfPlaceFailureMessage(result) {

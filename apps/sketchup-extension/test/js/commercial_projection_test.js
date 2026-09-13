@@ -48,11 +48,22 @@ function projection(total, referenceTotal) {
   };
 }
 
+function projectionResponse(requestId, binding, value) {
+  return {
+    requestId, projectId: binding.binding.projectId, designId: binding.binding.designId,
+    workState: {
+      projectId: binding.binding.projectId, designId: binding.binding.designId,
+      generation: 0, localChangesPending: false
+    },
+    projection: value
+  };
+}
+
 test('renders a legitimate zero rather than missing', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
-  assert.strictEqual(s.window.GraneteCommercialProjection.receive({ requestId: request, projectId: 'p-a', designId: 'd-a', projection: projection(0, 0) }), true);
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, projection(0, 0))), true);
   assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$0.00'));
   assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, '');
   assert.ok(s.__elements['commercial-projection-cost'].textContent.includes('$0.00'));
@@ -66,7 +77,7 @@ test('drops a late response after an exact context switch', () => {
   s.window.GraneteCommercialProjection.setBinding(bindingA);
   const old = s.__calls[s.__calls.length - 1].payload.requestId;
   s.window.GraneteCommercialProjection.setBinding(bindingB);
-  assert.strictEqual(s.window.GraneteCommercialProjection.receive({ requestId: old, projectId: 'p-a', designId: 'd-a', projection: projection(90, 80) }), false);
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(projectionResponse(old, bindingA, projection(90, 80))), false);
 });
 
 test('drops a late response after the device session changes', () => {
@@ -74,7 +85,7 @@ test('drops a late response after the device session changes', () => {
   s.window.GraneteCommercialProjection.setBinding(bindingA);
   const old = s.__calls[s.__calls.length - 1].payload.requestId;
   s.window.GraneteCommercialProjection.invalidateSession();
-  assert.strictEqual(s.window.GraneteCommercialProjection.receive({ requestId: old, projectId: 'p-a', designId: 'd-a', projection: projection(90, 80) }), false);
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(projectionResponse(old, bindingA, projection(90, 80))), false);
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Sin sesión');
 });
 
@@ -83,8 +94,33 @@ test('drops a response that predates an in-flight mutation', () => {
   s.window.GraneteCommercialProjection.setBinding(bindingA);
   const old = s.__calls[s.__calls.length - 1].payload.requestId;
   s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
-  assert.strictEqual(s.window.GraneteCommercialProjection.receive({ requestId: old, projectId: 'p-a', designId: 'd-a', projection: projection(90, 80) }), false);
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(projectionResponse(old, bindingA, projection(90, 80))), false);
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
+test('drops a response that predates a local commit even without a resolving event', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const old = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.__events['granete-mutation-state']({ detail: { phase: 'committed' } });
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(
+    projectionResponse(old, bindingA, projection(90, 80))
+  ), false);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
+});
+
+test('manual refresh requested before a local commit cannot become current afterward', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const first = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(first, bindingA, projection(100, 80)));
+  s.__elements['btn-commercial-projection-refresh'].listeners.click();
+  const refresh = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.__events['granete-mutation-state']({ detail: { phase: 'committed' } });
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(
+    projectionResponse(refresh, bindingA, projection(110, 80))
+  ), false);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
 });
 
 test('rejected mutation during initial loading starts a recoverable readback', () => {
@@ -97,11 +133,22 @@ test('rejected mutation during initial loading starts a recoverable readback', (
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Calculando');
 });
 
-test('only a server-synchronized commit refreshes while local commits stay stale', () => {
+test('cancelled mutation restores the last valid projection without claiming a new match', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
-  s.window.GraneteCommercialProjection.receive({ requestId: request, projectId: 'p-a', designId: 'd-a', projection: projection(100, 80) });
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, projection(100, 80)));
+  s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
+  s.__events['granete-mutation-state']({ detail: { phase: 'cancelled' } });
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualizado');
+  assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$100.00'));
+});
+
+test('partial synchronization cannot clear another local change while a full sync can', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, projection(100, 80)));
   s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Sincronizando');
   s.__events['granete-mutation-state']({ detail: { phase: 'rejected' } });
@@ -114,13 +161,55 @@ test('only a server-synchronized commit refreshes while local commits stay stale
   s.__elements['btn-commercial-projection-refresh'].listeners.click();
   assert.strictEqual(s.__calls.length, before);
   s.window.GraneteCommercialProjection.setBinding(bindingA);
-  assert.strictEqual(s.__calls.length, before);
+  assert.strictEqual(s.__calls.length, before + 1);
+  const reopen = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive({
+    requestId: reopen, projectId: 'p-a', designId: 'd-a',
+    workState: { projectId: 'p-a', designId: 'd-a', generation: 1, localChangesPending: true },
+    state: 'stale'
+  });
+  s.window.GraneteCommercialProjection.applySynchronization({
+    projectId: 'p-a', designId: 'd-a', generation: 2, localChangesPending: true, scope: 'partial'
+  });
+  assert.strictEqual(s.__calls.length, before + 1);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
+  s.window.GraneteCommercialProjection.applySynchronization({
+    projectId: 'p-a', designId: 'd-a', generation: 3, localChangesPending: false, scope: 'full'
+  });
+  assert.strictEqual(s.__calls.length, before + 2);
+  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
+test('authoritative pending work survives temporary unavailability and panel-style rebinding', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const first = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive({
+    requestId: first, projectId: 'p-a', designId: 'd-a',
+    workState: { projectId: 'p-a', designId: 'd-a', generation: 4, localChangesPending: true },
+    state: 'stale'
+  });
+  s.window.GraneteCommercialProjection.setBinding({ state: 'unreachable', binding: bindingA.binding });
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const reconnect = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive({
+    requestId: reconnect, projectId: 'p-a', designId: 'd-a',
+    workState: { projectId: 'p-a', designId: 'd-a', generation: 4, localChangesPending: true },
+    state: 'stale'
+  });
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
+  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
+test('pending work state is scoped by project and design', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  s.window.GraneteCommercialProjection.applySynchronization({
+    projectId: 'p-a', designId: 'd-a', generation: 1, localChangesPending: true, scope: 'local'
+  });
+  const before = s.__calls.length;
   s.window.GraneteCommercialProjection.setBinding(bindingB);
   assert.strictEqual(s.__calls.length, before + 1);
-  s.window.GraneteCommercialProjection.setBinding(bindingA);
-  s.__events['granete-mutation-state']({ detail: { phase: 'committed', serverSynchronized: true } });
-  assert.strictEqual(s.__calls.length, before + 3);
-  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
 });
 
 test('withheld amounts are explicit and cost rows stay hidden', () => {
@@ -132,17 +221,44 @@ test('withheld amounts are explicit and cost rows stay hidden', () => {
   p.costsWithheld = true;
   p.amounts.directCost = null;
   p.amounts.marginFactor = null;
-  s.window.GraneteCommercialProjection.receive({ requestId: request, projectId: 'p-a', designId: 'd-a', projection: p });
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, p));
   assert.strictEqual(s.__elements['commercial-projection-total'].textContent, 'No disponible para esta organización');
   assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, 'none');
 });
 
+test('incomplete reasons distinguish unsupported parameters, missing pricing data and withheld amounts', () => {
+  const cases = [
+    ['working_item_parameters_not_priceable', 'parámetros'],
+    ['working_item_pricing_context_missing', 'datos comerciales'],
+    ['commercial_amounts_withheld_for_organization', 'esta organización']
+  ];
+  cases.forEach(([issue, expected]) => {
+    const s = sandbox();
+    s.window.GraneteCommercialProjection.setBinding(bindingA);
+    const request = s.__calls[s.__calls.length - 1].payload.requestId;
+    const value = projection(null, undefined);
+    value.status = 'incomplete';
+    value.issues = [issue];
+    s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, value));
+    assert.ok(s.__elements['commercial-projection-status'].textContent.includes(expected));
+  });
+});
+
+test('a projection without model work evidence fails closed', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive({
+    requestId: request, projectId: 'p-a', designId: 'd-a', projection: projection(100, 80)
+  }), true);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualización requerida');
+  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
 test('successful working-copy callbacks publish a committed refresh', () => {
-  assert.ok(dialogSource.includes('function notifyCommercialProjectionCommitted()'));
-  assert.ok(dialogSource.includes('onCommercialProjectionMutationCommitted: function ()'));
+  assert.ok(dialogSource.includes('onCommercialProjectionSynchronization: function (payload)'));
   assert.ok(dialogSource.includes('onCommercialProjectionLocalMutation: function ()'));
-  assert.ok(dialogSource.includes('serverSynchronized: true'));
-  assert.strictEqual((dialogSource.match(/notifyCommercialProjectionCommitted\(\);/g) || []).length, 5);
+  assert.ok(dialogSource.includes('applySynchronization(payload)'));
 });
 
 console.log(`commercial projection tests passed: ${passed}`);
