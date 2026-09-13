@@ -47,13 +47,6 @@ export interface ProjectMetaModalProps {
   }[];
   /** F039: hide margin/cost fields. */
   readonly showCosts: boolean;
-  /**
-   * @deprecated #257 — status is workflow-only (chrome buttons). Kept optional
-   * so call sites need not pass reopen/produced caps into meta.
-   */
-  readonly canMutate?: boolean;
-  readonly canReopen?: boolean;
-  readonly canMarkProduced?: boolean;
 }
 
 export function ProjectMetaModal({
@@ -258,7 +251,7 @@ export function ProjectMetaModal({
               {editingId ? (
                 <span className="catalog-form__hint">
                   {' '}
-                  — usá Aceptar / Enviar / Reabrir en el detalle
+                  — el estado comercial se gestiona en la revisión de cotización
                 </span>
               ) : null}
             </p>

@@ -341,6 +341,44 @@ describe('apiMappers', () => {
     expect(projectFromApi(api as Record<string, unknown>).customerId).toBe('c1');
   });
 
+  it('narrows the server-owned Digital Thread context projection to booleans', () => {
+    const raw = {
+      id: 'pr-dt',
+      name: 'DT projection',
+      customer_id: 'c1',
+      status: 'accepted',
+      items: [],
+      has_digital_thread_context: false,
+    };
+
+    expect(projectFromApi(raw).hasDigitalThreadContext).toBe(false);
+    expect(
+      projectFromApi({
+        ...raw,
+        has_digital_thread_context: true,
+      }).hasDigitalThreadContext,
+    ).toBe(true);
+    expect(
+      projectFromApi({
+        ...raw,
+        has_digital_thread_context: 'false',
+      }).hasDigitalThreadContext,
+    ).toBeUndefined();
+    expect(
+      projectFromApi({
+        ...raw,
+        has_digital_thread_context: null,
+        hasDigitalThreadContext: false,
+      }).hasDigitalThreadContext,
+    ).toBe(false);
+    expect(
+      projectToApi({
+        ...projectFromApi(raw),
+        hasDigitalThreadContext: true,
+      }),
+    ).not.toHaveProperty('has_digital_thread_context');
+  });
+
   it('round-trips module baseMode + baseClearanceMm (zoclo)', () => {
     const mod: Module = {
       id: 'mod-z',

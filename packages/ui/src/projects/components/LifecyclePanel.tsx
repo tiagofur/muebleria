@@ -16,7 +16,6 @@ import {
   CheckCircle,
   Clock,
   ExternalLink,
-  Factory,
   FileCheck,
   FileSpreadsheet,
   History,
@@ -51,7 +50,6 @@ import {
 
 export interface LifecyclePanelProps {
   readonly project: Project;
-  readonly onOpenReleaseModal: () => void;
   readonly onOpenChangeOrderModal: () => void;
   readonly onCreateRevision?: (name?: string, description?: string) => void | Promise<void>;
   readonly onDecideApproval?: (
@@ -68,7 +66,6 @@ export interface LifecyclePanelProps {
 
 export function LifecyclePanel({
   project,
-  onOpenReleaseModal,
   onOpenChangeOrderModal,
   onCreateRevision,
   onDecideApproval,
@@ -188,15 +185,6 @@ export function LifecyclePanel({
                 Pendiente ({gates.filter((g) => g.passed).length}/6 Gates)
               </span>
             )}
-            <button
-              type="button"
-              className="btn btn--secondary btn--small"
-              onClick={onOpenReleaseModal}
-              data-testid="btn-open-release-modal"
-            >
-              <Factory size={14} aria-hidden="true" />
-              {staleness.isReleased ? 'Ver / Revocar' : 'Evaluar 6 Gates'}
-            </button>
           </div>
         </div>
       </div>

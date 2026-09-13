@@ -243,9 +243,9 @@ type Hardware struct {
 	// representation, digest and validation state are resolved server-side.
 	// Nil = no exact model associated (generic procedural preview).
 	VisualAsset *HardwareVisualAssetBinding `json:"visual_asset,omitempty"`
-	Active    bool                      `json:"active"`
-	CreatedAt time.Time                 `json:"created_at"`
-	UpdatedAt time.Time                 `json:"updated_at"`
+	Active      bool                        `json:"active"`
+	CreatedAt   time.Time                   `json:"created_at"`
+	UpdatedAt   time.Time                   `json:"updated_at"`
 }
 
 // MachiningOperation is one drill entry a hardware part requires (F127).
@@ -569,30 +569,30 @@ const (
 // Component is a reusable engineering component (carcasa piece).
 // Mirrors the frontend Component type from @granete/domain.
 type Component struct {
-	ID            string             `json:"id"`
-	Code          string             `json:"code"`
-	Name          string             `json:"name"`
-	Placement     ComponentPlacement `json:"placement"`
-	GeometryKind  string             `json:"geometry_kind"`
-	LengthMm      int                `json:"length_mm"`
-	WidthMm       int                `json:"width_mm"`
-	ThicknessMm   int                `json:"thickness_mm"`
-	DefaultEdges  []EdgeAssignment   `json:"default_edges"`
-	OptionRoles   []string           `json:"option_roles,omitempty"`
+	ID           string             `json:"id"`
+	Code         string             `json:"code"`
+	Name         string             `json:"name"`
+	Placement    ComponentPlacement `json:"placement"`
+	GeometryKind string             `json:"geometry_kind"`
+	LengthMm     int                `json:"length_mm"`
+	WidthMm      int                `json:"width_mm"`
+	ThicknessMm  int                `json:"thickness_mm"`
+	DefaultEdges []EdgeAssignment   `json:"default_edges"`
+	OptionRoles  []string           `json:"option_roles,omitempty"`
 	// CompatibleHardwareCategories optionally lists the hardware categories this component can host (#350).
-	CompatibleHardwareCategories []string `json:"compatible_hardware_categories,omitempty"`
-	LengthFormula string             `json:"length_formula,omitempty"`
-	WidthFormula  string             `json:"width_formula,omitempty"`
-	XFormula      string             `json:"x_formula,omitempty"`
-	YFormula      string             `json:"y_formula,omitempty"`
-	ZFormula      string             `json:"z_formula,omitempty"`
-	RotateX       int                `json:"rotate_x,omitempty"`
-	RotateY       int                `json:"rotate_y,omitempty"`
-	RotateZ       int                `json:"rotate_z,omitempty"`
-	Notes         string             `json:"notes,omitempty"`
-	Active        bool               `json:"active"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
+	CompatibleHardwareCategories []string  `json:"compatible_hardware_categories,omitempty"`
+	LengthFormula                string    `json:"length_formula,omitempty"`
+	WidthFormula                 string    `json:"width_formula,omitempty"`
+	XFormula                     string    `json:"x_formula,omitempty"`
+	YFormula                     string    `json:"y_formula,omitempty"`
+	ZFormula                     string    `json:"z_formula,omitempty"`
+	RotateX                      int       `json:"rotate_x,omitempty"`
+	RotateY                      int       `json:"rotate_y,omitempty"`
+	RotateZ                      int       `json:"rotate_z,omitempty"`
+	Notes                        string    `json:"notes,omitempty"`
+	Active                       bool      `json:"active"`
+	CreatedAt                    time.Time `json:"created_at"`
+	UpdatedAt                    time.Time `json:"updated_at"`
 }
 
 // ItemCustomDims is the free per-item dimensions override (F144 / #310), mm.
@@ -691,9 +691,18 @@ type Project struct {
 	// "legacy"). Computed on read (list/detail); never persisted and never
 	// accepted from client writes.
 	ResolvedProductionRelease *ResolvedProductionRelease `json:"resolved_production_release,omitempty"`
-	ChangeOrders      []ChangeOrder            `json:"change_orders,omitempty"`
-	PartInstances     []PartInstance           `json:"part_instances,omitempty"`
-	ModuleUnits       []ModuleUnitExecution    `json:"module_units,omitempty"`
+	// HasDigitalThreadContext is the server-owned projection that positively
+	// identifies a project as participating in the Digital Thread (#697
+	// review): it has at least one project-owned FurnitureInstance, quote
+	// revision, DT design or canonical production release. It is the ONE signal
+	// separating modern DT projects from true pre-Digital-Thread ones — legacy
+	// accepted/produced status compatibility never applies to a project with
+	// Digital Thread context. Computed on read (list/detail); never
+	// persisted and never accepted from client writes.
+	HasDigitalThreadContext bool                  `json:"has_digital_thread_context"`
+	ChangeOrders            []ChangeOrder         `json:"change_orders,omitempty"`
+	PartInstances           []PartInstance        `json:"part_instances,omitempty"`
+	ModuleUnits             []ModuleUnitExecution `json:"module_units,omitempty"`
 	// Installation is the installation job (visits, field issues, punch,
 	// closeout — OC-070..OC-074). Server-authoritative: only mutated through
 	// the dedicated installation endpoints, never through the project PUT.

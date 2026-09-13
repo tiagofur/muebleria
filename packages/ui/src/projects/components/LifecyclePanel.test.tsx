@@ -40,7 +40,6 @@ describe('LifecyclePanel — anticipo real (OC-013)', () => {
     render(
       <LifecyclePanel
         project={baseProject}
-        onOpenReleaseModal={() => {}}
         onOpenChangeOrderModal={() => {}}
         onRecordDeposit={onRecordDeposit}
       />,
@@ -68,7 +67,6 @@ describe('LifecyclePanel — anticipo real (OC-013)', () => {
     render(
       <LifecyclePanel
         project={baseProject}
-        onOpenReleaseModal={() => {}}
         onOpenChangeOrderModal={() => {}}
         onRecordDeposit={vi.fn()}
       />,
@@ -98,7 +96,6 @@ describe('LifecyclePanel — anticipo real (OC-013)', () => {
     render(
       <LifecyclePanel
         project={withDeposit}
-        onOpenReleaseModal={() => {}}
         onOpenChangeOrderModal={() => {}}
       />,
     );
@@ -112,7 +109,6 @@ describe('LifecyclePanel — anticipo real (OC-013)', () => {
     render(
       <LifecyclePanel
         project={baseProject}
-        onOpenReleaseModal={() => {}}
         onOpenChangeOrderModal={() => {}}
       />,
     );

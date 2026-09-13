@@ -1,3 +1,29 @@
+# PR #697 — corrección final de acceso a Producción (Refs #642)
+
+- Approval: prompt del propietario (2026-09-12). PR existente #697, rama
+  `feat/642-demo-flow-happy-path`; sin PR/issue nuevos, merge ni cierre de #642.
+- Started: 2026-09-12 20:02 CST.
+- Scope: cerrar el fallback legacy de `Project.status=accepted|produced` para
+  proyectos Digital Thread modernos sin `ProductionRelease`, conservar acceso
+  compatibility-only para proyectos positivamente pre-DT, integrar `main`,
+  ejecutar gates completos y verificar CI/publication/mergeability exact-head.
+- Plan:
+  1. Proyectar en el read model una señal server-owned de contexto Digital Thread.
+  2. Centralizar acceso a Producción en una regla canónica fail-closed.
+  3. Cubrir moderno con stamp residual, pre-DT accepted/produced y respuestas PUT.
+  4. Integrar la rama remota/main sin perder commits paralelos y validar local/remoto.
+- Result: `IMPLEMENTED_PENDING_CI`. `hasDigitalThreadContext` se deriva en list/detail
+  de FurnitureInstance, QuoteRevision, Design o ProductionRelease; sólo `false`
+  explícito habilita status legacy. PUT relee el agregado para no devolver una
+  proyección falsa transitoria. `projectAllowsProductionAccess` gobierna filtro,
+  workspace y apertura de orden.
+- Evidence local: `git diff --check` PASS; `pnpm typecheck` 7/7; `pnpm test` PASS
+  (domain 1411, storage 207, excel 350 + 3 skips preexistentes, desktop 17,
+  mobile 73, UI 1782, web 481); `pnpm openapi:check` PASS;
+  `GOFLAGS=-p=1 go test ./... -count=1` PASS; browser gate real Go + PostgreSQL
+  + Chromium 57/57 PASS, incluyendo el golden Q1→Q2→R2→P1→Producción con
+  `Project.status=draft`.
+
 # Issue #693 — hardening final del pipeline CADmatic 4/PTX r3
 
 - Approval: prompt del propietario (2026-09-12); issue #693 OPEN con labels `status:approved`, `type:chore`, `domain`. PR #694/#691 y PR #695/#692 verificados como integrados en `origin/main`.
@@ -57,6 +83,34 @@
   - Browser E2E real (`./scripts/organization-browser-gate.sh tests/organization/hardware-3d-catalog.spec.ts`): 10/10 PASS (27.1s en PostgreSQL desechable aislado).
   - Integridad y contratos: `pnpm openapi:check` PASS (0 drift), `pnpm typecheck` PASS (7/7 paquetes), `git diff --check` limpio (0 errores de whitespace).
 - Exclusiones respetadas: sin merge de #690, sin cierre de #667/#666, sin inicio de #668/#669/#670, sin cambios de RLS, permisos o migraciones de M1, sin etiquetas protegidas alteradas.
+
+# Demo Flow Audit & Cleanup — happy path simplification (Refs #642)
+
+- Approval: prompt del propietario (2026-09-12). Rama `feat/642-demo-flow-happy-path`,
+  base `origin/main@009360e2`. Single writer GLM. Sin merge ni cierre.
+- Auditoría completa del flujo (Cotizaciones→Reconciliación→Diseños→Producción):
+  backend ya correcto (accept Q NO toca Project.status; ProductionRelease única
+  autoridad de fabricación; gates fail-closed). Hallazgos P0: ninguno nuevo; 10 P1
+  de UX/confusión implementados; P2 documentados sin absorber.
+- Entrega: banner veredicto simple (conflictos/afecta precio/sincronizado) con
+  acción única de requote; linkage exacto Q→R (sourceDesignRevisionId, opción
+  "origen de esta cotización"); aprobación "Aprobar R para Q" bloqueada
+  preemptivamente con la MISMA verdad server del gate comercial; auto-pin de la
+  Q tras requote; CTA contextual "Abrir en Producción" tras P1; FloorStrip por
+  release authority (no Project.status); retirados del chrome: "Marcar en
+  producción", botón no-op "Evaluar 6 Gates", modal OC-022 para proyectos DT,
+  cadenas muertas onChangeStatus/onReopen/confirmReopen/pendingConfirm + copy
+  huérfano. E2E browser real nuevo con transiciones UI y assertions UX.
+- P0 descubierto por el E2E y corregido: el workspace de Producción
+  (/orders/:id) estaba gateado por status legacy → un proyecto DT (status
+  draft) con P1 canónica no podía abrir su orden. Alineado a manufacturing
+  authority (projectAllowsProductionOrder/filterProductionVisible) + refresh
+  del read model antes de navegar.
+- Evidence final: browser gate 52/52 PASS (2.9m) incl. spec nuevo; pnpm test
+  monorepo exit 0 (ui 1758 / web 461 / domain 1407 / storage 191); typecheck
+  7/7; openapi sin drift; go test ./... OK (storage aislado PASS 360s); diff
+  check limpio. PR parcial `Refs #642`, label `type:feature`, sin merge.
+- Detalle: `progress/implementation_demo_flow_cleanup.md`.
 
 # Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
 

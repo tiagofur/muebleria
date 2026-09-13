@@ -48,10 +48,49 @@ describe('productionHelpers (F038)', () => {
 
   it('filterProductionVisible excludes drafts and quoted', () => {
     const list = [
-      project('a', 'accepted', '2026-07-01T00:00:00.000Z'),
-      project('b', 'produced', '2026-07-10T00:00:00.000Z'),
+      {
+        ...project('a', 'accepted', '2026-07-01T00:00:00.000Z'),
+        hasDigitalThreadContext: false,
+      },
+      {
+        ...project('b', 'produced', '2026-07-10T00:00:00.000Z'),
+        hasDigitalThreadContext: false,
+      },
       project('c', 'quoted', '2026-07-12T00:00:00.000Z'),
     ];
     expect(filterProductionVisible(list).map((p) => p.id)).toEqual(['a', 'b']);
+  });
+
+  it('#697: filterProductionVisible fails closed for modern DT projects with a residual accepted stamp', () => {
+    const withFlag = (id: string, status: Project['status'], dt: boolean, updatedAt = '2026-07-01T00:00:00.000Z') => ({
+      ...project(id, status, updatedAt),
+      hasDigitalThreadContext: dt,
+    });
+    const list = [
+      // Modern DT + accepted residual + no canonical release → excluded.
+      withFlag('modern-accepted', 'accepted', true),
+      withFlag('modern-produced', 'produced', true),
+      // True pre-DT compatibility stays visible.
+      withFlag('predt-accepted', 'accepted', false),
+      withFlag('predt-produced', 'produced', false),
+      // Modern DT + canonical release (status draft) → visible.
+      {
+        ...withFlag('modern-released', 'draft', true),
+        resolvedProductionRelease: {
+          source: 'canonical' as const,
+          releaseId: 'rel-1',
+          releaseNumber: 1,
+          designRevisionId: 'dr-1',
+          designRevisionNumber: 2,
+          quoteRevisionId: 'q-2',
+          manufacturingFingerprint: 'sha256-abc',
+        },
+      },
+    ];
+    expect(filterProductionVisible(list).map((p) => p.id)).toEqual([
+      'predt-accepted',
+      'predt-produced',
+      'modern-released',
+    ]);
   });
 });

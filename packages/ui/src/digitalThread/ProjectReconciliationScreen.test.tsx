@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GraneteApiError, type ApiError } from '@granete/storage';
@@ -292,7 +292,7 @@ function apiError(status: number, code: string, message: string, details?: unkno
   );
 }
 
-function setupFetchMock(options: FetchMockOptions = {}) {
+export function setupFetchMock(options: FetchMockOptions = {}) {
   const quoteRevisions = options.quoteRevisions ?? mockQuoteRevisions;
   const designs = options.designs ?? mockDesigns;
   const revisionsByDesign =
@@ -448,7 +448,7 @@ function setupFetchMock(options: FetchMockOptions = {}) {
   return fetchMock;
 }
 
-function renderScreen(props: {
+export function renderScreen(props: {
   initialContext?: ProjectReconciliationContextState | null;
   onContextChange?: (ctx: ProjectReconciliationContextState) => void;
   canRequote?: boolean;
@@ -456,7 +456,11 @@ function renderScreen(props: {
   canRelease?: boolean;
   canMutateQuote?: boolean;
   canAcceptQuote?: boolean;
-} = {}) {
+  onOpenInProduction?: (projectId: string) => void;
+} = {}): RenderResult & {
+  readonly queryClient: QueryClient;
+  readonly keys: ReturnType<typeof projectReconciliationQueryKeys>;
+} {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -476,6 +480,7 @@ function renderScreen(props: {
         canRelease={props.canRelease ?? true}
         canMutateQuote={props.canMutateQuote ?? true}
         canAcceptQuote={props.canAcceptQuote ?? true}
+        onOpenInProduction={props.onOpenInProduction}
       />
     </QueryClientProvider>,
   );
@@ -867,7 +872,29 @@ describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
   });
 
   it('approval: unavailable before published, success only after response, honest failure', async () => {
+    // #642: approval requires a commercially clean pair — the same truth the
+    // server enforces (EvaluateReleaseCommercialGate). A spatial-only change
+    // stays approvable; the old fixture (conflicts + commercial changes)
+    // would be rejected by the server and is now blocked pre-emptively.
+    const cleanPair: ProjectDesignReconciliationResult = {
+      ...mockReconciliation,
+      items: mockReconciliation.items.filter(
+        (i) => i.status === 'synced' || i.furnitureInstanceId === FI_SPATIAL,
+      ),
+      impact: {
+        requiresRequote: false,
+        requiresResolution: false,
+        canRequote: true,
+        commercialChanges: 0,
+        manufacturingChanges: 0,
+        spatialChanges: 1,
+      },
+    };
     const fetchMock = setupFetchMock({
+      reconciliation: {
+        [`${QUOTE_1_ID}:${REV_1_ID}`]: cleanPair,
+        [`${QUOTE_1_ID}:${REV_2_ID}`]: cleanPair,
+      },
       approveResponse: () => apiError(409, 'CONFLICT', 'la revisión no puede aprobarse desde su estado actual'),
     });
     // R2 is already approved → approval unavailable with explanation.
@@ -895,18 +922,154 @@ describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
   });
 
   it('approval success renders only after the authoritative response', async () => {
-    setupFetchMock();
+    const cleanPair: ProjectDesignReconciliationResult = {
+      ...mockReconciliation,
+      items: mockReconciliation.items.filter(
+        (i) => i.status === 'synced' || i.furnitureInstanceId === FI_SPATIAL,
+      ),
+      impact: {
+        requiresRequote: false,
+        requiresResolution: false,
+        canRequote: true,
+        commercialChanges: 0,
+        manufacturingChanges: 0,
+        spatialChanges: 1,
+      },
+    };
+    setupFetchMock({
+      reconciliation: {
+        [`${QUOTE_1_ID}:${REV_1_ID}`]: cleanPair,
+        [`${QUOTE_2_ID}:${REV_1_ID}`]: cleanPair,
+        [`${QUOTE_2_ID}:${REV_2_ID}`]: cleanPair,
+      },
+    });
     renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });
 
     await waitFor(() => {
       expect(screen.getByTestId('approve-revision-btn')).toBeEnabled();
     });
+    // The button names the exact pair being approved (#642 demo flow).
+    expect(screen.getByTestId('approve-revision-btn')).toHaveTextContent('Aprobar R1 para Q1');
     await userEvent.click(screen.getByTestId('approve-revision-btn'));
 
     await waitFor(() => {
       expect(screen.getByTestId('approval-success')).toBeVisible();
     });
     expect(screen.getByTestId('approval-success')).toHaveTextContent('R1 aprobada');
+  });
+
+  it('#642 demo flow: commercial changes block approval pre-emptively and offer the requote as the single next action', async () => {
+    // Conflicts resolved, but commercial changes remain → the server's
+    // EvaluateReleaseCommercialGate would reject approval; the UI blocks it
+    // with the same verbatim truth and points at the requote.
+    const commercialOnly: ProjectDesignReconciliationResult = {
+      ...mockReconciliation,
+      summary: { ...mockReconciliation.summary, conflict: 0 },
+      items: mockReconciliation.items.filter((i) => i.status !== 'conflict'),
+      impact: {
+        ...mockReconciliation.impact,
+        requiresResolution: false,
+        canRequote: true,
+      },
+    };
+    setupFetchMock({
+      reconciliation: {
+        [`${QUOTE_1_ID}:${REV_1_ID}`]: commercialOnly,
+        [`${QUOTE_2_ID}:${REV_1_ID}`]: commercialOnly,
+        [`${QUOTE_2_ID}:${REV_2_ID}`]: commercialOnly,
+      },
+    });
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-pair-commercial-hint')).toBeVisible();
+    });
+    expect(screen.getByTestId('reconciliation-next-action')).toHaveTextContent(
+      'afecta el precio o la configuración comercial',
+    );
+    expect(screen.getByTestId('next-action-requote-btn')).toBeVisible();
+    expect(screen.getByTestId('approve-revision-btn')).toBeDisabled();
+  });
+
+  it('#642 demo flow: a conflicted pair blocks approval and states the conflict verdict', async () => {
+    setupFetchMock();
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-pair-conflict-hint')).toBeVisible();
+    });
+    expect(screen.getByTestId('reconciliation-next-action')).toHaveTextContent('conflictos');
+    expect(screen.getByTestId('approve-revision-btn')).toBeDisabled();
+  });
+
+  it('#642 demo flow: a spatial-only change stays approvable and reads as technical', async () => {
+    const cleanPair: ProjectDesignReconciliationResult = {
+      ...mockReconciliation,
+      items: mockReconciliation.items.filter(
+        (i) => i.status === 'synced' || i.furnitureInstanceId === FI_SPATIAL,
+      ),
+      impact: {
+        requiresRequote: false,
+        requiresResolution: false,
+        canRequote: true,
+        commercialChanges: 0,
+        manufacturingChanges: 0,
+        spatialChanges: 1,
+      },
+    };
+    setupFetchMock({
+      reconciliation: {
+        [`${QUOTE_1_ID}:${REV_1_ID}`]: cleanPair,
+        [`${QUOTE_2_ID}:${REV_1_ID}`]: cleanPair,
+        [`${QUOTE_2_ID}:${REV_2_ID}`]: cleanPair,
+      },
+    });
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('approve-revision-btn')).toBeEnabled();
+    });
+    expect(screen.getByTestId('reconciliation-next-action')).toHaveTextContent(
+      'técnicos o espaciales',
+    );
+  });
+
+  it('#642 demo flow: selecting a quote pins its origin design revision', async () => {
+    setupFetchMock();
+    // Start pinned at R2; Q2 (requote) declares R1 as its design origin.
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_2_ID } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reconciliation-context-bar')).toBeVisible();
+    });
+    await userEvent.selectOptions(screen.getByTestId('quote-revision-select'), QUOTE_2_ID);
+
+    // The exact linkage (sourceDesignRevisionId) re-pins R — not "latest".
+    expect(screen.getByTestId('design-revision-select')).toHaveValue(REV_1_ID);
+    const selected = (screen.getByTestId('design-revision-select') as HTMLSelectElement)
+      .selectedOptions[0] as HTMLOptionElement;
+    expect(selected.textContent).toContain('origen de esta cotización');
+  });
+
+  it('#642 demo flow: release success offers the contextual Abrir en Producción exit', async () => {
+    const onOpenInProduction = vi.fn();
+    setupFetchMock();
+    renderScreen({
+      initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_2_ID },
+      onOpenInProduction,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('open-release-review-btn')).toBeEnabled();
+    });
+    await userEvent.click(screen.getByTestId('open-release-review-btn'));
+    await userEvent.click(screen.getByTestId('submit-release'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('release-success')).toBeVisible();
+    });
+    await userEvent.click(screen.getByTestId('release-success-open-production'));
+    expect(onOpenInProduction).toHaveBeenCalledWith(PROJECT_ID);
   });
 
   it('release: gated until approval + review modal + success pins, and blocked preflight surfaces issues', async () => {

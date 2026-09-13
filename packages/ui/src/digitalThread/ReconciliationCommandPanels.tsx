@@ -217,6 +217,14 @@ export interface ApprovalPanelProps {
   /** Server context (#502): the gated command pins the exact accepted quote. */
   readonly quoteAccepted: boolean;
   readonly quoteLabel: string;
+  /** Exact pair context: the button names what is approved for which quote. */
+  readonly designRevisionLabel: string;
+  /**
+   * Verbatim server classification of the SELECTED pair (#502 commercial
+   * gate): 'conflict' | 'commercial' blocks pre-emptively with the same
+   * truth the server enforces; null = no claim (server stays fail-closed).
+   */
+  readonly pairCommercialBlocked: 'conflict' | 'commercial' | null;
   /** Server-owned preflight verdict over the exact revision. */
   readonly preflightBlocked: boolean | null;
   readonly submitting: boolean;
@@ -231,6 +239,8 @@ export function ApprovalPanel({
   approvedAt,
   quoteAccepted,
   quoteLabel,
+  designRevisionLabel,
+  pairCommercialBlocked,
   preflightBlocked,
   submitting,
   error,
@@ -268,6 +278,18 @@ export function ApprovalPanel({
           aprobación de producción hasta fijar una base comercial aceptada.
         </p>
       )}
+      {canSubmitFromStatus && pairCommercialBlocked === 'conflict' && (
+        <p className="pr-panel__why" data-testid="approval-pair-conflict-hint">
+          Hay conflictos sin resolver entre {quoteLabel} y {designRevisionLabel}: el servidor
+          bloquea la aprobación hasta resolverlos.
+        </p>
+      )}
+      {canSubmitFromStatus && pairCommercialBlocked === 'commercial' && (
+        <p className="pr-panel__why" data-testid="approval-pair-commercial-hint">
+          {designRevisionLabel} tiene cambios comerciales frente a {quoteLabel}: creá y aceptá la
+          cotización actualizada antes de aprobar.
+        </p>
+      )}
 
       <CommandErrorAlert error={error} />
 
@@ -275,11 +297,21 @@ export function ApprovalPanel({
         type="button"
         className="btn btn-primary"
         data-testid="approve-revision-btn"
-        disabled={submitting || !canSubmitFromStatus || !canApprove || preflightBlocked === true}
+        disabled={
+          submitting ||
+          !canSubmitFromStatus ||
+          !canApprove ||
+          preflightBlocked === true ||
+          pairCommercialBlocked !== null
+        }
         onClick={onApprove}
       >
         {submitting ? <RefreshCw size={14} className="spin" /> : <ShieldCheck size={14} />}
-        <span>{submitting ? 'Aprobando…' : 'Aprobar revisión exacta'}</span>
+        <span>
+          {submitting
+            ? 'Aprobando…'
+            : `Aprobar ${designRevisionLabel} para ${quoteLabel}`}
+        </span>
       </button>
       {canSubmitFromStatus && preflightBlocked === true && (
         <p className="pr-panel__why" data-testid="approval-preflight-hint">

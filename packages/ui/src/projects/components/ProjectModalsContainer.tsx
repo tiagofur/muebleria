@@ -27,7 +27,6 @@ import type {
 import { Project3DModal } from './Project3DModal';
 import { ProjectAddItemModal } from './ProjectAddItemModal';
 import { ProjectConfirmDeleteModal } from './ProjectConfirmDeleteModal';
-import { ProjectConfirmReopenModal } from './ProjectConfirmReopenModal';
 import { ProjectMetaModal } from './ProjectMetaModal';
 import { ProjectSaveAsTemplateModal } from './ProjectSaveAsTemplateModal';
 import { ProjectTemplatePickerModal } from './ProjectTemplatePickerModal';
@@ -57,14 +56,11 @@ export interface ProjectModalsContainerProps {
   }[];
   readonly showCosts?: boolean;
   readonly canMutate?: boolean;
-  readonly canReopen?: boolean;
-  readonly canMarkProduced?: boolean;
   readonly metaModalOpen: boolean;
   readonly metaEditingId: string | null;
   readonly metaDraft: ProjectDraft;
   readonly addItemModalOpen: boolean;
   readonly confirmDelete: boolean;
-  readonly confirmReopen: boolean;
   readonly showPresentation: boolean;
   readonly showSpatialStudio: boolean;
   readonly show3DModal: boolean;
@@ -114,8 +110,6 @@ export interface ProjectModalsContainerProps {
   }) => void;
   readonly onCancelDelete: () => void;
   readonly onConfirmDelete: (projectId: string) => void;
-  readonly onCancelReopen: () => void;
-  readonly onConfirmReopen: (projectId: string) => void;
   readonly onClosePresentation: () => void;
   readonly onGoToProyectar?: () => void;
   /** F141 (#309): insert desde la biblioteca de Proyectar; devuelve el id del ítem creado. */
@@ -173,14 +167,11 @@ export function ProjectModalsContainer({
   assignableOwners,
   showCosts,
   canMutate,
-  canReopen,
-  canMarkProduced,
   metaModalOpen,
   metaEditingId,
   metaDraft,
   addItemModalOpen,
   confirmDelete,
-  confirmReopen,
   showPresentation,
   showSpatialStudio,
   show3DModal,
@@ -203,8 +194,6 @@ export function ProjectModalsContainer({
   onAddItemSubmit,
   onCancelDelete,
   onConfirmDelete,
-  onCancelReopen,
-  onConfirmReopen,
   onClosePresentation,
   onGoToProyectar,
   onInsertCatalogItem,
@@ -249,9 +238,6 @@ export function ProjectModalsContainer({
         canAssignOwner={canAssignOwner ?? false}
         assignableOwners={assignableOwners ?? []}
         showCosts={showCosts ?? false}
-        canMutate={canMutate}
-        canReopen={canReopen}
-        canMarkProduced={canMarkProduced}
       />
 
       <ProjectAddItemModal
@@ -275,15 +261,6 @@ export function ProjectModalsContainer({
         onCancel={onCancelDelete}
         onConfirm={() => {
           if (selectedProject) onConfirmDelete(selectedProject.id);
-        }}
-      />
-
-      <ProjectConfirmReopenModal
-        open={confirmReopen && selectedProject != null}
-        projectName={selectedProject?.name ?? ''}
-        onCancel={onCancelReopen}
-        onConfirm={() => {
-          if (selectedProject) onConfirmReopen(selectedProject.id);
         }}
       />
 

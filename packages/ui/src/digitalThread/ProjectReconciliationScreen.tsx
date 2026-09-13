@@ -4,6 +4,7 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   ChevronRight,
+  Factory,
   FileText,
   GitCompareArrows,
   History,
@@ -140,6 +141,11 @@ export interface ProjectReconciliationScreenProps {
     designId: string | null;
     revisionId: string | null;
   }) => void;
+  /**
+   * Contextual exit after an exact ProductionRelease exists: opens the
+   * factory order workspace. Wired only when the shell exposes it.
+   */
+  readonly onOpenInProduction?: (projectId: string) => void;
   /** Role hints (server remains the authority for every command). */
   readonly canRequote?: boolean;
   readonly canApprove?: boolean;
@@ -165,6 +171,7 @@ export function ProjectReconciliationScreen({
   onBack,
   onOpenDesigns,
   onOpenFurnitureMatrix,
+  onOpenInProduction,
   canRequote = false,
   canApprove = false,
   canRelease = false,
@@ -399,6 +406,19 @@ export function ProjectReconciliationScreen({
     [reconciliation],
   );
 
+  // Verbatim server classification of the SELECTED Q/R pair (#502 gate):
+  // the same requiresResolution/requiresRequote truth the server enforces on
+  // approve/release. `null` = reconciliation not loaded (or failed) — the UI
+  // then adds no claim of its own and the server stays the fail-closed gate.
+  const pairImpact = reconciliation?.impact ?? null;
+  const pairCommercialBlock: 'conflict' | 'commercial' | null = !pairImpact
+    ? null
+    : pairImpact.requiresResolution
+      ? 'conflict'
+      : pairImpact.requiresRequote
+        ? 'commercial'
+        : null;
+
   // ---- Commands (no optimistic business success) ---------------------------------
 
   const invalidateQuoteRevisionReads = async () => {
@@ -525,6 +545,14 @@ export function ProjectReconciliationScreen({
       // Success only AFTER the authoritative response: refresh the exact
       // scopes (quote revisions + every reconciliation pair of this project).
       await invalidateQuoteRevisionReads();
+      // #642 demo flow: continue on the EXACT new revision the server just
+      // created (publish/accept act on it next) — no manual re-selection.
+      setQuoteRevisionId(result.quoteRevision.id);
+      onContextChange?.({
+        quoteRevisionId: result.quoteRevision.id,
+        designId: activeDesignId,
+        designRevisionId,
+      });
       setRequoteResult({
         quoteRevision: result.quoteRevision,
         sourceQuoteRevisionId: quoteRevisionId,
@@ -777,13 +805,25 @@ export function ProjectReconciliationScreen({
                 className="form-control"
                 data-testid="quote-revision-select"
                 value={quoteRevisionId ?? ''}
-                onChange={(e) =>
+                onChange={(e) => {
+                  // Exact Q→R linkage (#642): a requote records the design
+                  // revision it was minted from. When the user picks that Q,
+                  // pin its origin revision so the default pair is the
+                  // compatible one — an explicit R choice still wins.
+                  const nextQuoteId = e.target.value || null;
+                  const linkedDesignRevisionId =
+                    quoteRevisions.find((q) => q.id === nextQuoteId)
+                      ?.sourceDesignRevisionId ?? null;
                   pinContext({
-                    quoteRevisionId: e.target.value || null,
+                    quoteRevisionId: nextQuoteId,
                     designId: activeDesignId,
-                    designRevisionId,
-                  })
-                }
+                    designRevisionId:
+                      linkedDesignRevisionId &&
+                      designRevisions.some((r) => r.id === linkedDesignRevisionId)
+                        ? linkedDesignRevisionId
+                        : designRevisionId,
+                  });
+                }}
               >
                 {quoteRevisions.map((q) => (
                   <option key={q.id} value={q.id}>
@@ -837,6 +877,9 @@ export function ProjectReconciliationScreen({
                       : r.status === 'superseded'
                         ? 'Reemplazada'
                         : 'Publicada'}
+                    {selectedQuoteRevision?.sourceDesignRevisionId === r.id
+                      ? ' · origen de esta cotización'
+                      : ''}
                   </option>
                 ))}
               </select>
@@ -939,6 +982,70 @@ export function ProjectReconciliationScreen({
                 </div>
               ) : reconciliation ? (
                 <>
+                  {/* Happy-path verdict (#642 demo flow): one plain sentence
+                      from the verbatim server classification, before any
+                      technical counters. The detailed grid stays below for
+                      whoever needs it. */}
+                  {impactSummary && (
+                    <div
+                      className={`pd-alert ${
+                        pairCommercialBlock === 'conflict'
+                          ? 'pd-alert--error'
+                          : pairCommercialBlock === 'commercial'
+                            ? 'pd-alert--warning'
+                            : 'pd-alert--success'
+                      }`}
+                      data-testid="reconciliation-next-action"
+                    >
+                      {pairCommercialBlock === 'conflict' ? (
+                        <>
+                          <strong>
+                            El diseño tiene conflictos frente a {quoteLabel}.
+                          </strong>{' '}
+                          <span>
+                            Resolví las unidades en conflicto antes de continuar: el servidor
+                            bloquea la aprobación y la liberación con conflictos pendientes.
+                          </span>
+                        </>
+                      ) : pairCommercialBlock === 'commercial' ? (
+                        <>
+                          <strong>
+                            El cambio del diseño afecta el precio o la configuración comercial.
+                          </strong>{' '}
+                          <span>
+                            Creá la cotización actualizada, publicala y aceptala para poder
+                            aprobar {revLabel}.
+                          </span>
+                          {canRequote && incorporableItems.length > 0 ? (
+                            <div style={{ marginTop: '8px' }}>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                data-testid="next-action-requote-btn"
+                                onClick={handleOpenRequote}
+                              >
+                                <GitCompareArrows size={14} />
+                                <span>Crear cotización actualizada desde {quoteLabel}</span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <strong>
+                            El diseño está comercialmente sincronizado con {quoteLabel}.
+                          </strong>{' '}
+                          <span>
+                            {impactSummary.manufacturingChanges > 0 ||
+                            impactSummary.spatialChanges > 0
+                              ? 'Los cambios del diseño son técnicos o espaciales: no afectan la cotización.'
+                              : 'Sin cambios que requieran acción.'}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {/* Summary — server counts, verbatim */}
                   <section className="pd-card pr-summary" data-testid="reconciliation-summary">
                     <div className="pd-card__header">
@@ -1110,6 +1217,19 @@ export function ProjectReconciliationScreen({
                     + R{releaseResult.release.design_revision_number} · Contexto de fabricación:{' '}
                     {releaseResult.release.manufacturing_fingerprint.slice(0, 19)}…
                   </span>
+                  {onOpenInProduction ? (
+                    <div style={{ marginTop: '8px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        data-testid="release-success-open-production"
+                        onClick={() => onOpenInProduction(projectId)}
+                      >
+                        <Factory size={14} />
+                        <span>Abrir en Producción</span>
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -1145,6 +1265,8 @@ export function ProjectReconciliationScreen({
                   approvedAt={selectedDesignRevision?.approved_at}
                   quoteAccepted={selectedQuoteRevision?.status === 'accepted'}
                   quoteLabel={quoteLabel}
+                  designRevisionLabel={revLabel}
+                  pairCommercialBlocked={pairCommercialBlock}
                   preflightBlocked={preflight ? preflight.status === 'blocked' : null}
                   submitting={approveSubmitting}
                   error={approveError}

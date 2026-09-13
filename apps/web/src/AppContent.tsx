@@ -1095,12 +1095,6 @@ export function AppContent({
     session === 'guest' || anyRole(actorRoles, roleCanMutateProjects);
   const canDeleteProjects =
     session === 'guest' || anyRole(actorRoles, roleCanDeleteProject);
-  const canReopenProjects =
-    session === 'guest' || anyRole(actorRoles, roleCanReopenProject);
-  /** accepted/produced → draft: admin + gerente only (vendedor never). */
-  const canForceReopenClosed =
-    session === 'guest' ||
-    anyRole(actorRoles, (r) => r === 'admin' || r === 'gerente_ventas');
   const canMarkProduced =
     session === 'guest' || anyRole(actorRoles, roleCanMarkProduced);
   const canExportProduction =
@@ -1816,23 +1810,6 @@ export function AppContent({
       navigate(engineeringProjectPath(projectId));
     },
     [authUser?.id, projectActions, navigate],
-  );
-  const changeProjectStatus = useCallback(
-    (id: string, status: ProjectStatus) => {
-      if (!catalog) return;
-      projectActions.changeProjectStatus(id, status, catalog);
-    },
-    [projectActions, catalog],
-  );
-  const reopenProject = useCallback(
-    (id: string) => {
-      if (!catalog) return;
-      // Guest shell acts as full admin for local demo.
-      const roles =
-        session === 'guest' ? ['admin'] : actorRoles;
-      projectActions.reopenProject(id, catalog, roles);
-    },
-    [projectActions, catalog, session, actorRoles],
   );
   const restoreProjectVersion = useCallback(
     (id: string, version: number) => {
@@ -3267,6 +3244,9 @@ export function AppContent({
   }
 
   const shellViewCtx = {
+    refreshWorkspace: async () => {
+      await loadWorkspace();
+    },
     acquirePlanEditSession,
     actorRole,
     // #591: config object exists whenever the feature is reachable — on load
@@ -3310,16 +3290,13 @@ export function AppContent({
     canAssignOwner,
     canDeleteProjects,
     canExportProduction,
-    canForceReopenClosed,
     canMarkProduced,
     canMutateCatalog,
     canMutateModules,
     canMutateProjects,
     canOpenFabric,
-    canReopenProjects,
     catalog,
     categories,
-    changeProjectStatus,
     commandItems,
     components,
     createAgregado,
@@ -3480,7 +3457,6 @@ export function AppContent({
     releasePlanEditSession,
     removeProjectItem,
     renewPlanEditSession,
-    reopenProject,
     resolveMediaUrl,
     restoreProjectItems,
     restoreProjectVersion,

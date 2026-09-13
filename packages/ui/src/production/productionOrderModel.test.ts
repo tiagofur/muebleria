@@ -54,19 +54,71 @@ describe('productionOrderModel (PROD-0.1 / 0.3)', () => {
     expect(PRODUCTION_ORDER_TABS).not.toContain('exports');
   });
 
-  it('allows production order only for accepted|produced', () => {
-    expect(projectAllowsProductionOrder(baseProject({ status: 'accepted' }))).toBe(
-      true,
-    );
-    expect(projectAllowsProductionOrder(baseProject({ status: 'produced' }))).toBe(
-      true,
-    );
-    expect(projectAllowsProductionOrder(baseProject({ status: 'draft' }))).toBe(
-      false,
-    );
-    expect(projectAllowsProductionOrder(baseProject({ status: 'quoted' }))).toBe(
-      false,
-    );
+  // #697 review matrix — the ONE access rule over the release authority:
+  //   A. modern draft + canonical P1            → open
+  //   B. modern draft without release           → closed
+  //   C. modern + residual accepted + no P1     → closed (THE blocker case)
+  //   D. true pre-DT + accepted                 → compatibility-only open
+  //   E. true pre-DT + produced                 → compatibility-only open
+  const canonicalRelease = {
+    source: 'canonical' as const,
+    releaseId: 'rel-1',
+    releaseNumber: 1,
+    designRevisionId: 'dr-1',
+    designRevisionNumber: 2,
+    quoteRevisionId: 'q-2',
+    manufacturingFingerprint: 'sha256-abc',
+    frozenRouting: true,
+  };
+
+  it('A: modern draft + canonical ProductionRelease opens the order', () => {
+    // Digital Thread golden truth: Project.status stays draft forever; the
+    // manufacturing authority (canonical release) decides factory access.
+    const releasedDraft = baseProject({
+      status: 'draft',
+      hasDigitalThreadContext: true,
+      resolvedProductionRelease: canonicalRelease,
+    });
+    expect(projectAllowsProductionOrder(releasedDraft)).toBe(true);
+  });
+
+  it('B: modern draft without a release stays closed', () => {
+    expect(
+      projectAllowsProductionOrder(baseProject({ status: 'draft', hasDigitalThreadContext: true })),
+    ).toBe(false);
+    // Without the projection the same holds: draft never opens.
+    expect(projectAllowsProductionOrder(baseProject({ status: 'draft' }))).toBe(false);
+  });
+
+  it('C (blocker): modern DT project with residual accepted stamp and NO release fails closed', () => {
+    // The exact #697 review case: a modern Digital Thread project (quote
+    // revisions exist) whose Project.status was accidentally stamped
+    // accepted. Legacy status compatibility must NOT apply — commercial
+    // acceptance is a precondition for creating a release, never a
+    // substitute for having one.
+    const modernAccidentalStamp = baseProject({
+      status: 'accepted',
+      hasDigitalThreadContext: true,
+    });
+    expect(projectAllowsProductionOrder(modernAccidentalStamp)).toBe(false);
+    expect(projectAllowsProductionOrder(baseProject({ status: 'produced', hasDigitalThreadContext: true }))).toBe(false);
+  });
+
+  it('D/E: true pre-Digital-Thread accepted|produced keeps compatibility-only access', () => {
+    // The server projection positively identifies these projects as
+    // pre-Digital-Thread (no quote revisions, no designs, no releases).
+    expect(
+      projectAllowsProductionOrder(baseProject({ status: 'accepted', hasDigitalThreadContext: false })),
+    ).toBe(true);
+    expect(
+      projectAllowsProductionOrder(baseProject({ status: 'produced', hasDigitalThreadContext: false })),
+    ).toBe(true);
+    // Absent projection (local mode / stale payloads) is not positive legacy
+    // evidence, so compatibility fails closed.
+    expect(projectAllowsProductionOrder(baseProject({ status: 'accepted' }))).toBe(false);
+    expect(projectAllowsProductionOrder(baseProject({ status: 'produced' }))).toBe(false);
+    // Non-queue statuses stay closed in every interpretation.
+    expect(projectAllowsProductionOrder(baseProject({ status: 'quoted', hasDigitalThreadContext: false }))).toBe(false);
   });
 
   it('readiness: ready when cut rows exist', () => {

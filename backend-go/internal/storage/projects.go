@@ -516,11 +516,16 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 	if err != nil {
 		return nil, err
 	}
+	dtContext, err := s.DigitalThreadContextByProject(ctx, projectIDs)
+	if err != nil {
+		return nil, err
+	}
 	for i := range list {
 		list[i].ResolvedProductionRelease = resolveReleaseProjection(latestReleases[list[i].ID], list[i].ProductionRelease)
 		if canonical := latestReleases[list[i].ID]; canonical != nil {
 			list[i].ResolvedProductionRelease.FrozenRouting = frozenRouting[canonical.ID]
 		}
+		list[i].HasDigitalThreadContext = dtContext[list[i].ID]
 	}
 	for i := range list {
 		// Tenant requests share one transaction and one pgx connection, so
@@ -800,6 +805,41 @@ func structurePinArg(pin *int) interface{} {
 	return *pin
 }
 
+// DigitalThreadContextByProject returns, per project id, whether the project
+// positively participates in the Digital Thread (#697 review): it has at
+// least one project-owned FurnitureInstance, quote revision, DT design or
+// canonical production release. True pre-Digital-Thread projects answer false — the only case
+// where legacy accepted/produced status compatibility may apply. One batch
+// query, no N+1; computed on read and never persisted.
+func (s *PostgresStore) DigitalThreadContextByProject(ctx context.Context, projectIDs []string) (map[string]bool, error) {
+	result := make(map[string]bool, len(projectIDs))
+	if len(projectIDs) == 0 {
+		return result, nil
+	}
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT p.id,
+		       EXISTS (SELECT 1 FROM furniture_instances fi WHERE fi.project_id = p.id)
+		    OR EXISTS (SELECT 1 FROM quote_revisions qr WHERE qr.project_id = p.id)
+		    OR EXISTS (SELECT 1 FROM designs d WHERE d.project_id = p.id)
+		    OR EXISTS (SELECT 1 FROM production_releases pr WHERE pr.project_id = p.id)
+		FROM projects p
+		WHERE p.id = ANY($1)
+	`, projectIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var dtContext bool
+		if err := rows.Scan(&id, &dtContext); err != nil {
+			return nil, err
+		}
+		result[id] = dtContext
+	}
+	return result, rows.Err()
+}
+
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
 		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, installation, material_planning, quality, costing, site_survey, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
@@ -988,6 +1028,13 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 			}
 			p.ResolvedProductionRelease.FrozenRouting = frozenRouting[canonical.ID]
 		}
+	}
+	// #697 review: server-owned Digital Thread context projection — same
+	// read-model pass as the release authority above.
+	if dtContext, err := s.DigitalThreadContextByProject(ctx, []string{p.ID}); err != nil {
+		return nil, err
+	} else {
+		p.HasDigitalThreadContext = dtContext[p.ID]
 	}
 
 	// Cargar snapshot si existe
