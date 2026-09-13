@@ -25,14 +25,17 @@ func (o ManufacturingOperation) Valid() bool {
 
 // MachineOutputSelection is the persisted authoritative selection.
 type MachineOutputSelection struct {
-	Operation                   ManufacturingOperation `json:"operation"`
-	MachineProfileID            string                 `json:"machineProfileId"`
-	MachineProfileRevisionID    string                 `json:"machineProfileRevisionId"`
-	OutputProfileID             string                 `json:"outputProfileId"`
-	OutputProfileRevisionID     string                 `json:"outputProfileRevisionId"`
-	AdapterID                   string                 `json:"adapterId"`
-	AdapterVersion              string                 `json:"adapterVersion"`
-	AdapterImplementationDigest string                 `json:"adapterImplementationDigest"`
+	Operation                ManufacturingOperation `json:"operation"`
+	MachineProfileID         string                 `json:"machineProfileId"`
+	MachineProfileRevisionID string                 `json:"machineProfileRevisionId"`
+	OutputProfileID          string                 `json:"outputProfileId"`
+	OutputProfileRevisionID  string                 `json:"outputProfileRevisionId"`
+	// Nil is read-only historical state for rows created before #692. New writes
+	// must pin the exact catalog digest and validation rejects nil.
+	OutputProfileDigest         *string `json:"outputProfileDigest"`
+	AdapterID                   string  `json:"adapterId"`
+	AdapterVersion              string  `json:"adapterVersion"`
+	AdapterImplementationDigest string  `json:"adapterImplementationDigest"`
 }
 
 // MachineOutputSelectionRecord adds storage metadata to the selection.
@@ -147,11 +150,15 @@ func ValidateMachineOutputSelection(catalog MachineOutputCatalog, sel MachineOut
 	sel.MachineProfileRevisionID = trim(sel.MachineProfileRevisionID)
 	sel.OutputProfileID = trim(sel.OutputProfileID)
 	sel.OutputProfileRevisionID = trim(sel.OutputProfileRevisionID)
+	if sel.OutputProfileDigest != nil {
+		digest := trim(*sel.OutputProfileDigest)
+		sel.OutputProfileDigest = &digest
+	}
 	sel.AdapterID = trim(sel.AdapterID)
 	sel.AdapterVersion = trim(sel.AdapterVersion)
 	sel.AdapterImplementationDigest = trim(sel.AdapterImplementationDigest)
 	if sel.MachineProfileID == "" || sel.MachineProfileRevisionID == "" ||
-		sel.OutputProfileID == "" || sel.OutputProfileRevisionID == "" ||
+		sel.OutputProfileID == "" || sel.OutputProfileRevisionID == "" || sel.OutputProfileDigest == nil || *sel.OutputProfileDigest == "" ||
 		sel.AdapterID == "" || sel.AdapterVersion == "" || sel.AdapterImplementationDigest == "" {
 		return fmt.Errorf("la selección debe fijar máquina, perfil y adapter con revisión y digest exactos")
 	}
@@ -194,6 +201,10 @@ func ValidateMachineOutputSelection(catalog MachineOutputCatalog, sel MachineOut
 	if profile.RevisionID != sel.OutputProfileRevisionID {
 		return fmt.Errorf("revisión de perfil exacta requerida: %s@%s no coincide con el catálogo (%s)",
 			sel.OutputProfileID, sel.OutputProfileRevisionID, profile.RevisionID)
+	}
+	if profile.Digest != *sel.OutputProfileDigest {
+		return fmt.Errorf("digest de perfil exacto requerido: %s@%s no coincide con el catálogo",
+			sel.OutputProfileID, sel.OutputProfileRevisionID)
 	}
 
 	var adapter *AdapterCatalogEntry
@@ -244,16 +255,55 @@ type MachineOutputSelectionBlocker struct {
 // fabricates compatibility — an empty list is not a validation claim.
 func ResolveMachineOutputBlockers(catalog MachineOutputCatalog, sel MachineOutputSelection) []MachineOutputSelectionBlocker {
 	blockers := []MachineOutputSelectionBlocker{}
+	machineExact := false
+	for _, machine := range catalog.Machines {
+		if machine.MachineProfileID == sel.MachineProfileID &&
+			machine.MachineProfileRevisionID == sel.MachineProfileRevisionID {
+			machineExact = true
+			break
+		}
+	}
+	if !machineExact {
+		blockers = append(blockers, MachineOutputSelectionBlocker{
+			Code:   "PROFILE_DIGEST_MISMATCH",
+			Detail: "La revisión de máquina seleccionada ya no coincide con el catálogo.",
+		})
+	}
+	profileExact := false
+	for _, profile := range catalog.OutputProfiles {
+		if profile.OutputCompatibilityProfileID == sel.OutputProfileID &&
+			profile.RevisionID == sel.OutputProfileRevisionID &&
+			sel.OutputProfileDigest != nil && profile.Digest == *sel.OutputProfileDigest {
+			profileExact = true
+			break
+		}
+	}
+	if !profileExact {
+		blockers = append(blockers, MachineOutputSelectionBlocker{
+			Code:   "PROFILE_DIGEST_MISMATCH",
+			Detail: "El perfil guardado no tiene un pin exacto vigente; volvé a seleccionarlo antes de generar.",
+		})
+	}
+	adapterExact := false
 	for _, adapter := range catalog.Adapters {
-		if adapter.PostprocessorAdapterID != sel.AdapterID {
+		if adapter.PostprocessorAdapterID != sel.AdapterID ||
+			adapter.AdapterVersion != sel.AdapterVersion ||
+			adapter.ImplementationDigest != sel.AdapterImplementationDigest {
 			continue
 		}
+		adapterExact = true
 		if !adapter.SerializerImplemented {
 			blockers = append(blockers, MachineOutputSelectionBlocker{
 				Code:   "SERIALIZER_NOT_IMPLEMENTED",
 				Detail: "El serializador todavía no está implementado; la selección queda registrada pero no puede generar archivos.",
 			})
 		}
+	}
+	if !adapterExact {
+		blockers = append(blockers, MachineOutputSelectionBlocker{
+			Code:   "PROFILE_DIGEST_MISMATCH",
+			Detail: "La versión exacta del adapter guardado ya no está disponible.",
+		})
 	}
 	return blockers
 }

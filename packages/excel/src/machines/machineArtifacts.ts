@@ -42,6 +42,7 @@ export interface MachineArtifactRequest<Job> {
     readonly ref: MachineProfileRef;
     readonly supported: readonly MachineCapability[];
   };
+  readonly delivery?: ArtifactManifest['delivery'];
 }
 
 export interface MachineArtifactBundle {
@@ -79,6 +80,7 @@ export async function generateMachineArtifact<Job>(
   );
 
   const manifest: ArtifactManifest = {
+    manifestSchemaVersion: 'granete.machine-artifact-manifest.v2',
     artifactSetId: artifactId,
     jobId: job.jobId,
     provenance: job.provenance,
@@ -86,6 +88,7 @@ export async function generateMachineArtifact<Job>(
     machineProfile: request.machineProfile?.ref,
     machineProfileSupportedCapabilities: request.machineProfile?.supported ?? [],
     outputCompatibilityProfile: profile.ref,
+    outputCompatibilityProfileDigest: profile.digest,
     postprocessorAdapter: {
       postprocessorAdapterId: adapter.postprocessorAdapterId,
       adapterVersion: adapter.adapterVersion,
@@ -97,9 +100,11 @@ export async function generateMachineArtifact<Job>(
         artifactId,
         kind: request.kind,
         schemaVersion: request.schemaVersion,
+        fileName: request.fileName,
         sha256,
       },
     ],
+    delivery: request.delivery ?? { mode: 'unified' },
     createdAt: job.provenance.generatedAt,
     validationStatus: profile.supportStatus,
     nonProductionValidationArtifact: true,

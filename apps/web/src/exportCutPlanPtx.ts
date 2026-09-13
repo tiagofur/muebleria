@@ -95,6 +95,7 @@ async function buildCuttingZip(
   entries: readonly CuttingZipEntry[],
   zipName: string,
   deps?: DownloadDeps,
+  materialsCount = entries.length,
 ): Promise<CuttingDownloadResult> {
   if (entries.length === 0) {
     throw new Error('No hay archivos de corte para descargar (plan sin materiales)');
@@ -111,7 +112,7 @@ async function buildCuttingZip(
   return {
     fileName: zipName,
     filesCount: entries.length,
-    materialsCount: entries.length,
+    materialsCount,
     zipped: true,
     kind: 'ptx',
   };
@@ -179,19 +180,49 @@ export async function downloadCuttingArtifactBundles(
   const [single] = bundles;
   if (bundles.length === 1 && single && mode !== 'by-material') {
     downloadOptimizerXlsx(single.artifact.bytes, single.artifact.fileName, deps);
+    const manifestFileName = `${single.artifact.fileName}.manifest.json`;
+    downloadOptimizerXlsx(
+      new TextEncoder().encode(single.manifestJson),
+      manifestFileName,
+      deps,
+    );
     return {
       fileName: single.artifact.fileName,
-      filesCount: 1,
+      filesCount: 2,
       materialsCount: 1,
       zipped: false,
       kind: single.artifact.kind,
     };
   }
   const kind = single?.artifact.kind ?? 'ptx';
+  const entries: CuttingZipEntry[] = [];
+  const usedArtifactNames = new Set<string>();
+  for (const bundle of bundles) {
+    const artifactName = uniqueZipEntryName(bundle.artifact.fileName, usedArtifactNames);
+    usedArtifactNames.add(artifactName);
+    const deliveredManifestJson = bundle.manifest.artifacts?.length
+      ? `${JSON.stringify({
+          ...bundle.manifest,
+          artifacts: bundle.manifest.artifacts.map((artifact) =>
+            artifact.artifactId === bundle.artifact.artifactId
+              ? { ...artifact, fileName: artifactName }
+              : artifact,
+          ),
+        }, null, 2)}\n`
+      : bundle.manifestJson;
+    entries.push(
+      { fileName: artifactName, bytes: bundle.artifact.bytes },
+      {
+        fileName: `${artifactName}.manifest.json`,
+        bytes: new TextEncoder().encode(deliveredManifestJson),
+      },
+    );
+  }
   const result = await buildCuttingZip(
-    bundles.map((b) => ({ fileName: b.artifact.fileName, bytes: b.artifact.bytes })),
+    entries,
     ptxZipFileName(projectName),
     deps,
+    bundles.length,
   );
   return kind === 'ptx' ? result : { ...result, kind };
 }

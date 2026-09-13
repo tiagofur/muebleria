@@ -26,3 +26,11 @@ export {
   projectEventToApi,
   projectEventFromApi,
 } from './apiMappers';
+export {
+  resolveHardwareAssetFileUrl,
+  UnsupportedHardwareAssetUrlError,
+} from './hardwareAssetUrl';
+export {
+  type HardwareAssetService,
+  createApiHardwareAssetService,
+} from './hardwareAssetService';

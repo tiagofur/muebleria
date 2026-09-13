@@ -19,6 +19,7 @@ export type {
   MaterialCategory,
   EdgeBand,
   Hardware,
+  HardwareVisualAssetBinding,
   User,
   UserRole,
   Customer,

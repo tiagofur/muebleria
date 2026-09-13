@@ -260,8 +260,12 @@ import {
   type JobCostingView,
   type SiteSurveyView,
 } from '@granete/storage';
-import { resolveManufacturingOutputTarget } from '@granete/excel';
+import {
+  evaluateSelectedCuttingOutputReadiness,
+  resolveManufacturingOutputTarget,
+} from '@granete/excel';
 import type {
+  CutPlan,
   MachineOutputSelection,
   MachineOutputSelectionRecord,
   ManufacturingOperation,
@@ -271,6 +275,11 @@ import { machineOutputBlockerMessageEs } from '@granete/domain';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
+import {
+  forCurrentMachineOutputScope,
+  isCurrentMachineOutputRequest,
+  type CuttingOutputSelectionState,
+} from './exports/cuttingOutputAuthority';
 import { buildStockCatalog } from './derivations/stockCatalog';
 import { usePurchasingDerivations } from './derivations/usePurchasingDerivations';
 import { useQuoteDerivations } from './derivations/useQuoteDerivations';
@@ -610,6 +619,8 @@ export function AppContent({
     }
   }, [workspaceSeq]);
 
+  const sessionScope = useWorkspaceStore((st) => st.sessionScope);
+
   const authUser = useMemo(
     () => (session === 'auth' ? getAuthUser() : null),
     [session, getAuthUser, authUserSeq],
@@ -619,50 +630,112 @@ export function AppContent({
     () => (session === 'auth' ? getAuthToken() : null),
     [session, getAuthToken, authUserSeq],
   );
-  // #591 / WEB-MFG-2 — machine output selection (read model + save).
-  // A failed GET never hides the section silently: `machineOutputLoadError`
-  // keeps it visible with an explicit error + retry.
-  const [machineOutputReadModel, setMachineOutputReadModel] = useState<
-    Awaited<ReturnType<APIWorkspaceRepository['getMachineOutputSelections']>> | null
-  >(null);
-  const [machineOutputLoadError, setMachineOutputLoadError] = useState<string | null>(null);
+  const machineOutputScopeKey = useMemo(
+    () =>
+      session === 'guest'
+        ? 'guest'
+        : sessionScope
+          ? JSON.stringify(sessionScopeKey(sessionScope))
+          : null,
+    [session, sessionScope],
+  );
+  // #691 — preserve request truth. A successful empty response is the ONLY
+  // state that can authorize the historical legacy PTX path.
+  const [machineOutputRequestState, setMachineOutputRequestState] = useState<
+    | { readonly status: 'loading'; readonly scopeKey: string | null }
+    | { readonly status: 'error'; readonly scopeKey: string; readonly error: string }
+    | {
+        readonly status: 'loaded';
+        readonly scopeKey: string;
+        readonly model:
+          | Awaited<ReturnType<APIWorkspaceRepository['getMachineOutputSelections']>>
+          | null;
+      }
+  >({ status: 'loading', scopeKey: null });
   const [machineOutputReloadKey, setMachineOutputReloadKey] = useState(0);
   useEffect(() => {
-    if (!authToken) {
-      setMachineOutputReadModel(null);
-      setMachineOutputLoadError(null);
+    if (session === 'guest') {
+      setMachineOutputRequestState({ status: 'loaded', scopeKey: 'guest', model: null });
       return;
     }
+    if (!authToken || !machineOutputScopeKey) {
+      setMachineOutputRequestState({ status: 'loading', scopeKey: machineOutputScopeKey });
+      return;
+    }
+    const requestedScopeKey = machineOutputScopeKey;
     let cancelled = false;
     const repository = getRepository();
     if (typeof repository.getMachineOutputSelections !== 'function') {
-      setMachineOutputReadModel(null);
-      setMachineOutputLoadError(null);
+      setMachineOutputRequestState({
+        status: 'error',
+        scopeKey: requestedScopeKey,
+        error: 'La configuración de salida de máquina requiere modo servidor.',
+      });
       return;
     }
+    setMachineOutputRequestState({ status: 'loading', scopeKey: requestedScopeKey });
+    const requestIsCurrent = (): boolean => {
+      if (cancelled) return false;
+      const current = useWorkspaceStore.getState();
+      const currentScope = current.sessionScope;
+      return Boolean(
+        current.session === 'auth' &&
+        currentScope !== null &&
+        isCurrentMachineOutputRequest(
+          requestedScopeKey,
+          JSON.stringify(sessionScopeKey(currentScope)),
+        )
+      );
+    };
     repository
       .getMachineOutputSelections()
       .then((model) => {
-        if (!cancelled) {
-          setMachineOutputReadModel(model);
-          setMachineOutputLoadError(null);
+        if (requestIsCurrent()) {
+          setMachineOutputRequestState({
+            status: 'loaded',
+            scopeKey: requestedScopeKey,
+            model,
+          });
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setMachineOutputReadModel(null);
-          setMachineOutputLoadError(
-            'No se pudo cargar la configuración de salida de máquina. Verificá tu conexión o permisos y reintentá.',
-          );
+        if (requestIsCurrent()) {
+          setMachineOutputRequestState({
+            status: 'error',
+            scopeKey: requestedScopeKey,
+            error:
+              'No se pudo cargar la configuración de salida de máquina. Verificá tu conexión o permisos y reintentá.',
+          });
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [authToken, getRepository, authUserSeq, machineOutputReloadKey]);
+  }, [
+    session,
+    authToken,
+    getRepository,
+    authUserSeq,
+    machineOutputReloadKey,
+    machineOutputScopeKey,
+  ]);
   const refreshMachineOutput = useCallback(() => {
     setMachineOutputReloadKey((key) => key + 1);
   }, []);
+  // Scope mismatch is loading immediately during render. Waiting for the
+  // effect cleanup would leave one render where org A could govern org B.
+  const currentMachineOutputRequestState =
+    machineOutputRequestState.scopeKey === machineOutputScopeKey
+      ? machineOutputRequestState
+      : ({ status: 'loading', scopeKey: machineOutputScopeKey } as const);
+  const machineOutputReadModel =
+    currentMachineOutputRequestState.status === 'loaded'
+      ? currentMachineOutputRequestState.model
+      : null;
+  const machineOutputLoadError =
+    currentMachineOutputRequestState.status === 'error'
+      ? currentMachineOutputRequestState.error
+      : null;
   const machineOutputSelections = useMemo(() => {
     const map: Partial<
       Record<'cutting' | 'machining', MachineOutputSelectionRecord | undefined>
@@ -685,29 +758,155 @@ export function AppContent({
     }
     return map;
   }, [machineOutputSelections]);
-  const machineOutputCuttingSelection =
-    machineOutputSelections.cutting?.selection ?? null;
+  const cuttingOutputSelectionState = useMemo<CuttingOutputSelectionState>(() => {
+    let state: CuttingOutputSelectionState;
+    if (currentMachineOutputRequestState.status === 'loading') {
+      state = {
+        status: 'loading',
+        scopeKey: currentMachineOutputRequestState.scopeKey,
+      };
+    } else if (currentMachineOutputRequestState.status === 'error') {
+      state = {
+        status: 'error',
+        scopeKey: currentMachineOutputRequestState.scopeKey,
+        error: currentMachineOutputRequestState.error,
+      };
+    } else {
+      const record = machineOutputSelections.cutting;
+      const resolved = machineOutputResolved.cutting;
+      if (!record) {
+        state = { status: 'empty', scopeKey: currentMachineOutputRequestState.scopeKey };
+      } else if (
+        resolved?.status === 'CONFIGURED' &&
+        resolved.readiness.ready
+      ) {
+        state = {
+          status: 'configured',
+          scopeKey: currentMachineOutputRequestState.scopeKey,
+          selection: record.selection,
+        };
+      } else {
+        state = {
+          status: 'blocked',
+          scopeKey: currentMachineOutputRequestState.scopeKey,
+          selection: record.selection,
+          reason:
+            resolved?.status === 'CONFIGURED'
+              ? machineOutputBlockerMessageEs(resolved.readiness.reasons)
+              : 'La selección de salida de corte no coincide con el catálogo vigente.',
+        };
+      }
+    }
+    return forCurrentMachineOutputScope(state, machineOutputScopeKey);
+  }, [
+    currentMachineOutputRequestState,
+    machineOutputSelections,
+    machineOutputResolved,
+    machineOutputScopeKey,
+  ]);
   // Optimización: display summary of the #591 cutting target. Everything is
   // derived from the authoritative resolver + catalog — the panel only
   // presents it and never infers compatibility.
   const cuttingOutputTarget = useMemo<CuttingOutputTargetView | null>(() => {
+    if (cuttingOutputSelectionState.status === 'empty') return null;
+    if (cuttingOutputSelectionState.status === 'loading') {
+      return {
+        status: 'loading',
+        machineLabel: 'Salida de máquina',
+        formatLabel: 'PTX',
+        profileLabel: 'Cargando configuración…',
+        ready: false,
+        blockerMessage: 'Esperá a que termine de cargar la configuración.',
+      };
+    }
+    if (cuttingOutputSelectionState.status === 'error') {
+      return {
+        status: 'error',
+        machineLabel: 'Salida de máquina',
+        formatLabel: 'PTX',
+        profileLabel: 'Configuración no disponible',
+        ready: false,
+        blockerMessage: cuttingOutputSelectionState.error,
+      };
+    }
     const resolved = machineOutputResolved.cutting;
-    if (!resolved || resolved.status !== 'CONFIGURED') return null;
+    if (!resolved || resolved.status !== 'CONFIGURED') {
+      return {
+        status: 'configured-blocked',
+        machineLabel: 'Salida de máquina',
+        formatLabel: 'PTX',
+        profileLabel: 'Configuración bloqueada',
+        ready: false,
+        blockerMessage:
+          cuttingOutputSelectionState.status === 'blocked'
+            ? cuttingOutputSelectionState.reason
+            : 'La salida configurada no está disponible.',
+      };
+    }
     const profile = machineOutputReadModel?.catalog?.outputProfiles.find(
       (p) =>
         p.outputCompatibilityProfileId ===
         resolved.selection.outputCompatibilityProfileId,
     );
     return {
+      status:
+        cuttingOutputSelectionState.status === 'blocked'
+          ? 'stale'
+          : 'configured-ready',
       machineLabel: resolved.machineLabel,
       formatLabel: (profile?.formatFamily ?? 'ptx').toUpperCase(),
       profileLabel: resolved.profileLabel,
-      ready: resolved.readiness.ready,
-      blockerMessage: machineOutputBlockerMessageEs(
-        resolved.readiness.reasons,
-      ),
+      ready: cuttingOutputSelectionState.status === 'configured',
+      blockerMessage:
+        cuttingOutputSelectionState.status === 'blocked'
+          ? cuttingOutputSelectionState.reason
+          : '',
+      blockerCode:
+        resolved.readiness.reasons[0]?.code,
+      recoveryHint:
+        cuttingOutputSelectionState.status === 'blocked'
+          ? 'Volvé a seleccionar la versión vigente en Ajustes → Ingeniería.'
+          : undefined,
     };
-  }, [machineOutputResolved, machineOutputReadModel]);
+  }, [cuttingOutputSelectionState, machineOutputResolved, machineOutputReadModel]);
+
+  const resolveCuttingOutputTargetForPlan = useCallback(
+    (cutPlan: CutPlan): CuttingOutputTargetView | null => {
+      if (!cuttingOutputTarget || cuttingOutputSelectionState.status !== 'configured') {
+        return cuttingOutputTarget;
+      }
+      const evaluated = evaluateSelectedCuttingOutputReadiness(
+        cutPlan,
+        cuttingOutputSelectionState.selection,
+      );
+      if (evaluated.status !== 'CONFIGURED') return cuttingOutputTarget;
+      const exactProfile = machineOutputReadModel?.catalog?.outputProfiles.find(
+        (profile) =>
+          profile.outputCompatibilityProfileId ===
+            evaluated.selection.outputCompatibilityProfileId &&
+          profile.revisionId === evaluated.selection.outputCompatibilityProfileRevisionId &&
+          profile.digest === evaluated.selection.outputCompatibilityProfileDigest,
+      );
+      const reason = evaluated.readiness.reasons[0];
+      return {
+        machineLabel: evaluated.machineLabel,
+        formatLabel: (exactProfile?.formatFamily ?? 'ptx').toUpperCase(),
+        profileLabel: evaluated.profileLabel,
+        status: evaluated.readiness.ready ? 'configured-ready' : 'configured-blocked',
+        ready: evaluated.readiness.ready,
+        blockerMessage: machineOutputBlockerMessageEs(evaluated.readiness.reasons),
+        blockerCode: reason?.code,
+        recoveryHint: reason?.code.startsWith('ptx_compile.')
+          ? 'Corregí o regenerá el plan de corte y volvé a verificarlo.'
+          : 'Revisá Ajustes → Ingeniería antes de descargar.',
+      };
+    },
+    [
+      cuttingOutputSelectionState,
+      cuttingOutputTarget,
+      machineOutputReadModel,
+    ],
+  );
   const saveMachineOutputSelection = useCallback(
     async (
       operation: ManufacturingOperation,
@@ -720,10 +919,22 @@ export function AppContent({
       }
       // Server-authoritative: after saving, refetch the whole read model —
       // never fabricate labels/blockers locally.
+      const requestedScopeKey = machineOutputScopeKey;
       await repository.saveMachineOutputSelection(operation, selection, expectedVersion);
-      refreshMachineOutput();
+      const currentScope = useWorkspaceStore.getState().sessionScope;
+      const currentScopeKey = currentScope
+        ? JSON.stringify(sessionScopeKey(currentScope))
+        : session === 'guest'
+          ? 'guest'
+          : null;
+      if (
+        requestedScopeKey !== null &&
+        isCurrentMachineOutputRequest(requestedScopeKey, currentScopeKey)
+      ) {
+        refreshMachineOutput();
+      }
     },
-    [getRepository, refreshMachineOutput],
+    [getRepository, refreshMachineOutput, machineOutputScopeKey, session],
   );
   // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
   const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
@@ -743,7 +954,6 @@ export function AppContent({
   const organizationSwitchRecoveryAvailable = useWorkspaceStore((st) => st.orgSelectionRecoveryAvailable);
   const selectOrg = useWorkspaceStore((st) => st.selectOrg);
   const refreshOrganizationChoices = useWorkspaceStore((st) => st.refreshOrganizationChoices);
-  const sessionScope = useWorkspaceStore((st) => st.sessionScope);
   const hydrateSessionInfo = useWorkspaceStore((st) => st.hydrateSessionInfo);
   useEffect(() => {
     if (session === 'auth') void hydrateSessionInfo();
@@ -2861,7 +3071,7 @@ export function AppContent({
     session,
     actorRole,
     workspaceSettings: workspace?.settings,
-    machineOutputCuttingSelection,
+    cuttingOutputSelectionState,
     showCosts,
     toast,
     stampEngineeringGeneration,
@@ -3050,6 +3260,7 @@ export function AppContent({
       onRetry: refreshMachineOutput,
     },
     cuttingOutputTarget,
+    resolveCuttingOutputTarget: resolveCuttingOutputTargetForPlan,
     addProjectItem,
     agregados,
     allowedNavIds,

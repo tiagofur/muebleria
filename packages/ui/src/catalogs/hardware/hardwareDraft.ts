@@ -3,7 +3,7 @@
  * screen and its form modal.
  */
 
-import type { Hardware, HardwareMachiningProfile, HardwareUnit } from '@granete/domain';
+import type { Hardware, HardwareMachiningProfile, HardwareUnit, HardwareVisualAssetBinding } from '@granete/domain';
 
 export const UNIT_LABELS: Record<HardwareUnit, string> = {
   piece: 'Pieza',
@@ -42,6 +42,11 @@ export type HardwareDraft = {
    * validateMachiningProfile on submit). Null = cost-only hardware.
    */
   machining: HardwareMachiningProfile | null;
+  /**
+   * #667 M1/M2: Exact versioned 3D asset revision bound to this hardware.
+   * Null = no exact model associated (generic procedural preview).
+   */
+  visualAsset: HardwareVisualAssetBinding | null;
 };
 
 export const emptyPartFinishes = (): { body: string; base: string; grip: string } => ({
@@ -68,6 +73,7 @@ export const emptyDraft = (): HardwareDraft => ({
   previewClearcoat: '',
   partFinishes: emptyPartFinishes(),
   machining: null,
+  visualAsset: null,
 });
 
 export function toDraft(item: Hardware): HardwareDraft {
@@ -94,5 +100,6 @@ export function toDraft(item: Hardware): HardwareDraft {
       grip: item.partFinishes?.grip ?? '',
     },
     machining: item.machining ?? null,
+    visualAsset: item.visualAsset ? { ...item.visualAsset } : null,
   };
 }

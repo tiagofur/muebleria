@@ -1639,28 +1639,30 @@ type ProjectQuoteRequoteResult struct {
 }
 
 type MachineOutputSelection struct {
-	Operation                   string `json:"operation"`
-	MachineProfileId            string `json:"machineProfileId"`
-	MachineProfileRevisionId    string `json:"machineProfileRevisionId"`
-	OutputProfileId             string `json:"outputProfileId"`
-	OutputProfileRevisionId     string `json:"outputProfileRevisionId"`
-	AdapterId                   string `json:"adapterId"`
-	AdapterVersion              string `json:"adapterVersion"`
-	AdapterImplementationDigest string `json:"adapterImplementationDigest"`
+	Operation                   string  `json:"operation"`
+	MachineProfileId            string  `json:"machineProfileId"`
+	MachineProfileRevisionId    string  `json:"machineProfileRevisionId"`
+	OutputProfileId             string  `json:"outputProfileId"`
+	OutputProfileRevisionId     string  `json:"outputProfileRevisionId"`
+	OutputProfileDigest         *string `json:"outputProfileDigest"`
+	AdapterId                   string  `json:"adapterId"`
+	AdapterVersion              string  `json:"adapterVersion"`
+	AdapterImplementationDigest string  `json:"adapterImplementationDigest"`
 }
 
 type MachineOutputSelectionRecord struct {
-	Operation                   string `json:"operation"`
-	MachineProfileId            string `json:"machineProfileId"`
-	MachineProfileRevisionId    string `json:"machineProfileRevisionId"`
-	OutputProfileId             string `json:"outputProfileId"`
-	OutputProfileRevisionId     string `json:"outputProfileRevisionId"`
-	AdapterId                   string `json:"adapterId"`
-	AdapterVersion              string `json:"adapterVersion"`
-	AdapterImplementationDigest string `json:"adapterImplementationDigest"`
-	Version                     int64  `json:"version"`
-	UpdatedAt                   string `json:"updatedAt"`
-	UpdatedBy                   string `json:"updatedBy"`
+	Operation                   string  `json:"operation"`
+	MachineProfileId            string  `json:"machineProfileId"`
+	MachineProfileRevisionId    string  `json:"machineProfileRevisionId"`
+	OutputProfileId             string  `json:"outputProfileId"`
+	OutputProfileRevisionId     string  `json:"outputProfileRevisionId"`
+	OutputProfileDigest         *string `json:"outputProfileDigest"`
+	AdapterId                   string  `json:"adapterId"`
+	AdapterVersion              string  `json:"adapterVersion"`
+	AdapterImplementationDigest string  `json:"adapterImplementationDigest"`
+	Version                     int64   `json:"version"`
+	UpdatedAt                   string  `json:"updatedAt"`
+	UpdatedBy                   string  `json:"updatedBy"`
 }
 
 type MachineOutputBlocker struct {

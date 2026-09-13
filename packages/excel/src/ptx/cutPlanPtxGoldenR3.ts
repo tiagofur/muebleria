@@ -354,8 +354,11 @@ export const GOLDEN_R3_MAPPING = {
     "B-2-s0",
     "C-3-s0"
   ],
-  "offcutRegionIdByOffcutIndex": [
-    "place-3-1:rest"
+  "offcutRegionRefByOffcutIndex": [
+    {
+      "sheetIndex": 0,
+      "regionId": "place-3-1:rest"
+    }
   ],
   "sheetIndexByPatternIndex": [
     0

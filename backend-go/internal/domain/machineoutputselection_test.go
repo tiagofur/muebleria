@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+func machineOutputString(value string) *string { return &value }
+
 func TestMachineOutputCatalogParity(t *testing.T) {
 	raw, err := os.ReadFile("../../../contracts/machineOutputCatalog.contract.json")
 	if err != nil {
@@ -32,6 +34,7 @@ func validCuttingSelection() MachineOutputSelection {
 		MachineProfileRevisionID:    "r1",
 		OutputProfileID:             "ptx-generic",
 		OutputProfileRevisionID:     "r1",
+		OutputProfileDigest:         machineOutputString("d05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595"),
 		AdapterID:                   "granete-ptx",
 		AdapterVersion:              "1.2.0",
 		AdapterImplementationDigest: "954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236",

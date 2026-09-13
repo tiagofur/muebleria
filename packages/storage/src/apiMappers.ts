@@ -4133,6 +4133,10 @@ export function machineOutputSelectionRecordFromApi(raw: unknown): MachineOutput
       machineProfileRevisionId: moReqString(r.machineProfileRevisionId, 'machineProfileRevisionId'),
       outputCompatibilityProfileId: moReqString(r.outputProfileId, 'outputProfileId'),
       outputCompatibilityProfileRevisionId: moReqString(r.outputProfileRevisionId, 'outputProfileRevisionId'),
+      outputCompatibilityProfileDigest:
+        r.outputProfileDigest === null || r.outputProfileDigest === undefined
+          ? null
+          : moReqString(r.outputProfileDigest, 'outputProfileDigest'),
       postprocessorAdapterId: moReqString(r.adapterId, 'adapterId'),
       postprocessorAdapterVersion: moReqString(r.adapterVersion, 'adapterVersion'),
       postprocessorImplementationDigest: moReqString(r.adapterImplementationDigest, 'adapterImplementationDigest'),
@@ -4277,6 +4281,7 @@ export function machineOutputSelectionToApi(
     machineProfileRevisionId: selection.machineProfileRevisionId,
     outputProfileId: selection.outputCompatibilityProfileId,
     outputProfileRevisionId: selection.outputCompatibilityProfileRevisionId,
+    outputProfileDigest: selection.outputCompatibilityProfileDigest,
     adapterId: selection.postprocessorAdapterId,
     adapterVersion: selection.postprocessorAdapterVersion,
     adapterImplementationDigest: selection.postprocessorImplementationDigest,

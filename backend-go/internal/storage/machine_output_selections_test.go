@@ -18,14 +18,71 @@ const machineOutputRLSRole = "machine_output_rls_test"
 
 func machineOutputValidSelection() domain.MachineOutputSelection {
 	return domain.MachineOutputSelection{
-		Operation:                   domain.OperationCutting,
-		MachineProfileID:            "client-a-machine-b-hpp250",
-		MachineProfileRevisionID:    "r1",
-		OutputProfileID:             "ptx-generic",
-		OutputProfileRevisionID:     "r1",
+		Operation:                domain.OperationCutting,
+		MachineProfileID:         "client-a-machine-b-hpp250",
+		MachineProfileRevisionID: "r1",
+		OutputProfileID:          "ptx-generic",
+		OutputProfileRevisionID:  "r1",
+		OutputProfileDigest: func() *string {
+			value := "d05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595"
+			return &value
+		}(),
 		AdapterID:                   "granete-ptx",
 		AdapterVersion:              "1.0.0",
 		AdapterImplementationDigest: "39df10ba24528b5d402a940ac2e6f9fc20b735011468013090cfc78f88511a28",
+	}
+}
+
+func TestMachineOutputProfileDigestMigrationFreshAndUpgrade(t *testing.T) {
+	const orgID = "00000000-0000-0000-0000-000000000692"
+	ctx := context.Background()
+
+	fresh := multiOrgFreshDB(t)
+	identityApplyThrough(t, fresh, 132)
+	var nullable string
+	if err := fresh.QueryRow(ctx, `
+		SELECT is_nullable FROM information_schema.columns
+		WHERE table_name='machine_output_selections' AND column_name='output_profile_digest'
+	`).Scan(&nullable); err != nil || nullable != "YES" {
+		t.Fatalf("fresh digest column nullable=%q err=%v", nullable, err)
+	}
+
+	upgrade := multiOrgFreshDB(t)
+	identityApplyThrough(t, upgrade, 131)
+	if _, err := upgrade.Exec(ctx, `
+		INSERT INTO organizations (id, name, slug, type)
+		VALUES ($1, 'Issue 692 migration', 'issue-692-migration', 'factory')
+	`, orgID); err != nil {
+		t.Fatalf("seed pre-132 organization: %v", err)
+	}
+	if _, err := upgrade.Exec(ctx, `
+		INSERT INTO machine_output_selections (
+			organization_id, operation, machine_profile_id, machine_profile_revision_id,
+			output_profile_id, output_profile_revision_id,
+			adapter_id, adapter_version, adapter_implementation_digest
+		) VALUES ($1, 'cutting', 'machine', 'r1', 'ptx-cadmatic-4', 'r2', 'adapter', '1.1.0', 'historical')
+	`, orgID); err != nil {
+		t.Fatalf("seed pre-132 historical selection: %v", err)
+	}
+	contents, err := os.ReadFile("../../db/migration/000132_machine_output_profile_digest.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := upgrade.Exec(ctx, string(contents)); err != nil {
+		t.Fatalf("upgrade apply 000132: %v", err)
+	}
+	var digest *string
+	if err := upgrade.QueryRow(ctx, `
+		SELECT output_profile_digest FROM machine_output_selections
+		WHERE organization_id=$1 AND operation='cutting'
+	`, orgID).Scan(&digest); err != nil || digest != nil {
+		t.Fatalf("historical digest=%v err=%v, want NULL", digest, err)
+	}
+	if _, err := upgrade.Exec(ctx, `
+		UPDATE machine_output_selections SET output_profile_digest='not-a-digest'
+		WHERE organization_id=$1 AND operation='cutting'
+	`, orgID); err == nil {
+		t.Fatal("malformed profile digest must fail the migration constraint")
 	}
 }
 
@@ -81,6 +138,9 @@ func TestMachineOutputSelections_VersionConflictAndList(t *testing.T) {
 	}
 	if len(records) != 1 || records[0].Version != 2 || records[0].OutputProfileID != "ptx-generic" {
 		t.Fatalf("records = %+v", records)
+	}
+	if records[0].OutputProfileDigest == nil || *records[0].OutputProfileDigest != *sel.OutputProfileDigest {
+		t.Fatalf("profile digest was not preserved: %+v", records[0].OutputProfileDigest)
 	}
 
 	// Absence of configuration for a different operation is NO_OUTPUT_CONFIGURED.

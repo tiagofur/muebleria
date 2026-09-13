@@ -20,6 +20,7 @@ func machineOutputPutBody(operation string, sel domain.MachineOutputSelection, e
 			"machineProfileRevisionId":    sel.MachineProfileRevisionID,
 			"outputProfileId":             sel.OutputProfileID,
 			"outputProfileRevisionId":     sel.OutputProfileRevisionID,
+			"outputProfileDigest":         sel.OutputProfileDigest,
 			"adapterId":                   sel.AdapterID,
 			"adapterVersion":              sel.AdapterVersion,
 			"adapterImplementationDigest": sel.AdapterImplementationDigest,
@@ -32,11 +33,15 @@ func machineOutputPutBody(operation string, sel domain.MachineOutputSelection, e
 
 func validCuttingSelectionAPI() domain.MachineOutputSelection {
 	return domain.MachineOutputSelection{
-		Operation:                   domain.OperationCutting,
-		MachineProfileID:            "client-a-machine-b-hpp250",
-		MachineProfileRevisionID:    "r1",
-		OutputProfileID:             "ptx-generic",
-		OutputProfileRevisionID:     "r1",
+		Operation:                domain.OperationCutting,
+		MachineProfileID:         "client-a-machine-b-hpp250",
+		MachineProfileRevisionID: "r1",
+		OutputProfileID:          "ptx-generic",
+		OutputProfileRevisionID:  "r1",
+		OutputProfileDigest: func() *string {
+			value := "d05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595"
+			return &value
+		}(),
 		AdapterID:                   "granete-ptx",
 		AdapterVersion:              "1.2.0",
 		AdapterImplementationDigest: "954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236",
@@ -66,6 +71,9 @@ func TestMachineOutputSelectionRoundTrip(t *testing.T) {
 	}
 	if record.Version != 1 || record.OutputProfileID != "ptx-generic" {
 		t.Fatalf("unexpected record: %+v", record)
+	}
+	if record.OutputProfileDigest == nil || *record.OutputProfileDigest != "d05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595" {
+		t.Fatalf("profile digest was not preserved: %+v", record.OutputProfileDigest)
 	}
 
 	// GET read model resolves labels and no blockers for an implemented serializer.
@@ -102,6 +110,10 @@ func TestMachineOutputSelectionRejectsInvalidTuple(t *testing.T) {
 	srv := &Server{Store: &stubStore{}}
 	sel := validCuttingSelectionAPI()
 	sel.OutputProfileID = "saw-homag" // family mismatch with granete-ptx
+	sel.OutputProfileDigest = func() *string {
+		value := "2cccceea22fbba8ec7c7df948473b8cb713223f0de1c3d07216e5614c7c3e112"
+		return &value
+	}()
 
 	rr := putMachineOutputSelection(t, srv, "cutting", sel, 0, string(domain.RoleAdmin))
 	if rr.Code != http.StatusBadRequest {
@@ -163,11 +175,15 @@ func TestMachineOutputSelectionPermissionAndOperationMismatch(t *testing.T) {
 func TestMachineOutputSelectionSerializerNotImplementedSurfaced(t *testing.T) {
 	srv := &Server{Store: &stubStore{}}
 	sel := domain.MachineOutputSelection{
-		Operation:                   domain.OperationMachining,
-		MachineProfileID:            "client-a-machine-a-bhx050",
-		MachineProfileRevisionID:    "r1",
-		OutputProfileID:             "mpr-woodwop",
-		OutputProfileRevisionID:     "r1",
+		Operation:                domain.OperationMachining,
+		MachineProfileID:         "client-a-machine-a-bhx050",
+		MachineProfileRevisionID: "r1",
+		OutputProfileID:          "mpr-woodwop",
+		OutputProfileRevisionID:  "r1",
+		OutputProfileDigest: func() *string {
+			value := "28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1"
+			return &value
+		}(),
 		AdapterID:                   "woodwop-mpr",
 		AdapterVersion:              "0.1.0",
 		AdapterImplementationDigest: "4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782",
@@ -182,5 +198,37 @@ func TestMachineOutputSelectionSerializerNotImplementedSurfaced(t *testing.T) {
 	srv.HandleListMachineOutputSelections(getRR, get)
 	if !strings.Contains(getRR.Body.String(), "SERIALIZER_NOT_IMPLEMENTED") {
 		t.Fatalf("read model must surface SERIALIZER_NOT_IMPLEMENTED, got %s", getRR.Body.String())
+	}
+}
+
+func TestMachineOutputSelectionHistoricalProfileStaysStale(t *testing.T) {
+	srv := &Server{Store: &stubStore{machineOutputSelections: []domain.MachineOutputSelectionRecord{{
+		MachineOutputSelection: domain.MachineOutputSelection{
+			Operation:                   domain.OperationCutting,
+			MachineProfileID:            "client-a-machine-b-hpp250",
+			MachineProfileRevisionID:    "r1",
+			OutputProfileID:             "ptx-cadmatic-4",
+			OutputProfileRevisionID:     "r2",
+			OutputProfileDigest:         nil,
+			AdapterID:                   "granete-ptx",
+			AdapterVersion:              "1.1.0",
+			AdapterImplementationDigest: "historical",
+		},
+		Version: 2, UpdatedAt: "2026-09-01T00:00:00Z", UpdatedBy: "owner@example.com",
+	}}}}
+	get := withClaims(httptest.NewRequest(http.MethodGet, "/api/machine-output-selections", nil), "admin", string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+	srv.HandleListMachineOutputSelections(rr, get)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"profileLabel":"ptx-cadmatic-4@r2"`) ||
+		!strings.Contains(body, `"supportStatus":"NOT_TESTED"`) ||
+		!strings.Contains(body, `"code":"PROFILE_DIGEST_MISMATCH"`) {
+		t.Fatalf("historical selection was reinterpreted as current: %s", body)
+	}
+	if strings.Contains(body, `"profileLabel":"ptx-cadmatic-4@r3"`) {
+		t.Fatalf("historical r2 must not inherit r3 label: %s", body)
 	}
 }

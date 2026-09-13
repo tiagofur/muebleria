@@ -19,6 +19,8 @@ export interface MachineOutputSelection {
   readonly machineProfileRevisionId: string;
   readonly outputCompatibilityProfileId: string;
   readonly outputCompatibilityProfileRevisionId: string;
+  /** Exact profile data digest. Null exists only for pre-#692 historical rows. */
+  readonly outputCompatibilityProfileDigest: string | null;
   readonly postprocessorAdapterId: string;
   readonly postprocessorAdapterVersion: string;
   readonly postprocessorImplementationDigest: string;
@@ -62,6 +64,20 @@ export function machineOutputBlockerMessageEs(
   if (reasons.length === 0) return '';
   const detail = reasons
     .map((reason) => {
+      const ptxMessages: Readonly<Record<string, string>> = {
+        'ptx_compile.missing_cut_program': 'el plan no tiene un programa de corte ejecutable; regenerá el plan',
+        'ptx_compile.phase_unsupported': 'la secuencia de corte usa una fase que CADmatic 4 r3 todavía no representa; reorganizá o regenerá el plan',
+        'ptx_compile.trim_unsupported': 'el plan usa refilados no admitidos por este perfil',
+        'ptx_compile.trim_frame_unsupported': 'la orientación o el marco de refilado no está soportado por CADmatic 4 r3',
+        'ptx_compile.trim_structure_invalid': 'la secuencia de refilados no forma un marco CADmatic 4 válido; regenerá el plan o revisá los márgenes',
+        'ptx_compile.trim_mapping_ambiguous': 'las hojas del mismo material requieren refilados distintos; separá el material o unificá los márgenes',
+        'ptx_compile.trim_geometry_mismatch': 'la geometría ejecutada no coincide con los refilados configurados; regenerá el plan',
+        'ptx_compile.offcut_release_92_unsupported': 'el plan requiere liberar un retazo fuera del subconjunto FUNCTION 92 soportado',
+        'ptx_compile.offcut_release_duplicate': 'el plan intenta liberar dos veces el mismo retazo; regenerá el plan',
+      };
+      if (reason.code.startsWith('ptx_compile.')) {
+        return ptxMessages[reason.code] ?? reason.detail;
+      }
       switch (reason.code) {
         case 'SERIALIZER_NOT_IMPLEMENTED':
           return 'el serializador todavía no está implementado';

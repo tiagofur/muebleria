@@ -8,7 +8,11 @@ import {
 } from './exportCutPlanPtx';
 import { DEFAULT_CUT_PLAN_CONFIG, optimizeCutPlan } from '@granete/domain';
 import type { CutPlan, MachineOutputSelection, ProductionCutRow } from '@granete/domain';
-import { generateSelectedCuttingOutput, PTX_POSTPROCESSOR_ADAPTER } from '@granete/excel';
+import {
+  generateSelectedCuttingOutput,
+  PTX_CADMATIC_4_R3_PROFILE,
+  PTX_POSTPROCESSOR_ADAPTER,
+} from '@granete/excel';
 import type { MachineArtifactBundle } from '@granete/excel';
 import type { DownloadDeps } from './exportOptimizer';
 
@@ -308,6 +312,20 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r3, #661)', () => {
       expect(content.startsWith('HEADER,')).toBe(true);
       expect(content).not.toContain('[HEADER]');
       expect(content).toContain('GRANETE-PTX-CANDIDATE NOT_MACHINE_VALIDATED');
+      const manifest = JSON.parse(
+        await zip.file(`${name}.manifest.json`)!.async('string'),
+      ) as MachineArtifactBundle['manifest'];
+      const bytes = await zip.file(name)!.async('uint8array');
+      const actualHash = Array.from(
+        new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes).buffer)),
+      ).map((value) => value.toString(16).padStart(2, '0')).join('');
+      expect(manifest.artifacts[0]?.fileName).toBe(name);
+      expect(manifest.artifacts[0]?.sha256).toBe(actualHash);
+      expect(manifest.outputCompatibilityProfileDigest).toBe(
+        PTX_CADMATIC_4_R3_PROFILE.digest,
+      );
+      expect(manifest.delivery.mode).toBe('by-material');
+      expect(manifest.delivery.material?.code).toBeTruthy();
     }
     // Manifest exacto por material dentro del propio bundle.
     for (const bundle of bundles) {
@@ -325,10 +343,52 @@ function cad4Selection(): MachineOutputSelection {
     machineProfileRevisionId: 'r1',
     outputCompatibilityProfileId: 'ptx-cadmatic-4',
     outputCompatibilityProfileRevisionId: 'r3',
+    outputCompatibilityProfileDigest: PTX_CADMATIC_4_R3_PROFILE.digest,
     postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
     postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
     postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
   };
+}
+
+function buildCad4ReadyPlan(): CutPlan {
+  return optimizeCutPlan(
+    'cad4-direct-manifest',
+    [{
+      quantity: 1,
+      lengthMm: 450,
+      widthMm: 320,
+      description: 'Panel lab',
+      materialName: 'Lab Board 18',
+      materialCode: 'LAB18',
+      grain: 1,
+      L1: 0,
+      L2: 0,
+      W1: 0,
+      W2: 0,
+      partCode: 'P1',
+      partName: 'Panel lab',
+      moduleCode: 'M01',
+      thicknessMm: 18,
+    }],
+    [{
+      id: 'lab18',
+      code: 'LAB18',
+      name: 'Lab Board 18',
+      costPerM2: 10,
+      wastePercent: 10,
+      lengthMm: 1200,
+      widthMm: 700,
+      thicknessMm: 18,
+      grainDefault: true,
+      boardPrice: 8,
+      active: true,
+    }],
+    {
+      ...DEFAULT_CUT_PLAN_CONFIG,
+      sawKerfMm: 4,
+      trim: { topMm: 0, bottomMm: 0, leftMm: 0, rightMm: 0 },
+    },
+  );
 }
 
 function bundleFixture(fileName: string, marker: string): MachineArtifactBundle {
@@ -347,11 +407,12 @@ function bundleFixture(fileName: string, marker: string): MachineArtifactBundle 
 }
 
 function captureDeps() {
+  const downloads: string[] = [];
   const fakeAnchor: any = {
     href: '',
     download: '',
     rel: '',
-    click: vi.fn(),
+    click: vi.fn(() => downloads.push(fakeAnchor.download)),
   };
   const blobs: Blob[] = [];
   const deps: DownloadDeps = {
@@ -364,23 +425,56 @@ function captureDeps() {
     appendChild: vi.fn(),
     removeChild: vi.fn(),
   };
-  return { fakeAnchor, deps, blobs };
+  return { fakeAnchor, deps, blobs, downloads };
 }
 
 describe('downloadCuttingArtifactBundles (#591 machine output)', () => {
   it('un único bundle se descarga directo con su nombre de artefacto', async () => {
-    const { fakeAnchor, deps, blobs } = captureDeps();
+    const { fakeAnchor, deps, blobs, downloads } = captureDeps();
     const bundle = bundleFixture('corte-PRJ-1042-MEL_BLANCO_18.ptx', 'blanco');
 
     await downloadCuttingArtifactBundles([bundle], 'Cocina Moderna', deps);
 
-    expect(blobs).toHaveLength(1);
-    expect(fakeAnchor.download).toBe('corte-PRJ-1042-MEL_BLANCO_18.ptx');
-    expect(fakeAnchor.click).toHaveBeenCalledTimes(1);
+    expect(blobs).toHaveLength(2);
+    expect(downloads).toEqual([
+      'corte-PRJ-1042-MEL_BLANCO_18.ptx',
+      'corte-PRJ-1042-MEL_BLANCO_18.ptx.manifest.json',
+    ]);
+    expect(fakeAnchor.click).toHaveBeenCalledTimes(2);
     // Es el .ptx directo, no un zip.
     const text = new TextDecoder().decode(await blobs[0]!.arrayBuffer());
     expect(text).toContain('PTX-CONTENT blanco');
     expect(text.startsWith('PK')).toBe(false);
+    expect(await blobs[1]!.text()).toBe('{}\n');
+  });
+
+  it('descarga directa entrega manifest companion con hash de los bytes exactos', async () => {
+    const { deps, blobs, downloads } = captureDeps();
+    const bundles = await generateSelectedCuttingOutput(
+      buildCad4ReadyPlan(),
+      cad4Selection(),
+      'unified',
+    );
+
+    const result = await downloadCuttingArtifactBundles(
+      bundles,
+      'Cocina Moderna',
+      deps,
+      'unified',
+    );
+
+    expect(result.filesCount).toBe(2);
+    expect(downloads[1]).toBe(`${downloads[0]}.manifest.json`);
+    const bytes = new Uint8Array(await blobs[0]!.arrayBuffer());
+    const manifest = JSON.parse(await blobs[1]!.text()) as MachineArtifactBundle['manifest'];
+    const actualHash = Array.from(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes).buffer)),
+    ).map((value) => value.toString(16).padStart(2, '0')).join('');
+    expect(manifest.artifacts[0]?.fileName).toBe(downloads[0]);
+    expect(manifest.artifacts[0]?.sha256).toBe(actualHash);
+    expect(manifest.outputCompatibilityProfileDigest).toBe(
+      PTX_CADMATIC_4_R3_PROFILE.digest,
+    );
   });
 
   it('varios bundles por material se empaquetan TODOS en un zip (regresión: solo bajaba el primero)', async () => {
@@ -399,9 +493,11 @@ describe('downloadCuttingArtifactBundles (#591 machine output)', () => {
     const fileNames = Object.keys(zip.files);
     expect(fileNames).toContain('corte-PRJ-1042-MEL_BLANCO_18.ptx');
     expect(fileNames).toContain('corte-PRJ-1042-MEL_MOSCATO_18.ptx');
-    expect(fileNames).toHaveLength(2);
+    expect(fileNames).toHaveLength(4);
     expect(await zip.file('corte-PRJ-1042-MEL_BLANCO_18.ptx')!.async('string')).toContain('blanco');
     expect(await zip.file('corte-PRJ-1042-MEL_MOSCATO_18.ptx')!.async('string')).toContain('moscato');
+    expect(await zip.file('corte-PRJ-1042-MEL_BLANCO_18.ptx.manifest.json')!.async('string')).toBe('{}\n');
+    expect(await zip.file('corte-PRJ-1042-MEL_MOSCATO_18.ptx.manifest.json')!.async('string')).toBe('{}\n');
   });
 });
 
@@ -510,7 +606,12 @@ describe('robustez ZIP por material (hardening)', () => {
 
     expect(fakeAnchor.download).toBe('seccionadora-materiales-Cocina-Dup.zip');
     const zip = await JSZip.loadAsync(new Uint8Array(await blobs[0]!.arrayBuffer()));
-    expect(Object.keys(zip.files).sort()).toEqual(['corte-mdf-blanco-2.ptx', 'corte-mdf-blanco.ptx']);
+    expect(Object.keys(zip.files).sort()).toEqual([
+      'corte-mdf-blanco-2.ptx',
+      'corte-mdf-blanco-2.ptx.manifest.json',
+      'corte-mdf-blanco.ptx',
+      'corte-mdf-blanco.ptx.manifest.json',
+    ]);
     expect(await zip.file('corte-mdf-blanco.ptx')!.async('string')).toContain('PTX-CONTENT uno');
     expect(await zip.file('corte-mdf-blanco-2.ptx')!.async('string')).toContain('PTX-CONTENT dos');
   });

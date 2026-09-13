@@ -408,6 +408,7 @@ describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, m
         catalog={null}
         cutRows={[]}
         cuttingOutputTarget={{
+          status: 'configured-ready',
           machineLabel: 'HOLZMA (HOMAG) HPP 250',
           formatLabel: 'PTX',
           profileLabel: 'ptx-cadmatic-5@r1',
@@ -428,6 +429,7 @@ describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, m
         catalog={null}
         cutRows={[]}
         cuttingOutputTarget={{
+          status: 'stale',
           machineLabel: 'HOLZMA (HOMAG) HPP 250',
           formatLabel: 'PTX',
           profileLabel: 'ptx-cadmatic-4@r1',
@@ -443,6 +445,77 @@ describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, m
       (screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled,
     ).toBe(true);
   });
+
+  it('recalcula readiness cuando cambia el CutPlan activo antes de habilitar descarga', () => {
+    const resolveCuttingOutputTarget = vi.fn(() => ({
+      status: 'configured-blocked' as const,
+      machineLabel: 'HOLZMA (HOMAG) HPP 250',
+      formatLabel: 'PTX',
+      profileLabel: 'ptx-cadmatic-4@r3',
+      ready: false,
+      blockerMessage: 'No se puede generar: el plan no tiene programa de corte.',
+      blockerCode: 'ptx_compile.missing_cut_program',
+    }));
+    const activePlan = cutPlanFixture('saw-guillotine');
+    render(
+      <ProductionOrderOptimizationPanel
+        project={{ ...project(), cutPlan: activePlan }}
+        catalog={null}
+        cutRows={[]}
+        resolveCuttingOutputTarget={resolveCuttingOutputTarget}
+        onExportCutPlanPtx={vi.fn()}
+      />,
+    );
+
+    expect(resolveCuttingOutputTarget).toHaveBeenCalledWith(activePlan);
+    expect(screen.getByTestId('prod-opt-cutting-output-blocked').textContent)
+      .toContain('no tiene programa de corte');
+    expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled)
+      .toBe(true);
+  });
+
+  it.each([
+    {
+      status: 'loading' as const,
+      profileLabel: 'Cargando configuración…',
+      blockerMessage: 'Esperá a que termine de cargar la configuración.',
+    },
+    {
+      status: 'error' as const,
+      profileLabel: 'Configuración no disponible',
+      blockerMessage: 'No se pudo cargar la configuración de salida de máquina.',
+    },
+  ])(
+    '$profileLabel bloquea la descarga y presenta la causa',
+    ({ status, profileLabel, blockerMessage }) => {
+      render(
+        <ProductionOrderOptimizationPanel
+          project={{ ...project(), cutPlan: cutPlanFixture('saw-guillotine') }}
+          catalog={null}
+          cutRows={[]}
+          cuttingOutputTarget={{
+            status,
+            machineLabel: 'Salida de máquina',
+            formatLabel: 'PTX',
+            profileLabel,
+            ready: false,
+            blockerMessage,
+          }}
+          onExportCutPlanPtx={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId('prod-opt-cutting-output').textContent).toContain(
+        profileLabel,
+      );
+      expect(screen.getByTestId('prod-opt-cutting-output-blocked').textContent).toContain(
+        blockerMessage,
+      );
+      expect(
+        (screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled,
+      ).toBe(true);
+    },
+  );
 
   it('modo por material: preview cuenta materiales → archivos dentro de un ZIP y los lista', () => {
     render(
