@@ -2,18 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { AdapterSerializationBlocked } from '@granete/domain';
 import { buildFixtureCuttingJob } from './machineOutputFixtures';
 import {
+  PTX_ADAPTER_INDUSTRIAL_CONTRACT,
   PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR,
   PTX_POSTPROCESSOR_ADAPTER,
+  resolvePtxCompilerRoute,
 } from './ptxAdapter';
 import {
   PTX_CADMATIC_3_PROFILE,
   PTX_CADMATIC_4_PROFILE,
+  PTX_CADMATIC_4_CANDIDATE_PROFILE,
+  PTX_CADMATIC_4_R3_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
 } from './profiles';
 import { canonicalJson, sha256Hex } from './digest';
 import { generatePtxString } from '../ptxCutPlanExport';
+import { GOLDEN_TEXT } from '../ptx/cutPlanPtxGolden';
+import { GOLDEN_R3_TEXT } from '../ptx/cutPlanPtxGoldenR3';
 
 describe('PTX_POSTPROCESSOR_ADAPTER', () => {
   it('is ready for ptx-generic and produces bytes identical to the existing serializer', () => {
@@ -86,6 +92,46 @@ describe('PTX_POSTPROCESSOR_ADAPTER', () => {
   it('implementation digest matches its canonical descriptor (behavior identity)', async () => {
     const digest = await sha256Hex(canonicalJson(PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR));
     expect(digest).toBe(PTX_POSTPROCESSOR_ADAPTER.implementationDigest);
+  });
+
+  it('binds the implementation digest to effective r2/r3 options and stable industrial goldens', async () => {
+    const contract = PTX_ADAPTER_INDUSTRIAL_CONTRACT;
+    expect(contract.implementationDigest).toBe(PTX_POSTPROCESSOR_ADAPTER.implementationDigest);
+    expect(await sha256Hex(canonicalJson(PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR))).toBe(
+      contract.implementationDigest,
+    );
+    expect(contract.profiles.r2.digest).toBe(PTX_CADMATIC_4_CANDIDATE_PROFILE.digest);
+    expect(contract.profiles.r3.digest).toBe(PTX_CADMATIC_4_R3_PROFILE.digest);
+    expect(await sha256Hex(GOLDEN_TEXT)).toBe(contract.profiles.r2.goldenBytesSha256);
+    expect(await sha256Hex(GOLDEN_R3_TEXT)).toBe(contract.profiles.r3.goldenBytesSha256);
+
+    const legacyBytes = PTX_POSTPROCESSOR_ADAPTER.serialize(
+      buildFixtureCuttingJob(),
+      PTX_GENERIC_PROFILE,
+    );
+    expect(await sha256Hex(legacyBytes)).toBe(contract.legacyGoldenBytesSha256);
+
+    const r2 = resolvePtxCompilerRoute(PTX_CADMATIC_4_CANDIDATE_PROFILE).config!;
+    const r3 = resolvePtxCompilerRoute(PTX_CADMATIC_4_R3_PROFILE).config!;
+    expect(r2.compileOptions).toMatchObject({
+      trimType: 1,
+      includeVectors: undefined,
+      supportsPositiveTrim: undefined,
+    });
+    expect(r2.allowedFunctions).toEqual([0, 1, 2, 3]);
+    expect(r3.compileOptions).toMatchObject({
+      trimType: 1,
+      includeVectors: undefined,
+      supportsPositiveTrim: true,
+    });
+    expect(r3.allowedFunctions).toEqual([0, 1, 2, 3, 92]);
+    expect(contract.behaviorMarkers).toEqual({
+      compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3'],
+      r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
+      r3ReleaseScheduling: 'phase-2-rest-remnant-function-92-before-dependent-recut',
+      readback: 'parser-plus-independent-cut-program-verifier',
+      legacyRoute: 'ptx-generic@r1-only',
+    });
   });
 
   it('requires exactly the dimensions the serializer consumes', () => {

@@ -1108,4 +1108,33 @@ describe('r3 — mutation tests M1..M8 (verifier independiente)', () => {
     expect(validatePtxDocument(mutated)).toEqual([]);
     expectVerifierFails(mutated, plan, 'release.offcut_duplicate');
   });
+
+  it('M9: PTX intacto pero una banda descartada deja de ser waste liberado', () => {
+    const fixture = buildMainFixture();
+    const compiled = compileCutPlanToPtxDocument(fixture.plan, R3_OPTIONS);
+    const sheet = fixture.plan.sheets[0]!;
+    const cutProgram = sheet.cutProgram!;
+    const mutatedPlan: CutPlan = {
+      ...fixture.plan,
+      sheets: [
+        {
+          ...sheet,
+          cutProgram: {
+            ...cutProgram,
+            terminals: cutProgram.terminals.map((terminal) =>
+              terminal.regionId === 'trim:left:rest'
+                ? { ...terminal, liberated: false }
+                : terminal,
+            ),
+          },
+        },
+      ],
+    };
+    executeCutProgram(mutatedPlan.sheets[0]!.cutProgram!);
+    const parsed = mutateAndParse(compiled.document, (records) => records);
+    expect(validatePtxDocument(parsed)).toEqual([]);
+    expect(issueCodes(
+      verifyCutPlanPtxReadback(parsed, mutatedPlan, compiled.mapping, R3_OPTIONS),
+    )).toContain('trim.discarded_terminal');
+  });
 });

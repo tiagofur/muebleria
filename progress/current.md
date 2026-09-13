@@ -1,3 +1,19 @@
+# Issue #693 — hardening final del pipeline CADmatic 4/PTX r3
+
+- Approval: prompt del propietario (2026-09-12); issue #693 OPEN con labels `status:approved`, `type:chore`, `domain`. PR #694/#691 y PR #695/#692 verificados como integrados en `origin/main`.
+- Base exacta: `origin/main@d2199a608d7df56b4635588d7a363a0778f5b883`.
+- Rama/worktree: `chore/693-cad4-pipeline-hardening` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-693`; índice CodeGraph propio inicializado.
+- Started: 2026-09-12 18:58 CST.
+- Scope autorizado: guards explícitos r3, verificación independiente de descarte de trims, gobernanza del `implementationDigest`, paridad TS↔contrato↔Go, auditoría legacy y documentación viva. Sin cambio de bytes industriales, identidades/digests, semántica de trims/F92/scheduler ni soporte declarado.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. r3 bloquea `trimType!=1` con refilados positivos y `includeVectors=true`; el verifier vuelve a derivar `waste + liberated=true` y el mutation proof falla con PTX válido; el digest 1.2.0 queda vinculado a descriptor, profile pins, markers y SHA de goldens legacy/r2/r3; TS↔contrato↔Go fija la tupla CAD4 r3; documentación v0.7 y audit legacy actualizados. Sin drift de identidades ni bytes.
+- Evidence local: `pnpm test` PASS (372 archivos, 4306 tests; 3 skips preexistentes), `pnpm typecheck` PASS (7/7), `pnpm openapi:check` PASS, `GOFLAGS='-p=1' go test ./... -count=1` PASS, browser real Go + PostgreSQL + Chromium `machine-output-selection.spec.ts` PASS 9/9 (r3 normal+manifest, invalid active plan, stale conflict, retry, confirmed-empty legacy y late cross-org 200/500), verificador documental PASS acotado, `git diff --check` limpio. Diff: 375 altas + 142 bajas = 517 authored.
+- Plan:
+  1. Fijar pruebas RED para opciones r3 inválidas y mutación semántica del terminal descartado manteniendo PTX sintácticamente válido.
+  2. Endurecer route/verifier sin alterar bytes, perfiles ni identidades históricas r2/r3.
+  3. Vincular el digest del adapter a marcadores industriales, opciones efectivas y golden bytes; sumar paridad directa TS↔contrato↔Go.
+  4. Auditar cada caller legacy, documentar madurez v0.7, límites, retiro y condición de cierre de #650 sin borrar históricos.
+  5. Ejecutar suites enfocadas/completas, Go serial, browser real, push/PR y readback de CI sobre el HEAD exacto.
+
 # Issue #692 — readiness real, identidad multi-sheet y provenance CADmatic 4
 
 - Approval: prompt del propietario (2026-09-12); issue #692 OPEN con labels `status:approved`, `type:bug`, `high`, `domain`. PR #694 / issue #691 verificados como integrados en `origin/main`.

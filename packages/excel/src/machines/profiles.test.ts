@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   canonicalProfileData,
   CLIENT_A_BHX050_PROFILE,
@@ -13,6 +14,7 @@ import {
   SAW_HOMAG_PROFILE,
 } from './profiles';
 import { sha256Hex } from './digest';
+import { PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
 
 const ALL_PROFILES = [
   PTX_GENERIC_PROFILE,
@@ -110,5 +112,47 @@ describe('machine output profiles', () => {
     expect(CLIENT_A_HPP250_PROFILE.identity.model).toBe('HPP 250');
     expect(CLIENT_A_BHX050_PROFILE.identity.model).toBe('BHX 050');
     expect(CLIENT_A_HPP250_PROFILE.identity.provenance).toBe('OWNER_CONFIRMED');
+  });
+
+  it('CADmatic 4 r3 has direct TS parity with the shared catalog consumed by Go', () => {
+    const catalog = JSON.parse(
+      readFileSync(
+        new URL('../../../../contracts/machineOutputCatalog.contract.json', import.meta.url),
+        'utf8',
+      ),
+    ) as {
+      outputProfiles: Array<Record<string, unknown>>;
+      adapters: Array<Record<string, unknown>>;
+      machines: Array<Record<string, unknown>>;
+    };
+    const profile = catalog.outputProfiles.find(
+      (entry) => entry.outputCompatibilityProfileId === 'ptx-cadmatic-4',
+    );
+    expect(profile).toEqual({
+      outputCompatibilityProfileId: PTX_CADMATIC_4_R3_PROFILE.ref.outputCompatibilityProfileId,
+      revisionId: PTX_CADMATIC_4_R3_PROFILE.ref.revisionId,
+      formatFamily: PTX_CADMATIC_4_R3_PROFILE.formatFamily,
+      supportStatus: PTX_CADMATIC_4_R3_PROFILE.supportStatus,
+      digest: PTX_CADMATIC_4_R3_PROFILE.digest,
+    });
+    expect(catalog.adapters.find((entry) => entry.postprocessorAdapterId === 'granete-ptx'))
+      .toEqual({
+        postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
+        adapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
+        implementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
+        producedFormatFamily: PTX_POSTPROCESSOR_ADAPTER.producedFormatFamily,
+        serializerImplemented: true,
+      });
+    expect(catalog.machines.find((entry) => entry.machineProfileId === CLIENT_A_HPP250_PROFILE.ref.machineProfileId))
+      .toEqual({
+        machineProfileId: CLIENT_A_HPP250_PROFILE.ref.machineProfileId,
+        machineProfileRevisionId: CLIENT_A_HPP250_PROFILE.ref.machineProfileRevisionId,
+        manufacturerFamily: CLIENT_A_HPP250_PROFILE.identity.manufacturerFamily,
+        model: CLIENT_A_HPP250_PROFILE.identity.model,
+        role: CLIENT_A_HPP250_PROFILE.identity.role,
+        operations: ['cutting'],
+        supportStatus: 'NOT_TESTED',
+        provenance: CLIENT_A_HPP250_PROFILE.identity.provenance,
+      });
   });
 });
