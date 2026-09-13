@@ -1307,6 +1307,12 @@ the happy path as one plain verdict plus one action:
   reachable only for projects positively known to be pre-Digital-Thread (no
   quote authority). The floor progress strip follows the same authority, not
   `Project.status`.
+- The factory order workspace (`/orders/:id`) resolves access by the same
+  manufacturing authority (`projectAllowsProductionOrder` /
+  `filterProductionVisible`: canonical release first, legacy statuses as
+  pre-DT compatibility), and the "Abrir en Producción" handoffs refresh the
+  workspace read model so a release created moments earlier resolves without
+  a manual reload.
 
 ---
 
