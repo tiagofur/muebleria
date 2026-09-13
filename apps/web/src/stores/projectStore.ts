@@ -200,6 +200,21 @@ export interface ProjectStoreDeps {
   readonly newId?: () => string;
   /** Persists a single project (fire-and-forget OK). */
   readonly createProject: (project: Project) => Promise<void>;
+  /**
+   * #712 — true when the ACTIVE repository owns the atomic server-side
+   * "new quote + new customer" transition (server mode). Guest/local adapters
+   * report false and the store keeps the local-optimistic path.
+   */
+  readonly canCreateProjectWithInlineCustomer?: () => boolean;
+  /**
+   * #712 — atomic inline-customer create. The payload must not carry a
+   * customer_id: the server mints the authoritative identity and returns the
+   * persisted pair for local reconciliation.
+   */
+  readonly createProjectWithInlineCustomer?: (
+    project: Project,
+    inlineCustomerName: string,
+  ) => Promise<{ project: Project; customer: Customer }>;
   /** Persists a single project (PUT). */
   readonly saveProject: (project: Project) => Promise<void>;
   /** Deletes a project by id. */
@@ -629,6 +644,10 @@ function defaultNewId(): string {
 export function createProjectStore(options: InternalOptions) {
   const newId = options.deps.newId ?? defaultNewId;
   const persistCreateProject = options.deps.createProject;
+  const canPersistInlineCustomer =
+    options.deps.canCreateProjectWithInlineCustomer;
+  const persistCreateProjectWithInlineCustomer =
+    options.deps.createProjectWithInlineCustomer;
   const persistSaveProject = options.deps.saveProject;
   const persistDeleteProject = options.deps.deleteProject;
   const persistCreateTemplate = options.deps.createProjectTemplate;
@@ -751,11 +770,22 @@ export function createProjectStore(options: InternalOptions) {
     // --- Project CRUD ---
     createProject: (draft, catalog, actor) => {
       const now = new Date().toISOString();
-      const resolved = resolveCustomerFromDraft(
-        draft,
-        catalog.customers ?? [],
-        newId,
-      );
+      // #712: "Nuevo cliente" on a server-backed session must run as ONE
+      // backend transaction. The UI never mints a customer id for this path —
+      // the project goes out with customer_id '' + inline_customer_name and
+      // the server returns the persisted identity. Guest/local sessions keep
+      // the legacy local resolution (single local store, no FK boundary).
+      const inlineCustomerName =
+        draft.customerId.trim() === ''
+          ? (draft.customerName ?? '').trim()
+          : '';
+      const useAtomicInline =
+        inlineCustomerName !== '' &&
+        (canPersistInlineCustomer?.() ?? false) &&
+        !!persistCreateProjectWithInlineCustomer;
+      const resolved = useAtomicInline
+        ? { customerId: '', customers: [...(catalog.customers ?? [])] }
+        : resolveCustomerFromDraft(draft, catalog.customers ?? [], newId);
       const updatedCatalog = { ...catalog, customers: resolved.customers };
       const meta = draftToProjectMeta(draft, resolved.customerId);
       const ownerUserId = resolveOwnerOnCreateRoles(
@@ -784,6 +814,47 @@ export function createProjectStore(options: InternalOptions) {
         );
       } catch (err) {
         toastTransitionError('crear la cotización', err);
+        return;
+      }
+
+      if (useAtomicInline) {
+        // No optimistic state: the pair exists only after the server commits.
+        // On success, local state is reconciled with the authoritative
+        // identities; on failure nothing local survives and the server rolled
+        // the customer back too (#712 atomicity).
+        void persistCreateProjectWithInlineCustomer!(
+          project,
+          inlineCustomerName,
+        ).then(
+          (created) => {
+            const persisted: Project = {
+              ...project,
+              customerId: created.customer.id,
+            };
+            set({ projects: [...get().projects, persisted] });
+            // Local-only catalog add — the server already persisted the pair;
+            // re-saving the whole catalog would resurrect the unordered
+            // parallel channel that caused the original FK failure.
+            const currentCatalog = getCatalogStoreState().catalog;
+            if (currentCatalog) {
+              getCatalogStoreState().setCatalog({
+                ...currentCatalog,
+                customers: [
+                  ...(currentCatalog.customers ?? []),
+                  created.customer,
+                ],
+              });
+            }
+            toast({ type: 'success', message: `✓ "${meta.name}" creado` });
+          },
+          (err) => {
+            console.error('Error al crear proyecto con cliente nuevo:', err);
+            toast({
+              type: 'error',
+              message: 'No se pudo guardar la cotización en el servidor',
+            });
+          },
+        );
         return;
       }
 

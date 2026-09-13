@@ -1,5 +1,6 @@
 import type {
   Catalog,
+  Customer,
   Project,
   WorkshopSettings,
   ProjectInternalMessage,
@@ -154,6 +155,17 @@ export interface WorkspaceRepository {
   getProjects(): Promise<readonly Project[]>;
   /** Create a new project (POST). Prefer this over saveProject for first write. */
   createProject(project: Project): Promise<void>;
+  /**
+   * #712 — atomic "new quote + new customer" create (server adapters only):
+   * ONE backend transaction persists both, the customer id is minted by the
+   * server, and a failure rolls the pair back. Returns the authoritative
+   * persisted identities so the caller reconciles local state. Local/guest
+   * adapters leave this unset — their single local store needs no transition.
+   */
+  createProjectWithInlineCustomer?(
+    project: Project,
+    inlineCustomerName: string,
+  ): Promise<{ project: Project; customer: Customer }>;
   /** Update existing project (upsert PUT→POST fallback for other adapters). */
   saveProject(project: Project): Promise<void>;
   deleteProject(projectId: string): Promise<void>;

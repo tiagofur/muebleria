@@ -221,6 +221,10 @@ type Store interface {
 	ListProjects(ctx context.Context) ([]domain.Project, error)
 	GetProjectByID(ctx context.Context, id string) (*domain.Project, error)
 	CreateProject(ctx context.Context, p *domain.Project) error
+	// CreateProjectWithInlineCustomer is the atomic "nueva cotización + nuevo
+	// cliente" transition (#712): one transaction, server-owned customer id,
+	// rollback of both on any failure.
+	CreateProjectWithInlineCustomer(ctx context.Context, p *domain.Project, inline *domain.Customer) error
 	UpdateProject(ctx context.Context, id string, p *domain.Project) error
 	DeleteProject(ctx context.Context, id string) error
 	// Floor scan (PROD-3.1 / F089-RN): atomic single-item floor status write.
