@@ -678,6 +678,7 @@ export {
 
 export {
   releaseAuthorityOf,
+  projectAllowsProductionAccess,
   releaseAuthorityLabel,
   type ProductionReleaseAuthority,
   type ProductionReleaseAuthoritySource,

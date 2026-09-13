@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canReleaseMaterials,
+  projectAllowsProductionAccess,
   projectProcessStage,
   releaseAuthorityLabel,
   releaseAuthorityOf,
@@ -125,5 +126,44 @@ describe('processStage — canonical release unlocks production (#577)', () => {
       },
     });
     expect(projectProcessStage(sent)).toBe('almacen');
+  });
+});
+
+describe('projectAllowsProductionAccess (#697 review — one access rule)', () => {
+  const canonical = {
+    source: 'canonical' as const,
+    releaseId: 'rel-1',
+    releaseNumber: 1,
+    designRevisionId: 'dr-1',
+    designRevisionNumber: 2,
+    quoteRevisionId: 'q-2',
+    manufacturingFingerprint: 'sha256-abc',
+  };
+
+  it('canonical ProductionRelease opens production regardless of status', () => {
+    expect(
+      projectAllowsProductionAccess({
+        status: 'draft',
+        hasDigitalThreadContext: false,
+        resolvedProductionRelease: canonical,
+      }),
+    ).toBe(true);
+  });
+
+  it('modern DT project with residual accepted|produced stamp and no release fails closed', () => {
+    expect(projectAllowsProductionAccess({ status: 'accepted', hasDigitalThreadContext: true })).toBe(false);
+    expect(projectAllowsProductionAccess({ status: 'produced', hasDigitalThreadContext: true })).toBe(false);
+  });
+
+  it('true pre-DT projects keep compatibility-only status access', () => {
+    expect(projectAllowsProductionAccess({ status: 'accepted', hasDigitalThreadContext: false })).toBe(true);
+    expect(projectAllowsProductionAccess({ status: 'produced', hasDigitalThreadContext: false })).toBe(true);
+    expect(projectAllowsProductionAccess({ status: 'quoted', hasDigitalThreadContext: false })).toBe(false);
+  });
+
+  it('absent projection fails closed because pre-DT compatibility must be explicit', () => {
+    expect(projectAllowsProductionAccess({ status: 'accepted' })).toBe(false);
+    expect(projectAllowsProductionAccess({ status: 'produced' })).toBe(false);
+    expect(projectAllowsProductionAccess({ status: 'draft' })).toBe(false);
   });
 });

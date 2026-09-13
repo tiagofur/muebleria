@@ -1265,6 +1265,15 @@ export interface Project {
    */
   readonly resolvedProductionRelease?: import('./releaseAuthority').ProductionReleaseAuthority;
   /**
+   * #697 review — server-owned projection that positively identifies this
+   * project as participating in the Digital Thread (it has project-owned
+   * FurnitureInstances, quote revisions, DT designs or a canonical production release). The ONE signal that
+   * separates modern DT projects from true pre-Digital-Thread ones: legacy
+   * accepted/produced status compatibility never applies when true.
+   * `undefined` = the projection is absent (local mode / stale payloads).
+   */
+  readonly hasDigitalThreadContext?: boolean;
+  /**
    * Formal change orders for post-approval/post-release scope modifications (OC-024).
    */
   readonly changeOrders?: readonly import('./projectLifecycle').ChangeOrder[];
@@ -1808,4 +1817,3 @@ export interface WarrantyTicket {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
-

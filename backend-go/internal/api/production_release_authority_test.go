@@ -24,8 +24,8 @@ func TestProjectUpdate_CannotRewriteReleaseOnceCanonicalExists(t *testing.T) {
 		OwnerUserID: "u1", ProductionRelease: storedRelease,
 	}
 	store := &stubStore{
-		projectReturnedByID:        existing,
-		latestProductionRelease:    &domain.ProductionRelease{ID: "3f0c9c11-0000-4000-8000-000000000005", ProjectID: "p1"},
+		projectReturnedByID:     existing,
+		latestProductionRelease: &domain.ProductionRelease{ID: "3f0c9c11-0000-4000-8000-000000000005", ProjectID: "p1"},
 	}
 	srv := &Server{Store: store}
 
@@ -47,6 +47,40 @@ func TestProjectUpdate_CannotRewriteReleaseOnceCanonicalExists(t *testing.T) {
 	}
 }
 
+func TestProjectUpdate_ReadsBackDigitalThreadContextProjection(t *testing.T) {
+	existing := &domain.Project{
+		ID: "p1", Name: "Obra", CustomerID: "30000000-0000-0000-0000-00000000000a",
+		Status: domain.StatusAccepted, OwnerUserID: "u1", HasDigitalThreadContext: true,
+	}
+	readback := *existing
+	readback.Name = "Obra actualizada"
+	store := &stubStore{
+		projectReturnedByID:        existing,
+		projectReadbackAfterUpdate: &readback,
+	}
+	srv := &Server{Store: store}
+
+	body := `{"id":"p1","name":"Obra actualizada","customer_id":"30000000-0000-0000-0000-00000000000a","status":"accepted","owner_user_id":"u1","items":[]}`
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", strings.NewReader(body)), "u1", string(domain.RoleAdmin))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+	srv.HandleProjectByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rr.Code, rr.Body.String())
+	}
+	if store.lastUpdatedProject == nil || store.lastUpdatedProject.HasDigitalThreadContext {
+		t.Fatalf("client write must not persist the read-only DT projection")
+	}
+	var got domain.Project
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !got.HasDigitalThreadContext {
+		t.Fatalf("PUT response must return authoritative has_digital_thread_context=true")
+	}
+}
+
 // The part-executions revision guard resolves the canonical release authority:
 // parts derived against the legacy blob revision are rejected, parts derived
 // against the canonical release pass — the consumer resolves the SAME release
@@ -57,8 +91,8 @@ func TestPartExec_RevisionGuardUsesCanonicalReleaseAuthority(t *testing.T) {
 	store.moduleUnits = nil
 	store.itemQuantities = map[string]int{"i1": 1}
 	store.latestProductionRelease = &domain.ProductionRelease{
-		ID:                      "3f0c9c11-0000-4000-8000-000000000005",
-		ProjectID:               "p1",
+		ID:                       "3f0c9c11-0000-4000-8000-000000000005",
+		ProjectID:                "p1",
 		ManufacturingFingerprint: "sha256-a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
 	}
 
@@ -97,15 +131,15 @@ func TestPartExec_RevisionGuardFallsBackToLegacyBlob(t *testing.T) {
 func TestProductionRelease_ReadbackCarriesAuthorityPins(t *testing.T) {
 	created := &storage.ProductionReleaseReadback{
 		Release: domain.ProductionRelease{
-			ID:                      "3f0c9c11-0000-4000-8000-000000000005",
-			ProjectID:               releaseTestProjectID,
-			DesignRevisionID:        releaseTestRevisionID,
-			QuoteRevisionID:         releaseTestQuoteRevID,
-			ReleaseNumber:           1,
-			DesignRevisionNumber:    3,
+			ID:                       "3f0c9c11-0000-4000-8000-000000000005",
+			ProjectID:                releaseTestProjectID,
+			DesignRevisionID:         releaseTestRevisionID,
+			QuoteRevisionID:          releaseTestQuoteRevID,
+			ReleaseNumber:            1,
+			DesignRevisionNumber:     3,
 			ManufacturingFingerprint: "sha256-a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-			Status:                  domain.ProductionReleaseStatusActive,
-			ReleasedBy:              "user-release",
+			Status:                   domain.ProductionReleaseStatusActive,
+			ReleasedBy:               "user-release",
 		},
 	}
 	store := &stubStore{

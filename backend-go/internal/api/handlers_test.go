@@ -25,35 +25,36 @@ import (
 // of middleware_test.go and avoids any database dependency.
 type stubStore struct {
 	// Hardware 3D assets (#667 M1)
-	assetSessionResult     *storage.HardwareAssetUploadSessionResult
-	assetSession           *domain.HardwareAssetUploadSession
-	assetSessionErr        error
-	promoteAssetBytesCmd   *storage.PromoteHardwareAssetSessionBytesCommand
-	promoteAssetBytesErr   error
-	assetPreviousStagedKey string
-	recordAssetBytesArmed  bool
-	assetFinalized         *domain.HardwareAsset
-	assetFinalizeCmd       *storage.FinalizeHardwareAssetUploadCommand
-	assetFinalizeErr       error
-	assetCancelledCmd      *storage.CancelHardwareAssetUploadSessionCommand
-	assetResolvedBinding   *domain.HardwareVisualAssetBinding
-	assetResolveBindingCmd *[2]string
-	assetRevisionResult    *domain.HardwareAssetRevision
-	listHardwareAssets     []domain.HardwareAsset
-	createCustomerErr      error
-	createMaterialErr      error
-	createProjectErr       error
-	updateProjectErr       error
-	customerReturnedByID   *domain.Customer
-	customerGetByIDErr     error
-	projectReturnedByID    *domain.Project
-	projectGetByIDErr      error
-	listCustomers          []domain.Customer
-	listProjects           []domain.Project
-	listMaterials          []domain.MaterialBoard
-	lastCreatedCustomer    *domain.Customer
-	lastCreatedProject     *domain.Project
-	lastUpdatedProject     *domain.Project
+	assetSessionResult         *storage.HardwareAssetUploadSessionResult
+	assetSession               *domain.HardwareAssetUploadSession
+	assetSessionErr            error
+	promoteAssetBytesCmd       *storage.PromoteHardwareAssetSessionBytesCommand
+	promoteAssetBytesErr       error
+	assetPreviousStagedKey     string
+	recordAssetBytesArmed      bool
+	assetFinalized             *domain.HardwareAsset
+	assetFinalizeCmd           *storage.FinalizeHardwareAssetUploadCommand
+	assetFinalizeErr           error
+	assetCancelledCmd          *storage.CancelHardwareAssetUploadSessionCommand
+	assetResolvedBinding       *domain.HardwareVisualAssetBinding
+	assetResolveBindingCmd     *[2]string
+	assetRevisionResult        *domain.HardwareAssetRevision
+	listHardwareAssets         []domain.HardwareAsset
+	createCustomerErr          error
+	createMaterialErr          error
+	createProjectErr           error
+	updateProjectErr           error
+	customerReturnedByID       *domain.Customer
+	customerGetByIDErr         error
+	projectReturnedByID        *domain.Project
+	projectReadbackAfterUpdate *domain.Project
+	projectGetByIDErr          error
+	listCustomers              []domain.Customer
+	listProjects               []domain.Project
+	listMaterials              []domain.MaterialBoard
+	lastCreatedCustomer        *domain.Customer
+	lastCreatedProject         *domain.Project
+	lastUpdatedProject         *domain.Project
 	// Project furniture identity (#385 / DT-1)
 	furnitureInstancesByID map[string]domain.FurnitureInstance
 	listFurnitureInstances []domain.FurnitureInstance
@@ -1146,6 +1147,12 @@ func (s *stubStore) ListProjects(context.Context) ([]domain.Project, error) {
 	return []domain.Project{}, nil
 }
 func (s *stubStore) GetProjectByID(context.Context, string) (*domain.Project, error) {
+	if s.lastUpdatedProject != nil {
+		if s.projectReadbackAfterUpdate != nil {
+			return s.projectReadbackAfterUpdate, nil
+		}
+		return s.lastUpdatedProject, nil
+	}
 	return s.projectReturnedByID, s.projectGetByIDErr
 }
 func (s *stubStore) UpdateProject(_ context.Context, _ string, p *domain.Project) error {

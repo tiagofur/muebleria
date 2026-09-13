@@ -107,8 +107,7 @@ import {
   roleCanAccessFabricNav,   roleCanAccessShippingNav,
    roleCanAccessEmbarquesNav,
   filterProjectsByProcessStage,
-  isProductionReady,
-  releaseAuthorityOf,
+  projectAllowsProductionAccess,
   suggestDuplicateCode,
   transitionProjectStatus,
   type WarehouseProjectInput,
@@ -1541,7 +1540,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       {navId === 'orders' && useProductionWorkspace ? (
         <ProductionWorkspace
           projects={(filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).filter(
-            (p) => isProductionReady(p) || releaseAuthorityOf(p)?.source === 'canonical',
+            projectAllowsProductionAccess,
           )}
           lookupProject={(id) =>
             (filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).find((p) => p.id === id)

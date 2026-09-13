@@ -1289,6 +1289,9 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		// #577: the resolved release authority projection is computed on read;
 		// a client-sent copy is never persisted.
 		p.ResolvedProductionRelease = nil
+		// #697 review: the Digital Thread context projection is computed on
+		// read; a client-sent copy is never persisted.
+		p.HasDigitalThreadContext = false
 
 		if claims != nil {
 			p.CreatedBy = claims.UserID
@@ -1435,6 +1438,9 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		// #577: the resolved release authority projection is computed on read;
 		// a client-sent copy is never persisted.
 		p.ResolvedProductionRelease = nil
+		// #697 review: the Digital Thread context projection is computed on
+		// read; a client-sent copy is never persisted.
+		p.HasDigitalThreadContext = false
 		// OC-070..OC-074: the installation job is server-authoritative — it
 		// only changes through the dedicated installation endpoints (gates,
 		// RBAC and audit). A client-sent copy is ignored, never persisted.
@@ -1545,13 +1551,22 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		if !orgSeesManufacturing(claims, &p) {
-			domain.RedactProjectManufacturing(&p)
+		// Read back the authoritative aggregate after the generic update. Read-only
+		// projections are recomputed by storage and must not be returned as the
+		// zero values cleared from the client payload above.
+		updated, err := s.Store.GetProjectByID(r.Context(), id)
+		if err != nil {
+			respondWithInternalError(w, err, "handler: read updated project")
+			return
+		}
+		response := *updated
+		if !orgSeesManufacturing(claims, &response) {
+			domain.RedactProjectManufacturing(&response)
 		}
 		if !s.actorCanViewCosts(r) {
-			domain.RedactProjectCosts(&p)
+			domain.RedactProjectCosts(&response)
 		}
-		respondWithJSON(w, http.StatusOK, p)
+		respondWithJSON(w, http.StatusOK, response)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanDeleteProject), "no tenés permiso para eliminar cotizaciones") {

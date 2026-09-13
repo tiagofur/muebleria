@@ -2006,6 +2006,12 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     resolvedProductionRelease: releaseAuthorityFromApi(
       raw.resolved_production_release ?? raw.resolvedProductionRelease,
     ),
+    // #697 review — server-owned Digital Thread context projection. Computed
+    // on read; never sent back on writes (the write mapper below omits it).
+    hasDigitalThreadContext: (() => {
+      const value = raw.has_digital_thread_context ?? raw.hasDigitalThreadContext;
+      return typeof value === 'boolean' ? value : undefined;
+    })(),
     // OC-024 — change orders
     changeOrders: changeOrdersFromApi(raw.change_orders ?? raw.changeOrders),
     // OC-030 — physical part instances
