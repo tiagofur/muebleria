@@ -400,9 +400,11 @@ class DuplicateResolverTest < Minitest::Test
 
   # Proof 11: EntitiesObserver integration
   def test_entities_observer_dispatches_to_resolver
+    committed = 0
     observer = Granete::SketchUpExtension::Observers::EntitiesObserver.new(
       duplicate_resolver: @resolver,
-      model_provider: -> { @model }
+      model_provider: -> { @model },
+      on_working_copy_committed: -> { committed += 1 }
     )
 
     _original = create_managed_instance(furniture_instance_id: FI_1)
@@ -413,6 +415,7 @@ class DuplicateResolverTest < Minitest::Test
     copy_meta = @metadata_store.read(copy)
     assert_equal FI_2, copy_meta['identity']['furnitureInstanceId']
     assert_equal 'duplicate', copy_meta['identity']['origin']
+    assert_equal 1, committed
   end
 
   # Proof 12: Syntactically valid but unknown backend UUID rejected in precheck (#391 / DT-7)

@@ -111,9 +111,10 @@ test('withheld amounts are explicit and cost rows stay hidden', () => {
   assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, 'none');
 });
 
-test('successful working-copy placement callbacks publish a committed refresh', () => {
+test('successful working-copy callbacks publish a committed refresh', () => {
   assert.ok(dialogSource.includes('function notifyCommercialProjectionCommitted()'));
-  assert.strictEqual((dialogSource.match(/notifyCommercialProjectionCommitted\(\);/g) || []).length, 3);
+  assert.ok(dialogSource.includes('onCommercialProjectionMutationCommitted: function ()'));
+  assert.strictEqual((dialogSource.match(/notifyCommercialProjectionCommitted\(\);/g) || []).length, 4);
 });
 
 console.log(`commercial projection tests passed: ${passed}`);

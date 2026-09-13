@@ -4186,6 +4186,9 @@
           onCommercialProjection: function (payload) {
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receive(payload);
           },
+          onCommercialProjectionMutationCommitted: function () {
+            notifyCommercialProjectionCommitted();
+          },
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
           onPublishProgress: function (payload) { renderPublishProgress(payload); },
           onPublishResult: function (result) { handlePublishResult(result); },

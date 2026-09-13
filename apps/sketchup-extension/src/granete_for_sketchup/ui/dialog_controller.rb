@@ -1636,6 +1636,9 @@ module Granete
           @project_furniture_placer = project_furniture_placer
           @duplicate_resolver = duplicate_resolver
           @entities_observer = entities_observer
+          if @entities_observer.respond_to?(:on_working_copy_committed=)
+            @entities_observer.on_working_copy_committed = method(:notify_commercial_projection_committed)
+          end
           @design_publisher = design_publisher
           @mutation_coordinator = mutation_coordinator
           @manufacturing_overlay = manufacturing_overlay
@@ -1660,6 +1663,12 @@ module Granete
             on_selection_change: method(:handle_selection_change),
             model_provider: method(:active_model)
           )
+        end
+
+        def notify_commercial_projection_committed
+          return unless @dialog&.visible?
+
+          execute_bridge(@dialog, 'onCommercialProjectionMutationCommitted', {})
         end
 
         def show

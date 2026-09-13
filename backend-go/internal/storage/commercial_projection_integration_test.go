@@ -26,6 +26,8 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 		UPDATE modules
 		SET base_mode = 'plinth_board', width_mm = 800, depth_mm = 600
 		WHERE id = '`+csModule+`';
+		INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ('`+csProject+`', 'INTERIOR', '`+csMaterial+`', '`+rlsOrgA+`');
 		UPDATE projects
 		SET kitchen_layout = '{"walls":[{"id":"w-1","lengthMm":3000}],"placements":[{"itemId":"`+unit.FurnitureInstanceID+`","wallId":"w-1","offsetMm":0,"elevation":"wall"}]}'::jsonb
 		WHERE id = '`+csProject+`';`)
@@ -42,7 +44,7 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{{
 				FurnitureInstanceID: unit.FurnitureInstanceID, FurnitureDefinitionID: csModule,
 				Parameters:      map[string]any{},
-				MaterialChoices: map[string]string{"INTERIOR": csMaterial, "FRENTE": csMaterial},
+				MaterialChoices: map[string]string{"FRENTE": csMaterial},
 			}},
 		})
 		return err

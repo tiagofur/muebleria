@@ -100,6 +100,10 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 	result.Reference, result.AcceptedReference, result.LatestPublishedReference = selectCommercialProjectionReferences(revisions)
 
 	if len(result.Issues) == 0 {
+		levelChoices, choicesErr := s.loadProjectLevelChoices(ctx, projectID)
+		if choicesErr != nil {
+			return nil, choicesErr
+		}
 		catalog, catalogErr := s.GetFullCatalog(ctx)
 		if catalogErr != nil {
 			return nil, catalogErr
@@ -113,7 +117,7 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			ID: projectID, Name: envelope.ProjectName, CustomerID: envelope.CustomerID,
 			Currency: envelope.Currency, MarginFactor: envelope.MarginFactor,
 			LaborFixedCost: envelope.LaborFixedCost, Status: "draft", Items: pricingItems,
-			KitchenLayout: envelope.KitchenLayout,
+			KitchenLayout: envelope.KitchenLayout, ProjectLevelChoices: levelChoices,
 		}
 		breakdown, calcErr := engine.CalcProjectBreakdown(pricingProject, catalog)
 		if calcErr != nil {

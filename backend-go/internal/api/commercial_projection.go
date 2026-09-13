@@ -50,9 +50,9 @@ func (s *Server) HandleDesignCommercialProjection(w http.ResponseWriter, r *http
 }
 
 func toCommercialProjectionDTO(p *domain.CommercialProjection) openapi.CommercialProjection {
-	var amounts any
+	var amounts *openapi.CommercialProjectionAmounts
 	if p.Amounts != nil {
-		amounts = openapi.CommercialProjectionAmounts{
+		amounts = &openapi.CommercialProjectionAmounts{
 			MaterialsCost: p.Amounts.MaterialsCost, EdgeTotal: p.Amounts.EdgeTotal,
 			HardwareTotal: p.Amounts.HardwareTotal, DirectCost: p.Amounts.DirectCost,
 			LaborModular: p.Amounts.LaborModular, LaborFixedCost: p.Amounts.LaborFixedCost,
@@ -72,21 +72,21 @@ func toCommercialProjectionDTO(p *domain.CommercialProjection) openapi.Commercia
 	}
 }
 
-func projectionReferenceDTO(ref *domain.CommercialProjectionReference) any {
+func projectionReferenceDTO(ref *domain.CommercialProjectionReference) *openapi.CommercialProjectionReference {
 	if ref == nil {
 		return nil
 	}
-	return openapi.CommercialProjectionReference{
+	return &openapi.CommercialProjectionReference{
 		QuoteRevisionId: ref.QuoteRevisionID, RevisionNumber: int64(ref.RevisionNumber),
 		Status: openapi.QuoteRevisionStatus(ref.Status), Currency: ref.Currency, SaleTotal: ref.SaleTotal,
 	}
 }
 
-func projectionComparisonDTO(comparison *domain.CommercialProjectionComparison) any {
+func projectionComparisonDTO(comparison *domain.CommercialProjectionComparison) *openapi.CommercialProjectionComparison {
 	if comparison == nil {
 		return nil
 	}
-	return openapi.CommercialProjectionComparison{
+	return &openapi.CommercialProjectionComparison{
 		AbsoluteDelta: comparison.AbsoluteDelta, PercentageDelta: comparison.PercentageDelta,
 	}
 }

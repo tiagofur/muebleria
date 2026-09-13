@@ -1664,13 +1664,13 @@ export interface CommercialProjection {
   readonly "calculatedAt": string;
   readonly "currency": string;
   readonly "itemCount": number;
-  readonly "amounts": unknown;
+  readonly "amounts": CommercialProjectionAmounts | null;
   readonly "costsWithheld": boolean;
   readonly "saleAmountsWithheld": boolean;
-  readonly "reference": unknown;
-  readonly "acceptedReference": unknown;
-  readonly "latestPublishedReference": unknown;
-  readonly "comparison": unknown;
+  readonly "reference": CommercialProjectionReference | null;
+  readonly "acceptedReference": CommercialProjectionReference | null;
+  readonly "latestPublishedReference": CommercialProjectionReference | null;
+  readonly "comparison": CommercialProjectionComparison | null;
   readonly "issues": ReadonlyArray<string>;
 }
 
@@ -1679,6 +1679,14 @@ export const runtimeSchemas = {"AcceptInvitationRequest":{"additionalProperties"
 
 function fail(path: string, expected: string): never { throw new Error(`Invalid API response at ${path}: expected ${expected}`); }
 function validate(schema: any, value: unknown, path: string): unknown {
+  if (schema.oneOf) {
+    const matches: unknown[] = [];
+    for (const branch of schema.oneOf) {
+      try { matches.push(validate(branch, value, path)); } catch (_) { /* try the next branch */ }
+    }
+    if (matches.length !== 1) fail(path, 'exactly one allowed schema');
+    return matches[0];
+  }
   if (schema.$ref) return validate((runtimeSchemas as any)[schema.$ref.split('/').at(-1)!], value, path);
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
   if (value === null && types.includes('null')) return value;

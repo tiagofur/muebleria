@@ -27,11 +27,14 @@ def validate_spec(spec):
 def ref_name(s): return s["$ref"].rsplit("/", 1)[-1]
 
 def ts_type(s):
+    if "oneOf" in s:
+        return " | ".join(dict.fromkeys(ts_type(branch) for branch in s["oneOf"]))
     if "$ref" in s: return ref_name(s)
     t=s.get("type")
     nullable=isinstance(t,list) and "null" in t
     if isinstance(t,list): t=next(x for x in t if x!="null")
-    if "enum" in s: base=" | ".join(json.dumps(x) for x in s["enum"])
+    if t=="null": base="null"
+    elif "enum" in s: base=" | ".join(json.dumps(x) for x in s["enum"])
     elif t=="string": base="string"
     elif t in ("integer","number"): base="number"
     elif t=="boolean": base="boolean"
@@ -44,6 +47,13 @@ def ts_type(s):
     return base+(" | null" if nullable else "")
 
 def go_type(s):
+    if "oneOf" in s:
+        non_null=[branch for branch in s["oneOf"] if branch.get("type") != "null"]
+        has_null=len(non_null) != len(s["oneOf"])
+        if len(non_null) == 1 and has_null:
+            base=go_type(non_null[0])
+            return base if base.startswith(("[]", "*")) else "*"+base
+        return "any"
     if "$ref" in s: return ref_name(s)
     t=s.get("type")
     nullable=isinstance(t,list) and "null" in t
@@ -78,6 +88,14 @@ def generate_ts(schemas):
     out.append(r'''
 function fail(path: string, expected: string): never { throw new Error(`Invalid API response at ${path}: expected ${expected}`); }
 function validate(schema: any, value: unknown, path: string): unknown {
+  if (schema.oneOf) {
+    const matches: unknown[] = [];
+    for (const branch of schema.oneOf) {
+      try { matches.push(validate(branch, value, path)); } catch (_) { /* try the next branch */ }
+    }
+    if (matches.length !== 1) fail(path, 'exactly one allowed schema');
+    return matches[0];
+  }
   if (schema.$ref) return validate((runtimeSchemas as any)[schema.$ref.split('/').at(-1)!], value, path);
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
   if (value === null && types.includes('null')) return value;

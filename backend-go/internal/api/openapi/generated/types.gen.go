@@ -1989,24 +1989,24 @@ type CommercialProjectionComparison struct {
 }
 
 type CommercialProjection struct {
-	Schema                   string   `json:"schema"`
-	Status                   string   `json:"status"`
-	ProjectId                string   `json:"projectId"`
-	DesignId                 string   `json:"designId"`
-	WorkingVersion           string   `json:"workingVersion"`
-	WorkingFingerprint       string   `json:"workingFingerprint"`
-	CatalogFingerprint       *string  `json:"catalogFingerprint"`
-	ProjectionFingerprint    *string  `json:"projectionFingerprint"`
-	PricingAuthority         string   `json:"pricingAuthority"`
-	CalculatedAt             string   `json:"calculatedAt"`
-	Currency                 string   `json:"currency"`
-	ItemCount                int64    `json:"itemCount"`
-	Amounts                  any      `json:"amounts"`
-	CostsWithheld            bool     `json:"costsWithheld"`
-	SaleAmountsWithheld      bool     `json:"saleAmountsWithheld"`
-	Reference                any      `json:"reference"`
-	AcceptedReference        any      `json:"acceptedReference"`
-	LatestPublishedReference any      `json:"latestPublishedReference"`
-	Comparison               any      `json:"comparison"`
-	Issues                   []string `json:"issues"`
+	Schema                   string                          `json:"schema"`
+	Status                   string                          `json:"status"`
+	ProjectId                string                          `json:"projectId"`
+	DesignId                 string                          `json:"designId"`
+	WorkingVersion           string                          `json:"workingVersion"`
+	WorkingFingerprint       string                          `json:"workingFingerprint"`
+	CatalogFingerprint       *string                         `json:"catalogFingerprint"`
+	ProjectionFingerprint    *string                         `json:"projectionFingerprint"`
+	PricingAuthority         string                          `json:"pricingAuthority"`
+	CalculatedAt             string                          `json:"calculatedAt"`
+	Currency                 string                          `json:"currency"`
+	ItemCount                int64                           `json:"itemCount"`
+	Amounts                  *CommercialProjectionAmounts    `json:"amounts"`
+	CostsWithheld            bool                            `json:"costsWithheld"`
+	SaleAmountsWithheld      bool                            `json:"saleAmountsWithheld"`
+	Reference                *CommercialProjectionReference  `json:"reference"`
+	AcceptedReference        *CommercialProjectionReference  `json:"acceptedReference"`
+	LatestPublishedReference *CommercialProjectionReference  `json:"latestPublishedReference"`
+	Comparison               *CommercialProjectionComparison `json:"comparison"`
+	Issues                   []string                        `json:"issues"`
 }
