@@ -2,7 +2,7 @@
  * Catalog entity image or placeholder (F040).
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ImageIcon, Package } from 'lucide-react';
 import './catalogImage.css';
 
@@ -40,22 +40,34 @@ export function CatalogImage({
   size = 'md',
 }: CatalogImageProps): ReactNode {
   const base = `${SIZE_CLASS[size]}${className ? ` ${className}` : ''}`;
-  if (src && isSafeUrl(src)) {
+  // Presentation-only failure state keyed to the exact URL that failed:
+  // a different src retries normally, and a late error event attributed to
+  // a previous URL can't block the one being loaded now.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+
+  if (src && isSafeUrl(src) && src !== failedSrc) {
     return (
       <img
         className={base}
         src={src}
         alt={alt}
         loading="lazy"
+        onError={(event) => {
+          // Only fail the URL the element was actually loading when the
+          // error fired; ignore stale signals from an earlier src.
+          if (event.currentTarget.getAttribute('src') === src) {
+            setFailedSrc(src);
+          }
+        }}
         data-testid="catalog-image"
       />
     );
   }
   return (
-    // Placeholder is visual-only (F154 audit P3 #5): aria-hidden keeps "Sin
-    // foto" and the aria-label out of ancestors' accessible names — the
-    // entity name already lives in the card/row heading, and duplicating it
-    // made screen readers announce it twice.
+    // Placeholder is visual-only (F154 audit P3 #5): aria-hidden keeps its
+    // label out of ancestors' accessible names — the entity name already
+    // lives in the card/row heading, and duplicating it made screen readers
+    // announce it twice.
     <div
       className={`${base} catalog-image--placeholder`}
       aria-hidden="true"
@@ -63,7 +75,8 @@ export function CatalogImage({
     >
       <Package size={size === 'lg' ? 40 : 24} strokeWidth={1.5} />
       <span className="catalog-image__ph-label">
-        <ImageIcon size={14} strokeWidth={1.5} /> Sin foto
+        <ImageIcon size={14} strokeWidth={1.5} />{' '}
+        {src && isSafeUrl(src) ? 'Imagen no disponible' : 'Sin foto'}
       </span>
     </div>
   );
