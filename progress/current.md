@@ -12,6 +12,17 @@
   2. Centralizar acceso a Producción en una regla canónica fail-closed.
   3. Cubrir moderno con stamp residual, pre-DT accepted/produced y respuestas PUT.
   4. Integrar la rama remota/main sin perder commits paralelos y validar local/remoto.
+- Result: `IMPLEMENTED_PENDING_CI`. `hasDigitalThreadContext` se deriva en list/detail
+  de FurnitureInstance, QuoteRevision, Design o ProductionRelease; sólo `false`
+  explícito habilita status legacy. PUT relee el agregado para no devolver una
+  proyección falsa transitoria. `projectAllowsProductionAccess` gobierna filtro,
+  workspace y apertura de orden.
+- Evidence local: `git diff --check` PASS; `pnpm typecheck` 7/7; `pnpm test` PASS
+  (domain 1411, storage 207, excel 346 + 3 skips preexistentes, desktop 17,
+  mobile 73, UI 1782, web 461); `pnpm openapi:check` PASS;
+  `GOFLAGS=-p=1 go test ./... -count=1` PASS; browser gate real Go + PostgreSQL
+  + Chromium 57/57 PASS, incluyendo el golden Q1→Q2→R2→P1→Producción con
+  `Project.status=draft`.
 
 # Issue #692 — readiness real, identidad multi-sheet y provenance CADmatic 4
 
