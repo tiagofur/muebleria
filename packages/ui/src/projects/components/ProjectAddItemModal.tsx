@@ -90,6 +90,13 @@ export interface ProjectAddItemModalProps {
     | undefined;
 }
 
+// Stable identities for omitted optional catalogs: per-render `= []` defaults
+// would retrigger the draft-sync effect below on every render and, with an
+// empty/invalid module draft, freeze the modal in an infinite render loop.
+const EMPTY_COMPONENTS: readonly Component[] = [];
+const EMPTY_STRUCTURES: readonly Structure[] = [];
+const EMPTY_AGREGADOS: readonly Agregado[] = [];
+
 export function ProjectAddItemModal({
   open,
   onClose,
@@ -98,9 +105,9 @@ export function ProjectAddItemModal({
   categories,
   optionGroups,
   catalogs,
-  catalogComponents = [],
-  catalogStructures = [],
-  catalogAgregados = [],
+  catalogComponents = EMPTY_COMPONENTS,
+  catalogStructures = EMPTY_STRUCTURES,
+  catalogAgregados = EMPTY_AGREGADOS,
   projectLevelChoices,
   measureDefaults,
 }: ProjectAddItemModalProps): ReactNode {
@@ -181,7 +188,16 @@ export function ProjectAddItemModal({
     [modules, addItemCategoryFilter, categories],
   );
 
-  const addModule = modules.find((m) => m.id === addItem.moduleId);
+  // The draft keeps its module while the user explores other categories, but
+  // it only counts as a selection while the current filter still offers it.
+  // This single derivation drives picker value, dependent controls, submit
+  // gating and handleSubmit — there is no second selection state to sync.
+  const selectionHidden =
+    addItem.moduleId !== '' &&
+    !modulesForAdd.some((m) => m.id === addItem.moduleId);
+  const addModule = selectionHidden
+    ? undefined
+    : modules.find((m) => m.id === addItem.moduleId);
   const addGroups = groupsForModuleItem(
     addModule,
     optionGroups,
@@ -237,6 +253,12 @@ export function ProjectAddItemModal({
     const mod = modules.find((m) => m.id === addItem.moduleId);
     if (!mod) {
       setItemError('El mueble seleccionado no existe en el catálogo.');
+      return;
+    }
+    // The button is disabled, but a programmatic submit must not send a
+    // module the current filter hides from the picker.
+    if (!modulesForAdd.some((m) => m.id === mod.id)) {
+      setItemError('Selecciona un mueble de la categoría actual.');
       return;
     }
 
@@ -297,7 +319,7 @@ export function ProjectAddItemModal({
             type="submit"
             className="btn btn--primary"
             form={formId}
-            disabled={modulesForAdd.length === 0}
+            disabled={modulesForAdd.length === 0 || selectionHidden}
           >
             Agregar
           </button>
@@ -385,11 +407,7 @@ export function ProjectAddItemModal({
                   : 'Seleccionar mueble…'
               }
               searchPlaceholder="Buscar mueble…"
-              value={
-                modulesForAdd.some((m) => m.id === addItem.moduleId)
-                  ? addItem.moduleId
-                  : ''
-              }
+              value={selectionHidden ? '' : addItem.moduleId}
               onChange={(moduleId) => {
                 if (moduleId) selectModuleForAdd(moduleId);
               }}
@@ -446,11 +464,17 @@ export function ProjectAddItemModal({
           ) : null}
         </div>
 
-        {addGroups.length === 0 ? (
+        {selectionHidden ? (
+          <p className="catalog-empty" style={{ marginTop: 'var(--space-3)' }}>
+            Selecciona un mueble de la categoría actual.
+          </p>
+        ) : null}
+
+        {addModule && addGroups.length === 0 ? (
           <p className="catalog-empty" style={{ marginTop: 'var(--space-3)' }}>
             Este mueble no tiene grupos de opción requeridos.
           </p>
-        ) : (
+        ) : addModule ? (
           <div className="project-item-choices" style={{ marginTop: 'var(--space-3)' }}>
             {addGroups.map((group) => {
               const options = optionsForGroup(group, catalogs);
@@ -489,7 +513,7 @@ export function ProjectAddItemModal({
               );
             })}
           </div>
-        )}
+        ) : null}
         <p className="project-editor__hint">
           Vacío = hereda el default del proyecto. Podés agregar el mismo mueble
           más de una vez con distintas opciones.
