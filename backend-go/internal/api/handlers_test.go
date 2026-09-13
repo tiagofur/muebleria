@@ -87,6 +87,8 @@ type stubStore struct {
 	getDesignRevisionErr       error
 	listDesignRevisionItemsErr error
 	designWorkingCopiesByID    map[string]domain.DesignWorkingCopy
+	commercialProjection       *domain.CommercialProjection
+	commercialProjectionErr    error
 	// SketchUp model binding validation (#388 / DT-4)
 	modelBindingContext        *storage.ModelBindingContext
 	modelBindingContextErr     error
@@ -2084,6 +2086,13 @@ func (s *stubStore) GetDesignWorkingCopy(_ context.Context, designID string) (*d
 		Items:      []domain.DesignWorkingItem{},
 		UpdatedAt:  time.Now(),
 	}, nil
+}
+
+func (s *stubStore) GetDesignCommercialProjection(_ context.Context, _, _ string) (*domain.CommercialProjection, error) {
+	if s.commercialProjectionErr != nil {
+		return nil, s.commercialProjectionErr
+	}
+	return s.commercialProjection, nil
 }
 
 func (s *stubStore) UpdateDesignWorkingCopy(_ context.Context, cmd storage.UpdateDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error) {

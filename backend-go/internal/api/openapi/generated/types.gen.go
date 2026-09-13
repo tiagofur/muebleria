@@ -1963,3 +1963,50 @@ type HardwareAssetRevisionGrant struct {
 	URL            string                      `json:"url"`
 	ExpiresAt      string                      `json:"expires_at"`
 }
+
+type CommercialProjectionAmounts struct {
+	MaterialsCost  *float64 `json:"materialsCost"`
+	EdgeTotal      *float64 `json:"edgeTotal"`
+	HardwareTotal  *float64 `json:"hardwareTotal"`
+	DirectCost     *float64 `json:"directCost"`
+	LaborModular   *float64 `json:"laborModular"`
+	LaborFixedCost *float64 `json:"laborFixedCost"`
+	MarginFactor   *float64 `json:"marginFactor"`
+	SaleTotal      *float64 `json:"saleTotal"`
+}
+
+type CommercialProjectionReference struct {
+	QuoteRevisionId string              `json:"quoteRevisionId"`
+	RevisionNumber  int64               `json:"revisionNumber"`
+	Status          QuoteRevisionStatus `json:"status"`
+	Currency        string              `json:"currency"`
+	SaleTotal       *float64            `json:"saleTotal"`
+}
+
+type CommercialProjectionComparison struct {
+	AbsoluteDelta   float64  `json:"absoluteDelta"`
+	PercentageDelta *float64 `json:"percentageDelta"`
+}
+
+type CommercialProjection struct {
+	Schema                   string   `json:"schema"`
+	Status                   string   `json:"status"`
+	ProjectId                string   `json:"projectId"`
+	DesignId                 string   `json:"designId"`
+	WorkingVersion           string   `json:"workingVersion"`
+	WorkingFingerprint       string   `json:"workingFingerprint"`
+	CatalogFingerprint       *string  `json:"catalogFingerprint"`
+	ProjectionFingerprint    *string  `json:"projectionFingerprint"`
+	PricingAuthority         string   `json:"pricingAuthority"`
+	CalculatedAt             string   `json:"calculatedAt"`
+	Currency                 string   `json:"currency"`
+	ItemCount                int64    `json:"itemCount"`
+	Amounts                  any      `json:"amounts"`
+	CostsWithheld            bool     `json:"costsWithheld"`
+	SaleAmountsWithheld      bool     `json:"saleAmountsWithheld"`
+	Reference                any      `json:"reference"`
+	AcceptedReference        any      `json:"acceptedReference"`
+	LatestPublishedReference any      `json:"latestPublishedReference"`
+	Comparison               any      `json:"comparison"`
+	Issues                   []string `json:"issues"`
+}

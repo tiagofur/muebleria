@@ -4210,6 +4210,35 @@
           }
         }
       }
+    },
+    "/projects/{projectId}/designs/{designId}/commercial-projection": {
+      "get": {
+        "operationId": "getDesignCommercialProjection",
+        "description": "Returns a non-binding server-side estimate for the exact mutable Design working copy. It never creates or mutates a QuoteRevision.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current Design commercial projection or an honest incomplete projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommercialProjection"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10119,7 +10148,10 @@
           },
           "outputProfileDigest": {
             "description": "SHA-256 of the exact OutputCompatibilityProfile data. Null only for historical rows created before digest pinning; new writes reject null.",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "adapterId": {
             "type": "string"
@@ -10171,7 +10203,10 @@
           },
           "outputProfileDigest": {
             "description": "SHA-256 of the exact OutputCompatibilityProfile data; null marks an unpinned historical selection.",
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "adapterId": {
             "type": "string"
@@ -11269,6 +11304,267 @@
           "expires_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CommercialProjectionAmounts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "materialsCost",
+          "edgeTotal",
+          "hardwareTotal",
+          "directCost",
+          "laborModular",
+          "laborFixedCost",
+          "marginFactor",
+          "saleTotal"
+        ],
+        "properties": {
+          "materialsCost": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "edgeTotal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hardwareTotal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "directCost": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "laborModular": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "laborFixedCost": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "marginFactor": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "saleTotal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      },
+      "CommercialProjectionReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "quoteRevisionId",
+          "revisionNumber",
+          "status",
+          "currency",
+          "saleTotal"
+        ],
+        "properties": {
+          "quoteRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revisionNumber": {
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteRevisionStatus"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "saleTotal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      },
+      "CommercialProjectionComparison": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "absoluteDelta",
+          "percentageDelta"
+        ],
+        "properties": {
+          "absoluteDelta": {
+            "type": "number"
+          },
+          "percentageDelta": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      },
+      "CommercialProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema",
+          "status",
+          "projectId",
+          "designId",
+          "workingVersion",
+          "workingFingerprint",
+          "catalogFingerprint",
+          "projectionFingerprint",
+          "pricingAuthority",
+          "calculatedAt",
+          "currency",
+          "itemCount",
+          "amounts",
+          "costsWithheld",
+          "saleAmountsWithheld",
+          "reference",
+          "acceptedReference",
+          "latestPublishedReference",
+          "comparison",
+          "issues"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string",
+            "const": "granete.commercial-projection.v1"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "incomplete"
+            ]
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workingVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workingFingerprint": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          },
+          "catalogFingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          },
+          "projectionFingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          },
+          "pricingAuthority": {
+            "type": "string",
+            "const": "calc-project-breakdown"
+          },
+          "calculatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "itemCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "amounts": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CommercialProjectionAmounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "costsWithheld": {
+            "type": "boolean"
+          },
+          "saleAmountsWithheld": {
+            "type": "boolean"
+          },
+          "reference": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CommercialProjectionReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "acceptedReference": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CommercialProjectionReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latestPublishedReference": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CommercialProjectionReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparison": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CommercialProjectionComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }

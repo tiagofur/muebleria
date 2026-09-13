@@ -323,6 +323,7 @@ type Store interface {
 	GetDesignByID(ctx context.Context, id string) (*domain.Design, error)
 	ListDesignsByProject(ctx context.Context, projectID string) ([]domain.Design, error)
 	GetDesignWorkingCopy(ctx context.Context, designID string) (*domain.DesignWorkingCopy, error)
+	GetDesignCommercialProjection(ctx context.Context, projectID, designID string) (*domain.CommercialProjection, error)
 	UpdateDesignWorkingCopy(ctx context.Context, cmd storage.UpdateDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error)
 	ResetDesignWorkingCopy(ctx context.Context, cmd storage.ResetDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error)
 	// #637 / DT-MAT: quoted-material provenance detection (read-only) and

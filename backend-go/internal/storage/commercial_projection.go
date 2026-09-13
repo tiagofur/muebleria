@@ -1,0 +1,192 @@
+package storage
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sort"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
+)
+
+// GetDesignCommercialProjection calculates a non-binding estimate from the
+// exact Design working copy inside the request's tenant transaction. The
+// shared lock serializes this read with UpdateDesignWorkingCopy's FOR UPDATE.
+func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, projectID, designID string) (*domain.CommercialProjection, error) {
+	if !isValidUUID(projectID) || !isValidUUID(designID) {
+		return nil, domain.ErrDesignNotFound
+	}
+	orgID := OrgFromCtx(ctx)
+	var ownerOrgID, salesOrgID string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT p.organization_id::text, COALESCE(p.sales_organization_id::text, '')
+		FROM designs d
+		JOIN projects p ON p.id = d.project_id
+		WHERE d.id = $1 AND d.project_id = $2
+		  AND (p.organization_id = $3 OR p.sales_organization_id = $3 OR p.manufacturing_organization_id = $3)
+		FOR SHARE OF d
+	`, designID, projectID, orgID).Scan(&ownerOrgID, &salesOrgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignNotFound
+		}
+		return nil, err
+	}
+	saleVisible := ownerOrgID == orgID || salesOrgID == orgID
+
+	wc, err := s.GetDesignWorkingCopy(ctx, designID)
+	if err != nil || wc.ProjectID != projectID {
+		if err == nil {
+			err = domain.ErrDesignNotFound
+		}
+		return nil, err
+	}
+	envelope, err := s.loadQuoteCommercialEnvelope(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	workingFingerprint, err := hashJSON(struct {
+		BaseRevisionID *string                    `json:"baseRevisionId"`
+		Items          []domain.DesignWorkingItem `json:"items"`
+	}{wc.BaseRevisionID, wc.Items})
+	if err != nil {
+		return nil, err
+	}
+	workingVersion := wc.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	if wc.UpdatedAt.IsZero() {
+		workingVersion = workingFingerprint
+	}
+	now := time.Now().UTC()
+	result := &domain.CommercialProjection{
+		Schema: domain.CommercialProjectionSchema, Status: domain.CommercialProjectionIncomplete,
+		ProjectID: projectID, DesignID: designID, WorkingVersion: workingVersion,
+		WorkingFingerprint: workingFingerprint, PricingAuthority: "calc-project-breakdown",
+		CalculatedAt: now, Currency: envelope.Currency, ItemCount: len(wc.Items), Issues: []string{},
+		SaleAmountsWithheld: !saleVisible,
+	}
+
+	pricingItems := make([]domain.ProjectItem, 0, len(wc.Items))
+	for _, item := range wc.Items {
+		if item.FurnitureDefinitionID == "" {
+			result.Issues = append(result.Issues, "working_item_missing_furniture_definition")
+			continue
+		}
+		choices := item.MaterialChoices
+		if choices == nil {
+			choices = map[string]string{}
+		}
+		pricingItems = append(pricingItems, domain.ProjectItem{
+			ID: item.FurnitureInstanceID, ModuleID: item.FurnitureDefinitionID, Quantity: 1,
+			OptionChoices: choices, CustomDims: domain.CommercialDimsFromParameters(item.Parameters),
+		})
+	}
+	if len(wc.Items) == 0 {
+		result.Issues = append(result.Issues, "working_copy_empty")
+	} else if len(pricingItems) != len(wc.Items) {
+		result.Issues = append(result.Issues, "working_copy_incomplete")
+	}
+
+	revisions, err := s.ListQuoteRevisionsByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	result.Reference, result.AcceptedReference, result.LatestPublishedReference = selectCommercialProjectionReferences(revisions)
+
+	if len(result.Issues) == 0 {
+		catalog, catalogErr := s.GetFullCatalog(ctx)
+		if catalogErr != nil {
+			return nil, catalogErr
+		}
+		catalogFingerprint, hashErr := hashJSON(catalog)
+		if hashErr != nil {
+			return nil, hashErr
+		}
+		result.CatalogFingerprint = &catalogFingerprint
+		pricingProject := domain.Project{
+			ID: projectID, Name: envelope.ProjectName, CustomerID: envelope.CustomerID,
+			Currency: envelope.Currency, MarginFactor: envelope.MarginFactor,
+			LaborFixedCost: envelope.LaborFixedCost, Status: "draft", Items: pricingItems,
+		}
+		breakdown, calcErr := engine.CalcProjectBreakdown(pricingProject, catalog)
+		if calcErr != nil {
+			result.Issues = append(result.Issues, "pricing_inputs_incomplete:"+calcErr.Error())
+		} else {
+			projectionFingerprint, hashErr := hashJSON(struct {
+				Working string         `json:"working"`
+				Catalog string         `json:"catalog"`
+				Project domain.Project `json:"project"`
+			}{workingFingerprint, catalogFingerprint, pricingProject})
+			if hashErr != nil {
+				return nil, hashErr
+			}
+			result.ProjectionFingerprint = &projectionFingerprint
+			result.Amounts = domain.CommercialProjectionAmountsFromBreakdown(breakdown)
+			result.Status = domain.CommercialProjectionCurrent
+			if !saleVisible {
+				result.Amounts.SaleTotal = nil
+			}
+			result.Comparison = compareCommercialProjection(result)
+		}
+	}
+	return result, nil
+}
+
+func hashJSON(value any) (string, error) {
+	bytes, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("commercial projection fingerprint: %w", err)
+	}
+	sum := sha256.Sum256(bytes)
+	return "sha256-" + hex.EncodeToString(sum[:]), nil
+}
+
+func selectCommercialProjectionReferences(revisions []domain.QuoteRevisionDetail) (selected, accepted, latestPublished *domain.CommercialProjectionReference) {
+	sort.SliceStable(revisions, func(i, j int) bool { return revisions[i].RevisionNumber < revisions[j].RevisionNumber })
+	for i := range revisions {
+		revision := revisions[i]
+		ref := commercialProjectionReference(revision)
+		selected = ref
+		if revision.Status == "accepted" {
+			accepted = ref
+		}
+		if revision.PublishedAt != nil {
+			latestPublished = ref
+		}
+	}
+	if accepted != nil {
+		selected = accepted
+	}
+	return
+}
+
+func commercialProjectionReference(revision domain.QuoteRevisionDetail) *domain.CommercialProjectionReference {
+	ref := &domain.CommercialProjectionReference{QuoteRevisionID: revision.ID, RevisionNumber: revision.RevisionNumber, Status: revision.Status}
+	if revision.CommercialSnapshot != nil {
+		ref.Currency = revision.CommercialSnapshot.Currency
+		if !revision.CommercialAmountsWithheld {
+			value := revision.CommercialSnapshot.Breakdown.SalePrice
+			ref.SaleTotal = &value
+		}
+	}
+	return ref
+}
+
+func compareCommercialProjection(p *domain.CommercialProjection) *domain.CommercialProjectionComparison {
+	if p.Amounts == nil || p.Amounts.SaleTotal == nil || p.Reference == nil || p.Reference.SaleTotal == nil || p.Currency != p.Reference.Currency {
+		return nil
+	}
+	delta := *p.Amounts.SaleTotal - *p.Reference.SaleTotal
+	comparison := &domain.CommercialProjectionComparison{AbsoluteDelta: delta}
+	if *p.Reference.SaleTotal != 0 {
+		percent := delta / *p.Reference.SaleTotal * 100
+		comparison.PercentageDelta = &percent
+	}
+	return comparison
+}

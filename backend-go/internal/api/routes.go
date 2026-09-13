@@ -573,6 +573,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	// commercial items) that powers the exact commercial context selector of
 	// the Project Furniture matrix. Read-only.
 	mux.Handle("GET /api/projects/{projectId}/quote-revisions", authMW(http.HandlerFunc(server.HandleProjectQuoteRevisions)))
+	// #642 -> #677: non-binding commercial projection for the exact mutable
+	// Design working copy. no-store prevents a previous model/version total
+	// from being presented as current after authoring mutations.
+	mux.Handle("GET /api/projects/{projectId}/designs/{designId}/commercial-projection", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleDesignCommercialProjection))))
 	// #571 / WEB-DT-4: commercial QuoteRevision lifecycle. The canonical Q1
 	// entry converts the project's editable commercial state into the first
 	// immutable draft revision — the server builds the whole snapshot
