@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '@granete/domain';
 import { ProductionWorkspace } from './ProductionWorkspace';
 
@@ -22,12 +22,15 @@ function baseProject(overrides: Partial<Project> = {}): Project {
     marginFactor: 1.35,
     laborFixedCost: 0,
     status: 'accepted',
+    hasDigitalThreadContext: false,
     items: [],
     createdAt: '2026-08-28T00:00:00.000Z',
     updatedAt: '2026-08-28T00:00:00.000Z',
     ...overrides,
   };
 }
+
+afterEach(cleanup);
 
 function renderWorkspace(
   projects: readonly Project[],
@@ -82,5 +85,17 @@ describe('ProductionWorkspace order routing (P0-2c)', () => {
     const draft = baseProject({ status: 'draft' });
     renderWorkspace([], (id) => (id === 'p1' ? draft : undefined));
     expect(screen.getByTestId('prod-order-not-ready')).toBeTruthy();
+  });
+
+  it('keeps a modern accepted project without a canonical release out of production', () => {
+    const modernAcceptedWithoutRelease = baseProject({
+      hasDigitalThreadContext: true,
+    });
+    renderWorkspace(
+      [],
+      (id) => (id === 'p1' ? modernAcceptedWithoutRelease : undefined),
+    );
+    expect(screen.getByTestId('prod-order-not-ready')).toBeTruthy();
+    expect(screen.queryByTestId('prod-order-pending-release')).toBeNull();
   });
 });
