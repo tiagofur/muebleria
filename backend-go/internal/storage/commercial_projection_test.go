@@ -74,6 +74,26 @@ func TestMapDesignPricingPlacements_DropsUnitsAbsentFromWorkingCopy(t *testing.T
 	}
 }
 
+func TestCommercialProjectionParametersPriceable_FailsClosedOutsideCompleteDimensions(t *testing.T) {
+	if !commercialProjectionParametersPriceable(map[string]any{}) {
+		t.Fatal("empty parameters should use the catalog definition")
+	}
+	if !commercialProjectionParametersPriceable(map[string]any{
+		"widthMm": float64(600), "heightMm": float64(720), "depthMm": float64(560),
+	}) {
+		t.Fatal("complete dimensions should be priceable")
+	}
+	for _, parameters := range []map[string]any{
+		{"widthMm": float64(600)},
+		{"shelfCount": float64(3)},
+		{"widthMm": float64(600), "heightMm": float64(720), "depthMm": float64(560), "hasBack": false},
+	} {
+		if commercialProjectionParametersPriceable(parameters) {
+			t.Fatalf("parameters %#v must fail closed", parameters)
+		}
+	}
+}
+
 func projectionSnapshot(total float64) *domain.QuoteCommercialSnapshot {
 	return &domain.QuoteCommercialSnapshot{Currency: "MXN", Breakdown: domain.QuoteBreakdown{SalePrice: total}}
 }

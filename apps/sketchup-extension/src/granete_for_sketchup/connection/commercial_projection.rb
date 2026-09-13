@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'time'
 
 module Granete
   module SketchUpExtension
@@ -8,8 +9,16 @@ module Granete
       module CommercialProjection
         UUID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/
         SHA256_PATTERN = /\Asha256-[0-9a-f]{64}\z/
+        TOP_LEVEL_KEYS = %w[schema status projectId designId workingVersion workingFingerprint catalogFingerprint
+                            projectionFingerprint pricingAuthority calculatedAt currency itemCount amounts costsWithheld
+                            saleAmountsWithheld reference acceptedReference latestPublishedReference comparison
+                            issues].freeze
+        AMOUNT_KEYS = %w[materialsCost edgeTotal hardwareTotal directCost laborModular laborFixedCost marginFactor
+                         saleTotal].freeze
+        REFERENCE_KEYS = %w[quoteRevisionId revisionNumber status currency saleTotal].freeze
+        COMPARISON_KEYS = %w[absoluteDelta percentageDelta].freeze
 
-        module Contract
+        module Contract # rubocop:disable Metrics/ModuleLength
           module_function
 
           def parse!(body)
@@ -25,7 +34,7 @@ module Granete
           def validate_identity!(value)
             raise ArgumentError, 'respuesta comercial inválida' unless value.is_a?(Hash)
 
-            require_keys!(value, %w[schema status projectId designId])
+            require_exact_keys!(value, TOP_LEVEL_KEYS)
             unless value['schema'] == 'granete.commercial-projection.v1'
               raise ArgumentError, 'schema comercial incompatible'
             end
@@ -39,8 +48,10 @@ module Granete
           def validate_metadata!(value)
             require_keys!(value, %w[workingVersion workingFingerprint catalogFingerprint projectionFingerprint
                                     pricingAuthority calculatedAt currency itemCount])
-            raise ArgumentError, 'versión de diseño inválida' if value['workingVersion'].to_s.empty?
-            unless value['workingFingerprint'].to_s.match?(SHA256_PATTERN)
+            unless value['workingVersion'].is_a?(String) && !value['workingVersion'].empty?
+              raise ArgumentError, 'versión de diseño inválida'
+            end
+            unless value['workingFingerprint'].is_a?(String) && value['workingFingerprint'].match?(SHA256_PATTERN)
               raise ArgumentError, 'huella de diseño inválida'
             end
 
@@ -48,8 +59,9 @@ module Granete
             unless value['pricingAuthority'] == 'calc-project-breakdown'
               raise ArgumentError, 'autoridad de precios incompatible'
             end
-            raise ArgumentError, 'fecha de cálculo inválida' if value['calculatedAt'].to_s.empty?
-            raise ArgumentError, 'moneda inválida' if value['currency'].to_s.empty?
+
+            validate_calculated_at!(value['calculatedAt'])
+            raise ArgumentError, 'moneda inválida' unless value['currency'].is_a?(String)
             return if value['itemCount'].is_a?(Integer) && value['itemCount'] >= 0
 
             raise ArgumentError, 'cantidad de muebles inválida'
@@ -58,7 +70,7 @@ module Granete
           def validate_optional_fingerprints!(value)
             %w[catalogFingerprint projectionFingerprint].each do |key|
               fingerprint = value[key]
-              next if fingerprint.nil? || fingerprint.to_s.match?(SHA256_PATTERN)
+              next if fingerprint.nil? || (fingerprint.is_a?(String) && fingerprint.match?(SHA256_PATTERN))
 
               raise ArgumentError, "#{key} inválida"
             end
@@ -70,7 +82,9 @@ module Granete
             %w[costsWithheld saleAmountsWithheld].each do |key|
               raise ArgumentError, "#{key} inválido" unless [true, false].include?(value[key])
             end
-            raise ArgumentError, 'incidencias inválidas' unless value['issues'].is_a?(Array)
+            unless value['issues'].is_a?(Array) && value['issues'].all?(String)
+              raise ArgumentError, 'incidencias inválidas'
+            end
 
             validate_amounts!(value['amounts']) if value['amounts']
             %w[reference acceptedReference latestPublishedReference].each do |key|
@@ -82,10 +96,8 @@ module Granete
           def validate_amounts!(amounts)
             raise ArgumentError, 'montos comerciales inválidos' unless amounts.is_a?(Hash)
 
-            %w[materialsCost edgeTotal hardwareTotal directCost laborModular laborFixedCost marginFactor
-               saleTotal].each do |key|
-              raise ArgumentError, "#{key} ausente" unless amounts.key?(key)
-
+            require_exact_keys!(amounts, AMOUNT_KEYS)
+            AMOUNT_KEYS.each do |key|
               amount = amounts[key]
               next if amount.nil? || (amount.is_a?(Numeric) && amount.finite?)
 
@@ -95,10 +107,12 @@ module Granete
 
           def validate_reference!(reference)
             raise ArgumentError, 'referencia comercial inválida' unless reference.is_a?(Hash)
+
+            require_exact_keys!(reference, REFERENCE_KEYS)
             unless reference['quoteRevisionId'].to_s.match?(UUID_PATTERN) &&
                    reference['revisionNumber'].is_a?(Integer) && reference['revisionNumber'].positive? &&
                    %w[draft published accepted superseded].include?(reference['status']) &&
-                   (reference['currency'].nil? || !reference['currency'].to_s.empty?)
+                   (reference['currency'].nil? || reference['currency'].is_a?(String))
               raise ArgumentError, 'referencia comercial inválida'
             end
 
@@ -107,6 +121,8 @@ module Granete
 
           def validate_comparison!(comparison)
             raise ArgumentError, 'comparación comercial inválida' unless comparison.is_a?(Hash)
+
+            require_exact_keys!(comparison, COMPARISON_KEYS)
 
             validate_finite_or_nil!(comparison['absoluteDelta'], 'delta absoluto inválido', nullable: false)
             validate_finite_or_nil!(comparison['percentageDelta'], 'delta porcentual inválido')
@@ -122,6 +138,23 @@ module Granete
           def require_keys!(value, keys)
             missing = keys.reject { |key| value.key?(key) }
             raise ArgumentError, "campos comerciales ausentes: #{missing.join(', ')}" unless missing.empty?
+          end
+
+          def require_exact_keys!(value, keys)
+            require_keys!(value, keys)
+            unknown = value.keys - keys
+            raise ArgumentError, "campos comerciales desconocidos: #{unknown.join(', ')}" unless unknown.empty?
+          end
+
+          def validate_calculated_at!(value)
+            unless value.is_a?(String) &&
+                   value.match?(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\z/)
+              raise ArgumentError, 'fecha de cálculo inválida'
+            end
+
+            Time.iso8601(value)
+          rescue ArgumentError
+            raise ArgumentError, 'fecha de cálculo inválida'
           end
         end
 

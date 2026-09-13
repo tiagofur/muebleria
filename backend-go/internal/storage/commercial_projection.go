@@ -74,6 +74,10 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			result.Issues = append(result.Issues, "working_item_missing_furniture_definition")
 			continue
 		}
+		if !commercialProjectionParametersPriceable(item.Parameters) {
+			result.Issues = append(result.Issues, "working_item_parameters_not_priceable")
+			continue
+		}
 		choices := item.MaterialChoices
 		if choices == nil {
 			choices = map[string]string{}
@@ -149,6 +153,20 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		}
 	}
 	return result, nil
+}
+
+func commercialProjectionParametersPriceable(parameters map[string]any) bool {
+	dimensionKeys := map[string]struct{}{"widthMm": {}, "heightMm": {}, "depthMm": {}}
+	hasDimension := false
+	for key := range parameters {
+		if _, ok := dimensionKeys[key]; !ok {
+			// CalcProjectBreakdown has no per-unit typed-parameter input. Returning
+			// current here would silently price the catalog-default composition.
+			return false
+		}
+		hasDimension = true
+	}
+	return !hasDimension || domain.CommercialDimsFromParameters(parameters) != nil
 }
 
 // designPricingKitchenLayout translates the editable quote-line placement

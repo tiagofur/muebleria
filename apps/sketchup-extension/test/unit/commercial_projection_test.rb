@@ -83,6 +83,26 @@ class CommercialProjectionTest < Minitest::Test
     assert_raises(ArgumentError) { CP::Contract.parse!(body) }
   end
 
+  def test_contract_rejects_unknown_fields_and_non_string_issues
+    body = projection.merge('unexpected' => true)
+    assert_raises(ArgumentError) { CP::Contract.parse!(body) }
+
+    body = projection
+    body['amounts']['unexpected'] = 1
+    assert_raises(ArgumentError) { CP::Contract.parse!(body) }
+
+    body = projection
+    body['issues'] = [{ 'code' => 'not-generated' }]
+    assert_raises(ArgumentError) { CP::Contract.parse!(body) }
+  end
+
+  def test_contract_rejects_invalid_calculated_at
+    body = projection
+    body['calculatedAt'] = 'today'
+
+    assert_raises(ArgumentError) { CP::Contract.parse!(body) }
+  end
+
   def test_contract_fails_closed_on_invalid_reference_and_comparison
     body = projection
     body['reference'] = {
