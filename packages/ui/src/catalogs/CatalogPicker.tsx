@@ -82,6 +82,7 @@ export function CatalogPicker({
   const searchId = `${triggerId}-search`;
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -117,6 +118,18 @@ export function CatalogPicker({
     setHighlight(0);
   }, []);
 
+  // Deliberate closes (select, clear, Escape) hand focus back to the trigger
+  // so keyboard users continue the form from the picker. Outside clicks keep
+  // focus wherever the user put it, and a trigger unmounted by the consumer's
+  // onChange is never focused again.
+  const closeAndFocusTrigger = useCallback(() => {
+    close();
+    const trigger = triggerRef.current;
+    if (trigger && trigger.isConnected && !trigger.disabled) {
+      trigger.focus();
+    }
+  }, [close]);
+
   const openList = useCallback(() => {
     if (disabled) return;
     setOpen(true);
@@ -133,9 +146,9 @@ export function CatalogPicker({
   const selectId = useCallback(
     (nextId: string) => {
       onChange(nextId);
-      close();
+      closeAndFocusTrigger();
     },
-    [onChange, close],
+    [onChange, closeAndFocusTrigger],
   );
 
   useEffect(() => {
@@ -175,19 +188,29 @@ export function CatalogPicker({
 
   const onTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
+    if (e.key === 'Escape' && open) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeAndFocusTrigger();
+      return;
+    }
     if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       openList();
     }
   };
 
+  // Escape must close only this popover from wherever focus sits inside it
+  // (search input or Quitar selección); stopPropagation keeps container
+  // dialogs from seeing it while the list is open.
+  const onPopoverKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeAndFocusTrigger();
+  };
+
   const onSearchKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      close();
-      return;
-    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (filtered.length === 0) return;
@@ -217,6 +240,7 @@ export function CatalogPicker({
     >
       <label htmlFor={triggerId}>{label}</label>
       <button
+        ref={triggerRef}
         type="button"
         id={triggerId}
         className="catalog-picker__trigger"
@@ -245,7 +269,11 @@ export function CatalogPicker({
       </button>
 
       {open ? (
-        <div className="catalog-picker__popover" role="presentation">
+        <div
+          className="catalog-picker__popover"
+          role="presentation"
+          onKeyDown={onPopoverKeyDown}
+        >
           <div className="catalog-picker__search">
             <Search
               size={14}
@@ -338,10 +366,7 @@ export function CatalogPicker({
             <button
               type="button"
               className="catalog-picker__clear"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                selectId('');
-              }}
+              onClick={() => selectId('')}
             >
               Quitar selección
             </button>
