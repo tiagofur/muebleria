@@ -39,6 +39,10 @@ function dimLabel(m: Module): string {
   return 'Medidas a definir';
 }
 
+function furnitureNoun(count: number): string {
+  return count === 1 ? 'mueble' : 'muebles';
+}
+
 function categoryLabel(
   module: Module,
   categories: readonly ModuleCategory[],
@@ -88,6 +92,14 @@ export function ModuleShowcase({
     return byCat.filter((m) => matchesCodeOrName(m, q));
   }, [modules, categories, categoryFilter, debounced]);
 
+  // Summary follows the debounced state (same input that renders the cards),
+  // never the live searchbox text, so counts always match what is on screen.
+  const hasActiveFilters =
+    debounced.trim() !== '' || categoryFilter !== null;
+  const summaryText = hasActiveFilters
+    ? `Mostrando ${rows.length} de ${modules.length} ${furnitureNoun(modules.length)}`
+    : `${modules.length} ${furnitureNoun(modules.length)}`;
+
   const detail = detailId
     ? (modules.find((m) => m.id === detailId) ?? null)
     : null;
@@ -127,6 +139,7 @@ export function ModuleShowcase({
                 ? 'module-showcase-chip module-showcase-chip--active'
                 : 'module-showcase-chip'
             }
+            aria-pressed={categoryFilter === null}
             onClick={() => setCategoryFilter(null)}
             data-testid="showcase-filter-all"
           >
@@ -146,6 +159,7 @@ export function ModuleShowcase({
                     ? 'module-showcase-chip module-showcase-chip--active'
                     : 'module-showcase-chip'
                 }
+                aria-pressed={categoryFilter === cat.id}
                 onClick={() => setCategoryFilter(cat.id)}
                 data-testid={`showcase-filter-${cat.id}`}
               >
@@ -164,6 +178,7 @@ export function ModuleShowcase({
                   ? 'module-showcase-chip module-showcase-chip--active'
                   : 'module-showcase-chip'
               }
+              aria-pressed={categoryFilter === UNCATEGORIZED_FILTER}
               onClick={() => setCategoryFilter(UNCATEGORIZED_FILTER)}
               data-testid="showcase-filter-uncategorized"
             >
@@ -176,6 +191,30 @@ export function ModuleShowcase({
           </div>
         ) : undefined}
       />
+
+      {modules.length > 0 ? (
+        <div className="module-showcase__meta-row">
+          <p
+            className="module-showcase__results"
+            aria-live="polite"
+            data-testid="showcase-results-summary"
+          >
+            {summaryText}
+          </p>
+          {/* With zero rows the no-results EmptyState already offers the only
+              recovery action — never render a second Limpiar filtros here. */}
+          {hasActiveFilters && rows.length > 0 ? (
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={clearFilters}
+              data-testid="showcase-clear-filters"
+            >
+              Limpiar filtros
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {modules.length === 0 ? (
         <EmptyState

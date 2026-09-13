@@ -61,6 +61,22 @@
   opacity: 0.85;
 }
 
+/* Result summary + clear filters (discreet meta line under the toolbar) */
+.module-showcase__meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.module-showcase__results {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Photo-first grid */
 .module-showcase__grid {
   display: grid;
