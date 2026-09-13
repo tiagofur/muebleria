@@ -964,14 +964,21 @@ class DialogControllerTest < Minitest::Test
     callback = dialog.callbacks.fetch('get_commercial_projection')
 
     callback.call(nil, JSON.generate({ 'requestId' => 'commercial-1' }))
-    assert_equal 1, service.calls
-    assert_includes dialog.executed_scripts.last, '"localChangesPending":false'
+    assert_equal 1, service.calls, 'the server estimate may be read without claiming a local match'
+    assert_includes dialog.executed_scripts.last, '"matchConfirmed":false'
     assert_includes dialog.executed_scripts.last, '"projection"'
 
     state = projection_work_state
+    state.record_sync!(project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, scope: :full)
+    callback.call(nil, JSON.generate({ 'requestId' => 'commercial-verified' }))
+    assert_equal 2, service.calls
+    assert_includes dialog.executed_scripts.last, '"localChangesPending":false'
+    assert_includes dialog.executed_scripts.last, '"matchConfirmed":true'
+    assert_includes dialog.executed_scripts.last, '"projection"'
+
     state.mark_pending!(project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID)
     callback.call(nil, JSON.generate({ 'requestId' => 'commercial-2' }))
-    assert_equal 1, service.calls, 'pending local work must block a stale backend estimate'
+    assert_equal 2, service.calls, 'pending local work must block a stale backend estimate'
     assert_includes dialog.executed_scripts.last, '"state":"stale"'
 
     state.record_sync!(project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, scope: :full)
@@ -979,7 +986,7 @@ class DialogControllerTest < Minitest::Test
       state.mark_pending!(project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID)
     end
     callback.call(nil, JSON.generate({ 'requestId' => 'commercial-3' }))
-    assert_equal 2, service.calls
+    assert_equal 3, service.calls
     assert_includes dialog.executed_scripts.last, '"state":"stale"'
     refute_includes dialog.executed_scripts.last, '"projection"'
   end

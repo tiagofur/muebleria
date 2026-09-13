@@ -270,7 +270,8 @@ module Granete
           projection = @commercial_projection_service.fetch(project_id, design_id)
           finished_work = commercial_projection_local_work(project_id, design_id)
           if finished_work['localChangesPending'] ||
-             finished_work['generation'] != started_work['generation']
+             finished_work['generation'] != started_work['generation'] ||
+             finished_work['matchConfirmed'] != started_work['matchConfirmed']
             return commercial_projection_stale_response(
               request_id, project_id, design_id, finished_work,
               'el modelo cambió mientras se calculaba el presupuesto'

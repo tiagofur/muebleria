@@ -53,7 +53,7 @@ function projectionResponse(requestId, binding, value) {
     requestId, projectId: binding.binding.projectId, designId: binding.binding.designId,
     workState: {
       projectId: binding.binding.projectId, designId: binding.binding.designId,
-      generation: 0, localChangesPending: false
+      generation: 0, localChangesPending: false, matchConfirmed: true
     },
     projection: value
   };
@@ -123,6 +123,65 @@ test('manual refresh requested before a local commit cannot become current after
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
 });
 
+test('refresh and receive cannot become current while a mutation is resolving', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const first = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(first, bindingA, projection(100, 80)));
+  s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
+  const before = s.__calls.length;
+
+  s.window.GraneteCommercialProjection.refresh();
+  const attempted = s.__calls.length > before
+    ? s.__calls[s.__calls.length - 1].payload.requestId
+    : 'commercial-blocked';
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(
+    projectionResponse(attempted, bindingA, projection(110, 80))
+  ), false);
+  assert.strictEqual(s.__calls.length, before);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Sincronizando');
+});
+
+test('refresh and receive cannot become current while a host mutation is applying', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const first = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(first, bindingA, projection(100, 80)));
+  s.__events['granete-mutation-state']({ detail: { phase: 'applying_host_mutation' } });
+  const before = s.__calls.length;
+
+  s.window.GraneteCommercialProjection.refresh();
+  const attempted = s.__calls.length > before
+    ? s.__calls[s.__calls.length - 1].payload.requestId
+    : 'commercial-blocked';
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive(
+    projectionResponse(attempted, bindingA, projection(110, 80))
+  ), false);
+  assert.strictEqual(s.__calls.length, before);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Sincronizando');
+});
+
+test('cancellation preserves previously pending local work', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const initial = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive({
+    requestId: initial, projectId: 'p-a', designId: 'd-a',
+    workState: { projectId: 'p-a', designId: 'd-a', generation: 4, localChangesPending: true, matchConfirmed: false },
+    state: 'stale'
+  });
+
+  s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
+  const before = s.__calls.length;
+  s.__events['granete-mutation-state']({ detail: { phase: 'cancelled' } });
+
+  assert.strictEqual(s.__calls.length, before);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
+  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
 test('rejected mutation during initial loading starts a recoverable readback', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
@@ -140,6 +199,19 @@ test('cancelled mutation restores the last valid projection without claiming a n
   s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, projection(100, 80)));
   s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
   s.__events['granete-mutation-state']({ detail: { phase: 'cancelled' } });
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualizado');
+  assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$100.00'));
+});
+
+test('aborted mutation restores only a previously confirmed projection', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, projection(100, 80)));
+
+  s.__events['granete-mutation-state']({ detail: { phase: 'applying_host_mutation' } });
+  s.__events['granete-mutation-state']({ detail: { phase: 'aborted' } });
+
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualizado');
   assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$100.00'));
 });
@@ -165,16 +237,16 @@ test('partial synchronization cannot clear another local change while a full syn
   const reopen = s.__calls[s.__calls.length - 1].payload.requestId;
   s.window.GraneteCommercialProjection.receive({
     requestId: reopen, projectId: 'p-a', designId: 'd-a',
-    workState: { projectId: 'p-a', designId: 'd-a', generation: 1, localChangesPending: true },
+    workState: { projectId: 'p-a', designId: 'd-a', generation: 1, localChangesPending: true, matchConfirmed: false },
     state: 'stale'
   });
   s.window.GraneteCommercialProjection.applySynchronization({
-    projectId: 'p-a', designId: 'd-a', generation: 2, localChangesPending: true, scope: 'partial'
+    projectId: 'p-a', designId: 'd-a', generation: 2, localChangesPending: true, matchConfirmed: false, scope: 'partial'
   });
   assert.strictEqual(s.__calls.length, before + 1);
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
   s.window.GraneteCommercialProjection.applySynchronization({
-    projectId: 'p-a', designId: 'd-a', generation: 3, localChangesPending: false, scope: 'full'
+    projectId: 'p-a', designId: 'd-a', generation: 3, localChangesPending: false, matchConfirmed: true, scope: 'full'
   });
   assert.strictEqual(s.__calls.length, before + 2);
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
@@ -186,7 +258,7 @@ test('authoritative pending work survives temporary unavailability and panel-sty
   const first = s.__calls[s.__calls.length - 1].payload.requestId;
   s.window.GraneteCommercialProjection.receive({
     requestId: first, projectId: 'p-a', designId: 'd-a',
-    workState: { projectId: 'p-a', designId: 'd-a', generation: 4, localChangesPending: true },
+    workState: { projectId: 'p-a', designId: 'd-a', generation: 4, localChangesPending: true, matchConfirmed: false },
     state: 'stale'
   });
   s.window.GraneteCommercialProjection.setBinding({ state: 'unreachable', binding: bindingA.binding });
@@ -194,7 +266,7 @@ test('authoritative pending work survives temporary unavailability and panel-sty
   const reconnect = s.__calls[s.__calls.length - 1].payload.requestId;
   s.window.GraneteCommercialProjection.receive({
     requestId: reconnect, projectId: 'p-a', designId: 'd-a',
-    workState: { projectId: 'p-a', designId: 'd-a', generation: 4, localChangesPending: true },
+    workState: { projectId: 'p-a', designId: 'd-a', generation: 4, localChangesPending: true, matchConfirmed: false },
     state: 'stale'
   });
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
@@ -205,7 +277,7 @@ test('pending work state is scoped by project and design', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
   s.window.GraneteCommercialProjection.applySynchronization({
-    projectId: 'p-a', designId: 'd-a', generation: 1, localChangesPending: true, scope: 'local'
+    projectId: 'p-a', designId: 'd-a', generation: 1, localChangesPending: true, matchConfirmed: false, scope: 'local'
   });
   const before = s.__calls.length;
   s.window.GraneteCommercialProjection.setBinding(bindingB);
@@ -253,6 +325,46 @@ test('a projection without model work evidence fails closed', () => {
   }), true);
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualización requerida');
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
+test('an unconfirmed model may show only an explicitly server-only estimate', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.receive({
+    requestId: request, projectId: 'p-a', designId: 'd-a',
+    workState: {
+      projectId: 'p-a', designId: 'd-a', generation: 0,
+      localChangesPending: false, matchConfirmed: false, scope: 'unconfirmed'
+    },
+    projection: projection(100, 80)
+  }), true);
+
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Servidor no verificado');
+  assert.notStrictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualizado');
+  assert.ok(s.__elements['commercial-projection-status'].textContent.includes('servidor'));
+  assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$100.00'));
+});
+
+test('cancelling a mutation cannot promote a server-only estimate to current', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive({
+    requestId: request, projectId: 'p-a', designId: 'd-a',
+    workState: {
+      projectId: 'p-a', designId: 'd-a', generation: 0,
+      localChangesPending: false, matchConfirmed: false, scope: 'unconfirmed'
+    },
+    projection: projection(100, 80)
+  });
+
+  s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
+  s.__events['granete-mutation-state']({ detail: { phase: 'cancelled' } });
+
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Servidor no verificado');
+  assert.notStrictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualizado');
 });
 
 test('successful working-copy callbacks publish a committed refresh', () => {

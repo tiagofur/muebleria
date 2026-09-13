@@ -11,6 +11,8 @@
   var lastProjection = null;
   var workEpoch = 0;
   var workStates = {};
+  var mutationInFlight = false;
+  var lastProjectionMatchConfirmed = false;
 
   function element(id) { return document.getElementById(id); }
   function show(id, visible) { var node = element(id); if (node) node.style.display = visible ? "" : "none"; }
@@ -24,7 +26,8 @@
       stale: ["Desactualizado", "conflict"], unavailable: ["No disponible", "invalid"],
       unreachable: ["Sin conexión", "pending"], unauthenticated: ["Sin sesión", "invalid"],
       unauthorized: ["Sin permiso", "invalid"], not_found: ["No disponible", "invalid"],
-      incompatible: ["Actualización requerida", "invalid"]
+      incompatible: ["Actualización requerida", "invalid"],
+      server_only: ["Servidor no verificado", "pending"]
     }[state] || ["No disponible", "invalid"];
     if (badge) { badge.textContent = copy[0]; badge.className = "status-badge " + copy[1]; }
     text("commercial-projection-status", detail || copy[0]);
@@ -57,11 +60,13 @@
     return !!value && typeof value === "object" && binding &&
       value.projectId === binding.projectId && value.designId === binding.designId &&
       Number.isInteger(value.generation) && value.generation >= 0 &&
-      typeof value.localChangesPending === "boolean";
+      typeof value.localChangesPending === "boolean" &&
+      typeof value.matchConfirmed === "boolean";
   }
 
-  function renderProjection(projection) {
+  function renderProjection(projection, matchConfirmed) {
     lastProjection = projection;
+    lastProjectionMatchConfirmed = matchConfirmed === true;
     var amounts = projection.amounts;
     var total = amounts && money(amounts.saleTotal, projection.currency);
     show("commercial-projection-values", true);
@@ -97,8 +102,14 @@
       text("commercial-projection-delta", (comparison.absoluteDelta > 0 ? "+" : "") + absolute + percentage);
     }
 
-    if (projection.status === "current") setState("current", "Estimación no vinculante del diseño conectado.");
-    else setState("incomplete", incompleteReason(projection.issues));
+    if (!lastProjectionMatchConfirmed) {
+      var serverDetail = projection.status === "incomplete" ? incompleteReason(projection.issues) + " " : "";
+      setState("server_only", serverDetail + "Importe del servidor; no se confirmó la coincidencia con el modelo local.");
+    } else if (projection.status === "current") {
+      setState("current", "Estimación no vinculante del diseño conectado.");
+    } else {
+      setState("incomplete", incompleteReason(projection.issues));
+    }
   }
 
   function incompleteReason(issues) {
@@ -122,19 +133,24 @@
   }
 
   function request(options) {
+    if (mutationInFlight) {
+      setState("pending_sync", "Cambio en curso; esperá su resultado antes de actualizar el presupuesto.");
+      return false;
+    }
     if (hasPendingLocalWork() && !(options && options.probe === true)) {
       setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
-      return;
+      return false;
     }
     if (!binding || !window.sketchup || typeof window.sketchup.get_commercial_projection !== "function") {
       setState("unavailable", "Conectá un modelo y una sesión para ver el presupuesto.");
-      return;
+      return false;
     }
     sequence += 1;
     pending = { requestId: "commercial-" + sequence, projectId: binding.projectId, designId: binding.designId,
       workEpoch: workEpoch };
     setState("calculating", "Calculando con precios y reglas actuales del servidor…");
     window.sketchup.get_commercial_projection(JSON.stringify({ requestId: pending.requestId }));
+    return true;
   }
 
   function setBinding(status) {
@@ -149,6 +165,7 @@
   }
 
   function receive(payload) {
+    if (mutationInFlight) return false;
     if (!pending || !payload || payload.requestId !== pending.requestId) return false;
     if (pending.workEpoch !== workEpoch) return false;
     if (payload.projectId && (payload.projectId !== pending.projectId || payload.designId !== pending.designId)) return false;
@@ -166,8 +183,16 @@
         setState("stale", payload.error || "El cambio local todavía no se sincronizó con el diseño del servidor.");
         return true;
       }
+      if (payload.workState.matchConfirmed !== true) {
+        if (payload.projection) renderProjection(payload.projection, false);
+        else {
+          show("commercial-projection-values", false);
+          setState("incompatible", payload.error || "No se confirmó que el presupuesto corresponda al modelo local.");
+        }
+        return true;
+      }
     }
-    if (payload.projection) renderProjection(payload.projection);
+    if (payload.projection) renderProjection(payload.projection, true);
     else { show("commercial-projection-values", false); setState(payload.state || "unavailable", payload.error); }
     return true;
   }
@@ -189,6 +214,8 @@
     show("commercial-projection-values", false);
     if (payload.localChangesPending === true) {
       setState("stale", "Hay cambios locales de este diseño que todavía no están sincronizados.");
+    } else if (payload.matchConfirmed !== true) {
+      setState("incompatible", "Todavía no se confirmó que el modelo local coincida con el diseño del servidor.");
     } else {
       request({ probe: true });
     }
@@ -211,28 +238,33 @@
       var phase = event && event.detail && event.detail.phase;
       if (!binding) return;
       if (phase === "resolving" || phase === "applying_host_mutation") {
+        mutationInFlight = true;
         workEpoch += 1;
         sequence += 1;
         pending = null;
         show("commercial-projection-values", false);
         setState("pending_sync", "Cambio en curso; el total anterior no se presenta como actual.");
       } else if (phase === "committed") {
+        mutationInFlight = false;
         workEpoch += 1;
         sequence += 1;
         pending = null;
         workStates[contextKey(binding)] = {
           projectId: binding.projectId, designId: binding.designId,
           generation: ((currentWorkState() || {}).generation || 0) + 1,
-          localChangesPending: true, scope: "local"
+          localChangesPending: true, matchConfirmed: false, scope: "local"
         };
         lastProjection = null;
         show("commercial-projection-values", false);
         setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
       } else if (["rejected", "cancelled", "aborted"].indexOf(phase) !== -1 && lastProjection) {
-        renderProjection(lastProjection);
+        mutationInFlight = false;
+        renderProjection(lastProjection, lastProjectionMatchConfirmed);
       } else if (["rejected", "cancelled", "aborted"].indexOf(phase) !== -1) {
+        mutationInFlight = false;
         request();
       } else if (phase === "stale" || phase === "unavailable") {
+        mutationInFlight = false;
         workEpoch += 1;
         sequence += 1;
         pending = null;

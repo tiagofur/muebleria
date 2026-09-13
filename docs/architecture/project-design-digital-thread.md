@@ -885,6 +885,13 @@ el ciclo de vida del HtmlDialog. Una sincronización parcial conserva cualquier
 otro cambio local pendiente; sólo una sincronización completa comprobada puede
 limpiarlo. La lectura toma la generación antes y después del request y descarta
 el resultado si el modelo cambió durante el cálculo.
+La ausencia del registro o del contexto se conserva como coincidencia no
+confirmada: vincular Project/Design/baseRevision no demuestra igualdad del
+contenido. Una sincronización parcial tampoco inicializa esa prueba; una
+sincronización completa comprobada sí la persiste y permite lecturas posteriores
+sin bloquearlas. Mientras el runtime compartido esté en `resolving` o
+`applying_host_mutation`, no se inicia ni acepta una lectura etiquetable como
+actual del modelo local.
 | `Project.commercialStatus` CRM | Fuera: estado de oportunidad, no lifecycle de QuoteRevision |
 
 ---

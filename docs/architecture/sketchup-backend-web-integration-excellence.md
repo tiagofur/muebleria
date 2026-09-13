@@ -661,6 +661,11 @@ en metadata del modelo para sobrevivir desconexión y cierre/reapertura. Una
 confirmación parcial nunca prueba coincidencia del diseño completo: conserva el
 pendiente previo, mientras una sincronización completa comprobada sí habilita
 una nueva lectura.
+Un modelo/contexto sin ese registro empieza como coincidencia no confirmada,
+nunca como limpio por defecto; el binding por sí solo no prueba contenido. La
+confirmación parcial preserva ese desconocimiento y las fases compartidas
+`resolving|applying_host_mutation` bloquean tanto `request` como `receive` hasta
+su resultado terminal.
 No incluye modo Presentación, creación de QuoteRevision ni pricing local.
 ## Historical presentation ownership (#639)
 

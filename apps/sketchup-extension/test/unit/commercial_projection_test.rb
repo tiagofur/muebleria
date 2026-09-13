@@ -171,6 +171,91 @@ class CommercialProjectionTest < Minitest::Test
     assert_operator partial['generation'], :>, dirty['generation']
   end
 
+  def test_missing_local_work_metadata_is_unconfirmed
+    snapshot = CP::LocalWorkState.new(LocalStateModel.new).snapshot(
+      project_id: PROJECT_ID, design_id: DESIGN_ID
+    )
+
+    refute snapshot['localChangesPending']
+    refute snapshot['matchConfirmed']
+    assert_equal 'unconfirmed', snapshot['scope']
+  end
+
+  def test_missing_context_in_existing_payload_is_unconfirmed
+    model = LocalStateModel.new
+    state = CP::LocalWorkState.new(model)
+    other_design = '52000000-0000-0000-0000-000000000002'
+    state.record_sync!(project_id: PROJECT_ID, design_id: DESIGN_ID, scope: :full)
+
+    snapshot = CP::LocalWorkState.new(model).snapshot(project_id: PROJECT_ID, design_id: other_design)
+
+    refute snapshot['localChangesPending']
+    refute snapshot['matchConfirmed']
+    assert_equal 'unconfirmed', snapshot['scope']
+  end
+
+  def test_partial_sync_does_not_confirm_untracked_context
+    model = LocalStateModel.new
+
+    partial = CP::LocalWorkState.new(model).record_sync!(
+      project_id: PROJECT_ID, design_id: DESIGN_ID, scope: :partial
+    )
+
+    refute partial['localChangesPending']
+    refute partial['matchConfirmed']
+    assert_equal 'partial', partial['scope']
+  end
+
+  def test_full_sync_confirms_untracked_context_and_survives_reopen
+    model = LocalStateModel.new
+    synced = CP::LocalWorkState.new(model).record_sync!(
+      project_id: PROJECT_ID, design_id: DESIGN_ID, scope: :full
+    )
+    reopened = CP::LocalWorkState.new(model).snapshot(project_id: PROJECT_ID, design_id: DESIGN_ID)
+
+    refute synced['localChangesPending']
+    assert synced['matchConfirmed']
+    refute reopened['localChangesPending']
+    assert reopened['matchConfirmed']
+    assert_equal synced['generation'], reopened['generation']
+  end
+
+  def test_previous_v1_pending_entry_stays_pending_but_is_not_match_evidence
+    model = LocalStateModel.new
+    key = "#{PROJECT_ID}/#{DESIGN_ID}"
+    model.set_attribute(
+      CP::LocalWorkState::DICTIONARY,
+      CP::LocalWorkState::KEY,
+      JSON.generate('schemaVersion' => 1,
+                    'contexts' => { key => { 'generation' => 7, 'localChangesPending' => true } })
+    )
+
+    snapshot = CP::LocalWorkState.new(model).snapshot(project_id: PROJECT_ID, design_id: DESIGN_ID)
+
+    assert snapshot['localChangesPending']
+    refute snapshot['matchConfirmed']
+    assert_equal 7, snapshot['generation']
+  end
+
+  def test_previous_v1_clean_entry_is_unconfirmed_until_a_full_sync
+    model = LocalStateModel.new
+    key = "#{PROJECT_ID}/#{DESIGN_ID}"
+    model.set_attribute(
+      CP::LocalWorkState::DICTIONARY,
+      CP::LocalWorkState::KEY,
+      JSON.generate('schemaVersion' => 1,
+                    'contexts' => { key => { 'generation' => 3, 'localChangesPending' => false } })
+    )
+
+    state = CP::LocalWorkState.new(model)
+    snapshot = state.snapshot(project_id: PROJECT_ID, design_id: DESIGN_ID)
+    partial = state.record_sync!(project_id: PROJECT_ID, design_id: DESIGN_ID, scope: :partial)
+
+    refute snapshot['localChangesPending']
+    refute snapshot['matchConfirmed']
+    refute partial['matchConfirmed']
+  end
+
   def test_only_full_sync_clears_exact_context_without_mixing_designs
     model = LocalStateModel.new
     state = CP::LocalWorkState.new(model)
@@ -192,7 +277,8 @@ class CommercialProjectionTest < Minitest::Test
 
     snapshot = CP::LocalWorkState.new(model).snapshot(project_id: PROJECT_ID, design_id: DESIGN_ID)
 
-    assert snapshot['localChangesPending']
+    refute snapshot['localChangesPending']
+    refute snapshot['matchConfirmed']
     assert_equal 'unconfirmed', snapshot['scope']
   end
 end

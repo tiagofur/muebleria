@@ -18,11 +18,12 @@ module Granete
         REFERENCE_KEYS = %w[quoteRevisionId revisionNumber status currency saleTotal].freeze
         COMPARISON_KEYS = %w[absoluteDelta percentageDelta].freeze
 
-        # Design-scoped evidence that the local SketchUp model still contains
-        # confirmed authoring work not represented by the server working copy.
+        # Design-scoped evidence for whether the local SketchUp model is proven
+        # equal to the server working copy or contains confirmed local work.
         # It lives with the canonical model binding so it survives dialog and
         # model close/reopen. A partial working-copy PUT advances the evidence
-        # generation but NEVER clears another furniture's pending local work.
+        # generation but NEVER establishes a previously unknown whole-model
+        # match or clears another furniture's pending local work.
         class LocalWorkState
           DICTIONARY = 'com.granete.project'
           KEY = 'granete.commercial-projection-local-work.v1'
@@ -37,13 +38,13 @@ module Granete
             return unconfirmed(project_id, design_id) unless payload
 
             entry = payload.fetch('contexts', {})[context_key(project_id, design_id)]
-            return unconfirmed(project_id, design_id) if entry && !valid_entry?(entry)
+            return unconfirmed(project_id, design_id) unless valid_entry?(entry)
 
-            state(project_id, design_id, entry || { 'generation' => 0, 'localChangesPending' => false })
+            state(project_id, design_id, entry)
           end
 
           def mark_pending!(project_id:, design_id:)
-            update(project_id, design_id, pending: true, scope: 'local')
+            update(project_id, design_id, pending: true, confirmed: false, scope: 'local')
           end
 
           def record_sync!(project_id:, design_id:, scope:)
@@ -54,18 +55,23 @@ module Granete
 
             current = snapshot(project_id: project_id, design_id: design_id)
             pending = normalized == 'full' ? false : current['localChangesPending']
-            update(project_id, design_id, pending: pending, scope: normalized)
+            confirmed = normalized == 'full' || (current['matchConfirmed'] && !pending)
+            update(project_id, design_id, pending: pending, confirmed: confirmed, scope: normalized)
           end
 
           private
 
-          def update(project_id, design_id, pending:, scope:)
+          def update(project_id, design_id, pending:, confirmed:, scope:)
             payload = read_payload || empty_payload
             contexts = payload['contexts']
             key = context_key(project_id, design_id)
             previous = contexts[key]
             generation = (valid_entry?(previous) ? previous['generation'] : 0) + 1
-            contexts[key] = { 'generation' => generation, 'localChangesPending' => pending }
+            contexts[key] = {
+              'generation' => generation,
+              'localChangesPending' => pending,
+              'matchConfirmed' => confirmed
+            }
             @model.set_attribute(DICTIONARY, KEY, JSON.generate(payload))
             state(project_id, design_id, contexts[key]).merge('scope' => scope)
           end
@@ -74,7 +80,7 @@ module Granete
             return nil unless @model.respond_to?(:get_attribute) && @model.respond_to?(:set_attribute)
 
             raw = @model.get_attribute(DICTIONARY, KEY)
-            return empty_payload if raw.nil? || raw.to_s.empty?
+            return nil if raw.nil? || raw.to_s.empty?
 
             payload = JSON.parse(raw)
             return nil unless payload.is_a?(Hash) && payload['schemaVersion'] == SCHEMA_VERSION
@@ -98,17 +104,20 @@ module Granete
               'projectId' => project_id,
               'designId' => design_id,
               'generation' => entry['generation'].to_i,
-              'localChangesPending' => entry['localChangesPending'] == true
+              'localChangesPending' => entry['localChangesPending'] == true,
+              'matchConfirmed' => entry['matchConfirmed'] == true
             }
           end
 
           def valid_entry?(entry)
             entry.is_a?(Hash) && entry['generation'].is_a?(Integer) && entry['generation'] >= 0 &&
-              [true, false].include?(entry['localChangesPending'])
+              [true, false].include?(entry['localChangesPending']) &&
+              (!entry.key?('matchConfirmed') || [true, false].include?(entry['matchConfirmed']))
           end
 
           def unconfirmed(project_id, design_id)
-            state(project_id, design_id, 'generation' => 0, 'localChangesPending' => true)
+            state(project_id, design_id,
+                  'generation' => 0, 'localChangesPending' => false, 'matchConfirmed' => false)
               .merge('scope' => 'unconfirmed')
           end
         end

@@ -1046,3 +1046,35 @@ EOL.
   3. Separar sincronización parcial de completa; sólo una completa comprobada puede limpiar el estado pendiente.
   4. Validar callbacks reales Ruby→HtmlDialog, mensajes incompletos, suites Ruby/JS, RBZ y gates aplicables.
   5. Push al mismo PR, revisión independiente y readback exact-head de CI/publicación, sin merge ni cierre.
+
+## PR #702 / issue #677 — corrección incremental R1-B/R2-B
+
+- Approval: solicitud explícita del propietario (2026-09-13) para continuar en el mismo PR.
+- Head remoto revalidado: `f73277bc2e38d9f159eb55ef47c633f3c88e861a`; PR abierto, limpio y mergeable; worktree sin cambios ajenos antes de agregar las regresiones.
+- Started: 2026-09-13 13:38 CST.
+- Scope: distinguir seguimiento ausente de coincidencia probada y cerrar lecturas iniciadas o recibidas durante `resolving|applying_host_mutation`; sin tocar backend comercial, Proyectar, SSE, #679 ni el runtime compartido de mutaciones.
+- Plan:
+  1. Capturar RED real para modelo/contexto sin evidencia y sincronización parcial desde estado no confirmado.
+  2. Capturar RED real para refresh/receive durante las fases activas del runtime de mutaciones.
+  3. Corregir únicamente `LocalWorkState`, bridge/panel y pruebas, preservando pendientes previos ante rechazo/cancelación/aborto.
+  4. Ejecutar pruebas focalizadas, `rake verify`, OpenAPI/typecheck y gates aplicables; construir y hashear el RBZ final.
+  5. Actualizar el mismo PR y verificar head/checks/publicación sin mergear ni cerrar issues.
+- RED confirmado:
+  - JavaScript aceptaba como `true` una respuesta obtenida por `refresh()` durante `resolving` y podía volver a mostrar `Actualizado` antes del outcome.
+  - Ruby: 3 fallos demostraron que metadata ausente, contexto ausente y `partial` desde contexto no seguido se convertían en `localChangesPending:false`.
+- Corrección:
+  - `LocalWorkState` persiste `matchConfirmed` separado de `localChangesPending`; ausencia/corrupción/contexto nuevo y registros v1 previos sin esa prueba quedan no confirmados. `partial` preserva desconocido o pendiente; sólo `full` confirma.
+  - Un importe consultado al servidor sin prueba local se muestra como `Servidor no verificado`, nunca `Actualizado`; no requiere crear/aprobar QuoteRevision ni publicar DesignRevision.
+  - `request` y `receive` rechazan lecturas durante `resolving|applying_host_mutation`; outcomes terminales restauran únicamente la clasificación anterior válida y una cancelación no limpia pendientes.
+- GREEN focalizado final:
+  - JS comercial real: 21/21.
+  - `commercial_projection_test.rb`: 20 runs / 46 assertions.
+  - `dialog_controller_test.rb`: 31 runs / 192 assertions.
+  - RuboCop focalizado: sin offenses.
+- Gates finales ejecutados:
+  - `bundle exec rake verify`: 665 runs / 4516 assertions + boundary 6 runs / 2567 assertions, sin fallos; RBZ SHA256 `c41e3270c146dc84b3141dadbaf6b820a588550297cb657c47b9943d9b0e48cc`.
+  - `pnpm openapi:check`: PASS.
+  - `pnpm typecheck`: PASS, 7 workspaces.
+  - `pnpm test`: PASS completo.
+  - `git diff --check`: PASS.
+- Host real: `NOT_TESTED`. SketchUp 2026 continúa abierto con una sesión activa del usuario (PID 44023); no se cerró ni reemplazó y no se usó Ruby/JS como sustituto de evidencia host.
