@@ -113,6 +113,7 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			ID: projectID, Name: envelope.ProjectName, CustomerID: envelope.CustomerID,
 			Currency: envelope.Currency, MarginFactor: envelope.MarginFactor,
 			LaborFixedCost: envelope.LaborFixedCost, Status: "draft", Items: pricingItems,
+			KitchenLayout: envelope.KitchenLayout,
 		}
 		breakdown, calcErr := engine.CalcProjectBreakdown(pricingProject, catalog)
 		if calcErr != nil {
