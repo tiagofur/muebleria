@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
+
+var designWorkingFingerprintPattern = regexp.MustCompile(`^sha256-[0-9a-f]{64}$`)
 
 // #571 / WEB-DT-4: commercial QuoteRevision lifecycle API (ADR-0003,
 // digital-thread §§15–16, 25).
@@ -115,7 +118,10 @@ func (s *Server) HandleCreateInitialDesignQuoteRevision(w http.ResponseWriter, r
 		return
 	}
 	var payload openapi.CreateInitialDesignQuoteRevisionRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || strings.TrimSpace(payload.WorkingVersion) == "" || strings.TrimSpace(payload.WorkingFingerprint) == "" {
+	if !decodeGeneratedJSONBody(w, r, &payload) {
+		return
+	}
+	if strings.TrimSpace(payload.WorkingVersion) == "" || !designWorkingFingerprintPattern.MatchString(payload.WorkingFingerprint) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "workingVersion y workingFingerprint son obligatorios", nil)
 		return
 	}
@@ -136,7 +142,13 @@ func (s *Server) HandleCreateInitialDesignQuoteRevision(w http.ResponseWriter, r
 		respondWithQuoteLifecycleError(w, err, "create")
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, toQuoteRevisionDTO(result.Revision))
+	revision := result.Revision
+	if !s.actorCanViewCosts(r) {
+		redacted := *revision
+		redacted.CommercialSnapshot = domain.RedactQuoteCommercialSnapshot(revision.CommercialSnapshot)
+		revision = &redacted
+	}
+	respondWithJSON(w, http.StatusCreated, toQuoteRevisionDTO(revision))
 }
 
 // HandleQuoteRevisionPublish serves POST

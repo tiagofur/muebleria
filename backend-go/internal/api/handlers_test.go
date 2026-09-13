@@ -2043,6 +2043,7 @@ func (s *stubStore) CreateInitialDesignQuoteRevision(_ context.Context, cmd stor
 	return &storage.CreateInitialQuoteRevisionResult{Revision: &domain.QuoteRevision{
 		ID: "8f7b6c5d-0000-4000-8000-000000000012", ProjectID: cmd.ProjectID,
 		RevisionNumber: 1, Status: "draft", SourceType: "manual", Notes: cmd.Notes,
+		CommercialSnapshot: &domain.QuoteCommercialSnapshot{Breakdown: domain.QuoteBreakdown{MaterialsCost: 42, SalePrice: 100}},
 	}}, nil
 }
 

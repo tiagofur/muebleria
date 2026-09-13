@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -53,6 +54,16 @@ func TestHandleCreateInitialDesignQuoteRevision_ContractPermissionsAndConflict(t
 	if cmd == nil || cmd.ProjectID != quoteLifecycleTestProjectID || cmd.DesignID != quoteLifecycleTestDesignID || cmd.WorkingVersion != "2026-09-13T20:00:00Z" || cmd.Notes != "Q1 diseño" {
 		t.Fatalf("command=%+v", cmd)
 	}
+	var sellerRevision openapi.QuoteRevision
+	if err := json.Unmarshal(w.Body.Bytes(), &sellerRevision); err != nil || sellerRevision.CommercialSnapshot == nil || sellerRevision.CommercialSnapshot.Breakdown.MaterialsCost != 0 || sellerRevision.CommercialSnapshot.Breakdown.SalePrice != 100 {
+		t.Fatalf("seller redaction err=%v revision=%+v", err, sellerRevision)
+	}
+	w = httptest.NewRecorder()
+	server.HandleCreateInitialDesignQuoteRevision(w, newCreateDesignQuoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, body))
+	var adminRevision openapi.QuoteRevision
+	if err := json.Unmarshal(w.Body.Bytes(), &adminRevision); err != nil || adminRevision.CommercialSnapshot == nil || adminRevision.CommercialSnapshot.Breakdown.MaterialsCost != 42 {
+		t.Fatalf("admin cost visibility err=%v revision=%+v", err, adminRevision)
+	}
 
 	w = httptest.NewRecorder()
 	server.HandleCreateInitialDesignQuoteRevision(w, newCreateDesignQuoteRequest("user-2", []domain.UserRole{domain.RoleProduccion}, body))
@@ -67,10 +78,19 @@ func TestHandleCreateInitialDesignQuoteRevision_ContractPermissionsAndConflict(t
 		t.Fatalf("stale response=%d %s", w.Code, w.Body.String())
 	}
 
-	w = httptest.NewRecorder()
-	server.HandleCreateInitialDesignQuoteRevision(w, newCreateDesignQuoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, `{}`))
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("missing evidence status=%d", w.Code)
+	for name, invalidBody := range map[string]string{
+		"missing evidence": `{}`,
+		"unknown field":    strings.TrimSuffix(body, "}") + `,"unexpected":true}`,
+		"trailing JSON":    body + `{}`,
+		"bad fingerprint":  `{"workingVersion":"v1","workingFingerprint":"sha256-not-canonical"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalidStore, invalidResponse := &stubStore{}, httptest.NewRecorder()
+			(&Server{Store: invalidStore}).HandleCreateInitialDesignQuoteRevision(invalidResponse, newCreateDesignQuoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, invalidBody))
+			if invalidResponse.Code != http.StatusBadRequest || !bytes.Contains(invalidResponse.Body.Bytes(), []byte("BAD_REQUEST")) || invalidStore.createInitialDesignQuoteRevisionCalls != 0 {
+				t.Fatalf("response=%d %s store calls=%d", invalidResponse.Code, invalidResponse.Body.String(), invalidStore.createInitialDesignQuoteRevisionCalls)
+			}
+		})
 	}
 }
 

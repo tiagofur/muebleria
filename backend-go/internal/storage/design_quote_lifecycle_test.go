@@ -242,3 +242,40 @@ func TestCreateInitialDesignQuoteRevision_ConcurrentCreatesAtMostQ1(t *testing.T
 		t.Fatalf("revisions=%d want 1", count)
 	}
 }
+
+func TestCreateInitialDesignQuoteRevision_RejectsTerminalStatusCommittedWhileWaitingForLock(t *testing.T) {
+	fx := setupDesignQuoteFixture(t)
+	lock, err := fx.admin.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Rollback(context.Background())
+	var status string
+	if err = lock.QueryRow(context.Background(), `SELECT status FROM projects WHERE id=$1 FOR UPDATE`, csProject).Scan(&status); err != nil || status != "draft" {
+		t.Fatalf("lock project status=%q err=%v", status, err)
+	}
+	const applicationName = "design-q1-status-race"
+	tracingStore := newNamedRuntimeOrganizationStore(t, applicationName)
+	result := make(chan error, 1)
+	go func() {
+		result <- fiTx(t, tracingStore, fiActorA(), func(ctx context.Context) error {
+			_, err := tracingStore.CreateInitialDesignQuoteRevision(ctx, storage.CreateInitialDesignQuoteRevisionCommand{ProjectID: csProject, DesignID: fx.designID, WorkingVersion: fx.version, WorkingFingerprint: fx.fingerprint, ActorUserID: rlsUserA})
+			return err
+		})
+	}()
+	waitForOrganizationLockWait(t, fx.admin, applicationName)
+	if _, err = lock.Exec(context.Background(), `UPDATE projects SET status='accepted' WHERE id=$1`, csProject); err != nil {
+		t.Fatal(err)
+	}
+	if err = lock.Commit(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err = awaitSectorRaceResult(t, result); !errors.Is(err, domain.ErrQuoteRevisionAccepted) {
+		t.Fatalf("terminal transition err=%v", err)
+	}
+	var revisions, lines int
+	_ = fx.admin.QueryRow(context.Background(), `SELECT count(*), (SELECT count(*) FROM project_items WHERE project_id=$1) FROM quote_revisions WHERE project_id=$1`, csProject).Scan(&revisions, &lines)
+	if revisions != 0 || lines != 0 {
+		t.Fatalf("terminal rollback revisions/lines=%d/%d", revisions, lines)
+	}
+}

@@ -48,8 +48,9 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 
 	var ownerOrg, projectStatus string
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT organization_id::text, status FROM projects
+		SELECT organization_id::text, status FROM projects /* design-first-q1-lock */
 		WHERE id=$1 AND (organization_id=$2 OR sales_organization_id=$2 OR manufacturing_organization_id=$2)
+		FOR UPDATE
 	`, cmd.ProjectID, OrgFromCtx(ctx)).Scan(&ownerOrg, &projectStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrDesignNotFound
@@ -64,9 +65,6 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 		return nil, domain.ErrQuoteRevisionAccepted
 	}
 
-	if err := s.db(ctx).QueryRow(ctx, `SELECT status FROM projects WHERE id=$1 FOR UPDATE`, cmd.ProjectID).Scan(&projectStatus); err != nil {
-		return nil, err
-	}
 	var existingRevision bool
 	err = s.db(ctx).QueryRow(ctx, `SELECT true FROM quote_revisions WHERE project_id=$1 LIMIT 1`, cmd.ProjectID).Scan(&existingRevision)
 	if err == nil {

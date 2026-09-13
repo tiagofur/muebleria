@@ -3,10 +3,10 @@
 - Rama/worktree: `feat/711-design-first-initial-quote` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-711-design-first-quote`.
 - Started: 2026-09-13 15:06 CST. Un solo implementador; sin push, PR, merge, cierre ni labels.
 - Scope: comando server/API design-first para crear Q1 desde el working copy canónico exacto, preservando FurnitureInstance IDs y reutilizando pricing, CommercialSnapshot, QuoteRevision writer, RLS/capabilities e idempotencia existentes. Sin `apps/sketchup-extension/**` ni `backend-go/internal/storage/projects.go`.
-- Resultado: Q1 se crea transaccionalmente desde tokens exactos del working copy, enlaza FurnitureInstance existentes, congela configuración/procedencia en `commercialSnapshot`, audita y rechaza stale, otra tenant, Production, Q1 previa y carreras.
-- Contrato/migration: OpenAPI y clientes Go/TS regenerados; migration 000133 valida `designSource` opcional y conserva snapshots existentes en fresh + upgrade replay.
-- Gates: `GOFLAGS='-p=1' go test ./... -count=1`, `pnpm typecheck`, `pnpm test`, `pnpm openapi:check` y `git diff --check` PASS; PostgreSQL storage incluyó concurrencia, RLS, adopción parcial exacta y snapshot histórico.
-- Browser/SketchUp/máquina: `NOT_APPLICABLE`; el alcance es server/API y no modifica superficies host ni outputs físicos.
+- Corrección autorizada: #711 OPEN con `status:approved` + `size:exception` verificadas; R1 reutiliza `actorCanViewCosts`/`RedactQuoteCommercialSnapshot` y prueba vendedor sin costos vs. Admin.
+- Corrección R2: ownership/status se leen y validan bajo el mismo `FOR UPDATE`; una carrera determinística confirma rollback si `accepted` gana el lock.
+- Corrección R3: `decodeGeneratedJSONBody` rechaza campos desconocidos/JSON trailing y el fingerprint no canónico responde `BAD_REQUEST` sin llamar storage.
+- Gates: API focalizado + completo, storage focalizado, `pnpm openapi:check`, `pnpm typecheck`, `pnpm test` y `git diff --check` PASS; diff autoral autorizado = 868 líneas (828 altas + 40 bajas).
 
 # Issues #642 → #677 — presupuesto del diseño actual dentro de SketchUp
 
