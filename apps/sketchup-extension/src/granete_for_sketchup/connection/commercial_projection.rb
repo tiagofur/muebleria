@@ -24,6 +24,7 @@ module Granete
 
           def validate_identity!(value)
             raise ArgumentError, 'respuesta comercial inválida' unless value.is_a?(Hash)
+
             require_keys!(value, %w[schema status projectId designId])
             unless value['schema'] == 'granete.commercial-projection.v1'
               raise ArgumentError, 'schema comercial incompatible'
