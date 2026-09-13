@@ -93,21 +93,67 @@ describe('CatalogImage fallo de carga y recuperación', () => {
     expect(screen.queryByTestId('catalog-image-placeholder')).toBeNull();
   });
 
-  it('una señal tardía de A no deja a B en estado de error', () => {
+  it('una señal tardía de la carga anterior no afecta a B; un error real de B sí', () => {
     const a = '/media/a.webp';
     const b = '/media/b.webp';
     const { rerender } = render(<CatalogImage src={a} alt="A" />);
-    rerender(<CatalogImage src={b} alt="B" />);
-    const img = screen.getByTestId('catalog-image');
+    const nodoA = screen.getByTestId('catalog-image');
+    expect(nodoA.getAttribute('src')).toBe(a);
 
-    // Evento tardío atribuible a la carga de A: el error se ignora porque
-    // no corresponde a la URL que el elemento está cargando ahora.
-    img.setAttribute('src', a);
-    fireEvent.error(img);
-    img.setAttribute('src', b);
     rerender(<CatalogImage src={b} alt="B" />);
+    const nodoB = screen.getByTestId('catalog-image');
+    // Cada fuente es una carga distinguible: el cambio de src remonta el
+    // intento (nodo nuevo), no reutiliza el de A.
+    expect(nodoB).not.toBe(nodoA);
+    expect(nodoB.getAttribute('src')).toBe(b);
 
+    // Señal tardía de la carga A ejercitada sobre SU nodo, sin tocar el de B.
+    fireEvent.error(nodoA);
+    expect(screen.getByTestId('catalog-image')).toBe(nodoB);
+    expect(screen.queryByTestId('catalog-image-placeholder')).toBeNull();
+
+    // Un error auténtico de la carga activa de B sí muestra su marcador.
+    fireEvent.error(nodoB);
+    expect(screen.queryByTestId('catalog-image')).toBeNull();
+    expect(
+      screen.getByTestId('catalog-image-placeholder').textContent,
+    ).toContain('Imagen no disponible');
+  });
+
+  it('volver de B a A inicia un nuevo intento de A (estado aislado por fuente)', () => {
+    const a = '/media/a.webp';
+    const b = '/media/b.webp';
+    const { rerender } = render(<CatalogImage src={a} alt="A" />);
+    fireEvent.error(screen.getByTestId('catalog-image'));
+
+    rerender(<CatalogImage src={b} alt="B" />);
     expect(screen.getByTestId('catalog-image').getAttribute('src')).toBe(b);
+
+    rerender(<CatalogImage src={a} alt="A" />);
+    const reintento = screen.getByTestId('catalog-image');
+    expect(reintento.getAttribute('src')).toBe(a);
+    expect(screen.queryByTestId('catalog-image-placeholder')).toBeNull();
+
+    // El nuevo intento de A es independiente: si vuelve a fallar, muestra
+    // su marcador de nuevo.
+    fireEvent.error(reintento);
+    expect(
+      screen.getByTestId('catalog-image-placeholder').textContent,
+    ).toContain('Imagen no disponible');
+  });
+
+  it('A fallida → sin src → volver a A también permite un nuevo intento', () => {
+    const a = '/media/a.webp';
+    const { rerender } = render(<CatalogImage src={a} alt="A" />);
+    fireEvent.error(screen.getByTestId('catalog-image'));
+
+    rerender(<CatalogImage alt="Sin src" />);
+    expect(
+      screen.getByTestId('catalog-image-placeholder').textContent,
+    ).toContain('Sin foto');
+
+    rerender(<CatalogImage src={a} alt="A" />);
+    expect(screen.getByTestId('catalog-image').getAttribute('src')).toBe(a);
     expect(screen.queryByTestId('catalog-image-placeholder')).toBeNull();
   });
 

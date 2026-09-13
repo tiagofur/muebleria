@@ -40,29 +40,51 @@ export function CatalogImage({
   size = 'md',
 }: CatalogImageProps): ReactNode {
   const base = `${SIZE_CLASS[size]}${className ? ` ${className}` : ''}`;
-  // Presentation-only failure state keyed to the exact URL that failed:
-  // a different src retries normally, and a late error event attributed to
-  // a previous URL can't block the one being loaded now.
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-
-  if (src && isSafeUrl(src) && src !== failedSrc) {
-    return (
-      <img
-        className={base}
-        src={src}
-        alt={alt}
-        loading="lazy"
-        onError={(event) => {
-          // Only fail the URL the element was actually loading when the
-          // error fired; ignore stale signals from an earlier src.
-          if (event.currentTarget.getAttribute('src') === src) {
-            setFailedSrc(src);
-          }
-        }}
-        data-testid="catalog-image"
-      />
-    );
+  if (src && isSafeUrl(src)) {
+    // Key by src: switching source mounts a fresh load attempt with its own
+    // error state (returning to a previous URL retries it), while changing
+    // only alt/size/className keeps the current attempt — a failed URL never
+    // leaks into a different source or gets retried in place.
+    return <CatalogImageLoad key={src} src={src} alt={alt} base={base} size={size} />;
   }
+  return catalogImagePlaceholder(base, size, 'Sin foto');
+}
+
+function CatalogImageLoad({
+  src,
+  alt,
+  base,
+  size,
+}: {
+  readonly src: string;
+  readonly alt: string;
+  readonly base: string;
+  readonly size: NonNullable<CatalogImageProps['size']>;
+}): ReactNode {
+  // Presentation-only failure for this load attempt; a late error from an
+  // already-unmounted attempt (previous src) is inert setState.
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return catalogImagePlaceholder(base, size, 'Imagen no disponible');
+  }
+  return (
+    <img
+      className={base}
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      data-testid="catalog-image"
+    />
+  );
+}
+
+function catalogImagePlaceholder(
+  base: string,
+  size: NonNullable<CatalogImageProps['size']>,
+  label: 'Sin foto' | 'Imagen no disponible',
+): ReactNode {
   return (
     // Placeholder is visual-only (F154 audit P3 #5): aria-hidden keeps its
     // label out of ancestors' accessible names — the entity name already
@@ -75,8 +97,7 @@ export function CatalogImage({
     >
       <Package size={size === 'lg' ? 40 : 24} strokeWidth={1.5} />
       <span className="catalog-image__ph-label">
-        <ImageIcon size={14} strokeWidth={1.5} />{' '}
-        {src && isSafeUrl(src) ? 'Imagen no disponible' : 'Sin foto'}
+        <ImageIcon size={14} strokeWidth={1.5} /> {label}
       </span>
     </div>
   );
