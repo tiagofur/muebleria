@@ -156,6 +156,23 @@ function draftToProjectMeta(
 
 
 /**
+ * Identity reconciliation for server-authoritative entities (#712 review):
+ * replaces the entry with the same id in place, or appends when absent — a
+ * blind append could duplicate an identity that a concurrent load/refresh
+ * already brought into local state.
+ */
+function upsertById<T extends { readonly id: string }>(
+  list: readonly T[],
+  next: T,
+): readonly T[] {
+  const index = list.findIndex((item) => item.id === next.id);
+  if (index === -1) return [...list, next];
+  const copy = [...list];
+  copy[index] = next;
+  return copy;
+}
+
+/**
  * Prefer an existing catalog customer id from the draft. Only create when the
  * "Nuevo cliente" path sends a name without a selected id.
  * Returns resolved customerId + the new customers list (caller persists).
@@ -819,30 +836,30 @@ export function createProjectStore(options: InternalOptions) {
 
       if (useAtomicInline) {
         // No optimistic state: the pair exists only after the server commits.
-        // On success, local state is reconciled with the authoritative
-        // identities; on failure nothing local survives and the server rolled
-        // the customer back too (#712 atomicity).
+        // On success, local state adopts the ENTITIES the server returned —
+        // the 201 payload is the authority (server-resolved identity,
+        // timestamps, orgs, defaults and caller-scoped projections), never a
+        // local reconstruction of what was sent. Both reconcile BY ID so a
+        // concurrent refresh/reconciliation can never leave two entries for
+        // the same identity. On failure nothing local survives and the server
+        // rolled the customer back too (#712 atomicity).
         void persistCreateProjectWithInlineCustomer!(
           project,
           inlineCustomerName,
         ).then(
           (created) => {
-            const persisted: Project = {
-              ...project,
-              customerId: created.customer.id,
-            };
-            set({ projects: [...get().projects, persisted] });
-            // Local-only catalog add — the server already persisted the pair;
-            // re-saving the whole catalog would resurrect the unordered
+            set({ projects: upsertById(get().projects, created.project) });
+            // Local-only catalog upsert — the server already persisted the
+            // pair; re-saving the whole catalog would resurrect the unordered
             // parallel channel that caused the original FK failure.
             const currentCatalog = getCatalogStoreState().catalog;
             if (currentCatalog) {
               getCatalogStoreState().setCatalog({
                 ...currentCatalog,
-                customers: [
-                  ...(currentCatalog.customers ?? []),
+                customers: upsertById(
+                  currentCatalog.customers ?? [],
                   created.customer,
-                ],
+                ),
               });
             }
             toast({ type: 'success', message: `✓ "${meta.name}" creado` });
