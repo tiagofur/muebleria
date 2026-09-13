@@ -126,6 +126,41 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 	if projection.WorkingFingerprint == firstWorkingFingerprint {
 		t.Fatal("confirmed material change did not change exact working fingerprint")
 	}
+
+	// #390 design-first units have no quote-line link by design. Their working
+	// configuration prices against the catalog base instead of failing the
+	// whole projection as if a quote-origin link had gone missing.
+	multiOrgExec(t, fx.admin, `UPDATE modules SET base_mode = 'none' WHERE id = '`+csModule+`';`)
+	var designFirst *domain.FurnitureInstance
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var createErr error
+		designFirst, createErr = fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID: csProject, FurnitureDefinitionID: csModule,
+			Origin: domain.FurnitureInstanceOriginDesign, ActorUserID: rlsUserA,
+		})
+		if createErr != nil {
+			return createErr
+		}
+		_, updateErr := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID: designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
+				{FurnitureInstanceID: unit.FurnitureInstanceID, FurnitureDefinitionID: csModule, Parameters: map[string]any{}, MaterialChoices: map[string]string{"INTERIOR": csMaterial2, "FRENTE": csMaterial2}},
+				{FurnitureInstanceID: designFirst.ID, FurnitureDefinitionID: csModule, Parameters: map[string]any{}, MaterialChoices: map[string]string{"INTERIOR": csMaterial2, "FRENTE": csMaterial2}},
+			},
+		})
+		return updateErr
+	})
+	if err != nil {
+		t.Fatalf("add design-first working unit: %v", err)
+	}
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var readErr error
+		projection, readErr = fx.store.GetDesignCommercialProjection(ctx, csProject, designID)
+		return readErr
+	})
+	if err != nil || projection.Status != domain.CommercialProjectionCurrent || projection.ItemCount != 2 {
+		t.Fatalf("design-first projection=%+v err=%v", projection, err)
+	}
 	if got := len(listRevisions(t, fx)); got != 1 {
 		t.Fatalf("projection refresh created a QuoteRevision: got %d", got)
 	}

@@ -94,6 +94,20 @@ func TestCommercialProjectionParametersPriceable_FailsClosedOutsideCompleteDimen
 	}
 }
 
+func TestCommercialProjectionCostsVisibleToOrganization_OwningAuthorityOnly(t *testing.T) {
+	project := &domain.Project{
+		OrganizationID: "factory-owner", SalesOrganizationID: "seller", ManufacturingOrganizationID: "manufacturer",
+	}
+	if !commercialProjectionCostsVisibleToOrganization(project, "factory-owner") {
+		t.Fatal("owning organization lost cost authority")
+	}
+	for _, organizationID := range []string{"seller", "manufacturer", "unrelated"} {
+		if commercialProjectionCostsVisibleToOrganization(project, organizationID) {
+			t.Fatalf("organization %q received owning-workshop cost authority", organizationID)
+		}
+	}
+}
+
 func projectionSnapshot(total float64) *domain.QuoteCommercialSnapshot {
 	return &domain.QuoteCommercialSnapshot{Currency: "MXN", Breakdown: domain.QuoteBreakdown{SalePrice: total}}
 }

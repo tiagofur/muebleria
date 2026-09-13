@@ -65,11 +65,11 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		ProjectID: projectID, DesignID: designID, WorkingVersion: workingVersion,
 		WorkingFingerprint: workingFingerprint, PricingAuthority: "calc-project-breakdown",
 		CalculatedAt: now, Currency: project.Currency, ItemCount: len(wc.Items), Issues: []string{},
-		SaleAmountsWithheld: false,
+		CostsWithheld: !commercialProjectionCostsVisibleToOrganization(project, orgID), SaleAmountsWithheld: false,
 	}
-	baseModesByInstance := map[string]string{}
+	pricingContextByInstance := map[string]commercialProjectionPricingContext{}
 	if saleAmountsVisible {
-		baseModesByInstance, err = s.commercialProjectionBaseModes(ctx, projectID)
+		pricingContextByInstance, err = s.commercialProjectionPricingContexts(ctx, projectID)
 		if err != nil {
 			return nil, err
 		}
@@ -87,12 +87,12 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		}
 		baseMode := ""
 		if saleAmountsVisible {
-			var found bool
-			baseMode, found = baseModesByInstance[item.FurnitureInstanceID]
-			if !found {
+			pricingContext, found := pricingContextByInstance[item.FurnitureInstanceID]
+			if !found || !pricingContext.Priceable {
 				result.Issues = append(result.Issues, "working_item_pricing_context_missing")
 				continue
 			}
+			baseMode = pricingContext.BaseMode
 		}
 		choices := item.MaterialChoices
 		if choices == nil {
@@ -168,29 +168,49 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			result.Comparison = compareCommercialProjection(result)
 		}
 	}
+	if !commercialProjectionCostsVisibleToOrganization(project, orgID) {
+		domain.RedactCommercialProjectionCosts(result)
+	}
 	return result, nil
 }
 
-func (s *PostgresStore) commercialProjectionBaseModes(ctx context.Context, projectID string) (map[string]string, error) {
+func commercialProjectionCostsVisibleToOrganization(project *domain.Project, organizationID string) bool {
+	return project != nil && project.OrganizationID != "" && project.OrganizationID == organizationID
+}
+
+type commercialProjectionPricingContext struct {
+	BaseMode  string
+	Priceable bool
+}
+
+func (s *PostgresStore) commercialProjectionPricingContexts(ctx context.Context, projectID string) (map[string]commercialProjectionPricingContext, error) {
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT qlfi.furniture_instance_id::text, COALESCE(pi.base_mode, '')
-		FROM quote_line_furniture_instances qlfi
-		JOIN project_items pi ON pi.id = qlfi.quote_line_id AND pi.project_id = qlfi.project_id
-		WHERE qlfi.project_id = $1 AND qlfi.state = 'current'
+		SELECT fi.id::text, fi.origin, pi.base_mode
+		FROM furniture_instances fi
+		LEFT JOIN quote_line_furniture_instances qlfi
+		  ON qlfi.furniture_instance_id = fi.id AND qlfi.project_id = fi.project_id AND qlfi.state = 'current'
+		LEFT JOIN project_items pi ON pi.id = qlfi.quote_line_id AND pi.project_id = qlfi.project_id
+		WHERE fi.project_id = $1 AND fi.lifecycle_status = 'active'
 	`, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	baseModes := map[string]string{}
+	contexts := map[string]commercialProjectionPricingContext{}
 	for rows.Next() {
-		var instanceID, baseMode string
-		if err := rows.Scan(&instanceID, &baseMode); err != nil {
+		var instanceID, origin string
+		var linkedBaseMode *string
+		if err := rows.Scan(&instanceID, &origin, &linkedBaseMode); err != nil {
 			return nil, err
 		}
-		baseModes[instanceID] = baseMode
+		context := commercialProjectionPricingContext{Priceable: origin != string(domain.FurnitureInstanceOriginQuote)}
+		if linkedBaseMode != nil {
+			context.BaseMode = *linkedBaseMode
+			context.Priceable = true
+		}
+		contexts[instanceID] = context
 	}
-	return baseModes, rows.Err()
+	return contexts, rows.Err()
 }
 
 func commercialProjectionParametersPriceable(parameters map[string]any) bool {
