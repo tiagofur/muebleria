@@ -380,12 +380,15 @@ describe('CADmatic 4 candidato (ptx-cadmatic-4@r2) — ruta del compilador docum
     expect(text.includes('\n')).toBe(true);
   });
 
-  it('includeVectors=true emite VECTORS verificados por el readback; false no emite ninguno', () => {
+  it('r2 conserva includeVectors=true; r3 lo bloquea por contrato', () => {
     const job = candidateJob();
     const without = parsePtxDocumentBytes(PTX_POSTPROCESSOR_ADAPTER.serialize(job, CANDIDATE));
     expect(without.records.filter((r) => r.type === 'VECTORS')).toHaveLength(0);
 
-    const withVectorsProfile = profileVariant({ includeVectors: true });
+    const withVectorsProfile = {
+      ...CANDIDATE_R2,
+      dimensions: { ...CANDIDATE_R2.dimensions, includeVectors: true },
+    };
     const parsed = parsePtxDocumentBytes(PTX_POSTPROCESSOR_ADAPTER.serialize(job, withVectorsProfile));
     expect(parsed.records.filter((r) => r.type === 'VECTORS').length).toBeGreaterThan(0);
     const route = resolvePtxCompilerRoute(withVectorsProfile);
@@ -396,6 +399,26 @@ describe('CADmatic 4 candidato (ptx-cadmatic-4@r2) — ruta del compilador docum
       route.config!.compileOptions,
     );
     expect(issues).toEqual([]);
+
+    const r3Readiness = PTX_POSTPROCESSOR_ADAPTER.canSerialize(
+      job,
+      profileVariant({ includeVectors: true }),
+    );
+    expect(r3Readiness.reasons).toContainEqual(expect.objectContaining({
+      code: 'ptx_compile.profile_option_unsupported',
+      dimension: 'includeVectors',
+    }));
+    expectBlockedWithDetail(job, profileVariant({ includeVectors: true }), 'VECTORS=off');
+  });
+
+  it('r3 con refilados positivos exige TRIM_TYPE=1', () => {
+    const profile = profileVariant({ trimType: 0 });
+    const readiness = PTX_POSTPROCESSOR_ADAPTER.canSerialize(candidateJob(), profile);
+    expect(readiness.reasons).toContainEqual(expect.objectContaining({
+      code: 'ptx_compile.profile_option_unsupported',
+      dimension: 'trimType',
+    }));
+    expectBlockedWithDetail(candidateJob(), profile, 'refilados positivos exige trimType=1');
   });
 
   it('opciones de perfil no implementadas bloquean con causa específica (nunca decorativas)', () => {
