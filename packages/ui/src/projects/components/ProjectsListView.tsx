@@ -5,6 +5,9 @@
  * #642 / 2A: every card consumes the batch commercial summaries read model —
  * loading/error/none are distinct dataset states and a valid snapshot owns the
  * frozen identity (name, customer, currency, total, active quantity).
+ * #710: a discreet meta row under the toolbar reports visible vs received
+ * cards and offers filter recovery while results are on screen. It describes
+ * the navigation set only — never commercial dataset truth.
  */
 
 import type { ReactNode } from 'react';
@@ -35,6 +38,10 @@ import {
   type QuoteCommercialStatusFilter,
 } from '../quoteRevisionPresentation';
 import { CommercialStatusBadge } from './CommercialStatusBadge';
+
+function quoteNoun(count: number): string {
+  return count === 1 ? 'cotización' : 'cotizaciones';
+}
 
 export interface ProjectsListViewProps {
   readonly projects: readonly Project[];
@@ -98,6 +105,17 @@ export function ProjectsListView({
   // badge pending; error surfaces the banner and never "Sin cotización".
   const summariesReady = commercialSummariesStatus === 'ready';
   const summariesFailed = commercialSummariesStatus === 'error';
+
+  // #710: recovery stays reachable while restricted results are on screen.
+  // `filtered` follows the parent's debounced search, so right after the user
+  // empties the searchbox the visible subset can outlive the live `search`
+  // prop — the strict-subset check (counts only, no extra state) keeps the
+  // action available until the cards themselves are unrestricted again.
+  const showsRestrictedSubset =
+    filtered.length > 0 && filtered.length < projects.length;
+  const showClearFilters =
+    filtered.length > 0 &&
+    (search.trim() !== '' || statusFilter !== 'all' || showsRestrictedSubset);
 
   const cardIdentity = (
     project: Project,
@@ -185,6 +203,26 @@ export function ProjectsListView({
             />
           }
         />
+      ) : null}
+
+      {!isTrulyEmpty ? (
+        <div className="project-list-meta">
+          <p aria-live="polite" data-testid="projects-results-summary">
+            {`Mostrando ${filtered.length} de ${projects.length} ${quoteNoun(projects.length)}`}
+          </p>
+          {/* With zero matches the no-results EmptyState already owns the only
+              recovery action — never render a second Limpiar filtros here. */}
+          {showClearFilters ? (
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={onClearFilters}
+              data-testid="projects-clear-filters"
+            >
+              Limpiar filtros
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {summariesFailed ? (

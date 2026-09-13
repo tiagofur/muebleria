@@ -60,6 +60,23 @@
 
 /* —— Card grid (list) —— 1 / 2 / 3 cols (issue #34) —— */
 
+/* Result summary + clear filters (#710: discreet meta line under the toolbar;
+   counts describe the rendered cards, never commercial dataset truth). */
+.project-list-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.project-list-meta p {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .project-card-grid {
   display: grid;
   grid-template-columns: 1fr;

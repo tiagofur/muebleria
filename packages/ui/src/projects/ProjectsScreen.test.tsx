@@ -2598,3 +2598,49 @@ describe('commercial export picker acts on exact revisions (#642/3)', () => {
     expect(screen.queryByRole('menuitem', { name: /PDF listado/ })).toBeNull();
   });
 });
+
+describe('#710 quotes list orientation and filter recovery', () => {
+  it('search + status filter restrict results; Limpiar filtros restores the full set', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    // Baseline: the whole received set, no filters, no recovery action.
+    expect(screen.getByTestId('projects-results-summary').textContent).toBe(
+      'Mostrando 2 de 2 cotizaciones',
+    );
+    expect(screen.queryByTestId('projects-clear-filters')).toBeNull();
+
+    // Search narrows the set after the real debounce reaches `filtered`.
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Buscar cotizaciones' }),
+      'Cocina',
+    );
+    expect(await screen.findByText('Mostrando 1 de 2 cotizaciones')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.queryByTestId('project-card-prj-2')).toBeNull();
+    expect(screen.getByTestId('projects-clear-filters')).toBeTruthy();
+
+    // Status filter on top: restricted by both search and status.
+    const chips = screen.getByTestId('project-status-chips');
+    await user.click(within(chips).getByRole('button', { name: 'Borrador' }));
+    expect(screen.getByTestId('projects-results-summary').textContent).toBe(
+      'Mostrando 1 de 2 cotizaciones',
+    );
+
+    // One activation of the row action recovers the navigation set.
+    await user.click(screen.getByTestId('projects-clear-filters'));
+    // Live search input and chip selection reset immediately…
+    const searchbox = screen.getByRole('searchbox', {
+      name: 'Buscar cotizaciones',
+    }) as HTMLInputElement;
+    expect(searchbox.value).toBe('');
+    expect(
+      within(chips).getByRole('button', { name: 'Todas' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    // …while the cards follow the parent's debounce and then come back whole.
+    expect(await screen.findByText('Mostrando 2 de 2 cotizaciones')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
+    expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
+    expect(screen.queryByTestId('projects-clear-filters')).toBeNull();
+  });
+});
