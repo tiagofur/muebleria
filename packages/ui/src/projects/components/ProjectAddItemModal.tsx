@@ -90,6 +90,13 @@ export interface ProjectAddItemModalProps {
     | undefined;
 }
 
+// Stable identities for omitted optional catalogs: per-render `= []` defaults
+// would retrigger the draft-sync effect below on every render and, with an
+// empty/invalid module draft, freeze the modal in an infinite render loop.
+const EMPTY_COMPONENTS: readonly Component[] = [];
+const EMPTY_STRUCTURES: readonly Structure[] = [];
+const EMPTY_AGREGADOS: readonly Agregado[] = [];
+
 export function ProjectAddItemModal({
   open,
   onClose,
@@ -98,9 +105,9 @@ export function ProjectAddItemModal({
   categories,
   optionGroups,
   catalogs,
-  catalogComponents = [],
-  catalogStructures = [],
-  catalogAgregados = [],
+  catalogComponents = EMPTY_COMPONENTS,
+  catalogStructures = EMPTY_STRUCTURES,
+  catalogAgregados = EMPTY_AGREGADOS,
   projectLevelChoices,
   measureDefaults,
 }: ProjectAddItemModalProps): ReactNode {

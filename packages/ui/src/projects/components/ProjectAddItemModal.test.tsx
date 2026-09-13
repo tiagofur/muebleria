@@ -97,6 +97,9 @@ const modules: Module[] = [
 ];
 
 function renderModal(
+  // Los props de catálogo opcionales se omiten a propósito: ejercen los
+  // defaults del componente, que deben tener identidad estable (regresión
+  // del bucle de render con catálogo vacío).
   overrides: Partial<ComponentProps<typeof ProjectAddItemModal>> = {},
 ) {
   const onSubmit = vi.fn();
@@ -110,12 +113,6 @@ function renderModal(
       categories={categories}
       optionGroups={optionGroups}
       catalogs={{ materials, edges: [], hardware: [] }}
-      // Identidades estables como el consumidor real (ProjectModalsContainer
-      // pasa `catalogComponents ?? []`): sin esto, los defaults por render
-      // del modal re-disparan el efecto de sincronización con catálogo vacío.
-      catalogComponents={[]}
-      catalogStructures={[]}
-      catalogAgregados={[]}
       projectLevelChoices={{}}
       {...overrides}
     />,
@@ -326,6 +323,21 @@ describe('ProjectAddItemModal — selección efectiva vs filtro de categoría', 
     expect(screen.getByText('Elegí un mueble del catálogo.')).toBeInTheDocument();
   });
 
+  it('catálogo vacío con props de catálogo omitidos no congela el render (regresión de bucle)', () => {
+    // Antes del fix, los defaults por render (= []) de los props opcionales
+    // re-disparaban el efecto de sincronización del borrador para siempre
+    // cuando el catálogo de muebles estaba vacío.
+    const { onSubmit } = renderModal({ modules: [], categories: [] });
+
+    expect(screen.getByLabelText('Mueble').textContent).toContain(
+      'Sin muebles en este filtro',
+    );
+    expect(addBtn()).toBeDisabled();
+    fireEvent.submit(addForm());
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText('Elegí un mueble del catálogo.')).toBeInTheDocument();
+  });
+
   it('el envío normal conserva el payload y las validaciones previas', async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderModal();
@@ -363,11 +375,19 @@ describe('ProjectAddItemModal — selección efectiva vs filtro de categoría', 
       screen.getByText('Falta elegir: Interior (INTERIOR).'),
     ).toBeInTheDocument();
 
-    // Cantidad 0: el input tiene min=1 nativo que bloquea el submit del
-    // navegador; un submit programático que lo esquiva sigue topando con la
-    // validación del modal.
+    // Cantidad 0, primera capa: el min=1 nativo del input bloquea el submit
+    // del navegador (mismo comportamiento en jsdom y navegador real), así que
+    // la validación del modal ni llega a ejecutarse.
     await user.clear(screen.getByLabelText('Cantidad'));
     await user.type(screen.getByLabelText('Cantidad'), '0');
+    await user.click(addBtn());
+    expect(second.onSubmit).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText('La cantidad debe ser ≥ 1.'),
+    ).not.toBeInTheDocument();
+
+    // Cantidad 0, segunda capa: un submit programático que esquiva la
+    // validación nativa encuentra la validación React del modal.
     fireEvent.submit(addForm());
     expect(second.onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText('La cantidad debe ser ≥ 1.')).toBeInTheDocument();
