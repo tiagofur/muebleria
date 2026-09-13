@@ -142,7 +142,7 @@ test('successful working-copy callbacks publish a committed refresh', () => {
   assert.ok(dialogSource.includes('onCommercialProjectionMutationCommitted: function ()'));
   assert.ok(dialogSource.includes('onCommercialProjectionLocalMutation: function ()'));
   assert.ok(dialogSource.includes('serverSynchronized: true'));
-  assert.strictEqual((dialogSource.match(/notifyCommercialProjectionCommitted\(\);/g) || []).length, 4);
+  assert.strictEqual((dialogSource.match(/notifyCommercialProjectionCommitted\(\);/g) || []).length, 5);
 });
 
 console.log(`commercial projection tests passed: ${passed}`);

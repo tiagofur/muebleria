@@ -61,7 +61,8 @@ function buildSandbox() {
     createElement: () => createMockElement(''),
     querySelector: () => createMockElement('q'),
     querySelectorAll: () => [],
-    addEventListener: () => {}
+    addEventListener: () => {},
+    dispatchEvent: (event) => bridgeCalls.push({ action: 'document_event', event })
   };
 
   const sandbox = {
@@ -70,6 +71,7 @@ function buildSandbox() {
     clearTimeout: () => {},
     setInterval: () => 0,
     clearInterval: () => {},
+    CustomEvent: function (type, init) { return { type, detail: init && init.detail }; },
     document: documentMock,
     window: {
       addEventListener: () => {},
@@ -281,6 +283,8 @@ function runTests() {
     const btn = el(sandbox, 'btn-binding-publish');
     assert.ok(!btn.disabled);
     assert.ok(sandbox.__bridge.some((c) => c.action === 'get_model_binding'));
+    assert.ok(sandbox.__bridge.some((c) => c.action === 'document_event' &&
+      c.event.type === 'granete-mutation-state' && c.event.detail.serverSynchronized === true));
   });
 
   test('failure renders the specific duplicate-identity blocker', (sandbox) => {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -27,7 +28,15 @@ func (s *Server) HandleDesignCommercialProjection(w http.ResponseWriter, r *http
 	}
 	roles := actorRoles(claims)
 	project, err := s.Store.GetProjectByID(r.Context(), projectID)
-	if err != nil || project == nil || !canAccessCommercialProjectionPortfolio(claims.UserID, roles, project.OwnerUserID) {
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "diseño no encontrado", nil)
+			return
+		}
+		respondWithInternalError(w, err, "get project for design commercial projection")
+		return
+	}
+	if project == nil || !canAccessCommercialProjectionPortfolio(claims.UserID, roles, project.OwnerUserID) {
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "diseño no encontrado", nil)
 		return
 	}

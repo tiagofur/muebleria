@@ -24,7 +24,13 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		return nil, domain.ErrDesignNotFound
 	}
 	project, err := s.GetProjectByID(ctx, projectID)
-	if err != nil || project == nil {
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignNotFound
+		}
+		return nil, err
+	}
+	if project == nil {
 		return nil, domain.ErrDesignNotFound
 	}
 	orgID := OrgFromCtx(ctx)

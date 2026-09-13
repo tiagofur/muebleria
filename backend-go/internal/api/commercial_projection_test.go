@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -95,6 +96,15 @@ func TestHandleDesignCommercialProjection_HidesAnotherSellersProject(t *testing.
 	(&Server{Store: store}).HandleDesignCommercialProjection(rr, projectionRequest(string(domain.RoleVendedor)))
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status=%d body=%s, want portfolio-safe 404", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleDesignCommercialProjection_PreservesProjectLookupFailure(t *testing.T) {
+	store := &stubStore{projectGetByIDErr: errors.New("database unavailable")}
+	rr := httptest.NewRecorder()
+	(&Server{Store: store}).HandleDesignCommercialProjection(rr, projectionRequest(string(domain.RoleAdmin)))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s, want retryable server error", rr.Code, rr.Body.String())
 	}
 }
 

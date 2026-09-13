@@ -5688,6 +5688,7 @@
           }
           if (result.ok) {
             showToast("success", "✓ Diseño publicado como revisión inmutable R" + (result.revisionNumber || "?") + ".");
+            notifyCommercialProjectionCommitted();
             refreshModelBinding();
           } else {
             showToast("error", PUBLISH_ERROR_COPY[result.code] || "No se pudo publicar el diseño.");
