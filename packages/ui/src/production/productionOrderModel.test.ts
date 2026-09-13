@@ -69,6 +69,27 @@ describe('productionOrderModel (PROD-0.1 / 0.3)', () => {
     );
   });
 
+  it('#642: a canonical ProductionRelease opens the order even with Project.status draft', () => {
+    // Digital Thread golden truth: Project.status stays draft forever; the
+    // manufacturing authority (canonical release) decides factory access.
+    const releasedDraft = baseProject({
+      status: 'draft',
+      resolvedProductionRelease: {
+        source: 'canonical',
+        releaseId: 'rel-1',
+        releaseNumber: 1,
+        designRevisionId: 'dr-1',
+        designRevisionNumber: 2,
+        quoteRevisionId: 'q-2',
+        manufacturingFingerprint: 'sha256-abc',
+        frozenRouting: true,
+      },
+    });
+    expect(projectAllowsProductionOrder(releasedDraft)).toBe(true);
+    // Without a release, draft stays closed (no commercial acceptance bypass).
+    expect(projectAllowsProductionOrder(baseProject({ status: 'draft' }))).toBe(false);
+  });
+
   it('readiness: ready when cut rows exist', () => {
     const r = buildProductionOrderReadiness({
       project: baseProject(),

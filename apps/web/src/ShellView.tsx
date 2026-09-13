@@ -108,6 +108,7 @@ import {
    roleCanAccessEmbarquesNav,
   filterProjectsByProcessStage,
   isProductionReady,
+  releaseAuthorityOf,
   suggestDuplicateCode,
   transitionProjectStatus,
   type WarehouseProjectInput,
@@ -542,6 +543,8 @@ export interface ShellViewCtx {
   readonly projectTemplates: readonly ProjectTemplate[];
   readonly projects: readonly Project[];
   readonly projectsCreateKey: number;
+  /** Refresh the workspace read model (server-authoritative) before opening Producción. */
+  readonly refreshWorkspace: () => Promise<void>;
   readonly projectsForRole: readonly Project[];
   readonly purchaseOrders: PurchaseOrder[] | null;
   readonly purchasingProjects: ActiveProjectMaterial[];
@@ -815,6 +818,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     projectQuote,
     projectTemplates,
     projects,
+    refreshWorkspace,
     projectsCreateKey,
     projectsForRole,
     purchaseOrders,
@@ -1522,7 +1526,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
       {navId === 'orders' && useProductionWorkspace ? (
         <ProductionWorkspace
-          projects={(filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).filter(isProductionReady)}
+          projects={(filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).filter(
+            (p) => isProductionReady(p) || releaseAuthorityOf(p)?.source === 'canonical',
+          )}
           lookupProject={(id) =>
             (filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).find((p) => p.id === id)
           }
@@ -2108,8 +2114,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               onOpenInProduction={
                 useProductionWorkspace
                   ? (projectId) => {
-                      const target = productionOrderPath(projectId);
-                      if (location.pathname !== target) navigate(target);
+                      void refreshWorkspace().finally(() => {
+                        const target = productionOrderPath(projectId);
+                        if (location.pathname !== target) navigate(target);
+                      });
                     }
                   : undefined
               }
@@ -2244,8 +2252,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onOpenInProduction={
             useProductionWorkspace
               ? (projectId) => {
-                  const target = productionOrderPath(projectId);
-                  if (location.pathname !== target) navigate(target);
+                  // #642 demo flow: the release may have been created moments
+                  // ago through the Digital Thread commands — refresh the
+                  // server read model so the factory order resolves the
+                  // canonical authority without a manual reload.
+                  void refreshWorkspace().finally(() => {
+                    const target = productionOrderPath(projectId);
+                    if (location.pathname !== target) navigate(target);
+                  });
                 }
               : undefined
           }

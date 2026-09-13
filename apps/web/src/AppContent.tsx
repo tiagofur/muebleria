@@ -3034,6 +3034,9 @@ export function AppContent({
   }
 
   const shellViewCtx = {
+    refreshWorkspace: async () => {
+      await loadWorkspace();
+    },
     acquirePlanEditSession,
     actorRole,
     // #591: config object exists whenever the feature is reachable — on load

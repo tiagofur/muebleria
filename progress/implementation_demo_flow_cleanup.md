@@ -40,7 +40,27 @@ Backend verificado (auditoría, sin cambios necesarios):
 
 ## Hallazgos (clasificación P0/P1/P2)
 
-### P0 — ninguno nuevo
+### P0 — descubierto y corregido durante el E2E del golden flow
+
+**El workspace de Producción (`/orders/:id`) estaba gateado por status
+legacy**: `filterProductionVisible`/`isProductionReady`/
+`projectAllowsProductionOrder` filtraban por `status accepted|produced`, de
+modo que un proyecto DT (que conserva `status = draft` para siempre) con
+ProductionRelease canónica activa NO podía abrir su orden de fábrica —
+"Abrir en Producción" navigaba a "Orden no encontrada". Además, el read
+model de proyectos del store web (zustand ← workspace) no se enteraba del
+release creado por los comandos React Query de Reconciliación.
+
+Corregido con la MISMA política de manufacturing authority ya establecida
+(#642/#577): `projectAllowsProductionOrder` y `filterProductionVisible`
+aceptan `releaseAuthorityOf(p).source === 'canonical'` (status legacy queda
+como compatibilidad pre-DT), y ambos handlers `onOpenInProduction`
+(chrome Cotizaciones y éxito de release en Reconciliación) refrescan el
+read model del workspace antes de navegar. Regresión:
+`productionOrderModel.test.ts` (draft + release canónica → orden permitida)
+y el E2E golden (hub visible con status draft).
+
+### P0 (backend) — ninguno
 
 El backend ya cumple: accept Q no sincroniza Project.status; ProductionRelease
 es la única autoridad de fabricación DT; gates exactos fail-closed. No se
@@ -179,6 +199,17 @@ Web (`apps/web`):
   canForceReopenClosed, onMarkProduced/onReopen a ProjectsScreen).
 - `AppContent.tsx` — callbacks muertos eliminados.
 
+Producción (`packages/ui/src/production`):
+
+- `productionOrderModel.ts` — `projectAllowsProductionOrder` por
+  manufacturing authority (+ regresión).
+- `productionHelpers.ts` — `filterProductionVisible` por manufacturing
+  authority.
+
+Además `ShellView.tsx`: la cola de Producción incluye proyectos con release
+canónica y ambos `onOpenInProduction` refrescan el workspace antes de
+navegar (`refreshWorkspace` del ctx).
+
 Tests:
 
 - `packages/ui/src/digitalThread/ProjectReconciliationScreen.test.tsx` —
@@ -218,15 +249,23 @@ PostgreSQL efímero vía `scripts/organization-browser-gate.sh`):
    `Project.status = draft` y `resolved_production_release.source = canonical`
    pineado a R2 + Q2 (readback HTTP).
 
-## Verificación
+## Verificación (HEAD exacto de la rama)
 
 - `pnpm typecheck`: 7/7 PASS.
-- `pnpm test`: ver reporte final del PR (UI 1757+, web 461+ en verde al cierre
-  de esta entrega; batería completa en CI de exact-head).
-- Browser gate `demo-flow-happy-path.spec.ts`: PASS (ver evidencia exacta en
-  el PR).
-- `pnpm openapi:check`, `go test ./... -count=1 -p 1`, `git diff --check`:
-  ver PR (sin cambios Go/OpenAPI generados).
+- `pnpm test` (monorepo completo): domain 1407 / storage 191 / excel 341
+  (+3 skip hardware preexistentes) / desktop 17 / mobile 73 / ui 1758 /
+  web 461 — exit 0.
+- Browser gate completo (`scripts/organization-browser-gate.sh`):
+  **52/52 PASS (2.9m)**, incluyendo el spec nuevo
+  `demo-flow-happy-path.spec.ts` y todos los vecinos (reconciliation,
+  golden path #644, quote-list-authority, quote-legacy-recovery, designs,
+  furniture, pairing, gate-a, mfa, webauth, switch).
+- `GOFLAGS=-p=1 go test ./... -count=1`: todos los paquetes OK; storage
+  re-ejecutado aislado PASS (360s sobre PostgreSQL real) tras un flake de
+  carga cuando corrió en paralelo con el gate browser (sin cambios Go en
+  este PR).
+- `pnpm openapi:check`: sin drift (cero cambios de contrato).
+- `git diff --check`: limpio.
 
 ## Limitaciones restantes para la demo
 

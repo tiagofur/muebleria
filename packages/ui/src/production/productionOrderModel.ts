@@ -3,7 +3,7 @@
  * Pure helpers only; shell supplies cut-list result from domain.
  */
 
-import type { Project, ProductionCutRow } from '@granete/domain';
+import { releaseAuthorityOf, type Project, type ProductionCutRow } from '@granete/domain';
 import { isProductionQueueStatus } from './productionHelpers';
 
 /**
@@ -72,9 +72,18 @@ export function parseProductionOrderTab(
   return 'resumen';
 }
 
-/** True when project status may open the factory hub. */
+/**
+ * True when the project may open the factory order hub. #642/#577: the
+ * MANUFACTURING authority decides — a canonical ProductionRelease opens the
+ * order regardless of the literal Project.status (which stays `draft`
+ * forever on Digital Thread projects). The legacy accepted/produced statuses
+ * remain as pre-Digital-Thread compatibility.
+ */
 export function projectAllowsProductionOrder(project: Project): boolean {
-  return isProductionQueueStatus(project.status);
+  return (
+    isProductionQueueStatus(project.status) ||
+    releaseAuthorityOf(project)?.source === 'canonical'
+  );
 }
 
 export type ProductionOrderReadiness = {

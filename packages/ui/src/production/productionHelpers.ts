@@ -2,7 +2,7 @@
  * Production queue helpers (F038) — pure filters, no domain costs.
  */
 
-import type { Project, ProjectStatus } from '@granete/domain';
+import { releaseAuthorityOf, type Project, type ProjectStatus } from '@granete/domain';
 
 export type ProductionQueueTab = 'accepted' | 'produced';
 
@@ -35,5 +35,13 @@ export function filterProductionQueue(
 export function filterProductionVisible(
   projects: readonly Project[],
 ): Project[] {
-  return projects.filter((p) => isProductionQueueStatus(p.status));
+  // #642/#577: production visibility follows the MANUFACTURING authority —
+  // a canonical ProductionRelease keeps Digital Thread projects (status
+  // `draft`) visible to the factory surfaces; legacy accepted/produced
+  // statuses remain as pre-Digital-Thread compatibility.
+  return projects.filter(
+    (p) =>
+      isProductionQueueStatus(p.status) ||
+      releaseAuthorityOf(p)?.source === 'canonical',
+  );
 }

@@ -15,6 +15,15 @@
   producción", botón no-op "Evaluar 6 Gates", modal OC-022 para proyectos DT,
   cadenas muertas onChangeStatus/onReopen/confirmReopen/pendingConfirm + copy
   huérfano. E2E browser real nuevo con transiciones UI y assertions UX.
+- P0 descubierto por el E2E y corregido: el workspace de Producción
+  (/orders/:id) estaba gateado por status legacy → un proyecto DT (status
+  draft) con P1 canónica no podía abrir su orden. Alineado a manufacturing
+  authority (projectAllowsProductionOrder/filterProductionVisible) + refresh
+  del read model antes de navegar.
+- Evidence final: browser gate 52/52 PASS (2.9m) incl. spec nuevo; pnpm test
+  monorepo exit 0 (ui 1758 / web 461 / domain 1407 / storage 191); typecheck
+  7/7; openapi sin drift; go test ./... OK (storage aislado PASS 360s); diff
+  check limpio. PR parcial `Refs #642`, label `type:feature`, sin merge.
 - Detalle: `progress/implementation_demo_flow_cleanup.md`.
 
 # Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)

@@ -25,11 +25,11 @@ import { GATE_MODULE_A_ID, required } from './support/api';
  *   with Project.status still `draft`.
  */
 
-const PROJECT_ID = '77777777-6666-4777-8777-666666666666';
-const QUOTE_LINE_ID = '88888888-6666-4888-8888-666666666666';
-const CUSTOMER_ID = 'c0000000-0000-4000-8000-000000000066';
-const HAPPY_HW = '71000000-0000-4000-8000-000000000066';
-const HAPPY_STRUCT = '71000000-0000-4000-8000-000000000067';
+const PROJECT_ID = '77777777-bbbb-4777-8777-bbbbbbbbbbbb';
+const QUOTE_LINE_ID = '88888888-bbbb-4888-8888-bbbbbbbbbbbb';
+const CUSTOMER_ID = 'c0000000-0000-4000-8000-0000000000bb';
+const HAPPY_HW = '71000000-0000-4000-8000-0000000000b1';
+const HAPPY_STRUCT = '71000000-0000-4000-8000-0000000000b2';
 const HAPPY_CHOICES = {};
 
 interface SeededHappyPath {
@@ -125,6 +125,12 @@ test.describe.serial('Demo happy path UX: Q1 → cambios → Q2/R2 → P1 → Pr
     );
     seeded.r2Id = r2.id;
 
+    // The revision was published outside the workspace (the SketchUp-host
+    // leg is out of CI scope): reload so the exact-context surface refetches
+    // the authoritative revision list — no silent cache retargeting.
+    await page.reload();
+    await expect(page.getByTestId('reconciliation-context-bar')).toBeVisible();
+
     // Pin R2 explicitly (the newest-revision default is R2 here anyway — we
     // select it so the assertion is about the exact pair, not the default).
     await page.getByTestId('design-revision-select').selectOption(r2.id);
@@ -153,7 +159,7 @@ test.describe.serial('Demo happy path UX: Q1 → cambios → Q2/R2 → P1 → Pr
     await expect(page.getByTestId('design-revision-select')).toHaveValue(r2.id);
     await expect(
       page.getByTestId('design-revision-select').locator('option', { hasText: 'origen de esta cotización' }),
-    ).toHaveValue(r2.id);
+    ).toHaveAttribute('value', r2.id);
 
     // ------------------------------------------------------------------
     // 5. Publish + accept Q2 (atomic supersede of Q1).
@@ -194,7 +200,8 @@ test.describe.serial('Demo happy path UX: Q1 → cambios → Q2/R2 → P1 → Pr
     await expect(page.getByTestId('release-success-open-production')).toBeVisible();
     await page.getByTestId('release-success-open-production').click();
     await expect(page).toHaveURL(new RegExp(`/orders/${projectId}`));
-    await expect(page.getByTestId(`fabric-card-${projectId}`)).toBeVisible();
+    await expect(page.getByTestId('prod-order-hub')).toBeVisible();
+    await expect(page.getByTestId('prod-hub-title')).toContainText('Obra Happy Path Demo E2E');
 
     // ------------------------------------------------------------------
     // 7. Back on the Cotizaciones detail: the manufacturing authority
@@ -241,22 +248,22 @@ async function seedHappyPathFixtureReal(): Promise<SeededHappyPath> {
   const depthMm = template.externalDims?.depth || 590;
   await repository.saveCatalog({
     ...catalog,
-    structures: [...(catalog.structures ?? []), { id: HAPPY_STRUCT, code: 'HAPPY-STRUCT', name: 'Cuerpo', externalDims: { width: 600, height: 720, depth: depthMm }, components: [], active: true }],
-    hardware: [...catalog.hardware, { id: HAPPY_HW, code: 'HAPPY-HW', name: 'Herraje', unit: 'piece', costPerUnit: 10, active: true }],
+    structures: [...(catalog.structures ?? []), { id: HAPPY_STRUCT, code: 'HAPPY-B-STRUCT', name: 'Cuerpo Happy B', externalDims: { width: 600, height: 720, depth: depthMm }, components: [], active: true }],
+    hardware: [...catalog.hardware, { id: HAPPY_HW, code: 'HAPPY-B-HW', name: 'Herraje Happy B', unit: 'piece', costPerUnit: 10, active: true }],
     modules: [
       {
         ...template,
         id: GATE_MODULE_A_ID,
         structureId: HAPPY_STRUCT,
         components: [],
-        hardwareLines: [{ id: 'happy-hardware-line', hardwareId: HAPPY_HW, quantity: 1, optionRole: '' }],
+        hardwareLines: [{ id: 'happy-b-hardware-line', hardwareId: HAPPY_HW, quantity: 1, optionRole: '' }],
         externalDims: { width: 600, height: 720, depth: depthMm },
       },
     ],
     customers: [
       {
         id: CUSTOMER_ID,
-        name: 'Cliente Happy Path E2E',
+        name: 'Cliente Happy Path B E2E',
         active: true,
       },
     ],
