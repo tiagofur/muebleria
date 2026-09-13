@@ -193,6 +193,33 @@ function deriveTrimProjection(trace: CutProgramTrace): LocalTrimProjection | nul
 }
 
 /**
+ * Independent r3 proof that every physical trim band discarded from the
+ * prefix is an explicitly liberated waste terminal. This intentionally does
+ * not share the compiler planner: a valid-looking PTX must not self-verify
+ * when its source program says material remained on the table.
+ */
+function invalidDiscardedTrimBand(trace: CutProgramTrace): string | undefined {
+  const divisionByParent = new Map(
+    trace.divisions.map((division) => [division.parentRegionId, division]),
+  );
+  const terminalByRegion = new Map(
+    trace.terminals.map((terminal) => [terminal.regionId, terminal]),
+  );
+  let current = trace.boardRegionId;
+  for (;;) {
+    const division = divisionByParent.get(current);
+    if (!division || division.trim !== true) return undefined;
+    if (division.restRegionId) {
+      const terminal = terminalByRegion.get(division.restRegionId);
+      if (!terminal || terminal.kind !== 'waste' || terminal.liberated !== true) {
+        return division.restRegionId;
+      }
+    }
+    current = division.keptRegionId;
+  }
+}
+
+/**
  * Structural preorder, re-derived: kept subtree first, then the rest
  * subtree, from the staging root (usable root under r3). CUT_INDEX must
  * follow this order while SEQUENCE carries the scheduled execution order —
@@ -459,6 +486,15 @@ export function verifyCutPlanPtxReadback(
     try {
       const trace = executeCutProgram(sheet.cutProgram);
       sheetTraces.set(sheet.sheetIndex, trace);
+      if (r3) {
+        const invalidBand = invalidDiscardedTrimBand(trace);
+        if (invalidBand) {
+          push(
+            'trim.discarded_terminal',
+            `la banda de refilo ${invalidBand} de la hoja ${sheet.sheetIndex} debe terminar como waste con liberated=true`,
+          );
+        }
+      }
       sheetProjections.set(sheet.sheetIndex, deriveTrimProjection(trace));
       for (const terminal of trace.terminals) {
         if (terminal.kind === 'remnant') {

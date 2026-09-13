@@ -111,6 +111,7 @@ export interface PtxCompilerRouteConfig {
 export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
   { config?: PtxCompilerRouteConfig; reasons: readonly AdapterBlockReason[] } {
   const label = `${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId}`;
+  const isCadmatic4R3 = label === 'ptx-cadmatic-4@r3';
   const missing = checkRequiredDimensions(profile, PTX_COMPILER_REQUIRED_DIMENSIONS);
   if (missing.length > 0) return { reasons: missing };
 
@@ -165,6 +166,20 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
   const supportsPositiveTrim = dims.supportsPositiveTrim;
   if (typeof supportsPositiveTrim !== 'boolean') {
     unsupported(`supportsPositiveTrim '${String(dims.supportsPositiveTrim)}' no es booleano`);
+  }
+  if (isCadmatic4R3 && supportsPositiveTrim === true && trimType !== 1) {
+    reasons.push({
+      code: 'ptx_compile.profile_option_unsupported',
+      dimension: 'trimType',
+      detail: `${label} con refilados positivos exige trimType=1 (fixed trim first)`,
+    });
+  }
+  if (isCadmatic4R3 && includeVectors === true) {
+    reasons.push({
+      code: 'ptx_compile.profile_option_unsupported',
+      dimension: 'includeVectors',
+      detail: `${label} no implementa includeVectors=true: el contrato r3 exige VECTORS=off`,
+    });
   }
   const supportedFunctionsRaw = String(dims.supportedFunctions)
     .split(',')
@@ -287,6 +302,35 @@ export const PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
   adapterVersion: '1.2.0',
   producedFormatFamily: 'ptx',
   generator: 'packages/excel/src/machines/ptxAdapter.ts@3',
+} as const;
+
+/**
+ * Reviewable industrial contract bound to the current implementationDigest.
+ * It deliberately fingerprints explicit behavior markers, effective profile
+ * options and stable golden bytes — never whole source files or formatting
+ * noise. Any governed change must update this record together with a new
+ * adapter identity; CI compares every value against its independent source.
+ */
+export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
+  implementationDigest: '954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236',
+  behaviorMarkers: {
+    compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3'],
+    r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
+    r3ReleaseScheduling: 'phase-2-rest-remnant-function-92-before-dependent-recut',
+    readback: 'parser-plus-independent-cut-program-verifier',
+    legacyRoute: 'ptx-generic@r1-only',
+  },
+  profiles: {
+    r2: {
+      digest: '822221a6324199e63ec432966cfdd84b41dd8821fe09da1a3d1970e9fbae3c4a',
+      goldenBytesSha256: '6f72cce42d7f2c17359275f6c64f1bf14c5145d168a12abc0f77ba23830f4baa',
+    },
+    r3: {
+      digest: '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537',
+      goldenBytesSha256: 'f5e51ff7511960aae7eadef99a841fed9c824e4b28320ee83734db1430b2c7ee',
+    },
+  },
+  legacyGoldenBytesSha256: '544dcae574bc19e19f934f96b2ad1dc104a2d7b1f668262a83ae09df72510f09',
 } as const;
 
 export const PTX_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob> = {
