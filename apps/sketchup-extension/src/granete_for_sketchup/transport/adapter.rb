@@ -4,6 +4,7 @@ module Granete
   module SketchUpExtension
     module Transport
       class NotConfiguredError < StandardError; end
+      class RequestError < StandardError; end
 
       class Adapter
         def configured?

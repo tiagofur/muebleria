@@ -111,7 +111,7 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			return nil, hashErr
 		}
 		result.CatalogFingerprint = &catalogFingerprint
-		pricingLayout, layoutErr := s.designPricingKitchenLayout(ctx, projectID, envelope.KitchenLayout)
+		pricingLayout, layoutErr := s.designPricingKitchenLayout(ctx, projectID, envelope.KitchenLayout, pricingItems)
 		if layoutErr != nil {
 			return nil, layoutErr
 		}
@@ -145,7 +145,7 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 // designPricingKitchenLayout translates the editable quote-line placement
 // identity (ProjectItem + zero-based instanceIndex) to the physical
 // FurnitureInstance identity used by DesignWorkingCopy pricing items.
-func (s *PostgresStore) designPricingKitchenLayout(ctx context.Context, projectID string, raw json.RawMessage) (json.RawMessage, error) {
+func (s *PostgresStore) designPricingKitchenLayout(ctx context.Context, projectID string, raw json.RawMessage, pricingItems []domain.ProjectItem) (json.RawMessage, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return raw, nil
 	}
@@ -180,26 +180,45 @@ func (s *PostgresStore) designPricingKitchenLayout(ctx context.Context, projectI
 		return nil, err
 	}
 
+	workingInstances := make(map[string]struct{}, len(pricingItems))
+	for _, item := range pricingItems {
+		workingInstances[item.ID] = struct{}{}
+	}
+	layout["placements"] = mapDesignPricingPlacements(placements, unitsByLine, workingInstances)
+	mapped, err := json.Marshal(layout)
+	if err != nil {
+		return nil, err
+	}
+	return mapped, nil
+}
+
+func mapDesignPricingPlacements(placements []any, unitsByLine map[string][]string, workingInstances map[string]struct{}) []any {
+	mapped := make([]any, 0, len(placements))
 	for _, value := range placements {
 		placement, ok := value.(map[string]any)
 		if !ok {
 			continue
 		}
 		lineID, _ := placement["itemId"].(string)
-		index, ok := placement["instanceIndex"].(float64)
-		if !ok || index < 0 || index != float64(int(index)) {
+		instanceID := lineID
+		if _, alreadyPhysical := workingInstances[instanceID]; !alreadyPhysical {
+			index, validIndex := placement["instanceIndex"].(float64)
+			if !validIndex || index < 0 || index != float64(int(index)) {
+				continue
+			}
+			units := unitsByLine[lineID]
+			if int(index) >= len(units) {
+				continue
+			}
+			instanceID = units[int(index)]
+		}
+		if _, present := workingInstances[instanceID]; !present {
 			continue
 		}
-		units := unitsByLine[lineID]
-		if int(index) < len(units) {
-			placement["itemId"] = units[int(index)]
-		}
+		placement["itemId"] = instanceID
+		mapped = append(mapped, placement)
 	}
-	mapped, err := json.Marshal(layout)
-	if err != nil {
-		return nil, err
-	}
-	return mapped, nil
+	return mapped
 }
 
 func hashJSON(value any) (string, error) {

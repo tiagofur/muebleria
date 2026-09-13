@@ -55,6 +55,25 @@ func TestCommercialProjectionReference_LegacySnapshotKeepsUnknownCurrency(t *tes
 	}
 }
 
+func TestMapDesignPricingPlacements_DropsUnitsAbsentFromWorkingCopy(t *testing.T) {
+	placements := []any{
+		map[string]any{"itemId": "line-1", "instanceIndex": float64(0), "wallId": "wall-1"},
+		map[string]any{"itemId": "line-1", "instanceIndex": float64(1), "wallId": "wall-1"},
+	}
+	mapped := mapDesignPricingPlacements(
+		placements,
+		map[string][]string{"line-1": {"unit-current", "unit-absent"}},
+		map[string]struct{}{"unit-current": {}},
+	)
+	if len(mapped) != 1 {
+		t.Fatalf("mapped placements=%d want only the working-copy unit", len(mapped))
+	}
+	placement, ok := mapped[0].(map[string]any)
+	if !ok || placement["itemId"] != "unit-current" {
+		t.Fatalf("mapped placement=%#v", mapped[0])
+	}
+}
+
 func projectionSnapshot(total float64) *domain.QuoteCommercialSnapshot {
 	return &domain.QuoteCommercialSnapshot{Currency: "MXN", Breakdown: domain.QuoteBreakdown{SalePrice: total}}
 }

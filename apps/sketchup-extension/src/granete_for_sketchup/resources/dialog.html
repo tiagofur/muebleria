@@ -5827,8 +5827,16 @@
             return;
           }
 
-          if (result.status) renderModelBindingStatus(result.status);
-          else if (result.state) renderModelBindingStatus({ state: result.state, reason: result.reason });
+          var failureStatus = null;
+          if (result.status) failureStatus = result.status;
+          else if (result.state) failureStatus = { state: result.state, reason: result.reason };
+          if (failureStatus) {
+            renderModelBindingStatus(failureStatus);
+            // A failed validation makes any previously rendered amount stale.
+            // Fail closed with the same authoritative binding state instead of
+            // leaving the card marked as current.
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(failureStatus);
+          }
           if (result.pairing) {
             if (result.code === "invalid_code") {
               showPairingMessage("error", result.reason || "Código inválido.");

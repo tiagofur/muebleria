@@ -113,4 +113,12 @@ class CommercialProjectionTest < Minitest::Test
 
     assert_nil CP::Contract.parse!(body).dig('reference', 'currency')
   end
+
+  def test_service_rejects_response_for_another_design
+    body = projection.merge('designId' => '52000000-0000-0000-0000-000000000009')
+    service = CP::Service.new(transport: Transport.new('status' => 200, 'body' => body), auth_provider: Auth.new)
+
+    error = assert_raises(CP::Service::Error) { service.fetch(PROJECT_ID, DESIGN_ID) }
+    assert_equal :incompatible, error.kind
+  end
 end

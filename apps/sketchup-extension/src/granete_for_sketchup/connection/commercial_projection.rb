@@ -160,7 +160,14 @@ module Granete
                                           'path' => path,
                                           'headers' => headers)
             status = response['status'].to_i
-            return Contract.parse!(response['body']) if status == 200
+            if status == 200
+              projection = Contract.parse!(response['body'])
+              unless projection['projectId'] == project_id && projection['designId'] == design_id
+                raise ArgumentError, 'la respuesta comercial no coincide con el diseño conectado'
+              end
+
+              return projection
+            end
 
             kind, message = case status
                             when 401 then [:unauthenticated, 'la sesión venció; iniciá sesión de nuevo']
