@@ -11393,7 +11393,10 @@
             "$ref": "#/components/schemas/QuoteRevisionStatus"
           },
           "currency": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "saleTotal": {
             "type": [

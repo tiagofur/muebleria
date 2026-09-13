@@ -26,7 +26,7 @@ type CommercialProjectionReference struct {
 	QuoteRevisionID string   `json:"quoteRevisionId"`
 	RevisionNumber  int      `json:"revisionNumber"`
 	Status          string   `json:"status"`
-	Currency        string   `json:"currency"`
+	Currency        *string  `json:"currency"`
 	SaleTotal       *float64 `json:"saleTotal"`
 }
 

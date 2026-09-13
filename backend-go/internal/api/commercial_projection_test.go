@@ -21,13 +21,14 @@ func projectionRequest(role string) *http.Request {
 
 func TestHandleDesignCommercialProjection_PreservesLegitimateZeroAndReference(t *testing.T) {
 	zero := 0.0
+	currency := "MXN"
 	store := &stubStore{commercialProjection: &domain.CommercialProjection{
 		Schema: domain.CommercialProjectionSchema, Status: domain.CommercialProjectionCurrent,
 		ProjectID: qrTestProjectID, DesignID: projectionDesignID, WorkingVersion: "v1",
 		WorkingFingerprint: "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		PricingAuthority:   "calc-project-breakdown", CalculatedAt: time.Now().UTC(), Currency: "MXN",
 		Amounts: &domain.CommercialProjectionAmounts{SaleTotal: &zero, DirectCost: &zero}, Issues: []string{},
-		Reference: &domain.CommercialProjectionReference{QuoteRevisionID: "3f7b6c5d-0000-4000-8000-000000000010", RevisionNumber: 1, Status: "accepted", Currency: "MXN", SaleTotal: &zero},
+		Reference: &domain.CommercialProjectionReference{QuoteRevisionID: "3f7b6c5d-0000-4000-8000-000000000010", RevisionNumber: 1, Status: "accepted", Currency: &currency, SaleTotal: &zero},
 	}}
 	rr := httptest.NewRecorder()
 	(&Server{Store: store}).HandleDesignCommercialProjection(rr, projectionRequest(string(domain.RoleAdmin)))

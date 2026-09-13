@@ -89,4 +89,14 @@ class CommercialProjectionTest < Minitest::Test
 
     assert_equal 'published', CP::Contract.parse!(body).dig('reference', 'status')
   end
+
+  def test_contract_preserves_legacy_reference_with_unknown_currency
+    body = projection
+    body['reference'] = {
+      'quoteRevisionId' => PROJECT_ID, 'revisionNumber' => 1, 'status' => 'published',
+      'currency' => nil, 'saleTotal' => nil
+    }
+
+    assert_nil CP::Contract.parse!(body).dig('reference', 'currency')
+  end
 end

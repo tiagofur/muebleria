@@ -90,7 +90,7 @@ module Granete
             unless reference['quoteRevisionId'].to_s.match?(UUID_PATTERN) &&
                    reference['revisionNumber'].is_a?(Integer) && reference['revisionNumber'].positive? &&
                    %w[draft published accepted superseded].include?(reference['status']) &&
-                   !reference['currency'].to_s.empty?
+                   (reference['currency'].nil? || !reference['currency'].to_s.empty?)
               raise ArgumentError, 'referencia comercial inválida'
             end
 

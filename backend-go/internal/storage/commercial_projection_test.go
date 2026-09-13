@@ -25,7 +25,8 @@ func TestSelectCommercialProjectionReferences_PrefersAcceptedAndKeepsNewerPublis
 
 func TestCompareCommercialProjection_ZeroReferenceHasAbsoluteDeltaWithoutFakePercentage(t *testing.T) {
 	zero, current := 0.0, 25.0
-	p := &domain.CommercialProjection{Currency: "MXN", Amounts: &domain.CommercialProjectionAmounts{SaleTotal: &current}, Reference: &domain.CommercialProjectionReference{Currency: "MXN", SaleTotal: &zero}}
+	currency := "MXN"
+	p := &domain.CommercialProjection{Currency: currency, Amounts: &domain.CommercialProjectionAmounts{SaleTotal: &current}, Reference: &domain.CommercialProjectionReference{Currency: &currency, SaleTotal: &zero}}
 	comparison := compareCommercialProjection(p)
 	if comparison == nil || comparison.AbsoluteDelta != 25 || comparison.PercentageDelta != nil {
 		t.Fatalf("comparison=%#v", comparison)
@@ -34,13 +35,23 @@ func TestCompareCommercialProjection_ZeroReferenceHasAbsoluteDeltaWithoutFakePer
 
 func TestCompareCommercialProjection_CurrencyMismatchHasNoComparison(t *testing.T) {
 	reference, current := 100.0, 125.0
+	currency := "USD"
 	p := &domain.CommercialProjection{
 		Currency:  "MXN",
 		Amounts:   &domain.CommercialProjectionAmounts{SaleTotal: &current},
-		Reference: &domain.CommercialProjectionReference{Currency: "USD", SaleTotal: &reference},
+		Reference: &domain.CommercialProjectionReference{Currency: &currency, SaleTotal: &reference},
 	}
 	if comparison := compareCommercialProjection(p); comparison != nil {
 		t.Fatalf("currency mismatch comparison=%#v", comparison)
+	}
+}
+
+func TestCommercialProjectionReference_LegacySnapshotKeepsUnknownCurrency(t *testing.T) {
+	ref := commercialProjectionReference(domain.QuoteRevisionDetail{QuoteRevision: domain.QuoteRevision{
+		ID: "3f7b6c5d-0000-4000-8000-000000000010", RevisionNumber: 1, Status: "published",
+	}})
+	if ref.Currency != nil || ref.SaleTotal != nil {
+		t.Fatalf("legacy reference invented commercial values: %#v", ref)
 	}
 }
 

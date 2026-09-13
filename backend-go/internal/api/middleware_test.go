@@ -917,6 +917,7 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		// #389 grants.
 		{"list project furniture instances", http.MethodGet, "/api/projects/" + projectID + "/furniture-instances", true},
 		{"read design working copy", http.MethodGet, "/api/designs/" + designID + "/working-copy", true},
+		{"read exact design commercial projection (#677)", http.MethodGet, "/api/projects/" + projectID + "/designs/" + designID + "/commercial-projection", true},
 		{"place existing writes working copy", http.MethodPut, "/api/designs/" + designID + "/working-copy", true},
 		// #390 / DT-6 grant: catalog design-first identity creation.
 		{"create furniture instance from catalog (#390)", http.MethodPost, "/api/projects/" + projectID + "/furniture-instances", true},
@@ -937,5 +938,32 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 				t.Fatalf("extensionClientMayAccess(%s %s) = %v, want %v", tc.verb, tc.path, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestExtensionTokenMayReadExactDesignCommercialProjection(t *testing.T) {
+	const secret = "super-secret-test-key-0123456789"
+	users := &staticUsers{
+		byID: map[string]*domain.User{"u-1": {ID: "u-1", Email: "u@test.com", AccountStatus: domain.AccountStatusActive}},
+		memberships: map[string]*domain.MembershipWithOrg{"u-1:org-1": {
+			Membership:   domain.Membership{ID: "u-1:org-1", OrganizationID: "org-1", UserID: "u-1", CredentialVersion: 1, Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive},
+			Organization: domain.Organization{ID: "org-1", Status: domain.OrganizationStatusActive, CredentialVersion: 1},
+		}},
+	}
+	token, err := auth.GenerateLegacyExtensionToken("u-1", "u@test.com", auth.TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "u-1:org-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+	}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := "/api/projects/41000000-0000-0000-0000-000000000001/designs/52000000-0000-0000-0000-000000000001/commercial-projection"
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	recorder := httptest.NewRecorder()
+	AuthMiddleware(mustAuthority(secret), users)(okHandler()).ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("extension projection read status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }

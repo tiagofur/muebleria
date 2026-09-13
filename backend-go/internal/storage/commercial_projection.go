@@ -169,7 +169,8 @@ func selectCommercialProjectionReferences(revisions []domain.QuoteRevisionDetail
 func commercialProjectionReference(revision domain.QuoteRevisionDetail) *domain.CommercialProjectionReference {
 	ref := &domain.CommercialProjectionReference{QuoteRevisionID: revision.ID, RevisionNumber: revision.RevisionNumber, Status: revision.Status}
 	if revision.CommercialSnapshot != nil {
-		ref.Currency = revision.CommercialSnapshot.Currency
+		currency := revision.CommercialSnapshot.Currency
+		ref.Currency = &currency
 		if !revision.CommercialAmountsWithheld {
 			value := revision.CommercialSnapshot.Breakdown.SalePrice
 			ref.SaleTotal = &value
@@ -179,7 +180,7 @@ func commercialProjectionReference(revision domain.QuoteRevisionDetail) *domain.
 }
 
 func compareCommercialProjection(p *domain.CommercialProjection) *domain.CommercialProjectionComparison {
-	if p.Amounts == nil || p.Amounts.SaleTotal == nil || p.Reference == nil || p.Reference.SaleTotal == nil || p.Currency != p.Reference.Currency {
+	if p.Amounts == nil || p.Amounts.SaleTotal == nil || p.Reference == nil || p.Reference.SaleTotal == nil || p.Reference.Currency == nil || p.Currency != *p.Reference.Currency {
 		return nil
 	}
 	delta := *p.Amounts.SaleTotal - *p.Reference.SaleTotal
