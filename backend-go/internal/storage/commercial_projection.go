@@ -29,6 +29,14 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 	}
 	orgID := OrgFromCtx(ctx)
 	saleAmountsVisible := project.OrganizationID == orgID || project.SalesOrganizationID == orgID
+	costsVisible := false
+	if saleAmountsVisible {
+		organization, organizationErr := s.GetOrganizationByID(ctx, orgID)
+		if organizationErr != nil {
+			return nil, organizationErr
+		}
+		costsVisible = commercialProjectionCostsVisibleToOrganization(project, organization)
+	}
 	var authorized bool
 	err = s.db(ctx).QueryRow(ctx, `
 		SELECT true
@@ -65,7 +73,7 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		ProjectID: projectID, DesignID: designID, WorkingVersion: workingVersion,
 		WorkingFingerprint: workingFingerprint, PricingAuthority: "calc-project-breakdown",
 		CalculatedAt: now, Currency: project.Currency, ItemCount: len(wc.Items), Issues: []string{},
-		CostsWithheld: !commercialProjectionCostsVisibleToOrganization(project, orgID), SaleAmountsWithheld: false,
+		CostsWithheld: !costsVisible, SaleAmountsWithheld: false,
 	}
 	pricingContextByInstance := map[string]commercialProjectionPricingContext{}
 	if saleAmountsVisible {
@@ -168,14 +176,17 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			result.Comparison = compareCommercialProjection(result)
 		}
 	}
-	if !commercialProjectionCostsVisibleToOrganization(project, orgID) {
+	if !costsVisible {
 		domain.RedactCommercialProjectionCosts(result)
 	}
 	return result, nil
 }
 
-func commercialProjectionCostsVisibleToOrganization(project *domain.Project, organizationID string) bool {
-	return project != nil && project.OrganizationID != "" && project.OrganizationID == organizationID
+func commercialProjectionCostsVisibleToOrganization(project *domain.Project, organization *domain.Organization) bool {
+	if project == nil || organization == nil || organization.Type != domain.OrganizationTypeFactory {
+		return false
+	}
+	return organization.ID == project.OrganizationID || organization.ID == project.ManufacturingOrganizationID
 }
 
 type commercialProjectionPricingContext struct {

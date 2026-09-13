@@ -161,6 +161,21 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 	if err != nil || projection.Status != domain.CommercialProjectionCurrent || projection.ItemCount != 2 {
 		t.Fatalf("design-first projection=%+v err=%v", projection, err)
 	}
+
+	// Project ownership alone does not reveal factory internals when the owner
+	// is a commercial organization.
+	multiOrgExec(t, fx.admin, `UPDATE organizations SET type = 'store' WHERE id = '`+rlsOrgA+`';`)
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var readErr error
+		projection, readErr = fx.store.GetDesignCommercialProjection(ctx, csProject, designID)
+		return readErr
+	})
+	if err != nil || projection.Amounts == nil || projection.Amounts.SaleTotal == nil ||
+		projection.Amounts.DirectCost != nil || projection.Amounts.MarginFactor != nil ||
+		!projection.CostsWithheld || projection.SaleAmountsWithheld {
+		t.Fatalf("store-owned projection cost boundary=%+v err=%v", projection, err)
+	}
+	multiOrgExec(t, fx.admin, `UPDATE organizations SET type = 'factory' WHERE id = '`+rlsOrgA+`';`)
 	if got := len(listRevisions(t, fx)); got != 1 {
 		t.Fatalf("projection refresh created a QuoteRevision: got %d", got)
 	}

@@ -96,15 +96,20 @@ func TestCommercialProjectionParametersPriceable_FailsClosedOutsideCompleteDimen
 
 func TestCommercialProjectionCostsVisibleToOrganization_OwningAuthorityOnly(t *testing.T) {
 	project := &domain.Project{
-		OrganizationID: "factory-owner", SalesOrganizationID: "seller", ManufacturingOrganizationID: "manufacturer",
+		OrganizationID: "store-owner", SalesOrganizationID: "store-owner", ManufacturingOrganizationID: "manufacturer",
 	}
-	if !commercialProjectionCostsVisibleToOrganization(project, "factory-owner") {
-		t.Fatal("owning organization lost cost authority")
+	if commercialProjectionCostsVisibleToOrganization(project, &domain.Organization{ID: "store-owner", Type: domain.OrganizationTypeStore}) {
+		t.Fatal("store ownership must not grant factory-internal cost authority")
 	}
-	for _, organizationID := range []string{"seller", "manufacturer", "unrelated"} {
-		if commercialProjectionCostsVisibleToOrganization(project, organizationID) {
-			t.Fatalf("organization %q received owning-workshop cost authority", organizationID)
-		}
+	if !commercialProjectionCostsVisibleToOrganization(project, &domain.Organization{ID: "manufacturer", Type: domain.OrganizationTypeFactory}) {
+		t.Fatal("assigned factory lost manufacturing cost authority")
+	}
+	project.OrganizationID = "factory-owner"
+	if !commercialProjectionCostsVisibleToOrganization(project, &domain.Organization{ID: "factory-owner", Type: domain.OrganizationTypeFactory}) {
+		t.Fatal("factory owner lost cost authority")
+	}
+	if commercialProjectionCostsVisibleToOrganization(project, &domain.Organization{ID: "unrelated", Type: domain.OrganizationTypeFactory}) {
+		t.Fatal("unrelated factory received cost authority")
 	}
 }
 
