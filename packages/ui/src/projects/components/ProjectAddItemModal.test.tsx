@@ -1,7 +1,8 @@
 /**
  * Regresión focalizada — selección efectiva del modal Agregar mueble vs filtro
- * de categoría. El valor visible del selector, los controles dependientes
- * (medidas/opciones) y el payload enviado deben referir al mismo mueble.
+ * de categoría y respeto de "Quitar selección" del picker. El valor visible del
+ * selector, los controles dependientes (medidas/opciones) y el payload enviado
+ * deben referir al mismo mueble.
  * @vitest-environment jsdom
  */
 
@@ -96,6 +97,15 @@ const modules: Module[] = [
   },
 ];
 
+// Mueble extra para simular la llegada de un nuevo catálogo por rerender.
+const moduleC: Module = {
+  id: 'mod-c',
+  code: 'MOD-C',
+  name: 'Mueble C',
+  categoryId: 'cat-cocina',
+  hardwareLines: [],
+};
+
 function renderModal(
   // Los props de catálogo opcionales se omiten a propósito: ejercen los
   // defaults del componente, que deben tener identidad estable (regresión
@@ -104,20 +114,26 @@ function renderModal(
 ) {
   const onSubmit = vi.fn();
   const onClose = vi.fn();
-  render(
-    <ProjectAddItemModal
-      open
-      onClose={onClose}
-      onSubmit={onSubmit}
-      modules={modules}
-      categories={categories}
-      optionGroups={optionGroups}
-      catalogs={{ materials, edges: [], hardware: [] }}
-      projectLevelChoices={{}}
-      {...overrides}
-    />,
-  );
-  return { onSubmit, onClose };
+  const props: ComponentProps<typeof ProjectAddItemModal> = {
+    open: true,
+    onClose,
+    onSubmit,
+    modules,
+    categories,
+    optionGroups,
+    catalogs: { materials, edges: [], hardware: [] },
+    projectLevelChoices: {},
+    ...overrides,
+  };
+  const view = render(<ProjectAddItemModal {...props} />);
+  return {
+    onSubmit,
+    onClose,
+    // Rerender del padre: mezcla sobre los props originales de esta sesión.
+    rerender: (
+      next: Partial<ComponentProps<typeof ProjectAddItemModal>> = {},
+    ) => view.rerender(<ProjectAddItemModal {...props} {...next} />),
+  };
 }
 
 /** Selecciona un mueble desde el picker combobox (apertura + opción). */
@@ -132,6 +148,12 @@ async function selectCategory(
   categoryId: string,
 ) {
   await user.selectOptions(screen.getByLabelText('Categoría'), categoryId);
+}
+
+/** Abre el selector real y pulsa "Quitar selección". */
+async function clearModule(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByLabelText('Mueble'));
+  await user.click(screen.getByRole('button', { name: 'Quitar selección' }));
 }
 
 function addForm(): HTMLFormElement {
@@ -391,5 +413,200 @@ describe('ProjectAddItemModal — selección efectiva vs filtro de categoría', 
     fireEvent.submit(addForm());
     expect(second.onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText('La cantidad debe ser ≥ 1.')).toBeInTheDocument();
+  });
+});
+
+describe('ProjectAddItemModal — Quitar selección', () => {
+  it('quitar A desde el selector real deja el formulario sin selección ni envío', async () => {
+    const user = userEvent.setup();
+    const { onSubmit, onClose } = renderModal();
+
+    // Selección explícita de A con cantidad, medida y acabado propios.
+    await pickModule(user, /MOD-A — Mueble A/);
+    await user.clear(screen.getByLabelText('Cantidad'));
+    await user.type(screen.getByLabelText('Cantidad'), '3');
+    await user.selectOptions(
+      screen.getByTestId('add-item-measure-preset'),
+      'pa-800',
+    );
+
+    // Deja un error de validación visible antes de limpiar.
+    await user.selectOptions(screen.getByLabelText('Interior (INTERIOR)'), '');
+    await user.click(addBtn());
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('Falta elegir: Interior (INTERIOR).'),
+    ).toBeInTheDocument();
+    await user.selectOptions(
+      screen.getByLabelText('Interior (INTERIOR)'),
+      'mat-b',
+    );
+
+    await clearModule(user);
+
+    // El selector vuelve a su placeholder; medidas y opciones de A desaparecen.
+    const trigger = screen.getByLabelText('Mueble');
+    expect(trigger.textContent).toContain('Seleccionar mueble…');
+    expect(trigger.textContent).not.toContain('MOD-A');
+    expect(
+      screen.queryByTestId('add-item-measure-preset'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Interior (INTERIOR)')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Este mueble no tiene grupos de opción requeridos.'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Selecciona un mueble de la categoría actual.'),
+    ).not.toBeInTheDocument();
+    // El error previo se retira al iniciar la nueva selección.
+    expect(
+      screen.queryByText('Falta elegir: Interior (INTERIOR).'),
+    ).not.toBeInTheDocument();
+
+    // Cantidad y filtros de categoría permanecen exactamente como estaban.
+    expect((screen.getByLabelText('Cantidad') as HTMLInputElement).value).toBe(
+      '3',
+    );
+    expect(
+      (screen.getByLabelText('Categoría') as HTMLSelectElement).value,
+    ).toBe('');
+
+    // Agregar queda deshabilitado aunque existan muebles en el filtro; un
+    // submit programático tampoco envía el mueble anterior.
+    expect(addBtn()).toBeDisabled();
+    fireEvent.submit(addForm());
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('el vaciado explícito sobrevive rerenders, catálogos nuevos y cambio de categoría', async () => {
+    const user = userEvent.setup();
+    const { onSubmit, rerender } = renderModal();
+
+    await pickModule(user, /MOD-A — Mueble A/);
+    await user.clear(screen.getByLabelText('Cantidad'));
+    await user.type(screen.getByLabelText('Cantidad'), '2');
+    await clearModule(user);
+
+    const trigger = () => screen.getByLabelText('Mueble');
+
+    // Rerender del padre con referencias nuevas del mismo contenido.
+    rerender({ modules: [...modules], optionGroups: [...optionGroups] });
+    expect(trigger().textContent).toContain('Seleccionar mueble…');
+    expect(addBtn()).toBeDisabled();
+
+    // La llegada de un mueble adicional al filtro actual no autoselecciona.
+    rerender({ modules: [...modules, moduleC] });
+    expect(trigger().textContent).toContain('Seleccionar mueble…');
+    expect(trigger().textContent).not.toContain('MOD-C');
+    expect(addBtn()).toBeDisabled();
+    expect((screen.getByLabelText('Cantidad') as HTMLInputElement).value).toBe(
+      '2',
+    );
+
+    // Cambiar de categoría y volver al filtro anterior tampoco restaura A.
+    await selectCategory(user, 'cat-dormitorio');
+    expect(trigger().textContent).toContain('Seleccionar mueble…');
+    await selectCategory(user, '');
+    expect(trigger().textContent).toContain('Seleccionar mueble…');
+    expect(trigger().textContent).not.toContain('MOD-A');
+    expect(addBtn()).toBeDisabled();
+
+    fireEvent.submit(addForm());
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('tras quitar A, elegir B envía el payload de B sin configuración residual de A', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderModal();
+
+    await pickModule(user, /MOD-A — Mueble A/);
+    await user.clear(screen.getByLabelText('Cantidad'));
+    await user.type(screen.getByLabelText('Cantidad'), '3');
+    await user.selectOptions(
+      screen.getByTestId('add-item-measure-preset'),
+      'pa-800',
+    );
+    await user.selectOptions(
+      screen.getByLabelText('Interior (INTERIOR)'),
+      'mat-b',
+    );
+    await clearModule(user);
+
+    await selectCategory(user, 'cat-dormitorio');
+    await pickModule(user, /MOD-B — Mueble B/);
+
+    // La cantidad introducida se conserva; la configuración es la de B.
+    expect((screen.getByLabelText('Cantidad') as HTMLInputElement).value).toBe(
+      '3',
+    );
+    expect(addBtn()).toBeEnabled();
+    await user.click(addBtn());
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0]?.[0];
+    expect(payload).toMatchObject({ moduleId: 'mod-b', quantity: 3 });
+    expect(payload.optionChoices).toEqual({});
+    expect(payload.measurePresetId).toBeUndefined();
+  });
+
+  it('volver a elegir A tras quitarla usa la preparación nueva de la selección', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderModal();
+
+    await pickModule(user, /MOD-A — Mueble A/);
+    await user.selectOptions(
+      screen.getByTestId('add-item-measure-preset'),
+      'pa-800',
+    );
+    await user.selectOptions(
+      screen.getByLabelText('Interior (INTERIOR)'),
+      'mat-b',
+    );
+    await clearModule(user);
+
+    await pickModule(user, /MOD-A — Mueble A/);
+
+    // Defaults de una selección nueva de A, no la configuración retirada.
+    expect(
+      (screen.getByTestId('add-item-measure-preset') as HTMLSelectElement)
+        .value,
+    ).toBe('pa-600');
+    expect(
+      (screen.getByLabelText('Interior (INTERIOR)') as HTMLSelectElement).value,
+    ).toBe('mat-a');
+
+    await user.click(addBtn());
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        moduleId: 'mod-a',
+        measurePresetId: 'pa-600',
+        optionChoices: { INTERIOR: 'mat-a' },
+      }),
+    );
+  });
+
+  it('cerrar y reabrir recupera la inicialización normal después de un vaciado', async () => {
+    const user = userEvent.setup();
+    const { onSubmit, rerender } = renderModal();
+
+    await pickModule(user, /MOD-A — Mueble A/);
+    await clearModule(user);
+    expect(screen.getByLabelText('Mueble').textContent).not.toContain('MOD-A');
+
+    rerender({ open: false });
+    rerender({ open: true });
+
+    // La reapertura usa la inicialización existente: primer mueble preseleccionado.
+    expect(screen.getByLabelText('Mueble').textContent).toContain(
+      'MOD-A — Mueble A',
+    );
+    expect((screen.getByLabelText('Cantidad') as HTMLInputElement).value).toBe(
+      '1',
+    );
+    expect(addBtn()).toBeEnabled();
+
+    await user.click(addBtn());
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });
