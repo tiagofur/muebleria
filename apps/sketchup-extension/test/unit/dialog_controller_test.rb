@@ -795,6 +795,7 @@ class DialogControllerTest < Minitest::Test
 
     assert_empty @model.active_entities.groups
     assert(dialog.executed_scripts.any? { |s| s.include?('onSelectionChange(null)') })
+    assert(dialog.executed_scripts.any? { |s| s.include?('onCommercialProjectionLocalMutation({})') })
   end
 
   def test_delete_selected_furniture_rejects_entity_without_granete_metadata

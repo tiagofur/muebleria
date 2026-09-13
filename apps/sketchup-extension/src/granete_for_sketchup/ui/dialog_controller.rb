@@ -1862,6 +1862,7 @@ module Granete
                     end
           instance_id = payload['instanceId'] || payload[:instanceId]
 
+          deleted = false
           target = find_target_furniture_entity(instance_id)
           if target && active_model
             store = @metadata_store_factory.call(active_model)
@@ -1870,6 +1871,7 @@ module Granete
               active_model.start_operation('Eliminar Mueble', true)
               active_model.active_entities.erase_entities([target])
               active_model.commit_operation
+              deleted = true
               @logger.info('furniture_deleted', instance_id: instance_id || meta.dig('identity', 'instanceRef'))
             else
               @logger.warn('furniture_delete_rejected_no_metadata', target_class: target.class.name)
@@ -1879,6 +1881,7 @@ module Granete
           end
 
           execute_bridge(dialog, 'onSelectionChange', nil)
+          execute_bridge(dialog, 'onCommercialProjectionLocalMutation', {}) if deleted
         rescue StandardError => e
           @logger.error('furniture_delete_failed', error: e)
           execute_bridge(dialog, 'onSelectionChange', nil)

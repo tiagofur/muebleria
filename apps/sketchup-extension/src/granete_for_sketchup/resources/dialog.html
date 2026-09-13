@@ -4189,6 +4189,9 @@
           onCommercialProjectionMutationCommitted: function () {
             notifyCommercialProjectionCommitted();
           },
+          onCommercialProjectionLocalMutation: function () {
+            document.dispatchEvent(new CustomEvent("granete-mutation-state", { detail: { phase: "committed" } }));
+          },
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
           onPublishProgress: function (payload) { renderPublishProgress(payload); },
           onPublishResult: function (result) { handlePublishResult(result); },

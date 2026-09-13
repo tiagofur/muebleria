@@ -57,6 +57,8 @@ test('renders a legitimate zero rather than missing', () => {
   assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, '');
   assert.ok(s.__elements['commercial-projection-cost'].textContent.includes('$0.00'));
   assert.strictEqual(s.__elements['commercial-projection-delta'].textContent.includes('%'), false);
+  assert.ok(s.__elements['commercial-projection-reference'].textContent.includes('Aceptada'));
+  assert.strictEqual(s.__elements['commercial-projection-reference'].textContent.includes('accepted'), false);
 });
 
 test('drops a late response after an exact context switch', () => {
@@ -83,6 +85,16 @@ test('drops a response that predates an in-flight mutation', () => {
   s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
   assert.strictEqual(s.window.GraneteCommercialProjection.receive({ requestId: old, projectId: 'p-a', designId: 'd-a', projection: projection(90, 80) }), false);
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+});
+
+test('rejected mutation during initial loading starts a recoverable readback', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const before = s.__calls.length;
+  s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
+  s.__events['granete-mutation-state']({ detail: { phase: 'rejected' } });
+  assert.strictEqual(s.__calls.length, before + 1);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Calculando');
 });
 
 test('only a server-synchronized commit refreshes while local commits stay stale', () => {
@@ -128,6 +140,7 @@ test('withheld amounts are explicit and cost rows stay hidden', () => {
 test('successful working-copy callbacks publish a committed refresh', () => {
   assert.ok(dialogSource.includes('function notifyCommercialProjectionCommitted()'));
   assert.ok(dialogSource.includes('onCommercialProjectionMutationCommitted: function ()'));
+  assert.ok(dialogSource.includes('onCommercialProjectionLocalMutation: function ()'));
   assert.ok(dialogSource.includes('serverSynchronized: true'));
   assert.strictEqual((dialogSource.match(/notifyCommercialProjectionCommitted\(\);/g) || []).length, 4);
 });

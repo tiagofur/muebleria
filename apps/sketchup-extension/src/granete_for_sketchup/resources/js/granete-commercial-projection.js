@@ -35,6 +35,10 @@
     catch (_error) { return value.toFixed(2) + " " + currency; }
   }
 
+  function quoteStatus(value) {
+    return { draft: "Borrador", published: "Publicada", accepted: "Aceptada", superseded: "Reemplazada" }[value] || "Estado no disponible";
+  }
+
   function renderProjection(projection) {
     lastProjection = projection;
     var amounts = projection.amounts;
@@ -52,7 +56,7 @@
     var reference = projection.reference;
     if (reference) {
       var referenceTotal = money(reference.saleTotal, reference.currency);
-      text("commercial-projection-reference", "Q" + reference.revisionNumber + " · " + reference.status + (referenceTotal ? " · " + referenceTotal : ""));
+      text("commercial-projection-reference", "Q" + reference.revisionNumber + " · " + quoteStatus(reference.status) + (referenceTotal ? " · " + referenceTotal : ""));
     } else {
       text("commercial-projection-reference", "Sin cotización de referencia");
     }
@@ -61,7 +65,7 @@
     show("commercial-projection-published-row", !!distinctPublished);
     if (distinctPublished) {
       var publishedTotal = money(latestPublished.saleTotal, latestPublished.currency);
-      text("commercial-projection-published", "Q" + latestPublished.revisionNumber + " · " + latestPublished.status +
+      text("commercial-projection-published", "Q" + latestPublished.revisionNumber + " · " + quoteStatus(latestPublished.status) +
         (publishedTotal ? " · " + publishedTotal : ""));
     }
     var comparison = projection.comparison;
@@ -144,6 +148,8 @@
         setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
       } else if (["rejected", "cancelled", "aborted"].indexOf(phase) !== -1 && lastProjection) {
         renderProjection(lastProjection);
+      } else if (["rejected", "cancelled", "aborted"].indexOf(phase) !== -1) {
+        request();
       } else if (phase === "stale" || phase === "unavailable") {
         setState("stale", "No se pudo confirmar la versión comercial del cambio.");
       }
