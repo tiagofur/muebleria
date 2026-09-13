@@ -38,11 +38,14 @@ import { ProductionBoardView } from './ProductionBoardView';
  * generic PTX path).
  */
 export interface CuttingOutputTargetView {
+  readonly status: 'loading' | 'error' | 'configured-ready' | 'configured-blocked' | 'stale';
   readonly machineLabel: string;
   readonly formatLabel: string;
   readonly profileLabel: string;
   readonly ready: boolean;
   readonly blockerMessage: string;
+  readonly blockerCode?: string;
+  readonly recoveryHint?: string;
 }
 
 export type ProductionOrderOptimizationPanelProps = {
@@ -60,6 +63,7 @@ export type ProductionOrderOptimizationPanelProps = {
     mode?: 'unified' | 'by-material',
   ) => void;
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
+  readonly resolveCuttingOutputTarget?: (cutPlan: CutPlan) => CuttingOutputTargetView | null;
   readonly exportBusy?: boolean;
 };
 
@@ -74,6 +78,7 @@ export function ProductionOrderOptimizationPanel({
   onExportCutPlanDxf,
   onExportCutPlanPtx,
   cuttingOutputTarget = null,
+  resolveCuttingOutputTarget,
   exportBusy = false,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
   // Cut strategy dispatch (F126 saw/nesting + F133 workshop default):
@@ -129,6 +134,14 @@ export function ProductionOrderOptimizationPanel({
     }
     return [...byKey.entries()].map(([code, name]) => ({ code, name }));
   }, [currentCutPlan]);
+
+  const activeCuttingOutputTarget = useMemo(
+    () =>
+      currentCutPlan && resolveCuttingOutputTarget
+        ? resolveCuttingOutputTarget(currentCutPlan)
+        : cuttingOutputTarget,
+    [currentCutPlan, cuttingOutputTarget, resolveCuttingOutputTarget],
+  );
 
   const summary = useMemo(() => {
     if (!catalog) return null;
@@ -830,15 +843,18 @@ export function ProductionOrderOptimizationPanel({
                     data-testid="prod-opt-cutting-output"
                   >
                     Salida configurada:{' '}
-                    {cuttingOutputTarget ? (
-                      <strong style={{ color: 'var(--text-primary)' }}>
-                        {cuttingOutputTarget.machineLabel} · {cuttingOutputTarget.formatLabel} · {cuttingOutputTarget.profileLabel}
+                    {activeCuttingOutputTarget ? (
+                      <strong
+                        style={{ color: 'var(--text-primary)' }}
+                        data-state={activeCuttingOutputTarget.status}
+                      >
+                        {activeCuttingOutputTarget.machineLabel} · {activeCuttingOutputTarget.formatLabel} · {activeCuttingOutputTarget.profileLabel}
                       </strong>
                     ) : (
                       <strong style={{ color: 'var(--text-primary)' }}>PTX genérico v1.14 (sin salida de máquina configurada)</strong>
                     )}
                   </p>
-                  {cuttingOutputTarget && !cuttingOutputTarget.ready ? (
+                  {activeCuttingOutputTarget && !activeCuttingOutputTarget.ready ? (
                     <p
                       role="alert"
                       style={{
@@ -850,8 +866,10 @@ export function ProductionOrderOptimizationPanel({
                         borderRadius: 4,
                       }}
                       data-testid="prod-opt-cutting-output-blocked"
+                      data-blocker-code={activeCuttingOutputTarget.blockerCode}
                     >
-                      ⚠ {cuttingOutputTarget.blockerMessage} Configurá una salida compatible en Ajustes → Ingeniería antes de descargar.
+                      ⚠ {activeCuttingOutputTarget.blockerMessage}{' '}
+                      {activeCuttingOutputTarget.recoveryHint ?? 'Revisá el plan antes de descargar.'}
                     </p>
                   ) : null}
                   <div role="radiogroup" aria-label="Modo de descarga" data-testid="prod-opt-ptx-mode" style={{ marginBottom: 8 }}>
@@ -864,7 +882,7 @@ export function ProductionOrderOptimizationPanel({
                         onChange={() => setPtxMode('unified')}
                         data-testid="prod-opt-ptx-mode-unified"
                       />
-                      <span>Un archivo {cuttingOutputTarget?.formatLabel ?? 'PTX'}</span>
+                      <span>Un archivo {activeCuttingOutputTarget?.formatLabel ?? 'PTX'}</span>
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.85em' }}>
                       <input
@@ -881,9 +899,9 @@ export function ProductionOrderOptimizationPanel({
                   {/* Preview honesto de lo que va a descargarse. */}
                   <p style={{ margin: 0, fontSize: '0.8em', color: 'var(--text-muted)' }} data-testid="prod-opt-ptx-preview">
                     {ptxMode === 'unified'
-                      ? `Se descargará 1 archivo ${cuttingOutputTarget?.formatLabel ?? 'PTX'}`
+                      ? `Se descargará 1 archivo ${activeCuttingOutputTarget?.formatLabel ?? 'PTX'}`
                       : planMaterials.length > 0
-                        ? `${planMaterials.length} ${planMaterials.length === 1 ? 'material' : 'materiales'} → ${planMaterials.length} ${planMaterials.length === 1 ? 'archivo' : 'archivos'} ${cuttingOutputTarget?.formatLabel ?? 'PTX'} dentro de un ZIP`
+                        ? `${planMaterials.length} ${planMaterials.length === 1 ? 'material' : 'materiales'} → ${planMaterials.length} ${planMaterials.length === 1 ? 'archivo' : 'archivos'} ${activeCuttingOutputTarget?.formatLabel ?? 'PTX'} dentro de un ZIP`
                         : 'Sin materiales en el plan para separar'}
                   </p>
                   {ptxMode === 'by-material' && planMaterials.length > 0 ? (
@@ -925,16 +943,16 @@ export function ProductionOrderOptimizationPanel({
                       !currentCutPlan ||
                       !onExportCutPlanPtx ||
                       (ptxMode === 'by-material' && planMaterials.length === 0) ||
-                      (cuttingOutputTarget != null && !cuttingOutputTarget.ready)
+                      (activeCuttingOutputTarget != null && !activeCuttingOutputTarget.ready)
                     }
                     data-testid="prod-opt-export-ptx"
                     title={
-                      cuttingOutputTarget != null && !cuttingOutputTarget.ready
+                      activeCuttingOutputTarget != null && !activeCuttingOutputTarget.ready
                         ? 'La salida configurada está bloqueada: revisá el motivo arriba.'
                         : undefined
                     }
                   >
-                    Descargar {cuttingOutputTarget?.formatLabel ?? 'PTX'}
+                    Descargar {activeCuttingOutputTarget?.formatLabel ?? 'PTX'}
                   </button>
                 </div>
               </div>

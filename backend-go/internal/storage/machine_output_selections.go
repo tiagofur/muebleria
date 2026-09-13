@@ -15,7 +15,7 @@ import (
 func (s *PostgresStore) ListMachineOutputSelections(ctx context.Context) ([]domain.MachineOutputSelectionRecord, error) {
 	rows, err := s.db(ctx).Query(ctx, `
 		SELECT operation, machine_profile_id, machine_profile_revision_id,
-		       output_profile_id, output_profile_revision_id,
+		       output_profile_id, output_profile_revision_id, output_profile_digest,
 		       adapter_id, adapter_version, adapter_implementation_digest,
 		       version, updated_at, updated_by
 		FROM machine_output_selections
@@ -32,7 +32,7 @@ func (s *PostgresStore) ListMachineOutputSelections(ctx context.Context) ([]doma
 		var updatedAt time.Time
 		if err := rows.Scan(
 			&rec.Operation, &rec.MachineProfileID, &rec.MachineProfileRevisionID,
-			&rec.OutputProfileID, &rec.OutputProfileRevisionID,
+			&rec.OutputProfileID, &rec.OutputProfileRevisionID, &rec.OutputProfileDigest,
 			&rec.AdapterID, &rec.AdapterVersion, &rec.AdapterImplementationDigest,
 			&rec.Version, &updatedAt, &rec.UpdatedBy,
 		); err != nil {
@@ -59,35 +59,36 @@ func (s *PostgresStore) UpsertMachineOutputSelection(
 		INSERT INTO machine_output_selections (
 			organization_id, operation,
 			machine_profile_id, machine_profile_revision_id,
-			output_profile_id, output_profile_revision_id,
+			output_profile_id, output_profile_revision_id, output_profile_digest,
 			adapter_id, adapter_version, adapter_implementation_digest,
 			version, updated_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1, $11)
 		ON CONFLICT (organization_id, operation) DO UPDATE SET
 			machine_profile_id = EXCLUDED.machine_profile_id,
 			machine_profile_revision_id = EXCLUDED.machine_profile_revision_id,
 			output_profile_id = EXCLUDED.output_profile_id,
 			output_profile_revision_id = EXCLUDED.output_profile_revision_id,
+			output_profile_digest = EXCLUDED.output_profile_digest,
 			adapter_id = EXCLUDED.adapter_id,
 			adapter_version = EXCLUDED.adapter_version,
 			adapter_implementation_digest = EXCLUDED.adapter_implementation_digest,
 			version = machine_output_selections.version + 1,
 			updated_at = NOW(),
 			updated_by = EXCLUDED.updated_by
-		WHERE machine_output_selections.version = $11
+		WHERE machine_output_selections.version = $12
 		RETURNING operation, machine_profile_id, machine_profile_revision_id,
-		          output_profile_id, output_profile_revision_id,
+		          output_profile_id, output_profile_revision_id, output_profile_digest,
 		          adapter_id, adapter_version, adapter_implementation_digest,
 		          version, updated_at, updated_by
 	`,
 		OrgFromCtx(ctx), string(sel.Operation),
 		sel.MachineProfileID, sel.MachineProfileRevisionID,
-		sel.OutputProfileID, sel.OutputProfileRevisionID,
+		sel.OutputProfileID, sel.OutputProfileRevisionID, sel.OutputProfileDigest,
 		sel.AdapterID, sel.AdapterVersion, sel.AdapterImplementationDigest,
 		updatedBy, expectedVersion,
 	).Scan(
 		&rec.Operation, &rec.MachineProfileID, &rec.MachineProfileRevisionID,
-		&rec.OutputProfileID, &rec.OutputProfileRevisionID,
+		&rec.OutputProfileID, &rec.OutputProfileRevisionID, &rec.OutputProfileDigest,
 		&rec.AdapterID, &rec.AdapterVersion, &rec.AdapterImplementationDigest,
 		&rec.Version, &updatedAt, &rec.UpdatedBy,
 	)

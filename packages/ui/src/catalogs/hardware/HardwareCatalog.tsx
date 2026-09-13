@@ -16,6 +16,7 @@ import {
   countMachiningOperations,
   validateMachiningProfile,
 } from '@granete/domain';
+import type { HardwareAssetService } from '@granete/storage';
 import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   CatalogImage,
@@ -50,15 +51,19 @@ import '../catalogs.css';
 
 export interface HardwareCatalogProps {
   readonly hardware: readonly Hardware[];
-  readonly onCreate: (draft: HardwareDraft) => void;
-  readonly onUpdate: (id: string, draft: HardwareDraft) => void;
-  readonly onDeactivate: (id: string) => void;
-  readonly onReactivate: (id: string) => void;
+  readonly onCreate: (draft: HardwareDraft) => void | Promise<void>;
+  readonly onUpdate: (id: string, draft: HardwareDraft) => void | Promise<void>;
+  readonly onDeactivate: (id: string) => void | Promise<void>;
+  readonly onReactivate: (id: string) => void | Promise<void>;
   readonly openEntityId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
   /** F035: hide ABM when false. */
   readonly canMutate?: boolean;
   readonly showCosts?: boolean;
+  /** #667 M2: 3D asset service for uploads, listings and retirements */
+  readonly assetService?: HardwareAssetService;
+  /** Optional callback to reload catalog on readback failure */
+  readonly onReload?: () => Promise<void>;
   /** F042: upload catalog image. */
   readonly onUploadImage?: (file: File) => Promise<string>;
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
@@ -74,6 +79,8 @@ export function HardwareCatalog({
   onSelectionChange,
   canMutate = true,
   showCosts = true,
+  assetService,
+  onReload,
   onUploadImage,
   resolveImageUrl = (u) => u,
 }: HardwareCatalogProps): ReactNode {
@@ -92,6 +99,8 @@ export function HardwareCatalog({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<HardwareDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [readbackError, setReadbackError] = useState<string | null>(null);
 
   const rows = useMemo(
     () =>
@@ -145,20 +154,31 @@ export function HardwareCatalog({
     return null;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const err = validate();
     if (err) {
       setError(err);
       return;
     }
     setError(null);
-    if (editingId) {
-      onUpdate(editingId, draft);
-    } else {
-      onCreate(draft);
+    setSaving(true);
+    setReadbackError(null);
+    try {
+      if (editingId) {
+        await onUpdate(editingId, draft);
+      } else {
+        await onCreate(draft);
+      }
+      closeModal();
+    } catch (err: unknown) {
+      // Keep modal open, keep draft and previous binding intact (prompt §5.3)
+      const msg = err instanceof Error ? err.message : 'Error al guardar los cambios';
+      setError(msg);
+    } finally {
+      setSaving(false);
     }
-    closeModal();
   };
 
   const columns: CatalogColumn<Hardware>[] = useMemo(
@@ -331,6 +351,32 @@ export function HardwareCatalog({
                     </span>
                   </div>
                 ) : null}
+                <div className="catalog-row-detail__field" data-testid="hardware-detail-3d">
+                  <span className="catalog-row-detail__label">Modelo 3D y montaje</span>
+                  <span className="catalog-row-detail__value">
+                    {row.visualAsset ? (
+                      <>
+                        <span className="badge badge--info" style={{ marginRight: '0.25rem' }}>
+                          {(row.visualAsset.representation ?? 'skp').toUpperCase()}
+                        </span>
+                        <span className="badge badge--neutral" style={{ marginRight: '0.25rem' }}>
+                          {row.visualAsset.validationState === 'validated'
+                            ? 'Validado'
+                            : row.visualAsset.validationState === 'failed'
+                            ? 'Falló validación'
+                            : 'Pendiente de validación'}
+                        </span>
+                        <span className="catalog-row-detail__value--mono">
+                          {row.visualAsset.sha256 ? `${row.visualAsset.sha256.slice(0, 12)}...` : ''}
+                        </span>
+                      </>
+                    ) : row.previewShape ? (
+                      `Forma genérica: ${row.previewShape}`
+                    ) : (
+                      'Sin modelo de archivo asociado'
+                    )}
+                  </span>
+                </div>
                 {row.notes ? (
                   <div className="catalog-row-detail__field">
                     <span className="catalog-row-detail__label">Notas</span>
@@ -385,6 +431,8 @@ export function HardwareCatalog({
         setDraft={setDraft}
         error={error}
         canMutate={canMutate}
+        saving={saving}
+        assetService={assetService}
         onUploadImage={onUploadImage}
         resolveImageUrl={resolveImageUrl}
         onSubmit={handleSubmit}

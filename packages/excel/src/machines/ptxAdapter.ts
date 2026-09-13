@@ -204,8 +204,9 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
 function compilationBlockReason(error: unknown): AdapterBlockReason {
   if (error instanceof PtxCompilationError) {
     return {
-      code: 'OPERATION_NOT_REPRESENTABLE',
-      detail: `${error.code}: ${error.message}`,
+      code: error.code,
+      detail: error.message,
+      context: error.context,
     };
   }
   if (error instanceof PtxDocumentInvalidError) {

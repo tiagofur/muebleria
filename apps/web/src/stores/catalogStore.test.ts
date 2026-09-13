@@ -10,7 +10,7 @@ import { useWorkspaceStore } from './workspaceStore';
 afterEach(() => {
   useUiStore.getState().disposeUi();
   // F118 S2 tests: restore the no-session default.
-  useWorkspaceStore.setState({ session: null });
+  useWorkspaceStore.setState({ session: null, activeOrg: null, workspaceSeq: 0 });
 });
 
 // ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ function makeDeps(overrides: Partial<CatalogStoreDeps> = {}): {
   });
   // F118 S2: the patch error-toast guard silences saves that raced a logout
   // (session === null). Simulate an active session for these tests.
-  useWorkspaceStore.setState({ session: 'guest' });
+  useWorkspaceStore.setState({ session: 'guest', activeOrg: null, workspaceSeq: 0 });
   const deps: CatalogStoreDeps = {
     newId: () => `id-${Math.random().toString(36).slice(2, 8)}`,
     saveCatalog: async (c) => {
@@ -341,6 +341,7 @@ describe('catalogStore — hardware / optionGroups / components', () => {
       previewClearcoat: '',
       partFinishes: { body: '', base: '', grip: '' },
       machining: null,
+      visualAsset: null,
     });
     expect(
       store.getState().catalog!.hardware.some((h) => h.code === 'HW-1'),
@@ -387,6 +388,7 @@ describe('catalogStore — hardware / optionGroups / components', () => {
           },
         ],
       },
+      visualAsset: null,
     });
     const created = store
       .getState()
@@ -397,11 +399,115 @@ describe('catalogStore — hardware / optionGroups / components', () => {
           id: 'cam',
           role: 'cam',
           operations: [
-            { id: 'cam-15', kind: 'blind_hole', diameterMm: 15, depthMm: 13, xMm: 0, yMm: 0, face: 'anchor' },
+            {
+              id: 'cam-15',
+              kind: 'blind_hole',
+              diameterMm: 15,
+              depthMm: 13,
+              xMm: 0,
+              yMm: 0,
+              face: 'anchor',
+            },
           ],
         },
       ],
     });
+  });
+
+  it('createHardware y updateHardware gestionan visualAsset (#667 M2)', async () => {
+    const { deps } = makeDeps();
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+
+    const binding = {
+      assetId: '11111111-1111-4111-8111-111111111111',
+      assetRevisionId: '22222222-2222-4222-8222-222222222222',
+      representation: 'skp' as const,
+      sha256: 'sha256-abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+      validationState: 'pending' as const,
+    };
+
+    await store.getState().createHardware({
+      code: 'HW-3D',
+      name: 'Manija 3D',
+      unit: 'piece',
+      costPerUnit: 12,
+      packageSize: '',
+      imageUrl: '',
+      notes: '',
+      previewShape: 'bar-pull',
+      previewColor: '#ffffff',
+      previewSizeMm: '128',
+      previewDiameterMm: '10',
+      previewProjectionMm: '25',
+      previewRoughness: '0.4',
+      previewMetalness: '0.8',
+      previewClearcoat: '0',
+      partFinishes: { body: '', base: '', grip: '' },
+      machining: null,
+      visualAsset: binding,
+    });
+
+    const created = store
+      .getState()
+      .catalog!.hardware.find((h) => h.code === 'HW-3D');
+    expect(created).toBeDefined();
+    expect(created?.visualAsset).toEqual(binding);
+
+    // Editing only non-visual fields keeps visualAsset intact
+    await store.getState().updateHardware(created!.id, {
+      code: 'HW-3D-EDITED',
+      name: 'Manija 3D Editada',
+      unit: 'piece',
+      costPerUnit: 15,
+      packageSize: '',
+      imageUrl: '',
+      notes: 'Notas actualizadas',
+      previewShape: 'bar-pull',
+      previewColor: '#ffffff',
+      previewSizeMm: '128',
+      previewDiameterMm: '10',
+      previewProjectionMm: '25',
+      previewRoughness: '0.4',
+      previewMetalness: '0.8',
+      previewClearcoat: '0',
+      partFinishes: { body: '', base: '', grip: '' },
+      machining: null,
+      visualAsset: created!.visualAsset ?? null,
+    });
+
+    const updated = store
+      .getState()
+      .catalog!.hardware.find((h) => h.id === created!.id);
+    expect(updated?.name).toBe('Manija 3D Editada');
+    expect(updated?.visualAsset).toEqual(binding);
+
+    // Unbinding explicitly removes visualAsset
+    await store.getState().updateHardware(created!.id, {
+      code: 'HW-3D-EDITED',
+      name: 'Manija 3D Sin Modelo',
+      unit: 'piece',
+      costPerUnit: 15,
+      packageSize: '',
+      imageUrl: '',
+      notes: '',
+      previewShape: 'bar-pull',
+      previewColor: '#ffffff',
+      previewSizeMm: '128',
+      previewDiameterMm: '10',
+      previewProjectionMm: '25',
+      previewRoughness: '0.4',
+      previewMetalness: '0.8',
+      previewClearcoat: '0',
+      partFinishes: { body: '', base: '', grip: '' },
+      machining: null,
+      visualAsset: null,
+    });
+
+    const unbound = store
+      .getState()
+      .catalog!.hardware.find((h) => h.id === created!.id);
+    expect(unbound?.visualAsset).toBeUndefined();
   });
 
   it('deleteOptionGroup removes by id (guest, no backend DELETE)', async () => {
@@ -1222,5 +1328,523 @@ describe('catalogStore — save serialization (P1-4)', () => {
     await Promise.resolve();
 
     expect(customerCreates).toBe(1);
+  });
+
+  describe('C1 — save reconciliation and rollback isolation', () => {
+    it('queued mutation B is preserved and persisted when prior mutation A fails', async () => {
+      let resolveA: () => void = () => {};
+      let rejectA: (err: Error) => void = () => {};
+      const promiseA = new Promise<void>((res, rej) => {
+        resolveA = res;
+        rejectA = rej;
+      });
+
+      let resolveB: () => void = () => {};
+      const promiseB = new Promise<void>((res) => {
+        resolveB = res;
+      });
+
+      const savedPayloads: Catalog[] = [];
+      let callCount = 0;
+      const { deps } = makeDeps({
+        saveCatalog: async (c) => {
+          callCount++;
+          savedPayloads.push(c);
+          if (callCount === 1) {
+            await promiseA;
+          } else {
+            await promiseB;
+          }
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(seedCatalog());
+
+      // 1. A starts a write and its response is held pending
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-FAIL-A' });
+      expect(callCount).toBe(1);
+
+      // 2. B applies a different change and is queued
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-KEEP-B' });
+      expect(callCount).toBe(1); // B is queued behind A
+
+      // 3. A fails
+      rejectA(new Error('Network error on save A'));
+
+      // Wait for B's task to be triggered
+      await vi.waitFor(() => expect(callCount).toBe(2));
+
+      // 4. B finishes
+      resolveB();
+      await vi.waitFor(() => {
+        const finalCatalog = store.getState().catalog!;
+        expect(finalCatalog.materials.some((m) => m.code === 'MAT-KEEP-B')).toBe(true);
+      });
+
+      const finalCatalog = store.getState().catalog!;
+      expect(finalCatalog.materials.some((m) => m.code === 'MAT-FAIL-A')).toBe(false);
+      expect(finalCatalog.materials.some((m) => m.code === 'MAT-KEEP-B')).toBe(true);
+
+      // Verify payload actually sent by B: contains B, does NOT contain A
+      const payloadB = savedPayloads[1]!;
+      expect(payloadB.materials.some((m) => m.code === 'MAT-KEEP-B')).toBe(true);
+      expect(payloadB.materials.some((m) => m.code === 'MAT-FAIL-A')).toBe(false);
+    });
+
+    it('queued mutation B is rejected and never declared saved if B itself fails', async () => {
+      let rejectA: (err: Error) => void = () => {};
+      const promiseA = new Promise<void>((_, rej) => {
+        rejectA = rej;
+      });
+
+      let rejectB: (err: Error) => void = () => {};
+      const promiseB = new Promise<void>((_, rej) => {
+        rejectB = rej;
+      });
+
+      let callCount = 0;
+      const { deps } = makeDeps({
+        saveCatalog: async () => {
+          callCount++;
+          if (callCount === 1) {
+            await promiseA;
+          } else {
+            await promiseB;
+          }
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(seedCatalog());
+
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-FAIL-A' });
+      const bPromise = store.getState().createHardware({
+        code: 'HW-B',
+        name: 'Hardware B',
+        unit: 'piece',
+        costPerUnit: 10,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      rejectA(new Error('A failed'));
+      await vi.waitFor(() => expect(callCount).toBe(2));
+
+      rejectB(new Error('B failed'));
+      await expect(bPromise).rejects.toThrow('B failed');
+
+      const finalCatalog = store.getState().catalog!;
+      expect(finalCatalog.materials.some((m) => m.code === 'MAT-FAIL-A')).toBe(false);
+      expect(finalCatalog.hardware.some((h) => h.code === 'HW-B')).toBe(false);
+    });
+
+    it('save rejection racing logout does not restore catalog into logged out context', async () => {
+      let rejectA: (err: Error) => void = () => {};
+      const promiseA = new Promise<void>((_, rej) => {
+        rejectA = rej;
+      });
+
+      const { deps, toasts } = makeDeps({
+        saveCatalog: async () => {
+          await promiseA;
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(seedCatalog());
+
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-A' });
+
+      // User logs out before rejection
+      useWorkspaceStore.setState({ session: null });
+      store.getState().setCatalog(null);
+
+      // Now A fails
+      rejectA(new Error('A failed late'));
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Catalog in store must remain null! Not repopulated with old catalog snapshot!
+      expect(store.getState().catalog).toBeNull();
+      // No error toast on logout screen
+      expect(toasts).toHaveLength(0);
+    });
+
+    it('save rejection racing organization switch does not overwrite new organization catalog', async () => {
+      let rejectA: (err: Error) => void = () => {};
+      const promiseA = new Promise<void>((_, rej) => {
+        rejectA = rej;
+      });
+
+      const { deps } = makeDeps({
+        saveCatalog: async () => {
+          await promiseA;
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(seedCatalog());
+
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-A' });
+
+      // Org switch happens before rejection
+      const newOrgCatalog: Catalog = {
+        ...seedCatalog(),
+        materials: [],
+      };
+      useWorkspaceStore.setState({
+        activeOrg: {
+          id: 'org-target-2',
+          name: 'Target 2',
+          slug: 'target-2',
+          type: 'factory',
+          status: 'active',
+          license: { plan: 'pro', status: 'active', expires_at: null },
+        },
+        workspaceSeq: 99,
+      });
+      store.getState().setCatalog(newOrgCatalog);
+
+      // Now A fails
+      rejectA(new Error('A failed late'));
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Must remain newOrgCatalog, NOT restored to old Org 1 snapshot!
+      expect(store.getState().catalog).toBe(newOrgCatalog);
+      expect(store.getState().catalog?.materials).toHaveLength(0);
+    });
+
+    it('R1 — payload enviado y confirmedCatalog representan exactamente la misma unidad de confirmación', async () => {
+      const initialCatalog: Catalog = {
+        ...seedCatalog(),
+        hardware: [
+          {
+            id: 'hw-a',
+            code: 'HW-A',
+            name: 'A initial',
+            unit: 'piece',
+            costPerUnit: 10,
+            active: true,
+          },
+          {
+            id: 'hw-b',
+            code: 'HW-B',
+            name: 'B initial',
+            unit: 'piece',
+            costPerUnit: 20,
+            active: true,
+          },
+          {
+            id: 'hw-c',
+            code: 'HW-C',
+            name: 'C initial',
+            unit: 'piece',
+            costPerUnit: 30,
+            active: true,
+          },
+        ],
+      };
+
+      let resolveA!: () => void;
+      const promiseA = new Promise<void>((r) => { resolveA = r; });
+      let resolveB!: () => void;
+      const promiseB = new Promise<void>((r) => { resolveB = r; });
+
+      const savedPayloads: Catalog[] = [];
+      let callCount = 0;
+      const { deps } = makeDeps({
+        saveCatalog: async (cat: Catalog) => {
+          callCount++;
+          const snapshot = JSON.parse(JSON.stringify(cat)) as Catalog;
+          savedPayloads.push(snapshot);
+          if (callCount === 1) {
+            await promiseA;
+          } else if (callCount === 2) {
+            await promiseB;
+          } else if (callCount === 3) {
+            throw new Error('C network failure before server write');
+          }
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      store.getState().setCatalog(initialCatalog);
+
+      // 1. Change A, holding its save in promiseA
+      const pA = store.getState().updateHardware('hw-a', {
+        code: 'HW-A',
+        name: 'A updated',
+        unit: 'piece',
+        costPerUnit: 10,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      // 2. Change B and C; both operations get queued in pendingOps
+      const pB = store.getState().updateHardware('hw-b', {
+        code: 'HW-B',
+        name: 'B updated',
+        unit: 'piece',
+        costPerUnit: 20,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      const pC = store.getState().updateHardware('hw-c', {
+        code: 'HW-C',
+        name: 'C updated',
+        unit: 'piece',
+        costPerUnit: 30,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      // 3. Confirm A
+      resolveA();
+      await pA;
+
+      // 4. B is now executing. Check B's payload!
+      await vi.waitFor(() => expect(callCount).toBe(2));
+      const payloadB = savedPayloads[1]!;
+      expect(payloadB.hardware.find((h) => h.id === 'hw-a')?.name).toBe('A updated');
+      expect(payloadB.hardware.find((h) => h.id === 'hw-b')?.name).toBe('B updated');
+      // B must NOT include C's unconfirmed optimistic changes
+      expect(payloadB.hardware.find((h) => h.id === 'hw-c')?.name).toBe('C initial');
+
+      // 5. Confirm B
+      resolveB();
+      await pB;
+
+      const simulatedServerState = JSON.parse(JSON.stringify(payloadB)) as Catalog;
+
+      // 6. C fails before any write of its own
+      await expect(pC).rejects.toThrow('C network failure before server write');
+
+      // 7. Verification of final state
+      const storeCatalog = store.getState().catalog!;
+      expect(storeCatalog.hardware.find((h) => h.id === 'hw-c')?.name).toBe('C initial');
+      expect(simulatedServerState.hardware.find((h) => h.id === 'hw-c')?.name).toBe('C initial');
+      expect(storeCatalog.hardware.find((h) => h.id === 'hw-b')?.name).toBe('B updated');
+      expect(simulatedServerState.hardware.find((h) => h.id === 'hw-b')?.name).toBe('B updated');
+    });
+
+    it('R2 — guard posterior a await no resuelve patch ni emite toast de éxito tras logout', async () => {
+      let resolveSave!: () => void;
+      const savePromise = new Promise<void>((r) => { resolveSave = r; });
+
+      const { deps, toasts } = makeDeps({
+        saveCatalog: async () => {
+          await savePromise;
+        },
+      });
+
+      const store = createCatalogStore({ deps });
+      const catalog = seedCatalog();
+      const targetHw = catalog.hardware[0]!;
+      store.getState().setCatalog(catalog);
+
+      const updatePromise = store.getState().updateHardware(targetHw.id, {
+        code: targetHw.code,
+        name: 'Hardware Updated',
+        unit: targetHw.unit,
+        costPerUnit: targetHw.costPerUnit,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      // User logs out and clears catalog while save is in flight
+      useWorkspaceStore.setState({ session: null });
+      store.getState().setCatalog(null);
+
+      // Now save resolves on the server
+      resolveSave();
+
+      // updatePromise must reject, NOT resolve as success
+      await expect(updatePromise).rejects.toThrow(/sesión|organización|ContextInvalidated/i);
+
+      // Must NOT toast "✓ Cambios guardados"
+      expect(toasts).toHaveLength(0);
+
+      // Catalog must remain null in logged out context
+      expect(store.getState().catalog).toBeNull();
+    });
+
+    it('R2 — guard posterior a await no resuelve patch ni emite toast de éxito tras cambio de organización', async () => {
+      let resolveSave!: () => void;
+      const savePromise = new Promise<void>((r) => { resolveSave = r; });
+
+      const { deps, toasts } = makeDeps({
+        saveCatalog: async () => {
+          await savePromise;
+        },
+      });
+
+      // Start in Org 1
+      useWorkspaceStore.setState({
+        session: 'auth',
+        activeOrg: {
+          id: 'org-source-1',
+          name: 'Source 1',
+          slug: 'source-1',
+          type: 'factory',
+          status: 'active',
+          license: { plan: 'pro', status: 'active', expires_at: null },
+        },
+        workspaceSeq: 1,
+      });
+
+      const store = createCatalogStore({ deps });
+      const catalog = seedCatalog();
+      const targetHw = catalog.hardware[0]!;
+      store.getState().setCatalog(catalog);
+
+      const updatePromise = store.getState().updateHardware(targetHw.id, {
+        code: targetHw.code,
+        name: 'Hardware Updated Org1',
+        unit: targetHw.unit,
+        costPerUnit: targetHw.costPerUnit,
+        packageSize: '',
+        imageUrl: '',
+        notes: '',
+        previewShape: '',
+        previewColor: '',
+        previewSizeMm: '',
+        previewDiameterMm: '',
+        previewProjectionMm: '',
+        previewRoughness: '',
+        previewMetalness: '',
+        previewClearcoat: '',
+        partFinishes: { body: '', base: '', grip: '' },
+        machining: null,
+        visualAsset: null,
+      });
+
+      // Org switch happens while save is in flight: switch to Org 2
+      const org2Catalog: Catalog = {
+        ...seedCatalog(),
+        hardware: [],
+      };
+      useWorkspaceStore.setState({
+        activeOrg: {
+          id: 'org-target-2',
+          name: 'Target 2',
+          slug: 'target-2',
+          type: 'factory',
+          status: 'active',
+          license: { plan: 'pro', status: 'active', expires_at: null },
+        },
+        workspaceSeq: 2,
+      });
+      store.getState().setCatalog(org2Catalog);
+
+      // Now save resolves
+      resolveSave();
+
+      // Must reject, NOT succeed
+      await expect(updatePromise).rejects.toThrow(/sesión|organización|ContextInvalidated/i);
+
+      // Must NOT toast success
+      expect(toasts).toHaveLength(0);
+
+      // Catalog in store must remain org2Catalog with 0 hardware
+      expect(store.getState().catalog?.hardware).toHaveLength(0);
+    });
+
+    it('R2 — consumidor de patchSaved devuelve false y no autoriza operaciones dependientes tras invalidar contexto', async () => {
+      let resolveSave!: () => void;
+      const savePromise = new Promise<void>((r) => { resolveSave = r; });
+
+      let hardDeleteCalled = false;
+      const { deps } = makeDeps({
+        saveCatalog: async () => {
+          await savePromise;
+        },
+        fetchImpl: (async () => {
+          hardDeleteCalled = true;
+          return new Response(null, { status: 204 });
+        }) as unknown as typeof fetch,
+        getSession: () => 'auth',
+        getAuthToken: () => 'token-test',
+      });
+
+      const store = createCatalogStore({ deps });
+      const initialCat: Catalog = {
+        ...seedCatalog(),
+        categories: [{ id: 'cat-to-delete', name: 'Cat Delete', sortOrder: 0 }],
+      };
+      store.getState().setCatalog(initialCat);
+
+      const deletePromise = store.getState().deleteCategory('cat-to-delete');
+
+      // User logs out or changes org while local save is in flight
+      useWorkspaceStore.setState({ session: null });
+      store.getState().setCatalog(null);
+
+      resolveSave();
+      await deletePromise;
+
+      // hardDeleteOnAuth must NOT have been called because patchSaved must return false when context is invalidated!
+      expect(hardDeleteCalled).toBe(false);
+    });
   });
 });

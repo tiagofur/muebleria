@@ -32,7 +32,11 @@ import {
   type CutProgramRect,
   type CutProgramRegion,
   type CutProgramTerminalDeclaration,
+  type MachineOutputSelection,
 } from '@granete/domain';
+import { evaluateSelectedCuttingOutputReadiness } from '../machines/outputSelectionResolver';
+import { CLIENT_A_HPP250_PROFILE, PTX_CADMATIC_4_R3_PROFILE } from '../machines/profiles';
+import { PTX_POSTPROCESSOR_ADAPTER } from '../machines/ptxAdapter';
 import type { PtxCutRecord, PtxDocument, PtxMaterialRecord, PtxRecord } from './records';
 import { ptxDocumentsEqual } from './equivalence';
 import { parsePtxDocumentBytes, parsePtxDocumentText } from './parse';
@@ -69,6 +73,18 @@ const R3_OPTIONS: CompileCutPlanToPtxOptions = {
 };
 
 const KERF = 4;
+
+const R3_SELECTION: MachineOutputSelection = {
+  operation: 'cutting',
+  machineProfileId: CLIENT_A_HPP250_PROFILE.ref.machineProfileId,
+  machineProfileRevisionId: CLIENT_A_HPP250_PROFILE.ref.machineProfileRevisionId,
+  outputCompatibilityProfileId: PTX_CADMATIC_4_R3_PROFILE.ref.outputCompatibilityProfileId,
+  outputCompatibilityProfileRevisionId: PTX_CADMATIC_4_R3_PROFILE.ref.revisionId,
+  outputCompatibilityProfileDigest: PTX_CADMATIC_4_R3_PROFILE.digest,
+  postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
+  postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
+  postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
+};
 
 function configWithTrim(trim: { topMm: number; bottomMm: number; leftMm: number; rightMm: number }): CutPlanConfig {
   return {
@@ -509,6 +525,113 @@ describe('r3 — refilados 10/10/10/10 con kerf 4 (caso principal)', () => {
   });
 });
 
+describe('r3 — identidad de regiones local a cada hoja', () => {
+  function sheetWithRepeatedLocalIds(sheetIndex: number): CutPlanSheet {
+    const boardRect: CutProgramRect = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 400 };
+    const builder = new ProgramBuilder('board', boardRect);
+    const usable = addPerimeterTrims(builder, 'board', {
+      topMm: 10,
+      bottomMm: 10,
+      leftMm: 10,
+      rightMm: 10,
+    });
+    const rip = builder.divide({ parent: usable, axis: 'y', keptExtentMm: 200, cutId: 'D1' });
+    const cross = builder.divide({ parent: rip.keptId, axis: 'x', keptExtentMm: 250, cutId: 'D2' });
+    const recut = builder.divide({ parent: cross.keptId, axis: 'y', keptExtentMm: 150, cutId: 'D3' });
+    const pieceId = `P${sheetIndex + 1}`;
+    builder.terminal(recut.keptId, 'piece', pieceId);
+    builder.terminal(recut.restId!, 'waste');
+    builder.terminal(cross.restId!, 'remnant');
+    builder.terminal(rip.restId!, 'waste');
+    const program = builder.build('board');
+    executeCutProgram(program);
+    return {
+      sheetIndex,
+      strategy: 'saw-guillotine',
+      materialCode: 'LAB18',
+      materialName: 'Lab Board 18',
+      sheetWidthMm: boardRect.widthMm,
+      sheetLengthMm: boardRect.lengthMm,
+      thicknessMm: 18,
+      pieces: [piecePlacement({ id: pieceId, partCode: pieceId, rect: recut.keptRect, sheetIndex })],
+      remnants: [],
+      instructions: [],
+      cutProgram: program,
+      netPiecesAreaM2: 0,
+      grossSheetAreaM2: 0,
+      usableRemnantAreaM2: 0,
+      wasteAreaM2: 0,
+      wastePercent: 0,
+      yieldPercent: 0,
+    };
+  }
+
+  function multiSheetPlan(): CutPlan {
+    const sheets = [sheetWithRepeatedLocalIds(0), sheetWithRepeatedLocalIds(1)];
+    return {
+      id: 'cutplan-multi-sheet-local-region-ids',
+      projectId: 'lab-692',
+      generatedAt: '2026-09-12T00:00:00.000Z',
+      version: 1,
+      isFrozen: true,
+      config: configWithTrim({ topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 }),
+      sheets,
+      stats: {
+        totalSheets: 2,
+        totalPieces: 2,
+        totalGrossAreaM2: 0,
+        totalNetPiecesAreaM2: 0,
+        totalUsefulRemnantsAreaM2: 0,
+        totalWasteAreaM2: 0,
+        globalWastePercent: 0,
+        globalYieldPercent: 0,
+        byMaterial: [],
+      },
+      usefulRemnants: [],
+    };
+  }
+
+  it('asigna X1/X2 por (sheetIndex, regionId) aunque los ids locales se repitan', () => {
+    const plan = multiSheetPlan();
+    const compiled = compileCutPlanToPtxDocument(plan, R3_OPTIONS);
+    const fn92 = cutsOf(compiled.document, 1)
+      .concat(cutsOf(compiled.document, 2))
+      .filter((row) => row.functionCode === 92);
+    expect(fn92).toHaveLength(2);
+    expect(fn92.map((row) => row.partReference)).toEqual([
+      { kind: 'offcut', offcutIndex: 1 },
+      { kind: 'offcut', offcutIndex: 2 },
+    ]);
+    expect(compiled.mapping.offcutRegionRefByOffcutIndex).toEqual([
+      { sheetIndex: 0, regionId: 'D2:rest' },
+      { sheetIndex: 1, regionId: 'D2:rest' },
+    ]);
+    expect(runFullChain(plan, R3_OPTIONS)).toBeDefined();
+  });
+
+  it('rechaza un cruce X1/X2 aunque el documento siga siendo válido', () => {
+    const plan = multiSheetPlan();
+    const compiled = compileCutPlanToPtxDocument(plan, R3_OPTIONS);
+    const mutated = mutateAndParse(compiled.document, (records) =>
+      records.map((record) => {
+        if (record.type !== 'CUTS' || record.functionCode !== 92 || record.partReference.kind !== 'offcut') {
+          return record;
+        }
+        return {
+          ...record,
+          partReference: {
+            kind: 'offcut',
+            offcutIndex: record.partReference.offcutIndex === 1 ? 2 : 1,
+          },
+        };
+      }),
+    );
+    expect(validatePtxDocument(mutated)).toEqual([]);
+    expect(issueCodes(verifyCutPlanPtxReadback(mutated, plan, compiled.mapping, R3_OPTIONS)))
+      .toContain('release.offcut_ref');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // G2 — asimétricos: mapping por eje + leadingBand, sin normalizar
 // ---------------------------------------------------------------------------
@@ -744,6 +867,14 @@ describe('r3 fail closed — estructura del prefijo de trims', () => {
       () => compileCutPlanToPtxDocument(plan, R3_OPTIONS),
       'ptx_compile.trim_frame_unsupported',
     );
+    const readiness = evaluateSelectedCuttingOutputReadiness(plan, R3_SELECTION);
+    expect(readiness.status).toBe('CONFIGURED');
+    if (readiness.status === 'CONFIGURED') {
+      expect(readiness.readiness.ready).toBe(false);
+      expect(readiness.readiness.reasons.map((reason) => reason.code)).toContain(
+        'ptx_compile.trim_frame_unsupported',
+      );
+    }
   });
 
   it('mismo material con márgenes ejecutados distintos entre hojas: trim_mapping_ambiguous', () => {

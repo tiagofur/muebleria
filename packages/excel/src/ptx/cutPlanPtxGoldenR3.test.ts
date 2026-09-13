@@ -39,7 +39,7 @@ function buildGoldenR3Mapping(): PtxCompilationMapping {
     materialIndexByCode: new Map(Object.entries(GOLDEN_R3_MAPPING.materialIndexByCode)),
     partIndexByPieceRef: new Map(Object.entries(GOLDEN_R3_MAPPING.partIndexByPieceRef)),
     pieceRefByPartIndex: [...GOLDEN_R3_MAPPING.pieceRefByPartIndex],
-    offcutRegionIdByOffcutIndex: [...GOLDEN_R3_MAPPING.offcutRegionIdByOffcutIndex],
+    offcutRegionRefByOffcutIndex: [...GOLDEN_R3_MAPPING.offcutRegionRefByOffcutIndex],
     sheetIndexByPatternIndex: [...GOLDEN_R3_MAPPING.sheetIndexByPatternIndex],
     sheets: GOLDEN_R3_MAPPING.sheets.map((sheet) => ({
       sheetIndex: sheet.sheetIndex,
@@ -64,8 +64,8 @@ describe('golden r3 candidato LAB_FIXTURE NOT_MACHINE_VALIDATED (trim positivo)'
     expect([...compiled.mapping.partIndexByPieceRef]).toEqual(
       Object.entries(GOLDEN_R3_MAPPING.partIndexByPieceRef),
     );
-    expect(compiled.mapping.offcutRegionIdByOffcutIndex).toEqual([
-      ...GOLDEN_R3_MAPPING.offcutRegionIdByOffcutIndex,
+    expect(compiled.mapping.offcutRegionRefByOffcutIndex).toEqual([
+      ...GOLDEN_R3_MAPPING.offcutRegionRefByOffcutIndex,
     ]);
 
     expect(serializePtxDocument(compiled.document, { decimalPlaces: GOLDEN_R3_OPTIONS.decimalPlaces }))
@@ -139,7 +139,10 @@ describe('golden r3 candidato LAB_FIXTURE NOT_MACHINE_VALIDATED (trim positivo)'
 
   it('responde las preguntas de la tabla inversa', () => {
     const mapping = buildGoldenR3Mapping();
-    expect(mapping.offcutRegionIdByOffcutIndex[0]).toBe('place-3-1:rest');
+    expect(mapping.offcutRegionRefByOffcutIndex[0]).toEqual({
+      sheetIndex: 0,
+      regionId: 'place-3-1:rest',
+    });
     expect(mapping.sheets[0]!.offcutIndexByRegionId.get('place-3-1:rest')).toBe(1);
   });
 

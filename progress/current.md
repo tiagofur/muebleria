@@ -25,6 +25,49 @@
   7/7; openapi sin drift; go test ./... OK (storage aislado PASS 360s); diff
   check limpio. PR parcial `Refs #642`, label `type:feature`, sin merge.
 - Detalle: `progress/implementation_demo_flow_cleanup.md`.
+# Issue #692 — readiness real, identidad multi-sheet y provenance CADmatic 4
+
+- Approval: prompt del propietario (2026-09-12); issue #692 OPEN con labels `status:approved`, `type:bug`, `high`, `domain`. PR #694 / issue #691 verificados como integrados en `origin/main`.
+- Base exacta: `origin/main@4623205d2031ffd78769ebeedf89f1d40e363e56`.
+- Rama/worktree: `fix/692-cadmatic4-readiness` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-692`; índice CodeGraph propio inicializado.
+- Started: 2026-09-12 17:05 CST.
+- Delivery: PR único autorizado explícitamente por el propietario el 2026-09-12, con `size:exception` sobre el presupuesto recomendado de 800 líneas authored.
+- Scope autorizado: identidad de región `(sheetIndex, regionId)`, readiness contra el `CutPlan` activo, errores `ptx_compile.*` preservados, manifest/provenance durable en descarga directa/ZIP/Production Pack, pin exacto de digest de profile (estrategia A) y presentación histórica stale honesta.
+- Result: `IMPLEMENTED_PENDING_CI`. `ScopedRegionRef` elimina colisiones job-wide y la regresión de dos hojas conserva X1/X2 con readback/mutación semántica; readiness y descarga comparten `evaluateSelectedCuttingOutputReadiness` sobre el `CutPlan` activo; errores `ptx_compile.*` llegan tipados a UI; selección persiste digest exacto con migración 000132 nullable sólo para históricos; r1/r2 quedan stale sin retarget; salida configurada entrega manifest v2 directo, por material y en Production Pack con hash de los bytes entregados.
+- Evidence local: `pnpm test` PASS (372 archivos, 4302 tests; 3 skips preexistentes de fixtures/evidence), `pnpm typecheck` PASS (7/7), `pnpm openapi:check` PASS, `GOFLAGS='-p=1' go test ./...` PASS (incluye migration fresh + upgrade/historical NULL), browser real Go + PostgreSQL 16 + Chromium PASS 9/9 (Settings→save r3→reload→CutPlan real→readiness→PTX+manifest→SHA/readback; bloqueado específico antes de descarga; late org A 200/500 no gobierna B), `git diff --check` limpio.
+- Plan:
+  1. Fijar RED multi-sheet con ids locales repetidos y mutación semántica X1/X2; centralizar identidad scoped sin cambiar `CutProgram.regionId`.
+  2. Persistir el digest exacto del profile mediante migración aditiva forward-only y regenerar el contrato OpenAPI/cliente.
+  3. Unificar evaluación y generación sobre el `CutPlan` real, conservando error tipado y contexto hasta la UI.
+  4. Entregar manifests deterministas con hashes/pins exactos y mostrar selecciones stale sin reinterpretarlas como r3.
+  5. Ejecutar pruebas enfocadas, migraciones fresh/upgrade, suites completas, browser real, push/PR y readback de CI sobre el HEAD exacto.
+
+# Issue #691 — autoridad de selección CADmatic 4 sin fallback legacy
+- `IMPLEMENTED_PENDING_REVIEW` en `fix/691-machine-output-authority`: loading/error/blocked no exportan, configured usa la tupla exacta y sólo confirmed-empty habilita legacy; directa/Production Pack comparten autoridad scoped. Evidencia pos-merge: browser Go+PostgreSQL+Chromium 8/8 (retry real, empty→legacy, Settings→CAD4 r3→reload→CSV y A tardía 200/500 sin gobernar B), focused web 13/13, UI 21/21, typecheck 7/7, OpenAPI/diff limpios. Diff: 724 altas + 76 bajas = 800 authored; sin #692/#693 ni PTX/profiles/adapters.
+# Issue #667 — M2: administración de recursos 3D desde React (Correcciones R1–R3 sobre PR #690)
+
+- Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. PR #690 en rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree dedicado (`.worktrees/feat-667-hardware-3d-catalog-ui`).
+- Base revisada: `94d72be9e11253bf15ff415c2ace776e466892b2`.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Correcciones R1–R3 resueltas conservando C2 (resunción de sesión finalizada) y C4 (origen preservado con disclosure colapsado):
+  - **R1 — Unidad coherente de guardado y confirmación en cola** (`apps/web/src/stores/catalog/shared.ts`):
+    - *Problema:* `task()` enviaba `get().catalog` (proyección optimista completa con mutaciones posteriores en cola). Al confirmar, solo se incorporaba el updater propio a `confirmedCatalog`. Si fallaba una operación posterior (C), el servidor ya había recibido y persistido C dentro del payload de B, pero la UI la revertía al valor inicial en pantalla.
+    - *Solución:* La unidad de guardado es `op.updater(confirmedCatalog ?? current)`. Las operaciones posteriores en cola permanecen aisladas en `pendingOps`. Al resolver `saveCatalog`, se actualiza `confirmedCatalog = catalogToSave`. Si C falla antes de su escritura, servidor y cliente concuerdan exactamente sin desfasar el estado confirmado ni revertir efectos ya persistidos.
+    - *Evidencia:* Test RED reproducido (`expected 'C updated' to be 'C initial'`), corregido a GREEN en `apps/web/src/stores/catalogStore.test.ts`.
+  - **R2 — Invalidez de contexto tipada y rechazo explícito** (`apps/web/src/stores/catalog/shared.ts`, `apps/web/src/stores/catalogStore.ts`):
+    - *Problema:* El guard posterior al `await saveCatalog` hacía un `return;` silencioso, resolviendo la promesa de `patch()`. Por tanto, `saveAndToast` emitía `✓ Cambios guardados` tras logout o cambio de organización, y `patchSaved` retornaba `true`, habilitando escrituras dependientes (como `hardDeleteOnAuth`) sobre un contexto ajeno.
+    - *Solución:* Introducción y exportación de `ContextInvalidatedError`. `task()` lanza `ContextInvalidatedError` si el `workspaceSeq` cambia antes o después de `saveCatalog`. `saveAndToast` no emite toast de éxito ante invalidación de contexto y propaga el error tipado. `patchSaved` captura `ContextInvalidatedError` y retorna `false`, impidiendo continuaciones dependientes.
+    - *Evidencia:* Tests RED reproducidos (toast indebido y continuación de hard delete), corregidos a GREEN en `apps/web/src/stores/catalogStore.test.ts`.
+  - **R3 — Invalidación centralizada y control ocupado durante retry / confirmación** (`packages/ui/src/catalogs/hardware/HardwareAssetUploadModal.tsx`):
+    - *Problema:* Durante el reintento mientras `getSession` estaba en curso o durante el delay de confirmación de 300 ms, `isBusy` era `false` y el input de archivo permanecía habilitado. Cambiar el archivo no invalidaba `opGenerationRef`, no abortaba la petición en vuelo ni cancelaba el temporizador, provocando que una resolución tardía de A asociara el asset A y cerrara el modal del archivo B.
+    - *Solución:* Se añadió la etapa `'resuming'` al tipo `UploadStage` y se marca inmediatamente al consultar una sesión existente. `isBusy` abarca tanto `'resuming'` como `'confirmed'`. El input de archivo se deshabilita mientras `isBusy`. Se centralizó la invalidación activa en `invalidateActiveAttempt()` (`opGenerationRef++`, `abortController.abort()`, limpieza de `successTimerRef`) ejecutándose al iniciar un nuevo proceso, al desmontar/cerrar el modal, en `resetForm` y en el `onChange` del archivo. Al cancelar remotamente, se verifica `session.status !== 'finalized'` para no cancelar recursos ya completados.
+    - *Evidencia:* Tests RED reproducidos (`fileInput.disabled === false` durante retry y durante confirmed), corregidos a GREEN en `packages/ui/src/catalogs/hardware/Hardware3D.test.tsx` (16/16 PASS).
+- Evidence:
+  - Unitarias UI (`packages/ui/src/catalogs/hardware/Hardware3D.test.tsx`): 16/16 tests PASS.
+  - Unitarias Web (`apps/web/src/stores/catalogStore.test.ts`): 51/51 tests PASS.
+  - Monorepo unitarias completas: `@granete/ui` 162/162 archivos (1760/1760 PASS), `@granete/web` 36/36 archivos (458/458 PASS).
+  - Browser E2E real (`./scripts/organization-browser-gate.sh tests/organization/hardware-3d-catalog.spec.ts`): 10/10 PASS (27.1s en PostgreSQL desechable aislado).
+  - Integridad y contratos: `pnpm openapi:check` PASS (0 drift), `pnpm typecheck` PASS (7/7 paquetes), `git diff --check` limpio (0 errores de whitespace).
+- Exclusiones respetadas: sin merge de #690, sin cierre de #667/#666, sin inicio de #668/#669/#670, sin cambios de RLS, permisos o migraciones de M1, sin etiquetas protegidas alteradas.
 
 # Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
 

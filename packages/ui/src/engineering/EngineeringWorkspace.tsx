@@ -107,6 +107,7 @@ export function EngineeringWorkspace({
   onExportCutPlanDxf,
   onExportCutPlanPtx,
   cuttingOutputTarget,
+  resolveCuttingOutputTarget,
   onImportNesting: _onImportNesting,
   // Permissions
   canImportNesting: _canImportNesting,
@@ -169,6 +170,9 @@ export function EngineeringWorkspace({
   ) => void | Promise<void>;
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
+  readonly resolveCuttingOutputTarget?: (
+    cutPlan: import('@granete/domain').CutPlan,
+  ) => CuttingOutputTargetView | null;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;
   readonly canImportNesting?: boolean;
   readonly exportBusy?: boolean;
@@ -361,6 +365,7 @@ export function EngineeringWorkspace({
             onExportCutPlanDxf={onExportCutPlanDxf}
             onExportCutPlanPtx={onExportCutPlanPtx}
             cuttingOutputTarget={cuttingOutputTarget}
+            resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             exportBusy={exportBusy}
           />
         )}

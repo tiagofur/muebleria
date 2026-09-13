@@ -9,15 +9,11 @@
 import {
   machineOutputBlockerMessageEs,
   type AdapterBlockReason,
+  type CutPlan,
   MachineOutputSelection,
   ManufacturingOperation,
   OutputCompatibilityProfile,
   ResolvedManufacturingOutputTarget,
-} from '@granete/domain';
-import {
-  divideRegion,
-  type CutPlanPlacedPiece,
-  type CutProgramInput,
 } from '@granete/domain';
 import {
   CLIENT_A_BHX050_PROFILE,
@@ -52,12 +48,6 @@ export const KNOWN_OUTPUT_PROFILES: readonly OutputCompatibilityProfile[] = [
   MPR_WOODWOP_PROFILE,
 ];
 
-/** Cutting-format families per shared catalog (parity fixture in contracts/). */
-const OPERATION_FORMAT_FAMILIES: Record<ManufacturingOperation, readonly string[]> = {
-  cutting: ['ptx', 'saw'],
-  machining: ['mpr'],
-};
-
 function adapterForFamily(family: string) {
   switch (family) {
     case 'ptx':
@@ -71,10 +61,20 @@ function adapterForFamily(family: string) {
   }
 }
 
+/** Exact catalog resolution; historical references are displayable but never retargeted. */
+function exactProfileForSelection(selection: MachineOutputSelection): OutputCompatibilityProfile | undefined {
+  return KNOWN_OUTPUT_PROFILES.find(
+    (profile) =>
+      profile.ref.outputCompatibilityProfileId === selection.outputCompatibilityProfileId &&
+      profile.ref.revisionId === selection.outputCompatibilityProfileRevisionId &&
+      selection.outputCompatibilityProfileDigest !== null &&
+      profile.digest === selection.outputCompatibilityProfileDigest,
+  );
+}
+
 /**
- * Resolves the configured target. Unknown/stale references surface as typed
- * blockers (they can happen when the catalog evolves after a selection was
- * saved); the resolver NEVER substitutes another profile.
+ * Resolves only the persisted tuple against the current catalog. It deliberately
+ * does not probe a synthetic job: operation readiness needs the real active job.
  */
 export function resolveManufacturingOutputTarget(
   selection: MachineOutputSelection | undefined,
@@ -84,208 +84,146 @@ export function resolveManufacturingOutputTarget(
     return { status: 'NO_OUTPUT_CONFIGURED', operation };
   }
 
-  const machine = KNOWN_MACHINE_PROFILES.find(
-    (m) => m.ref.machineProfileId === selection.machineProfileId,
+  const currentMachine = KNOWN_MACHINE_PROFILES.find(
+    (machine) => machine.ref.machineProfileId === selection.machineProfileId,
   );
-  const profile = KNOWN_OUTPUT_PROFILES.find(
-    (p) => p.ref.outputCompatibilityProfileId === selection.outputCompatibilityProfileId,
+  const machine = currentMachine?.ref.machineProfileRevisionId === selection.machineProfileRevisionId
+    ? currentMachine
+    : undefined;
+  const currentProfile = KNOWN_OUTPUT_PROFILES.find(
+    (profile) => profile.ref.outputCompatibilityProfileId === selection.outputCompatibilityProfileId,
   );
+  const profile = exactProfileForSelection(selection);
+  const adapter = profile ? adapterForFamily(profile.formatFamily) : undefined;
 
   const reasons: AdapterBlockReason[] = [];
-  if (!machine) {
+  if (!currentMachine) {
     reasons.push({
       code: 'FORMAT_FAMILY_MISMATCH',
       detail: `máquina desconocida: ${selection.machineProfileId}`,
     });
-  } else if (machine.ref.machineProfileRevisionId !== selection.machineProfileRevisionId) {
+  } else if (!machine) {
     reasons.push({
       code: 'PROFILE_DIGEST_MISMATCH',
-      detail: `revisión de máquina ${selection.machineProfileId}@${selection.machineProfileRevisionId} ya no existe en el catálogo (${machine.ref.machineProfileRevisionId})`,
+      detail: `revisión de máquina ${selection.machineProfileId}@${selection.machineProfileRevisionId} ya no existe en el catálogo (${currentMachine.ref.machineProfileRevisionId})`,
     });
   }
-  if (!profile) {
+
+  if (!currentProfile) {
     reasons.push({
       code: 'FORMAT_FAMILY_MISMATCH',
       detail: `perfil de salida desconocido: ${selection.outputCompatibilityProfileId}`,
     });
-  } else if (profile.ref.revisionId !== selection.outputCompatibilityProfileRevisionId) {
+  } else if (!profile) {
+    const selectedDigest = selection.outputCompatibilityProfileDigest ?? 'sin digest histórico';
     reasons.push({
       code: 'PROFILE_DIGEST_MISMATCH',
-      detail: `revisión de perfil ${selection.outputCompatibilityProfileId}@${selection.outputCompatibilityProfileRevisionId} ya no existe en el catálogo (${profile.ref.revisionId})`,
+      detail: `perfil guardado ${selection.outputCompatibilityProfileId}@${selection.outputCompatibilityProfileRevisionId} (${selectedDigest}) no coincide con la versión vigente ${currentProfile.ref.revisionId} (${currentProfile.digest})`,
     });
   }
 
-  const family = profile?.formatFamily;
-  const adapter = family ? adapterForFamily(family) : undefined;
-  if (!adapter) {
+  if (profile && !adapter) {
     reasons.push({
       code: 'FORMAT_FAMILY_MISMATCH',
       detail: 'no hay adapter para la familia del perfil seleccionado',
     });
   } else if (
-    adapter.postprocessorAdapterId !== selection.postprocessorAdapterId ||
-    adapter.adapterVersion !== selection.postprocessorAdapterVersion ||
-    adapter.implementationDigest !== selection.postprocessorImplementationDigest
+    adapter && (
+      adapter.postprocessorAdapterId !== selection.postprocessorAdapterId ||
+      adapter.adapterVersion !== selection.postprocessorAdapterVersion ||
+      adapter.implementationDigest !== selection.postprocessorImplementationDigest
+    )
   ) {
     reasons.push({
       code: 'PROFILE_DIGEST_MISMATCH',
-      detail: `el adapter seleccionado (${selection.postprocessorAdapterId}@${selection.postprocessorAdapterVersion}) no coincide con el implementado (${adapter.postprocessorAdapterId}@${adapter.adapterVersion})`,
+      detail: `el adapter guardado (${selection.postprocessorAdapterId}@${selection.postprocessorAdapterVersion}) no coincide con el implementado (${adapter.postprocessorAdapterId}@${adapter.adapterVersion})`,
     });
   }
 
-  // Adapter readiness (evidence + representability + implementation) — computed
-  // against a neutral machining/cutting job shape when the family requires one.
-  if (adapter && profile && machine && reasons.length === 0) {
-    const placeholderJob =
-      operation === 'cutting'
-        ? { jobId: 'readiness-probe', provenance: emptyProvenance(), cutPlan: probeCutPlan() }
-        : { jobId: 'readiness-probe', provenance: emptyProvenance(), drilling: emptyDrilling() };
-    reasons.push(...adapter.canSerialize(placeholderJob as never, profile).reasons);
+  const adapterExact = adapter &&
+    adapter.postprocessorAdapterId === selection.postprocessorAdapterId &&
+    adapter.adapterVersion === selection.postprocessorAdapterVersion &&
+    adapter.implementationDigest === selection.postprocessorImplementationDigest
+      ? adapter
+      : undefined;
+
+  // Catalog-level evidence remains part of configuration readiness and does
+  // not need a synthetic job. The active CutPlan preflight below adds the
+  // operation-specific compiler blockers for cutting.
+  if (operation === 'cutting' && adapterExact && profile && reasons.length === 0) {
+    for (const dimension of adapterExact.requiredDimensions) {
+      if (profile.dimensions[dimension] === undefined) {
+        reasons.push({
+          code: 'FIELD_FORMAT_EVIDENCE_REQUIRED',
+          dimension,
+          detail: `dimension '${dimension}' of profile ${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId} has no field/repo evidence`,
+        });
+      }
+    }
+  }
+
+  // Machining keeps its existing implementation-level blocker without
+  // pretending this says anything about a cutting plan. Cutting readiness is
+  // exclusively evaluated by evaluateSelectedCuttingOutputReadiness below.
+  if (operation === 'machining' && adapterExact && reasons.length === 0) {
+    reasons.push(...adapterExact.canSerialize({
+      jobId: 'settings-readiness',
+      provenance: { projectId: 'settings-readiness', generatedAt: '1970-01-01T00:00:00.000Z' },
+      drilling: {
+        schema: 'muebles.drilling-data.v1',
+        projectId: 'settings-readiness',
+        projectName: 'settings-readiness',
+        generatedAt: '1970-01-01T00:00:00.000Z',
+        totalPiecesCount: 0,
+        totalHolesCount: 0,
+        patterns: [],
+      },
+    } as never, profile!).reasons);
   }
 
   return {
     status: 'CONFIGURED',
     operation,
     selection,
-    machineLabel: machine ? `${machine.identity.manufacturerFamily} ${machine.identity.model}` : selection.machineProfileId,
+    machineLabel: machine
+      ? `${machine.identity.manufacturerFamily} ${machine.identity.model}`
+      : `${selection.machineProfileId}@${selection.machineProfileRevisionId}`,
     profileLabel: profile
       ? `${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId}`
-      : selection.outputCompatibilityProfileId,
-    adapterLabel: adapter
-      ? `${adapter.postprocessorAdapterId} · ${adapter.adapterVersion}`
-      : selection.postprocessorAdapterId,
+      : `${selection.outputCompatibilityProfileId}@${selection.outputCompatibilityProfileRevisionId}`,
+    adapterLabel: adapterExact
+      ? `${adapterExact.postprocessorAdapterId} · ${adapterExact.adapterVersion}`
+      : `${selection.postprocessorAdapterId} · ${selection.postprocessorAdapterVersion}`,
     supportStatus: profile?.supportStatus ?? 'NOT_TESTED',
     readiness: { ready: reasons.length === 0, reasons },
   };
 }
 
-function emptyProvenance() {
-  return { projectId: 'readiness-probe', generatedAt: '1970-01-01T00:00:00.000Z' };
-}
-
-/**
- * Representative COMPILABLE probe plan: the CADmatic 4 candidate revision
- * runs a real compilation preflight inside canSerialize, so the resolver's
- * readiness probe must be a plan the documented compiler accepts (trim 0,
- * uniform kerf, ASCII identities, one validated program). Profiles routed to
- * the legacy serializer never inspect plan contents, so they are unaffected.
- */
-function probeCutPlan(): CutPlan {
-  const board = { xMm: 0, yMm: 0, lengthMm: 600, widthMm: 400 };
-  const division = divideRegion(board, 'x', 300, 4);
-  const program: CutProgramInput = {
-    schemaVersion: 'granete.cut-program.v1',
-    boardRegionId: 'board',
-    regions: [
-      { regionId: 'board', rect: board },
-      { regionId: 'probe:kept', rect: division.keptRect },
-      { regionId: 'probe:rest', rect: division.restRect! },
-    ],
-    divisions: [
-      {
-        cutId: 'probe-cut-1',
-        parentRegionId: 'board',
-        axis: 'x',
-        keptExtentMm: 300,
-        kerfMm: 4,
-        keptRegionId: 'probe:kept',
-        restRegionId: 'probe:rest',
-      },
-    ],
-    terminals: [
-      { regionId: 'probe:kept', kind: 'piece', pieceRef: 'probe-piece-s0' },
-      { regionId: 'probe:rest', kind: 'waste' },
-    ],
-  };
-  const piece: CutPlanPlacedPiece = {
-    id: 'probe-piece-s0',
-    partCode: 'PROBE',
-    partName: 'Probe',
-    moduleCode: 'M0',
-    labelRef: 'probe-piece-s0',
-    materialName: 'Probe Board 18',
-    materialCode: 'PROBE18',
-    xMm: 0,
-    yMm: 0,
-    lengthMm: 300,
-    widthMm: 400,
-    originalLengthMm: 300,
-    originalWidthMm: 400,
-    grain: 1,
-    rotated: false,
-    L1: 0,
-    L2: 0,
-    W1: 0,
-    W2: 0,
-    thicknessMm: 18,
-    sheetIndex: 0,
-    stripIndex: 0,
-    cutSequenceNumber: 1,
-  };
-  return {
-    id: 'readiness-probe',
-    projectId: 'readiness-probe',
-    generatedAt: '1970-01-01T00:00:00.000Z',
-    version: 1,
-    isFrozen: true,
-    config: {
-      sawKerfMm: 4,
-      trim: { topMm: 0, bottomMm: 0, leftMm: 0, rightMm: 0 },
-      deductEdgeBand: true,
-      allowRotationNoGrain: true,
-      minRemnantWidthMm: 400,
-      minRemnantLengthMm: 600,
-      preferLongitudinalRips: true,
+/** Readiness for cutting is evaluated against the exact active CutPlan. */
+export function evaluateSelectedCuttingOutputReadiness(
+  cutPlan: CutPlan,
+  selection: MachineOutputSelection | undefined,
+): ResolvedManufacturingOutputTarget {
+  const resolved = resolveManufacturingOutputTarget(selection, 'cutting');
+  if (resolved.status !== 'CONFIGURED' || !resolved.readiness.ready || !selection) {
+    return resolved;
+  }
+  const profile = exactProfileForSelection(selection);
+  const adapter = profile ? adapterForFamily(profile.formatFamily) : undefined;
+  if (!profile || !adapter) return resolved;
+  const readiness = adapter.canSerialize({
+    jobId: cutPlan.id,
+    provenance: {
+      projectId: cutPlan.projectId,
+      generatedAt: cutPlan.generatedAt,
+      cutPlanId: cutPlan.id,
+      cutPlanVersion: cutPlan.version,
     },
-    sheets: [
-      {
-        sheetIndex: 0,
-        strategy: 'saw-guillotine',
-        materialCode: 'PROBE18',
-        materialName: 'Probe Board 18',
-        sheetWidthMm: 400,
-        sheetLengthMm: 600,
-        thicknessMm: 18,
-        pieces: [piece],
-        remnants: [],
-        instructions: [],
-        cutProgram: program,
-        netPiecesAreaM2: 0.12,
-        grossSheetAreaM2: 0.24,
-        usableRemnantAreaM2: 0,
-        wasteAreaM2: 0.12,
-        wastePercent: 50,
-        yieldPercent: 50,
-      },
-    ],
-    stats: {
-      totalSheets: 1,
-      totalPieces: 1,
-      totalGrossAreaM2: 0.24,
-      totalNetPiecesAreaM2: 0.12,
-      totalUsefulRemnantsAreaM2: 0,
-      totalWasteAreaM2: 0.12,
-      globalWastePercent: 50,
-      globalYieldPercent: 50,
-      byMaterial: [],
-    },
-    usefulRemnants: [],
-  };
+    cutPlan,
+  } as never, profile);
+  return { ...resolved, readiness };
 }
 
-function emptyDrilling() {
-  return {
-    schema: 'muebles.drilling-data.v1' as const,
-    projectId: 'readiness-probe',
-    projectName: 'readiness-probe',
-    generatedAt: '1970-01-01T00:00:00.000Z',
-    totalPiecesCount: 0,
-    totalHolesCount: 0,
-    patterns: [],
-  };
-}
-
-import type { CutPlan } from '@granete/domain';
 import { generateMachineArtifact, type MachineArtifactBundle } from './machineArtifacts';
 import {
   cutFileToken,
@@ -311,7 +249,7 @@ export async function generateSelectedCuttingOutput(
   selection: MachineOutputSelection,
   mode: CuttingOutputMode = 'unified',
 ): Promise<readonly MachineArtifactBundle[]> {
-  const resolved = resolveManufacturingOutputTarget(selection, 'cutting');
+  const resolved = evaluateSelectedCuttingOutputReadiness(cutPlan, selection);
   if (resolved.status !== 'CONFIGURED') {
     throw new ValidationError('no hay salida de máquina configurada para corte', {
       status: 'NO_OUTPUT_CONFIGURED',
@@ -323,9 +261,7 @@ export async function generateSelectedCuttingOutput(
       reasons: resolved.readiness.reasons,
     });
   }
-  const profile = KNOWN_OUTPUT_PROFILES.find(
-    (p) => p.ref.outputCompatibilityProfileId === selection.outputCompatibilityProfileId,
-  )!;
+  const profile = exactProfileForSelection(selection)!;
   const adapter = adapterForFamily(profile.formatFamily)!;
   const kind = profile.formatFamily === 'ptx' ? ('ptx' as const) : ('saw' as const);
   const extension = String(profile.dimensions.fileExtension ?? 'pending');
@@ -334,6 +270,7 @@ export async function generateSelectedCuttingOutput(
     plan: CutPlan,
     jobId: string,
     fileName: string,
+    delivery: MachineArtifactBundle['manifest']['delivery'],
   ): Promise<MachineArtifactBundle> =>
     generateMachineArtifact({
       job: {
@@ -355,9 +292,12 @@ export async function generateSelectedCuttingOutput(
       kind,
       schemaVersion: String(profile.dimensions.headerVersion ?? 'pending-evidence'),
       fileName,
+      delivery,
       machineProfile: {
         ref: KNOWN_MACHINE_PROFILES.find(
-          (m) => m.ref.machineProfileId === selection.machineProfileId,
+          (m) =>
+            m.ref.machineProfileId === selection.machineProfileId &&
+            m.ref.machineProfileRevisionId === selection.machineProfileRevisionId,
         )!.ref,
         supported: [],
       },
@@ -382,6 +322,10 @@ export async function generateSelectedCuttingOutput(
             cutPlanForMaterialGroup(cutPlan, group),
             `${cutPlan.id}--${group.materialCode}`,
             fileName,
+            {
+              mode: 'by-material',
+              material: { code: group.materialCode, name: group.materialName },
+            },
           ),
         );
       }
@@ -395,6 +339,7 @@ export async function generateSelectedCuttingOutput(
       cutPlan,
       cutPlan.id,
       `corte-${cutFileToken(cutPlan.projectName || cutPlan.projectId)}.${extension}`,
+      { mode: 'unified' },
     ),
   ];
 }

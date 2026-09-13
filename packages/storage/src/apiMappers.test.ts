@@ -1639,6 +1639,94 @@ describe('hardwareToApi / hardwareFromApi — machining profile (F127)', () => {
       ],
     });
   });
+
+  describe('hardwareToApi / hardwareFromApi — versioned 3D visual asset binding (#667 M1/M2)', () => {
+    it('serializes visualAsset into visual_asset with assetId and assetRevisionId', () => {
+      const api = hardwareToApi({
+        id: 'hw-vis',
+        code: 'HW-V1',
+        name: 'Tirador Con Modelo',
+        unit: 'piece',
+        costPerUnit: 25,
+        active: true,
+        visualAsset: {
+          assetId: '74000000-0000-0000-0000-000000000001',
+          assetRevisionId: '75000000-0000-0000-0000-000000000001',
+          representation: 'skp',
+          sha256: 'sha256-test',
+          validationState: 'pending',
+        },
+      });
+
+      expect(api.visual_asset).toEqual({
+        assetId: '74000000-0000-0000-0000-000000000001',
+        assetRevisionId: '75000000-0000-0000-0000-000000000001',
+      });
+    });
+
+    it('emits visual_asset: null when visualAsset is absent', () => {
+      const api = hardwareToApi({
+        id: 'hw-novis',
+        code: 'HW-V0',
+        name: 'Tirador Sin Modelo',
+        unit: 'piece',
+        costPerUnit: 10,
+        active: true,
+      });
+
+      expect(api.visual_asset).toBeNull();
+    });
+
+    it('maps visual_asset from API with server-resolved facts', () => {
+      const hw = hardwareFromApi({
+        id: 'hw-vis',
+        code: 'HW-V1',
+        name: 'Tirador',
+        unit: 'piece',
+        cost_per_unit: 25,
+        active: true,
+        visual_asset: {
+          asset_id: '74000000-0000-0000-0000-000000000001',
+          asset_revision_id: '75000000-0000-0000-0000-000000000001',
+          representation: 'skp',
+          sha256: 'sha256-abcdef0123456789',
+          validation_state: 'pending',
+        },
+      });
+
+      expect(hw.visualAsset).toEqual({
+        assetId: '74000000-0000-0000-0000-000000000001',
+        assetRevisionId: '75000000-0000-0000-0000-000000000001',
+        representation: 'skp',
+        sha256: 'sha256-abcdef0123456789',
+        validationState: 'pending',
+      });
+    });
+
+    it('drops malformed or empty visual asset from API payload', () => {
+      const hwEmpty = hardwareFromApi({
+        id: 'hw-1',
+        code: 'HW-1',
+        name: 'Tirador',
+        unit: 'piece',
+        cost_per_unit: 25,
+        active: true,
+        visual_asset: {},
+      });
+      expect(hwEmpty.visualAsset).toBeUndefined();
+
+      const hwNoRev = hardwareFromApi({
+        id: 'hw-2',
+        code: 'HW-2',
+        name: 'Tirador',
+        unit: 'piece',
+        cost_per_unit: 25,
+        active: true,
+        visual_asset: { asset_id: 'asset-1' },
+      });
+      expect(hwNoRev.visualAsset).toBeUndefined();
+    });
+  });
 });
 
 describe('apiMappers — engineering log round-trip (roadmap-screens 2a.4)', () => {
@@ -2597,6 +2685,7 @@ describe('machine output selection mappers (#591)', () => {
     expect(record.selection.operation).toBe('cutting');
     expect(record.selection.outputCompatibilityProfileId).toBe('ptx-generic');
     expect(record.selection.postprocessorAdapterId).toBe('granete-ptx');
+    expect(record.selection.outputCompatibilityProfileDigest).toBeNull();
     expect(record.version).toBe(2);
     expect(record.updatedBy).toBe('owner@example.com');
   });

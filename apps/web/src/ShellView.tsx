@@ -216,6 +216,8 @@ import {
   LocalStorageWorkspaceRepository,
   breakdownFromApi,
   createSeedWorkspace,
+  GraneteApiClient,
+  createApiHardwareAssetService,
 } from '@granete/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
@@ -441,6 +443,9 @@ export interface ShellViewCtx {
   readonly handleExportCutPlanPtx: (cutPlan: CutPlan, mode?: 'unified' | 'by-material') => Promise<void>;
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
+  readonly resolveCuttingOutputTarget?: (
+    cutPlan: import('@granete/domain').CutPlan,
+  ) => CuttingOutputTargetView | null;
   readonly handleExportDespiecePdf: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportElevations: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportHardwareList: (projectId?: string | undefined) => Promise<void>;
@@ -725,6 +730,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleExportCutPlanDxf,
     handleExportCutPlanPtx,
     cuttingOutputTarget = null,
+    resolveCuttingOutputTarget,
     handleExportDespiecePdf,
     handleExportElevations,
     handleExportHardwareList,
@@ -953,6 +959,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       selectedProjectId ?? 'no-project',
     ).commercialSummaries,
   });
+  const hardwareAssetService = useMemo(() => {
+    if (session !== 'auth' || !authToken) return undefined;
+    return createApiHardwareAssetService(
+      new GraneteApiClient(DEFAULT_API_BASE),
+      authToken,
+    );
+  }, [session, authToken]);
   const quoteAuthorityView = quoteAuthority.kind === 'idle'
     ? undefined
     : quoteAuthority.kind === 'ready'
@@ -1376,6 +1389,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
             onExportCutPlanPtx={(plan, mode) => { void handleExportCutPlanPtx(plan, mode); }}
             cuttingOutputTarget={cuttingOutputTarget}
+            resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             canImportNesting={canMarkProduced || canExportProductionUnion}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
             exportBusy={exportBusy}
@@ -1719,6 +1733,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           canMutate={canMutateCatalog}
           showCosts={showCosts}
           resolveImageUrl={resolveMediaUrl}
+          assetService={hardwareAssetService}
           onUploadImage={
             canMutateCatalog && session === 'auth' && authToken
               ? uploadCatalogImage

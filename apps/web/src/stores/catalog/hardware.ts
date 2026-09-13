@@ -75,7 +75,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
       const pkg = Number(draft.packageSize);
       const packageSize =
         Number.isFinite(pkg) && pkg > 0 ? pkg : undefined;
-      const item = {
+      const item: Hardware = {
         id: ctx.newId(),
         code,
         name: draft.name.trim(),
@@ -87,8 +87,9 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
         active: true,
         ...hardwarePreviewFields(draft),
         ...hardwareMachiningField(draft),
+        ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
       };
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({ ...c, hardware: [...c.hardware, item] }),
         `✓ "${code}" creado`,
       );
@@ -98,7 +99,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
       const pkg = Number(draft.packageSize);
       const packageSize =
         Number.isFinite(pkg) && pkg > 0 ? pkg : undefined;
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({
           ...c,
           hardware: c.hardware.map((h) => {
@@ -115,6 +116,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               previewClearcoat: _dcl,
               partFinishes: _dpf,
               machining: _dma,
+              visualAsset: _dva,
               ...rest
             } = h;
             return {
@@ -128,6 +130,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               notes: optionalNotes(draft.notes),
               ...hardwarePreviewFields(draft),
               ...hardwareMachiningField(draft),
+              ...(draft.visualAsset ? { visualAsset: draft.visualAsset } : {}),
             };
           }),
         }),
@@ -137,7 +140,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
 
     setHardwareActive: (id, active) => {
       const target = ctx.get().catalog?.hardware.find((h) => h.id === id);
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({
           ...c,
           hardware: c.hardware.map((h) => (h.id === id ? { ...h, active } : h)),

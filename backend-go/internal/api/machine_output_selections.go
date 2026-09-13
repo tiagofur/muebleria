@@ -22,22 +22,31 @@ func (s *Server) buildMachineOutputSelectionsReadModel(records []domain.MachineO
 	resolved := make([]openapi.MachineOutputSelectionResolved, 0, len(records))
 	for _, rec := range records {
 		entry := openapi.MachineOutputSelectionResolved{
-			Selection: machineOutputSelectionRecordToAPI(rec),
-			Blockers:  []openapi.MachineOutputBlocker{},
+			Selection:     machineOutputSelectionRecordToAPI(rec),
+			Blockers:      []openapi.MachineOutputBlocker{},
+			MachineLabel:  rec.MachineProfileID + "@" + rec.MachineProfileRevisionID,
+			ProfileLabel:  rec.OutputProfileID + "@" + rec.OutputProfileRevisionID,
+			AdapterLabel:  rec.AdapterID + " · " + rec.AdapterVersion,
+			SupportStatus: "NOT_TESTED",
 		}
 		for _, machine := range catalog.Machines {
-			if machine.MachineProfileID == rec.MachineProfileID {
+			if machine.MachineProfileID == rec.MachineProfileID &&
+				machine.MachineProfileRevisionID == rec.MachineProfileRevisionID {
 				entry.MachineLabel = machine.ManufacturerFamily + " " + machine.Model
 			}
 		}
 		for _, profile := range catalog.OutputProfiles {
-			if profile.OutputCompatibilityProfileID == rec.OutputProfileID {
+			if profile.OutputCompatibilityProfileID == rec.OutputProfileID &&
+				profile.RevisionID == rec.OutputProfileRevisionID && rec.OutputProfileDigest != nil &&
+				profile.Digest == *rec.OutputProfileDigest {
 				entry.ProfileLabel = profile.OutputCompatibilityProfileID + "@" + profile.RevisionID
 				entry.SupportStatus = profile.SupportStatus
 			}
 		}
 		for _, adapter := range catalog.Adapters {
-			if adapter.PostprocessorAdapterID == rec.AdapterID {
+			if adapter.PostprocessorAdapterID == rec.AdapterID &&
+				adapter.AdapterVersion == rec.AdapterVersion &&
+				adapter.ImplementationDigest == rec.AdapterImplementationDigest {
 				entry.AdapterLabel = adapter.PostprocessorAdapterID + " · " + adapter.AdapterVersion
 			}
 		}
@@ -61,6 +70,7 @@ func machineOutputSelectionRecordToAPI(rec domain.MachineOutputSelectionRecord) 
 		MachineProfileRevisionId:    rec.MachineProfileRevisionID,
 		OutputProfileId:             rec.OutputProfileID,
 		OutputProfileRevisionId:     rec.OutputProfileRevisionID,
+		OutputProfileDigest:         rec.OutputProfileDigest,
 		AdapterId:                   rec.AdapterID,
 		AdapterVersion:              rec.AdapterVersion,
 		AdapterImplementationDigest: rec.AdapterImplementationDigest,

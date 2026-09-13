@@ -48,6 +48,7 @@ import type {
   PtxCompilationMapping,
   PtxCompiledSheetMapping,
 } from './compileCutPlan';
+import { scopedRegionKey } from './scopedRegionRef';
 
 export interface CutPlanPtxReadbackIssue {
   readonly code: string;
@@ -461,7 +462,10 @@ export function verifyCutPlanPtxReadback(
       sheetProjections.set(sheet.sheetIndex, deriveTrimProjection(trace));
       for (const terminal of trace.terminals) {
         if (terminal.kind === 'remnant') {
-          globalOffcutIndexByRegion.set(terminal.regionId, runningOffcutIndex++);
+          globalOffcutIndexByRegion.set(
+            scopedRegionKey({ sheetIndex: sheet.sheetIndex, regionId: terminal.regionId }),
+            runningOffcutIndex++,
+          );
         }
       }
     } catch {
@@ -956,7 +960,9 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
         push('release.index', `${label}: CUT_INDEX=${row.cutIndex} ≠ ${expectedCutIndex ?? '?'}`);
       }
       if (release.kind === 'offcut') {
-        const expectedOffcutIndex = globalOffcutIndexByRegion.get(release.regionId);
+        const expectedOffcutIndex = globalOffcutIndexByRegion.get(
+          scopedRegionKey({ sheetIndex: sheet.sheetIndex, regionId: release.regionId }),
+        );
         if (
           row.partReference.kind !== 'offcut' ||
           expectedOffcutIndex === undefined ||
@@ -989,7 +995,9 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
       push('release.index', `${label}: CUT_INDEX=${row.cutIndex} ≠ ${expectedCutIndex ?? '?'}`);
     }
     if (release.kind === 'offcut') {
-      const expectedOffcutIndex = globalOffcutIndexByRegion.get(release.regionId);
+      const expectedOffcutIndex = globalOffcutIndexByRegion.get(
+        scopedRegionKey({ sheetIndex: sheet.sheetIndex, regionId: release.regionId }),
+      );
       if (
         row.partReference.kind !== 'offcut' ||
         expectedOffcutIndex === undefined ||
@@ -1026,7 +1034,9 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
   // --- OFFCUTS rows for this sheet's remnant leaves ----------------------
   const remnantTerminals = trace.terminals.filter((t) => t.kind === 'remnant');
   for (const terminal of remnantTerminals) {
-    const expectedIndex = globalOffcutIndexByRegion.get(terminal.regionId);
+    const expectedIndex = globalOffcutIndexByRegion.get(
+      scopedRegionKey({ sheetIndex: sheet.sheetIndex, regionId: terminal.regionId }),
+    );
     const row = offcutRows.find((r) => expectedIndex !== undefined && r.offcutIndex === expectedIndex);
     if (!row) {
       push('offcuts.missing', `retazo '${terminal.regionId}' (X${expectedIndex ?? '?'}) sin fila OFFCUTS`);

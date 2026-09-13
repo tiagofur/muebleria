@@ -79,6 +79,8 @@ describe('generateMachineArtifact', () => {
       outputCompatibilityProfileId: 'ptx-generic',
       revisionId: 'r1',
     });
+    expect(manifest.manifestSchemaVersion).toBe('granete.machine-artifact-manifest.v2');
+    expect(manifest.outputCompatibilityProfileDigest).toBe(PTX_GENERIC_PROFILE.digest);
     expect(manifest.postprocessorAdapter.postprocessorAdapterId).toBe('granete-ptx');
     expect(manifest.postprocessorAdapter.implementationDigest).toBe(
       PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
@@ -87,6 +89,8 @@ describe('generateMachineArtifact', () => {
     expect(manifest.validationStatus).toBe('NOT_TESTED');
     expect(manifest.nonProductionValidationArtifact).toBe(true);
     expect(manifest.machineProfile?.machineProfileId).toBe('client-a-machine-b-hpp250');
+    expect(manifest.artifacts[0]?.fileName).toBe('test-generic.ptx');
+    expect(manifest.delivery).toEqual({ mode: 'unified' });
   });
 
   it('blocks on unevidenced profiles instead of emitting guessed bytes', async () => {
