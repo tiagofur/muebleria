@@ -42,8 +42,8 @@
     text("commercial-projection-total", total || (projection.saleAmountsWithheld ? "No disponible para esta organización" : "No disponible"));
 
     var cost = amounts && money(amounts.directCost, projection.currency);
-    show("commercial-projection-cost-row", !!cost && !projection.costsWithheld);
-    if (cost) text("commercial-projection-cost", cost);
+    show("commercial-projection-cost-row", cost !== null && !projection.costsWithheld);
+    if (cost !== null) text("commercial-projection-cost", cost);
     var margin = amounts && typeof amounts.marginFactor === "number" ? amounts.marginFactor.toFixed(2) + "×" : null;
     show("commercial-projection-margin-row", !!margin && !projection.costsWithheld);
     if (margin) text("commercial-projection-margin", margin);
@@ -125,8 +125,12 @@
         pending = null;
         show("commercial-projection-values", false);
         setState("pending_sync", "Cambio en curso; el total anterior no se presenta como actual.");
-      } else if (phase === "committed") {
+      } else if (phase === "committed" && event.detail.serverSynchronized === true) {
         request();
+      } else if (phase === "committed") {
+        lastProjection = null;
+        show("commercial-projection-values", false);
+        setState("stale", "El cambio local todavía no se sincronizó con el diseño del servidor.");
       } else if (["rejected", "cancelled", "aborted"].indexOf(phase) !== -1 && lastProjection) {
         renderProjection(lastProjection);
       } else if (phase === "stale" || phase === "unavailable") {

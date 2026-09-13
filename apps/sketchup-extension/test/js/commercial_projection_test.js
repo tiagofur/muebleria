@@ -54,6 +54,8 @@ test('renders a legitimate zero rather than missing', () => {
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
   assert.strictEqual(s.window.GraneteCommercialProjection.receive({ requestId: request, projectId: 'p-a', designId: 'd-a', projection: projection(0, 0) }), true);
   assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$0.00'));
+  assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, '');
+  assert.ok(s.__elements['commercial-projection-cost'].textContent.includes('$0.00'));
   assert.strictEqual(s.__elements['commercial-projection-delta'].textContent.includes('%'), false);
 });
 
@@ -83,7 +85,7 @@ test('drops a response that predates an in-flight mutation', () => {
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
 });
 
-test('confirmed mutation refreshes while rejected mutation restores prior truth', () => {
+test('only a server-synchronized commit refreshes while local commits stay stale', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
@@ -94,6 +96,10 @@ test('confirmed mutation refreshes while rejected mutation restores prior truth'
   assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Actualizado');
   const before = s.__calls.length;
   s.__events['granete-mutation-state']({ detail: { phase: 'committed' } });
+  assert.strictEqual(s.__calls.length, before);
+  assert.strictEqual(s.__elements['commercial-projection-badge'].textContent, 'Desactualizado');
+  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
+  s.__events['granete-mutation-state']({ detail: { phase: 'committed', serverSynchronized: true } });
   assert.strictEqual(s.__calls.length, before + 1);
 });
 
@@ -114,6 +120,7 @@ test('withheld amounts are explicit and cost rows stay hidden', () => {
 test('successful working-copy callbacks publish a committed refresh', () => {
   assert.ok(dialogSource.includes('function notifyCommercialProjectionCommitted()'));
   assert.ok(dialogSource.includes('onCommercialProjectionMutationCommitted: function ()'));
+  assert.ok(dialogSource.includes('serverSynchronized: true'));
   assert.strictEqual((dialogSource.match(/notifyCommercialProjectionCommitted\(\);/g) || []).length, 4);
 });
 

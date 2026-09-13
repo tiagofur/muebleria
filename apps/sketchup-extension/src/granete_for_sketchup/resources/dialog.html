@@ -6277,7 +6277,9 @@
         }
 
         function notifyCommercialProjectionCommitted() {
-          document.dispatchEvent(new CustomEvent("granete-mutation-state", { detail: { phase: "committed" } }));
+          document.dispatchEvent(new CustomEvent("granete-mutation-state", {
+            detail: { phase: "committed", serverSynchronized: true }
+          }));
         }
 
         function pfPlaceFailureMessage(result) {

@@ -25,8 +25,9 @@ func (s *Server) HandleDesignCommercialProjection(w http.ResponseWriter, r *http
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "projectId o designId inválido", nil)
 		return
 	}
+	roles := actorRoles(claims)
 	project, err := s.Store.GetProjectByID(r.Context(), projectID)
-	if err != nil || project == nil || !domain.CanAccessOwnedResourceRoles(claims.UserID, actorRoles(claims), project.OwnerUserID) {
+	if err != nil || project == nil || !canAccessCommercialProjectionPortfolio(claims.UserID, roles, project.OwnerUserID) {
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "diseño no encontrado", nil)
 		return
 	}
@@ -47,6 +48,18 @@ func (s *Server) HandleDesignCommercialProjection(w http.ResponseWriter, r *http
 		domain.RedactCommercialProjectionCosts(projection)
 	}
 	respondWithJSON(w, http.StatusOK, toCommercialProjectionDTO(projection))
+}
+
+func canAccessCommercialProjectionPortfolio(actorID string, roles []domain.UserRole, ownerUserID string) bool {
+	// Seller access remains portfolio-scoped. Operational project roles rely on
+	// the repository/RLS organization relationship authority instead of sales
+	// ownership, so an assigned manufacturing organization is not denied here.
+	if domain.AnyRole(roles, func(role domain.UserRole) bool {
+		return role != domain.RoleVendedor && domain.RoleCanAccessProjects(role)
+	}) {
+		return true
+	}
+	return ownerUserID != "" && ownerUserID == actorID
 }
 
 func toCommercialProjectionDTO(p *domain.CommercialProjection) openapi.CommercialProjection {

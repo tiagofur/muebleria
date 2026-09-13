@@ -97,3 +97,20 @@ func TestHandleDesignCommercialProjection_HidesAnotherSellersProject(t *testing.
 		t.Fatalf("status=%d body=%s, want portfolio-safe 404", rr.Code, rr.Body.String())
 	}
 }
+
+func TestHandleDesignCommercialProjection_AllowsAssignedManufacturingRolePastPortfolioGate(t *testing.T) {
+	store := &stubStore{
+		projectReturnedByID: &domain.Project{ID: qrTestProjectID, OwnerUserID: "seller-2"},
+		commercialProjection: &domain.CommercialProjection{
+			Schema: domain.CommercialProjectionSchema, Status: domain.CommercialProjectionIncomplete,
+			ProjectID: qrTestProjectID, DesignID: projectionDesignID, WorkingVersion: "v1",
+			WorkingFingerprint: "sha256-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			PricingAuthority:   "calc-project-breakdown", CalculatedAt: time.Now().UTC(), Currency: "MXN", Issues: []string{},
+		},
+	}
+	rr := httptest.NewRecorder()
+	(&Server{Store: store}).HandleDesignCommercialProjection(rr, projectionRequest(string(domain.RoleGerenteProduccion)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s, want assigned manufacturing access", rr.Code, rr.Body.String())
+	}
+}
