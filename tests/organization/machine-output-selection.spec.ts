@@ -1,17 +1,26 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Download, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { optimizeCutPlan } from '@granete/domain';
+import { optimizeCutPlan, type ArtifactManifest, type CutPlan } from '@granete/domain';
+import {
+  compileCutPlanToPtxDocument,
+  parsePtxDocumentBytes,
+  PTX_CADMATIC_4_R3_PROFILE,
+  resolvePtxCompilerRoute,
+  validatePtxDocument,
+  verifyCutPlanPtxReadback,
+} from '@granete/excel';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { required } from './support/api';
 import { TotpProvider, secretFromProvisioningUri } from './support/totp';
 
 /**
- * #591 / WEB-MFG-2 browser E2E against the real Go backend + PostgreSQL:
+ * #692 / PTX-CAD4 browser E2E against the real Go backend + PostgreSQL:
  * the factory pins the EXACT machine/profile/adapter tuple per operation,
  * it survives reload, the resolver read model returns only that target, a
  * blocked CADmatic 3 selection produces blockers (never a silent fallback to
- * ptx-generic), the CADmatic 4 candidate revision (r2, #650) resolves ready
- * while staying an unvalidated candidate, stale writes conflict, and org B
+ * ptx-generic), the CADmatic 4 r3 candidate evaluates the real active CutPlan,
+ * downloads bytes plus a durable manifest, stale writes conflict, and org B
  * never sees org A's config.
  */
 
@@ -21,6 +30,7 @@ const CUTTING_GENERIC = {
   machineProfileRevisionId: 'r1',
   outputProfileId: 'ptx-generic',
   outputProfileRevisionId: 'r1',
+  outputProfileDigest: 'd05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595',
   adapterId: 'granete-ptx',
   adapterVersion: '1.2.0',
   adapterImplementationDigest: '954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236',
@@ -30,9 +40,11 @@ const CUTTING_CADMATIC4_CANDIDATE = {
   ...CUTTING_GENERIC,
   outputProfileId: 'ptx-cadmatic-4',
   outputProfileRevisionId: 'r3',
+  outputProfileDigest: '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537',
 } as const;
 const EXPORT_PROJECT_ID = '77777777-6910-4691-8691-777777777777';
 const EXPORT_PROJECT_B_ID = '77777777-6911-4691-8691-777777777777';
+const BLOCKED_PROJECT_ID = '77777777-6920-4692-8692-777777777777';
 let restoreB: (() => Promise<unknown>) | undefined;
 
 async function api() {
@@ -97,7 +109,7 @@ async function saveCuttingSelection(
   await waitForCuttingProfile(repository, expectedProfileId);
 }
 
-async function seedCuttingProject(repository: APIWorkspaceRepository, projectId = EXPORT_PROJECT_ID): Promise<void> {
+async function seedCuttingProject(repository: APIWorkspaceRepository, projectId = EXPORT_PROJECT_ID): Promise<CutPlan> {
   const catalog = await repository.getCatalog();
   const customer = { id: projectId.replace('77777777', 'c0000000'), name: 'CAD4 E2E', active: true };
   await repository.saveCatalog({ ...catalog, customers: [...(catalog.customers ?? []), customer] });
@@ -111,6 +123,7 @@ async function seedCuttingProject(repository: APIWorkspaceRepository, projectId 
     currency: 'MXN', marginFactor: 1.3, laborFixedCost: 0, status: 'draft', createdAt: now,
     updatedAt: now, items: [], cutPlan,
   });
+  return cutPlan;
 }
 
 async function exportPtx(page: Page, projectId = EXPORT_PROJECT_ID): Promise<string> {
@@ -120,20 +133,49 @@ async function exportPtx(page: Page, projectId = EXPORT_PROJECT_ID): Promise<str
   return new TextDecoder().decode(await readFile((await download.path())!));
 }
 
-test.describe.serial('Machine output selection (#591) browser E2E', () => {
+async function exportPtxWithManifest(
+  page: Page,
+  projectId = EXPORT_PROJECT_ID,
+): Promise<{ ptxBytes: Uint8Array; ptxFileName: string; manifest: ArtifactManifest }> {
+  await page.goto(`/engineering/${projectId}`);
+  await page.getByTestId('eng-tab-optimizacion').click();
+  const downloads: Download[] = [];
+  const capture = (download: Download): void => { downloads.push(download); };
+  page.on('download', capture);
+  try {
+    await page.getByTestId('prod-opt-export-ptx').click();
+    await expect.poll(() => downloads.length, { timeout: 15_000 }).toBe(2);
+  } finally {
+    page.off('download', capture);
+  }
+  const files = await Promise.all(downloads.map(async (download) => ({
+    name: download.suggestedFilename(),
+    bytes: new Uint8Array(await readFile((await download.path())!)),
+  })));
+  const manifestFile = files.find((file) => file.name.endsWith('.manifest.json'));
+  const ptxFile = files.find((file) => file.name.endsWith('.ptx'));
+  if (!manifestFile || !ptxFile) throw new Error('Expected one PTX and one companion manifest download');
+  return {
+    ptxBytes: ptxFile.bytes,
+    ptxFileName: ptxFile.name,
+    manifest: JSON.parse(new TextDecoder().decode(manifestFile.bytes)) as ArtifactManifest,
+  };
+}
+
+test.describe.serial('Machine output selection readiness/provenance (#692) browser E2E', () => {
   test('select exact tuple → persists across reload → resolver returns only this target', async ({ page }) => {
     test.setTimeout(90_000);
     const { repository } = await api();
 
     await loginToA(page);
     await openEngineeringSettings(page);
-    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX (dialecto Granete)', 'ptx-generic');
+    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX (dialecto Granete) · r1', 'ptx-generic');
 
     // Reload: exact tuple survives.
     await page.reload();
     await page.getByTestId('settings-tab-tab-ingenieria').click();
     await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
-    await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Listo');
+    await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Configurada');
     await page.getByText('Detalle técnico').click();
     const tech = page.getByTestId('machine-output-cutting');
     await expect(tech.getByText('profile: ptx-generic@r1')).toBeVisible();
@@ -154,7 +196,7 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     const { repository } = await api();
     await loginToA(page);
     await openEngineeringSettings(page);
-    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 3', 'ptx-cadmatic-3');
+    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 3 · r1', 'ptx-cadmatic-3');
 
     await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
     await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Bloqueado');
@@ -170,7 +212,7 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     // Machining selection of the pending MPR serializer is valid and surfaces
     // the structural blocker (selection ≠ generation).
     await page.getByTestId('machine-output-machining-machine').selectOption({ label: 'WEEKE (HOMAG) BHX 050' });
-    await page.getByTestId('machine-output-machining-profile').selectOption({ label: 'MPR · woodWOP' });
+    await page.getByTestId('machine-output-machining-profile').selectOption({ label: 'MPR · woodWOP · r1' });
     await page.getByTestId('machine-output-machining-save').click();
     await expect
       .poll(
@@ -188,21 +230,21 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     );
   });
 
-  test('CADmatic 4 candidate (r3, #661) resolves ready while staying an unvalidated candidate', async ({ page }) => {
+  test('CADmatic 4 r3 evaluates the active plan and downloads verifiable bytes + manifest', async ({ page }) => {
     test.setTimeout(90_000);
 
     const { repository } = await api();
     await loginToA(page);
     await openEngineeringSettings(page);
     // Switching is an explicit user action — never an automatic fallback.
-    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4', 'ptx-cadmatic-4');
+    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4 · r3', 'ptx-cadmatic-4');
     await page.reload();
     await page.getByTestId('settings-tab-tab-ingenieria').click();
 
-    // Ready (the revision's real compilation preflight passes) but honest
-    // about field state: candidate, not validated on the machine.
+    // Settings only confirms the exact tuple is configured; real readiness is
+    // evaluated below against the active project CutPlan.
     await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
-    await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Listo');
+    await expect(page.getByTestId('machine-output-cutting-readiness')).toHaveText('Configurada');
 
     const readModel = await repository.getMachineOutputSelections();
     const cutting = readModel.selections.find((s) => s.selection.selection.operation === 'cutting');
@@ -211,10 +253,82 @@ test.describe.serial('Machine output selection (#591) browser E2E', () => {
     expect(cutting!.blockers).toEqual([]);
     expect(cutting!.supportStatus).toBe('NOT_TESTED');
 
-    await seedCuttingProject(repository);
-    const text = await exportPtx(page);
+    const cutPlan = await seedCuttingProject(repository);
+    const output = await exportPtxWithManifest(page);
+    const text = new TextDecoder().decode(output.ptxBytes);
     expect(text.startsWith('HEADER,')).toBe(true);
     expect(text).not.toContain('[HEADER]');
+
+    expect(output.manifest.manifestSchemaVersion).toBe('granete.machine-artifact-manifest.v2');
+    expect(output.manifest.outputCompatibilityProfile).toEqual({
+      outputCompatibilityProfileId: 'ptx-cadmatic-4',
+      revisionId: 'r3',
+    });
+    expect(output.manifest.outputCompatibilityProfileDigest).toBe(CUTTING_CADMATIC4_CANDIDATE.outputProfileDigest);
+    expect(output.manifest.postprocessorAdapter).toEqual({
+      postprocessorAdapterId: CUTTING_CADMATIC4_CANDIDATE.adapterId,
+      adapterVersion: CUTTING_CADMATIC4_CANDIDATE.adapterVersion,
+      implementationDigest: CUTTING_CADMATIC4_CANDIDATE.adapterImplementationDigest,
+    });
+    expect(output.manifest.delivery).toEqual({ mode: 'unified' });
+    expect(output.manifest.provenance).toMatchObject({
+      projectId: cutPlan.projectId,
+      cutPlanId: cutPlan.id,
+      cutPlanVersion: cutPlan.version,
+    });
+    expect(output.manifest.missingProvenance).toEqual([
+      'productionReleaseId',
+      'designRevisionId',
+      'bomFingerprint',
+    ]);
+    expect(output.manifest.artifacts).toEqual([
+      expect.objectContaining({
+        fileName: output.ptxFileName,
+        sha256: createHash('sha256').update(output.ptxBytes).digest('hex'),
+      }),
+    ]);
+
+    const route = resolvePtxCompilerRoute(PTX_CADMATIC_4_R3_PROFILE);
+    expect(route.reasons).toEqual([]);
+    expect(route.config).toBeDefined();
+    const mapping = compileCutPlanToPtxDocument(cutPlan, route.config!.compileOptions).mapping;
+    const parsed = parsePtxDocumentBytes(output.ptxBytes);
+    expect(validatePtxDocument(parsed)).toEqual([]);
+    expect(verifyCutPlanPtxReadback(parsed, cutPlan, mapping, route.config!.compileOptions)).toEqual([]);
+  });
+
+  test('CADmatic 4 blocks an invalid active CutPlan before download', async ({ page }) => {
+    test.setTimeout(90_000);
+    const { repository } = await api();
+    await loginToA(page);
+    await openEngineeringSettings(page);
+    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4 · r3', 'ptx-cadmatic-4');
+    const valid = await seedCuttingProject(repository, BLOCKED_PROJECT_ID);
+    await repository.saveProject({
+      id: BLOCKED_PROJECT_ID,
+      name: 'Salida CADmatic 4 bloqueada',
+      customerId: BLOCKED_PROJECT_ID.replace('77777777', 'c0000000'),
+      currency: 'MXN',
+      marginFactor: 1.3,
+      laborFixedCost: 0,
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      items: [],
+      cutPlan: {
+        ...valid,
+        projectName: 'Salida CADmatic 4 bloqueada',
+        sheets: valid.sheets.map((sheet) => ({ ...sheet, cutProgram: undefined })),
+      },
+    });
+
+    await page.goto(`/engineering/${BLOCKED_PROJECT_ID}`);
+    await page.getByTestId('eng-tab-optimizacion').click();
+    const blocker = page.getByTestId('prod-opt-cutting-output-blocked');
+    await expect(blocker).toBeVisible();
+    await expect(blocker).toHaveAttribute('data-blocker-code', 'ptx_compile.missing_cut_program');
+    await expect(blocker).toContainText('regenerá el plan de corte');
+    await expect(page.getByTestId('prod-opt-export-ptx')).toBeDisabled();
   });
 
   test('stale editor gets a typed VERSION_CONFLICT, never a silent overwrite', async () => {

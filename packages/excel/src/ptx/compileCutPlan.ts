@@ -134,6 +134,7 @@ import {
   type PtxTrimType,
   type PtxVectorRecord,
 } from './records';
+import type { ScopedRegionRef } from './scopedRegionRef';
 import { PtxDocumentInvalidError, validatePtxDocument } from './validate';
 
 // ---------------------------------------------------------------------------
@@ -191,8 +192,8 @@ export interface PtxCompilationMapping {
   readonly partIndexByPieceRef: ReadonlyMap<string, number>;
   /** PART_INDEX → placed piece id (position i holds partIndex i+1). */
   readonly pieceRefByPartIndex: readonly string[];
-  /** OFFCUT_INDEX → remnant regionId (job-wide; position i holds offcutIndex i+1). */
-  readonly offcutRegionIdByOffcutIndex: readonly string[];
+  /** OFFCUT_INDEX → sheet-scoped remnant identity (position i holds offcutIndex i+1). */
+  readonly offcutRegionRefByOffcutIndex: readonly ScopedRegionRef[];
   /** PTN_INDEX → sheetIndex (position i holds patternIndex i+1). */
   readonly sheetIndexByPatternIndex: readonly number[];
   readonly sheets: readonly PtxCompiledSheetMapping[];
@@ -1278,7 +1279,7 @@ export function compileCutPlanToPtxDocument(
   const offcutRecords: PtxOffcutRecord[] = [];
   const vectorRecords: PtxVectorRecord[] = [];
   const sheetMappings: PtxCompiledSheetMapping[] = [];
-  const offcutRegionIdByOffcutIndex: string[] = [];
+  const offcutRegionRefByOffcutIndex: ScopedRegionRef[] = [];
   const sheetIndexByPatternIndex: number[] = [];
   let offcutIndex = 1;
 
@@ -1392,7 +1393,10 @@ export function compileCutPlanToPtxDocument(
       if (release.kind === 'offcut') {
         const terminal = terminalByRegion.get(release.regionId)!;
         offcutIndexByRegionId.set(release.regionId, offcutIndex);
-        offcutRegionIdByOffcutIndex.push(release.regionId);
+        offcutRegionRefByOffcutIndex.push({
+          sheetIndex: sheet.sheetIndex,
+          regionId: release.regionId,
+        });
         offcutRecords.push({
           type: 'OFFCUTS',
           jobIndex: 1,
@@ -1446,7 +1450,7 @@ export function compileCutPlanToPtxDocument(
       ),
       partIndexByPieceRef,
       pieceRefByPartIndex,
-      offcutRegionIdByOffcutIndex,
+      offcutRegionRefByOffcutIndex,
       sheetIndexByPatternIndex,
       sheets: sheetMappings,
     },

@@ -303,6 +303,7 @@ export {
 export {
   KNOWN_MACHINE_PROFILES,
   KNOWN_OUTPUT_PROFILES,
+  evaluateSelectedCuttingOutputReadiness,
   resolveManufacturingOutputTarget,
 } from './machines/outputSelectionResolver';
 

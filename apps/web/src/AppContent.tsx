@@ -260,8 +260,12 @@ import {
   type JobCostingView,
   type SiteSurveyView,
 } from '@granete/storage';
-import { resolveManufacturingOutputTarget } from '@granete/excel';
+import {
+  evaluateSelectedCuttingOutputReadiness,
+  resolveManufacturingOutputTarget,
+} from '@granete/excel';
 import type {
+  CutPlan,
   MachineOutputSelection,
   MachineOutputSelectionRecord,
   ManufacturingOperation,
@@ -807,6 +811,7 @@ export function AppContent({
     if (cuttingOutputSelectionState.status === 'empty') return null;
     if (cuttingOutputSelectionState.status === 'loading') {
       return {
+        status: 'loading',
         machineLabel: 'Salida de máquina',
         formatLabel: 'PTX',
         profileLabel: 'Cargando configuración…',
@@ -816,6 +821,7 @@ export function AppContent({
     }
     if (cuttingOutputSelectionState.status === 'error') {
       return {
+        status: 'error',
         machineLabel: 'Salida de máquina',
         formatLabel: 'PTX',
         profileLabel: 'Configuración no disponible',
@@ -826,6 +832,7 @@ export function AppContent({
     const resolved = machineOutputResolved.cutting;
     if (!resolved || resolved.status !== 'CONFIGURED') {
       return {
+        status: 'configured-blocked',
         machineLabel: 'Salida de máquina',
         formatLabel: 'PTX',
         profileLabel: 'Configuración bloqueada',
@@ -842,6 +849,10 @@ export function AppContent({
         resolved.selection.outputCompatibilityProfileId,
     );
     return {
+      status:
+        cuttingOutputSelectionState.status === 'blocked'
+          ? 'stale'
+          : 'configured-ready',
       machineLabel: resolved.machineLabel,
       formatLabel: (profile?.formatFamily ?? 'ptx').toUpperCase(),
       profileLabel: resolved.profileLabel,
@@ -850,8 +861,52 @@ export function AppContent({
         cuttingOutputSelectionState.status === 'blocked'
           ? cuttingOutputSelectionState.reason
           : '',
+      blockerCode:
+        resolved.readiness.reasons[0]?.code,
+      recoveryHint:
+        cuttingOutputSelectionState.status === 'blocked'
+          ? 'Volvé a seleccionar la versión vigente en Ajustes → Ingeniería.'
+          : undefined,
     };
   }, [cuttingOutputSelectionState, machineOutputResolved, machineOutputReadModel]);
+
+  const resolveCuttingOutputTargetForPlan = useCallback(
+    (cutPlan: CutPlan): CuttingOutputTargetView | null => {
+      if (!cuttingOutputTarget || cuttingOutputSelectionState.status !== 'configured') {
+        return cuttingOutputTarget;
+      }
+      const evaluated = evaluateSelectedCuttingOutputReadiness(
+        cutPlan,
+        cuttingOutputSelectionState.selection,
+      );
+      if (evaluated.status !== 'CONFIGURED') return cuttingOutputTarget;
+      const exactProfile = machineOutputReadModel?.catalog?.outputProfiles.find(
+        (profile) =>
+          profile.outputCompatibilityProfileId ===
+            evaluated.selection.outputCompatibilityProfileId &&
+          profile.revisionId === evaluated.selection.outputCompatibilityProfileRevisionId &&
+          profile.digest === evaluated.selection.outputCompatibilityProfileDigest,
+      );
+      const reason = evaluated.readiness.reasons[0];
+      return {
+        machineLabel: evaluated.machineLabel,
+        formatLabel: (exactProfile?.formatFamily ?? 'ptx').toUpperCase(),
+        profileLabel: evaluated.profileLabel,
+        status: evaluated.readiness.ready ? 'configured-ready' : 'configured-blocked',
+        ready: evaluated.readiness.ready,
+        blockerMessage: machineOutputBlockerMessageEs(evaluated.readiness.reasons),
+        blockerCode: reason?.code,
+        recoveryHint: reason?.code.startsWith('ptx_compile.')
+          ? 'Corregí o regenerá el plan de corte y volvé a verificarlo.'
+          : 'Revisá Ajustes → Ingeniería antes de descargar.',
+      };
+    },
+    [
+      cuttingOutputSelectionState,
+      cuttingOutputTarget,
+      machineOutputReadModel,
+    ],
+  );
   const saveMachineOutputSelection = useCallback(
     async (
       operation: ManufacturingOperation,
@@ -3225,6 +3280,7 @@ export function AppContent({
       onRetry: refreshMachineOutput,
     },
     cuttingOutputTarget,
+    resolveCuttingOutputTarget: resolveCuttingOutputTargetForPlan,
     addProjectItem,
     agregados,
     allowedNavIds,

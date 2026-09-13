@@ -2685,6 +2685,7 @@ describe('machine output selection mappers (#591)', () => {
     expect(record.selection.operation).toBe('cutting');
     expect(record.selection.outputCompatibilityProfileId).toBe('ptx-generic');
     expect(record.selection.postprocessorAdapterId).toBe('granete-ptx');
+    expect(record.selection.outputCompatibilityProfileDigest).toBeNull();
     expect(record.version).toBe(2);
     expect(record.updatedBy).toBe('owner@example.com');
   });

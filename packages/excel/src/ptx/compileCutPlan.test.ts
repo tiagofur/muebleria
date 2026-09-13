@@ -370,7 +370,7 @@ describe('Caso A — cadena completa sobre plan real básico', () => {
     expect([...second.mapping.partIndexByPieceRef]).toEqual([...first.mapping.partIndexByPieceRef]);
     expect([...second.mapping.materialIndexByCode]).toEqual([...first.mapping.materialIndexByCode]);
     expect(second.mapping.pieceRefByPartIndex).toEqual(first.mapping.pieceRefByPartIndex);
-    expect(second.mapping.offcutRegionIdByOffcutIndex).toEqual(first.mapping.offcutRegionIdByOffcutIndex);
+    expect(second.mapping.offcutRegionRefByOffcutIndex).toEqual(first.mapping.offcutRegionRefByOffcutIndex);
     const bytesOf = (doc: PtxDocument): string =>
       JSON.stringify([...serializePtxDocumentBytes(doc, { decimalPlaces: 2 })]);
     expect(bytesOf(second.document)).toBe(bytesOf(first.document));
@@ -652,7 +652,9 @@ describe('Caso D — retazo obligatorio 500×796 con Xn', () => {
     const offcuts = compiled.document.records.filter((r) => r.type === 'OFFCUTS');
     expect(offcuts).toHaveLength(1);
     expect(offcuts[0]).toMatchObject({ offcutIndex: 1, length: 500, width: 796 });
-    expect(compiled.mapping.offcutRegionIdByOffcutIndex).toEqual(['place-2-y:rest']);
+    expect(compiled.mapping.offcutRegionRefByOffcutIndex).toEqual([
+      { sheetIndex: 0, regionId: 'place-2-y:rest' },
+    ]);
 
     const releases = cutsOf(compiled.document).filter((r) => r.sequence === 0);
     expect(releases).toHaveLength(1);
