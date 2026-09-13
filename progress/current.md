@@ -18,8 +18,8 @@
   proyección falsa transitoria. `projectAllowsProductionAccess` gobierna filtro,
   workspace y apertura de orden.
 - Evidence local: `git diff --check` PASS; `pnpm typecheck` 7/7; `pnpm test` PASS
-  (domain 1411, storage 207, excel 346 + 3 skips preexistentes, desktop 17,
-  mobile 73, UI 1782, web 461); `pnpm openapi:check` PASS;
+  (domain 1411, storage 207, excel 350 + 3 skips preexistentes, desktop 17,
+  mobile 73, UI 1782, web 481); `pnpm openapi:check` PASS;
   `GOFLAGS=-p=1 go test ./... -count=1` PASS; browser gate real Go + PostgreSQL
   + Chromium 57/57 PASS, incluyendo el golden Q1→Q2→R2→P1→Producción con
   `Project.status=draft`.
