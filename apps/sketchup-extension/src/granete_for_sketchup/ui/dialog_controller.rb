@@ -221,6 +221,50 @@ module Granete
         end
       end
 
+      # #642 -> #677: credential-safe projection bridge. The HtmlDialog sends
+      # only correlation metadata; Ruby resolves Project/Design exclusively
+      # from the canonical binding before calling the backend.
+      module CommercialProjectionBridge
+        def register_commercial_projection_callbacks(dialog)
+          dialog.add_action_callback('get_commercial_projection') do |_context, payload|
+            handle_commercial_projection(dialog, payload)
+          end
+        end
+
+        def handle_commercial_projection(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          request_id = payload['requestId'].to_s
+          status = model_binding_connector.status
+          unless status['state'] == 'connected' && status['binding'].is_a?(Hash)
+            error = 'el modelo debe estar conectado y actualizado para calcular el presupuesto'
+            return execute_bridge(dialog, 'onCommercialProjection', {
+                                    'requestId' => request_id, 'state' => status['state'] || 'unavailable',
+                                    'error' => error
+                                  })
+          end
+
+          binding = status['binding']
+          project_id = binding['projectId']
+          design_id = binding['designId']
+          projection = @commercial_projection_service.fetch(project_id, design_id)
+          execute_bridge(dialog, 'onCommercialProjection', {
+                           'requestId' => request_id, 'projectId' => project_id, 'designId' => design_id,
+                           'state' => projection['status'], 'projection' => projection
+                         })
+        rescue Connection::CommercialProjection::Service::Error => e
+          @logger.error('commercial_projection_failed', error: e)
+          execute_bridge(dialog, 'onCommercialProjection', {
+                           'requestId' => request_id, 'state' => e.kind.to_s, 'error' => e.message
+                         })
+        rescue StandardError => e
+          @logger.error('commercial_projection_bridge_failed', error: e)
+          error = 'no se pudo actualizar el presupuesto'
+          execute_bridge(dialog, 'onCommercialProjection', {
+                           'requestId' => request_id, 'state' => 'unavailable', 'error' => error
+                         })
+        end
+      end
+
       # #389 / DT-5 Project Furniture callback handlers: the panel never
       # touches business identity — listing and Place existing go through the
       # ProjectFurniture placer, which validates the binding and derives
@@ -1558,6 +1602,7 @@ module Granete
       class DialogController # rubocop:disable Metrics/ClassLength
         include SessionBridge
         include ModelBindingBridge
+        include CommercialProjectionBridge
         include ProjectFurnitureBridge
         include FurnitureBridge
         include HostMutationBridge
@@ -1583,7 +1628,7 @@ module Granete
                        migration_review_controller: nil, model_binding_connector: nil,
                        project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil,
                        design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil,
-                       publication_gate: nil)
+                       publication_gate: nil, commercial_projection_service: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -1595,6 +1640,7 @@ module Granete
           @mutation_coordinator = mutation_coordinator
           @manufacturing_overlay = manufacturing_overlay
           @publication_gate = publication_gate
+          @commercial_projection_service = commercial_projection_service
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store
@@ -1722,6 +1768,7 @@ module Granete
           dialog.add_action_callback('close_dialog') { dialog.close }
           register_auth_callbacks(dialog)
           register_model_binding_callbacks(dialog)
+          register_commercial_projection_callbacks(dialog) if @commercial_projection_service
           register_project_furniture_callbacks(dialog)
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.

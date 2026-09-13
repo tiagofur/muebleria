@@ -1,3 +1,55 @@
+# Issues #642 → #677 — presupuesto del diseño actual dentro de SketchUp
+
+- Approval: prompt del propietario (2026-09-13). #642 permanece OPEN con
+  `status:approved`; #677 permanece OPEN sin label protegida y se consume sólo
+  como referencia de alcance. No se modifican labels, no se cierran issues y no
+  se hace merge.
+- Base exacta: `origin/main@cc38c87a4cb29b14544708896be309aa6af68dd6`
+  (PR #697 integrado). Rama `feat/642-677-sketchup-budget`; worktree aislado
+  `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-677-commercial-projection`.
+- Started: 2026-09-13 08:17 CST. Un solo implementador; revisión independiente
+  secuencial al finalizar. Modelo solicitado: Codex Sol, razonamiento medio.
+- Scope autorizado: CommercialProjection backend-owned sobre la versión de
+  trabajo exacta, contrato OpenAPI generado, lectura autenticada con credencial
+  SketchUp, panel compacto y actualización tras mutaciones confirmadas, pruebas,
+  documentación y PR parcial con `Refs #642` / `Refs #677`.
+- Baseline: `./init.sh` pasó typecheck y toda la batería TypeScript; el Go completo
+  sufrió contención del PostgreSQL compartido (`tuple concurrently updated` en
+  migration 000094). La validación PostgreSQL final se ejecutará serializada o
+  contra instancia temporal aislada.
+- Plan:
+  1. Reutilizar `CalcProjectBreakdown` con FurnitureInstances del working copy
+     exacto y selección comercial de referencia explícita.
+  2. Añadir el read model role-safe y su ruta OpenAPI sin crear ni mutar Q/R.
+  3. Consumirlo desde el runtime/credencial existente del plugin y proteger
+     versiones, cambios de contexto y respuestas tardías.
+  4. Presentar estados honestos y el total/delta en el panel compacto, con costo
+     y margen sólo cuando el backend los autorice.
+  5. Ejecutar pruebas focalizadas, PostgreSQL real aislado, contratos/Ruby/JS,
+     empaquetado RBZ, gates finales, revisión independiente y publicación del PR.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. El endpoint calcula contra el
+  `DesignWorkingCopy` exacto y el catálogo vigente mediante
+  `CalcProjectBreakdown`, sin crear ni mutar QuoteRevision. Expone huellas de
+  working copy/catálogo/proyección, toma la aceptada como referencia (o la
+  emitida más reciente si no existe), conserva una emitida posterior visible,
+  omite porcentaje con base cero y toda comparación entre monedas distintas.
+  El panel usa credencial de dispositivo, oculta costos/venta por autoridad,
+  distingue estados incompletos y descarta respuestas tardías por sesión y
+  Project/Design.
+- Evidence local: `pnpm test` PASS (domain 1411, storage 207, excel 350 + 3
+  skips preexistentes, desktop 17, mobile 73, UI 1782, web 481);
+  `pnpm typecheck` 7/7 y `pnpm openapi:check` PASS; Go completo PASS por
+  paquetes sobre PostgreSQL 16 aislado (API y demás paquetes, luego storage
+  serial 338.351s) tras descartar la corrida contra el PostgreSQL compartido
+  por agotamiento de conexiones; `bundle exec rake verify` PASS (Ruby 647/647,
+  boundary 6/6, RuboCop, syntax y package); JS comercial 5/5; RBZ exacto
+  `d604d083488fb97b539bfba5a648d6227780f00d6c0f6540a9d7f7294ca73607`.
+- Host evidence: `NOT_TESTED`. SketchUp 2026 estaba abierto con una sesión del
+  usuario; el intento de una segunda instancia con el RBZ exacto terminó sin
+  ejecutar TestUp por el comportamiento singleton. La instalación anterior se
+  restauró byte por byte. El próximo gate es reiniciar SketchUp de forma segura
+  con un modelo descartable, instalar ese RBZ y ejecutar el smoke de HtmlDialog.
+
 # PR #697 — corrección final de acceso a Producción (Refs #642)
 
 - Approval: prompt del propietario (2026-09-12). PR existente #697, rama
