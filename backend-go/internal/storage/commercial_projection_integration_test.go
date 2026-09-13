@@ -76,6 +76,26 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 		t.Fatalf("exact version evidence missing: %+v", projection)
 	}
 	firstWorkingFingerprint := projection.WorkingFingerprint
+	firstProjectionFingerprint := *projection.ProjectionFingerprint
+
+	// A quote-line base override is part of the current pricing context even
+	// though DesignWorkingCopy identifies the physical unit. It must therefore
+	// change the exact projection input instead of silently falling back to the
+	// module default.
+	multiOrgExec(t, fx.admin, `
+		UPDATE project_items SET base_mode = 'none' WHERE id = '`+csLine+`';`)
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var readErr error
+		projection, readErr = fx.store.GetDesignCommercialProjection(ctx, csProject, designID)
+		return readErr
+	})
+	if err != nil {
+		t.Fatalf("projection after base override: %v", err)
+	}
+	if projection.Status != domain.CommercialProjectionCurrent || projection.ProjectionFingerprint == nil ||
+		*projection.ProjectionFingerprint == firstProjectionFingerprint {
+		t.Fatalf("line base override missing from exact projection input: %+v", projection)
+	}
 
 	// The existing confirmed working-copy command is the only write. A material
 	// change must produce a new exact projection without creating QuoteRevision Q2.

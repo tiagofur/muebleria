@@ -101,6 +101,7 @@ test('only a server-synchronized commit refreshes while local commits stay stale
   assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
   s.__events['granete-mutation-state']({ detail: { phase: 'committed', serverSynchronized: true } });
   assert.strictEqual(s.__calls.length, before + 1);
+  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, 'none');
 });
 
 test('withheld amounts are explicit and cost rows stay hidden', () => {

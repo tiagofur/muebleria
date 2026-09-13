@@ -126,6 +126,8 @@
         show("commercial-projection-values", false);
         setState("pending_sync", "Cambio en curso; el total anterior no se presenta como actual.");
       } else if (phase === "committed" && event.detail.serverSynchronized === true) {
+        lastProjection = null;
+        show("commercial-projection-values", false);
         request();
       } else if (phase === "committed") {
         lastProjection = null;

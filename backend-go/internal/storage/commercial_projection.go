@@ -67,6 +67,13 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		CalculatedAt: now, Currency: project.Currency, ItemCount: len(wc.Items), Issues: []string{},
 		SaleAmountsWithheld: false,
 	}
+	baseModesByInstance := map[string]string{}
+	if saleAmountsVisible {
+		baseModesByInstance, err = s.commercialProjectionBaseModes(ctx, projectID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	pricingItems := make([]domain.ProjectItem, 0, len(wc.Items))
 	for _, item := range wc.Items {
@@ -78,13 +85,22 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			result.Issues = append(result.Issues, "working_item_parameters_not_priceable")
 			continue
 		}
+		baseMode := ""
+		if saleAmountsVisible {
+			var found bool
+			baseMode, found = baseModesByInstance[item.FurnitureInstanceID]
+			if !found {
+				result.Issues = append(result.Issues, "working_item_pricing_context_missing")
+				continue
+			}
+		}
 		choices := item.MaterialChoices
 		if choices == nil {
 			choices = map[string]string{}
 		}
 		pricingItems = append(pricingItems, domain.ProjectItem{
 			ID: item.FurnitureInstanceID, ModuleID: item.FurnitureDefinitionID, Quantity: 1,
-			OptionChoices: choices, CustomDims: domain.CommercialDimsFromParameters(item.Parameters),
+			OptionChoices: choices, CustomDims: domain.CommercialDimsFromParameters(item.Parameters), BaseMode: baseMode,
 		})
 	}
 	if len(wc.Items) == 0 {
@@ -153,6 +169,28 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		}
 	}
 	return result, nil
+}
+
+func (s *PostgresStore) commercialProjectionBaseModes(ctx context.Context, projectID string) (map[string]string, error) {
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT qlfi.furniture_instance_id::text, COALESCE(pi.base_mode, '')
+		FROM quote_line_furniture_instances qlfi
+		JOIN project_items pi ON pi.id = qlfi.quote_line_id AND pi.project_id = qlfi.project_id
+		WHERE qlfi.project_id = $1 AND qlfi.state = 'current'
+	`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	baseModes := map[string]string{}
+	for rows.Next() {
+		var instanceID, baseMode string
+		if err := rows.Scan(&instanceID, &baseMode); err != nil {
+			return nil, err
+		}
+		baseModes[instanceID] = baseMode
+	}
+	return baseModes, rows.Err()
 }
 
 func commercialProjectionParametersPriceable(parameters map[string]any) bool {
