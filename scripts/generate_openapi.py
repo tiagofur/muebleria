@@ -33,7 +33,8 @@ def ts_type(s):
     t=s.get("type")
     nullable=isinstance(t,list) and "null" in t
     if isinstance(t,list): t=next(x for x in t if x!="null")
-    if t=="null": base="null"
+    if "const" in s: base=json.dumps(s["const"])
+    elif t=="null": base="null"
     elif "enum" in s: base=" | ".join(json.dumps(x) for x in s["enum"])
     elif t=="string": base="string"
     elif t in ("integer","number"): base="number"
@@ -97,9 +98,14 @@ function validate(schema: any, value: unknown, path: string): unknown {
     return matches[0];
   }
   if (schema.$ref) return validate((runtimeSchemas as any)[schema.$ref.split('/').at(-1)!], value, path);
+  if (schema.type === 'null') {
+    if (value !== null) fail(path, 'null');
+    return value;
+  }
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
   if (value === null && types.includes('null')) return value;
   const type = types.find((candidate: string) => candidate !== 'null');
+  if (schema.const !== undefined && value !== schema.const) fail(path, JSON.stringify(schema.const));
   if (schema.enum && !schema.enum.includes(value)) fail(path, schema.enum.join(' | '));
   if (type === 'string') {
     if (typeof value !== 'string') fail(path, 'string');

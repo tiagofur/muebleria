@@ -1652,7 +1652,7 @@ export interface CommercialProjectionComparison {
 }
 
 export interface CommercialProjection {
-  readonly "schema": string;
+  readonly "schema": "granete.commercial-projection.v1";
   readonly "status": "current" | "incomplete";
   readonly "projectId": string;
   readonly "designId": string;
@@ -1660,7 +1660,7 @@ export interface CommercialProjection {
   readonly "workingFingerprint": string;
   readonly "catalogFingerprint": string | null;
   readonly "projectionFingerprint": string | null;
-  readonly "pricingAuthority": string;
+  readonly "pricingAuthority": "calc-project-breakdown";
   readonly "calculatedAt": string;
   readonly "currency": string;
   readonly "itemCount": number;
@@ -1688,9 +1688,14 @@ function validate(schema: any, value: unknown, path: string): unknown {
     return matches[0];
   }
   if (schema.$ref) return validate((runtimeSchemas as any)[schema.$ref.split('/').at(-1)!], value, path);
+  if (schema.type === 'null') {
+    if (value !== null) fail(path, 'null');
+    return value;
+  }
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
   if (value === null && types.includes('null')) return value;
   const type = types.find((candidate: string) => candidate !== 'null');
+  if (schema.const !== undefined && value !== schema.const) fail(path, JSON.stringify(schema.const));
   if (schema.enum && !schema.enum.includes(value)) fail(path, schema.enum.join(' | '));
   if (type === 'string') {
     if (typeof value !== 'string') fail(path, 'string');

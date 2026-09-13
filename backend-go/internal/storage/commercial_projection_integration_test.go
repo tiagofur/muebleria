@@ -29,7 +29,7 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 		INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id, organization_id)
 		VALUES ('`+csProject+`', 'INTERIOR', '`+csMaterial+`', '`+rlsOrgA+`');
 		UPDATE projects
-		SET kitchen_layout = '{"walls":[{"id":"w-1","lengthMm":3000}],"placements":[{"itemId":"`+unit.FurnitureInstanceID+`","wallId":"w-1","offsetMm":0,"elevation":"wall"}]}'::jsonb
+		SET kitchen_layout = '{"walls":[{"id":"w-1","lengthMm":3000}],"placements":[{"itemId":"`+csLine+`","instanceIndex":0,"wallId":"w-1","offsetMm":0,"elevation":"wall"}]}'::jsonb
 		WHERE id = '`+csProject+`';`)
 
 	var designID string

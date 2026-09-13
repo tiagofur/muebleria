@@ -331,6 +331,34 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
     await expect(client.getSession('token')).rejects.toBe(abortError);
   });
 
+  it('parses nullable commercial projection references and enforces contract constants', async () => {
+    const projection = {
+      schema: 'granete.commercial-projection.v1', status: 'current',
+      projectId: '11111111-1111-4111-8111-111111111111',
+      designId: '22222222-2222-4222-8222-222222222222',
+      workingVersion: 'v1', workingFingerprint: `sha256-${'a'.repeat(64)}`,
+      catalogFingerprint: `sha256-${'b'.repeat(64)}`,
+      projectionFingerprint: `sha256-${'c'.repeat(64)}`,
+      pricingAuthority: 'calc-project-breakdown', calculatedAt: '2026-09-13T00:00:00Z',
+      currency: 'MXN', itemCount: 1,
+      amounts: {
+        materialsCost: 100, edgeTotal: 0, hardwareTotal: 0, directCost: 100,
+        laborModular: 50, laborFixedCost: 0, marginFactor: 1.5, saleTotal: 200,
+      },
+      costsWithheld: false, saleAmountsWithheld: false,
+      reference: null, acceptedReference: null, latestPublishedReference: null, comparison: null, issues: [],
+    } as const;
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(projection));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+
+    const result = await client.getDesignCommercialProjection('token', projection.projectId, projection.designId);
+    expect(result.amounts?.saleTotal).toBe(200);
+
+    fetchImpl.mockResolvedValueOnce(json({ ...projection, schema: 'granete.commercial-projection.v2' }));
+    await expect(client.getDesignCommercialProjection('token', projection.projectId, projection.designId))
+      .rejects.toThrow('granete.commercial-projection.v1');
+  });
+
   describe('Hardware asset multipart upload & lifecycle methods (#667 M2)', () => {
     it('sends multipart FormData without manual Content-Type and parses staged result', async () => {
       const staged = {

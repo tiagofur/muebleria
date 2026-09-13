@@ -113,11 +113,15 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			return nil, hashErr
 		}
 		result.CatalogFingerprint = &catalogFingerprint
+		pricingLayout, layoutErr := s.designPricingKitchenLayout(ctx, projectID, envelope.KitchenLayout)
+		if layoutErr != nil {
+			return nil, layoutErr
+		}
 		pricingProject := domain.Project{
 			ID: projectID, Name: envelope.ProjectName, CustomerID: envelope.CustomerID,
 			Currency: envelope.Currency, MarginFactor: envelope.MarginFactor,
 			LaborFixedCost: envelope.LaborFixedCost, Status: "draft", Items: pricingItems,
-			KitchenLayout: envelope.KitchenLayout, ProjectLevelChoices: levelChoices,
+			KitchenLayout: pricingLayout, ProjectLevelChoices: levelChoices,
 		}
 		breakdown, calcErr := engine.CalcProjectBreakdown(pricingProject, catalog)
 		if calcErr != nil {
@@ -141,6 +145,66 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		}
 	}
 	return result, nil
+}
+
+// designPricingKitchenLayout translates the editable quote-line placement
+// identity (ProjectItem + zero-based instanceIndex) to the physical
+// FurnitureInstance identity used by DesignWorkingCopy pricing items.
+func (s *PostgresStore) designPricingKitchenLayout(ctx context.Context, projectID string, raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return raw, nil
+	}
+	var layout map[string]any
+	if err := json.Unmarshal(raw, &layout); err != nil {
+		return raw, nil // CalcProjectBreakdown reports the canonical layout error.
+	}
+	placements, ok := layout["placements"].([]any)
+	if !ok {
+		return raw, nil
+	}
+
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT quote_line_id::text, furniture_instance_id::text
+		FROM quote_line_furniture_instances
+		WHERE project_id = $1 AND state = 'current'
+		ORDER BY quote_line_id, created_at, furniture_instance_id
+	`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	unitsByLine := make(map[string][]string)
+	for rows.Next() {
+		var lineID, instanceID string
+		if err := rows.Scan(&lineID, &instanceID); err != nil {
+			return nil, err
+		}
+		unitsByLine[lineID] = append(unitsByLine[lineID], instanceID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for _, value := range placements {
+		placement, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		lineID, _ := placement["itemId"].(string)
+		index, ok := placement["instanceIndex"].(float64)
+		if !ok || index < 0 || index != float64(int(index)) {
+			continue
+		}
+		units := unitsByLine[lineID]
+		if int(index) < len(units) {
+			placement["itemId"] = units[int(index)]
+		}
+	}
+	mapped, err := json.Marshal(layout)
+	if err != nil {
+		return nil, err
+	}
+	return mapped, nil
 }
 
 func hashJSON(value any) (string, error) {
