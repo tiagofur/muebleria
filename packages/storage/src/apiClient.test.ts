@@ -359,6 +359,27 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       .rejects.toThrow('granete.commercial-projection.v1');
   });
 
+  it('sends exact working-copy evidence for design-first Q1 through the generated contract', async () => {
+    const projectId = '11111111-1111-4111-8111-111111111111';
+    const designId = '22222222-2222-4222-8222-222222222222';
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({
+      id: '33333333-3333-4333-8333-333333333333', projectId, revisionNumber: 1,
+      status: 'draft', sourceType: 'manual',
+    }));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+    const body = { workingVersion: 'v1', workingFingerprint: `sha256-${'a'.repeat(64)}` };
+
+    await client.createInitialDesignQuoteRevision('token', projectId, designId, body, 'design-q1-key');
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`http://api.test/projects/${projectId}/designs/${designId}/quote-revisions`);
+    expect(init?.headers).toEqual(expect.objectContaining({}));
+    expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('design-q1-key');
+    expect(init?.body).toBe(JSON.stringify(body));
+
+    await expect(client.createInitialDesignQuoteRevision('token', projectId, designId, { ...body, workingFingerprint: 'bad' }))
+      .rejects.toThrow('workingFingerprint');
+  });
+
   describe('Hardware asset multipart upload & lifecycle methods (#667 M2)', () => {
     it('sends multipart FormData without manual Content-Type and parses staged result', async () => {
       const staged = {

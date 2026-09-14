@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -18,6 +19,7 @@ import (
 const (
 	quoteLifecycleTestProjectID = "10000000-0000-0000-0000-000000000011"
 	quoteLifecycleTestRevID     = "20000000-0000-0000-0000-000000000021"
+	quoteLifecycleTestDesignID  = "30000000-0000-0000-0000-000000000031"
 )
 
 func newCreateQuoteRevisionRequest(claimsUserID string, roles []domain.UserRole, body string) *http.Request {
@@ -27,6 +29,86 @@ func newCreateQuoteRevisionRequest(claimsUserID string, roles []domain.UserRole,
 		req = withTestClaims(req, claimsUserID, roles)
 	}
 	return req
+}
+
+func newCreateDesignQuoteRequest(claimsUserID string, roles []domain.UserRole, body string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+quoteLifecycleTestProjectID+"/designs/"+quoteLifecycleTestDesignID+"/quote-revisions", bytes.NewBufferString(body))
+	req.SetPathValue("projectId", quoteLifecycleTestProjectID)
+	req.SetPathValue("designId", quoteLifecycleTestDesignID)
+	if claimsUserID != "" {
+		req = withTestClaims(req, claimsUserID, roles)
+	}
+	return req
+}
+
+func TestHandleCreateInitialDesignQuoteRevision_ContractPermissionsAndConflict(t *testing.T) {
+	body := `{"workingVersion":"2026-09-13T20:00:00Z","workingFingerprint":"sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","notes":"Q1 diseño"}`
+	store := &stubStore{}
+	server := &Server{Store: store}
+	w := httptest.NewRecorder()
+	server.HandleCreateInitialDesignQuoteRevision(w, newCreateDesignQuoteRequest("user-1", []domain.UserRole{domain.RoleVendedor}, body))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", w.Code, w.Body.String())
+	}
+	cmd := store.createInitialDesignQuoteRevisionCmd
+	if cmd == nil || cmd.ProjectID != quoteLifecycleTestProjectID || cmd.DesignID != quoteLifecycleTestDesignID || cmd.WorkingVersion != "2026-09-13T20:00:00Z" || cmd.Notes != "Q1 diseño" {
+		t.Fatalf("command=%+v", cmd)
+	}
+	var sellerRevision openapi.QuoteRevision
+	if err := json.Unmarshal(w.Body.Bytes(), &sellerRevision); err != nil || sellerRevision.CommercialSnapshot == nil || sellerRevision.CommercialSnapshot.Breakdown.MaterialsCost != 0 || sellerRevision.CommercialSnapshot.Breakdown.SalePrice != 100 {
+		t.Fatalf("seller redaction err=%v revision=%+v", err, sellerRevision)
+	}
+	w = httptest.NewRecorder()
+	server.HandleCreateInitialDesignQuoteRevision(w, newCreateDesignQuoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, body))
+	var adminRevision openapi.QuoteRevision
+	if err := json.Unmarshal(w.Body.Bytes(), &adminRevision); err != nil || adminRevision.CommercialSnapshot == nil || adminRevision.CommercialSnapshot.Breakdown.MaterialsCost != 42 {
+		t.Fatalf("admin cost visibility err=%v revision=%+v", err, adminRevision)
+	}
+
+	w = httptest.NewRecorder()
+	server.HandleCreateInitialDesignQuoteRevision(w, newCreateDesignQuoteRequest("user-2", []domain.UserRole{domain.RoleProduccion}, body))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("production status=%d", w.Code)
+	}
+
+	server = &Server{Store: &stubStore{createInitialDesignQuoteRevisionErr: domain.ErrDesignRevisionConflict}}
+	w = httptest.NewRecorder()
+	server.HandleCreateInitialDesignQuoteRevision(w, newCreateDesignQuoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, body))
+	if w.Code != http.StatusConflict || !bytes.Contains(w.Body.Bytes(), []byte("VERSION_CONFLICT")) {
+		t.Fatalf("stale response=%d %s", w.Code, w.Body.String())
+	}
+
+	for name, invalidBody := range map[string]string{
+		"missing evidence": `{}`,
+		"unknown field":    strings.TrimSuffix(body, "}") + `,"unexpected":true}`,
+		"trailing JSON":    body + `{}`,
+		"bad fingerprint":  `{"workingVersion":"v1","workingFingerprint":"sha256-not-canonical"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalidStore, invalidResponse := &stubStore{}, httptest.NewRecorder()
+			(&Server{Store: invalidStore}).HandleCreateInitialDesignQuoteRevision(invalidResponse, newCreateDesignQuoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, invalidBody))
+			if invalidResponse.Code != http.StatusBadRequest || !bytes.Contains(invalidResponse.Body.Bytes(), []byte("BAD_REQUEST")) || invalidStore.createInitialDesignQuoteRevisionCalls != 0 {
+				t.Fatalf("response=%d %s store calls=%d", invalidResponse.Code, invalidResponse.Body.String(), invalidStore.createInitialDesignQuoteRevisionCalls)
+			}
+		})
+	}
+}
+
+func TestHandleCreateInitialDesignQuoteRevision_IdempotentReplay(t *testing.T) {
+	store := &quoteLifecycleIdempotentStore{stubStore: &stubStore{}, receipts: map[string]storage.IdempotencyResponse{}}
+	server := &Server{Store: store}
+	handler := server.RequireIdempotency("quote.create-design-revision", http.HandlerFunc(server.HandleCreateInitialDesignQuoteRevision))
+	request := func() *http.Request {
+		req := newCreateDesignQuoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, `{"workingVersion":"v1","workingFingerprint":"sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)
+		req.Header.Set("Idempotency-Key", "design-q1-replay")
+		return req
+	}
+	first, replay := httptest.NewRecorder(), httptest.NewRecorder()
+	handler.ServeHTTP(first, request())
+	handler.ServeHTTP(replay, request())
+	if first.Code != http.StatusCreated || replay.Code != http.StatusCreated || store.createInitialDesignQuoteRevisionCalls != 1 || replay.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("create/replay=%d/%d calls=%d headers=%v", first.Code, replay.Code, store.createInitialDesignQuoteRevisionCalls, replay.Header())
+	}
 }
 
 func newQuoteLifecycleCommandRequest(methodTarget string, claimsUserID string, roles []domain.UserRole) *http.Request {

@@ -1451,14 +1451,21 @@ type QuoteRevisionDetail struct {
 }
 
 type QuoteCommercialSnapshot struct {
-	Schema     string                   `json:"schema"`
-	CapturedAt string                   `json:"capturedAt"`
-	Currency   string                   `json:"currency"`
-	Customer   QuoteCommercialIdentity  `json:"customer"`
-	Project    QuoteCommercialIdentity  `json:"project"`
-	Breakdown  QuoteCommercialBreakdown `json:"breakdown"`
-	Lines      []QuoteCommercialLine    `json:"lines"`
-	Units      []QuoteCommercialUnit    `json:"units"`
+	Schema       string                       `json:"schema"`
+	CapturedAt   string                       `json:"capturedAt"`
+	Currency     string                       `json:"currency"`
+	Customer     QuoteCommercialIdentity      `json:"customer"`
+	Project      QuoteCommercialIdentity      `json:"project"`
+	Breakdown    QuoteCommercialBreakdown     `json:"breakdown"`
+	Lines        []QuoteCommercialLine        `json:"lines"`
+	Units        []QuoteCommercialUnit        `json:"units"`
+	DesignSource *QuoteCommercialDesignSource `json:"designSource,omitempty"`
+}
+
+type QuoteCommercialDesignSource struct {
+	DesignId           string `json:"designId"`
+	WorkingVersion     string `json:"workingVersion"`
+	WorkingFingerprint string `json:"workingFingerprint"`
 }
 
 type QuoteCommercialIdentity struct {
@@ -1625,6 +1632,12 @@ type ProjectFurnitureWorkspace struct {
 type CreateInitialQuoteRevisionRequest struct {
 	Notes               *string `json:"notes,omitempty"`
 	BaseQuoteRevisionId *string `json:"baseQuoteRevisionId,omitempty"`
+}
+
+type CreateInitialDesignQuoteRevisionRequest struct {
+	WorkingVersion     string  `json:"workingVersion"`
+	WorkingFingerprint string  `json:"workingFingerprint"`
+	Notes              *string `json:"notes,omitempty"`
 }
 
 type RequoteProjectQuoteRequest struct {

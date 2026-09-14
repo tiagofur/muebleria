@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
+
+var designWorkingFingerprintPattern = regexp.MustCompile(`^sha256-[0-9a-f]{64}$`)
 
 // #571 / WEB-DT-4: commercial QuoteRevision lifecycle API (ADR-0003,
 // digital-thread §§15–16, 25).
@@ -97,6 +100,55 @@ func (s *Server) HandleCreateInitialQuoteRevision(w http.ResponseWriter, r *http
 	}
 
 	respondWithJSON(w, http.StatusCreated, toQuoteRevisionDTO(result.Revision))
+}
+
+// HandleCreateInitialDesignQuoteRevision serves the design-first Q1 command.
+func (s *Server) HandleCreateInitialDesignQuoteRevision(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateProjects), "no tenés permiso para crear revisiones de cotización en esta obra") {
+		return
+	}
+	projectID, designID := r.PathValue("projectId"), r.PathValue("designId")
+	if !isValidUUID(projectID) || !isValidUUID(designID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "projectId o designId inválido", nil)
+		return
+	}
+	var payload openapi.CreateInitialDesignQuoteRevisionRequest
+	if !decodeGeneratedJSONBody(w, r, &payload) {
+		return
+	}
+	if strings.TrimSpace(payload.WorkingVersion) == "" || !designWorkingFingerprintPattern.MatchString(payload.WorkingFingerprint) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "workingVersion y workingFingerprint son obligatorios", nil)
+		return
+	}
+	notes := ""
+	if payload.Notes != nil {
+		notes = strings.TrimSpace(*payload.Notes)
+	}
+	result, err := s.Store.CreateInitialDesignQuoteRevision(r.Context(), storage.CreateInitialDesignQuoteRevisionCommand{
+		ProjectID: projectID, DesignID: designID,
+		WorkingVersion: strings.TrimSpace(payload.WorkingVersion), WorkingFingerprint: strings.TrimSpace(payload.WorkingFingerprint),
+		Notes: notes, ActorUserID: claims.UserID, IP: clientIP(r), RequestID: RequestIDFromContext(r.Context()),
+	})
+	if err != nil {
+		if errors.Is(err, domain.ErrDesignRevisionConflict) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeVersionConflict, "El working copy del diseño cambió: actualizá la proyección antes de cotizar", nil)
+			return
+		}
+		respondWithQuoteLifecycleError(w, err, "create")
+		return
+	}
+	revision := result.Revision
+	if !s.actorCanViewCosts(r) {
+		redacted := *revision
+		redacted.CommercialSnapshot = domain.RedactQuoteCommercialSnapshot(revision.CommercialSnapshot)
+		revision = &redacted
+	}
+	respondWithJSON(w, http.StatusCreated, toQuoteRevisionDTO(revision))
 }
 
 // HandleQuoteRevisionPublish serves POST

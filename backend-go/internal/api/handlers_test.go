@@ -165,18 +165,21 @@ type stubStore struct {
 	requoteProjectQuoteCalls  int
 	requoteProjectQuoteCmd    *storage.RequoteProjectQuoteCommand
 	// Commercial QuoteRevision lifecycle (#571 / WEB-DT-4)
-	createInitialQuoteRevisionResult *storage.CreateInitialQuoteRevisionResult
-	createInitialQuoteRevisionErr    error
-	createInitialQuoteRevisionCalls  int
-	createInitialQuoteRevisionCmd    *storage.CreateInitialQuoteRevisionCommand
-	publishQuoteRevisionResult       *domain.QuoteRevision
-	publishQuoteRevisionErr          error
-	publishQuoteRevisionCalls        int
-	publishQuoteRevisionCmd          *storage.QuoteRevisionLifecycleCommand
-	acceptQuoteRevisionResult        *storage.AcceptQuoteRevisionResult
-	acceptQuoteRevisionErr           error
-	acceptQuoteRevisionCalls         int
-	acceptQuoteRevisionCmd           *storage.QuoteRevisionLifecycleCommand
+	createInitialQuoteRevisionResult      *storage.CreateInitialQuoteRevisionResult
+	createInitialQuoteRevisionErr         error
+	createInitialQuoteRevisionCalls       int
+	createInitialQuoteRevisionCmd         *storage.CreateInitialQuoteRevisionCommand
+	createInitialDesignQuoteRevisionErr   error
+	createInitialDesignQuoteRevisionCalls int
+	createInitialDesignQuoteRevisionCmd   *storage.CreateInitialDesignQuoteRevisionCommand
+	publishQuoteRevisionResult            *domain.QuoteRevision
+	publishQuoteRevisionErr               error
+	publishQuoteRevisionCalls             int
+	publishQuoteRevisionCmd               *storage.QuoteRevisionLifecycleCommand
+	acceptQuoteRevisionResult             *storage.AcceptQuoteRevisionResult
+	acceptQuoteRevisionErr                error
+	acceptQuoteRevisionCalls              int
+	acceptQuoteRevisionCmd                *storage.QuoteRevisionLifecycleCommand
 	// DesignRevision approval + ProductionRelease (#395 / DT-11)
 	approveDesignRevisionResult   *domain.DesignRevision
 	approveDesignRevisionErr      error
@@ -2118,6 +2121,20 @@ func (s *stubStore) CreateInitialQuoteRevision(_ context.Context, cmd storage.Cr
 		},
 		CreatedInstanceIDs: []string{},
 	}, nil
+}
+
+func (s *stubStore) CreateInitialDesignQuoteRevision(_ context.Context, cmd storage.CreateInitialDesignQuoteRevisionCommand) (*storage.CreateInitialQuoteRevisionResult, error) {
+	s.createInitialDesignQuoteRevisionCalls++
+	cmdCopy := cmd
+	s.createInitialDesignQuoteRevisionCmd = &cmdCopy
+	if s.createInitialDesignQuoteRevisionErr != nil {
+		return nil, s.createInitialDesignQuoteRevisionErr
+	}
+	return &storage.CreateInitialQuoteRevisionResult{Revision: &domain.QuoteRevision{
+		ID: "8f7b6c5d-0000-4000-8000-000000000012", ProjectID: cmd.ProjectID,
+		RevisionNumber: 1, Status: "draft", SourceType: "manual", Notes: cmd.Notes,
+		CommercialSnapshot: &domain.QuoteCommercialSnapshot{Breakdown: domain.QuoteBreakdown{MaterialsCost: 42, SalePrice: 100}},
+	}}, nil
 }
 
 func (s *stubStore) PublishQuoteRevision(_ context.Context, cmd storage.QuoteRevisionLifecycleCommand) (*domain.QuoteRevision, error) {
