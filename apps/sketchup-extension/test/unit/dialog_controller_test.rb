@@ -38,14 +38,16 @@ class DialogControllerTest < Minitest::Test
   class ProjectionBindingConnector
     attr_reader :service
 
-    def initialize
+    def initialize(capabilities: { 'can_create_initial_quote' => true })
       @service = Object.new
+      @capabilities = capabilities
     end
 
     def status
       {
         'state' => 'connected',
-        'binding' => { 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID }
+        'binding' => { 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID },
+        'capabilities' => @capabilities
       }
     end
   end
@@ -1050,9 +1052,39 @@ class DialogControllerTest < Minitest::Test
     assert_includes dialog.executed_scripts.last, '"status":"draft"'
   end
 
+  def test_initial_quote_bridge_requires_exact_server_capability
+    cases = {
+      false_value: { 'can_create_initial_quote' => false },
+      missing: {},
+      string_value: { 'can_create_initial_quote' => 'true' },
+      nil_value: { 'can_create_initial_quote' => nil }
+    }
+
+    cases.each do |label, capabilities|
+      service = ProjectionService.new
+      quote = QuoteCoordinator.new
+      controller = projection_controller(
+        service, project_bootstrap: BootstrapCoordinator.new, initial_quote: quote,
+                 binding_capabilities: capabilities
+      )
+      dialog = controller.show
+
+      dialog.callbacks.fetch('emit_initial_quote').call(
+        nil,
+        JSON.generate('workingVersion' => 'working-718',
+                      'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0)
+      )
+
+      assert_empty quote.calls, label
+      assert_equal 0, service.calls, label
+      assert_includes dialog.executed_scripts.last, '"code":"forbidden"', label
+    end
+  end
+
   private
 
-  def projection_controller(service, project_bootstrap: nil, initial_quote: nil)
+  def projection_controller(service, project_bootstrap: nil, initial_quote: nil,
+                            binding_capabilities: { 'can_create_initial_quote' => true })
     binding = Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
       project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, base_revision_id: nil
     )
@@ -1065,7 +1097,7 @@ class DialogControllerTest < Minitest::Test
       logger: @logger,
       status_provider: StatusProvider.new,
       metadata_store: @store,
-      model_binding_connector: ProjectionBindingConnector.new,
+      model_binding_connector: ProjectionBindingConnector.new(capabilities: binding_capabilities),
       commercial_projection_service: service,
       project_bootstrap: project_bootstrap,
       initial_quote: initial_quote

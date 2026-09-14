@@ -358,6 +358,9 @@ module Granete
           unless status['state'] == 'connected'
             return initial_quote_failure(dialog, 'binding_changed', 'el enlace del modelo cambió')
           end
+          unless status.dig('capabilities', 'can_create_initial_quote') == true
+            return initial_quote_failure(dialog, 'forbidden', 'no tenés permiso para emitir la cotización inicial')
+          end
           if mutation_coordinator.busy?
             return initial_quote_failure(dialog, 'mutation_pending', 'hay una modificación en curso')
           end
