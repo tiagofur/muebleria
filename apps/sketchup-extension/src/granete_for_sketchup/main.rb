@@ -20,8 +20,9 @@ module Granete
         connection/model_binding
         connection/transform_contract
         connection/managed_furniture
-        connection/panel_state
         connection/project_furniture_contract
+        connection/host_reconciliation
+        connection/panel_state
         connection/project_furniture
         connection/commercial_projection
         connection/project_bootstrap

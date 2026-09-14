@@ -311,12 +311,13 @@ module Granete
         # A backend PUT failure at confirm rolls the local placement back and
         # fails loud; drifted_base/archived/auth states fail BEFORE anything is
         # placed or synced.
-        class Placer
-          attr_reader :intent_store, :service
+        class Placer # rubocop:disable Metrics/ClassLength
+          attr_reader :intent_store, :service, :host_reconciliation
 
           def initialize(model_provider:, binding_store_factory:, model_binding_service:,
                          service:, metadata_store_factory:, catalog_provider:,
-                         furniture_builder_factory:, intent_store: IntentStore.new, logger: SafeLogger.new)
+                         furniture_builder_factory:, intent_store: IntentStore.new,
+                         host_reconciliation: nil, logger: SafeLogger.new)
             @model_provider = model_provider
             @binding_store_factory = binding_store_factory
             @model_binding_service = model_binding_service
@@ -326,6 +327,10 @@ module Granete
             @furniture_builder_factory = furniture_builder_factory
             @intent_store = intent_store
             @logger = logger
+            @host_reconciliation = host_reconciliation || HostReconciliation.new(
+              model_provider: model_provider, binding_store_factory: binding_store_factory,
+              service: service, metadata_store_factory: metadata_store_factory, logger: logger
+            )
           end
 
           # Step 1 — authoritative context + unit scope + insertion. Does NOT
@@ -339,6 +344,17 @@ module Granete
 
             context = placement_context(model)
             return context unless context['ok']
+
+            reconciliation = @host_reconciliation.projection
+            unless reconciliation['state'] == 'connected'
+              return failure(:host_reconciliation_required,
+                             reconciliation['reason'] || 'el estado local del diseño no se pudo reconciliar')
+            end
+            row = reconciliation['items'].find { |item| item['id'] == furniture_instance_id }
+            if row && %w[missing_local incompatible unknown].include?(row['reconciliationState'])
+              return failure(:host_reconciliation_required,
+                             row['reason'] || 'el estado local del mueble no se pudo reconciliar')
+            end
 
             unit = resolve_unit(context['binding'], furniture_instance_id)
             # Failures, already_placed (focus) and pending_confirmation
@@ -452,20 +468,12 @@ module Granete
             failure(:cancel_failed, e.message)
           end
 
-          # Panel payload for the dialog: binding-aware rows with
-          # pending/placed derived from the working copy. A pending unit with
-          # a local root is awaiting position confirmation — surfaced
-          # explicitly, never as success.
+          # Panel payload for the dialog: binding-aware rows derived from the
+          # shared Project + WorkingCopy + top-level host reconciliation.
           def panel
-            model = @model_provider.call
-            metadata_store = model ? @metadata_store_factory.call(model) : nil
             PanelState.build_panel_payload(
-              model: model,
-              binding_store: @binding_store_factory.call,
-              service: @service,
-              catalog_provider: @catalog_provider,
-              metadata_store: metadata_store,
-              logger: @logger
+              reconciliation: @host_reconciliation,
+              catalog_provider: @catalog_provider
             )
           end
 

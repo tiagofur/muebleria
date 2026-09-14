@@ -1,6 +1,6 @@
 # SketchUp Host Reconciliation — Design Working Copy vs archivo SKP
 
-> **Estado:** PROPUESTA ARQUITECTÓNICA / recuperación de integridad local
+> **Estado:** IMPLEMENTACIÓN PARCIAL — reconciliación y gates fail-closed; restauración/save-awareness pendientes
 > **Ámbito:** Granete for SketchUp, Design Working Copy, FurnitureInstance, cotización design-first
 > **Relacionados:** Project Design Digital Thread, #388, #389, #390, #391, #702, #718, #679
 

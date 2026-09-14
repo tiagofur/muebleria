@@ -12,22 +12,43 @@ module Granete
         module ManagedFurniture
           module_function
 
+          # Reads every top-level entity exactly once and groups roots by the
+          # server-owned furnitureInstanceId. The returned index also keeps
+          # incompatible managed roots explicit so host reconciliation can
+          # fail closed instead of silently treating corrupt metadata as
+          # absence.
+          def index(model, metadata_store)
+            result = { by_id: Hash.new { |hash, key| hash[key] = [] }, invalid: [] }
+            return result unless model.respond_to?(:entities)
+
+            # rubocop:disable-next SketchupSuggestions/ModelEntities
+            model.entities.each do |entity|
+              metadata = metadata_store.read(entity)
+              next unless metadata.is_a?(Hash)
+
+              identity = metadata['identity']
+              furniture_id = identity.is_a?(Hash) ? identity['furnitureInstanceId'] : nil
+              if !furniture_id.is_a?(String) || furniture_id.strip.empty?
+                if metadata['kind'] == 'furnitureInstance'
+                  result[:invalid] << { entity: entity, reason: 'missing_furniture_instance_id' }
+                end
+                next
+              end
+
+              result[:by_id][furniture_id] << { entity: entity, metadata: metadata }
+            rescue JSON::ParserError, Metadata::InvalidMetadataError
+              result[:invalid] << { entity: entity, reason: 'unreadable_metadata' }
+            end
+            result
+          end
+
           # Returns { 'entity' => entity|nil, 'duplicates' => count } for the
           # given furnitureInstanceId across the model's top-level entities.
           def locate(model, metadata_store, furniture_instance_id)
             return { 'entity' => nil, 'duplicates' => 0 } unless model.respond_to?(:entities)
             return { 'entity' => nil, 'duplicates' => 0 } unless furniture_instance_id.is_a?(String)
 
-            matches = []
-            # Top-level furniture lives in the model root: model.entities is
-            # the correct read here, not the open editing context.
-            # rubocop:disable-next SketchupSuggestions/ModelEntities
-            model.entities.each do |entity|
-              metadata = read_metadata(metadata_store, entity)
-              next unless metadata.is_a?(Hash) && metadata['identity'].is_a?(Hash)
-
-              matches << entity if metadata['identity']['furnitureInstanceId'] == furniture_instance_id
-            end
+            matches = index(model, metadata_store)[:by_id][furniture_instance_id].map { |entry| entry[:entity] }
             { 'entity' => matches.first, 'duplicates' => matches.length }
           end
 

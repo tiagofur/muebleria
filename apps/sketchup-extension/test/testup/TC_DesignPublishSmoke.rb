@@ -105,6 +105,7 @@ module Granete
             transport: fake, auth_provider: fake_auth
           ),
           working_copy_service: fake,
+          host_reconciliation: clean_host_reconciliation,
           base_advancer: -> { fake.advance_base },
           metadata_store_factory: ->(m) { Metadata::Store.new(m) }
         )
@@ -145,6 +146,7 @@ module Granete
             transport: fake, auth_provider: fake_auth
           ),
           working_copy_service: fake,
+          host_reconciliation: clean_host_reconciliation,
           base_advancer: -> { fake.advance_base },
           metadata_store_factory: ->(m) { Metadata::Store.new(m) }
         )
@@ -219,6 +221,14 @@ module Granete
         auth.define_singleton_method(:configured?) { true }
         auth.define_singleton_method(:authorization_header) { 'Bearer smoke-token' }
         auth
+      end
+
+      def clean_host_reconciliation
+        Struct.new(:projection).new(
+          { 'state' => 'connected', 'projectId' => PROJECT_ID, 'designId' => DESIGN_ID,
+            'baseRevisionId' => REVISION_R1, 'schemaVersion' => 1,
+            'snapshot' => 'testup-host-clean', 'clean' => true }
+        )
       end
 
       # Scripted backend: records the publish sequence, echoes authoritative

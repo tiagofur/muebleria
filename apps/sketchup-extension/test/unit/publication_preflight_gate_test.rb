@@ -41,9 +41,19 @@ class PublicationPreflightGateTest < Minitest::Test
     @logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
   end
 
+  HostProjection = Struct.new(:value) do
+    def projection = value
+  end
+
+  def clean_host
+    HostProjection.new({ 'state' => 'connected', 'clean' => true,
+                         'summary' => { 'attention' => 0 }, 'snapshot' => 'host-clean' })
+  end
+
   def gate_with_scope(*furniture_ids)
     Host::PublicationPreflightGate.new(
       scope_provider: -> { furniture_ids.map { |id| { 'furnitureInstanceId' => id } } },
+      host_reconciliation: clean_host,
       tracker: @tracker,
       logger: @logger
     )
@@ -137,13 +147,34 @@ class PublicationPreflightGateTest < Minitest::Test
     assert_equal 0, projection['total']
   end
 
+  def test_dirty_or_unknown_host_blocks_even_when_manufacturing_is_ready
+    record_ready("furnitureInstanceId=#{FI_A}")
+    dirty = HostProjection.new({ 'state' => 'connected', 'clean' => false,
+                                 'summary' => { 'attention' => 2 } })
+    gate = Host::PublicationPreflightGate.new(
+      scope_provider: -> { [{ 'furnitureInstanceId' => FI_A }] },
+      host_reconciliation: dirty, tracker: @tracker, logger: @logger
+    )
+    projection = gate.projection
+    refute projection['allowed']
+    assert_equal false, projection['hostClean']
+    assert_equal 2, projection['hostAttention']
+
+    unknown = Host::PublicationPreflightGate.new(
+      scope_provider: -> { [{ 'furnitureInstanceId' => FI_A }] },
+      tracker: @tracker, logger: @logger
+    ).projection
+    refute unknown['allowed']
+    assert_equal 'unknown', unknown['hostState']
+  end
+
   # FAIL CLOSED: an uncomputable scope (no model/binding/read error) can
   # never degrade into "current furniture only" — publication stays
   # blocked with an honest scopeAvailable=false projection.
   def test_scope_unavailable_fails_closed
     gate = Host::PublicationPreflightGate.new(
       scope_provider: -> { raise StandardError, 'binding unreadable' },
-      tracker: @tracker, logger: @logger
+      host_reconciliation: clean_host, tracker: @tracker, logger: @logger
     )
     projection = gate.projection
 
@@ -262,7 +293,7 @@ class PublicationPreflightGateTest < Minitest::Test
         )
         manifest['items']
       },
-      tracker: @tracker, logger: @logger
+      host_reconciliation: clean_host, tracker: @tracker, logger: @logger
     )
 
     # Only FI_A verified → FI_B pending → blocked (Case 2 against the real

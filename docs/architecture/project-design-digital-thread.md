@@ -892,6 +892,13 @@ sincronización completa comprobada sí la persiste y permite lecturas posterior
 sin bloquearlas. Mientras el runtime compartido esté en `resolving` o
 `applying_host_mutation`, no se inicia ni acepta una lectura etiquetable como
 actual del modelo local.
+
+Esa etiqueta comercial prueba la intención server-side, no la presencia física
+en el archivo abierto. Antes de emitir Q1 o publicar, el callback Ruby deriva de
+nuevo `HostReconciliation` para el binding exacto y exige que cada item del
+Working Copy tenga exactamente una raíz local compatible; `missing_local`,
+`pending_confirmation`, duplicados, identidades huérfanas/incompatibles y lecturas
+desconocidas fallan cerrado antes de cualquier escritura.
 | `Project.commercialStatus` CRM | Fuera: estado de oportunidad, no lifecycle de QuoteRevision |
 
 ---

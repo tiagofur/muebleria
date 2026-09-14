@@ -125,6 +125,9 @@ function pushGate(sandbox, overrides) {
     : Object.assign({
         scopeAvailable: true,
         allowed: true,
+        hostAvailable: true,
+        hostClean: true,
+        hostAttention: 0,
         total: 1,
         verified: 1,
         pending: 0,
@@ -210,6 +213,14 @@ function runTests() {
     assert.ok(progress.textContent.indexOf('requiere verificar todos los muebles') >= 0);
     assert.ok(progress.textContent.indexOf('3 muebles · 2 verificados · 1 pendiente') >= 0,
       'counts denominator is the canonical #392 scope: ' + progress.textContent);
+  });
+
+  test('host divergence blocks publish with an actionable count', (sandbox) => {
+    pushGate(sandbox, { allowed: false, hostClean: false, hostAttention: 3 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    assert.ok(el(sandbox, 'btn-binding-publish').disabled);
+    assert.ok(el(sandbox, 'binding-publish-progress').textContent.indexOf('3 muebles') >= 0);
+    assert.ok(el(sandbox, 'binding-publish-progress').textContent.indexOf('reconciliación') >= 0);
   });
 
   test('blocked scope furniture explains manufacturing problems', (sandbox) => {

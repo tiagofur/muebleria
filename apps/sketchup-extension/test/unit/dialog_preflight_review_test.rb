@@ -6,6 +6,7 @@ require_relative '../test_helper'
 require_relative '../support/overlay_runtime'
 require_relative '../support/overlay_fixture'
 require_relative '../../src/granete_for_sketchup/logging'
+require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/assets/asset_resolver'
 require_relative '../../src/granete_for_sketchup/assets/asset_loader'
 require_relative '../../src/granete_for_sketchup/assets/texture_cache'
@@ -270,6 +271,9 @@ class DialogPreflightReviewTest < Minitest::Test
     )
     gate = Host::PublicationPreflightGate.new(
       scope_provider: scope_provider || -> { scope_items },
+      host_reconciliation: Struct.new(:projection).new(
+        { 'state' => 'connected', 'clean' => true, 'summary' => { 'attention' => 0 } }
+      ),
       tracker: tracker, logger: @logger
     )
     @controller = Granete::SketchUpExtension::UserInterface::DialogController.new(

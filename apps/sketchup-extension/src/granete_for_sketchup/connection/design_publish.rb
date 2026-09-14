@@ -344,7 +344,7 @@ module Granete
         class Publisher
           def initialize(model_provider:, binding_store_factory:, duplicate_resolver:,
                          service:, working_copy_service:, base_advancer:,
-                         metadata_store_factory:, logger: SafeLogger.new)
+                         metadata_store_factory:, host_reconciliation: nil, logger: SafeLogger.new)
             @model_provider = model_provider
             @binding_store_factory = binding_store_factory
             @duplicate_resolver = duplicate_resolver
@@ -352,6 +352,7 @@ module Granete
             @working_copy_service = working_copy_service
             @base_advancer = base_advancer
             @metadata_store_factory = metadata_store_factory
+            @host_reconciliation = host_reconciliation
             @logger = logger
           end
 
@@ -370,6 +371,12 @@ module Granete
             unless precheck['valid']
               return failure(precheck['code'] || 'precheck_failed',
                              precheck['reason'] || 'la identidad de los muebles no es válida para publicar')
+            end
+
+            host = @host_reconciliation&.projection
+            unless ProjectFurniture::HostReconciliation.clean_for?(host, binding)
+              return failure('host_reconciliation_required',
+                             host&.dig('reason') || 'el archivo SketchUp no coincide con el diseño de Granete')
             end
 
             report(on_progress, 'syncing')

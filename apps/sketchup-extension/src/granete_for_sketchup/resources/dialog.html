@@ -4205,6 +4205,7 @@
             renderModelBindingStatus(status);
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(status);
             if (window.GraneteCommercialBootstrap) window.GraneteCommercialBootstrap.setBinding(status);
+            if (status && status.state === "connected") requestProjectFurniture();
           },
           onCommercialProjection: function (payload) {
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receive(payload);
@@ -4231,7 +4232,12 @@
           onBindingDesigns: function (result) { handleBindingDesigns(result); },
 
           // #389 / #390 Project Furniture bridge — delegates to the project section.
-          onProjectFurniture: function (payload) { renderProjectFurniture(payload); },
+          onProjectFurniture: function (payload) {
+            renderProjectFurniture(payload);
+            if (window.GraneteCommercialProjection) {
+              window.GraneteCommercialProjection.setHostReconciliation(payload);
+            }
+          },
           onPlaceFurnitureResult: function (result) { handlePlaceFurnitureResult(result); },
           onCreateProjectFurnitureResult: function (result) { handleCreateProjectFurnitureResult(result); },
           getCatalogCreateIntentKey: function () { return catalogCreateIntentKey; },
@@ -5647,6 +5653,10 @@
           if (!gate || gate.scopeAvailable === false) {
             base = "No se pudo confirmar el alcance de publicación del diseño. " +
                    "Verificá los muebles del diseño antes de publicar.";
+          } else if (gate.hostAvailable !== true || gate.hostClean !== true) {
+            base = (gate.hostAttention || 0) > 0
+              ? "Hay " + gate.hostAttention + " muebles que requieren reconciliación con este archivo SketchUp."
+              : "No se pudo confirmar que este archivo SketchUp coincida con el diseño.";
           } else if ((gate.blocked || 0) > 0) {
             base = "La publicación está bloqueada porque existen problemas de fabricación.";
           } else if ((gate.stale || 0) > 0) {
@@ -6060,13 +6070,14 @@
               return;
             }
             pfListView.style.display = "block";
-            pfCountBadge.textContent = (payload.placed || 0) + " colocados · " + (payload.pending || 0) + " pendientes";
-            pfPendingTitle.textContent = "Pendientes de colocar (" + (payload.pending || 0) + ")";
-            pfPlacedTitle.textContent = "Colocados (" + (payload.placed || 0) + ")";
+            pfCountBadge.textContent = (payload.placed || 0) + " puestos · " + (payload.pending || 0) + " pendientes" +
+              ((payload.attention || 0) > 0 ? " · " + payload.attention + " requieren atención" : "");
+            pfPendingTitle.textContent = "Pendientes y divergencias (" + (payload.pending || 0) + ")";
+            pfPlacedTitle.textContent = "Puestos / Sincronizados (" + (payload.placed || 0) + ")";
             // Terminal (removed/cancelled) units are neither placeable nor
             // placed; they are history and stay out of this authoring panel.
-            renderPfList(pfPendingList, items.filter(function (row) { return !row.placed && !row.terminal; }), true);
-            renderPfList(pfPlacedList, items.filter(function (row) { return row.placed; }), false);
+            renderPfList(pfPendingList, items.filter(function (row) { return !row.placed && !row.terminal; }));
+            renderPfList(pfPlacedList, items.filter(function (row) { return row.placed; }));
             return;
           }
 
@@ -6084,23 +6095,24 @@
           pfError.style.display = "block";
         }
 
-        function renderPfList(container, rows, pending) {
+        function renderPfList(container, rows) {
           container.innerHTML = "";
           if (!rows.length) {
             var note = document.createElement("p");
             note.className = "subhead";
             note.style.margin = "0";
             note.style.fontSize = "var(--text-xs)";
-            note.textContent = pending ? "Todas las unidades están colocadas." : "Todavía no hay unidades colocadas.";
+            note.textContent = container === pfPendingList ?
+              "No hay unidades pendientes ni divergencias." : "Todavía no hay unidades sincronizadas.";
             container.appendChild(note);
             return;
           }
           rows.forEach(function (row) {
-            container.appendChild(pfUnitCard(row, pending));
+            container.appendChild(pfUnitCard(row));
           });
         }
 
-        function pfUnitCard(row, pending) {
+        function pfUnitCard(row) {
           var card = document.createElement("div");
           card.className = "card pf-unit-card";
 
@@ -6119,11 +6131,20 @@
             unitBadge.textContent = "Unidad " + row.unitIndex + " de " + row.unitTotal;
             name.appendChild(unitBadge);
           }
-          if (row.pendingConfirm) {
-            var pendingConfirmBadge = document.createElement("span");
-            pendingConfirmBadge.className = "status-badge pending";
-            pendingConfirmBadge.textContent = "Posición pendiente";
-            name.appendChild(pendingConfirmBadge);
+          var stateCopy = {
+            pending_confirmation: ["Posición pendiente", "pending"],
+            present_synced: ["Puesto / Sincronizado", "valid"],
+            missing_local: ["Falta en este archivo", "conflict"],
+            duplicate_local: ["Identidad duplicada", "invalid"],
+            terminal_or_orphan_local: ["Identidad no vigente", "invalid"],
+            incompatible: ["Contexto incompatible", "invalid"],
+            unknown: ["Presencia no verificable", "invalid"]
+          }[row.reconciliationState];
+          if (stateCopy) {
+            var stateBadge = document.createElement("span");
+            stateBadge.className = "status-badge " + stateCopy[1];
+            stateBadge.textContent = stateCopy[0];
+            name.appendChild(stateBadge);
           }
           main.appendChild(name);
 
@@ -6142,8 +6163,7 @@
 
           card.appendChild(main);
 
-          if (pending) {
-            if (row.pendingConfirm) {
+          if (row.reconciliationState === "pending_confirmation") {
               var actionsGroup = document.createElement("div");
               actionsGroup.style.display = "flex";
               actionsGroup.style.gap = "6px";
@@ -6165,7 +6185,7 @@
               actionsGroup.appendChild(btnCancel);
 
               card.appendChild(actionsGroup);
-            } else {
+          } else if (row.reconciliationState === "unplaced") {
               var action = document.createElement("button");
               action.className = "btn btn-primary";
               action.style.width = "auto";
@@ -6173,8 +6193,7 @@
               action.disabled = !!pfPlacing[row.id];
               action.addEventListener("click", function () { placeFurnitureInstance(row.id, action); });
               card.appendChild(action);
-            }
-          } else {
+          } else if (row.reconciliationState === "present_synced") {
             var action = document.createElement("button");
             action.className = "btn btn-secondary";
             action.style.width = "auto";

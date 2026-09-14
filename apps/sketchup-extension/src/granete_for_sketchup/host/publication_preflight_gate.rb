@@ -9,8 +9,9 @@ module Granete
       # evaluates is exactly the managed FurnitureInstance set the
       # publisher will put in the manifest — obtained from the SAME
       # authority (Connection::DesignPublish::ManifestBuilder), never from
-      # the PreflightTracker, the current selection, names, display names
-      # or geometry. No second membership source exists here.
+      # the PreflightTracker, the current selection, names or display names.
+      # HostReconciliation is a separate coherence guard: it proves that
+      # the manifest's business intent matches the active model's roots.
       #
       # The gate NEVER computes manufacturing readiness: every furniture
       # state arrives from the PreflightTracker's authoritative entries
@@ -32,9 +33,10 @@ module Granete
         # scope_provider: callable returning the canonical #392 manifest
         # items (each carrying furnitureInstanceId) or nil when the scope
         # cannot be established.
-        def initialize(scope_provider:, tracker:, logger: nil)
+        def initialize(scope_provider:, tracker:, host_reconciliation: nil, logger: nil)
           @scope_provider = scope_provider
           @tracker = tracker
+          @host_reconciliation = host_reconciliation
           @logger = logger
         end
 
@@ -46,22 +48,28 @@ module Granete
         # canonical publication scope — never the tracker entries, so
         # unverified furniture blocks and unrelated entries are invisible.
         def projection
+          host = host_projection
           items = publication_scope
-          return scope_unavailable_projection unless items.is_a?(Array)
+          return scope_unavailable_projection(host) unless items.is_a?(Array)
 
           states = items.map { |item| state_for_furniture(item['furnitureInstanceId']) }
           counts = states.tally
           verified = counts.fetch('ready', 0) + counts.fetch('warning', 0)
+          host_clean = host.is_a?(Hash) && host['state'] == 'connected' && host['clean'] == true
           {
             'scopeAvailable' => true,
-            'allowed' => states.all? { |state| %w[ready warning].include?(state) },
+            'allowed' => host_clean && states.all? { |state| %w[ready warning].include?(state) },
             'total' => items.length,
             'verified' => verified,
             'pending' => items.length - verified,
             'blocked' => counts['blocked'],
             'stale' => counts['stale'],
             'unavailable' => counts['unavailable'],
-            'unverified' => counts[UNVERIFIED]
+            'unverified' => counts[UNVERIFIED],
+            'hostAvailable' => host.is_a?(Hash) && host['state'] == 'connected',
+            'hostClean' => host_clean,
+            'hostAttention' => host.is_a?(Hash) ? host.dig('summary', 'attention').to_i : 0,
+            'hostState' => host.is_a?(Hash) ? host['state'] : 'unknown'
           }
         end
 
@@ -83,7 +91,14 @@ module Granete
           nil
         end
 
-        def scope_unavailable_projection
+        def host_projection
+          @host_reconciliation&.projection
+        rescue StandardError => e
+          @logger&.error('publication_host_reconciliation_failed', error: e)
+          nil
+        end
+
+        def scope_unavailable_projection(host)
           {
             'scopeAvailable' => false,
             'allowed' => false,
@@ -93,7 +108,11 @@ module Granete
             'blocked' => 0,
             'stale' => 0,
             'unavailable' => 0,
-            'unverified' => 0
+            'unverified' => 0,
+            'hostAvailable' => host.is_a?(Hash) && host['state'] == 'connected',
+            'hostClean' => false,
+            'hostAttention' => host.is_a?(Hash) ? host.dig('summary', 'attention').to_i : 0,
+            'hostState' => host.is_a?(Hash) ? host['state'] : 'unknown'
           }
         end
       end

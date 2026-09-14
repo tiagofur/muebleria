@@ -14,6 +14,7 @@ require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/connection/transform_contract'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
+require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/connection/duplicate_resolver'
 require_relative '../../src/granete_for_sketchup/connection/design_publish'
@@ -133,6 +134,24 @@ class DesignPublishTest < Minitest::Test
     end
   end
 
+  class HostReconciliationDouble
+    attr_accessor :clean
+    attr_reader :calls
+
+    def initialize
+      @clean = true
+      @calls = 0
+    end
+
+    def projection
+      @calls += 1
+      { 'state' => 'connected', 'projectId' => PROJECT_ID, 'designId' => DESIGN_ID,
+        'baseRevisionId' => REVISION_R1, 'schemaVersion' => 1,
+        'snapshot' => 'host-publish', 'clean' => @clean,
+        'summary' => { 'attention' => @clean ? 0 : 1 } }
+    end
+  end
+
   def setup
     @model = TestModel.new
     SketchupStub.active_model = @model
@@ -156,6 +175,7 @@ class DesignPublishTest < Minitest::Test
     end
 
     @base_advancer = base_advancer_double(REVISION_R2)
+    @host_reconciliation = HostReconciliationDouble.new
 
     @resolver = DR.new(
       model_provider: -> { @model },
@@ -172,6 +192,7 @@ class DesignPublishTest < Minitest::Test
       duplicate_resolver: @resolver,
       service: @service,
       working_copy_service: @wc_service,
+      host_reconciliation: @host_reconciliation,
       base_advancer: @base_advancer,
       metadata_store_factory: ->(m) { MS.new(m) },
       logger: Granete::SketchUpExtension::SafeLogger.new
@@ -385,6 +406,21 @@ class DesignPublishTest < Minitest::Test
     assert_equal 0, @base_advancer.calls
   end
 
+  def test_publish_aborts_before_working_copy_sync_or_export_when_host_is_dirty
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    @host_reconciliation.clean = false
+    progress = []
+
+    result = @publisher.publish(on_progress: ->(step) { progress << step })
+
+    refute result['ok']
+    assert_equal 'host_reconciliation_required', result['code']
+    assert_equal ['validating'], progress
+    assert_empty @wc_service.update_calls
+    assert_empty @transport.requests_for('POST', /publish/)
+  end
+
   def test_publish_fails_loud_when_server_hash_mismatches
     create_managed_instance(furniture_instance_id: FI_1)
     seed_working_items(FI_1)
@@ -426,6 +462,7 @@ class DesignPublishTest < Minitest::Test
       duplicate_resolver: @resolver,
       service: @service,
       working_copy_service: @wc_service,
+      host_reconciliation: @host_reconciliation,
       base_advancer: @base_advancer,
       metadata_store_factory: ->(m) { MS.new(m) }
     )
@@ -462,6 +499,7 @@ class DesignPublishTest < Minitest::Test
       duplicate_resolver: @resolver,
       service: @service,
       working_copy_service: @wc_service,
+      host_reconciliation: @host_reconciliation,
       base_advancer: base_advancer_double('00000000-0000-0000-0000-000000000099'),
       metadata_store_factory: ->(m) { MS.new(m) }
     )

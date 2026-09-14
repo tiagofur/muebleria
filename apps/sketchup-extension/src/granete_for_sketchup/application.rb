@@ -2,7 +2,7 @@
 
 module Granete
   module SketchUpExtension
-    class Application
+    class Application # rubocop:disable Metrics/ClassLength
       attr_reader :auth_provider, :transport, :session
 
       def initialize( # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
@@ -38,6 +38,8 @@ module Granete
         @project_furniture_placer = project_furniture_placer || build_project_furniture_placer(
           resolved_catalog_provider
         )
+        @host_reconciliation = @project_furniture_placer.host_reconciliation if
+          @project_furniture_placer.respond_to?(:host_reconciliation)
         @duplicate_resolver = duplicate_resolver || Connection::DuplicateResolver.new(
           model_provider: method(:active_model),
           binding_store_factory: -> { Connection::ModelBinding::Store.new(active_model) },
@@ -64,6 +66,7 @@ module Granete
           duplicate_resolver: @duplicate_resolver,
           service: @design_publish_service,
           working_copy_service: @project_furniture_placer.service,
+          host_reconciliation: @host_reconciliation,
           base_advancer: -> { @model_binding_connector.adopt_authoritative_base },
           metadata_store_factory: method(:metadata_store),
           logger: logger
@@ -75,6 +78,7 @@ module Granete
         mutation_coordinator = build_mutation_coordinator(logger)
         @publication_preflight_gate = Host::PublicationPreflightGate.new(
           scope_provider: method(:publication_scope_items),
+          host_reconciliation: @host_reconciliation,
           tracker: mutation_coordinator.preflight_tracker,
           logger: logger
         )
@@ -100,6 +104,7 @@ module Granete
           design_publisher: @design_publisher,
           mutation_coordinator: mutation_coordinator,
           publication_gate: @publication_preflight_gate,
+          host_reconciliation: @host_reconciliation,
           commercial_projection_service: commercial_projection_service,
           project_bootstrap: commercial_entry[:project_bootstrap], initial_quote: commercial_entry[:initial_quote]
         )

@@ -129,13 +129,13 @@ function connectedPanel() {
     items: [
       { id: FI_1, name: 'Base 600', dimensions: [600, 720, 560],
         dimensions_label: '600 × 720 × 560 mm', definitionId: 'def-1', origin: 'quote',
-        terminal: false, placed: false, unitIndex: 1, unitTotal: 2 },
+        terminal: false, placed: false, reconciliationState: 'unplaced', unitIndex: 1, unitTotal: 2 },
       { id: FI_2, name: 'Base 600', dimensions: [600, 720, 560],
         dimensions_label: '600 × 720 × 560 mm', definitionId: 'def-1', origin: 'quote',
-        terminal: false, placed: false, unitIndex: 2, unitTotal: 2 },
+        terminal: false, placed: false, reconciliationState: 'unplaced', unitIndex: 2, unitTotal: 2 },
       { id: FI_3, name: 'Torre horno', dimensions: [600, 2100, 560],
         dimensions_label: '600 × 2100 × 560 mm', definitionId: 'def-2', origin: 'quote',
-        terminal: false, placed: true, unitIndex: 1, unitTotal: 1 }
+        terminal: false, placed: true, reconciliationState: 'present_synced', unitIndex: 1, unitTotal: 1 }
     ]
   };
 }
@@ -147,8 +147,8 @@ function runTests() {
   test('pending list renders one card per unit with unit labels', (sandbox) => {
     sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
     assert.ok(visible(el(sandbox, 'pf-list-view')));
-    assert.equal(el(sandbox, 'pf-pending-title').textContent, 'Pendientes de colocar (2)');
-    assert.equal(el(sandbox, 'pf-placed-title').textContent, 'Colocados (1)');
+    assert.equal(el(sandbox, 'pf-pending-title').textContent, 'Pendientes y divergencias (2)');
+    assert.equal(el(sandbox, 'pf-placed-title').textContent, 'Puestos / Sincronizados (1)');
 
     const pending = el(sandbox, 'pf-pending-list');
     assert.equal(pending.children.length, 2, 'two individually placeable units');
@@ -167,6 +167,19 @@ function runTests() {
     assert.equal(pendingButton.textContent, 'Colocar');
     const placedButton = el(sandbox, 'pf-placed-list').children[0].children[1];
     assert.equal(placedButton.textContent, 'Seleccionar');
+  });
+
+  test('missing local is visible but has no normal placement or restore action yet', (sandbox) => {
+    const panel = connectedPanel();
+    panel.attention = 1;
+    panel.items[0].reconciliationState = 'missing_local';
+    panel.items[0].blocking = true;
+    sandbox.window.GraneteDialog.onProjectFurniture(panel);
+
+    const card = el(sandbox, 'pf-pending-list').children[0];
+    const labels = card.children[0].children[0].children.map((child) => child.textContent);
+    assert.ok(labels.includes('Falta en este archivo'));
+    assert.equal(card.children.length, 1, 'missing_local must not expose Colocar or a premature restore action');
   });
 
   test('Colocar sends the exact furnitureInstanceId and guards double clicks', (sandbox) => {
@@ -245,7 +258,7 @@ function runTests() {
     const panel = connectedPanel();
     panel.items.push({ id: '51000000-0000-0000-0000-0000000000f4', name: 'Viejo',
       dimensions: null, dimensions_label: null, definitionId: 'def-1', origin: 'quote',
-      terminal: true, placed: false, unitIndex: 3, unitTotal: 3 });
+      terminal: true, placed: false, reconciliationState: 'terminal', unitIndex: 3, unitTotal: 3 });
     sandbox.window.GraneteDialog.onProjectFurniture(panel);
     assert.equal(el(sandbox, 'pf-pending-list').children.length, 2);
   });
@@ -253,6 +266,7 @@ function runTests() {
   test('unit with pendingConfirm renders Posicion pendiente and confirm/cancel buttons', (sandbox) => {
     const panel = connectedPanel();
     panel.items[0].pendingConfirm = true;
+    panel.items[0].reconciliationState = 'pending_confirmation';
     sandbox.window.GraneteDialog.onProjectFurniture(panel);
 
     const pendingCard = el(sandbox, 'pf-pending-list').children[0];

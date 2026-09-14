@@ -11,6 +11,7 @@ require_relative '../../src/granete_for_sketchup/transport/adapter'
 require_relative '../../src/granete_for_sketchup/transport/http_adapter'
 require_relative '../../src/granete_for_sketchup/connection/commercial_projection'
 require_relative '../../src/granete_for_sketchup/connection/model_binding'
+require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/project_bootstrap'
 require_relative '../../src/granete_for_sketchup/connection/initial_quote'
 require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
@@ -46,7 +47,8 @@ class DialogControllerTest < Minitest::Test
     def status
       {
         'state' => 'connected',
-        'binding' => { 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID },
+        'binding' => { 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID,
+                       'baseRevisionId' => nil, 'schemaVersion' => 1 },
         'capabilities' => @capabilities
       }
     end
@@ -85,6 +87,26 @@ class DialogControllerTest < Minitest::Test
       { 'id' => '73000000-0000-0000-0000-000000000718', 'projectId' => PROJECTION_PROJECT_ID,
         'revisionNumber' => 1, 'status' => 'draft',
         'commercialSnapshot' => { 'currency' => 'MXN', 'breakdown' => { 'salePrice' => 100.0 } } }
+    end
+  end
+
+  class HostReconciliationDouble
+    attr_reader :calls
+
+    def initialize(clean: true, snapshots: ['host-clean'])
+      @clean = clean
+      @snapshots = snapshots
+      @calls = 0
+    end
+
+    def projection
+      snapshot = @snapshots[[@calls, @snapshots.length - 1].min]
+      @calls += 1
+      {
+        'state' => 'connected', 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID,
+        'baseRevisionId' => nil, 'schemaVersion' => 1, 'snapshot' => snapshot, 'clean' => @clean,
+        'summary' => { 'attention' => @clean ? 0 : 2 }
+      }
     end
   end
 
@@ -868,6 +890,27 @@ class DialogControllerTest < Minitest::Test
     assert_includes @model.active_entities.groups, group
   end
 
+  def test_successful_local_delete_refreshes_host_reconciliation_panel
+    placer = Object.new
+    placer.define_singleton_method(:panel) { { 'state' => 'connected', 'items' => [] } }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      project_furniture_placer: placer
+    )
+    group = @model.active_entities.add_group
+    @store.write(group, {
+                   'namespace' => 'com.granete.sketchup_extension', 'metadataVersion' => 1,
+                   'kind' => 'furnitureInstance', 'identity' => { 'instanceRef' => 'inst-del-refresh' }
+                 })
+
+    dialog = controller.show
+    dialog.callbacks.fetch('delete_selected_furniture').call(
+      nil, JSON.generate({ 'instanceId' => 'inst-del-refresh' })
+    )
+
+    assert(dialog.executed_scripts.any? { |script| script.include?('onProjectFurniture') })
+  end
+
   def test_dialog_ready_publishes_furniture_selection_context_payload
     definition = @controller.instance_variable_get(:@catalog_provider).find_definition('kitchen-base-standard')
     Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
@@ -1081,10 +1124,66 @@ class DialogControllerTest < Minitest::Test
     end
   end
 
+  def test_initial_quote_fails_before_projection_or_quote_when_host_is_dirty
+    service = ProjectionService.new
+    quote = QuoteCoordinator.new
+    host = HostReconciliationDouble.new(clean: false)
+    controller = projection_controller(service, project_bootstrap: BootstrapCoordinator.new,
+                                                initial_quote: quote, host_reconciliation: host)
+    dialog = controller.show
+
+    dialog.callbacks.fetch('emit_initial_quote').call(
+      nil, JSON.generate('workingVersion' => 'working-718',
+                         'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0)
+    )
+
+    assert_empty quote.calls
+    assert_equal 0, service.calls
+    assert_includes dialog.executed_scripts.last, 'host_reconciliation_required'
+  end
+
+  def test_initial_quote_fails_closed_when_host_reconciliation_is_unavailable
+    service = ProjectionService.new
+    quote = QuoteCoordinator.new
+    controller = projection_controller(service, project_bootstrap: BootstrapCoordinator.new,
+                                                initial_quote: quote, host_reconciliation: nil)
+    dialog = controller.show
+
+    dialog.callbacks.fetch('emit_initial_quote').call(
+      nil, JSON.generate('workingVersion' => 'working-718',
+                         'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0)
+    )
+
+    assert_empty quote.calls
+    assert_equal 0, service.calls
+    assert_includes dialog.executed_scripts.last, 'host_reconciliation_required'
+  end
+
+  def test_initial_quote_rechecks_host_snapshot_immediately_before_create
+    service = ProjectionService.new
+    quote = QuoteCoordinator.new
+    host = HostReconciliationDouble.new(snapshots: %w[host-before host-after])
+    controller = projection_controller(service, project_bootstrap: BootstrapCoordinator.new,
+                                                initial_quote: quote, host_reconciliation: host)
+    dialog = controller.show
+    projection_work_state.record_sync!(project_id: PROJECTION_PROJECT_ID,
+                                       design_id: PROJECTION_DESIGN_ID, scope: :full)
+
+    dialog.callbacks.fetch('emit_initial_quote').call(
+      nil, JSON.generate('workingVersion' => 'working-718',
+                         'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0)
+    )
+
+    assert_empty quote.calls
+    assert_equal 2, host.calls
+    assert_includes dialog.executed_scripts.last, 'refresh_required'
+  end
+
   private
 
   def projection_controller(service, project_bootstrap: nil, initial_quote: nil,
-                            binding_capabilities: { 'can_create_initial_quote' => true })
+                            binding_capabilities: { 'can_create_initial_quote' => true },
+                            host_reconciliation: HostReconciliationDouble.new)
     binding = Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
       project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, base_revision_id: nil
     )
@@ -1099,6 +1198,7 @@ class DialogControllerTest < Minitest::Test
       metadata_store: @store,
       model_binding_connector: ProjectionBindingConnector.new(capabilities: binding_capabilities),
       commercial_projection_service: service,
+      host_reconciliation: host_reconciliation,
       project_bootstrap: project_bootstrap,
       initial_quote: initial_quote
     )

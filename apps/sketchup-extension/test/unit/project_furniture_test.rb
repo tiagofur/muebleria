@@ -9,8 +9,9 @@ require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/connection/transform_contract'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
-require_relative '../../src/granete_for_sketchup/connection/panel_state'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
+require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
+require_relative '../../src/granete_for_sketchup/connection/panel_state'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
@@ -27,8 +28,8 @@ FBUILDER = Granete::SketchUpExtension::Model::FurnitureBuilder
 #   * identity: Place stamps the server furnitureInstanceId verbatim, never
 #     mints/derives a new identity, and no business-object creation request
 #     is ever issued (negative proof A);
-#   * pending/placed derives per furnitureInstanceId from the working copy
-#     (qty > 1 stays individually traceable — proofs B/C);
+#   * host state derives per furnitureInstanceId from project membership,
+#     exact WorkingCopy intent and one top-level model scan;
 #   * already-placed focuses instead of duplicating (proof D);
 #   * cross-project/cross-org units cannot be placed (proofs E/F);
 #   * the working-copy update merges — other items survive (proof G);
@@ -47,6 +48,7 @@ class ProjectFurnitureTest < Minitest::Test
   FI_1 = '51000000-0000-0000-0000-0000000000f1'
   FI_2 = '51000000-0000-0000-0000-0000000000f2'
   FI_3 = '51000000-0000-0000-0000-0000000000f3'
+  FI_4 = '51000000-0000-0000-0000-0000000000f4'
   FI_FOREIGN = '51000000-0000-0000-0000-0000000000ff'
 
   # Model with attribute dictionaries so the REAL binding store and metadata
@@ -155,6 +157,20 @@ class ProjectFurnitureTest < Minitest::Test
     end
   end
 
+  class CountingStore
+    attr_reader :reads
+
+    def initialize(store)
+      @store = store
+      @reads = 0
+    end
+
+    def read(entity)
+      @reads += 1
+      @store.read(entity)
+    end
+  end
+
   # Moves the placed root to a FINAL user-chosen transform before confirm:
   # 1 m along +X and 90° about Z (mm/deg at the contract level).
   def finalize_position!(_model, fi_id, translation_mm = [1000, 0, 0])
@@ -241,12 +257,10 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal quoted_finish, put['body']['items'].first['material_choices']
   end
 
-  # Cascade priority: an authored working item's materials are design truth
-  # and win over the quoted display finish — the confirm merge keeps them
-  # verbatim, so the local render must match what will be persisted.
-  def test_place_existing_prefers_authored_working_item_materials
-    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
-                       [instance_body(FI_1, 'quote', display_choices: { 'FRENTE' => 'mat-quoted' })])
+  # A WorkingCopy item without its root is missing_local, never an ordinary
+  # placement. Until the dedicated restore slice exists, even a direct bridge
+  # invocation must fail before inserting origin geometry or rewriting intent.
+  def test_missing_local_cannot_use_the_normal_place_path
     stub_working_copy(working_copy_body([
                                           { 'furniture_instance_id' => FI_1,
                                             'furniture_definition_id' => DEFINITION_ID,
@@ -257,79 +271,10 @@ class ProjectFurnitureTest < Minitest::Test
                                         ]))
 
     result = @placer.place(FI_1)
-    assert result['ok'], result.inspect
-
-    resolve = @catalog.layout_resolves.last
-    assert_equal({ 'FRENTE' => 'mat-authored' }, resolve['choices'])
-  end
-
-  # #637 / DT-MAT: after the web/backend reconciliation fills the lost quoted
-  # finish into the working copy of an EXISTING connected unit, the plugin
-  # reads the exact explicit choices from the refreshed working copy: they
-  # drive the authoritative layout resolve on re-placement and survive the
-  # confirm merge verbatim. No silent local default masquerades as the quoted
-  # provenance.
-  def test_reconciled_working_copy_choices_drive_resolve_and_survive_confirm
-    reconciled = { 'FRENTES' => 'mat-roble', 'INTERIOR' => 'mat-blanco' }
-    stub_project_furniture([instance_body(FI_1, 'quote', display_choices: reconciled)])
-    stub_working_copy(working_copy_body([
-                                          { 'furniture_instance_id' => FI_1,
-                                            'furniture_definition_id' => DEFINITION_ID,
-                                            'parameters' => { 'widthMm' => 600 },
-                                            'material_choices' => reconciled,
-                                            'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
-                                                             'rotation_deg' => [0.0, 0.0, 0.0] } }
-                                        ]))
-
-    # The local root is gone; re-placing the connected unit re-runs the
-    # authoritative resolve with the RECONCILED explicit choices.
-    result = @placer.place(FI_1)
-    assert result['ok'], result.inspect
-    assert_equal 'pending_position', result['code']
-
-    resolve = @catalog.layout_resolves.last
-    assert_equal reconciled, resolve['choices'],
-                 'layout resolve must use the reconciled explicit choices, never a default'
-
-    finalize_position!(@model, FI_1)
-    confirmed = @placer.confirm_placement(FI_1)
-    assert confirmed['ok'], confirmed.inspect
-
-    put = @transport.requests_for('PUT', %r{/working-copy}).first
-    assert_equal reconciled, put['body']['items'].first['material_choices'],
-                 'confirm must keep the reconciled choices verbatim (authored design truth)'
-  end
-
-  # Negative mirror of #637: when the working copy still carries the historical
-  # empty snapshot and only the display quotes a finish, the re-placement seeds
-  # the quoted finish (#620) but a confirm that finds an EXISTING empty item
-  # keeps it empty — the plugin never fabricates provenance locally; only the
-  # explicit server-side reconciliation may fill it.
-  def test_unreconciled_working_item_is_never_locally_backfilled_at_confirm
-    stub_project_furniture([instance_body(FI_1, 'quote', display_choices: { 'FRENTES' => 'mat-roble' })])
-    stub_working_copy(working_copy_body([
-                                          { 'furniture_instance_id' => FI_1,
-                                            'furniture_definition_id' => DEFINITION_ID,
-                                            'parameters' => { 'widthMm' => 600 },
-                                            'material_choices' => {},
-                                            'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
-                                                             'rotation_deg' => [0.0, 0.0, 0.0] } }
-                                        ]))
-
-    result = @placer.place(FI_1)
-    assert result['ok'], result.inspect
-    # #620 seeding still applies while the unit has no authored choice: the
-    # resolve sees the quoted finish (it is not an authored truth yet).
-    assert_equal({ 'FRENTES' => 'mat-roble' }, @catalog.layout_resolves.last['choices'])
-
-    finalize_position!(@model, FI_1)
-    confirmed = @placer.confirm_placement(FI_1)
-    assert confirmed['ok'], confirmed.inspect
-
-    # The merge keeps the EXISTING working item's fields verbatim: the empty
-    # snapshot stays empty until the explicit server-side reconciliation.
-    put = @transport.requests_for('PUT', %r{/working-copy}).first
-    assert_equal({}, put['body']['items'].first['material_choices'])
+    refute result['ok']
+    assert_equal 'host_reconciliation_required', result['code']
+    assert_empty top_level_furniture(@model)
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
   def test_confirm_writes_working_item_with_final_transform
@@ -745,30 +690,87 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal 1, located['duplicates']
   end
 
-  def test_panel_derives_pending_placed_per_unit
-    # Proof C: qty = 3 renders three individually traceable rows.
+  def test_locate_keeps_legacy_identity_only_metadata_compatibility
+    entity = @model.entities.add_group
+    MS.new(@model).write(entity, {
+                           'namespace' => 'com.granete.sketchup_extension', 'metadataVersion' => 1,
+                           'kind' => 'componentInstance',
+                           'identity' => { 'furnitureInstanceId' => FI_1 }
+                         })
+
+    located = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)
+
+    assert_same entity, located['entity']
+    assert_equal 1, located['duplicates']
+  end
+
+  def test_panel_reconciles_all_authorities_with_one_host_scan
     @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
                        [instance_body(FI_1, 'quote'), instance_body(FI_2, 'quote'),
                         instance_body(FI_3, 'quote', display_name: 'Torre horno',
-                                                     definition_id: DEFINITION_ID_2)])
+                                                     definition_id: DEFINITION_ID_2),
+                        instance_body(FI_4, 'design', definition_id: DEFINITION_ID_2)])
     stub_working_copy(working_copy_body([
+                                          { 'furniture_instance_id' => FI_2,
+                                            'parameters' => {}, 'material_choices' => {} },
                                           { 'furniture_instance_id' => FI_3,
+                                            'furniture_definition_id' => DEFINITION_ID_2,
                                             'parameters' => {}, 'material_choices' => {} }
                                         ]))
+    create_managed_root(FI_1)
+    create_managed_root(FI_3, definition_id: DEFINITION_ID_2)
+    store = CountingStore.new(MS.new(@model))
+    reconciliation = PF::HostReconciliation.new(
+      model_provider: -> { @model }, binding_store_factory: -> { MB::Store.new(@model) },
+      service: @placer.service, metadata_store_factory: ->(_model) { store }, logger: NullLogger.new
+    )
 
-    panel = @placer.panel
+    panel = PF::PanelState.build_panel_payload(reconciliation: reconciliation, catalog_provider: @catalog)
 
     assert_equal 'connected', panel['state']
-    assert_equal 3, panel['items'].length
-    assert_equal 2, panel['pending']
+    assert_equal @model.entities.to_a.length, store.reads, 'each top-level root must be read exactly once'
+    assert_equal 4, panel['items'].length
+    assert_equal 3, panel['pending']
     assert_equal 1, panel['placed']
+    assert_equal 2, panel['attention']
 
     by_id = panel['items'].to_h { |row| [row['id'], row] }
     assert by_id[FI_1]['unitIndex'] == 1 && by_id[FI_1]['unitTotal'] == 2
     assert by_id[FI_2]['unitIndex'] == 2 && by_id[FI_2]['unitTotal'] == 2
-    assert by_id[FI_3]['placed']
+    assert_equal 'pending_confirmation', by_id[FI_1]['reconciliationState']
+    assert_equal 'missing_local', by_id[FI_2]['reconciliationState']
+    assert_equal 'present_synced', by_id[FI_3]['reconciliationState']
+    assert_equal 'unplaced', by_id[FI_4]['reconciliationState']
     assert_equal 'Gabinete Base 600', by_id[FI_1]['name']
     assert_equal 'Torre horno', by_id[FI_3]['name']
+  end
+
+  def test_duplicate_terminal_orphan_and_incompatible_states_fail_closed
+    stub_project_furniture([instance_body(FI_1, 'quote'),
+                            instance_body(FI_2, 'design', lifecycle: 'removed'),
+                            instance_body(FI_3, 'design'),
+                            instance_body(FI_4, 'design', lifecycle: 'cancelled')])
+    stub_working_copy(working_copy_body([{ 'furniture_instance_id' => FI_2,
+                                           'parameters' => {}, 'material_choices' => {} }]))
+    create_managed_root(FI_1)
+    create_managed_root(FI_1)
+    create_managed_root(FI_FOREIGN)
+    create_managed_root(FI_3, project_id: PROJECT_B_ID)
+    invalid = @model.entities.add_group
+    MS.new(@model).write(invalid, {
+                           'namespace' => 'com.granete.sketchup_extension', 'metadataVersion' => 1,
+                           'kind' => 'furnitureInstance', 'identity' => { 'instanceRef' => 'local-only' }
+                         })
+
+    panel = @placer.panel
+    states = panel['items'].to_h { |row| [row['id'], row['reconciliationState']] }
+    assert_equal 'duplicate_local', states[FI_1]
+    assert_equal 'terminal_or_orphan_local', states[FI_2]
+    assert_equal 'terminal_or_orphan_local', states[FI_FOREIGN]
+    assert_equal 'incompatible', states[FI_3]
+    refute states.key?(FI_4), 'an inert terminal instance is outside the active reconciliation universe'
+    assert_includes states.values, 'unknown'
+    refute panel['clean']
   end
 
   def test_panel_distinct_error_states
@@ -1152,6 +1154,21 @@ class ProjectFurnitureTest < Minitest::Test
   end
 
   private
+
+  def create_managed_root(furniture_id, definition_id: DEFINITION_ID,
+                          project_id: PROJECT_ID, design_id: DESIGN_ID)
+    definition = @model.definitions.add("Managed #{furniture_id}-#{@model.entities.to_a.length}")
+    entity = @model.entities.add_instance(definition, Geom::Transformation.new)
+    MS.new(@model).write(entity, {
+                           'namespace' => 'com.granete.sketchup_extension', 'metadataVersion' => 1,
+                           'kind' => 'furnitureInstance',
+                           'identity' => { 'instanceRef' => furniture_id, 'furnitureInstanceId' => furniture_id,
+                                           'projectId' => project_id, 'designId' => design_id },
+                           'intent' => { 'furnitureDefinitionId' => definition_id,
+                                         'parameters' => {}, 'materialChoices' => {} }
+                         })
+    entity
+  end
 
   def build_placer(model: @model, transport: @transport)
     PF::Placer.new(

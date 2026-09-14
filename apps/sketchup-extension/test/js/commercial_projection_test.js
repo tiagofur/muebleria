@@ -51,10 +51,18 @@ function sandbox() {
   return context;
 }
 
-const bindingA = { state: 'connected', binding: { projectId: 'p-a', designId: 'd-a' },
+const bindingA = { state: 'connected', binding: { projectId: 'p-a', designId: 'd-a', baseRevisionId: null, schemaVersion: 1 },
   capabilities: { can_edit_working_copy: true, can_publish_revision: true, can_create_initial_quote: true } };
-const bindingB = { state: 'connected', binding: { projectId: 'p-b', designId: 'd-b' },
+const bindingB = { state: 'connected', binding: { projectId: 'p-b', designId: 'd-b', baseRevisionId: null, schemaVersion: 1 },
   capabilities: { can_edit_working_copy: true, can_publish_revision: true, can_create_initial_quote: true } };
+function setHost(s, selectedBinding, clean, attention) {
+  const value = selectedBinding.binding;
+  return s.window.GraneteCommercialProjection.setHostReconciliation({
+    state: 'connected', projectId: value.projectId, designId: value.designId,
+    baseRevisionId: value.baseRevisionId, schemaVersion: value.schemaVersion,
+    snapshot: 'sha256-' + 'c'.repeat(64), clean, attention: attention || 0
+  });
+}
 function projection(total, referenceTotal) {
   return {
     status: 'current', currency: 'MXN', costsWithheld: false, saleAmountsWithheld: false,
@@ -97,6 +105,7 @@ function finishRuntimeMutation(s, outcome) {
 test('renders a legitimate zero rather than missing', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
+  setHost(s, bindingA, true);
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
   assert.strictEqual(s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, projection(0, 0))), true);
   assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$0.00'));
@@ -110,6 +119,7 @@ test('renders a legitimate zero rather than missing', () => {
 test('enables Q1 only for exact confirmed current projection and guards double click', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
+  setHost(s, bindingA, true);
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
   const value = initialProjection(125);
   s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, value));
@@ -140,6 +150,22 @@ test('Q1 remains disabled without exact local match or while mutation is active'
   assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true);
 });
 
+test('Q1 fails closed for unknown, dirty, or stale-context host reconciliation', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, initialProjection(125)));
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true, 'unknown host state');
+
+  setHost(s, bindingA, false, 2);
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true, 'dirty host state');
+  assert.ok(s.__elements['initial-quote-status'].textContent.includes('2 divergencias'));
+
+  assert.strictEqual(setHost(s, bindingB, true), false, 'another binding cannot authorize Q1');
+  setHost(s, bindingA, true);
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, false, 'exact clean host context');
+});
+
 test('Q1 remains disabled when explicit initial quote capability is false despite working-copy access', () => {
   const s = sandbox();
   const denied = { state: 'connected', binding: bindingA.binding,
@@ -153,6 +179,7 @@ test('Q1 remains disabled when explicit initial quote capability is false despit
 test('renders normal Q1 and opens only the server-provided ID-only URL', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
+  setHost(s, bindingA, true);
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
   s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, initialProjection(125)));
   s.__elements['btn-initial-quote'].listeners.click();
@@ -174,6 +201,7 @@ test('renders normal Q1 and opens only the server-provided ID-only URL', () => {
 test('changed tokens require a refreshed projection and another click', () => {
   const s = sandbox();
   s.window.GraneteCommercialProjection.setBinding(bindingA);
+  setHost(s, bindingA, true);
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
   s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, initialProjection(125)));
   s.__elements['btn-initial-quote'].listeners.click();
@@ -563,4 +591,4 @@ test('successful working-copy callbacks publish a committed refresh', () => {
   assert.ok(dialogSource.includes('applySynchronization(payload)'));
 });
 
-console.log(`commercial projection tests passed: ${passed}`);
+console.log(JSON.stringify({ success: true, testsPassed: passed }));
