@@ -98,6 +98,16 @@ function validate(schema: any, value: unknown, path: string): unknown {
     return matches[0];
   }
   if (schema.$ref) return validate((runtimeSchemas as any)[schema.$ref.split('/').at(-1)!], value, path);
+  if (schema.not) {
+    let excluded = true;
+    try { validate(schema.not, value, path); } catch (_) { excluded = false; }
+    if (excluded) fail(path, 'value excluded by not');
+  }
+  if (schema.required) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(path, 'object');
+    const input = value as Record<string, unknown>;
+    for (const required of schema.required) if (!(required in input)) fail(`${path}.${required}`, 'required property');
+  }
   if (schema.type === 'null') {
     if (value !== null) fail(path, 'null');
     return value;

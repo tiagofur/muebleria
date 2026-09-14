@@ -347,11 +347,15 @@ func TestHandleQuoteRevisionAccept_SuccessForwardsExactIDs(t *testing.T) {
 // idempotency contract (same pattern as requoteIdempotentStore).
 type quoteLifecycleIdempotentStore struct {
 	*stubStore
-	receipts map[string]storage.IdempotencyResponse
+	receipts     map[string]storage.IdempotencyResponse
+	fingerprints map[string]string
 }
 
 func (s *quoteLifecycleIdempotentStore) ExecuteIdempotent(ctx context.Context, req storage.IdempotencyRequest, execute func(context.Context) (storage.IdempotencyResponse, error)) (storage.IdempotencyResponse, bool, error) {
 	if receipt, ok := s.receipts[req.ScopeKey]; ok {
+		if s.fingerprints != nil && s.fingerprints[req.ScopeKey] != req.Fingerprint {
+			return storage.IdempotencyResponse{}, false, storage.ErrIdempotencyConflict
+		}
 		return receipt, true, nil
 	}
 	response, err := execute(ctx)
@@ -362,6 +366,10 @@ func (s *quoteLifecycleIdempotentStore) ExecuteIdempotent(ctx context.Context, r
 		return response, false, nil
 	}
 	s.receipts[req.ScopeKey] = response
+	if s.fingerprints == nil {
+		s.fingerprints = map[string]string{}
+	}
+	s.fingerprints[req.ScopeKey] = req.Fingerprint
 	return response, false, nil
 }
 

@@ -25,26 +25,29 @@ import (
 // of middleware_test.go and avoids any database dependency.
 type stubStore struct {
 	// Hardware 3D assets (#667 M1)
-	assetSessionResult         *storage.HardwareAssetUploadSessionResult
-	assetSession               *domain.HardwareAssetUploadSession
-	assetSessionErr            error
-	promoteAssetBytesCmd       *storage.PromoteHardwareAssetSessionBytesCommand
-	promoteAssetBytesErr       error
-	assetPreviousStagedKey     string
-	recordAssetBytesArmed      bool
-	assetFinalized             *domain.HardwareAsset
-	assetFinalizeCmd           *storage.FinalizeHardwareAssetUploadCommand
-	assetFinalizeErr           error
-	assetCancelledCmd          *storage.CancelHardwareAssetUploadSessionCommand
-	assetResolvedBinding       *domain.HardwareVisualAssetBinding
-	assetResolveBindingCmd     *[2]string
-	assetRevisionResult        *domain.HardwareAssetRevision
-	listHardwareAssets         []domain.HardwareAsset
-	createCustomerErr          error
-	createMaterialErr          error
-	createProjectErr           error
-	createProjectWithInlineErr error
-	updateProjectErr           error
+	assetSessionResult           *storage.HardwareAssetUploadSessionResult
+	assetSession                 *domain.HardwareAssetUploadSession
+	assetSessionErr              error
+	promoteAssetBytesCmd         *storage.PromoteHardwareAssetSessionBytesCommand
+	promoteAssetBytesErr         error
+	assetPreviousStagedKey       string
+	recordAssetBytesArmed        bool
+	assetFinalized               *domain.HardwareAsset
+	assetFinalizeCmd             *storage.FinalizeHardwareAssetUploadCommand
+	assetFinalizeErr             error
+	assetCancelledCmd            *storage.CancelHardwareAssetUploadSessionCommand
+	assetResolvedBinding         *domain.HardwareVisualAssetBinding
+	assetResolveBindingCmd       *[2]string
+	assetRevisionResult          *domain.HardwareAssetRevision
+	listHardwareAssets           []domain.HardwareAsset
+	createCustomerErr            error
+	createMaterialErr            error
+	createProjectErr             error
+	createProjectWithInlineErr   error
+	bootstrapProjectDesignResult *storage.BootstrapProjectDesignResult
+	bootstrapProjectDesignErr    error
+	bootstrapProjectDesignCmd    *storage.BootstrapProjectDesignCommand
+	updateProjectErr             error
 	// #714 inline-customer update transition.
 	updateProjectWithInlineErr               error
 	updateProjectWithInlineBase              string
@@ -494,6 +497,21 @@ func (s *stubStore) CreateProjectWithInlineCustomer(ctx context.Context, p *doma
 	inline.Active = true
 	s.lastInlineCustomer = &ic
 	return nil
+}
+func (s *stubStore) BootstrapProjectDesign(_ context.Context, cmd storage.BootstrapProjectDesignCommand) (*storage.BootstrapProjectDesignResult, error) {
+	cp := cmd
+	s.bootstrapProjectDesignCmd = &cp
+	if s.bootstrapProjectDesignErr != nil {
+		return nil, s.bootstrapProjectDesignErr
+	}
+	if s.bootstrapProjectDesignResult != nil {
+		return s.bootstrapProjectDesignResult, nil
+	}
+	return &storage.BootstrapProjectDesignResult{
+		Customer: domain.Customer{ID: "70000000-0000-0000-0000-000000000718", Name: "Cliente"},
+		Project:  domain.Project{ID: "71000000-0000-0000-0000-000000000718", Name: cmd.ProjectName},
+		Design:   domain.Design{ID: "72000000-0000-0000-0000-000000000718", ProjectID: "71000000-0000-0000-0000-000000000718", Name: cmd.DesignName},
+	}, nil
 }
 func (s *stubStore) GetCustomerByID(ctx context.Context, id string) (*domain.Customer, error) {
 	return s.customerReturnedByID, s.customerGetByIDErr

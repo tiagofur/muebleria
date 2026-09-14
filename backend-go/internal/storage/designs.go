@@ -1429,6 +1429,8 @@ type ModelBindingContext struct {
 	OrganizationName          string
 	ProjectID                 string
 	ProjectName               string
+	CustomerID                string
+	CustomerName              string
 	Design                    domain.Design
 	WorkingCopyBaseRevisionID *string
 	WorkingCopyUpdatedAt      time.Time
@@ -1454,11 +1456,12 @@ func (s *PostgresStore) GetModelBindingContext(ctx context.Context, projectID, d
 
 	// 1. Project + owning organization (display summary for the plugin dialog).
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT p.name, p.organization_id::text, o.name
+		SELECT p.name, p.organization_id::text, o.name, c.id::text, c.name
 		FROM projects p
 		JOIN organizations o ON o.id = p.organization_id
-		WHERE p.id = $1
-	`, projectID).Scan(&out.ProjectName, &out.OrganizationID, &out.OrganizationName)
+		JOIN customers c ON c.id = p.customer_id AND c.organization_id = p.organization_id
+		WHERE p.id = $1 AND p.organization_id = $2
+	`, projectID, OrgFromCtx(ctx)).Scan(&out.ProjectName, &out.OrganizationID, &out.OrganizationName, &out.CustomerID, &out.CustomerName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignNotFound

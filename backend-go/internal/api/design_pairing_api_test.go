@@ -53,6 +53,8 @@ func pairingTestBindingContext() *storage.ModelBindingContext {
 	return &storage.ModelBindingContext{
 		ProjectID:        designTestProjectID,
 		ProjectName:      "Obra Demo",
+		CustomerID:       "61000000-0000-0000-0000-000000000001",
+		CustomerName:     "Cliente Demo",
 		OrganizationID:   storage.InitialOrganizationID,
 		OrganizationName: "Taller Demo",
 		Design:           design,

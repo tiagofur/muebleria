@@ -361,6 +361,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("/api/furniture/authoring/resolve", authoringResolve)
 
 	// Clientes
+	mux.Handle("GET /api/customers/summaries", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleCustomerSummaries))))
 	mux.Handle("GET /api/customers", authMW(http.HandlerFunc(server.HandleCustomers)))
 	mux.Handle("POST /api/customers", authMW(http.HandlerFunc(server.HandleCustomers)))
 	mux.Handle("GET /api/customers/{id}", authMW(http.HandlerFunc(server.HandleCustomerByID)))
@@ -483,6 +484,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("DELETE /api/catalog/components/{id}", authMW(http.HandlerFunc(server.HandleComponentByID)))
 
 	// Proyectos y cotizaciones
+	mux.Handle("POST /api/projects:bootstrap-design", noStoreMiddleware(authMW(server.RequireIdempotency("project.bootstrap-design", http.HandlerFunc(server.HandleProjectDesignBootstrap)))))
 	mux.Handle("GET /api/projects", authMW(http.HandlerFunc(server.HandleProjects)))
 	mux.Handle("POST /api/projects", authMW(http.HandlerFunc(server.HandleProjects)))
 	// #642 / 2A: batch read model for project commercial summaries in Cotizaciones list.
