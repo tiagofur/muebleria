@@ -237,7 +237,8 @@ module Granete
         def place_existing_furniture(model, furniture_instance_id:, definition:, parameters: {},
                                      resolved_layout: nil, material_choices: nil,
                                      project_id: nil, design_id: nil, relationships: nil,
-                                     transformation: nil, prepare: true, preserve_parameters: false)
+                                     transformation: nil, prepare: true, preserve_parameters: false,
+                                     transaction: true)
           unless furniture_instance_id.is_a?(String) && !furniture_instance_id.strip.empty?
             return { 'success' => false,
                      'error' => 'Se requiere la identidad (furnitureInstanceId) del mueble del proyecto' }
@@ -249,7 +250,7 @@ module Granete
                      normalize_parameters(definition, parameters)
                    end
           host_transform = transformation || Geom::Transformation.new
-          model.start_operation("Colocar Mueble del Proyecto #{definition['name']}", true)
+          model.start_operation("Colocar Mueble del Proyecto #{definition['name']}", true) if transaction
           begin
             furniture_definition = create_furniture_definition(model, definition, furniture_instance_id)
             # FurnitureInstance roots are TOP-LEVEL (native entity model
@@ -269,9 +270,9 @@ module Granete
                                            identity: { server: true, project_id: project_id,
                                                        design_id: design_id },
                                            relationships: relationships)
-            model.commit_operation
+            model.commit_operation if transaction
           rescue StandardError => e
-            model.abort_operation
+            model.abort_operation if transaction
             return { 'success' => false, 'error' => e.message }
           end
 

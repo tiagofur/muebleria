@@ -1162,6 +1162,7 @@ class ProjectFurnitureTest < Minitest::Test
     )
     stub_working_copy(working_copy_body([item]))
     actions_before = SketchupStub.send_actions.length
+    operations_before = @model.operations.length
 
     result = @placer.restore(FI_1)
 
@@ -1178,6 +1179,8 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal item['material_choices'], metadata.dig('intent', 'materialChoices')
     assert_equal item['transform'], PF::TransformContract.from_host(root.transformation)
     assert_equal actions_before, SketchupStub.send_actions.length, 'restore must not activate the Move tool'
+    assert_equal [[:start, 'Restaurar Mueble del Proyecto Gabinete Base 600', true], :commit],
+                 @model.operations.drop(operations_before)
     assert_empty @transport.requests_for('POST', %r{/furniture-instances})
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
@@ -1286,21 +1289,27 @@ class ProjectFurnitureTest < Minitest::Test
     drift_builder = Object.new
     drift_builder.define_singleton_method(:place_existing_furniture) do |model, **kwargs|
       result = real_builder.place_existing_furniture(model, **kwargs)
-      MB::Store.new(model).write!(
-        MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R2)
+      drifted = MB::Binding.new(
+        project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R2
       )
+      model.set_attribute(MB::DICTIONARY, MB::BINDING_KEY, JSON.generate(drifted.to_h))
       result
     end
-    drift_builder.define_singleton_method(:rollback_placement) do |model, entity|
-      real_builder.rollback_placement(model, entity)
-    end
     placer = build_placer_with_builder(drift_builder)
+    operations_before = @model.operations.length
 
     result = placer.restore(FI_1)
 
     refute result['ok']
     assert_equal 'binding_changed', result['code']
     assert_empty top_level_furniture(@model)
+    restore_operations = @model.operations.drop(operations_before)
+    start_count = restore_operations.count { |entry| entry.is_a?(Array) && entry.first == :start }
+    assert_equal 1, start_count
+    assert_equal 0, restore_operations.count(:commit)
+    assert_equal 1, restore_operations.count(:abort)
+    Sketchup.send_action('editUndo:')
+    assert_empty top_level_furniture(@model), 'Undo must not resurrect a restore that never committed'
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
@@ -1347,7 +1356,7 @@ class ProjectFurnitureTest < Minitest::Test
     SketchupStub.active_model = @model
   end
 
-  def test_restore_ruby_guard_rejects_same_identity_while_first_call_is_in_flight
+  def test_restore_ruby_guard_keeps_same_model_identity_claimed_across_binding_change
     item = restore_item
     stub_working_copy(working_copy_body([item]))
     delegate = PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new)
@@ -1378,12 +1387,17 @@ class ProjectFurnitureTest < Minitest::Test
     )
     first = Thread.new { restorer.restore(FI_1) }
     entered.pop
+    MB::Store.new(@model).write!(
+      MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R2)
+    )
 
     second = restorer.restore(FI_1)
     assert_equal 'action_in_progress', second['code']
     release << true
-    assert first.value['ok']
-    assert_equal 1, top_level_furniture(@model).length
+    first_result = first.value
+    refute first_result['ok']
+    assert_equal 'binding_changed', first_result['code']
+    assert_empty top_level_furniture(@model)
   end
 
   private
@@ -1420,9 +1434,6 @@ class ProjectFurnitureTest < Minitest::Test
       result = real_builder.place_existing_furniture(model, **kwargs)
       after_insert.call
       result
-    end
-    wrapper.define_singleton_method(:rollback_placement) do |model, entity|
-      real_builder.rollback_placement(model, entity)
     end
     wrapper
   end

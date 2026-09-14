@@ -155,6 +155,7 @@ module SketchupStub
   @entity_seq = 0
   @guid_seq = 0
   @undo_frames = []
+  @undo_history = []
 
   class Menu
     attr_reader :items
@@ -689,6 +690,7 @@ module SketchupStub
       @entity_seq = 0
       @guid_seq = 0
       @undo_frames = []
+      @undo_history = []
       UI::HtmlDialog.reset! if defined?(UI::HtmlDialog)
     end
 
@@ -699,7 +701,8 @@ module SketchupStub
     end
 
     def commit_undo_frame
-      @undo_frames.pop
+      frame = @undo_frames.pop
+      @undo_history << frame if frame
     end
 
     def abort_undo_frame
@@ -708,6 +711,10 @@ module SketchupStub
 
     def record_undo(&block)
       @undo_frames.last&.push(block)
+    end
+
+    def undo
+      @undo_history.pop&.reverse_each(&:call)
     end
 
     def next_persistent_id
@@ -770,6 +777,7 @@ module Sketchup
 
   def self.send_action(action)
     SketchupStub.send_actions << action
+    SketchupStub.undo if action == 'editUndo:'
   end
 
   def self.require(path)

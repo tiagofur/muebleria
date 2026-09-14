@@ -48,7 +48,7 @@ module Granete
               return failure('unbound', 'conectá este modelo a un proyecto y diseño primero', furniture_instance_id)
             end
 
-            key = [model.object_id, binding.to_h, furniture_instance_id]
+            key = [model.object_id, furniture_instance_id]
             unless claim?(key)
               return failure('action_in_progress', 'la restauración de este mueble ya está en curso',
                              furniture_instance_id)
@@ -99,22 +99,27 @@ module Granete
             raise RestoreFailure.new('duplicate_detected', DUPLICATE_MESSAGE) unless fresh[:local].empty?
 
             builder = @furniture_builder_factory.call(model)
+            operation_open = false
+            model.start_operation("Restaurar Mueble del Proyecto #{definition['name']}", true)
+            operation_open = true
             inserted = builder.place_existing_furniture(
               model, furniture_instance_id: furniture_instance_id, definition: definition,
                      parameters: initial[:item].parameters, material_choices: initial[:item].material_choices,
                      resolved_layout: layout, project_id: binding.project_id, design_id: binding.design_id,
-                     transformation: transform, prepare: false, preserve_parameters: true
+                     transformation: transform, prepare: false, preserve_parameters: true, transaction: false
             )
             raise RestoreFailure.new('placement_failed', inserted['error']) unless inserted['success']
 
             entity = inserted['entity']
             verify_inserted!(model, binding, furniture_instance_id, initial, entity)
+            model.commit_operation
+            operation_open = false
             @logger.info('project_furniture_restored', furniture_instance_id: furniture_instance_id,
                                                        project_id: binding.project_id,
                                                        design_id: binding.design_id)
             success(furniture_instance_id, restored: true)
           rescue RestoreFailure, Service::Error, PlacementResolutionError, Contract::ContractError, StandardError
-            rollback_new_root(model, builder, entity, furniture_instance_id) if entity
+            model.abort_operation if operation_open
             raise
           end
 
@@ -270,13 +275,6 @@ module Granete
 
           def finish_claim(key)
             @guard.synchronize { @in_flight.delete(key) }
-          end
-
-          def rollback_new_root(model, builder, entity, furniture_instance_id)
-            return if builder&.rollback_placement(model, entity)
-
-            @logger.error('project_furniture_restore_rollback_failed',
-                          furniture_instance_id: furniture_instance_id)
           end
 
           def success(furniture_instance_id, restored:)
