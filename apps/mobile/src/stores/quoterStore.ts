@@ -1,10 +1,17 @@
 import { create } from 'zustand';
 import { apiClient } from '../services/apiClient';
 import {
+  loadPersistedIntention,
+  savePersistedIntention,
+  clearPersistedIntention,
+} from '../services/quoterIntentionStorage';
+import { useCatalogStore } from './catalogStore';
+import {
   type Module,
   type ProjectItem,
   type Project,
   type OptionChoices,
+  type Customer,
   seedCatalogExpandedLatAm,
   resolveBom,
   calcProjectBreakdown,
@@ -61,10 +68,137 @@ export interface QuoterState {
   generateWhatsAppText: () => string;
   /**
    * Persist the street quote as a DRAFT project on the server so the office
-   * picks it up in the web app: find-or-create customer by name, then POST
-   * the project with one line item per cart row. Returns the project id.
+   * picks it up in the web app (#715): ONE POST /projects with
+   * inline_customer_name — the server creates Customer + Project in the same
+   * transaction and mints the customer identity. No dedupe by name, no
+   * separate POST /customers. Returns the server-authoritative project id.
    */
   saveAsQuote: () => Promise<{ projectId: string; customerName: string }>;
+  /**
+   * #715 internal: the uncommitted save intention (payload digest +
+   * project id). POST /projects has no Idempotency-Key wrapper — its retry
+   * contract is a client-stable project id, so the same semantic payload
+   * retries with the same id (409 ⇒ reconcile by read-back) and any edit
+   * mints a fresh one. Persisted (fingerprint + projectId only) so the
+   * retry survives app restart/crash after a lost response; cleared once
+   * the server commits.
+   */
+  pendingSaveIntention: { fingerprint: string; projectId: string } | null;
+}
+
+/** Customer shape returned by GET /customers/{id} and 201 inline_customer. */
+interface ServerCustomer {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+  active?: boolean;
+}
+
+/** 201 body of POST /projects with inline_customer_name (#712): flat project
+ * fields plus the server-minted customer. */
+interface InlineProjectCreateResponse {
+  id: string;
+  customer_id: string;
+  inline_customer?: ServerCustomer;
+}
+
+/**
+ * v4 UUID over Math.random for runtimes without crypto.randomUUID (Hermes /
+ * RN 0.76). It is a client-side intention id validated by the server as a
+ * UUID — not a secret — so non-crypto randomness is acceptable here.
+ */
+export function uuidV4Fallback(): string {
+  const hex = () =>
+    Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0');
+  const variant = ((Math.floor(Math.random() * 0xffff) & 0x3fff) | 0x8000)
+    .toString(16)
+    .padStart(4, '0');
+  return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${variant}-${hex()}${hex()}${hex()}`;
+}
+
+function newProjectIntentionId(): string {
+  const c = globalThis.crypto;
+  return c && typeof c.randomUUID === 'function'
+    ? c.randomUUID()
+    : uuidV4Fallback();
+}
+
+/** HTTP status carried by the apiClient's DomainError (context.status). */
+function httpStatusOf(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const e = err as { status?: unknown; context?: { status?: unknown } };
+  const status = e.context?.status ?? e.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * Deterministic digest (two-lane FNV-1a) of the semantic payload. The
+ * fingerprint identifies the intention across retries AND app restarts
+ * without persisting any commercial payload — only this digest + the
+ * project id are stored.
+ */
+function fingerprintOf(payload: string): string {
+  const lanes = [0x811c9dc5, 0x01000193];
+  for (let i = 0; i < payload.length; i++) {
+    const code = payload.charCodeAt(i);
+    for (let l = 0; l < lanes.length; l++) {
+      lanes[l] = Math.imul(lanes[l] ^ code, 0x01000193) >>> 0;
+    }
+  }
+  return lanes.map((h) => h.toString(16).padStart(8, '0')).join('');
+}
+
+/**
+ * One-shot hydration of the persisted intention (#715 restart safety).
+ * Adopted only while no in-session intention exists — a save made in this
+ * session always wins over the persisted row. A load failure (corrupt row,
+ * read error) rejects and un-memoizes so the next attempt re-reads; every
+ * attempt is fail-closed on its own.
+ */
+let intentionHydration: Promise<void> | null = null;
+function ensureIntentionHydrated(): Promise<void> {
+  intentionHydration ??= loadPersistedIntention()
+    .then((persisted) => {
+      if (
+        persisted &&
+        useQuoterStore.getState().pendingSaveIntention === null
+      ) {
+        useQuoterStore.setState({ pendingSaveIntention: persisted });
+      }
+    })
+    .catch((err: unknown) => {
+      intentionHydration = null;
+      throw err;
+    });
+  return intentionHydration;
+}
+
+/** @visibleForTesting — re-run hydration after simulating an app restart. */
+export function __resetQuoterIntentionHydration(): void {
+  intentionHydration = null;
+}
+
+/**
+ * Adopt the server-owned customer into the mobile catalog store (by id), the
+ * same reconciliation the web store does after the atomic create. No parallel
+ * store: catalogStore keeps owning the customer list.
+ */
+function reconcileCatalogCustomer(raw: ServerCustomer): void {
+  const catalog = useCatalogStore.getState();
+  if (catalog.customers.some((c) => c.id === raw.id)) return;
+  const customer: Customer = {
+    id: raw.id,
+    name: raw.name,
+    email: raw.email || undefined,
+    phone: raw.phone || undefined,
+    address: raw.address || undefined,
+    notes: raw.notes || undefined,
+    active: raw.active ?? true,
+  };
+  useCatalogStore.setState({ customers: [...catalog.customers, customer] });
 }
 
 function calculateItemCosts(
@@ -133,6 +267,7 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
   customerName: 'Cliente Particular',
   projectTitle: 'Presupuesto de Mobiliario',
   commercialMarginPercent: 35,
+  pendingSaveIntention: null,
 
   setCustomerName: (name) => set({ customerName: name }),
   setProjectTitle: (title) => set({ projectTitle: title }),
@@ -322,36 +457,37 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
   },
 
   // --- saveAsQuote (server persistence) ----------------------------------------
-// Appended separately: find-or-create the customer by name, then POST the
-// draft project. Item option choices are empty — the office finishes them
-// in the web editor; module/preset/quantity carry over intact.
+  // #715: the whole save is ONE server-side transaction. POST /projects with
+  // customer_id '' + inline_customer_name creates Customer + Project together
+  // (#712); the server mints the customer id and returns the authoritative
+  // pair in the 201 body. Mobile never POSTs /customers and never dedupes by
+  // name — a typed name is a new customer by design (the picker for existing
+  // customers belongs to the web app). The intention (digest + project id)
+  // is persisted FAIL-CLOSED (durable write confirmed → memory → POST) so a
+  // retry after restart/lost-response reuses the same id (409 ⇒ validated
+  // read-back) instead of duplicating the pair. Item option choices are
+  // empty — the office finishes them in the web editor; module/preset/
+  // quantity carry over intact.
 
   saveAsQuote: async () => {
-    const { customerName, projectTitle, items, commercialMarginPercent } = get();
+    const { customerName, projectTitle, items, commercialMarginPercent } =
+      get();
     if (items.length === 0) {
       throw new Error('El carrito está vacío');
     }
+    // Restart safety (#715): adopt the persisted intention (if any) before
+    // deciding the project id, so a retry after app restart reuses it. A
+    // load failure propagates — never mint a fresh id over an unreadable
+    // intention that may hide an unrecoverable prior commit.
+    await ensureIntentionHydrated();
+    const { pendingSaveIntention } = get();
+
     const trimmedName = customerName.trim() || 'Cliente Particular';
 
-    // Find-or-create customer by exact name (case-insensitive).
-    const customers = await apiClient
-      .get<{ id: string; name: string }[]>('/customers')
-      .catch(() => [] as { id: string; name: string }[]);
-    const existing = customers.find(
-      (c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase(),
-    );
-    let customerId = existing?.id;
-    if (!customerId) {
-      const created = await apiClient.post<{ id: string }>('/customers', {
-        name: trimmedName,
-        active: true,
-      });
-      customerId = created.id;
-    }
-
-    const created = await apiClient.post<{ id: string }>('/projects', {
+    const body = {
       name: projectTitle.trim() || `Cotización ${trimmedName}`,
-      customer_id: customerId,
+      customer_id: '',
+      inline_customer_name: trimmedName,
       currency: 'MXN',
       margin_factor: 1 + commercialMarginPercent / 100,
       labor_fixed_cost: 0,
@@ -364,8 +500,79 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
           : {}),
         option_choices: {},
       })),
-    });
+    };
 
-    return { projectId: created.id, customerName: trimmedName };
+    // Same semantic payload ⇒ same project id (safe retry, in-session and
+    // across restarts); any edit to the draft ⇒ new intention, new id.
+    const fingerprint = fingerprintOf(JSON.stringify(body));
+    const projectId =
+      pendingSaveIntention?.fingerprint === fingerprint
+        ? pendingSaveIntention.projectId
+        : newProjectIntentionId();
+    const intention = { fingerprint, projectId };
+    // FAIL-CLOSED (#715 review): confirm the durable write BEFORE adopting
+    // the intention or sending anything. If it fails: 0 POST /projects,
+    // 0 customers, 0 projects, honest error — no best-effort continue that
+    // could strand a committed pair behind a lost id.
+    try {
+      await savePersistedIntention(intention);
+    } catch (err) {
+      throw new Error(
+        `No se pudo registrar el intento de guardado de forma segura: ${(err as Error)?.message ?? 'error de almacenamiento'}`,
+      );
+    }
+    set({ pendingSaveIntention: intention });
+
+    try {
+      const created = await apiClient.post<InlineProjectCreateResponse>(
+        '/projects',
+        { id: projectId, ...body },
+      );
+      if (
+        !created.id ||
+        !created.customer_id ||
+        created.customer_id !== created.inline_customer?.id
+      ) {
+        throw new Error(
+          'El servidor no devolvió el par cliente+cotización creado',
+        );
+      }
+      reconcileCatalogCustomer(created.inline_customer);
+      set({ pendingSaveIntention: null });
+      await clearPersistedIntention();
+      return { projectId: created.id, customerName: trimmedName };
+    } catch (err) {
+      if (httpStatusOf(err) !== 409) {
+        // Fallo honesto: la transacción server-side dejó 0 clientes y 0
+        // cotizaciones nuevas. El draft queda intacto, la intención queda
+        // persistida y un reintento (incluso tras reinicio) reutiliza el
+        // mismo projectId.
+        throw err;
+      }
+      // 409: esta intención ya podría haber hecho commit (respuesta
+      // perdida). Reconciliar desde la verdad del servidor — pero sólo si
+      // el read-back es coherente con ESTA intención; nunca un 409 ciego.
+      const existing = await apiClient.get<{
+        id: string;
+        customer_id: string;
+        name?: string;
+      }>(`/projects/${projectId}`);
+      if (
+        existing.id !== projectId ||
+        !existing.customer_id ||
+        (existing.name ?? '') !== body.name
+      ) {
+        throw new Error(
+          'El reintento encontró una cotización que no coincide con esta intención',
+        );
+      }
+      const customer = await apiClient.get<ServerCustomer>(
+        `/customers/${existing.customer_id}`,
+      );
+      reconcileCatalogCustomer(customer);
+      set({ pendingSaveIntention: null });
+      await clearPersistedIntention();
+      return { projectId: existing.id, customerName: trimmedName };
+    }
   },
 }));

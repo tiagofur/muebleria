@@ -5,6 +5,7 @@ import { useAuthStore } from './src/stores/authStore';
 import { useCatalogStore } from './src/stores/catalogStore';
 import { unwrapPieceLabelQrUrl } from '@granete/domain';
 import { setOfflineQueueStorage } from './src/services/offlineQueueStorage';
+import { setQuoterIntentionStorage } from './src/services/quoterIntentionStorage';
 import { useFloorScannerStore } from './src/stores/floorScannerStore';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -43,12 +44,15 @@ export type ActiveScreen =
 
 // Persistent offline queue storage (F091 item 2). Web/test builds mock or
 // skip this — setOfflineQueueStorage(null) keeps the in-memory behavior.
+// The same AsyncStorage instance backs the quoter's save intention (#715).
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const AsyncStorage = require('@react-native-async-storage/async-storage').default;
   setOfflineQueueStorage(AsyncStorage);
+  setQuoterIntentionStorage(AsyncStorage);
 } catch {
   setOfflineQueueStorage(null);
+  setQuoterIntentionStorage(null);
 }
 
 export default function App() {
