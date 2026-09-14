@@ -4,9 +4,17 @@
   if (window.GraneteCommercialBootstrap) return;
 
   var busy = false;
+  var bootstrapOpen = false;
+  var bindingState = { state: "unbound" };
   function el(id) { return document.getElementById(id); }
   function visible(node, value) { if (node) node.style.display = value ? "" : "none"; }
   function setStatus(value) { if (el("bootstrap-status")) el("bootstrap-status").textContent = value || ""; }
+  function renderHierarchy() {
+    var formOpen = bootstrapOpen && bindingState.state !== "connected";
+    visible(el("project-bootstrap-form"), formOpen);
+    visible(el("model-binding-actions"), !formOpen);
+    visible(el("pairing-entry"), !formOpen && bindingState.state !== "connected");
+  }
   function mode() {
     var checked = document.querySelector('input[name="bootstrap-customer-mode"]:checked');
     return checked ? checked.value : "existing";
@@ -17,7 +25,8 @@
   }
   function open() {
     if (busy) return;
-    visible(el("project-bootstrap-form"), true);
+    bootstrapOpen = true;
+    renderHierarchy();
     visible(el("model-binding-picker"), false);
     setStatus("Cargando clientes…");
     syncMode();
@@ -25,7 +34,12 @@
     if (projectName && typeof projectName.focus === "function") projectName.focus();
     if (window.sketchup && window.sketchup.list_bootstrap_customers) window.sketchup.list_bootstrap_customers();
   }
-  function close() { if (!busy) { visible(el("project-bootstrap-form"), false); setStatus(""); } }
+  function close() {
+    if (busy) return;
+    bootstrapOpen = false;
+    renderHierarchy();
+    setStatus("");
+  }
   function receiveCustomers(result) {
     var select = el("bootstrap-customer-select");
     if (!select) return;
@@ -62,12 +76,19 @@
     el("project-bootstrap-form").setAttribute("aria-busy", "false");
     el("btn-bootstrap-submit").disabled = false;
     if (result && result.ok) {
-      visible(el("project-bootstrap-form"), false);
+      bootstrapOpen = false;
+      renderHierarchy();
       setStatus("");
-    } else setStatus((result && result.reason) || "No se pudo crear el proyecto.");
+    } else {
+      bootstrapOpen = true;
+      renderHierarchy();
+      setStatus((result && result.reason) || "No se pudo crear el proyecto.");
+    }
   }
   function setBinding(bindingStatus) {
-    if (bindingStatus && bindingStatus.state === "connected") visible(el("project-bootstrap-form"), false);
+    bindingState = bindingStatus || { state: "unbound" };
+    if (bindingState.state === "connected") bootstrapOpen = false;
+    renderHierarchy();
   }
 
   if (el("btn-bootstrap-project")) el("btn-bootstrap-project").addEventListener("click", open);
