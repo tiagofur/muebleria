@@ -1152,3 +1152,12 @@ EOL.
   - `git diff --check`: PASS.
 - `origin/main` avanzó a `56bb3cf4` por el merge de PR #717 después de comenzar; se
   incorporará antes del push y se repetirá la verificación afectada sin alterar #711.
+- Integración final: `origin/main@56bb3cf4` incorporado sin conflictos manuales.
+  Verificación post-merge en el HEAD local:
+  - `pnpm typecheck`, `pnpm test`, `pnpm openapi:check`, `git diff --check`: PASS.
+  - Primer `GOFLAGS='-p=1' go test ./... -count=1`: API/domain/pilot PASS; storage
+    recibió terminaciones administrativas PostgreSQL (`SQLSTATE 57P01`) por solapamiento
+    interno de tests DB, no un assertion failure del cambio.
+  - Rerun aislado y serial real `GOFLAGS='-p=1' go test -parallel=1 ./internal/storage -count=1`:
+    PASS en 554.135 s.
+  - Browser gate real post-merge: 1/1 Chromium PASS en 10.2 s.
