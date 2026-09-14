@@ -1225,3 +1225,73 @@ EOL.
     PASS (storage 462.588 s; pilotreadiness 232.931 s).
   - Browser gate real Chromium PASS 1/1 en 8.1 s.
   - `git diff --check` PASS.
+## Issue #658 — implementación — 2026-09-14
+
+- Handoff: implementar #658 sobre `main` (base `dd277ddd`), rama
+  `feat/658-design-working-materials-reconcile-ui`. Inicio bloqueado
+  temporalmente por falta de `status:approved`; el propietario lo añadió y la
+  implementación continuó el mismo día.
+- Superficie: `DesignWorkingMaterialsPanel`
+  (`packages/ui/src/digitalThread/DesignWorkingMaterialsPanel.tsx`) integrado
+  en el workspace de Diseños justo bajo el banner del Working Copy. Reutiliza
+  SOLO las operaciones generadas existentes
+  (`getDesignWorkingCopyMaterialProvenance`,
+  `reconcileDesignWorkingMaterials`, `listProjectFurnitureInstances`); sin
+  backend nuevo, sin segundo clasificador ni DTO paralelo. Nombres de material
+  resueltos por props del catálogo del shell (presentación only).
+- Semántica honrada: los 4 estados de provenance del contrato con copy propio
+  (Elegido en el diseño / Cotizado, falta en el borrador / Heredado del
+  diseño / Sin resolver); fuente quoted comunicada como «material cotizado
+  actual», nunca como revisión histórica; sólo `quoted_missing_from_working`
+  expone acción; confirmación por unidad con detalle de lo que se aplicará;
+  concurrencia con `working_copy_updated_at` del GET; Idempotency-Key reutilizada
+  por intención; 409 → mensaje + Recargar materiales (sin overwrite); respuesta
+  tardía de otro Design descartada por correlación de designId; read-back por
+  invalidación de las queries del mismo design; read-only sin acción de mutación.
+- Verificación:
+  - `pnpm typecheck` monorepo PASS; `pnpm test` completo PASS (ui 1851, web
+    492, storage 216, excel 350+3 skip, desktop 17, mobile 87, domain);
+    `pnpm openapi:check` PASS (sin drift); `git diff --check` PASS.
+  - Tests nuevos: 11 del panel (candidate/authored/empty/error/success/
+    double-click/conflict/context-switch/read-only/retry-key) + 1 de
+    integración de pantalla.
+  - Browser gate real Go+PostgreSQL
+    (`tests/organization/design-working-materials-reconcile.spec.ts`), verde
+    en 3 corridas: positivo (detect → revisar → confirmar → read-back real →
+    pendiente desaparece; unidad authored nunca ofrecida), conflicto stale
+    real (409 → recargar → reparación exitosa con token fresco, parámetros
+    concurrentes preservados), tenant denial cross-org (404) y smoke
+    responsive 390/768/1280 sin overflow.
+  - Hallazgo del gate: mi fixture inicial colisionaba PROJECT/QUOTE_LINE IDs
+    con project-pairing.spec.ts (rompía su selección default de design);
+    corregido con IDs únicos + preservación de customers. Las corridas full
+    locales posteriores mostraron flakes ambientales no relacionados
+    (mfa/machine-output con timeouts de 15-18 min; host con load 7+), cada
+    spec fallido pasa aislado y en combinación con el mío.
+  - SketchUp host: N/A / NOT_TESTED.
+- Review round (late-response context receipt): la correlación pasó de
+  designId-only a un context receipt completo — `JSON.stringify([...queryKeys.root,
+  projectId, designId])`, reutilizando la identidad de session/tenant scope que
+  `projectDesignsQueryKeys(sessionScopeKey(...))` ya hornea en las query keys
+  (sin parsear JWT ni autoridad paralela). El receipt activo se actualiza
+  sincrónicamente con el render (patrón React de ajuste de estado en fase de
+  render, sin useEffect): al cambiar session scope/project/design se descartan
+  modal, unitStates, idempotency keys y guards single-flight sin tocar el
+  command server-side ya emitido. Success, error y 409 se comparan contra el
+  receipt vivo y se descartan completos (sin setUnitState, sin invalidaciones
+  del contexto nuevo; el guard single-flight del contexto nuevo tampoco se
+  toca desde una intención vieja). Regresiones nuevas: Project A→B tardía,
+  session/org A→B tardía, 409 tardío (más la de Design conservada y la
+  verificación de estado idle fresco en B). Re-verificación: typecheck+pnpm
+  test completos PASS (ui 1854), openapi:check PASS, browser gate 6/6 PASS
+  (mi spec + pairing + inline-customer).
+- Review round 2 (setState durante render): el receipt sigue actualizándose
+  sincrónicamente con el render, pero ahora SOLO como asignación de ref —
+  sin setState en fase de render. El reset visual/intenciones (modal,
+  unitStates, idempotency keys, guards) vive en un useEffect por receipt,
+  posterior al commit; el guard de late responses NO depende del effect (el
+  ref ya cambió cuando el nuevo contexto renderiza, antes de cualquier
+  efecto). Regresión nueva: cambio de contexto design/project/session sin
+  warnings de update-during-render. Panel 15/15; ui 1855; typecheck+pnpm
+  test completos PASS; openapi:check PASS; browser gate 5/5 PASS (reintento
+  tras un flake de carga del host en pairing, paso no relacionado).

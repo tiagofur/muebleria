@@ -31,6 +31,7 @@ import {
   type DesignRevisionArtifact,
   type ProductionRelease,
 } from '@granete/storage';
+import type { MaterialBoard } from '@granete/domain';
 import { EmptyState, Modal, PageHeader, PageLoading, WorkspaceTabs } from '../common';
 import {
   ARTIFACT_HEALTH_LABELS,
@@ -49,6 +50,7 @@ import {
 import { resolveDesignArtifactUrl } from './designArtifactUrl';
 import { SketchUpPairingModal } from './SketchUpPairingModal';
 import { RevisionSnapshotItemsPanel } from './RevisionSnapshotItemsPanel';
+import { DesignWorkingMaterialsPanel } from './DesignWorkingMaterialsPanel';
 import './digitalThread.css';
 
 /**
@@ -79,9 +81,11 @@ export interface ProjectDesignsQueryKeys {
   readonly root: QueryKey;
   readonly designs: QueryKey;
   readonly designWorkingCopy: (designId: string) => QueryKey;
+  readonly designMaterialProvenance: (designId: string) => QueryKey;
   readonly designRevisions: (designId: string) => QueryKey;
   readonly designRevisionDetail: (designId: string, revisionId: string) => QueryKey;
   readonly designRevisionArtifacts: (designId: string, revisionId: string) => QueryKey;
+  readonly furnitureInstances: QueryKey;
   readonly productionReleases: QueryKey;
 }
 
@@ -94,6 +98,12 @@ export function projectDesignsQueryKeys(
     root,
     designs: [...root, 'designs'],
     designWorkingCopy: (designId: string) => [...root, 'designs', designId, 'working-copy'],
+    designMaterialProvenance: (designId: string) => [
+      ...root,
+      'designs',
+      designId,
+      'material-provenance',
+    ],
     designRevisions: (designId: string) => [...root, 'designs', designId, 'revisions'],
     designRevisionDetail: (designId: string, revisionId: string) => [
       ...root,
@@ -111,6 +121,7 @@ export function projectDesignsQueryKeys(
       revisionId,
       'artifacts',
     ],
+    furnitureInstances: [...root, 'furniture-instances'],
     productionReleases: [...root, 'production-releases'],
   };
 }
@@ -128,6 +139,12 @@ export interface ProjectDesignsScreenProps {
   readonly onOpenFurnitureMatrix?: (context: { designId: string | null; revisionId: string | null }) => void;
   readonly onOpenReconciliation?: (context: { designId: string | null; revisionId: string | null }) => void;
   readonly canMutate?: boolean;
+  /**
+   * #658: catálogo de materiales del workspace para presentar los candidatos
+   * de reconciliación por nombre (presentación only; la clasificación y la
+   * mutación viven en el servidor).
+   */
+  readonly catalogMaterials?: readonly MaterialBoard[];
 }
 
 type ArtifactAccessErrorKind =
@@ -246,6 +263,7 @@ export function ProjectDesignsScreen({
   onOpenFurnitureMatrix,
   onOpenReconciliation,
   canMutate = false,
+  catalogMaterials,
 }: ProjectDesignsScreenProps): ReactNode {
   const queryClient = useQueryClient();
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
@@ -926,6 +944,22 @@ export function ProjectDesignsScreen({
                   </div>
                 </div>
               ) : null}
+
+              {/* #658 — Materiales pendientes del borrador: presentación del
+                  read model #638 + command canónico de reconciliación. Se
+                  muestra sólo cuando el servidor informa candidatos (o un
+                  error de lectura, que jamás es ausencia). */}
+              {activeDesignId && (
+                <DesignWorkingMaterialsPanel
+                  api={api}
+                  token={token}
+                  projectId={projectId}
+                  designId={activeDesignId}
+                  canMutate={canMutate}
+                  queryKeys={queryKeys}
+                  catalogMaterials={catalogMaterials}
+                />
+              )}
 
               {/* Lineage Timeline (R1 → R2 → R3) */}
               <div className="pd-lineage-container" data-testid="design-lineage-timeline">
