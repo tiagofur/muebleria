@@ -214,8 +214,7 @@ module Granete
                     intent&.dig('furnitureDefinitionId') == item.furniture_definition_id &&
                     intent&.dig('parameters') == item.parameters &&
                     (intent&.dig('materialChoices') || {}) == (item.material_choices || {}) &&
-                    TransformContract.equivalent?(TransformContract.from_host(entity.transformation),
-                                                  item.transform)
+                    TransformContract.equivalent_to_host?(item.transform, entity.transformation)
             return if exact
 
             raise RestoreFailure.new('host_readback_failed',

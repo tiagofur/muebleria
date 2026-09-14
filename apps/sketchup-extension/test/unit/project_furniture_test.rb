@@ -1208,6 +1208,27 @@ class ProjectFurnitureTest < Minitest::Test
     end
   end
 
+  def test_restore_accepts_near_gimbal_pitch_without_information_losing_roundtrip
+    [89.998, 89.999, -89.998, -89.999].each do |pitch|
+      @model = PlacerModel.new
+      write_binding(@model)
+      stub_binding_validation(base: REVISION_R1)
+      stub_project_furniture(list_body)
+      item = restore_item(rotation: [15.0, pitch, 35.0])
+      stub_working_copy(working_copy_body([item]))
+      @placer = build_placer
+
+      result = @placer.restore(FI_1)
+
+      assert result['ok'], "pitch #{pitch}: #{result.inspect}"
+      root = top_level_furniture(@model).first
+      assert PF::TransformContract.equivalent_to_host?(item['transform'], root.transformation)
+      assert_in_delta pitch, PF::TransformContract.from_host(root.transformation)['rotation_deg'][1], 0.001
+      assert_empty @transport.requests_for('POST', %r{/furniture-instances})
+      assert_empty @transport.requests_for('PUT', %r{/working-copy})
+    end
+  end
+
   def test_restore_retry_with_exact_root_is_an_idempotent_noop
     item = restore_item
     stub_working_copy(working_copy_body([item]))
