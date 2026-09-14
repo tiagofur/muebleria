@@ -38,7 +38,8 @@ module Granete
         @host_observer = AppLifecycleObserver.new(
           extension_name: EXTENSION_NAME,
           extension_id: EXTENSION_ID,
-          on_unload: method(:shutdown)
+          on_unload: method(:shutdown),
+          on_model_change: @application.method(:handle_active_model_change)
         )
         ::Sketchup.add_observer(@host_observer)
         @host_observer

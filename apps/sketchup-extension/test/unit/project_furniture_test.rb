@@ -11,6 +11,7 @@ require_relative '../../src/granete_for_sketchup/connection/transform_contract'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
+require_relative '../../src/granete_for_sketchup/connection/host_restore'
 require_relative '../../src/granete_for_sketchup/connection/panel_state'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
@@ -1153,7 +1154,231 @@ class ProjectFurnitureTest < Minitest::Test
     assert_nil placer.intent_store.fetch(FI_1)
   end
 
+  def test_restore_recreates_exact_working_copy_root_without_business_or_working_copy_writes
+    item = restore_item(
+      parameters: { 'widthMm' => 777, 'shelfCount' => 3 },
+      choices: { 'FRENTE' => 'mat-roble', 'INTERIOR' => 'mat-blanco' },
+      translation: [1250.0, -250.0, 80.0], rotation: [0.0, 0.0, 90.0]
+    )
+    stub_working_copy(working_copy_body([item]))
+    actions_before = SketchupStub.send_actions.length
+
+    result = @placer.restore(FI_1)
+
+    assert result['ok'], result.inspect
+    assert_equal 'present_synced', result['code']
+    assert_equal true, result['restored']
+    assert_equal 1, top_level_furniture(@model).length
+    root = top_level_furniture(@model).first
+    metadata = MS.new(@model).read(root)
+    assert_equal FI_1, metadata.dig('identity', 'furnitureInstanceId')
+    assert_equal PROJECT_ID, metadata.dig('identity', 'projectId')
+    assert_equal DESIGN_ID, metadata.dig('identity', 'designId')
+    assert_equal item['parameters'], metadata.dig('intent', 'parameters')
+    assert_equal item['material_choices'], metadata.dig('intent', 'materialChoices')
+    assert_equal item['transform'], PF::TransformContract.from_host(root.transformation)
+    assert_equal actions_before, SketchupStub.send_actions.length, 'restore must not activate the Move tool'
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances})
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_restore_retry_with_exact_root_is_an_idempotent_noop
+    item = restore_item
+    stub_working_copy(working_copy_body([item]))
+    first = @placer.restore(FI_1)
+    second = @placer.restore(FI_1)
+
+    assert first['ok'], first.inspect
+    assert second['ok'], second.inspect
+    assert_equal false, second['restored']
+    assert_equal 1, top_level_furniture(@model).length
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances})
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_individual_restore_succeeds_while_another_unit_remains_missing
+    stub_project_furniture([instance_body(FI_1, 'design'), instance_body(FI_2, 'design')])
+    second = restore_item
+    second['furniture_instance_id'] = FI_2
+    stub_working_copy(working_copy_body([restore_item, second]))
+
+    result = @placer.restore(FI_1)
+
+    assert result['ok'], result.inspect
+    panel = @placer.panel
+    states = panel['items'].to_h { |row| [row['id'], row['reconciliationState']] }
+    assert_equal 'present_synced', states[FI_1]
+    assert_equal 'missing_local', states[FI_2]
+  end
+
+  def test_restore_fails_closed_before_insertion_for_terminal_missing_definition_and_bad_transform
+    stub_project_furniture([instance_body(FI_1, 'design', lifecycle: 'removed')])
+    stub_working_copy(working_copy_body([restore_item]))
+    assert_equal 'terminal', @placer.restore(FI_1)['code']
+    assert_empty top_level_furniture(@model)
+
+    stub_project_furniture([instance_body(FI_1, 'design', definition_id: DEFINITION_ID_2)])
+    stub_working_copy(working_copy_body([restore_item(definition_id: DEFINITION_ID_2)]))
+    blocked = @placer.restore(FI_1)
+    assert_equal 'recovery_blocked', blocked['code']
+    assert_equal FI_1, blocked['instanceId']
+    assert_empty top_level_furniture(@model)
+
+    stub_project_furniture([instance_body(FI_1, 'design')])
+    invalid = restore_item
+    invalid['transform'] = { 'translation_mm' => [0, 0, 0] }
+    stub_working_copy(working_copy_body([invalid]))
+    assert_equal 'invalid_transform', @placer.restore(FI_1)['code']
+    assert_empty top_level_furniture(@model)
+  end
+
+  def test_restore_rolls_back_only_new_root_when_binding_drifts_after_insert
+    item = restore_item
+    stub_working_copy(working_copy_body([item]))
+    real_builder = FBUILDER.new(metadata_store: MS.new(@model))
+    drift_builder = Object.new
+    drift_builder.define_singleton_method(:place_existing_furniture) do |model, **kwargs|
+      result = real_builder.place_existing_furniture(model, **kwargs)
+      MB::Store.new(model).write!(
+        MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R2)
+      )
+      result
+    end
+    drift_builder.define_singleton_method(:rollback_placement) do |model, entity|
+      real_builder.rollback_placement(model, entity)
+    end
+    placer = build_placer_with_builder(drift_builder)
+
+    result = placer.restore(FI_1)
+
+    refute result['ok']
+    assert_equal 'binding_changed', result['code']
+    assert_empty top_level_furniture(@model)
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_restore_rolls_back_new_root_when_working_copy_or_lifecycle_drifts_after_insert
+    scenarios = {
+      working_copy: lambda {
+        changed = restore_item(parameters: { 'widthMm' => 901 })
+        stub_working_copy(working_copy_body([changed]))
+      },
+      lifecycle: lambda {
+        stub_project_furniture([instance_body(FI_1, 'design', lifecycle: 'removed')])
+      }
+    }
+
+    scenarios.each do |name, mutation|
+      @model = PlacerModel.new
+      write_binding(@model)
+      stub_binding_validation(base: REVISION_R1)
+      stub_project_furniture([instance_body(FI_1, 'design')])
+      stub_working_copy(working_copy_body([restore_item]))
+      builder = mutating_builder(&mutation)
+
+      result = build_placer_with_builder(builder).restore(FI_1)
+
+      refute result['ok'], name
+      assert_empty top_level_furniture(@model), name
+      assert_empty @transport.requests_for('PUT', %r{/working-copy}), name
+    end
+  end
+
+  def test_restore_rolls_back_new_root_when_active_model_object_changes_after_insert
+    stub_working_copy(working_copy_body([restore_item]))
+    original = @model
+    builder = mutating_builder { SketchupStub.active_model = PlacerModel.new }
+    placer = build_placer_with_builder(builder, model_provider: -> { SketchupStub.active_model })
+    SketchupStub.active_model = original
+
+    result = placer.restore(FI_1)
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_empty top_level_furniture(original)
+  ensure
+    SketchupStub.active_model = @model
+  end
+
+  def test_restore_ruby_guard_rejects_same_identity_while_first_call_is_in_flight
+    item = restore_item
+    stub_working_copy(working_copy_body([item]))
+    delegate = PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new)
+    entered = Queue.new
+    release = Queue.new
+    blocking = Object.new
+    blocking.define_singleton_method(:list_project_furniture) do |project_id|
+      unless instance_variable_defined?(:@blocked)
+        @blocked = true
+        entered << true
+        release.pop
+      end
+      delegate.list_project_furniture(project_id)
+    end
+    blocking.define_singleton_method(:get_working_copy) { |design_id| delegate.get_working_copy(design_id) }
+    reconciliation = PF::HostReconciliation.new(
+      model_provider: -> { @model }, binding_store_factory: -> { MB::Store.new(@model) },
+      service: blocking, metadata_store_factory: ->(_m) { MS.new(@model) }, logger: NullLogger.new
+    )
+    restorer = PF::Restorer.new(
+      model_provider: -> { @model }, binding_store_factory: -> { MB::Store.new(@model) },
+      model_binding_service: MB::Service.new(
+        transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new
+      ), service: blocking, metadata_store_factory: ->(_m) { MS.new(@model) },
+      catalog_provider: @catalog,
+      furniture_builder_factory: ->(model) { FBUILDER.new(metadata_store: MS.new(model)) },
+      host_reconciliation: reconciliation, logger: NullLogger.new
+    )
+    first = Thread.new { restorer.restore(FI_1) }
+    entered.pop
+
+    second = restorer.restore(FI_1)
+    assert_equal 'action_in_progress', second['code']
+    release << true
+    assert first.value['ok']
+    assert_equal 1, top_level_furniture(@model).length
+  end
+
   private
+
+  def restore_item(parameters: {}, choices: {}, translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0],
+                   definition_id: DEFINITION_ID)
+    {
+      'furniture_instance_id' => FI_1,
+      'furniture_definition_id' => definition_id,
+      'definition_version' => 4,
+      'parameters' => parameters,
+      'material_choices' => choices,
+      'transform' => { 'translation_mm' => translation, 'rotation_deg' => rotation },
+      'technical_client_locator' => { 'kind' => 'sketchup_persistent_id', 'value' => 'old-root' }
+    }
+  end
+
+  def build_placer_with_builder(builder, model_provider: -> { @model })
+    PF::Placer.new(
+      model_provider: model_provider, binding_store_factory: ->(model) { MB::Store.new(model) },
+      model_binding_service: MB::Service.new(
+        transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new
+      ),
+      service: PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new),
+      metadata_store_factory: ->(_m) { MS.new(@model) }, catalog_provider: @catalog,
+      furniture_builder_factory: ->(_m) { builder }, logger: NullLogger.new
+    )
+  end
+
+  def mutating_builder(&after_insert)
+    real_builder = FBUILDER.new(metadata_store: MS.new(@model))
+    wrapper = Object.new
+    wrapper.define_singleton_method(:place_existing_furniture) do |model, **kwargs|
+      result = real_builder.place_existing_furniture(model, **kwargs)
+      after_insert.call
+      result
+    end
+    wrapper.define_singleton_method(:rollback_placement) do |model, entity|
+      real_builder.rollback_placement(model, entity)
+    end
+    wrapper
+  end
 
   def create_managed_root(furniture_id, definition_id: DEFINITION_ID,
                           project_id: PROJECT_ID, design_id: DESIGN_ID)

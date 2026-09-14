@@ -62,7 +62,7 @@ module Granete
         )
         @design_publisher = Connection::DesignPublish::Publisher.new(
           model_provider: method(:active_model),
-          binding_store_factory: -> { Connection::ModelBinding::Store.new(active_model) },
+          binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) },
           duplicate_resolver: @duplicate_resolver,
           service: @design_publish_service,
           working_copy_service: @project_furniture_placer.service,
@@ -91,6 +91,9 @@ module Granete
           transport: @transport, auth_provider: @auth_provider, model_provider: method(:active_model),
           connector: @model_binding_connector, logger: logger
         )
+        @save_awareness = Host::SaveAwareness.new(
+          binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) }
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
@@ -105,8 +108,13 @@ module Granete
           mutation_coordinator: mutation_coordinator,
           publication_gate: @publication_preflight_gate,
           host_reconciliation: @host_reconciliation,
+          save_awareness: @save_awareness,
           commercial_projection_service: commercial_projection_service,
           project_bootstrap: commercial_entry[:project_bootstrap], initial_quote: commercial_entry[:initial_quote]
+        )
+        @save_awareness_lifecycle = Host::SaveAwarenessLifecycle.new(
+          model_provider: method(:active_model), state: @save_awareness, logger: logger,
+          on_change: ->(event, model) { @dialog.handle_host_model_event(event, model) }
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
@@ -118,10 +126,12 @@ module Granete
 
       def start
         @lifecycle.start
+        @save_awareness_lifecycle.start
         self
       end
 
       def shutdown
+        @save_awareness_lifecycle.shutdown
         @lifecycle.shutdown
       end
 
@@ -140,6 +150,10 @@ module Granete
 
       def close_dialog
         @dialog.close
+      end
+
+      def handle_active_model_change(model)
+        @save_awareness_lifecycle.rebind(model)
       end
 
       def metadata_store(model)
@@ -196,7 +210,7 @@ module Granete
         texture_cache = Assets::TextureCache.new(transport: @transport, auth_provider: @auth_provider)
         Connection::ProjectFurniture::Placer.new(
           model_provider: method(:active_model),
-          binding_store_factory: -> { Connection::ModelBinding::Store.new(active_model) },
+          binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) },
           model_binding_service: @model_binding_connector.service,
           service: Connection::ProjectFurniture::Service.new(
             transport: @transport,

@@ -105,7 +105,7 @@ class DesignPublishTest < Minitest::Test
 
   # ProjectFurniture service double for the #391 precheck + working copy sync.
   class FakeWorkingCopyService
-    attr_accessor :working_copy, :update_calls
+    attr_accessor :working_copy, :update_calls, :on_update
 
     def initialize(working_copy:)
       @working_copy = working_copy
@@ -131,11 +131,12 @@ class DesignPublishTest < Minitest::Test
       @working_copy = PF::Contract::WorkingCopy.new(
         design_id: design_id, base_revision_id: base_revision_id, items: items
       )
+      @on_update&.call
     end
   end
 
   class HostReconciliationDouble
-    attr_accessor :clean
+    attr_accessor :clean, :on_projection
     attr_reader :calls
 
     def initialize
@@ -145,6 +146,7 @@ class DesignPublishTest < Minitest::Test
 
     def projection
       @calls += 1
+      @on_projection&.call
       { 'state' => 'connected', 'projectId' => PROJECT_ID, 'designId' => DESIGN_ID,
         'baseRevisionId' => REVISION_R1, 'schemaVersion' => 1,
         'snapshot' => 'host-publish', 'clean' => @clean,
@@ -419,6 +421,33 @@ class DesignPublishTest < Minitest::Test
     assert_equal ['validating'], progress
     assert_empty @wc_service.update_calls
     assert_empty @transport.requests_for('POST', /publish/)
+  end
+
+  def test_publish_aborts_before_sync_or_export_when_active_model_changes_during_reconciliation
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    other = TestModel.new
+    @host_reconciliation.on_projection = -> { @model = other }
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_empty @wc_service.update_calls
+    assert_empty @transport.requests
+  end
+
+  def test_publish_stops_before_export_if_model_changes_during_working_copy_sync
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    @wc_service.on_update = -> { @model = TestModel.new }
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_equal 1, @wc_service.update_calls.length
+    assert_empty @transport.requests, 'artifact export/upload must not start after a context switch'
   end
 
   def test_publish_fails_loud_when_server_hash_mismatches

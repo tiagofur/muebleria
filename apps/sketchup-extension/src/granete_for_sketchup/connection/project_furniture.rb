@@ -11,8 +11,9 @@ module Granete
       #     never from a parallel manual selection;
       #   * FurnitureInstance.id is the business identity: Place EXISTING
       #     stamps it verbatim and never creates another identity;
-      #   * pending/placed is DERIVED per furnitureInstanceId from the
-      #     current DesignWorkingCopy — no global placed flag exists;
+      #   * placement state is DERIVED per furnitureInstanceId from active
+      #     project membership, exact DesignWorkingCopy intent and one
+      #     top-level host inventory — no global placed flag exists;
       #   * board choices seed from the authored working item or the
       #     quoted finish on the instance display — a placement never
       #     silently drops the acabado the customer chose (#620);
@@ -314,10 +315,11 @@ module Granete
         class Placer # rubocop:disable Metrics/ClassLength
           attr_reader :intent_store, :service, :host_reconciliation
 
+          # rubocop:disable-next Metrics/ParameterLists
           def initialize(model_provider:, binding_store_factory:, model_binding_service:,
                          service:, metadata_store_factory:, catalog_provider:,
                          furniture_builder_factory:, intent_store: IntentStore.new,
-                         host_reconciliation: nil, logger: SafeLogger.new)
+                         host_reconciliation: nil, restorer: nil, logger: SafeLogger.new)
             @model_provider = model_provider
             @binding_store_factory = binding_store_factory
             @model_binding_service = model_binding_service
@@ -330,6 +332,13 @@ module Granete
             @host_reconciliation = host_reconciliation || HostReconciliation.new(
               model_provider: model_provider, binding_store_factory: binding_store_factory,
               service: service, metadata_store_factory: metadata_store_factory, logger: logger
+            )
+            @restorer = restorer || Restorer.new(
+              model_provider: model_provider, binding_store_factory: binding_store_factory,
+              model_binding_service: model_binding_service, service: service,
+              metadata_store_factory: metadata_store_factory, catalog_provider: catalog_provider,
+              furniture_builder_factory: furniture_builder_factory,
+              host_reconciliation: @host_reconciliation, logger: logger
             )
           end
 
@@ -477,6 +486,10 @@ module Granete
             )
           end
 
+          def restore(furniture_instance_id)
+            @restorer.restore(furniture_instance_id)
+          end
+
           private
 
           def execute_created_placement(model, binding, prep, idempotency_key, material_choices)
@@ -505,8 +518,8 @@ module Granete
           # Phase 1 — binding + authoritative revalidation. Fails loud
           # (unbound / drifted-base / archived / auth) BEFORE anything is
           # placed or synced (#389 §15).
-          def placement_context(_model)
-            PlacementGuards.placement_context(@binding_store_factory.call, @model_binding_service)
+          def placement_context(model)
+            PlacementGuards.placement_context(binding_store(model), @model_binding_service)
           end
 
           def validate_instance_active(binding, furniture_instance_id)
@@ -607,6 +620,10 @@ module Granete
 
           def failure(code, reason)
             { 'ok' => false, 'code' => code.to_s, 'reason' => reason }
+          end
+
+          def binding_store(model)
+            @binding_store_factory.arity.zero? ? @binding_store_factory.call : @binding_store_factory.call(model)
           end
         end
       end

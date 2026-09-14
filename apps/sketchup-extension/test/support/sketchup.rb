@@ -556,6 +556,9 @@ module SketchupStub
         @instances.delete(entity)
         @faces.delete(entity)
         entity.definition.remove_instance(entity) if entity.is_a?(ComponentInstanceStub)
+        @observers.dup.each do |observer|
+          observer.onElementRemoved(self, entity.persistent_id) if observer.respond_to?(:onElementRemoved)
+        end
       end
       true
     end
@@ -608,7 +611,7 @@ module SketchupStub
     include AttributeContainer
 
     attr_reader :active_entities, :selection, :definitions, :materials, :operations,
-                :selected_tools
+                :selected_tools, :observers
     attr_accessor :active_view
 
     def initialize
@@ -619,10 +622,23 @@ module SketchupStub
       @operations = []
       @selected_tools = []
       @active_view = ViewStub.new
+      @observers = []
     end
 
     def entities
       @active_entities
+    end
+
+    def add_observer(observer)
+      @observers << observer unless @observers.include?(observer)
+    end
+
+    def remove_observer(observer)
+      @observers.delete(observer)
+    end
+
+    def notify_post_save
+      @observers.dup.each { |observer| observer.onPostSaveModel(self) if observer.respond_to?(:onPostSaveModel) }
     end
 
     # #470 overlay tool lifecycle: selecting tools is recorded (never a
@@ -732,6 +748,9 @@ module Sketchup
   end
 
   class EntitiesObserver
+  end
+
+  class ModelObserver
   end
 
   # Minimal color for overlay drawing tests (#470).

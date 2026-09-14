@@ -79,11 +79,12 @@ module Granete
     class AppLifecycleObserver < ::Sketchup::AppObserver
       attr_reader :extension_name, :extension_id
 
-      def initialize(extension_name:, extension_id:, on_unload:)
+      def initialize(extension_name:, extension_id:, on_unload:, on_model_change: nil)
         super()
         @extension_name = extension_name
         @extension_id = extension_id
         @on_unload = on_unload
+        @on_model_change = on_model_change
       end
 
       def onUnloadExtension(extension_id)
@@ -91,6 +92,18 @@ module Granete
         return unless [@extension_name, @extension_id].include?(identifier)
 
         @on_unload.call
+      end
+
+      def onNewModel(model)
+        @on_model_change&.call(model)
+      end
+
+      def onOpenModel(model)
+        @on_model_change&.call(model)
+      end
+
+      def onActivateModel(model)
+        @on_model_change&.call(model)
       end
     end
   end

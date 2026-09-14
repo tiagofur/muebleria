@@ -1,6 +1,6 @@
 # SketchUp Host Reconciliation — Design Working Copy vs archivo SKP
 
-> **Estado:** IMPLEMENTACIÓN PARCIAL — reconciliación y gates fail-closed; restauración/save-awareness pendientes
+> **Estado:** IMPLEMENTADO — reconciliación, restauración individual, save-awareness y gates fail-closed
 > **Ámbito:** Granete for SketchUp, Design Working Copy, FurnitureInstance, cotización design-first
 > **Relacionados:** Project Design Digital Thread, #388, #389, #390, #391, #702, #718, #679
 
@@ -135,7 +135,7 @@ Precondiciones server/host:
 2. FurnitureInstance existe, pertenece al Project y está `active`;
 3. Working Copy actual contiene exactamente el item de esa FurnitureInstance;
 4. host scan confirma 0 entidades con ese ID;
-5. no hay mutation runtime concurrente;
+5. no hay otra mutación del host ni restauración concurrente para esa identidad;
 6. la FurnitureDefinition necesaria puede resolverse de forma canónica;
 7. parámetros/material choices/transform provienen del item exacto del Working Copy.
 
@@ -158,6 +158,11 @@ present_synced
 ```
 
 El servidor ya contiene la intención correcta, por lo que esta operación es **local rehydration**, no una nueva mutación comercial/design del servidor.
+
+Antes de insertar se repiten las lecturas de binding, FurnitureInstance, Working Copy y host; después se verifica
+la metadata exacta y que exista una sola raíz. Si cualquiera de esas autoridades cambia durante la operación,
+se revierte únicamente la raíz recién insertada. Un retry que encuentra una raíz exacta ya válida es un no-op
+`present_synced`, nunca crea una copia.
 
 Si la inserción local falla, el Working Copy permanece intacto y el estado continúa `missing_local`.
 
@@ -209,8 +214,13 @@ Además, Granete debe hacer visible cuando el servidor ya recibió cambios que t
 Después de una confirmación/sync exitosa que modifica el modelo:
 
 - mostrar estado `Cambios en Granete · guardá el archivo SketchUp` mientras el modelo permanezca modificado/no confirmado como guardado;
-- aprovechar los observers de guardado del host (`onPostSaveModel` o equivalente disponible en la versión soportada) para limpiar ese aviso sólo después de un save real;
+- limpiar el aviso únicamente desde `Sketchup::ModelObserver#onPostSaveModel(model)`, después de un save real;
 - no afirmar “todo guardado” por el mero éxito del PUT server-side.
+
+El estado vive sólo en memoria y queda ligado al objeto modelo y al snapshot completo de su binding. El observer
+permanece activo aunque el diálogo esté cerrado; el único `AppLifecycleObserver` de la extensión lo vuelve a
+enlazar al crear, abrir o activar otro modelo, sin polling. Una mutación sincronizada posterior vuelve a mostrar
+el aviso.
 
 No se requiere impedir programáticamente que el usuario cierre SketchUp. SketchUp puede seguir mostrando su diálogo nativo de guardar/cancelar/no guardar; Granete añade claridad y recuperación segura si el usuario elige no guardar.
 
@@ -240,15 +250,8 @@ Cajonera 3 cajones  Falta en este archivo   [Restaurar]
 Torre horno         Pendiente confirmar
 ```
 
-Resumen del panel cuando haya divergencia:
-
-```text
-Diseño necesita atención
-2 muebles de Granete no están presentes en este archivo SketchUp.
-[Restaurar todos]
-```
-
-`Restaurar todos` sólo procesa items `missing_local` que pasen todos los guards. Debe detenerse/reportar de forma granular ante conflictos; no ocultar parciales.
+`Restaurar todos` es una mejora opcional posterior, no parte del DoD central. Si se implementa en otro cambio,
+sólo podrá procesar items `missing_local` que pasen todos los guards y deberá reportar parciales sin ocultarlos.
 
 ## 11. Pruebas mínimas
 
@@ -278,7 +281,7 @@ Diseño necesita atención
 ### Comercial/publicación
 
 - `missing_local` bloquea Emitir cotización antes de llamar #717;
-- al restaurar todos y reconciliar limpio, Q1 vuelve a habilitarse;
+- al restaurar individualmente los faltantes y reconciliar limpio, Q1 vuelve a habilitarse;
 - CommercialProjection server-side no se altera por la restauración local.
 
 ### Save awareness

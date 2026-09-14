@@ -89,6 +89,7 @@ function buildSandbox() {
         create_project_furniture: (p) => bridgeCalls.push({ action: 'create_project_furniture', payload: JSON.parse(p) }),
         confirm_placement_instance: (p) => bridgeCalls.push({ action: 'confirm_placement_instance', payload: JSON.parse(p) }),
         cancel_placement_instance: (p) => bridgeCalls.push({ action: 'cancel_placement_instance', payload: JSON.parse(p) }),
+        restore_furniture_instance: (p) => bridgeCalls.push({ action: 'restore_furniture_instance', payload: JSON.parse(p) }),
         select_project_furniture: (p) => bridgeCalls.push({ action: 'select_project_furniture', payload: JSON.parse(p) }),
         enroll: () => {}, logout: () => {}, close_dialog: () => {}
       }
@@ -169,17 +170,54 @@ function runTests() {
     assert.equal(placedButton.textContent, 'Seleccionar');
   });
 
-  test('missing local is visible but has no normal placement or restore action yet', (sandbox) => {
+  test('missing local is visible and exposes only the exact restore action', (sandbox) => {
     const panel = connectedPanel();
     panel.attention = 1;
     panel.items[0].reconciliationState = 'missing_local';
     panel.items[0].blocking = true;
+    panel.items[0].reason = 'Granete espera este mueble, pero falta en este archivo SketchUp';
     sandbox.window.GraneteDialog.onProjectFurniture(panel);
 
     const card = el(sandbox, 'pf-pending-list').children[0];
     const labels = card.children[0].children[0].children.map((child) => child.textContent);
     assert.ok(labels.includes('Falta en este archivo'));
-    assert.equal(card.children.length, 1, 'missing_local must not expose Colocar or a premature restore action');
+    assert.equal(card.children.length, 2, 'missing_local must expose one action');
+    assert.equal(card.children[1].textContent, 'Restaurar en este archivo');
+    assert.ok(card.children[0].children.some((child) =>
+      child.textContent.includes('falta en este archivo SketchUp')));
+  });
+
+  test('restore sends exact identity once while in flight', (sandbox) => {
+    const panel = connectedPanel();
+    panel.items[0].reconciliationState = 'missing_local';
+    sandbox.window.GraneteDialog.onProjectFurniture(panel);
+    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    button.click();
+    button.click();
+    const calls = sandbox.__bridge.filter((call) => call.action === 'restore_furniture_instance');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].payload.furnitureInstanceId, FI_1);
+    assert.ok(!calls[0].payload.definitionId);
+  });
+
+  test('failed restore re-arms its own action', (sandbox) => {
+    const panel = connectedPanel();
+    panel.items[0].reconciliationState = 'missing_local';
+    sandbox.window.GraneteDialog.onProjectFurniture(panel);
+    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    button.click();
+    sandbox.window.GraneteDialog.onRestoreFurnitureResult({
+      ok: false, code: 'authority_changed', reason: 'changed', instanceId: FI_1
+    });
+    assert.equal(button.disabled, false);
+    assert.equal(button.textContent, 'Restaurar en este archivo');
+  });
+
+  test('save awareness is visible until Ruby reports a real save', (sandbox) => {
+    sandbox.window.GraneteDialog.onHostSaveAwareness({ needsSave: true });
+    assert.ok(visible(el(sandbox, 'pf-save-awareness')));
+    sandbox.window.GraneteDialog.onHostSaveAwareness({ needsSave: false });
+    assert.ok(!visible(el(sandbox, 'pf-save-awareness')));
   });
 
   test('Colocar sends the exact furnitureInstanceId and guards double clicks', (sandbox) => {

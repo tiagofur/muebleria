@@ -22,25 +22,39 @@ module Granete
             @logger = logger
           end
 
-          def projection
-            model = @model_provider.call
+          # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+          def projection(model: nil, binding: nil)
+            model ||= @model_provider.call
             return unavailable('no_model', 'no hay un modelo activo') unless model
+            return unavailable('context_changed', 'el modelo activo cambió') unless active_model?(model)
 
-            store = @binding_store_factory.call
-            binding = store.read
-            unless binding
+            store = binding_store(model)
+            stored_binding = store.read
+            unless stored_binding
               state = store.respond_to?(:last_error) && store.last_error ? 'unknown' : 'unbound'
               return unavailable(state, 'el modelo no tiene un enlace legible')
             end
+            if binding && binding.to_h != stored_binding.to_h
+              return unavailable('incompatible', 'el enlace del modelo cambió durante la reconciliación', binding)
+            end
+
+            binding ||= stored_binding
 
             instances = @service.list_project_furniture(binding.project_id)
             working = @service.get_working_copy(binding.design_id)
+            unless active_model?(model) && binding_store(model).read&.to_h == binding.to_h
+              return unavailable('context_changed', 'el modelo o su enlace cambió durante la reconciliación', binding)
+            end
             unless working.project_id == binding.project_id && working.design_id == binding.design_id &&
                    working.base_revision_id == binding.base_revision_id
               return unavailable('incompatible', 'el Working Copy no corresponde al enlace exacto del modelo', binding)
             end
 
-            build(model, binding, instances, working)
+            projection = build(model, binding, instances, working)
+            return unavailable('context_changed', 'el modelo activo cambió durante la reconciliación', binding) unless
+              active_model?(model)
+
+            projection
           rescue Service::Error => e
             unavailable(error_state(e), e.message)
           rescue Contract::ContractError => e
@@ -63,6 +77,14 @@ module Granete
           end
 
           private
+
+          def binding_store(model)
+            @binding_store_factory.arity.zero? ? @binding_store_factory.call : @binding_store_factory.call(model)
+          end
+
+          def active_model?(model)
+            @model_provider.call.equal?(model)
+          end
 
           def build(model, binding, instances, working)
             local = ManagedFurniture.index(model, @metadata_store_factory.call(model))

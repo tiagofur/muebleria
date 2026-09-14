@@ -157,6 +157,33 @@ module Granete
         refute_includes parent_group.entities.to_a, located['entity'], 'entity must not be nested in parent group'
       end
 
+      # TestUp-compatible host coverage for the local rehydration primitive.
+      # The full Restorer authority/race matrix remains hermetic because this
+      # suite intentionally performs no live backend requests.
+      def test_restore_primitive_applies_exact_working_transform_without_move_assist
+        contract = {
+          'translation_mm' => [1250.0, -250.0, 80.0],
+          'rotation_deg' => [0.0, 0.0, 90.0]
+        }
+        parameters = { 'widthMm' => 777, 'shelfCount' => 3 }
+        choices = { 'FRENTE' => 'mat-roble' }
+        result = builder.place_existing_furniture(
+          model, furniture_instance_id: FI_1, definition: catalog_definition,
+                 parameters: parameters, material_choices: choices,
+                 project_id: PROJECT_ID, design_id: DESIGN_ID,
+                 transformation: ProjectFurniture::TransformContract.to_host(contract),
+                 prepare: false, preserve_parameters: true
+        )
+
+        assert result['success'], result.inspect
+        root = result['entity']
+        assert_empty model.selection, 'restore must not select the root or activate Move'
+        assert_equal contract, ProjectFurniture::TransformContract.from_host(root.transformation)
+        metadata = metadata_store.read(root)
+        assert_equal parameters, metadata.dig('intent', 'parameters')
+        assert_equal choices, metadata.dig('intent', 'materialChoices')
+      end
+
       private
 
       def model

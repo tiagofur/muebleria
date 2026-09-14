@@ -12,6 +12,6 @@ class DialogProjectFurnitureJsTest < Minitest::Test
 
     result = JSON.parse(stdout)
     assert result['success']
-    assert_operator result['testsPassed'], :>=, 15
+    assert_operator result['testsPassed'], :>=, 20
   end
 end

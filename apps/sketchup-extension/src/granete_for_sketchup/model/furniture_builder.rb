@@ -233,15 +233,22 @@ module Granete
         # caller can read the final transform and sync the design working
         # copy; on any host error the operation aborts leaving no partial
         # hierarchy. relationships follows the MetadataWriter tri-state.
+        # rubocop:disable-next Metrics/ParameterLists
         def place_existing_furniture(model, furniture_instance_id:, definition:, parameters: {},
                                      resolved_layout: nil, material_choices: nil,
-                                     project_id: nil, design_id: nil, relationships: nil)
+                                     project_id: nil, design_id: nil, relationships: nil,
+                                     transformation: nil, prepare: true, preserve_parameters: false)
           unless furniture_instance_id.is_a?(String) && !furniture_instance_id.strip.empty?
             return { 'success' => false,
                      'error' => 'Se requiere la identidad (furnitureInstanceId) del mueble del proyecto' }
           end
 
-          params = normalize_parameters(definition, parameters)
+          params = if preserve_parameters
+                     JSON.parse(JSON.generate(parameters || {}))
+                   else
+                     normalize_parameters(definition, parameters)
+                   end
+          host_transform = transformation || Geom::Transformation.new
           model.start_operation("Colocar Mueble del Proyecto #{definition['name']}", true)
           begin
             furniture_definition = create_furniture_definition(model, definition, furniture_instance_id)
@@ -252,7 +259,7 @@ module Granete
             # untraceable.
             # rubocop:disable-next SketchupSuggestions/ModelEntities
             furniture = model.entities.add_instance(furniture_definition,
-                                                    Geom::Transformation.new)
+                                                    host_transform)
             furniture.name = "#{definition['name']} (#{furniture_instance_id})"
             counts = render_layout(model, furniture_definition, furniture_instance_id, definition,
                                    params, resolved_layout)
@@ -268,7 +275,7 @@ module Granete
             return { 'success' => false, 'error' => e.message }
           end
 
-          prepare_placement(model, furniture)
+          prepare_placement(model, furniture) if prepare
           { 'entity' => furniture }.merge(build_result(furniture_instance_id, definition, params, counts))
         end
 

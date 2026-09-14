@@ -358,12 +358,12 @@ module Granete
 
           attr_reader :service
 
-          # rubocop:disable-next Metrics/AbcSize, Metrics/BlockLength, Metrics/MethodLength
+          # rubocop:disable-next Metrics/AbcSize, Metrics/BlockLength, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
           def publish(on_progress: nil)
             model = @model_provider.call
             return failure('no_model', 'no hay un modelo activo') unless model
 
-            binding = @binding_store_factory.call.read
+            binding = binding_store(model).read
             return failure('unbound', 'conectá este modelo a un proyecto y diseño primero') unless binding
 
             report(on_progress, 'validating')
@@ -373,10 +373,13 @@ module Granete
                              precheck['reason'] || 'la identidad de los muebles no es válida para publicar')
             end
 
-            host = @host_reconciliation&.projection
+            host = host_projection(model, binding)
             unless ProjectFurniture::HostReconciliation.clean_for?(host, binding)
               return failure('host_reconciliation_required',
                              host&.dig('reason') || 'el archivo SketchUp no coincide con el diseño de Granete')
+            end
+            unless context_current?(model, binding)
+              return failure('context_changed', 'el modelo activo o su enlace cambió antes de publicar')
             end
 
             report(on_progress, 'syncing')
@@ -384,12 +387,20 @@ module Granete
                                              sketchup_version: host_sketchup_version,
                                              plugin_version: Granete::SketchUpExtension::EXTENSION_VERSION)
             sync_working_copy(binding, model, manifest)
+            return failure('context_changed', 'el modelo activo o su enlace cambió durante la publicación') unless
+              context_current?(model, binding)
 
             report(on_progress, 'exporting')
             DesignPublish.with_temp_dir('granete-publish') do |dir|
+              return failure('context_changed', 'el modelo activo o su enlace cambió antes de exportar') unless
+                context_current?(model, binding)
+
               artifacts = ArtifactExporter.export(model, manifest, dir)
 
               report(on_progress, 'uploading')
+              return failure('context_changed', 'el modelo activo o su enlace cambió antes de subir') unless
+                context_current?(model, binding)
+
               session = @service.prepare_publish(
                 binding.design_id,
                 manifest: manifest,
@@ -404,6 +415,10 @@ module Granete
                 idempotency_key: "pubfin:#{session.id}"
               )
 
+              unless context_current?(model, binding)
+                return failure('context_changed',
+                               'el modelo activo o su enlace cambió antes de actualizar la base')
+              end
               advance = advance_binding_base(revision)
               return advance unless advance['ok']
 
@@ -428,6 +443,22 @@ module Granete
           end
 
           private
+
+          def binding_store(model)
+            @binding_store_factory.arity.zero? ? @binding_store_factory.call : @binding_store_factory.call(model)
+          end
+
+          def host_projection(model, binding)
+            return nil unless @host_reconciliation
+
+            method = @host_reconciliation.method(:projection)
+            accepts_context = method.parameters.any? { |kind, _name| %i[key keyreq keyrest].include?(kind) }
+            accepts_context ? method.call(model: model, binding: binding) : method.call
+          end
+
+          def context_current?(model, binding)
+            @model_provider.call.equal?(model) && binding_store(model).read&.to_h == binding.to_h
+          end
 
           def report(on_progress, step)
             on_progress&.call(step)

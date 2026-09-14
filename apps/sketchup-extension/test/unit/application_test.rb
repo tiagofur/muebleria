@@ -12,6 +12,20 @@ require_relative '../../src/granete_for_sketchup/transport/http_adapter'
 require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
+require_relative '../../src/granete_for_sketchup/connection/model_binding'
+require_relative '../../src/granete_for_sketchup/connection/transform_contract'
+require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
+require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
+require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
+require_relative '../../src/granete_for_sketchup/connection/host_restore'
+require_relative '../../src/granete_for_sketchup/connection/panel_state'
+require_relative '../../src/granete_for_sketchup/connection/project_furniture'
+require_relative '../../src/granete_for_sketchup/connection/commercial_projection'
+require_relative '../../src/granete_for_sketchup/connection/project_bootstrap'
+require_relative '../../src/granete_for_sketchup/connection/initial_quote'
+require_relative '../../src/granete_for_sketchup/connection/commercial_entry'
+require_relative '../../src/granete_for_sketchup/connection/duplicate_resolver'
+require_relative '../../src/granete_for_sketchup/connection/design_publish'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 require_relative '../../src/granete_for_sketchup/selection/capabilities'
 require_relative '../../src/granete_for_sketchup/selection/selection_context'
@@ -19,6 +33,7 @@ require_relative '../../src/granete_for_sketchup/selection/capability_policy'
 require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
 require_relative '../../src/granete_for_sketchup/selection/resolver'
 require_relative '../../src/granete_for_sketchup/observers/selection_observer'
+require_relative '../../src/granete_for_sketchup/observers/entities_observer'
 require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
 require_relative '../../src/granete_for_sketchup/assets/asset_resolver'
 require_relative '../../src/granete_for_sketchup/assets/asset_loader'
@@ -29,6 +44,7 @@ require_relative '../../src/granete_for_sketchup/tools/internal_component_move_t
 require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 require_relative '../../src/granete_for_sketchup/lifecycle'
+require_relative '../../src/granete_for_sketchup/host/save_awareness'
 require_relative '../../src/granete_for_sketchup/application'
 
 class ApplicationTest < Minitest::Test
@@ -165,7 +181,7 @@ class ApplicationTest < Minitest::Test
       manufacturing_inspection open_external_url open_material_selector
       place_furniture_instance poll_enrollment preflight_review publish_design_revision
       refresh_media_url refresh_model_binding
-      rescan_duplicates select_furniture select_project_furniture update_furniture
+      rescan_duplicates restore_furniture_instance select_furniture select_project_furniture update_furniture
       validate_managed_furniture_identity
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
@@ -215,6 +231,34 @@ class ApplicationTest < Minitest::Test
     labels = SketchupStub.menus['Extensions'].items.map(&:first)
     assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
     refute UI::HtmlDialog.instances.first.visible?
+  end
+
+  def test_save_observer_remains_active_after_dialog_closes_and_shutdown_detaches_it
+    model = SketchupStub.active_model
+    binding = Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
+      project_id: '41000000-0000-0000-0000-000000000001',
+      design_id: '52000000-0000-0000-0000-000000000001',
+      base_revision_id: '53000000-0000-0000-0000-000000000001'
+    )
+    Granete::SketchUpExtension::Connection::ModelBinding::Store.new(model).write!(binding)
+    state = @application.instance_variable_get(:@save_awareness)
+    @application.start
+    state.mark_synced(model)
+    dialog = @application.open_dialog
+    dialog.close
+
+    assert_equal 1, model.observers.length
+    assert state.projection(model)['needsSave']
+    model.notify_post_save
+    refute state.projection(model)['needsSave']
+
+    reopened = @application.open_dialog
+    reopened.callbacks.fetch('dialog_ready').call(nil)
+    awareness = reopened.executed_scripts.reverse.find { |script| script.include?('onHostSaveAwareness') }
+    assert_includes awareness, '"needsSave":false'
+
+    @application.shutdown
+    assert_empty model.observers
   end
 
   def test_production_wiring_writes_metadata_and_rehydrates_selection
