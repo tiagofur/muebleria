@@ -1295,6 +1295,83 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	}
 	defer tx.Rollback(ctx)
 
+	if err := updateProjectTx(ctx, tx, id, p); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ErrProjectConcurrentUpdate means the project's customer assignment moved
+// between the caller's read and the inline transition (#714 §11). Raised
+// instead of silently orphaning the customer a competing transition created;
+// the handler surfaces it as an explicit 409.
+var ErrProjectConcurrentUpdate = errors.New("project concurrently updated")
+
+// UpdateProjectWithInlineCustomer is the atomic "editar cotización + nuevo
+// cliente" transition (#714): the row is locked, the caller's base view of the
+// customer assignment is verified, and the customer is inserted with a
+// server-owned id plus the project update referencing it inside the SAME
+// transaction. Any failure rolls both back — no orphan customer residue, and
+// the FK is never consulted with an unpersisted identity.
+func (s *PostgresStore) UpdateProjectWithInlineCustomer(ctx context.Context, id string, p *domain.Project, inline *domain.Customer, baseCustomerID string, expectedProjectUpdatedAt time.Time) error {
+	if strings.TrimSpace(inline.Name) == "" {
+		return fmt.Errorf("inline customer name is required")
+	}
+	inline.Active = true
+
+	tx, err := s.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// #714 §11: serialize competing inline updates on the row itself and
+	// verify the caller's base view of the customer assignment. A stale base
+	// fails with an explicit conflict — a retry (same or new idempotency key)
+	// converges instead of minting another customer and orphaning the first.
+	var currentCustomerID *string
+	var projectOrg string
+	var currentStatus domain.ProjectStatus
+	var currentUpdatedAt time.Time
+	err = tx.QueryRow(ctx, `
+		SELECT customer_id, organization_id, status, updated_at FROM projects
+		WHERE id = $1 AND organization_id = $2
+		FOR UPDATE`, id, OrgFromCtx(ctx)).Scan(&currentCustomerID, &projectOrg, &currentStatus, &currentUpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("project not found")
+		}
+		return err
+	}
+	current := ""
+	if currentCustomerID != nil {
+		current = *currentCustomerID
+	}
+	if current != baseCustomerID || currentStatus != domain.StatusDraft || !currentUpdatedAt.Equal(expectedProjectUpdatedAt) {
+		return ErrProjectConcurrentUpdate
+	}
+
+	// The inline customer belongs to the project's OWNING organization — the
+	// logical FK scope (ensureCustomerInOrgTx inside updateProjectTx) requires
+	// exactly that tenant.
+	if err := createCustomerTx(ctx, tx, inline, projectOrg); err != nil {
+		return err
+	}
+	p.CustomerID = inline.ID
+
+	if err := updateProjectTx(ctx, tx, id, p); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// updateProjectTx holds the project update shared by every update path: the
+// aggregate UPDATE, the logical customer scope guard (#712 §8 — RI checks
+// bypass RLS, so the storage owns this) and the child collections, all on the
+// given transaction.
+func updateProjectTx(ctx context.Context, tx pgx.Tx, id string, p *domain.Project) error {
 	var owner *string
 	if p.OwnerUserID != "" {
 		owner = &p.OwnerUserID
@@ -1307,6 +1384,21 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	if techStatus == "" {
 		techStatus = "pending_assignment"
 	}
+	// #712 §8 (aligned with the create path): the update rewrites customer_id,
+	// so the same logical FK scope applies — the customer must belong to the
+	// project's OWNING organization (shared sales/manufacturing orgs may update
+	// the project but never re-point it at a customer outside the owner
+	// tenant). Raised BEFORE the UPDATE so an unpersisted or foreign id
+	// surfaces as the neutral not-found instead of a raw FK violation.
+	var projectOrg string
+	if err := tx.QueryRow(ctx,
+		`SELECT organization_id FROM projects WHERE id = $1`, id).Scan(&projectOrg); err != nil {
+		return err
+	}
+	if err := ensureCustomerInOrgTx(ctx, tx, p.CustomerID, projectOrg); err != nil {
+		return err
+	}
+
 	// #327: sales/manufacturing ownership is NOT writable through the generic
 	// update — it is assigned at create (validated against the caller's
 	// memberships) and reassignment needs a dedicated audited flow.
@@ -1329,20 +1421,6 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	// exists, calculate later 404s, and the row is never written.
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("project not found")
-	}
-
-	// #712 §8: the update rewrites customer_id, so the same logical FK scope
-	// applies here. The customer must belong to the project's OWNING
-	// organization (shared sales/manufacturing orgs may update the project but
-	// never re-point it at a customer outside the owner tenant). Checked in
-	// this transaction, so a rejection rolls the whole update back.
-	var projectOrg string
-	if err := tx.QueryRow(ctx,
-		`SELECT organization_id FROM projects WHERE id = $1`, id).Scan(&projectOrg); err != nil {
-		return err
-	}
-	if err := ensureCustomerInOrgTx(ctx, tx, p.CustomerID, projectOrg); err != nil {
-		return err
 	}
 
 	if err := replaceProjectItemsTx(ctx, tx, id, p.Items); err != nil {
@@ -1407,7 +1485,7 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 		}
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {

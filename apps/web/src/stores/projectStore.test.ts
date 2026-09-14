@@ -7,7 +7,10 @@ import type {
   ProjectItem,
   ProjectTemplate,
 } from '@granete/domain';
-import { createSeedWorkspace } from '@granete/storage';
+import {
+  createSeedWorkspace,
+  ProjectInlineUpdateHttpError,
+} from '@granete/storage';
 import type { ProjectDraft } from '@granete/ui';
 
 import {
@@ -398,6 +401,234 @@ describe('projectStore — createProject with inline customer (#712 atomic path)
     const matches = customers.filter((c) => c.id === serverCustomer.id);
     expect(matches).toHaveLength(1);
     expect(matches[0]!.name).toBe(serverCustomer.name); // authoritative
+  });
+
+  it('#714: update uses one atomic call, no optimistic state, and server entities win', async () => {
+    const atomicCalls: Array<{
+      projectId: string;
+      name: string;
+      replaces: string;
+      expectedUpdatedAt: string;
+      key: string;
+    }> = [];
+    const saved: Project[] = [];
+    const base = makeDeps();
+    const deps: ProjectStoreDeps = {
+      ...base.deps,
+      saveProject: async (p) => {
+        saved.push(p);
+      },
+      canUpdateProjectWithInlineCustomer: () => true,
+      updateProjectWithInlineCustomer: async (p, name, ctx) => {
+        atomicCalls.push({
+          projectId: p.id,
+          name,
+          replaces: ctx.replacesCustomerId,
+          expectedUpdatedAt: ctx.expectedProjectUpdatedAt,
+          key: ctx.idempotencyKey,
+        });
+        return {
+          project: {
+            ...p,
+            customerId: 'server-cust-1',
+            ownerUserId: 'server-owner',
+            updatedAt: '2026-09-13T23:45:00.000Z',
+          },
+          customer: { id: 'server-cust-1', name: 'Server Name', active: true },
+        };
+      },
+    };
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([
+      makeProject({ id: 'proj-1', customerId: 'cust-base', status: 'draft' }),
+    ]);
+    const cat = seedCatalog();
+
+    store.getState().updateProject('proj-1', projectDraft, cat, {
+      id: 'user-1',
+    });
+
+    // No legacy PUT, local customer or optimistic project mutation may escape
+    // before the atomic server commit.
+    expect(saved).toHaveLength(0);
+    expect(store.getState().projects[0]!.customerId).toBe('cust-base');
+    expect(
+      getCatalogStoreState().catalog?.customers?.some(
+        (customer) => customer.name === 'New Customer',
+      ),
+    ).toBe(false);
+    // The intention runs through the single atomic server transition.
+    expect(atomicCalls).toHaveLength(1);
+    expect(atomicCalls[0]!.projectId).toBe('proj-1');
+    expect(atomicCalls[0]!.name).toBe('New Customer');
+    expect(atomicCalls[0]!.replaces).toBe('cust-base');
+    expect(atomicCalls[0]!.expectedUpdatedAt).toBe(
+      '2024-01-01T00:00:00.000Z',
+    );
+    expect(atomicCalls[0]!.key).toMatch(/^web:/);
+
+    await vi.waitFor(() => {
+      expect(store.getState().projects[0]).toMatchObject({
+        customerId: 'server-cust-1',
+        ownerUserId: 'server-owner',
+        updatedAt: '2026-09-13T23:45:00.000Z',
+      });
+    });
+    const customers = getCatalogStoreState().catalog?.customers ?? [];
+    expect(customers.filter((customer) => customer.id === 'server-cust-1')).toEqual([
+      { id: 'server-cust-1', name: 'Server Name', active: true },
+    ]);
+  });
+
+  it('#714: failure preserves the prior project/customer state and keeps the key for retry', async () => {
+    const calls: Array<{ key: string; expectedUpdatedAt: string }> = [];
+    let fail = true;
+    const base = makeDeps();
+    const deps: ProjectStoreDeps = {
+      ...base.deps,
+      canUpdateProjectWithInlineCustomer: () => true,
+      updateProjectWithInlineCustomer: async (p, name, ctx) => {
+        calls.push({
+          key: ctx.idempotencyKey,
+          expectedUpdatedAt: ctx.expectedProjectUpdatedAt,
+        });
+        if (fail) throw new Error('lost response');
+        return {
+          project: { ...p, customerId: 'server-cust-retry' },
+          customer: { id: 'server-cust-retry', name, active: true },
+        };
+      },
+    };
+    const store = createProjectStore({ deps });
+    const original = makeProject({ customerId: 'cust-base' });
+    store.getState().setProjects([original]);
+    const cat = seedCatalog();
+
+    store.getState().updateProject('proj-1', projectDraft, cat, { id: 'user-1' });
+    await vi.waitFor(() => expect(base.toasts.at(-1)?.type).toBe('error'));
+    expect(store.getState().projects[0]).toEqual(original);
+    expect(
+      getCatalogStoreState().catalog?.customers?.some(
+        (customer) => customer.name === 'New Customer',
+      ),
+    ).toBe(false);
+
+    fail = false;
+    store.getState().updateProject('proj-1', projectDraft, cat, { id: 'user-1' });
+    await vi.waitFor(() => {
+      expect(store.getState().projects[0]!.customerId).toBe('server-cust-retry');
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual(calls[0]);
+  });
+
+  it('#714: 409 requires refresh, preserves state and does not retry automatically', async () => {
+    let calls = 0;
+    const base = makeDeps();
+    const deps: ProjectStoreDeps = {
+      ...base.deps,
+      canUpdateProjectWithInlineCustomer: () => true,
+      updateProjectWithInlineCustomer: async () => {
+        calls += 1;
+        throw new ProjectInlineUpdateHttpError(409, 'project changed concurrently');
+      },
+    };
+    const store = createProjectStore({ deps });
+    const original = makeProject({ customerId: 'cust-base' });
+    store.getState().setProjects([original]);
+
+    store.getState().updateProject('proj-1', projectDraft, seedCatalog(), {
+      id: 'user-1',
+    });
+
+    await vi.waitFor(() => expect(base.toasts).toHaveLength(1));
+    expect(base.toasts[0]).toEqual({
+      type: 'error',
+      message: 'La cotización cambió en el servidor. Recargá antes de volver a guardar.',
+    });
+    expect(calls).toBe(1);
+    expect(store.getState().projects[0]).toEqual(original);
+  });
+
+  it('#714: refresh creates a new intention with a new key and updated token', async () => {
+    const calls: Array<{ key: string; expectedUpdatedAt: string }> = [];
+    const base = makeDeps();
+    const deps: ProjectStoreDeps = {
+      ...base.deps,
+      canUpdateProjectWithInlineCustomer: () => true,
+      updateProjectWithInlineCustomer: async (_project, _name, context) => {
+        calls.push({
+          key: context.idempotencyKey,
+          expectedUpdatedAt: context.expectedProjectUpdatedAt,
+        });
+        throw new ProjectInlineUpdateHttpError(409, 'project changed concurrently');
+      },
+    };
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([
+      makeProject({ customerId: 'cust-base', updatedAt: '2024-01-01T00:00:00.000Z' }),
+    ]);
+    const cat = seedCatalog();
+
+    store.getState().updateProject('proj-1', projectDraft, cat, { id: 'user-1' });
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+
+    store.getState().setProjects([
+      makeProject({ customerId: 'cust-base', updatedAt: '2026-09-13T23:59:00.000Z' }),
+    ]);
+    store.getState().updateProject('proj-1', projectDraft, cat, { id: 'user-1' });
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+
+    expect(calls[0]!.expectedUpdatedAt).toBe('2024-01-01T00:00:00.000Z');
+    expect(calls[1]!.expectedUpdatedAt).toBe('2026-09-13T23:59:00.000Z');
+    expect(calls[1]!.key).not.toBe(calls[0]!.key);
+  });
+
+  it('#714: reconciliation is id-based when a refresh already inserted the pair', async () => {
+    let release!: (value: { project: Project; customer: Customer }) => void;
+    const response = new Promise<{ project: Project; customer: Customer }>(
+      (resolve) => { release = resolve; },
+    );
+    const base = makeDeps();
+    const deps: ProjectStoreDeps = {
+      ...base.deps,
+      canUpdateProjectWithInlineCustomer: () => true,
+      updateProjectWithInlineCustomer: async () => response,
+    };
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject({ customerId: 'cust-base' })]);
+    const cat = seedCatalog();
+
+    store.getState().updateProject('proj-1', projectDraft, cat, { id: 'user-1' });
+    store.getState().setProjects([
+      makeProject({ id: 'proj-1', name: 'Refresh stale project' }),
+    ]);
+    getCatalogStoreState().setCatalog({
+      ...cat,
+      customers: [
+        ...(cat.customers ?? []),
+        { id: 'server-cust-1', name: 'Refresh stale customer', active: true },
+      ],
+    });
+    release({
+      project: makeProject({
+        id: 'proj-1',
+        name: 'Server project',
+        customerId: 'server-cust-1',
+      }),
+      customer: { id: 'server-cust-1', name: 'Server customer', active: true },
+    });
+
+    await vi.waitFor(() => {
+      expect(store.getState().projects[0]!.name).toBe('Server project');
+    });
+    expect(store.getState().projects).toHaveLength(1);
+    const matches = (getCatalogStoreState().catalog?.customers ?? []).filter(
+      (customer) => customer.id === 'server-cust-1',
+    );
+    expect(matches).toEqual([
+      { id: 'server-cust-1', name: 'Server customer', active: true },
+    ]);
   });
 
   it('reconciles the project by id — a concurrent insert cannot duplicate it', async () => {

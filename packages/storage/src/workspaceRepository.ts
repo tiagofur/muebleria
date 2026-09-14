@@ -100,6 +100,17 @@ export class MaterialsReleaseGateError extends Error {
   }
 }
 
+/** HTTP failure from the atomic quote + inline-customer update command. */
+export class ProjectInlineUpdateHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly responseText: string,
+  ) {
+    super(`Failed to update project: ${status} ${responseText}`);
+    this.name = 'ProjectInlineUpdateHttpError';
+  }
+}
+
 /** Derived view of a project's quality job (OC-060..OC-062). */
 export interface QualityView {
   readonly quality: QualityJob | null;
@@ -165,6 +176,24 @@ export interface WorkspaceRepository {
   createProjectWithInlineCustomer?(
     project: Project,
     inlineCustomerName: string,
+  ): Promise<{ project: Project; customer: Customer }>;
+  /**
+   * #714 — atomic "edit quote + new customer" update (server adapters only):
+   * ONE backend transaction persists the customer (server-minted id) and the
+   * repointed project, guarded by a durable idempotency receipt keyed by the
+   * caller's intention. replacesCustomerId is the caller's base view of the
+   * current assignment ('' = none): a stale base converges with an explicit
+   * conflict instead of duplicating customers. Local/guest adapters leave
+   * this unset — their single local store needs no transition.
+   */
+  updateProjectWithInlineCustomer?(
+    project: Project,
+    inlineCustomerName: string,
+    context: {
+      readonly replacesCustomerId: string;
+      readonly expectedProjectUpdatedAt: string;
+      readonly idempotencyKey: string;
+    },
   ): Promise<{ project: Project; customer: Customer }>;
   /** Update existing project (upsert PUT→POST fallback for other adapters). */
   saveProject(project: Project): Promise<void>;

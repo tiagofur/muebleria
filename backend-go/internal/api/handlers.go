@@ -1500,9 +1500,36 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
-		var p domain.Project
-		if !decodeJSONBody(w, r, &p) {
+		var req updateProjectRequest
+		if !decodeJSONBody(w, r, &req) {
 			return
+		}
+		p := req.Project
+		inlineName := strings.TrimSpace(req.InlineCustomerName)
+		if inlineName != "" {
+			if p.CustomerID != "" {
+				respondWithError(w, http.StatusBadRequest, "enviá un cliente existente o un cliente nuevo, no ambos")
+				return
+			}
+			if req.InlineCustomerReplaces == nil {
+				respondWithError(w, http.StatusBadRequest, "falta el cliente actual de la cotización para crear uno nuevo")
+				return
+			}
+			if req.ExpectedProjectUpdatedAt == nil {
+				respondWithError(w, http.StatusBadRequest, "falta la versión actual de la cotización para crear un cliente nuevo")
+				return
+			}
+			if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCustomers), "no tenés permiso para crear clientes") {
+				return
+			}
+			if claims.OrgID != "" && claims.OrgID != existing.OrganizationID {
+				respondWithError(w, http.StatusForbidden, "sólo la organización dueña de la cotización puede asignar un cliente nuevo")
+				return
+			}
+			if existing.Status != domain.StatusDraft {
+				respondWithError(w, http.StatusConflict, "la cotización ya no está en borrador: no se puede asignar un cliente nuevo")
+				return
+			}
 		}
 		// #577: the resolved release authority projection is computed on read;
 		// a client-sent copy is never persisted.
@@ -1544,7 +1571,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !orgSeesManufacturing(claims, existing) {
 			domain.RestoreProjectManufacturing(&p, existing)
 		}
-		if !validateProjectPayloadRequiredIDs(w, &p, false) {
+		if !validateProjectPayloadRequiredIDs(w, &p, inlineName != "") {
 			return
 		}
 
@@ -1611,8 +1638,26 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !authorizeCloseoutEventAppends(w, existing, p.Events) {
 			return
 		}
-		err = s.Store.UpdateProject(r.Context(), id, &p)
+		var inlineCustomer *domain.Customer
+		if inlineName != "" {
+			inlineCustomer = &domain.Customer{Name: inlineName, OwnerUserID: p.OwnerUserID}
+			err = s.Store.UpdateProjectWithInlineCustomer(
+				r.Context(), id, &p, inlineCustomer,
+				strings.TrimSpace(*req.InlineCustomerReplaces),
+				*req.ExpectedProjectUpdatedAt,
+			)
+		} else {
+			err = s.Store.UpdateProject(r.Context(), id, &p)
+		}
 		if err != nil {
+			if errors.Is(err, storage.ErrProjectConcurrentUpdate) {
+				respondWithError(w, http.StatusConflict, "la cotización cambió en el servidor: recargá y volvé a intentar")
+				return
+			}
+			if errors.Is(err, storage.ErrCustomerNotFound) {
+				respondWithError(w, http.StatusNotFound, "El cliente indicado no existe")
+				return
+			}
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
@@ -1634,6 +1679,10 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(&response)
+		}
+		if inlineCustomer != nil {
+			respondWithJSON(w, http.StatusOK, updateProjectResponse{Project: response, InlineCustomer: inlineCustomer})
+			return
 		}
 		respondWithJSON(w, http.StatusOK, response)
 
