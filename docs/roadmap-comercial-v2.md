@@ -77,6 +77,17 @@ The preferred customer-facing loop is:
 
 If DXF, PTX, stock or a machine route is not part of the rehearsal, the script states that exclusion. Avoiding a route does not close its issue.
 
+## Demo design entry rule (#729)
+
+The current Demo Vertical Slice uses **SketchUp as the only visible design
+entry**. Web keeps Cliente/Proyecto → Cotización → historial/revisiones →
+aprobación → Ingeniería → Producción → outputs; design authoring is reached
+through Diseños → "Abrir en SketchUp" (pairing #499). Proyectar stays
+implemented, tested and preserved for future work under its existing owners
+(#643, #308, #444, #529) — no lifecycle, authority or `source_type` change.
+Its entry points are hidden behind the single `demoExperience.proyectarVisible`
+switch in `@granete/ui`; re-enabling it is that one-flag change.
+
 ## P0 exclusions
 
 - no second pricing engine in Ruby, React or exports;

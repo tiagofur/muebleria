@@ -564,6 +564,28 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     expect(saved.baseClearanceMm).toBe('120');
   });
 
+  // #729 — la demo no promociona Proyectar: el hint del campo B no puede
+  // nombrar una superficie oculta.
+  it('#729 demo copy: base clearance hint explains B without naming Proyectar', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
+    await screen.findByTestId('module-editor-page');
+
+    const baseSelect = screen.getByTestId(
+      'module-base-mode',
+    ) as HTMLSelectElement;
+    await user.selectOptions(baseSelect, 'plinth_board');
+
+    const field = screen
+      .getByTestId('module-base-clearance')
+      .closest('.catalog-form__field');
+    const hint = field?.querySelector('.module-editor__hint');
+    expect(hint?.textContent).toMatch(/variable B/i);
+    expect(hint?.textContent).not.toMatch(/Proyectar/);
+  });
+
   it('opens full-page create from requestCreateKey prop (Dashboard handoff)', () => {
     renderScreen({ requestCreateKey: 1 });
     const page = screen.getByTestId('module-editor-page');

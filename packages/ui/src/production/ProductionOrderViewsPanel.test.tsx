@@ -204,6 +204,25 @@ describe('ProductionOrderViewsPanel F101 page chrome migration', () => {
     expect(action.className).toBe('btn');
     expect(header.querySelector('.page-header__primary-action')).toBeNull();
   });
+
+  // #729 — SketchUp es la única entrada visible de diseño en la demo: el
+  // placeholder no puede dirigir a una superficie oculta.
+  it('#729 demo copy: empty-walls placeholder does not direct users to Proyectar', () => {
+    render(
+      <ProductionOrderViewsPanel
+        project={project}
+        modules={[]}
+        catalog={{ modules: [], structures: [], components: [], materials: [], edges: [], hardware: [], optionGroups: [] }}
+      />,
+    );
+    const placeholder = within(screen.getByTestId('prod-vistas-elevaciones')).getByText(
+      /No hay muros en el layout/,
+    );
+    expect(placeholder.textContent).toBe(
+      'No hay muros en el layout para generar elevaciones.',
+    );
+    expect(placeholder.textContent).not.toMatch(/Proyectar/);
+  });
 });
 
 describe('ProductionOrderViewsPanel #256 multi-ambiente scope', () => {

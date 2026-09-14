@@ -1,3 +1,43 @@
+# Issue #729 — [P0][DEMO-UX] SketchUp como única entrada visible de diseño para la demo
+
+- Approval: issue #729 OPEN con `status:approved` aplicada por el propietario
+  (2026-09-14T21:43:58Z) + `type:feature`; prompt del propietario define
+  alcance, exclusiones y DoD. Base exacta
+  `origin/main@69274cc5bb0e71ec60feec24cd2abdb890c720fb` (incluye #728 ya
+  mergeado; solape verificado nulo). Rama `feat/729-demo-ux-sketchup-only-design`.
+  Sin PR/issue concurrente (0 PRs abiertos verificados antes de empezar).
+- Scope: ocultar TODAS las entradas visibles de Proyectar en la experiencia
+  normal de la demo mediante UN único control
+  `demoExperience.proyectarVisible = false`
+  (`packages/ui/src/demoExperience.ts`): botón chrome "Proyectar"
+  (`project-chrome-projectar`), cue post-agregar "Colocar en Proyectar",
+  acciones "Ir a Proyectar" del modo Presentación (slides Planta y Vista 3D) —
+  gating en los tres choke points de props en `ProjectsScreen.tsx` — y copy
+  que nombra la superficie oculta (placeholder sin muros de Vistas de
+  producción; hint del campo B en editor de módulos). Sin launcher inventado:
+  SketchUp queda como único camino visible vía menú "Más" → "Diseños 3D y
+  revisiones" → "Abrir en SketchUp" (pairing #499, flujo existente).
+- No-removal guarantees: Proyectar NO se elimina ni depreca; componentes,
+  `ProjectSpatialStudio` (+ sus tests directos), visores 3D read-only ("Vista
+  3D cotización", "3D" por ítem), `onUpdateKitchenLayout`/KitchenPlanPanel 2D,
+  label factual de fuente `proyectar: 'Proyectar 3D'` (source_type) y
+  owners #643/#308/#444/#529 quedan intactos. La ruta directa preservada se
+  activa por sesión con `sessionStorage.granete_proyectar_visible=1` (mismo
+  patrón que la sesión guest): los gates #444 y los smokes del studio la
+  usan; nada del flujo normal de producto escribe esa clave.
+- Result: `IMPLEMENTED_PENDING_REVIEW`.
+- Evidence: RED primero confirmado (3 tests nuevos fallando por entradas
+  visibles); luego GREEN. `@granete/ui` completa 166 archivos/1858 PASS
+  (incluye #729 demo-hides, #729 reactivation-one-switch, #729 copy x2 y
+  `ProjectSpatialStudio` intactos); `apps/web` 38 archivos/492 PASS;
+  `pnpm typecheck` 7/7 sin errores; browser real: smoke studio
+  `proyectar-studio.spec.ts` 4/4 PASS (WebGL, entrada por opt-in de sesión) y
+  gate #444 `proyectar-webgl.spec.ts` 6/6 PASS (SwiftShader); `git diff
+  --check` limpio. Smokes perf/usability (#312/#314): NOT_RUN (mismo patrón
+  de opt-in verificado dos veces; presupuestos de 3–8 min ajenos a este
+  cambio). Diff: +167/−17 en 13 archivos + 1 nuevo (`demoExperience.ts`).
+- Docs: `docs/roadmap-comercial-v2.md` § "Demo design entry rule (#729)".
+
 # Issue #727 — [P0][RELEASE] DesignRevision con dimensiones explícitas falla al liberar módulos con presets
 
 - Approval: prompt del propietario (2026-09-14). Issue #727 creada específica para esta causa (sin absorber en #650/#644); sin PR/issue concurrente (verificado: 0 PRs abiertos). Base exacta `origin/main@096ebb49`; rama `fix/727-release-explicit-dims-presets`. Un único writer; sin merge, cierre ni cambios de labels protegidos.

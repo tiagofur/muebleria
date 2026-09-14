@@ -52,6 +52,7 @@ import {
   type DropdownMenuSection,
   PageLoading,
 } from '../common';
+import { demoExperience } from '../demoExperience';
 import '../catalogs/catalogs.css';
 import { ExportIssueList } from './ExportIssueList';
 import { ProjectDetailView } from './components/ProjectDetailView';
@@ -800,7 +801,7 @@ export function ProjectsScreen({
           onBackToList={state.backToList}
           onOpenPresentation={() => state.setShowPresentation(true)}
           onOpenSpatialStudio={
-            onUpdateKitchenLayout
+            demoExperience.proyectarVisible && onUpdateKitchenLayout
               ? () => {
                   state.setPostAddPlaceCue(false);
                   state.setSpatialBootstrap(null);
@@ -811,7 +812,9 @@ export function ProjectsScreen({
           postAddPlaceCue={state.postAddPlaceCue}
           onDismissPostAddPlaceCue={() => state.setPostAddPlaceCue(false)}
           onOpenSpatialStudioUnplaced={
-            onUpdateKitchenLayout ? state.openSpatialStudioUnplaced : undefined
+            demoExperience.proyectarVisible && onUpdateKitchenLayout
+              ? state.openSpatialStudioUnplaced
+              : undefined
           }
           onEditMeta={state.startEditMeta}
           onDuplicate={onDuplicate}
@@ -970,7 +973,7 @@ export function ProjectsScreen({
         onConfirmDelete={(id) => state.handleDelete(id)}
         onClosePresentation={() => state.setShowPresentation(false)}
         onGoToProyectar={
-          onUpdateKitchenLayout
+          demoExperience.proyectarVisible && onUpdateKitchenLayout
             ? () => {
                 state.setShowPresentation(false);
                 state.setShowSpatialStudio(true);

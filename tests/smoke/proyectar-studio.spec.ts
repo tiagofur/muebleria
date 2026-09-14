@@ -13,6 +13,9 @@ async function enterAsGuest(page: Page) {
   await page.addInitScript(() => {
     try {
       sessionStorage.setItem('granete_session', 'guest');
+      // #729: Proyectar stays implemented and directly testable; the studio
+      // smokes opt in per session (demo keeps every entry hidden).
+      sessionStorage.setItem('granete_proyectar_visible', '1');
     } catch {
       /* sessionStorage unavailable */
     }

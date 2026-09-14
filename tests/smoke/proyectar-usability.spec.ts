@@ -198,6 +198,7 @@ test.describe('Proyectar usability benchmark — script canónico (#314 P3D-8)',
     await page.addInitScript(() => {
       try {
         sessionStorage.setItem('granete_session', 'guest');
+        sessionStorage.setItem('granete_proyectar_visible', '1');
         localStorage.setItem('muebles_usability_benchmark', '1');
       } catch {
         /* storage unavailable */

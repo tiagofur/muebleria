@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
+import { demoExperience } from '../demoExperience';
 import type {
   Customer,
   EdgeBand,
@@ -2161,7 +2162,9 @@ describe('ProjectsScreen project templates (#110)', () => {
     expect(onDeleteTemplate).toHaveBeenCalledWith('tmpl-test');
   });
 
-  it('does not auto-open Proyectar after add; shows place cue banner', async () => {
+  // #729 — Demo Vertical Slice: SketchUp is the only visible design surface.
+  // Proyectar entries stay hidden even when the layout writer exists.
+  it('#729 demo experience hides every Proyectar entry from the quote flow', async () => {
     const user = userEvent.setup();
     const onUpdateKitchenLayout = vi.fn();
     renderScreen({ onUpdateKitchenLayout });
@@ -2169,23 +2172,64 @@ describe('ProjectsScreen project templates (#110)', () => {
     await user.click(screen.getByTestId('project-card-prj-1'));
     expect(screen.getByTestId('project-detail')).toBeTruthy();
 
+    // Chrome button: hidden even though the kitchen layout writer exists.
+    expect(screen.queryByTestId('project-chrome-projectar')).toBeNull();
+
     await user.click(screen.getByRole('button', { name: /Agregar mueble/i }));
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Agregar' }));
 
-    // Studio must stay closed — cotizar ≠ proyectar.
+    // Studio stays closed; the place cue (its only action opens it) stays
+    // hidden too — the item list itself is the honest post-add feedback.
     expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
+    expect(screen.queryByTestId('project-post-add-place-cue')).toBeNull();
     expect(screen.getByTestId('project-detail')).toBeTruthy();
 
-    const cue = screen.getByTestId('project-post-add-place-cue');
-    expect(cue.getAttribute('role')).toBe('status');
-    expect(cue.textContent).toMatch(/Mueble agregado a la cotización/i);
+    // Presentation mode offers no path into Proyectar either: check the
+    // Planta slide (1) and the Vista 3D slide (3).
+    await user.click(screen.getByRole('button', { name: /^Más$/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Presentar al cliente' }));
+    await user.click(screen.getByTestId('presentation-next-slide'));
+    expect(screen.queryByRole('button', { name: /Ir a Proyectar/i })).toBeNull();
+    await user.click(screen.getByTestId('presentation-next-slide'));
+    await user.click(screen.getByTestId('presentation-next-slide'));
+    expect(screen.queryByRole('button', { name: /Ir a Proyectar/i })).toBeNull();
+  });
 
-    await user.click(screen.getByTestId('project-post-add-place-cue-open'));
-    expect(screen.getByTestId('project-spatial-studio')).toBeTruthy();
-    expect(
-      screen.getByTestId('spatial-studio-filter-unplaced').className,
-    ).toMatch(/filter--on/);
+  // #729 — Reactivation is one switch: flipping proyectarVisible restores
+  // every entry (chrome button wiring, post-add cue, studio open flow).
+  it('#729 reactivation is one switch: proyectarVisible=true restores the place cue and studio flow', async () => {
+    const user = userEvent.setup();
+    const onUpdateKitchenLayout = vi.fn();
+    const flag = demoExperience as { proyectarVisible: boolean };
+    const previous = flag.proyectarVisible;
+    flag.proyectarVisible = true;
+    try {
+      renderScreen({ onUpdateKitchenLayout });
+
+      await user.click(screen.getByTestId('project-card-prj-1'));
+      expect(screen.getByTestId('project-chrome-projectar')).toBeTruthy();
+
+      await user.click(screen.getByRole('button', { name: /Agregar mueble/i }));
+      const dialog = screen.getByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Agregar' }));
+
+      // Studio must stay closed — cotizar ≠ proyectar.
+      expect(screen.queryByTestId('project-spatial-studio')).toBeNull();
+      expect(screen.getByTestId('project-detail')).toBeTruthy();
+
+      const cue = screen.getByTestId('project-post-add-place-cue');
+      expect(cue.getAttribute('role')).toBe('status');
+      expect(cue.textContent).toMatch(/Mueble agregado a la cotización/i);
+
+      await user.click(screen.getByTestId('project-post-add-place-cue-open'));
+      expect(screen.getByTestId('project-spatial-studio')).toBeTruthy();
+      expect(
+        screen.getByTestId('spatial-studio-filter-unplaced').className,
+      ).toMatch(/filter--on/);
+    } finally {
+      flag.proyectarVisible = previous;
+    }
   });
 });
 

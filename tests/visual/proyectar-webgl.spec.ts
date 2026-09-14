@@ -53,6 +53,9 @@ async function enterAsGuest(page: Page) {
   await page.addInitScript(() => {
     try {
       sessionStorage.setItem('granete_session', 'guest');
+      // #729: the #444 visual gate exercises the preserved direct path;
+      // demo builds keep every Proyectar entry hidden.
+      sessionStorage.setItem('granete_proyectar_visible', '1');
     } catch {
       /* sessionStorage unavailable */
     }
