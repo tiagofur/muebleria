@@ -83,6 +83,10 @@ module Granete
           auth_provider: @auth_provider,
           logger: logger
         )
+        commercial_entry = Connection::CommercialEntry.build(
+          transport: @transport, auth_provider: @auth_provider, model_provider: method(:active_model),
+          connector: @model_binding_connector, logger: logger
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
@@ -96,7 +100,8 @@ module Granete
           design_publisher: @design_publisher,
           mutation_coordinator: mutation_coordinator,
           publication_gate: @publication_preflight_gate,
-          commercial_projection_service: commercial_projection_service
+          commercial_projection_service: commercial_projection_service,
+          project_bootstrap: commercial_entry[:project_bootstrap], initial_quote: commercial_entry[:initial_quote]
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),

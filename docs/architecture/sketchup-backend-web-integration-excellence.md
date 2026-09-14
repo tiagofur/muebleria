@@ -452,6 +452,18 @@ Security requirements:
 - failed pairing/rebind preserves existing valid binding;
 - rebind inventories managed identities and routes adoption/reconciliation explicitly.
 
+### 12.1 Directional boundary: Web-first versus SketchUp-first
+
+#499 exclusively owns Web → SketchUp pairing for an existing exact
+Project/Design. #718 owns the reverse product entry: SketchUp creates one
+server-authoritative Customer?/Project/Design context through the narrow
+generated bootstrap command, binds it through #388, and may create only the
+first draft QuoteRevision through the existing Design-working Q1 command.
+Both use the SketchUp device credential and exact capability allowlists; neither
+reuses a Web JWT or grants access to general legacy Customer/Project/Quote
+mutations. A model with an existing valid binding cannot be silently
+overwritten by the SketchUp-first action.
+
 ## 13. Progressive React Digital Thread workspace
 
 #396 is the tracker.

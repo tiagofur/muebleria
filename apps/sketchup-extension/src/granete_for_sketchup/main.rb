@@ -24,6 +24,9 @@ module Granete
         connection/project_furniture_contract
         connection/project_furniture
         connection/commercial_projection
+        connection/project_bootstrap
+        connection/initial_quote
+        connection/commercial_entry
         connection/duplicate_resolver
         connection/design_publish
         library/catalog_parameter_contract

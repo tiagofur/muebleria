@@ -323,6 +323,108 @@ module Granete
         end
       end
 
+      # #718 — bounded SketchUp-first commercial entry. Ruby owns binding,
+      # local-work checks, credentials and the final server refetch; the
+      # HtmlDialog receives presentation data only.
+      module CommercialBootstrapBridge
+        def register_commercial_bootstrap_callbacks(dialog)
+          dialog.add_action_callback('list_bootstrap_customers') { handle_bootstrap_customers(dialog) }
+          dialog.add_action_callback('bootstrap_project_design') { |_c, p| handle_bootstrap_project(dialog, p) }
+          dialog.add_action_callback('emit_initial_quote') { |_c, p| handle_initial_quote(dialog, p) }
+        end
+
+        def handle_bootstrap_customers(dialog)
+          entries = @project_bootstrap.customers
+          execute_bridge(dialog, 'onBootstrapCustomers', { 'ok' => true, 'entries' => entries })
+        rescue Connection::ProjectBootstrap::Service::Error => e
+          execute_bridge(dialog, 'onBootstrapCustomers', {
+                           'ok' => false, 'code' => e.kind.to_s, 'reason' => e.message
+                         })
+        end
+
+        def handle_bootstrap_project(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          result = @project_bootstrap.create(payload)
+          execute_bridge(dialog, 'onBootstrapResult', result)
+          handle_get_model_binding(dialog) if result['ok']
+        rescue StandardError => e
+          @logger.error('bootstrap_project_bridge_failed', error: e)
+          execute_bridge(dialog, 'onBootstrapResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        def handle_initial_quote(dialog, payload_json) # rubocop:disable Metrics/AbcSize
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          status = model_binding_connector.status
+          unless status['state'] == 'connected'
+            return initial_quote_failure(dialog, 'binding_changed', 'el enlace del modelo cambió')
+          end
+          if mutation_coordinator.busy?
+            return initial_quote_failure(dialog, 'mutation_pending', 'hay una modificación en curso')
+          end
+
+          binding = status['binding']
+          before = commercial_projection_local_work(binding['projectId'], binding['designId'])
+          unless before['matchConfirmed'] == true && before['localChangesPending'] == false
+            return initial_quote_failure(dialog, 'local_state_unconfirmed',
+                                         'el diseño local no coincide con el servidor')
+          end
+
+          projection = @commercial_projection_service.fetch(binding['projectId'], binding['designId'])
+          after = commercial_projection_local_work(binding['projectId'], binding['designId'])
+          unless after == before && initial_quote_projection_valid?(projection)
+            return initial_quote_refresh(dialog, 'el presupuesto dejó de estar listo; revisalo de nuevo')
+          end
+
+          displayed_total = payload['saleTotal']
+          changed = payload['workingVersion'] != projection['workingVersion'] ||
+                    payload['workingFingerprint'] != projection['workingFingerprint'] ||
+                    !displayed_total.is_a?(Numeric) || displayed_total != projection.dig('amounts', 'saleTotal')
+          return initial_quote_refresh(dialog, 'el presupuesto cambió; revisalo y volvé a emitir') if changed
+
+          quote = @initial_quote.create(
+            project_id: binding['projectId'], design_id: binding['designId'],
+            working_version: projection['workingVersion'], working_fingerprint: projection['workingFingerprint']
+          )
+          execute_bridge(dialog, 'onInitialQuoteResult', {
+                           'ok' => true, 'quote' => quote,
+                           'webUrl' => initial_quote_web_url(binding['projectId'], quote['id'])
+                         })
+        rescue Connection::CommercialProjection::Service::Error, Connection::InitialQuote::Service::Error => e
+          initial_quote_failure(dialog, e.kind.to_s, e.message)
+        rescue StandardError => e
+          @logger.error('initial_quote_bridge_failed', error: e)
+          initial_quote_failure(dialog, 'error', 'no se pudo emitir la cotización')
+        end
+
+        private
+
+        def initial_quote_projection_valid?(projection)
+          projection['status'] == 'current' && projection['reference'].nil? &&
+            projection['itemCount'].to_i.positive? && projection.dig('amounts', 'saleTotal').is_a?(Numeric) &&
+            projection['workingVersion'].is_a?(String) && !projection['workingVersion'].empty? &&
+            projection['workingFingerprint'].to_s.match?(Connection::CommercialProjection::SHA256_PATTERN)
+        end
+
+        def initial_quote_failure(dialog, code, reason)
+          execute_bridge(dialog, 'onInitialQuoteResult', { 'ok' => false, 'code' => code, 'reason' => reason })
+          nil
+        end
+
+        def initial_quote_refresh(dialog, reason)
+          execute_bridge(dialog, 'onInitialQuoteResult', {
+                           'ok' => false, 'code' => 'refresh_required', 'reason' => reason
+                         })
+          nil
+        end
+
+        def initial_quote_web_url(project_id, quote_id)
+          base = @status_provider.call['server_url'].to_s.sub(%r{/api/?\z}, '')
+          return nil unless base.match?(%r{\Ahttps?://})
+
+          "#{base}/quotes?projectId=#{project_id}&quoteRevisionId=#{quote_id}"
+        end
+      end
+
       # #389 / DT-5 Project Furniture callback handlers: the panel never
       # touches business identity — listing and Place existing go through the
       # ProjectFurniture placer, which validates the binding and derives
@@ -1664,6 +1766,7 @@ module Granete
         include SessionBridge
         include ModelBindingBridge
         include CommercialProjectionBridge
+        include CommercialBootstrapBridge
         include ProjectFurnitureBridge
         include FurnitureBridge
         include HostMutationBridge
@@ -1689,7 +1792,8 @@ module Granete
                        migration_review_controller: nil, model_binding_connector: nil,
                        project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil,
                        design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil,
-                       publication_gate: nil, commercial_projection_service: nil)
+                       publication_gate: nil, commercial_projection_service: nil,
+                       project_bootstrap: nil, initial_quote: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -1705,6 +1809,8 @@ module Granete
           @manufacturing_overlay = manufacturing_overlay
           @publication_gate = publication_gate
           @commercial_projection_service = commercial_projection_service
+          @project_bootstrap = project_bootstrap
+          @initial_quote = initial_quote
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store
@@ -1833,6 +1939,7 @@ module Granete
           register_auth_callbacks(dialog)
           register_model_binding_callbacks(dialog)
           register_commercial_projection_callbacks(dialog) if @commercial_projection_service
+          register_commercial_bootstrap_callbacks(dialog) if @project_bootstrap && @initial_quote
           register_project_furniture_callbacks(dialog)
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.

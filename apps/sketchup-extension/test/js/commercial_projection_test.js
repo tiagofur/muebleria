@@ -34,6 +34,8 @@ function sandbox() {
     window: { sketchup: {
       get_model_binding: () => calls.push({ action: 'binding' }),
       get_commercial_projection: (payload) => calls.push({ action: 'projection', payload: JSON.parse(payload) }),
+      emit_initial_quote: (payload) => calls.push({ action: 'quote', payload: JSON.parse(payload) }),
+      open_external_url: (payload) => calls.push({ action: 'open', payload: JSON.parse(payload) }),
       update_furniture: (payload) => calls.push({ action: 'mutation', payload: JSON.parse(payload) })
     }, GraneteBridge: {
       nextMessageId: () => `mutation-${++messageSequence}`,
@@ -49,8 +51,10 @@ function sandbox() {
   return context;
 }
 
-const bindingA = { state: 'connected', binding: { projectId: 'p-a', designId: 'd-a' } };
-const bindingB = { state: 'connected', binding: { projectId: 'p-b', designId: 'd-b' } };
+const bindingA = { state: 'connected', binding: { projectId: 'p-a', designId: 'd-a' },
+  capabilities: { can_edit_working_copy: true, can_publish_revision: true } };
+const bindingB = { state: 'connected', binding: { projectId: 'p-b', designId: 'd-b' },
+  capabilities: { can_edit_working_copy: true, can_publish_revision: true } };
 function projection(total, referenceTotal) {
   return {
     status: 'current', currency: 'MXN', costsWithheld: false, saleAmountsWithheld: false,
@@ -58,6 +62,15 @@ function projection(total, referenceTotal) {
     reference: { revisionNumber: 2, status: 'accepted', currency: 'MXN', saleTotal: referenceTotal },
     comparison: referenceTotal === undefined ? null : { absoluteDelta: total - referenceTotal, percentageDelta: referenceTotal === 0 ? null : (total - referenceTotal) / referenceTotal * 100 }
   };
+}
+
+function initialProjection(total) {
+  const value = projection(total, undefined);
+  value.reference = null;
+  value.itemCount = 1;
+  value.workingVersion = 'working-718';
+  value.workingFingerprint = 'sha256-' + 'a'.repeat(64);
+  return value;
 }
 
 function projectionResponse(requestId, binding, value) {
@@ -92,6 +105,82 @@ test('renders a legitimate zero rather than missing', () => {
   assert.strictEqual(s.__elements['commercial-projection-delta'].textContent.includes('%'), false);
   assert.ok(s.__elements['commercial-projection-reference'].textContent.includes('Aceptada'));
   assert.strictEqual(s.__elements['commercial-projection-reference'].textContent.includes('accepted'), false);
+});
+
+test('enables Q1 only for exact confirmed current projection and guards double click', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  const value = initialProjection(125);
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, value));
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, false);
+  s.__elements['btn-initial-quote'].listeners.click();
+  s.__elements['btn-initial-quote'].listeners.click();
+  const quoteCalls = s.__calls.filter((call) => call.action === 'quote');
+  assert.strictEqual(quoteCalls.length, 1);
+  assert.deepStrictEqual(quoteCalls[0].payload, {
+    workingVersion: 'working-718', workingFingerprint: 'sha256-' + 'a'.repeat(64), saleTotal: 125
+  });
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true);
+});
+
+test('Q1 remains disabled without exact local match or while mutation is active', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  const response = projectionResponse(request, bindingA, initialProjection(125));
+  response.workState.matchConfirmed = false;
+  s.window.GraneteCommercialProjection.receive(response);
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true);
+
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const next = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(next, bindingA, initialProjection(125)));
+  s.__events['granete-mutation-state']({ detail: { phase: 'resolving' } });
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true);
+});
+
+test('Q1 remains disabled without the canonical project mutation capability', () => {
+  const s = sandbox();
+  const denied = { state: 'connected', binding: bindingA.binding,
+    capabilities: { can_edit_working_copy: false, can_publish_revision: false } };
+  s.window.GraneteCommercialProjection.setBinding(denied);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, denied, initialProjection(125)));
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true);
+});
+
+test('renders normal Q1 and opens only the server-provided ID-only URL', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, initialProjection(125)));
+  s.__elements['btn-initial-quote'].listeners.click();
+  s.window.GraneteCommercialProjection.receiveQuote({
+    ok: true,
+    quote: { id: 'q-1', revisionNumber: 1, status: 'draft', commercialSnapshot: { currency: 'MXN', breakdown: { salePrice: 125 } } },
+    webUrl: 'https://granete.test/quotes?projectId=p-a&quoteRevisionId=q-1'
+  });
+  assert.ok(s.__elements['initial-quote-status'].textContent.includes('Q1'));
+  assert.ok(s.__elements['initial-quote-status'].textContent.includes('Borrador'));
+  assert.ok(s.__elements['initial-quote-status'].textContent.includes('$'));
+  assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true);
+  s.__elements['btn-open-in-granete'].listeners.click();
+  assert.deepStrictEqual(s.__calls[s.__calls.length - 1], {
+    action: 'open', payload: { url: 'https://granete.test/quotes?projectId=p-a&quoteRevisionId=q-1' }
+  });
+});
+
+test('changed tokens require a refreshed projection and another click', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, initialProjection(125)));
+  s.__elements['btn-initial-quote'].listeners.click();
+  const before = s.__calls.filter((call) => call.action === 'projection').length;
+  s.window.GraneteCommercialProjection.receiveQuote({ ok: false, code: 'refresh_required', reason: 'cambió' });
+  assert.strictEqual(s.__calls.filter((call) => call.action === 'projection').length, before + 1);
+  assert.strictEqual(s.__calls.filter((call) => call.action === 'quote').length, 1);
 });
 
 test('drops a late response after an exact context switch', () => {

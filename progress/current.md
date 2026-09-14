@@ -1,3 +1,20 @@
+# Issue #718 — SketchUp-first project bootstrap and first QuoteRevision
+
+- Approval/base: issue #718 OPEN con `status:approved`; PR #717 MERGED y #711 CLOSED verificados. Base exacta `origin/main@56bb3cf494c809e4e573f38037d1d9d4117ddeb8`.
+- Rama/worktree: `codex/feat/718-sketchup-first-q1` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-718-sketchup-first-q1`.
+- Started: 2026-09-13. Un único writer de producto; sin push, PR, merge, cierre ni cambios de labels.
+- Baseline aislado: `GOFLAGS='-p=1' DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54476/muebles?sslmode=disable env -u MIGRATION_DATABASE_URL ./init.sh` terminó rc=0 sobre la base exacta. Log `/tmp/issue-718-baseline-init-isolated.log`, SHA-256 `29992ae3c14cb8b9a616f312a6e8273834a107005709bc47207f843e2887ef80`. La falla previa queda clasificada como contención de PostgreSQL/procesos compartidos, no como regresión de `origin/main`.
+- Scope: bootstrap atómico Customer?+Project+Design con contrato generado y auth SketchUp least-privilege; binding canónico #388; CommercialProjection #702; creación idempotente de Q1 mediante #717; Q1 visible por readers React existentes.
+- Exclusiones: #499, #679, #643, Presentation, Q2/requote/Change Orders, aceptación/publicación, Design approval, ProductionRelease, PTX/CNC, permisos generales, Web JWT, pricing local y estado paralelo.
+- Plan:
+  1. Fijar contratos OpenAPI y API/DB tests RED para summaries de Customer, bootstrap atómico, allowlist exacta, RLS, rollback e idempotencia.
+  2. Implementar bootstrap server-authoritative reutilizando writers canónicos y regenerar consumidores.
+  3. Implementar servicios Ruby `ProjectBootstrap`/`InitialQuote`, envelope técnico durable y binding/readback canónicos.
+  4. Extender el HtmlDialog con formulario accesible y CTA Q1 fail-closed sobre CommercialProjection exacta, sin pricing local.
+  5. Ejecutar gates focalizados Go/PostgreSQL, contratos, Ruby, Node HtmlDialog, browser cuando aplique y `git diff --check`; registrar host real como `NOT_TESTED` si no está disponible.
+- Result: bootstrap generado y atómico implementado con defaults del taller, IDs server-side, customer portfolio/tenant checks, working copy y audit durable en la misma transacción idempotente. El bearer SketchUp sólo suma summaries, bootstrap y el POST Q1 exacto. Ruby conserva envelopes técnicos hash-only antes del request, reusa la misma key tras pérdida/fallo de binding, impide aplicar respuestas a otro modelo activo y usa el connector #388 como único writer. El CTA revalida binding, mutation/local match y CommercialProjection fresca; un cambio de tokens/total exige otro click y Q1 existente nunca deriva a requote.
+- Evidence focal final: `pnpm openapi:check` y `pnpm --dir packages/storage typecheck` PASS; `GOFLAGS='-p=1' DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54476/muebles?sslmode=disable env -u MIGRATION_DATABASE_URL go test ./internal/api -count=1` PASS (20.142s); la misma infraestructura aislada con `go test ./internal/storage -run 'TestBootstrapProjectDesignPostgres|TestCreateInitialDesignQuoteRevision_' -count=1` PASS (10.738s). `RBENV_VERSION=3.2.11 rbenv exec bundle exec rake verify` PASS: 674 runs/4568 assertions, boundary 6/2675, RuboCop/syntax y readback del RBZ SHA-256 `c0def9d297c37e0a354914d4f7b124f4d8632dcba20ea574a8b9d407dc6477ee`. Node HtmlDialog real-source harnesses: bootstrap 6 PASS y CommercialProjection/Q1 31 PASS. `git diff --check` PASS. Browser React, SketchUp/TestUp host real y CI: `NOT_TESTED`/`NOT_RUN`; no se sustituyen con jsdom/Ruby. Diff actual: 2,090 líneas authored (+2,028/-62) excluyendo tres outputs generados; requiere gobernanza de tamaño antes de publicar.
+
 # Issue #711 — primera QuoteRevision desde Design working copy
 - Approval/base: issue #711 OPEN con `status:approved`, autorización “listo”, `origin/main@84fc820a444e9d536808afb490b1109290a2ee50`.
 - Rama/worktree: `feat/711-design-first-initial-quote` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-711-design-first-quote`.

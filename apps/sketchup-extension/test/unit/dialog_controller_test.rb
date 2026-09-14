@@ -11,6 +11,8 @@ require_relative '../../src/granete_for_sketchup/transport/adapter'
 require_relative '../../src/granete_for_sketchup/transport/http_adapter'
 require_relative '../../src/granete_for_sketchup/connection/commercial_projection'
 require_relative '../../src/granete_for_sketchup/connection/model_binding'
+require_relative '../../src/granete_for_sketchup/connection/project_bootstrap'
+require_relative '../../src/granete_for_sketchup/connection/initial_quote'
 require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
@@ -60,7 +62,27 @@ class DialogControllerTest < Minitest::Test
       @calls += 1
       @on_fetch&.call
       { 'status' => 'current', 'projectId' => project_id, 'designId' => design_id,
-        'currency' => 'MXN', 'amounts' => { 'saleTotal' => 100.0 }, 'issues' => [] }
+        'currency' => 'MXN', 'amounts' => { 'saleTotal' => 100.0 }, 'issues' => [],
+        'itemCount' => 1, 'reference' => nil, 'workingVersion' => 'working-718',
+        'workingFingerprint' => "sha256-#{'a' * 64}" }
+    end
+  end
+
+  class BootstrapCoordinator
+    def customers = []
+    def create(_payload) = { 'ok' => false }
+  end
+
+  class QuoteCoordinator
+    attr_reader :calls
+
+    def initialize = @calls = []
+
+    def create(**args)
+      @calls << args
+      { 'id' => '73000000-0000-0000-0000-000000000718', 'projectId' => PROJECTION_PROJECT_ID,
+        'revisionNumber' => 1, 'status' => 'draft',
+        'commercialSnapshot' => { 'currency' => 'MXN', 'breakdown' => { 'salePrice' => 100.0 } } }
     end
   end
 
@@ -1006,9 +1028,31 @@ class DialogControllerTest < Minitest::Test
     assert_includes dialog.executed_scripts.last, '"scope":"full"'
   end
 
+  def test_initial_quote_bridge_refetches_and_requires_exact_displayed_tokens
+    service = ProjectionService.new
+    quote = QuoteCoordinator.new
+    controller = projection_controller(service, project_bootstrap: BootstrapCoordinator.new, initial_quote: quote)
+    dialog = controller.show
+    projection_work_state.record_sync!(project_id: PROJECTION_PROJECT_ID,
+                                       design_id: PROJECTION_DESIGN_ID, scope: :full)
+
+    callback = dialog.callbacks.fetch('emit_initial_quote')
+    callback.call(nil, JSON.generate('workingVersion' => 'stale',
+                                     'workingFingerprint' => "sha256-#{'b' * 64}", 'saleTotal' => 99.0))
+    assert_empty quote.calls
+    assert_includes dialog.executed_scripts.last, 'refresh_required'
+
+    callback.call(nil, JSON.generate('workingVersion' => 'working-718',
+                                     'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0))
+    assert_equal 1, quote.calls.length
+    assert_equal 'working-718', quote.calls.first[:working_version]
+    assert_includes dialog.executed_scripts.last, '"revisionNumber":1'
+    assert_includes dialog.executed_scripts.last, '"status":"draft"'
+  end
+
   private
 
-  def projection_controller(service)
+  def projection_controller(service, project_bootstrap: nil, initial_quote: nil)
     binding = Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
       project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, base_revision_id: nil
     )
@@ -1022,7 +1066,9 @@ class DialogControllerTest < Minitest::Test
       status_provider: StatusProvider.new,
       metadata_store: @store,
       model_binding_connector: ProjectionBindingConnector.new,
-      commercial_projection_service: service
+      commercial_projection_service: service,
+      project_bootstrap: project_bootstrap,
+      initial_quote: initial_quote
     )
   end
 
