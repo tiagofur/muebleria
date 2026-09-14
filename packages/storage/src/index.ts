@@ -6,6 +6,7 @@ export const PACKAGE_NAME = '@granete/storage' as const;
 
 export type { WorkspaceRepository } from './workspaceRepository';
 export type { JobCostingView, SiteSurveyView } from './workspaceRepository';
+export { ProjectInlineUpdateHttpError } from './workspaceRepository';
 export { APIWorkspaceRepository } from './apiWorkspaceRepository';
 export {
   LocalStorageWorkspaceRepository,

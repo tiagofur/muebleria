@@ -7,7 +7,10 @@ import type {
   ProjectItem,
   ProjectTemplate,
 } from '@granete/domain';
-import { createSeedWorkspace } from '@granete/storage';
+import {
+  createSeedWorkspace,
+  ProjectInlineUpdateHttpError,
+} from '@granete/storage';
 import type { ProjectDraft } from '@granete/ui';
 
 import {
@@ -405,6 +408,7 @@ describe('projectStore — createProject with inline customer (#712 atomic path)
       projectId: string;
       name: string;
       replaces: string;
+      expectedUpdatedAt: string;
       key: string;
     }> = [];
     const saved: Project[] = [];
@@ -420,6 +424,7 @@ describe('projectStore — createProject with inline customer (#712 atomic path)
           projectId: p.id,
           name,
           replaces: ctx.replacesCustomerId,
+          expectedUpdatedAt: ctx.expectedProjectUpdatedAt,
           key: ctx.idempotencyKey,
         });
         return {
@@ -457,6 +462,9 @@ describe('projectStore — createProject with inline customer (#712 atomic path)
     expect(atomicCalls[0]!.projectId).toBe('proj-1');
     expect(atomicCalls[0]!.name).toBe('New Customer');
     expect(atomicCalls[0]!.replaces).toBe('cust-base');
+    expect(atomicCalls[0]!.expectedUpdatedAt).toBe(
+      '2024-01-01T00:00:00.000Z',
+    );
     expect(atomicCalls[0]!.key).toMatch(/^web:/);
 
     await vi.waitFor(() => {
@@ -473,14 +481,17 @@ describe('projectStore — createProject with inline customer (#712 atomic path)
   });
 
   it('#714: failure preserves the prior project/customer state and keeps the key for retry', async () => {
-    const calls: string[] = [];
+    const calls: Array<{ key: string; expectedUpdatedAt: string }> = [];
     let fail = true;
     const base = makeDeps();
     const deps: ProjectStoreDeps = {
       ...base.deps,
       canUpdateProjectWithInlineCustomer: () => true,
       updateProjectWithInlineCustomer: async (p, name, ctx) => {
-        calls.push(ctx.idempotencyKey);
+        calls.push({
+          key: ctx.idempotencyKey,
+          expectedUpdatedAt: ctx.expectedProjectUpdatedAt,
+        });
         if (fail) throw new Error('lost response');
         return {
           project: { ...p, customerId: 'server-cust-retry' },
@@ -508,7 +519,69 @@ describe('projectStore — createProject with inline customer (#712 atomic path)
       expect(store.getState().projects[0]!.customerId).toBe('server-cust-retry');
     });
     expect(calls).toHaveLength(2);
-    expect(calls[1]).toBe(calls[0]);
+    expect(calls[1]).toEqual(calls[0]);
+  });
+
+  it('#714: 409 requires refresh, preserves state and does not retry automatically', async () => {
+    let calls = 0;
+    const base = makeDeps();
+    const deps: ProjectStoreDeps = {
+      ...base.deps,
+      canUpdateProjectWithInlineCustomer: () => true,
+      updateProjectWithInlineCustomer: async () => {
+        calls += 1;
+        throw new ProjectInlineUpdateHttpError(409, 'project changed concurrently');
+      },
+    };
+    const store = createProjectStore({ deps });
+    const original = makeProject({ customerId: 'cust-base' });
+    store.getState().setProjects([original]);
+
+    store.getState().updateProject('proj-1', projectDraft, seedCatalog(), {
+      id: 'user-1',
+    });
+
+    await vi.waitFor(() => expect(base.toasts).toHaveLength(1));
+    expect(base.toasts[0]).toEqual({
+      type: 'error',
+      message: 'La cotización cambió en el servidor. Recargá antes de volver a guardar.',
+    });
+    expect(calls).toBe(1);
+    expect(store.getState().projects[0]).toEqual(original);
+  });
+
+  it('#714: refresh creates a new intention with a new key and updated token', async () => {
+    const calls: Array<{ key: string; expectedUpdatedAt: string }> = [];
+    const base = makeDeps();
+    const deps: ProjectStoreDeps = {
+      ...base.deps,
+      canUpdateProjectWithInlineCustomer: () => true,
+      updateProjectWithInlineCustomer: async (_project, _name, context) => {
+        calls.push({
+          key: context.idempotencyKey,
+          expectedUpdatedAt: context.expectedProjectUpdatedAt,
+        });
+        throw new ProjectInlineUpdateHttpError(409, 'project changed concurrently');
+      },
+    };
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([
+      makeProject({ customerId: 'cust-base', updatedAt: '2024-01-01T00:00:00.000Z' }),
+    ]);
+    const cat = seedCatalog();
+
+    store.getState().updateProject('proj-1', projectDraft, cat, { id: 'user-1' });
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+
+    store.getState().setProjects([
+      makeProject({ customerId: 'cust-base', updatedAt: '2026-09-13T23:59:00.000Z' }),
+    ]);
+    store.getState().updateProject('proj-1', projectDraft, cat, { id: 'user-1' });
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+
+    expect(calls[0]!.expectedUpdatedAt).toBe('2024-01-01T00:00:00.000Z');
+    expect(calls[1]!.expectedUpdatedAt).toBe('2026-09-13T23:59:00.000Z');
+    expect(calls[1]!.key).not.toBe(calls[0]!.key);
   });
 
   it('#714: reconciliation is id-based when a refresh already inserted the pair', async () => {

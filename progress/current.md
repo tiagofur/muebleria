@@ -1161,3 +1161,40 @@ EOL.
   - Rerun aislado y serial real `GOFLAGS='-p=1' go test -parallel=1 ./internal/storage -count=1`:
     PASS en 554.135 s.
   - Browser gate real post-merge: 1/1 Chromium PASS en 10.2 s.
+
+## PR #719 / issue #714 — corrección final R1: concurrencia exacta bajo lock
+
+- Approval: solicitud explícita del propietario (2026-09-13) para corregir el
+  hallazgo final en el mismo PR; #714 continúa OPEN con `status:approved` y
+  `size:exception`.
+- Head inicial exacto: `f0f10abfaeca3f95724c292e4ddd1d5d397fb584`;
+  rama/worktree existentes y limpios, PR abierto/mergeable con CI verde.
+- Scope: cerrar únicamente el TOCTOU/lost update de
+  `UpdateProjectWithInlineCustomer`; conservar atomicidad, idempotencia,
+  identidad server-owned, permisos/tenant, reconciliación Web, guest/local y
+  PUT con Customer existente.
+- Plan:
+  1. Usar `projects.updated_at` como token persistido exacto (no existe columna
+     `version` autoritativa para Project) y transportar la base leída por Web.
+  2. Bajo el mismo `FOR UPDATE`, revalidar customer base, `status=draft` y
+     `updated_at` antes de crear Customer.
+  3. Añadir interleavings PostgreSQL deterministas para lifecycle y metadata,
+     más prueba HTTP 409 y estabilidad payload/key/token en Web/repository.
+  4. Ejecutar suites focalizadas serializadas, browser happy path, gates
+     completos, actualizar el mismo PR y verificar CI exact-head; sin merge/cierre.
+- RED confirmado antes del fix con PostgreSQL real y espera de lock demostrada:
+  tanto el cambio concurrente `draft -> quoted` como la edición concurrente de
+  `name/notes` eran sobrescritos por la transición inline.
+- Implementado: `expected_project_updated_at` viaja desde la lectura Web hasta
+  storage; el mismo `SELECT ... FOR UPDATE` compara customer, lifecycle y
+  `updated_at` antes de insertar el Customer. El 409 queda tipado y exige
+  recarga; no hay retry automático.
+- GREEN local:
+  - Go API focalizado PASS.
+  - Go storage/HTTP PostgreSQL focalizado serial PASS.
+  - storage Vitest 35/35; Web projectStore 67/67.
+  - `pnpm typecheck`, `pnpm test` y `pnpm openapi:check` PASS.
+  - Go completo serial `GOFLAGS='-p=1' go test -parallel=1 ./... -count=1`
+    PASS (storage 462.588 s; pilotreadiness 232.931 s).
+  - Browser gate real Chromium PASS 1/1 en 8.1 s.
+  - `git diff --check` PASS.

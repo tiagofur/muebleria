@@ -1515,6 +1515,10 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "falta el cliente actual de la cotización para crear uno nuevo")
 				return
 			}
+			if req.ExpectedProjectUpdatedAt == nil {
+				respondWithError(w, http.StatusBadRequest, "falta la versión actual de la cotización para crear un cliente nuevo")
+				return
+			}
 			if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCustomers), "no tenés permiso para crear clientes") {
 				return
 			}
@@ -1640,6 +1644,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			err = s.Store.UpdateProjectWithInlineCustomer(
 				r.Context(), id, &p, inlineCustomer,
 				strings.TrimSpace(*req.InlineCustomerReplaces),
+				*req.ExpectedProjectUpdatedAt,
 			)
 		} else {
 			err = s.Store.UpdateProject(r.Context(), id, &p)

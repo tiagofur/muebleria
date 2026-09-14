@@ -6,14 +6,16 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 type updateProjectRequest struct {
 	domain.Project
-	InlineCustomerName     string  `json:"inline_customer_name,omitempty"`
-	InlineCustomerReplaces *string `json:"inline_customer_replaces,omitempty"`
+	InlineCustomerName       string     `json:"inline_customer_name,omitempty"`
+	InlineCustomerReplaces   *string    `json:"inline_customer_replaces,omitempty"`
+	ExpectedProjectUpdatedAt *time.Time `json:"expected_project_updated_at,omitempty"`
 }
 
 type updateProjectResponse struct {

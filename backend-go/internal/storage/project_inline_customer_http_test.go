@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/api"
 	"github.com/tiagofur/muebles-backend/internal/auth"
@@ -67,8 +68,8 @@ func TestProjectInlineCustomerUpdateHTTP_Postgres(t *testing.T) {
 		handler.ServeHTTP(recorder, req)
 		return recorder
 	}
-	inlineBody := func(replaces string) string {
-		return `{"id":"` + projectID + `","name":"Cocina editada","customer_id":"","inline_customer_name":"Ana López","inline_customer_replaces":"` + replaces + `","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+	inlineBody := func(replaces, expectedUpdatedAt string) string {
+		return `{"id":"` + projectID + `","name":"Cocina editada","customer_id":"","inline_customer_name":"Ana López","inline_customer_replaces":"` + replaces + `","expected_project_updated_at":"` + expectedUpdatedAt + `","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
 	}
 	countInline := func() int {
 		t.Helper()
@@ -91,9 +92,44 @@ func TestProjectInlineCustomerUpdateHTTP_Postgres(t *testing.T) {
 		}
 		return *ref
 	}
+	projectUpdatedAt := func() string {
+		t.Helper()
+		var updatedAt time.Time
+		if err := fx.admin.QueryRow(ctx,
+			`SELECT updated_at FROM projects WHERE id = $1`, projectID).Scan(&updatedAt); err != nil {
+			t.Fatal(err)
+		}
+		return updatedAt.Format(time.RFC3339Nano)
+	}
+
+	// A non-customer winner that keeps the same assignment must still make a
+	// stale inline intention fail with 409. This proves the HTTP surface carries
+	// the exact persisted Project version rather than relying on customer_id.
+	staleVersion := projectUpdatedAt()
+	if _, err := fx.admin.Exec(ctx, `
+		UPDATE projects
+		SET name='Concurrent winner', notes='B', updated_at=clock_timestamp() + interval '1 second'
+		WHERE id=$1`, projectID); err != nil {
+		t.Fatal(err)
+	}
+	staleMetadata := put(tokenA, "inline-update-stale-version", inlineBody(baseCustomer, staleVersion))
+	if staleMetadata.Code != http.StatusConflict {
+		t.Fatalf("stale version status=%d body=%s, want 409", staleMetadata.Code, staleMetadata.Body.String())
+	}
+	if got := countInline(); got != 0 {
+		t.Fatalf("customers after stale version = %d, want 0", got)
+	}
+	var winnerName, winnerNotes string
+	if err := fx.admin.QueryRow(ctx, `SELECT name, notes FROM projects WHERE id=$1`, projectID).Scan(&winnerName, &winnerNotes); err != nil {
+		t.Fatal(err)
+	}
+	if winnerName != "Concurrent winner" || winnerNotes != "B" {
+		t.Fatalf("winner metadata = %q/%q, want Concurrent winner/B", winnerName, winnerNotes)
+	}
 
 	// 1. Atomic happy path: one PUT commits customer + repointed project.
-	first := put(tokenA, "inline-update-key-0001", inlineBody(baseCustomer))
+	happyBody := inlineBody(baseCustomer, projectUpdatedAt())
+	first := put(tokenA, "inline-update-key-0001", happyBody)
 	if first.Code != http.StatusOK {
 		t.Fatalf("inline update status=%d body=%s", first.Code, first.Body.String())
 	}
@@ -124,7 +160,7 @@ func TestProjectInlineCustomerUpdateHTTP_Postgres(t *testing.T) {
 
 	// 2. Lost response + retry with the SAME key: the durable receipt replays
 	// the exact committed answer; the transition does not execute again.
-	second := put(tokenA, "inline-update-key-0001", inlineBody(baseCustomer))
+	second := put(tokenA, "inline-update-key-0001", happyBody)
 	if second.Code != http.StatusOK {
 		t.Fatalf("retry status=%d body=%s", second.Code, second.Body.String())
 	}
@@ -144,7 +180,7 @@ func TestProjectInlineCustomerUpdateHTTP_Postgres(t *testing.T) {
 	// 3. Manual retry with a NEW key still carrying the stale base view: the
 	// base check refuses with an explicit 409 — the user converges by
 	// refreshing, and no second customer is ever minted.
-	stale := put(tokenA, "inline-update-key-0002", inlineBody(baseCustomer))
+	stale := put(tokenA, "inline-update-key-0002", happyBody)
 	if stale.Code != http.StatusConflict {
 		t.Fatalf("stale-base retry status=%d body=%s, want the explicit 409", stale.Code, stale.Body.String())
 	}
@@ -154,7 +190,7 @@ func TestProjectInlineCustomerUpdateHTTP_Postgres(t *testing.T) {
 
 	// 4. The manufacturing partner (org B, admin on the shared project) never
 	// gains the commercial capability — not even with a correct base view.
-	cross := put(tokenB, "inline-update-key-0003", inlineBody(created.InlineCustomer.ID))
+	cross := put(tokenB, "inline-update-key-0003", inlineBody(created.InlineCustomer.ID, created.UpdatedAt.Format(time.RFC3339Nano)))
 	if cross.Code != http.StatusForbidden {
 		t.Fatalf("partner inline update status=%d body=%s, want 403", cross.Code, cross.Body.String())
 	}
@@ -167,7 +203,7 @@ func TestProjectInlineCustomerUpdateHTTP_Postgres(t *testing.T) {
 
 	// 5. The inline capability requires the idempotency key — 400 before
 	// anything persists.
-	noKey := put(tokenA, "", inlineBody(created.InlineCustomer.ID))
+	noKey := put(tokenA, "", inlineBody(created.InlineCustomer.ID, created.UpdatedAt.Format(time.RFC3339Nano)))
 	if noKey.Code != http.StatusBadRequest {
 		t.Fatalf("missing key status=%d body=%s, want 400", noKey.Code, noKey.Body.String())
 	}

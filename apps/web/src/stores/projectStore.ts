@@ -105,7 +105,11 @@ import {
   type InstallationJob,
   type PartInstance,
 } from '@granete/domain';
-import { breakdownFromApi, newIdempotencyKey } from '@granete/storage';
+import {
+  breakdownFromApi,
+  newIdempotencyKey,
+  ProjectInlineUpdateHttpError,
+} from '@granete/storage';
 import type { ProjectDraft } from '@granete/ui';
 
 import type { ToastFn } from './catalogStore';
@@ -249,6 +253,7 @@ export interface ProjectStoreDeps {
     inlineCustomerName: string,
     context: {
       readonly replacesCustomerId: string;
+      readonly expectedProjectUpdatedAt: string;
       readonly idempotencyKey: string;
     },
   ) => Promise<{ project: Project; customer: Customer }>;
@@ -698,6 +703,7 @@ export function createProjectStore(options: InternalOptions) {
     readonly idempotencyKey: string;
     readonly project: Project;
     readonly replacesCustomerId: string;
+    readonly expectedProjectUpdatedAt: string;
   };
   // Keep the exact request identity and payload after a transport failure. A
   // repeated click for the same semantic edit reuses both, so the durable
@@ -988,6 +994,7 @@ export function createProjectStore(options: InternalOptions) {
         const signature = JSON.stringify({
           id,
           replacesCustomerId: existing.customerId,
+          expectedProjectUpdatedAt: existing.updatedAt,
           inlineCustomerName,
           name: meta.name,
           currency: meta.currency,
@@ -1005,6 +1012,7 @@ export function createProjectStore(options: InternalOptions) {
                 idempotencyKey: newIdempotencyKey(),
                 project: updatedProject,
                 replacesCustomerId: existing.customerId,
+                expectedProjectUpdatedAt: existing.updatedAt,
               };
         pendingInlineUpdates.set(id, intention);
 
@@ -1013,6 +1021,7 @@ export function createProjectStore(options: InternalOptions) {
           inlineCustomerName,
           {
             replacesCustomerId: intention.replacesCustomerId,
+            expectedProjectUpdatedAt: intention.expectedProjectUpdatedAt,
             idempotencyKey: intention.idempotencyKey,
           },
         ).then(
@@ -1043,7 +1052,10 @@ export function createProjectStore(options: InternalOptions) {
             console.error('Error al actualizar proyecto con cliente nuevo:', err);
             toast({
               type: 'error',
-              message: 'No se pudo guardar el proyecto. Reintentá en unos segundos.',
+              message:
+                err instanceof ProjectInlineUpdateHttpError && err.status === 409
+                  ? 'La cotización cambió en el servidor. Recargá antes de volver a guardar.'
+                  : 'No se pudo guardar el proyecto. Reintentá en unos segundos.',
             });
           },
         );

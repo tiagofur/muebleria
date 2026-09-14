@@ -5,7 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -35,6 +37,33 @@ func readProjectCustomerID(t *testing.T, store *storage.PostgresStore, projectID
 		return ""
 	}
 	return *ref
+}
+
+func namedInlineUpdateStore(t *testing.T, source *storage.PostgresStore, applicationName string) *storage.PostgresStore {
+	t.Helper()
+	config := source.Pool.Config().Copy()
+	config.ConnConfig.RuntimeParams["application_name"] = applicationName
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.Ping(context.Background()); err != nil {
+		pool.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	return &storage.PostgresStore{Pool: pool}
+}
+
+func awaitInlineUpdateResult(t *testing.T, result <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("inline update did not finish after the competing lock was released")
+		return nil
+	}
 }
 
 // The exact #714 boundary on the update surface. The shell's parallel PUT
@@ -85,7 +114,7 @@ func TestProjectInlineUpdate_AtomicUpdateServerOwnedIdentity(t *testing.T) {
 	payload.CustomerID = "" // the UI sends no customer id on the inline path
 
 	customer := domain.Customer{Name: "Ana López"}
-	if err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, payload, &customer, inlineUpdateBaseCust); err != nil {
+	if err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, payload, &customer, inlineUpdateBaseCust, payload.UpdatedAt); err != nil {
 		t.Fatalf("UpdateProjectWithInlineCustomer: %v", err)
 	}
 
@@ -130,7 +159,7 @@ func TestProjectInlineUpdate_BaseMismatchFailsExplicitConflict(t *testing.T) {
 	}
 	payload.CustomerID = ""
 	customer := domain.Customer{Name: "Ana López"}
-	err = store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, payload, &customer, "e7777777-0000-0000-0000-000000000700")
+	err = store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, payload, &customer, "e7777777-0000-0000-0000-000000000700", payload.UpdatedAt)
 	if !errors.Is(err, storage.ErrProjectConcurrentUpdate) {
 		t.Fatalf("error = %v, want storage.ErrProjectConcurrentUpdate", err)
 	}
@@ -162,7 +191,7 @@ func TestProjectInlineUpdate_UpdateFailureRollsBackCustomer(t *testing.T) {
 	}}
 
 	customer := domain.Customer{Name: "Ana López"}
-	if err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, payload, &customer, inlineUpdateBaseCust); err == nil {
+	if err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, payload, &customer, inlineUpdateBaseCust, payload.UpdatedAt); err == nil {
 		t.Fatal("the controlled item failure must fail the transition")
 	}
 	if got := countCustomersByName(t, store, orgA, "Ana López"); got != 0 {
@@ -193,13 +222,14 @@ func TestProjectInlineUpdate_RetrySameIntentionConverges(t *testing.T) {
 	}
 
 	p1, c1 := build()
-	if err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, p1, c1, inlineUpdateBaseCust); err != nil {
+	expectedUpdatedAt := p1.UpdatedAt
+	if err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, p1, c1, inlineUpdateBaseCust, expectedUpdatedAt); err != nil {
 		t.Fatalf("first attempt: %v", err)
 	}
 
 	// Response lost; the client replays the exact same intention (same base).
 	p2, c2 := build()
-	err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, p2, c2, inlineUpdateBaseCust)
+	err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, p2, c2, inlineUpdateBaseCust, expectedUpdatedAt)
 	if !errors.Is(err, storage.ErrProjectConcurrentUpdate) {
 		t.Fatalf("replay error = %v, want the explicit conflict (converge, never duplicate)", err)
 	}
@@ -239,7 +269,7 @@ func TestProjectInlineUpdate_ConcurrentCompetingUpdatesSerializeExplicitly(t *te
 	for i := 0; i < rounds; i++ {
 		p, c := build("Competidora")
 		go func() {
-			err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, p, c, inlineUpdateBaseCust)
+			err := store.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, p, c, inlineUpdateBaseCust, p.UpdatedAt)
 			results <- result{err: err, customerID: c.ID}
 		}()
 	}
@@ -267,6 +297,104 @@ func TestProjectInlineUpdate_ConcurrentCompetingUpdatesSerializeExplicitly(t *te
 	}
 }
 
+func TestProjectInlineUpdate_LifecycleChangeCommittedWhileWaitingFailsConflict(t *testing.T) {
+	store, orgA, _ := isolationSetup(t)
+	ctx := context.Background()
+	payload, err := store.GetProjectByID(scoped(ctx, orgA), inlineUpdateProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload.CustomerID = ""
+	before := countCustomers(t, store, orgA)
+
+	winner, err := store.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer winner.Rollback(ctx)
+	if _, err := winner.Exec(ctx, `SELECT id FROM projects WHERE id=$1 FOR UPDATE`, inlineUpdateProjectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := winner.Exec(ctx, `UPDATE projects SET status='quoted', updated_at=clock_timestamp() WHERE id=$1`, inlineUpdateProjectID); err != nil {
+		t.Fatal(err)
+	}
+
+	const applicationName = "project-inline-lifecycle-race"
+	tracingStore := namedInlineUpdateStore(t, store, applicationName)
+	result := make(chan error, 1)
+	go func() {
+		customer := &domain.Customer{Name: "Lifecycle loser"}
+		result <- tracingStore.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, payload, customer, inlineUpdateBaseCust, payload.UpdatedAt)
+	}()
+	waitForOrganizationLockWait(t, store.Pool, applicationName)
+	if err := winner.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := awaitInlineUpdateResult(t, result); !errors.Is(err, storage.ErrProjectConcurrentUpdate) {
+		t.Fatalf("inline update error = %v, want concurrent conflict after lifecycle winner", err)
+	}
+
+	var status, customerID string
+	if err := store.Pool.QueryRow(ctx, `SELECT status, customer_id FROM projects WHERE id=$1`, inlineUpdateProjectID).Scan(&status, &customerID); err != nil {
+		t.Fatal(err)
+	}
+	if status != "quoted" || customerID != inlineUpdateBaseCust {
+		t.Fatalf("winner state status/customer = %q/%q, want quoted/%q", status, customerID, inlineUpdateBaseCust)
+	}
+	if got := countCustomers(t, store, orgA); got != before {
+		t.Fatalf("customers = %d, want %d (loser must not create one)", got, before)
+	}
+}
+
+func TestProjectInlineUpdate_MetadataChangeWithSameCustomerIsNotOverwritten(t *testing.T) {
+	store, orgA, _ := isolationSetup(t)
+	ctx := context.Background()
+	payload, err := store.GetProjectByID(scoped(ctx, orgA), inlineUpdateProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload.CustomerID = ""
+	before := countCustomers(t, store, orgA)
+
+	winner, err := store.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer winner.Rollback(ctx)
+	if _, err := winner.Exec(ctx, `SELECT id FROM projects WHERE id=$1 FOR UPDATE`, inlineUpdateProjectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := winner.Exec(ctx, `UPDATE projects SET name='Cocina modificada', notes='B', updated_at=clock_timestamp() + interval '1 second' WHERE id=$1`, inlineUpdateProjectID); err != nil {
+		t.Fatal(err)
+	}
+
+	const applicationName = "project-inline-metadata-race"
+	tracingStore := namedInlineUpdateStore(t, store, applicationName)
+	result := make(chan error, 1)
+	go func() {
+		customer := &domain.Customer{Name: "Metadata loser"}
+		result <- tracingStore.UpdateProjectWithInlineCustomer(scoped(ctx, orgA), inlineUpdateProjectID, payload, customer, inlineUpdateBaseCust, payload.UpdatedAt)
+	}()
+	waitForOrganizationLockWait(t, store.Pool, applicationName)
+	if err := winner.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := awaitInlineUpdateResult(t, result); !errors.Is(err, storage.ErrProjectConcurrentUpdate) {
+		t.Fatalf("inline update error = %v, want concurrent conflict after metadata winner", err)
+	}
+
+	var name, notes, customerID string
+	if err := store.Pool.QueryRow(ctx, `SELECT name, notes, customer_id FROM projects WHERE id=$1`, inlineUpdateProjectID).Scan(&name, &notes, &customerID); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Cocina modificada" || notes != "B" || customerID != inlineUpdateBaseCust {
+		t.Fatalf("winner state name/notes/customer = %q/%q/%q", name, notes, customerID)
+	}
+	if got := countCustomers(t, store, orgA); got != before {
+		t.Fatalf("customers = %d, want %d (stale write must fail before insert)", got, before)
+	}
+}
+
 // Tenant isolation (proof I): another org's caller cannot run the transition
 // on this project — neutral not-found, nothing persisted on either side.
 func TestProjectInlineUpdate_TenantIsolation_CrossOrgUpdateRejected(t *testing.T) {
@@ -281,7 +409,7 @@ func TestProjectInlineUpdate_TenantIsolation_CrossOrgUpdateRejected(t *testing.T
 	}
 	payload.CustomerID = ""
 	customer := domain.Customer{Name: "Intrusa"}
-	err = store.UpdateProjectWithInlineCustomer(scoped(ctx, orgB), inlineUpdateProjectID, payload, &customer, inlineUpdateBaseCust)
+	err = store.UpdateProjectWithInlineCustomer(scoped(ctx, orgB), inlineUpdateProjectID, payload, &customer, inlineUpdateBaseCust, payload.UpdatedAt)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("error = %v, want the neutral not-found (org B cannot touch org A's project)", err)
 	}

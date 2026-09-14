@@ -56,7 +56,11 @@ import type {
   JobCostingView,
   SiteSurveyView,
 } from './workspaceRepository';
-import { CloseoutGateError, MaterialsReleaseGateError } from './workspaceRepository';
+import {
+  CloseoutGateError,
+  MaterialsReleaseGateError,
+  ProjectInlineUpdateHttpError,
+} from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
 import type { ProductionRelease, ReserveMaterialsRequest, ReleaseMaterialsRequest } from './openapi/generated/types';
 
@@ -741,6 +745,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     inlineCustomerName: string,
     context: {
       readonly replacesCustomerId: string;
+      readonly expectedProjectUpdatedAt: string;
       readonly idempotencyKey: string;
     },
   ): Promise<{ project: Project; customer: Customer }> {
@@ -752,6 +757,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         customer_id: '',
         inline_customer_name: inlineCustomerName,
         inline_customer_replaces: context.replacesCustomerId,
+        expected_project_updated_at: context.expectedProjectUpdatedAt,
       }),
     });
     if (res.ok) {
@@ -766,11 +772,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       };
     }
     const text = await res.text().catch(() => '');
-    // A 409 carries the honest verdict (stale base view, concurrent edit or
-    // reused key); surface it verbatim so the store can tell the user to
-    // refresh instead of blindly retrying.
     console.error(`API update failed /projects/${project.id}: ${res.status} ${text}`);
-    throw new Error(`Failed to update project: ${res.status} ${text}`);
+    throw new ProjectInlineUpdateHttpError(res.status, text);
   }
 
   async saveProject(project: Project): Promise<void> {

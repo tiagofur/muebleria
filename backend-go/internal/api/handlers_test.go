@@ -46,10 +46,11 @@ type stubStore struct {
 	createProjectWithInlineErr error
 	updateProjectErr           error
 	// #714 inline-customer update transition.
-	updateProjectWithInlineErr   error
-	updateProjectWithInlineBase  string
-	updateProjectWithInlineCalls int
-	lastInlineUpdateCustomer     *domain.Customer
+	updateProjectWithInlineErr               error
+	updateProjectWithInlineBase              string
+	updateProjectWithInlineExpectedUpdatedAt time.Time
+	updateProjectWithInlineCalls             int
+	lastInlineUpdateCustomer                 *domain.Customer
 	// In-memory durable-idempotency receipts (mirror api_idempotency_receipts
 	// semantics: same scope+fingerprint replays, different fingerprint
 	// conflicts, 5xx is retryable and never sealed).
@@ -1204,12 +1205,13 @@ type stubIdempotencyReceipt struct {
 	response    storage.IdempotencyResponse
 }
 
-func (s *stubStore) UpdateProjectWithInlineCustomer(_ context.Context, _ string, p *domain.Project, inline *domain.Customer, baseCustomerID string) error {
+func (s *stubStore) UpdateProjectWithInlineCustomer(_ context.Context, _ string, p *domain.Project, inline *domain.Customer, baseCustomerID string, expectedProjectUpdatedAt time.Time) error {
 	if s.updateProjectWithInlineErr != nil {
 		return s.updateProjectWithInlineErr
 	}
 	s.updateProjectWithInlineCalls++
 	s.updateProjectWithInlineBase = baseCustomerID
+	s.updateProjectWithInlineExpectedUpdatedAt = expectedProjectUpdatedAt
 	ic := *inline
 	// Mirrors the real storage: the server mints the authoritative identity
 	// and the project references exactly it.
@@ -2539,6 +2541,7 @@ func seedInlineUpdateStore(extra *stubStore) *stubStore {
 		ID: "88888888-9999-0000-1111-222222222222", Name: "Cocina base",
 		CustomerID:  "10000000-0000-0000-0000-000000000001",
 		OwnerUserID: "v1", Status: domain.StatusDraft, Items: []domain.ProjectItem{},
+		UpdatedAt: time.Date(2026, 9, 13, 22, 0, 0, 0, time.UTC),
 	}
 	if extra == nil {
 		extra = &stubStore{}
@@ -2547,7 +2550,7 @@ func seedInlineUpdateStore(extra *stubStore) *stubStore {
 	return extra
 }
 
-const inlineUpdateBody = `{"id":"88888888-9999-0000-1111-222222222222","name":"Cocina editada","customer_id":"","inline_customer_name":"  Ana López  ","inline_customer_replaces":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+const inlineUpdateBody = `{"id":"88888888-9999-0000-1111-222222222222","name":"Cocina editada","customer_id":"","inline_customer_name":"  Ana López  ","inline_customer_replaces":"10000000-0000-0000-0000-000000000001","expected_project_updated_at":"2026-09-13T22:00:00Z","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
 
 func TestHandleProjectByIDUpdateWithInlineCustomer(t *testing.T) {
 	const stubMintedID = "70000000-0000-0000-0000-000000000714"
@@ -2590,6 +2593,9 @@ func TestHandleProjectByIDUpdateWithInlineCustomer(t *testing.T) {
 	if store.updateProjectWithInlineBase != "10000000-0000-0000-0000-000000000001" {
 		t.Fatalf("base = %q, want the caller's base view of the customer assignment", store.updateProjectWithInlineBase)
 	}
+	if want := time.Date(2026, 9, 13, 22, 0, 0, 0, time.UTC); !store.updateProjectWithInlineExpectedUpdatedAt.Equal(want) {
+		t.Fatalf("expected updated_at = %v, want %v", store.updateProjectWithInlineExpectedUpdatedAt, want)
+	}
 	if store.lastUpdatedProject != nil && store.lastUpdatedProject.CustomerID != stubMintedID {
 		t.Fatalf("stored project customer = %q, want the minted id", store.lastUpdatedProject.CustomerID)
 	}
@@ -2622,6 +2628,24 @@ func TestHandleProjectByIDUpdateInlineWithoutBaseReturns400(t *testing.T) {
 	}
 	if msg := errorBody(t, rr); !strings.Contains(msg, "cliente actual") {
 		t.Errorf("error message = %q, want it to demand the base customer view", msg)
+	}
+}
+
+func TestHandleProjectByIDUpdateInlineWithoutProjectVersionReturns400(t *testing.T) {
+	srv := &Server{Store: seedInlineUpdateStore(nil)}
+	body := `{"id":"88888888-9999-0000-1111-222222222222","name":"X","customer_id":"","inline_customer_name":"Ana López","inline_customer_replaces":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+	rr := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, rr, inlineUpdateRequest(body, "key-714-version-missing"))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "versión") {
+		t.Errorf("error message = %q, want it to demand the project version", msg)
+	}
+	if srv.Store.(*stubStore).updateProjectWithInlineCalls != 0 {
+		t.Fatal("missing concurrency evidence must fail before the transition")
 	}
 }
 
@@ -2670,7 +2694,7 @@ func TestHandleProjectByIDUpdateInlineReplayReturnsSameResponse(t *testing.T) {
 // second execution under someone else's key.
 func TestHandleProjectByIDUpdateInlineKeyReuseWithOtherPayloadReturns409(t *testing.T) {
 	srv := &Server{Store: seedInlineUpdateStore(nil)}
-	other := `{"id":"88888888-9999-0000-1111-222222222222","name":"Otro nombre","customer_id":"","inline_customer_name":"Ana López","inline_customer_replaces":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+	other := `{"id":"88888888-9999-0000-1111-222222222222","name":"Otro nombre","customer_id":"","inline_customer_name":"Ana López","inline_customer_replaces":"10000000-0000-0000-0000-000000000001","expected_project_updated_at":"2026-09-13T22:00:00Z","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
 	first := httptest.NewRecorder()
 	second := httptest.NewRecorder()
 

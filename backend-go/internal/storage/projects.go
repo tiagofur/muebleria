@@ -1314,7 +1314,7 @@ var ErrProjectConcurrentUpdate = errors.New("project concurrently updated")
 // server-owned id plus the project update referencing it inside the SAME
 // transaction. Any failure rolls both back — no orphan customer residue, and
 // the FK is never consulted with an unpersisted identity.
-func (s *PostgresStore) UpdateProjectWithInlineCustomer(ctx context.Context, id string, p *domain.Project, inline *domain.Customer, baseCustomerID string) error {
+func (s *PostgresStore) UpdateProjectWithInlineCustomer(ctx context.Context, id string, p *domain.Project, inline *domain.Customer, baseCustomerID string, expectedProjectUpdatedAt time.Time) error {
 	if strings.TrimSpace(inline.Name) == "" {
 		return fmt.Errorf("inline customer name is required")
 	}
@@ -1332,10 +1332,12 @@ func (s *PostgresStore) UpdateProjectWithInlineCustomer(ctx context.Context, id 
 	// converges instead of minting another customer and orphaning the first.
 	var currentCustomerID *string
 	var projectOrg string
+	var currentStatus domain.ProjectStatus
+	var currentUpdatedAt time.Time
 	err = tx.QueryRow(ctx, `
-		SELECT customer_id, organization_id FROM projects
+		SELECT customer_id, organization_id, status, updated_at FROM projects
 		WHERE id = $1 AND organization_id = $2
-		FOR UPDATE`, id, OrgFromCtx(ctx)).Scan(&currentCustomerID, &projectOrg)
+		FOR UPDATE`, id, OrgFromCtx(ctx)).Scan(&currentCustomerID, &projectOrg, &currentStatus, &currentUpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("project not found")
@@ -1346,7 +1348,7 @@ func (s *PostgresStore) UpdateProjectWithInlineCustomer(ctx context.Context, id 
 	if currentCustomerID != nil {
 		current = *currentCustomerID
 	}
-	if current != baseCustomerID {
+	if current != baseCustomerID || currentStatus != domain.StatusDraft || !currentUpdatedAt.Equal(expectedProjectUpdatedAt) {
 		return ErrProjectConcurrentUpdate
 	}
 

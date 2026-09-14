@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { APIWorkspaceRepository } from './apiWorkspaceRepository';
+import { ProjectInlineUpdateHttpError } from './workspaceRepository';
 
 describe('APIWorkspaceRepository', () => {
   beforeEach(() => {
@@ -1292,6 +1293,7 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
         'Ana López',
         {
           replacesCustomerId: 'c-base',
+          expectedProjectUpdatedAt: '2026-09-13T00:00:00.000Z',
           idempotencyKey: 'web:714-retry-key',
         },
       );
@@ -1317,6 +1319,9 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
       expect(body.customer_id).toBe('');
       expect(body.inline_customer_name).toBe('Ana López');
       expect(body.inline_customer_replaces).toBe('c-base');
+      expect(body.expected_project_updated_at).toBe(
+        '2026-09-13T00:00:00.000Z',
+      );
     });
 
     it('rejects a malformed success without the persisted customer identity', async () => {
@@ -1331,9 +1336,32 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
       await expect(
         repo.updateProjectWithInlineCustomer!(draftProject, 'Ana López', {
           replacesCustomerId: 'c-base',
+          expectedProjectUpdatedAt: '2026-09-13T00:00:00.000Z',
           idempotencyKey: 'web:714-retry-key',
         }),
       ).rejects.toThrow('Server did not return the inline customer identity');
+    });
+
+    it('exposes a typed 409 so callers can require an authoritative refresh', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: false,
+        status: 409,
+        text: async () => '{"error":"project changed concurrently"}',
+      } as Response));
+      const repo = new APIWorkspaceRepository('http://test/api', {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+      });
+
+      const request = repo.updateProjectWithInlineCustomer!(draftProject, 'Ana López', {
+        replacesCustomerId: 'c-base',
+        expectedProjectUpdatedAt: '2026-09-13T00:00:00.000Z',
+        idempotencyKey: 'web:714-conflict-key',
+      });
+
+      await expect(request).rejects.toMatchObject({
+        name: 'ProjectInlineUpdateHttpError',
+        status: 409,
+      } satisfies Partial<ProjectInlineUpdateHttpError>);
     });
   });
 });
