@@ -342,6 +342,8 @@ module Granete
         # states; every failure returns a typed payload and NEVER advances
         # the binding base.
         class Publisher
+          class ContextChangedError < StandardError; end
+
           def initialize(model_provider:, binding_store_factory:, duplicate_resolver:,
                          service:, working_copy_service:, base_advancer:,
                          metadata_store_factory:, host_reconciliation: nil, logger: SafeLogger.new)
@@ -358,7 +360,7 @@ module Granete
 
           attr_reader :service
 
-          # rubocop:disable-next Metrics/AbcSize, Metrics/BlockLength, Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+          # rubocop:disable-next Metrics/AbcSize, Metrics/BlockLength, Metrics/MethodLength
           def publish(on_progress: nil)
             model = @model_provider.call
             return failure('no_model', 'no hay un modelo activo') unless model
@@ -378,47 +380,40 @@ module Granete
               return failure('host_reconciliation_required',
                              host&.dig('reason') || 'el archivo SketchUp no coincide con el diseño de Granete')
             end
-            unless context_current?(model, binding)
-              return failure('context_changed', 'el modelo activo o su enlace cambió antes de publicar')
-            end
+            assert_context_current!(model, binding)
 
             report(on_progress, 'syncing')
             manifest = ManifestBuilder.build(model, binding, @metadata_store_factory.call(model),
                                              sketchup_version: host_sketchup_version,
                                              plugin_version: Granete::SketchUpExtension::EXTENSION_VERSION)
             sync_working_copy(binding, model, manifest)
-            return failure('context_changed', 'el modelo activo o su enlace cambió durante la publicación') unless
-              context_current?(model, binding)
+            assert_context_current!(model, binding)
 
             report(on_progress, 'exporting')
             DesignPublish.with_temp_dir('granete-publish') do |dir|
-              return failure('context_changed', 'el modelo activo o su enlace cambió antes de exportar') unless
-                context_current?(model, binding)
+              assert_context_current!(model, binding)
 
               artifacts = ArtifactExporter.export(model, manifest, dir)
 
               report(on_progress, 'uploading')
-              return failure('context_changed', 'el modelo activo o su enlace cambió antes de subir') unless
-                context_current?(model, binding)
+              assert_context_current!(model, binding)
 
               session = @service.prepare_publish(
                 binding.design_id,
                 manifest: manifest,
                 idempotency_key: prepare_key(binding, manifest)
               )
-              upload_and_verify(binding, session, artifacts)
+              upload_and_verify(model, binding, session, artifacts)
 
               report(on_progress, 'publishing')
+              assert_context_current!(model, binding)
               revision = @service.finalize_publish(
                 binding.design_id,
                 session_id: session.id,
                 idempotency_key: "pubfin:#{session.id}"
               )
 
-              unless context_current?(model, binding)
-                return failure('context_changed',
-                               'el modelo activo o su enlace cambió antes de actualizar la base')
-              end
+              assert_context_current!(model, binding)
               advance = advance_binding_base(revision)
               return advance unless advance['ok']
 
@@ -435,6 +430,8 @@ module Granete
                 'status' => advance['status']
               }
             end
+          rescue ContextChangedError => e
+            failure('context_changed', e.message)
           rescue Service::Error => e
             failure(error_code(e.kind), e.message)
           rescue StandardError => e
@@ -458,6 +455,12 @@ module Granete
 
           def context_current?(model, binding)
             @model_provider.call.equal?(model) && binding_store(model).read&.to_h == binding.to_h
+          end
+
+          def assert_context_current!(model, binding)
+            return if context_current?(model, binding)
+
+            raise ContextChangedError, 'el modelo activo o su enlace cambió durante la publicación'
           end
 
           def report(on_progress, step)
@@ -487,6 +490,7 @@ module Granete
                 base_revision_id: working.base_revision_id, items: items
               )
             end
+            assert_context_current!(model, binding)
             @working_copy_service.update_working_copy(
               binding.design_id,
               items: items,
@@ -495,9 +499,10 @@ module Granete
             )
           end
 
-          def upload_and_verify(binding, session, artifacts)
+          def upload_and_verify(model, binding, session, artifacts)
             ARTIFACT_KINDS.each do |kind|
               artifact = artifacts.fetch(kind)
+              assert_context_current!(model, binding)
               uploaded = @service.upload_artifact(
                 binding.design_id, session.id, kind,
                 file_path: artifact['path'],

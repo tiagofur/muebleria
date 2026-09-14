@@ -1182,6 +1182,32 @@ class ProjectFurnitureTest < Minitest::Test
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
+  def test_restore_accepts_equivalent_positive_and_negative_gimbal_pitch
+    scenarios = [
+      { rotation: [15.0, 90.0, 35.0], canonical: [-20.0, 90.0, 0.0] },
+      { rotation: [15.0, -90.0, 35.0], canonical: [50.0, -90.0, 0.0] }
+    ]
+
+    scenarios.each do |scenario|
+      @model = PlacerModel.new
+      write_binding(@model)
+      stub_binding_validation(base: REVISION_R1)
+      stub_project_furniture(list_body)
+      item = restore_item(rotation: scenario[:rotation])
+      stub_working_copy(working_copy_body([item]))
+      @placer = build_placer
+
+      result = @placer.restore(FI_1)
+
+      assert result['ok'], "#{scenario[:rotation].inspect}: #{result.inspect}"
+      restored = PF::TransformContract.from_host(top_level_furniture(@model).first.transformation)
+      assert_equal scenario[:canonical], restored['rotation_deg']
+      assert PF::TransformContract.equivalent?(item['transform'], restored)
+      assert_empty @transport.requests_for('POST', %r{/furniture-instances})
+      assert_empty @transport.requests_for('PUT', %r{/working-copy})
+    end
+  end
+
   def test_restore_retry_with_exact_root_is_an_idempotent_noop
     item = restore_item
     stub_working_copy(working_copy_body([item]))

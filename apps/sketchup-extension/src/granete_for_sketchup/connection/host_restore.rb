@@ -214,8 +214,8 @@ module Granete
                     intent&.dig('furnitureDefinitionId') == item.furniture_definition_id &&
                     intent&.dig('parameters') == item.parameters &&
                     (intent&.dig('materialChoices') || {}) == (item.material_choices || {}) &&
-                    normalized_transform(TransformContract.from_host(entity.transformation)) ==
-                    normalized_transform(item.transform)
+                    TransformContract.equivalent?(TransformContract.from_host(entity.transformation),
+                                                  item.transform)
             return if exact
 
             raise RestoreFailure.new('host_readback_failed',
@@ -234,12 +234,6 @@ module Granete
             end
 
             TransformContract.to_host(transform)
-          end
-
-          def normalized_transform(transform)
-            return nil unless transform.is_a?(Hash)
-
-            transform.transform_values { |values| values&.map { |value| value.to_f.round(3) } }
           end
 
           def working_snapshot(working)

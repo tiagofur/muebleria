@@ -56,6 +56,7 @@ class DesignPublishTest < Minitest::Test
 
   # Transport fake with both JSON routing AND multipart upload capture.
   class FakeTransport
+    attr_accessor :on_upload
     attr_reader :requests, :uploads
 
     def initialize
@@ -95,6 +96,7 @@ class DesignPublishTest < Minitest::Test
       # fake echoes the authoritative hash of the received bytes.
       sha = route['body']['sha256'] || "sha256-#{digest.hexdigest}"
       body = route['body'].merge('sha256' => sha, 'size_bytes' => File.size(file_path))
+      @on_upload&.call(record)
       { 'status' => route['status'], 'body' => body }
     end
 
@@ -105,7 +107,7 @@ class DesignPublishTest < Minitest::Test
 
   # ProjectFurniture service double for the #391 precheck + working copy sync.
   class FakeWorkingCopyService
-    attr_accessor :working_copy, :update_calls, :on_update
+    attr_accessor :working_copy, :update_calls, :on_get, :on_update
 
     def initialize(working_copy:)
       @working_copy = working_copy
@@ -122,6 +124,7 @@ class DesignPublishTest < Minitest::Test
     end
 
     def get_working_copy(_design_id)
+      @on_get&.call
       @working_copy
     end
 
@@ -448,6 +451,73 @@ class DesignPublishTest < Minitest::Test
     assert_equal 'context_changed', result['code']
     assert_equal 1, @wc_service.update_calls.length
     assert_empty @transport.requests, 'artifact export/upload must not start after a context switch'
+  end
+
+  def test_publish_stops_before_working_copy_put_if_model_changes_during_get
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    @wc_service.on_get = -> { @model = TestModel.new }
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_empty @wc_service.update_calls, 'a stale GET must never be followed by a WorkingCopy PUT'
+    assert_empty @transport.requests
+  end
+
+  def test_publish_stops_before_working_copy_put_if_binding_changes_during_get
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    @wc_service.on_get = lambda do
+      MB::Store.new(@model).write!(
+        MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R2)
+      )
+    end
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_empty @wc_service.update_calls, 'a stale GET must never be followed by a WorkingCopy PUT'
+    assert_empty @transport.requests
+  end
+
+  def test_publish_stops_subsequent_uploads_and_finalize_after_binding_changes_during_upload
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    stub_publish_routes
+    @transport.on_upload = lambda do |_upload|
+      MB::Store.new(@model).write!(
+        MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R2)
+      )
+    end
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_equal 1, @transport.uploads.length, 'context drift must stop the next staged upload'
+    assert_empty @transport.requests_for('POST', /:finalize/)
+    assert_equal 0, @base_advancer.calls
+  end
+
+  def test_publish_stops_before_finalize_if_model_changes_after_uploads
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    stub_publish_routes
+    progress = lambda do |step|
+      @model = TestModel.new if step == 'publishing'
+    end
+
+    result = @publisher.publish(on_progress: progress)
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_equal 3, @transport.uploads.length
+    assert_empty @transport.requests_for('POST', /:finalize/),
+                 'a model switch between staged uploads and finalize must stop publication'
+    assert_equal 0, @base_advancer.calls
   end
 
   def test_publish_fails_loud_when_server_hash_mismatches
