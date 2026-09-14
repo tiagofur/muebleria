@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import { apiClient } from '../services/apiClient';
+import {
+  loadPersistedIntention,
+  savePersistedIntention,
+  clearPersistedIntention,
+} from '../services/quoterIntentionStorage';
 import { useCatalogStore } from './catalogStore';
 import {
   type Module,
@@ -70,11 +75,13 @@ export interface QuoterState {
    */
   saveAsQuote: () => Promise<{ projectId: string; customerName: string }>;
   /**
-   * #715 internal: the uncommitted save intention (payload fingerprint +
+   * #715 internal: the uncommitted save intention (payload digest +
    * project id). POST /projects has no Idempotency-Key wrapper — its retry
    * contract is a client-stable project id, so the same semantic payload
    * retries with the same id (409 ⇒ reconcile by read-back) and any edit
-   * mints a fresh one. Cleared once the server commits.
+   * mints a fresh one. Persisted (fingerprint + projectId only) so the
+   * retry survives app restart/crash after a lost response; cleared once
+   * the server commits.
    */
   pendingSaveIntention: { fingerprint: string; projectId: string } | null;
 }
@@ -125,6 +132,46 @@ function httpStatusOf(err: unknown): number | undefined {
   const e = err as { status?: unknown; context?: { status?: unknown } };
   const status = e.context?.status ?? e.status;
   return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * Deterministic digest (two-lane FNV-1a) of the semantic payload. The
+ * fingerprint identifies the intention across retries AND app restarts
+ * without persisting any commercial payload — only this digest + the
+ * project id are stored.
+ */
+function fingerprintOf(payload: string): string {
+  const lanes = [0x811c9dc5, 0x01000193];
+  for (let i = 0; i < payload.length; i++) {
+    const code = payload.charCodeAt(i);
+    for (let l = 0; l < lanes.length; l++) {
+      lanes[l] = Math.imul(lanes[l] ^ code, 0x01000193) >>> 0;
+    }
+  }
+  return lanes.map((h) => h.toString(16).padStart(8, '0')).join('');
+}
+
+/**
+ * One-shot hydration of the persisted intention (#715 restart safety).
+ * Adopted only while no in-session intention exists — a save made in this
+ * session always wins over the persisted row.
+ */
+let intentionHydration: Promise<void> | null = null;
+function ensureIntentionHydrated(): Promise<void> {
+  intentionHydration ??= loadPersistedIntention().then((persisted) => {
+    if (
+      persisted &&
+      useQuoterStore.getState().pendingSaveIntention === null
+    ) {
+      useQuoterStore.setState({ pendingSaveIntention: persisted });
+    }
+  });
+  return intentionHydration;
+}
+
+/** @visibleForTesting — re-run hydration after simulating an app restart. */
+export function __resetQuoterIntentionHydration(): void {
+  intentionHydration = null;
 }
 
 /**
@@ -408,11 +455,16 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
   // (#712); the server mints the customer id and returns the authoritative
   // pair in the 201 body. Mobile never POSTs /customers and never dedupes by
   // name — a typed name is a new customer by design (the picker for existing
-  // customers belongs to the web app). Item option choices are empty — the
-  // office finishes them in the web editor; module/preset/quantity carry
-  // over intact.
+  // customers belongs to the web app). The intention (digest + project id)
+  // is persisted so a retry after restart/lost-response reuses the same id
+  // (409 ⇒ authoritative read-back) instead of duplicating the pair. Item
+  // option choices are empty — the office finishes them in the web editor;
+  // module/preset/quantity carry over intact.
 
   saveAsQuote: async () => {
+    // Restart safety (#715): adopt the persisted intention (if any) before
+    // deciding the project id, so a retry after app restart reuses it.
+    await ensureIntentionHydrated();
     const {
       customerName,
       projectTitle,
@@ -443,14 +495,18 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
       })),
     };
 
-    // Same semantic payload ⇒ same project id (safe retry); any edit to the
-    // draft ⇒ new intention, new id.
-    const fingerprint = JSON.stringify(body);
+    // Same semantic payload ⇒ same project id (safe retry, in-session and
+    // across restarts); any edit to the draft ⇒ new intention, new id.
+    const fingerprint = fingerprintOf(JSON.stringify(body));
     const projectId =
       pendingSaveIntention?.fingerprint === fingerprint
         ? pendingSaveIntention.projectId
         : newProjectIntentionId();
-    set({ pendingSaveIntention: { fingerprint, projectId } });
+    const intention = { fingerprint, projectId };
+    set({ pendingSaveIntention: intention });
+    // Persist BEFORE the request: if the commit lands and the app dies
+    // before the response, the next session still retries the same id.
+    await savePersistedIntention(intention);
 
     try {
       const created = await apiClient.post<InlineProjectCreateResponse>(
@@ -468,23 +524,31 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
       }
       reconcileCatalogCustomer(created.inline_customer);
       set({ pendingSaveIntention: null });
+      await clearPersistedIntention();
       return { projectId: created.id, customerName: trimmedName };
     } catch (err) {
       if (httpStatusOf(err) !== 409) {
         // Fallo honesto: la transacción server-side dejó 0 clientes y 0
-        // cotizaciones nuevas. El draft queda intacto y un reintento con el
-        // mismo contenido reutiliza el mismo projectId.
+        // cotizaciones nuevas. El draft queda intacto, la intención queda
+        // persistida y un reintento (incluso tras reinicio) reutiliza el
+        // mismo projectId.
         throw err;
       }
-      // 409: esta misma intención ya había hecho commit (respuesta perdida).
-      // Reconciliar desde la verdad del servidor en vez de duplicar el par.
+      // 409: esta intención ya podría haber hecho commit (respuesta
+      // perdida). Reconciliar desde la verdad del servidor — pero sólo si
+      // el read-back es coherente con ESTA intención; nunca un 409 ciego.
       const existing = await apiClient.get<{
         id: string;
         customer_id: string;
+        name?: string;
       }>(`/projects/${projectId}`);
-      if (!existing.id || !existing.customer_id) {
+      if (
+        existing.id !== projectId ||
+        !existing.customer_id ||
+        (existing.name ?? '') !== body.name
+      ) {
         throw new Error(
-          'No se pudo reconciliar la cotización tras el reintento',
+          'El reintento encontró una cotización que no coincide con esta intención',
         );
       }
       const customer = await apiClient.get<ServerCustomer>(
@@ -492,6 +556,7 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
       );
       reconcileCatalogCustomer(customer);
       set({ pendingSaveIntention: null });
+      await clearPersistedIntention();
       return { projectId: existing.id, customerName: trimmedName };
     }
   },

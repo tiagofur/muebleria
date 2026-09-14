@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useQuoterStore, uuidV4Fallback } from './quoterStore';
+import {
+  useQuoterStore,
+  uuidV4Fallback,
+  __resetQuoterIntentionHydration,
+} from './quoterStore';
 import { useCatalogStore } from './catalogStore';
+import {
+  setQuoterIntentionStorage,
+} from '../services/quoterIntentionStorage';
 import { DomainError, seedCatalogExpandedLatAm } from '@granete/domain';
 
 const postMock = vi.fn();
@@ -102,6 +109,22 @@ describe('saveAsQuote — transición atómica Customer+Project (#715)', () => {
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const initialCustomers = useCatalogStore.getState().customers;
 
+  function memoryStorage() {
+    const map = new Map<string, string>();
+    return {
+      getItem: (k: string) => Promise.resolve(map.get(k) ?? null),
+      setItem: (k: string, v: string) => {
+        map.set(k, v);
+        return Promise.resolve();
+      },
+      removeItem: (k: string) => {
+        map.delete(k);
+        return Promise.resolve();
+      },
+      __dump: () => map,
+    };
+  }
+
   /** Server double for POST /projects: the #712 inline transition answers
    * 201 with the flat project plus the server-minted inline customer. */
   function mockInlineCreateSuccess(customerId = 'cust-server-1') {
@@ -130,6 +153,8 @@ describe('saveAsQuote — transición atómica Customer+Project (#715)', () => {
   beforeEach(() => {
     postMock.mockReset();
     getMock.mockReset();
+    setQuoterIntentionStorage(null);
+    __resetQuoterIntentionHydration();
     useQuoterStore.setState({
       items: [],
       customerName: 'Cliente Particular',
@@ -258,7 +283,11 @@ describe('saveAsQuote — transición atómica Customer+Project (#715)', () => {
     );
     getMock.mockImplementation(async (endpoint: string) => {
       if (endpoint.startsWith('/projects/')) {
-        return { id: endpoint.slice('/projects/'.length), customer_id: 'cust-server-4' };
+        return {
+          id: endpoint.slice('/projects/'.length),
+          customer_id: 'cust-server-4',
+          name: 'Presupuesto de Mobiliario',
+        };
       }
       if (endpoint.startsWith('/customers/')) {
         return { id: 'cust-server-4', name: 'Ana', active: true };
@@ -323,5 +352,117 @@ describe('saveAsQuote — transición atómica Customer+Project (#715)', () => {
     );
     const pending = useQuoterStore.getState().pendingSaveIntention;
     expect(pending?.projectId).toMatch(UUID_V4);
+  });
+
+  it('restart + respuesta perdida tras commit: rehidrata la intención, reintenta con el MISMO id y reconcilia por read-back', async () => {
+    const storage = memoryStorage();
+    setQuoterIntentionStorage(storage);
+    mockInlineCreateSuccess('cust-restart');
+    seedCart('Ana');
+
+    // 1) El POST pudo haber hecho commit pero la respuesta se perdió.
+    postMock.mockRejectedValueOnce(
+      new DomainError('Error de red al conectar con el servidor', { url: 'u' }),
+    );
+    await expect(useQuoterStore.getState().saveAsQuote()).rejects.toThrow(
+      'Error de red',
+    );
+    const firstId = postMock.mock.calls[0][1].id as string;
+
+    // 2) La intención persistida es sólo evidencia técnica mínima:
+    // digest + projectId; sin nombre ni payload comercial.
+    const raw = storage.__dump().get('granete_quoter_intention_v1');
+    expect(raw).toBeDefined();
+    const persisted = JSON.parse(raw as string);
+    expect(persisted.projectId).toBe(firstId);
+    expect(persisted.fingerprint).toMatch(/^[0-9a-f]{16}$/);
+    expect(raw).not.toContain('Ana');
+    expect(raw).not.toContain('Presupuesto');
+
+    // 3) "App restart": memoria a estado inicial, hidratación re-ejecutada.
+    useQuoterStore.setState({
+      items: [],
+      customerName: 'Cliente Particular',
+      projectTitle: 'Presupuesto de Mobiliario',
+      commercialMarginPercent: 35,
+      pendingSaveIntention: null,
+    });
+    __resetQuoterIntentionHydration();
+    expect(useQuoterStore.getState().pendingSaveIntention).toBeNull();
+
+    // 4) El usuario re-ingresa el MISMO draft semántico.
+    useQuoterStore.getState().setCustomerName('Ana');
+    useQuoterStore.getState().addModuleToCart(
+      seedCatalogExpandedLatAm.modules[0],
+    );
+
+    // 5) El commit del primer intento ya existía → reintento con mismo id → 409.
+    postMock.mockRejectedValueOnce(
+      new DomainError('El registro ya existe', { status: 409 }),
+    );
+    getMock.mockImplementation(async (endpoint: string) => {
+      if (endpoint === `/projects/${firstId}`) {
+        return {
+          id: firstId,
+          customer_id: 'cust-restart',
+          name: 'Presupuesto de Mobiliario',
+        };
+      }
+      if (endpoint === '/customers/cust-restart') {
+        return { id: 'cust-restart', name: 'Ana', active: true };
+      }
+      throw new Error(`GET inesperado: ${endpoint}`);
+    });
+
+    const result = await useQuoterStore.getState().saveAsQuote();
+
+    // 6) Mismo projectId recuperado tras el reinicio — sin par duplicado.
+    expect(postMock).toHaveBeenCalledTimes(2);
+    expect(postMock.mock.calls[1][1].id).toBe(firstId);
+    expect(result).toEqual({ projectId: firstId, customerName: 'Ana' });
+
+    // 7) Un solo Customer + Project adoptados localmente.
+    expect(
+      useCatalogStore.getState().customers.filter((c) => c.id === 'cust-restart'),
+    ).toHaveLength(1);
+
+    // 8) Success confirmado → intención limpia en memoria Y persistencia.
+    expect(useQuoterStore.getState().pendingSaveIntention).toBeNull();
+    expect(storage.__dump().has('granete_quoter_intention_v1')).toBe(false);
+  });
+
+  it('409 con read-back incoherente: fallo honesto, nunca un 409 ciego', async () => {
+    const storage = memoryStorage();
+    setQuoterIntentionStorage(storage);
+    mockInlineCreateSuccess();
+    seedCart('Ana');
+
+    // El id de la intención choca con un proyecto ajeno (nombre distinto).
+    postMock.mockRejectedValueOnce(
+      new DomainError('El registro ya existe', { status: 409 }),
+    );
+    getMock.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('/projects/')) {
+        return {
+          id: endpoint.slice('/projects/'.length),
+          customer_id: 'cust-ajeno',
+          name: 'Cocina de otro cliente',
+        };
+      }
+      throw new Error(`GET inesperado: ${endpoint}`);
+    });
+
+    await expect(useQuoterStore.getState().saveAsQuote()).rejects.toThrow(
+      'no coincide con esta intención',
+    );
+
+    // La intención se conserva para diagnóstico/reintento; sin adopción local.
+    expect(useQuoterStore.getState().pendingSaveIntention).not.toBeNull();
+    expect(storage.__dump().has('granete_quoter_intention_v1')).toBe(true);
+    expect(useCatalogStore.getState().customers).toHaveLength(
+      initialCustomers.length,
+    );
+    // Nunca se consultó el customer del proyecto ajeno.
+    expect(getMock).toHaveBeenCalledTimes(1);
   });
 });
