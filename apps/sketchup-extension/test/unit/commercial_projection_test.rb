@@ -22,7 +22,9 @@ class CommercialProjectionTest < Minitest::Test
       @response = response
     end
 
-    def request(payload)
+    # Same shape as Transport::HttpAdapter#request: a braceless trailing hash
+    # at the call site is parsed as keywords here and drops the payload.
+    def request(payload, authorization_header: nil) # rubocop:disable Lint/UnusedMethodArgument
       @payload = payload
       @response
     end
