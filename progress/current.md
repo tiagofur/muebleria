@@ -1285,3 +1285,13 @@ EOL.
   verificación de estado idle fresco en B). Re-verificación: typecheck+pnpm
   test completos PASS (ui 1854), openapi:check PASS, browser gate 6/6 PASS
   (mi spec + pairing + inline-customer).
+- Review round 2 (setState durante render): el receipt sigue actualizándose
+  sincrónicamente con el render, pero ahora SOLO como asignación de ref —
+  sin setState en fase de render. El reset visual/intenciones (modal,
+  unitStates, idempotency keys, guards) vive en un useEffect por receipt,
+  posterior al commit; el guard de late responses NO depende del effect (el
+  ref ya cambió cuando el nuevo contexto renderiza, antes de cualquier
+  efecto). Regresión nueva: cambio de contexto design/project/session sin
+  warnings de update-during-render. Panel 15/15; ui 1855; typecheck+pnpm
+  test completos PASS; openapi:check PASS; browser gate 5/5 PASS (reintento
+  tras un flake de carga del host en pairing, paso no relacionado).

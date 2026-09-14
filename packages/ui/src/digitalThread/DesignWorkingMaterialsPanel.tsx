@@ -150,21 +150,28 @@ export function DesignWorkingMaterialsPanel({
   const idempotencyKeys = useRef(new Map<string, string>());
   const inFlightUnits = useRef(new Set<string>());
 
-  // #658 review: the active context receipt updates SYNCHRONOUSLY with
-  // render/props — never via useEffect — so there is no window where the ref
-  // still represents the previous session/project/design. A change discards
-  // every local intention of the old surface (modal, unit states, idempotency
-  // keys, single-flight guards); server-side commands already issued stay
-  // untouched and their results are dropped on arrival.
+  // #658 review round 2: the live context receipt updates SYNCHRONOUSLY with
+  // render/props — ref assignment only, never setState during render — so a
+  // response of any previous session/project/design is invalid the moment the
+  // new context renders, BEFORE any effect runs. The late-response guard in
+  // submitRepair compares against this ref and therefore never depends on the
+  // reset effect below.
   const receipt = contextReceipt(queryKeys, projectId, designId);
   const activeContextRef = useRef(receipt);
   if (activeContextRef.current !== receipt) {
     activeContextRef.current = receipt;
-    idempotencyKeys.current.clear();
-    inFlightUnits.current.clear();
+  }
+
+  // React-safe reset of the previous surface AFTER commit: close the modal and
+  // discard unit states, idempotency keys and single-flight guards. Commands
+  // already sent server-side are never cancelled or mutated; their results are
+  // dropped by the synchronous receipt check above.
+  useEffect(() => {
     setIsReviewOpen(false);
     setUnitStates({});
-  }
+    idempotencyKeys.current.clear();
+    inFlightUnits.current.clear();
+  }, [receipt]);
 
   const provenanceQuery = useQuery({
     queryKey: queryKeys.designMaterialProvenance(designId),

@@ -545,6 +545,32 @@ describe('DesignWorkingMaterialsPanel (#658)', () => {
     await assertForeignResponseDiscarded();
   });
 
+  it('context switches render without React update-during-render warnings', async () => {
+    setupMock();
+    const { rerender } = renderPanel();
+    await openReviewModal();
+
+    // The receipt ref updates synchronously during render (no setState during
+    // render); the visual/intention reset happens in a post-commit effect.
+    // React surfaces update-during-render as a console error.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      rerenderWithContext(rerender, { designId: '22222222-0000-4000-8000-000000000004' });
+      rerenderWithContext(rerender, { projectId: '11111111-0000-4000-8000-00000000009c' });
+      rerenderWithContext(rerender, { scopeKey: ['session', 'another-scope'] });
+
+      const logged = consoleError.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(logged).not.toMatch(/Cannot update a component|update during render/i);
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    // The post-commit reset still closed the previous context's modal.
+    await waitFor(() => {
+      expect(screen.queryByTestId('pending-materials-modal')).not.toBeInTheDocument();
+    });
+  });
+
   it('read-only: candidates are visible but no mutation is offered', async () => {
     setupMock();
     renderPanel({ canMutate: false });
