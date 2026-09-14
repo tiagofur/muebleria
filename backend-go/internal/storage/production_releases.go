@@ -118,22 +118,14 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 	}
 
 	// 3-6. The ONE authoritative gate chain (exact accepted quote →
-	// reconciliation commercial gate → manufacturing preflight), shared with
-	// the #502 production approval so both commands enforce identical
-	// verdicts over the exact pair.
-	items, preflight, err := s.enforceProductionGates(txCtx, projectOrgID, cmd.ProjectID, cmd.QuoteRevisionID, cmd.DesignRevisionID)
+	// reconciliation commercial gate → manufacturing preflight + release
+	// snapshot resolution), shared with the #502 production approval so both
+	// commands enforce identical verdicts over the exact pair.
+	outcome, err := s.enforceProductionGates(txCtx, projectOrgID, cmd.ProjectID, cmd.QuoteRevisionID, cmd.DesignRevisionID)
 	if err != nil {
 		return nil, err
 	}
-	catalog, err := s.GetFullCatalog(txCtx)
-	if err != nil {
-		return nil, err
-	}
-	collection, err := engine.ResolveReleaseCollection(cmd.DesignRevisionID, items, catalog)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrReleaseSnapshotResolution, err)
-	}
-	quoteRevisionID := cmd.QuoteRevisionID
+	items, catalog, collection := outcome.items, outcome.catalog, outcome.collection
 
 	// 7. Server-computed manufacturing fingerprint over the same immutable
 	// items the preflight validated (§18–§19). Because both derive from
@@ -156,6 +148,7 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 	// 9. Insert the immutable pin. The approved-revision RLS backstop
 	// (migration 000119) re-verifies the design revision status at the
 	// database boundary.
+	quoteRevisionID := cmd.QuoteRevisionID
 	release := domain.ProductionRelease{
 		ProjectID:                cmd.ProjectID,
 		DesignID:                 drDesignID,
@@ -195,7 +188,7 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 		"design_revision_number":    release.DesignRevisionNumber,
 		"release_number":            release.ReleaseNumber,
 		"manufacturing_fingerprint": release.ManufacturingFingerprint,
-		"preflight_status":          string(preflight.Status),
+		"preflight_status":          string(outcome.preflight.Status),
 		"snapshot_schema_version":   2,
 		"item_count":                len(items),
 	}
@@ -229,14 +222,103 @@ func (s *PostgresStore) CreateProductionRelease(ctx context.Context, cmd CreateP
 	return &ProductionReleaseReadback{Release: release, Staleness: *staleness}, nil
 }
 
+// releaseGateOutcome carries the single authoritative evaluation every
+// release surface shares (#727): the immutable items, the manufacturing
+// preflight verdict, the coherent catalog snapshot and the resolved release
+// collection. The release command resolves ONCE here and reuses the
+// collection for its immutable snapshot — no second resolution.
+type releaseGateOutcome struct {
+	items      []domain.DesignRevisionItem
+	preflight  *domain.ManufacturingPreflightResult
+	catalog    domain.Catalog
+	collection *engine.ResolvedReleaseCollection
+}
+
+// evaluateReleaseManufacturingReadiness runs the authoritative manufacturing
+// preflight AND the release snapshot resolution over the exact immutable
+// revision items (§§16–17 + #727 preflight↔release parity): a revision is
+// manufacturing-ready only if the SAME snapshot would resolve in
+// ResolveReleaseCollection. No BOM rule is duplicated here — both verdicts
+// come from the same engines the release command runs.
+func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Context, projectOrgID, designRevisionID string, items []domain.DesignRevisionItem) (*releaseGateOutcome, error) {
+	// 1. Authoritative manufacturing preflight against the organization
+	// catalog (§§16–§17). Any blocker rejects the whole command.
+	definitions, err := s.loadReferencedFurnitureDefinitionParameters(ctx, projectOrgID, items)
+	if err != nil {
+		return nil, err
+	}
+	materialIDs, err := s.loadSelectedMaterialIDs(ctx, projectOrgID, items)
+	if err != nil {
+		return nil, err
+	}
+	preflight := domain.RunManufacturingPreflight(designRevisionID, items, definitions, materialIDs)
+	if preflight.Status == domain.ManufacturingPreflightBlocked {
+		return &releaseGateOutcome{items: items, preflight: preflight},
+			&domain.ReleasePreflightBlockedError{Result: preflight}
+	}
+
+	// 2. Release snapshot resolution (#727): the manufacturing preflight alone
+	// is not the release verdict — the exact snapshot must also resolve. A
+	// resolution failure is reported BOTH as the typed command error (409
+	// blocker release_snapshot_resolution) and as a blocked preflight verdict,
+	// so no surface can present an unresolvable revision as ready.
+	catalog, err := s.GetFullCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog)
+	if err != nil {
+		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
+			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
+	}
+	return &releaseGateOutcome{items: items, preflight: preflight, catalog: catalog, collection: collection}, nil
+}
+
+// preflightBlockedBySnapshotResolution derives the honest BLOCKED verdict from
+// a typed resolution failure: same scope, same revision, one issue carrying
+// the physical identities and the business-safe reason (#727). The failing
+// unit's item-level verdict flips to blocked so per-unit projections stay
+// coherent with the collection verdict.
+func preflightBlockedBySnapshotResolution(ready *domain.ManufacturingPreflightResult, err error) *domain.ManufacturingPreflightResult {
+	blocked := &domain.ManufacturingPreflightResult{
+		DesignRevisionID: ready.DesignRevisionID,
+		Scope:            ready.Scope,
+		Status:           domain.ManufacturingPreflightBlocked,
+		Items:            ready.Items,
+	}
+	var failure *domain.ReleaseUnitResolutionFailure
+	if !errors.As(err, &failure) {
+		blocked.Issues = append(blocked.Issues, domain.ManufacturingPreflightIssue{
+			Code:    domain.PreflightIssueSnapshotResolution,
+			Message: "la revisión no puede resolverse para fabricación",
+		})
+		return blocked
+	}
+	issue := domain.ManufacturingPreflightIssue{
+		Code:                  domain.PreflightIssueSnapshotResolution,
+		FurnitureInstanceID:   failure.FurnitureInstanceID,
+		FurnitureDefinitionID: failure.FurnitureDefinitionID,
+		Message:               failure.Reason,
+	}
+	blocked.Issues = append(blocked.Issues, issue)
+	for i := range blocked.Items {
+		if blocked.Items[i].FurnitureInstanceID == failure.FurnitureInstanceID {
+			blocked.Items[i].Status = domain.ManufacturingPreflightItemBlocked
+			blocked.Items[i].Issues = append(blocked.Items[i].Issues, issue)
+			break
+		}
+	}
+	return blocked
+}
+
 // enforceProductionGates is the ONE authoritative gate chain shared by the
-// release command and the #502 production approval: exact accepted
-// commercial baseline (when pinned), reconciliation commercial gate over the
-// exact pair (#393/#394 — the server always recomputes) and the authoritative
-// manufacturing preflight against the organization catalog (§§12–17). Any
-// verdict rejects the whole command with the typed domain error the HTTP
-// layer maps to structured 409 blockers.
-func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID, projectID, quoteRevisionID, designRevisionID string) ([]domain.DesignRevisionItem, *domain.ManufacturingPreflightResult, error) {
+// release command and the #502 production approval: exact accepted commercial
+// baseline (when pinned), reconciliation commercial gate over the exact pair
+// (#393/#394 — the server always recomputes) and the authoritative
+// manufacturing readiness (preflight + release snapshot resolution, #727) of
+// the organization catalog (§§12–17). Any verdict rejects the whole command
+// with the typed domain error the HTTP layer maps to structured 409 blockers.
+func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID, projectID, quoteRevisionID, designRevisionID string) (*releaseGateOutcome, error) {
 	// 1. Commercial baseline: exact, same-project, accepted. A draft or
 	// superseded quote never grounds production.
 	const quoteStatusAccepted = "accepted"
@@ -247,22 +329,22 @@ func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID
 		`, quoteRevisionID).Scan(&qrProjectID, &qrStatus)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, nil, domain.ErrQuoteRevisionNotFound
+				return nil, domain.ErrQuoteRevisionNotFound
 			}
-			return nil, nil, err
+			return nil, err
 		}
 		if qrProjectID != projectID {
-			return nil, nil, domain.ErrCrossProjectRelease
+			return nil, domain.ErrCrossProjectRelease
 		}
 		if qrStatus != quoteStatusAccepted {
-			return nil, nil, domain.ErrReleaseQuoteNotAccepted
+			return nil, domain.ErrReleaseQuoteNotAccepted
 		}
 	}
 
 	// 2. Immutable snapshot items: preflight and fingerprint inputs.
 	items, err := s.ListDesignRevisionItems(ctx, designRevisionID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// 3. Reconciliation commercial gate over the exact revisions: a client
@@ -270,36 +352,25 @@ func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID
 	if quoteRevisionID != "" {
 		inputs, err := s.loadReconciliationInputs(ctx, projectID, quoteRevisionID, designRevisionID)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		reconciliation, err := domain.Reconcile(inputs.Quote, inputs.Design)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		classification, err := domain.ClassifyReconciliation(reconciliation)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if err := domain.EvaluateReleaseCommercialGate(classification); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
-	// 4. Authoritative manufacturing preflight against the organization
-	// catalog (§§16–§17). Any blocker rejects the whole command.
-	definitions, err := s.loadReferencedFurnitureDefinitionParameters(ctx, projectOrgID, items)
-	if err != nil {
-		return nil, nil, err
-	}
-	materialIDs, err := s.loadSelectedMaterialIDs(ctx, projectOrgID, items)
-	if err != nil {
-		return nil, nil, err
-	}
-	preflight := domain.RunManufacturingPreflight(designRevisionID, items, definitions, materialIDs)
-	if preflight.Status == domain.ManufacturingPreflightBlocked {
-		return nil, preflight, &domain.ReleasePreflightBlockedError{Result: preflight}
-	}
-	return items, preflight, nil
+	// 4. Manufacturing readiness: authoritative preflight + release snapshot
+	// resolution (#727 parity — the gate cannot present as ready a revision
+	// whose exact snapshot would fail to resolve).
+	return s.evaluateReleaseManufacturingReadiness(ctx, projectOrgID, designRevisionID, items)
 }
 
 // EvaluateDesignRevisionPreflight (#502 / WEB-DT-3) evaluates the exact same
@@ -338,21 +409,25 @@ func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, des
 		return nil, err
 	}
 
-	// 3. Catalog parameter contracts for the referenced definitions — the
-	// identical loader the release path uses.
-	definitions, err := s.loadReferencedFurnitureDefinitionParameters(ctx, projectOrgID, items)
+	// 3-4. The ONE authoritative verdict, extended with the release snapshot
+	// resolution (#727 parity): the preflight may not report READY for a
+	// revision whose exact snapshot would fail to resolve at release time.
+	// RLS scopes the revision read to the organizations that can access the
+	// project, so a foreign revision never reaches this point. Both blocked
+	// verdicts (manufacturing issues, unresolvable snapshot) are RESULTS, not
+	// errors — the read-only evaluation answers with the authoritative verdict.
+	outcome, err := s.evaluateReleaseManufacturingReadiness(ctx, projectOrgID, revisionID, items)
 	if err != nil {
+		var blocked *domain.ReleasePreflightBlockedError
+		if errors.As(err, &blocked) {
+			return blocked.Result, nil
+		}
+		if errors.Is(err, ErrReleaseSnapshotResolution) {
+			return outcome.preflight, nil
+		}
 		return nil, err
 	}
-
-	// 4. The ONE authoritative verdict. RLS scopes the revision read to the
-	// organizations that can access the project, so a foreign revision never
-	// reaches this point.
-	materialIDs, err := s.loadSelectedMaterialIDs(ctx, projectOrgID, items)
-	if err != nil {
-		return nil, err
-	}
-	return domain.RunManufacturingPreflight(revisionID, items, definitions, materialIDs), nil
+	return outcome.preflight, nil
 }
 
 // loadSelectedMaterialIDs checks membership only: role/kind resolution remains

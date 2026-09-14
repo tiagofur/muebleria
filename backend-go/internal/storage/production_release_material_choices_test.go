@@ -41,7 +41,7 @@ func TestProductionRelease_SelectedMaterialAuthority(t *testing.T) {
 					preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3)
 					return err
 				})
-				valid := scenario == "valid" || scenario == "empty"
+				valid := scenario == "valid"
 				if scenario == "unavailable" {
 					if err == nil || preflight != nil {
 						t.Fatalf("unavailable authority must fail: result=%+v err=%v", preflight, err)
@@ -53,8 +53,22 @@ func TestProductionRelease_SelectedMaterialAuthority(t *testing.T) {
 					if valid && preflight.Status != domain.ManufacturingPreflightReady {
 						t.Fatalf("valid choices blocked: %+v", preflight)
 					}
-					if !valid && (preflight.Status != domain.ManufacturingPreflightBlocked || len(preflight.Issues) == 0 || preflight.Issues[0].Code != domain.PreflightIssueInvalidMaterialUse) {
-						t.Fatalf("missing/foreign choice must block: %+v", preflight)
+					if !valid && (preflight.Status != domain.ManufacturingPreflightBlocked || len(preflight.Issues) == 0) {
+						t.Fatalf("invalid choices must block: %+v", preflight)
+					}
+					if scenario == "missing" || scenario == "foreign" {
+						if preflight.Issues[0].Code != domain.PreflightIssueInvalidMaterialUse {
+							t.Fatalf("missing/foreign choice must block on material use: %+v", preflight)
+						}
+					}
+					if scenario == "empty" {
+						// #727 parity: no material choices means the release
+						// snapshot cannot resolve (a BODY part has no material),
+						// and the preflight verdict must say so — READY was the
+						// old gap the release command discovered too late.
+						if preflight.Issues[0].Code != domain.PreflightIssueSnapshotResolution {
+							t.Fatalf("empty choices must block on snapshot resolution: %+v", preflight)
+						}
 					}
 				}
 				err = releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
@@ -75,7 +89,11 @@ func TestProductionRelease_SelectedMaterialAuthority(t *testing.T) {
 						t.Fatal("invalid release accepted")
 					}
 					var blocked *domain.ReleasePreflightBlockedError
-					if scenario != "unavailable" && (!errors.As(err, &blocked) || blocked.Result.Issues[0].Code != domain.PreflightIssueInvalidMaterialUse) {
+					// "empty" rejects through the release snapshot resolution
+					// (#727: no consumed material means no resolvable part);
+					// missing/foreign reject through the material-use blocker.
+					if (scenario == "missing" || scenario == "foreign") &&
+						(!errors.As(err, &blocked) || blocked.Result.Issues[0].Code != domain.PreflightIssueInvalidMaterialUse) {
 						t.Fatalf("expected material blocker, got %v", err)
 					}
 					var count int

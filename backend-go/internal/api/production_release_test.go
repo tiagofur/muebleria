@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -17,11 +19,13 @@ import (
 // idempotency semantics of both commands.
 
 const (
-	releaseTestProjectID  = "3f0c9c11-0000-4000-8000-000000000001"
-	releaseTestDesignID   = "3f0c9c11-0000-4000-8000-000000000002"
-	releaseTestRevisionID = "3f0c9c11-0000-4000-8000-000000000003"
-	releaseTestQuoteRevID = "3f0c9c11-0000-4000-8000-000000000004"
-	releaseTestReleaseID  = "3f0c9c11-0000-4000-8000-000000000005"
+	releaseTestProjectID    = "3f0c9c11-0000-4000-8000-000000000001"
+	releaseTestDesignID     = "3f0c9c11-0000-4000-8000-000000000002"
+	releaseTestRevisionID   = "3f0c9c11-0000-4000-8000-000000000003"
+	releaseTestQuoteRevID   = "3f0c9c11-0000-4000-8000-000000000004"
+	releaseTestReleaseID    = "3f0c9c11-0000-4000-8000-000000000005"
+	releaseTestInstanceID   = "3f0c9c11-0000-4000-8000-000000000006"
+	releaseTestDefinitionID = "3f0c9c11-0000-4000-8000-000000000007"
 )
 
 func newApproveRequest(userID string, roles []domain.UserRole) *http.Request {
@@ -199,6 +203,10 @@ func TestHandleProjectProductionReleases_GateErrorMapping(t *testing.T) {
 		{"preflight blocked", blockedPreflight, http.StatusConflict, "issues"},
 		{"reconciliation conflict", &domain.ReleaseCommercialGateError{Classification: conflictClassification, Cause: domain.ReleaseBlockerReconciliationConflict}, http.StatusConflict, "blocker"},
 		{"commercial outdated", &domain.ReleaseCommercialGateError{Classification: outdatedClassification, Cause: domain.ReleaseBlockerCommercialOutdated}, http.StatusConflict, "requiresRequote"},
+		{"snapshot resolution typed unit (#727)", &domain.ReleaseUnitResolutionFailure{
+			FurnitureInstanceID: releaseTestInstanceID, FurnitureDefinitionID: releaseTestDefinitionID,
+			Reason: "la revisión publicada del mueble requiere dimensiones explícitas"}, http.StatusConflict, "reason"},
+		{"snapshot resolution sentinel only (#727)", fmt.Errorf("%w: collection-level failure", storage.ErrReleaseSnapshotResolution), http.StatusConflict, "blocker"},
 		{"cross project", domain.ErrCrossProjectRelease, http.StatusNotFound, ""},
 		{"quote revision not found", domain.ErrQuoteRevisionNotFound, http.StatusNotFound, ""},
 		{"design revision not found", domain.ErrDesignRevisionNotFound, http.StatusNotFound, ""},
@@ -225,6 +233,51 @@ func TestHandleProjectProductionReleases_GateErrorMapping(t *testing.T) {
 			if _, ok := apiErr.Details[tc.detailOn]; !ok {
 				t.Fatalf("%s: expected details.%s to carry the authoritative blocker: %v", tc.name, tc.detailOn, apiErr.Details)
 			}
+		}
+	}
+}
+
+// #727: the snapshot resolution 409 is actionable — exact physical
+// identities and the business-safe reason travel in details; nothing
+// internal (SQL, paths, stack traces) leaks.
+func TestHandleProjectProductionReleases_SnapshotResolutionDetails(t *testing.T) {
+	store := &stubStore{createProductionReleaseErr: &domain.ReleaseUnitResolutionFailure{
+		FurnitureInstanceID:   releaseTestInstanceID,
+		FurnitureDefinitionID: releaseTestDefinitionID,
+		Reason:                "la revisión publicada del mueble \"Alacena 1 Puerta Izquierda\" (MOD-ALA-1P-IZQ) requiere dimensiones explícitas",
+	}}
+	server := &Server{Store: store}
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+releaseTestProjectID+"/production-releases", bytes.NewBufferString(`{"design_revision_id":"`+releaseTestRevisionID+`"}`))
+	req.SetPathValue("projectId", releaseTestProjectID)
+	req = withTestClaims(req, "user-1", []domain.UserRole{domain.RoleAdmin})
+	w := httptest.NewRecorder()
+	server.HandleProjectProductionReleases(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	var apiErr struct {
+		Message string         `json:"message"`
+		Details map[string]any `json:"details"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&apiErr); err != nil {
+		t.Fatal(err)
+	}
+	if apiErr.Details["blocker"] != "release_snapshot_resolution" {
+		t.Fatalf("blocker must be release_snapshot_resolution: %v", apiErr.Details)
+	}
+	if apiErr.Details["furnitureInstanceId"] != releaseTestInstanceID ||
+		apiErr.Details["furnitureDefinitionId"] != releaseTestDefinitionID {
+		t.Fatalf("details must carry the exact physical identities: %v", apiErr.Details)
+	}
+	reason, _ := apiErr.Details["reason"].(string)
+	if reason == "" || !strings.Contains(reason, "dimensiones explícitas") {
+		t.Fatalf("details.reason must carry the business-safe cause: %v", apiErr.Details)
+	}
+	body := w.Body.String()
+	for _, leak := range []string{"SELECT", "sql:", ".go:", "panic", "goroutine"} {
+		if strings.Contains(body, leak) {
+			t.Fatalf("409 body must not leak internals (%q): %s", leak, body)
 		}
 	}
 }

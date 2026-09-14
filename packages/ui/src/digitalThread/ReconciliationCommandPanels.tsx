@@ -81,6 +81,22 @@ export function describeCommandError(err: unknown): CommandErrorView {
           'El preflight autoritativo rechazó el comando. Corregí los problemas listados antes de liberar.',
       };
     }
+    if (blocker === 'release_snapshot_resolution') {
+      // #727: the server reports the exact unit and business reason; the alert
+      // must be actionable, not a generic conflict.
+      const reason = typeof details?.reason === 'string' ? details.reason : null;
+      const unit =
+        typeof details?.furnitureInstanceId === 'string' && details.furnitureInstanceId
+          ? details.furnitureInstanceId
+          : null;
+      return {
+        kind: 'conflict',
+        title: 'La revisión no puede resolverse para fabricación',
+        message: reason
+          ? `Unidad ${unit ?? 'afectada'}: ${reason}. Corregí el diseño y publicá una nueva revisión antes de liberar.`
+          : 'La revisión no puede resolverse para fabricación. Corregí el diseño y publicá una nueva revisión antes de liberar.',
+      };
+    }
     if (err.status === 409 || err.code === 'CONFLICT') {
       return {
         kind: 'conflict',

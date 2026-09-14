@@ -160,15 +160,18 @@ const (
 )
 
 // Preflight issue codes — exactly the blockers the current contracts expose;
-// no invented gates (#395 §17).
+// no invented gates (#395 §17). release_snapshot_resolution (#727) keeps the
+// preflight verdict honest with the release command: the exact same snapshot
+// resolution the release would run must not fail behind a READY verdict.
 type ManufacturingPreflightIssueCode string
 
 const (
-	PreflightIssueEmptyRevision      ManufacturingPreflightIssueCode = "empty_revision"
-	PreflightIssueDuplicateInstance  ManufacturingPreflightIssueCode = "duplicate_instance"
-	PreflightIssueMissingDefinition  ManufacturingPreflightIssueCode = "missing_definition"
-	PreflightIssueInvalidParameters  ManufacturingPreflightIssueCode = "invalid_parameters"
-	PreflightIssueInvalidMaterialUse ManufacturingPreflightIssueCode = "invalid_material_choice"
+	PreflightIssueEmptyRevision       ManufacturingPreflightIssueCode = "empty_revision"
+	PreflightIssueDuplicateInstance   ManufacturingPreflightIssueCode = "duplicate_instance"
+	PreflightIssueMissingDefinition   ManufacturingPreflightIssueCode = "missing_definition"
+	PreflightIssueInvalidParameters   ManufacturingPreflightIssueCode = "invalid_parameters"
+	PreflightIssueInvalidMaterialUse  ManufacturingPreflightIssueCode = "invalid_material_choice"
+	PreflightIssueSnapshotResolution  ManufacturingPreflightIssueCode = "release_snapshot_resolution"
 )
 
 type ManufacturingPreflightIssue struct {
@@ -403,6 +406,22 @@ func (e *ReleaseCommercialGateError) Error() string {
 		return "reconciliation conflicts block the production release"
 	}
 	return "the commercial baseline is outdated for this design revision: incorporate the design changes through an explicit re-quote first"
+}
+
+// ReleaseUnitResolutionFailure is the typed, business-safe reason ONE exact
+// revision unit cannot be resolved for manufacturing (#727). It carries the
+// physical identities and a safe cause only — never SQL, paths, stack traces
+// or data from another tenant — so the API can surface an actionable 409
+// instead of a generic conflict.
+type ReleaseUnitResolutionFailure struct {
+	FurnitureInstanceID   string
+	FurnitureDefinitionID string
+	Reason                string
+}
+
+func (e *ReleaseUnitResolutionFailure) Error() string {
+	return fmt.Sprintf("la unidad de mueble %s (definición %s) no puede resolverse para fabricación: %s",
+		e.FurnitureInstanceID, e.FurnitureDefinitionID, e.Reason)
 }
 
 // EvaluateReleaseCommercialGate applies the §17 reconciliation gate over the

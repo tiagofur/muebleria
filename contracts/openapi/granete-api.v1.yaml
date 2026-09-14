@@ -7534,13 +7534,14 @@
       },
       "ManufacturingPreflightIssueCode": {
         "type": "string",
-        "description": "Canonical blocker codes of the release manufacturing preflight. No other taxonomy.",
+        "description": "Canonical blocker codes of the release manufacturing preflight. No other taxonomy. release_snapshot_resolution (#727): the exact release snapshot would not resolve for manufacturing, with the same verdict the release command enforces.",
         "enum": [
           "empty_revision",
           "duplicate_instance",
           "missing_definition",
           "invalid_parameters",
-          "invalid_material_choice"
+          "invalid_material_choice",
+          "release_snapshot_resolution"
         ]
       },
       "ManufacturingPreflightIssue": {

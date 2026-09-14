@@ -976,9 +976,24 @@ No liberar si existe cualquiera de estos blockers:
 - diseño no aprobado cuando la política requiere aprobación;
 - manifest/semantic identity inválido;
 - authoritative manufacturing preflight blocked;
+- el snapshot exacto de la revisión no puede resolverse para fabricación
+  (`ResolveReleaseCollection` participa del MISMO gate que alimenta la
+  aprobación y el preflight read-only — una revisión no puede presentarse
+  como manufacturing-ready si el mismo snapshot fallaría al liberar; #727);
 - `bomFingerprint` stale respecto al release candidate;
 - reconciliation conflict comercial bloqueante;
 - IDs duplicados/ambiguos.
+
+### Autoridad de dimensiones en el release (#727)
+
+Los presets de medida (`Module.Presets`, H09/#104) gobiernan la selección
+comercial de tamaño en el flujo Quote/Project: ahí el `measurePresetId`
+exacto sigue siendo obligatorio. Una `DesignRevision` publicada/aprobada es
+el estado físico congelado: en la resolución para fabricación sus
+`widthMm/heightMm/depthMm` explícitos (safe integer > 0) SON la autoridad y
+no se requiere ni consulta ningún preset. Es una frontera explícita de
+resolución (`ResolveBomForRelease` / `publishedDesignAuthority`) sobre el
+mismo motor único de BOM — no un segundo engine ni una relajación de H09.
 
 Producción anterior permanece fijada a su revisión incluso si aparece R9/R10 posteriormente.
 
