@@ -2041,6 +2041,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                 projects.find((p) => p.id === projectDesignsRoute.projectId)?.name
               }
               canMutate={canMutateProjects}
+              catalogMaterials={materials}
               queryKeys={projectDesignsQueryKeys(
                 sessionScopeKey(sessionScope),
                 projectDesignsRoute.projectId,

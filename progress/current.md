@@ -1225,3 +1225,47 @@ EOL.
     PASS (storage 462.588 s; pilotreadiness 232.931 s).
   - Browser gate real Chromium PASS 1/1 en 8.1 s.
   - `git diff --check` PASS.
+## Issue #658 — implementación — 2026-09-14
+
+- Handoff: implementar #658 sobre `main` (base `dd277ddd`), rama
+  `feat/658-design-working-materials-reconcile-ui`. Inicio bloqueado
+  temporalmente por falta de `status:approved`; el propietario lo añadió y la
+  implementación continuó el mismo día.
+- Superficie: `DesignWorkingMaterialsPanel`
+  (`packages/ui/src/digitalThread/DesignWorkingMaterialsPanel.tsx`) integrado
+  en el workspace de Diseños justo bajo el banner del Working Copy. Reutiliza
+  SOLO las operaciones generadas existentes
+  (`getDesignWorkingCopyMaterialProvenance`,
+  `reconcileDesignWorkingMaterials`, `listProjectFurnitureInstances`); sin
+  backend nuevo, sin segundo clasificador ni DTO paralelo. Nombres de material
+  resueltos por props del catálogo del shell (presentación only).
+- Semántica honrada: los 4 estados de provenance del contrato con copy propio
+  (Elegido en el diseño / Cotizado, falta en el borrador / Heredado del
+  diseño / Sin resolver); fuente quoted comunicada como «material cotizado
+  actual», nunca como revisión histórica; sólo `quoted_missing_from_working`
+  expone acción; confirmación por unidad con detalle de lo que se aplicará;
+  concurrencia con `working_copy_updated_at` del GET; Idempotency-Key reutilizada
+  por intención; 409 → mensaje + Recargar materiales (sin overwrite); respuesta
+  tardía de otro Design descartada por correlación de designId; read-back por
+  invalidación de las queries del mismo design; read-only sin acción de mutación.
+- Verificación:
+  - `pnpm typecheck` monorepo PASS; `pnpm test` completo PASS (ui 1851, web
+    492, storage 216, excel 350+3 skip, desktop 17, mobile 87, domain);
+    `pnpm openapi:check` PASS (sin drift); `git diff --check` PASS.
+  - Tests nuevos: 11 del panel (candidate/authored/empty/error/success/
+    double-click/conflict/context-switch/read-only/retry-key) + 1 de
+    integración de pantalla.
+  - Browser gate real Go+PostgreSQL
+    (`tests/organization/design-working-materials-reconcile.spec.ts`), verde
+    en 3 corridas: positivo (detect → revisar → confirmar → read-back real →
+    pendiente desaparece; unidad authored nunca ofrecida), conflicto stale
+    real (409 → recargar → reparación exitosa con token fresco, parámetros
+    concurrentes preservados), tenant denial cross-org (404) y smoke
+    responsive 390/768/1280 sin overflow.
+  - Hallazgo del gate: mi fixture inicial colisionaba PROJECT/QUOTE_LINE IDs
+    con project-pairing.spec.ts (rompía su selección default de design);
+    corregido con IDs únicos + preservación de customers. Las corridas full
+    locales posteriores mostraron flakes ambientales no relacionados
+    (mfa/machine-output con timeouts de 15-18 min; host con load 7+), cada
+    spec fallido pasa aislado y en combinación con el mío.
+  - SketchUp host: N/A / NOT_TESTED.

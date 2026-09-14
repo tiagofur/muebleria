@@ -10,6 +10,7 @@ import type {
   DesignRevision,
   DesignRevisionArtifact,
   DesignWorkingCopy,
+  DesignWorkingCopyMaterialProvenance,
   ProductionRelease,
 } from '@granete/storage';
 import {
@@ -241,6 +242,9 @@ interface FetchMockOptions {
   // #499 pairing handoff
   pairingStatusFail?: boolean;
   pairingStatus?: 'pending' | 'exchanged' | 'cancelled' | 'expired';
+  // #658 working-copy material provenance (default: honest empty — no candidates)
+  materialProvenanceByDesign?: Record<string, DesignWorkingCopyMaterialProvenance>;
+  materialProvenanceFail?: boolean;
 }
 
 function setupFetchMock(options: FetchMockOptions = {}) {
@@ -382,6 +386,29 @@ function setupFetchMock(options: FetchMockOptions = {}) {
         });
       }
       return json(releases);
+    }
+
+    // 5b. #658 Working-copy material provenance: GET /designs/:id/working-copy/material-provenance
+    if (/^\/designs\/([^/]+)\/working-copy\/material-provenance$/.test(path) && method === 'GET') {
+      const dId = path.match(/^\/designs\/([^/]+)\/working-copy\/material-provenance$/)![1]!;
+      if (options.materialProvenanceFail) {
+        return new Response(JSON.stringify({ code: 'INTERNAL', message: 'provenance failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const provenance = options.materialProvenanceByDesign?.[dId] ?? {
+        design_id: dId,
+        project_id: PROJECT_ID,
+        working_copy_updated_at: null,
+        items: [],
+      };
+      return json(provenance);
+    }
+
+    // 5c. #658 Furniture instance display names: GET /projects/:id/furniture-instances
+    if (path === `/projects/${PROJECT_ID}/furniture-instances` && method === 'GET') {
+      return json([]);
     }
 
     // 6. Artifact authorization: POST /designs/:id/revisions/:revId/artifacts/:kind:authorize
@@ -1766,5 +1793,37 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     expect(within(panel).getAllByText(REV_3_ID).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('working-copy-banner')).toHaveTextContent('33333333…');
     expect(screen.getByTestId('working-copy-banner')).not.toHaveTextContent(REV_3_ID);
+  });
+
+  it('#658 surfaces the pending-materials review when the server reports candidates', async () => {
+    const user = userEvent.setup();
+    setupFetchMock({
+      materialProvenanceByDesign: {
+        [DESIGN_1_ID]: {
+          design_id: DESIGN_1_ID,
+          project_id: PROJECT_ID,
+          working_copy_updated_at: '2026-09-14T10:00:00.123456Z',
+          items: [
+            {
+              furniture_instance_id: INSTANCE_1_ID,
+              furniture_definition_id: null,
+              reconcilable: true,
+              roles: [
+                { role: 'FRENTES', quoted_choice: 'c0000000-0000-4000-8000-0000000000bb', provenance: 'quoted_missing_from_working' },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID }, canMutate: true });
+
+    const strip = await screen.findByTestId('pending-materials-strip');
+    expect(strip).toHaveTextContent('1 mueble tiene materiales cotizados que faltan en el borrador');
+
+    await user.click(screen.getByTestId('review-pending-materials-btn'));
+    const modal = screen.getByTestId('pending-materials-modal');
+    expect(within(modal).getByTestId(`pending-unit-${INSTANCE_1_ID}`)).toBeVisible();
+    expect(within(modal).getByTestId(`repair-unit-${INSTANCE_1_ID}`)).toBeVisible();
   });
 });
