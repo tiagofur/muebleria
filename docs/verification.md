@@ -83,6 +83,26 @@ pnpm typecheck
 Ejecutar `go test` sobre el paquete afectado y, antes de cierre de feature server-side,
 la suite backend razonablemente completa definida por el repo.
 
+### Granete for SketchUp — reconciliación del host
+
+```bash
+cd apps/sketchup-extension
+bundle exec rake syntax
+bundle exec ruby -Itest test/unit/project_furniture_test.rb
+bundle exec ruby -Itest test/unit/dialog_controller_test.rb
+bundle exec ruby -Itest test/unit/publication_preflight_gate_test.rb
+bundle exec ruby -Itest test/unit/design_publish_test.rb
+bundle exec rake verify
+```
+
+La matriz mínima separa Project membership, item exacto del Working Copy y raíz
+local: `unplaced`, `pending_confirmation`, `present_synced`, `missing_local`,
+duplicado y autoridad incompatible/desconocida. Debe probar que Q1 no llama al
+servicio de cotización y publish no sincroniza/exporta cuando la reconciliación
+no es limpia. Los harness JS de Project Furniture y Commercial Projection deben
+tener wrappers Ruby para formar parte de `rake unit`; ejecutarlos sólo con
+`node` no constituye evidencia de `rake verify`.
+
 ### Multi-org / Pilot Readiness
 
 `backend-go/tests/pilotreadiness/` (F179) prueba aislamiento y operaciones

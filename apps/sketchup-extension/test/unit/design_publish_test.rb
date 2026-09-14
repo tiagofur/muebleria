@@ -14,6 +14,7 @@ require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/connection/transform_contract'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
+require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/connection/duplicate_resolver'
 require_relative '../../src/granete_for_sketchup/connection/design_publish'
@@ -55,6 +56,7 @@ class DesignPublishTest < Minitest::Test
 
   # Transport fake with both JSON routing AND multipart upload capture.
   class FakeTransport
+    attr_accessor :on_upload
     attr_reader :requests, :uploads
 
     def initialize
@@ -94,6 +96,7 @@ class DesignPublishTest < Minitest::Test
       # fake echoes the authoritative hash of the received bytes.
       sha = route['body']['sha256'] || "sha256-#{digest.hexdigest}"
       body = route['body'].merge('sha256' => sha, 'size_bytes' => File.size(file_path))
+      @on_upload&.call(record)
       { 'status' => route['status'], 'body' => body }
     end
 
@@ -104,7 +107,7 @@ class DesignPublishTest < Minitest::Test
 
   # ProjectFurniture service double for the #391 precheck + working copy sync.
   class FakeWorkingCopyService
-    attr_accessor :working_copy, :update_calls
+    attr_accessor :working_copy, :update_calls, :on_get, :on_update
 
     def initialize(working_copy:)
       @working_copy = working_copy
@@ -121,6 +124,7 @@ class DesignPublishTest < Minitest::Test
     end
 
     def get_working_copy(_design_id)
+      @on_get&.call
       @working_copy
     end
 
@@ -130,6 +134,26 @@ class DesignPublishTest < Minitest::Test
       @working_copy = PF::Contract::WorkingCopy.new(
         design_id: design_id, base_revision_id: base_revision_id, items: items
       )
+      @on_update&.call
+    end
+  end
+
+  class HostReconciliationDouble
+    attr_accessor :clean, :on_projection
+    attr_reader :calls
+
+    def initialize
+      @clean = true
+      @calls = 0
+    end
+
+    def projection
+      @calls += 1
+      @on_projection&.call
+      { 'state' => 'connected', 'projectId' => PROJECT_ID, 'designId' => DESIGN_ID,
+        'baseRevisionId' => REVISION_R1, 'schemaVersion' => 1,
+        'snapshot' => 'host-publish', 'clean' => @clean,
+        'summary' => { 'attention' => @clean ? 0 : 1 } }
     end
   end
 
@@ -156,6 +180,7 @@ class DesignPublishTest < Minitest::Test
     end
 
     @base_advancer = base_advancer_double(REVISION_R2)
+    @host_reconciliation = HostReconciliationDouble.new
 
     @resolver = DR.new(
       model_provider: -> { @model },
@@ -172,6 +197,7 @@ class DesignPublishTest < Minitest::Test
       duplicate_resolver: @resolver,
       service: @service,
       working_copy_service: @wc_service,
+      host_reconciliation: @host_reconciliation,
       base_advancer: @base_advancer,
       metadata_store_factory: ->(m) { MS.new(m) },
       logger: Granete::SketchUpExtension::SafeLogger.new
@@ -385,6 +411,115 @@ class DesignPublishTest < Minitest::Test
     assert_equal 0, @base_advancer.calls
   end
 
+  def test_publish_aborts_before_working_copy_sync_or_export_when_host_is_dirty
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    @host_reconciliation.clean = false
+    progress = []
+
+    result = @publisher.publish(on_progress: ->(step) { progress << step })
+
+    refute result['ok']
+    assert_equal 'host_reconciliation_required', result['code']
+    assert_equal ['validating'], progress
+    assert_empty @wc_service.update_calls
+    assert_empty @transport.requests_for('POST', /publish/)
+  end
+
+  def test_publish_aborts_before_sync_or_export_when_active_model_changes_during_reconciliation
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    other = TestModel.new
+    @host_reconciliation.on_projection = -> { @model = other }
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_empty @wc_service.update_calls
+    assert_empty @transport.requests
+  end
+
+  def test_publish_stops_before_export_if_model_changes_during_working_copy_sync
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    @wc_service.on_update = -> { @model = TestModel.new }
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_equal 1, @wc_service.update_calls.length
+    assert_empty @transport.requests, 'artifact export/upload must not start after a context switch'
+  end
+
+  def test_publish_stops_before_working_copy_put_if_model_changes_during_get
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    @wc_service.on_get = -> { @model = TestModel.new }
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_empty @wc_service.update_calls, 'a stale GET must never be followed by a WorkingCopy PUT'
+    assert_empty @transport.requests
+  end
+
+  def test_publish_stops_before_working_copy_put_if_binding_changes_during_get
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    @wc_service.on_get = lambda do
+      MB::Store.new(@model).write!(
+        MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R2)
+      )
+    end
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_empty @wc_service.update_calls, 'a stale GET must never be followed by a WorkingCopy PUT'
+    assert_empty @transport.requests
+  end
+
+  def test_publish_stops_subsequent_uploads_and_finalize_after_binding_changes_during_upload
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    stub_publish_routes
+    @transport.on_upload = lambda do |_upload|
+      MB::Store.new(@model).write!(
+        MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R2)
+      )
+    end
+
+    result = @publisher.publish
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_equal 1, @transport.uploads.length, 'context drift must stop the next staged upload'
+    assert_empty @transport.requests_for('POST', /:finalize/)
+    assert_equal 0, @base_advancer.calls
+  end
+
+  def test_publish_stops_before_finalize_if_model_changes_after_uploads
+    create_managed_instance(furniture_instance_id: FI_1)
+    seed_working_items(FI_1)
+    stub_publish_routes
+    progress = lambda do |step|
+      @model = TestModel.new if step == 'publishing'
+    end
+
+    result = @publisher.publish(on_progress: progress)
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_equal 3, @transport.uploads.length
+    assert_empty @transport.requests_for('POST', /:finalize/),
+                 'a model switch between staged uploads and finalize must stop publication'
+    assert_equal 0, @base_advancer.calls
+  end
+
   def test_publish_fails_loud_when_server_hash_mismatches
     create_managed_instance(furniture_instance_id: FI_1)
     seed_working_items(FI_1)
@@ -426,6 +561,7 @@ class DesignPublishTest < Minitest::Test
       duplicate_resolver: @resolver,
       service: @service,
       working_copy_service: @wc_service,
+      host_reconciliation: @host_reconciliation,
       base_advancer: @base_advancer,
       metadata_store_factory: ->(m) { MS.new(m) }
     )
@@ -462,6 +598,7 @@ class DesignPublishTest < Minitest::Test
       duplicate_resolver: @resolver,
       service: @service,
       working_copy_service: @wc_service,
+      host_reconciliation: @host_reconciliation,
       base_advancer: base_advancer_double('00000000-0000-0000-0000-000000000099'),
       metadata_store_factory: ->(m) { MS.new(m) }
     )

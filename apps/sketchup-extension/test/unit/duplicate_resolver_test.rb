@@ -419,6 +419,18 @@ class DuplicateResolverTest < Minitest::Test
     assert_equal 1, committed
   end
 
+  def test_entities_observer_refreshes_inventory_after_native_removal_without_reading_deleted_metadata
+    changes = 0
+    observer = Granete::SketchUpExtension::Observers::EntitiesObserver.new(
+      duplicate_resolver: @resolver,
+      on_host_inventory_changed: -> { changes += 1 }
+    )
+
+    observer.onElementRemoved(@model.entities, 98_765)
+
+    assert_equal 1, changes
+  end
+
   # Proof 12: Syntactically valid but unknown backend UUID rejected in precheck (#391 / DT-7)
   def test_validate_model_rejects_syntactically_valid_but_unknown_backend_uuid
     unknown_uuid = '51000000-aaaa-bbbb-cccc-999999999999'

@@ -1859,9 +1859,14 @@
 
         <!-- Tab 2: Project Furniture (#389 / DT-5). A source clearly separate
              from the Catalog/Library: units that ALREADY EXIST as physical
-             project furniture, with pending/placed derived from the design
-             working copy. The panel never edits business identity. -->
+             project furniture, with state reconciled against the exact design
+             working copy and this file's managed roots. The panel never edits
+             business identity. -->
         <section id="pane-project" class="tab-pane" role="tabpanel">
+          <div id="pf-save-awareness" class="card" role="status" aria-live="polite" style="display: none; margin-bottom: var(--space-3); border-color: var(--warning);">
+            <strong>Guardá este archivo SketchUp</strong>
+            <p class="subhead" style="margin: var(--space-1) 0 0; font-size: var(--text-xs);">Hay cambios sincronizados con Granete que todavía no se guardaron en este archivo.</p>
+          </div>
           <div id="commercial-projection-card" class="card" style="display: none; margin-bottom: var(--space-3);" aria-live="polite">
             <div class="library-header-row">
               <div>
@@ -4205,6 +4210,7 @@
             renderModelBindingStatus(status);
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(status);
             if (window.GraneteCommercialBootstrap) window.GraneteCommercialBootstrap.setBinding(status);
+            if (status && status.state === "connected") requestProjectFurniture();
           },
           onCommercialProjection: function (payload) {
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receive(payload);
@@ -4231,12 +4237,19 @@
           onBindingDesigns: function (result) { handleBindingDesigns(result); },
 
           // #389 / #390 Project Furniture bridge — delegates to the project section.
-          onProjectFurniture: function (payload) { renderProjectFurniture(payload); },
+          onProjectFurniture: function (payload) {
+            renderProjectFurniture(payload);
+            if (window.GraneteCommercialProjection) {
+              window.GraneteCommercialProjection.setHostReconciliation(payload);
+            }
+          },
           onPlaceFurnitureResult: function (result) { handlePlaceFurnitureResult(result); },
           onCreateProjectFurnitureResult: function (result) { handleCreateProjectFurnitureResult(result); },
           getCatalogCreateIntentKey: function () { return catalogCreateIntentKey; },
           onConfirmPlacementResult: function (result) { handleConfirmPlacementResult(result); },
           onCancelPlacementResult: function (result) { handleCancelPlacementResult(result); },
+          onRestoreFurnitureResult: function (result) { handleRestoreFurnitureResult(result); },
+          onHostSaveAwareness: function (payload) { renderHostSaveAwareness(payload); },
 
           setCatalog: function (payload) {
             if (Object.prototype.toString.call(payload) === "[object Array]") {
@@ -5647,6 +5660,10 @@
           if (!gate || gate.scopeAvailable === false) {
             base = "No se pudo confirmar el alcance de publicación del diseño. " +
                    "Verificá los muebles del diseño antes de publicar.";
+          } else if (gate.hostAvailable !== true || gate.hostClean !== true) {
+            base = (gate.hostAttention || 0) > 0
+              ? "Hay " + gate.hostAttention + " muebles que requieren reconciliación con este archivo SketchUp."
+              : "No se pudo confirmar que este archivo SketchUp coincida con el diseño.";
           } else if ((gate.blocked || 0) > 0) {
             base = "La publicación está bloqueada porque existen problemas de fabricación.";
           } else if ((gate.stale || 0) > 0) {
@@ -5992,10 +6009,9 @@
 
         // ------------------------------------------------------------------
         // Project Furniture (#389 / DT-5). Separate source from the Catalog:
-        // units that already exist in the connected project, with
-        // pending/placed derived from the design working copy. Every action
-        // goes to Ruby (placer); the panel never invents or edits business
-        // identity.
+        // units that already exist in the connected project, reconciled with
+        // exact WorkingCopy intent and the open file's managed roots. Every
+        // action goes to Ruby; the panel never invents or edits business identity.
         // ------------------------------------------------------------------
         var pfUnbound = document.getElementById("pf-unbound-state");
         var pfLoading = document.getElementById("pf-loading-state");
@@ -6012,6 +6028,7 @@
         var btnPfRefresh = document.getElementById("btn-pf-refresh");
         var btnPfGoStatus = document.getElementById("btn-pf-go-status");
         var btnPfRetry = document.getElementById("btn-pf-retry");
+        var pfSaveAwareness = document.getElementById("pf-save-awareness");
 
         var PF_ERROR_COPY = {
           unauthenticated: "Iniciá sesión con tu cuenta del taller en la pestaña Estado.",
@@ -6026,6 +6043,11 @@
         var pfPlacing = {};
         var pfConfirming = {};
         var pfCancelling = {};
+        var pfRestoring = {};
+
+        function renderHostSaveAwareness(payload) {
+          pfSaveAwareness.style.display = payload && payload.needsSave ? "block" : "none";
+        }
 
         function hidePfStates() {
           [pfUnbound, pfLoading, pfError, pfEmpty].forEach(function (el) { el.style.display = "none"; });
@@ -6060,13 +6082,14 @@
               return;
             }
             pfListView.style.display = "block";
-            pfCountBadge.textContent = (payload.placed || 0) + " colocados · " + (payload.pending || 0) + " pendientes";
-            pfPendingTitle.textContent = "Pendientes de colocar (" + (payload.pending || 0) + ")";
-            pfPlacedTitle.textContent = "Colocados (" + (payload.placed || 0) + ")";
+            pfCountBadge.textContent = (payload.placed || 0) + " puestos · " + (payload.pending || 0) + " pendientes" +
+              ((payload.attention || 0) > 0 ? " · " + payload.attention + " requieren atención" : "");
+            pfPendingTitle.textContent = "Pendientes y divergencias (" + (payload.pending || 0) + ")";
+            pfPlacedTitle.textContent = "Puestos / Sincronizados (" + (payload.placed || 0) + ")";
             // Terminal (removed/cancelled) units are neither placeable nor
             // placed; they are history and stay out of this authoring panel.
-            renderPfList(pfPendingList, items.filter(function (row) { return !row.placed && !row.terminal; }), true);
-            renderPfList(pfPlacedList, items.filter(function (row) { return row.placed; }), false);
+            renderPfList(pfPendingList, items.filter(function (row) { return !row.placed && !row.terminal; }));
+            renderPfList(pfPlacedList, items.filter(function (row) { return row.placed; }));
             return;
           }
 
@@ -6084,23 +6107,24 @@
           pfError.style.display = "block";
         }
 
-        function renderPfList(container, rows, pending) {
+        function renderPfList(container, rows) {
           container.innerHTML = "";
           if (!rows.length) {
             var note = document.createElement("p");
             note.className = "subhead";
             note.style.margin = "0";
             note.style.fontSize = "var(--text-xs)";
-            note.textContent = pending ? "Todas las unidades están colocadas." : "Todavía no hay unidades colocadas.";
+            note.textContent = container === pfPendingList ?
+              "No hay unidades pendientes ni divergencias." : "Todavía no hay unidades sincronizadas.";
             container.appendChild(note);
             return;
           }
           rows.forEach(function (row) {
-            container.appendChild(pfUnitCard(row, pending));
+            container.appendChild(pfUnitCard(row));
           });
         }
 
-        function pfUnitCard(row, pending) {
+        function pfUnitCard(row) {
           var card = document.createElement("div");
           card.className = "card pf-unit-card";
 
@@ -6119,11 +6143,21 @@
             unitBadge.textContent = "Unidad " + row.unitIndex + " de " + row.unitTotal;
             name.appendChild(unitBadge);
           }
-          if (row.pendingConfirm) {
-            var pendingConfirmBadge = document.createElement("span");
-            pendingConfirmBadge.className = "status-badge pending";
-            pendingConfirmBadge.textContent = "Posición pendiente";
-            name.appendChild(pendingConfirmBadge);
+          var stateCopy = {
+            pending_confirmation: ["Posición pendiente", "pending"],
+            present_synced: ["Puesto / Sincronizado", "valid"],
+            missing_local: ["Falta en este archivo", "conflict"],
+            duplicate_local: ["Identidad duplicada", "invalid"],
+            terminal_or_orphan_local: ["Identidad no vigente", "invalid"],
+            recovery_blocked: ["Restauración bloqueada", "invalid"],
+            incompatible: ["Contexto incompatible", "invalid"],
+            unknown: ["Presencia no verificable", "invalid"]
+          }[row.reconciliationState];
+          if (stateCopy) {
+            var stateBadge = document.createElement("span");
+            stateBadge.className = "status-badge " + stateCopy[1];
+            stateBadge.textContent = stateCopy[0];
+            name.appendChild(stateBadge);
           }
           main.appendChild(name);
 
@@ -6134,6 +6168,13 @@
             main.appendChild(dims);
           }
 
+          if (row.reason) {
+            var reason = document.createElement("div");
+            reason.className = "pf-unit-meta";
+            reason.textContent = row.reason;
+            main.appendChild(reason);
+          }
+
           // Granete IDs are diagnostics, not product noise: secondary line.
           var ref = document.createElement("div");
           ref.className = "pf-unit-ref";
@@ -6142,8 +6183,7 @@
 
           card.appendChild(main);
 
-          if (pending) {
-            if (row.pendingConfirm) {
+          if (row.reconciliationState === "pending_confirmation") {
               var actionsGroup = document.createElement("div");
               actionsGroup.style.display = "flex";
               actionsGroup.style.gap = "6px";
@@ -6165,7 +6205,7 @@
               actionsGroup.appendChild(btnCancel);
 
               card.appendChild(actionsGroup);
-            } else {
+          } else if (row.reconciliationState === "unplaced") {
               var action = document.createElement("button");
               action.className = "btn btn-primary";
               action.style.width = "auto";
@@ -6173,8 +6213,15 @@
               action.disabled = !!pfPlacing[row.id];
               action.addEventListener("click", function () { placeFurnitureInstance(row.id, action); });
               card.appendChild(action);
-            }
-          } else {
+          } else if (row.reconciliationState === "missing_local") {
+            var restore = document.createElement("button");
+            restore.className = "btn btn-primary";
+            restore.style.width = "auto";
+            restore.textContent = pfRestoring[row.id] ? "Restaurando…" : "Restaurar en este archivo";
+            restore.disabled = !!pfRestoring[row.id];
+            restore.addEventListener("click", function () { restoreFurnitureInstance(row.id, restore); });
+            card.appendChild(restore);
+          } else if (row.reconciliationState === "present_synced") {
             var action = document.createElement("button");
             action.className = "btn btn-secondary";
             action.style.width = "auto";
@@ -6234,6 +6281,21 @@
           }
         }
 
+        function restoreFurnitureInstance(furnitureInstanceId, button) {
+          if (!furnitureInstanceId || pfRestoring[furnitureInstanceId]) return;
+          pfRestoring[furnitureInstanceId] = button;
+          button.disabled = true;
+          button.textContent = "Restaurando…";
+          if (window.sketchup && window.sketchup.restore_furniture_instance) {
+            window.sketchup.restore_furniture_instance(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
+          } else {
+            delete pfRestoring[furnitureInstanceId];
+            button.disabled = false;
+            button.textContent = "Restaurar en este archivo";
+            showToast("error", "Restaurar está disponible sólo dentro de SketchUp.");
+          }
+        }
+
         function handlePlaceFurnitureResult(result) {
           result = result || {};
           var button = pfPlacing[result.instanceId];
@@ -6288,6 +6350,23 @@
           showToast("error", result.reason || "No se pudo cancelar la colocación.");
         }
 
+        function handleRestoreFurnitureResult(result) {
+          result = result || {};
+          var button = pfRestoring[result.instanceId];
+          delete pfRestoring[result.instanceId];
+          if (result.ok) {
+            showToast("success", result.restored === false ?
+              "El mueble ya estaba restaurado y verificado." : "✓ Mueble restaurado en este archivo.");
+            requestProjectFurniture();
+            return;
+          }
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Restaurar en este archivo";
+          }
+          showToast("error", pfPlaceFailureMessage(result));
+        }
+
         function handleCreateProjectFurnitureResult(result) {
           result = result || {};
           btnInsert.disabled = false;
@@ -6328,6 +6407,14 @@
             case "bad_contract": return result.reason || "Error de contrato con el servidor.";
             case "no_model": return "No hay un modelo activo en SketchUp.";
             case "placement_failed": return result.reason || "La colocación falló.";
+            case "action_in_progress": return "La restauración de este mueble ya está en curso.";
+            case "working_copy_changed":
+            case "authority_changed":
+            case "binding_changed":
+            case "context_changed": return result.reason || "El modelo o el diseño cambió; actualizá y reintentá.";
+            case "invalid_transform": return result.reason || "La posición guardada no es válida.";
+            case "recovery_blocked": return result.reason || "La restauración está bloqueada.";
+            case "host_readback_failed": return result.reason || "No se pudo verificar la restauración.";
             case "sync_failed": return result.reason || "El diseño no se pudo actualizar.";
             default: return result.reason || "No se pudo colocar el mueble.";
           }

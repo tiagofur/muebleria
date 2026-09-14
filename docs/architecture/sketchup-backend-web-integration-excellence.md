@@ -74,7 +74,10 @@ SketchUp does **not** own:
 
 - Project/FurnitureInstance business identity creation except through server commands;
 - BOM, productive thickness, joints, derived drilling or nesting;
-- reconciliation;
+- reconciliación empresarial o clasificación de cambios. El plugin sí deriva
+  una proyección efímera y side-effect-free de **presencia local** para el
+  Project/Design exacto; nunca convierte esa lectura del host en autoridad de
+  identidad, Working Copy o lifecycle;
 - approval or ProductionRelease;
 - MachineProfile/postprocessor rules;
 - support claims.

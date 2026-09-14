@@ -32,6 +32,19 @@ class RuntimeLifecycleTest < Minitest::Test
     assert_equal 1, SketchupStub.observers.length
   end
 
+  def test_single_host_observer_rebinds_persistent_save_observer_on_model_activation
+    Granete::SketchUpExtension::Runtime.start
+    original = SketchupStub.active_model
+    other = SketchupStub::ModelStub.new
+
+    assert_equal 1, original.observers.length
+    SketchupStub.active_model = other
+    SketchupStub.observers.first.onActivateModel(other)
+
+    assert_empty original.observers
+    assert_equal 1, other.observers.length
+  end
+
   def test_start_returns_the_same_application
     application = Granete::SketchUpExtension::Runtime.start
 

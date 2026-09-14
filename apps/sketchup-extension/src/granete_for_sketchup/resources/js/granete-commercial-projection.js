@@ -16,6 +16,7 @@
   var lastProjectionMatchConfirmed = false;
   var quotePending = false;
   var quoteWebUrl = null;
+  var hostReconciliation = null;
 
   function element(id) { return document.getElementById(id); }
   function show(id, visible) { var node = element(id); if (node) node.style.display = visible ? "" : "none"; }
@@ -48,6 +49,10 @@
 
   function contextKey(value) {
     return value ? value.projectId + "/" + value.designId : null;
+  }
+
+  function exactContextKey(value) {
+    return value ? [value.projectId, value.designId, value.baseRevisionId || "", value.schemaVersion].join("/") : null;
   }
 
   function activeMutationPhase(phase) {
@@ -139,6 +144,8 @@
   function quoteReady() {
     var state = currentWorkState();
     return !!binding && binding.canCreateInitialQuote === true &&
+      !!hostReconciliation && hostReconciliation.clean === true &&
+      hostReconciliation.contextKey === exactContextKey(binding) &&
       !pending && !quotePending && !mutationInFlight && !!lastProjection &&
       lastProjectionMatchConfirmed && !!state && state.matchConfirmed === true &&
       state.localChangesPending === false && lastProjection.status === "current" &&
@@ -159,6 +166,8 @@
         " · " + money(lastProjection.reference.saleTotal, lastProjection.reference.currency) : "";
       text("initial-quote-status", "Q" + lastProjection.reference.revisionNumber + " · " +
         quoteStatus(lastProjection.reference.status) + frozenTotal);
+    } else if (!quotePending && hostReconciliation && hostReconciliation.clean !== true) {
+      text("initial-quote-status", "Resolvé " + hostReconciliation.attention + " divergencias con este archivo antes de emitir.");
     } else if (!quotePending) text("initial-quote-status", quoteReady() ? "Lista para crear Q1." : "Sin cotización emitible.");
   }
 
@@ -181,6 +190,8 @@
       text("initial-quote-status", (result && result.reason) || "No se pudo emitir la cotización.");
       updateQuoteAction();
       if (result && result.code === "refresh_required") request({ probe: true });
+      if (result && result.code === "host_reconciliation_required" && window.sketchup &&
+          typeof window.sketchup.get_project_furniture === "function") window.sketchup.get_project_furniture();
       return false;
     }
     var quote = result.quote || {};
@@ -250,6 +261,7 @@
     lastProjection = null;
     quotePending = false;
     quoteWebUrl = null;
+    hostReconciliation = null;
     binding = next;
     reconcileMutationRuntime();
     show("commercial-projection-card", !!binding);
@@ -257,6 +269,21 @@
     show("btn-open-in-granete", false);
     updateQuoteAction();
     if (binding) request({ probe: true });
+  }
+
+  function setHostReconciliation(payload) {
+    hostReconciliation = null;
+    if (binding && payload && payload.state === "connected" &&
+        payload.projectId === binding.projectId && payload.designId === binding.designId &&
+        payload.baseRevisionId === (binding.baseRevisionId || null) &&
+        payload.schemaVersion === binding.schemaVersion && typeof payload.snapshot === "string") {
+      hostReconciliation = {
+        contextKey: exactContextKey(binding), clean: payload.clean === true,
+        attention: Number(payload.attention || (payload.summary && payload.summary.attention) || 0)
+      };
+    }
+    updateQuoteAction();
+    return hostReconciliation !== null;
   }
 
   function receive(payload) {
@@ -397,6 +424,7 @@
 
   window.GraneteCommercialProjection = {
     setBinding: setBinding, receive: receive, refresh: request,
+    setHostReconciliation: setHostReconciliation,
     applySynchronization: applySynchronization, invalidateSession: invalidateSession,
     receiveQuote: receiveQuote
   };

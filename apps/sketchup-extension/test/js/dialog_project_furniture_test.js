@@ -89,6 +89,7 @@ function buildSandbox() {
         create_project_furniture: (p) => bridgeCalls.push({ action: 'create_project_furniture', payload: JSON.parse(p) }),
         confirm_placement_instance: (p) => bridgeCalls.push({ action: 'confirm_placement_instance', payload: JSON.parse(p) }),
         cancel_placement_instance: (p) => bridgeCalls.push({ action: 'cancel_placement_instance', payload: JSON.parse(p) }),
+        restore_furniture_instance: (p) => bridgeCalls.push({ action: 'restore_furniture_instance', payload: JSON.parse(p) }),
         select_project_furniture: (p) => bridgeCalls.push({ action: 'select_project_furniture', payload: JSON.parse(p) }),
         enroll: () => {}, logout: () => {}, close_dialog: () => {}
       }
@@ -129,13 +130,13 @@ function connectedPanel() {
     items: [
       { id: FI_1, name: 'Base 600', dimensions: [600, 720, 560],
         dimensions_label: '600 × 720 × 560 mm', definitionId: 'def-1', origin: 'quote',
-        terminal: false, placed: false, unitIndex: 1, unitTotal: 2 },
+        terminal: false, placed: false, reconciliationState: 'unplaced', unitIndex: 1, unitTotal: 2 },
       { id: FI_2, name: 'Base 600', dimensions: [600, 720, 560],
         dimensions_label: '600 × 720 × 560 mm', definitionId: 'def-1', origin: 'quote',
-        terminal: false, placed: false, unitIndex: 2, unitTotal: 2 },
+        terminal: false, placed: false, reconciliationState: 'unplaced', unitIndex: 2, unitTotal: 2 },
       { id: FI_3, name: 'Torre horno', dimensions: [600, 2100, 560],
         dimensions_label: '600 × 2100 × 560 mm', definitionId: 'def-2', origin: 'quote',
-        terminal: false, placed: true, unitIndex: 1, unitTotal: 1 }
+        terminal: false, placed: true, reconciliationState: 'present_synced', unitIndex: 1, unitTotal: 1 }
     ]
   };
 }
@@ -147,8 +148,8 @@ function runTests() {
   test('pending list renders one card per unit with unit labels', (sandbox) => {
     sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
     assert.ok(visible(el(sandbox, 'pf-list-view')));
-    assert.equal(el(sandbox, 'pf-pending-title').textContent, 'Pendientes de colocar (2)');
-    assert.equal(el(sandbox, 'pf-placed-title').textContent, 'Colocados (1)');
+    assert.equal(el(sandbox, 'pf-pending-title').textContent, 'Pendientes y divergencias (2)');
+    assert.equal(el(sandbox, 'pf-placed-title').textContent, 'Puestos / Sincronizados (1)');
 
     const pending = el(sandbox, 'pf-pending-list');
     assert.equal(pending.children.length, 2, 'two individually placeable units');
@@ -167,6 +168,56 @@ function runTests() {
     assert.equal(pendingButton.textContent, 'Colocar');
     const placedButton = el(sandbox, 'pf-placed-list').children[0].children[1];
     assert.equal(placedButton.textContent, 'Seleccionar');
+  });
+
+  test('missing local is visible and exposes only the exact restore action', (sandbox) => {
+    const panel = connectedPanel();
+    panel.attention = 1;
+    panel.items[0].reconciliationState = 'missing_local';
+    panel.items[0].blocking = true;
+    panel.items[0].reason = 'Granete espera este mueble, pero falta en este archivo SketchUp';
+    sandbox.window.GraneteDialog.onProjectFurniture(panel);
+
+    const card = el(sandbox, 'pf-pending-list').children[0];
+    const labels = card.children[0].children[0].children.map((child) => child.textContent);
+    assert.ok(labels.includes('Falta en este archivo'));
+    assert.equal(card.children.length, 2, 'missing_local must expose one action');
+    assert.equal(card.children[1].textContent, 'Restaurar en este archivo');
+    assert.ok(card.children[0].children.some((child) =>
+      child.textContent.includes('falta en este archivo SketchUp')));
+  });
+
+  test('restore sends exact identity once while in flight', (sandbox) => {
+    const panel = connectedPanel();
+    panel.items[0].reconciliationState = 'missing_local';
+    sandbox.window.GraneteDialog.onProjectFurniture(panel);
+    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    button.click();
+    button.click();
+    const calls = sandbox.__bridge.filter((call) => call.action === 'restore_furniture_instance');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].payload.furnitureInstanceId, FI_1);
+    assert.ok(!calls[0].payload.definitionId);
+  });
+
+  test('failed restore re-arms its own action', (sandbox) => {
+    const panel = connectedPanel();
+    panel.items[0].reconciliationState = 'missing_local';
+    sandbox.window.GraneteDialog.onProjectFurniture(panel);
+    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    button.click();
+    sandbox.window.GraneteDialog.onRestoreFurnitureResult({
+      ok: false, code: 'authority_changed', reason: 'changed', instanceId: FI_1
+    });
+    assert.equal(button.disabled, false);
+    assert.equal(button.textContent, 'Restaurar en este archivo');
+  });
+
+  test('save awareness is visible until Ruby reports a real save', (sandbox) => {
+    sandbox.window.GraneteDialog.onHostSaveAwareness({ needsSave: true });
+    assert.ok(visible(el(sandbox, 'pf-save-awareness')));
+    sandbox.window.GraneteDialog.onHostSaveAwareness({ needsSave: false });
+    assert.ok(!visible(el(sandbox, 'pf-save-awareness')));
   });
 
   test('Colocar sends the exact furnitureInstanceId and guards double clicks', (sandbox) => {
@@ -245,7 +296,7 @@ function runTests() {
     const panel = connectedPanel();
     panel.items.push({ id: '51000000-0000-0000-0000-0000000000f4', name: 'Viejo',
       dimensions: null, dimensions_label: null, definitionId: 'def-1', origin: 'quote',
-      terminal: true, placed: false, unitIndex: 3, unitTotal: 3 });
+      terminal: true, placed: false, reconciliationState: 'terminal', unitIndex: 3, unitTotal: 3 });
     sandbox.window.GraneteDialog.onProjectFurniture(panel);
     assert.equal(el(sandbox, 'pf-pending-list').children.length, 2);
   });
@@ -253,6 +304,7 @@ function runTests() {
   test('unit with pendingConfirm renders Posicion pendiente and confirm/cancel buttons', (sandbox) => {
     const panel = connectedPanel();
     panel.items[0].pendingConfirm = true;
+    panel.items[0].reconciliationState = 'pending_confirmation';
     sandbox.window.GraneteDialog.onProjectFurniture(panel);
 
     const pendingCard = el(sandbox, 'pf-pending-list').children[0];

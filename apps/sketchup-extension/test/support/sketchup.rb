@@ -155,6 +155,7 @@ module SketchupStub
   @entity_seq = 0
   @guid_seq = 0
   @undo_frames = []
+  @undo_history = []
 
   class Menu
     attr_reader :items
@@ -556,6 +557,9 @@ module SketchupStub
         @instances.delete(entity)
         @faces.delete(entity)
         entity.definition.remove_instance(entity) if entity.is_a?(ComponentInstanceStub)
+        @observers.dup.each do |observer|
+          observer.onElementRemoved(self, entity.persistent_id) if observer.respond_to?(:onElementRemoved)
+        end
       end
       true
     end
@@ -608,7 +612,7 @@ module SketchupStub
     include AttributeContainer
 
     attr_reader :active_entities, :selection, :definitions, :materials, :operations,
-                :selected_tools
+                :selected_tools, :observers
     attr_accessor :active_view
 
     def initialize
@@ -619,10 +623,23 @@ module SketchupStub
       @operations = []
       @selected_tools = []
       @active_view = ViewStub.new
+      @observers = []
     end
 
     def entities
       @active_entities
+    end
+
+    def add_observer(observer)
+      @observers << observer unless @observers.include?(observer)
+    end
+
+    def remove_observer(observer)
+      @observers.delete(observer)
+    end
+
+    def notify_post_save
+      @observers.dup.each { |observer| observer.onPostSaveModel(self) if observer.respond_to?(:onPostSaveModel) }
     end
 
     # #470 overlay tool lifecycle: selecting tools is recorded (never a
@@ -673,6 +690,7 @@ module SketchupStub
       @entity_seq = 0
       @guid_seq = 0
       @undo_frames = []
+      @undo_history = []
       UI::HtmlDialog.reset! if defined?(UI::HtmlDialog)
     end
 
@@ -683,7 +701,8 @@ module SketchupStub
     end
 
     def commit_undo_frame
-      @undo_frames.pop
+      frame = @undo_frames.pop
+      @undo_history << frame if frame
     end
 
     def abort_undo_frame
@@ -692,6 +711,10 @@ module SketchupStub
 
     def record_undo(&block)
       @undo_frames.last&.push(block)
+    end
+
+    def undo
+      @undo_history.pop&.reverse_each(&:call)
     end
 
     def next_persistent_id
@@ -734,6 +757,9 @@ module Sketchup
   class EntitiesObserver
   end
 
+  class ModelObserver
+  end
+
   # Minimal color for overlay drawing tests (#470).
   class Color
     attr_reader :red, :green, :blue
@@ -751,6 +777,7 @@ module Sketchup
 
   def self.send_action(action)
     SketchupStub.send_actions << action
+    SketchupStub.undo if action == 'editUndo:'
   end
 
   def self.require(path)

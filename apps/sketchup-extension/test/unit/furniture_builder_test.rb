@@ -439,6 +439,8 @@ class FurnitureBuilderTest < Minitest::Test
 
     assert result['success']
     assert_equal SHELF_RELATIONSHIPS, @store.read(furniture_instance)['relationships']
+    assert_equal [[:start, 'Colocar Mueble del Proyecto Gabinete Base Estándar', true], :commit],
+                 @model.operations
   end
 
   def test_relationship_state_of_unexpected_type_fails_closed

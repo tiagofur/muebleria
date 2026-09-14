@@ -165,6 +165,7 @@ module Granete
             confirm_rebind: payload['confirmRebind'] == true
           )
           execute_bridge(dialog, 'onModelBindingResult', result)
+          refresh_after_binding_mutation(dialog, result)
         rescue StandardError => e
           @logger.error('model_binding_connect_failed', error: e)
           execute_bridge(dialog, 'onModelBindingResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
@@ -177,6 +178,7 @@ module Granete
           result = model_binding_connector.connect_with_code(payload['code'].to_s)
           execute_bridge(dialog, 'onModelBindingResult', result)
           push_preflight_state(dialog)
+          refresh_after_binding_mutation(dialog, result)
         rescue StandardError => e
           @logger.error('pairing_connect_failed', error: e)
           execute_bridge(dialog, 'onModelBindingResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
@@ -185,6 +187,8 @@ module Granete
         # Revalidate the stored binding (drift/archived/valid refresh).
         def handle_refresh_model_binding(dialog)
           execute_bridge(dialog, 'onModelBindingStatus', model_binding_connector.status)
+          handle_get_project_furniture(dialog) if @project_furniture_placer
+          push_host_save_awareness(dialog)
         rescue StandardError => e
           @logger.error('model_binding_refresh_failed', error: e)
           execute_bridge(dialog, 'onModelBindingStatus', { 'state' => 'unreachable', 'reason' => e.message })
@@ -192,13 +196,23 @@ module Granete
 
         # Explicit base-drift remediation: adopt the authoritative working base.
         def handle_adopt_binding_base(dialog)
-          execute_bridge(dialog, 'onModelBindingResult', model_binding_connector.adopt_authoritative_base)
+          result = model_binding_connector.adopt_authoritative_base
+          execute_bridge(dialog, 'onModelBindingResult', result)
+          refresh_after_binding_mutation(dialog, result)
         rescue StandardError => e
           @logger.error('model_binding_adopt_failed', error: e)
           execute_bridge(dialog, 'onModelBindingResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         end
 
         private
+
+        def refresh_after_binding_mutation(dialog, result)
+          return unless result['ok']
+
+          handle_get_model_binding(dialog)
+          handle_get_project_furniture(dialog) if @project_furniture_placer
+          push_host_save_awareness(dialog)
+        end
 
         def model_binding_service_list(method, argument = nil)
           entries = if argument
@@ -310,7 +324,16 @@ module Granete
             project_id: binding.project_id, design_id: binding.design_id, scope: scope
           )
           execute_bridge(@dialog, 'onCommercialProjectionSynchronization', state) if @dialog&.visible?
+          mark_host_save_pending
           state
+        end
+
+        def mark_host_save_pending
+          return unless @save_awareness && active_model
+
+          payload = @save_awareness.mark_synced(active_model)
+          execute_bridge(@dialog, 'onHostSaveAwareness', payload) if @dialog&.visible?
+          payload
         end
 
         private
@@ -326,7 +349,7 @@ module Granete
       # #718 — bounded SketchUp-first commercial entry. Ruby owns binding,
       # local-work checks, credentials and the final server refetch; the
       # HtmlDialog receives presentation data only.
-      module CommercialBootstrapBridge
+      module CommercialBootstrapBridge # rubocop:disable Metrics/ModuleLength
         def register_commercial_bootstrap_callbacks(dialog)
           dialog.add_action_callback('list_bootstrap_customers') { handle_bootstrap_customers(dialog) }
           dialog.add_action_callback('bootstrap_project_design') { |_c, p| handle_bootstrap_project(dialog, p) }
@@ -352,8 +375,13 @@ module Granete
           execute_bridge(dialog, 'onBootstrapResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         end
 
-        def handle_initial_quote(dialog, payload_json) # rubocop:disable Metrics/AbcSize
+        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity
+        # rubocop:disable Metrics/MethodLength, Metrics/PerceivedComplexity
+        def handle_initial_quote(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          model = active_model
+          return initial_quote_failure(dialog, 'binding_changed', 'el modelo activo cambió') unless model
+
           status = model_binding_connector.status
           unless status['state'] == 'connected'
             return initial_quote_failure(dialog, 'binding_changed', 'el enlace del modelo cambió')
@@ -366,6 +394,17 @@ module Granete
           end
 
           binding = status['binding']
+          binding_value = Connection::ModelBinding::Binding.parse(binding)
+          unless active_model.equal?(model) &&
+                 Connection::ModelBinding::Store.new(model).read&.to_h == binding_value.to_h
+            return initial_quote_failure(dialog, 'binding_changed', 'el modelo activo o su enlace cambió')
+          end
+
+          host_before = contextual_host_projection(model, binding_value)
+          unless Connection::ProjectFurniture::HostReconciliation.clean_for?(host_before, binding_value)
+            return initial_quote_failure(dialog, 'host_reconciliation_required',
+                                         host_reconciliation_reason(host_before))
+          end
           before = commercial_projection_local_work(binding['projectId'], binding['designId'])
           unless before['matchConfirmed'] == true && before['localChangesPending'] == false
             return initial_quote_failure(dialog, 'local_state_unconfirmed',
@@ -384,6 +423,14 @@ module Granete
                     !displayed_total.is_a?(Numeric) || displayed_total != projection.dig('amounts', 'saleTotal')
           return initial_quote_refresh(dialog, 'el presupuesto cambió; revisalo y volvé a emitir') if changed
 
+          host_after = contextual_host_projection(model, binding_value)
+          unless Connection::ProjectFurniture::HostReconciliation.clean_for?(host_after, binding_value) &&
+                 host_after['snapshot'] == host_before['snapshot'] && active_model.equal?(model) &&
+                 Connection::ModelBinding::Store.new(model).read&.to_h == binding_value.to_h
+            reason = 'el archivo SketchUp dejó de coincidir con el diseño; revisalo de nuevo'
+            return initial_quote_refresh(dialog, reason)
+          end
+
           quote = @initial_quote.create(
             project_id: binding['projectId'], design_id: binding['designId'],
             working_version: projection['workingVersion'], working_fingerprint: projection['workingFingerprint']
@@ -398,8 +445,25 @@ module Granete
           @logger.error('initial_quote_bridge_failed', error: e)
           initial_quote_failure(dialog, 'error', 'no se pudo emitir la cotización')
         end
+        # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity
+        # rubocop:enable Metrics/MethodLength, Metrics/PerceivedComplexity
 
         private
+
+        def host_reconciliation_reason(projection)
+          count = projection&.dig('summary', 'attention').to_i
+          return "hay #{count} muebles que requieren reconciliación con este archivo SketchUp" if count.positive?
+
+          projection&.dig('reason') || 'no se pudo confirmar que este archivo SketchUp coincida con el diseño'
+        end
+
+        def contextual_host_projection(model, binding)
+          return nil unless @host_reconciliation
+
+          method = @host_reconciliation.method(:projection)
+          accepts_context = method.parameters.any? { |kind, _name| %i[key keyreq keyrest].include?(kind) }
+          accepts_context ? method.call(model: model, binding: binding) : method.call
+        end
 
         def initial_quote_projection_valid?(projection)
           projection['status'] == 'current' && projection['reference'].nil? &&
@@ -431,7 +495,8 @@ module Granete
       # #389 / DT-5 Project Furniture callback handlers: the panel never
       # touches business identity — listing and Place existing go through the
       # ProjectFurniture placer, which validates the binding and derives
-      # pending/placed from the design working copy.
+      # host state from project membership, exact WorkingCopy intent and the
+      # active model's top-level managed roots.
       module ProjectFurnitureBridge # rubocop:disable Metrics/ModuleLength
         def register_project_furniture_callbacks(dialog)
           dialog.add_action_callback('get_project_furniture') { handle_get_project_furniture(dialog) }
@@ -442,6 +507,9 @@ module Granete
           end
           dialog.add_action_callback('cancel_placement_instance') do |_c, p|
             handle_cancel_placement_instance(dialog, p)
+          end
+          dialog.add_action_callback('restore_furniture_instance') do |_c, p|
+            handle_restore_furniture_instance(dialog, p)
           end
           dialog.add_action_callback('select_project_furniture') { |_c, p| handle_select_project_furniture(p) }
           dialog.add_action_callback('validate_managed_furniture_identity') do
@@ -455,8 +523,7 @@ module Granete
           end
         end
 
-        # Panel payload: binding-aware rows with pending/placed derived per
-        # furnitureInstanceId from the current working copy.
+        # Panel payload: binding-aware reconciliation per furnitureInstanceId.
         def handle_get_project_furniture(dialog)
           result = project_furniture_placer.panel
           execute_bridge(dialog, 'onProjectFurniture', result)
@@ -518,6 +585,27 @@ module Granete
                          { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         end
 
+        def handle_restore_furniture_instance(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          furniture_instance_id = payload['furnitureInstanceId'].to_s
+          result = if mutation_coordinator.busy?
+                     {
+                       'ok' => false, 'code' => 'action_in_progress',
+                       'reason' => 'hay otra modificación del modelo en curso',
+                       'instanceId' => furniture_instance_id
+                     }
+                   else
+                     project_furniture_placer.restore(furniture_instance_id)
+                   end
+          execute_bridge(dialog, 'onRestoreFurnitureResult', result)
+          mark_host_save_pending if result['ok'] && result['restored'] == true
+          handle_get_project_furniture(dialog)
+        rescue StandardError => e
+          @logger.error('project_furniture_restore_failed', error: e)
+          execute_bridge(dialog, 'onRestoreFurnitureResult',
+                         { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
         # Focus an already-placed unit: pure viewport selection state.
         def handle_select_project_furniture(raw_payload = nil)
           payload = if raw_payload.is_a?(String) && !raw_payload.strip.empty?
@@ -548,6 +636,15 @@ module Granete
         # binding of whichever model is open).
         def refresh_project_furniture
           handle_get_project_furniture(@dialog) if @dialog&.visible?
+        end
+
+        def handle_observed_working_copy_commit
+          notify_commercial_projection_synchronization(:partial)
+          refresh_project_furniture
+        end
+
+        def handle_host_inventory_change
+          refresh_project_furniture
         end
 
         # #391 / DT-7: Publish precheck for managed furniture identity.
@@ -627,6 +724,13 @@ module Granete
         def publish_gate_reason(gate)
           scope_unknown = 'no se pudo confirmar el alcance de publicación del diseño'
           return scope_unknown if gate.nil? || !gate['scopeAvailable']
+
+          unless gate['hostAvailable'] && gate['hostClean']
+            count = gate['hostAttention'].to_i
+            return "hay #{count} muebles que requieren reconciliación con este archivo SketchUp" if count.positive?
+
+            return 'no se pudo confirmar que este archivo SketchUp coincida con el diseño'
+          end
           return 'hay muebles con problemas de fabricación' if gate['blocked'].to_i.positive?
           return 'la revisión de fabricación quedó desactualizada' if gate['stale'].to_i.positive?
           if gate['unavailable'].to_i.positive?
@@ -1108,6 +1212,7 @@ module Granete
           # from the NEW accepted fingerprint or leaves it honestly stale.
           overlay_mutation_outcome(outcome)
           push_manufacturing_state(dialog) if @manufacturing_overlay&.mode_on?
+          refresh_project_furniture if outcome.committed? && @project_furniture_placer
         end
 
         # Honest dialog-level degraded state derived from catalog/session
@@ -1410,6 +1515,23 @@ module Granete
 
       # Selection and model lifecycle observer bridge for keeping the dialog in sync with SketchUp.
       module ObserverBridge
+        def handle_host_model_event(event, model)
+          return unless model.equal?(active_model)
+
+          rebind_model(model) if event == :model_changed && @dialog&.visible?
+          push_host_save_awareness(@dialog) if @dialog&.visible?
+          refresh_binding_status if event == :saved && @dialog&.visible?
+          refresh_project_furniture if event == :saved
+        rescue StandardError => e
+          @logger.error('host_model_event_failed', error: e)
+        end
+
+        def push_host_save_awareness(dialog)
+          return unless @save_awareness && dialog&.visible?
+
+          execute_bridge(dialog, 'onHostSaveAwareness', @save_awareness.projection(active_model))
+        end
+
         def handle_selection_change(context)
           return unless @dialog&.visible?
 
@@ -1796,6 +1918,7 @@ module Granete
                        project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil,
                        design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil,
                        publication_gate: nil, commercial_projection_service: nil,
+                       host_reconciliation: nil, save_awareness: nil,
                        project_bootstrap: nil, initial_quote: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
@@ -1805,12 +1928,17 @@ module Granete
           @duplicate_resolver = duplicate_resolver
           @entities_observer = entities_observer
           if @entities_observer.respond_to?(:on_working_copy_committed=)
-            @entities_observer.on_working_copy_committed = method(:notify_commercial_projection_synchronization)
+            @entities_observer.on_working_copy_committed = method(:handle_observed_working_copy_commit)
+          end
+          if @entities_observer.respond_to?(:on_host_inventory_changed=)
+            @entities_observer.on_host_inventory_changed = method(:handle_host_inventory_change)
           end
           @design_publisher = design_publisher
           @mutation_coordinator = mutation_coordinator
           @manufacturing_overlay = manufacturing_overlay
           @publication_gate = publication_gate
+          @host_reconciliation = host_reconciliation
+          @save_awareness = save_awareness
           @commercial_projection_service = commercial_projection_service
           @project_bootstrap = project_bootstrap
           @initial_quote = initial_quote
@@ -1962,6 +2090,7 @@ module Granete
           check_current_selection(dialog)
           refresh_binding_status
           refresh_project_furniture
+          push_host_save_awareness(dialog)
           push_degraded_state(dialog)
           @logger.info('dialog_ready')
         end
@@ -2046,7 +2175,7 @@ module Granete
           end
 
           execute_bridge(dialog, 'onSelectionChange', nil)
-          notify_commercial_projection_local_delete(dialog) if deleted
+          refresh_after_local_delete(dialog) if deleted
         rescue StandardError => e
           @logger.error('furniture_delete_failed', error: e)
           execute_bridge(dialog, 'onSelectionChange', nil)
@@ -2055,6 +2184,11 @@ module Granete
         def notify_commercial_projection_local_delete(dialog)
           mark_commercial_projection_local_work
           execute_bridge(dialog, 'onCommercialProjectionLocalMutation', {})
+        end
+
+        def refresh_after_local_delete(dialog)
+          notify_commercial_projection_local_delete(dialog)
+          handle_get_project_furniture(dialog) if @project_furniture_placer
         end
 
         def active_model

@@ -11,6 +11,7 @@ require_relative '../../src/granete_for_sketchup/transport/adapter'
 require_relative '../../src/granete_for_sketchup/transport/http_adapter'
 require_relative '../../src/granete_for_sketchup/connection/commercial_projection'
 require_relative '../../src/granete_for_sketchup/connection/model_binding'
+require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/project_bootstrap'
 require_relative '../../src/granete_for_sketchup/connection/initial_quote'
 require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
@@ -37,6 +38,7 @@ class DialogControllerTest < Minitest::Test
 
   class ProjectionBindingConnector
     attr_reader :service
+    attr_accessor :on_status
 
     def initialize(capabilities: { 'can_create_initial_quote' => true })
       @service = Object.new
@@ -44,9 +46,11 @@ class DialogControllerTest < Minitest::Test
     end
 
     def status
+      @on_status&.call
       {
         'state' => 'connected',
-        'binding' => { 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID },
+        'binding' => { 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID,
+                       'baseRevisionId' => nil, 'schemaVersion' => 1 },
         'capabilities' => @capabilities
       }
     end
@@ -85,6 +89,43 @@ class DialogControllerTest < Minitest::Test
       { 'id' => '73000000-0000-0000-0000-000000000718', 'projectId' => PROJECTION_PROJECT_ID,
         'revisionNumber' => 1, 'status' => 'draft',
         'commercialSnapshot' => { 'currency' => 'MXN', 'breakdown' => { 'salePrice' => 100.0 } } }
+    end
+  end
+
+  class HostReconciliationDouble
+    attr_reader :calls
+
+    def initialize(clean: true, snapshots: ['host-clean'])
+      @clean = clean
+      @snapshots = snapshots
+      @calls = 0
+    end
+
+    def projection
+      snapshot = @snapshots[[@calls, @snapshots.length - 1].min]
+      @calls += 1
+      {
+        'state' => 'connected', 'projectId' => PROJECTION_PROJECT_ID, 'designId' => PROJECTION_DESIGN_ID,
+        'baseRevisionId' => nil, 'schemaVersion' => 1, 'snapshot' => snapshot, 'clean' => @clean,
+        'summary' => { 'attention' => @clean ? 0 : 2 }
+      }
+    end
+  end
+
+  class SaveAwarenessDouble
+    attr_reader :marked
+
+    def initialize
+      @marked = []
+    end
+
+    def mark_synced(model)
+      @marked << model
+      { 'needsSave' => true }
+    end
+
+    def projection(_model)
+      { 'needsSave' => !@marked.empty? }
     end
   end
 
@@ -868,6 +909,118 @@ class DialogControllerTest < Minitest::Test
     assert_includes @model.active_entities.groups, group
   end
 
+  def test_successful_local_delete_refreshes_host_reconciliation_panel
+    placer = Object.new
+    placer.define_singleton_method(:panel) { { 'state' => 'connected', 'items' => [] } }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      project_furniture_placer: placer
+    )
+    group = @model.active_entities.add_group
+    @store.write(group, {
+                   'namespace' => 'com.granete.sketchup_extension', 'metadataVersion' => 1,
+                   'kind' => 'furnitureInstance', 'identity' => { 'instanceRef' => 'inst-del-refresh' }
+                 })
+
+    dialog = controller.show
+    dialog.callbacks.fetch('delete_selected_furniture').call(
+      nil, JSON.generate({ 'instanceId' => 'inst-del-refresh' })
+    )
+
+    assert(dialog.executed_scripts.any? { |script| script.include?('onProjectFurniture') })
+  end
+
+  def test_restore_callback_uses_exact_identity_and_refreshes_after_success
+    calls = []
+    placer = Object.new
+    placer.define_singleton_method(:restore) do |id|
+      calls << id
+      { 'ok' => true, 'code' => 'present_synced', 'instanceId' => id, 'restored' => true }
+    end
+    placer.define_singleton_method(:panel) { { 'state' => 'connected', 'items' => [] } }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      project_furniture_placer: placer
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('restore_furniture_instance').call(
+      nil, JSON.generate({ 'furnitureInstanceId' => '51000000-0000-0000-0000-0000000000f1' })
+    )
+
+    assert_equal ['51000000-0000-0000-0000-0000000000f1'], calls
+    assert(dialog.executed_scripts.any? { |script| script.include?('onRestoreFurnitureResult') })
+    assert(dialog.executed_scripts.any? { |script| script.include?('onProjectFurniture') })
+  end
+
+  def test_restore_failure_rearms_exact_action_and_refreshes_authority
+    panels = 0
+    placer = Object.new
+    placer.define_singleton_method(:restore) do |id|
+      { 'ok' => false, 'code' => 'authority_changed', 'reason' => 'changed', 'instanceId' => id }
+    end
+    placer.define_singleton_method(:panel) do
+      panels += 1
+      { 'state' => 'connected', 'items' => [] }
+    end
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      project_furniture_placer: placer
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('restore_furniture_instance').call(
+      nil, JSON.generate({ 'furnitureInstanceId' => '51000000-0000-0000-0000-0000000000f1' })
+    )
+
+    assert_equal 1, panels
+    assert_includes dialog.executed_scripts[-2], 'onRestoreFurnitureResult'
+    assert_includes dialog.executed_scripts[-2], '"instanceId":"51000000-0000-0000-0000-0000000000f1"'
+    assert_includes dialog.executed_scripts.last, 'onProjectFurniture'
+  end
+
+  def test_restore_noop_does_not_create_a_new_save_warning
+    awareness = SaveAwarenessDouble.new
+    placer = Object.new
+    placer.define_singleton_method(:restore) do |id|
+      { 'ok' => true, 'code' => 'present_synced', 'instanceId' => id, 'restored' => false }
+    end
+    placer.define_singleton_method(:panel) { { 'state' => 'connected', 'items' => [] } }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      project_furniture_placer: placer, save_awareness: awareness
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('restore_furniture_instance').call(
+      nil, JSON.generate({ 'furnitureInstanceId' => '51000000-0000-0000-0000-0000000000f1' })
+    )
+
+    assert_empty awareness.marked
+  end
+
+  def test_restore_fails_closed_while_another_host_mutation_is_busy
+    calls = []
+    placer = Object.new
+    placer.define_singleton_method(:restore) { |id| calls << id }
+    placer.define_singleton_method(:panel) { { 'state' => 'connected', 'items' => [] } }
+    coordinator = Object.new
+    coordinator.define_singleton_method(:busy?) { true }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      project_furniture_placer: placer, mutation_coordinator: coordinator
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('restore_furniture_instance').call(
+      nil, JSON.generate({ 'furnitureInstanceId' => '51000000-0000-0000-0000-0000000000f1' })
+    )
+
+    assert_empty calls
+    result = dialog.executed_scripts.find { |script| script.include?('onRestoreFurnitureResult') }
+    assert_includes result, 'action_in_progress'
+  end
+
   def test_dialog_ready_publishes_furniture_selection_context_payload
     definition = @controller.instance_variable_get(:@catalog_provider).find_definition('kitchen-base-standard')
     Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
@@ -1016,18 +1169,21 @@ class DialogControllerTest < Minitest::Test
   end
 
   def test_commercial_projection_sync_callback_keeps_partial_pending_and_full_clears
-    controller = projection_controller(ProjectionService.new)
+    awareness = SaveAwarenessDouble.new
+    controller = projection_controller(ProjectionService.new, save_awareness: awareness)
     dialog = controller.show
     controller.mark_commercial_projection_local_work
 
     partial = controller.notify_commercial_projection_synchronization(:partial)
     assert partial['localChangesPending']
-    assert_includes dialog.executed_scripts.last, 'onCommercialProjectionSynchronization'
-    assert_includes dialog.executed_scripts.last, '"scope":"partial"'
+    partial_script = dialog.executed_scripts.reverse.find { |script| script.include?('"scope":"partial"') }
+    assert_includes partial_script, 'onCommercialProjectionSynchronization'
 
     full = controller.notify_commercial_projection_synchronization(:full)
     refute full['localChangesPending']
-    assert_includes dialog.executed_scripts.last, '"scope":"full"'
+    assert(dialog.executed_scripts.any? { |script| script.include?('"scope":"full"') })
+    assert_equal [@model, @model], awareness.marked
+    assert(dialog.executed_scripts.any? { |script| script.include?('onHostSaveAwareness') })
   end
 
   def test_initial_quote_bridge_refetches_and_requires_exact_displayed_tokens
@@ -1081,10 +1237,99 @@ class DialogControllerTest < Minitest::Test
     end
   end
 
+  def test_initial_quote_fails_before_projection_or_quote_when_host_is_dirty
+    service = ProjectionService.new
+    quote = QuoteCoordinator.new
+    host = HostReconciliationDouble.new(clean: false)
+    controller = projection_controller(service, project_bootstrap: BootstrapCoordinator.new,
+                                                initial_quote: quote, host_reconciliation: host)
+    dialog = controller.show
+
+    dialog.callbacks.fetch('emit_initial_quote').call(
+      nil, JSON.generate('workingVersion' => 'working-718',
+                         'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0)
+    )
+
+    assert_empty quote.calls
+    assert_equal 0, service.calls
+    assert_includes dialog.executed_scripts.last, 'host_reconciliation_required'
+  end
+
+  def test_initial_quote_fails_before_projection_when_active_model_changes_during_binding_status
+    service = ProjectionService.new
+    quote = QuoteCoordinator.new
+    connector = ProjectionBindingConnector.new
+    connector.on_status = -> { SketchupStub.active_model = SketchupStub::ModelStub.new }
+    binding = Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
+      project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, base_revision_id: nil
+    )
+    @model.set_attribute(
+      Granete::SketchUpExtension::Connection::ModelBinding::DICTIONARY,
+      Granete::SketchUpExtension::Connection::ModelBinding::BINDING_KEY,
+      JSON.generate(binding.to_h)
+    )
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      model_binding_connector: connector, commercial_projection_service: service,
+      host_reconciliation: HostReconciliationDouble.new,
+      project_bootstrap: BootstrapCoordinator.new, initial_quote: quote
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('emit_initial_quote').call(
+      nil, JSON.generate('workingVersion' => 'working-718',
+                         'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0)
+    )
+
+    assert_empty quote.calls
+    assert_equal 0, service.calls
+    assert_includes dialog.executed_scripts.last, 'binding_changed'
+  ensure
+    SketchupStub.active_model = @model
+  end
+
+  def test_initial_quote_fails_closed_when_host_reconciliation_is_unavailable
+    service = ProjectionService.new
+    quote = QuoteCoordinator.new
+    controller = projection_controller(service, project_bootstrap: BootstrapCoordinator.new,
+                                                initial_quote: quote, host_reconciliation: nil)
+    dialog = controller.show
+
+    dialog.callbacks.fetch('emit_initial_quote').call(
+      nil, JSON.generate('workingVersion' => 'working-718',
+                         'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0)
+    )
+
+    assert_empty quote.calls
+    assert_equal 0, service.calls
+    assert_includes dialog.executed_scripts.last, 'host_reconciliation_required'
+  end
+
+  def test_initial_quote_rechecks_host_snapshot_immediately_before_create
+    service = ProjectionService.new
+    quote = QuoteCoordinator.new
+    host = HostReconciliationDouble.new(snapshots: %w[host-before host-after])
+    controller = projection_controller(service, project_bootstrap: BootstrapCoordinator.new,
+                                                initial_quote: quote, host_reconciliation: host)
+    dialog = controller.show
+    projection_work_state.record_sync!(project_id: PROJECTION_PROJECT_ID,
+                                       design_id: PROJECTION_DESIGN_ID, scope: :full)
+
+    dialog.callbacks.fetch('emit_initial_quote').call(
+      nil, JSON.generate('workingVersion' => 'working-718',
+                         'workingFingerprint' => "sha256-#{'a' * 64}", 'saleTotal' => 100.0)
+    )
+
+    assert_empty quote.calls
+    assert_equal 2, host.calls
+    assert_includes dialog.executed_scripts.last, 'refresh_required'
+  end
+
   private
 
   def projection_controller(service, project_bootstrap: nil, initial_quote: nil,
-                            binding_capabilities: { 'can_create_initial_quote' => true })
+                            binding_capabilities: { 'can_create_initial_quote' => true },
+                            host_reconciliation: HostReconciliationDouble.new, save_awareness: nil)
     binding = Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
       project_id: PROJECTION_PROJECT_ID, design_id: PROJECTION_DESIGN_ID, base_revision_id: nil
     )
@@ -1099,6 +1344,8 @@ class DialogControllerTest < Minitest::Test
       metadata_store: @store,
       model_binding_connector: ProjectionBindingConnector.new(capabilities: binding_capabilities),
       commercial_projection_service: service,
+      host_reconciliation: host_reconciliation,
+      save_awareness: save_awareness,
       project_bootstrap: project_bootstrap,
       initial_quote: initial_quote
     )
