@@ -42,7 +42,7 @@ class WorkflowContractTest(unittest.TestCase):
         reviewer = (ROOT / ".agents/skills/reviewer/SKILL.md").read_text()
         template = (ROOT / ".github/PULL_REQUEST_TEMPLATE.md").read_text()
 
-        self.assertIn("Closes/Fixes/Resolves #N", leader)
+        self.assertIn("`Closes #N`, `Fixes #N` o `Resolves #N`", leader)
         self.assertIn("Delivery: complete", leader)
         self.assertIn("Refs #N", leader)
         self.assertIn("Delivery: partial", leader)
