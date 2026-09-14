@@ -496,7 +496,10 @@ export const ProjectItemsSection = memo(function ProjectItemsSection(): ReactNod
         <p className="catalog-form__error">{itemError}</p>
       ) : null}
 
-      {postAddPlaceCue ? (
+      {/* #729 — the cue's only action opens Proyectar; without the studio
+          entry available (demo: SketchUp is the visible design surface) the
+          banner would be an orphan instruction, so it stays hidden. */}
+      {postAddPlaceCue && onOpenSpatialStudioUnplaced ? (
         <div
           className="project-post-add-cue"
           role="status"

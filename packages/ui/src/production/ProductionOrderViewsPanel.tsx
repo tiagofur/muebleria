@@ -32,6 +32,7 @@ import {
 } from '../preview3d/FurnitureScene3D';
 import { PageHeader } from '../common';
 import { WorkspaceTabs } from '../common/Tabs';
+import { demoExperience } from '../demoExperience';
 import '../common/furniture3dViewer.css';
 
 export type ProductionOrderViewsPanelProps = {
@@ -263,8 +264,10 @@ export function ProductionOrderViewsPanel({
         </p>
         {elevations.walls.length === 0 ? (
           <p className="prod-hub__placeholder-body">
-            No hay muros en el layout. Definí el plano en cotización (Proyectar)
-            para generar elevaciones.
+            {/* #729 — demo: no dirigir a Proyectar (superficie oculta). */}
+            {demoExperience.proyectarVisible
+              ? 'No hay muros en el layout. Definí el plano en cotización (Proyectar) para generar elevaciones.'
+              : 'No hay muros en el layout para generar elevaciones.'}
           </p>
         ) : groupedElevations ? (
           <div className="prod-vistas__elev-groups" data-testid="prod-elev-groups">

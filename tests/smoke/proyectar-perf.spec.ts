@@ -56,6 +56,7 @@ test.describe('Proyectar perf — escena de referencia (#312 P3D-6)', () => {
     await page.addInitScript(() => {
       try {
         sessionStorage.setItem('granete_session', 'guest');
+        sessionStorage.setItem('granete_proyectar_visible', '1');
         localStorage.setItem('granete_seed_perf_reference', '1');
       } catch {
         /* storage unavailable */

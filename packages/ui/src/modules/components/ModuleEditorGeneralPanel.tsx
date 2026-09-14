@@ -5,6 +5,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { ModuleCategory } from '@granete/domain';
 import { CatalogImage } from '../../common';
+import { demoExperience } from '../../demoExperience';
 import type { ModuleDraft } from '../moduleHelpers';
 
 export type CategoryCascadeState = {
@@ -226,7 +227,10 @@ export function ModuleEditorGeneralPanel({
             />
             <p className="module-editor__hint">
               Altura de zoclo o pata. Entra en fórmulas de pieza como variable <code>B</code>.
-              En Proyectar se ajusta por mueble (pestaña Posición).
+              {/* #729 — demo: no nombrar la superficie oculta. */}
+              {demoExperience.proyectarVisible
+                ? ' En Proyectar se ajusta por mueble (pestaña Posición).'
+                : ''}
             </p>
           </div>
         ) : null}
