@@ -27,6 +27,10 @@
           "name": "Carpintería García"
         },
         "project": {
+          "customer": {
+            "id": "61000000-0000-0000-0000-000000000001",
+            "name": "Cliente García"
+          },
           "id": "41000000-0000-0000-0000-000000000001",
           "name": "Cocina García"
         },
@@ -61,6 +65,10 @@
           "name": "Carpintería García"
         },
         "project": {
+          "customer": {
+            "id": "61000000-0000-0000-0000-000000000001",
+            "name": "Cliente García"
+          },
           "id": "41000000-0000-0000-0000-000000000001",
           "name": "Cocina García"
         },
@@ -94,6 +102,10 @@
           "name": "Carpintería García"
         },
         "project": {
+          "customer": {
+            "id": "61000000-0000-0000-0000-000000000001",
+            "name": "Cliente García"
+          },
           "id": "41000000-0000-0000-0000-000000000001",
           "name": "Cocina García"
         },
@@ -142,6 +154,10 @@
           "name": "Carpintería García"
         },
         "project": {
+          "customer": {
+            "id": "61000000-0000-0000-0000-000000000001",
+            "name": "Cliente García"
+          },
           "id": "41000000-0000-0000-0000-000000000001",
           "name": "Cocina García"
         },

@@ -2328,6 +2328,68 @@
         }
       }
     },
+    "/customers/summaries": {
+      "get": {
+        "operationId": "listCustomerSummaries",
+        "summary": "List the exact customers available to a SketchUp project bootstrap (#718)",
+        "description": "Least-privilege customer picker projection. It contains only server-owned identity and display name, applies the caller's organization and portfolio scope, and never deduplicates by name.",
+        "responses": {
+          "200": {
+            "description": "Active customer summaries visible to the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CustomerSummary"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects:bootstrap-design": {
+      "post": {
+        "operationId": "bootstrapProjectDesign",
+        "summary": "Atomically create a canonical Customer/Project/Design context for SketchUp (#718)",
+        "description": "Creates one Project and its initial Design, optionally creating the selected Customer in the same transaction. Business IDs are always minted by the server. The response embeds the canonical #388 binding validation context. Requires Idempotency-Key so lost responses and double clicks converge to the same Customer/Project/Design; the same key with a different intent is rejected.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDesignBootstrapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Canonical context created or replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDesignBootstrapResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/commercial-summaries": {
       "get": {
         "operationId": "listProjectCommercialSummaries",
@@ -8505,7 +8567,8 @@
         "additionalProperties": false,
         "required": [
           "id",
-          "name"
+          "name",
+          "customer"
         ],
         "properties": {
           "id": {
@@ -8514,6 +8577,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerSummary"
           }
         }
       },
@@ -8620,6 +8686,92 @@
           },
           "capabilities": {
             "$ref": "#/components/schemas/ModelBindingCapabilities"
+          }
+        }
+      },
+      "CustomerSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "NewCustomerInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "ProjectDesignBootstrapRequest": {
+        "type": "object",
+        "description": "One SketchUp-first bootstrap intent. Supply exactly one of existingCustomerId or newCustomer. No business ID, organization, status, currency or commercial value is accepted from the client.",
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": ["existingCustomerId"],
+            "not": { "required": ["newCustomer"] }
+          },
+          {
+            "required": ["newCustomer"],
+            "not": { "required": ["existingCustomerId"] }
+          }
+        ],
+        "required": [
+          "projectName",
+          "designName"
+        ],
+        "properties": {
+          "projectName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "designName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "existingCustomerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "newCustomer": {
+            "$ref": "#/components/schemas/NewCustomerInput"
+          }
+        }
+      },
+      "ProjectDesignBootstrapResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "customer",
+          "binding"
+        ],
+        "properties": {
+          "customer": {
+            "$ref": "#/components/schemas/CustomerSummary"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/ModelBindingValidation"
           }
         }
       },

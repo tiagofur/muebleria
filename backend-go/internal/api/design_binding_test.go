@@ -40,6 +40,8 @@ func validBindingContext() *storage.ModelBindingContext {
 		OrganizationName: "Carpintería García",
 		ProjectID:        designTestProjectID,
 		ProjectName:      "Cocina García",
+		CustomerID:       "61000000-0000-0000-0000-000000000001",
+		CustomerName:     "Cliente García",
 		Design: domain.Design{
 			ID:        designTestDesignID,
 			ProjectID: designTestProjectID,
@@ -72,7 +74,7 @@ func TestHandleProjectDesignBindingValidate_Valid(t *testing.T) {
 		`"state":"valid"`,
 		`"schema_version":` + strconv.Itoa(ModelBindingSchemaVersion),
 		`"organization":{"id":"60000000-0000-0000-0000-000000000001","name":"Carpintería García"}`,
-		`"project":{"id":"` + designTestProjectID + `","name":"Cocina García"}`,
+		`"project":{"id":"` + designTestProjectID + `","name":"Cocina García","customer":{"id":"61000000-0000-0000-0000-000000000001","name":"Cliente García"}}`,
 		`"design":{"id":"` + designTestDesignID + `","name":"Cocina Principal","status":"active"}`,
 		`"base_revision_id":"` + base + `"`,
 		`"base_revision_number":2`,

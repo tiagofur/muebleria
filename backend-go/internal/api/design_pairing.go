@@ -234,8 +234,9 @@ func (s *Server) HandleDesignPairingGrantExchange(w http.ResponseWriter, r *http
 			Name: ctx.OrganizationName,
 		},
 		Project: openapi.ModelBindingProjectSummary{
-			ID:   ctx.ProjectID,
-			Name: ctx.ProjectName,
+			ID:       ctx.ProjectID,
+			Name:     ctx.ProjectName,
+			Customer: openapi.CustomerSummary{ID: ctx.CustomerID, Name: ctx.CustomerName},
 		},
 		Design: openapi.ModelBindingDesignSummary{
 			ID:     ctx.Design.ID,

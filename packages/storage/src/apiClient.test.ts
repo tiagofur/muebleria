@@ -1,11 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GraneteApiClient } from './apiClient';
 import { GraneteApiError, GraneteNetworkError } from './apiErrors';
+import { parseGenerated } from './openapi/generated/types';
 
 const json = (value: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json', ...headers } });
 
 describe('GraneteApiClient generated runtime boundary (#448)', () => {
+  it('enforces exactly one bootstrap customer selection across oneOf required/not branches', () => {
+    const base = { projectName: 'Obra', designName: 'Diseño' };
+    expect(parseGenerated('ProjectDesignBootstrapRequest', {
+      ...base,
+      newCustomer: { name: 'Cliente' },
+    })).toEqual({ ...base, newCustomer: { name: 'Cliente' } });
+    expect(() => parseGenerated('ProjectDesignBootstrapRequest', base))
+      .toThrow('exactly one allowed schema');
+    expect(() => parseGenerated('ProjectDesignBootstrapRequest', {
+      ...base,
+      existingCustomerId: '11111111-1111-4111-8111-111111111111',
+      newCustomer: { name: 'Cliente' },
+    })).toThrow('exactly one allowed schema');
+  });
+
   it('rejects invalid JSON instead of accepting a cast', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json([{ user_id: 'u1' }]));
     const client = new GraneteApiClient('http://api.test', fetchImpl);

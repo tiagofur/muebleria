@@ -225,6 +225,10 @@ type Store interface {
 	// cliente" transition (#712): one transaction, server-owned customer id,
 	// rollback of both on any failure.
 	CreateProjectWithInlineCustomer(ctx context.Context, p *domain.Project, inline *domain.Customer) error
+	// BootstrapProjectDesign is the atomic SketchUp-first Customer?/Project/Design
+	// transition (#718). Business IDs are server-owned and the surrounding
+	// RequireIdempotency transaction owns commit + replay receipt.
+	BootstrapProjectDesign(ctx context.Context, cmd storage.BootstrapProjectDesignCommand) (*storage.BootstrapProjectDesignResult, error)
 	UpdateProject(ctx context.Context, id string, p *domain.Project) error
 	// UpdateProjectWithInlineCustomer is the atomic "editar cotización + nuevo
 	// cliente" transition (#714): row lock + base-view verification, then the

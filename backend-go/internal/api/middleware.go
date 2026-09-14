@@ -522,7 +522,8 @@ var extensionClientGetPrefixes = []string{
 // surface for that picker — the same DTOs the web workspace consumes, never
 // a parallel read model.
 var extensionClientExactGetPaths = map[string]struct{}{
-	"/api/projects": {},
+	"/api/projects":            {},
+	"/api/customers/summaries": {},
 }
 
 var extensionClientGetPatterns = []*regexp.Regexp{
@@ -597,11 +598,14 @@ var extensionTokenMayPostPaths = map[string]struct{}{
 	// grants for files the extension token can already GET. The response
 	// contains only signed read URLs — no session credential, no mutation.
 	"/api/media:authorize": {},
+	// #718: one exact atomic Customer?/Project/Design bootstrap command. It
+	// cannot be widened to legacy Customer or Project creation endpoints.
+	"/api/projects:bootstrap-design": {},
 }
 
-// Parameterized POST surface for the extension credential. Same deliberate
-// capability-grant rule as extensionTokenMayPostPaths: each entry cites its
-// owning issue and must remain a stateless, business-record-free operation.
+// Parameterized POST surface for the extension credential. Each entry is an
+// exact capability grant with an owning issue; no neighboring legacy or
+// lifecycle route is implied.
 var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// #388 / DT-4: authoritative validation of a SketchUp model binding
 	// candidate. Stateless read over the org/project/design working truth —
@@ -625,6 +629,9 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// Allocates authoritative identity (origin='duplicate', origin_furniture_instance_id=source)
 	// for the bound project when a managed unit is copied in the host.
 	regexp.MustCompile(`^/api/projects/[^/]+/furniture-instances/[^/]+:duplicate$`),
+	// #718 consumes #717's Q1-only command with the exact Project/Design
+	// working-version tokens. Quote lifecycle commands remain denied.
+	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/quote-revisions$`),
 	// #392 / DT-8 staged revision publication. prepare/finalize are durable
 	// idempotent commands (RequireIdempotency at the route); the artifact
 	// upload mints staging metadata only — a revision becomes `published`

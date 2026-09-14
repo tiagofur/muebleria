@@ -17,6 +17,7 @@ import type {
   CreateInvitationResponse,
   CreatePairingGrantRequest,
   CreateProductionReleaseRequest,
+  CustomerSummary,
   Design,
   DesignArtifactGrant,
   DesignPublishSession,
@@ -86,6 +87,8 @@ import type {
   PrepareDesignPublishRequest,
   ProductionRelease,
   ProjectCommercialSummary,
+  ProjectDesignBootstrapRequest,
+  ProjectDesignBootstrapResponse,
   ProjectDesignReconciliationResult,
   ProjectFurnitureWorkspace,
   ProjectFurnitureWorkspaceRequest,
@@ -205,6 +208,8 @@ export abstract class GeneratedGraneteApiClient {
   listPlatformUserSessions(token: string, userId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/platform/users/${encodeURIComponent(userId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
   revokePlatformUserSession(token: string, userId: string, sessionId: string, body: RevokeSessionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/platform/users/${encodeURIComponent(userId)}/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, bodySchema: "RevokeSessionRequest", body, idempotencyKey: key, signal }); }
   authorizeMedia(token: string, body: MediaAuthorizeRequest, signal?: AbortSignal): Promise<MediaAuthorizeResponse> { return this.request("POST", "/media:authorize", { schema: "MediaAuthorizeResponse", token, bodySchema: "MediaAuthorizeRequest", body, signal }); }
+  listCustomerSummaries(token: string, signal?: AbortSignal): Promise<ReadonlyArray<CustomerSummary>> { return this.request("GET", "/customers/summaries", { arrayOf: "CustomerSummary", token, signal }); }
+  bootstrapProjectDesign(token: string, body: ProjectDesignBootstrapRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProjectDesignBootstrapResponse> { return this.request("POST", "/projects:bootstrap-design", { schema: "ProjectDesignBootstrapResponse", token, bodySchema: "ProjectDesignBootstrapRequest", body, idempotencyKey: key, signal }); }
   listProjectCommercialSummaries(token: string, signal?: AbortSignal): Promise<ReadonlyArray<ProjectCommercialSummary>> { return this.request("GET", "/projects/commercial-summaries", { arrayOf: "ProjectCommercialSummary", token, signal }); }
   listProjectFurnitureInstances(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<FurnitureInstance>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { arrayOf: "FurnitureInstance", token, signal }); }
   createProjectFurnitureInstance(token: string, projectId: string, body: CreateFurnitureInstanceRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { schema: "FurnitureInstance", token, bodySchema: "CreateFurnitureInstanceRequest", body, idempotencyKey: key, signal }); }

@@ -7,6 +7,7 @@ import (
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #388 / DT-4: authoritative validation of a SketchUp model binding
@@ -78,6 +79,13 @@ func (s *Server) HandleProjectDesignBindingValidate(w http.ResponseWriter, r *ht
 		return
 	}
 
+	respondWithJSON(w, http.StatusOK, modelBindingValidationDTO(ctx, roles))
+}
+
+// modelBindingValidationDTO is the single projection used by binding
+// validation and SketchUp-first bootstrap. Both surfaces therefore expose the
+// exact same identity, working-base and capability semantics.
+func modelBindingValidationDTO(ctx *storage.ModelBindingContext, roles []domain.UserRole) openapi.ModelBindingValidation {
 	state := openapi.ModelBindingStateValid
 	if ctx.Design.Status == domain.DesignStatusArchived {
 		state = openapi.ModelBindingStateDesignArchived
@@ -101,7 +109,7 @@ func (s *Server) HandleProjectDesignBindingValidate(w http.ResponseWriter, r *ht
 		}
 	}
 
-	respondWithJSON(w, http.StatusOK, openapi.ModelBindingValidation{
+	return openapi.ModelBindingValidation{
 		State:         state,
 		SchemaVersion: ModelBindingSchemaVersion,
 		Organization: openapi.ModelBindingOrganizationSummary{
@@ -109,8 +117,9 @@ func (s *Server) HandleProjectDesignBindingValidate(w http.ResponseWriter, r *ht
 			Name: ctx.OrganizationName,
 		},
 		Project: openapi.ModelBindingProjectSummary{
-			ID:   ctx.ProjectID,
-			Name: ctx.ProjectName,
+			ID:       ctx.ProjectID,
+			Name:     ctx.ProjectName,
+			Customer: openapi.CustomerSummary{ID: ctx.CustomerID, Name: ctx.CustomerName},
 		},
 		Design: openapi.ModelBindingDesignSummary{
 			ID:     ctx.Design.ID,
@@ -126,5 +135,5 @@ func (s *Server) HandleProjectDesignBindingValidate(w http.ResponseWriter, r *ht
 			CanEditWorkingCopy: canEdit,
 			CanPublishRevision: canPublish,
 		},
-	})
+	}
 }

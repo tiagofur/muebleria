@@ -1181,8 +1181,9 @@ type ModelBindingOrganizationSummary struct {
 }
 
 type ModelBindingProjectSummary struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID       string          `json:"id"`
+	Name     string          `json:"name"`
+	Customer CustomerSummary `json:"customer"`
 }
 
 type ModelBindingDesignSummary struct {
@@ -1210,6 +1211,27 @@ type ModelBindingValidation struct {
 	Design        ModelBindingDesignSummary       `json:"design"`
 	WorkingCopy   ModelBindingWorkingCopySummary  `json:"working_copy"`
 	Capabilities  ModelBindingCapabilities        `json:"capabilities"`
+}
+
+type CustomerSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type NewCustomerInput struct {
+	Name string `json:"name"`
+}
+
+type ProjectDesignBootstrapRequest struct {
+	ProjectName        string            `json:"projectName"`
+	DesignName         string            `json:"designName"`
+	ExistingCustomerId *string           `json:"existingCustomerId,omitempty"`
+	NewCustomer        *NewCustomerInput `json:"newCustomer,omitempty"`
+}
+
+type ProjectDesignBootstrapResponse struct {
+	Customer CustomerSummary        `json:"customer"`
+	Binding  ModelBindingValidation `json:"binding"`
 }
 
 type DesignPublishArtifactKind string
