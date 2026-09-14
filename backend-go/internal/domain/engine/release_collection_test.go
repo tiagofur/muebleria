@@ -175,9 +175,9 @@ func TestResolveReleaseCollectionManufacturingPolicy(t *testing.T) {
 				if err != nil || !reflect.DeepEqual(result.Requirements, want) || len(result.Units[0].BOM.BoardParts) != 0 {
 					t.Fatalf("hardware-only collection must retain demand: %+v, %v", result, err)
 				}
-			} else if result != nil || err == nil || !strings.Contains(err.Error(), "no manufacturing demand") {
-				t.Fatalf("empty manufacturing must fail closed: %+v, %v", result, err)
-			}
+				} else if result != nil || err == nil || !strings.Contains(err.Error(), "demanda de fabricación") {
+					t.Fatalf("empty manufacturing must fail closed: %+v, %v", result, err)
+				}
 			after, _ := json.Marshal([]any{items, catalog})
 			if string(before) != string(after) {
 				t.Fatal("manufacturing policy mutated its inputs")

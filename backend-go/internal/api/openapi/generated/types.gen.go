@@ -908,11 +908,12 @@ const (
 type ManufacturingPreflightIssueCode string
 
 const (
-	ManufacturingPreflightIssueCodeEmptyRevision         ManufacturingPreflightIssueCode = "empty_revision"
-	ManufacturingPreflightIssueCodeDuplicateInstance     ManufacturingPreflightIssueCode = "duplicate_instance"
-	ManufacturingPreflightIssueCodeMissingDefinition     ManufacturingPreflightIssueCode = "missing_definition"
-	ManufacturingPreflightIssueCodeInvalidParameters     ManufacturingPreflightIssueCode = "invalid_parameters"
-	ManufacturingPreflightIssueCodeInvalidMaterialChoice ManufacturingPreflightIssueCode = "invalid_material_choice"
+	ManufacturingPreflightIssueCodeEmptyRevision             ManufacturingPreflightIssueCode = "empty_revision"
+	ManufacturingPreflightIssueCodeDuplicateInstance         ManufacturingPreflightIssueCode = "duplicate_instance"
+	ManufacturingPreflightIssueCodeMissingDefinition         ManufacturingPreflightIssueCode = "missing_definition"
+	ManufacturingPreflightIssueCodeInvalidParameters         ManufacturingPreflightIssueCode = "invalid_parameters"
+	ManufacturingPreflightIssueCodeInvalidMaterialChoice     ManufacturingPreflightIssueCode = "invalid_material_choice"
+	ManufacturingPreflightIssueCodeReleaseSnapshotResolution ManufacturingPreflightIssueCode = "release_snapshot_resolution"
 )
 
 type ManufacturingPreflightIssue struct {

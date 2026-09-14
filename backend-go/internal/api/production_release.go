@@ -124,12 +124,16 @@ func respondWithDesignApprovalError(w http.ResponseWriter, err error) {
 	default:
 		var preflightBlocked *domain.ReleasePreflightBlockedError
 		var commercialBlocked *domain.ReleaseCommercialGateError
+		var resolutionFailure *domain.ReleaseUnitResolutionFailure
 		if errors.As(err, &preflightBlocked) || errors.As(err, &commercialBlocked) ||
+			errors.As(err, &resolutionFailure) ||
+			errors.Is(err, storage.ErrReleaseSnapshotResolution) ||
 			errors.Is(err, domain.ErrReleaseQuoteNotAccepted) ||
 			errors.Is(err, domain.ErrQuoteRevisionNotFound) ||
 			errors.Is(err, domain.ErrCrossProjectRelease) {
 			// #502 production approval gate: SAME typed 409 blocker vocabulary
-			// the release command exposes — one verdict, two commands.
+			// the release command exposes — one verdict, two commands. #727:
+			// release snapshot resolution participates in the same chain.
 			respondWithProductionReleaseError(w, err)
 			return
 		}
@@ -418,6 +422,21 @@ func respondWithProductionReleaseError(w http.ResponseWriter, err error) {
 			})
 		return
 	}
+	// #727: an unresolvable snapshot is an actionable conflict — the exact
+	// physical identities and the business-safe reason travel in details, never
+	// SQL, paths or internals.
+	var resolutionFailure *domain.ReleaseUnitResolutionFailure
+	if errors.As(err, &resolutionFailure) {
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			"La revisión no puede resolverse para fabricación",
+			map[string]any{
+				"blocker":                "release_snapshot_resolution",
+				"furnitureInstanceId":    resolutionFailure.FurnitureInstanceID,
+				"furnitureDefinitionId":  resolutionFailure.FurnitureDefinitionID,
+				"reason":                 resolutionFailure.Reason,
+			})
+		return
+	}
 	switch {
 	case errors.Is(err, domain.ErrDesignNotFound), errors.Is(err, domain.ErrDesignRevisionNotFound),
 		errors.Is(err, domain.ErrQuoteRevisionNotFound), errors.Is(err, domain.ErrReleaseNotFound),
@@ -426,7 +445,10 @@ func respondWithProductionReleaseError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrInvalidReleaseCommand):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "comando de release inválido", nil)
 	case errors.Is(err, storage.ErrReleaseSnapshotResolution):
-		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "La revisión no puede resolverse para fabricación", nil)
+		// Collection-level resolution failure without a typed unit cause.
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			"La revisión no puede resolverse para fabricación",
+			map[string]any{"blocker": "release_snapshot_resolution"})
 	case errors.Is(err, domain.ErrDesignRevisionNotApproved):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "la revisión de diseño no está aprobada para producción", nil)
 	case errors.Is(err, domain.ErrReleaseQuoteNotAccepted):

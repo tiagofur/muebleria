@@ -64,6 +64,7 @@ export const PREFLIGHT_ISSUE_CODE_LABELS: Readonly<Record<string, string>> = {
   missing_definition: 'La definición de catálogo no existe',
   invalid_parameters: 'Parámetros fuera del contrato de fabricación',
   invalid_material_choice: 'Elección de material inválida',
+  release_snapshot_resolution: 'La unidad no puede resolverse para fabricación',
 };
 
 export const PREFLIGHT_STATUS_LABELS: Readonly<Record<ManufacturingPreflightResult['status'], string>> = {

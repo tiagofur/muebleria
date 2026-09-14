@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -39,10 +40,25 @@ func ResolveReleaseCollection(designRevisionID string, items []domain.DesignRevi
 	for _, item := range items {
 		unit, err := resolveReleaseUnit(item, catalog, &budget)
 		if err != nil {
-			return nil, fmt.Errorf("release collection unit %s: %w", item.FurnitureInstanceID, err)
+			// #727: keep the exact physical identities and the business-safe
+			// cause typed — the API surfaces an actionable 409, never a parsed
+			// string or an internal error.
+			var failure *domain.ReleaseUnitResolutionFailure
+			if errors.As(err, &failure) {
+				return nil, failure
+			}
+			return nil, &domain.ReleaseUnitResolutionFailure{
+				FurnitureInstanceID:   item.FurnitureInstanceID,
+				FurnitureDefinitionID: item.FurnitureDefinitionID,
+				Reason:                err.Error(),
+			}
 		}
 		if len(unit.BOM.BoardParts) == 0 && len(unit.BOM.HardwareLines) == 0 {
-			return nil, fmt.Errorf("release collection unit %s has no manufacturing demand", item.FurnitureInstanceID)
+			return nil, &domain.ReleaseUnitResolutionFailure{
+				FurnitureInstanceID:   item.FurnitureInstanceID,
+				FurnitureDefinitionID: item.FurnitureDefinitionID,
+				Reason:                "la unidad no genera demanda de fabricación",
+			}
 		}
 		units = append(units, *unit)
 		inputs = append(inputs, ResolvedRequirementInput{BOM: unit.BOM, PhysicalQuantity: 1})

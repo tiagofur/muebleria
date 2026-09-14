@@ -10,6 +10,25 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
+// dimensionAuthority names WHO owns a unit's dimensions on a resolve path
+// (#727). It is an explicit boundary, not a boolean: the commercial flow and
+// the manufacturing release flow read the same single engine with different
+// authorities.
+type dimensionAuthority int
+
+const (
+	// commercialPresetAuthority is the sales/quotation flow (H09 / #104):
+	// Module.Presets drive size selection, so an exact measurePresetID is
+	// mandatory for preset-bearing modules — even when custom dimensions
+	// override the resolved size (stale ids fail loudly, TS parity).
+	commercialPresetAuthority dimensionAuthority = iota
+	// publishedDesignAuthority is the manufacturing release flow (#727): a
+	// published DesignRevisionItem carries the frozen physical truth, so its
+	// explicit custom dimensions are authoritative and commercial measure
+	// presets are neither required nor consulted.
+	publishedDesignAuthority
+)
+
 // ResolveBom validates a module and resolves material/edge/hardware IDs
 // (mirrors packages/domain resolveBom).
 //
@@ -34,7 +53,7 @@ func ResolveBom(
 	if len(measurePresetID) > 0 {
 		presetID = measurePresetID[0]
 	}
-	return resolveBomCommon(module, optionChoices, catalog, presetID, nil, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, presetID, nil, nil, nil)
 }
 
 // ResolveBomWithContext is the #442-aware canonical variant: it carries the
@@ -51,7 +70,7 @@ func ResolveBomWithContext(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, measurePresetID, structureRevisionPin, customDims, baseContext)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, baseContext)
 }
 
 // ResolveBomWithDims is the F144-aware variant (#310 / P3D-7): customDims
@@ -68,7 +87,25 @@ func ResolveBomWithDims(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, measurePresetID, structureRevisionPin, customDims, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, structureRevisionPin, customDims, nil)
+}
+
+// ResolveBomForRelease resolves the BOM of an already-published design unit
+// under publishedDesignAuthority (#727): the item's explicit dimensions are
+// the manufacturing truth and commercial measure presets are not consulted,
+// so a preset-bearing module releases from its exact recorded dimensions
+// without a measurePresetId. Structured (parametric) modules MUST carry
+// custom dimensions; fixed modules keep rejecting them. Every other
+// validation — structure, components, formulas, materials, hardware,
+// choices, base treatment — is the same single resolveBomCommon path: this
+// is an authority boundary, not a second BOM engine.
+func ResolveBomForRelease(
+	module domain.Module,
+	optionChoices map[string]string,
+	catalog domain.Catalog,
+	customDims *domain.ItemCustomDims,
+) (domain.ResolvedBom, error) {
+	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, nil)
 }
 
 // ResolveBomWithPin is the #108-aware variant of ResolveBom. It accepts an
@@ -86,7 +123,7 @@ func ResolveBomWithPin(
 	measurePresetID string,
 	pin *int,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, measurePresetID, pin, nil, nil)
+	return resolveBomCommon(module, optionChoices, catalog, commercialPresetAuthority, measurePresetID, pin, nil, nil)
 }
 
 // resolveBomCommon is the single BOM path (#442): every exported variant
@@ -97,6 +134,7 @@ func resolveBomCommon(
 	module domain.Module,
 	optionChoices map[string]string,
 	catalog domain.Catalog,
+	authority dimensionAuthority,
 	measurePresetID string,
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
@@ -118,7 +156,7 @@ func resolveBomCommon(
 	var rawParts []domain.BoardPart
 	widthMm, depthMm := 600, 560
 	if strings.TrimSpace(module.StructureID) != "" {
-		composed, dims, err := expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, customDims, optionChoices, baseMode, baseClearance)
+		composed, dims, err := expandComposedModulePartsWithDims(module, catalog, authority, measurePresetID, structureRevisionPin, customDims, optionChoices, baseMode, baseClearance)
 		if err != nil {
 			return domain.ResolvedBom{}, err
 		}
@@ -273,6 +311,7 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []dom
 func expandComposedModulePartsWithDims(
 	module domain.Module,
 	catalog domain.Catalog,
+	authority dimensionAuthority,
 	measurePresetID string,
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
@@ -292,14 +331,28 @@ func expandComposedModulePartsWithDims(
 	if err != nil {
 		return nil, formulaDims{}, err
 	}
-	// resolveModuleDims keeps validating the preset id (stale ids fail loudly,
-	// TS parity); the custom override then replaces the resolved dims.
-	dims, err := resolveModuleDims(module, measurePresetID)
-	if err != nil {
-		return nil, formulaDims{}, err
-	}
-	if customDims != nil {
+	var dims formulaDims
+	if authority == publishedDesignAuthority {
+		// #727: the published revision item owns the physical truth. Commercial
+		// measure presets are a sales concept and are not consulted here; the
+		// explicit dimensions are mandatory for structured modules.
+		if customDims == nil {
+			return nil, formulaDims{}, fmt.Errorf(
+				"la revisión publicada del mueble %q (%s) requiere dimensiones explícitas",
+				module.Name, module.Code)
+		}
 		dims = formulaDims{W: customDims.WidthMm, H: customDims.HeightMm, D: customDims.DepthMm}
+	} else {
+		// resolveModuleDims keeps validating the preset id (stale ids fail
+		// loudly, TS parity); the custom override then replaces the resolved
+		// dims.
+		dims, err = resolveModuleDims(module, measurePresetID)
+		if err != nil {
+			return nil, formulaDims{}, err
+		}
+		if customDims != nil {
+			dims = formulaDims{W: customDims.WidthMm, H: customDims.HeightMm, D: customDims.DepthMm}
+		}
 	}
 	if err := validateStructureDims(structure, dims); err != nil {
 		return nil, formulaDims{}, err

@@ -1340,8 +1340,8 @@ describe('reconciliationWorkspace pure model (#502)', () => {
   });
 
   it('maps typed command errors without a generic catch-all', () => {
-    const apiErrorOf = (code: ApiError['code'], details: unknown): GraneteApiError =>
-      new GraneteApiError(403, {
+    const apiErrorOf = (code: ApiError['code'], details: unknown, status = 403): GraneteApiError =>
+      new GraneteApiError(status, {
         code,
         message: code,
         fieldErrors: {},
@@ -1355,6 +1355,30 @@ describe('reconciliationWorkspace pure model (#502)', () => {
       'step-up',
     );
     expect(describeCommandError(new TypeError('fetch failed')).kind).toBe('network');
+
+    // #727: snapshot resolution failures surface the server's exact unit and
+    // business reason — never a generic conflict.
+    const resolution = describeCommandError(
+      apiErrorOf(
+        'CONFLICT',
+        {
+          blocker: 'release_snapshot_resolution',
+          furnitureInstanceId: '0849c5c6-dcb8-4b42-a2c1-6ad84a172771',
+          reason: 'la revisión publicada del mueble "Alacena" requiere dimensiones explícitas',
+        },
+        409,
+      ),
+    );
+    expect(resolution.kind).toBe('conflict');
+    expect(resolution.title).toBe('La revisión no puede resolverse para fabricación');
+    expect(resolution.message).toContain('0849c5c6-dcb8-4b42-a2c1-6ad84a172771');
+    expect(resolution.message).toContain('dimensiones explícitas');
+
+    const resolutionNoDetails = describeCommandError(
+      apiErrorOf('CONFLICT', { blocker: 'release_snapshot_resolution' }, 409),
+    );
+    expect(resolutionNoDetails.kind).toBe('conflict');
+    expect(resolutionNoDetails.message).not.toContain('Unidad undefined');
   });
 });
 

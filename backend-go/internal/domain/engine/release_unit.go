@@ -103,7 +103,9 @@ func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, 
 	if err := validateReleaseUnitExpansion(prepared, catalog, collection); err != nil {
 		return nil, fmt.Errorf("release unit expansion: %w", err)
 	}
-	bom, err := ResolveBomWithContext(prepared, item.MaterialChoices, catalog, nil, "", nil, dims)
+	// #727: publishedDesignAuthority — the item's explicit dimensions are the
+	// manufacturing truth; commercial measure presets are not consulted.
+	bom, err := ResolveBomForRelease(prepared, item.MaterialChoices, catalog, dims)
 	if err != nil {
 		return nil, err
 	}

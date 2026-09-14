@@ -119,15 +119,16 @@ func (s *PostgresStore) approveDesignRevision(ctx context.Context, designID, rev
 	}
 
 	// 2b. Production approval gate: with an exact accepted quote pinned the
-	// server enforces the SAME authoritative commercial + preflight verdicts
-	// the release command enforces — production approval can never bypass
+	// server enforces the SAME authoritative commercial + manufacturing
+	// readiness verdicts the release command enforces (preflight AND release
+	// snapshot resolution, #727) — production approval can never bypass
 	// blocking state. Idempotent replays of an already-approved revision keep
 	// returning the current state (history is never rewritten).
 	if expectedProjectID != "" && rev.ProjectID != expectedProjectID {
 		return nil, domain.ErrCrossProjectRelease
 	}
 	if rev.Status == domain.DesignRevisionStatusPublished && quoteRevisionID != "" {
-		if _, _, err := s.enforceProductionGates(txCtx, rev.OrganizationID, rev.ProjectID, quoteRevisionID, cmd.DesignRevisionID); err != nil {
+		if _, err := s.enforceProductionGates(txCtx, rev.OrganizationID, rev.ProjectID, quoteRevisionID, cmd.DesignRevisionID); err != nil {
 			return nil, err
 		}
 	}
