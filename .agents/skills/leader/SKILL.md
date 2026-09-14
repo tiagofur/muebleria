@@ -31,6 +31,29 @@ Para cada tarea recibida:
 5. Permite como máximo una corrección y revalidación; después entrega o bloquea.
 6. Devuelve PR_READY_FOR_HUMAN_MERGE sólo tras el readback final. Nunca merges.
 
+## Contrato de publicación y cierre de issue
+
+Antes de publicar o declarar un PR listo, clasifica explícitamente la entrega contra
+el DoD de su issue propietaria:
+
+- **Entrega completa:** primera línea `Closes #N`, `Fixes #N` o `Resolves #N`;
+  segunda línea exacta `Delivery: complete`; el PR debe apuntar a `main` y no debe
+  quedar aceptación pendiente de esa issue. El merge humano a `main` debe permitir
+  que GitHub cierre la issue de forma nativa.
+- **Entrega parcial:** primera línea `Refs #N`; segunda línea exacta
+  `Delivery: partial`; enumera lo restante y conserva la issue abierta.
+
+**Nunca uses `Refs #N` para una issue bounded ya completada sólo para posponer el
+cierre a memoria/manual cleanup.** Tampoco uses un closing keyword para una entrega
+parcial o un PR apilado hacia una rama intermedia. La prohibición de "cierre
+automático" significa que el agente no llama la API de cierre por su cuenta: no
+prohíbe el cierre nativo de GitHub provocado por el closing keyword cuando el humano
+mergea una entrega completa a `main`.
+
+`PR Publication / Publication metadata` es enforcement de esta pareja
+keyword+`Delivery`; el reviewer además comprueba que el modo declarado coincide con
+el DoD real. Si no coincide, el PR no está listo aunque el código esté verde.
+
 ## Regla anti-teléfono-descompuesto
 
 Cuando lances subagentes, instrúyeles explícitamente para que

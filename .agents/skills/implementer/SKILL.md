@@ -25,8 +25,13 @@ handoff del líder antes de escribir. No seleccionas issues ni apruebas tu traba
    (ver `docs/verification.md` para el nivel requerido).
 7. **Verifica** las capas exigidas por `docs/verification.md`; registra fallos.
    Como máximo una ronda de corrección y revalidación dentro del presupuesto.
-8. **Entrega** evidencia al líder; él asigna el revisor independiente.
-9. No cierres issues, marques ledger `done` ni hagas merge. Revisión no es integración.
+8. **Clasifica la entrega** contra el DoD real de la issue antes del handoff:
+   - `delivery_mode=complete` sólo si todos sus criterios están satisfechos;
+   - `delivery_mode=partial` si queda cualquier criterio/entrega pendiente.
+   El implementador no decide el cierre: reporta el modo con evidencia para que
+   líder/reviewer validen el keyword correcto del PR.
+9. **Entrega** evidencia al líder; él asigna el revisor independiente.
+10. No cierres issues, marques ledger `done` ni hagas merge. Revisión no es integración.
 
 ## Stack de referencia
 
@@ -82,13 +87,16 @@ Si la feature que implementas toca **cualquiera** de estas cosas, es trabajo UI/
   trabajo incompleto, commitealo en rama `wip/` y pusheala. Leé
   `docs/git-workflow.md` antes de cerrar sesión o tocar stashes.
 - **Antes de cerrar sesión: `git push`.** HEAD local == origin.
+- **Nunca redactes `Refs #N` para una issue bounded que realmente quedó completa.**
+  En el reporte deja explícito `delivery_mode=complete|partial`; el PR final usa
+  `Closes/Fixes/Resolves + Delivery: complete` o `Refs + Delivery: partial`.
 
 ## Comunicación con el líder
 
 Tu respuesta final es **una sola línea**:
 
 ```
-IMPLEMENTED_PENDING_REVIEW -> <ruta del reporte con issue y HEAD>
+IMPLEMENTED_PENDING_REVIEW -> <ruta del reporte con issue, HEAD y delivery_mode>
 ```
 o
 ```

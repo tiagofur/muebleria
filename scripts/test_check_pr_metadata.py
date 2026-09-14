@@ -10,7 +10,8 @@ import check_pr_metadata as gate
 class PublicationTests(unittest.TestCase):
     def setUp(self):
         self.repo = "tiagofur/muebleria"
-        self.pr = {"number": 574, "state": "open", "body": "Closes #573\nSummary\n",
+        self.pr = {"number": 574, "state": "open",
+                   "body": "Closes #573\nDelivery: complete\nSummary\n",
                    "head": {"sha": "a" * 40},
                    "base": {"ref": "main", "sha": "c" * 40, "repo": {"full_name": self.repo}},
                    "labels": [{"name": "type:chore"}]}
@@ -23,28 +24,62 @@ class PublicationTests(unittest.TestCase):
     def validate(self):
         return gate.validate(self.event, self.repo, self.pr, self.issue)
 
-    def test_supported_types_and_keywords(self):
+    def test_supported_types_and_closing_keywords_for_complete_delivery(self):
         for label in gate.TYPES:
             for keyword in ("Closes", "fIxEs", "Resolves"):
                 self.pr["labels"] = [{"name": label}]
-                self.pr["body"] = f"\n{keyword} #573\nNormal prose fixes behavior."
+                self.pr["body"] = f"\n{keyword} #573\nDelivery: complete\nNormal prose fixes behavior."
                 self.assertEqual(self.validate(), 573)
 
+    def test_complete_delivery_rejects_refs_and_non_main_base(self):
+        self.pr["body"] = "Refs #573\nDelivery: complete\nSummary"
+        with self.assertRaises(ValueError):
+            self.validate()
+        self.setUp()
+        self.pr["base"]["ref"] = "stacked"
+        self.event["pull_request"]["base"]["ref"] = "stacked"
+        with self.assertRaises(ValueError):
+            self.validate()
+
+    def test_partial_delivery_requires_refs(self):
+        self.pr["body"] = "Refs #573\nDelivery: partial\n## Delivered scope\nMetadata gate.\n## Remaining scope\nQueue."
+        self.assertEqual(self.validate(), 573)
+        self.pr["body"] = "Closes #573\nDelivery: partial\nSummary"
+        with self.assertRaises(ValueError):
+            self.validate()
+
+    def test_delivery_marker_is_mandatory_and_second(self):
+        for body in (
+            "Closes #573\nSummary",
+            "Closes #573\nDelivery: done\nSummary",
+            "Closes #573\nSummary\nDelivery: complete",
+            "Refs #573\nDelivery: complete",
+        ):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.pr["body"] = body
+                self.validate()
+
     def test_references_fail_closed(self):
-        for body in (None, "No link", "Closes #0", "Closes #573 and #574",
-                     "Closes: #573", "Closes #573.", "Closes other/repo#573",
-                     "Closes https://github.com/other/repo/issues/573",
-                     "Closes #573\nFixes #574", "Closes #573\nFixes #573",
-                     "Closes #573\nAlso fixes #574", "```\nCloses #573\n```",
-                     "<!--\nCloses #573\n-->", "Closes #573\nClose #574",
-                     "Closes #573\nFixed #574", "Closes #573\nResolved #574",
-                     "Closes #573\nClosed #574"):
+        for body in (None, "No link", "Closes #0\nDelivery: complete",
+                     "Closes #573 and #574\nDelivery: complete",
+                     "Closes: #573\nDelivery: complete", "Closes #573.\nDelivery: complete",
+                     "Closes other/repo#573\nDelivery: complete",
+                     "Closes https://github.com/other/repo/issues/573\nDelivery: complete",
+                     "Closes #573\nDelivery: complete\nFixes #574",
+                     "Closes #573\nDelivery: complete\nFixes #573",
+                     "Closes #573\nDelivery: complete\nAlso fixes #574",
+                     "```\nCloses #573\n```\nDelivery: complete",
+                     "<!--\nCloses #573\n-->\nDelivery: complete",
+                     "Closes #573\nDelivery: complete\nClose #574",
+                     "Closes #573\nDelivery: complete\nFixed #574",
+                     "Closes #573\nDelivery: complete\nResolved #574",
+                     "Closes #573\nDelivery: complete\nClosed #574"):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 self.pr["body"] = body
                 self.validate()
 
     def test_partial_reference_preserves_approval_and_open_parent(self):
-        self.pr["body"] = "rEfS #573\n## Delivered scope\nMetadata gate.\n## Remaining scope\nQueue."
+        self.pr["body"] = "rEfS #573\nDelivery: partial\n## Delivered scope\nMetadata gate.\n## Remaining scope\nQueue."
         before = copy.deepcopy(self.issue)
         get = unittest.mock.Mock(side_effect=[self.pr, self.issue, self.pr])
         self.assertEqual(gate.check(self.event, self.repo, get), 573)
@@ -54,23 +89,24 @@ class PublicationTests(unittest.TestCase):
                 gate.validate(self.event, self.repo, self.pr, {**self.issue, **change})
 
     def test_partial_reference_rejects_ambiguous_and_malformed_links(self):
-        scope = "\n## Delivered scope\nGate.\n## Remaining scope\nQueue."
+        scope = "\nDelivery: partial\n## Delivered scope\nGate.\n## Remaining scope\nQueue."
         for body in ("Refs #573" + scope + "\nCloses #573",
                      "Refs #573" + scope + "\nRefs #574",
-                     "Closes #573\nRefs #574", "Refs other/repo#573" + scope,
+                     "Closes #573\nDelivery: complete\nRefs #574",
+                     "Refs other/repo#573" + scope,
                      "Refs #573." + scope, "<!--\nRefs #573\n-->" + scope,
                      "Refs #573" + scope + "\nResolves other/repo#574"):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 gate.linked_issue(body)
 
     def test_numeric_prose_is_not_an_additional_issue_target(self):
-        self.assertEqual(gate.linked_issue("Refs #573\nAfter the fix: 67/67"), 573)
+        self.assertEqual(gate.linked_issue("Refs #573\nDelivery: partial\nAfter the fix: 67/67"), 573)
         for suffix in ("Fixes #574", "Fixes other/repo#574", "Fixes 574",
                        "<!-- Fixes #574 -->", "```\nFixes #574\n```",
                        "Fixes\n#574", "<!-- Fixes\n#574 -->", "Fixes other/repo #574",
                        "Resolves https://github.com/other/repo/issues/574"):
             with self.subTest(suffix=suffix), self.assertRaises(ValueError):
-                gate.linked_issue("Refs #573\n" + suffix)
+                gate.linked_issue("Refs #573\nDelivery: partial\n" + suffix)
 
     def test_issue_rejections(self):
         for change in ({"state": "closed"}, {"pull_request": {}}, {"number": 574}, {"number": 573.0},
@@ -87,7 +123,8 @@ class PublicationTests(unittest.TestCase):
         for change in ({"labels": []}, {"labels": [{"name": "type:unknown"}]},
                        {"labels": [{"name": "type:chore"}, {"name": "type:docs"}]},
                        {"head": {"sha": "b" * 40}}, {"state": "closed"},
-                       {"number": 575}, {"number": 574.0}, {"base": {"ref": "other", "repo": {"full_name": self.repo}}}):
+                       {"number": 575}, {"number": 574.0},
+                       {"base": {"ref": "other", "repo": {"full_name": self.repo}}}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 self.pr.update(change)
                 self.validate()
