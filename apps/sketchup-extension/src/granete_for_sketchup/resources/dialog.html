@@ -6191,7 +6191,7 @@
               var btnConfirm = document.createElement("button");
               btnConfirm.className = "btn btn-primary";
               btnConfirm.style.width = "auto";
-              btnConfirm.textContent = pfConfirming[row.id] ? "Confirmando…" : "Confirmar posición";
+              btnConfirm.textContent = pfConfirming[row.id] ? "Sincronizando…" : "Reintentar sincronización";
               btnConfirm.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id];
               btnConfirm.addEventListener("click", function () { confirmPlacementInstance(row.id, btnConfirm); });
               actionsGroup.appendChild(btnConfirm);
@@ -6255,13 +6255,13 @@
           if (!furnitureInstanceId || pfConfirming[furnitureInstanceId]) return;
           pfConfirming[furnitureInstanceId] = button;
           button.disabled = true;
-          button.textContent = "Confirmando…";
+          button.textContent = "Sincronizando…";
           if (window.sketchup && window.sketchup.confirm_placement_instance) {
             window.sketchup.confirm_placement_instance(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
           } else {
             delete pfConfirming[furnitureInstanceId];
             button.disabled = false;
-            button.textContent = "Confirmar posición";
+            button.textContent = "Reintentar sincronización";
             showToast("error", "Confirmar disponible sólo dentro de SketchUp.");
           }
         }
@@ -6304,9 +6304,9 @@
             if (result.code === "already_placed") {
               showToast("success", "Ese mueble ya está colocado: se seleccionó el existente.");
             } else if (result.code === "pending_position") {
-              showToast("info", "Mueble insertado: ubicalo con la herramienta Mover y confirmá su posición final.");
+              showToast("info", "Mueble insertado, pero la sincronización de posición quedó pendiente.");
             } else {
-              showToast("success", "✓ Mueble colocado y guardado en el borrador del diseño.");
+              showToast("success", "✓ Mueble colocado y sincronizado con el diseño.");
             }
             return;
           }
@@ -6325,12 +6325,12 @@
           var button = pfConfirming[result.instanceId];
           delete pfConfirming[result.instanceId];
           if (result.ok) {
-            showToast("success", "✓ Mueble colocado y guardado en el borrador del diseño.");
+            showToast("success", "✓ Posición sincronizada con el taller.");
             return;
           }
           if (button) {
             button.disabled = false;
-            button.textContent = "Confirmar posición";
+            button.textContent = "Reintentar sincronización";
           }
           showToast("error", pfPlaceFailureMessage(result));
         }

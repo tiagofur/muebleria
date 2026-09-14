@@ -174,6 +174,17 @@ module Granete
               return ['missing_local', 'Granete espera este mueble, pero falta en este archivo SketchUp']
             end
 
+            local_entity = local_entries.first[:entity]
+            working_item = working_items.first
+            if local_entity.respond_to?(:transformation)
+              working_transform = working_item.transform
+              matches = working_transform &&
+                        TransformContract.equivalent_to_host?(working_transform, local_entity.transformation)
+              unless matches
+                return ['pending_confirmation', 'la posición local difiere de Granete; sincronización pendiente']
+              end
+            end
+
             ['present_synced', nil]
           end
 

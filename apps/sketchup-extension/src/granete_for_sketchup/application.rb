@@ -94,6 +94,16 @@ module Granete
         @save_awareness = Host::SaveAwareness.new(
           binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) }
         )
+        @position_sync_coordinator = Host::PositionSyncCoordinator.new(
+          model_provider: method(:active_model),
+          binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) },
+          service: @project_furniture_placer.service,
+          metadata_store_factory: method(:metadata_store),
+          host_reconciliation: @host_reconciliation,
+          intent_store: @project_furniture_placer.intent_store,
+          mutation_coordinator: mutation_coordinator,
+          logger: logger
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
@@ -109,6 +119,7 @@ module Granete
           publication_gate: @publication_preflight_gate,
           host_reconciliation: @host_reconciliation,
           save_awareness: @save_awareness,
+          position_sync_coordinator: @position_sync_coordinator,
           commercial_projection_service: commercial_projection_service,
           project_bootstrap: commercial_entry[:project_bootstrap], initial_quote: commercial_entry[:initial_quote]
         )
@@ -131,6 +142,7 @@ module Granete
       end
 
       def shutdown
+        @position_sync_coordinator.shutdown
         @save_awareness_lifecycle.shutdown
         @lifecycle.shutdown
       end
@@ -154,6 +166,7 @@ module Granete
 
       def handle_active_model_change(model)
         @save_awareness_lifecycle.rebind(model)
+        @position_sync_coordinator.rebind(model) if @dialog&.visible?
       end
 
       def metadata_store(model)

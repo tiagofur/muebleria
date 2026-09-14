@@ -716,7 +716,9 @@ class ProjectFurnitureTest < Minitest::Test
                                             'parameters' => {}, 'material_choices' => {} },
                                           { 'furniture_instance_id' => FI_3,
                                             'furniture_definition_id' => DEFINITION_ID_2,
-                                            'parameters' => {}, 'material_choices' => {} }
+                                            'parameters' => {}, 'material_choices' => {},
+                                            'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                                             'rotation_deg' => [0.0, 0.0, 0.0] } }
                                         ]))
     create_managed_root(FI_1)
     create_managed_root(FI_3, definition_id: DEFINITION_ID_2)
@@ -744,6 +746,30 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal 'unplaced', by_id[FI_4]['reconciliationState']
     assert_equal 'Gabinete Base 600', by_id[FI_1]['name']
     assert_equal 'Torre horno', by_id[FI_3]['name']
+  end
+
+  def test_reconciliation_is_transform_aware
+    stub_project_furniture([instance_body(FI_1, 'quote')])
+    stub_working_copy(working_copy_body([
+                                          { 'furniture_instance_id' => FI_1,
+                                            'parameters' => {}, 'material_choices' => {},
+                                            'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                                             'rotation_deg' => [0.0, 0.0, 0.0] } }
+                                        ]))
+    create_managed_root(FI_1)
+
+    panel = @placer.panel
+    by_id = panel['items'].to_h { |row| [row['id'], row] }
+    assert_equal 'present_synced', by_id[FI_1]['reconciliationState']
+    assert panel['clean']
+
+    finalize_position!(@model, FI_1, [500, 0, 0])
+
+    panel_after_move = @placer.panel
+    by_id_after = panel_after_move['items'].to_h { |row| [row['id'], row] }
+    assert_equal 'pending_confirmation', by_id_after[FI_1]['reconciliationState']
+    assert_equal 'la posición local difiere de Granete; sincronización pendiente', by_id_after[FI_1]['reason']
+    refute panel_after_move['clean']
   end
 
   def test_duplicate_terminal_orphan_and_incompatible_states_fail_closed
