@@ -295,8 +295,9 @@ func TestHandlePairingGrant_ExchangeConsumesAndReturnsBindingContext(t *testing.
 			Name string `json:"name"`
 		} `json:"project"`
 		Capabilities struct {
-			CanEdit    bool `json:"can_edit_working_copy"`
-			CanPublish bool `json:"can_publish_revision"`
+			CanEdit               bool `json:"can_edit_working_copy"`
+			CanPublish            bool `json:"can_publish_revision"`
+			CanCreateInitialQuote bool `json:"can_create_initial_quote"`
 		} `json:"capabilities"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
@@ -308,8 +309,8 @@ func TestHandlePairingGrant_ExchangeConsumesAndReturnsBindingContext(t *testing.
 	if body.Project.Name != "Obra Demo" {
 		t.Fatalf("project name = %q, want the authoritative #388 context", body.Project.Name)
 	}
-	if !body.Capabilities.CanEdit || !body.Capabilities.CanPublish {
-		t.Fatalf("admin device capabilities = %+v, want edit+publish", body.Capabilities)
+	if !body.Capabilities.CanEdit || !body.Capabilities.CanPublish || !body.Capabilities.CanCreateInitialQuote {
+		t.Fatalf("admin device capabilities = %+v, want edit+publish+initial quote", body.Capabilities)
 	}
 	cmd := *store.exchangePairingGrantCmd
 	if cmd.Code != "ABCDEFGHJKLM" {

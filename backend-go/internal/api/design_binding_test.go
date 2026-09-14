@@ -80,6 +80,7 @@ func TestHandleProjectDesignBindingValidate_Valid(t *testing.T) {
 		`"base_revision_number":2`,
 		`"can_edit_working_copy":true`,
 		`"can_publish_revision":true`,
+		`"can_create_initial_quote":true`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("response missing %s: %s", want, body)
@@ -107,7 +108,8 @@ func TestHandleProjectDesignBindingValidate_ArchivedDesignBlocksCapabilities(t *
 		t.Fatalf("want state design_archived: %s", body)
 	}
 	if !strings.Contains(body, `"can_edit_working_copy":false`) ||
-		!strings.Contains(body, `"can_publish_revision":false`) {
+		!strings.Contains(body, `"can_publish_revision":false`) ||
+		!strings.Contains(body, `"can_create_initial_quote":false`) {
 		t.Fatalf("archived design must not advertise authoring capabilities: %s", body)
 	}
 }
@@ -131,6 +133,9 @@ func TestHandleProjectDesignBindingValidate_RoleWithoutPublish(t *testing.T) {
 	}
 	if !strings.Contains(body, `"can_publish_revision":false`) {
 		t.Fatalf("producción must not publish revisions: %s", body)
+	}
+	if !strings.Contains(body, `"can_create_initial_quote":false`) {
+		t.Fatalf("producción must not create an initial quote: %s", body)
 	}
 }
 

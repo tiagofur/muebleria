@@ -253,6 +253,8 @@ func (s *Server) HandleDesignPairingGrantExchange(w http.ResponseWriter, r *http
 				domain.AnyRole(roles, domain.RoleCanAccessProjects),
 			CanPublishRevision: state == openapi.ModelBindingStateValid &&
 				domain.AnyRole(roles, domain.RoleCanMutateProjects),
+			CanCreateInitialQuote: state == openapi.ModelBindingStateValid &&
+				domain.AnyRole(roles, domain.RoleCanMutateProjects),
 		},
 	})
 }

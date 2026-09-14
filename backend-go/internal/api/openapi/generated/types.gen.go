@@ -1199,8 +1199,9 @@ type ModelBindingWorkingCopySummary struct {
 }
 
 type ModelBindingCapabilities struct {
-	CanEditWorkingCopy bool `json:"can_edit_working_copy"`
-	CanPublishRevision bool `json:"can_publish_revision"`
+	CanEditWorkingCopy    bool `json:"can_edit_working_copy"`
+	CanPublishRevision    bool `json:"can_publish_revision"`
+	CanCreateInitialQuote bool `json:"can_create_initial_quote"`
 }
 
 type ModelBindingValidation struct {

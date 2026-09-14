@@ -120,7 +120,8 @@ class DuplicateResolverTest < Minitest::Test
         project: { 'id' => PROJECT_ID, 'name' => 'Cocina García' },
         design: { 'id' => DESIGN_ID, 'name' => 'Cocina principal', 'status' => 'active' },
         working_copy: { 'base_revision_id' => REVISION_R1, 'base_revision_number' => 1 },
-        capabilities: { 'can_edit_working_copy' => true, 'can_publish_revision' => true }
+        capabilities: { 'can_edit_working_copy' => true, 'can_publish_revision' => true,
+                        'can_create_initial_quote' => true }
       )
     end
 

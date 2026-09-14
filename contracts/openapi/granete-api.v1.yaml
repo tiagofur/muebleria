@@ -8640,7 +8640,8 @@
         "additionalProperties": false,
         "required": [
           "can_edit_working_copy",
-          "can_publish_revision"
+          "can_publish_revision",
+          "can_create_initial_quote"
         ],
         "properties": {
           "can_edit_working_copy": {
@@ -8648,6 +8649,10 @@
           },
           "can_publish_revision": {
             "type": "boolean"
+          },
+          "can_create_initial_quote": {
+            "type": "boolean",
+            "description": "Whether the actor may create the first design-working QuoteRevision. Mirrors the Q1 command's RoleCanMutateProjects gate and remains distinct from DesignRevision publication."
           }
         }
       },

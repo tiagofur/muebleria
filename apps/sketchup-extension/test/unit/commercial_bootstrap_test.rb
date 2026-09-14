@@ -141,7 +141,8 @@ class CommercialBootstrapTest < Minitest::Test
       'design' => { 'id' => DESIGN_ID, 'name' => 'Principal', 'status' => 'active' },
       'working_copy' => { 'base_revision_id' => nil, 'base_revision_number' => nil,
                           'updated_at' => '2026-09-13T12:00:00Z' },
-      'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true }
+      'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true,
+                          'can_create_initial_quote' => true }
     }
   end
 

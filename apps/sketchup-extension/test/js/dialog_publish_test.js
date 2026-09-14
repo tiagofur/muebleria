@@ -155,7 +155,7 @@ function status(state, capabilities) {
     authoritativeBaseRevisionId: REVISION_R7,
     authoritativeBaseRevisionNumber: 7,
     capabilities: capabilities ||
-      { can_edit_working_copy: true, can_publish_revision: true }
+      { can_edit_working_copy: true, can_publish_revision: true, can_create_initial_quote: true }
   };
 }
 
@@ -175,7 +175,7 @@ function runTests() {
 
   test('publish button hidden without the server capability', (sandbox) => {
     sandbox.window.GraneteDialog.onModelBindingStatus(
-      status('connected', { can_edit_working_copy: true, can_publish_revision: false }));
+      status('connected', { can_edit_working_copy: true, can_publish_revision: false, can_create_initial_quote: false }));
     assert.ok(!visible(el(sandbox, 'btn-binding-publish')));
   });
 

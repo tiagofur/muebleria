@@ -217,10 +217,10 @@ module Granete
           def self.capabilities!(value)
             raise ArgumentError, 'capabilities must be an object' unless value.is_a?(Hash)
 
-            %w[can_edit_working_copy can_publish_revision].each do |key|
+            %w[can_edit_working_copy can_publish_revision can_create_initial_quote].each do |key|
               raise ArgumentError, "capabilities.#{key} must be boolean" unless [true, false].include?(value[key])
             end
-            value.slice('can_edit_working_copy', 'can_publish_revision')
+            value.slice('can_edit_working_copy', 'can_publish_revision', 'can_create_initial_quote')
           end
 
           def self.require_keys!(payload, *keys)

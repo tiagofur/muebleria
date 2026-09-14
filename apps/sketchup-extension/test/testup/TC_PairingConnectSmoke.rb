@@ -144,7 +144,8 @@ module Granete
           'design' => { 'id' => DESIGN_ID, 'name' => 'Cocina Principal', 'status' => 'active' },
           'working_copy' => { 'base_revision_id' => REVISION_R2, 'base_revision_number' => 2,
                               'updated_at' => '2026-09-03T12:00:00Z' },
-          'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true }
+          'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true,
+                              'can_create_initial_quote' => true }
         }
       end
 

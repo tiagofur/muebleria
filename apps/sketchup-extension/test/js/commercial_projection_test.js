@@ -52,9 +52,9 @@ function sandbox() {
 }
 
 const bindingA = { state: 'connected', binding: { projectId: 'p-a', designId: 'd-a' },
-  capabilities: { can_edit_working_copy: true, can_publish_revision: true } };
+  capabilities: { can_edit_working_copy: true, can_publish_revision: true, can_create_initial_quote: true } };
 const bindingB = { state: 'connected', binding: { projectId: 'p-b', designId: 'd-b' },
-  capabilities: { can_edit_working_copy: true, can_publish_revision: true } };
+  capabilities: { can_edit_working_copy: true, can_publish_revision: true, can_create_initial_quote: true } };
 function projection(total, referenceTotal) {
   return {
     status: 'current', currency: 'MXN', costsWithheld: false, saleAmountsWithheld: false,
@@ -140,10 +140,10 @@ test('Q1 remains disabled without exact local match or while mutation is active'
   assert.strictEqual(s.__elements['btn-initial-quote'].disabled, true);
 });
 
-test('Q1 remains disabled without the canonical project mutation capability', () => {
+test('Q1 remains disabled when explicit initial quote capability is false despite working-copy access', () => {
   const s = sandbox();
   const denied = { state: 'connected', binding: bindingA.binding,
-    capabilities: { can_edit_working_copy: false, can_publish_revision: false } };
+    capabilities: { can_edit_working_copy: true, can_publish_revision: false, can_create_initial_quote: false } };
   s.window.GraneteCommercialProjection.setBinding(denied);
   const request = s.__calls[s.__calls.length - 1].payload.requestId;
   s.window.GraneteCommercialProjection.receive(projectionResponse(request, denied, initialProjection(125)));

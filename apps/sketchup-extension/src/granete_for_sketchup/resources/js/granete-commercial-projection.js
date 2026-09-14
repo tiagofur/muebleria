@@ -243,7 +243,7 @@
   function setBinding(status) {
     var next = status && status.state === "connected" && status.binding ?
       Object.assign({}, status.binding, {
-        canCreateInitialQuote: !!status.capabilities && status.capabilities.can_edit_working_copy === true
+        canCreateInitialQuote: !!status.capabilities && status.capabilities.can_create_initial_quote === true
       }) : null;
     sequence += 1;
     pending = null;
