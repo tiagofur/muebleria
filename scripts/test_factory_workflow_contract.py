@@ -32,6 +32,8 @@ class WorkflowContractTest(unittest.TestCase):
             "PR_READY_FOR_HUMAN_MERGE", "no conjunto vacío",
             "mergeability unknown bloquea", "no autonomía",
             "enlace parcial/cierre correcto",
+            "Contrato de publicación y cierre de issues",
+            "Delivery: complete", "Delivery: partial", "issue-reconcile.yml",
         ):
             with self.subTest(boundary=boundary):
                 self.assertIn(boundary, contract)
