@@ -1268,6 +1268,17 @@ Debe mostrar:
 9. Reconciliation becomes clean; approve/release exact revisions.
 ```
 
+The SketchUp-first entry (#718) realizes steps 1–7 without a Web-created
+project prerequisite. `POST /projects:bootstrap-design` atomically creates an
+optional new Customer plus the canonical Project, Design, and working copy,
+then the existing #388 connector persists and reads back the exact binding.
+The dialog reuses `Design CommercialProjection`; it never prices locally. Its
+initial-quote action refetches that projection and calls the existing #711
+Design-working Q1 command with the exact version and fingerprint. The result
+is an ordinary draft QuoteRevision, so current React quote readers discover it
+without a SketchUp-specific branch. Existing QuoteRevisions disable this Q1
+action; requote/Q2 remains a separate explicit workflow.
+
 Quote-first and design-first are two controlled inputs into ONE commercial
 authority. They never create a parallel “SketchUp quote”: exact readers,
 publish/accept, exports and history consume the same immutable QuoteRevision.

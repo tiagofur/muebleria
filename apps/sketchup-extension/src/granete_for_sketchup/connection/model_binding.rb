@@ -166,7 +166,7 @@ module Granete
               state: state,
               schema_version: schema_version,
               organization: summary!(payload['organization'], 'organization'),
-              project: summary!(payload['project'], 'project'),
+              project: project_summary!(payload['project']),
               design: design_summary!(payload['design']),
               working_copy: working_copy!(payload['working_copy']),
               capabilities: capabilities!(payload['capabilities'])
@@ -187,6 +187,12 @@ module Granete
             raise ArgumentError, "unknown design status: #{status.inspect}" unless DESIGN_STATUSES.include?(status)
 
             summary['status'] = status
+            summary
+          end
+
+          def self.project_summary!(value)
+            summary = summary!(value, 'project')
+            summary['customer'] = summary!(value['customer'], 'project.customer') if value.key?('customer')
             summary
           end
 
@@ -211,10 +217,10 @@ module Granete
           def self.capabilities!(value)
             raise ArgumentError, 'capabilities must be an object' unless value.is_a?(Hash)
 
-            %w[can_edit_working_copy can_publish_revision].each do |key|
+            %w[can_edit_working_copy can_publish_revision can_create_initial_quote].each do |key|
               raise ArgumentError, "capabilities.#{key} must be boolean" unless [true, false].include?(value[key])
             end
-            value.slice('can_edit_working_copy', 'can_publish_revision')
+            value.slice('can_edit_working_copy', 'can_publish_revision', 'can_create_initial_quote')
           end
 
           def self.require_keys!(payload, *keys)
@@ -266,7 +272,7 @@ module Granete
               state: payload['state'],
               schema_version: payload['schema_version'],
               organization: Contract.summary!(payload['organization'], 'organization'),
-              project: Contract.summary!(payload['project'], 'project'),
+              project: Contract.project_summary!(payload['project']),
               design: Contract.design_summary!(payload['design']),
               working_copy: Contract.working_copy!(payload['working_copy']),
               capabilities: Contract.capabilities!(payload['capabilities'])
@@ -693,6 +699,7 @@ module Granete
               if validation
                 display['organizationName'] = validation.organization['name']
                 display['projectName'] = validation.project['name']
+                display['customerName'] = validation.project.dig('customer', 'name')
                 display['designName'] = validation.design['name']
                 display['designStatus'] = validation.design['status']
               end

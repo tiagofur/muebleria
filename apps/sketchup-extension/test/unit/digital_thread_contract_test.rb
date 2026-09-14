@@ -116,7 +116,8 @@ class DigitalThreadContractTest < Minitest::Test
         project: { 'id' => proj_id, 'name' => 'Project E2E' },
         design: { 'id' => des_id, 'name' => 'Design E2E', 'status' => 'active' },
         working_copy: { 'base_revision_id' => rev_id, 'base_revision_number' => 1 },
-        capabilities: { 'can_edit_working_copy' => true, 'can_publish_revision' => true }
+        capabilities: { 'can_edit_working_copy' => true, 'can_publish_revision' => true,
+                        'can_create_initial_quote' => true }
       )
     end
 

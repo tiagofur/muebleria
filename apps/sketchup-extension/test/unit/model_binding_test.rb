@@ -127,8 +127,28 @@ class ModelBindingTest < Minitest::Test
       'design' => { 'id' => design_id, 'name' => 'Cocina Principal', 'status' => 'active' },
       'working_copy' => { 'base_revision_id' => base, 'base_revision_number' => number,
                           'updated_at' => '2026-09-03T12:00:00Z' },
-      'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true }
+      'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true,
+                          'can_create_initial_quote' => true }
     }
+  end
+
+  def test_contract_requires_boolean_initial_quote_capability
+    allowed = mb::Contract.parse!(validation_payload)
+    assert allowed.capabilities['can_create_initial_quote']
+
+    denied_payload = validation_payload
+    denied_payload['capabilities']['can_create_initial_quote'] = false
+    refute mb::Contract.parse!(denied_payload).capabilities['can_create_initial_quote']
+
+    missing = validation_payload
+    missing['capabilities'].delete('can_create_initial_quote')
+    assert_raises(ArgumentError) { mb::Contract.parse!(missing) }
+
+    ['true', nil, 1].each do |invalid|
+      payload = validation_payload
+      payload['capabilities']['can_create_initial_quote'] = invalid
+      assert_raises(ArgumentError) { mb::Contract.parse!(payload) }
+    end
   end
 
   def binding(base: REVISION_R1)

@@ -70,6 +70,12 @@ func TestHandleCreateInitialDesignQuoteRevision_ContractPermissionsAndConflict(t
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("production status=%d", w.Code)
 	}
+	if modelBindingValidationDTO(validBindingContext(), []domain.UserRole{domain.RoleProduccion}).Capabilities.CanCreateInitialQuote {
+		t.Fatal("production Q1 capability must match the handler's RoleCanMutateProjects denial")
+	}
+	if !modelBindingValidationDTO(validBindingContext(), []domain.UserRole{domain.RoleVendedor}).Capabilities.CanCreateInitialQuote {
+		t.Fatal("vendedor Q1 capability must match the handler's RoleCanMutateProjects authorization")
+	}
 
 	server = &Server{Store: &stubStore{createInitialDesignQuoteRevisionErr: domain.ErrDesignRevisionConflict}}
 	w = httptest.NewRecorder()

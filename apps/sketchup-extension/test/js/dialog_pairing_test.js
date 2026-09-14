@@ -124,7 +124,7 @@ function connectedStatus() {
     },
     authoritativeBaseRevisionId: '53000000-0000-0000-0000-000000000001',
     authoritativeBaseRevisionNumber: 1,
-    capabilities: { can_edit_working_copy: true, can_publish_revision: true }
+    capabilities: { can_edit_working_copy: true, can_publish_revision: true, can_create_initial_quote: true }
   };
 }
 

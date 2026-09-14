@@ -49,6 +49,7 @@ class ModelBindingContractTest < Minitest::Test
     first = mb::Contract.parse!(scenario('01-first-bind-valid')['response'])
     assert_equal 'valid', first.state
     assert first.capabilities['can_edit_working_copy']
+    assert first.capabilities['can_create_initial_quote']
     refute_nil first.working_copy['base_revision_id']
     assert_equal 2, first.working_copy['base_revision_number']
 
@@ -63,6 +64,7 @@ class ModelBindingContractTest < Minitest::Test
     assert_equal 'design_archived', archived.state
     refute archived.capabilities['can_edit_working_copy']
     refute archived.capabilities['can_publish_revision']
+    refute archived.capabilities['can_create_initial_quote']
   end
 
   def test_non_200_answers_never_write_binding_metadata

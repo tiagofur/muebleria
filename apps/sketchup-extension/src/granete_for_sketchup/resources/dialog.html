@@ -1879,6 +1879,9 @@
               <div id="commercial-projection-delta-row" class="kv-row" style="display: none;"><span class="k">Diferencia</span><span class="v" id="commercial-projection-delta">--</span></div>
             </div>
             <button id="btn-commercial-projection-refresh" class="btn btn-secondary" style="width: auto; margin-top: var(--space-2);">Actualizar presupuesto</button>
+            <button id="btn-initial-quote" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);" disabled>Emitir cotización</button>
+            <p id="initial-quote-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-1);"></p>
+            <button id="btn-open-in-granete" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-1);">Abrir en Granete</button>
           </div>
           <div id="project-furniture-state-area">
             <!-- State cards: every state is distinct, none collapses. -->
@@ -2328,6 +2331,7 @@
             </div>
             <div id="model-binding-info" style="display: none; margin-top: var(--space-2);">
               <div class="kv-row"><span class="k">Taller</span><span class="v" id="binding-org-name">--</span></div>
+              <div class="kv-row"><span class="k">Cliente</span><span class="v" id="binding-customer-name">--</span></div>
               <div class="kv-row"><span class="k">Proyecto</span><span class="v" id="binding-project-name">--</span></div>
               <div class="kv-row"><span class="k">Diseño</span><span class="v" id="binding-design-name">--</span></div>
               <div class="kv-row"><span class="k">Base</span><span class="v" id="binding-base-revision">--</span></div>
@@ -2348,6 +2352,7 @@
                  style="display: none; margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
             </div>
             <div id="model-binding-actions" style="margin-top: var(--space-2);">
+              <button id="btn-bootstrap-project" class="btn btn-secondary" style="width: 100%;">Nuevo proyecto</button>
               <button id="btn-binding-connect" class="btn btn-secondary" style="width: 100%;">Conectar modelo (manual)</button>
               <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar de nuevo</button>
               <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
@@ -2357,6 +2362,22 @@
               <button id="btn-binding-publish" class="btn btn-primary" style="width: 100%; display: none; margin-top: var(--space-1);" disabled>Publicar diseño</button>
               <p id="binding-publish-progress" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
             </div>
+            <form id="project-bootstrap-form" style="display: none; margin-top: var(--space-2);" aria-busy="false">
+              <label class="login-label" for="bootstrap-project-name">Proyecto</label>
+              <input id="bootstrap-project-name" class="login-field" maxlength="200" required autocomplete="off">
+              <label class="login-label" for="bootstrap-design-name" style="margin-top: var(--space-2);">Diseño</label>
+              <input id="bootstrap-design-name" class="login-field" maxlength="200" required value="Diseño principal" autocomplete="off">
+              <fieldset style="border: 0; padding: 0; margin: var(--space-2) 0;">
+                <legend class="login-label">Cliente</legend>
+                <label><input type="radio" name="bootstrap-customer-mode" value="existing" checked> Existente</label>
+                <label style="margin-left: var(--space-2);"><input type="radio" name="bootstrap-customer-mode" value="new"> Nuevo</label>
+              </fieldset>
+              <select id="bootstrap-customer-select" class="login-field" style="width: 100%;" aria-label="Cliente existente"></select>
+              <input id="bootstrap-customer-name" class="login-field" maxlength="200" autocomplete="off" placeholder="Nombre del cliente" aria-label="Nombre del cliente nuevo" style="display: none;">
+              <button id="btn-bootstrap-submit" type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">Crear y conectar</button>
+              <button id="btn-bootstrap-cancel" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+              <p id="bootstrap-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-2);"></p>
+            </form>
             <div id="model-binding-picker" style="display: none; margin-top: var(--space-2);">
               <label class="login-label" for="binding-project-select">Proyecto</label>
               <select id="binding-project-select" class="login-field" style="width: 100%;"></select>
@@ -2600,6 +2621,7 @@
         var bindingDetail = document.getElementById("model-binding-detail");
         var bindingInfo = document.getElementById("model-binding-info");
         var bindingOrgName = document.getElementById("binding-org-name");
+        var bindingCustomerName = document.getElementById("binding-customer-name");
         var bindingProjectName = document.getElementById("binding-project-name");
         var bindingDesignName = document.getElementById("binding-design-name");
         var bindingBaseRevision = document.getElementById("binding-base-revision");
@@ -4182,6 +4204,7 @@
           onModelBindingStatus: function (status) {
             renderModelBindingStatus(status);
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(status);
+            if (window.GraneteCommercialBootstrap) window.GraneteCommercialBootstrap.setBinding(status);
           },
           onCommercialProjection: function (payload) {
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receive(payload);
@@ -4191,6 +4214,15 @@
           },
           onCommercialProjectionLocalMutation: function () {
             document.dispatchEvent(new CustomEvent("granete-mutation-state", { detail: { phase: "committed" } }));
+          },
+          onBootstrapCustomers: function (result) {
+            if (window.GraneteCommercialBootstrap) window.GraneteCommercialBootstrap.receiveCustomers(result);
+          },
+          onBootstrapResult: function (result) {
+            if (window.GraneteCommercialBootstrap) window.GraneteCommercialBootstrap.receiveBootstrap(result);
+          },
+          onInitialQuoteResult: function (result) {
+            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receiveQuote(result);
           },
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
           onPublishProgress: function (payload) { renderPublishProgress(payload); },
@@ -5540,12 +5572,15 @@
           if (bound && status.binding) {
             var binding = status.binding;
             bindingOrgName.textContent = binding.organizationName || "--";
+            bindingCustomerName.textContent = binding.customerName || "--";
             bindingProjectName.textContent = binding.projectName || binding.projectId || "--";
             bindingDesignName.textContent = binding.designName || binding.designId || "--";
             bindingBaseRevision.textContent = bindingBaseLabel(status);
           }
 
           bindingConnectBtn.style.display = status.state === "connected" ? "none" : "block";
+          var bootstrapButton = document.getElementById("btn-bootstrap-project");
+          if (bootstrapButton) bootstrapButton.style.display = status.state === "unbound" ? "block" : "none";
           // The pairing-code entry is the primary connect path and follows the
           // same rule as the manual picker: once the design is linked there is
           // nothing to connect, and a new code would only rebind (#499/#388).
@@ -6430,6 +6465,7 @@
     <script src="js/granete-bridge.js"></script>
     <script src="js/granete-mutation.js"></script>
     <script src="js/granete-commercial-projection.js"></script>
+    <script src="js/granete-commercial-bootstrap.js"></script>
     <script src="js/granete-manufacturing.js"></script>
     <script src="js/granete-preflight-review.js"></script>
   </body>

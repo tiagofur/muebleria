@@ -97,6 +97,8 @@ func modelBindingValidationDTO(ctx *storage.ModelBindingContext, roles []domain.
 		domain.AnyRole(roles, domain.RoleCanAccessProjects)
 	canPublish := state == openapi.ModelBindingStateValid &&
 		domain.AnyRole(roles, domain.RoleCanMutateProjects)
+	canCreateInitialQuote := state == openapi.ModelBindingStateValid &&
+		domain.AnyRole(roles, domain.RoleCanMutateProjects)
 
 	var baseRevID *string
 	var baseRevNum *int64
@@ -132,8 +134,9 @@ func modelBindingValidationDTO(ctx *storage.ModelBindingContext, roles []domain.
 			UpdatedAt:          ctx.WorkingCopyUpdatedAt.UTC().Format(time.RFC3339Nano),
 		},
 		Capabilities: openapi.ModelBindingCapabilities{
-			CanEditWorkingCopy: canEdit,
-			CanPublishRevision: canPublish,
+			CanEditWorkingCopy:    canEdit,
+			CanPublishRevision:    canPublish,
+			CanCreateInitialQuote: canCreateInitialQuote,
 		},
 	}
 }

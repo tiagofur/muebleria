@@ -14,6 +14,8 @@
   var mutationInFlight = false;
   var mutationContextKey = null;
   var lastProjectionMatchConfirmed = false;
+  var quotePending = false;
+  var quoteWebUrl = null;
 
   function element(id) { return document.getElementById(id); }
   function show(id, visible) { var node = element(id); if (node) node.style.display = visible ? "" : "none"; }
@@ -131,6 +133,69 @@
     } else {
       setState("incomplete", incompleteReason(projection.issues));
     }
+    updateQuoteAction();
+  }
+
+  function quoteReady() {
+    var state = currentWorkState();
+    return !!binding && binding.canCreateInitialQuote === true &&
+      !pending && !quotePending && !mutationInFlight && !!lastProjection &&
+      lastProjectionMatchConfirmed && !!state && state.matchConfirmed === true &&
+      state.localChangesPending === false && lastProjection.status === "current" &&
+      !lastProjection.reference && lastProjection.itemCount > 0 &&
+      typeof lastProjection.workingVersion === "string" && lastProjection.workingVersion.length > 0 &&
+      /^sha256-[0-9a-f]{64}$/.test(lastProjection.workingFingerprint || "") &&
+      lastProjection.amounts && typeof lastProjection.amounts.saleTotal === "number" &&
+      isFinite(lastProjection.amounts.saleTotal);
+  }
+
+  function updateQuoteAction() {
+    var button = element("btn-initial-quote");
+    if (!button) return;
+    button.disabled = !quoteReady();
+    button.textContent = quotePending ? "Emitiendo…" : "Emitir cotización";
+    if (lastProjection && lastProjection.reference) {
+      var frozenTotal = typeof lastProjection.reference.saleTotal === "number" ?
+        " · " + money(lastProjection.reference.saleTotal, lastProjection.reference.currency) : "";
+      text("initial-quote-status", "Q" + lastProjection.reference.revisionNumber + " · " +
+        quoteStatus(lastProjection.reference.status) + frozenTotal);
+    } else if (!quotePending) text("initial-quote-status", quoteReady() ? "Lista para crear Q1." : "Sin cotización emitible.");
+  }
+
+  function emitQuote() {
+    if (!quoteReady() || !window.sketchup || typeof window.sketchup.emit_initial_quote !== "function") return false;
+    quotePending = true;
+    text("initial-quote-status", "Revalidando presupuesto y creando Q1…");
+    updateQuoteAction();
+    window.sketchup.emit_initial_quote(JSON.stringify({
+      workingVersion: lastProjection.workingVersion,
+      workingFingerprint: lastProjection.workingFingerprint,
+      saleTotal: lastProjection.amounts.saleTotal
+    }));
+    return true;
+  }
+
+  function receiveQuote(result) {
+    quotePending = false;
+    if (!result || !result.ok) {
+      text("initial-quote-status", (result && result.reason) || "No se pudo emitir la cotización.");
+      updateQuoteAction();
+      if (result && result.code === "refresh_required") request({ probe: true });
+      return false;
+    }
+    var quote = result.quote || {};
+    var snapshot = quote.commercialSnapshot || {};
+    var total = snapshot.breakdown && snapshot.breakdown.salePrice;
+    lastProjection.reference = {
+      quoteRevisionId: quote.id, revisionNumber: quote.revisionNumber,
+      status: quote.status, currency: snapshot.currency || lastProjection.currency, saleTotal: total
+    };
+    quoteWebUrl = result.webUrl || null;
+    text("initial-quote-status", "Q1 · Borrador" + (typeof total === "number" ? " · " + money(total, snapshot.currency || lastProjection.currency) : ""));
+    var open = element("btn-open-in-granete");
+    if (open) open.style.display = quoteWebUrl ? "" : "none";
+    renderProjection(lastProjection, true);
+    return true;
   }
 
   function incompleteReason(issues) {
@@ -170,19 +235,27 @@
     pending = { requestId: "commercial-" + sequence, projectId: binding.projectId, designId: binding.designId,
       workEpoch: workEpoch };
     setState("calculating", "Calculando con precios y reglas actuales del servidor…");
+    updateQuoteAction();
     window.sketchup.get_commercial_projection(JSON.stringify({ requestId: pending.requestId }));
     return true;
   }
 
   function setBinding(status) {
-    var next = status && status.state === "connected" && status.binding ? status.binding : null;
+    var next = status && status.state === "connected" && status.binding ?
+      Object.assign({}, status.binding, {
+        canCreateInitialQuote: !!status.capabilities && status.capabilities.can_create_initial_quote === true
+      }) : null;
     sequence += 1;
     pending = null;
     lastProjection = null;
+    quotePending = false;
+    quoteWebUrl = null;
     binding = next;
     reconcileMutationRuntime();
     show("commercial-projection-card", !!binding);
     show("commercial-projection-values", false);
+    show("btn-open-in-granete", false);
+    updateQuoteAction();
     if (binding) request({ probe: true });
   }
 
@@ -203,6 +276,7 @@
       if (payload.workState.localChangesPending === true) {
         show("commercial-projection-values", false);
         setState("stale", payload.error || "El cambio local todavía no se sincronizó con el diseño del servidor.");
+        updateQuoteAction();
         return true;
       }
       if (payload.workState.matchConfirmed !== true) {
@@ -216,6 +290,7 @@
     }
     if (payload.projection) renderProjection(payload.projection, true);
     else { show("commercial-projection-values", false); setState(payload.state || "unavailable", payload.error); }
+    updateQuoteAction();
     return true;
   }
 
@@ -241,6 +316,7 @@
     } else {
       request({ probe: true });
     }
+    updateQuoteAction();
     return true;
   }
 
@@ -251,10 +327,19 @@
     lastProjection = null;
     show("commercial-projection-values", false);
     if (binding) setState("unauthenticated", "La sesión cambió; se descartó el presupuesto anterior.");
+    updateQuoteAction();
   }
 
   var refresh = element("btn-commercial-projection-refresh");
   if (refresh) refresh.addEventListener("click", request);
+  var quote = element("btn-initial-quote");
+  if (quote) quote.addEventListener("click", emitQuote);
+  var openQuote = element("btn-open-in-granete");
+  if (openQuote) openQuote.addEventListener("click", function () {
+    if (quoteWebUrl && window.sketchup && window.sketchup.open_external_url) {
+      window.sketchup.open_external_url(JSON.stringify({ url: quoteWebUrl }));
+    }
+  });
   if (document && document.addEventListener) {
     document.addEventListener("granete-mutation-state", function (event) {
       var phase = event && event.detail && event.detail.phase;
@@ -267,6 +352,7 @@
         pending = null;
         show("commercial-projection-values", false);
         setState("pending_sync", "Cambio en curso; el total anterior no se presenta como actual.");
+        updateQuoteAction();
         return;
       }
       if (!terminalMutationPhase(phase)) return;
@@ -276,6 +362,7 @@
       mutationInFlight = false;
       mutationContextKey = null;
       if (!binding) return;
+      updateQuoteAction();
       if (wasInFlight && trackedContextKey !== contextKey(binding)) {
         request({ probe: true });
         return;
@@ -304,12 +391,14 @@
         show("commercial-projection-values", false);
         setState("stale", "No se pudo confirmar la versión comercial del cambio.");
       }
+      updateQuoteAction();
     });
   }
 
   window.GraneteCommercialProjection = {
     setBinding: setBinding, receive: receive, refresh: request,
-    applySynchronization: applySynchronization, invalidateSession: invalidateSession
+    applySynchronization: applySynchronization, invalidateSession: invalidateSession,
+    receiveQuote: receiveQuote
   };
   if (window.sketchup && typeof window.sketchup.get_model_binding === "function") window.sketchup.get_model_binding();
 })();
