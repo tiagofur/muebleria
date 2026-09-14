@@ -1269,3 +1269,19 @@ EOL.
     (mfa/machine-output con timeouts de 15-18 min; host con load 7+), cada
     spec fallido pasa aislado y en combinación con el mío.
   - SketchUp host: N/A / NOT_TESTED.
+- Review round (late-response context receipt): la correlación pasó de
+  designId-only a un context receipt completo — `JSON.stringify([...queryKeys.root,
+  projectId, designId])`, reutilizando la identidad de session/tenant scope que
+  `projectDesignsQueryKeys(sessionScopeKey(...))` ya hornea en las query keys
+  (sin parsear JWT ni autoridad paralela). El receipt activo se actualiza
+  sincrónicamente con el render (patrón React de ajuste de estado en fase de
+  render, sin useEffect): al cambiar session scope/project/design se descartan
+  modal, unitStates, idempotency keys y guards single-flight sin tocar el
+  command server-side ya emitido. Success, error y 409 se comparan contra el
+  receipt vivo y se descartan completos (sin setUnitState, sin invalidaciones
+  del contexto nuevo; el guard single-flight del contexto nuevo tampoco se
+  toca desde una intención vieja). Regresiones nuevas: Project A→B tardía,
+  session/org A→B tardía, 409 tardío (más la de Design conservada y la
+  verificación de estado idle fresco en B). Re-verificación: typecheck+pnpm
+  test completos PASS (ui 1854), openapi:check PASS, browser gate 6/6 PASS
+  (mi spec + pairing + inline-customer).

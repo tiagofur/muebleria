@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { MaterialBoard } from '@granete/domain';
-import { GraneteApiClient } from '@granete/storage';
+import { GraneteApiClient, GraneteApiError } from '@granete/storage';
 import {
   DesignWorkingMaterialsPanel,
 } from './DesignWorkingMaterialsPanel';
@@ -128,16 +128,18 @@ function setupMock(options: MockOptions = {}) {
     const json = (data: unknown, status = 200) =>
       new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
-    if (method === 'GET' && path === `/designs/${DESIGN_ID}/working-copy/material-provenance`) {
+    const provenanceMatch = path.match(/^\/designs\/([^/]+)\/working-copy\/material-provenance$/);
+    if (method === 'GET' && provenanceMatch) {
       if (options.provenanceFail?.()) {
         return json({ code: 'INTERNAL', message: 'provenance failed' }, 500);
       }
       return json((options.provenance ?? (() => provenancePayload([CANDIDATE_ITEM, AUTHORED_ONLY_ITEM])))());
     }
-    if (method === 'GET' && path === `/projects/${PROJECT_ID}/furniture-instances`) {
+    if (method === 'GET' && /^\/projects\/([^/]+)\/furniture-instances$/.test(path)) {
       return json(options.instances ?? FURNITURE_INSTANCES);
     }
-    if (method === 'POST' && path === `/designs/${DESIGN_ID}/working-copy/material-choices:reconcile`) {
+    const reconcileMatch = path.match(/^\/designs\/([^/]+)\/working-copy\/material-choices:reconcile$/);
+    if (method === 'POST' && reconcileMatch) {
       const result = await (options.reconcile
         ? options.reconcile(body as Record<string, unknown>, key)
         : Promise.resolve({
@@ -375,6 +377,42 @@ describe('DesignWorkingMaterialsPanel (#658)', () => {
     await within(modal).findByTestId(`repair-unit-${UNIT_ID}`);
   });
 
+  // #658 review — context receipt regressions. Each intention captures the
+  // receipt (session scope via query keys + projectId + designId); success,
+  // error and conflict responses from a previous context are discarded whole.
+
+  function rerenderWithContext(
+    rerender: (node: React.ReactElement) => void,
+    context: { projectId?: string; designId?: string; scopeKey?: readonly unknown[] },
+  ) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const keys = projectDesignsQueryKeys(context.scopeKey ?? ['test-scope-B'], context.projectId ?? PROJECT_ID);
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <DesignWorkingMaterialsPanel
+          api={new GraneteApiClient(API)}
+          token="test-jwt"
+          projectId={context.projectId ?? PROJECT_ID}
+          designId={context.designId ?? DESIGN_ID}
+          canMutate
+          queryKeys={keys}
+          catalogMaterials={CATALOG_MATERIALS}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  async function assertForeignResponseDiscarded() {
+    // No variant of the old context's outcome ever renders…
+    await waitFor(() => {
+      expect(screen.queryByTestId(`repair-success-${UNIT_ID}`)).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId(`repair-conflict-${UNIT_ID}`)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`repair-error-${UNIT_ID}`)).not.toBeInTheDocument();
+    // …and the old context's modal is gone.
+    expect(screen.queryByTestId('pending-materials-modal')).not.toBeInTheDocument();
+  }
+
   it('a late response from design A never mutates the state of design B', async () => {
     let resolveReconcile: ((value: { status: number; body: unknown }) => void) | null = null;
     const { calls } = setupMock({
@@ -387,24 +425,9 @@ describe('DesignWorkingMaterialsPanel (#658)', () => {
     await userEvent.click(screen.getByTestId(`confirm-repair-${UNIT_ID}`));
 
     // Switch to Design B while A's command is in flight.
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const keys = projectDesignsQueryKeys(['test-scope'], PROJECT_ID);
-    const designB = '22222222-0000-4000-8000-000000000002';
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <DesignWorkingMaterialsPanel
-          api={new GraneteApiClient(API)}
-          token="test-jwt"
-          projectId={PROJECT_ID}
-          designId={designB}
-          canMutate
-          queryKeys={keys}
-          catalogMaterials={CATALOG_MATERIALS}
-        />
-      </QueryClientProvider>,
-    );
+    rerenderWithContext(rerender, { designId: '22222222-0000-4000-8000-000000000002' });
 
-    // A's response arrives late.
+    // A's success response arrives late: discarded whole.
     expect(resolveReconcile).toBeTruthy();
     resolveReconcile!({
       status: 200,
@@ -421,14 +444,105 @@ describe('DesignWorkingMaterialsPanel (#658)', () => {
     await waitFor(() => {
       expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
     });
-    // No success/conflict/error from A is applied to B's context, and the
-    // modal A opened is gone (B reset all A-local state).
-    await waitFor(() => {
-      expect(screen.queryByTestId('pending-materials-modal')).not.toBeInTheDocument();
+    await assertForeignResponseDiscarded();
+  });
+
+  it('late response from project A never mutates the state of project B', async () => {
+    let resolveReconcile: ((value: { status: number; body: unknown }) => void) | null = null;
+    setupMock({
+      reconcile: () => new Promise((resolve) => { resolveReconcile = resolve; }),
     });
-    expect(screen.queryByTestId(`repair-success-${UNIT_ID}`)).not.toBeInTheDocument();
-    expect(screen.queryByTestId(`repair-conflict-${UNIT_ID}`)).not.toBeInTheDocument();
-    expect(screen.queryByTestId(`repair-error-${UNIT_ID}`)).not.toBeInTheDocument();
+    const { rerender } = renderPanel();
+
+    await openReviewModal();
+    await userEvent.click(screen.getByTestId(`repair-unit-${UNIT_ID}`));
+    await userEvent.click(screen.getByTestId(`confirm-repair-${UNIT_ID}`));
+
+    // Switch to Project B (same session scope, same design id) mid-flight.
+    rerenderWithContext(rerender, { projectId: '11111111-0000-4000-8000-00000000009b' });
+
+    expect(resolveReconcile).toBeTruthy();
+    resolveReconcile!({
+      status: 200,
+      body: {
+        design_id: DESIGN_ID,
+        project_id: PROJECT_ID,
+        furniture_instance_id: UNIT_ID,
+        filled_choices: { FRENTES: MATERIAL_B_ID },
+        preserved_choices: {},
+        working_copy_updated_at: '2026-09-14T10:05:00.654321Z',
+      },
+    });
+
+    await assertForeignResponseDiscarded();
+
+    // B's own surface is untouched and fully operable: fresh review state
+    // (idle — not A's submitting), no leftover intention from A.
+    await screen.findByTestId('pending-materials-strip');
+    await userEvent.click(screen.getByTestId('review-pending-materials-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId(`repair-unit-${UNIT_ID}`)).toBeVisible();
+    });
+  });
+
+  it('late response from a previous session/org scope is discarded', async () => {
+    let resolveReconcile: ((value: { status: number; body: unknown }) => void) | null = null;
+    setupMock({
+      reconcile: () => new Promise((resolve) => { resolveReconcile = resolve; }),
+    });
+    const { rerender } = renderPanel();
+
+    await openReviewModal();
+    await userEvent.click(screen.getByTestId(`repair-unit-${UNIT_ID}`));
+    await userEvent.click(screen.getByTestId(`confirm-repair-${UNIT_ID}`));
+
+    // Same project and design, but a different session/tenant scope: the
+    // receipt must differ because the query-key scope identity changed.
+    rerenderWithContext(rerender, { scopeKey: ['session', 'other-generation', 'other-user'] });
+
+    expect(resolveReconcile).toBeTruthy();
+    resolveReconcile!({
+      status: 200,
+      body: {
+        design_id: DESIGN_ID,
+        project_id: PROJECT_ID,
+        furniture_instance_id: UNIT_ID,
+        filled_choices: { FRENTES: MATERIAL_B_ID },
+        preserved_choices: {},
+        working_copy_updated_at: '2026-09-14T10:05:00.654321Z',
+      },
+    });
+
+    await assertForeignResponseDiscarded();
+  });
+
+  it('a late 409 conflict from a previous context never reaches the new surface', async () => {
+    let rejectReconcile: ((reason: unknown) => void) | null = null;
+    setupMock({
+      reconcile: () =>
+        new Promise((_, reject) => { rejectReconcile = reject; }),
+    });
+    const { rerender } = renderPanel();
+
+    await openReviewModal();
+    await userEvent.click(screen.getByTestId(`repair-unit-${UNIT_ID}`));
+    await userEvent.click(screen.getByTestId(`confirm-repair-${UNIT_ID}`));
+
+    rerenderWithContext(rerender, { designId: '22222222-0000-4000-8000-000000000003' });
+
+    expect(rejectReconcile).toBeTruthy();
+    rejectReconcile!(
+      new GraneteApiError(409, {
+        code: 'CONFLICT',
+        message: 'El borrador de trabajo cambió',
+        fieldErrors: {},
+        requestId: 'r',
+        retryable: false,
+        details: {},
+      }),
+    );
+
+    await assertForeignResponseDiscarded();
   });
 
   it('read-only: candidates are visible but no mutation is offered', async () => {

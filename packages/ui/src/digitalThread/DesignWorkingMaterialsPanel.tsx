@@ -6,7 +6,6 @@ import {
   GraneteApiClient,
   GraneteApiError,
   newIdempotencyKey,
-  type DesignWorkingCopyMaterialProvenance,
   type DesignWorkingItemMaterialProvenance,
   type DesignWorkingMaterialsReconciliation,
   type FurnitureInstance,
@@ -31,6 +30,11 @@ import './digitalThread.css';
  *   "material cotizado actual", nunca como revisión histórica aceptada;
  * - la reparación muta únicamente el Working Copy; publicar una DesignRevision
  *   sigue siendo una acción explícita separada.
+ *
+ * Late responses: cada intención captura un context receipt (session/tenant
+ * scope vía query keys + projectId + designId, ver `contextReceipt`). Success,
+ * error y 409 se descartan completos si el receipt vivo cambió — no aplican
+ * setUnitState, modal ni invalidaciones del contexto nuevo.
  */
 
 const PROVENANCE_LABELS: Record<MaterialProvenanceStatus, string> = {
@@ -87,6 +91,24 @@ type UnitRepairState =
   | { readonly kind: 'conflict' }
   | { readonly kind: 'failed'; readonly message: string };
 
+/**
+ * #658 review — context receipt of one reconciliation intention.
+ *
+ * Reuses the exact session/tenant identity the screen already bakes into its
+ * query keys (`projectDesignsQueryKeys(sessionScopeKey, projectId)` → root
+ * `['project-designs', ...scope, projectId]`): no JWT parsing, no parallel
+ * session authority. Adding designId pins the exact working copy. A response
+ * whose captured receipt no longer equals the live one is discarded — success,
+ * error and 409 alike — before touching local state or invalidating queries.
+ */
+function contextReceipt(
+  queryKeys: ProjectDesignsQueryKeys,
+  projectId: string,
+  designId: string,
+): string {
+  return JSON.stringify([...queryKeys.root, projectId, designId]);
+}
+
 export interface DesignWorkingMaterialsPanelProps {
   readonly api: GraneteApiClient;
   readonly token: string;
@@ -127,28 +149,28 @@ export function DesignWorkingMaterialsPanel({
   const [unitStates, setUnitStates] = useState<Record<string, UnitRepairState>>({});
   const idempotencyKeys = useRef(new Map<string, string>());
   const inFlightUnits = useRef(new Set<string>());
-  const designIdRef = useRef(designId);
 
-  useEffect(() => {
-    designIdRef.current = designId;
-    // Un contexto de Design distinto descarta toda intención en curso: ni la
-    // respuesta tardía de A ni su estado local pueden aplicarse a B.
-    setIsReviewOpen(false);
-    setUnitStates({});
+  // #658 review: the active context receipt updates SYNCHRONOUSLY with
+  // render/props — never via useEffect — so there is no window where the ref
+  // still represents the previous session/project/design. A change discards
+  // every local intention of the old surface (modal, unit states, idempotency
+  // keys, single-flight guards); server-side commands already issued stay
+  // untouched and their results are dropped on arrival.
+  const receipt = contextReceipt(queryKeys, projectId, designId);
+  const activeContextRef = useRef(receipt);
+  if (activeContextRef.current !== receipt) {
+    activeContextRef.current = receipt;
     idempotencyKeys.current.clear();
     inFlightUnits.current.clear();
-  }, [designId]);
+    setIsReviewOpen(false);
+    setUnitStates({});
+  }
 
   const provenanceQuery = useQuery({
     queryKey: queryKeys.designMaterialProvenance(designId),
     queryFn: ({ signal }) => api.getDesignWorkingCopyMaterialProvenance(token, designId, signal),
   });
   const provenance = provenanceQuery.data ?? null;
-
-  const provenanceRef = useRef<DesignWorkingCopyMaterialProvenance | null>(null);
-  useEffect(() => {
-    provenanceRef.current = provenance;
-  }, [provenance]);
 
   const candidates = useMemo(
     () => (provenance?.items ?? []).filter((item) => item.reconcilable),
@@ -207,7 +229,14 @@ export function DesignWorkingMaterialsPanel({
     if (inFlightUnits.current.has(unitId)) return;
     inFlightUnits.current.add(unitId);
 
-    const startDesignId = designIdRef.current;
+    // Context receipt + contexto exacto capturados al iniciar la intención:
+    // sesión/tenant scope (vía query keys), projectId y designId. Toda
+    // respuesta se compara contra el receipt vivo antes de aplicarse.
+    const startContext = activeContextRef.current;
+    const startDesignId = designId;
+    const startQueryKeys = queryKeys;
+    const startQueryClient = queryClient;
+    const startProvenance = provenance;
     // La misma intención reutiliza la misma key; una intención nueva (tras
     // éxito, conflicto o cancelación) genera una nueva.
     let key = idempotencyKeys.current.get(unitId);
@@ -216,7 +245,7 @@ export function DesignWorkingMaterialsPanel({
       idempotencyKeys.current.set(unitId, key);
     }
     // Token de concurrencia exacto de la proyección que el usuario revisó.
-    const expectedUpdatedAt = provenanceRef.current?.working_copy_updated_at ?? null;
+    const expectedUpdatedAt = startProvenance?.working_copy_updated_at ?? null;
     setUnitState(unitId, { kind: 'submitting' });
 
     let result: DesignWorkingMaterialsReconciliation;
@@ -228,8 +257,11 @@ export function DesignWorkingMaterialsPanel({
         key,
       );
     } catch (err) {
+      // Respuesta del contexto anterior: se descarta completa (éxito, error y
+      // conflicto por igual). Ni setUnitState ni el guard single-flight del
+      // contexto nuevo deben tocarse desde una intención vieja.
+      if (activeContextRef.current !== startContext) return;
       inFlightUnits.current.delete(unitId);
-      if (designIdRef.current !== startDesignId) return; // respuesta tardía sobre otro Design
       if (isConflictError(err)) {
         idempotencyKeys.current.delete(unitId);
         setUnitState(unitId, { kind: 'conflict' });
@@ -238,14 +270,14 @@ export function DesignWorkingMaterialsPanel({
       }
       return;
     }
+    if (activeContextRef.current !== startContext) return; // respuesta tardía de otro contexto
     inFlightUnits.current.delete(unitId);
-    if (designIdRef.current !== startDesignId) return; // respuesta tardía sobre otro Design
     idempotencyKeys.current.delete(unitId);
     setUnitState(unitId, { kind: 'succeeded', filledCount: Object.keys(result.filled_choices).length });
-    // Read-back sólo a través de las proyecciones canónicas del MISMO design:
+    // Read-back sólo a través de las proyecciones canónicas del MISMO contexto:
     // nunca fabricamos el estado localmente antes de confirmación server-side.
-    await queryClient.invalidateQueries({ queryKey: queryKeys.designMaterialProvenance(startDesignId) });
-    await queryClient.invalidateQueries({ queryKey: queryKeys.designWorkingCopy(startDesignId) });
+    await startQueryClient.invalidateQueries({ queryKey: startQueryKeys.designMaterialProvenance(startDesignId) });
+    await startQueryClient.invalidateQueries({ queryKey: startQueryKeys.designWorkingCopy(startDesignId) });
   };
 
   const handleReload = async () => {
