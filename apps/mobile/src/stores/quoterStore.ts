@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { apiClient } from '../services/apiClient';
+import { useCatalogStore } from './catalogStore';
 import {
   type Module,
   type ProjectItem,
   type Project,
   type OptionChoices,
+  type Customer,
   seedCatalogExpandedLatAm,
   resolveBom,
   calcProjectBreakdown,
@@ -61,10 +63,88 @@ export interface QuoterState {
   generateWhatsAppText: () => string;
   /**
    * Persist the street quote as a DRAFT project on the server so the office
-   * picks it up in the web app: find-or-create customer by name, then POST
-   * the project with one line item per cart row. Returns the project id.
+   * picks it up in the web app (#715): ONE POST /projects with
+   * inline_customer_name — the server creates Customer + Project in the same
+   * transaction and mints the customer identity. No dedupe by name, no
+   * separate POST /customers. Returns the server-authoritative project id.
    */
   saveAsQuote: () => Promise<{ projectId: string; customerName: string }>;
+  /**
+   * #715 internal: the uncommitted save intention (payload fingerprint +
+   * project id). POST /projects has no Idempotency-Key wrapper — its retry
+   * contract is a client-stable project id, so the same semantic payload
+   * retries with the same id (409 ⇒ reconcile by read-back) and any edit
+   * mints a fresh one. Cleared once the server commits.
+   */
+  pendingSaveIntention: { fingerprint: string; projectId: string } | null;
+}
+
+/** Customer shape returned by GET /customers/{id} and 201 inline_customer. */
+interface ServerCustomer {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+  active?: boolean;
+}
+
+/** 201 body of POST /projects with inline_customer_name (#712): flat project
+ * fields plus the server-minted customer. */
+interface InlineProjectCreateResponse {
+  id: string;
+  customer_id: string;
+  inline_customer?: ServerCustomer;
+}
+
+/**
+ * v4 UUID over Math.random for runtimes without crypto.randomUUID (Hermes /
+ * RN 0.76). It is a client-side intention id validated by the server as a
+ * UUID — not a secret — so non-crypto randomness is acceptable here.
+ */
+export function uuidV4Fallback(): string {
+  const hex = () =>
+    Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0');
+  const variant = ((Math.floor(Math.random() * 0xffff) & 0x3fff) | 0x8000)
+    .toString(16)
+    .padStart(4, '0');
+  return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${variant}-${hex()}${hex()}${hex()}`;
+}
+
+function newProjectIntentionId(): string {
+  const c = globalThis.crypto;
+  return c && typeof c.randomUUID === 'function'
+    ? c.randomUUID()
+    : uuidV4Fallback();
+}
+
+/** HTTP status carried by the apiClient's DomainError (context.status). */
+function httpStatusOf(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const e = err as { status?: unknown; context?: { status?: unknown } };
+  const status = e.context?.status ?? e.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * Adopt the server-owned customer into the mobile catalog store (by id), the
+ * same reconciliation the web store does after the atomic create. No parallel
+ * store: catalogStore keeps owning the customer list.
+ */
+function reconcileCatalogCustomer(raw: ServerCustomer): void {
+  const catalog = useCatalogStore.getState();
+  if (catalog.customers.some((c) => c.id === raw.id)) return;
+  const customer: Customer = {
+    id: raw.id,
+    name: raw.name,
+    email: raw.email || undefined,
+    phone: raw.phone || undefined,
+    address: raw.address || undefined,
+    notes: raw.notes || undefined,
+    active: raw.active ?? true,
+  };
+  useCatalogStore.setState({ customers: [...catalog.customers, customer] });
 }
 
 function calculateItemCosts(
@@ -133,6 +213,7 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
   customerName: 'Cliente Particular',
   projectTitle: 'Presupuesto de Mobiliario',
   commercialMarginPercent: 35,
+  pendingSaveIntention: null,
 
   setCustomerName: (name) => set({ customerName: name }),
   setProjectTitle: (title) => set({ projectTitle: title }),
@@ -322,36 +403,32 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
   },
 
   // --- saveAsQuote (server persistence) ----------------------------------------
-// Appended separately: find-or-create the customer by name, then POST the
-// draft project. Item option choices are empty — the office finishes them
-// in the web editor; module/preset/quantity carry over intact.
+  // #715: the whole save is ONE server-side transaction. POST /projects with
+  // customer_id '' + inline_customer_name creates Customer + Project together
+  // (#712); the server mints the customer id and returns the authoritative
+  // pair in the 201 body. Mobile never POSTs /customers and never dedupes by
+  // name — a typed name is a new customer by design (the picker for existing
+  // customers belongs to the web app). Item option choices are empty — the
+  // office finishes them in the web editor; module/preset/quantity carry
+  // over intact.
 
   saveAsQuote: async () => {
-    const { customerName, projectTitle, items, commercialMarginPercent } = get();
+    const {
+      customerName,
+      projectTitle,
+      items,
+      commercialMarginPercent,
+      pendingSaveIntention,
+    } = get();
     if (items.length === 0) {
       throw new Error('El carrito está vacío');
     }
     const trimmedName = customerName.trim() || 'Cliente Particular';
 
-    // Find-or-create customer by exact name (case-insensitive).
-    const customers = await apiClient
-      .get<{ id: string; name: string }[]>('/customers')
-      .catch(() => [] as { id: string; name: string }[]);
-    const existing = customers.find(
-      (c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase(),
-    );
-    let customerId = existing?.id;
-    if (!customerId) {
-      const created = await apiClient.post<{ id: string }>('/customers', {
-        name: trimmedName,
-        active: true,
-      });
-      customerId = created.id;
-    }
-
-    const created = await apiClient.post<{ id: string }>('/projects', {
+    const body = {
       name: projectTitle.trim() || `Cotización ${trimmedName}`,
-      customer_id: customerId,
+      customer_id: '',
+      inline_customer_name: trimmedName,
       currency: 'MXN',
       margin_factor: 1 + commercialMarginPercent / 100,
       labor_fixed_cost: 0,
@@ -364,8 +441,58 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
           : {}),
         option_choices: {},
       })),
-    });
+    };
 
-    return { projectId: created.id, customerName: trimmedName };
+    // Same semantic payload ⇒ same project id (safe retry); any edit to the
+    // draft ⇒ new intention, new id.
+    const fingerprint = JSON.stringify(body);
+    const projectId =
+      pendingSaveIntention?.fingerprint === fingerprint
+        ? pendingSaveIntention.projectId
+        : newProjectIntentionId();
+    set({ pendingSaveIntention: { fingerprint, projectId } });
+
+    try {
+      const created = await apiClient.post<InlineProjectCreateResponse>(
+        '/projects',
+        { id: projectId, ...body },
+      );
+      if (
+        !created.id ||
+        !created.customer_id ||
+        created.customer_id !== created.inline_customer?.id
+      ) {
+        throw new Error(
+          'El servidor no devolvió el par cliente+cotización creado',
+        );
+      }
+      reconcileCatalogCustomer(created.inline_customer);
+      set({ pendingSaveIntention: null });
+      return { projectId: created.id, customerName: trimmedName };
+    } catch (err) {
+      if (httpStatusOf(err) !== 409) {
+        // Fallo honesto: la transacción server-side dejó 0 clientes y 0
+        // cotizaciones nuevas. El draft queda intacto y un reintento con el
+        // mismo contenido reutiliza el mismo projectId.
+        throw err;
+      }
+      // 409: esta misma intención ya había hecho commit (respuesta perdida).
+      // Reconciliar desde la verdad del servidor en vez de duplicar el par.
+      const existing = await apiClient.get<{
+        id: string;
+        customer_id: string;
+      }>(`/projects/${projectId}`);
+      if (!existing.id || !existing.customer_id) {
+        throw new Error(
+          'No se pudo reconciliar la cotización tras el reintento',
+        );
+      }
+      const customer = await apiClient.get<ServerCustomer>(
+        `/customers/${existing.customer_id}`,
+      );
+      reconcileCatalogCustomer(customer);
+      set({ pendingSaveIntention: null });
+      return { projectId: existing.id, customerName: trimmedName };
+    }
   },
 }));
