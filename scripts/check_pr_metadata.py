@@ -7,7 +7,8 @@ import urllib.request
 
 TYPES = {"type:" + name for name in
          ("bug", "feature", "docs", "refactor", "chore", "breaking-change")}
-REFERENCE = re.compile(r"(?:Closes|Fixes|Resolves|Refs) #([1-9][0-9]*)", re.I)
+REFERENCE = re.compile(r"(Closes|Fixes|Resolves|Refs) #([1-9][0-9]*)", re.I)
+DELIVERY = re.compile(r"Delivery: (complete|partial)", re.I)
 TARGET = re.compile(r"\b(?:clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed)|refs)\b\s*:?\s*(?:#|https?://|[\w.-]+/[\w.-]+\s*#|[0-9]+(?![0-9/]))", re.I)
 
 
@@ -24,14 +25,29 @@ def label_names(record):
     return [item["name"] for item in labels]
 
 
-def linked_issue(body):
+def publication_link(body):
+    """Return (issue number, delivery mode) after enforcing closing semantics."""
     require(isinstance(body, str), "Missing PR body")
     lines = [line.strip() for line in body.splitlines() if line.strip()]
-    match = REFERENCE.fullmatch(lines[0]) if lines else None
-    require(match is not None, "First nonempty line must be Closes/Fixes/Resolves/Refs #N")
-    require(TARGET.search("\n".join(lines[1:])) is None,
+    link = REFERENCE.fullmatch(lines[0]) if lines else None
+    require(link is not None, "First nonempty line must be Closes/Fixes/Resolves/Refs #N")
+    delivery = DELIVERY.fullmatch(lines[1]) if len(lines) > 1 else None
+    require(delivery is not None,
+            "Second nonempty line must be Delivery: complete or Delivery: partial")
+    keyword = link[1].lower()
+    mode = delivery[1].lower()
+    if mode == "complete":
+        require(keyword != "refs", "Complete delivery must use Closes/Fixes/Resolves")
+    else:
+        require(keyword == "refs", "Partial delivery must use Refs")
+    require(TARGET.search("\n".join(lines[2:])) is None,
             "Additional issue-link targets are not allowed")
-    return int(match[1])
+    return int(link[2]), mode
+
+
+def linked_issue(body):
+    """Compatibility helper used by tests/callers that only need the issue number."""
+    return publication_link(body)[0]
 
 
 def validate(event, repository, pr, issue=None):
@@ -53,7 +69,10 @@ def validate(event, repository, pr, issue=None):
             and pr["base"]["sha"] == expected["base"]["sha"], "PR base changed")
     types = [name for name in label_names(pr) if name.startswith("type:")]
     require(len(types) == 1 and types[0] in TYPES, "Exactly one supported type label required")
-    number = linked_issue(pr["body"])
+    number, mode = publication_link(pr["body"])
+    if mode == "complete":
+        require(pr["base"]["ref"] == "main",
+                "Complete delivery must target main so GitHub can close the issue on merge")
     if issue is not None:
         require(type(issue["number"]) is int and issue["number"] == number
                 and "pull_request" not in issue,

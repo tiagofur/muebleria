@@ -10,7 +10,8 @@ import factory_handoff as handoff
 
 class HandoffTests(unittest.TestCase):
     def setUp(self):
-        self.pr = {"number": 576, "state": "open", "body": "Refs #573\n$(secret)",
+        self.pr = {"number": 576, "state": "open",
+                   "body": "Refs #573\nDelivery: partial\n$(secret)",
                    "title": "Private PR title", "merged": False, "merged_at": None,
                    "draft": True, "labels": [{"name": "type:chore"}],
                    "head": {"sha": "a" * 40, "ref": "candidate",
@@ -63,7 +64,8 @@ class HandoffTests(unittest.TestCase):
         for target, mutations in (("pr", [
                 {"number": 576.0}, {"number": True}, {"state": "closed"},
                 {"merged": True}, {"merged": 0}, {"merged_at": "yesterday"},
-                {"draft": 1}, {"title": None}, {"body": "Refs other/repo#573"},
+                {"draft": 1}, {"title": None},
+                {"body": "Refs other/repo#573\nDelivery: partial"},
                 {"labels": []}, {"labels": [{"name": "type:no"}]},
                 {"labels": [{"name": "type:chore"}] * 2},
                 {"head": {"sha": "a" * 40, "ref": "branch", "repo": None}},
@@ -82,7 +84,7 @@ class HandoffTests(unittest.TestCase):
                     self.build()
 
     def test_scope_drift_on_either_reread(self):
-        for target, mutation in (("pr", {"body": "Refs #573\nNew scope"}),
+        for target, mutation in (("pr", {"body": "Refs #573\nDelivery: partial\nNew scope"}),
                                  ("pr", {"title": "New title"}), ("pr", {"draft": False}),
                                  ("pr", {"head": {**self.pr["head"], "sha": "c" * 40}}),
                                  ("issue", {"body": "Changed acceptance"}),
