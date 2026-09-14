@@ -1245,4 +1245,95 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
       ).rejects.toThrow('Failed to create project: 500');
     });
   });
+
+  describe('updateProjectWithInlineCustomer (#714)', () => {
+    const draftProject = {
+      id: 'p-714',
+      name: 'Cocina editada',
+      customerId: 'client-id-must-not-travel',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'draft' as const,
+      items: [],
+      createdAt: '2026-09-13T00:00:00.000Z',
+      updatedAt: '2026-09-13T00:00:00.000Z',
+    };
+
+    const serverPair = {
+      id: 'p-714',
+      name: 'Nombre autoritativo',
+      customer_id: 'c-srv-714',
+      currency: 'MXN',
+      margin_factor: 1.35,
+      labor_fixed_cost: 0,
+      status: 'draft',
+      items: [],
+      created_at: '2026-09-13T00:00:00.000Z',
+      updated_at: '2026-09-13T00:00:02.000Z',
+      inline_customer: {
+        id: 'c-srv-714',
+        name: 'Ana López',
+        active: true,
+      },
+    };
+
+    it('sends the exact idempotent inline command and returns the authoritative pair', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => serverPair,
+      } as Response));
+      const repo = new APIWorkspaceRepository('http://test/api', {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+      });
+
+      const result = await repo.updateProjectWithInlineCustomer!(
+        draftProject,
+        'Ana López',
+        {
+          replacesCustomerId: 'c-base',
+          idempotencyKey: 'web:714-retry-key',
+        },
+      );
+
+      expect(result.project).toMatchObject({
+        id: 'p-714',
+        name: 'Nombre autoritativo',
+        customerId: 'c-srv-714',
+        updatedAt: '2026-09-13T00:00:02.000Z',
+      });
+      expect(result.customer).toMatchObject({
+        id: 'c-srv-714',
+        name: 'Ana López',
+        active: true,
+      });
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toBe('http://test/api/projects/p-714');
+      expect(init.method).toBe('PUT');
+      expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe(
+        'web:714-retry-key',
+      );
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      expect(body.customer_id).toBe('');
+      expect(body.inline_customer_name).toBe('Ana López');
+      expect(body.inline_customer_replaces).toBe('c-base');
+    });
+
+    it('rejects a malformed success without the persisted customer identity', async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ ...serverPair, inline_customer: undefined }),
+      } as Response));
+      const repo = new APIWorkspaceRepository('http://test/api', {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+      });
+
+      await expect(
+        repo.updateProjectWithInlineCustomer!(draftProject, 'Ana López', {
+          replacesCustomerId: 'c-base',
+          idempotencyKey: 'web:714-retry-key',
+        }),
+      ).rejects.toThrow('Server did not return the inline customer identity');
+    });
+  });
 });

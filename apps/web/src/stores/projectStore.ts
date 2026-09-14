@@ -105,7 +105,7 @@ import {
   type InstallationJob,
   type PartInstance,
 } from '@granete/domain';
-import { breakdownFromApi } from '@granete/storage';
+import { breakdownFromApi, newIdempotencyKey } from '@granete/storage';
 import type { ProjectDraft } from '@granete/ui';
 
 import type { ToastFn } from './catalogStore';
@@ -231,6 +231,26 @@ export interface ProjectStoreDeps {
   readonly createProjectWithInlineCustomer?: (
     project: Project,
     inlineCustomerName: string,
+  ) => Promise<{ project: Project; customer: Customer }>;
+  /**
+   * #714 — true when the ACTIVE repository owns the atomic server-side
+   * "edit quote + new customer" transition (server mode). Guest/local
+   * adapters report false and the store keeps the local-optimistic path.
+   */
+  readonly canUpdateProjectWithInlineCustomer?: () => boolean;
+  /**
+   * #714 — atomic inline-customer update. The payload must not carry a
+   * customer_id; the caller supplies its base view of the current assignment
+   * plus the idempotency key minted for this intention. The server commits
+   * both entities in one transaction and returns the persisted pair.
+   */
+  readonly updateProjectWithInlineCustomer?: (
+    project: Project,
+    inlineCustomerName: string,
+    context: {
+      readonly replacesCustomerId: string;
+      readonly idempotencyKey: string;
+    },
   ) => Promise<{ project: Project; customer: Customer }>;
   /** Persists a single project (PUT). */
   readonly saveProject: (project: Project) => Promise<void>;
@@ -665,10 +685,24 @@ export function createProjectStore(options: InternalOptions) {
     options.deps.canCreateProjectWithInlineCustomer;
   const persistCreateProjectWithInlineCustomer =
     options.deps.createProjectWithInlineCustomer;
+  const canPersistUpdateInlineCustomer =
+    options.deps.canUpdateProjectWithInlineCustomer;
+  const persistUpdateProjectWithInlineCustomer =
+    options.deps.updateProjectWithInlineCustomer;
   const persistSaveProject = options.deps.saveProject;
   const persistDeleteProject = options.deps.deleteProject;
   const persistCreateTemplate = options.deps.createProjectTemplate;
   const persistDeleteTemplate = options.deps.deleteProjectTemplate;
+  type PendingInlineUpdate = {
+    readonly signature: string;
+    readonly idempotencyKey: string;
+    readonly project: Project;
+    readonly replacesCustomerId: string;
+  };
+  // Keep the exact request identity and payload after a transport failure. A
+  // repeated click for the same semantic edit reuses both, so the durable
+  // server receipt can replay a commit whose first response was lost.
+  const pendingInlineUpdates = new Map<string, PendingInlineUpdate>();
   // F064: toast comes from uiStore (single source of truth). Reading fresh
   // each call avoids stale closures across re-renders.
   const toast: ToastFn = (input) => getUiStoreState().toast(input);
@@ -892,11 +926,22 @@ export function createProjectStore(options: InternalOptions) {
 
     updateProject: (id, draft, catalog, actor) => {
       const now = new Date().toISOString();
-      const resolved = resolveCustomerFromDraft(
-        draft,
-        catalog.customers ?? [],
-        newId,
-      );
+      // #714: "Nuevo cliente" while EDITING must run as ONE backend
+      // transaction on server-backed sessions — a locally minted customer id
+      // may never travel in the PUT (the FK race #712 fixed for create).
+      // Guest/local sessions keep the legacy local resolution (single local
+      // store, no FK boundary).
+      const inlineCustomerName =
+        draft.customerId.trim() === ''
+          ? (draft.customerName ?? '').trim()
+          : '';
+      const useAtomicInline =
+        inlineCustomerName !== '' &&
+        (canPersistUpdateInlineCustomer?.() ?? false) &&
+        !!persistUpdateProjectWithInlineCustomer;
+      const resolved = useAtomicInline
+        ? { customerId: '', customers: [...(catalog.customers ?? [])] }
+        : resolveCustomerFromDraft(draft, catalog.customers ?? [], newId);
       const updatedCatalog = { ...catalog, customers: resolved.customers };
       const meta = draftToProjectMeta(draft, resolved.customerId);
 
@@ -938,6 +983,72 @@ export function createProjectStore(options: InternalOptions) {
         withTransition,
         existing.status,
       );
+
+      if (useAtomicInline && persistUpdateProjectWithInlineCustomer) {
+        const signature = JSON.stringify({
+          id,
+          replacesCustomerId: existing.customerId,
+          inlineCustomerName,
+          name: meta.name,
+          currency: meta.currency,
+          marginFactor: meta.marginFactor,
+          laborFixedCost: meta.laborFixedCost,
+          notes: meta.notes,
+          ownerUserId: updatedProject.ownerUserId,
+        });
+        const previous = pendingInlineUpdates.get(id);
+        const intention: PendingInlineUpdate =
+          previous?.signature === signature
+            ? previous
+            : {
+                signature,
+                idempotencyKey: newIdempotencyKey(),
+                project: updatedProject,
+                replacesCustomerId: existing.customerId,
+              };
+        pendingInlineUpdates.set(id, intention);
+
+        persistUpdateProjectWithInlineCustomer(
+          intention.project,
+          inlineCustomerName,
+          {
+            replacesCustomerId: intention.replacesCustomerId,
+            idempotencyKey: intention.idempotencyKey,
+          },
+        ).then(
+          ({ project: serverProject, customer: serverCustomer }) => {
+            // A later edit owns the local state; never let an older response
+            // overwrite it. Its server result will be observed on refresh.
+            if (pendingInlineUpdates.get(id)?.idempotencyKey !== intention.idempotencyKey) {
+              return;
+            }
+            pendingInlineUpdates.delete(id);
+            set({ projects: upsertById(get().projects, serverProject) });
+            const currentCatalog = getCatalogStoreState().catalog;
+            if (currentCatalog) {
+              getCatalogStoreState().setCatalog({
+                ...currentCatalog,
+                customers: upsertById(
+                  currentCatalog.customers ?? [],
+                  serverCustomer,
+                ),
+              });
+            }
+            toast({ type: 'success', message: '✓ Cambios guardados' });
+          },
+          (err) => {
+            if (pendingInlineUpdates.get(id)?.idempotencyKey !== intention.idempotencyKey) {
+              return;
+            }
+            console.error('Error al actualizar proyecto con cliente nuevo:', err);
+            toast({
+              type: 'error',
+              message: 'No se pudo guardar el proyecto. Reintentá en unos segundos.',
+            });
+          },
+        );
+        return;
+      }
 
       // F062 bug fix: persist customers via catalogStore.
       getCatalogStoreState().upsertCustomers(resolved.customers);

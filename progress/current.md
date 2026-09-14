@@ -1089,3 +1089,56 @@ EOL.
 - GREEN focalizado: módulo comercial 26/26; todos los harness JavaScript de la extensión PASS; Ruby comercial 20 runs / 46 assertions y dialog controller 31 runs / 192 assertions.
 - Gates finales locales: `bundle exec rake verify` PASS (665 runs / 4516 assertions; boundary 6 runs / 2567 assertions; RuboCop 170 archivos); RBZ SHA256 `38fc433e9912e71a339b132a516540ff7e164abf461278124123b336f1d67fc0`; `pnpm openapi:check`, `pnpm typecheck` y `pnpm test` PASS; `git diff --check` PASS.
 - Host real: `NOT_TESTED`; no se cerró ni reemplazó la sesión activa de SketchUp del usuario y las pruebas Ruby/JavaScript no se presentan como evidencia del host.
+
+## Issue #714 — editar cotización + "Nuevo cliente" atómico — 2026-09-13
+
+- Approval: `status:approved` verificada en #714 (labels bug/frontend/status:approved).
+- Dependencia: PR #716 mergeado; base exacta `origin/main@02372786`.
+  Rama `fix/714-inline-customer-project-update`; worktree aislado
+  `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-714`.
+- Started: 2026-09-13 23:30 CST. Rol: implementador.
+- Plan:
+  1. RED: store web documenta el PUT con id local + pin de frontera FK en PG.
+  2. Storage: `UpdateProjectWithInlineCustomer` — una tx: SELECT...FOR UPDATE
+     (serializa + valida base `inline_customer_replaces`), crea Customer con id
+     del servidor en la org dueña del project, UPDATE conjunto; rollback total.
+  3. Handler: PUT /projects/{id} acepta `inline_customer_name` +
+     `inline_customer_replaces` (retrocompatible); la ruta inline se envuelve en
+     `RequireIdempotency("projects.update-inline-customer")` (receipts durable
+     existentes) → replay exacto ante retry; guards: ambos→400, base ausente→400,
+     permisos projects+customers, sólo draft (§15), mapeo ErrProjectConcurrentUpdate→409.
+  4. Web: repo `updateProjectWithInlineCustomer` (PUT con Idempotency-Key, body
+     customer_id '' + inline fields); store updateProject sin canal paralelo, sin
+     optimista, reconciliación por id (upsertById) con entidades del servidor;
+     guest/local conserva camino local.
+  5. Pruebas PG reales (happy/rollback/existing/retry/concurrency/cross-tenant) +
+     handlers + repo + store; browser smoke con stack real; gates; PR Refs #714.
+- Retry-safety (§10): no existe mecanismo específico para PUT projects; se reutilizan
+  los receipts durable (`api_idempotency_receipts` + `ExecuteIdempotent`) SÓLO para la
+  capability nueva (los PUT actuales no cambian) y el base-check
+  `inline_customer_replaces` hace converger un retry con clave nueva (409 explícito,
+  sin huérfanos). Sin dedupe por nombre.
+- Size governance: el propietario autorizó explícitamente la excepción para el cambio
+  cohesivo de 1.591 líneas; `size:exception` aplicada a #714 el 2026-09-13.
+- Resultado local: transición inline atómica implementada sin Customer ID generado por
+  Web, sin mutación optimista y con adopción autoritativa de Project + Customer. El PUT
+  existente conserva su camino legacy para Customer ya persistido y guest/local.
+- GREEN focalizado:
+  - `pnpm --filter @granete/web exec vitest run src/stores/projectStore.test.ts`:
+    65/65 PASS.
+  - `pnpm --filter @granete/storage exec vitest run src/apiWorkspaceRepository.test.ts`:
+    34/34 PASS.
+  - `go test ./internal/api -run 'TestHandleProjectByIDUpdate' -count=1`: PASS.
+  - `go test ./internal/storage -run 'TestProjectInlineUpdate_|TestProjectInlineCustomerUpdateHTTP_Postgres' -count=1`:
+    PASS con PostgreSQL real.
+- Browser real: `./scripts/organization-browser-gate.sh tests/organization/project-inline-customer-update.spec.ts`:
+  Chromium + Go + PostgreSQL, 1/1 PASS; edición, refresh, relación persistida y ausencia
+  de Customer huérfano verificados.
+- Gates completos locales:
+  - `pnpm typecheck`: PASS.
+  - `pnpm test`: PASS (incluye Web 490/490 y Domain 1411/1411).
+  - `pnpm openapi:check`: PASS.
+  - `(cd backend-go && GOFLAGS='-p=1' go test ./... -count=1)`: PASS.
+  - `git diff --check`: PASS.
+- `origin/main` avanzó a `56bb3cf4` por el merge de PR #717 después de comenzar; se
+  incorporará antes del push y se repetirá la verificación afectada sin alterar #711.

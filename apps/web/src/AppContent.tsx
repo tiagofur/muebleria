@@ -525,6 +525,17 @@ export function AppContent({
       }
       return repo.createProjectWithInlineCustomer(p, name);
     },
+    canUpdateProjectWithInlineCustomer: () =>
+      getRepository().updateProjectWithInlineCustomer != null,
+    updateProjectWithInlineCustomer: (p, name, context) => {
+      const repo = getRepository();
+      if (!repo.updateProjectWithInlineCustomer) {
+        return Promise.reject(
+          new Error('El repositorio activo no soporta actualizar cliente inline'),
+        );
+      }
+      return repo.updateProjectWithInlineCustomer(p, name, context);
+    },
     saveProject: (p) => getRepository().saveProject(p) as Promise<void>,
     deleteProject: (id) => getRepository().deleteProject(id) as Promise<void>,
     createProjectTemplate: (t) =>

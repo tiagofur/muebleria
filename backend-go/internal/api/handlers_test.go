@@ -45,6 +45,16 @@ type stubStore struct {
 	createProjectErr           error
 	createProjectWithInlineErr error
 	updateProjectErr           error
+	// #714 inline-customer update transition.
+	updateProjectWithInlineErr   error
+	updateProjectWithInlineBase  string
+	updateProjectWithInlineCalls int
+	lastInlineUpdateCustomer     *domain.Customer
+	// In-memory durable-idempotency receipts (mirror api_idempotency_receipts
+	// semantics: same scope+fingerprint replays, different fingerprint
+	// conflicts, 5xx is retryable and never sealed).
+	idempotencyReceipts        map[string]stubIdempotencyReceipt
+	idempotencyErr             error
 	customerReturnedByID       *domain.Customer
 	customerGetByIDErr         error
 	projectReturnedByID        *domain.Project
@@ -1183,6 +1193,67 @@ func (s *stubStore) UpdateProject(_ context.Context, _ string, p *domain.Project
 	cp := *p
 	s.lastUpdatedProject = &cp
 	return nil
+}
+
+// stubIdempotencyReceipt mirrors one api_idempotency_receipts row.
+type stubIdempotencyReceipt struct {
+	fingerprint string
+	response    storage.IdempotencyResponse
+}
+
+func (s *stubStore) UpdateProjectWithInlineCustomer(_ context.Context, _ string, p *domain.Project, inline *domain.Customer, baseCustomerID string) error {
+	if s.updateProjectWithInlineErr != nil {
+		return s.updateProjectWithInlineErr
+	}
+	s.updateProjectWithInlineCalls++
+	s.updateProjectWithInlineBase = baseCustomerID
+	ic := *inline
+	// Mirrors the real storage: the server mints the authoritative identity
+	// and the project references exactly it.
+	ic.ID = "70000000-0000-0000-0000-000000000714"
+	ic.Active = true
+	p.CustomerID = ic.ID
+	inline.ID = ic.ID
+	inline.Active = true
+	s.lastInlineUpdateCustomer = &ic
+	cp := *p
+	s.lastUpdatedProject = &cp
+	return nil
+}
+
+// ExecuteIdempotent replays sealed responses for the same scope+fingerprint
+// and refuses key reuse with another payload — the in-memory counterpart of
+// the durable receipts the real store commits with the mutation.
+func (s *stubStore) ExecuteIdempotent(
+	ctx context.Context,
+	req storage.IdempotencyRequest,
+	execute func(context.Context) (storage.IdempotencyResponse, error),
+) (storage.IdempotencyResponse, bool, error) {
+	if s.idempotencyErr != nil {
+		return storage.IdempotencyResponse{}, false, s.idempotencyErr
+	}
+	if prev, ok := s.idempotencyReceipts[req.ScopeKey]; ok {
+		if prev.fingerprint != req.Fingerprint {
+			return storage.IdempotencyResponse{}, false, storage.ErrIdempotencyConflict
+		}
+		return prev.response, true, nil
+	}
+	// The real store chains the request context (plus its transaction); the
+	// handler below must keep seeing the caller's claims and org scope.
+	response, err := execute(ctx)
+	if err != nil {
+		return storage.IdempotencyResponse{}, false, err
+	}
+	if response.Status < http.StatusInternalServerError {
+		if s.idempotencyReceipts == nil {
+			s.idempotencyReceipts = map[string]stubIdempotencyReceipt{}
+		}
+		s.idempotencyReceipts[req.ScopeKey] = stubIdempotencyReceipt{
+			fingerprint: req.Fingerprint,
+			response:    response,
+		}
+	}
+	return response, false, nil
 }
 func (s *stubStore) DeleteProject(context.Context, string) error {
 	s.deleteProjectCalled = true
@@ -2426,6 +2497,258 @@ func TestHandleProjectsCreateWithInlineDuplicateProjectReturns409(t *testing.T) 
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409 (body=%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// #714 — the inline "nuevo cliente" update command on PUT /projects/{id}.
+const inlineUpdateProjectPath = "/api/projects/88888888-9999-0000-1111-222222222222"
+
+func inlineUpdateRequest(body, idempotencyKey string) *http.Request {
+	req := withClaims(httptest.NewRequest(http.MethodPut, inlineUpdateProjectPath, strings.NewReader(body)), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "88888888-9999-0000-1111-222222222222")
+	req.Header.Set("Content-Type", "application/json")
+	if idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
+	return req
+}
+
+func serveInlineUpdate(srv *Server, rr http.ResponseWriter, req *http.Request) {
+	srv.requireProjectInlineUpdateIdempotency(http.HandlerFunc(srv.HandleProjectByID)).ServeHTTP(rr, req)
+}
+
+func seedInlineUpdateStore(extra *stubStore) *stubStore {
+	base := &domain.Project{
+		ID: "88888888-9999-0000-1111-222222222222", Name: "Cocina base",
+		CustomerID:  "10000000-0000-0000-0000-000000000001",
+		OwnerUserID: "v1", Status: domain.StatusDraft, Items: []domain.ProjectItem{},
+	}
+	if extra == nil {
+		extra = &stubStore{}
+	}
+	extra.projectReturnedByID = base
+	return extra
+}
+
+const inlineUpdateBody = `{"id":"88888888-9999-0000-1111-222222222222","name":"Cocina editada","customer_id":"","inline_customer_name":"  Ana López  ","inline_customer_replaces":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+
+func TestHandleProjectByIDUpdateWithInlineCustomer(t *testing.T) {
+	const stubMintedID = "70000000-0000-0000-0000-000000000714"
+	// The read-back deliberately differs from the client payload: the server
+	// resolved timestamps the caller never sent (#716 lesson — the response is
+	// the authority, never a local reconstruction).
+	readback := &domain.Project{
+		ID: "88888888-9999-0000-1111-222222222222", Name: "Cocina editada",
+		CustomerID: stubMintedID, OwnerUserID: "v1", Status: domain.StatusDraft,
+		Items: []domain.ProjectItem{}, UpdatedAt: time.Date(2026, 9, 13, 23, 0, 0, 0, time.UTC),
+	}
+	store := seedInlineUpdateStore(&stubStore{projectReadbackAfterUpdate: readback})
+	srv := &Server{Store: store}
+	rr := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, rr, inlineUpdateRequest(inlineUpdateBody, "key-714-aaaaaaaaaaaa"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	var got struct {
+		domain.Project
+		InlineCustomer *domain.Customer `json:"inline_customer"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if got.CustomerID != stubMintedID {
+		t.Fatalf("project.customer_id = %q, want the server-minted id %q", got.CustomerID, stubMintedID)
+	}
+	if !got.UpdatedAt.Equal(readback.UpdatedAt) {
+		t.Fatalf("updated_at = %v, want the authoritative read-back %v", got.UpdatedAt, readback.UpdatedAt)
+	}
+	if got.InlineCustomer == nil || got.InlineCustomer.ID != stubMintedID || got.InlineCustomer.Name != "Ana López" || !got.InlineCustomer.Active {
+		t.Fatalf("inline_customer = %+v, want the active trimmed 'Ana López' with the minted id", got.InlineCustomer)
+	}
+	if store.updateProjectWithInlineCalls != 1 {
+		t.Fatalf("inline transition calls = %d, want exactly 1", store.updateProjectWithInlineCalls)
+	}
+	if store.updateProjectWithInlineBase != "10000000-0000-0000-0000-000000000001" {
+		t.Fatalf("base = %q, want the caller's base view of the customer assignment", store.updateProjectWithInlineBase)
+	}
+	if store.lastUpdatedProject != nil && store.lastUpdatedProject.CustomerID != stubMintedID {
+		t.Fatalf("stored project customer = %q, want the minted id", store.lastUpdatedProject.CustomerID)
+	}
+}
+
+func TestHandleProjectByIDUpdateInlinePlusExistingCustomerReturns400(t *testing.T) {
+	srv := &Server{Store: seedInlineUpdateStore(nil)}
+	body := `{"id":"88888888-9999-0000-1111-222222222222","name":"X","customer_id":"10000000-0000-0000-0000-000000000001","inline_customer_name":"Ana López","inline_customer_replaces":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+	rr := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, rr, inlineUpdateRequest(body, "key-714-bbbbbbbbbbbb"))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "no ambos") {
+		t.Errorf("error message = %q, want it to reject the ambiguous intent", msg)
+	}
+}
+
+func TestHandleProjectByIDUpdateInlineWithoutBaseReturns400(t *testing.T) {
+	srv := &Server{Store: seedInlineUpdateStore(nil)}
+	body := `{"id":"88888888-9999-0000-1111-222222222222","name":"X","customer_id":"","inline_customer_name":"Ana López","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+	rr := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, rr, inlineUpdateRequest(body, "key-714-cccccccccccc"))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "cliente actual") {
+		t.Errorf("error message = %q, want it to demand the base customer view", msg)
+	}
+}
+
+// The inline capability rides the durable idempotency receipts: a missing or
+// malformed key is rejected before anything persists.
+func TestHandleProjectByIDUpdateInlineWithoutIdempotencyKeyReturns400(t *testing.T) {
+	srv := &Server{Store: seedInlineUpdateStore(nil)}
+	rr := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, rr, inlineUpdateRequest(inlineUpdateBody, ""))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if srv.Store.(*stubStore).updateProjectWithInlineCalls != 0 {
+		t.Fatal("nothing may persist when the idempotency key is missing")
+	}
+}
+
+// Proof G at the HTTP boundary: the same intention replayed with the same key
+// returns the EXACT committed response — no second customer, no re-execution.
+func TestHandleProjectByIDUpdateInlineReplayReturnsSameResponse(t *testing.T) {
+	store := seedInlineUpdateStore(nil)
+	srv := &Server{Store: store}
+	first := httptest.NewRecorder()
+	second := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, first, inlineUpdateRequest(inlineUpdateBody, "key-714-dddddddddddd"))
+	serveInlineUpdate(srv, second, inlineUpdateRequest(inlineUpdateBody, "key-714-dddddddddddd"))
+
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("status first=%d second=%d, want 200/200", first.Code, second.Code)
+	}
+	if second.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("replay header = %q, want 'true'", second.Header().Get("Idempotency-Replayed"))
+	}
+	if first.Body.String() != second.Body.String() {
+		t.Fatalf("replayed body differs:\nfirst=%s\nsecond=%s", first.Body.String(), second.Body.String())
+	}
+	if store.updateProjectWithInlineCalls != 1 {
+		t.Fatalf("transition executions = %d, want 1 (the replay is served from the receipt)", store.updateProjectWithInlineCalls)
+	}
+}
+
+// Key reuse with a different payload is an explicit conflict — never a silent
+// second execution under someone else's key.
+func TestHandleProjectByIDUpdateInlineKeyReuseWithOtherPayloadReturns409(t *testing.T) {
+	srv := &Server{Store: seedInlineUpdateStore(nil)}
+	other := `{"id":"88888888-9999-0000-1111-222222222222","name":"Otro nombre","customer_id":"","inline_customer_name":"Ana López","inline_customer_replaces":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+	first := httptest.NewRecorder()
+	second := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, first, inlineUpdateRequest(inlineUpdateBody, "key-714-eeeeeeeeeeee"))
+	serveInlineUpdate(srv, second, inlineUpdateRequest(other, "key-714-eeeeeeeeeeee"))
+
+	if second.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body=%s)", second.Code, second.Body.String())
+	}
+}
+
+// Proof H mapping: the storage's explicit concurrency error surfaces as an
+// honest 409, never as a 500 or a silent overwrite.
+func TestHandleProjectByIDUpdateInlineConcurrentConflictReturns409(t *testing.T) {
+	store := seedInlineUpdateStore(&stubStore{updateProjectWithInlineErr: storage.ErrProjectConcurrentUpdate})
+	srv := &Server{Store: store}
+	rr := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, rr, inlineUpdateRequest(inlineUpdateBody, "key-714-ffffffffffff"))
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "cambió") {
+		t.Errorf("error message = %q, want the honest concurrent-update message", msg)
+	}
+}
+
+// Proof J: the inline capability cannot bypass the commercial lifecycle — a
+// non-draft project is rejected with an explicit conflict.
+func TestHandleProjectByIDUpdateInlineClosedProjectReturns409(t *testing.T) {
+	store := seedInlineUpdateStore(nil)
+	store.projectReturnedByID.Status = domain.StatusQuoted
+	srv := &Server{Store: store}
+	rr := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, rr, inlineUpdateRequest(inlineUpdateBody, "key-714-gggggggggggg"))
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.updateProjectWithInlineCalls != 0 {
+		t.Fatal("a closed project must never reach the inline transition")
+	}
+}
+
+// The inline transition writes BOTH entities, so a caller without the
+// customer-mutation capability is refused even though it may edit projects.
+func TestHandleProjectByIDUpdateInlineWithoutCustomerPermissionReturns403(t *testing.T) {
+	store := seedInlineUpdateStore(nil)
+	srv := &Server{Store: store}
+	req := withClaims(httptest.NewRequest(http.MethodPut, inlineUpdateProjectPath, strings.NewReader(inlineUpdateBody)), "prod-1", string(domain.RoleProduccion))
+	req.SetPathValue("id", "88888888-9999-0000-1111-222222222222")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "key-714-hhhhhhhhhhhh")
+	rr := httptest.NewRecorder()
+
+	serveInlineUpdate(srv, rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+	if store.updateProjectWithInlineCalls != 0 {
+		t.Fatal("production-only roles must never run the inline transition")
+	}
+}
+
+// Regression (proof D): legacy PUTs — no inline fields, no idempotency key —
+// keep the exact previous contract: plain UpdateProject, flat project echo.
+func TestHandleProjectByIDUpdateLegacyPutUnchanged(t *testing.T) {
+	store := seedInlineUpdateStore(nil)
+	srv := &Server{Store: store}
+	body := `{"id":"88888888-9999-0000-1111-222222222222","name":"Edición normal","customer_id":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"status":"draft","items":[]}`
+	req := withClaims(httptest.NewRequest(http.MethodPut, inlineUpdateProjectPath, strings.NewReader(body)), "v1", string(domain.RoleVendedor))
+	req.SetPathValue("id", "88888888-9999-0000-1111-222222222222")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.updateProjectWithInlineCalls != 0 {
+		t.Fatal("legacy PUT must never touch the inline transition")
+	}
+	if store.lastUpdatedProject == nil {
+		t.Fatal("legacy PUT must go through UpdateProject")
+	}
+	var got domain.Project
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if got.CustomerID != "10000000-0000-0000-0000-000000000001" {
+		t.Fatalf("customer_id = %q, want the selected existing customer", got.CustomerID)
 	}
 }
 

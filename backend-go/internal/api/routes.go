@@ -488,7 +488,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// #642 / 2A: batch read model for project commercial summaries in Cotizaciones list.
 	mux.Handle("GET /api/projects/commercial-summaries", authMW(http.HandlerFunc(server.HandleProjectCommercialSummaries)))
 	mux.Handle("GET /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
-	mux.Handle("PUT /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
+	mux.Handle("PUT /api/projects/{id}", authMW(server.requireProjectInlineUpdateIdempotency(http.HandlerFunc(server.HandleProjectByID))))
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 
 	// Project furniture identity (#385 / DT-1, ADR-0003): stable per-unit

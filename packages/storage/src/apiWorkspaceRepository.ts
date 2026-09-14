@@ -728,6 +728,51 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     throw new Error(`Failed to create project: ${res.status} ${text}`);
   }
 
+  /**
+   * #714 — atomic "edit quote + new customer" update. The server persists
+   * both in ONE transaction behind a durable idempotency receipt keyed by
+   * context.idempotencyKey: a retry after a lost response replays the
+   * committed answer instead of minting a second customer. The payload must
+   * NOT carry a customer_id (the UI never fabricates one); the server mints
+   * the identity and returns the authoritative read-back pair.
+   */
+  async updateProjectWithInlineCustomer(
+    project: Project,
+    inlineCustomerName: string,
+    context: {
+      readonly replacesCustomerId: string;
+      readonly idempotencyKey: string;
+    },
+  ): Promise<{ project: Project; customer: Customer }> {
+    const res = await this.fetch(`${this.baseUrl}/projects/${project.id}`, {
+      method: 'PUT',
+      headers: { ...this.getHeaders(), 'Idempotency-Key': context.idempotencyKey },
+      body: JSON.stringify({
+        ...projectToApi(project),
+        customer_id: '',
+        inline_customer_name: inlineCustomerName,
+        inline_customer_replaces: context.replacesCustomerId,
+      }),
+    });
+    if (res.ok) {
+      const raw = (await res.json()) as Record<string, unknown>;
+      const inline = raw.inline_customer as Record<string, unknown> | undefined;
+      if (!inline) {
+        throw new Error('Server did not return the inline customer identity');
+      }
+      return {
+        project: projectFromApi(raw),
+        customer: customerFromApi(inline),
+      };
+    }
+    const text = await res.text().catch(() => '');
+    // A 409 carries the honest verdict (stale base view, concurrent edit or
+    // reused key); surface it verbatim so the store can tell the user to
+    // refresh instead of blindly retrying.
+    console.error(`API update failed /projects/${project.id}: ${res.status} ${text}`);
+    throw new Error(`Failed to update project: ${res.status} ${text}`);
+  }
+
   async saveProject(project: Project): Promise<void> {
     await this.upsert(
       `/projects/${project.id}`,
