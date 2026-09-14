@@ -125,6 +125,8 @@ describe('saveAsQuote — transición atómica Customer+Project (#715)', () => {
     };
   }
 
+  let storage: ReturnType<typeof memoryStorage>;
+
   /** Server double for POST /projects: the #712 inline transition answers
    * 201 with the flat project plus the server-minted inline customer. */
   function mockInlineCreateSuccess(customerId = 'cust-server-1') {
@@ -153,7 +155,10 @@ describe('saveAsQuote — transición atómica Customer+Project (#715)', () => {
   beforeEach(() => {
     postMock.mockReset();
     getMock.mockReset();
-    setQuoterIntentionStorage(null);
+    // Working storage by default (fail-closed persistence requires a
+    // backend); specific tests inject failing/corrupt variants.
+    storage = memoryStorage();
+    setQuoterIntentionStorage(storage);
     __resetQuoterIntentionHydration();
     useQuoterStore.setState({
       items: [],
@@ -355,8 +360,6 @@ describe('saveAsQuote — transición atómica Customer+Project (#715)', () => {
   });
 
   it('restart + respuesta perdida tras commit: rehidrata la intención, reintenta con el MISMO id y reconcilia por read-back', async () => {
-    const storage = memoryStorage();
-    setQuoterIntentionStorage(storage);
     mockInlineCreateSuccess('cust-restart');
     seedCart('Ana');
 
@@ -464,5 +467,86 @@ describe('saveAsQuote — transición atómica Customer+Project (#715)', () => {
     );
     // Nunca se consultó el customer del proyecto ajeno.
     expect(getMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('fallo de escritura durable: fail-closed — 0 POST, error honesto, sin intención adoptada', async () => {
+    mockInlineCreateSuccess();
+    seedCart('Ana');
+    const failing = memoryStorage();
+    failing.setItem = () => Promise.reject(new Error('disk full'));
+    setQuoterIntentionStorage(failing);
+
+    await expect(useQuoterStore.getState().saveAsQuote()).rejects.toThrow(
+      'No se pudo registrar el intento de guardado de forma segura',
+    );
+
+    // Fail-closed: sin POST no hay Customer ni Project posibles.
+    expect(postMock).not.toHaveBeenCalled();
+    expect(getMock).not.toHaveBeenCalled();
+    // La intención no se adopta en memoria sin write durable confirmado.
+    expect(useQuoterStore.getState().pendingSaveIntention).toBeNull();
+    expect(useCatalogStore.getState().customers).toHaveLength(
+      initialCustomers.length,
+    );
+  });
+
+  it('intención persistida corrupta/inválida: fail-closed — 0 POST y sin nueva intención silenciosa', async () => {
+    mockInlineCreateSuccess();
+    const variants: ReadonlyArray<[string, string]> = [
+      ['JSON inválido', '{no-es-json'],
+      ['projectId inválido', JSON.stringify({ fingerprint: 'abcd1234abcd1234', projectId: 'no-uuid' })],
+      ['fingerprint inválido', JSON.stringify({ fingerprint: '', projectId: uuidV4Fallback() })],
+    ];
+
+    for (const [label, raw] of variants) {
+      postMock.mockReset();
+      useQuoterStore.setState({
+        items: [],
+        customerName: 'Cliente Particular',
+        projectTitle: 'Presupuesto de Mobiliario',
+        commercialMarginPercent: 35,
+        pendingSaveIntention: null,
+      });
+      storage.__dump().set('granete_quoter_intention_v1', raw);
+      seedCart('Ana');
+
+      await expect(useQuoterStore.getState().saveAsQuote()).rejects.toThrow(
+        /corrupta|inválida/,
+      );
+
+      // Podría existir un commit previo irrecuperable tras esa fila: jamás
+      // se acuña un projectId nuevo ni se envía nada.
+      expect(postMock).not.toHaveBeenCalled();
+      expect(useQuoterStore.getState().pendingSaveIntention).toBeNull();
+      // La fila corrupta no se sobreescribe silenciosamente.
+      expect(storage.__dump().get('granete_quoter_intention_v1')).toBe(raw);
+      expect(label).toBeTruthy();
+    }
+  });
+
+  it('fallo de lectura del storage: fail-closed — 0 POST', async () => {
+    mockInlineCreateSuccess();
+    seedCart('Ana');
+    const unreadable = memoryStorage();
+    unreadable.getItem = () => Promise.reject(new Error('io error'));
+    setQuoterIntentionStorage(unreadable);
+
+    await expect(useQuoterStore.getState().saveAsQuote()).rejects.toThrow(
+      'No se pudo leer la intención de guardado persistida',
+    );
+    expect(postMock).not.toHaveBeenCalled();
+    expect(useQuoterStore.getState().pendingSaveIntention).toBeNull();
+  });
+
+  it('sin backend de persistencia inyectado: fail-closed — 0 POST', async () => {
+    mockInlineCreateSuccess();
+    seedCart('Ana');
+    setQuoterIntentionStorage(null);
+
+    await expect(useQuoterStore.getState().saveAsQuote()).rejects.toThrow(
+      'Persistencia local de la intención no disponible',
+    );
+    expect(postMock).not.toHaveBeenCalled();
+    expect(useQuoterStore.getState().pendingSaveIntention).toBeNull();
   });
 });

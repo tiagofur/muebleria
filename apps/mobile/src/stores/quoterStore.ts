@@ -154,18 +154,25 @@ function fingerprintOf(payload: string): string {
 /**
  * One-shot hydration of the persisted intention (#715 restart safety).
  * Adopted only while no in-session intention exists — a save made in this
- * session always wins over the persisted row.
+ * session always wins over the persisted row. A load failure (corrupt row,
+ * read error) rejects and un-memoizes so the next attempt re-reads; every
+ * attempt is fail-closed on its own.
  */
 let intentionHydration: Promise<void> | null = null;
 function ensureIntentionHydrated(): Promise<void> {
-  intentionHydration ??= loadPersistedIntention().then((persisted) => {
-    if (
-      persisted &&
-      useQuoterStore.getState().pendingSaveIntention === null
-    ) {
-      useQuoterStore.setState({ pendingSaveIntention: persisted });
-    }
-  });
+  intentionHydration ??= loadPersistedIntention()
+    .then((persisted) => {
+      if (
+        persisted &&
+        useQuoterStore.getState().pendingSaveIntention === null
+      ) {
+        useQuoterStore.setState({ pendingSaveIntention: persisted });
+      }
+    })
+    .catch((err: unknown) => {
+      intentionHydration = null;
+      throw err;
+    });
   return intentionHydration;
 }
 
@@ -456,25 +463,25 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
   // pair in the 201 body. Mobile never POSTs /customers and never dedupes by
   // name — a typed name is a new customer by design (the picker for existing
   // customers belongs to the web app). The intention (digest + project id)
-  // is persisted so a retry after restart/lost-response reuses the same id
-  // (409 ⇒ authoritative read-back) instead of duplicating the pair. Item
-  // option choices are empty — the office finishes them in the web editor;
-  // module/preset/quantity carry over intact.
+  // is persisted FAIL-CLOSED (durable write confirmed → memory → POST) so a
+  // retry after restart/lost-response reuses the same id (409 ⇒ validated
+  // read-back) instead of duplicating the pair. Item option choices are
+  // empty — the office finishes them in the web editor; module/preset/
+  // quantity carry over intact.
 
   saveAsQuote: async () => {
-    // Restart safety (#715): adopt the persisted intention (if any) before
-    // deciding the project id, so a retry after app restart reuses it.
-    await ensureIntentionHydrated();
-    const {
-      customerName,
-      projectTitle,
-      items,
-      commercialMarginPercent,
-      pendingSaveIntention,
-    } = get();
+    const { customerName, projectTitle, items, commercialMarginPercent } =
+      get();
     if (items.length === 0) {
       throw new Error('El carrito está vacío');
     }
+    // Restart safety (#715): adopt the persisted intention (if any) before
+    // deciding the project id, so a retry after app restart reuses it. A
+    // load failure propagates — never mint a fresh id over an unreadable
+    // intention that may hide an unrecoverable prior commit.
+    await ensureIntentionHydrated();
+    const { pendingSaveIntention } = get();
+
     const trimmedName = customerName.trim() || 'Cliente Particular';
 
     const body = {
@@ -503,10 +510,18 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
         ? pendingSaveIntention.projectId
         : newProjectIntentionId();
     const intention = { fingerprint, projectId };
+    // FAIL-CLOSED (#715 review): confirm the durable write BEFORE adopting
+    // the intention or sending anything. If it fails: 0 POST /projects,
+    // 0 customers, 0 projects, honest error — no best-effort continue that
+    // could strand a committed pair behind a lost id.
+    try {
+      await savePersistedIntention(intention);
+    } catch (err) {
+      throw new Error(
+        `No se pudo registrar el intento de guardado de forma segura: ${(err as Error)?.message ?? 'error de almacenamiento'}`,
+      );
+    }
     set({ pendingSaveIntention: intention });
-    // Persist BEFORE the request: if the commit lands and the app dies
-    // before the response, the next session still retries the same id.
-    await savePersistedIntention(intention);
 
     try {
       const created = await apiClient.post<InlineProjectCreateResponse>(
