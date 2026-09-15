@@ -249,6 +249,7 @@ module Granete
                    else
                      normalize_parameters(definition, parameters)
                    end
+          prefetch_visual_assets(resolved_layout)
           host_transform = transformation || Geom::Transformation.new
           model.start_operation("Colocar Mueble del Proyecto #{definition['name']}", true) if transaction
           begin
@@ -387,6 +388,116 @@ module Granete
         end
       end
 
+      # Renders resolved Library::NativeLayout composition (#414 contract).
+      # Extracted from FurnitureBuilder to keep the class within its length budget.
+      module NativeLayoutRenderer
+        def prefetch_visual_assets(resolved_layout)
+          return unless resolved_layout.is_a?(Library::NativeLayout)
+          return unless @asset_loader.respond_to?(:prefetch_hardware_assets)
+
+          @asset_loader.prefetch_hardware_assets(resolved_layout.hardware)
+        end
+
+        def render_native_layout(model, furniture_definition, instance_id, native_layout)
+          native_layout.boards.each do |board|
+            render_native_board(model, furniture_definition, instance_id, board)
+          end
+          native_layout.hardware.each do |placement|
+            render_native_hardware(model, furniture_definition, instance_id, placement)
+          end
+          {
+            'total' => native_layout.boards.length + native_layout.hardware.length,
+            'boards' => native_layout.boards.length,
+            'hardware' => native_layout.hardware.length
+          }
+        end
+
+        def render_native_board(model, parent_definition, furniture_instance_id, board)
+          name = board.name || board.slot_id || board.component_instance_id
+          board_definition = model.definitions.add(
+            "#{FurnitureBuilder::PART_DEFINITION_PREFIX}#{name} · #{board.component_instance_id}"
+          )
+          LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm, board.length_mm)
+
+          instance = parent_definition.entities.add_instance(
+            board_definition, LocalGeometry.axes_transform(board.translation, board.basis)
+          )
+          instance.name = name
+
+          paint_board(model, instance, board)
+          ChildMetadataWriter.write_part(
+            @metadata_store, instance, board.component_instance_id, board.slot_id,
+            component_definition_id: board.component_definition_id,
+            catalog_component_id: board.catalog_component_id,
+            furniture_ref: furniture_instance_id,
+            role: board.role,
+            material_binding_role: board.option_role,
+            assembly_translation_mm: board.translation,
+            authoring_capability: board.authoring_capability
+          )
+          instance
+        end
+
+        def render_native_hardware(model, parent_definition, furniture_instance_id, placement)
+          name = placement.name || 'Herraje'
+          pos = placement.local_translation || placement.translation || [0.0, 0.0, 0.0]
+
+          asset_id = placement.asset_id || placement.hardware_id
+          if @asset_loader && asset_id
+            instance = @asset_loader.load_asset_instance(
+              model, asset_id, parent_definition, pos,
+              basis: placement.basis,
+              revision_id: placement.asset_revision_id,
+              sha256: placement.sha256,
+              expected_bytes: placement.expected_bytes
+            )
+            return attach_hardware_metadata(instance, placement, name, furniture_instance_id) if instance
+          end
+
+          dims = placement.dimensions || FurnitureBuilder::DEFAULT_HARDWARE_DIMS_MM
+          hardware_definition = model.definitions.add(
+            "#{FurnitureBuilder::HARDWARE_DEFINITION_PREFIX}#{name} · #{placement.placement_id}"
+          )
+          LocalGeometry.build_local_box(hardware_definition, dims[0], dims[1], dims[2])
+          transform = if placement.basis
+                        LocalGeometry.axes_transform(pos, placement.basis)
+                      else
+                        LocalGeometry.translation_only(pos)
+                      end
+          instance = parent_definition.entities.add_instance(hardware_definition, transform)
+          instance.name = name
+          MaterialApplier.apply(model, instance, name, placement.color_hex)
+          attach_hardware_metadata(instance, placement, name, furniture_instance_id)
+        end
+
+        def attach_hardware_metadata(instance, placement, name, furniture_instance_id)
+          instance.name = name
+          ChildMetadataWriter.write_hardware(
+            @metadata_store, instance, placement.placement_id,
+            furniture_ref: furniture_instance_id,
+            hardware_definition_id: placement.hardware_id,
+            host_component_instance_id: placement.host_component_instance_id,
+            placement_kind: placement.placement_kind,
+            anchor_face: placement.anchor_face,
+            offset_mm: placement.offset_mm
+          )
+          instance
+        end
+
+        def paint_board(model, instance, board)
+          material_name = board.material_name || board.option_role || board.slot_id || 'Tablero'
+          texture_url = board.material_texture_url || board.material_image_url
+          texture_path = @texture_cache&.resolve_texture(texture_url)
+          MaterialApplier.apply(
+            model, instance, material_name, board.material_color_hex,
+            texture_path: texture_path,
+            tile_width_mm: board.material_texture_tile_width_mm,
+            tile_length_mm: board.material_texture_tile_length_mm,
+            grain: board.material_grain
+          )
+        end
+      end
+
       # Native SketchUp renderer (#415 / ADR-0004). Every managed furniture is
       # a top-level Sketchup::ComponentInstance with an isolated generated
       # ComponentDefinition; every managed board/hardware is a nested
@@ -401,6 +512,7 @@ module Granete
         include FurnitureIntent
         include ProjectPlacement
         include LegacyMigrationBuild
+        include NativeLayoutRenderer
 
         MM_TO_INCHES = 1.0 / 25.4
         DEFAULT_HARDWARE_DIMS_MM = [96.0, 32.0, 25.0].freeze
@@ -426,6 +538,7 @@ module Granete
           parameters = normalize_parameters(definition, raw_parameters)
           instance_id = generate_instance_id
 
+          prefetch_visual_assets(resolved_layout)
           model.start_operation("Insertar Mueble #{definition['name']}", true)
           begin
             furniture_definition = create_furniture_definition(model, definition, instance_id)
@@ -472,6 +585,7 @@ module Granete
             return { 'success' => false, 'error' => MATERIAL_RESOLUTION_REQUIRED_ERROR }
           end
 
+          prefetch_visual_assets(resolved_layout)
           model.start_operation("Editar Mueble #{definition['name']}", true) if transaction
           begin
             # A native copy/paste can temporarily leave two top-level furniture
@@ -508,7 +622,7 @@ module Granete
         end
 
         def build_result(instance_id, definition, parameters, counts)
-          {
+          res = {
             'success' => true,
             'instance_id' => instance_id,
             'name' => definition['name'],
@@ -517,6 +631,10 @@ module Granete
             'hardware_count' => counts['hardware'],
             'parameters' => parameters
           }
+          if @asset_loader.respond_to?(:diagnostics) && !@asset_loader.diagnostics.empty?
+            res['diagnostics'] = @asset_loader.diagnostics.dup
+          end
+          res
         end
 
         # The top-level host definition is isolated per FurnitureInstance
@@ -540,101 +658,6 @@ module Granete
                   'resolved_layout debe ser un Library::NativeLayout parseado vía LayoutContract.parse! ' \
                   '(contrato granete.local-basis.v1); el renderer no consume bodies crudos ni infiere AABBs'
           end
-        end
-
-        # Server-resolved composition (#414 contract already validated by the
-        # parser): local solid geometry at origin + authoritative transform.
-        def render_native_layout(model, furniture_definition, instance_id, native_layout)
-          native_layout.boards.each do |board|
-            render_native_board(model, furniture_definition, instance_id, board)
-          end
-          native_layout.hardware.each do |placement|
-            render_native_hardware(model, furniture_definition, instance_id, placement)
-          end
-          {
-            'total' => native_layout.boards.length + native_layout.hardware.length,
-            'boards' => native_layout.boards.length,
-            'hardware' => native_layout.hardware.length
-          }
-        end
-
-        def render_native_board(model, parent_definition, furniture_instance_id, board)
-          name = board.name || board.slot_id || board.component_instance_id
-          board_definition = model.definitions.add(
-            "#{PART_DEFINITION_PREFIX}#{name} · #{board.component_instance_id}"
-          )
-          LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm, board.length_mm)
-
-          instance = parent_definition.entities.add_instance(
-            board_definition, LocalGeometry.axes_transform(board.translation, board.basis)
-          )
-          instance.name = name
-
-          paint_board(model, instance, board)
-          ChildMetadataWriter.write_part(
-            @metadata_store, instance, board.component_instance_id, board.slot_id,
-            component_definition_id: board.component_definition_id,
-            catalog_component_id: board.catalog_component_id,
-            furniture_ref: furniture_instance_id,
-            role: board.role,
-            material_binding_role: board.option_role,
-            # #414: persist the authoritative localTransform pose, never the
-            # AABB min (preview convenience only).
-            assembly_translation_mm: board.translation,
-            authoring_capability: board.authoring_capability
-          )
-          instance
-        end
-
-        def render_native_hardware(model, parent_definition, furniture_instance_id, placement)
-          name = placement.name || 'Herraje'
-          pos = placement.translation || [0.0, 0.0, 0.0]
-
-          asset_id = placement.asset_id || placement.hardware_id
-          if @asset_loader && asset_id
-            instance = @asset_loader.load_asset_instance(model, asset_id, parent_definition, pos)
-            return attach_hardware_metadata(instance, placement, name, furniture_instance_id) if instance
-          end
-
-          dims = placement.dimensions || DEFAULT_HARDWARE_DIMS_MM
-          hardware_definition = model.definitions.add(
-            "#{HARDWARE_DEFINITION_PREFIX}#{name} · #{placement.placement_id}"
-          )
-          LocalGeometry.build_local_box(hardware_definition, dims[0], dims[1], dims[2])
-          instance = parent_definition.entities.add_instance(hardware_definition,
-                                                             LocalGeometry.translation_only(pos))
-          instance.name = name
-          MaterialApplier.apply(model, instance, name, placement.color_hex)
-          attach_hardware_metadata(instance, placement, name, furniture_instance_id)
-        end
-
-        def attach_hardware_metadata(instance, placement, name, furniture_instance_id)
-          instance.name = name
-          ChildMetadataWriter.write_hardware(
-            @metadata_store, instance, placement.placement_id,
-            furniture_ref: furniture_instance_id,
-            hardware_definition_id: placement.hardware_id,
-            host_component_instance_id: placement.host_component_instance_id,
-            placement_kind: placement.placement_kind,
-            anchor_face: placement.anchor_face,
-            offset_mm: placement.offset_mm
-          )
-          instance
-        end
-
-        # Visual painting from the resolved material preview fields. Rendering
-        # only — the material's industrial thickness/truth never lives here.
-        def paint_board(model, instance, board)
-          material_name = board.material_name || board.option_role || board.slot_id || 'Tablero'
-          texture_url = board.material_texture_url || board.material_image_url
-          texture_path = @texture_cache&.resolve_texture(texture_url)
-          MaterialApplier.apply(
-            model, instance, material_name, board.material_color_hex,
-            texture_path: texture_path,
-            tile_width_mm: board.material_texture_tile_width_mm,
-            tile_length_mm: board.material_texture_tile_length_mm,
-            grain: board.material_grain
-          )
         end
 
         # Scoped generated-definition cleanup (ADR-0004 §22): only Granete

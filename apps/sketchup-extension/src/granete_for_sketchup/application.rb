@@ -224,6 +224,15 @@ module Granete
       # resolution path.
       def build_project_furniture_placer(catalog_provider)
         texture_cache = Assets::TextureCache.new(transport: @transport, auth_provider: @auth_provider)
+        hardware_downloader = Assets::HardwareAssetDownloader.new(
+          transport: @transport,
+          auth_provider: @auth_provider,
+          logger: @logger
+        )
+        asset_loader = Assets::AssetLoader.new(
+          downloader: hardware_downloader,
+          logger: @logger
+        )
         Connection::ProjectFurniture::Placer.new(
           model_provider: method(:active_model),
           binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) },
@@ -238,7 +247,7 @@ module Granete
           furniture_builder_factory: lambda { |model|
             Model::FurnitureBuilder.new(
               metadata_store: metadata_store(model),
-              asset_loader: Assets::AssetLoader.new,
+              asset_loader: asset_loader,
               texture_cache: texture_cache
             )
           },

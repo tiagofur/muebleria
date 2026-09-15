@@ -157,12 +157,16 @@ module Granete
 
         attr_reader :placement_id, :hardware_id, :asset_id, :name, :placement_kind,
                     :host_component_instance_id, :translation, :dimensions, :color_hex,
-                    :anchor_face, :offset_mm
+                    :anchor_face, :offset_mm,
+                    :asset_revision_id, :sha256, :expected_bytes, :representation,
+                    :validation_state, :local_transform
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
                        placement_kind: nil, host_component_instance_id: nil, translation: nil,
-                       dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil)
+                       dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil,
+                       asset_revision_id: nil, sha256: nil, expected_bytes: nil,
+                       representation: nil, validation_state: nil, local_transform: nil)
           @placement_id = placement_id
           @hardware_id = hardware_id
           @asset_id = asset_id
@@ -174,6 +178,20 @@ module Granete
           @color_hex = color_hex
           @anchor_face = anchor_face
           @offset_mm = offset_mm
+          @asset_revision_id = asset_revision_id
+          @sha256 = sha256
+          @expected_bytes = expected_bytes
+          @representation = representation
+          @validation_state = validation_state
+          @local_transform = local_transform
+        end
+
+        def basis
+          @local_transform ? @local_transform['basis'] : nil
+        end
+
+        def local_translation
+          @local_transform ? @local_transform['translation'] : @translation
         end
       end
 
@@ -335,7 +353,7 @@ module Granete
           raw.map { |entry| parse_placement(entry) }
         end
 
-        # rubocop:disable-next Metrics/AbcSize
+        # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
         def parse_placement(raw)
           raise LayoutContract::ContractError, 'Herraje de composición inválido' unless raw.is_a?(Hash)
 
@@ -359,12 +377,33 @@ module Granete
                         raw['offsetMm'].to_f
                       end
 
+          local_transform = if raw['localTransform'].is_a?(Hash)
+                              {
+                                'translation' => ContractCoercions.numeric_triple(
+                                  raw.dig('localTransform', 'translationMm'),
+                                  "translationMm de localTransform de herraje #{placement_id}"
+                                ),
+                                'basis' => BasisValidation.parse(raw.dig('localTransform', 'basis'), placement_id)
+                              }
+                            end
+
           LayoutHardwarePlacement.new(
             placement_id: placement_id,
             hardware_id: ContractCoercions.optional_opaque_string(raw['hardwareId'],
                                                                   "hardwareId de #{placement_id}"),
             asset_id: ContractCoercions.optional_opaque_string(raw['assetId'],
                                                                "assetId de #{placement_id}"),
+            asset_revision_id: ContractCoercions.optional_opaque_string(raw['assetRevisionId'],
+                                                                        "assetRevisionId de #{placement_id}"),
+            sha256: ContractCoercions.optional_opaque_string(raw['sha256'],
+                                                             "sha256 de #{placement_id}"),
+            expected_bytes: ContractCoercions.optional_finite_number(raw['expectedBytes'],
+                                                                     "expectedBytes de #{placement_id}")&.to_i,
+            representation: ContractCoercions.optional_opaque_string(raw['representation'],
+                                                                     "representation de #{placement_id}"),
+            validation_state: ContractCoercions.optional_opaque_string(raw['validationState'],
+                                                                       "validationState de #{placement_id}"),
+            local_transform: local_transform,
             name: ContractCoercions.optional_opaque_string(raw['name'], "name de #{placement_id}"),
             placement_kind: placement_kind,
             host_component_instance_id: ContractCoercions.optional_opaque_string(

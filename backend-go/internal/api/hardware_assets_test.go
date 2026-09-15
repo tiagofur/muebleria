@@ -565,3 +565,54 @@ func TestHardwareAssets_HandlerLevelByteWalkthrough(t *testing.T) {
 	_, _ = pool.Exec(context.Background(),
 		`DELETE FROM hardware_assets WHERE id = $1`, asset.ID)
 }
+
+func TestHardwareAssetRevisionValidate(t *testing.T) {
+	var capturedCmd storage.RecordHardwareAssetValidationCommand
+	store := &stubStore{
+		recordValidationCmd: &capturedCmd,
+	}
+	srv := &Server{Store: store}
+
+	// 1. Success path
+	payload := `{"sha256":"sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","tool":"sketchup-host-2024","result":"passed","details":{"manifold":true}}`
+	req := hwAssetRequest(http.MethodPost,
+		"/api/hardware-assets/74000000-0000-0000-0000-000000000001/revisions/75000000-0000-0000-0000-000000000001:validate",
+		payload, string(domain.RoleAdmin))
+	req.SetPathValue("assetId", "74000000-0000-0000-0000-000000000001")
+	req.SetPathValue("revisionId", "75000000-0000-0000-0000-000000000001")
+	rr := httptest.NewRecorder()
+	srv.HandleHardwareAssetRevisionValidate(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d %s", rr.Code, rr.Body.String())
+	}
+	if capturedCmd.Tool != "sketchup-host-2024" || capturedCmd.Result != "passed" {
+		t.Fatalf("unexpected captured command: %+v", capturedCmd)
+	}
+
+	// 2. Invalid SHA format
+	badShaPayload := `{"sha256":"bad-sha","tool":"sketchup-host-2024","result":"passed"}`
+	badReq := hwAssetRequest(http.MethodPost,
+		"/api/hardware-assets/74000000-0000-0000-0000-000000000001/revisions/75000000-0000-0000-0000-000000000001:validate",
+		badShaPayload, string(domain.RoleAdmin))
+	badReq.SetPathValue("assetId", "74000000-0000-0000-0000-000000000001")
+	badReq.SetPathValue("revisionId", "75000000-0000-0000-0000-000000000001")
+	badRR := httptest.NewRecorder()
+	srv.HandleHardwareAssetRevisionValidate(badRR, badReq)
+	if badRR.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for bad SHA, got %d", badRR.Code)
+	}
+
+	// 3. Invalid result
+	badResultPayload := `{"sha256":"sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","tool":"sketchup-host-2024","result":"maybe"}`
+	badResReq := hwAssetRequest(http.MethodPost,
+		"/api/hardware-assets/74000000-0000-0000-0000-000000000001/revisions/75000000-0000-0000-0000-000000000001:validate",
+		badResultPayload, string(domain.RoleAdmin))
+	badResReq.SetPathValue("assetId", "74000000-0000-0000-0000-000000000001")
+	badResReq.SetPathValue("revisionId", "75000000-0000-0000-0000-000000000001")
+	badResRR := httptest.NewRecorder()
+	srv.HandleHardwareAssetRevisionValidate(badResRR, badResReq)
+	if badResRR.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for bad result, got %d", badResRR.Code)
+	}
+}

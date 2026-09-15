@@ -1,3 +1,20 @@
+# Issue #668 — [P1][AS3D-2] SketchUp: jaladera SKP real con descarga, montaje y diagnóstico completo
+
+- Approval: Prompt y handoff del propietario (2026-09-15) autorizan la implementación de #668 como parte del programa #666. Base exacta origin/main en worktree aislado .worktrees/issue-668-sketchup-hardware-3d, rama feat/668-sketchup-hardware-skp-assets.
+- Scope: Descarga autorizada mediante token de sesión JWT (POST /hardware-assets/{assetId}/revisions/{revisionId}:authorize), streaming de binario sin cabecera Bearer a endpoint de archivo firmado, verificación de hash sha256 y tamaño, caché atómica en disco (HardwareAssetCache), resolución de geometrías SKP nativas en SketchUp con orientación autoritativa de base ortonormal derecha (axes_transform), prefetching previo a la transacción de modelo (#498 pipeline, cero I/O de red dentro de model.start_operation), diagnósticos estructurados visibles ante fallos o ausencias (hardware_asset_missing), y validador en host (HardwareAssetValidator) con emisión de evidencia inmutable append-only a POST /api/hardware-assets/{assetId}/revisions/{revisionId}:validate. Sin fallback mutable por nombre en reconstrucción de revisiones históricas.
+- Solución por capas:
+  1. Go Domain & Engine: LayoutHardware enriquecido con LocalTransform, AssetID, AssetRevisionID, SHA256, ExpectedBytes, Representation, ValidationState. Wire golden sketchupAuthoringResolve.contract.json sincronizado con paridad exacta.
+  2. Go Backend: RecordHardwareAssetValidation en storage y HandleHardwareAssetRevisionValidate en API para registrar evidencia append-only desde el host validador.
+  3. Ruby Contratos & Cache: LayoutContract valida y parsea LayoutHardwarePlacement con base ortonormal y metadatos visuales. HardwareAssetCache con verificación sha256 y escritura atómica temporal. HardwareAssetDownloader con mutex por asset/revisión y reintento de grant.
+  4. Ruby Montaje & Renderizado: AssetLoader con prefetching y transformación rígida (axes_transform), integrado a FurnitureBuilder prefetch pipeline antes de model.start_operation. NativeLayoutRenderer modularizado.
+  5. Ruby Validador: HardwareAssetValidator inspecciona entidades y dimensiones en host SketchUp y remite reporte tipado (passed/failed) al backend.
+- Evidencia:
+  - Ruby Extension: 769 runs, 5136 assertions, 0 failures, 0 errors, 0 skips (bundle exec rake unit).
+  - RuboCop: 192 files inspected, no offenses detected (bundle exec rubocop).
+  - Go Backend: tests de internal/domain/engine y internal/api de hardware assets PASS (TestLayoutHardwareAuthoritativeTransformAndVisualAsset, TestHardwareAssetRevisionValidate, TestAuthoringResolveContractFixtureGolden).
+  - OpenAPI Drift: pnpm openapi:check PASS (0 drift, negative proofs passed).
+  - TypeScript Monorepo: pnpm test PASS (38 test files, 492 tests), pnpm typecheck PASS (7/7 packages/apps).
+- Delivery mode: complete.
 # Issue #738 — [P0][FLOW-ENG] Llevar el release canónico a Ingeniería sin depender de Project.status ni saltar etapas
 
 - Approval: issue #738 OPEN con `status:approved`, `type:bug`, `high` (verificada remota al iniciar). Base exacta `origin/main@888dcb596b3932f487758e0b006b3b76e53c54b8` (post-merge PR #737, verificado). Rama `fix/738-canonical-release-engineering-entry`. Durante la entrega se integró `origin/main@74bb90e0` (merge del PR documental #742): su documento `docs/demo/engineering-flow-recovery-2026-09-15.md` llegó por main (no copiado); el conflicto en `docs/project-lifecycle.md` §2.2 se resolvió conservando la estructura de #742 (contradicción de la base examinada) y actualizando el bloque al estado implementado por #738.
