@@ -43,6 +43,19 @@ module Granete
           store(key, review_from_rejection(e, scope, message_id))
         end
 
+        # #731 PR2 fail-closed seam: an UNEXPECTED failure during a
+        # revalidation attempt (the batch's rescue) must invalidate the
+        # furniture's SHARED truth — every tracker alias of the unit flips
+        # to unavailable, so an older authoritative ready/warning can never
+        # survive the failed attempt that superseded it. The stored review
+        # carries the honest reason for the exceptions UX.
+        def mark_unavailable(scope, message_id:, reason:)
+          key = CommandContract.semantic_target_key(scope)
+          furniture_id = scope['furnitureInstanceId'] || scope['furnitureInstanceRef']
+          @tracker.mark_unavailable_furniture!(furniture_id, message_id: message_id)
+          store(key, PreflightReview.unavailable(scope: scope, reason: reason))
+        end
+
         # Navigates a review issue to its exact managed context; returns the
         # navigation result hash (or nil when nothing honest can be located).
         def navigate(scope, issue_id:, target: 'primary')

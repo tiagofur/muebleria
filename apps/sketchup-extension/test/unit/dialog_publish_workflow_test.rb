@@ -67,9 +67,17 @@ class DialogPublishWorkflowTest < Minitest::Test
       @outcomes = outcomes.dup
     end
 
+    # Queues further per-call outcomes for a LATER run on the same provider
+    # (e.g. a revalidation whose second unit fails unexpectedly).
+    def enqueue(outcomes)
+      @outcomes.concat(outcomes)
+    end
+
     def resolve_authoring(request_payload)
       @requests << request_payload
       outcome = @outcomes.shift || :ready
+      raise 'boom' if outcome == :raise
+
       body = scenario_body(outcome == :ready ? READY : BLOCKED)
       body['responseMessageId'] = "resolve-#{request_payload['messageId']}"
       body['inReplyToMessageId'] = request_payload['messageId']
@@ -227,6 +235,39 @@ class DialogPublishWorkflowTest < Minitest::Test
     exception = validation['exceptions'].find { |e| e['furnitureInstanceId'] == FI_A }
     refute_nil exception
     assert_equal 'duplicate_local', exception['state']
+  end
+
+  # Review P1 regression (orchestration): the tracker already holds ready
+  # for the whole scope; a NEW publish run whose FI_B revalidation raises
+  # unexpectedly must invalidate that ready in the SHARED tracker, block the
+  # FRESH gate and never reach the publisher — with FI_B shown as the only
+  # exception, never as ready.
+  def test_publish_after_unexpected_revalidation_failure_never_publishes
+    publisher = recording_publisher
+    host = connected_host(%w[present_synced] * 4)
+    controller = build_controller(%i[ready ready ready ready], publisher, host)
+    dialog = controller_dialog(controller)
+
+    # First a full successful validation seeds the tracker with ready.
+    controller.handle_validate_design_revision(dialog)
+    controller.drain
+    assert_equal 4, provider_requests(controller).length
+
+    @provider.enqueue(%i[ready raise])
+    controller.handle_publish_design_revision(dialog)
+    controller.drain
+
+    assert_empty publisher.calls, 'the fresh gate must block on the invalidated unit'
+    result = publish_result(controller)
+    assert_equal 'preflight_incomplete', result['code']
+    validation = result['validation']
+    assert_equal 4, validation['total']
+    assert_equal 3, validation['ready']
+    assert_equal 1, validation['attention']
+    assert_equal([FI_B], validation['exceptions'].map { |e| e['furnitureInstanceId'] })
+    exception = validation['exceptions'].first
+    assert_equal 'unavailable', exception['state']
+    assert_equal 'boom', exception['reason']
   end
 
   # Caso 8: double click → one orchestration, one batch, one publish.

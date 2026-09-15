@@ -1418,3 +1418,34 @@ EOL.
   `node test/js/dialog_publish_test.js` 22/22; `git diff --check` limpio.
 - SketchUp real (TestUp): NOT_TESTED en esta sesión (sin host disponible);
   `TC_DesignPublishSmoke.rb` queda como smoke real-host para el merge gate.
+
+## #731 PR2 — review correction (fail-closed en unexpected failure)
+
+- P1 de review corregido: el rescue inesperado de
+  `DesignPreflightBatch#run_unit` ahora invalida la verdad compartida, no
+  sólo el estado local del batch.
+  - Seam nuevo `PreflightReviewSession#mark_unavailable(scope, message_id:, reason:)`
+    (session seam, sin conocimiento extra del tracker en el batch).
+  - `PreflightTracker#mark_unavailable_furniture!(id, message_id:)` nueva:
+    invalida TODAS las aliases id/ref registradas del mueble (ningún
+    `ready` viejo puede sobrevivir; la prioridad del gate ya ponía
+    unavailable > ready, ahora además no quedan entradas contradictorias).
+  - Guardado también un review `unavailable` con el reason honesto para la
+    UX de excepciones.
+- Regresiones:
+  - `design_preflight_batch_test.rb#test_unexpected_failure_invalidates_previous_ready_and_blocks_the_gate`:
+    tracker pre-sembrado ready (con alias ref en FI_B) → revalidación con
+    RuntimeError en FI_B → batch completa, estado efectivo unavailable en
+    TODAS las aliases, `PublicationPreflightGate` REAL allowed=false
+    (unavailable=1, verified=2).
+  - `dialog_publish_workflow_test.rb#test_publish_after_unexpected_revalidation_failure_never_publishes`:
+    tracker all-ready (validación previa) → Publicar con raise inesperado
+    en FI_B → Publisher.publish calls 0, code preflight_incomplete,
+    exceptions-only [FI_B] state unavailable reason 'boom', ready=3/4.
+  - Semántica de resultados conocidos (ready/warning/blocked/
+    AuthoringResolveError/unavailable normal) intacta; el batch no aborta.
+- Verificación: `rake verify` PASS — RuboCop 0; unit 750 runs / 5060
+  assertions / 0 failures; boundary 6/6; RBZ sha256
+  53510b186aa67fbc52cbde54ab472502726a142dfaec4e318f5671e50f86ae93;
+  `node test/js/dialog_publish_test.js` 22/22; `git diff --check` limpio.
+  SketchUp real: NOT_TESTED (sin host en esta sesión).

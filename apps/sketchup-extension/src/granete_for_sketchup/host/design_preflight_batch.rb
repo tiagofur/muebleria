@@ -144,12 +144,33 @@ module Granete
           @preflight_session.run(scope, message_id: message_id)
           run['states'][furniture_instance_id] = state_for(furniture_instance_id)
         rescue StandardError => e
-          # An unexpected per-unit failure is an honest unavailable result:
-          # the batch continues and the gate fails closed on it.
+          # An unexpected per-unit failure is an honest unavailable result —
+          # and it must invalidate the furniture's SHARED truth: the session
+          # seam flips every tracker alias of the unit to unavailable, so an
+          # older ready/warning can never survive the failed revalidation
+          # attempt the gate would otherwise read. The batch continues; the
+          # fresh gate fails closed.
           @logger.error('design_preflight_batch_unit_failed',
                         error: e, furniture_instance_id: furniture_instance_id)
-          run['states'][furniture_instance_id] = 'unavailable'
+          invalidate_unit_truth(scope, message_id: message_id, reason: e.message)
+          run['states'][furniture_instance_id] = state_for(furniture_instance_id)
           run['reasons'][furniture_instance_id] = e.message
+        end
+
+        # Session seam first (shared tracker + stored unavailable review); a
+        # session double without the seam still gets every tracker alias of
+        # the furniture invalidated directly.
+        def invalidate_unit_truth(scope, message_id:, reason: nil)
+          if @preflight_session.respond_to?(:mark_unavailable)
+            @preflight_session.mark_unavailable(scope, message_id: message_id, reason: reason)
+            return
+          end
+
+          furniture_id = scope['furnitureInstanceId'] || scope['furnitureInstanceRef']
+          tracker = @preflight_session.respond_to?(:tracker) ? @preflight_session.tracker : nil
+          return unless tracker.respond_to?(:mark_unavailable_furniture!)
+
+          tracker.mark_unavailable_furniture!(furniture_id, message_id: message_id)
         end
 
         # Effective furniture state with the SAME priority the publication

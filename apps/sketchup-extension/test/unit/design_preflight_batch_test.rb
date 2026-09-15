@@ -28,12 +28,14 @@ class DesignPreflightBatchTest < Minitest::Test
   end
 
   # Session double: runs the authoritative seam and records honest tracker
-  # entries, with per-furniture configurable statuses and raisers.
+  # entries, with per-furniture configurable statuses and raisers. The
+  # tracker can be shared across runs so older entries survive exactly like
+  # they do in the real host session.
   class FakeSession
     attr_reader :runs, :tracker
 
-    def initialize(statuses = {}, raisers = {})
-      @tracker = Host::PreflightTracker.new
+    def initialize(statuses = {}, raisers = {}, tracker: nil)
+      @tracker = tracker || Host::PreflightTracker.new
       @statuses = statuses
       @raisers = raisers
       @runs = []
@@ -54,6 +56,13 @@ class DesignPreflightBatchTest < Minitest::Test
                                    message_id: message_id)
       end
       nil
+    end
+
+    # The session seam the batch's unexpected-failure rescue depends on.
+    def mark_unavailable(scope, message_id:, reason: nil)
+      _ = reason
+      @tracker.mark_unavailable_furniture!(scope['furnitureInstanceId'],
+                                           message_id: message_id)
     end
   end
 
@@ -92,7 +101,7 @@ class DesignPreflightBatchTest < Minitest::Test
   end
 
   def test_blocked_unit_is_a_result_and_the_batch_continues
-    session = FakeSession.new(FI_A => 'ready', FI_B => 'blocked', FI_C => 'warning')
+    session = FakeSession.new({ FI_A => 'ready', FI_B => 'blocked', FI_C => 'warning' })
     batch = build_batch(session)
 
     batch.start
@@ -160,7 +169,7 @@ class DesignPreflightBatchTest < Minitest::Test
   end
 
   def test_unexpected_unit_error_maps_to_unavailable_and_continues
-    session = FakeSession.new({}, FI_B => RuntimeError.new('boom'))
+    session = FakeSession.new({}, { FI_B => RuntimeError.new('boom') })
     batch = build_batch(session)
 
     batch.start
@@ -170,6 +179,46 @@ class DesignPreflightBatchTest < Minitest::Test
     assert_equal 'unavailable', result['states'][FI_B]
     assert_equal 'boom', result['reasons'][FI_B]
     assert_equal 3, session.runs.length
+  end
+
+  # Review P1 regression: a furniture whose PREVIOUS validation left a
+  # tracker `ready` must not keep it when the CURRENT revalidation attempt
+  # fails unexpectedly — the shared truth flips to unavailable and the FRESH
+  # publication gate fails closed. The batch itself stays resilient.
+  def test_unexpected_failure_invalidates_previous_ready_and_blocks_the_gate
+    seeded = FakeSession.new
+    seeded.run({ 'furnitureInstanceId' => FI_A }, message_id: 'seed-a')
+    seeded.run({ 'furnitureInstanceId' => FI_B, 'furnitureInstanceRef' => FI_B },
+               message_id: 'seed-b')
+    seeded.run({ 'furnitureInstanceId' => FI_C }, message_id: 'seed-c')
+    tracker = seeded.tracker
+    assert_equal 'ready', effective_state(tracker, FI_B)
+
+    failing = FakeSession.new({ FI_A => 'ready', FI_C => 'ready' },
+                              { FI_B => RuntimeError.new('boom') }, tracker: tracker)
+    build_batch(failing).start
+
+    result = @completions.last
+    assert result['ok'], 'the other units still complete'
+    assert_equal 3, failing.runs.length
+    assert_equal 'unavailable', result['states'][FI_B]
+    assert_equal 'unavailable', effective_state(tracker, FI_B),
+                 'the old ready must not survive the failed revalidation'
+    assert_equal ['unavailable'],
+                 tracker.furniture_entries_for(FI_B).map(&:state).uniq,
+                 'every id/ref alias of the furniture flips coherently'
+
+    gate = Host::PublicationPreflightGate.new(
+      scope_provider: -> { @scope },
+      host_reconciliation: Struct.new(:projection).new(
+        { 'state' => 'connected', 'clean' => true, 'summary' => { 'attention' => 0 } }
+      ),
+      tracker: tracker
+    )
+    refute gate.allowed?, 'the fresh gate must fail closed on the invalidated unit'
+    projection = gate.projection
+    assert_equal 1, projection['unavailable']
+    assert_equal 2, projection['verified']
   end
 
   def test_start_is_single_flight_while_busy
@@ -197,6 +246,13 @@ class DesignPreflightBatchTest < Minitest::Test
   end
 
   private
+
+  # The gate's own priority resolution over the tracker's alias entries.
+  def effective_state(tracker, furniture_instance_id)
+    states = tracker.furniture_entries_for(furniture_instance_id).map(&:state).uniq
+    Host::PublicationPreflightGate::STATE_PRIORITY.find { |state| states.include?(state) } ||
+      Host::PublicationPreflightGate::UNVERIFIED
+  end
 
   def build_batch(session, scope_provider: nil, model_provider: nil, scheduler: nil)
     Host::DesignPreflightBatch.new(
