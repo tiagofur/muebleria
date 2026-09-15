@@ -2486,8 +2486,8 @@ module Granete
           if @model_builder.nil? || @builder_model != model
             @builder_model = model
             hardware_downloader = Assets::HardwareAssetDownloader.new(
-              transport: @transport,
-              auth_provider: @auth_provider,
+              transport: @session.respond_to?(:transport) ? @session.transport : nil,
+              auth_provider: @session,
               logger: @logger
             )
             asset_loader = Assets::AssetLoader.new(
