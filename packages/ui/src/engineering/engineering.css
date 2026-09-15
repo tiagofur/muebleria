@@ -219,6 +219,26 @@
   color: var(--text-secondary, inherit);
 }
 
+/* #739 — honest error while reading the frozen cutting demand: actionable
+   message + retry, never a silent fallback to the live rows. */
+.eng-workspace__demand-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-card);
+  border: 1px solid var(--danger-500);
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--danger-700);
+}
+
+.eng-workspace__demand-error p {
+  margin: 0;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Resumen tab
    ═══════════════════════════════════════════════════════════════════════════ */

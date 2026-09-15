@@ -280,6 +280,16 @@ export async function generateSelectedCuttingOutput(
           generatedAt: cutPlan.generatedAt,
           cutPlanId: cutPlan.id,
           cutPlanVersion: cutPlan.version,
+          // #739 — a plan generated from the frozen release demand carries
+          // its exact liberation pins and manufacturing fingerprint into the
+          // artifact manifest (never reported as missing provenance).
+          ...(cutPlan.releaseBase
+            ? {
+                productionReleaseId: cutPlan.releaseBase.releaseId,
+                designRevisionId: cutPlan.releaseBase.designRevisionId,
+                bomFingerprint: cutPlan.releaseBase.manufacturingFingerprint,
+              }
+            : {}),
         },
         cutPlan: plan,
         presentation: {

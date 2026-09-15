@@ -1,0 +1,162 @@
+package storage_test
+
+import (
+	"context"
+	"reflect"
+	"testing"
+
+	"github.com/tiagofur/muebles-backend/internal/storage"
+)
+
+// #739 — the frozen cutting demand projection engineering prepares against.
+// The projection reads exclusively from the private manufacturing snapshot:
+// exact physical identities, quantities, dimensions, effective thickness,
+// material identity, grain and edge flags. Mutable catalog/project state
+// never rebuilds it, and a missing snapshot is unavailable evidence.
+
+// frozen release demand: release P1 over the canonical fixture (2 physical
+// units of the same definition — repeated units must keep distinct
+// identities with full quantities), with L1 edge flags frozen from the
+// component's default edges.
+func createCuttingDemandRelease(t *testing.T, fx *releaseFixture) *storage.ReleaseCuttingDemandView {
+	t.Helper()
+	// Edge flags must be part of the frozen content: give the panel a default
+	// L1 edge (resolved through the material's default edge band) BEFORE the
+	// release so the snapshot freezes it.
+	multiOrgExec(t, fx.admin, `
+		UPDATE material_boards SET default_edge_band_id='70000000-0000-0000-0000-000000000003' WHERE id='`+releaseMaterial+`';
+		UPDATE components SET default_edges='[{"side":"L1","enabled":true}]' WHERE code='RELEASE-PANEL';`)
+	actorA := fiActorA()
+	var p1 *storage.ProductionReleaseReadback
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var innerErr error
+		p1, innerErr = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
+			ProjectID:        fx.projectID,
+			DesignRevisionID: fx.revR3,
+			QuoteRevisionID:  fx.quoteQ3,
+			ActorUserID:      rlsUserA,
+			RequestID:        "req-739-cutting-demand",
+		})
+		return innerErr
+	})
+	if err != nil {
+		t.Fatalf("create release P1: %v", err)
+	}
+	var demand *storage.ReleaseCuttingDemandView
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var innerErr error
+		demand, innerErr = fx.store.GetProjectProductionReleaseCuttingDemand(ctx, fx.projectID, p1.Release.ID)
+		return innerErr
+	}); err != nil {
+		t.Fatalf("read cutting demand: %v", err)
+	}
+	if demand.ReleaseID != p1.Release.ID || demand.ReleaseNumber != 1 ||
+		demand.DesignRevisionID != fx.revR3 || demand.ManufacturingFingerprint != p1.Release.ManufacturingFingerprint {
+		t.Fatalf("demand must pin the exact release readback: %+v", demand)
+	}
+	return demand
+}
+
+func TestReleaseCuttingDemand_ExactUnitsAndFrozenFields(t *testing.T) {
+	fx := setupReleaseFixture(t)
+	demand := createCuttingDemandRelease(t, fx)
+
+	if len(demand.Units) != 2 {
+		t.Fatalf("both physical units must be projected, got %d", len(demand.Units))
+	}
+	seen := map[string]bool{}
+	for _, unit := range demand.Units {
+		if unit.FurnitureInstanceID == "" || seen[unit.FurnitureInstanceID] {
+			t.Fatalf("unit identities must be exact and unique: %+v", unit)
+		}
+		seen[unit.FurnitureInstanceID] = true
+		if unit.FurnitureDefinitionID != fiModuleA {
+			t.Fatalf("definition identity must survive: %+v", unit)
+		}
+		if len(unit.Pieces) == 0 {
+			t.Fatalf("unit %s must carry board pieces", unit.FurnitureInstanceID)
+		}
+		for _, piece := range unit.Pieces {
+			if piece.Quantity < 1 || piece.LengthMm < 1 || piece.WidthMm < 1 {
+				t.Fatalf("piece demand must be positive: %+v", piece)
+			}
+			if piece.ThicknessMm != 18 {
+				t.Fatalf("effective thickness must be the material's 18 mm, got %d", piece.ThicknessMm)
+			}
+			if piece.MaterialID != releaseMaterial {
+				t.Fatalf("material identity must be the frozen choice, got %s", piece.MaterialID)
+			}
+			if piece.Grain != 0 {
+				t.Fatalf("grain must come from the material's grain default (false), got %d", piece.Grain)
+			}
+			if piece.L1 != 1 || piece.L2 != 0 || piece.W1 != 0 || piece.W2 != 0 {
+				t.Fatalf("edge flags must mirror the frozen edges (L1 only), got L%d L%d W%d W%d",
+					piece.L1, piece.L2, piece.W1, piece.W2)
+			}
+		}
+	}
+	// Repeated units of the same definition project the same piece demand per
+	// unit — no deduplication, no loss.
+	if !reflect.DeepEqual(demand.Units[0].Pieces, demand.Units[1].Pieces) {
+		t.Fatalf("identical repeated units must keep identical per-unit demand: %+v vs %+v",
+			demand.Units[0].Pieces, demand.Units[1].Pieces)
+	}
+}
+
+func TestReleaseCuttingDemand_IgnoresMutableCatalogAndProject(t *testing.T) {
+	fx := setupReleaseFixture(t)
+	demand := createCuttingDemandRelease(t, fx)
+
+	// The catalog moves on after the release: rename the material, flip grain,
+	// resize the module and its component. None of that may rebuild the frozen
+	// demand (acceptance: divergent Project/catalog never changes the pieces
+	// engineering prepares against).
+	multiOrgExec(t, fx.admin, `
+		UPDATE material_boards SET name='Renamed board', grain_default=TRUE, thickness_mm=25 WHERE id='`+releaseMaterial+`';
+		UPDATE modules SET width_mm=999, height_mm=999, depth_mm=999 WHERE id='`+fiModuleA+`';
+		UPDATE components SET length_mm=111, width_mm=222, default_edges='[{"side":"W2","enabled":true}]' WHERE code='RELEASE-PANEL';`)
+
+	var after *storage.ReleaseCuttingDemandView
+	if err := releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var innerErr error
+		after, innerErr = fx.store.GetProjectProductionReleaseCuttingDemand(ctx, fx.projectID, demand.ReleaseID)
+		return innerErr
+	}); err != nil {
+		t.Fatalf("re-read cutting demand after catalog divergence: %v", err)
+	}
+	if !reflect.DeepEqual(demand, after) {
+		t.Fatalf("catalog/project mutation must not alter the frozen cutting demand:\nbefore=%+v\nafter=%+v", demand, after)
+	}
+}
+
+func TestReleaseCuttingDemand_UnavailableAndIsolated(t *testing.T) {
+	fx := setupReleaseFixture(t)
+	demand := createCuttingDemandRelease(t, fx)
+
+	// Unknown release → unavailable evidence, never a fallback.
+	if err := releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, err := fx.store.GetProjectProductionReleaseCuttingDemand(ctx, fx.projectID, "00000000-0000-0000-0000-0000000000ff")
+		return err
+	}); err != storage.ErrReleaseSnapshotUnavailable {
+		t.Fatalf("unknown release must fail with ErrReleaseSnapshotUnavailable, got %v", err)
+	}
+
+	// Cross-org actor sees nothing (organization_id-scoped read, no leak).
+	err := releaseTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
+		_, err := fx.store.GetProjectProductionReleaseCuttingDemand(ctx, fx.projectID, demand.ReleaseID)
+		return err
+	})
+	if err != storage.ErrReleaseSnapshotUnavailable {
+		t.Fatalf("foreign organization must fail closed, got %v", err)
+	}
+
+	// Reading the demand is a pure projection: no release state changes.
+	var releaseStatus string
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT status FROM production_releases WHERE id=$1`, demand.ReleaseID).Scan(&releaseStatus); err != nil {
+		t.Fatal(err)
+	}
+	if releaseStatus != "active" {
+		t.Fatalf("reading the demand must not mutate the release, got status=%s", releaseStatus)
+	}
+}

@@ -352,6 +352,104 @@ func (s *Server) HandleProjectProductionRelease(w http.ResponseWriter, r *http.R
 	respondWithJSON(w, http.StatusOK, toProductionReleaseDTO(*readback))
 }
 
+// HandleProjectProductionReleaseCuttingDemand serves GET
+// /api/projects/{projectId}/production-releases/{releaseId}/cutting-demand
+// (#739). Tenant-safe projection of the FROZEN manufacturing snapshot: the
+// board cutting demand engineering prepares against — exact unit/part
+// identities, quantities, finished dimensions, effective thickness, material
+// identity, grain and edge flags. No costs, no routing, no evaluated
+// parameters; the current catalog is never consulted to rebuild pieces. A
+// missing/corrupt snapshot is unavailable evidence: an actionable conflict,
+// never a fallback to the mutable project.
+func (s *Server) HandleProjectProductionReleaseCuttingDemand(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	// #739 — industrial preparation capability (admin/gerente_produccion/
+	// ingeniero): the frozen despiece is factory engineering content, never a
+	// store/commercial surface. Cross-org isolation is enforced by the
+	// snapshot read (organization_id-scoped), mirroring the release reads.
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanReleaseProduction), "no tenés permiso para preparar el corte de esta liberación") {
+		return
+	}
+	projectID := r.PathValue("projectId")
+	releaseID := r.PathValue("releaseId")
+	if !isValidUUID(projectID) || !isValidUUID(releaseID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "IDs inválidos", nil)
+		return
+	}
+
+	demand, err := s.Store.GetProjectProductionReleaseCuttingDemand(r.Context(), projectID, releaseID)
+	if err != nil {
+		switch {
+		case errors.Is(err, storage.ErrReleaseSnapshotUnavailable):
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+				"El despiece congelado de esta liberación no está disponible",
+				map[string]any{"blocker": "release_snapshot_unavailable"})
+		default:
+			respondWithProductionReleaseError(w, err)
+		}
+		return
+	}
+	respondWithJSON(w, http.StatusOK, toReleaseCuttingDemandDTO(demand))
+}
+
+func toReleaseCuttingDemandDTO(view *storage.ReleaseCuttingDemandView) openapi.ReleaseCuttingDemand {
+	dto := openapi.ReleaseCuttingDemand{
+		ReleaseID:               view.ReleaseID,
+		ReleaseNumber:           int64(view.ReleaseNumber),
+		DesignRevisionID:        view.DesignRevisionID,
+		DesignRevisionNumber:    int64(view.DesignRevisionNumber),
+		ManufacturingFingerprint: view.ManufacturingFingerprint,
+		SchemaVersion:           int64(view.SchemaVersion),
+		Units:                   make([]openapi.ReleaseCuttingDemandUnit, 0, len(view.Units)),
+	}
+	for _, unit := range view.Units {
+		unitDTO := openapi.ReleaseCuttingDemandUnit{
+			FurnitureInstanceID:   unit.FurnitureInstanceID,
+			FurnitureDefinitionID: unit.FurnitureDefinitionID,
+			Pieces:                make([]openapi.ReleaseCuttingDemandPiece, 0, len(unit.Pieces)),
+		}
+		for _, piece := range unit.Pieces {
+			pieceDTO := openapi.ReleaseCuttingDemandPiece{
+				PartID:      piece.PartID,
+				Description: piece.Description,
+				Quantity:    int64(piece.Quantity),
+				LengthMm:    int64(piece.LengthMm),
+				WidthMm:     int64(piece.WidthMm),
+				ThicknessMm: int64(piece.ThicknessMm),
+				MaterialID:  piece.MaterialID,
+				Grain:       int64(piece.Grain),
+				L1:          int64(piece.L1),
+				L2:          int64(piece.L2),
+				W1:          int64(piece.W1),
+				W2:          int64(piece.W2),
+			}
+			if piece.PartCode != "" {
+				code := piece.PartCode
+				pieceDTO.PartCode = &code
+			}
+			if piece.EdgeBandID != "" {
+				edge := piece.EdgeBandID
+				pieceDTO.EdgeBandID = &edge
+			}
+			if piece.OptionRole != "" {
+				role := piece.OptionRole
+				pieceDTO.OptionRole = &role
+			}
+			unitDTO.Pieces = append(unitDTO.Pieces, pieceDTO)
+		}
+		dto.Units = append(dto.Units, unitDTO)
+	}
+	return dto
+}
+
 func toProductionReleaseDTO(readback storage.ProductionReleaseReadback) openapi.ProductionRelease {
 	release := readback.Release
 	dto := openapi.ProductionRelease{

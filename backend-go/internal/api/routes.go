@@ -626,6 +626,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/projects/{projectId}/production-releases", authMW(http.HandlerFunc(server.HandleProjectProductionReleases)))
 	mux.Handle("POST /api/projects/{projectId}/production-releases", noStoreMiddleware(consistentReleaseCatalogMiddleware(authMW(server.RequireIdempotency("production.release", http.HandlerFunc(server.HandleProjectProductionReleases))))))
 	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}", authMW(http.HandlerFunc(server.HandleProjectProductionRelease)))
+	// #739: frozen cutting demand of the exact release (engineering
+	// preparation input). Read-only projection of the private manufacturing
+	// snapshot — the mutable project/catalog is never consulted.
+	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}/cutting-demand", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectProductionReleaseCuttingDemand))))
 
 	// #392 / DT-8: staged publication of an immutable DesignRevision with
 	// manifest + artifacts. prepare and finalize are durable commands behind

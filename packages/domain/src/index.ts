@@ -669,6 +669,16 @@ export {
 } from './dataTruth';
 
 export {
+  releaseCutRowsFromDemand,
+  releaseBaseFromDemand,
+  planMatchesReleaseBase,
+  type ReleaseCuttingDemandBase,
+  type ReleaseCuttingDemandView,
+  type ReleaseCuttingDemandUnitView,
+  type ReleaseCuttingDemandPieceView,
+} from './engineeringCuttingDemand';
+
+export {
   projectProcessStage,
   filterProjectsByProcessStage,
   canReleaseMaterials,

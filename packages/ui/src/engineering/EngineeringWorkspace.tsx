@@ -6,6 +6,13 @@
  *
  * Reuses existing production panels where possible; the Resumen tab
  * is extracted to EngineeringResumenTab.
+ *
+ * #738 — a canonical obra pins its EXACT ProductionRelease context; tabs
+ * that still read the live editable project/catalog are labeled as a
+ * working view. #739 — when the frozen cutting demand of the pinned release
+ * is available, Despiece and Optimización consume THAT exact content (never
+ * the mutable project), engineering preparation becomes explicit and the
+ * plan exports (PDF/PTX/ZIP) connect to the same generated plan.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -21,6 +28,7 @@ import {
   ENGINEERING_ENTRY_STATUS_LABELS_ES,
   releaseAuthorityLabel,
   releaseAuthorityOf,
+  type CutPlan,
   type Project,
   type Module,
   type Catalog,
@@ -29,6 +37,7 @@ import {
   type ModuleLabel,
   type HardwarePurchaseRow,
   type NestingImportResult,
+  type ReleaseCuttingDemandBase,
 } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { WorkspaceTabs } from '../common/Tabs';
@@ -86,6 +95,19 @@ export type EngineeringReleaseContextProp =
   | { readonly state: 'loading' }
   | { readonly state: 'ready'; readonly view: EngineeringReleasePinView };
 
+/**
+ * #739 — frozen cutting demand of the pinned release, resolved by the shell
+ * from the generated projection (never the mutable project/catalog).
+ */
+export type EngineeringReleaseCuttingDemandProp =
+  | { readonly status: 'loading' }
+  | { readonly status: 'error'; readonly message: string; readonly retry: () => void }
+  | {
+      readonly status: 'ready';
+      readonly rows: readonly ProductionCutRow[];
+      readonly base: ReleaseCuttingDemandBase;
+    };
+
 /** Tabs whose panels read the live editable project/catalog state. */
 const LIVE_DATA_TABS: ReadonlySet<EngineeringTab> = new Set([
   'resumen',
@@ -94,6 +116,12 @@ const LIVE_DATA_TABS: ReadonlySet<EngineeringTab> = new Set([
   'etiquetas',
   'herrajes',
   'vistas',
+  'optimizacion',
+]);
+
+/** Tabs that consume the FROZEN release content when it is available (#739). */
+const FROZEN_CONTENT_TABS: ReadonlySet<EngineeringTab> = new Set([
+  'despiece',
   'optimizacion',
 ]);
 
@@ -157,11 +185,14 @@ export function EngineeringWorkspace({
   /**
    * #738 — exact release context pinned by the navigation. When present the
    * obra is canonical: the header shows THIS liberation (not the server's
-   * "latest" authority), live data tabs are labeled as a working view, and
-   * document downloads computed from the live project are NOT offered as
-   * release content (#739 owns the frozen despiece/exports).
+   * "latest" authority) and live data tabs are labeled as a working view.
+   * #739 — when its frozen cutting demand is available, Despiece and
+   * Optimización switch to that exact content and the plan exports connect.
    */
   releaseContext,
+  releaseCuttingDemand,
+  releaseCutPlan,
+  onSaveReleaseCutPlan,
 }: {
   readonly project: Project;
   readonly modules: readonly Module[];
@@ -232,20 +263,41 @@ export function EngineeringWorkspace({
   readonly onSendToProduction?: () => void;
   readonly onMarkDocumented?: () => void;
   readonly releaseContext?: EngineeringReleaseContextProp;
+  /** #739 — frozen cutting demand of the pinned release (canonical obras). */
+  readonly releaseCuttingDemand?: EngineeringReleaseCuttingDemandProp;
+  /** #739 — plan persisted for the exact pinned release (undefined = legacy). */
+  readonly releaseCutPlan?: CutPlan | null;
+  readonly onSaveReleaseCutPlan?: (cutPlan: CutPlan) => void;
 }): ReactNode {
   const [activeTab, setActiveTab] = useState<EngineeringTab>('resumen');
 
   // #738 — canonical obra: the release context governs presentation. The
-  // legacy per-project log actions and the live-data document exports are
-  // not offered (they can't prove anything about THIS release); the frozen
-  // despiece/exports arrive with #739.
+  // legacy per-project log actions are not offered and the live-data
+  // document exports are never presented as release content.
   const hasReleaseContext = releaseContext !== undefined;
+  const releaseView = releaseContext?.state === 'ready' ? releaseContext.view : null;
+  const entryStatus = engineeringEntryStatus(project);
+
+  // #739 — frozen demand wiring. Only surfaces connected to the exact
+  // content get unlocked; everything else keeps its live working view. While
+  // the shell hasn't resolved the demand yet (undefined) the frozen tabs keep
+  // the #738 interim behavior: live rows labeled as a working view.
+  const frozenDemand =
+    releaseCuttingDemand?.status === 'ready' ? releaseCuttingDemand : null;
+  const demandResolved = releaseCuttingDemand !== undefined;
+  const demandLoading = releaseCuttingDemand?.status === 'loading';
+  const demandError =
+    releaseCuttingDemand?.status === 'error' ? releaseCuttingDemand : null;
+  const frozenTabActive =
+    hasReleaseContext && FROZEN_CONTENT_TABS.has(activeTab);
+  const tabUsesFrozenContent = frozenTabActive && demandResolved;
+
+  // Live-data document exports: on a canonical obra these can't prove
+  // anything about THIS release, so the Documentos tab is not offered (#738).
   const documentExportsDisabled = hasReleaseContext;
   const tabs = hasReleaseContext
     ? ENGINEERING_TABS.filter((tab) => tab !== 'documentos')
     : ENGINEERING_TABS;
-  const releaseView = releaseContext?.state === 'ready' ? releaseContext.view : null;
-  const entryStatus = engineeringEntryStatus(project);
 
   const documents = useEngineeringDocuments({
     readiness,
@@ -262,6 +314,15 @@ export function EngineeringWorkspace({
     onExportCncPilot: documentExportsDisabled ? undefined : onExportCncPilot,
     onNavigateToTab: (tabId) => setActiveTab(tabId as EngineeringTab),
   });
+
+  // Despiece rows for the active context: frozen release content when
+  // available (canonical obra), live derivation otherwise (legacy view).
+  const despieceRows = tabUsesFrozenContent
+    ? (frozenDemand?.rows ?? null)
+    : cutRows;
+  const despieceError = tabUsesFrozenContent
+    ? (demandError?.message ?? null)
+    : (cutError ?? null);
 
   return (
     <section
@@ -369,16 +430,48 @@ export function EngineeringWorkspace({
         testIdPrefix="eng"
       />
 
-      {/* #738 — canonical obra: the data tabs read the live editable
-          project/catalog, so they are explicitly separated from the frozen
+      {/* #739 — the exact base is connected: preparation is editable without
+          touching what was commercially agreed. */}
+      {frozenDemand && tabUsesFrozenContent ? (
+        <p className="eng-workspace__live-notice" data-testid="eng-release-prep-notice">
+          Preparación editable:{' '}
+          {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} provienen del contenido
+          congelado de la liberación #{frozenDemand.base.releaseNumber} (R
+          {frozenDemand.base.designRevisionNumber}). Ajustar disco, refilados,
+          estrategia o formato de tablero define cómo cortar estas piezas; no
+          modifica la cotización, el diseño ni la liberación acordados.
+        </p>
+      ) : null}
+      {/* #738 — canonical obra: the data tabs that still read the live
+          editable project/catalog stay explicitly separated from the frozen
           release content (never labeled as liberation documents). */}
-      {hasReleaseContext && activeTab !== 'documentos' ? (
+      {hasReleaseContext && !tabUsesFrozenContent && activeTab !== 'documentos' ? (
         <p className="eng-workspace__live-notice" data-testid="eng-live-view-notice">
           Vista de trabajo actual:{' '}
           {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} se calculan desde el
           proyecto y el catálogo vigentes, no desde el contenido congelado de
           la liberación. El despiece y los documentos exactos de esta
           liberación todavía no están disponibles.
+        </p>
+      ) : null}
+
+      {/* #739 — demand status for the frozen tabs: honest loading/error,
+          never a silent fallback to the live rows. */}
+      {demandError && tabUsesFrozenContent ? (
+        <div
+          className="eng-workspace__demand-error"
+          data-testid="eng-demand-error"
+          role="alert"
+        >
+          <p>{demandError.message}</p>
+          <button type="button" className="btn btn--small" onClick={demandError.retry}>
+            Reintentar
+          </button>
+        </div>
+      ) : null}
+      {demandLoading && tabUsesFrozenContent ? (
+        <p className="eng-workspace__live-notice" data-testid="eng-demand-loading">
+          Leyendo el despiece congelado de la liberación…
         </p>
       ) : null}
 
@@ -406,12 +499,13 @@ export function EngineeringWorkspace({
         {activeTab === 'despiece' && (
           <div className="eng-despiece">
             <ProductionOrderDespiecePanel
-              cutRows={cutRows}
-              cutError={cutError}
+              cutRows={despieceRows}
+              cutError={despieceError}
               onExportCsv={documentExportsDisabled ? undefined : onExportCsv}
               exportBusy={exportBusy}
             />
-            {/* Imprimir A4 button */}
+            {/* Imprimir A4 button — legacy working view only: the release
+                despiece prints from the generated plan (Optimización → PDF). */}
             {!documentExportsDisabled ? (
               <div className="eng-despiece__print">
                 <button
@@ -461,13 +555,26 @@ export function EngineeringWorkspace({
           <ProductionOrderOptimizationPanel
             project={project}
             catalog={catalog}
-            cutRows={cutRows}
+            cutRows={despieceRows}
             defaultCutStrategy={defaultCutStrategy}
-            onSaveCutPlan={onSaveCutPlan}
-            onExportCutPlanPdf={documentExportsDisabled ? undefined : onExportCutPlanPdf}
-            onExportOptimizer={documentExportsDisabled ? undefined : onExportOptimizer}
-            onExportCutPlanDxf={documentExportsDisabled ? undefined : onExportCutPlanDxf}
-            onExportCutPlanPtx={documentExportsDisabled ? undefined : onExportCutPlanPtx}
+            initialCutPlan={hasReleaseContext ? (releaseCutPlan ?? null) : undefined}
+            demandBase={frozenDemand?.base ?? null}
+            onSaveCutPlan={
+              hasReleaseContext ? onSaveReleaseCutPlan : onSaveCutPlan
+            }
+            onExportCutPlanPdf={onExportCutPlanPdf}
+            onExportOptimizer={
+              documentExportsDisabled
+                ? undefined
+                : onExportOptimizer
+            }
+            optimizerUnavailableReason={
+              documentExportsDisabled
+                ? 'El Optimizer XLSX se calcula desde el proyecto vivo. Para la liberación exacta usá el PDF del plan de corte, generado desde las piezas congeladas.'
+                : null
+            }
+            onExportCutPlanDxf={onExportCutPlanDxf}
+            onExportCutPlanPtx={onExportCutPlanPtx}
             cuttingOutputTarget={cuttingOutputTarget}
             resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             exportBusy={exportBusy}

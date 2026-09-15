@@ -18,7 +18,9 @@ import type {
   CutPlan,
   CutPlanConfig,
   CutStrategy,
+  ReleaseCuttingDemandBase,
 } from '@granete/domain';
+import { planMatchesReleaseBase } from '@granete/domain';
 import {
   estimateBoardSheets,
   generateProjectMaterialSummary,
@@ -65,6 +67,15 @@ export type ProductionOrderOptimizationPanelProps = {
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly resolveCuttingOutputTarget?: (cutPlan: CutPlan) => CuttingOutputTargetView | null;
   readonly exportBusy?: boolean;
+  /**
+   * #739 — plan persisted for the EXACT release this panel is preparing
+   * (undefined = legacy project-scoped view; null = no stored plan).
+   */
+  readonly initialCutPlan?: CutPlan | null;
+  /** #739 — frozen release base; generated plans are pinned to it. */
+  readonly demandBase?: ReleaseCuttingDemandBase | null;
+  /** #739 — shown when the Optimizer XLSX isn't connected to the exact plan. */
+  readonly optimizerUnavailableReason?: string | null;
 };
 
 export function ProductionOrderOptimizationPanel({
@@ -80,48 +91,58 @@ export function ProductionOrderOptimizationPanel({
   cuttingOutputTarget = null,
   resolveCuttingOutputTarget,
   exportBusy = false,
+  initialCutPlan,
+  demandBase = null,
+  optimizerUnavailableReason = null,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
+  // #739 — the release-scoped plan (when this panel prepares an exact
+  // liberation) wins over the project's legacy single-slot plan.
+  const seededPlan = initialCutPlan !== undefined ? initialCutPlan : project.cutPlan;
   // Cut strategy dispatch (F126 saw/nesting + F133 workshop default):
   // the project's persisted plan wins, then the taller default, then sierra.
   const [cutStrategy, setCutStrategy] = useState<CutStrategy>(
-    project.cutPlan?.config.cutStrategy ?? defaultCutStrategy ?? 'saw-guillotine',
+    seededPlan?.config.cutStrategy ?? defaultCutStrategy ?? 'saw-guillotine',
   );
   const [toolSpacingMm, setToolSpacingMm] = useState<number>(
-    project.cutPlan?.config.toolSpacingMm ?? DEFAULT_TOOL_SPACING_MM,
+    seededPlan?.config.toolSpacingMm ?? DEFAULT_TOOL_SPACING_MM,
   );
   const isNesting = cutStrategy === 'cnc-nesting';
   // Cut Configuration parameters
   const [sawKerfMm, setSawKerfMm] = useState<number>(
-    project.cutPlan?.config.sawKerfMm ?? DEFAULT_CUT_PLAN_CONFIG.sawKerfMm,
+    seededPlan?.config.sawKerfMm ?? DEFAULT_CUT_PLAN_CONFIG.sawKerfMm,
   );
   const [trimTopMm, setTrimTopMm] = useState<number>(
-    project.cutPlan?.config.trim.topMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.topMm,
+    seededPlan?.config.trim.topMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.topMm,
   );
   const [trimBottomMm, setTrimBottomMm] = useState<number>(
-    project.cutPlan?.config.trim.bottomMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.bottomMm,
+    seededPlan?.config.trim.bottomMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.bottomMm,
   );
   const [trimLeftMm, setTrimLeftMm] = useState<number>(
-    project.cutPlan?.config.trim.leftMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.leftMm,
+    seededPlan?.config.trim.leftMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.leftMm,
   );
   const [trimRightMm, setTrimRightMm] = useState<number>(
-    project.cutPlan?.config.trim.rightMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.rightMm,
+    seededPlan?.config.trim.rightMm ?? DEFAULT_CUT_PLAN_CONFIG.trim.rightMm,
   );
   const [allowRotationNoGrain, setAllowRotationNoGrain] = useState<boolean>(
-    project.cutPlan?.config.allowRotationNoGrain ?? DEFAULT_CUT_PLAN_CONFIG.allowRotationNoGrain,
+    seededPlan?.config.allowRotationNoGrain ?? DEFAULT_CUT_PLAN_CONFIG.allowRotationNoGrain,
   );
   const [deductEdgeBand, setDeductEdgeBand] = useState<boolean>(
-    project.cutPlan?.config.deductEdgeBand ?? DEFAULT_CUT_PLAN_CONFIG.deductEdgeBand,
+    seededPlan?.config.deductEdgeBand ?? DEFAULT_CUT_PLAN_CONFIG.deductEdgeBand,
   );
 
-  // Current active CutPlan (stored in state or loaded from project)
-  const [cutPlanState, setCutPlanState] = useState<CutPlan | null>(project.cutPlan ?? null);
+  // Current active CutPlan (stored in state or loaded from project/release)
+  const [cutPlanState, setCutPlanState] = useState<CutPlan | null>(seededPlan ?? null);
   const [activeSheetIndex, setActiveSheetIndex] = useState<number>(0);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  // #739 — honest save lifecycle: never claim success before persistence
+  // actually resolves, and surface real failures.
+  const [saveState, setSaveState] = useState<
+    { kind: 'idle' } | { kind: 'saving' } | { kind: 'ok' } | { kind: 'error'; message: string }
+  >({ kind: 'idle' });
   // Operational choice for THIS download (the only place bundling is chosen).
   const [ptxMode, setPtxMode] = useState<'unified' | 'by-material'>('unified');
 
-  const currentCutPlan = cutPlanState ?? project.cutPlan ?? null;
+  const currentCutPlan = cutPlanState ?? seededPlan ?? null;
 
   // Distinct materials of the active plan (same grouping key as the export:
   // materialCode with materialName fallback) — drives the download preview.
@@ -143,14 +164,17 @@ export function ProductionOrderOptimizationPanel({
     [currentCutPlan, cuttingOutputTarget, resolveCuttingOutputTarget],
   );
 
+  // #739 — with a frozen release demand the pre-plan estimate must NOT be
+  // derived from the live project; the exact requisition comes from the
+  // generated plan itself.
   const summary = useMemo(() => {
-    if (!catalog) return null;
+    if (!catalog || demandBase) return null;
     try {
       return generateProjectMaterialSummary(project, catalog);
     } catch {
       return null;
     }
-  }, [project, catalog]);
+  }, [project, catalog, demandBase]);
 
   const sheetEstimates = useMemo(() => {
     if (!summary || !catalog) return [];
@@ -181,25 +205,40 @@ export function ProductionOrderOptimizationPanel({
       ...(cutStrategy === 'cnc-nesting' ? { toolSpacingMm: Math.max(0, toolSpacingMm) } : {}),
     };
 
-    const newPlan = optimizeCutPlan(
+    const generated = optimizeCutPlan(
       project.id,
       cutRows,
       catalog?.materials ?? [],
       config,
       project.name,
     );
+    // #739 — a plan generated from the frozen demand carries its exact
+    // release pin: changing the liberation invalidates the plan, never
+    // retargets it.
+    const newPlan = demandBase ? { ...generated, releaseBase: demandBase } : generated;
 
     setCutPlanState(newPlan);
     setActiveSheetIndex(0);
     setSelectedStepIndex(null);
-    setSaveSuccessMsg(null);
+    setSaveState({ kind: 'idle' });
   };
 
   const handleSavePlan = () => {
     if (!currentCutPlan) return;
-    onSaveCutPlan?.(currentCutPlan);
-    setSaveSuccessMsg('✓ Plan de corte guardado exitosamente en el proyecto');
-    setTimeout(() => setSaveSuccessMsg(null), 4000);
+    if (!onSaveCutPlan) return;
+    setSaveState({ kind: 'saving' });
+    try {
+      onSaveCutPlan(currentCutPlan);
+      setSaveState({ kind: 'ok' });
+    } catch (err) {
+      setSaveState({
+        kind: 'error',
+        message:
+          err instanceof Error
+            ? `No se pudo guardar el plan: ${err.message}`
+            : 'No se pudo guardar el plan',
+      });
+    }
   };
 
   const handleExportPdf = () => {
@@ -231,6 +270,39 @@ export function ProductionOrderOptimizationPanel({
   // Exports follow the GENERATED plan, not the live selector: the file must
   // always match the strategy that produced the layout on screen.
   const planStrategy = currentCutPlan?.config.cutStrategy ?? cutStrategy;
+
+  // #739 — a saved/generated plan only applies to the EXACT release it was
+  // generated from (defense in depth: the shell already keys storage by
+  // release, but a mismatched pin must never silently govern exports).
+  const planBaseMismatch =
+    currentCutPlan != null &&
+    demandBase != null &&
+    !planMatchesReleaseBase(currentCutPlan, demandBase);
+  // #739 — parameter drift: the selectors describe the NEXT generation; if
+  // they differ from the active plan's config, the on-screen result does NOT
+  // include them and exporting it would misrepresent the configuration.
+  const configDrift = useMemo(() => {
+    if (!currentCutPlan) return false;
+    const c = currentCutPlan.config;
+    // Legacy plans predate cutStrategy/toolSpacingMm in the persisted config:
+    // an absent strategy means saw-guillotine and an absent spacing means the
+    // default — normalizing both sides avoids a false drift on old plans.
+    return (
+      (c.cutStrategy ?? 'saw-guillotine') !== cutStrategy ||
+      c.sawKerfMm !== Math.max(0, sawKerfMm) ||
+      c.trim.topMm !== Math.max(0, trimTopMm) ||
+      c.trim.bottomMm !== Math.max(0, trimBottomMm) ||
+      c.trim.leftMm !== Math.max(0, trimLeftMm) ||
+      c.trim.rightMm !== Math.max(0, trimRightMm) ||
+      c.deductEdgeBand !== deductEdgeBand ||
+      c.allowRotationNoGrain !== allowRotationNoGrain ||
+      (cutStrategy === 'cnc-nesting' &&
+        (c.toolSpacingMm ?? DEFAULT_TOOL_SPACING_MM) !== Math.max(0, toolSpacingMm))
+    );
+  }, [currentCutPlan, cutStrategy, sawKerfMm, trimTopMm, trimBottomMm, trimLeftMm, trimRightMm, deductEdgeBand, allowRotationNoGrain, toolSpacingMm]);
+  // Exports are blocked while the visible result does not represent the
+  // current configuration or the current release.
+  const exportsStale = configDrift || planBaseMismatch;
 
   return (
     <div className="prod-opt" data-testid="prod-hub-optimizacion">
@@ -427,11 +499,31 @@ export function ProductionOrderOptimizationPanel({
           </div>
         </div>
 
-        {saveSuccessMsg && (
-          <p style={{ color: '#16a34a', fontSize: '0.9em', fontWeight: 500, margin: '8px 0 0' }}>
-            {saveSuccessMsg}
+        {saveState.kind === 'saving' ? (
+          <p style={{ fontSize: '0.9em', fontWeight: 500, margin: '8px 0 0', color: 'var(--text-secondary)' }} data-testid="prod-opt-save-saving">
+            Guardando plan…
           </p>
-        )}
+        ) : null}
+        {saveState.kind === 'ok' ? (
+          <p style={{ color: '#16a34a', fontSize: '0.9em', fontWeight: 500, margin: '8px 0 0' }} data-testid="prod-opt-save-ok">
+            ✓ Plan de corte guardado
+          </p>
+        ) : null}
+        {saveState.kind === 'error' ? (
+          <p role="alert" style={{ color: 'var(--danger-700, #991b1b)', fontSize: '0.9em', fontWeight: 500, margin: '8px 0 0' }} data-testid="prod-opt-save-error">
+            {saveState.message}
+          </p>
+        ) : null}
+        {planBaseMismatch ? (
+          <p role="alert" style={{ color: 'var(--danger-700, #991b1b)', fontSize: '0.9em', fontWeight: 500, margin: '8px 0 0' }} data-testid="prod-opt-plan-base-mismatch">
+            El plan activo pertenece a otra liberación. Regenerá el plan con las piezas de la liberación actual antes de guardar o exportar.
+          </p>
+        ) : null}
+        {configDrift && !planBaseMismatch ? (
+          <p role="alert" style={{ color: 'var(--status-warning, #b45309)', fontSize: '0.9em', fontWeight: 500, margin: '8px 0 0' }} data-testid="prod-opt-config-drift">
+            Configuración modificada: el plan activo no incluye los valores nuevos. Regenerá el plan antes de exportar.
+          </p>
+        ) : null}
       </section>
 
       {/* 2. WAREHOUSE REQUISITION SUMMARY */}
@@ -462,6 +554,10 @@ export function ProductionOrderOptimizationPanel({
               ))}
             </ul>
           </div>
+        ) : demandBase ? (
+          <p className="prod-opt__disclaimer" data-testid="prod-opt-release-requisition-note">
+            La requisición exacta se calcula con las piezas congeladas de la liberación al generar el plan de corte.
+          </p>
         ) : (
           <div>
             <p className="prod-opt__disclaimer">
@@ -731,7 +827,7 @@ export function ProductionOrderOptimizationPanel({
                   type="button"
                   className="btn btn--primary btn--small"
                   onClick={() => handleExportDxf('sheets')}
-                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanDxf}
+                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanDxf || exportsStale}
                   data-testid="prod-opt-export-dxf-sheets"
                 >
                   Descargar DXF (tableros)
@@ -740,7 +836,7 @@ export function ProductionOrderOptimizationPanel({
                   type="button"
                   className="btn btn--small"
                   onClick={() => handleExportDxf('pieces')}
-                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanDxf}
+                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanDxf || exportsStale}
                   data-testid="prod-opt-export-dxf-pieces"
                 >
                   Descargar DXF (piezas)
@@ -774,9 +870,14 @@ export function ProductionOrderOptimizationPanel({
                   type="button"
                   className="btn btn--primary btn--small"
                   onClick={handleExportPdf}
-                  disabled={exportBusy || !currentCutPlan}
+                  disabled={exportBusy || !currentCutPlan || !onExportCutPlanPdf || exportsStale}
                   data-testid="prod-opt-export-pdf-manual"
                   style={{ alignSelf: 'flex-start' }}
+                  title={
+                    exportsStale
+                      ? 'La configuración cambió desde la generación: regenerá el plan antes de exportar.'
+                      : undefined
+                  }
                 >
                   Descargar PDF de Taller
                 </button>
@@ -810,9 +911,18 @@ export function ProductionOrderOptimizationPanel({
                   disabled={exportBusy || !onExportOptimizer}
                   data-testid="prod-opt-export-optimizer-xlsx"
                   style={{ alignSelf: 'flex-start' }}
+                  title={optimizerUnavailableReason ?? undefined}
                 >
                   Descargar Optimizer XLSX
                 </button>
+                {optimizerUnavailableReason ? (
+                  <p
+                    style={{ margin: '8px 0 0', fontSize: '0.8em', color: 'var(--text-muted)' }}
+                    data-testid="prod-opt-optimizer-unavailable"
+                  >
+                    {optimizerUnavailableReason}
+                  </p>
+                ) : null}
               </div>
 
               {/* Automatic Panel Saws (PTX v1.14) — la ÚNICA superficie donde
@@ -942,6 +1052,7 @@ export function ProductionOrderOptimizationPanel({
                       exportBusy ||
                       !currentCutPlan ||
                       !onExportCutPlanPtx ||
+                      exportsStale ||
                       (ptxMode === 'by-material' && planMaterials.length === 0) ||
                       (activeCuttingOutputTarget != null && !activeCuttingOutputTarget.ready)
                     }

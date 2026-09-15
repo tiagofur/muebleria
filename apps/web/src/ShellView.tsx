@@ -38,6 +38,7 @@ import type {
   OptionGroup,
   Project,
   ProjectItem,
+  ReleaseCuttingDemandBase,
   ProjectMaterialSummary,
   ProjectStatus,
   ProjectTemplate,
@@ -109,6 +110,8 @@ import {
   filterProjectsByProcessStage,
   projectAllowsProductionAccess,
   releaseAuthorityOf,
+  releaseBaseFromDemand,
+  releaseCutRowsFromDemand,
   suggestDuplicateCode,
   transitionProjectStatus,
   type WarehouseProjectInput,
@@ -224,6 +227,10 @@ import {
   engineeringReleaseQueryKey,
   useEngineeringReleaseContext,
 } from './engineeringReleaseContext';
+import {
+  engineeringCuttingDemandQueryKey,
+  useEngineeringCuttingDemand,
+} from './engineeringCuttingDemand';
 import {
   captureDeferredNavigationIntent,
   runDeferredNavigationGuarded,
@@ -341,6 +348,7 @@ import type {
 import type { AmbientMaterialDraft, CuttingOutputTargetView, MachineOutputConfigProps } from '@granete/ui';
 import type { OwnerPortfolioRow } from '@granete/ui';
 import type { WorkspaceRepository } from '@granete/storage';
+import { loadReleaseCutPlan, saveReleaseCutPlan } from '@granete/storage';
 import type { AuthUser, MembershipChoice, OrgSummary } from './session';
 import type { AssignableOwner } from './stores/workspaceStore';
 import type { StockCatalogView } from './derivations/stockCatalog';
@@ -990,6 +998,23 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       routeEngineeringReleaseId ?? 'no-release',
     ),
   });
+  // #739 — frozen cutting demand of the SAME pinned release (fetched only
+  // once the release context is verified: same project/release scope, same
+  // session keying, no cross-context leakage).
+  const engineeringDemandContext = useEngineeringCuttingDemand({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    projectId:
+      engineeringReleaseContext.kind === 'ready' && routeEngineeringProjectId
+        ? routeEngineeringProjectId
+        : null,
+    releaseId: routeEngineeringReleaseId,
+    queryKey: engineeringCuttingDemandQueryKey(
+      sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+      routeEngineeringProjectId ?? 'no-project',
+      routeEngineeringReleaseId ?? 'no-release',
+    ),
+  });
   // #738 review — "Abrir Ingeniería" refreshes the read model and THEN
   // navigates. The deferred navigation is guarded: if the user moved to
   // another route/project, switched organization or the session ended while
@@ -1428,10 +1453,67 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             engCutError = err instanceof Error ? err.message : 'Error al resolver despiece';
           }
         }
+        // #739 — with a verified release context the despiece/optimización
+        // demand comes from the FROZEN cutting-demand projection of the exact
+        // release — never from the live project/catálogo. Mapping failures
+        // (a frozen material/canto no longer in the catalog) are honest
+        // blockers; the live rows stay untouched for the working-view tabs.
+        let engFrozenDemand:
+          | {
+              readonly status: 'loading';
+            }
+          | {
+              readonly status: 'error';
+              readonly message: string;
+              readonly retry: () => void;
+            }
+          | {
+              readonly status: 'ready';
+              readonly rows: readonly ProductionCutRow[];
+              readonly base: ReleaseCuttingDemandBase;
+            }
+          | undefined;
+        if (engReleaseContext?.state === 'ready') {
+          if (engineeringDemandContext.kind === 'loading') {
+            engFrozenDemand = { status: 'loading' };
+          } else if (engineeringDemandContext.kind === 'error') {
+            engFrozenDemand = {
+              status: 'error',
+              message: engineeringDemandContext.message,
+              retry: engineeringDemandContext.retry,
+            };
+          } else if (engineeringDemandContext.kind === 'ready') {
+            try {
+              engFrozenDemand = {
+                status: 'ready',
+                rows: releaseCutRowsFromDemand(
+                  engineeringDemandContext.demand,
+                  catalog ?? null,
+                ),
+                base: releaseBaseFromDemand(engineeringDemandContext.demand),
+              };
+            } catch (err) {
+              engFrozenDemand = {
+                status: 'error',
+                message:
+                  err instanceof Error
+                    ? err.message
+                    : 'No se pudo resolver el despiece congelado de la liberación',
+                retry: engineeringDemandContext.retry,
+              };
+            }
+          }
+        }
+        // The readiness gate for the release context reports the FROZEN rows
+        // (what must be manufactured); the live derivation keeps feeding the
+        // legacy working view only.
         const engReadiness = buildProductionOrderReadiness({
           project: engProject,
-          cutRows: engCutRows,
-          cutListError: engCutError,
+          cutRows: engFrozenDemand?.status === 'ready' ? engFrozenDemand.rows : engCutRows,
+          cutListError:
+            engFrozenDemand?.status === 'error'
+              ? engFrozenDemand.message
+              : (engCutError ?? null),
         });
         let engLabels: ReturnType<typeof generatePieceLabels> | null = null;
         let engLabelsError: string | null = null;
@@ -1511,6 +1593,28 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
             onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
             onExportCutPlanPtx={(plan, mode) => { void handleExportCutPlanPtx(plan, mode); }}
+            /* #739 — frozen release demand + release-scoped plan persistence:
+               the optimización/despiece surfaces consume the exact release
+               content; every other tab keeps its live working view. */
+            releaseCuttingDemand={engFrozenDemand}
+            releaseCutPlan={
+              engFrozenDemand?.status === 'ready'
+                ? loadReleaseCutPlan(
+                    { organizationId: activeOrg?.id ?? 'no-org' },
+                    engProject.id,
+                    engFrozenDemand.base.releaseId,
+                  )
+                : undefined
+            }
+            onSaveReleaseCutPlan={(plan) => {
+              if (engFrozenDemand?.status !== 'ready') return;
+              saveReleaseCutPlan(
+                { organizationId: activeOrg?.id ?? 'no-org' },
+                engProject.id,
+                engFrozenDemand.base.releaseId,
+                plan,
+              );
+            }}
             cuttingOutputTarget={cuttingOutputTarget}
             resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             canImportNesting={canMarkProduced || canExportProductionUnion}
