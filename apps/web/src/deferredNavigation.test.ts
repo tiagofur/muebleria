@@ -143,20 +143,30 @@ describe('runDeferredNavigationGuarded — integration (#738 review)', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('refresh REJECTS with the context intact → still navigates (the workspace fetches its own context)', async () => {
+  it('refresh REJECTS with the context intact → still navigates, with NO unhandled rejection', async () => {
+    const onUnhandled = vi.fn();
+    process.once('unhandledRejection', onUnhandled);
     const { refresh, navigate } = setupRun();
     refresh.reject(new Error('transient'));
     await flush();
+    await new Promise((resolve) => setImmediate(resolve));
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith('/engineering/p-1?release=rel-1');
+    expect(onUnhandled).not.toHaveBeenCalled();
+    process.removeListener('unhandledRejection', onUnhandled);
   });
 
-  it('refresh REJECTS after the context changed → does NOT navigate', async () => {
+  it('refresh REJECTS after the context changed → does NOT navigate, no unhandled rejection', async () => {
+    const onUnhandled = vi.fn();
+    process.once('unhandledRejection', onUnhandled);
     const { refresh, navigate, changeLive } = setupRun();
     changeLive({ path: '/engineering/p-9' });
     refresh.reject(new Error('transient'));
     await flush();
+    await new Promise((resolve) => setImmediate(resolve));
     expect(navigate).not.toHaveBeenCalled();
+    expect(onUnhandled).not.toHaveBeenCalled();
+    process.removeListener('unhandledRejection', onUnhandled);
   });
 
   it('does not re-navigate when the live path already is the exact target', async () => {

@@ -64,7 +64,7 @@ export function runDeferredNavigationGuarded(args: {
     readonly target: (projectId: string, releaseId: string) => string;
   };
 }): void {
-  void args.deps.refreshWorkspace().finally(() => {
+  const complete = () => {
     const live = args.deps.live();
     if (!deferredNavigationStillCurrent(args.start, live)) {
       return;
@@ -73,5 +73,9 @@ export function runDeferredNavigationGuarded(args: {
     if (live.path !== target) {
       args.deps.navigate(target);
     }
-  });
+  };
+  // Both outcomes run the SAME guard. The rejection is consumed here (the
+  // workspace fetches its own context after navigating): a failed refresh
+  // never surfaces as an unhandled rejection from this path.
+  void args.deps.refreshWorkspace().then(complete, complete);
 }
