@@ -2485,9 +2485,18 @@ module Granete
 
           if @model_builder.nil? || @builder_model != model
             @builder_model = model
+            hardware_downloader = Assets::HardwareAssetDownloader.new(
+              transport: @transport,
+              auth_provider: @auth_provider,
+              logger: @logger
+            )
+            asset_loader = Assets::AssetLoader.new(
+              downloader: hardware_downloader,
+              logger: @logger
+            )
             @model_builder = Model::FurnitureBuilder.new(
               metadata_store: @metadata_store_factory.call(model),
-              asset_loader: Assets::AssetLoader.new,
+              asset_loader: asset_loader,
               texture_cache: texture_cache
             )
           end

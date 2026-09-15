@@ -39,6 +39,8 @@ type stubStore struct {
 	assetResolvedBinding         *domain.HardwareVisualAssetBinding
 	assetResolveBindingCmd       *[2]string
 	assetRevisionResult          *domain.HardwareAssetRevision
+	recordValidationCmd          *storage.RecordHardwareAssetValidationCommand
+	recordValidationErr          error
 	listHardwareAssets           []domain.HardwareAsset
 	createCustomerErr            error
 	createMaterialErr            error
@@ -4213,6 +4215,13 @@ func (s *stubStore) ResolveHardwareVisualAssetBinding(_ context.Context, assetID
 		return nil, domain.ErrHardwareAssetBindingInvalid
 	}
 	return s.assetResolvedBinding, nil
+}
+
+func (s *stubStore) RecordHardwareAssetValidation(_ context.Context, cmd storage.RecordHardwareAssetValidationCommand) error {
+	if s.recordValidationCmd != nil {
+		*s.recordValidationCmd = cmd
+	}
+	return s.recordValidationErr
 }
 
 func (s *stubStore) CollectHardwareAssetStagedFile(_ context.Context, _, _, _ string, remove func() error) (bool, error) {

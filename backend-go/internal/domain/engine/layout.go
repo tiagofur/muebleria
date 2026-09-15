@@ -152,19 +152,26 @@ type LayoutComponent struct {
 // joints once that machinery is projected into layouts. Clients must fail
 // closed on unknown values instead of treating them as derived.
 type LayoutHardware struct {
-	PlacementID             string          `json:"placementId"`
-	HardwareID              string          `json:"hardwareId"`
-	Name                    string          `json:"name"`
-	Shape                   string          `json:"shape"`
-	SizeMm                  float64         `json:"sizeMm,omitempty"`
-	DiameterMm              float64         `json:"diameterMm,omitempty"`
-	ProjectionMm            float64         `json:"projectionMm"`
-	ColorHex                string          `json:"colorHex,omitempty"`
-	HostComponentInstanceID string          `json:"hostComponentInstanceId"`
-	AnchorFace              string          `json:"anchorFace"`
-	PlacementKind           string          `json:"placementKind"`
-	Transform               LayoutTransform `json:"transform"`
-	DimensionsMm            [3]float64      `json:"dimensionsMm"`
+	PlacementID             string               `json:"placementId"`
+	HardwareID              string               `json:"hardwareId"`
+	Name                    string               `json:"name"`
+	Shape                   string               `json:"shape"`
+	SizeMm                  float64              `json:"sizeMm,omitempty"`
+	DiameterMm              float64              `json:"diameterMm,omitempty"`
+	ProjectionMm            float64              `json:"projectionMm"`
+	ColorHex                string               `json:"colorHex,omitempty"`
+	HostComponentInstanceID string               `json:"hostComponentInstanceId"`
+	AnchorFace              string               `json:"anchorFace"`
+	PlacementKind           string               `json:"placementKind"`
+	Transform               LayoutTransform      `json:"transform"`
+	DimensionsMm            [3]float64           `json:"dimensionsMm"`
+	LocalTransform          LayoutLocalTransform `json:"localTransform"`
+	AssetID                 string               `json:"assetId,omitempty"`
+	AssetRevisionID         string               `json:"assetRevisionId,omitempty"`
+	SHA256                  string               `json:"sha256,omitempty"`
+	ExpectedBytes           int64                `json:"expectedBytes,omitempty"`
+	Representation          string               `json:"representation,omitempty"`
+	ValidationState         string               `json:"validationState,omitempty"`
 }
 
 const (
@@ -1158,8 +1165,12 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	if hw.PreviewShape != nil && validHardwarePreviewShapes[*hw.PreviewShape] {
 		shape = *hw.PreviewShape
 	}
-	if shape == "" {
+	hasVisualAsset := hw.VisualAsset != nil && hw.VisualAsset.AssetID != ""
+	if shape == "" && !hasVisualAsset {
 		return LayoutHardware{}, false
+	}
+	if shape == "" && hasVisualAsset {
+		shape = "custom"
 	}
 
 	w := math.Max(board.widthMm, 0)
@@ -1286,6 +1297,30 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		color = normalizeHexColor(*hw.PreviewColor)
 	}
 
+	// Authoritative hardware mounting frame in furniture space:
+	faceFurniture := [3]float64{snapMm(faceRender[0]), snapMm(faceRender[2]), snapMm(faceRender[1])}
+	normFurn := snapUnitVec3([3]float64{normalRender[0], normalRender[2], normalRender[1]})
+	uFurn := snapUnitVec3([3]float64{u[0], u[2], u[1]})
+	vFurn := snapUnitVec3(cross3(normFurn, uFurn))
+	hwBasis := LayoutBasis{
+		X: uFurn,
+		Y: vFurn,
+		Z: normFurn,
+	}
+	hwLocalTransform := LayoutLocalTransform{
+		TranslationMm: faceFurniture,
+		Basis:         hwBasis,
+	}
+
+	var assetID, assetRevisionID, sha256, rep, valState string
+	if hw.VisualAsset != nil {
+		assetID = hw.VisualAsset.AssetID
+		assetRevisionID = hw.VisualAsset.AssetRevisionID
+		sha256 = hw.VisualAsset.SHA256
+		rep = string(hw.VisualAsset.Representation)
+		valState = string(hw.VisualAsset.ValidationState)
+	}
+
 	// Every placement this engine renders today is authored on a
 	// component-instance override (#350 manual vocabulary); derived
 	// placements arrive with the relationship/joint projection.
@@ -1303,6 +1338,12 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		PlacementKind:           HardwarePlacementKindManual,
 		Transform:               LayoutTransform{TranslationMm: boxMin},
 		DimensionsMm:            dims,
+		LocalTransform:          hwLocalTransform,
+		AssetID:                 assetID,
+		AssetRevisionID:         assetRevisionID,
+		SHA256:                  sha256,
+		Representation:          rep,
+		ValidationState:         valState,
 	}, true
 }
 

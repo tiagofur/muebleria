@@ -945,3 +945,65 @@ func (s *Server) resolveHardwareVisualBindingForWrite(r *http.Request, w http.Re
 	h.VisualAsset = binding
 	return true
 }
+
+// HandleHardwareAssetRevisionValidate: POST /api/hardware-assets/{assetId}/revisions/{revisionId}:validate.
+// Records append-only validation evidence from a host validator (#668).
+func (s *Server) HandleHardwareAssetRevisionValidate(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	var req struct {
+		SHA256  string                 `json:"sha256"`
+		Tool    string                 `json:"tool"`
+		Result  string                 `json:"result"`
+		Details map[string]interface{} `json:"details"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Tool == "" || len(req.Tool) > 255 {
+		respondWithError(w, http.StatusBadRequest, "tool is required (max 255 chars)")
+		return
+	}
+	if req.Result != "passed" && req.Result != "failed" {
+		respondWithError(w, http.StatusBadRequest, "result must be 'passed' or 'failed'")
+		return
+	}
+	if !strings.HasPrefix(req.SHA256, "sha256-") || len(req.SHA256) != 71 {
+		respondWithError(w, http.StatusBadRequest, "sha256 must follow format 'sha256-<64hex>'")
+		return
+	}
+	var detailsRaw json.RawMessage
+	if req.Details != nil {
+		raw, err := json.Marshal(req.Details)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid details JSON")
+			return
+		}
+		detailsRaw = raw
+	}
+	cmd := storage.RecordHardwareAssetValidationCommand{
+		AssetID:     r.PathValue("assetId"),
+		RevisionID:  r.PathValue("revisionId"),
+		SHA256:      req.SHA256,
+		Tool:        req.Tool,
+		Result:      req.Result,
+		Details:     detailsRaw,
+		ActorUserID: claims.UserID,
+	}
+	if err := s.Store.RecordHardwareAssetValidation(r.Context(), cmd); err != nil {
+		respondWithHardwareAssetError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":      "recorded",
+		"asset_id":    cmd.AssetID,
+		"revision_id": cmd.RevisionID,
+		"result":      cmd.Result,
+	})
+}

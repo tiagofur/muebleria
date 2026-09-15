@@ -438,6 +438,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/hardware-assets/{assetCommand...}", noStoreMiddleware(authMW(hardwareAssetCommandRouter(map[string]http.Handler{
 		"retire":    server.RequireIdempotency("hardware-assets.retire", http.HandlerFunc(server.HandleHardwareAssetRetire)),
 		"authorize": http.HandlerFunc(server.HandleHardwareAssetRevisionAuthorize),
+		"validate":  http.HandlerFunc(server.HandleHardwareAssetRevisionValidate),
 	}))))
 	mux.Handle("GET /api/hardware-assets/files/{key...}", server.hardwareAssetFileGetAuth(http.HandlerFunc(server.HandleHardwareAssetFileGet)))
 

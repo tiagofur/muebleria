@@ -268,4 +268,55 @@ class LayoutContractTest < Minitest::Test
   def test_static_providers_do_not_resolve_native_layouts
     assert_nil Granete::SketchUpExtension::Library::StaticCatalogProvider.new.resolved_native_layout('x', {})
   end
+
+  def test_hardware_with_visual_asset_and_local_transform_parses_successfully
+    hw_raw = golden_hardware(
+      'assetId' => 'ast-handle-160',
+      'assetRevisionId' => 'rev-handle-160-v1',
+      'sha256' => 'sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      'expectedBytes' => 10_240,
+      'representation' => 'skp',
+      'validationState' => 'validated',
+      'localTransform' => {
+        'translationMm' => [100.0, 50.0, 20.0],
+        'basis' => {
+          'x' => [1.0, 0.0, 0.0],
+          'y' => [0.0, 0.0, 1.0],
+          'z' => [0.0, -1.0, 0.0]
+        }
+      }
+    )
+    body = golden_layout.merge('hardware' => [hw_raw])
+    layout = Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+
+    placement = layout.hardware.first
+    assert_equal 'ast-handle-160', placement.asset_id
+    assert_equal 'rev-handle-160-v1', placement.asset_revision_id
+    assert_equal 'sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', placement.sha256
+    assert_equal 10_240, placement.expected_bytes
+    assert_equal 'skp', placement.representation
+    assert_equal 'validated', placement.validation_state
+    assert_equal [100.0, 50.0, 20.0], placement.local_translation
+    assert_equal [1.0, 0.0, 0.0], placement.basis['x']
+    assert_equal [0.0, 0.0, 1.0], placement.basis['y']
+    assert_equal [0.0, -1.0, 0.0], placement.basis['z']
+  end
+
+  def test_hardware_with_malformed_local_transform_basis_fails_safe
+    hw_raw = golden_hardware(
+      'localTransform' => {
+        'translationMm' => [0.0, 0.0, 0.0],
+        'basis' => {
+          'x' => [0.0, 1.0, 0.0],
+          'y' => [1.0, 0.0, 0.0],
+          'z' => [0.0, 0.0, 1.0] # Left-handed (det = -1)
+        }
+      }
+    )
+    body = golden_layout.merge('hardware' => [hw_raw])
+
+    assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+    end
+  end
 end

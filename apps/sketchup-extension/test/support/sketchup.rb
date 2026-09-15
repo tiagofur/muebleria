@@ -34,6 +34,24 @@ module Geom
     end
   end
 
+  class BoundingBox
+    attr_accessor :width, :height, :depth
+
+    def initialize(width = 0.0, height = 0.0, depth = 0.0)
+      @width = width
+      @height = height
+      @depth = depth
+    end
+
+    def empty?
+      @width.to_f <= 0.0 && @height.to_f <= 0.0 && @depth.to_f <= 0.0
+    end
+
+    def diagonal
+      Math.sqrt((@width.to_f**2) + (@height.to_f**2) + (@depth.to_f**2))
+    end
+  end
+
   # 4x4 rigid transform, row-major like SketchUp's to_a:
   # [Xx Yx Zx Tx  Xy Yy Zy Ty  Xz Yz Zz Tz  0 0 0 1]
   # (a * b) applies b first, then a — SketchUp composition semantics.
@@ -146,6 +164,12 @@ module Sketchup
   class View
   end
 
+  class Face
+  end
+
+  class Edge
+  end
+
   def self.version
     '24.0.145-stub'
   end
@@ -170,7 +194,7 @@ module SketchupStub
     end
   end
 
-  class FaceStub
+  class FaceStub < Sketchup::Face
     attr_accessor :normal
     attr_reader :points
 
@@ -285,6 +309,17 @@ module SketchupStub
 
     attr_accessor :name
     attr_reader :entities, :instances, :guid
+
+    def bounds
+      @bounds ||= begin
+        has_entities = entities && !entities.to_a.empty?
+        Geom::BoundingBox.new(has_entities ? 1.0 : 0.0, has_entities ? 1.0 : 0.0, has_entities ? 1.0 : 0.0)
+      end
+    end
+
+    def bounds=(b)
+      @bounds = b
+    end
 
     def initialize(name = "")
       @name = name

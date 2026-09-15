@@ -667,3 +667,70 @@ func TestLayoutAgregadoRepeatedInstancesRequireUniqueStableIds(t *testing.T) {
 func contains(haystack, needle string) bool {
 	return len(needle) > 0 && len(haystack) >= len(needle) && strings.Contains(haystack, needle)
 }
+
+func TestLayoutHardwareAuthoritativeTransformAndVisualAsset(t *testing.T) {
+	board := &layoutBoard{
+		id:          "door-1",
+		widthMm:     500,
+		thicknessMm: 18,
+		lengthMm:    700,
+		rotX:        0,
+		rotY:        0,
+		rotZ:        0,
+		x:           0,
+		y:           0,
+		z:           0,
+	}
+	hp := domain.HardwarePlacement{
+		HardwareID: "hw-skp-handle",
+		AnchorFace: "front",
+		RelativePosition: domain.HardwareRelPosition{
+			XMm: 250,
+			YMm: 100,
+		},
+	}
+	catalog := domain.Catalog{
+		Hardware: []domain.Hardware{
+			{
+				ID:     "hw-skp-handle",
+				Active: true,
+				Name:   "Tirador SKP",
+				VisualAsset: &domain.HardwareVisualAssetBinding{
+					AssetID:         "asset-uuid-1",
+					AssetRevisionID: "rev-uuid-1",
+					SHA256:          "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+					Representation:  domain.HardwareAssetRepresentationSKP,
+					ValidationState: domain.HardwareAssetValidationPending,
+				},
+			},
+		},
+	}
+
+	hw, ok := resolveHardwareToWorld(board, hp, catalog, "hp-1")
+	if !ok {
+		t.Fatal("expected hardware with VisualAsset to resolve even without PreviewShape")
+	}
+
+	if hw.AssetID != "asset-uuid-1" || hw.AssetRevisionID != "rev-uuid-1" {
+		t.Fatalf("unexpected asset identity in LayoutHardware: %+v", hw)
+	}
+	if hw.SHA256 != "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
+		t.Fatalf("unexpected sha256: %s", hw.SHA256)
+	}
+	if hw.Representation != "skp" {
+		t.Fatalf("unexpected representation: %s", hw.Representation)
+	}
+
+	if err := validateLayoutBasis(hw.LocalTransform.Basis); err != nil {
+		t.Fatalf("hardware local transform basis invalid: %v", err)
+	}
+
+	// For rot=0 board, local Y (thickness=18) maps to workshop Z, and local Z (100) maps to workshop Y
+	if hw.LocalTransform.TranslationMm[0] != 250 || hw.LocalTransform.TranslationMm[1] != 100 || hw.LocalTransform.TranslationMm[2] != 18 {
+		t.Fatalf("expected translation [250 100 18], got %v", hw.LocalTransform.TranslationMm)
+	}
+	// Normal should point along the face normal (workshop +Z for rot=0 front face)
+	if hw.LocalTransform.Basis.Z[2] != 1 {
+		t.Fatalf("expected basis.z (normal) to be +Z for rot=0, got %v", hw.LocalTransform.Basis.Z)
+	}
+}

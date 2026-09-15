@@ -461,7 +461,7 @@ class FurnitureBuilderTest < Minitest::Test
     definition = @provider.find_definition('kitchen-base-standard')
     loaded = []
     loader_mock = Object.new
-    loader_mock.define_singleton_method(:load_asset_instance) do |_model, asset_id, target, pos|
+    loader_mock.define_singleton_method(:load_asset_instance) do |_model, asset_id, target, pos, **_kwargs|
       loaded << { asset_id: asset_id, target: target, pos: pos }
       hardware_def = SketchupStub.active_model.definitions.add('loaded-asset')
       target.entities.add_instance(hardware_def, Geom::Transformation.identity)
