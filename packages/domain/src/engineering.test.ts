@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   engineeringStatus,
+  engineeringEntryStatus,
+  ENGINEERING_ENTRY_STATUS_LABELS_ES,
   createEngineeringLog,
   recordGeneration,
   recordSentToProduction,
@@ -71,12 +73,56 @@ describe('EngineeringLog', () => {
   });
 });
 
+/* ── #738 — engineering entry status over the release authority ──────────── */
+
+describe('engineeringEntryStatus (#738)', () => {
+  const canonical = {
+    resolvedProductionRelease: { source: 'canonical' as const, releaseId: 'P1', releaseNumber: 1 },
+  };
+
+  it('canonical release without a log is honestly pending', () => {
+    expect(engineeringEntryStatus({ status: 'draft', ...canonical } as any)).toBe('pending');
+  });
+
+  it('a legacy log does not prove completion of the canonical release', () => {
+    // Uncorrelated per-project evidence → unverified, never documented.
+    const legacyLog: EngineeringLog = {
+      startedBy: 'eng1',
+      startedAt: '2026-08-11T10:00:00Z',
+      generatedBy: 'eng1',
+      generatedAt: '2026-08-12T10:00:00Z',
+      revision: 1,
+    };
+    expect(engineeringEntryStatus({ status: 'accepted', ...canonical, engineeringLog: legacyLog } as any)).toBe(
+      'unverified',
+    );
+  });
+
+  it('non-canonical projects keep the log-derived status', () => {
+    expect(engineeringEntryStatus({ status: 'accepted' } as any)).toBe('pending');
+    expect(
+      engineeringEntryStatus({
+        status: 'accepted',
+        engineeringLog: { startedBy: 'eng1', startedAt: '2026-08-11T10:00:00Z', revision: 1 },
+      } as any),
+    ).toBe('in_progress');
+  });
+
+  it('labels every entry status in Spanish', () => {
+    expect(ENGINEERING_ENTRY_STATUS_LABELS_ES.pending).toBe('Pendiente');
+    expect(ENGINEERING_ENTRY_STATUS_LABELS_ES.in_progress).toBe('En proceso');
+    expect(ENGINEERING_ENTRY_STATUS_LABELS_ES.documented).toBe('Documentado');
+    expect(ENGINEERING_ENTRY_STATUS_LABELS_ES.unverified).toBe('Sin verificar');
+  });
+});
+
 describe('computeEngineeringDashboardStats', () => {
   const mockProjects: any[] = [
     {
       id: 'p1',
       name: 'Cocina A',
       status: 'accepted',
+      hasDigitalThreadContext: false,
       createdAt: '2026-08-10T10:00:00Z',
       items: [{ quantity: 4 }],
     },
@@ -84,6 +130,7 @@ describe('computeEngineeringDashboardStats', () => {
       id: 'p2',
       name: 'Placard B',
       status: 'accepted',
+      hasDigitalThreadContext: false,
       createdAt: '2026-08-10T10:00:00Z',
       items: [{ quantity: 2 }],
       engineeringLog: {
@@ -96,6 +143,7 @@ describe('computeEngineeringDashboardStats', () => {
       id: 'p3',
       name: 'Mueble TV C',
       status: 'accepted',
+      hasDigitalThreadContext: false,
       createdAt: '2026-08-10T10:00:00Z',
       items: [{ quantity: 1 }],
       engineeringLog: {
@@ -110,6 +158,7 @@ describe('computeEngineeringDashboardStats', () => {
       id: 'p4',
       name: 'Vanitory D',
       status: 'produced',
+      hasDigitalThreadContext: false,
       createdAt: '2026-08-10T10:00:00Z',
       items: [{ quantity: 1 }],
       engineeringLog: {
@@ -131,20 +180,65 @@ describe('computeEngineeringDashboardStats', () => {
     },
   ];
 
-  it('uses canonical stage continuity without inventing a legacy timestamp', () => {
+  it('canonical P enters the engineering queue honestly (#738)', () => {
+    // Invariant replaced by #738: the old test asserted "canonical P ⇒
+    // almacen/produccion stage with isSentToProduction true" — it conflated
+    // the manufacturing ACCESS authority (P unlocks the factory, #697, still
+    // true) with engineering COMPLETION. P enables engineering preparation;
+    // it does not complete it nor fabricate a legacy send. Durable
+    // completion evidence per release is #740.
+    const canonical = {
+      ...mockProjects[0]!,
+      status: 'draft',
+      resolvedProductionRelease: { source: 'canonical' as const, releaseId: 'P1', releaseNumber: 1 },
+    };
+    const stats = computeEngineeringDashboardStats([canonical]);
+    expect(stats.projects[0]?.stage).toBe('ingenieria');
+    expect(stats.projects[0]?.status).toBe('pending');
+    expect(stats.projects[0]?.isSentToProduction).toBe(false);
+    expect(stats.projects[0]?.sentToProductionAt).toBeUndefined();
+    expect(stats.totalActiveQueue).toBe(1);
+    expect(stats.pendingCount).toBe(1);
+    expect(stats.totalSent).toBe(0);
+    // A legacy materials stamp never turns P into production work either.
+    const stamped = computeEngineeringDashboardStats([{
+      ...canonical,
+      status: 'accepted',
+      materialsRelease: { releasedBy: 'warehouse', releasedAt: '2026-09-07T20:00:00Z' },
+    }]);
+    expect(stamped.projects[0]?.stage).toBe('ingenieria');
+    expect(stamped.projects[0]?.isSentToProduction).toBe(false);
+  });
+
+  it('an uncorrelated legacy log surfaces as unverified, never completed', () => {
     const canonical = {
       ...mockProjects[0]!,
       resolvedProductionRelease: { source: 'canonical' as const, releaseId: 'P1', releaseNumber: 1 },
+      engineeringLog: {
+        startedBy: 'eng1',
+        startedAt: '2026-08-11T10:00:00Z',
+        generatedBy: 'eng1',
+        generatedAt: '2026-08-12T10:00:00Z',
+        revision: 1,
+      },
     };
-    const warehouse = computeEngineeringDashboardStats([canonical]);
-    expect(warehouse.projects[0]?.stage).toBe('almacen');
-    expect(warehouse.projects[0]?.isSentToProduction).toBe(true);
-    expect(warehouse.projects[0]?.sentToProductionAt).toBeUndefined();
-    expect(warehouse.totalActiveQueue).toBe(0);
-    const production = computeEngineeringDashboardStats([{
-      ...canonical, materialsRelease: { releasedBy: 'warehouse', releasedAt: '2026-09-07T20:00:00Z' },
-    }]);
-    expect(production.projects[0]?.stage).toBe('produccion');
+    const stats = computeEngineeringDashboardStats([canonical]);
+    expect(stats.projects[0]?.stage).toBe('ingenieria');
+    expect(stats.projects[0]?.status).toBe('unverified');
+    // Visible in the queue ⇒ present in the counters.
+    expect(stats.pendingCount).toBe(1);
+    expect(stats.totalActiveQueue).toBe(1);
+  });
+
+  it('a cancelled obra with a canonical release is not active engineering work', () => {
+    const cancelled = {
+      ...mockProjects[0]!,
+      cancelledAt: '2026-09-01T10:00:00Z',
+      resolvedProductionRelease: { source: 'canonical' as const, releaseId: 'P1', releaseNumber: 1 },
+    };
+    const stats = computeEngineeringDashboardStats([cancelled]);
+    expect(stats.projects).toHaveLength(0);
+    expect(stats.totalActiveQueue).toBe(0);
   });
 
   it('computes correct counts across statuses and excludes drafts', () => {
@@ -195,6 +289,7 @@ describe('computeEngineeringDashboardStats', () => {
         id: 'p_assigned',
         name: 'Obra Asignada',
         status: 'accepted',
+        hasDigitalThreadContext: false,
         createdAt: '2026-08-10T10:00:00Z',
         assignedEngineerId: 'eng_lead',
         items: [{ quantity: 3 }],

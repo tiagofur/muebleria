@@ -859,6 +859,14 @@ export function createProjectStore(options: InternalOptions) {
         items: [],
         createdAt: now,
         updatedAt: now,
+        // #738 review: a project born into the guest/local tool gets the
+        // POSITIVE pre-Digital-Thread signal (the local tool is DT-free by
+        // construction). On server-backed sessions the field stays absent on
+        // this optimistic object — the server response carries the
+        // authoritative projection.
+        ...(useWorkspaceStore.getState().session === 'guest'
+          ? { hasDigitalThreadContext: false as const }
+          : {}),
       };
       // Capture snapshot if created already as quoted/accepted (PRD §7.4).
       let project: Project;

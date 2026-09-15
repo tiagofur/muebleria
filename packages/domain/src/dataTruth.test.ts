@@ -28,6 +28,7 @@ describe('Data Truth Contract (OC-006)', () => {
           marginFactor: 1.3,
           laborFixedCost: 0,
           status: 'accepted',
+          hasDigitalThreadContext: false,
           items: [
             { id: 'i1', moduleId: 'm1', optionChoices: {}, quantity: 2 },
             { id: 'i2', moduleId: 'm2', optionChoices: {}, quantity: 3 },

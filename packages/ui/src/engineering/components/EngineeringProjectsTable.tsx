@@ -5,16 +5,17 @@
 import type { ReactNode } from 'react';
 import { LayoutGrid, SearchX } from 'lucide-react';
 import {
-  ENGINEERING_STATUS_LABELS_ES,
+  ENGINEERING_ENTRY_STATUS_LABELS_ES,
   type EngineeringDashboardProjectMetrics,
-  type EngineeringStatus,
+  type EngineeringEntryStatus,
 } from '@granete/domain';
 import { EmptyState } from '../../common';
 
-const STATUS_BADGE_MODIFIERS: Readonly<Record<EngineeringStatus, string>> = {
+const STATUS_BADGE_MODIFIERS: Readonly<Record<EngineeringEntryStatus, string>> = {
   pending: 'open',
   in_progress: 'progress',
   documented: 'done',
+  unverified: 'progress',
 };
 
 export interface EngineeringProjectsTableProps {
@@ -90,7 +91,7 @@ export function EngineeringProjectsTable({
                       </span>
                       {p.isSentToProduction
                         ? 'Enviada a planta'
-                        : ENGINEERING_STATUS_LABELS_ES[p.status]}
+                        : ENGINEERING_ENTRY_STATUS_LABELS_ES[p.status]}
                     </span>
                   </td>
                   <td>

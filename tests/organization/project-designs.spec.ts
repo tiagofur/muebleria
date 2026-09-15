@@ -322,11 +322,17 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(itemsTable.getByText(seeded.instanceIds[1])).not.toBeVisible();
     await expect(itemsTable.getByText(seeded.instanceIds[2])).not.toBeVisible();
 
+    // Item order stability: revision items are inserted in one publish
+    // transaction, so created_at ties leave the row order undefined
+    // (design_revision_items.created_at defaults to the transaction NOW()).
+    // The frozen CONTENT is what matters — assert it order-independently.
     const firstItem = itemsTable.locator('article').first();
     await expect(firstItem.getByText(seeded.moduleName, { exact: true }).first()).toBeVisible();
     await expect(firstItem.getByText(seeded.moduleCode, { exact: true })).toBeVisible();
     await expect(firstItem.getByText('Ancho', { exact: true })).toBeVisible();
-    await expect(firstItem.getByText('600 mm', { exact: true })).toBeVisible();
+    // R1 froze the exact authored widths: 600 mm (FI-A) and 800 mm (FI-B).
+    await expect(itemsTable.getByText('600 mm', { exact: true })).toBeVisible();
+    await expect(itemsTable.getByText('800 mm', { exact: true })).toBeVisible();
     await expect(firstItem.getByText(seeded.materialName, { exact: true })).toBeVisible();
     await expect(firstItem.getByText(seeded.materialCode, { exact: true })).toBeVisible();
     await expect(firstItem.getByText(`${seeded.materialThicknessMm} mm`, { exact: true })).toBeVisible();
@@ -350,6 +356,12 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(itemsTable.getByText(seeded.instanceIds[0])).not.toBeVisible();
     await expect(itemsTable.getByText(seeded.instanceIds[1])).not.toBeVisible();
     await expect(itemsTable.getByText(seeded.instanceIds[2])).not.toBeVisible();
+    // Frozen per-revision dimensions: R2 keeps FI-A/FI-B's 600/800 mm and
+    // adds FI-C's 900 mm — each revision snapshot stays frozen to its own
+    // authored widths, never recomputed from current data.
+    await expect(itemsTable.getByText('600 mm', { exact: true })).toBeVisible();
+    await expect(itemsTable.getByText('800 mm', { exact: true })).toBeVisible();
+    await expect(itemsTable.getByText('900 mm', { exact: true })).toBeVisible();
 
     // The immutable descriptors remain usable without horizontal overflow at
     // the three supported operational breakpoints.

@@ -8,7 +8,8 @@
 
 import type { Project } from './types';
 import type { DataTruthOrigin } from './dataTruth';
-import { projectProcessStage, sentToProduction } from './processStage';
+import { projectProcessStage } from './processStage';
+import { releaseAuthorityOf } from './releaseAuthority';
 
 /** Engineering lifecycle status derived from the log fields. */
 export type EngineeringStatus =
@@ -18,6 +19,15 @@ export type EngineeringStatus =
   | 'in_progress'
   /** Docs generated (generatedAt is set). */
   | 'documented';
+
+/**
+ * #738 — engineering PREPARATION status of a project as the Engineering
+ * surfaces present it. `unverified`: the project has a canonical
+ * ProductionRelease plus legacy per-project log evidence that cannot prove
+ * completion of THIS release (no correlation) — shown as evidence awaiting
+ * review, never as completed work and never erased as "brand new".
+ */
+export type EngineeringEntryStatus = EngineeringStatus | 'unverified';
 
 /**
  * Immutable engineering audit log for a project.
@@ -102,6 +112,26 @@ export const ENGINEERING_STATUS_LABELS_ES: Readonly<Record<EngineeringStatus, st
   documented: 'Documentado',
 };
 
+/**
+ * #738 — the engineering entry/preparation status of a project across the
+ * shared projection (queue, workspace header, dashboard): with a canonical
+ * ProductionRelease the obra is preparable ('pending') or carries
+ * uncorrelated legacy evidence ('unverified'); the per-project log alone
+ * never claims completion of the release.
+ */
+export function engineeringEntryStatus(project: Project): EngineeringEntryStatus {
+  if (releaseAuthorityOf(project)?.source === 'canonical') {
+    return project.engineeringLog ? 'unverified' : 'pending';
+  }
+  return engineeringStatus(project.engineeringLog);
+}
+
+/** Spanish labels for the engineering entry statuses. */
+export const ENGINEERING_ENTRY_STATUS_LABELS_ES: Readonly<Record<EngineeringEntryStatus, string>> = {
+  ...ENGINEERING_STATUS_LABELS_ES,
+  unverified: 'Sin verificar',
+};
+
 /* ── Engineering Dashboard Analytics ─────────────────────────────────────── */
 
 export interface EngineeringDashboardProjectMetrics {
@@ -109,7 +139,7 @@ export interface EngineeringDashboardProjectMetrics {
   readonly projectName: string;
   readonly customerId?: string;
   readonly customerLabel?: string;
-  readonly status: EngineeringStatus;
+  readonly status: EngineeringEntryStatus;
   readonly isSentToProduction: boolean;
   readonly stage: 'ingenieria' | 'almacen' | 'produccion' | 'ventas';
   readonly engineerId?: string;
@@ -186,16 +216,20 @@ export function computeEngineeringDashboardStats(
     }
   >();
 
-  // Only consider accepted / active projects that belong to the engineering lifecycle.
+  // #738 — only obras in the engineering lifecycle (stage ingenieria /
+  // almacen / produccion — cancelled and commercial-stage works excluded by
+  // the SAME shared rule the queue consumes, never a parallel status filter).
   for (const p of projects) {
-    if (p.status !== 'accepted' && p.status !== 'produced') {
+    const stage = projectProcessStage(p);
+    if (stage === 'ventas') {
       continue;
     }
 
     const log = p.engineeringLog;
-    const status = engineeringStatus(log);
-    const isSent = sentToProduction(p);
-    const stage = projectProcessStage(p);
+    const status = engineeringEntryStatus(p);
+    // "Sent" is the legacy handshake conclusion (almacén/produccion stages);
+    // a canonical release never fabricates it (#738).
+    const isSent = stage === 'almacen' || stage === 'produccion';
 
     // Module and piece counts
     let moduleCount = 0;
@@ -238,12 +272,17 @@ export function computeEngineeringDashboardStats(
     let stagnantReason: string | undefined;
 
     if (stage === 'ingenieria') {
-      if (status === 'pending') {
+      if (status === 'pending' || status === 'unverified') {
+        // #738: unverified = canonical release + uncorrelated legacy log —
+        // preparation is still pending (counted), but the "never started"
+        // stagnancy message would erase real history, so no stale alert.
         pendingCount++;
-        const hoursWaiting = (now - depositAtMs) / (1000 * 3600);
-        if (hoursWaiting > 72) {
-          isStagnant = true;
-          stagnantReason = `Lleva ${Math.floor(hoursWaiting / 24)} días en cola sin iniciar ingeniería`;
+        if (status === 'pending') {
+          const hoursWaiting = (now - depositAtMs) / (1000 * 3600);
+          if (hoursWaiting > 72) {
+            isStagnant = true;
+            stagnantReason = `Lleva ${Math.floor(hoursWaiting / 24)} días en cola sin iniciar ingeniería`;
+          }
         }
       } else if (status === 'in_progress') {
         inProgressCount++;

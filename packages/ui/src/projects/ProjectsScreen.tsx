@@ -270,6 +270,10 @@ export interface ProjectsScreenProps {
    * Shell navigates to `/production/:id`.
    */
   readonly onOpenInProduction?: (projectId: string) => void;
+  /**
+   * #738 — open Engineering pinned to the obra's exact canonical release.
+   */
+  readonly onOpenInEngineering?: (projectId: string, releaseId: string) => void;
   /** WEB-DT-1 (#500): opens the server-backed Project Furniture matrix. */
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
   /** WEB-DT-2 (#501): opens the server-backed Designs and revisions workspace. */
@@ -527,6 +531,7 @@ export function ProjectsScreen({
   onExport,
   onExportProductionPack,
   onOpenInProduction,
+  onOpenInEngineering,
   onOpenFurnitureMatrix,
   onOpenDesigns,
   onOpenReconciliation,
@@ -757,6 +762,7 @@ export function ProjectsScreen({
           onExport={onExport}
           onExportProductionPack={onExportProductionPack}
           onOpenInProduction={onOpenInProduction}
+          onOpenInEngineering={onOpenInEngineering}
           onOpenFurnitureMatrix={onOpenFurnitureMatrix}
           onOpenDesigns={onOpenDesigns}
           onOpenReconciliation={onOpenReconciliation}
