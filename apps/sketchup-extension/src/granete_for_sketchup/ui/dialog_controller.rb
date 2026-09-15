@@ -537,9 +537,23 @@ module Granete
         # the working copy keeps every other item.
         def handle_place_furniture_instance(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
-          result = project_furniture_placer.place(payload['furnitureInstanceId'].to_s)
+          fi_id = payload['furnitureInstanceId'].to_s
+          result = project_furniture_placer.place(fi_id)
+          if result['ok'] && @position_sync_coordinator
+            model = active_model
+            binding = Connection::ModelBinding::Store.new(model).read
+            if binding
+              preflight_review_session
+              converged = @position_sync_coordinator.converge_inserted_unit(model, binding, fi_id)
+              result = converged if converged['ok']
+            end
+          end
           execute_bridge(dialog, 'onPlaceFurnitureResult', result)
           handle_get_project_furniture(dialog) if result['ok']
+          if result['ok']
+            scope = Host::CommandContract.furniture_scope({ 'furnitureInstanceId' => fi_id })
+            push_preflight_state(dialog, scope)
+          end
         rescue StandardError => e
           @logger.error('project_furniture_place_failed', error: e)
           execute_bridge(dialog, 'onPlaceFurnitureResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
@@ -554,8 +568,21 @@ module Granete
             material_choices: payload['materialChoices'] || {},
             idempotency_key: payload['idempotencyKey']
           )
+          if result['ok'] && result['instanceId'] && @position_sync_coordinator
+            model = active_model
+            binding = Connection::ModelBinding::Store.new(model).read
+            if binding
+              preflight_review_session
+              converged = @position_sync_coordinator.converge_inserted_unit(model, binding, result['instanceId'])
+              result = converged if converged['ok']
+            end
+          end
           execute_bridge(dialog, 'onCreateProjectFurnitureResult', result)
           handle_get_project_furniture(dialog) if result['ok']
+          if result['ok'] && result['instanceId']
+            scope = Host::CommandContract.furniture_scope({ 'furnitureInstanceId' => result['instanceId'] })
+            push_preflight_state(dialog, scope)
+          end
         rescue StandardError => e
           @logger.error('project_furniture_create_failed', error: e)
           execute_bridge(dialog, 'onCreateProjectFurnitureResult',
@@ -564,10 +591,15 @@ module Granete
 
         def handle_confirm_placement_instance(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
-          result = project_furniture_placer.confirm_placement(payload['furnitureInstanceId'].to_s)
+          fi_id = payload['furnitureInstanceId'].to_s
+          result = project_furniture_placer.confirm_placement(fi_id)
           execute_bridge(dialog, 'onConfirmPlacementResult', result)
           notify_commercial_projection_synchronization(:partial) if result['ok']
           handle_get_project_furniture(dialog) if result['ok']
+          if result['ok']
+            scope = Host::CommandContract.furniture_scope({ 'furnitureInstanceId' => fi_id })
+            push_preflight_state(dialog, scope)
+          end
         rescue StandardError => e
           @logger.error('project_furniture_confirm_failed', error: e)
           execute_bridge(dialog, 'onConfirmPlacementResult',
@@ -641,6 +673,56 @@ module Granete
         def handle_observed_working_copy_commit
           notify_commercial_projection_synchronization(:partial)
           refresh_project_furniture
+        end
+
+        def handle_observed_position_sync_outcome(outcome = nil, **kwargs)
+          return unless @dialog&.visible?
+
+          outcome = kwargs if outcome.nil? || !outcome.is_a?(Hash)
+          return unless outcome.is_a?(Hash)
+
+          current = active_model
+          return unless current
+          return if outcome[:model] && !current.equal?(outcome[:model])
+          return unless sync_outcome_binding_matches?(current, outcome[:binding])
+
+          handle_get_project_furniture(@dialog)
+
+          return unless outcome[:status] == :success
+
+          push_preflight_state(@dialog)
+          mark_host_save_pending
+        end
+
+        def sync_outcome_binding_matches?(current_model, outcome_binding)
+          return true unless outcome_binding
+
+          current_binding = if defined?(Connection::ModelBinding::Store)
+                              Connection::ModelBinding::Store.new(current_model).read
+                            end
+          if current_binding
+            return current_binding.project_id == outcome_binding.project_id &&
+                   current_binding.design_id == outcome_binding.design_id &&
+                   current_binding.base_revision_id == outcome_binding.base_revision_id
+          end
+
+          return true unless @model_binding_connector.respond_to?(:status)
+
+          status = @model_binding_connector.status
+          return true unless status.is_a?(Hash) && status['binding'].is_a?(Hash)
+
+          b = status['binding']
+          b['projectId'] == outcome_binding.project_id &&
+            b['designId'] == outcome_binding.design_id &&
+            b['baseRevisionId'] == outcome_binding.base_revision_id
+        end
+
+        def handle_observed_position_sync_complete(_event, _ids)
+          return unless @dialog&.visible?
+
+          handle_get_project_furniture(@dialog)
+          push_preflight_state(@dialog)
+          mark_host_save_pending
         end
 
         def handle_host_inventory_change
@@ -1552,14 +1634,12 @@ module Granete
 
         def attach_selection_observer
           @observed_model = active_model
-          @observed_model&.selection&.add_observer(@selection_observer)
-          @observed_model&.entities&.add_observer(@entities_observer) if @entities_observer
+          attach_model_observers(@observed_model)
           attach_app_observer
         end
 
         def detach_selection_observer
-          @observed_model&.selection&.remove_observer(@selection_observer)
-          @observed_model&.entities&.remove_observer(@entities_observer) if @entities_observer
+          detach_model_observers(@observed_model)
           @observed_model = nil
           detach_app_observer
         end
@@ -1567,11 +1647,9 @@ module Granete
         def rebind_model(new_model)
           return if @observed_model.equal?(new_model)
 
-          @observed_model&.selection&.remove_observer(@selection_observer)
-          @observed_model&.entities&.remove_observer(@entities_observer) if @entities_observer
+          detach_model_observers(@observed_model)
           @observed_model = new_model
-          @observed_model&.selection&.add_observer(@selection_observer)
-          @observed_model&.entities&.add_observer(@entities_observer) if @entities_observer
+          attach_model_observers(@observed_model)
           @builder_model = nil
           check_current_selection(@dialog) if @dialog&.visible?
           refresh_binding_status
@@ -1580,6 +1658,22 @@ module Granete
           refresh_project_furniture
           offer_migration_if_legacy(new_model)
           @duplicate_resolver&.rescan_and_resolve(new_model)
+        end
+
+        def attach_model_observers(target_model)
+          return unless target_model
+
+          target_model.selection&.add_observer(@selection_observer)
+          target_model.entities&.add_observer(@entities_observer) if @entities_observer
+          @position_sync_coordinator&.rebind(target_model)
+        end
+
+        def detach_model_observers(target_model)
+          return unless target_model
+
+          target_model.selection&.remove_observer(@selection_observer)
+          target_model.entities&.remove_observer(@entities_observer) if @entities_observer
+          @position_sync_coordinator&.detach
         end
 
         def attach_app_observer
@@ -1817,7 +1911,11 @@ module Granete
             ),
             model_provider: method(:active_model),
             logger: @logger
-          )
+          ).tap do |session|
+            if @position_sync_coordinator.respond_to?(:preflight_session=)
+              @position_sync_coordinator.preflight_session = session
+            end
+          end
         end
 
         def review_scope(envelope)
@@ -1919,6 +2017,7 @@ module Granete
                        design_publisher: nil, mutation_coordinator: nil, manufacturing_overlay: nil,
                        publication_gate: nil, commercial_projection_service: nil,
                        host_reconciliation: nil, save_awareness: nil,
+                       position_sync_coordinator: nil,
                        project_bootstrap: nil, initial_quote: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
@@ -1927,12 +2026,8 @@ module Granete
           @project_furniture_placer = project_furniture_placer
           @duplicate_resolver = duplicate_resolver
           @entities_observer = entities_observer
-          if @entities_observer.respond_to?(:on_working_copy_committed=)
-            @entities_observer.on_working_copy_committed = method(:handle_observed_working_copy_commit)
-          end
-          if @entities_observer.respond_to?(:on_host_inventory_changed=)
-            @entities_observer.on_host_inventory_changed = method(:handle_host_inventory_change)
-          end
+          @position_sync_coordinator = position_sync_coordinator
+          wire_observer_callbacks
           @design_publisher = design_publisher
           @mutation_coordinator = mutation_coordinator
           @manufacturing_overlay = manufacturing_overlay
@@ -1988,8 +2083,23 @@ module Granete
         def open?
           @dialog&.visible? || false
         end
+        alias visible? open?
 
         private
+
+        def wire_observer_callbacks
+          if @entities_observer.respond_to?(:on_working_copy_committed=)
+            @entities_observer.on_working_copy_committed = method(:handle_observed_working_copy_commit)
+          end
+          if @entities_observer.respond_to?(:on_host_inventory_changed=)
+            @entities_observer.on_host_inventory_changed = method(:handle_host_inventory_change)
+          end
+          if @position_sync_coordinator.respond_to?(:on_sync_outcome=)
+            @position_sync_coordinator.on_sync_outcome = method(:handle_observed_position_sync_outcome)
+          elsif @position_sync_coordinator.respond_to?(:on_sync_complete=)
+            @position_sync_coordinator.on_sync_complete = method(:handle_observed_position_sync_complete)
+          end
+        end
 
         # #498 shared coordinator: built lazily when not injected so tests
         # and the application wiring share one construction shape.

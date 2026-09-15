@@ -31,6 +31,7 @@ module Granete
         connection/commercial_entry
         connection/duplicate_resolver
         connection/design_publish
+        connection/position_sync_coordinator
         library/catalog_parameter_contract
         library/catalog_provider
         library/layout_contract
@@ -51,6 +52,7 @@ module Granete
         host/preflight_review_session
         host/publication_preflight_gate
         host/save_awareness
+        host/position_sync_observer
         overlay/manufacturing_feature_view
         overlay/feature_projector
         overlay/screen_picker

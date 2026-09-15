@@ -314,7 +314,7 @@ function runTests() {
 
     const actions = pendingCard.children[1];
     assert.equal(actions.children.length, 2, 'actions group must have confirm and cancel');
-    assert.equal(actions.children[0].textContent, 'Confirmar posición');
+    assert.equal(actions.children[0].textContent, 'Reintentar sincronización');
     assert.equal(actions.children[1].textContent, 'Cancelar');
 
     // Confirm click dispatches confirm_placement_instance

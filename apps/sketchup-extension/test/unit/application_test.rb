@@ -45,6 +45,8 @@ require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 require_relative '../../src/granete_for_sketchup/lifecycle'
 require_relative '../../src/granete_for_sketchup/host/save_awareness'
+require_relative '../../src/granete_for_sketchup/host/position_sync_observer'
+require_relative '../../src/granete_for_sketchup/connection/position_sync_coordinator'
 require_relative '../../src/granete_for_sketchup/application'
 
 class ApplicationTest < Minitest::Test
