@@ -1,7 +1,7 @@
 # Issue #731 — [P0][SU-DEMO] Convergencia automática de posición, sincronización y validación del diseño (Parte 1/2)
 
 - Approval: issue #731 OPEN con `status:approved` y `type:feature`.
-- Base exacta: `origin/main@b330ecf9573887c2f6d2f347eb108d4a974b772c`. Rama: `feat/731-auto-position-convergence`.
+- Base exacta: `origin/main@b330ecf9ee032f618eaf2a8a8b8a39e51b9e615d`. Rama: `feat/731-auto-position-convergence`.
 - Scope PR1 (Delivery: partial):
   - Auto-confirm en INSERT (R1): post-inserción física mediante Placer se realiza convergencia explícita y síncrona vía `PositionSyncCoordinator#converge_inserted_unit`, sincronizando WorkingCopy con pose conocida y ejecutando preflight review inicial sin depender de observers que ignoran operaciones internas.
   - Transform-aware reconciliation (R2): `HostReconciliation` compara el transform local contra el transform del WorkingCopy mediante `TransformContract.equivalent_to_host?`. Si difieren o el WorkingCopy no tiene transform, reporta `pending_confirmation` con razón honesta ("la posición local difiere de Granete; sincronización pendiente") y marca el panel como no limpio (`clean: false`).
@@ -11,9 +11,9 @@
   - UI fallback (Caso 4): En el flujo exitoso, la confirmación es automática y silenciosa. Ante falla de red/servidor, no se revierte la geometría local del usuario y el botón secundario presenta "Reintentar sincronización" (con feedback "Sincronizando…") en lugar del manual "Confirmar posición".
   - Ciclo de vida y seguridad: `PositionSyncCoordinator` se vincula al ciclo de vida del modelo y del diálogo, previniendo fugas de observers o ejecuciones desalineadas si el modelo no está vinculado a Granete.
 - Evidencia de verificación:
-  - Ruby unit tests: 723 runs, 4884 assertions, 0 failures, 0 errors, 0 skips (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rake unit`).
+  - Ruby unit tests: 728 runs, 4933 assertions, 0 failures, 0 errors, 0 skips (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rake unit`).
   - Boundary suite: 6 runs, 2855 assertions, 0 failures, 0 errors, 0 skips (`OwnershipTest` PASS completo).
-  - Deterministic RBZ: sha256 `2d558d13f3175c3aeda19f1375a388964d4c676059edb6656027836b7c1530f4` verificado y reproducible (`rake package:verify`).
+  - Deterministic RBZ: sha256 `8a0f7141ec75650e8bc8d75dba9e921c2cc3d73880b59753bb507d4209f0e82b` verificado y reproducible (`rake package:verify`).
   - RuboCop: 183 files inspected, 0 offenses (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rubocop`).
   - JS tests: 16 test suites (266 tests) passing cleanly (`for f in test/js/*.js; do node "$f"; done`).
   - Boundary & packaging: `rake verify` COMPLETO PASS (syntax, lint, unit, boundary, package:verify).
