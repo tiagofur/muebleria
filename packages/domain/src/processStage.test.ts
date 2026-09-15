@@ -237,7 +237,7 @@ describe('#738 projectProcessStage — canonical release', () => {
             lines: [],
           },
           reservations: [],
-        } as Project['materialPlanning'],
+        } as unknown as Project['materialPlanning'],
         ...extra,
       });
     expect(projectProcessStage(derived())).toBe('almacen');
