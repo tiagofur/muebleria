@@ -37,6 +37,9 @@ require_relative '../../src/granete_for_sketchup/observers/entities_observer'
 require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
 require_relative '../../src/granete_for_sketchup/assets/asset_resolver'
 require_relative '../../src/granete_for_sketchup/assets/asset_loader'
+require_relative '../../src/granete_for_sketchup/assets/hardware_asset_cache'
+require_relative '../../src/granete_for_sketchup/assets/hardware_asset_grant_manager'
+require_relative '../../src/granete_for_sketchup/assets/hardware_asset_downloader'
 require_relative '../../src/granete_for_sketchup/assets/texture_cache'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 require_relative '../support/host_runtime'
@@ -314,5 +317,191 @@ class ApplicationTest < Minitest::Test
     refute_nil catalog_script, 'get_catalog must respond with catalog definitions'
     assert_includes catalog_script, 'kitchen-base-standard'
     assert_includes catalog_script, 'Gabinete Base Estándar'
+  end
+
+  class RecordingSessionTransport
+    attr_reader :requests
+
+    def initialize(grant_response = nil)
+      @grant_response = grant_response
+      @requests = []
+    end
+
+    def configured?
+      true
+    end
+
+    def base_url
+      'http://taller.local:8080/api'
+    end
+
+    def request(payload, authorization_header: nil)
+      @requests << { 'payload' => payload, 'authorization_header' => authorization_header }
+      @grant_response || { 'status' => 200, 'body' => {} }
+    end
+  end
+
+  class AuthenticatedHermeticSession < HermeticDeviceProvider
+    attr_accessor :org_id, :auth_token
+
+    def initialize(logger:, transport:, org_id: 'org-workshop-1', auth_token: 'Bearer test-session-token')
+      super(
+        logger: logger,
+        transport: transport,
+        store_path: File.join(Dir.mktmpdir('granete-auth-test'), 'session.json')
+      )
+      @org_id = org_id
+      @auth_token = auth_token
+    end
+
+    def current_organization_id
+      @org_id
+    end
+
+    def authorization_header
+      @auth_token
+    end
+
+    def configured?
+      !@org_id.nil? && !@auth_token.nil?
+    end
+  end
+
+  class FakeCatalogTransportWithHardware
+    def initialize(sha256:, expected_bytes:)
+      @sha256 = sha256
+      @expected_bytes = expected_bytes
+    end
+
+    def configured?
+      true
+    end
+
+    def request(req = {}, *)
+      if req['path'].to_s.include?('/layout')
+        {
+          'status' => 200,
+          'body' => {
+            'furnitureDefinitionId' => 'kitchen-base-standard',
+            'definitionName' => 'Gabinete Base Estándar',
+            'transformContract' => 'granete.local-basis.v1',
+            'dimensionsMm' => [800, 720, 590],
+            'components' => [
+              {
+                'componentInstanceId' => 'st-side-copy-0',
+                'componentDefinitionId' => 'st-side',
+                'slotId' => 'lateral_izquierdo',
+                'name' => 'Lateral',
+                'kind' => 'board',
+                'transform' => { 'translationMm' => [0, 0, 0] },
+                'dimensionsMm' => [18, 590, 720],
+                'localTransform' => {
+                  'translationMm' => [0, 590, 0],
+                  'basis' => { 'x' => [0, -1, 0], 'y' => [1, 0, 0], 'z' => [0, 0, 1] }
+                },
+                'lengthMm' => 720, 'widthMm' => 590, 'thicknessMm' => 18,
+                'optionRole' => 'LATERAL', 'materialColorHex' => '#c8b89a'
+              }
+            ],
+            'hardware' => [
+              {
+                'placementId' => 'hw-pull-0',
+                'hardwareId' => 'pull-96',
+                'assetId' => 'ast-pull-96',
+                'assetRevisionId' => 'rev-001',
+                'name' => 'Tirador 96',
+                'sha256' => @sha256,
+                'expectedBytes' => @expected_bytes,
+                'representation' => 'skp',
+                'placementKind' => 'derived',
+                'hostComponentInstanceId' => 'st-side-copy-0',
+                'dimensionsMm' => [96, 32, 25],
+                'localTransform' => {
+                  'translationMm' => [100, 20, 700],
+                  'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
+                }
+              }
+            ]
+          }
+        }
+      else
+        { 'status' => 200, 'body' => WORKSHOP_CONTRACT }
+      end
+    end
+  end
+
+  def test_library_hardware_asset_downloader_wiring_authorizes_skp_and_avoids_fallback_proxy
+    logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+    model_data = 'FAKE SKP BINARY CONTENT FOR HARDWARE'
+    model_sha = Digest::SHA256.hexdigest(model_data)
+    model_size = model_data.bytesize
+
+    grant_response = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => model_sha,
+        'sizeBytes' => model_size,
+        'url' => '/api/hardware-assets/files/key?grant=signed-grant-token',
+        'expiresAt' => (Time.now + 300).utc.iso8601
+      }
+    }
+    session_transport = RecordingSessionTransport.new(grant_response)
+    session = AuthenticatedHermeticSession.new(logger: logger, transport: session_transport)
+
+    catalog_transport = FakeCatalogTransportWithHardware.new(
+      sha256: model_sha,
+      expected_bytes: model_size
+    )
+
+    application = Granete::SketchUpExtension::Application.new(
+      logger: logger,
+      session_provider: session,
+      transport: catalog_transport,
+      auth_provider: FakeCatalogAuth.new
+    )
+    controller = application.instance_variable_get(:@dialog)
+    dialog = application.open_dialog
+
+    # 1 & 2. Verify real production hierarchy wiring
+    model = SketchupStub.active_model
+    builder = controller.send(:furniture_builder_for, model)
+    asset_loader = builder.instance_variable_get(:@asset_loader)
+    downloader = asset_loader.instance_variable_get(:@downloader)
+
+    assert_same session.transport, downloader.instance_variable_get(:@transport)
+    assert_same session, downloader.instance_variable_get(:@auth_provider)
+
+    # Seed the cache so valid authorized grant serves the asset without network fetch
+    downloader.cache.put(
+      asset_id: 'ast-pull-96',
+      revision_id: 'rev-001',
+      data: model_data,
+      sha256: model_sha,
+      expected_bytes: model_size,
+      org_id: session.current_organization_id
+    )
+
+    # 3. Insert furniture from Library with layout containing assetId + assetRevisionId
+    dialog.callbacks.fetch('insert_furniture').call(
+      nil,
+      'definitionId' => 'kitchen-base-standard',
+      'parameters' => { 'widthMm' => 800 }
+    )
+
+    # Verify authorized path was attempted through session transport
+    grant_request = session_transport.requests.find do |req|
+      req['payload'].is_a?(Hash) && req['payload']['path'].to_s.include?('hardware-assets')
+    end
+    refute_nil grant_request, 'must attempt authorized SKP grant request through session transport'
+    assert_equal session.authorization_header, grant_request['authorization_header'],
+                 'must authenticate grant request with session authorization header'
+
+    # Verify fallback proxy was not used
+    fallback_definitions = model.definitions.select do |d|
+      d.name.start_with?(Granete::SketchUpExtension::Model::FurnitureBuilder::HARDWARE_DEFINITION_PREFIX)
+    end
+    assert_empty fallback_definitions,
+                 'must not fall back to proxy geometry when session is configured and authorized'
   end
 end
