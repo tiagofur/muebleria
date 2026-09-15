@@ -61,7 +61,15 @@ export function createSeedWorkspace(): Workspace {
   return {
     schemaVersion: SCHEMA_VERSION,
     catalog: seedCatalogExpandedLatAm,
-    projects,
+    // #738 review: local projects are born with the POSITIVE pre-Digital
+    // Thread signal — the local tool is DT-free by construction (no designs,
+    // quote revisions or releases exist locally). Stage helpers fail closed
+    // on unknown provenance, so every local producer must vouch for its own
+    // context instead of leaving the field absent.
+    projects: projects.map((project) => ({
+      ...project,
+      hasDigitalThreadContext: false,
+    })),
     projectTemplates: [seedCocinaEstandarTemplate],
     settings: { ...DEFAULT_WORKSHOP_SETTINGS },
   };

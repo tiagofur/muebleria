@@ -122,6 +122,7 @@ describe('computeEngineeringDashboardStats', () => {
       id: 'p1',
       name: 'Cocina A',
       status: 'accepted',
+      hasDigitalThreadContext: false,
       createdAt: '2026-08-10T10:00:00Z',
       items: [{ quantity: 4 }],
     },
@@ -129,6 +130,7 @@ describe('computeEngineeringDashboardStats', () => {
       id: 'p2',
       name: 'Placard B',
       status: 'accepted',
+      hasDigitalThreadContext: false,
       createdAt: '2026-08-10T10:00:00Z',
       items: [{ quantity: 2 }],
       engineeringLog: {
@@ -141,6 +143,7 @@ describe('computeEngineeringDashboardStats', () => {
       id: 'p3',
       name: 'Mueble TV C',
       status: 'accepted',
+      hasDigitalThreadContext: false,
       createdAt: '2026-08-10T10:00:00Z',
       items: [{ quantity: 1 }],
       engineeringLog: {
@@ -155,6 +158,7 @@ describe('computeEngineeringDashboardStats', () => {
       id: 'p4',
       name: 'Vanitory D',
       status: 'produced',
+      hasDigitalThreadContext: false,
       createdAt: '2026-08-10T10:00:00Z',
       items: [{ quantity: 1 }],
       engineeringLog: {
@@ -285,6 +289,7 @@ describe('computeEngineeringDashboardStats', () => {
         id: 'p_assigned',
         name: 'Obra Asignada',
         status: 'accepted',
+        hasDigitalThreadContext: false,
         createdAt: '2026-08-10T10:00:00Z',
         assignedEngineerId: 'eng_lead',
         items: [{ quantity: 3 }],

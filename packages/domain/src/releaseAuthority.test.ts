@@ -26,6 +26,9 @@ function baseProject(overrides: Partial<Project> = {}): Project {
     marginFactor: 1,
     laborFixedCost: 0,
     status: 'accepted',
+    // Positively identified pre-DT fixture context (#738 review): the
+    // legacy chain only applies to vouched provenance.
+    hasDigitalThreadContext: false,
     items: [],
     createdAt: '2026-09-01T00:00:00Z',
     updatedAt: '2026-09-01T00:00:00Z',

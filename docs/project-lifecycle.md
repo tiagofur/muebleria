@@ -89,11 +89,23 @@ produccion   = canónico: derivación + autorización de materiales
 
 - Un `ProductionRelease` canónico habilita la **preparación** de Ingeniería;
   por sí solo no la completa, no libera materiales ni inicia fabricación.
-  Sólo la evidencia material release-correlacionada avanza la obra: el
-  snapshot de requerimientos (que el servidor sólo crea con el id exacto del
-  release) y la autorización release-scoped que escribe el stamp en la misma
-  transacción. Un stamp legacy sin demanda congelada derivada no prueba nada
-  de ese release. La finalización durable de Ingeniería por release es #740.
+  Sólo la evidencia material CORRELACIONADA con la P exacta avanza la obra
+  (`materialEvidenceCorrelatesWithRelease`): el snapshot de requerimientos
+  debe llevar el `releaseId` de la autoridad resuelta Y su huella de BOM
+  (`bomFingerprint` = `manufacturingFingerprint`); la autorización
+  release-scoped escribe el stamp sobre esa derivación. Requerimientos de
+  otra P, sin identidad o con huella incompatible — y un stamp legacy sin
+  derivación correlacionada — jamás avanzan la autoridad actual (P2 no
+  hereda la etapa operativa de la evidencia de P1). La finalización durable
+  de Ingeniería por release es #740.
+- La cadena legacy aplica SÓLO a contexto pre-Digital-Thread positivamente
+  identificado (`hasDigitalThreadContext === false`). El servidor proyecta
+  el campo en toda lectura del API y los productores locales (seed,
+  repositorio local, creación en modo guest) lo declaran positivamente: el
+  modo local es DT-free por construcción. Procedencia desconocida
+  (`undefined`) falla cerrado — un payload que nadie avaló no obtiene etapa
+  fabril a partir de stamps antiguos, ni en la etapa ni en
+  `canReleaseMaterials`.
 - `sentToProduction` sólo refleja el handshake legacy OC-022
   (`engineeringLog.sentToProductionAt`); "existe P" ya no se interpreta
   como envío ya realizado.

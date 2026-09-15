@@ -356,6 +356,12 @@ test.describe.serial('Project Designs & Immutable Revisions (#501 / WEB-DT-2) Br
     await expect(itemsTable.getByText(seeded.instanceIds[0])).not.toBeVisible();
     await expect(itemsTable.getByText(seeded.instanceIds[1])).not.toBeVisible();
     await expect(itemsTable.getByText(seeded.instanceIds[2])).not.toBeVisible();
+    // Frozen per-revision dimensions: R2 keeps FI-A/FI-B's 600/800 mm and
+    // adds FI-C's 900 mm — each revision snapshot stays frozen to its own
+    // authored widths, never recomputed from current data.
+    await expect(itemsTable.getByText('600 mm', { exact: true })).toBeVisible();
+    await expect(itemsTable.getByText('800 mm', { exact: true })).toBeVisible();
+    await expect(itemsTable.getByText('900 mm', { exact: true })).toBeVisible();
 
     // The immutable descriptors remain usable without horizontal overflow at
     // the three supported operational breakpoints.

@@ -56,7 +56,21 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
       if (raw) {
         // F116 C6: guest workspaces persisted at an older schemaVersion must
         // migrate on load, exactly like the JSON file storage does.
-        return withWorkshopSettings(migrateWorkspace(JSON.parse(raw) as Workspace));
+        const migrated = withWorkshopSettings(
+          migrateWorkspace(JSON.parse(raw) as Workspace),
+        );
+        // #738 review: THIS repository is the authority for local data, and
+        // the local tool is Digital-Thread-free by construction — it positively
+        // vouches pre-DT for every project it serves (including payloads
+        // persisted before the field existed). This is a declaration by the
+        // producer, not an inference from absence at consumption.
+        return {
+          ...migrated,
+          projects: migrated.projects.map((project) => ({
+            ...project,
+            hasDigitalThreadContext: false,
+          })),
+        };
       }
     } catch {
       // ignore

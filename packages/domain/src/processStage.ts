@@ -15,7 +15,11 @@
  */
 
 import type { Project } from './types';
-import { releaseAuthorityOf } from './releaseAuthority';
+import type { MaterialRequirementsSnapshot } from './materialPlanning';
+import {
+  releaseAuthorityOf,
+  type ProductionReleaseAuthority,
+} from './releaseAuthority';
 
 /** Stage of a project along the workshop process. */
 export type ProjectProcessStage =
@@ -52,6 +56,31 @@ export function sentToProduction(project: Project): boolean {
 }
 
 /**
+ * Whether the project's frozen material requirements are CORRELATED with the
+ * exact canonical release authority being projected (#738 review): they must
+ * have been derived from THAT release (matching releaseId) and carry its
+ * manufacturing BOM fingerprint. Requirements from another release, without
+ * identity, or with an incompatible fingerprint are real progress of ANOTHER
+ * context — the current release's stage must not inherit them (the evidence
+ * stays untouched; it simply doesn't advance this authority).
+ */
+export function materialEvidenceCorrelatesWithRelease(
+  requirements: MaterialRequirementsSnapshot | undefined,
+  authority: ProductionReleaseAuthority,
+): boolean {
+  if (!requirements?.releaseId || requirements.releaseId !== authority.releaseId) {
+    return false;
+  }
+  if (
+    authority.manufacturingFingerprint &&
+    requirements.bomFingerprint !== authority.manufacturingFingerprint
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Derive the current process stage of a project.
  *
  * #738 — ONE shared entry rule:
@@ -61,37 +90,34 @@ export function sentToProduction(project: Project): boolean {
  * 2. A canonical ProductionRelease puts the obra in `ingenieria` regardless
  *    of the legacy commercial stamp on Project.status: the release enables
  *    engineering preparation. P BY ITSELF neither completes engineering,
- *    authorizes materials nor starts fabrication — only EXPLICIT
- *    release-scoped material evidence advances a canonical obra past
- *    `ingenieria`: frozen requirements derived from the exact release
- *    (Almacén work started → `almacen`) and the audited material
- *    authorization stamp (`materialsRelease` → `produccion`). Durable
- *    per-release engineering completion is #740; a legacy per-project
- *    handshake log is never that evidence.
- * 3. Modern Digital Thread projects (positively `hasDigitalThreadContext`)
- *    with a residual accepted/produced stamp and NO release fail closed:
- *    commercial acceptance never substitutes a release (#642/#673/#697).
- * 4. Pre-Digital-Thread projects keep the legacy chain (accepted →
- *    engineering send → materials release). `hasDigitalThreadContext` is a
- *    server-owned projection always present in API mode; `undefined` means
- *    local mode, not a stale payload — the local legacy tool keeps working.
+ *    authorizes materials nor starts fabrication — only material evidence
+ *    CORRELATED with the exact release advances the obra past `ingenieria`
+ *    (see materialEvidenceCorrelatesWithRelease): frozen requirements
+ *    derived from that release (→ `almacen`) plus the audited material
+ *    authorization stamp (→ `produccion`). Evidence of another release, or
+ *    a legacy per-project stamp without correlation, never advances the
+ *    current authority (#740 owns the durable completion).
+ * 3. The legacy chain applies ONLY to positively identified pre-Digital
+ *    Thread context (`hasDigitalThreadContext === false`, set by the
+ *    server on API reads and by the local producers for the DT-free local
+ *    tool). A modern project (`=== true`) with a residual accepted/produced
+ *    stamp and no release fails closed, and so does UNKNOWN provenance
+ *    (`undefined` = a payload nobody vouched for): commercial acceptance
+ *    never substitutes a release (#642/#673/#697).
  */
 export function projectProcessStage(project: Project): ProjectProcessStage {
   if (project.cancelledAt) return 'ventas';
-  if (releaseAuthorityOf(project)?.source === 'canonical') {
-    // Only release-correlated material evidence advances the obra: the
-    // requirements snapshot can ONLY be derived through the release-scoped
-    // command (the server rejects an implicit-latest derive), and the
-    // release-scoped authorization writes the stamp on top of it. A bare
-    // legacy stamp without derived frozen demand proves nothing about THIS
-    // release.
-    if (project.materialsRelease && project.materialPlanning?.requirements) {
-      return 'produccion';
-    }
-    if (project.materialPlanning?.requirements) return 'almacen';
+  const authority = releaseAuthorityOf(project);
+  if (authority?.source === 'canonical') {
+    const correlated = materialEvidenceCorrelatesWithRelease(
+      project.materialPlanning?.requirements,
+      authority,
+    );
+    if (correlated && project.materialsRelease) return 'produccion';
+    if (correlated) return 'almacen';
     return 'ingenieria';
   }
-  if (project.hasDigitalThreadContext === true) return 'ventas';
+  if (project.hasDigitalThreadContext !== false) return 'ventas';
   if (project.status !== 'accepted' && project.status !== 'produced') {
     return 'ventas';
   }
@@ -110,14 +136,19 @@ export function filterProjectsByProcessStage(
 
 /**
  * Whether Almacén can release the project's materials to production:
- * legacy flow only (engineering already sent it and materials weren't
- * released yet). A canonical release is not legacy material evidence —
- * material authorization for a release is durable evidence (#740).
+ * positively identified pre-Digital-Thread legacy flow only (engineering
+ * already sent it and materials weren't released yet). A canonical release
+ * is not legacy material evidence — material authorization for a release is
+ * durable evidence (#740) — and unknown provenance fails closed.
  */
 export function canReleaseMaterials(project: Project): boolean {
+  // A canonical obra never receives the legacy per-project stamp — material
+  // authorization for a release is durable release-scoped evidence (#740),
+  // and an uncorrelated legacy log doesn't turn the stamp applicable.
+  if (releaseAuthorityOf(project)?.source === 'canonical') return false;
   return (
+    project.hasDigitalThreadContext === false &&
     (project.status === 'accepted' || project.status === 'produced') &&
-    project.hasDigitalThreadContext !== true &&
     sentToProduction(project) &&
     !project.materialsRelease
   );

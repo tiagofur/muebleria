@@ -19,6 +19,12 @@
   - Regresión: `demo-flow-happy-path.spec.ts` 1/1 PASS (exit a Producción conserva).
   - Hook: `engineeringReleaseContext.test.ts` 5/5 (resolución exacta, 404 fail-safe, release ajeno rechazado, sin label Q inventado, keys scoped).
 - Docs: `docs/project-lifecycle.md` §2 actualizado con la regla ejecutable vigente (#738) y su relación con `projectAllowsProductionAccess` (#697). Límites: despiece congelado/PTX de prueba = #739; finalización durable/gates físicos/materiales = #740; continuidad P1/P2 = #741.
+- Revisión independiente R1 (CHANGES_REQUESTED sobre c67c510e) — cuatro correcciones aplicadas sobre el mismo PR:
+  1. Correlación exacta evidencia↔P: `materialEvidenceCorrelatesWithRelease` exige `requirements.releaseId === authority.releaseId` Y `bomFingerprint === manufacturingFingerprint`; P2 jamás hereda etapa de evidencia de P1 (tests: P2+P1-reqs, P2+P1-reqs+stamp, reqs sin identidad, huella incompatible → todas `ingenieria`). `canReleaseMaterials` además excluye canonical explícitamente (un log legacy no vuelve aplicable el stamp).
+  2. Pre-DT estricto: la cadena legacy exige `hasDigitalThreadContext === false` (procedencia desconocida falla cerrado, también en `canReleaseMaterials`). Señal positiva local sin rellenar el mapper: `createSeedWorkspace`, `LocalStorageWorkspaceRepository.getWorkspace()` (declara pre-DT para todo payload local, incluidos los previos al campo) y `projectStore.createProject` en sesión guest ponen `false` positivamente; la creación en sesión auth deja el campo ausente (la respuesta del servidor es la autoridad). Test nuevo del nacimiento guest/auth.
+  3. Navegación diferida guardada: `deferredNavigation` captura scope+URL del intento y revalida sesión/scope/ruta vivos antes del `navigate()` (late completion jamás arrastra al usuario; navega también ante refresh rechazado SÓLO con intento vigente). Tests 4/4; cableado único `openInEngineeringGuarded` para reconciliation y chrome.
+  4. Inspector histórico: el fallo de CI estaba ya corregido en 8af49186 (empate `created_at` transaccional → orden indefinido; aserción independiente del orden; diagnóstico documentado, ajeno a #738). Reforzadas las dimensiones congeladas por revisión: R1 fija 600/800 y R2 600/800/900.
+- Evidence ronda R1: monorepo domain 1431 / storage 216 / excel 350(+3) / desktop 17 / mobile 87 / UI 1869 / web 507; typecheck 7/7; gates locales de la ronda en el informe del PR.
 - Delivery: complete (para el alcance de #738). Sin merge, sin cierre de issues, sin labels protegidos.
 
 

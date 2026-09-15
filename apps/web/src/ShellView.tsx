@@ -224,6 +224,10 @@ import {
   engineeringReleaseQueryKey,
   useEngineeringReleaseContext,
 } from './engineeringReleaseContext';
+import {
+  captureDeferredNavigationIntent,
+  deferredNavigationStillCurrent,
+} from './deferredNavigation';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
 import { buildStockCatalog } from './derivations/stockCatalog';
@@ -986,6 +990,36 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       routeEngineeringReleaseId ?? 'no-release',
     ),
   });
+  // #738 review — "Abrir Ingeniería" refreshes the read model and THEN
+  // navigates. The deferred navigation is guarded: if the user moved to
+  // another route/project, switched organization or the session ended while
+  // the refresh was in flight, the late completion must NOT drag them back
+  // to the abandoned intent. It still navigates when the refresh REJECTED
+  // (the workspace fetches its own context) — only with the intent current.
+  const openInEngineeringGuarded = (projectId: string, releaseId: string) => {
+    const scopeAtStart = useWorkspaceStore.getState().sessionScope;
+    const intent = captureDeferredNavigationIntent({
+      scopeKey: scopeAtStart ? JSON.stringify(sessionScopeKey(scopeAtStart)) : null,
+      path: window.location.pathname + window.location.search,
+    });
+    void refreshWorkspace().finally(() => {
+      const live = useWorkspaceStore.getState();
+      const liveScope = live.sessionScope;
+      if (
+        !deferredNavigationStillCurrent(intent, {
+          scopeKey: liveScope ? JSON.stringify(sessionScopeKey(liveScope)) : null,
+          path: window.location.pathname + window.location.search,
+          sessionActive: live.session !== null,
+        })
+      ) {
+        return;
+      }
+      const target = engineeringProjectPath(projectId, { releaseId });
+      if (window.location.pathname + window.location.search !== target) {
+        navigate(target);
+      }
+    });
+  };
   const {
     authority: quoteAuthority,
     revisions: quoteRevisions,
@@ -2227,17 +2261,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                 useEngineeringWorkspace
                   ? (projectId, releaseId) => {
                       // #738: open Engineering pinned to the release the
-                      // command returned — refresh the server read model so
-                      // the workspace resolves the exact context without a
-                      // manual reload.
-                      void refreshWorkspace().finally(() => {
-                        const target = engineeringProjectPath(projectId, {
-                          releaseId,
-                        });
-                        if (location.pathname + location.search !== target) {
-                          navigate(target);
-                        }
-                      });
+                      // command returned, guarded against a superseded
+                      // context (see openInEngineeringGuarded).
+                      openInEngineeringGuarded(projectId, releaseId);
                     }
                   : undefined
               }
@@ -2387,15 +2413,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             useEngineeringWorkspace
               ? (projectId, releaseId) => {
                   // #738: open Engineering pinned to the obra's exact
-                  // release (the detail menu passes the resolved authority).
-                  void refreshWorkspace().finally(() => {
-                    const target = engineeringProjectPath(projectId, {
-                      releaseId,
-                    });
-                    if (location.pathname + location.search !== target) {
-                      navigate(target);
-                    }
-                  });
+                  // release (the detail menu passes the resolved
+                  // authority), guarded against a superseded context.
+                  openInEngineeringGuarded(projectId, releaseId);
                 }
               : undefined
           }

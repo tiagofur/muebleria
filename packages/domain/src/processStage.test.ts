@@ -26,6 +26,9 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     marginFactor: 1,
     laborFixedCost: 0,
     status: 'accepted',
+    // Fixtures default to POSITIVELY identified pre-Digital-Thread works
+    // (#738 review): the legacy chain only applies to vouched context.
+    hasDigitalThreadContext: false,
     items: [],
     createdAt: '2026-08-01T10:00:00Z',
     updatedAt: '2026-08-01T10:00:00Z',
@@ -130,6 +133,35 @@ describe('canReleaseMaterials', () => {
       canReleaseMaterials(makeProject({ status: 'draft', engineeringLog: sentLog() })),
     ).toBe(false);
   });
+
+  it('#738 review — only positively pre-DT context may use the legacy stamp', () => {
+    // Unknown provenance fails closed; a canonical obra never receives the
+    // legacy materials stamp.
+    expect(
+      canReleaseMaterials(
+        makeProject({
+          hasDigitalThreadContext: undefined,
+          engineeringLog: sentLog(),
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canReleaseMaterials(
+        makeProject({
+          hasDigitalThreadContext: true,
+          engineeringLog: sentLog(),
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canReleaseMaterials(
+        makeProject({
+          resolvedProductionRelease: canonicalRelease(),
+          engineeringLog: sentLog(),
+        }),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('canSendToProduction', () => {
@@ -196,6 +228,7 @@ function canonicalRelease(
     designRevisionId: 'rev-2',
     designRevisionNumber: 2,
     quoteRevisionId: 'qrev-2',
+    manufacturingFingerprint: 'sha256-' + 'a'.repeat(64),
     ...overrides,
   } as NonNullable<Project['resolvedProductionRelease']>;
 }
@@ -220,8 +253,9 @@ describe('#738 projectProcessStage — canonical release', () => {
   });
 
   it('explicit release-scoped material evidence advances a canonical obra', () => {
-    // Frozen requirements derived from the exact release = Almacén work
-    // started (someone ran the release-scoped derive command).
+    // Frozen requirements derived from the exact release (matching id AND
+    // BOM fingerprint) = Almacén work started through the release-scoped
+    // derive command.
     const derived = (extra: Partial<Project> = {}): Project =>
       makeProject({
         status: 'draft',
@@ -247,15 +281,91 @@ describe('#738 projectProcessStage — canonical release', () => {
     expect(
       projectProcessStage(derived({ materialsRelease: RELEASE })),
     ).toBe('produccion');
-    // A materials stamp WITHOUT derived requirements is not release-scoped
+    // A materials stamp WITHOUT correlated requirements is not release-scoped
     // material evidence — a legacy per-project stamp proves nothing about
-    // THIS release (the requirements snapshot is the release-correlated
-    // anchor the server controls).
+    // THIS release.
     expect(
       projectProcessStage(
         makeProject({
           resolvedProductionRelease: canonicalRelease(),
           materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('ingenieria');
+  });
+
+  it('#738 review — P2 never inherits the operational stage of P1 evidence', () => {
+    // The decisive correlation cases: the resolved authority is P2 while the
+    // material evidence belongs to P1 (or carries no/expired identity).
+    // Neither requirements nor an older authorization may advance P2.
+    const p2Authority = canonicalRelease({
+      releaseId: 'rel-2',
+      releaseNumber: 2,
+      manufacturingFingerprint: 'sha256-' + 'b'.repeat(64),
+    });
+    const p1Requirements = {
+      id: 'mp-1',
+      projectId: 'p1',
+      requirements: {
+        releaseId: 'rel-1',
+        bomFingerprint: 'sha256-' + 'a'.repeat(64),
+        derivedAt: '2026-09-10T10:00:00Z',
+        lines: [],
+      },
+      reservations: [],
+    } as unknown as Project['materialPlanning'];
+    // P2 + P1 requirements → stays in Ingeniería.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: p2Authority,
+          materialPlanning: p1Requirements,
+        }),
+      ),
+    ).toBe('ingenieria');
+    // P2 + P1 requirements + an older materials stamp → still Ingeniería.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: p2Authority,
+          materialPlanning: p1Requirements,
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('ingenieria');
+    // Requirements without release identity never advance the obra.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: p2Authority,
+          materialPlanning: {
+            id: 'mp-2',
+            projectId: 'p1',
+            requirements: {
+              derivedAt: '2026-09-10T10:00:00Z',
+              lines: [],
+            },
+            reservations: [],
+          } as unknown as Project['materialPlanning'],
+        }),
+      ),
+    ).toBe('ingenieria');
+    // Matching releaseId but incompatible BOM fingerprint never advances.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: p2Authority,
+          materialPlanning: {
+            id: 'mp-3',
+            projectId: 'p1',
+            requirements: {
+              releaseId: 'rel-2',
+              bomFingerprint: 'sha256-' + 'c'.repeat(64),
+              derivedAt: '2026-09-10T10:00:00Z',
+              lines: [],
+            },
+            reservations: [],
+          } as unknown as Project['materialPlanning'],
         }),
       ),
     ).toBe('ingenieria');
@@ -299,19 +409,59 @@ describe('#738 projectProcessStage — canonical release', () => {
         makeProject({ status: 'produced', hasDigitalThreadContext: true }),
       ),
     ).toBe('ventas');
+    // Even full legacy stamps never unlock a modern project without P.
+    expect(
+      projectProcessStage(
+        makeProject({
+          status: 'produced',
+          hasDigitalThreadContext: true,
+          engineeringLog: sentLog(),
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('ventas');
   });
 
-  it('local mode (no DT projection) keeps the legacy chain', () => {
-    // hasDigitalThreadContext is server-owned: undefined means local mode,
-    // not a stale payload — the local legacy tool keeps working.
+  it('#738 review — unknown provenance (no DT projection) fails closed', () => {
+    // `undefined` means nobody vouched for this payload's context — the
+    // server ALWAYS projects the field on API reads and the local producers
+    // positively set it, so absence is unknown, not pre-DT. Old stamps never
+    // grant a workshop stage to a payload of unknown provenance.
     expect(
-      projectProcessStage(makeProject({ hasDigitalThreadContext: undefined })),
+      projectProcessStage(
+        makeProject({ status: 'accepted', hasDigitalThreadContext: undefined }),
+      ),
+    ).toBe('ventas');
+    expect(
+      projectProcessStage(
+        makeProject({
+          status: 'accepted',
+          hasDigitalThreadContext: undefined,
+          engineeringLog: sentLog(),
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('ventas');
+  });
+
+  it('positively identified pre-DT context keeps the legacy chain', () => {
+    expect(
+      projectProcessStage(makeProject({ hasDigitalThreadContext: false })),
     ).toBe('ingenieria');
     expect(
       projectProcessStage(
-        makeProject({ hasDigitalThreadContext: undefined, engineeringLog: sentLog() }),
+        makeProject({ hasDigitalThreadContext: false, engineeringLog: sentLog() }),
       ),
     ).toBe('almacen');
+    expect(
+      projectProcessStage(
+        makeProject({
+          hasDigitalThreadContext: false,
+          engineeringLog: sentLog(),
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('produccion');
   });
 
   it('pre-DT compatibility keeps the legacy chain when positively identified', () => {
