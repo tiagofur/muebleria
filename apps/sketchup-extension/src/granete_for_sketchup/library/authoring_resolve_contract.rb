@@ -776,7 +776,7 @@ module Granete
           default_version = if defined?(Granete::SketchUpExtension::EXTENSION_VERSION)
                               Granete::SketchUpExtension::EXTENSION_VERSION
                             else
-                              '0.1.0'
+                              '0.1.1'
                             end
           {
             'schemaId' => AuthoringResolveContract::SUPPORTED_SCHEMA_ID,
