@@ -65,6 +65,9 @@ module Granete
         overlay/inspection_tool
         overlay/manager
         assets/asset_resolver
+        assets/hardware_asset_cache
+        assets/hardware_asset_downloader
+        assets/hardware_asset_validator
         assets/asset_loader
         assets/texture_cache
         assets/media_authorizer

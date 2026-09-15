@@ -1,9 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'asset_resolver'
-require_relative 'hardware_asset_cache'
-require_relative 'hardware_asset_downloader'
-
 module Granete
   module SketchUpExtension
     module Assets

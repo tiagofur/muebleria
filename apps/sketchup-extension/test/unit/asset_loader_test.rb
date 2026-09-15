@@ -6,6 +6,7 @@ require_relative '../../src/granete_for_sketchup/assets/asset_resolver'
 require_relative '../../src/granete_for_sketchup/assets/hardware_asset_cache'
 require_relative '../../src/granete_for_sketchup/assets/hardware_asset_downloader'
 require_relative '../../src/granete_for_sketchup/assets/asset_loader'
+require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
 
 class AssetLoaderTest < Minitest::Test

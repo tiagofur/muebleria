@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'catalog_provider'
-
 module Granete
   module SketchUpExtension
     module Library
