@@ -675,6 +675,48 @@ module Granete
           refresh_project_furniture
         end
 
+        def handle_observed_position_sync_outcome(outcome = nil, **kwargs)
+          return unless @dialog&.visible?
+
+          outcome = kwargs if outcome.nil? || !outcome.is_a?(Hash)
+          return unless outcome.is_a?(Hash)
+
+          current = active_model
+          return unless current
+          return if outcome[:model] && !current.equal?(outcome[:model])
+          return unless sync_outcome_binding_matches?(current, outcome[:binding])
+
+          handle_get_project_furniture(@dialog)
+
+          return unless outcome[:status] == :success
+
+          push_preflight_state(@dialog)
+          mark_host_save_pending
+        end
+
+        def sync_outcome_binding_matches?(current_model, outcome_binding)
+          return true unless outcome_binding
+
+          current_binding = if defined?(Connection::ModelBinding::Store)
+                              Connection::ModelBinding::Store.new(current_model).read
+                            end
+          if current_binding
+            return current_binding.project_id == outcome_binding.project_id &&
+                   current_binding.design_id == outcome_binding.design_id &&
+                   current_binding.base_revision_id == outcome_binding.base_revision_id
+          end
+
+          return true unless @model_binding_connector.respond_to?(:status)
+
+          status = @model_binding_connector.status
+          return true unless status.is_a?(Hash) && status['binding'].is_a?(Hash)
+
+          b = status['binding']
+          b['projectId'] == outcome_binding.project_id &&
+            b['designId'] == outcome_binding.design_id &&
+            b['baseRevisionId'] == outcome_binding.base_revision_id
+        end
+
         def handle_observed_position_sync_complete(_event, _ids)
           return unless @dialog&.visible?
 
@@ -2052,9 +2094,11 @@ module Granete
           if @entities_observer.respond_to?(:on_host_inventory_changed=)
             @entities_observer.on_host_inventory_changed = method(:handle_host_inventory_change)
           end
-          return unless @position_sync_coordinator.respond_to?(:on_sync_complete=)
-
-          @position_sync_coordinator.on_sync_complete = method(:handle_observed_position_sync_complete)
+          if @position_sync_coordinator.respond_to?(:on_sync_outcome=)
+            @position_sync_coordinator.on_sync_outcome = method(:handle_observed_position_sync_outcome)
+          elsif @position_sync_coordinator.respond_to?(:on_sync_complete=)
+            @position_sync_coordinator.on_sync_complete = method(:handle_observed_position_sync_complete)
+          end
         end
 
         # #498 shared coordinator: built lazily when not injected so tests

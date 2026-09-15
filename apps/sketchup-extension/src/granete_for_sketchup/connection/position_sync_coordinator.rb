@@ -15,14 +15,18 @@ module Granete
       # - Debouncing / coalescing rapid moves (A -> B -> C converges to C).
       # - Strict context revalidation before PUT (model + exact binding).
       # - Authoritative PUT readback before advancing local known_transforms.
+      # - Structured outcome callback (on_sync_outcome) for both success and failure
+      #   allowing the UI to honestly present pending_confirmation on sync failures.
       class PositionSyncCoordinator # rubocop:disable Metrics/ClassLength
         attr_reader :known_transforms
-        attr_accessor :on_sync_complete, :preflight_session
+        attr_accessor :on_sync_outcome, :on_sync_complete, :preflight_session
 
+        # rubocop:disable-next Metrics/ParameterLists
         def initialize(model_provider:, binding_store_factory:, service:,
                        metadata_store_factory:, host_reconciliation:,
                        intent_store: nil, mutation_coordinator: nil,
                        preflight_session: nil, on_sync_complete: nil,
+                       on_sync_outcome: nil,
                        logger: SafeLogger.new)
           @model_provider = model_provider
           @binding_store_factory = binding_store_factory
@@ -33,6 +37,7 @@ module Granete
           @mutation_coordinator = mutation_coordinator
           @preflight_session = preflight_session
           @on_sync_complete = on_sync_complete
+          @on_sync_outcome = on_sync_outcome
           @logger = logger
           @suppressed = false
           @known_transforms = {}
@@ -140,16 +145,34 @@ module Granete
                            furniture_instance_id)
           end
 
+          # P2: Validate project_id, design_id, AND base_revision_id
           unless updated_wc.design_id == captured_binding.design_id &&
-                 updated_wc.project_id == captured_binding.project_id
-            return failure(:context_changed,
-                           'el Working Copy devuelto no coincide con el diseño activo',
+                 updated_wc.project_id == captured_binding.project_id &&
+                 updated_wc.base_revision_id == captured_binding.base_revision_id
+            emit_sync_outcome(
+              event: :insert,
+              ids: [furniture_instance_id],
+              status: :failed,
+              code: :base_revision_mismatch,
+              model: captured_model,
+              binding: captured_binding
+            )
+            return failure(:base_revision_mismatch,
+                           'el Working Copy devuelto no coincide con la revisión base del modelo',
                            furniture_instance_id)
           end
 
           returned_item = updated_wc.items.find { |i| i.furniture_instance_id == furniture_instance_id }
           unless returned_item&.transform &&
                  ProjectFurniture::TransformContract.equivalent_to_host?(returned_item.transform, host_transform)
+            emit_sync_outcome(
+              event: :insert,
+              ids: [furniture_instance_id],
+              status: :failed,
+              code: :readback_mismatch,
+              model: captured_model,
+              binding: captured_binding
+            )
             return failure(:readback_mismatch,
                            'la posición devuelta por el servidor difiere del estado local',
                            furniture_instance_id)
@@ -161,11 +184,26 @@ module Granete
           @intent_store&.delete(furniture_instance_id) if @intent_store.respond_to?(:delete)
 
           run_initial_preflight(furniture_instance_id)
-          @on_sync_complete&.call(:insert, [furniture_instance_id])
+          emit_sync_outcome(
+            event: :insert,
+            ids: [furniture_instance_id],
+            status: :success,
+            code: :ok,
+            model: captured_model,
+            binding: captured_binding
+          )
 
           { 'ok' => true, 'code' => 'placed', 'instanceId' => furniture_instance_id }
         rescue StandardError => e
           @logger.error('position_sync_insert_failed', error: e, furniture_instance_id: furniture_instance_id)
+          emit_sync_outcome(
+            event: :insert,
+            ids: [furniture_instance_id],
+            status: :failed,
+            code: extract_error_code(e),
+            model: captured_model,
+            binding: captured_binding
+          )
           failure(:sync_failed, e.message, furniture_instance_id)
         end
 
@@ -181,6 +219,8 @@ module Granete
 
           moved_entries = detect_moved_entries(captured_model)
           return if moved_entries.empty?
+
+          all_ids = moved_entries.map { |item| item[:id] }
 
           working = @service.get_working_copy(captured_binding.design_id)
 
@@ -211,28 +251,76 @@ module Granete
 
           return unless context_valid?(captured_model, captured_binding)
 
-          return unless updated_wc.design_id == captured_binding.design_id &&
-                        updated_wc.project_id == captured_binding.project_id
+          # P2: Validate project_id, design_id, AND base_revision_id
+          unless updated_wc.design_id == captured_binding.design_id &&
+                 updated_wc.project_id == captured_binding.project_id &&
+                 updated_wc.base_revision_id == captured_binding.base_revision_id
+            @logger.warn('position_sync_moved_base_revision_mismatch',
+                         design_id: captured_binding.design_id,
+                         expected_base: captured_binding.base_revision_id,
+                         returned_base: updated_wc.base_revision_id)
+            emit_sync_outcome(
+              event: :move,
+              ids: all_ids,
+              status: :failed,
+              code: :base_revision_mismatch,
+              model: captured_model,
+              binding: captured_binding
+            )
+            return
+          end
 
           synced_ids = []
+          failed_ids = []
           moved_entries.each do |item|
             returned = updated_wc.items.find { |w| w.furniture_instance_id == item[:id] }
             entity = item[:entity]
             host_transform = entity.respond_to?(:transformation) ? entity.transformation : nil
-            next unless returned&.transform && host_transform &&
-                        ProjectFurniture::TransformContract.equivalent_to_host?(returned.transform, host_transform)
-
-            @known_transforms[captured_model] ||= {}
-            @known_transforms[captured_model][item[:id]] = returned.transform
-            synced_ids << item[:id]
+            if returned&.transform && host_transform &&
+               ProjectFurniture::TransformContract.equivalent_to_host?(returned.transform, host_transform)
+              @known_transforms[captured_model] ||= {}
+              @known_transforms[captured_model][item[:id]] = returned.transform
+              synced_ids << item[:id]
+            else
+              failed_ids << item[:id]
+            end
           end
 
           if synced_ids.any?
             @logger.info('position_sync_moved_synced', count: synced_ids.length)
-            @on_sync_complete&.call(:move, synced_ids)
+            emit_sync_outcome(
+              event: :move,
+              ids: synced_ids,
+              status: :success,
+              code: :ok,
+              model: captured_model,
+              binding: captured_binding
+            )
+          end
+
+          if failed_ids.any?
+            @logger.warn('position_sync_moved_readback_mismatch', count: failed_ids.length)
+            emit_sync_outcome(
+              event: :move,
+              ids: failed_ids,
+              status: :failed,
+              code: :readback_mismatch,
+              model: captured_model,
+              binding: captured_binding
+            )
           end
         rescue StandardError => e
           @logger.error('position_sync_moved_failed', error: e)
+          if all_ids&.any?
+            emit_sync_outcome(
+              event: :move,
+              ids: all_ids,
+              status: :failed,
+              code: extract_error_code(e),
+              model: captured_model,
+              binding: captured_binding
+            )
+          end
         end
 
         def record_transforms(model)
@@ -254,6 +342,40 @@ module Granete
         end
 
         private
+
+        def emit_sync_outcome(event:, ids:, status:, model:, binding:, code: :ok)
+          unless context_valid?(model, binding)
+            @logger.info('position_sync_outcome_discarded_context_changed',
+                         event: event, ids: ids, status: status, code: code)
+            return
+          end
+
+          outcome = {
+            event: event,
+            ids: ids,
+            status: status,
+            code: code,
+            model: model,
+            binding: binding
+          }
+
+          if @on_sync_outcome
+            begin
+              @on_sync_outcome.call(outcome)
+            rescue ArgumentError
+              @on_sync_outcome.call(**outcome)
+            end
+          end
+
+          @on_sync_complete&.call(event, ids) if status == :success
+        end
+
+        def extract_error_code(error)
+          return error.kind.to_sym if error.respond_to?(:kind) && error.kind
+          return error.code.to_sym if error.respond_to?(:code) && error.code
+
+          :sync_failed
+        end
 
         def handle_transaction_event(model)
           return if suppressed?

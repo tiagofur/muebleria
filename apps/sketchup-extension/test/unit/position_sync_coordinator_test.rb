@@ -9,15 +9,26 @@ require_relative '../../src/granete_for_sketchup/connection/transform_contract'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
+require_relative '../../src/granete_for_sketchup/connection/panel_state'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/host/command_contract'
 require_relative '../../src/granete_for_sketchup/host/position_sync_observer'
 require_relative '../../src/granete_for_sketchup/connection/position_sync_coordinator'
+require_relative '../../src/granete_for_sketchup/selection/capabilities'
+require_relative '../../src/granete_for_sketchup/selection/selection_context'
+require_relative '../../src/granete_for_sketchup/selection/capability_policy'
+require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
+require_relative '../../src/granete_for_sketchup/selection/resolver'
+require_relative '../../src/granete_for_sketchup/observers/selection_observer'
+require_relative '../../src/granete_for_sketchup/library/catalog_provider'
+require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
+require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 
 PF = Granete::SketchUpExtension::Connection::ProjectFurniture
 MB = Granete::SketchUpExtension::Connection::ModelBinding
 MS = Granete::SketchUpExtension::Metadata::Store
 CONNECTION = Granete::SketchUpExtension::Connection
+UIDialogController = Granete::SketchUpExtension::UserInterface::DialogController
 
 class NullLogger
   def info(*); end
@@ -107,6 +118,7 @@ class PositionSyncCoordinatorTest < Minitest::Test
 
   def setup
     @model = CoordModel.new
+    SketchupStub.active_model = @model if defined?(SketchupStub)
     @current_model = @model
     @transport = FakeTransport.new
     @auth = FakeAuth.new
@@ -145,6 +157,10 @@ class PositionSyncCoordinatorTest < Minitest::Test
       logger: @logger
     )
     @coordinator.rebind(@model)
+  end
+
+  def teardown
+    SketchupStub.active_model = nil if defined?(SketchupStub)
   end
 
   def test_converge_inserted_unit_syncs_and_runs_initial_preflight
@@ -463,6 +479,344 @@ class PositionSyncCoordinatorTest < Minitest::Test
     assert_empty events
 
     # Invariant: reconciliation remains pending
+    panel = @reconciliation.projection
+    refute panel['clean']
+    row = panel['items'].find { |i| i['id'] == FI_1 }
+    assert_equal 'pending_confirmation', row['reconciliationState']
+  end
+
+  def test_regression_1_network_failure_after_move_refreshes_dialog_to_pending_confirmation
+    entity = create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+
+    # Initially converged and present_synced
+    @coordinator.converge_inserted_unit(@model, binding, FI_1)
+    stub_working_copy([
+                        { 'furniture_instance_id' => FI_1,
+                          'furniture_definition_id' => DEFINITION_ID,
+                          'parameters' => {}, 'material_choices' => {},
+                          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
+                      ])
+
+    panel_initial = @reconciliation.projection
+    assert panel_initial['clean']
+    assert_equal 'present_synced', panel_initial['items'].first['reconciliationState']
+
+    rec = @reconciliation
+    fake_placer = Object.new
+    fake_placer.define_singleton_method(:panel) do
+      PF::PanelState.build_panel_payload(reconciliation: rec, catalog_provider: nil)
+    end
+
+    controller = UIDialogController.new(
+      logger: @logger,
+      status_provider: Object.new,
+      project_furniture_placer: fake_placer,
+      position_sync_coordinator: @coordinator
+    )
+    dialog = controller.show
+    dialog.executed_scripts.clear
+
+    outcomes = []
+    success_events = []
+    original_outcome_handler = @coordinator.on_sync_outcome
+    @coordinator.on_sync_outcome = lambda do |outcome|
+      outcomes << outcome
+      original_outcome_handler&.call(outcome)
+    end
+    @coordinator.on_sync_complete = ->(event, ids) { success_events << [event, ids] }
+
+    # User changes local transform
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+
+    # Transport returns 503 on PUT
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 503,
+                       { 'error' => { 'message' => 'Service Unavailable' } })
+
+    # onTransactionCommit triggers sync
+    @coordinator.on_transaction_commit(@model)
+
+    # Invariants:
+    # 1. No known_transform advance
+    known_for_model = @coordinator.known_transforms[@model] || {}
+    refute_equal [500.0, 0.0, 0.0], known_for_model[FI_1]&.dig('translation_mm')
+
+    # 2. No success callback
+    assert_empty success_events
+
+    # 3. Failure outcome callback emitted for same context
+    assert_equal 1, outcomes.length
+    assert_equal :move, outcomes.first[:event]
+    assert_equal [FI_1], outcomes.first[:ids]
+    assert_equal :failed, outcomes.first[:status]
+
+    # 4. DialogController refreshed Project Furniture
+    project_furniture_scripts = dialog.executed_scripts.select { |s| s.include?('onProjectFurniture') }
+    refute_empty project_furniture_scripts
+    payload = JSON.parse(project_furniture_scripts.last[/onProjectFurniture\((.*)\)\z/, 1])
+
+    # 5. HostReconciliation reports pending_confirmation, panel clean == false, row is NOT present_synced
+    refute payload['clean']
+    row = payload['items'].find { |i| i['id'] == FI_1 }
+    assert_equal 'pending_confirmation', row['reconciliationState']
+    refute row['placed']
+    assert row['pendingConfirm'] # UI action is “Reintentar sincronización”
+  end
+
+  def test_regression_2_readback_mismatch_after_move_refreshes_dialog_to_pending_confirmation
+    entity = create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+
+    @coordinator.converge_inserted_unit(@model, binding, FI_1)
+    stub_working_copy([
+                        { 'furniture_instance_id' => FI_1,
+                          'furniture_definition_id' => DEFINITION_ID,
+                          'parameters' => {}, 'material_choices' => {},
+                          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
+                      ])
+
+    rec = @reconciliation
+    fake_placer = Object.new
+    fake_placer.define_singleton_method(:panel) do
+      PF::PanelState.build_panel_payload(reconciliation: rec, catalog_provider: nil)
+    end
+
+    controller = UIDialogController.new(
+      logger: @logger,
+      status_provider: Object.new,
+      project_furniture_placer: fake_placer,
+      position_sync_coordinator: @coordinator
+    )
+    dialog = controller.show
+    dialog.executed_scripts.clear
+
+    outcomes = []
+    success_events = []
+    original_outcome_handler = @coordinator.on_sync_outcome
+    @coordinator.on_sync_outcome = lambda do |outcome|
+      outcomes << outcome
+      original_outcome_handler&.call(outcome)
+    end
+    @coordinator.on_sync_complete = ->(event, ids) { success_events << [event, ids] }
+
+    # User moves entity to 500mm
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+
+    # Server returns 200 OK, but returned transform is 9999mm (mismatch)
+    mismatched_body = {
+      'design_id' => DESIGN_ID,
+      'project_id' => PROJECT_ID,
+      'base_revision_id' => REVISION_R1,
+      'items' => [
+        {
+          'furniture_instance_id' => FI_1,
+          'furniture_definition_id' => DEFINITION_ID,
+          'parameters' => {},
+          'material_choices' => {},
+          'transform' => { 'translation_mm' => [9999.0, 9999.0, 9999.0],
+                           'rotation_deg' => [0.0, 0.0, 0.0] }
+        }
+      ]
+    }
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 200, mismatched_body)
+
+    @coordinator.on_transaction_commit(@model)
+
+    # Invariant: NO known_transform advance to 500mm
+    known_for_model = @coordinator.known_transforms[@model] || {}
+    refute_equal [500.0, 0.0, 0.0], known_for_model[FI_1]&.dig('translation_mm')
+
+    # Invariant: NO success callback
+    assert_empty success_events
+
+    # Invariant: failure outcome emitted
+    assert_equal 1, outcomes.length
+    assert_equal :failed, outcomes.first[:status]
+    assert_equal :readback_mismatch, outcomes.first[:code]
+
+    # Invariant: DialogController refreshed Project Furniture
+    project_furniture_scripts = dialog.executed_scripts.select { |s| s.include?('onProjectFurniture') }
+    refute_empty project_furniture_scripts
+    payload = JSON.parse(project_furniture_scripts.last[/onProjectFurniture\((.*)\)\z/, 1])
+
+    # Invariant: HostReconciliation reports pending_confirmation & retry action visible
+    refute payload['clean']
+    row = payload['items'].find { |i| i['id'] == FI_1 }
+    assert_equal 'pending_confirmation', row['reconciliationState']
+    assert row['pendingConfirm']
+  end
+
+  def test_regression_3_context_switch_during_move_failure_does_not_pollute_new_model
+    entity = create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+
+    @coordinator.converge_inserted_unit(@model, binding, FI_1)
+    stub_working_copy([
+                        { 'furniture_instance_id' => FI_1,
+                          'furniture_definition_id' => DEFINITION_ID,
+                          'parameters' => {}, 'material_choices' => {},
+                          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
+                      ])
+
+    model_b = CoordModel.new
+    write_binding(model_b, project_id: '41000000-0000-0000-0000-000000000002',
+                           design_id: '52000000-0000-0000-0000-000000000002',
+                           base_revision_id: '53000000-0000-0000-0000-000000000002')
+
+    dialog_b_refreshes = []
+    fake_placer_b = Object.new
+    fake_placer_b.define_singleton_method(:panel) do
+      dialog_b_refreshes << true
+      { 'clean' => true, 'items' => [] }
+    end
+
+    controller_b = UIDialogController.new(
+      logger: @logger,
+      status_provider: Object.new,
+      project_furniture_placer: fake_placer_b,
+      position_sync_coordinator: @coordinator
+    )
+    dialog_b = controller_b.show
+    dialog_b.executed_scripts.clear
+
+    # Move entity in model A
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+
+    # Before result arrives: active model switches to B and PUT returns 503
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 503,
+                       { 'error' => { 'message' => '503 Unavailable' } })
+    @transport.before_request = lambda do |method, path|
+      if method == 'PUT' && path =~ %r{/working-copy}
+        @current_model = model_b
+        SketchupStub.active_model = model_b
+      end
+    end
+
+    @coordinator.sync_moved_entities(@model)
+
+    # Invariant: NO refresh of model B's dialog
+    assert_empty dialog_b_refreshes
+    project_furniture_scripts = dialog_b.executed_scripts.select { |s| s.include?('onProjectFurniture') }
+    assert_empty project_furniture_scripts
+
+    # Invariant: NO known_transform advance for model B
+    known_b = @coordinator.known_transforms[model_b] || {}
+    assert_empty known_b
+  end
+
+  def test_regression_4_base_mismatch_insert_fails_closed
+    create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+
+    # PUT returns base = R2 (different from binding base R1)
+    mismatched_base_body = {
+      'design_id' => DESIGN_ID,
+      'project_id' => PROJECT_ID,
+      'base_revision_id' => '53000000-0000-0000-0000-000000000002',
+      'items' => [
+        {
+          'furniture_instance_id' => FI_1,
+          'furniture_definition_id' => DEFINITION_ID,
+          'parameters' => {},
+          'material_choices' => {},
+          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                           'rotation_deg' => [0.0, 0.0, 0.0] }
+        }
+      ]
+    }
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 200, mismatched_base_body)
+
+    events = []
+    outcomes = []
+    @coordinator.on_sync_complete = ->(event, ids) { events << [event, ids] }
+    @coordinator.on_sync_outcome = ->(outcome) { outcomes << outcome }
+    preflight_runs_before = @preflight_session.runs.length
+
+    result = @coordinator.converge_inserted_unit(@model, binding, FI_1)
+
+    # Invariant: fails closed with base_revision_mismatch
+    refute result['ok']
+    assert_equal 'base_revision_mismatch', result['code']
+
+    # Invariant: NO known_transform advance
+    known_for_model = @coordinator.known_transforms[@model] || {}
+    assert_nil known_for_model[FI_1]
+
+    # Invariant: NO initial preflight run
+    assert_equal preflight_runs_before, @preflight_session.runs.length
+
+    # Invariant: NO success callback
+    assert_empty events
+
+    # Invariant: failure outcome emitted
+    assert_equal 1, outcomes.length
+    assert_equal :failed, outcomes.first[:status]
+    assert_equal :base_revision_mismatch, outcomes.first[:code]
+  end
+
+  def test_regression_5_base_mismatch_move_fails_closed
+    entity = create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+
+    @coordinator.converge_inserted_unit(@model, binding, FI_1)
+    stub_working_copy([
+                        { 'furniture_instance_id' => FI_1,
+                          'furniture_definition_id' => DEFINITION_ID,
+                          'parameters' => {}, 'material_choices' => {},
+                          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
+                      ])
+
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+
+    # PUT returns base = R2
+    mismatched_base_body = {
+      'design_id' => DESIGN_ID,
+      'project_id' => PROJECT_ID,
+      'base_revision_id' => '53000000-0000-0000-0000-000000000002',
+      'items' => [
+        {
+          'furniture_instance_id' => FI_1,
+          'furniture_definition_id' => DEFINITION_ID,
+          'parameters' => {},
+          'material_choices' => {},
+          'transform' => { 'translation_mm' => [500.0, 0.0, 0.0],
+                           'rotation_deg' => [0.0, 0.0, 0.0] }
+        }
+      ]
+    }
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 200, mismatched_base_body)
+
+    events = []
+    outcomes = []
+    @coordinator.on_sync_complete = ->(event, ids) { events << [event, ids] }
+    @coordinator.on_sync_outcome = ->(outcome) { outcomes << outcome }
+
+    @coordinator.on_transaction_commit(@model)
+
+    # Invariant: NO known_transform advance
+    known_for_model = @coordinator.known_transforms[@model] || {}
+    refute_equal [500.0, 0.0, 0.0], known_for_model[FI_1]&.dig('translation_mm')
+
+    # Invariant: NO success callback
+    assert_empty events
+
+    # Invariant: failure outcome with base_revision_mismatch
+    assert_equal 1, outcomes.length
+    assert_equal :failed, outcomes.first[:status]
+    assert_equal :base_revision_mismatch, outcomes.first[:code]
+
+    # Invariant: reconciliation remains pending
+    stub_working_copy([
+                        { 'furniture_instance_id' => FI_1,
+                          'furniture_definition_id' => DEFINITION_ID,
+                          'parameters' => {}, 'material_choices' => {},
+                          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
+                      ])
     panel = @reconciliation.projection
     refute panel['clean']
     row = panel['items'].find { |i| i['id'] == FI_1 }
