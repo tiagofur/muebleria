@@ -324,6 +324,16 @@
       return submit("navigate_issue", { issueId: issueId, target: target });
     },
 
+    // #731 PR2: navigate an exception card's issue to its exact managed
+    // context WITHOUT depending on the current selection — the design-wide
+    // validation UX addresses the furniture by explicit identity through
+    // the same #466 navigate_issue channel.
+    navigateFurnitureIssue: function (furnitureInstanceId, issueId, target) {
+      return submit("navigate_issue",
+                    { issueId: issueId, target: target || "primary" },
+                    { furnitureInstanceId: furnitureInstanceId });
+    },
+
     // Ruby resets `running` implicitly by pushing the next preflight_state.
     handleRunningReset: function () {
       running = false;

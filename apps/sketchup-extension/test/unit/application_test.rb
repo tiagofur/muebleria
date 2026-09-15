@@ -184,7 +184,7 @@ class ApplicationTest < Minitest::Test
       place_furniture_instance poll_enrollment preflight_review publish_design_revision
       refresh_media_url refresh_model_binding
       rescan_duplicates restore_furniture_instance select_furniture select_project_furniture update_furniture
-      validate_managed_furniture_identity
+      validate_design_revision validate_managed_furniture_identity
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
     first_dialog.callbacks.fetch('dialog_ready').call(nil)

@@ -7,6 +7,7 @@ require_relative '../support/overlay_runtime'
 require_relative '../support/overlay_fixture'
 require_relative '../../src/granete_for_sketchup/logging'
 require_relative '../../src/granete_for_sketchup/connection/model_binding'
+require_relative '../../src/granete_for_sketchup/connection/commercial_projection'
 require_relative '../../src/granete_for_sketchup/assets/asset_resolver'
 require_relative '../../src/granete_for_sketchup/assets/asset_loader'
 require_relative '../../src/granete_for_sketchup/assets/texture_cache'
@@ -20,6 +21,7 @@ require_relative '../../src/granete_for_sketchup/observers/selection_observer'
 require_relative '../../src/granete_for_sketchup/host/preflight_review_copy'
 require_relative '../../src/granete_for_sketchup/host/preflight_review'
 require_relative '../../src/granete_for_sketchup/host/preflight_review_session'
+require_relative '../../src/granete_for_sketchup/host/design_preflight_batch'
 require_relative '../../src/granete_for_sketchup/overlay/issue_navigation'
 require_relative '../../src/granete_for_sketchup/tools/internal_component_move_tool'
 require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
@@ -269,18 +271,30 @@ class DialogPreflightReviewTest < Minitest::Test
     coordinator = Host::AuthoringMutationCoordinator.new(
       model_provider: -> { @model }, logger: @logger, preflight_tracker: tracker
     )
+    host_reconciliation = Struct.new(:projection).new(
+      { 'state' => 'connected', 'clean' => true, 'summary' => { 'attention' => 0 }, 'items' => [] }
+    )
     gate = Host::PublicationPreflightGate.new(
       scope_provider: scope_provider || -> { scope_items },
-      host_reconciliation: Struct.new(:projection).new(
-        { 'state' => 'connected', 'clean' => true, 'summary' => { 'attention' => 0 } }
-      ),
+      host_reconciliation: host_reconciliation,
       tracker: tracker, logger: @logger
+    )
+    # #731 PR2: the publish path is an orchestration that needs the model's
+    # exact binding and the SAME canonical scope provider the gate reads.
+    Granete::SketchUpExtension::Connection::ModelBinding::Store.new(@model).write!(
+      Granete::SketchUpExtension::Connection::ModelBinding::Binding.new(
+        project_id: '41000000-0000-0000-0000-0000000000f1',
+        design_id: '52000000-0000-0000-0000-0000000000f1',
+        base_revision_id: '53000000-0000-0000-0000-0000000000f1'
+      )
     )
     @controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
       logger: @logger, status_provider: StatusProvider.new, catalog_provider: @provider,
       design_publisher: design_publisher,
       mutation_coordinator: coordinator,
-      publication_gate: gate
+      publication_gate: gate,
+      host_reconciliation: host_reconciliation,
+      publication_scope_provider: scope_provider || -> { scope_items }
     )
     @dialog = @controller.show
   end
@@ -316,12 +330,13 @@ class DialogPreflightReviewTest < Minitest::Test
     assert_nil payload['publicationGate']
   end
 
-  # The publish callback enforces the design-wide gate Ruby-side: a scope
-  # with unverified furniture never reaches the publisher.
+  # The publish orchestration auto-validates the whole design scope: a
+  # furniture that cannot even be located stays honestly unavailable, the
+  # FRESH gate blocks and ONLY the exception reaches the dialog (#731).
   def test_publish_is_blocked_until_the_whole_design_scope_is_verified
     called = []
     publisher = Object.new
-    publisher.define_singleton_method(:publish) do
+    publisher.define_singleton_method(:publish) do |_kwargs|
       called << :publish
       { 'ok' => true }
     end
@@ -331,7 +346,6 @@ class DialogPreflightReviewTest < Minitest::Test
     )
 
     @provider.apply_correction! # the fixture furniture resolves ready
-    run_review # verifies ONLY the fixture furniture
 
     @controller.handle_publish_design_revision(@dialog)
     result = publish_result_payload
@@ -339,11 +353,12 @@ class DialogPreflightReviewTest < Minitest::Test
     assert_equal false, result['ok']
     assert_equal 'preflight_incomplete', result['code']
     assert_empty called, 'the publisher must not run with unverified scope furniture'
-    assert_match(/verificar/, result['reason'])
+    assert_equal 1, result['validation']['attention']
+    assert_equal 'inst-not-verified', result['validation']['exceptions'].first['furnitureInstanceId']
   end
 
   # Once every scope furniture holds a current authoritative ready/warning,
-  # the publish callback proceeds to the real publisher.
+  # the orchestration's fresh gate allows the real publisher to run.
   def test_publish_proceeds_once_the_whole_design_scope_is_verified
     called = []
     publisher = Object.new
@@ -354,20 +369,19 @@ class DialogPreflightReviewTest < Minitest::Test
     controller_with_gate([scope_item(OverlayFixture::FURNITURE_INSTANCE_ID)],
                          design_publisher: publisher)
 
-    @provider.apply_correction! # the authoritative resolve now clears
-    run_review
-
+    @provider.apply_correction! # the batch's own resolve now clears
     @controller.handle_publish_design_revision(@dialog)
 
     assert_equal [:publish], called
     assert_equal true, publish_result_payload['ok']
   end
 
-  # A gate without scope (unbound design) blocks the callback fail-closed.
+  # A gate without scope (unbound design) blocks the orchestration
+  # fail-closed before any resolve or publish attempt.
   def test_publish_fails_closed_when_the_publication_scope_is_unavailable
     called = []
     publisher = Object.new
-    publisher.define_singleton_method(:publish) do
+    publisher.define_singleton_method(:publish) do |_kwargs|
       called << :publish
       { 'ok' => true }
     end

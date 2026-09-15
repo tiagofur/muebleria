@@ -2359,13 +2359,20 @@
             <div id="model-binding-actions" style="margin-top: var(--space-2);">
               <button id="btn-bootstrap-project" class="btn btn-secondary" style="width: 100%;">Nuevo proyecto</button>
               <button id="btn-binding-connect" class="btn btn-secondary" style="width: 100%;">Conectar modelo (manual)</button>
-              <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar de nuevo</button>
+              <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar conexión</button>
               <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
               <!-- #392 / DT-8: staged revision publication. Visible only when
                    the server granted can_publish_revision and the base is
-                   current; the backend stays the authority either way. -->
+                   current; the backend stays the authority either way.
+                   #731 PR2: Publicar diseño es la orquestación de cierre
+                   (auto-sync recuperable → validación del diseño → gate →
+                   publish); Validar diseño ejecuta el mismo batch sin
+                   publicar. Las excepciones se muestran sólo para lo que
+                   requiere atención. -->
               <button id="btn-binding-publish" class="btn btn-primary" style="width: 100%; display: none; margin-top: var(--space-1);" disabled>Publicar diseño</button>
+              <button id="btn-design-validate" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar diseño</button>
               <p id="binding-publish-progress" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
+              <div id="binding-publish-exceptions" style="display: none; margin-top: var(--space-2);"></div>
             </div>
             <form id="project-bootstrap-form" style="display: none; margin-top: var(--space-2);" aria-busy="false">
               <label class="login-label" for="bootstrap-project-name">Proyecto</label>
@@ -2635,6 +2642,8 @@
         var bindingAdoptBtn = document.getElementById("btn-binding-adopt");
         var bindingPublishBtn = document.getElementById("btn-binding-publish");
         var bindingPublishProgress = document.getElementById("binding-publish-progress");
+        var designValidateBtn = document.getElementById("btn-design-validate");
+        var bindingPublishExceptions = document.getElementById("binding-publish-exceptions");
         var bindingPicker = document.getElementById("model-binding-picker");
         var bindingProjectSelect = document.getElementById("binding-project-select");
         var bindingDesignSelect = document.getElementById("binding-design-select");
@@ -4233,6 +4242,8 @@
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
           onPublishProgress: function (payload) { renderPublishProgress(payload); },
           onPublishResult: function (result) { handlePublishResult(result); },
+          onDesignValidationProgress: function (payload) { renderDesignValidationProgress(payload); },
+          onDesignValidationResult: function (result) { handleDesignValidationResult(result); },
           onBindingProjects: function (result) { handleBindingProjects(result); },
           onBindingDesigns: function (result) { handleBindingDesigns(result); },
 
@@ -5684,14 +5695,23 @@
           var preflightBlocked = window.GranetePreflightReview &&
             window.GranetePreflightReview.publishBlocked();
           bindingPublishBtn.style.display = canPublish(status) ? "block" : "none";
-          bindingPublishBtn.disabled = publishInFlight || !idle || preflightBlocked;
+          // #731 PR2: a pending/blocked gate no longer disables the button —
+          // the click runs the automatic orchestration (auto-validation).
+          // Only an in-flight/recent publish does. Ruby re-enforces every
+          // precondition fail-closed before the publisher.
+          bindingPublishBtn.disabled = publishInFlight || !idle;
           bindingPublishBtn.textContent = publishInFlight ? "Publicando…" : "Publicar diseño";
+          if (designValidateBtn) {
+            designValidateBtn.style.display = canPublish(status) ? "block" : "none";
+            designValidateBtn.disabled = publishInFlight || designValidateInFlight;
+            designValidateBtn.textContent = designValidateInFlight ? "Validando…" : "Validar diseño";
+          }
           if (preflightBlocked && !publishInFlight) {
             bindingPublishProgress.style.display = "block";
             bindingPublishProgress.textContent = publishGateBlockedCopy(
               window.GranetePreflightReview ? window.GranetePreflightReview.publicationGate() : null
             );
-          } else if (!publishInFlight && lastPublishOutcome === null) {
+          } else if (!publishInFlight && lastPublishOutcome === null && !designValidateInFlight) {
             bindingPublishProgress.style.display = "none";
             bindingPublishProgress.textContent = "";
           }
@@ -5713,26 +5733,39 @@
           if (!bindingPublishProgress || !payload) return;
           publishInFlight = true;
           lastPublishOutcome = null;
+          clearPublishExceptions();
           if (bindingPublishBtn) {
             bindingPublishBtn.disabled = true;
             bindingPublishBtn.textContent = "Publicando…";
           }
+          if (designValidateBtn) designValidateBtn.disabled = true;
           bindingPublishProgress.style.display = "block";
-          bindingPublishProgress.textContent = PUBLISH_STEP_COPY[payload.step] || PUBLISH_STEP_COPY.validating;
+          var copy = PUBLISH_STEP_COPY[payload.step] || PUBLISH_STEP_COPY.validating;
+          // #731 PR2: the orchestration appends design-validation counts to
+          // the validating step ("Validando diseño… 12 de 30").
+          bindingPublishProgress.textContent = payload.detail ? (copy + " " + payload.detail) : copy;
         }
 
         function handlePublishResult(result) {
           publishInFlight = false;
           result = result || { ok: false, code: "error", reason: "resultado desconocido" };
           lastPublishOutcome = result;
+          if (result.ok) {
+            clearPublishExceptions();
+          }
           if (bindingPublishProgress) {
             bindingPublishProgress.style.display = "block";
             if (result.ok) {
               bindingPublishProgress.textContent = "Diseño publicado · Revisión R" + (result.revisionNumber || "?");
-            } else {
+            } else if (!result.validation) {
               var copy = PUBLISH_ERROR_COPY[result.code] || "No se pudo publicar el diseño.";
               bindingPublishProgress.textContent = copy + (result.reason ? " (" + result.reason + ")" : "");
             }
+          }
+          // #731: with a validation projection the summary line + exception
+          // cards ARE the feedback — a generic error copy would only hide it.
+          if (!result.ok && result.validation) {
+            renderDesignValidation(result.validation);
           }
           if (bindingPublishBtn) {
             bindingPublishBtn.disabled = false;
@@ -5741,8 +5774,168 @@
           if (result.ok) {
             showToast("success", "✓ Diseño publicado como revisión inmutable R" + (result.revisionNumber || "?") + ".");
             refreshModelBinding();
-          } else {
+          } else if (!result.validation) {
             showToast("error", PUBLISH_ERROR_COPY[result.code] || "No se pudo publicar el diseño.");
+          }
+        }
+
+        // ------------------------------------------------------------------
+        // #731 PR2 — design-wide validation UX. `Validar diseño` and the
+        // automatic publish orchestration report the SAME Ruby-composed
+        // projection: summary counts plus ONLY the furniture that requires
+        // attention (never a list of per-unit successes). Navigation
+        // reuses the existing seams: select by FurnitureInstance identity
+        // and navigate_issue through the #466 review channel.
+        // ------------------------------------------------------------------
+        var VALIDATION_STATE_LABELS = {
+          blocked: "Requiere atención",
+          stale: "Verificación desactualizada",
+          unavailable: "No disponible",
+          unverified: "Sin verificar",
+          pending_confirmation: "Posición pendiente",
+          duplicate_local: "Identidad duplicada",
+          missing_local: "Falta en este archivo",
+          incompatible: "Contexto incompatible",
+          terminal_or_orphan_local: "Identidad no vigente",
+          unknown: "No verificable",
+          unbound: "Sin conectar",
+          unreachable: "Servidor no disponible"
+        };
+        var designValidateInFlight = false;
+
+        function validationStateLabel(state) {
+          return VALIDATION_STATE_LABELS[state] || "Requiere atención";
+        }
+
+        function clearPublishExceptions() {
+          if (!bindingPublishExceptions) return;
+          bindingPublishExceptions.innerHTML = "";
+          bindingPublishExceptions.style.display = "none";
+        }
+
+        function firstValidationIssue(review) {
+          var groups = (review && review.groups) || [];
+          for (var g = 0; g < groups.length; g++) {
+            var issues = groups[g].issues || [];
+            if (issues.length) return issues[0];
+          }
+          return null;
+        }
+
+        function validationExceptionCard(exception) {
+          var card = document.createElement("div");
+          card.className = "preflight-issue";
+          card.setAttribute("data-furniture-instance-id", exception.furnitureInstanceId || "");
+
+          var head = document.createElement("div");
+          head.className = "preflight-issue-head";
+          var title = document.createElement("strong");
+          title.textContent = exception.displayName ||
+            ("Mueble " + String(exception.furnitureInstanceId || "").slice(0, 8));
+          head.appendChild(title);
+          var badge = document.createElement("span");
+          badge.className = "status-badge error";
+          badge.textContent = validationStateLabel(exception.state);
+          head.appendChild(badge);
+          card.appendChild(head);
+
+          var issue = firstValidationIssue(exception.review);
+          var detail = document.createElement("p");
+          detail.className = "preflight-issue-detail";
+          detail.textContent = issue
+            ? (issue.title + (issue.message ? " — " + issue.message : ""))
+            : (exception.reason || validationStateLabel(exception.state));
+          card.appendChild(detail);
+
+          if (issue && issue.remediation) {
+            var remediation = document.createElement("p");
+            remediation.className = "preflight-issue-remediation";
+            remediation.textContent = issue.remediation;
+            card.appendChild(remediation);
+          }
+
+          var actions = document.createElement("div");
+          actions.className = "preflight-issue-actions";
+
+          var selectBtn = document.createElement("button");
+          selectBtn.type = "button";
+          selectBtn.className = "btn btn-primary";
+          selectBtn.textContent = "Seleccionar";
+          selectBtn.addEventListener("click", function () {
+            if (window.sketchup && window.sketchup.select_project_furniture && exception.furnitureInstanceId) {
+              window.sketchup.select_project_furniture(
+                JSON.stringify({ furnitureInstanceId: exception.furnitureInstanceId })
+              );
+            }
+          });
+          actions.appendChild(selectBtn);
+
+          if (issue && window.GranetePreflightReview &&
+              window.GranetePreflightReview.navigateFurnitureIssue && exception.furnitureInstanceId) {
+            var navigateBtn = document.createElement("button");
+            navigateBtn.type = "button";
+            navigateBtn.className = "btn btn-secondary";
+            navigateBtn.textContent = "Ir al origen";
+            navigateBtn.addEventListener("click", function () {
+              window.GranetePreflightReview.navigateFurnitureIssue(
+                exception.furnitureInstanceId, issue.issueId, "primary"
+              );
+            });
+            actions.appendChild(navigateBtn);
+          }
+          card.appendChild(actions);
+          return card;
+        }
+
+        // Summary line + exception cards (exceptions-only: the ready
+        // majority never gets a card).
+        function renderDesignValidation(validation) {
+          validation = validation || { total: 0, ready: 0, attention: 0, exceptions: [] };
+          if (bindingPublishProgress) {
+            bindingPublishProgress.style.display = "block";
+            bindingPublishProgress.textContent = validation.total +
+              (validation.total === 1 ? " mueble · " : " muebles · ") +
+              (validation.ready || 0) + " listos · " + (validation.attention || 0) +
+              ((validation.attention || 0) === 1 ? " requiere atención" : " requieren atención");
+          }
+          if (!bindingPublishExceptions) return;
+          bindingPublishExceptions.innerHTML = "";
+          (validation.exceptions || []).forEach(function (exception) {
+            bindingPublishExceptions.appendChild(validationExceptionCard(exception));
+          });
+          bindingPublishExceptions.style.display =
+            (validation.exceptions || []).length ? "block" : "none";
+        }
+
+        function renderDesignValidationProgress(payload) {
+          if (!bindingPublishProgress || !payload) return;
+          designValidateInFlight = true;
+          if (designValidateBtn) {
+            designValidateBtn.disabled = true;
+            designValidateBtn.textContent = "Validando…";
+          }
+          bindingPublishProgress.style.display = "block";
+          bindingPublishProgress.textContent = payload.detail ||
+            ("Validando diseño… " + (payload.done || 0) + " de " + (payload.total || 0));
+        }
+
+        function handleDesignValidationResult(result) {
+          designValidateInFlight = false;
+          result = result || { ok: false, code: "error", reason: "resultado desconocido" };
+          if (designValidateBtn) {
+            designValidateBtn.disabled = false;
+            designValidateBtn.textContent = "Validar diseño";
+          }
+          if (result.validation) {
+            renderDesignValidation(result.validation);
+            showToast(result.ok ? "info" : "error",
+                      result.ok ? "Validación del diseño completada." : "No se pudo completar la validación del diseño.");
+          } else {
+            if (bindingPublishProgress) {
+              bindingPublishProgress.style.display = "block";
+              bindingPublishProgress.textContent = result.reason || "No se pudo validar el diseño.";
+            }
+            showToast("error", result.reason || "No se pudo validar el diseño.");
           }
         }
 
@@ -5992,16 +6185,26 @@
         if (bindingPublishBtn) {
           bindingPublishBtn.addEventListener("click", function () {
             if (publishInFlight) return;
-            // #466 design-wide gate: the disabled state is UX — the handler
-            // re-checks the Ruby projection fail-closed before reaching the
-            // host (the Ruby publish callback enforces the same gate again).
-            if (window.GranetePreflightReview && window.GranetePreflightReview.publishBlocked()) return;
+            // #731 PR2: the click STARTS the automatic orchestration — a
+            // pending/blocked gate is no longer a client-side wall. Ruby
+            // converges what is safe, validates the whole design, re-checks
+            // the gate fail-closed and only then publishes (or returns the
+            // exceptions-only projection).
             lastPublishOutcome = null;
             renderPublishProgress({ step: "validating" });
             if (window.sketchup && window.sketchup.publish_design_revision) {
               window.sketchup.publish_design_revision();
             } else {
               handlePublishResult({ ok: false, code: "unavailable", reason: "publicación no disponible" });
+            }
+          });
+        }
+        if (designValidateBtn) {
+          designValidateBtn.addEventListener("click", function () {
+            if (designValidateInFlight || publishInFlight) return;
+            if (window.sketchup && window.sketchup.validate_design_revision) {
+              renderDesignValidationProgress({ detail: "Validando diseño…" });
+              window.sketchup.validate_design_revision();
             }
           });
         }

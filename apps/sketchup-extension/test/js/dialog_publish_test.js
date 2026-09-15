@@ -45,6 +45,7 @@ function createMockElement(id) {
     el.listeners[evt] = el.listeners[evt] || [];
     el.listeners[evt].push(cb);
   };
+  el.setAttribute = (name, value) => { el['data-' + name] = value; };
   el.click = () => {
     (el.listeners.click || []).forEach((cb) => cb({ preventDefault: () => {} }));
   };
@@ -81,6 +82,11 @@ function buildSandbox() {
         refresh_model_binding: () => bridgeCalls.push({ action: 'refresh_model_binding' }),
         adopt_binding_base: () => bridgeCalls.push({ action: 'adopt_binding_base' }),
         publish_design_revision: () => bridgeCalls.push({ action: 'publish_design_revision' }),
+        validate_design_revision: () => bridgeCalls.push({ action: 'validate_design_revision' }),
+        select_project_furniture: (payload) =>
+          bridgeCalls.push({ action: 'select_project_furniture', payload: payload }),
+        preflight_review: (payload) => bridgeCalls.push({ action: 'preflight_review', payload: payload }),
+        select_furniture: (payload) => bridgeCalls.push({ action: 'select_furniture', payload: payload }),
         enroll: () => {}, logout: () => {}, close_dialog: () => {}
       }
     }
@@ -192,33 +198,37 @@ function runTests() {
     assert.ok(!visible(el(sandbox, 'binding-publish-progress')));
   });
 
-  // #466 design-wide gate: without a Ruby gate projection the button stays
-  // fail-closed — tracker entries alone can never unblock publication.
-  test('publish button disabled without a gate projection', (sandbox) => {
+  // #731 PR2: without a Ruby gate projection the button stays clickable —
+  // the click starts the orchestration and Ruby fails closed with the
+  // honest scope reason. The informational line stays.
+  test('publish button stays actionable without a gate projection', (sandbox) => {
     pushGate(sandbox, null);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const btn = el(sandbox, 'btn-binding-publish');
     assert.ok(visible(btn));
-    assert.ok(btn.disabled);
+    assert.ok(!btn.disabled, 'the click runs the orchestration; Ruby is the barrier');
     const progress = el(sandbox, 'binding-publish-progress');
     assert.ok(visible(progress));
     assert.ok(progress.textContent.indexOf('alcance de publicación') >= 0);
   });
 
-  test('unverified scope furniture blocks with honest scope counts', (sandbox) => {
+  // #731 PR2: unverified furniture no longer walls the button — the click
+  // auto-validates the design. The honest scope counts stay visible.
+  test('unverified scope furniture keeps the button actionable with honest counts', (sandbox) => {
     pushGate(sandbox, { allowed: false, total: 3, verified: 2, pending: 1, unverified: 1 });
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
-    assert.ok(el(sandbox, 'btn-binding-publish').disabled);
+    assert.ok(!el(sandbox, 'btn-binding-publish').disabled,
+      'Publicar diseño now runs the automatic validation');
     const progress = el(sandbox, 'binding-publish-progress');
     assert.ok(progress.textContent.indexOf('requiere verificar todos los muebles') >= 0);
     assert.ok(progress.textContent.indexOf('3 muebles · 2 verificados · 1 pendiente') >= 0,
       'counts denominator is the canonical #392 scope: ' + progress.textContent);
   });
 
-  test('host divergence blocks publish with an actionable count', (sandbox) => {
+  test('host divergence keeps an actionable button with an honest count', (sandbox) => {
     pushGate(sandbox, { allowed: false, hostClean: false, hostAttention: 3 });
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
-    assert.ok(el(sandbox, 'btn-binding-publish').disabled);
+    assert.ok(!el(sandbox, 'btn-binding-publish').disabled);
     assert.ok(el(sandbox, 'binding-publish-progress').textContent.indexOf('3 muebles') >= 0);
     assert.ok(el(sandbox, 'binding-publish-progress').textContent.indexOf('reconciliación') >= 0);
   });
@@ -245,14 +255,21 @@ function runTests() {
     assert.ok(progress.textContent.indexOf('No se pudo confirmar el estado de fabricación') >= 0);
   });
 
-  test('a blocked gate swallows the click before the host callback', (sandbox) => {
+  // #731 PR2: a pending gate no longer swallows the click — the click
+  // STARTS the Ruby orchestration (auto-convergence + batch validation).
+  test('a blocked gate still starts the orchestration on click', (sandbox) => {
     pushGate(sandbox, { allowed: false, total: 2, verified: 1, pending: 1 });
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const baseline = sandbox.__bridge.length;
     el(sandbox, 'btn-binding-publish').click();
     const publishCalls = sandbox.__bridge.slice(baseline)
       .filter((c) => c.action === 'publish_design_revision');
-    assert.equal(publishCalls.length, 0, 'a closed gate must not reach the publisher');
+    assert.equal(publishCalls.length, 1,
+      'the click reaches Ruby; the fresh gate there decides');
+    // Close the cycle like Ruby does, so later tests start idle.
+    sandbox.window.GraneteDialog.onPublishResult({
+      ok: false, code: 'preflight_incomplete', reason: 'faltan verificar 2 de 2 muebles del diseño'
+    });
   });
 
   test('click publishes and shows the validating step', (sandbox) => {
@@ -324,6 +341,154 @@ function runTests() {
     const publishCalls = sandbox.__bridge.slice(baseline)
       .filter((c) => c.action === 'publish_design_revision');
     assert.equal(publishCalls.length, 1, 'a publish in flight must not re-enter');
+  });
+
+  // ------------------------------------------------------------------
+  // #731 PR2 — design-wide validation UX.
+  // ------------------------------------------------------------------
+
+  test('design validation progress appends counts to the validating step', (sandbox) => {
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    sandbox.window.GraneteDialog.onPublishProgress({ step: 'validating', detail: 'Validando diseño… 12 de 30' });
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.equal(progress.textContent, 'Validando identidad de los muebles… Validando diseño… 12 de 30');
+  });
+
+  // Caso 10: 29 ready / 1 blocked shows a summary line and ONLY the
+  // exception card — never per-unit success cards.
+  test('publish failure with validation shows only the exceptions', (sandbox) => {
+    pushGate(sandbox, { allowed: false, total: 30, verified: 29, pending: 1, blocked: 1 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    sandbox.window.GraneteDialog.onPublishResult({
+      ok: false,
+      code: 'preflight_incomplete',
+      reason: 'hay muebles con problemas de fabricación',
+      validation: {
+        total: 30,
+        ready: 29,
+        attention: 1,
+        exceptions: [
+          {
+            furnitureInstanceId: '51000000-0000-0000-0000-0000000000c3',
+            displayName: 'Gabinete Bajo 3 Cajones',
+            state: 'blocked',
+            reason: null,
+            review: {
+              groups: [
+                { key: 'materials', label: 'Materiales', count: 1, issues: [
+                  { issueId: 'issue-0', title: 'Material sin resolver',
+                    message: 'FRENTES sin resolver', remediation: 'Elegí el material.',
+                    severity: 'error' }
+                ] }
+              ]
+            }
+          }
+        ]
+      }
+    });
+
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.ok(progress.textContent.indexOf('30 muebles') >= 0);
+    assert.ok(progress.textContent.indexOf('29 listos') >= 0);
+    assert.ok(progress.textContent.indexOf('1 requiere atención') >= 0);
+
+    const container = el(sandbox, 'binding-publish-exceptions');
+    assert.ok(visible(container));
+    assert.equal(container.children.length, 1, 'exactly one card: the exception');
+    const card = container.children[0];
+    assert.equal(card.children[0].children[0].textContent, 'Gabinete Bajo 3 Cajones');
+    const detailLine = card.children[1].textContent;
+    assert.ok(detailLine.indexOf('Material sin resolver') >= 0, detailLine);
+    assert.ok(detailLine.indexOf('FRENTES sin resolver') >= 0, detailLine);
+  });
+
+  test('exception card selects by furniture identity and navigates the issue', (sandbox) => {
+    pushGate(sandbox, { allowed: false, total: 2, verified: 1, pending: 1, blocked: 1 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    sandbox.window.GraneteDialog.onPublishResult({
+      ok: false,
+      code: 'preflight_incomplete',
+      validation: {
+        total: 2, ready: 1, attention: 1,
+        exceptions: [
+          { furnitureInstanceId: '51000000-0000-0000-0000-0000000000c3',
+            displayName: 'Gabinete Bajo 3 Cajones', state: 'blocked',
+            review: { groups: [{ key: 'materials', label: 'Materiales', count: 1, issues: [
+              { issueId: 'issue-0', title: 'Material sin resolver', message: 'x', severity: 'error' }
+            ] }] } }
+        ]
+      }
+    });
+
+    const container = el(sandbox, 'binding-publish-exceptions');
+    const card = container.children[0];
+    const actions = card.children[card.children.length - 1];
+    const baseline = sandbox.__bridge.length;
+    actions.children[0].click(); // [Seleccionar]
+    const selectCalls = sandbox.__bridge.slice(baseline)
+      .filter((c) => c.action === 'select_project_furniture');
+    assert.equal(selectCalls.length, 1);
+    assert.ok(selectCalls[0].payload.indexOf('51000000-0000-0000-0000-0000000000c3') >= 0);
+
+    const baseline2 = sandbox.__bridge.length;
+    actions.children[1].click(); // [Ir al origen]
+    const navigateCalls = sandbox.__bridge.slice(baseline2)
+      .filter((c) => c.action === 'preflight_review');
+    assert.equal(navigateCalls.length, 1, 'navigation reuses the #466 navigate_issue channel');
+    const envelope = JSON.parse(navigateCalls[0].payload);
+    assert.equal('navigate_issue', envelope.command);
+    assert.equal('51000000-0000-0000-0000-0000000000c3', envelope.semanticTarget.furnitureInstanceId);
+  });
+
+  test('publish success clears the exceptions view', (sandbox) => {
+    pushGate(sandbox);
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    sandbox.window.GraneteDialog.onPublishResult({
+      ok: false, code: 'preflight_incomplete', validation: {
+        total: 1, ready: 0, attention: 1,
+        exceptions: [{ furnitureInstanceId: 'x', state: 'unverified' }]
+      }
+    });
+    assert.ok(visible(el(sandbox, 'binding-publish-exceptions')));
+
+    sandbox.window.GraneteDialog.onPublishResult({ ok: true, revisionNumber: 3 });
+    assert.ok(!visible(el(sandbox, 'binding-publish-exceptions')));
+  });
+
+  // Entrega D: Validar diseño runs the same batch without publishing.
+  test('validate design button starts the same batch without publishing', (sandbox) => {
+    pushGate(sandbox);
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    const btn = el(sandbox, 'btn-design-validate');
+    assert.ok(visible(btn));
+    assert.ok(!btn.disabled);
+
+    const baseline = sandbox.__bridge.length;
+    btn.click();
+    const validateCalls = sandbox.__bridge.slice(baseline)
+      .filter((c) => c.action === 'validate_design_revision');
+    assert.equal(validateCalls.length, 1);
+    assert.equal(btn.textContent, 'Validando…');
+
+    sandbox.window.GraneteDialog.onDesignValidationResult({
+      ok: true,
+      validation: { total: 4, ready: 4, attention: 0, exceptions: [] }
+    });
+    assert.equal(btn.textContent, 'Validar diseño');
+    assert.ok(!btn.disabled);
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.ok(progress.textContent.indexOf('4 listos') >= 0);
+    assert.ok(!visible(el(sandbox, 'binding-publish-exceptions')));
+  });
+
+  // Entrega G: the binding refresh copy no longer promises manufacturing
+  // validation — it refreshes the connection.
+  test('binding refresh copy is Actualizar conexión, not Validar de nuevo', () => {
+    const html = fs.readFileSync(
+      path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html'), 'utf8');
+    assert.ok(html.indexOf('Actualizar conexión') >= 0);
+    assert.equal(html.indexOf('>Validar de nuevo<'), -1,
+      'the misleading copy must not survive in the binding context');
   });
 
   const sandbox = runDialog();

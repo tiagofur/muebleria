@@ -65,6 +65,16 @@ module Granete
           end
         end
 
+        # #731 PR2 fail-closed invalidation: flips EVERY furniture-scoped
+        # alias of the unit — the canonical key plus every id/ref-namespace
+        # key already recorded — to unavailable, so no older ready/warning
+        # alias can survive a failed revalidation attempt.
+        def mark_unavailable_furniture!(furniture_instance_id, message_id: nil)
+          keys = furniture_alias_keys(furniture_instance_id, nil) +
+                 CommandContract.target_keys_for('furnitureInstanceId' => furniture_instance_id)
+          keys.uniq.each { |key| mark_unavailable!(key, message_id: message_id) }
+        end
+
         # Records an AUTHORITATIVE preflight outcome for a furniture scope
         # (#466 review). Fail-closed: only review states are accepted, the
         # correlation message is mandatory, and ready/warning must carry the
