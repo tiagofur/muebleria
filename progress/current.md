@@ -5,13 +5,18 @@
 - Scope PR1 (Delivery: partial):
   - Auto-confirm en INSERT (R1): post-inserción física mediante Placer se realiza convergencia explícita y síncrona vía `PositionSyncCoordinator#converge_inserted_unit`, sincronizando WorkingCopy con pose conocida y ejecutando preflight review inicial sin depender de observers que ignoran operaciones internas.
   - Transform-aware reconciliation (R2): `HostReconciliation` compara el transform local contra el transform del WorkingCopy mediante `TransformContract.equivalent_to_host?`. Si difieren o el WorkingCopy no tiene transform, reporta `pending_confirmation` con razón honesta ("la posición local difiere de Granete; sincronización pendiente") y marca el panel como no limpio (`clean: false`).
-  - Observer nativo (`PositionSyncCoordinator`, R3): `PositionSyncModelObserver` captura `onTransactionCommit`, `onTransactionUndo`, `onTransactionRedo` para movimientos o rotaciones nativas de SketchUp en muebles administrados de nivel superior. Aplica coalescing / debounce de movimientos rápidos (A -> B -> C converge a C) y sincroniza el WorkingCopy sin invalidar el `PreflightTracker` ni forzar re-resolves innecesarios del despiece.
+  - Boundary y arquitectura (R3): `PositionSyncObserver` (en capa `Host`) es un observer SketchUp puro sin dependencias de WorkingCopy ni red; delega en `PositionSyncCoordinator` (en capa `Connection`), respetando `OwnershipTest` y cero `require_relative` en runtime.
+  - Revalidación estricta de contexto: captura modelo, exact binding, projectId, designId y baseRevisionId al inicio; revalida antes del PUT (y durante debounce). Si cualquier autoridad cambia (switch de modelo o binding durante GET o debounce), aborta fail-closed con 0 llamadas PUT y 0 efectos colaterales.
+  - Readback autoritativo en PUT: utiliza la respuesta del PUT de WorkingCopy como autoridad; sólo avanza `known_transforms` y emite `on_sync_complete` si el transform devuelto por el servidor equivale al del host final. Si difiere, falla cerrado y la reconciliación permanece en `pending_confirmation` habilitando "Reintentar sincronización".
   - UI fallback (Caso 4): En el flujo exitoso, la confirmación es automática y silenciosa. Ante falla de red/servidor, no se revierte la geometría local del usuario y el botón secundario presenta "Reintentar sincronización" (con feedback "Sincronizando…") en lugar del manual "Confirmar posición".
-  - Ciclo de vida y seguridad: `PositionSyncCoordinator` se vincula al ciclo de vida del modelo y del diálogo (`attach_selection_observer` / `detach_selection_observer` / `rebind_model`), previniendo fugas de observers o ejecuciones desalineadas si el modelo no está vinculado a Granete.
+  - Ciclo de vida y seguridad: `PositionSyncCoordinator` se vincula al ciclo de vida del modelo y del diálogo, previniendo fugas de observers o ejecuciones desalineadas si el modelo no está vinculado a Granete.
 - Evidencia de verificación:
-  - Ruby unit tests: 719 runs, 4874 assertions, 0 failures, 0 errors, 0 skips (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rake unit`).
-  - RuboCop: 182 files inspected, 0 offenses (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rubocop`).
+  - Ruby unit tests: 723 runs, 4884 assertions, 0 failures, 0 errors, 0 skips (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rake unit`).
+  - Boundary suite: 6 runs, 2855 assertions, 0 failures, 0 errors, 0 skips (`OwnershipTest` PASS completo).
+  - Deterministic RBZ: sha256 `2d558d13f3175c3aeda19f1375a388964d4c676059edb6656027836b7c1530f4` verificado y reproducible (`rake package:verify`).
+  - RuboCop: 183 files inspected, 0 offenses (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rubocop`).
   - JS tests: 16 test suites (266 tests) passing cleanly (`for f in test/js/*.js; do node "$f"; done`).
+  - Boundary & packaging: `rake verify` COMPLETO PASS (syntax, lint, unit, boundary, package:verify).
 - Delivery: partial.
 
 # Issue #732 — [P0][SU-COMM] Error en llamada HTTP de proyección comercial por kwargs de Ruby 3

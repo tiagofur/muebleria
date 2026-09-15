@@ -94,7 +94,7 @@ module Granete
         @save_awareness = Host::SaveAwareness.new(
           binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) }
         )
-        @position_sync_coordinator = Host::PositionSyncCoordinator.new(
+        @position_sync_coordinator = Connection::PositionSyncCoordinator.new(
           model_provider: method(:active_model),
           binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) },
           service: @project_furniture_placer.service,

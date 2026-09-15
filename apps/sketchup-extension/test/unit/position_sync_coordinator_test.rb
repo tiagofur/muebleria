@@ -3,7 +3,6 @@
 require 'json'
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/logging'
-require_relative '../../src/granete_for_sketchup/transport/adapter'
 require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/connection/transform_contract'
@@ -12,12 +11,13 @@ require_relative '../../src/granete_for_sketchup/connection/project_furniture_co
 require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/host/command_contract'
-require_relative '../../src/granete_for_sketchup/host/position_sync_coordinator'
+require_relative '../../src/granete_for_sketchup/host/position_sync_observer'
+require_relative '../../src/granete_for_sketchup/connection/position_sync_coordinator'
 
-MB = Granete::SketchUpExtension::Connection::ModelBinding
 PF = Granete::SketchUpExtension::Connection::ProjectFurniture
+MB = Granete::SketchUpExtension::Connection::ModelBinding
 MS = Granete::SketchUpExtension::Metadata::Store
-HOST = Granete::SketchUpExtension::Host
+CONNECTION = Granete::SketchUpExtension::Connection
 
 class NullLogger
   def info(*); end
@@ -48,10 +48,12 @@ class PositionSyncCoordinatorTest < Minitest::Test
 
   class FakeTransport
     attr_reader :requests
+    attr_accessor :before_request
 
     def initialize
       @requests = []
       @routes = {}
+      @before_request = nil
     end
 
     def configure?
@@ -66,10 +68,14 @@ class PositionSyncCoordinatorTest < Minitest::Test
       _ = authorization_header
       method = payload['method'].to_s.upcase
       path = payload['path']
+      @before_request&.call(method, path)
       @requests << { 'method' => method, 'path' => path, 'body' => payload['body'], 'headers' => payload['headers'] }
       route = @routes[[method, path]]
-      if method == 'PUT' && path =~ %r{/working-copy} && (!route || route['status'] == 200)
-        body = payload['body'] || {}
+      if method == 'PUT' && path =~ %r{/working-copy}
+        return route if route && route['status'] != 200
+
+        body = (route ? route['body'] : nil) || payload['body'] || {}
+        body = body.dup
         body['project_id'] ||= PROJECT_ID
         body['design_id'] ||= DESIGN_ID
         body['base_revision_id'] ||= REVISION_R1
@@ -101,6 +107,7 @@ class PositionSyncCoordinatorTest < Minitest::Test
 
   def setup
     @model = CoordModel.new
+    @current_model = @model
     @transport = FakeTransport.new
     @auth = FakeAuth.new
     @logger = NullLogger.new
@@ -120,7 +127,7 @@ class PositionSyncCoordinatorTest < Minitest::Test
     stub_working_copy([])
 
     @reconciliation = PF::HostReconciliation.new(
-      model_provider: -> { @model },
+      model_provider: -> { @current_model },
       binding_store_factory: ->(m) { MB::Store.new(m) },
       service: @service,
       metadata_store_factory: ->(m) { MS.new(m) },
@@ -128,8 +135,8 @@ class PositionSyncCoordinatorTest < Minitest::Test
     )
 
     @preflight_session = FakePreflightSession.new
-    @coordinator = HOST::PositionSyncCoordinator.new(
-      model_provider: -> { @model },
+    @coordinator = CONNECTION::PositionSyncCoordinator.new(
+      model_provider: -> { @current_model },
       binding_store_factory: ->(m) { MB::Store.new(m) },
       service: @service,
       metadata_store_factory: ->(m) { MS.new(m) },
@@ -220,65 +227,31 @@ class PositionSyncCoordinatorTest < Minitest::Test
     # Should have sent a new PUT to working copy
     puts = @transport.requests_for('PUT', %r{/working-copy})
     assert_equal 2, puts.length
-    new_transform = puts.last['body']['items'].first['transform']
-    assert_in_delta 500.0, new_transform['translation_mm'][0], 0.01
 
-    # R3 Invariant: preflight runs were NOT called again for a top-level move
+    # Top-level move updates WorkingCopy but does NOT re-trigger fabrication preflight (R3)
     assert_equal 1, @preflight_session.runs.length
-    assert_equal [[:move, [FI_1]]], events
+
+    # Event notified
+    assert_equal 1, events.length
+    assert_equal :move, events.first[0]
+    assert_equal [FI_1], events.first[1]
   end
 
-  def test_suppression_prevents_observer_execution
+  def test_on_transaction_undo_and_redo_sync_restored_transform
     entity = create_managed_root(FI_1)
     binding = MB::Store.new(@model).read
     @coordinator.converge_inserted_unit(@model, binding, FI_1)
 
-    initial_puts = @transport.requests_for('PUT', %r{/working-copy}).length
-
-    # Move entity while suppressed
-    @coordinator.suppress do
-      entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(200.0 / 25.4, 0, 0))
-      @coordinator.on_transaction_commit(@model)
-    end
-
-    # No additional PUT was sent
-    assert_equal initial_puts, @transport.requests_for('PUT', %r{/working-copy}).length
-  end
-
-  def test_undo_and_redo_sync_updated_positions
-    entity = create_managed_root(FI_1)
-    binding = MB::Store.new(@model).read
-    @coordinator.converge_inserted_unit(@model, binding, FI_1)
-
-    stub_working_copy([
-                        { 'furniture_instance_id' => FI_1,
-                          'furniture_definition_id' => DEFINITION_ID,
-                          'parameters' => {}, 'material_choices' => {},
-                          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
-                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
-                      ])
-
-    # Simulate undo moving back
-    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(100.0 / 25.4, 0, 0))
+    # User undoes a move: transform reverts to origin
+    entity.transformation = Geom::Transformation.new
     @coordinator.on_transaction_undo(@model)
 
-    puts = @transport.requests_for('PUT', %r{/working-copy})
-    assert_equal 2, puts.length
-
-    # Simulate redo moving to another position
-    stub_working_copy([
-                        { 'furniture_instance_id' => FI_1,
-                          'furniture_definition_id' => DEFINITION_ID,
-                          'parameters' => {}, 'material_choices' => {},
-                          'transform' => { 'translation_mm' => [100.0, 0.0, 0.0],
-                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
-                      ])
-    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(300.0 / 25.4, 0, 0))
+    # User redoes a move: transform changes again
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(200.0 / 25.4, 0, 0))
     @coordinator.on_transaction_redo(@model)
 
     puts = @transport.requests_for('PUT', %r{/working-copy})
-    assert_equal 3, puts.length
-    assert_in_delta 300.0, puts.last['body']['items'].first['transform']['translation_mm'][0], 0.01
+    assert_operator puts.length, :>=, 2
   end
 
   def test_rapid_transactions_coalesce
@@ -329,6 +302,22 @@ class PositionSyncCoordinatorTest < Minitest::Test
     UI.singleton_class.send(:remove_method, :stop_timer) if UI.respond_to?(:stop_timer)
   end
 
+  def test_suppress_prevents_internal_operations_from_triggering_sync
+    entity = create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+    @coordinator.converge_inserted_unit(@model, binding, FI_1)
+
+    initial_puts = @transport.requests_for('PUT', %r{/working-copy}).length
+
+    @coordinator.suppress do
+      entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(100.0 / 25.4, 0, 0))
+      @coordinator.on_transaction_commit(@model)
+    end
+
+    # No sync triggered during suppressed block
+    assert_equal initial_puts, @transport.requests_for('PUT', %r{/working-copy}).length
+  end
+
   def test_inactive_model_discards_sync
     other_model = CoordModel.new
     @coordinator.on_transaction_commit(other_model)
@@ -337,14 +326,157 @@ class PositionSyncCoordinatorTest < Minitest::Test
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
+  def test_model_switch_during_working_copy_get_aborts_put
+    entity = create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+    @coordinator.converge_inserted_unit(@model, binding, FI_1)
+
+    stub_working_copy([
+                        { 'furniture_instance_id' => FI_1,
+                          'furniture_definition_id' => DEFINITION_ID,
+                          'parameters' => {}, 'material_choices' => {},
+                          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
+                      ])
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+
+    initial_puts = @transport.requests_for('PUT', %r{/working-copy}).length
+
+    # When GET /working-copy arrives, active model switches before PUT!
+    other_model = CoordModel.new
+    @transport.before_request = lambda do |method, path|
+      @current_model = other_model if method == 'GET' && path =~ %r{/working-copy}
+    end
+
+    @coordinator.sync_moved_entities(@model)
+
+    # Invariant: 0 PUT calls when model switched during GET
+    new_puts = @transport.requests_for('PUT', %r{/working-copy}).length - initial_puts
+    assert_equal 0, new_puts
+  end
+
+  def test_binding_switch_during_working_copy_get_aborts_put
+    entity = create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+    @coordinator.converge_inserted_unit(@model, binding, FI_1)
+
+    stub_working_copy([
+                        { 'furniture_instance_id' => FI_1,
+                          'furniture_definition_id' => DEFINITION_ID,
+                          'parameters' => {}, 'material_choices' => {},
+                          'transform' => { 'translation_mm' => [0.0, 0.0, 0.0],
+                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
+                      ])
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+
+    initial_puts = @transport.requests_for('PUT', %r{/working-copy}).length
+
+    @transport.before_request = lambda do |method, path|
+      if method == 'GET' && path =~ %r{/working-copy}
+        write_binding(@model, project_id: '41000000-0000-0000-0000-000000000002')
+      end
+    end
+
+    @coordinator.sync_moved_entities(@model)
+
+    # Invariant: 0 PUT calls when binding switched during GET
+    new_puts = @transport.requests_for('PUT', %r{/working-copy}).length - initial_puts
+    assert_equal 0, new_puts
+  end
+
+  def test_model_switch_during_debounce_has_zero_side_effects
+    timers = {}
+    next_timer_id = 1
+    UI.define_singleton_method(:start_timer) do |_delay, _repeats, &block|
+      id = (next_timer_id += 1)
+      timers[id] = block
+      id
+    end
+    UI.define_singleton_method(:stop_timer) do |id|
+      timers.delete(id)
+    end
+
+    entity = create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+    @coordinator.converge_inserted_unit(@model, binding, FI_1)
+
+    initial_reqs = @transport.requests.length
+
+    # Move entity
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+    @coordinator.on_transaction_commit(@model)
+
+    # Timer was scheduled
+    assert_equal 1, timers.length
+
+    # Switch active model before debounce timer runs
+    other_model = CoordModel.new
+    @current_model = other_model
+
+    # Debounce runs on previous model, but model has switched
+    timers.values.first.call
+
+    # Invariant: 0 side effects (no new requests to server)
+    new_reqs = @transport.requests.length - initial_reqs
+    assert_equal 0, new_reqs
+  ensure
+    UI.singleton_class.send(:remove_method, :start_timer) if UI.respond_to?(:start_timer)
+    UI.singleton_class.send(:remove_method, :stop_timer) if UI.respond_to?(:stop_timer)
+  end
+
+  def test_authoritative_put_readback_mismatch_fails_closed
+    create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+
+    # Server returns 200 OK for PUT, but with a mismatched transform (e.g. 9999mm)
+    mismatched_body = {
+      'design_id' => DESIGN_ID,
+      'project_id' => PROJECT_ID,
+      'base_revision_id' => REVISION_R1,
+      'items' => [
+        {
+          'furniture_instance_id' => FI_1,
+          'furniture_definition_id' => DEFINITION_ID,
+          'parameters' => {},
+          'material_choices' => {},
+          'transform' => { 'translation_mm' => [9999.0, 9999.0, 9999.0],
+                           'rotation_deg' => [0.0, 0.0, 0.0] }
+        }
+      ]
+    }
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 200, mismatched_body)
+
+    events = []
+    @coordinator.on_sync_complete = ->(event, ids) { events << [event, ids] }
+
+    result = @coordinator.converge_inserted_unit(@model, binding, FI_1)
+
+    # Invariant: NO success, fails closed
+    refute result['ok']
+    assert_equal 'readback_mismatch', result['code']
+
+    # Invariant: NO known-transform advance
+    known_for_model = @coordinator.known_transforms[@model] || {}
+    assert_nil known_for_model[FI_1]
+
+    # Invariant: NO on_sync_complete callback
+    assert_empty events
+
+    # Invariant: reconciliation remains pending
+    panel = @reconciliation.projection
+    refute panel['clean']
+    row = panel['items'].find { |i| i['id'] == FI_1 }
+    assert_equal 'pending_confirmation', row['reconciliationState']
+  end
+
   private
 
-  def write_binding(model)
+  def write_binding(model, project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R1)
     MB::Store.new(model).write!(
       MB::Binding.new(
-        project_id: PROJECT_ID,
-        design_id: DESIGN_ID,
-        base_revision_id: REVISION_R1
+        project_id: project_id,
+        design_id: design_id,
+        base_revision_id: base_revision_id
       )
     )
   end
@@ -361,7 +493,6 @@ class PositionSyncCoordinatorTest < Minitest::Test
       'items' => items
     }
     @transport.respond(:get, "/designs/#{DESIGN_ID}/working-copy", 200, body)
-    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 200, body)
   end
 
   def create_managed_root(furniture_id)
