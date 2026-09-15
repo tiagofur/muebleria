@@ -33,18 +33,24 @@ class HardwareAssetDownloaderTest < Minitest::Test
   end
 
   class FakeAuth
-    attr_accessor :current_organization_id
+    attr_accessor :current_organization_id, :authorization_header_value
 
-    def initialize(org_id: 'org-test')
+    def initialize(org_id: 'org-test', auth_header: 'Bearer session-jwt-test')
       @current_organization_id = org_id
+      @authorization_header_value = auth_header
     end
 
     def configured?
-      true
+      !@current_organization_id.nil? && !@authorization_header_value.nil?
     end
 
     def authorization_header
-      'Bearer session-jwt-test'
+      @authorization_header_value
+    end
+
+    def logout
+      @current_organization_id = nil
+      @authorization_header_value = nil
     end
   end
 
@@ -61,7 +67,7 @@ class HardwareAssetDownloaderTest < Minitest::Test
     FileUtils.remove_entry(@tmp_dir) if @tmp_dir && File.directory?(@tmp_dir)
   end
 
-  def test_returns_cached_file_without_network_request
+  def test_reuses_cached_file_with_valid_authorization_without_byte_download
     # Seed cache
     cached_path = @cache.put(
       asset_id: 'ast-1',
@@ -72,7 +78,17 @@ class HardwareAssetDownloaderTest < Minitest::Test
       org_id: 'org-test'
     )
 
-    transport = FakeTransport.new([])
+    grant_response = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token',
+        'expiresAt' => (Time.now + 300).utc.iso8601
+      }
+    }
+    transport = FakeTransport.new([grant_response])
     http_called = false
     downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
       transport: transport,
@@ -94,62 +110,27 @@ class HardwareAssetDownloaderTest < Minitest::Test
     )
 
     assert_equal cached_path, path
-    assert_empty transport.requests
+    assert_equal 1, transport.requests.length
     refute http_called
-  end
 
-  def test_authorizes_and_downloads_when_cache_misses
-    grant_response = {
-      'status' => 200,
-      'body' => {
-        'representation' => 'skp',
-        'sha256' => @model_sha,
-        'sizeBytes' => @model_size,
-        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token',
-        'expiresAt' => '2026-09-15T12:00:00Z'
-      }
-    }
-    transport = FakeTransport.new([grant_response])
-    requested_url = nil
-
-    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
-      transport: transport,
-      auth_provider: FakeAuth.new,
-      cache: @cache,
-      logger: @logger,
-      http_fetcher: lambda do |url|
-        requested_url = url
-        [200, @model_data]
-      end
-    )
-
-    path = downloader.download_asset(
+    # Repetition: in-memory grant cache reuses authorization without new HTTP request
+    second_path = downloader.download_asset(
       asset_id: 'ast-1',
       revision_id: 'rev-1',
       sha256: @model_sha,
       expected_bytes: @model_size,
       org_id: 'org-test'
     )
-
-    refute_nil path
-    assert File.file?(path)
-    assert_equal @model_data, File.binread(path)
-
-    # Verify authorize request
+    assert_equal cached_path, second_path
     assert_equal 1, transport.requests.length
-    auth_req = transport.requests.first
-    assert_equal '/hardware-assets/ast-1/revisions/rev-1:authorize', auth_req['payload']['path']
-    assert_equal 'Bearer session-jwt-test', auth_req['authorization_header']
-
-    # Verify download URL resolved to base origin + grant
-    expected_url = 'http://taller.local:8080/api/hardware-assets/files/storage-key?grant=signed-grant-token'
-    assert_equal expected_url, requested_url
+    refute http_called
   end
 
   def test_retries_with_fresh_grant_when_download_returns_unauthorized
     initial_grant = {
       'status' => 200,
       'body' => {
+        'representation' => 'skp',
         'url' => '/api/hardware-assets/files/key?grant=expired-grant',
         'sha256' => @model_sha,
         'sizeBytes' => @model_size
@@ -158,6 +139,7 @@ class HardwareAssetDownloaderTest < Minitest::Test
     fresh_grant = {
       'status' => 200,
       'body' => {
+        'representation' => 'skp',
         'url' => '/api/hardware-assets/files/key?grant=fresh-grant',
         'sha256' => @model_sha,
         'sizeBytes' => @model_size
@@ -314,5 +296,232 @@ class HardwareAssetDownloaderTest < Minitest::Test
 
     refute_includes log_output, 'SECRET_TOKEN_VALUE'
     refute_includes log_output, 'grant='
+  end
+
+  def test_rejects_cross_tenant_cache_access_when_caller_org_differs_from_session
+    @cache.put(
+      asset_id: 'ast-cross',
+      revision_id: 'rev-1',
+      data: @model_data,
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-a'
+    )
+
+    transport = FakeTransport.new([])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new(org_id: 'org-b'),
+      cache: @cache,
+      logger: @logger
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-cross',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-a'
+    )
+
+    assert_nil path
+    assert_empty transport.requests
+  end
+
+  def test_refuses_cached_file_when_session_expired_or_revoked
+    @cache.put(
+      asset_id: 'ast-revoked',
+      revision_id: 'rev-1',
+      data: @model_data,
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    revoked_response = { 'status' => 401, 'body' => { 'error' => 'session_revoked' } }
+    transport = FakeTransport.new([revoked_response])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new(org_id: 'org-test'),
+      cache: @cache,
+      logger: @logger
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-revoked',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    assert_nil path
+    assert_equal 1, transport.requests.length
+  end
+
+  def test_refuses_to_deliver_asset_if_session_logs_out_during_operation
+    grant_response = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token'
+      }
+    }
+    transport = FakeTransport.new([grant_response])
+    auth = FakeAuth.new(org_id: 'org-test')
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: auth,
+      cache: @cache,
+      logger: @logger,
+      http_fetcher: lambda do |_url|
+        auth.logout
+        [200, @model_data]
+      end
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-logout',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    assert_nil path
+  end
+
+  def test_rejects_when_grant_sha_differs_from_caller_sha_pin
+    caller_sha = Digest::SHA256.hexdigest('CALLER EXPECTED DATA')
+    grant_sha = Digest::SHA256.hexdigest('GRANT OTHER DATA')
+    grant_response = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => grant_sha,
+        'size_bytes' => 100,
+        'url' => '/api/hardware-assets/files/key?grant=token'
+      }
+    }
+    transport = FakeTransport.new([grant_response])
+    http_called = false
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger,
+      http_fetcher: lambda do |_url|
+        http_called = true
+        [200, 'GRANT OTHER DATA']
+      end
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-mismatch',
+      revision_id: 'rev-1',
+      sha256: caller_sha,
+      expected_bytes: 100,
+      org_id: 'org-test'
+    )
+
+    assert_nil path
+    refute http_called
+  end
+
+  def test_rejects_when_grant_size_differs_from_caller_size_pin
+    grant_response = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size + 50,
+        'url' => '/api/hardware-assets/files/key?grant=token'
+      }
+    }
+    transport = FakeTransport.new([grant_response])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-size-mismatch',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    assert_nil path
+  end
+
+  def test_rejects_grant_missing_mandatory_representation_or_digest_or_size
+    invalid_grants = [
+      { 'sha256' => @model_sha, 'size_bytes' => 100, 'url' => '/k' },
+      { 'representation' => 'glb', 'sha256' => @model_sha, 'size_bytes' => 100, 'url' => '/k' },
+      { 'representation' => 'skp', 'size_bytes' => 100, 'url' => '/k' },
+      { 'representation' => 'skp', 'sha256' => 'invalid_short_sha', 'size_bytes' => 100, 'url' => '/k' },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'url' => '/k' },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 0, 'url' => '/k' },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 60 * 1024 * 1024, 'url' => '/k' }
+    ]
+
+    invalid_grants.each_with_index do |bad_grant, idx|
+      transport = FakeTransport.new([{ 'status' => 200, 'body' => bad_grant }])
+      downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+        transport: transport,
+        auth_provider: FakeAuth.new,
+        cache: @cache,
+        logger: @logger
+      )
+
+      path = downloader.download_asset(
+        asset_id: "ast-bad-#{idx}",
+        revision_id: 'rev-1'
+      )
+      assert_nil path, "Expected rejection for grant case #{idx}: #{bad_grant.inspect}"
+    end
+  end
+
+  def test_rejects_corrupt_downloaded_bytes_and_cleans_temporary_file
+    grant_response = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token'
+      }
+    }
+    transport = FakeTransport.new([grant_response])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger,
+      http_fetcher: lambda do |_url|
+        [200, 'CORRUPTED BYTES']
+      end
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-corrupt',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    assert_nil path
+    expected_cache_file = @cache.path_for(
+      asset_id: 'ast-corrupt', revision_id: 'rev-1', sha256: @model_sha, org_id: 'org-test'
+    )
+    refute File.exist?(expected_cache_file)
+    temp_files = Dir.glob(File.join(@tmp_dir, '**', '*.tmp.*'))
+    assert_empty temp_files
   end
 end

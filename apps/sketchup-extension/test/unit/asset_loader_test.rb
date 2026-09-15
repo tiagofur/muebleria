@@ -135,4 +135,32 @@ class AssetLoaderTest < Minitest::Test
     assert_equal [0.0, 0.0, 1.0], transform.yaxis.to_a
     assert_equal [0.0, -1.0, 0.0], transform.zaxis.to_a
   end
+
+  def test_loader_does_not_bypass_downloader_via_cache_get
+    # Seed cache directly
+    dummy_sha = Digest::SHA256.hexdigest('SKP DATA')
+    @cache.put(
+      asset_id: 'ast-direct',
+      revision_id: 'rev-1',
+      data: 'SKP DATA',
+      sha256: dummy_sha,
+      expected_bytes: 8,
+      org_id: 'org-test'
+    )
+
+    # Downloader returns nil (e.g. unauthenticated or revoked session)
+    downloader = FakeDownloader.new(nil)
+    loader = Granete::SketchUpExtension::Assets::AssetLoader.new(
+      downloader: downloader,
+      cache: @cache
+    )
+
+    # Even though file is in @cache, loader must NOT return it
+    result = loader.load_asset_instance(
+      @model, 'ast-direct', @target_group, [0, 0, 0],
+      revision_id: 'rev-1', sha256: dummy_sha,
+      expected_bytes: 8, org_id: 'org-test'
+    )
+    assert_nil result
+  end
 end

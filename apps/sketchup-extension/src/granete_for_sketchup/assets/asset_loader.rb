@@ -11,9 +11,9 @@ module Granete
         attr_reader :diagnostics
 
         def initialize(resolver: nil, downloader: nil, cache: nil, logger: nil)
+          _ = cache
           @resolver = resolver || AssetResolver.new
           @downloader = downloader
-          @cache = cache || @downloader&.cache
           @logger = logger
           @diagnostics = []
         end
@@ -65,19 +65,14 @@ module Granete
           sha256 = placement.sha256
           expected_bytes = placement.expected_bytes
 
-          cached = @cache&.get(
-            asset_id: asset_id, revision_id: revision_id, sha256: sha256,
-            expected_bytes: expected_bytes, org_id: org_id
-          )
-          return cached if cached
-
+          path = nil
           if @downloader
             path = @downloader.download_asset(
               asset_id: asset_id, revision_id: revision_id, sha256: sha256,
               expected_bytes: expected_bytes, org_id: org_id
             )
-            return path if path
           end
+          return path if path
 
           record_diagnostic(
             'code' => 'hardware_asset_missing',
@@ -91,20 +86,13 @@ module Granete
         end
 
         def resolve_asset_file(asset_id:, revision_id:, sha256:, expected_bytes:, org_id:)
-          if revision_id && @cache
-            cached = @cache.get(
-              asset_id: asset_id, revision_id: revision_id, sha256: sha256,
-              expected_bytes: expected_bytes, org_id: org_id
-            )
-            return cached if cached
-          end
+          if revision_id
+            return nil unless @downloader
 
-          if revision_id && @downloader
-            downloaded = @downloader.download_asset(
+            return @downloader.download_asset(
               asset_id: asset_id, revision_id: revision_id, sha256: sha256,
               expected_bytes: expected_bytes, org_id: org_id
             )
-            return downloaded if downloaded
           end
 
           @resolver&.resolve_skp_path(asset_id)

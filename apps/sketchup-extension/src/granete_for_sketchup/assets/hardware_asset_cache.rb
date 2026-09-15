@@ -28,9 +28,9 @@ module Granete
           return nil unless valid_segment?(revision_id)
 
           clean_sha = sanitize_sha(sha256)
-          return nil if sha256 && !clean_sha
+          return nil unless clean_sha
 
-          filename = clean_sha ? "#{clean_sha}.skp" : 'asset.skp'
+          filename = "#{clean_sha}.skp"
           target = File.expand_path(
             File.join(@cache_dir, org_id.to_s.strip, asset_id.to_s.strip, revision_id.to_s.strip, filename)
           )
@@ -93,18 +93,22 @@ module Granete
         end
 
         def verify_integrity?(file_path, sha256:, expected_bytes:)
-          if expected_bytes.is_a?(Numeric) && expected_bytes.positive? && File.size(file_path) != expected_bytes.to_i
+          unless expected_bytes.is_a?(Numeric) && expected_bytes.positive? &&
+                 File.size(file_path) == expected_bytes.to_i
             FileUtils.rm_f(file_path)
             return false
           end
 
-          if sha256 && !sha256.to_s.strip.empty?
-            computed_sha = Digest::SHA256.file(file_path).hexdigest
-            expected_hex = sanitize_sha(sha256)
-            if !expected_hex || computed_sha.downcase != expected_hex.downcase
-              FileUtils.rm_f(file_path)
-              return false
-            end
+          expected_hex = sanitize_sha(sha256)
+          unless expected_hex
+            FileUtils.rm_f(file_path)
+            return false
+          end
+
+          computed_sha = Digest::SHA256.file(file_path).hexdigest
+          if computed_sha.downcase != expected_hex.downcase
+            FileUtils.rm_f(file_path)
+            return false
           end
 
           true

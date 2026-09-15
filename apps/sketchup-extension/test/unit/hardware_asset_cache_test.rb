@@ -70,6 +70,8 @@ class HardwareAssetCacheTest < Minitest::Test
       asset_id: 'ast-pull-1',
       revision_id: 'rev-1',
       data: @dummy_data,
+      sha256: @dummy_sha,
+      expected_bytes: @dummy_size,
       org_id: 'org-1'
     )
     assert File.file?(saved_path)
@@ -77,6 +79,7 @@ class HardwareAssetCacheTest < Minitest::Test
     hit = @cache.get(
       asset_id: 'ast-pull-1',
       revision_id: 'rev-1',
+      sha256: @dummy_sha,
       expected_bytes: @dummy_size + 10,
       org_id: 'org-1'
     )
@@ -114,6 +117,8 @@ class HardwareAssetCacheTest < Minitest::Test
       asset_id: 'ast-pull-1',
       revision_id: 'rev-1',
       data: @dummy_data,
+      sha256: @dummy_sha,
+      expected_bytes: @dummy_size,
       org_id: 'org-1'
     )
     assert File.file?(saved_path)

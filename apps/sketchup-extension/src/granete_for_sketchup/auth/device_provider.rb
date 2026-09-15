@@ -339,6 +339,11 @@ module Granete
         end
 
         def current_organization_id
+          return nil unless configured?
+
+          refresh_if_needed if @access_token.to_s.empty? || access_token_expired?
+          return nil if access_token_expired?
+
           payload = decode_session_payload
           payload && payload['org_id']
         end
