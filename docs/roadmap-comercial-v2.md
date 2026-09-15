@@ -1,7 +1,7 @@
 # Granete product roadmap — P0 to P3
 
 > **Status:** ACTIVE
-> **Updated:** 2026-09-12
+> **Updated:** 2026-09-15
 > **Canonical for:** product priority, sequencing, dependencies and exclusions
 > **North Star:** make Granete easy to sell and operate without weakening its commercial, design or manufacturing authorities.
 
@@ -15,18 +15,52 @@ This roadmap replaces the phase ordering in the previous version of this file. H
 
 GitHub issues own implementation. Architecture documents own invariants. This roadmap only orders those authorities and records what each phase must not absorb.
 
+## Immediate owner priority — 2026-09-15
+
+**Simplify the Q/R experience and recover the path to Engineering and test PTX.**
+The owner cannot currently reach Engineering from a modern released project.
+The bounded plan is [Engineering flow recovery](demo/engineering-flow-recovery-2026-09-15.md);
+[Project lifecycle](project-lifecycle.md) separates implemented facts from the target.
+Base inspected: `556804c1cf57c79e064f3f32267634591b33dfbf`.
+
+New corrective owners, not delivered by this roadmap:
+
+- #738: Engineering entry/queue and exact contextual navigation.
+- #739: frozen-release cut input, optimization and non-production PTX/PDF candidates.
+- #740: release-bound Engineering completion and material/physical-operation gates.
+- #741: P1/P2 work continuity, suspension/cancellation without silent retargeting.
+
+The immediate usable milestone is **#738 → #739 → #644 verification**. #736/PR #737
+is the separate in-flight release/BOM correction at this baseline; review and integrate
+it first for samples affected by repeated-part IDs, without starting a competing writer.
+Existing P access is not technically dependent on that BOM correction.
+
+Test-file preparation does not wait for the whole ERP, Change Orders, stock dispatch,
+Engineering completion or client machine evidence. It must preserve exact content,
+permissions and serializer capability. Physical work must not be shown/used as authorized
+until #740; P2 on started work additionally requires #741, and real dispatch requires #680.
+No fake Project accepted/produced, material-ready or completed-operation stamps.
+
+#642 remains the commercial/UX owner: one action per intention, automatic internal
+validation and authoritative context selection, technical Q/R/P detail secondary.
+#677 keeps the SketchUp HUD/Presentation scope. Neither issue is restarted: PR #663
+already delivered exact commercial detail, #673 removed the auxiliary legacy acceptance
+from the golden path, #697 simplified reconciliation, and #731/PR #735 automated design
+validation/publication. Missing end-to-end Engineering is not proof those foundations
+are absent. Q/R/P remain separate exact authorities, not extra user chores.
+
 ## Quick path
 
-1. Finish or explicitly exclude every P0 route used in the Perfect Demo.
-2. Prove the P1 loop with the first customers before expanding breadth.
-3. Add P2 operational depth from observed daily work.
-4. Pull P3 forward only with customer evidence or a completed prerequisite.
+1. Recover Engineering and exact test outputs through the immediate milestone above.
+2. Finish or explicitly exclude every other P0 route shown in the demo.
+3. Prove the P1 paid workflow before expanding breadth.
+4. Add P2/P3 depth only from observed use and the owning prerequisites.
 
 ## Phase meaning
 
 | Phase | Outcome | Exit rule |
 |---|---|---|
-| **P0 — Perfect Demo** | One coherent sales-to-release story with no silent industrial or commercial error. | Every shown route is verified at an exact revision or visibly excluded. |
+| **P0 — Perfect Demo** | One coherent quote/design/Engineering-to-validation-output story, with no silent industrial or commercial error. | Every shown route is verified at an exact context or visibly excluded; physical operation requires its separate gates. |
 | **P1 — MVP for first customers** | A customer can repeat the paid workflow safely with support and recovery. | Real customer tasks, host/machine boundaries and concurrent operations are proven. |
 | **P2 — Daily operations** | Warehouse, labels, design clients and after-sales remain exact during normal work. | Multi-user, retry, historical lineage and shop-floor evidence are durable. |
 | **P3 — Differentiators and future** | High-leverage experiences expand sales or margin without destabilizing the core. | Pilot evidence justifies the investment and the required authorities already exist. |
@@ -39,6 +73,8 @@ The repository Issue Form still uses its older priority vocabulary. The P0-P3 ta
 |---|---|---|
 | Commercial history and pricing projection | #642 | Exact QuoteRevision snapshots, exact PDF/XLSX and backend CommercialProjection. |
 | Design and production lineage | #384 | Project, FurnitureInstance, Design, DesignRevision and ProductionRelease identities. |
+| Engineering entry and frozen input | #738, #739 | Consume existing exact release; no second BOM or output engine. |
+| Operational authorization and work continuity | #740, #741 | Engineering/material facts and physical work remain separate from the existence of P. |
 | SketchUp product | #465 | Authoring and host interaction; never pricing or manufacturing truth. |
 | Perfect Demo regression | #644 | Verification only; it does not implement product behavior. |
 | Cut program and PTX/CADmatic candidate | #650 | Internal deterministic program/output; no physical-machine claim. |
@@ -55,13 +91,18 @@ Closed issues remain historical proof. They are not reopened to absorb new exact
 
 | Order | Work | Owner | Dependency and exit |
 |---:|---|---|---|
-| 1 | Complete exact commercial authority, backend CommercialProjection and exact customer PDF/XLSX | #642 | Projection must use the existing pricing authority, identify exact Design version/fingerprint and quote baseline, redact costs and never mutate QuoteRevision. |
-| 2 | Preserve drilling for rotated DXF pieces | #676 | Transform every supported operation correctly or block the export. #650 does not own this defect. |
-| 3 | Show live total, quote delta and Presentation mode inside SketchUp | #677 | Requires #642 CommercialProjection plus #465/#499/#474. Ruby displays server truth and never calculates prices. |
-| 4 | Prove Quote to SketchUp to DesignRevision to ProductionRelease | #644 | Expand assertions only after owning behavior lands. No helper may manufacture hidden acceptance. |
-| 5 | Finish the canonical PTX/CADmatic candidate | #650 | Technical completion is separate from customer/machine evidence. |
-| 6 | Validate the exact PTX route in the workshop | #348 | Required before any CADmatic/machine compatibility claim. |
-| 7 | Run the broader real-host-to-output gate | #354 | Consume #676 and the exact host/output versions. Simulated proof remains labeled simulated. |
+| 0 | Finish review of the in-flight repeated-part release correction when needed by the sample | #736 / PR #737 | Preserve the existing writer; a checked issue body is not a merged runtime fix. |
+| 1 | Modern release opens Engineering and appears in the correct queue | #738 | No Project.status workaround, no automatic Engineering/material completion. |
+| 2 | Engineering uses the frozen cut input and prepares test PTX/PDF | #739 | Reuse #577/#650/#591/#600; supported serializer and exact plan pins, no stock or field-validation prerequisite. |
+| 3 | Prove Q/R → release → Engineering → test download through normal UI | #644 | Extend existing fixtures after behavior lands; no SQL/manual state shortcuts. |
+| 4 | Complete remaining commercial Q/R UX, consumers and exact customer PDF/XLSX | #642, #677 | Reuse delivered snapshots/projections and SketchUp publication automation; no duplicate pricing or revision system. |
+| 5 | Close technical gaps exposed by the representative cut plan | #650 | Program/preview/bytes fidelity; no new serializer in the Engineering consumer. |
+| 6 | Enforce exact Engineering/material authorization before any physical demo operation | #740 | Mandatory before exposing physical actions as operable; does not block non-production test candidates. |
+| 7 | Preserve rotated drilling if DXF is included; qualify field output separately | #676, #348, #354 | No DXF or machine compatibility claim outside exact evidence. |
+
+This order is for the immediate Engineering/PTX rehearsal, not permission to bypass
+safety issues in a physical demonstration. #740 is a hard boundary for physical work;
+#741/#680 apply to in-progress release changes/real stock dispatch respectively.
 
 ## Demo presentation rule
 
@@ -71,11 +112,17 @@ The preferred customer-facing loop is:
 2. modify a supported cabinet configuration;
 3. show Calculating changes, then the backend estimated total and delta;
 4. compare against the last sent or accepted QuoteRevision;
-5. enter Presentation mode with internal cost/IDs hidden;
-6. if the accepted baseline changed, show Change order required without creating or approving anything automatically;
-7. publish/reconcile/approve/release through the existing explicit commands.
+5. use Presentation mode when its delivered scope supports the task;
+6. resolve only real commercial decisions, without creating Q for every spatial move;
+7. publish/reconcile/approve/release through explicit existing commands;
+8. continue to Engineering for the exact released content and test outputs.
 
-If DXF, PTX, stock or a machine route is not part of the rehearsal, the script states that exclusion. Avoiding a route does not close its issue.
+Preflight, exact context preselection and refresh may be automatic. Acceptance,
+approval, release and operational completion are not hidden side effects. A future
+composite confirmation must disclose every consequence and retain each permission,
+exact reference and retry/failure boundary; it is not required for #738/#739.
+
+If DXF, PTX, stock or a machine route is not part of the rehearsal, the script states that exclusion. Avoiding a route does not close its issue. Downloading a candidate does not mark Engineering complete or manufacturing started.
 
 ## Demo design entry rule (#729)
 
@@ -94,7 +141,9 @@ switch in `@granete/ui`; re-enabling it is that one-flag change.
 - no automatic quote acceptance, DesignRevision approval or ProductionRelease;
 - no machine claim from file generation alone;
 - no universal CAM, CAD or hidden customer fixture;
-- no weakening stale, preflight, tenant or exact-identity gates for the demo.
+- no weakening stale, preflight, tenant or exact-identity gates for the demo;
+- no requirement to complete stock/physical manufacturing merely to download a validation candidate;
+- no live Project/catalog reconstruction presented as frozen-release content.
 
 # P1 — MVP for first customers
 
@@ -102,14 +151,15 @@ switch in `@granete/ui`; re-enabling it is that one-flag change.
 
 | Order | Work | Owner | Depends on |
 |---:|---|---|---|
-| 1 | Canonical post-acceptance Change Orders | #678 | #642 CommercialProjection and #384 exact identities. |
-| 2 | Event-driven cross-client refresh and safe synchronization | #679 | #465, #496, #499 and #474. |
-| 3 | Atomic, idempotent stock dispatch and picking | #680 | Existing stock ledger, #302 material planning and tenant transactions. |
-| 4 | Commercial packaging, compatibility, diagnostics and usability | #355, #504, #506 | Supported host matrix #473, degraded behavior #474 and measured tasks. |
+| 1 | Safe P1/P2 operational continuity and suspension/cancellation | #741 | Exact facts/gates #740; inventory effects remain #680. |
+| 2 | Canonical post-acceptance Change Orders | #678 | #642 CommercialProjection and #384 exact identities. |
+| 3 | Event-driven cross-client refresh and safe synchronization | #679 | #465, #496, #499 and #474; conflict-safe WorkingCopy writes before broader automatic sync. |
+| 4 | Atomic, idempotent stock dispatch and picking | #680 | Existing stock ledger, #302 material planning and tenant transactions; required before using real dispatch. |
+| 5 | Commercial packaging, compatibility, diagnostics and usability | #355, #504, #506 | Supported host matrix #473, degraded behavior #474 and measured tasks. |
 
 Change Order acceptance authorizes only the commercial delta. It does not rewrite the accepted quote or approve/release design.
 
-Events are hints to refetch exact server state. They are not commands, truth or a second dispatcher.
+Events are hints to refetch exact server state. They are not commands, truth or a second dispatcher. Row locks alone do not reject an obsolete WorkingCopy replacement; #679 owns the expected-version boundary.
 
 ## 3D hardware sequence
 
@@ -130,6 +180,10 @@ Do not create another hardware catalog, parser or animation issue. #529 remains 
 
 Each customer has an independent dossier and evidence pack. A result for Client A never certifies Client B. Manual transfer can be a valid first integration when its operator work and readback are explicit.
 
+This is the qualification/production-output sequence. Already delivered profile/adapter
+foundations may be reused for #739/#650 offline validation candidates without claiming
+field readiness or implementing the complete #503 workspace.
+
 ## Daily-use SketchUp value in P1
 
 Reuse existing owners instead of new tickets:
@@ -148,7 +202,8 @@ Reuse existing owners instead of new tickets:
 - no binary simultaneous geometry merge;
 - no event-triggered business transitions;
 - no support or machine promise outside the exact tested matrix;
-- no broad-release claim before representative users complete the paid workflow.
+- no broad-release claim before representative users complete the paid workflow;
+- no P2 inheriting P1 Engineering/material/progress evidence or silently replacing started work.
 
 # P2 — Daily operations
 
@@ -157,7 +212,7 @@ Reuse existing owners instead of new tickets:
 | 1 | Bring Proyectar under the canonical Design lifecycle | #643 | Reuse #308 North Star and #444 WebGL gate; no second Design truth. |
 | 2 | Reconcile unresolved working-copy materials from Web | #658 | Reuse server provenance and generated client. |
 | 3 | Persist and reuse exact offcuts | #681 | Requires #650 offcut identity and #680 atomic stock authority. |
-| 4 | Bind labels and QR reprints to exact ProductionRelease | #682 | Reuse closed #96/#141/#283 render/scanner foundations and #577 release lineage. |
+| 4 | Bind labels and QR reprints to exact ProductionRelease | #682 | Reuse closed #96/#141/#283 render/scanner foundations and #577 release lineage; consume #739 readers where applicable. |
 | 5 | Trace warranty refabrication to exact released parts | #683 | Reuse closed #303 installation/punch, existing WarrantyTicket and #304 costing. |
 
 ## Delivered foundations, not new backlog
@@ -209,13 +264,22 @@ Reuse existing owners instead of new tickets:
 
 # Dependency summary
 
+## Immediate Engineering/test-output milestone
+
+#738 → #739 → #644 verification
+#577 + supported #650/#591/#600 → #739
+#736/PR #737 → release of samples affected by repeated-part collisions
+
+#740 gates physical operation; #741 gates safe P1/P2 started-work changes.
+Neither is a stock/physical-completion prerequisite for #739 validation candidates.
+
 ## Commercial chain
 
 #642 → #677 → #644
 #642 + #384 → #678 → #686
 #465 + #496 + #499 + #474 → #679
 
-## Industrial chain
+## Industrial qualification chain
 
 #650 → #348 → #351 → #352/#353 → #503 → #354
 #676 → #354
@@ -223,6 +287,7 @@ Reuse existing owners instead of new tickets:
 
 ## Exact operational lineage
 
+#738 + exact release facts → #740 → #741
 #577 + existing labels → #682
 #303 + existing warranty + #304 → #683
 #384 + #642 + #643 + #444 → #684
