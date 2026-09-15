@@ -288,6 +288,20 @@ export interface CutPlanStats {
 }
 
 /**
+ * #739 — the exact frozen release base a plan was generated from. Present
+ * only when the demand came from a ProductionRelease cutting-demand
+ * projection; changing the release (or its manufacturing fingerprint)
+ * invalidates the plan instead of retargeting it.
+ */
+export interface CutPlanReleaseBase {
+  readonly releaseId: string;
+  readonly releaseNumber: number;
+  readonly designRevisionId: string;
+  readonly designRevisionNumber: number;
+  readonly manufacturingFingerprint: string;
+}
+
+/**
  * Complete immutable Cut Plan data model.
  */
 export interface CutPlan {
@@ -301,4 +315,6 @@ export interface CutPlan {
   readonly sheets: readonly CutPlanSheet[];
   readonly stats: CutPlanStats;
   readonly usefulRemnants: readonly CutPlanRemnant[];
+  /** #739 — frozen release pin; see CutPlanReleaseBase. */
+  readonly releaseBase?: CutPlanReleaseBase;
 }

@@ -427,3 +427,154 @@ func TestProductionRelease_RouterRegistration(t *testing.T) {
 		t.Fatal("RegisterRoutes must succeed")
 	}
 }
+
+// #739 — frozen cutting demand read: factory-engineering capability, exact
+// release pins and honest snapshot-unavailable verdicts (never a fallback to
+// the mutable project).
+
+func newCuttingDemandRequest(userID string, roles []domain.UserRole) *http.Request {
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/projects/"+releaseTestProjectID+"/production-releases/"+releaseTestReleaseID+"/cutting-demand", nil)
+	req.SetPathValue("projectId", releaseTestProjectID)
+	req.SetPathValue("releaseId", releaseTestReleaseID)
+	return withTestClaims(req, userID, roles)
+}
+
+func cuttingDemandStubView() *storage.ReleaseCuttingDemandView {
+	code := "PANEL-A"
+	edge := "70000000-0000-0000-0000-000000000003"
+	role := "BODY"
+	return &storage.ReleaseCuttingDemandView{
+		ReleaseID:                releaseTestReleaseID,
+		ReleaseNumber:            1,
+		DesignRevisionID:         releaseTestRevisionID,
+		DesignRevisionNumber:     2,
+		ManufacturingFingerprint: "sha256-a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+		SchemaVersion:            2,
+		Units: []storage.ReleaseCuttingDemandUnitView{
+			{
+				FurnitureInstanceID:   releaseTestInstanceID,
+				FurnitureDefinitionID: releaseTestDefinitionID,
+				Pieces: []storage.ReleaseCuttingDemandPieceView{
+					{
+						PartID:      "part-1",
+						PartCode:    code,
+						Description: "Panel base",
+						Quantity:    2,
+						LengthMm:    600,
+						WidthMm:     560,
+						ThicknessMm: 18,
+						MaterialID:  "70000000-0000-0000-0000-000000000001",
+						EdgeBandID:  edge,
+						Grain:       1,
+						L1:          1,
+						OptionRole:  role,
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestHandleProjectProductionReleaseCuttingDemand_HappyPath(t *testing.T) {
+	store := &stubStore{cuttingDemandResult: cuttingDemandStubView()}
+	server := &Server{Store: store}
+	w := httptest.NewRecorder()
+	server.HandleProjectProductionReleaseCuttingDemand(w, newCuttingDemandRequest("user-1", []domain.UserRole{domain.RoleIngeniero}))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		ReleaseID                string `json:"release_id"`
+		ReleaseNumber            int    `json:"release_number"`
+		DesignRevisionID         string `json:"design_revision_id"`
+		ManufacturingFingerprint string `json:"manufacturing_fingerprint"`
+		SchemaVersion            int    `json:"schema_version"`
+		Units                    []struct {
+			FurnitureInstanceID string `json:"furniture_instance_id"`
+			Pieces              []struct {
+				PartID       string  `json:"part_id"`
+				PartCode     *string `json:"part_code"`
+				Quantity     int     `json:"quantity"`
+				LengthMm     int     `json:"length_mm"`
+				WidthMm      int     `json:"width_mm"`
+				ThicknessMm  int     `json:"thickness_mm"`
+				MaterialID   string  `json:"material_id"`
+				EdgeBandID   *string `json:"edge_band_id"`
+				Grain        int     `json:"grain"`
+				L1           int     `json:"l1"`
+				L2           int     `json:"l2"`
+				OptionRole   *string `json:"option_role"`
+			} `json:"pieces"`
+		} `json:"units"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.ReleaseID != releaseTestReleaseID || body.ReleaseNumber != 1 ||
+		body.DesignRevisionID != releaseTestRevisionID || body.SchemaVersion != 2 {
+		t.Fatalf("projection must pin the exact release: %+v", body)
+	}
+	if len(body.Units) != 1 || len(body.Units[0].Pieces) != 1 {
+		t.Fatalf("projection must carry units and pieces: %+v", body.Units)
+	}
+	piece := body.Units[0].Pieces[0]
+	if piece.PartID != "part-1" || piece.Quantity != 2 || piece.LengthMm != 600 || piece.WidthMm != 560 ||
+		piece.ThicknessMm != 18 || piece.MaterialID != "70000000-0000-0000-0000-000000000001" || piece.Grain != 1 || piece.L1 != 1 || piece.L2 != 0 {
+		t.Fatalf("piece projection mismatch: %+v", piece)
+	}
+	if piece.PartCode == nil || *piece.PartCode != "PANEL-A" || piece.EdgeBandID == nil || piece.OptionRole == nil {
+		t.Fatalf("optional frozen fields must survive when present: %+v", piece)
+	}
+	// No cost-adjacent fields are exposed by the contract (additionalProperties
+	// false) — the handler only serializes the generated DTO.
+	if strings.Contains(w.Body.String(), "cost") {
+		t.Fatalf("projection must not leak costs: %s", w.Body.String())
+	}
+}
+
+func TestHandleProjectProductionReleaseCuttingDemand_PermissionDenial(t *testing.T) {
+	// Industrial preparation capability only: commercial/store-facing roles
+	// are rejected by the server (UI hiding is not security).
+	for _, role := range []domain.UserRole{domain.RoleVendedor, domain.RoleUser, domain.RoleProduccion, domain.RoleAlmacen} {
+		server := &Server{Store: &stubStore{cuttingDemandResult: cuttingDemandStubView()}}
+		w := httptest.NewRecorder()
+		server.HandleProjectProductionReleaseCuttingDemand(w, newCuttingDemandRequest("user-1", []domain.UserRole{role}))
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("role %s: expected 403, got %d", role, w.Code)
+		}
+	}
+	for _, role := range []domain.UserRole{domain.RoleAdmin, domain.RoleGerenteProduccion, domain.RoleIngeniero} {
+		server := &Server{Store: &stubStore{cuttingDemandResult: cuttingDemandStubView()}}
+		w := httptest.NewRecorder()
+		server.HandleProjectProductionReleaseCuttingDemand(w, newCuttingDemandRequest("user-1", []domain.UserRole{role}))
+		if w.Code != http.StatusOK {
+			t.Fatalf("role %s: expected 200, got %d: %s", role, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestHandleProjectProductionReleaseCuttingDemand_ErrorMapping(t *testing.T) {
+	// Missing/corrupt snapshot → actionable 409, never a fallback.
+	server := &Server{Store: &stubStore{cuttingDemandErr: storage.ErrReleaseSnapshotUnavailable}}
+	w := httptest.NewRecorder()
+	server.HandleProjectProductionReleaseCuttingDemand(w, newCuttingDemandRequest("user-1", []domain.UserRole{domain.RoleAdmin}))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("snapshot unavailable: expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "release_snapshot_unavailable") {
+		t.Fatalf("409 must carry the typed blocker: %s", w.Body.String())
+	}
+
+	// Invalid IDs never reach storage.
+	bad := httptest.NewRequest(http.MethodGet, "/api/projects/not-a-uuid/production-releases/x/cutting-demand", nil)
+	bad.SetPathValue("projectId", "not-a-uuid")
+	bad.SetPathValue("releaseId", "x")
+	bad = withTestClaims(bad, "user-1", []domain.UserRole{domain.RoleAdmin})
+	w2 := httptest.NewRecorder()
+	server2 := &Server{Store: &stubStore{cuttingDemandResult: cuttingDemandStubView()}}
+	server2.HandleProjectProductionReleaseCuttingDemand(w2, bad)
+	if w2.Code != http.StatusBadRequest {
+		t.Fatalf("invalid ids: expected 400, got %d", w2.Code)
+	}
+}

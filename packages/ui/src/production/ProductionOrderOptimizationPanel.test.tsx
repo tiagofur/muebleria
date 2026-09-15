@@ -775,3 +775,206 @@ describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, m
     expect(boardView().textContent).toContain('Guillotina 2D');
   });
 });
+
+describe('ProductionOrderOptimizationPanel — #739 preparación de liberación exacta', () => {
+  const demandBaseFixture = {
+    releaseId: 'rel-1',
+    releaseNumber: 1,
+    designRevisionId: 'rev-2',
+    designRevisionNumber: 2,
+    manufacturingFingerprint: 'sha256-' + 'a'.repeat(64),
+  };
+
+  function renderPanel(over: Record<string, unknown> = {}) {
+    const rows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01',
+        partCode: 'LAT-01',
+        partName: 'Lateral',
+        moduleCode: 'M01',
+        materialName: 'MDF Blanco 18mm',
+        lengthMm: 800,
+        widthMm: 500,
+        quantity: 2,
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+      },
+    ];
+    return render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={fixtureCatalog()}
+        cutRows={rows}
+        onExportCutPlanPdf={() => undefined}
+        onExportCutPlanPtx={() => undefined}
+        onSaveCutPlan={() => undefined}
+        {...over}
+      />,
+    );
+  }
+
+  it('botón PDF nunca parece habilitado sin su acción de exportación (bug #739)', () => {
+    renderPanel({ onExportCutPlanPdf: undefined, initialCutPlan: cutPlanFixture('saw-guillotine') });
+    const pdf = screen.getByTestId('prod-opt-export-pdf-manual');
+    expect((pdf as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('plan activo + acción presente: PDF habilitado', () => {
+    renderPanel({ initialCutPlan: cutPlanFixture('saw-guillotine') });
+    const pdf = screen.getByTestId('prod-opt-export-pdf-manual');
+    expect((pdf as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('cambiar parámetros bloquea exportaciones hasta regenerar (no exporta un resultado viejo)', () => {
+    const pinnedPlan: CutPlan = {
+      ...cutPlanFixture('saw-guillotine'),
+      releaseBase: demandBaseFixture,
+    };
+    renderPanel({ initialCutPlan: pinnedPlan, demandBase: demandBaseFixture });
+    // El plan fixture usa kerf 4: igual config → exportable.
+    expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(false);
+
+    const kerfInput = screen.getByDisplayValue('4') as HTMLInputElement;
+    fireEvent.change(kerfInput, { target: { value: '5' } });
+
+    expect(screen.getByTestId('prod-opt-config-drift')).toBeDefined();
+    expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled).toBe(true);
+
+    // Regenerar con la config nueva desbloquea la exportación.
+    fireEvent.click(screen.getByRole('button', { name: /Generar Plan de Corte 2D/i }));
+    expect(screen.queryByTestId('prod-opt-config-drift')).toBeNull();
+    expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('el plan generado desde demanda congelada lleva el pin de la liberación', () => {
+    renderPanel({ demandBase: demandBaseFixture });
+    fireEvent.click(screen.getByRole('button', { name: /Generar Plan de Corte 2D/i }));
+    // El pin viaja en el plan generado: guardar entrega exactamente esa base.
+    let saved: CutPlan | undefined;
+    cleanup();
+    render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={fixtureCatalog()}
+        cutRows={[
+          {
+            description: 'LAT-01 · Lateral · M01',
+            partCode: 'LAT-01',
+            partName: 'Lateral',
+            moduleCode: 'M01',
+            materialName: 'MDF Blanco 18mm',
+            lengthMm: 800,
+            widthMm: 500,
+            quantity: 2,
+            grain: 1,
+            L1: 0,
+            L2: 0,
+            W1: 0,
+            W2: 0,
+          },
+        ]}
+        demandBase={demandBaseFixture}
+        onSaveCutPlan={(plan) => {
+          saved = plan;
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Generar Plan de Corte 2D/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Guardar Plan/i }));
+    expect(saved?.releaseBase).toEqual(demandBaseFixture);
+    expect(screen.getByTestId('prod-opt-save-ok')).toBeDefined();
+  });
+
+  it('un plan pineado a otra liberación no gobierna exportaciones ni guardado', () => {
+    const foreignBase: CutPlan = {
+      ...cutPlanFixture('saw-guillotine'),
+      releaseBase: { ...demandBaseFixture, releaseId: 'rel-OTRA', releaseNumber: 7 },
+    };
+    renderPanel({ initialCutPlan: foreignBase, demandBase: demandBaseFixture });
+    expect(screen.getByTestId('prod-opt-plan-base-mismatch')).toBeDefined();
+    expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('guardado honesto: el éxito se declara después de persistir; el fallo se muestra', () => {
+    renderPanel({ initialCutPlan: cutPlanFixture('saw-guillotine'), onSaveCutPlan: undefined });
+    // Sin acción de guardado no se ofrece el botón (nada que declarar).
+    expect(screen.queryByRole('button', { name: /Guardar Plan/i })).toBeNull();
+
+    cleanup();
+    render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={fixtureCatalog()}
+        cutRows={[
+          {
+            description: 'LAT-01 · Lateral · M01',
+            partCode: 'LAT-01',
+            partName: 'Lateral',
+            moduleCode: 'M01',
+            materialName: 'MDF Blanco 18mm',
+            lengthMm: 800,
+            widthMm: 500,
+            quantity: 2,
+            grain: 1,
+            L1: 0,
+            L2: 0,
+            W1: 0,
+            W2: 0,
+          },
+        ]}
+        initialCutPlan={cutPlanFixture('saw-guillotine')}
+        onSaveCutPlan={() => {
+          throw new Error('storage quota exceeded');
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Guardar Plan/i }));
+    expect(screen.getByTestId('prod-opt-save-error')).toBeDefined();
+    expect(screen.queryByTestId('prod-opt-save-ok')).toBeNull();
+  });
+
+  it('requisición previa: con demanda congelada no estima desde el proyecto vivo', () => {
+    renderPanel({ demandBase: demandBaseFixture });
+    expect(screen.getByTestId('prod-opt-release-requisition-note')).toBeDefined();
+  });
+
+  it('plan legacy sin cutStrategy en la config no genera drift falso (regresión #739)', () => {
+    const legacyPlan: CutPlan = {
+      ...cutPlanFixture('saw-guillotine'),
+      config: {
+        // Pre-F126 persisted plans: no cutStrategy/toolSpacingMm fields.
+        sawKerfMm: 4,
+        trim: { topMm: 10, bottomMm: 10, leftMm: 10, rightMm: 10 },
+        deductEdgeBand: true,
+        allowRotationNoGrain: true,
+        minRemnantWidthMm: 400,
+        minRemnantLengthMm: 600,
+        preferLongitudinalRips: true,
+        heuristic: 'guillotine-hybrid',
+      },
+    };
+    renderPanel({ initialCutPlan: legacyPlan });
+    expect(screen.queryByTestId('prod-opt-config-drift')).toBeNull();
+    expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('optimizer XLSX no conectado a la liberación muestra el motivo junto a la acción', () => {
+    renderPanel({
+      initialCutPlan: cutPlanFixture('saw-guillotine'),
+      onExportOptimizer: undefined,
+      optimizerUnavailableReason:
+        'El Optimizer XLSX se calcula desde el proyecto vivo. Para la liberación exacta usá el PDF del plan de corte.',
+    });
+    const btn = screen.getByTestId('prod-opt-export-optimizer-xlsx') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(screen.getByTestId('prod-opt-optimizer-unavailable').textContent).toContain(
+      'usá el PDF del plan de corte',
+    );
+  });
+});

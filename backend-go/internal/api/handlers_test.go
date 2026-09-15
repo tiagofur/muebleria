@@ -207,6 +207,8 @@ type stubStore struct {
 	listProductionReleasesErr    error
 	getProductionReleaseResult   *storage.ProductionReleaseReadback
 	getProductionReleaseErr      error
+	cuttingDemandResult          *storage.ReleaseCuttingDemandView
+	cuttingDemandErr             error
 	latestProductionRelease      *domain.ProductionRelease
 	latestProductionReleaseErr   error
 	materialReturnedByID         *domain.MaterialBoard
@@ -4130,6 +4132,13 @@ func (s *stubStore) GetProjectProductionRelease(_ context.Context, _, _ string) 
 		return s.getProductionReleaseResult, nil
 	}
 	return nil, domain.ErrReleaseNotFound
+}
+
+func (s *stubStore) GetProjectProductionReleaseCuttingDemand(_ context.Context, _, _ string) (*storage.ReleaseCuttingDemandView, error) {
+	if s.cuttingDemandErr != nil {
+		return nil, s.cuttingDemandErr
+	}
+	return s.cuttingDemandResult, nil
 }
 
 func (s *stubStore) GetLatestProjectProductionRelease(_ context.Context, _ string) (*domain.ProductionRelease, error) {

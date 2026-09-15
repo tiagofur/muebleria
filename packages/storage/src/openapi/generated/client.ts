@@ -101,6 +101,7 @@ import type {
   ReconcileDesignWorkingMaterialsRequest,
   ReconcileProjectDesignRequest,
   RefreshRequest,
+  ReleaseCuttingDemand,
   RequoteProjectQuoteRequest,
   ResendInvitationResponse,
   ResetDesignWorkingCopyRequest,
@@ -234,6 +235,7 @@ export abstract class GeneratedGraneteApiClient {
   listProjectProductionReleases(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<ProductionRelease>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases`, { arrayOf: "ProductionRelease", token, signal }); }
   createProductionRelease(token: string, projectId: string, body: CreateProductionReleaseRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProductionRelease> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/production-releases`, { schema: "ProductionRelease", token, bodySchema: "CreateProductionReleaseRequest", body, idempotencyKey: key, signal }); }
   getProjectProductionRelease(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ProductionRelease> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}`, { schema: "ProductionRelease", token, signal }); }
+  getProjectProductionReleaseCuttingDemand(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ReleaseCuttingDemand> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/cutting-demand`, { schema: "ReleaseCuttingDemand", token, signal }); }
   getDesign(token: string, designId: string, signal?: AbortSignal): Promise<Design> { return this.request("GET", `/designs/${encodeURIComponent(designId)}`, { schema: "Design", token, signal }); }
   getDesignWorkingCopy(token: string, designId: string, signal?: AbortSignal): Promise<DesignWorkingCopy> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/working-copy`, { schema: "DesignWorkingCopy", token, signal }); }
   updateDesignWorkingCopy(token: string, designId: string, body: UpdateDesignWorkingCopyRequest, signal?: AbortSignal): Promise<DesignWorkingCopy> { return this.request("PUT", `/designs/${encodeURIComponent(designId)}/working-copy`, { schema: "DesignWorkingCopy", token, bodySchema: "UpdateDesignWorkingCopyRequest", body, signal }); }

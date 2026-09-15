@@ -1068,6 +1068,40 @@ type ProductionRelease struct {
 	Staleness                ProductionReleaseStaleness `json:"staleness"`
 }
 
+type ReleaseCuttingDemand struct {
+	ReleaseID                string                     `json:"release_id"`
+	ReleaseNumber            int64                      `json:"release_number"`
+	DesignRevisionID         string                     `json:"design_revision_id"`
+	DesignRevisionNumber     int64                      `json:"design_revision_number"`
+	ManufacturingFingerprint string                     `json:"manufacturing_fingerprint"`
+	SchemaVersion            int64                      `json:"schema_version"`
+	Units                    []ReleaseCuttingDemandUnit `json:"units"`
+}
+
+type ReleaseCuttingDemandUnit struct {
+	FurnitureInstanceID   string                      `json:"furniture_instance_id"`
+	FurnitureDefinitionID string                      `json:"furniture_definition_id"`
+	Pieces                []ReleaseCuttingDemandPiece `json:"pieces"`
+}
+
+type ReleaseCuttingDemandPiece struct {
+	PartID      string  `json:"part_id"`
+	PartCode    *string `json:"part_code,omitempty"`
+	Description string  `json:"description"`
+	Quantity    int64   `json:"quantity"`
+	LengthMm    int64   `json:"length_mm"`
+	WidthMm     int64   `json:"width_mm"`
+	ThicknessMm int64   `json:"thickness_mm"`
+	MaterialID  string  `json:"material_id"`
+	EdgeBandID  *string `json:"edge_band_id,omitempty"`
+	Grain       int64   `json:"grain"`
+	L1          int64   `json:"l1"`
+	L2          int64   `json:"l2"`
+	W1          int64   `json:"w1"`
+	W2          int64   `json:"w2"`
+	OptionRole  *string `json:"option_role,omitempty"`
+}
+
 type PublishDesignRevisionItem struct {
 	FurnitureInstanceID    string                  `json:"furniture_instance_id"`
 	FurnitureDefinitionID  *string                 `json:"furniture_definition_id,omitempty"`

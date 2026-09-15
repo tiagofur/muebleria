@@ -382,7 +382,7 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var engineerID *string
 		var techStatus *string
 		var surveyCompletedAt *time.Time
-		var installDate *string
+		var installDate *time.Time
 		var commercialStatus *string
 		var notes *string
 		var kitchenLayout []byte
@@ -433,7 +433,10 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 			p.CommercialStatus = &cs
 		}
 		p.SurveyCompletedAt = surveyCompletedAt
-		p.InstallationScheduledDate = installDate
+		if installDate != nil {
+			formatted := installDate.Format("2006-01-02")
+			p.InstallationScheduledDate = &formatted
+		}
 		if notes != nil {
 			p.Notes = *notes
 		}
@@ -853,7 +856,7 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var engineerID *string
 	var techStatus *string
 	var surveyCompletedAt *time.Time
-	var installDate *string
+	var installDate *time.Time
 	var commercialStatus *string
 	var notes *string
 	var kitchenLayout []byte
@@ -908,7 +911,10 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		p.CommercialStatus = &cs
 	}
 	p.SurveyCompletedAt = surveyCompletedAt
-	p.InstallationScheduledDate = installDate
+	if installDate != nil {
+		formatted := installDate.Format("2006-01-02")
+		p.InstallationScheduledDate = &formatted
+	}
 	if notes != nil {
 		p.Notes = *notes
 	}
@@ -1186,7 +1192,7 @@ func createProjectTx(ctx context.Context, tx pgx.Tx, p *domain.Project) error {
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
 			RETURNING created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx), salesOrg, mfgOrg).
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, nullDateArg(p.InstallationScheduledDate), p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx), salesOrg, mfgOrg).
 			Scan(&p.CreatedAt, &p.UpdatedAt)
 	} else {
 		query := `
@@ -1194,7 +1200,7 @@ func createProjectTx(ctx context.Context, tx pgx.Tx, p *domain.Project) error {
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
 			RETURNING id, created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx), salesOrg, mfgOrg).
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, nullDateArg(p.InstallationScheduledDate), p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx), salesOrg, mfgOrg).
 			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	}
 	if err != nil {
@@ -1411,7 +1417,7 @@ func updateProjectTx(ctx context.Context, tx pgx.Tx, id string, p *domain.Projec
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = $27 AND (organization_id = $28 OR sales_organization_id = $28 OR manufacturing_organization_id = $28);
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), id, OrgFromCtx(ctx))
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, nullDateArg(p.InstallationScheduledDate), nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -2154,6 +2160,13 @@ func nullKitchenLayout(b []byte) interface{} {
 		return nil
 	}
 	return b
+}
+
+func nullDateArg(d *string) any {
+	if d == nil || strings.TrimSpace(*d) == "" {
+		return nil
+	}
+	return strings.TrimSpace(*d)
 }
 
 // SetProjectItemFloorStatus atomically advances one item's shop-floor status

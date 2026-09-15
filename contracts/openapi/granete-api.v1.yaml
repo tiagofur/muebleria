@@ -3338,6 +3338,42 @@
         }
       }
     },
+    "/projects/{projectId}/production-releases/{releaseId}/cutting-demand": {
+      "get": {
+        "operationId": "getProjectProductionReleaseCuttingDemand",
+        "summary": "Frozen board cutting demand of the exact release for engineering preparation (#739)",
+        "description": "Tenant-safe projection of the private manufacturing snapshot: per physical unit and board-part occurrence with dimensions, effective thickness, material identity, grain and edge flags. This is WHAT must be manufactured, frozen at release time; engineering preparation (blade, trims, board formats) is NOT part of it. Exposes no costs, no routing program and no evaluated parameters. Catalog renames/deletions after the release never change this projection; resolving current labels/sheet formats is the consumer's explicit engineering input.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The frozen cutting demand of the exact release",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseCuttingDemand"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}": {
       "get": {
         "operationId": "getDesign",
@@ -8126,6 +8162,179 @@
           "staleness": {
             "$ref": "#/components/schemas/ProductionReleaseStaleness",
             "description": "Derived read-only projection against current authoring state; stale never mutates the release."
+          }
+        }
+      },
+      "ReleaseCuttingDemand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "release_id",
+          "release_number",
+          "design_revision_id",
+          "design_revision_number",
+          "manufacturing_fingerprint",
+          "schema_version",
+          "units"
+        ],
+        "properties": {
+          "release_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "release_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "design_revision_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "design_revision_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "manufacturing_fingerprint": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$",
+            "description": "Exact manufacturing fingerprint the demand was frozen with — the plan pin that invalidates a saved plan when the release changes."
+          },
+          "schema_version": {
+            "type": "integer",
+            "description": "Snapshot schema version the projection was read from (1 BOM-only, 2 BOM+routing)."
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReleaseCuttingDemandUnit"
+            }
+          }
+        }
+      },
+      "ReleaseCuttingDemandUnit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furniture_instance_id",
+          "furniture_definition_id",
+          "pieces"
+        ],
+        "properties": {
+          "furniture_instance_id": {
+            "type": "string",
+            "description": "Exact physical unit identity (never derived from names or geometry)."
+          },
+          "furniture_definition_id": {
+            "type": "string"
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReleaseCuttingDemandPiece"
+            }
+          }
+        }
+      },
+      "ReleaseCuttingDemandPiece": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "part_id",
+          "description",
+          "quantity",
+          "length_mm",
+          "width_mm",
+          "thickness_mm",
+          "material_id",
+          "grain",
+          "l1",
+          "l2",
+          "w1",
+          "w2"
+        ],
+        "properties": {
+          "part_id": {
+            "type": "string",
+            "description": "Board part identity within the unit definition (occurrence identity = unit + part + sequence)."
+          },
+          "part_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "length_mm": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Finished measure convention (same as the optimizer cut list): edge-band deduction is an optimization input, never pre-applied here."
+          },
+          "width_mm": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "thickness_mm": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Effective board thickness resolved at release time (MaterialBoard.thicknessMm)."
+          },
+          "material_id": {
+            "type": "string",
+            "description": "Frozen material identity; the current catalog only supplies display labels and stock formats."
+          },
+          "edge_band_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grain": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "0 = no grain, 1 = grain (inherited from the resolved material's grain default)."
+          },
+          "l1": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "l2": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "w1": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "w2": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "option_role": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

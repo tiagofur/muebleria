@@ -386,6 +386,8 @@ type Store interface {
 	CreateProductionRelease(ctx context.Context, cmd storage.CreateProductionReleaseCommand) (*storage.ProductionReleaseReadback, error)
 	ListProjectProductionReleases(ctx context.Context, projectID string) ([]storage.ProductionReleaseReadback, error)
 	GetProjectProductionRelease(ctx context.Context, projectID, releaseID string) (*storage.ProductionReleaseReadback, error)
+	// #739: frozen cutting demand projection of the exact release.
+	GetProjectProductionReleaseCuttingDemand(ctx context.Context, projectID, releaseID string) (*storage.ReleaseCuttingDemandView, error)
 	// GetLatestProjectProductionRelease resolves the ONE release authority:
 	// the newest canonical release of the project (nil when none exists).
 	GetLatestProjectProductionRelease(ctx context.Context, projectID string) (*domain.ProductionRelease, error)

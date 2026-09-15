@@ -107,3 +107,102 @@ func (s *PostgresStore) GetProductionReleaseManufacturingSnapshot(ctx context.Co
 	}
 	return &snapshot, nil
 }
+
+// #739 — tenant-safe public projection of the private snapshot: WHAT must be
+// manufactured (board cutting demand per exact physical unit), never the
+// routing program, evaluated parameters or costs. Engineering preparation
+// (blade, trims, board formats) is intentionally absent: it is an explicit
+// consumer input, not frozen release content.
+type ReleaseCuttingDemandView struct {
+	ReleaseID                string
+	ReleaseNumber            int
+	DesignRevisionID         string
+	DesignRevisionNumber     int
+	ManufacturingFingerprint string
+	SchemaVersion            int
+	Units                    []ReleaseCuttingDemandUnitView
+}
+
+type ReleaseCuttingDemandUnitView struct {
+	FurnitureInstanceID   string
+	FurnitureDefinitionID string
+	Pieces                []ReleaseCuttingDemandPieceView
+}
+
+type ReleaseCuttingDemandPieceView struct {
+	PartID       string
+	PartCode     string
+	Description  string
+	Quantity     int
+	LengthMm     int
+	WidthMm      int
+	ThicknessMm  int
+	MaterialID   string
+	EdgeBandID   string
+	Grain        int
+	L1, L2       int
+	W1, W2       int
+	OptionRole   string
+}
+
+// GetProjectProductionReleaseCuttingDemand projects the frozen snapshot's
+// board parts into the engineering cutting demand. It never resolves against
+// the current catalog: material identity, dimensions, effective thickness,
+// grain and edges come exclusively from the frozen release content.
+func (s *PostgresStore) GetProjectProductionReleaseCuttingDemand(ctx context.Context, projectID, releaseID string) (*ReleaseCuttingDemandView, error) {
+	snapshot, err := s.GetProductionReleaseManufacturingSnapshot(ctx, projectID, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	view := &ReleaseCuttingDemandView{
+		ReleaseID:                snapshot.Release.ID,
+		ReleaseNumber:            snapshot.Release.ReleaseNumber,
+		DesignRevisionID:         snapshot.Release.DesignRevisionID,
+		DesignRevisionNumber:     snapshot.Release.DesignRevisionNumber,
+		ManufacturingFingerprint: snapshot.Release.ManufacturingFingerprint,
+		SchemaVersion:            snapshot.SchemaVersion,
+		Units:                    make([]ReleaseCuttingDemandUnitView, 0, len(snapshot.Units)),
+	}
+	for _, unit := range snapshot.Units {
+		unitView := ReleaseCuttingDemandUnitView{
+			FurnitureInstanceID:   unit.Resolved.FurnitureInstanceID,
+			FurnitureDefinitionID: unit.Resolved.FurnitureDefinitionID,
+		}
+		for _, part := range unit.Resolved.BOM.BoardParts {
+			if part.Quantity <= 0 {
+				continue
+			}
+			piece := ReleaseCuttingDemandPieceView{
+				PartID:       part.ID,
+				PartCode:     part.Code,
+				Description:  part.Description,
+				Quantity:     part.Quantity,
+				LengthMm:     part.LengthMm,
+				WidthMm:      part.WidthMm,
+				ThicknessMm:  part.ThicknessMm,
+				MaterialID:   part.MaterialID,
+				EdgeBandID:   part.EdgeBandID,
+				Grain:        int(part.Grain),
+				OptionRole:   part.OptionRole,
+			}
+			for _, edge := range part.Edges {
+				if !edge.Enabled {
+					continue
+				}
+				switch edge.Side {
+				case "L1":
+					piece.L1 = 1
+				case "L2":
+					piece.L2 = 1
+				case "W1":
+					piece.W1 = 1
+				case "W2":
+					piece.W2 = 1
+				}
+			}
+			unitView.Pieces = append(unitView.Pieces, piece)
+		}
+		view.Units = append(view.Units, unitView)
+	}
+	return view, nil
+}
