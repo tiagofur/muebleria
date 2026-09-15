@@ -210,14 +210,47 @@ describe('#738 projectProcessStage — canonical release', () => {
   });
 
   it('accepted + P1 without engineering evidence does NOT skip to almacen', () => {
-    // P existence must not be interpreted as "engineering already sent".
+    // P existence must not be interpreted as "engineering already sent":
+    // no release-scoped material evidence ⇒ honest Ingeniería.
     expect(
       projectProcessStage(
         makeProject({ resolvedProductionRelease: canonicalRelease() }),
       ),
     ).toBe('ingenieria');
-    // Even a legacy materials stamp does not turn P into production work —
-    // material authorization for a release is durable evidence (#740).
+  });
+
+  it('explicit release-scoped material evidence advances a canonical obra', () => {
+    // Frozen requirements derived from the exact release = Almacén work
+    // started (someone ran the release-scoped derive command).
+    const derived = (extra: Partial<Project> = {}): Project =>
+      makeProject({
+        status: 'draft',
+        resolvedProductionRelease: canonicalRelease(),
+        materialPlanning: {
+          id: 'mp-1',
+          projectId: 'p1',
+          requirements: {
+            releaseId: 'rel-1',
+            bomFingerprint: 'sha256-' + 'a'.repeat(64),
+            derivedAt: '2026-09-10T10:00:00Z',
+            derivedBy: 'almacen1',
+            lines: [],
+          },
+          reservations: [],
+        } as Project['materialPlanning'],
+        ...extra,
+      });
+    expect(projectProcessStage(derived())).toBe('almacen');
+    // The audited material authorization stamp (written by the
+    // release-scoped /materials/release command) completes the physical
+    // passage through Almacén.
+    expect(
+      projectProcessStage(derived({ materialsRelease: RELEASE })),
+    ).toBe('produccion');
+    // A materials stamp WITHOUT derived requirements is not release-scoped
+    // material evidence — a legacy per-project stamp proves nothing about
+    // THIS release (the requirements snapshot is the release-correlated
+    // anchor the server controls).
     expect(
       projectProcessStage(
         makeProject({

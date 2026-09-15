@@ -78,16 +78,22 @@ workspace consumen:
 ```text
 ventas       = cancelada (cancelledAt), o sin release canónico y
                (draft/quoted, o accepted/produced sólo pre-DT/local)
-ingenieria   = release canónico presente (cualquiera sea Project.status),
+ingenieria   = release canónico presente sin evidencia material
+               release-correlacionada (cualquiera sea Project.status),
                o accepted/produced legacy sin sentToProductionAt
-almacen      = legacy: sentToProductionAt sin materialsRelease
-produccion   = legacy: materialsRelease presente
+almacen      = canónico: requerimientos congelados derivados del release
+               exacto; legacy: sentToProductionAt sin materialsRelease
+produccion   = canónico: derivación + autorización de materiales
+               release-scoped (stamp auditado); legacy: materialsRelease
 ```
 
 - Un `ProductionRelease` canónico habilita la **preparación** de Ingeniería;
-  no la completa, no libera materiales ni inicia fabricación. La obra
-  permanece en `ingenieria` hasta que exista evidencia durable de
-  finalización ligada al release (#740).
+  por sí solo no la completa, no libera materiales ni inicia fabricación.
+  Sólo la evidencia material release-correlacionada avanza la obra: el
+  snapshot de requerimientos (que el servidor sólo crea con el id exacto del
+  release) y la autorización release-scoped que escribe el stamp en la misma
+  transacción. Un stamp legacy sin demanda congelada derivada no prueba nada
+  de ese release. La finalización durable de Ingeniería por release es #740.
 - `sentToProduction` sólo refleja el handshake legacy OC-022
   (`engineeringLog.sentToProductionAt`); "existe P" ya no se interpreta
   como envío ya realizado.

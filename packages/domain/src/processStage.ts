@@ -60,10 +60,14 @@ export function sentToProduction(project: Project): boolean {
  *    queryable; queues exclude it).
  * 2. A canonical ProductionRelease puts the obra in `ingenieria` regardless
  *    of the legacy commercial stamp on Project.status: the release enables
- *    engineering preparation. It does NOT complete engineering, authorize
- *    materials or start fabrication — legacy handshake/materials stamps are
- *    per-project evidence with no correlation to the release, so they never
- *    advance a canonical obra past `ingenieria` (durable evidence is #740).
+ *    engineering preparation. P BY ITSELF neither completes engineering,
+ *    authorizes materials nor starts fabrication — only EXPLICIT
+ *    release-scoped material evidence advances a canonical obra past
+ *    `ingenieria`: frozen requirements derived from the exact release
+ *    (Almacén work started → `almacen`) and the audited material
+ *    authorization stamp (`materialsRelease` → `produccion`). Durable
+ *    per-release engineering completion is #740; a legacy per-project
+ *    handshake log is never that evidence.
  * 3. Modern Digital Thread projects (positively `hasDigitalThreadContext`)
  *    with a residual accepted/produced stamp and NO release fail closed:
  *    commercial acceptance never substitutes a release (#642/#673/#697).
@@ -75,6 +79,16 @@ export function sentToProduction(project: Project): boolean {
 export function projectProcessStage(project: Project): ProjectProcessStage {
   if (project.cancelledAt) return 'ventas';
   if (releaseAuthorityOf(project)?.source === 'canonical') {
+    // Only release-correlated material evidence advances the obra: the
+    // requirements snapshot can ONLY be derived through the release-scoped
+    // command (the server rejects an implicit-latest derive), and the
+    // release-scoped authorization writes the stamp on top of it. A bare
+    // legacy stamp without derived frozen demand proves nothing about THIS
+    // release.
+    if (project.materialsRelease && project.materialPlanning?.requirements) {
+      return 'produccion';
+    }
+    if (project.materialPlanning?.requirements) return 'almacen';
     return 'ingenieria';
   }
   if (project.hasDigitalThreadContext === true) return 'ventas';
