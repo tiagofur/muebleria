@@ -339,6 +339,105 @@ func TestDeriveCanonicalPartExecutionsFromFrozenRouting(t *testing.T) {
 	}
 }
 
+// TestDeriveReleaseRoutingProgram_RepeatedStructureAndAgregadoComponents ensures
+// that modules with duplicate structure components (e.g. top and bottom panels)
+// and sibling agregados (e.g. multiple doors with distinct instance IDs)
+// produce unique, matching part IDs in both BOM and AuthoringResolve, allowing
+// DeriveReleaseRoutingProgram to freeze routing without duplicate part ID errors.
+func TestDeriveReleaseRoutingProgram_RepeatedStructureAndAgregadoComponents(t *testing.T) {
+	_, catalog := releaseUnitFixture(t)
+
+	// Structure with two distinct entries pointing to the same panel component (top and bottom)
+	panelComp := catalog.Components[0]
+	catalog.Structures[0].Components = []domain.ComponentInstance{
+		{ComponentID: panelComp.ID, Quantity: 1},
+		{ComponentID: panelComp.ID, Quantity: 1},
+	}
+
+	// Agregado definition with a door component
+	doorComp := domain.Component{
+		ID: "comp-door", Code: "DOOR", Name: "Puerta", Placement: domain.PlacementPuerta,
+		GeometryKind: "rectangular_board", ThicknessMm: 18, OptionRoles: []string{"FRENTES"},
+		LengthFormula: "PH", WidthFormula: "PW", Active: true,
+	}
+	catalog.Components = append(catalog.Components, doorComp)
+
+	doorAgregado := domain.Agregado{
+		ID: "agr-door-def", Code: "AGR-DOOR", Name: "Agregado Puerta",
+		Components: []domain.ComponentInstance{{ComponentID: doorComp.ID, Quantity: 1}},
+		Active:     true,
+	}
+	catalog.Agregados = append(catalog.Agregados, doorAgregado)
+
+	// Module has 2 sibling instances of the same agregado with distinct instance IDs
+	module := catalog.Modules[0]
+	module.Components = nil
+	module.ParameterDefinitions = nil
+	module.Agregados = []domain.ModuleAgregadoInstance{
+		{
+			ID:         "inst-door-left",
+			AgregadoID: doorAgregado.ID,
+			Name:       "Puerta Izquierda",
+			Quantity:   1,
+			Dimensions: &domain.AgregadoDimensions{WidthFormula: "PW/2"},
+		},
+		{
+			ID:         "inst-door-right",
+			AgregadoID: doorAgregado.ID,
+			Name:       "Puerta Derecha",
+			Quantity:   1,
+			Dimensions: &domain.AgregadoDimensions{WidthFormula: "PW/2"},
+			Position:   &domain.AgregadoPosition{XFormula: "PW/2"},
+		},
+	}
+	catalog.Modules[0] = module
+
+	item := domain.DesignRevisionItem{
+		FurnitureInstanceID:   "unit-kitchen-1",
+		FurnitureDefinitionID: module.ID,
+		Parameters:            map[string]any{"widthMm": 800.0, "heightMm": 720.0, "depthMm": 320.0},
+		MaterialChoices:       map[string]string{"INTERIOR": "mat-body", "FRENTES": "mat-body"},
+	}
+
+	unit, err := ResolveReleaseUnit(item, catalog)
+	if err != nil {
+		t.Fatalf("ResolveReleaseUnit: %v", err)
+	}
+
+	// Verify all BOM board parts have unique IDs
+	seenParts := map[string]int{}
+	for _, p := range unit.BOM.BoardParts {
+		seenParts[p.ID]++
+		if seenParts[p.ID] > 1 {
+			t.Fatalf("duplicate board part ID in BOM: %s", p.ID)
+		}
+	}
+
+	// Check that the two structure panels received distinct copy indexes
+	p0 := "st-" + panelComp.ID + "-copy-0"
+	p1 := "st-" + panelComp.ID + "-copy-1"
+	if seenParts[p0] != 1 || seenParts[p1] != 1 {
+		t.Fatalf("structure panels must have distinct copy indexes (%s, %s), got: %+v", p0, p1, seenParts)
+	}
+
+	// Check that the two agregado doors received instance-tagged prefixes
+	doorLeft := "agr-" + doorAgregado.ID + "-instance-inst-door-left-u0-" + doorComp.ID + "-copy-0"
+	doorRight := "agr-" + doorAgregado.ID + "-instance-inst-door-right-u0-" + doorComp.ID + "-copy-0"
+	if seenParts[doorLeft] != 1 || seenParts[doorRight] != 1 {
+		t.Fatalf("agregado doors must carry distinct instance tags (%s, %s), got: %+v", doorLeft, doorRight, seenParts)
+	}
+
+	// Verify DeriveReleaseRoutingProgram succeeds and produces matching parts
+	program, err := DeriveReleaseRoutingProgram([]domain.DesignRevisionItem{item}, []ResolvedReleaseUnit{*unit}, catalog)
+	if err != nil {
+		t.Fatalf("DeriveReleaseRoutingProgram: %v", err)
+	}
+
+	if len(program.Units) != 1 || len(program.Units[0].Parts) != len(unit.BOM.BoardParts) {
+		t.Fatalf("expected %d parts in routing program, got %d", len(unit.BOM.BoardParts), len(program.Units[0].Parts))
+	}
+}
+
 func unitFrozenParts(t *testing.T, units []ResolvedReleaseUnit, furnitureInstanceID string) []domain.ResolvedBoardPart {
 	t.Helper()
 	for _, unit := range units {

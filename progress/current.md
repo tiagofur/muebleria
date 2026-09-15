@@ -1,3 +1,17 @@
+# Issue #736 — [P0][RELEASE] Desduplicar IDs de piezas en Go BOM resolve para estructura y agregados repetidos
+
+- Approval: prompt del propietario autoriza issue y PR (2026-09-14). Issue #736 creada con labels `status:approved`, `type:bug`, `backend`, `domain`, `high`. Base exacta `origin/main@556804c1`. Rama `fix/736-release-bom-duplicate-part-ids`.
+- Causa raíz confirmada (reproducción sobre DB real del proyecto `44e5c81d-4e28-4f56-b577-7b0464d885ea`): `CreateProductionRelease` fallaba con `ErrReleaseSnapshotResolution` (409 "La revisión no puede resolverse para fabricación"). En `resolve.go` (`expandComponentInstances`), piezas repetidas de estructura recibían siempre `-copy-0`. En agregados, prefijos fijos legacy (`st-agr-` / `mod-agr-`) y loop sobre cantidad generaban IDs duplicados sin las etiquetas de instancia hermanas ni la partición de espacio de `layout.go` / `bom.ts` (#442 / #434). Al validar `ValidateReleaseRoutingProgram`, las piezas colisionaban (`routing part appears more than once`). Además, `evaluateReleaseManufacturingReadiness` no evaluaba `DeriveReleaseRoutingProgram` en preflight.
+- Solución:
+  1. `expandComponentInstances`: `copyCounters := map[string]int{}` asigna copias secuenciales (`copy-0`, `copy-1`, ...).
+  2. `expandComposedModulePartsWithDims`: se unifica la expansión de agregados de estructura y módulo, evaluando dimensiones de sub-espacio, partición en unidades vía `agregadoSubspaceUnits`, etiquetas de instancia estables (`instance-%s-`) y prefijos exactos `agr-%s-%su%d-`.
+  3. `evaluateReleaseManufacturingReadiness`: evalúa `engine.DeriveReleaseRoutingProgram` en el gate para paridad total con release.
+- Regresiones y evidencia:
+  - Unitario `TestDeriveReleaseRoutingProgram_RepeatedStructureAndAgregadoComponents` en `release_routing_test.go` PASS.
+  - Suite de engine completa PASS.
+  - Storage: prueba transaccional sobre PostgreSQL real con Revisión 4 del proyecto real PASS (preflight READY, release creado exitosamente con fingerprint sha256).
+  - `pnpm openapi:check` PASS (0 drift); `git diff --check` limpio.
+
 # Issue #731 — [P0][SU-DEMO] Convergencia automática de posición, sincronización y validación del diseño (Parte 1/2)
 
 - Approval: issue #731 OPEN con `status:approved` y `type:feature`.

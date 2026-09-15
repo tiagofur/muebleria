@@ -368,29 +368,6 @@ func expandComposedModulePartsWithDims(
 	}
 	parts = append(parts, structureParts...)
 
-	// Expand Agregados from Structure. #442: agregado components are filtered
-	// by the effective base mode too (TS resolveComposedModule filters every
-	// agregado unit's components — bom.ts filterComponentInstancesForBaseMode).
-	for _, agrInst := range structure.Agregados {
-		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
-		if !ok {
-			continue
-		}
-		agrParts, err := expandComponentInstances(
-			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
-			catalog, dims, "st-agr-", optionChoices, baseClearance)
-		if err != nil {
-			return nil, formulaDims{}, err
-		}
-		qty := agrInst.Quantity
-		if qty <= 0 {
-			qty = 1
-		}
-		for q := 0; q < qty; q++ {
-			parts = append(parts, agrParts...)
-		}
-	}
-
 	moduleParts, err := expandComponentInstances(
 		filterInstancesForBaseMode(module.Components, catalog, baseMode),
 		catalog, dims, "mod-", optionChoices, baseClearance,
@@ -400,23 +377,100 @@ func expandComposedModulePartsWithDims(
 	}
 	parts = append(parts, moduleParts...)
 
-	// Expand Agregados from Module (same effective-mode filtering as above).
-	for _, agrInst := range module.Agregados {
+	// Agregados from structure and module (#442 / #434 / #54c93646 parity with
+	// layout.go and TS bom.ts): evaluate sub-space box + units and disambiguate
+	// sibling agregado instances with stable instance tags so part identities
+	// match between BOM, layout and machining evidence without colliding on copy-0.
+	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
+	agregadoInstanceCount := map[string]int{}
+	for _, inst := range agregadoInstances {
+		agregadoInstanceCount[inst.AgregadoID]++
+	}
+	seenInstanceIDs := map[string]bool{}
+	for _, agrInst := range agregadoInstances {
 		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
 		if !ok {
 			continue
 		}
-		agrParts, err := expandComponentInstances(
-			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
-			catalog, dims, "mod-agr-", optionChoices, baseClearance)
-		if err != nil {
-			return nil, formulaDims{}, err
+		instanceTag := ""
+		if agregadoInstanceCount[agrInst.AgregadoID] > 1 {
+			instanceID := strings.TrimSpace(agrInst.ID)
+			if instanceID == "" {
+				return nil, formulaDims{}, fmt.Errorf("repeated agregado %s requires a stable instance id", agrInst.AgregadoID)
+			}
+			identityKey := agrInst.AgregadoID + "\x00" + instanceID
+			if seenInstanceIDs[identityKey] {
+				return nil, formulaDims{}, fmt.Errorf("repeated agregado %s has duplicate instance id %s", agrInst.AgregadoID, instanceID)
+			}
+			seenInstanceIDs[identityKey] = true
+			instanceTag = fmt.Sprintf("instance-%s-", instanceID)
 		}
-		qty := agrInst.Quantity
-		if qty <= 0 {
-			qty = 1
+		parentDims := formulaDims{
+			W: dims.W, H: dims.H, D: dims.D,
+			PW: dims.W, PH: dims.H, PD: dims.D,
+			T: 18, B: baseClearance,
 		}
-		for q := 0; q < qty; q++ {
+		spaceW := float64(dims.W)
+		spaceH := float64(dims.H)
+		spaceD := float64(dims.D)
+		if agrInst.Dimensions != nil {
+			if agrInst.Dimensions.WidthFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.WidthFormula, parentDims); err == nil {
+					spaceW = float64(v)
+				}
+			} else if agr.WidthMm > 0 {
+				spaceW = float64(agr.WidthMm)
+			}
+			if agrInst.Dimensions.HeightFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.HeightFormula, parentDims); err == nil {
+					spaceH = float64(v)
+				}
+			} else if agr.HeightMm > 0 {
+				spaceH = float64(agr.HeightMm)
+			}
+			if agrInst.Dimensions.DepthFormula != "" {
+				if v, err := evaluatePartFormula(agrInst.Dimensions.DepthFormula, parentDims); err == nil {
+					spaceD = float64(v)
+				}
+			} else if agr.DepthMm > 0 {
+				spaceD = float64(agr.DepthMm)
+			}
+		} else {
+			if agr.WidthMm > 0 {
+				spaceW = float64(agr.WidthMm)
+			}
+			if agr.HeightMm > 0 {
+				spaceH = float64(agr.HeightMm)
+			}
+			if agr.DepthMm > 0 {
+				spaceD = float64(agr.DepthMm)
+			}
+		}
+
+		quantity := agrInst.Quantity
+		if quantity <= 0 {
+			quantity = 1
+		}
+		units := agregadoSubspaceUnits(quantity, spaceW, spaceH, spaceD, 0, 0, 0, agrInst.LayoutDirection, agrInst.GapMm)
+		for _, unit := range units {
+			unitDims := formulaDims{
+				W:  int(math.Round(unit.w)),
+				H:  int(math.Round(unit.h)),
+				D:  int(math.Round(unit.d)),
+				PW: int(math.Round(unit.w)),
+				PH: int(math.Round(unit.h)),
+				PD: int(math.Round(unit.d)),
+				T:  18,
+				B:  baseClearance,
+			}
+			idPrefix := fmt.Sprintf("agr-%s-%su%d-", agrInst.AgregadoID, instanceTag, unit.index)
+			agrParts, err := expandComponentInstances(
+				filterInstancesForBaseMode(agr.Components, catalog, baseMode),
+				catalog, unitDims, idPrefix, optionChoices, baseClearance,
+			)
+			if err != nil {
+				return nil, formulaDims{}, err
+			}
 			parts = append(parts, agrParts...)
 		}
 	}
@@ -475,6 +529,7 @@ func expandComponentInstances(
 	baseClearance int,
 ) ([]domain.BoardPart, error) {
 	parts := make([]domain.BoardPart, 0)
+	copyCounters := map[string]int{}
 	for _, inst := range instances {
 		comp, ok := findComponent(catalog, inst.ComponentID)
 		if !ok {
@@ -543,8 +598,10 @@ func expandComponentInstances(
 		}
 
 		for i := 0; i < inst.Quantity; i++ {
+			copyIndex := copyCounters[comp.ID]
+			copyCounters[comp.ID] = copyIndex + 1
 			parts = append(parts, domain.BoardPart{
-				ID:          fmt.Sprintf("%s%s-copy-%d", idPrefix, comp.ID, i),
+				ID:          fmt.Sprintf("%s%s-copy-%d", idPrefix, comp.ID, copyIndex),
 				Description: comp.Name,
 				Quantity:    1,
 				LengthMm:    lengthMm,

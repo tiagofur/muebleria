@@ -271,6 +271,10 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
 			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
 	}
+	if _, err := engine.DeriveReleaseRoutingProgram(items, collection.Units, catalog); err != nil {
+		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
+			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
+	}
 	return &releaseGateOutcome{items: items, preflight: preflight, catalog: catalog, collection: collection}, nil
 }
 
