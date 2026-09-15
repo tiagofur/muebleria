@@ -799,9 +799,21 @@ func mustResolveModuleLayout(t *testing.T, w *hwAssetWorld) string {
 			// here is a fixture bug, not an expected path.
 			return err
 		}
+		// Visual asset bindings are layout/BOM neutral (visual ≠ manufacturing).
+		// Strip visual representation metadata to assert manufacturing layout identity.
+		manufacturingHw := make([]engine.LayoutHardware, len(layout.Hardware))
+		for i, h := range layout.Hardware {
+			h.AssetID = ""
+			h.AssetRevisionID = ""
+			h.SHA256 = ""
+			h.ExpectedBytes = 0
+			h.Representation = ""
+			h.ValidationState = ""
+			manufacturingHw[i] = h
+		}
 		encoded, err := json.Marshal(map[string]any{
 			"components": layout.Components,
-			"hardware":   layout.Hardware,
+			"hardware":   manufacturingHw,
 		})
 		if err != nil {
 			return err
