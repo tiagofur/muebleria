@@ -6,6 +6,7 @@ require 'stringio'
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/logging'
 require_relative '../../src/granete_for_sketchup/assets/hardware_asset_cache'
+require_relative '../../src/granete_for_sketchup/assets/hardware_asset_grant_manager'
 require_relative '../../src/granete_for_sketchup/assets/hardware_asset_downloader'
 
 class HardwareAssetDownloaderTest < Minitest::Test

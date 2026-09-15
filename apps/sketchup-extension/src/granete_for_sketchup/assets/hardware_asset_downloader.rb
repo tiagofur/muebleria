@@ -2,7 +2,6 @@
 
 require 'net/http' # rubocop:disable SketchupPerformance/OpenSSL
 require 'uri'
-require_relative 'hardware_asset_grant_manager'
 
 module Granete
   module SketchUpExtension
