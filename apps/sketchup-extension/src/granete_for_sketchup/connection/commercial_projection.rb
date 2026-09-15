@@ -293,9 +293,12 @@ module Granete
             auth = @auth_provider.authorization_header
             headers['Authorization'] = auth if auth
             path = "/projects/#{project_id}/designs/#{design_id}/commercial-projection"
-            response = @transport.request('method' => 'GET',
-                                          'path' => path,
-                                          'headers' => headers)
+            # Braces are load-bearing: a braceless trailing hash is parsed as
+            # keywords against HttpAdapter#request(payload, authorization_header:)
+            # and the request payload never reaches the adapter.
+            response = @transport.request({ 'method' => 'GET',
+                                            'path' => path,
+                                            'headers' => headers })
             status = response['status'].to_i
             if status == 200
               projection = Contract.parse!(response['body'])

@@ -1,3 +1,12 @@
+# Issue #732 — [P0][SU-COMM] Error en llamada HTTP de proyección comercial por kwargs de Ruby 3
+
+- Approval: issue #732 OPEN con `status:approved` y `type:bug`.
+- Base exacta: `origin/main@c8673d817584be8416109c062001e99d7d071829`. Rama: `fix/732-sketchup-commercial-projection-kwargs`.
+- Causa raíz: `Granete::SketchUpExtension::Connection::CommercialProjection::Service#fetch_projection` llamaba a `@transport.request` con un trailing hash sin llaves. Con la firma de `HttpAdapter#request(payload, authorization_header: nil)`, Ruby 3 interpreta los argumentos como keyword arguments y falla con `ArgumentError: wrong number of arguments (given 0, expected 1)`, degradando silenciosamente a `unconfirmed` en runtime.
+- Fix: envolver el hash con llaves explícitas `{ ... }` y sincronizar el mock de tests en `test/unit/commercial_projection_test.rb` con la firma real (`authorization_header: nil`).
+- Evidencia: tests unitarios en verde (20 runs, 46 assertions, 0 failures), rubocop sin ofensas.
+- Delivery: complete.
+
 # Issue #729 — [P0][DEMO-UX] SketchUp como única entrada visible de diseño para la demo
 
 - Approval: issue #729 OPEN con `status:approved` aplicada por el propietario
