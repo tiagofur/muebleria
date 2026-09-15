@@ -108,6 +108,7 @@ import {
    roleCanAccessEmbarquesNav,
   filterProjectsByProcessStage,
   projectAllowsProductionAccess,
+  releaseAuthorityOf,
   suggestDuplicateCode,
   transitionProjectStatus,
   type WarehouseProjectInput,
@@ -219,6 +220,10 @@ import {
   createApiHardwareAssetService,
 } from '@granete/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
+import {
+  engineeringReleaseQueryKey,
+  useEngineeringReleaseContext,
+} from './engineeringReleaseContext';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
 import { buildStockCatalog } from './derivations/stockCatalog';
@@ -565,6 +570,8 @@ export interface ShellViewCtx {
   readonly routeComponentEditId: string | null;
   readonly routeComponentId: string | null;
   readonly routeEngineeringProjectId: string | null;
+  /** #738: exact ProductionRelease pinned in the URL (`?release=`). */
+  readonly routeEngineeringReleaseId: string | null;
   readonly routeEntityId: string | null;
   readonly routeModuleEditId: string | null;
   readonly routeModuleId: string | null;
@@ -624,6 +631,8 @@ export interface ShellViewCtx {
   readonly updateStructure: (id: string, draft: StructureDraft) => void;
   readonly uploadCatalogImage: (file: File) => Promise<string>;
   readonly useProductionWorkspace: boolean;
+  /** #738: whether this session can open the Engineering workspace. */
+  readonly useEngineeringWorkspace: boolean;
   readonly warehouseProjects: readonly WarehouseProjectInput[];
   readonly warrantyTickets: readonly WarrantyTicket[] | null;
   readonly workshopAnalytics: WorkshopAnalytics | undefined;
@@ -837,6 +846,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     routeComponentEditId,
     routeComponentId,
     routeEngineeringProjectId,
+    routeEngineeringReleaseId,
     routeEntityId,
     routeModuleEditId,
     routeModuleId,
@@ -894,6 +904,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     updateStructure,
     uploadCatalogImage,
     useProductionWorkspace,
+    useEngineeringWorkspace,
     warehouseProjects,
     warrantyTickets,
     workshopAnalytics,
@@ -936,6 +947,45 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     () => projectReconciliationFromPath(location.pathname, location.search),
     [location.pathname, location.search],
   );
+
+  // #738 — the Engineering workspace route pins its exact ProductionRelease
+  // context (`?release=`). Entering a canonical obra without an explicit
+  // release pins the server-resolved authority in the URL ONCE (replace, not
+  // push): the exact context survives reloads and a newer release never
+  // retargets an open screen silently.
+  useEffect(() => {
+    if (navId !== 'engineering' || !routeEngineeringProjectId || routeEngineeringReleaseId) {
+      return;
+    }
+    const project = projects.find((p) => p.id === routeEngineeringProjectId);
+    const authority = project ? releaseAuthorityOf(project) : undefined;
+    if (authority?.source !== 'canonical') return;
+    const target = engineeringProjectPath(routeEngineeringProjectId, {
+      releaseId: authority.releaseId,
+    });
+    if (location.pathname + location.search !== target) {
+      navigate(target, { replace: true });
+    }
+  }, [
+    navId,
+    routeEngineeringProjectId,
+    routeEngineeringReleaseId,
+    projects,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
+  const engineeringReleaseContext = useEngineeringReleaseContext({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    projectId: routeEngineeringProjectId,
+    releaseId: routeEngineeringReleaseId,
+    queryKey: engineeringReleaseQueryKey(
+      sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+      routeEngineeringProjectId ?? 'no-project',
+      routeEngineeringReleaseId ?? 'no-release',
+    ),
+  });
   const {
     authority: quoteAuthority,
     revisions: quoteRevisions,
@@ -1293,6 +1343,42 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             />
           );
         }
+        // #738 — an explicitly pinned release that cannot be verified
+        // (unknown, foreign to this obra or not authorized for this session)
+        // fails SAFE: never fall back to an implicit "latest" context.
+        if (routeEngineeringReleaseId && engineeringReleaseContext.kind === 'error') {
+          return (
+            <EmptyState
+              icon={FileQuestion}
+              title="Liberación no disponible"
+              description={engineeringReleaseContext.message}
+              actionLabel="Reintentar"
+              secondaryActionLabel="Volver a Ingeniería"
+              onAction={engineeringReleaseContext.retry}
+              onSecondaryAction={() => navigate(pathForNav('engineering'))}
+            />
+          );
+        }
+        // #738 — pinned release context for the workspace. When ready it is
+        // the EXACT liberation this screen was opened with (the URL param,
+        // pinned from the server authority on general entry); the data tabs
+        // below keep reading the live editable state and are labeled as a
+        // working view, never as frozen release content (#739 owns that).
+        const engReleaseContext =
+          engineeringReleaseContext.kind === 'ready'
+            ? {
+                state: 'ready' as const,
+                view: {
+                  releaseNumber: engineeringReleaseContext.release.release_number,
+                  designRevisionNumber:
+                    engineeringReleaseContext.release.design_revision_number,
+                  quoteLabel: engineeringReleaseContext.quoteLabel,
+                  releasedAt: engineeringReleaseContext.release.released_at,
+                },
+              }
+            : engineeringReleaseContext.kind === 'loading'
+              ? { state: 'loading' as const }
+              : undefined;
         const engModules = modules.filter((m) =>
           engProject.items.some((item) => item.moduleId === m.id),
         );
@@ -1341,6 +1427,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         return (
           <EngineeringWorkspace
             project={engProject}
+            releaseContext={engReleaseContext}
             modules={engModules}
             catalog={catalog}
             catalog3d={
@@ -2136,6 +2223,24 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                     }
                   : undefined
               }
+              onOpenInEngineering={
+                useEngineeringWorkspace
+                  ? (projectId, releaseId) => {
+                      // #738: open Engineering pinned to the release the
+                      // command returned — refresh the server read model so
+                      // the workspace resolves the exact context without a
+                      // manual reload.
+                      void refreshWorkspace().finally(() => {
+                        const target = engineeringProjectPath(projectId, {
+                          releaseId,
+                        });
+                        if (location.pathname + location.search !== target) {
+                          navigate(target);
+                        }
+                      });
+                    }
+                  : undefined
+              }
               canRequote={canRequoteDesignChanges}
               canApprove={canApproveDesignRevisionsHint}
               canRelease={canReleaseProductionHint}
@@ -2274,6 +2379,22 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                   void refreshWorkspace().finally(() => {
                     const target = productionOrderPath(projectId);
                     if (location.pathname !== target) navigate(target);
+                  });
+                }
+              : undefined
+          }
+          onOpenInEngineering={
+            useEngineeringWorkspace
+              ? (projectId, releaseId) => {
+                  // #738: open Engineering pinned to the obra's exact
+                  // release (the detail menu passes the resolved authority).
+                  void refreshWorkspace().finally(() => {
+                    const target = engineeringProjectPath(projectId, {
+                      releaseId,
+                    });
+                    if (location.pathname + location.search !== target) {
+                      navigate(target);
+                    }
                   });
                 }
               : undefined

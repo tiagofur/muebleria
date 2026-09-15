@@ -4,6 +4,7 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   ChevronRight,
+  ClipboardCheck,
   Factory,
   FileText,
   GitCompareArrows,
@@ -146,6 +147,12 @@ export interface ProjectReconciliationScreenProps {
    * factory order workspace. Wired only when the shell exposes it.
    */
   readonly onOpenInProduction?: (projectId: string) => void;
+  /**
+   * #738 — contextual MAIN exit after a release exists: opens Engineering
+   * with the EXACT release the command returned (preparation available; the
+   * release does not complete engineering by itself).
+   */
+  readonly onOpenInEngineering?: (projectId: string, releaseId: string) => void;
   /** Role hints (server remains the authority for every command). */
   readonly canRequote?: boolean;
   readonly canApprove?: boolean;
@@ -172,6 +179,7 @@ export function ProjectReconciliationScreen({
   onOpenDesigns,
   onOpenFurnitureMatrix,
   onOpenInProduction,
+  onOpenInEngineering,
   canRequote = false,
   canApprove = false,
   canRelease = false,
@@ -1217,7 +1225,37 @@ export function ProjectReconciliationScreen({
                     + R{releaseResult.release.design_revision_number} · Contexto de fabricación:{' '}
                     {releaseResult.release.manufacturing_fingerprint.slice(0, 19)}…
                   </span>
-                  {onOpenInProduction ? (
+                  {/* #738 — the next step after liberating is preparing the
+                      released content in Engineering, pinned to the release
+                      the command just returned. The production hub stays one
+                      click away as a read/execution context — a different
+                      intention, not the highlighted next action. */}
+                  {onOpenInEngineering ? (
+                    <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        data-testid="release-success-open-engineering"
+                        onClick={() =>
+                          onOpenInEngineering(projectId, releaseResult.release.id)
+                        }
+                      >
+                        <ClipboardCheck size={14} />
+                        <span>Abrir Ingeniería</span>
+                      </button>
+                      {onOpenInProduction ? (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          data-testid="release-success-open-production"
+                          onClick={() => onOpenInProduction(projectId)}
+                        >
+                          <Factory size={14} />
+                          <span>Abrir en Producción</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : onOpenInProduction ? (
                     <div style={{ marginTop: '8px' }}>
                       <button
                         type="button"

@@ -27,6 +27,8 @@ import {
   projectPath,
   structureEditIdFromPath,
   structureEditPath,
+  engineeringProjectPath,
+  engineeringProjectFromPath,
   NEW_ENTITY_ID,
 } from './routes';
 
@@ -431,5 +433,44 @@ describe('project reconciliation route (WEB-DT-3 / #502)', () => {
       designId: null,
       designRevisionId: null,
     });
+  });
+});
+
+describe('#738 — engineering project route with exact release pin', () => {
+  const id = '11111111-2222-4333-8444-555555555555';
+  const releaseId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+
+  it('builds the workspace path without a pin by default', () => {
+    expect(engineeringProjectPath(id)).toBe(`/engineering/${id}`);
+  });
+
+  it('carries the exact release as a query param', () => {
+    expect(engineeringProjectPath(id, { releaseId })).toBe(
+      `/engineering/${id}?release=${releaseId}`,
+    );
+    expect(engineeringProjectPath(id, { releaseId: null })).toBe(`/engineering/${id}`);
+  });
+
+  it('parses the project and release from a pinned URL', () => {
+    expect(engineeringProjectFromPath(`/engineering/${id}`, `?release=${releaseId}`)).toEqual({
+      projectId: id,
+      releaseId,
+    });
+  });
+
+  it('an unpinned URL resolves to no release (never an implicit latest)', () => {
+    expect(engineeringProjectFromPath(`/engineering/${id}`)).toEqual({
+      projectId: id,
+      releaseId: null,
+    });
+    // Empty param normalizes to null too.
+    expect(engineeringProjectFromPath(`/engineering/${id}`, '?release=')).toEqual({
+      projectId: id,
+      releaseId: null,
+    });
+  });
+
+  it('the queue path stays a non-workspace route', () => {
+    expect(engineeringProjectFromPath('/engineering')).toBeNull();
   });
 });

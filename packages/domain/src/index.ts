@@ -646,14 +646,17 @@ export {
 
 export {
   engineeringStatus,
+  engineeringEntryStatus,
   canSendToProduction,
   createEngineeringLog,
   recordGeneration,
   recordSentToProduction,
   computeEngineeringDashboardStats,
   ENGINEERING_STATUS_LABELS_ES,
+  ENGINEERING_ENTRY_STATUS_LABELS_ES,
   type EngineeringLog,
   type EngineeringStatus,
+  type EngineeringEntryStatus,
   type EngineeringDashboardProjectMetrics,
   type EngineerWorkloadSummary,
   type EngineeringDashboardStats,

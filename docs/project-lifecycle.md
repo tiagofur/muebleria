@@ -37,14 +37,39 @@ Actualmente el paso principal entre áreas se deriva mediante:
 - `ProjectItem.floorStatus` + `floorEvents` para ejecución física legacy;
 - `cancelledAt` y otros stamps auxiliares.
 
-`packages/domain/src/processStage.ts` implementa hoy:
+`packages/domain/src/processStage.ts` implementa hoy (#738 — la liberación
+canónica es la entrada a Ingeniería, no una etapa física):
 
 ```text
-ventas       = draft/quoted
-ingenieria   = accepted/produced sin sentToProductionAt
-almacen      = sentToProductionAt sin materialsRelease
-produccion   = materialsRelease presente
+ventas       = cancelada (cancelledAt), o sin release canónico y
+               (draft/quoted, o accepted/produced sólo pre-DT/local)
+ingenieria   = release canónico presente (cualquiera sea Project.status),
+               o accepted/produced legacy sin sentToProductionAt
+almacen      = legacy: sentToProductionAt sin materialsRelease
+produccion   = legacy: materialsRelease presente
 ```
+
+Reglas #738 vigentes en esa proyección compartida:
+
+- Un `ProductionRelease` canónico habilita la **preparación** de Ingeniería;
+  no la completa, no libera materiales ni inicia fabricación. La obra
+  permanece en `ingenieria` hasta que exista evidencia durable de
+  finalización ligada al release (#740).
+- `sentToProduction` sólo refleja el handshake legacy OC-022
+  (`engineeringLog.sentToProductionAt`); "existe P" ya no se interpreta
+  como envío ya realizado.
+- `engineeringEntryStatus` proyecta el estado honesto de preparación para
+  las superficies de Ingeniería: `pending` (sin evidencia), los estados del
+  log legacy, o `unverified` (release canónico + log legacy no
+  correlacionado — evidencia que no prueba la finalización de esa
+  liberación y no se borra).
+- Proyectos modernos (`hasDigitalThreadContext === true`) con stamp residual
+  accepted/produced y sin release fallan cerrado. La ausencia de proyección
+  (`undefined`) es modo local, no evidencia pre-DT: la cadena legacy se
+  conserva para el modo local/pre-DT positivamente identificado (`false`).
+- El acceso de consulta/operación al hub de Producción es otra regla
+  (`projectAllowsProductionAccess`, #697): consultar el hub no es lo mismo
+  que haber completado Ingeniería.
 
 Esto es la **verdad ejecutable actual**, aunque sea un modelo transitorio.
 

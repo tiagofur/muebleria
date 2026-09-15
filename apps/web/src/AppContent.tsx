@@ -105,6 +105,7 @@ import {
   ITEM_FLOOR_STATUS_LABELS_ES,
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
+  roleCanAccessEngineeringNav,
   roleIsScopedBySector,
   roleCanAccessFabricNav,
   roleCanAccessShippingNav,
@@ -1129,6 +1130,9 @@ export function AppContent({
   /** PROD-0.1: factory workspace nav (export roles). */
   const useProductionWorkspace =
     session === 'auth' && anyRole(actorRoles, roleCanAccessProductionNav);
+  /** #738: Engineering workspace nav (admin/ingeniero; guest = full tool). */
+  const useEngineeringWorkspace =
+    session === 'guest' || anyRole(actorRoles, roleCanAccessEngineeringNav);
 
   useEffect(() => {
     if (!canAssignOwner || !authToken) {
@@ -1267,8 +1271,12 @@ export function AppContent({
     navId === 'shipments' ? shipmentDetailFromPath(location.pathname) : null;
   const routeInstallationProjectId =
     navId === 'installations' ? installationDetailFromPath(location.pathname) : null;
-  const routeEngineeringProjectId =
-    navId === 'engineering' ? engineeringProjectFromPath(location.pathname) : null;
+  const routeEngineeringProject =
+    navId === 'engineering'
+      ? engineeringProjectFromPath(location.pathname, location.search)
+      : null;
+  const routeEngineeringProjectId = routeEngineeringProject?.projectId ?? null;
+  const routeEngineeringReleaseId = routeEngineeringProject?.releaseId ?? null;
   // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
   const routeModuleEditId =
     navId === 'modules' ? moduleEditIdFromPath(location.pathname) : null;
@@ -3485,6 +3493,7 @@ export function AppContent({
     routeComponentEditId,
     routeComponentId,
     routeEngineeringProjectId,
+    routeEngineeringReleaseId,
     routeEntityId,
     routeModuleEditId,
     routeModuleId,
@@ -3543,6 +3552,7 @@ export function AppContent({
     updateStructure,
     uploadCatalogImage,
     useProductionWorkspace,
+    useEngineeringWorkspace,
     warehouseProjects,
     warrantyTickets,
     workshopAnalytics,

@@ -457,6 +457,7 @@ export function renderScreen(props: {
   canMutateQuote?: boolean;
   canAcceptQuote?: boolean;
   onOpenInProduction?: (projectId: string) => void;
+  onOpenInEngineering?: (projectId: string, releaseId: string) => void;
 } = {}): RenderResult & {
   readonly queryClient: QueryClient;
   readonly keys: ReturnType<typeof projectReconciliationQueryKeys>;
@@ -481,6 +482,7 @@ export function renderScreen(props: {
         canMutateQuote={props.canMutateQuote ?? true}
         canAcceptQuote={props.canAcceptQuote ?? true}
         onOpenInProduction={props.onOpenInProduction}
+        onOpenInEngineering={props.onOpenInEngineering}
       />
     </QueryClientProvider>,
   );
@@ -1070,6 +1072,33 @@ describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
     });
     await userEvent.click(screen.getByTestId('release-success-open-production'));
     expect(onOpenInProduction).toHaveBeenCalledWith(PROJECT_ID);
+  });
+
+  it('#738: release success offers Abrir Ingeniería as the main exit with the release the command returned', async () => {
+    const onOpenInEngineering = vi.fn();
+    setupFetchMock();
+    renderScreen({
+      initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_2_ID },
+      onOpenInEngineering,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('open-release-review-btn')).toBeEnabled();
+    });
+    await userEvent.click(screen.getByTestId('open-release-review-btn'));
+    await userEvent.click(screen.getByTestId('submit-release'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('release-success')).toBeVisible();
+    });
+    const engineeringBtn = screen.getByTestId('release-success-open-engineering');
+    // One primary action per context: preparing the release in Engineering.
+    expect(engineeringBtn.className).toContain('btn-primary');
+    await userEvent.click(engineeringBtn);
+    // The exact release returned by the command pins the navigation.
+    expect(onOpenInEngineering).toHaveBeenCalledWith(PROJECT_ID, expect.any(String));
+    const releaseId = onOpenInEngineering.mock.calls[0]![1];
+    expect(releaseId).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
   it('release: gated until approval + review modal + success pins, and blocked preflight surfaces issues', async () => {

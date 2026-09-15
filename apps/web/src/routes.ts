@@ -306,13 +306,28 @@ export function navFromPath(pathname: string): AppNavId | null {
 }
 
 /**
- * Engineering project deep link: `/engineering/:projectId`.
+ * Engineering project deep link: `/engineering/:projectId`. The exact
+ * ProductionRelease context travels as a `release` query param (#738) so a
+ * historical view stays pinned to the liberation the user opened — a newer
+ * release never retargets it silently and a reload keeps the selection.
  */
-export function engineeringProjectPath(projectId: string): string {
-  return `${NAV_PATHS.engineering}/${encodeURIComponent(projectId)}`;
+export interface EngineeringProjectRouteContext {
+  readonly releaseId: string | null;
 }
 
-export function engineeringProjectFromPath(pathname: string): string | null {
+export function engineeringProjectPath(
+  projectId: string,
+  context?: EngineeringProjectRouteContext | null,
+): string {
+  const base = `${NAV_PATHS.engineering}/${encodeURIComponent(projectId)}`;
+  if (!context?.releaseId) return base;
+  return `${base}?release=${encodeURIComponent(context.releaseId)}`;
+}
+
+export function engineeringProjectFromPath(
+  pathname: string,
+  search = '',
+): { projectId: string; releaseId: string | null } | null {
   const base = NAV_PATHS.engineering;
   const normalized = normalizePathname(pathname);
   if (normalized === base) return null;
@@ -326,7 +341,12 @@ export function engineeringProjectFromPath(pathname: string): string | null {
     decoded = rest;
   }
   if (decoded.includes('/')) return null;
-  return decoded;
+  const params = new URLSearchParams(search);
+  const release = params.get('release');
+  return {
+    projectId: decoded,
+    releaseId: release && release.length > 0 ? release : null,
+  };
 }
 
 /**

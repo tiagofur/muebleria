@@ -97,8 +97,14 @@ describe('releaseAuthorityOf (#577)', () => {
   });
 });
 
-describe('processStage — canonical release unlocks production (#577)', () => {
-  it('a canonical release sends the obra past ingeniería without the legacy handshake', () => {
+describe('processStage — canonical release unlocks production (#577, refined by #738)', () => {
+  it('a canonical release ENABLES engineering preparation without inventing the legacy send', () => {
+    // Invariant replaced by #738: this test used to assert "canonical P ⇒
+    // stage almacen + canReleaseMaterials true", conflating the production
+    // ACCESS authority (still true — see projectAllowsProductionAccess below)
+    // with engineering COMPLETION and legacy material evidence. P puts the
+    // obra in the engineering queue (preparation available); it does not
+    // complete engineering nor authorize the legacy materials stamp.
     const project = baseProject({
       resolvedProductionRelease: {
         source: 'canonical',
@@ -107,8 +113,11 @@ describe('processStage — canonical release unlocks production (#577)', () => {
       },
     });
     expect(project.engineeringLog).toBeUndefined(); // no legacy stamp anywhere
-    expect(projectProcessStage(project)).toBe('almacen');
-    expect(canReleaseMaterials(project)).toBe(true);
+    expect(projectProcessStage(project)).toBe('ingenieria');
+    expect(canReleaseMaterials(project)).toBe(false);
+    // The factory workspace itself stays reachable through the release
+    // authority (#697) — query access is a different concept from stage.
+    expect(projectAllowsProductionAccess(project)).toBe(true);
   });
 
   it('legacy-only projects still require the engineering handshake', () => {
