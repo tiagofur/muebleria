@@ -224,6 +224,7 @@ type HardwareVisualAssetBinding struct {
 	// Resolved server-side:
 	Representation HardwareAssetRepresentation `json:"representation,omitempty"`
 	SHA256         string                      `json:"sha256,omitempty"`
+	SizeBytes      int64                       `json:"sizeBytes,omitempty"`
 	// ValidationState of the pinned revision, resolved server-side so every
 	// consumer can distinguish "bytes present" from "host-proven".
 	ValidationState HardwareAssetValidationState `json:"validationState,omitempty"`

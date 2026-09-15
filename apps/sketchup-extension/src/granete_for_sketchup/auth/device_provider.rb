@@ -338,6 +338,11 @@ module Granete
           }
         end
 
+        def current_organization_id
+          payload = decode_session_payload
+          payload && payload['org_id']
+        end
+
         private
 
         def fetch_token(device_secret)

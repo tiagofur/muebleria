@@ -1313,12 +1313,14 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	}
 
 	var assetID, assetRevisionID, sha256, rep, valState string
+	var expectedBytes int64
 	if hw.VisualAsset != nil {
 		assetID = hw.VisualAsset.AssetID
 		assetRevisionID = hw.VisualAsset.AssetRevisionID
 		sha256 = hw.VisualAsset.SHA256
 		rep = string(hw.VisualAsset.Representation)
 		valState = string(hw.VisualAsset.ValidationState)
+		expectedBytes = hw.VisualAsset.SizeBytes
 	}
 
 	// Every placement this engine renders today is authored on a
@@ -1342,6 +1344,7 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		AssetID:                 assetID,
 		AssetRevisionID:         assetRevisionID,
 		SHA256:                  sha256,
+		ExpectedBytes:           expectedBytes,
 		Representation:          rep,
 		ValidationState:         valState,
 	}, true

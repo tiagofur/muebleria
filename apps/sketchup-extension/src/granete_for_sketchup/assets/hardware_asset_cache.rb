@@ -7,42 +7,42 @@ module Granete
   module SketchUpExtension
     module Assets
       # HardwareAssetCache provides an isolated, disk-backed cache for downloaded
-      # hardware .skp files organized by organization, asset ID, revision, and sha256 digest.
+      # hardware .skp files organized strictly by organization, asset ID, revision, and sha256 digest.
       # Cached files are verified against exact size and sha256 before being returned.
+      # All path segments are strictly validated to prevent path traversal attacks, and
+      # un-scoped or foreign access fails closed.
       class HardwareAssetCache
         attr_reader :cache_dir
 
+        VALID_SEGMENT = /\A[a-zA-Z0-9_-]+\z/
+        VALID_SHA = /\A[a-fA-F0-9]{64}\z/
+
         def initialize(cache_dir: nil)
-          @cache_dir = cache_dir || default_cache_dir
+          @cache_dir = File.expand_path(cache_dir || default_cache_dir)
           FileUtils.mkdir_p(@cache_dir) unless File.directory?(@cache_dir)
         end
 
         def path_for(asset_id:, revision_id:, sha256: nil, org_id: nil)
-          org_segment = org_id.to_s.strip.empty? ? '_shared' : org_id.to_s.strip
-          asset_segment = asset_id.to_s.strip
-          revision_segment = revision_id.to_s.strip
-          filename = sha256.to_s.strip.empty? ? 'asset.skp' : "#{sanitize_sha(sha256)}.skp"
+          return nil unless valid_segment?(org_id)
+          return nil unless valid_segment?(asset_id)
+          return nil unless valid_segment?(revision_id)
 
-          File.join(@cache_dir, org_segment, asset_segment, revision_segment, filename)
+          clean_sha = sanitize_sha(sha256)
+          return nil if sha256 && !clean_sha
+
+          filename = clean_sha ? "#{clean_sha}.skp" : 'asset.skp'
+          target = File.expand_path(
+            File.join(@cache_dir, org_id.to_s.strip, asset_id.to_s.strip, revision_id.to_s.strip, filename)
+          )
+          return nil unless target.start_with?("#{@cache_dir}#{File::SEPARATOR}")
+
+          target
         end
 
         def get(asset_id:, revision_id:, sha256: nil, expected_bytes: nil, org_id: nil)
           path = path_for(asset_id: asset_id, revision_id: revision_id, sha256: sha256, org_id: org_id)
-          return nil unless File.file?(path)
-
-          if expected_bytes.is_a?(Numeric) && expected_bytes.positive? && File.size(path) != expected_bytes.to_i
-            FileUtils.rm_f(path)
-            return nil
-          end
-
-          if sha256 && !sha256.to_s.strip.empty?
-            computed_sha = Digest::SHA256.file(path).hexdigest
-            expected_hex = sanitize_sha(sha256)
-            if computed_sha.downcase != expected_hex.downcase
-              FileUtils.rm_f(path)
-              return nil
-            end
-          end
+          return nil unless path && File.file?(path)
+          return nil unless verify_integrity?(path, sha256: sha256, expected_bytes: expected_bytes)
 
           path
         rescue StandardError
@@ -51,31 +51,14 @@ module Granete
 
         def put(asset_id:, revision_id:, data: nil, source_path: nil, sha256: nil, expected_bytes: nil, org_id: nil)
           target_path = path_for(asset_id: asset_id, revision_id: revision_id, sha256: sha256, org_id: org_id)
+          return nil unless target_path
+
           dir = File.dirname(target_path)
           FileUtils.mkdir_p(dir) unless File.directory?(dir)
 
           tmp_path = "#{target_path}.tmp.#{Process.pid}.#{rand(100_000)}"
-          if data
-            File.binwrite(tmp_path, data)
-          elsif source_path && File.file?(source_path)
-            FileUtils.cp(source_path, tmp_path)
-          else
-            return nil
-          end
-
-          if expected_bytes.is_a?(Numeric) && expected_bytes.positive? && File.size(tmp_path) != expected_bytes.to_i
-            FileUtils.rm_f(tmp_path)
-            return nil
-          end
-
-          if sha256 && !sha256.to_s.strip.empty?
-            computed_sha = Digest::SHA256.file(tmp_path).hexdigest
-            expected_hex = sanitize_sha(sha256)
-            if computed_sha.downcase != expected_hex.downcase
-              FileUtils.rm_f(tmp_path)
-              return nil
-            end
-          end
+          return nil unless write_content?(tmp_path, data: data, source_path: source_path)
+          return nil unless verify_integrity?(tmp_path, sha256: sha256, expected_bytes: expected_bytes)
 
           File.rename(tmp_path, target_path)
           target_path
@@ -85,15 +68,60 @@ module Granete
         end
 
         def clear_revision(asset_id:, revision_id:, org_id: nil)
-          org_segment = org_id.to_s.strip.empty? ? '_shared' : org_id.to_s.strip
-          revision_dir = File.join(@cache_dir, org_segment, asset_id.to_s.strip, revision_id.to_s.strip)
+          return unless valid_segment?(org_id) && valid_segment?(asset_id) && valid_segment?(revision_id)
+
+          revision_dir = File.expand_path(
+            File.join(@cache_dir, org_id.to_s.strip, asset_id.to_s.strip, revision_id.to_s.strip)
+          )
+          return unless revision_dir.start_with?("#{@cache_dir}#{File::SEPARATOR}")
+
           FileUtils.rm_rf(revision_dir) if File.directory?(revision_dir)
         end
 
         private
 
+        def write_content?(dest_path, data:, source_path:)
+          if data
+            File.binwrite(dest_path, data)
+            true
+          elsif source_path && File.file?(source_path)
+            FileUtils.cp(source_path, dest_path)
+            true
+          else
+            false
+          end
+        end
+
+        def verify_integrity?(file_path, sha256:, expected_bytes:)
+          if expected_bytes.is_a?(Numeric) && expected_bytes.positive? && File.size(file_path) != expected_bytes.to_i
+            FileUtils.rm_f(file_path)
+            return false
+          end
+
+          if sha256 && !sha256.to_s.strip.empty?
+            computed_sha = Digest::SHA256.file(file_path).hexdigest
+            expected_hex = sanitize_sha(sha256)
+            if !expected_hex || computed_sha.downcase != expected_hex.downcase
+              FileUtils.rm_f(file_path)
+              return false
+            end
+          end
+
+          true
+        end
+
+        def valid_segment?(segment)
+          str = segment.to_s.strip
+          !str.empty? && VALID_SEGMENT.match?(str)
+        end
+
         def sanitize_sha(sha)
-          sha.to_s.strip.sub(/\Asha256-/, '')
+          return nil if sha.nil?
+
+          hex = sha.to_s.strip.sub(/\Asha256-/, '')
+          return nil unless VALID_SHA.match?(hex)
+
+          hex.downcase
         end
 
         def default_cache_dir

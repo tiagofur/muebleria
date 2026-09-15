@@ -33,6 +33,12 @@ class HardwareAssetDownloaderTest < Minitest::Test
   end
 
   class FakeAuth
+    attr_accessor :current_organization_id
+
+    def initialize(org_id: 'org-test')
+      @current_organization_id = org_id
+    end
+
     def configured?
       true
     end
@@ -205,5 +211,108 @@ class HardwareAssetDownloaderTest < Minitest::Test
     )
 
     assert_nil path
+  end
+
+  def test_authorizes_and_downloads_with_snake_case_size_bytes
+    grant_response = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token'
+      }
+    }
+    transport = FakeTransport.new([grant_response])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger,
+      http_fetcher: lambda do |_url|
+        [200, @model_data]
+      end
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-snake',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size
+    )
+
+    refute_nil path
+    assert File.file?(path)
+    assert_equal @model_data, File.binread(path)
+  end
+
+  def test_rejects_non_skp_representation
+    grant_response = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'obj',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token'
+      }
+    }
+    transport = FakeTransport.new([grant_response])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger,
+      http_fetcher: lambda do |_url|
+        [200, @model_data]
+      end
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-obj',
+      revision_id: 'rev-1',
+      sha256: @model_sha
+    )
+
+    assert_nil path
+  end
+
+  def test_fails_closed_when_no_organization_available
+    auth = FakeAuth.new(org_id: nil)
+    auth.current_organization_id = nil
+    transport = FakeTransport.new([])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: auth,
+      cache: @cache,
+      logger: @logger
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-no-org',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      org_id: nil
+    )
+
+    assert_nil path
+    assert_empty transport.requests
+  end
+
+  def test_default_http_fetch_redacts_signed_grant_query_in_error_logs
+    log_sink = StringIO.new
+    logger = Granete::SketchUpExtension::SafeLogger.new(sink: log_sink)
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: FakeTransport.new([]),
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: logger
+    )
+
+    # Calling default_http_fetch on an invalid port/host will raise and trigger log error
+    downloader.send(:default_http_fetch, 'http://127.0.0.1:1/file.skp?grant=SECRET_TOKEN_VALUE')
+    log_output = log_sink.string
+
+    refute_includes log_output, 'SECRET_TOKEN_VALUE'
+    refute_includes log_output, 'grant='
   end
 end

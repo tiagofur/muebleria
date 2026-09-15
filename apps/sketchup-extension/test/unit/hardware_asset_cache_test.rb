@@ -29,15 +29,18 @@ class HardwareAssetCacheTest < Minitest::Test
     assert path.end_with?(expected_suffix)
   end
 
-  def test_path_for_defaults_to_shared_org_when_blank
-    path = @cache.path_for(
-      asset_id: 'ast-pull-1',
-      revision_id: 'rev-1',
-      sha256: @dummy_sha,
-      org_id: nil
-    )
-    expected_suffix = File.join('_shared', 'ast-pull-1', 'rev-1', "#{@dummy_sha}.skp")
-    assert path.end_with?(expected_suffix)
+  def test_path_for_refuses_blank_or_traversal_org
+    assert_nil @cache.path_for(asset_id: 'ast-pull-1', revision_id: 'rev-1', sha256: @dummy_sha, org_id: nil)
+    assert_nil @cache.path_for(asset_id: 'ast-pull-1', revision_id: 'rev-1', sha256: @dummy_sha, org_id: '')
+    assert_nil @cache.path_for(asset_id: 'ast-pull-1', revision_id: 'rev-1', sha256: @dummy_sha, org_id: '  ')
+    assert_nil @cache.path_for(asset_id: 'ast-pull-1', revision_id: 'rev-1', sha256: @dummy_sha, org_id: '../evil')
+    assert_nil @cache.path_for(asset_id: 'ast-pull-1', revision_id: 'rev-1', sha256: @dummy_sha, org_id: 'org/nested')
+  end
+
+  def test_path_for_refuses_traversal_in_asset_or_revision
+    assert_nil @cache.path_for(asset_id: '../ast', revision_id: 'rev-1', org_id: 'org-test')
+    assert_nil @cache.path_for(asset_id: 'ast-1', revision_id: '../../rev', org_id: 'org-test')
+    assert_nil @cache.path_for(asset_id: 'ast-1', revision_id: 'rev/1', org_id: 'org-test')
   end
 
   def test_put_and_get_valid_asset
