@@ -226,7 +226,7 @@ import {
 } from './engineeringReleaseContext';
 import {
   captureDeferredNavigationIntent,
-  deferredNavigationStillCurrent,
+  runDeferredNavigationGuarded,
 } from './deferredNavigation';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
@@ -998,26 +998,29 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   // (the workspace fetches its own context) — only with the intent current.
   const openInEngineeringGuarded = (projectId: string, releaseId: string) => {
     const scopeAtStart = useWorkspaceStore.getState().sessionScope;
-    const intent = captureDeferredNavigationIntent({
-      scopeKey: scopeAtStart ? JSON.stringify(sessionScopeKey(scopeAtStart)) : null,
-      path: window.location.pathname + window.location.search,
-    });
-    void refreshWorkspace().finally(() => {
-      const live = useWorkspaceStore.getState();
-      const liveScope = live.sessionScope;
-      if (
-        !deferredNavigationStillCurrent(intent, {
-          scopeKey: liveScope ? JSON.stringify(sessionScopeKey(liveScope)) : null,
-          path: window.location.pathname + window.location.search,
-          sessionActive: live.session !== null,
-        })
-      ) {
-        return;
-      }
-      const target = engineeringProjectPath(projectId, { releaseId });
-      if (window.location.pathname + window.location.search !== target) {
-        navigate(target);
-      }
+    runDeferredNavigationGuarded({
+      projectId,
+      releaseId,
+      start: captureDeferredNavigationIntent({
+        scopeKey: scopeAtStart
+          ? JSON.stringify(sessionScopeKey(scopeAtStart))
+          : null,
+        path: window.location.pathname + window.location.search,
+      }),
+      deps: {
+        refreshWorkspace,
+        navigate,
+        live: () => {
+          const liveState = useWorkspaceStore.getState();
+          const liveScope = liveState.sessionScope;
+          return {
+            scopeKey: liveScope ? JSON.stringify(sessionScopeKey(liveScope)) : null,
+            path: window.location.pathname + window.location.search,
+            sessionActive: liveState.session !== null,
+          };
+        },
+        target: (id, release) => engineeringProjectPath(id, { releaseId: release }),
+      },
     });
   };
   const {

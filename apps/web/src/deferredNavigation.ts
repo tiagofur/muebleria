@@ -40,3 +40,38 @@ export function deferredNavigationStillCurrent(
   if (!live.sessionActive) return false;
   return intent.scopeKey === live.scopeKey && intent.startedPath === live.path;
 }
+
+/**
+ * The composed deferred-navigation run behind "Abrir Ingeniería": refresh
+ * the read model, then navigate to the exact target IFF the intent is still
+ * current. Kept dependency-injected so the integration behavior (pending
+ * refresh, context change, resolve/reject, real effect on navigate) is
+ * testable without rendering the shell.
+ */
+export function runDeferredNavigationGuarded(args: {
+  readonly projectId: string;
+  readonly releaseId: string;
+  readonly start: DeferredNavigationIntent;
+  readonly deps: {
+    readonly refreshWorkspace: () => Promise<void>;
+    readonly navigate: (target: string) => void;
+    /** Live context read at completion time (never a render closure). */
+    readonly live: () => {
+      readonly scopeKey: string | null;
+      readonly path: string;
+      readonly sessionActive: boolean;
+    };
+    readonly target: (projectId: string, releaseId: string) => string;
+  };
+}): void {
+  void args.deps.refreshWorkspace().finally(() => {
+    const live = args.deps.live();
+    if (!deferredNavigationStillCurrent(args.start, live)) {
+      return;
+    }
+    const target = args.deps.target(args.projectId, args.releaseId);
+    if (live.path !== target) {
+      args.deps.navigate(target);
+    }
+  });
+}
