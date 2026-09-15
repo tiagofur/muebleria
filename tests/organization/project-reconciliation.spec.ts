@@ -761,9 +761,10 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId('project-open-in-production')).toBeVisible();
     await expect(page.getByTestId('project-mark-produced')).toHaveCount(0);
 
-    // One real fixture continues the SAME accepted Q2/R2/P1 into warehouse.
-    // Hardware demand is genuine; this is explicitly not a complete physical
-    // golden path and does not manufacture a no-CNC receipt for the fixture.
+    // One real fixture continues the SAME accepted Q2/R2/P1 into the
+    // release-scoped material flow. Hardware demand is genuine; this is
+    // explicitly not a complete physical golden path and does not
+    // manufacture a no-CNC receipt for the fixture.
     const apiBase = required('ORGANIZATION_API_BASE');
     const authHeaders = { Authorization: `Bearer ${lifecycleOwner.token}`, 'Content-Type': 'application/json' };
     // Project operational acceptance remains a distinct supported command;
@@ -771,11 +772,29 @@ async function publishRevisionWithItemIds(options: {
     const operationsRepository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => lifecycleOwner.token });
     const operationalProject = (await operationsRepository.getProjects()).find((project) => project.id === seeded.projectId)!;
     await operationsRepository.saveProject({ ...operationalProject, status: 'accepted' });
+
+    // #738 — replaced invariant: this stage used to assert "accepted + P ⇒
+    // the obra appears in the Almacén queue and gets the legacy materials
+    // stamp", conflating the production ACCESS authority (#697) with
+    // engineering completion. P alone does NOT advance the obra: before any
+    // release-scoped material evidence it stays honestly in the Engineering
+    // queue as Pendiente, and it is NOT in the warehouse queue.
+    await page.goto('/engineering');
+    await expect(page.getByTestId(`eng-project-${seeded.projectId}`)).toBeVisible();
+    await expect(page.getByTestId(`eng-project-${seeded.projectId}`)).toContainText('Pendiente');
+    await expect(page.getByTestId(`eng-sent-${seeded.projectId}`)).toHaveCount(0);
     await page.goto('/warehouse');
     await page.getByRole('tab', { name: 'Herrajes' }).click();
-    await page.getByTestId(`purch-release-${seeded.projectId}`).click();
-    await page.getByTestId(`purch-plan-derive-${seeded.projectId}`).click();
-    await expect(page.getByTestId(`purch-plan-provenance-${seeded.projectId}`)).toContainText('Diseño R2');
+    await expect(page.getByTestId(`purch-release-${seeded.projectId}`)).toHaveCount(0);
+
+    // The #577 frozen material flow still runs server-side against the
+    // EXACT release — the same commands the planning panel issues (derive
+    // with the exact production_release_id, stock, reserve, release) — over
+    // real Go + PostgreSQL. Only the warehouse-queue ENTRY is gated by the
+    // honest stage until #740.
+    await operationsRepository.deriveMaterialRequirements(seeded.projectId, [], {
+      productionReleaseId: releasedP1.id,
+    });
     const readPlanning = async () => (await (await fetch(`${apiBase}/projects/${seeded.projectId}/materials`, { headers: authHeaders })).json()).planning;
     const planning = await readPlanning();
     expect(planning.requirements.release_id).toBe(releasedP1.id);
@@ -787,21 +806,17 @@ async function publishRevisionWithItemIds(options: {
       body: JSON.stringify({ kind: 'herrajes', material_id: REC_HW, type: 'entrada', quantity: 4 }),
     });
     expect(stock.status).toBe(201);
-    await page.reload();
-    await page.getByRole('tab', { name: 'Herrajes' }).click();
-    await page.getByTestId(`purch-release-${seeded.projectId}`).click();
-    const reserve = page.waitForRequest((request) => request.url().endsWith(`/projects/${seeded.projectId}/materials/reserve`));
-    await page.getByTestId(`purch-plan-reserve-${seeded.projectId}`).click();
-    expect((await reserve).postDataJSON().production_release_id).toBe(releasedP1.id);
-    await expect(page.getByTestId(`purch-plan-reserve-${seeded.projectId}`)).toHaveCount(0);
+    const reservedView = await operationsRepository.reserveMaterials(seeded.projectId, undefined, {
+      productionReleaseId: releasedP1.id,
+    });
     const reserved = await readPlanning();
     expect(reserved.requirements).toEqual(planning.requirements);
     expect(reserved.reservations).toHaveLength(1);
     expect(reserved.reservations[0].quantity).toBe(4);
-    const releaseMaterials = page.waitForRequest((request) => request.url().endsWith(`/projects/${seeded.projectId}/materials/release`));
-    await page.getByTestId(`purch-plan-release-${seeded.projectId}`).click();
-    expect((await releaseMaterials).postDataJSON().production_release_id).toBe(releasedP1.id);
-    await expect(page.getByTestId(`purch-release-${seeded.projectId}`)).toHaveCount(0);
+    expect((reservedView.reservations ?? reserved.reservations)[0]?.quantity ?? reserved.reservations[0]?.quantity).toBe(4);
+    await operationsRepository.releaseMaterials(seeded.projectId, undefined, {
+      productionReleaseId: releasedP1.id,
+    });
     await assertFrozenRoutingExecution(page, apiBase, lifecycleOwner.token, seeded.projectId, releasedP1.id, 2);
 
     // ------------------------------------------------------------------
@@ -836,10 +851,14 @@ async function publishRevisionWithItemIds(options: {
         .sort(),
     );
 
-    // Stage engine readback in the UI: the obra left the ingeniería working
-    // queue and appears read-only under "Enviadas a producción" — the stage
-    // treats the canonical release as the liberation, not
-    // engineeringLog.sentToProductionAt.
+    // Stage engine readback in the UI (#738 evidence chain): the obra stays
+    // in the ingeniería working queue while NO release-scoped material
+    // evidence exists (asserted above), and advances to the read-only
+    // "Enviadas a producción" section ONLY through the explicit chain —
+    // frozen requirements derived from the exact release + the audited
+    // release-scoped material authorization. The canonical release alone
+    // never fabricated that passage; the legacy handshake log was never
+    // written.
     await page.goto('/engineering');
     await expect(page.getByTestId(`eng-project-${seeded.projectId}`)).toHaveCount(0);
     await expect(page.getByTestId(`eng-sent-${seeded.projectId}`)).toBeVisible();
@@ -1119,19 +1138,24 @@ async function publishRevisionWithItemIds(options: {
     ).json()) as { planning?: unknown };
     expect(materialsBefore.planning ?? null).toBeNull();
 
-    // 3. UI — Compras y Almacén: the canonical release alone unlocked the
-    //    almacén stage (no legacy engineering handshake, no legacy release).
-    //    The derive button is enabled and derives from the release snapshot.
+    // 3. UI — Compras y Almacén (#738 evidence chain): P alone no longer
+    //    places the obra in the almacén queue. The FIRST derive runs
+    //    through the release-scoped server command (the same one the panel
+    //    issues); once frozen requirements exist, the obra's active work is
+    //    genuinely in Almacén and the planning card drives the rest.
     await loginToA(page);
+    const deriveResponse = await fetch(`${apiBase}/projects/${OPS_PROJECT_ID}/materials/derive`, {
+      method: 'POST',
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ production_release_id: release.id, lines: [] }),
+    });
+    expect(deriveResponse.status).toBe(200);
     await page.goto('/warehouse');
     // The obra's module has board parts only: its picking card lives under
-    // the Tableros tab. The card offers the planning panel (stage unlocked
-    // by the canonical release — no engineering handshake happened).
+    // the Tableros tab (placed there by the derived frozen demand). The
+    // card offers the planning panel with the derived requirements.
     await page.getByRole('tab', { name: 'Tableros' }).click();
     await page.getByTestId(`purch-release-${OPS_PROJECT_ID}`).click();
-    const deriveBtn = page.getByTestId(`purch-plan-derive-${OPS_PROJECT_ID}`);
-    await expect(deriveBtn).toBeVisible();
-    await deriveBtn.click();
 
     // 4. Human-readable provenance: derived from the exact release + revision.
     const provenance = page.getByTestId(`purch-plan-provenance-${OPS_PROJECT_ID}`);

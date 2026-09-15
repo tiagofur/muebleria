@@ -31,6 +31,7 @@ import type {
   WarrantyPhotoKind,
   WarrantyTicket,
 } from '@granete/domain';
+import { releaseAuthorityOf } from '@granete/domain';
 import { projectAllowsProductionChrome } from './projectDetailContext';
 
 import {
@@ -122,6 +123,11 @@ export interface ProjectDetailViewProps {
   readonly onExportProductionPack?: () => void | Promise<void>;
   /** Navigate to production order hub (PROD-0.1). Only when plant-ready. */
   readonly onOpenInProduction?: (projectId: string) => void;
+  /**
+   * #738 — open Engineering pinned to the obra's exact canonical release
+   * (preparation available; the release itself doesn't complete engineering).
+   */
+  readonly onOpenInEngineering?: (projectId: string, releaseId: string) => void;
   /** WEB-DT-1 (#500): open the server-backed Project Furniture matrix. */
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
   readonly onOpenReconciliation?: (projectId: string, quoteRevisionId?: string) => void;
@@ -379,6 +385,7 @@ function ProjectDetailViewInner(): ReactNode {
     exportMenu,
     productionExportOk,
     onOpenInProduction,
+    onOpenInEngineering,
     onOpenFurnitureMatrix,
     onOpenDesigns,
     onOpenReconciliation,
@@ -439,6 +446,27 @@ function ProjectDetailViewInner(): ReactNode {
 
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
     const sections: DropdownMenuSection[] = [];
+
+    // #738 — liberated obra: preparing the released content in Engineering
+    // is the product's next step; the menu names the exact release.
+    const engineeringReleaseId =
+      releaseAuthorityOf(project)?.source === 'canonical'
+        ? releaseAuthorityOf(project)?.releaseId
+        : undefined;
+    if (onOpenInEngineering && engineeringReleaseId) {
+      sections.push({
+        id: 'engineering-entry',
+        label: 'Ingeniería',
+        items: [
+          {
+            id: 'open-engineering',
+            label: 'Abrir Ingeniería',
+            hint: 'Preparación técnica de la liberación',
+            onSelect: () => onOpenInEngineering(project.id, engineeringReleaseId),
+          },
+        ],
+      });
+    }
 
     if (hasOpenInProduction && productionExportOk && onOpenInProduction) {
       sections.push({
@@ -537,6 +565,7 @@ function ProjectDetailViewInner(): ReactNode {
     hasOpenInProduction,
     onDuplicate,
     onOpenInProduction,
+    onOpenInEngineering,
     onOpenFurnitureMatrix,
     onOpenDesigns,
     onOpenReconciliation,
@@ -544,6 +573,7 @@ function ProjectDetailViewInner(): ReactNode {
     onSaveAsTemplate,
     productionExportOk,
     project.id,
+    project.resolvedProductionRelease,
     onOpenPresentation,
   ]);
 
@@ -709,6 +739,7 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onExport,
     onExportProductionPack,
     onOpenInProduction,
+    onOpenInEngineering,
     onOpenFurnitureMatrix,
     onOpenDesigns,
     onOpenReconciliation,

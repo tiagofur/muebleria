@@ -16,7 +16,9 @@ import '../production/production.css';
 
 import {
   canSendToProduction,
+  engineeringEntryStatus,
   engineeringStatus,
+  ENGINEERING_ENTRY_STATUS_LABELS_ES,
   releaseAuthorityLabel,
   releaseAuthorityOf,
   type Project,
@@ -68,6 +70,44 @@ const TAB_LABELS: Readonly<Record<EngineeringTab, string>> = {
   documentos: 'Documentos',
 };
 
+/**
+ * #738 — the EXACT ProductionRelease this workspace was opened with (pinned
+ * in the URL). Presentation view resolved from authoritative read models by
+ * the shell; the workspace never derives it from "latest".
+ */
+export interface EngineeringReleasePinView {
+  readonly releaseNumber: number;
+  readonly designRevisionNumber: number;
+  readonly quoteLabel: string | null;
+  readonly releasedAt: string;
+}
+
+export type EngineeringReleaseContextProp =
+  | { readonly state: 'loading' }
+  | { readonly state: 'ready'; readonly view: EngineeringReleasePinView };
+
+/** Tabs whose panels read the live editable project/catalog state. */
+const LIVE_DATA_TABS: ReadonlySet<EngineeringTab> = new Set([
+  'resumen',
+  'modulos',
+  'despiece',
+  'etiquetas',
+  'herrajes',
+  'vistas',
+  'optimizacion',
+]);
+
+/** What the live data tab names for the working-view notice. */
+const LIVE_TAB_NOUN_ES: Readonly<Partial<Record<EngineeringTab, string>>> = {
+  resumen: 'el resumen',
+  modulos: 'los módulos',
+  despiece: 'el despiece',
+  etiquetas: 'las etiquetas',
+  herrajes: 'los herrajes',
+  vistas: 'las vistas',
+  optimizacion: 'la optimización',
+};
+
 /* ── Main workspace ─────────────────────────────────────────────────────── */
 
 export function EngineeringWorkspace({
@@ -114,6 +154,14 @@ export function EngineeringWorkspace({
   exportBusy,
   onSendToProduction,
   onMarkDocumented,
+  /**
+   * #738 — exact release context pinned by the navigation. When present the
+   * obra is canonical: the header shows THIS liberation (not the server's
+   * "latest" authority), live data tabs are labeled as a working view, and
+   * document downloads computed from the live project are NOT offered as
+   * release content (#739 owns the frozen despiece/exports).
+   */
+  releaseContext,
 }: {
   readonly project: Project;
   readonly modules: readonly Module[];
@@ -183,22 +231,35 @@ export function EngineeringWorkspace({
    */
   readonly onSendToProduction?: () => void;
   readonly onMarkDocumented?: () => void;
+  readonly releaseContext?: EngineeringReleaseContextProp;
 }): ReactNode {
   const [activeTab, setActiveTab] = useState<EngineeringTab>('resumen');
+
+  // #738 — canonical obra: the release context governs presentation. The
+  // legacy per-project log actions and the live-data document exports are
+  // not offered (they can't prove anything about THIS release); the frozen
+  // despiece/exports arrive with #739.
+  const hasReleaseContext = releaseContext !== undefined;
+  const documentExportsDisabled = hasReleaseContext;
+  const tabs = hasReleaseContext
+    ? ENGINEERING_TABS.filter((tab) => tab !== 'documentos')
+    : ENGINEERING_TABS;
+  const releaseView = releaseContext?.state === 'ready' ? releaseContext.view : null;
+  const entryStatus = engineeringEntryStatus(project);
 
   const documents = useEngineeringDocuments({
     readiness,
     labels,
     moduleLabels,
-    onExportProductionPack,
-    onExportOptimizer,
-    onExportCutListCsv,
-    onExportHardware,
-    onExportElevations,
-    onExportPieceLabels,
-    onExportModulePdf,
-    onExportAssemblySheets,
-    onExportCncPilot,
+    onExportProductionPack: documentExportsDisabled ? undefined : onExportProductionPack,
+    onExportOptimizer: documentExportsDisabled ? undefined : onExportOptimizer,
+    onExportCutListCsv: documentExportsDisabled ? undefined : onExportCutListCsv,
+    onExportHardware: documentExportsDisabled ? undefined : onExportHardware,
+    onExportElevations: documentExportsDisabled ? undefined : onExportElevations,
+    onExportPieceLabels: documentExportsDisabled ? undefined : onExportPieceLabels,
+    onExportModulePdf: documentExportsDisabled ? undefined : onExportModulePdf,
+    onExportAssemblySheets: documentExportsDisabled ? undefined : onExportAssemblySheets,
+    onExportCncPilot: documentExportsDisabled ? undefined : onExportCncPilot,
     onNavigateToTab: (tabId) => setActiveTab(tabId as EngineeringTab),
   });
 
@@ -242,7 +303,34 @@ export function EngineeringWorkspace({
             Enviar a Producción
           </button>
         ) : null}
-        {releaseAuthorityOf(project)?.source === 'canonical' ? (
+        {releaseView ? (
+          <div className="eng-workspace__release-context" data-testid="eng-release-context">
+            <span
+              className="status-badge status-badge--done"
+              title="Liberación exacta con la que se abrió esta pantalla. La preparación de Ingeniería queda disponible; la liberación no la completa."
+            >
+              <Factory size={16} strokeWidth={1.5} aria-hidden />
+              Liberación #{releaseView.releaseNumber} · Diseño R
+              {releaseView.designRevisionNumber}
+              {releaseView.quoteLabel ? ` · ${releaseView.quoteLabel}` : ''}
+            </span>
+            <span
+              className={`status-badge status-badge--${entryStatus === 'pending' ? 'open' : 'progress'}`}
+              data-testid="eng-entry-status"
+              title="Estado de la preparación de Ingeniería para esta liberación. Ningún dato indica que la preparación esté terminada."
+            >
+              <span className="status-badge__dot" aria-hidden>●</span>
+              {ENGINEERING_ENTRY_STATUS_LABELS_ES[entryStatus]}
+            </span>
+          </div>
+        ) : releaseContext?.state === 'loading' ? (
+          <span
+            className="status-badge status-badge--progress"
+            data-testid="eng-release-context-loading"
+          >
+            Verificando liberación…
+          </span>
+        ) : releaseAuthorityOf(project)?.source === 'canonical' ? (
           <span
             className="status-badge status-badge--done"
             data-testid="eng-canonical-release"
@@ -252,7 +340,8 @@ export function EngineeringWorkspace({
             {releaseAuthorityLabel(project)}
           </span>
         ) : null}
-        {engineeringStatus(project.engineeringLog) === 'in_progress' &&
+        {!hasReleaseContext &&
+        engineeringStatus(project.engineeringLog) === 'in_progress' &&
         onMarkDocumented ? (
           <button
             type="button"
@@ -269,7 +358,7 @@ export function EngineeringWorkspace({
 
       {/* Tab bar */}
       <WorkspaceTabs
-        tabs={ENGINEERING_TABS.map((tab) => ({
+        tabs={tabs.map((tab) => ({
           id: tab,
           label: TAB_LABELS[tab],
         }))}
@@ -279,6 +368,19 @@ export function EngineeringWorkspace({
         idPrefix="eng"
         testIdPrefix="eng"
       />
+
+      {/* #738 — canonical obra: the data tabs read the live editable
+          project/catalog, so they are explicitly separated from the frozen
+          release content (never labeled as liberation documents). */}
+      {hasReleaseContext && activeTab !== 'documentos' ? (
+        <p className="eng-workspace__live-notice" data-testid="eng-live-view-notice">
+          Vista de trabajo actual:{' '}
+          {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} se calculan desde el
+          proyecto y el catálogo vigentes, no desde el contenido congelado de
+          la liberación. El despiece y los documentos exactos de esta
+          liberación todavía no están disponibles.
+        </p>
+      ) : null}
 
       {/* Tab panel */}
       <div
@@ -306,21 +408,23 @@ export function EngineeringWorkspace({
             <ProductionOrderDespiecePanel
               cutRows={cutRows}
               cutError={cutError}
-              onExportCsv={onExportCsv}
+              onExportCsv={documentExportsDisabled ? undefined : onExportCsv}
               exportBusy={exportBusy}
             />
             {/* Imprimir A4 button */}
-            <div className="eng-despiece__print">
-              <button
-                type="button"
-                className="btn btn--small"
-                onClick={onExportDespiecePdf}
-                disabled={exportBusy || !onExportDespiecePdf}
-              >
-                <Printer size={14} strokeWidth={1.5} />
-                Imprimir A4
-              </button>
-            </div>
+            {!documentExportsDisabled ? (
+              <div className="eng-despiece__print">
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  onClick={onExportDespiecePdf}
+                  disabled={exportBusy || !onExportDespiecePdf}
+                >
+                  <Printer size={14} strokeWidth={1.5} />
+                  Imprimir A4
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
         {activeTab === 'etiquetas' && (
@@ -330,8 +434,8 @@ export function EngineeringWorkspace({
             labelsError={labelsError}
             moduleLabels={moduleLabels}
             moduleLabelsError={moduleLabelsError}
-            onExportPdf={onExportPdf}
-            onExportModulePdf={onExportModulePdf}
+            onExportPdf={documentExportsDisabled ? undefined : onExportPdf}
+            onExportModulePdf={documentExportsDisabled ? undefined : onExportModulePdf}
             exportBusy={exportBusy}
           />
         )}
@@ -339,7 +443,7 @@ export function EngineeringWorkspace({
           <ProductionOrderHardwarePanel
             rows={hardwareRows}
             error={hardwareError}
-            onExportHardware={onExportHardware}
+            onExportHardware={documentExportsDisabled ? undefined : onExportHardware}
             exportBusy={exportBusy}
           />
         )}
@@ -349,7 +453,7 @@ export function EngineeringWorkspace({
             modules={modules}
             catalog={catalog3d}
             resolveMediaUrl={resolveMediaUrl}
-            onExportElevations={onExportElevations}
+            onExportElevations={documentExportsDisabled ? undefined : onExportElevations}
             exportBusy={exportBusy}
           />
         )}
@@ -360,10 +464,10 @@ export function EngineeringWorkspace({
             cutRows={cutRows}
             defaultCutStrategy={defaultCutStrategy}
             onSaveCutPlan={onSaveCutPlan}
-            onExportCutPlanPdf={onExportCutPlanPdf}
-            onExportOptimizer={onExportOptimizer}
-            onExportCutPlanDxf={onExportCutPlanDxf}
-            onExportCutPlanPtx={onExportCutPlanPtx}
+            onExportCutPlanPdf={documentExportsDisabled ? undefined : onExportCutPlanPdf}
+            onExportOptimizer={documentExportsDisabled ? undefined : onExportOptimizer}
+            onExportCutPlanDxf={documentExportsDisabled ? undefined : onExportCutPlanDxf}
+            onExportCutPlanPtx={documentExportsDisabled ? undefined : onExportCutPlanPtx}
             cuttingOutputTarget={cuttingOutputTarget}
             resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             exportBusy={exportBusy}
@@ -376,7 +480,7 @@ export function EngineeringWorkspace({
           />
         )}
       </div>
-      {ENGINEERING_TABS.filter((tab) => tab !== activeTab).map((tab) => (
+      {tabs.filter((tab) => tab !== activeTab).map((tab) => (
         <div
           key={tab}
           role="tabpanel"

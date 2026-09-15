@@ -5,6 +5,7 @@ import {
   canReleaseMaterials,
   isProductionReady,
   PROCESS_STAGE_LABELS_ES,
+  sentToProduction,
   type MaterialsRelease,
 } from './processStage';
 import { canSendToProduction, type EngineeringLog } from './engineering';
@@ -25,6 +26,9 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     marginFactor: 1,
     laborFixedCost: 0,
     status: 'accepted',
+    // Fixtures default to POSITIVELY identified pre-Digital-Thread works
+    // (#738 review): the legacy chain only applies to vouched context.
+    hasDigitalThreadContext: false,
     items: [],
     createdAt: '2026-08-01T10:00:00Z',
     updatedAt: '2026-08-01T10:00:00Z',
@@ -129,6 +133,35 @@ describe('canReleaseMaterials', () => {
       canReleaseMaterials(makeProject({ status: 'draft', engineeringLog: sentLog() })),
     ).toBe(false);
   });
+
+  it('#738 review — only positively pre-DT context may use the legacy stamp', () => {
+    // Unknown provenance fails closed; a canonical obra never receives the
+    // legacy materials stamp.
+    expect(
+      canReleaseMaterials(
+        makeProject({
+          hasDigitalThreadContext: undefined,
+          engineeringLog: sentLog(),
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canReleaseMaterials(
+        makeProject({
+          hasDigitalThreadContext: true,
+          engineeringLog: sentLog(),
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canReleaseMaterials(
+        makeProject({
+          resolvedProductionRelease: canonicalRelease(),
+          engineeringLog: sentLog(),
+        }),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('canSendToProduction', () => {
@@ -179,5 +212,291 @@ describe('PROCESS_STAGE_LABELS_ES', () => {
   it('labels every stage in Spanish', () => {
     expect(PROCESS_STAGE_LABELS_ES.ingenieria).toBe('Ingeniería');
     expect(PROCESS_STAGE_LABELS_ES.almacen).toBe('Almacén');
+  });
+});
+
+/* ── #738 — canonical release → Engineering entry ────────────────────────── */
+
+/** Server-owned canonical release projection (#577) on the project read model. */
+function canonicalRelease(
+  overrides: Partial<Project['resolvedProductionRelease']> = {},
+): NonNullable<Project['resolvedProductionRelease']> {
+  return {
+    source: 'canonical',
+    releaseId: 'rel-1',
+    releaseNumber: 1,
+    designRevisionId: 'rev-2',
+    designRevisionNumber: 2,
+    quoteRevisionId: 'qrev-2',
+    manufacturingFingerprint: 'sha256-' + 'a'.repeat(64),
+    ...overrides,
+  } as NonNullable<Project['resolvedProductionRelease']>;
+}
+
+describe('#738 projectProcessStage — canonical release', () => {
+  it('draft + Q accepted + R approved + P1 enters ingenieria (not ventas)', () => {
+    expect(
+      projectProcessStage(
+        makeProject({ status: 'draft', resolvedProductionRelease: canonicalRelease() }),
+      ),
+    ).toBe('ingenieria');
+  });
+
+  it('accepted + P1 without engineering evidence does NOT skip to almacen', () => {
+    // P existence must not be interpreted as "engineering already sent":
+    // no release-scoped material evidence ⇒ honest Ingeniería.
+    expect(
+      projectProcessStage(
+        makeProject({ resolvedProductionRelease: canonicalRelease() }),
+      ),
+    ).toBe('ingenieria');
+  });
+
+  it('explicit release-scoped material evidence advances a canonical obra', () => {
+    // Frozen requirements derived from the exact release (matching id AND
+    // BOM fingerprint) = Almacén work started through the release-scoped
+    // derive command.
+    const derived = (extra: Partial<Project> = {}): Project =>
+      makeProject({
+        status: 'draft',
+        resolvedProductionRelease: canonicalRelease(),
+        materialPlanning: {
+          id: 'mp-1',
+          projectId: 'p1',
+          requirements: {
+            releaseId: 'rel-1',
+            bomFingerprint: 'sha256-' + 'a'.repeat(64),
+            derivedAt: '2026-09-10T10:00:00Z',
+            derivedBy: 'almacen1',
+            lines: [],
+          },
+          reservations: [],
+        } as unknown as Project['materialPlanning'],
+        ...extra,
+      });
+    expect(projectProcessStage(derived())).toBe('almacen');
+    // The audited material authorization stamp (written by the
+    // release-scoped /materials/release command) completes the physical
+    // passage through Almacén.
+    expect(
+      projectProcessStage(derived({ materialsRelease: RELEASE })),
+    ).toBe('produccion');
+    // A materials stamp WITHOUT correlated requirements is not release-scoped
+    // material evidence — a legacy per-project stamp proves nothing about
+    // THIS release.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: canonicalRelease(),
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('ingenieria');
+  });
+
+  it('#738 review — P2 never inherits the operational stage of P1 evidence', () => {
+    // The decisive correlation cases: the resolved authority is P2 while the
+    // material evidence belongs to P1 (or carries no/expired identity).
+    // Neither requirements nor an older authorization may advance P2.
+    const p2Authority = canonicalRelease({
+      releaseId: 'rel-2',
+      releaseNumber: 2,
+      manufacturingFingerprint: 'sha256-' + 'b'.repeat(64),
+    });
+    const p1Requirements = {
+      id: 'mp-1',
+      projectId: 'p1',
+      requirements: {
+        releaseId: 'rel-1',
+        bomFingerprint: 'sha256-' + 'a'.repeat(64),
+        derivedAt: '2026-09-10T10:00:00Z',
+        lines: [],
+      },
+      reservations: [],
+    } as unknown as Project['materialPlanning'];
+    // P2 + P1 requirements → stays in Ingeniería.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: p2Authority,
+          materialPlanning: p1Requirements,
+        }),
+      ),
+    ).toBe('ingenieria');
+    // P2 + P1 requirements + an older materials stamp → still Ingeniería.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: p2Authority,
+          materialPlanning: p1Requirements,
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('ingenieria');
+    // Requirements without release identity never advance the obra.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: p2Authority,
+          materialPlanning: {
+            id: 'mp-2',
+            projectId: 'p1',
+            requirements: {
+              derivedAt: '2026-09-10T10:00:00Z',
+              lines: [],
+            },
+            reservations: [],
+          } as unknown as Project['materialPlanning'],
+        }),
+      ),
+    ).toBe('ingenieria');
+    // Matching releaseId but incompatible BOM fingerprint never advances.
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: p2Authority,
+          materialPlanning: {
+            id: 'mp-3',
+            projectId: 'p1',
+            requirements: {
+              releaseId: 'rel-2',
+              bomFingerprint: 'sha256-' + 'c'.repeat(64),
+              derivedAt: '2026-09-10T10:00:00Z',
+              lines: [],
+            },
+            reservations: [],
+          } as unknown as Project['materialPlanning'],
+        }),
+      ),
+    ).toBe('ingenieria');
+  });
+
+  it('legacy handshake evidence never retargets a canonical obra past ingenieria', () => {
+    expect(
+      projectProcessStage(
+        makeProject({
+          resolvedProductionRelease: canonicalRelease(),
+          engineeringLog: sentLog(),
+        }),
+      ),
+    ).toBe('ingenieria');
+  });
+
+  it('a cancelled obra with a canonical release is not active engineering work', () => {
+    expect(
+      projectProcessStage(
+        makeProject({
+          status: 'accepted',
+          cancelledAt: '2026-09-01T10:00:00Z',
+          resolvedProductionRelease: canonicalRelease(),
+        }),
+      ),
+    ).toBe('ventas');
+  });
+
+  it('a modern DT project with a residual accepted stamp and NO release stays ventas', () => {
+    // Commercial acceptance alone never unlocks engineering for a modern
+    // project: a positively modern project with a residual stamp and no
+    // canonical release fails closed (the server always projects
+    // hasDigitalThreadContext in API mode — #697).
+    expect(
+      projectProcessStage(
+        makeProject({ status: 'accepted', hasDigitalThreadContext: true }),
+      ),
+    ).toBe('ventas');
+    expect(
+      projectProcessStage(
+        makeProject({ status: 'produced', hasDigitalThreadContext: true }),
+      ),
+    ).toBe('ventas');
+    // Even full legacy stamps never unlock a modern project without P.
+    expect(
+      projectProcessStage(
+        makeProject({
+          status: 'produced',
+          hasDigitalThreadContext: true,
+          engineeringLog: sentLog(),
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('ventas');
+  });
+
+  it('#738 review — unknown provenance (no DT projection) fails closed', () => {
+    // `undefined` means nobody vouched for this payload's context — the
+    // server ALWAYS projects the field on API reads and the local producers
+    // positively set it, so absence is unknown, not pre-DT. Old stamps never
+    // grant a workshop stage to a payload of unknown provenance.
+    expect(
+      projectProcessStage(
+        makeProject({ status: 'accepted', hasDigitalThreadContext: undefined }),
+      ),
+    ).toBe('ventas');
+    expect(
+      projectProcessStage(
+        makeProject({
+          status: 'accepted',
+          hasDigitalThreadContext: undefined,
+          engineeringLog: sentLog(),
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('ventas');
+  });
+
+  it('positively identified pre-DT context keeps the legacy chain', () => {
+    expect(
+      projectProcessStage(makeProject({ hasDigitalThreadContext: false })),
+    ).toBe('ingenieria');
+    expect(
+      projectProcessStage(
+        makeProject({ hasDigitalThreadContext: false, engineeringLog: sentLog() }),
+      ),
+    ).toBe('almacen');
+    expect(
+      projectProcessStage(
+        makeProject({
+          hasDigitalThreadContext: false,
+          engineeringLog: sentLog(),
+          materialsRelease: RELEASE,
+        }),
+      ),
+    ).toBe('produccion');
+  });
+
+  it('pre-DT compatibility keeps the legacy chain when positively identified', () => {
+    expect(projectProcessStage(makeProject({ hasDigitalThreadContext: false }))).toBe(
+      'ingenieria',
+    );
+    expect(
+      projectProcessStage(
+        makeProject({ hasDigitalThreadContext: false, engineeringLog: sentLog() }),
+      ),
+    ).toBe('almacen');
+  });
+});
+
+describe('#738 sentToProduction — P is not a fabricated legacy send', () => {
+  it('canonical release alone is NOT a legacy engineering send', () => {
+    expect(
+      sentToProduction(
+        makeProject({ resolvedProductionRelease: canonicalRelease() }),
+      ),
+    ).toBe(false);
+  });
+
+  it('only the legacy handshake log proves the send', () => {
+    expect(sentToProduction(makeProject())).toBe(false);
+    expect(sentToProduction(makeProject({ engineeringLog: sentLog() }))).toBe(true);
+  });
+});
+
+describe('#738 canReleaseMaterials — canonical release is not legacy material evidence', () => {
+  it('a canonical obra never receives the legacy materials stamp', () => {
+    expect(
+      canReleaseMaterials(
+        makeProject({ resolvedProductionRelease: canonicalRelease() }),
+      ),
+    ).toBe(false);
   });
 });

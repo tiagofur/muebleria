@@ -34,6 +34,7 @@ const mockProjects: ProjectWithCustomer[] = [
     name: 'Cocina Moderna',
     customerLabel: 'Cliente A',
     status: 'accepted',
+    hasDigitalThreadContext: false,
     items: [],
     currency: 'MXN',
     createdAt: '2026-08-01T00:00:00Z',
@@ -44,6 +45,7 @@ const mockProjects: ProjectWithCustomer[] = [
     name: 'Placard Walk-in',
     customerLabel: 'Cliente B',
     status: 'accepted',
+    hasDigitalThreadContext: false,
     items: [],
     currency: 'MXN',
     createdAt: '2026-08-01T00:00:00Z',
@@ -54,6 +56,7 @@ const mockProjects: ProjectWithCustomer[] = [
     id: 'p3',
     name: 'Escritorio Ejecutivo',
     status: 'accepted',
+    hasDigitalThreadContext: false,
     items: [],
     currency: 'MXN',
     createdAt: '2026-08-01T00:00:00Z',
@@ -194,6 +197,7 @@ describe('EngineeringScreen', () => {
         name: 'Obra Enviada',
         customerLabel: 'Cliente C',
         status: 'produced',
+        hasDigitalThreadContext: false,
         items: [],
         currency: 'MXN',
         createdAt: '2026-08-01T00:00:00Z',
@@ -231,5 +235,102 @@ describe('F101 page chrome migration', () => {
     expect(header.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(header).getByRole('heading', { name: 'Ingeniería' })).toBeTruthy();
     expect(within(toolbar).getByRole('searchbox', { name: 'Buscar proyecto de ingeniería' })).toBeTruthy();
+  });
+});
+
+/* ── #738 — canonical release enters the Engineering queue ───────────────── */
+
+describe('#738 canonical release queue entry', () => {
+  afterEach(cleanup);
+
+  const canonicalDraft: ProjectWithCustomer = {
+    id: 'canon1',
+    name: 'Cocina Liberada',
+    customerLabel: 'Cliente DT',
+    status: 'draft',
+    items: [],
+    currency: 'MXN',
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+    resolvedProductionRelease: {
+      source: 'canonical',
+      releaseId: 'rel-1',
+      releaseNumber: 1,
+      designRevisionId: 'dr-2',
+      designRevisionNumber: 2,
+      quoteRevisionId: 'qr-2',
+    },
+  } as unknown as ProjectWithCustomer;
+
+  const canonicalWithLegacyLog: ProjectWithCustomer = {
+    ...canonicalDraft,
+    id: 'canon2',
+    name: 'Cocina Liberada con Log Viejo',
+    status: 'accepted',
+    engineeringLog: logDocumented,
+  } as unknown as ProjectWithCustomer;
+
+  it('shows the draft+P1 obra in the queue with its release label and pending status', () => {
+    render(
+      <EngineeringScreen
+        projects={[canonicalDraft]}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    const card = screen.getByTestId('eng-project-canon1');
+    expect(card).not.toBeNull();
+    expect(within(card).getByText('Liberación #1 · Diseño R2')).not.toBeNull();
+    expect(within(card).getByText('Pendiente')).not.toBeNull();
+  });
+
+  it('does not offer the legacy "Iniciar" log action for a canonical obra', () => {
+    const onStartEngineering = vi.fn();
+    render(
+      <EngineeringScreen
+        projects={[canonicalDraft]}
+        onStartEngineering={onStartEngineering}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText('Iniciar')).toBeNull();
+    expect(onStartEngineering).not.toHaveBeenCalled();
+  });
+
+  it('an accepted obra with P1 does NOT appear as sent (no invented skip to Almacén)', () => {
+    render(
+      <EngineeringScreen
+        projects={[{ ...canonicalDraft, id: 'canon3', status: 'accepted' } as unknown as ProjectWithCustomer]}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('eng-project-canon3')).not.toBeNull();
+    expect(screen.queryByTestId('eng-sent-canon3')).toBeNull();
+  });
+
+  it('an uncorrelated legacy log surfaces as "Sin verificar", never as completed', () => {
+    render(
+      <EngineeringScreen
+        projects={[canonicalWithLegacyLog]}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    const card = screen.getByTestId('eng-project-canon2');
+    expect(within(card).getByText('Sin verificar')).not.toBeNull();
+    expect(within(card).queryByText('Documentado')).toBeNull();
+  });
+
+  it('a cancelled obra with a canonical release is not presented as active work', () => {
+    render(
+      <EngineeringScreen
+        projects={[{ ...canonicalDraft, id: 'canon4', cancelledAt: '2026-09-10T10:00:00Z' } as unknown as ProjectWithCustomer]}
+        onStartEngineering={vi.fn()}
+        onOpenProject={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('eng-project-canon4')).toBeNull();
+    expect(screen.queryByTestId('eng-sent-canon4')).toBeNull();
   });
 });

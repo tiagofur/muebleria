@@ -53,9 +53,10 @@ Timestamps operativos incluyen hora y actor del hecho real. Una fecha de comprom
 
 Fuentes: `backend-go/internal/domain/quote_commercial.go`, `production_release.go`; `internal/storage/production_release_authority.go`, `partExecutions.go`, `materialPlanning.go`; `internal/api/installation.go`.
 
-### 2.2 Contradicción actual de etapas
+### 2.2 Etapas — contradicción de la base examinada, corregida por #738
 
-`packages/domain/src/processStage.ts` sigue implementando:
+En la base examinada (`556804c1`), `packages/domain/src/processStage.ts`
+implementaba:
 
 ```text
 si Project.status no es accepted/produced → ventas
@@ -66,9 +67,62 @@ si materialsRelease                      → produccion
 sentToProduction = engineeringLog.sentToProductionAt O release canónico
 ```
 
-A la vez, `releaseAuthority.ts#projectAllowsProductionAccess` habilita el hub con release canónico aunque Project.status sea draft. La cola de `EngineeringScreen.tsx` filtra por projectProcessStage.
+A la vez, `releaseAuthority.ts#projectAllowsProductionAccess` habilitaba el
+hub con release canónico aunque Project.status fuera draft: la obra podía
+abrir Producción y seguir clasificada como Ventas, o saltar Ingeniería con
+un accepted antiguo + P.
 
-Por eso Project draft + Q aceptada + R aprobada + P puede abrir Producción y seguir clasificado como Ventas; con accepted antiguo + P puede saltar Ingeniería. Es un defecto, no una nueva invariante. #738 corrige entrada/navegación; #740 completa las decisiones operativas.
+#738 (implementado) unificó la proyección ejecutable que cola, métricas y
+workspace consumen:
+
+```text
+ventas       = cancelada (cancelledAt), o sin release canónico y
+               (draft/quoted, o accepted/produced sólo pre-DT/local)
+ingenieria   = release canónico presente sin evidencia material
+               release-correlacionada (cualquiera sea Project.status),
+               o accepted/produced legacy sin sentToProductionAt
+almacen      = canónico: requerimientos congelados derivados del release
+               exacto; legacy: sentToProductionAt sin materialsRelease
+produccion   = canónico: derivación + autorización de materiales
+               release-scoped (stamp auditado); legacy: materialsRelease
+```
+
+- Un `ProductionRelease` canónico habilita la **preparación** de Ingeniería;
+  por sí solo no la completa, no libera materiales ni inicia fabricación.
+  Sólo la evidencia material CORRELACIONADA con la P exacta avanza la obra
+  (`materialEvidenceCorrelatesWithRelease`): el snapshot de requerimientos
+  debe llevar el `releaseId` de la autoridad resuelta Y su huella de BOM
+  (`bomFingerprint` = `manufacturingFingerprint`); la autorización
+  release-scoped escribe el stamp sobre esa derivación. Requerimientos de
+  otra P, sin identidad o con huella incompatible — y un stamp legacy sin
+  derivación correlacionada — jamás avanzan la autoridad actual (P2 no
+  hereda la etapa operativa de la evidencia de P1). La finalización durable
+  de Ingeniería por release es #740.
+- La cadena legacy aplica SÓLO a contexto pre-Digital-Thread positivamente
+  identificado (`hasDigitalThreadContext === false`). El servidor proyecta
+  el campo en toda lectura del API y los productores locales (seed,
+  repositorio local, creación en modo guest) lo declaran positivamente: el
+  modo local es DT-free por construcción. Procedencia desconocida
+  (`undefined`) falla cerrado — un payload que nadie avaló no obtiene etapa
+  fabril a partir de stamps antiguos, ni en la etapa ni en
+  `canReleaseMaterials`.
+- `sentToProduction` sólo refleja el handshake legacy OC-022
+  (`engineeringLog.sentToProductionAt`); "existe P" ya no se interpreta
+  como envío ya realizado.
+- `engineeringEntryStatus` proyecta el estado honesto de preparación para
+  las superficies de Ingeniería: `pending` (sin evidencia), los estados del
+  log legacy, o `unverified` (release canónico + log legacy no
+  correlacionado — evidencia que no prueba la finalización de esa
+  liberación y no se borra).
+- Proyectos modernos (`hasDigitalThreadContext === true`) con stamp residual
+  accepted/produced y sin release fallan cerrado. La ausencia de proyección
+  (`undefined`) es modo local, no evidencia pre-DT: la cadena legacy se
+  conserva para el modo local/pre-DT positivamente identificado (`false`).
+- El acceso de consulta/operación al hub de Producción es otra regla
+  (`projectAllowsProductionAccess`, #697): consultar el hub no es lo mismo
+  que haber completado Ingeniería.
+
+Ese comportamiento era un defecto, no una invariante: #738 corrige entrada/navegación (arriba); #740 completa las decisiones operativas.
 
 ### 2.3 Ingeniería actual
 

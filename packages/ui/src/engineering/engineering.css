@@ -200,6 +200,25 @@
   min-height: 0;
 }
 
+/* #738 — exact release context in the workspace header + working-view
+   notice separating live data tabs from frozen release content. */
+.eng-workspace__release-context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.eng-workspace__live-notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--text-secondary, inherit);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Resumen tab
    ═══════════════════════════════════════════════════════════════════════════ */

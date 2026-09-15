@@ -201,6 +201,11 @@ export interface ProjectDetailContextValue {
   readonly onExport?: () => void | Promise<void>;
   readonly onExportProductionPack?: () => void | Promise<void>;
   readonly onOpenInProduction?: (projectId: string) => void;
+  /**
+   * #738 — open Engineering pinned to the obra's exact canonical release
+   * (preparation available; the release itself doesn't complete engineering).
+   */
+  readonly onOpenInEngineering?: (projectId: string, releaseId: string) => void;
   /** WEB-DT-1 (#500): open the server-backed Project Furniture matrix. */
   readonly onOpenFurnitureMatrix?: (projectId: string) => void;
   /** WEB-DT-2 (#501): open the server-backed Designs and revisions workspace. */

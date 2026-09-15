@@ -18,10 +18,12 @@ import {
 import './engineering.css';
 
 import {
-  engineeringStatus,
-  ENGINEERING_STATUS_LABELS_ES,
+  engineeringEntryStatus,
+  ENGINEERING_ENTRY_STATUS_LABELS_ES,
   projectProcessStage,
-  type EngineeringStatus,
+  releaseAuthorityLabel,
+  releaseAuthorityOf,
+  type EngineeringEntryStatus,
   type Project,
 } from '@granete/domain';
 import {
@@ -35,20 +37,22 @@ import {
 
 type ProjectWithCustomer = Project & { readonly customerLabel?: string };
 
-type FilterStatus = EngineeringStatus | 'all';
+type FilterStatus = EngineeringEntryStatus | 'all';
 
 const STATUS_CHIP_OPTIONS: readonly StatusChipOption<FilterStatus>[] = [
   { value: 'all', label: 'Todos' },
   { value: 'pending', label: 'Pendientes' },
   { value: 'in_progress', label: 'En proceso' },
   { value: 'documented', label: 'Documentados' },
+  { value: 'unverified', label: 'Sin verificar' },
 ];
 
 /** Engineering status → semantic status-badge modifier (design.md §5.2). */
-const STATUS_BADGE_MODIFIER: Readonly<Record<EngineeringStatus, string>> = {
+const STATUS_BADGE_MODIFIER: Readonly<Record<EngineeringEntryStatus, string>> = {
   pending: 'open',
   in_progress: 'progress',
   documented: 'done',
+  unverified: 'progress',
 };
 
 export function EngineeringScreen({
@@ -73,8 +77,10 @@ export function EngineeringScreen({
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
 
   // Process stage gating — the working queue is ONLY projects in the
-  // ingeniería stage (accepted, engineering not sent yet). Projects already
-  // sent to Almacén/Producción move to the read-only "Enviadas" section.
+  // ingeniería stage: canonical releases (#738, Project may still be draft)
+  // or pre-DT accepted obras engineering hasn't sent yet. Projects already
+  // sent to Almacén/Producción (legacy flow) move to the read-only
+  // "Enviadas" section.
   const queue = useMemo(
     () => projects.filter((p) => projectProcessStage(p) === 'ingenieria'),
     [projects],
@@ -99,7 +105,7 @@ export function EngineeringScreen({
       );
     }
     if (statusFilter !== 'all') {
-      result = result.filter((p) => engineeringStatus(p.engineeringLog) === statusFilter);
+      result = result.filter((p) => engineeringEntryStatus(p) === statusFilter);
     }
     return result;
   }, [queue, search, statusFilter]);
@@ -158,17 +164,21 @@ export function EngineeringScreen({
         <EmptyState
           icon={ClipboardList}
           title="No hay obras para ingeniería"
-          description="Cuando Ventas acepte una cotización, la obra aparece aquí para documentación técnica."
+          description="Cuando se libere una obra para fabricación — o Ventas acepte una cotización del flujo anterior — aparece aquí para su preparación técnica."
         />
       ) : (
         <ul className="eng-project-list">
           {filtered.map((project) => {
-            const status = engineeringStatus(project.engineeringLog);
+            const status = engineeringEntryStatus(project);
             const log = project.engineeringLog;
+            // #738 — a canonical obra enters through its release: no legacy
+            // per-project log is created to "start" it (the log can't prove
+            // anything about the release); the workspace opens directly.
+            const canonical = releaseAuthorityOf(project)?.source === 'canonical';
             return (
               <li
                 key={project.id}
-                className={`eng-project-card${status === 'pending' ? ' eng-project-card--startable' : ''}`}
+                className={`eng-project-card${status === 'pending' && !canonical ? ' eng-project-card--startable' : ''}`}
                 data-testid={`eng-project-${project.id}`}
               >
                 <button
@@ -185,6 +195,14 @@ export function EngineeringScreen({
                     ) : null}
                   </div>
                   <div className="eng-project-card__meta">
+                    {canonical ? (
+                      <span
+                        className="eng-project-card__revision"
+                        title="Liberación exacta que habilita la preparación técnica de esta obra"
+                      >
+                        {releaseAuthorityLabel(project)}
+                      </span>
+                    ) : null}
                     {log?.startedAt ? (
                       <div className="eng-project-card__date-block">
                         <span className="eng-project-card__date-label">Inicio</span>
@@ -208,14 +226,14 @@ export function EngineeringScreen({
                     ) : null}
                     <span className={`status-badge status-badge--${STATUS_BADGE_MODIFIER[status]}`}>
                       <span className="status-badge__dot" aria-hidden>●</span>
-                      {ENGINEERING_STATUS_LABELS_ES[status]}
+                      {ENGINEERING_ENTRY_STATUS_LABELS_ES[status]}
                     </span>
-                    {status === 'pending' && (
+                    {status === 'pending' && !canonical && (
                       <span className="eng-project-card__start-slot" aria-hidden />
                     )}
                   </div>
                 </button>
-                {status === 'pending' && (
+                {status === 'pending' && !canonical && (
                   <button
                     type="button"
                     className="btn btn--primary btn--small eng-project-card__start"

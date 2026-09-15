@@ -3,31 +3,47 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   pull_request:
-    branches:
-      - main
-      - master
+    branches: [main, master]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  impact:
+    name: Select verification impact
+    runs-on: ubuntu-latest
+    outputs:
+      plan: ${{ steps.impact.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Classify exact tested merge tree (unknown means full)
+        id: impact
+        run: python3 scripts/ci_impact.py --ci
+
   validate-ledger:
     name: Validate Feature List & Harness
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Validate feature_list.json
         run: |
           python3 - <<'PY'
@@ -48,67 +64,51 @@ jobs:
               print(f"[FAIL] feature_list.json inválido: {e}")
               sys.exit(1)
           PY
-
       - name: Check generated OpenAPI contract drift
         run: python3 scripts/check_openapi_drift.py
+      - name: Verify CI selection, fail-closed gate and factory contracts
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_ci_*.py' -v
+          python3 -m unittest discover -s scripts -p test_factory_efficiency.py -v
+          python3 -m unittest discover -s scripts -p test_factory_workflow_contract.py -v
 
   typescript:
     name: TypeScript (Typecheck & Tests)
+    needs: impact
+    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs.typescript }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        # La versión sale de packageManager en package.json; no fijar aquí
-        # para que no diverja (OC-002).
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
         with:
-          # pnpm@11 (packageManager) requiere Node >= 22.13; Node 20 lo crashea.
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
           node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Run Tests
-        run: pnpm test
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
 
   proyectar-visual:
     name: Proyectar WebGL visual gate (#444)
+    needs: impact
+    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['proyectar-visual'] }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      # Suite determinista: Chromium + SwiftShader (CPU GL) y baselines sin
-      # sufijo de plataforma; misma configuración que la corrida local
-      # (docs/verification.md § Gate visual WebGL de Proyectar).
-      - name: Run Proyectar visual suite
-        run: pnpm exec playwright test --config=playwright.config.ts tests/visual/proyectar-webgl.spec.ts
-
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # Same deterministic Chromium/SwiftShader baseline, no weakened tests.
+      - run: pnpm exec playwright test --config=playwright.config.ts tests/visual/proyectar-webgl.spec.ts
       - name: Upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
@@ -118,46 +118,53 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  foundation-gate-a:
-    name: Foundation Gate A
+  foundation-postgres:
+    name: Foundation PostgreSQL proofs
+    needs: impact
+    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['foundation-postgres'] }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
         with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+          persist-credentials: false
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
           cache-dependency-path: backend-go/go.sum
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Run unchanged deployment/RLS/fresh/upgrade/atomic/pilot proofs
+        run: scripts/foundation-gate-a.sh --stage postgres
 
-      - name: Run authoritative Foundation Gate A
-        run: pnpm gate:foundation:a
+  organization-browser:
+    name: Foundation real browser proofs
+    needs: impact
+    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['organization-browser'] }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: backend-go/go.sum
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # Full real-browser suite and isolated runtime-role PostgreSQL, not mocks.
+      - run: scripts/foundation-gate-a.sh --stage browser
 
   sketchup-extension:
     name: SketchUp Extension (Ruby, ${{ matrix.os }})
-    # Documented runtime targets are macOS and Windows; run the portable
-    # Ruby/RBZ gates on all three families. Licensed SketchUp host smoke
-    # remains a separate manual gate (README §Evidencia).
+    needs: impact
+    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['sketchup-extension'] }}
     strategy:
       fail-fast: false
       matrix:
@@ -167,64 +174,67 @@ jobs:
       run:
         working-directory: apps/sketchup-extension
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2.11'
           bundler: Gemfile.lock
           bundler-cache: true
           working-directory: apps/sketchup-extension
-
       - name: Verify extension and RBZ package
         run: bundle exec rake verify
 
   backend-go:
     name: Go Backend Tests
+    needs: impact
+    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['backend-go'] }}
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
         env:
           POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      # Sin esto, los tests de integración de storage se saltan con t.Skip
-      # y la CI da un verde falso (OC-002). Los propios tests aplican las
-      # migraciones embebidas sobre la base fresca.
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
           cache-dependency-path: backend-go/go.sum
-
-      # F179: la suite de Pilot Readiness (tests/pilotreadiness) corre dentro
-      # de `go test ./...` y su pata de backup/restore necesita pg_dump/
-      # pg_restore (misma major que el service container postgres:16).
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
-
       - name: Run Go Tests
         working-directory: backend-go
-        # PostgreSQL migration/race suites share cluster-level role DDL; keep
-        # package execution serial so independent ephemeral DB fixtures cannot
-        # concurrently mutate pg_auth_members.
-        # -timeout is PER PACKAGE (go default 10m): the internal/storage suite
-        # runs every migration + RLS/direct-SQL proof against real PostgreSQL
-        # and has been measured between 8 and 16.5 minutes depending on runner
-        # load — the implicit default failed the whole package on a marginal
-        # overrun (#667 M1 residual round CI evidence). More time, same tests.
+        # Keep serialization: cluster-level role DDL shares pg_auth_members.
+        # Keep the existing per-package timeout, not a fast-but-incomplete suite.
         run: go test -p 1 -timeout=30m -v ./...
+
+  foundation-gate-a:
+    # Preserve the existing check name as the stable aggregate; all expected
+    # jobs must succeed. Publication metadata remains a separate required gate.
+    name: Foundation Gate A
+    needs: [impact, validate-ledger, typescript, proyectar-visual, sketchup-extension, backend-go, foundation-postgres, organization-browser]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require every selected proof for the exact tested commit
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_result.py

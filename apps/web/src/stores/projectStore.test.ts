@@ -23,6 +23,7 @@ import {
   ensureCatalogStore,
   getCatalogStoreState,
 } from './catalogStore';
+import { useWorkspaceStore } from './workspaceStore';
 import { useUiStore } from './uiStore';
 
 // ---------------------------------------------------------------------------
@@ -109,6 +110,8 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     marginFactor: 1.35,
     laborFixedCost: 1200,
     status: 'draft',
+    // Store fixtures are local-tool works: positively pre-DT (#738 review).
+    hasDigitalThreadContext: false,
     items: [],
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
@@ -243,6 +246,24 @@ describe('projectStore — createProject (cross-store customers)', () => {
     // No new customers added to catalogStore.
     const customers = getCatalogStoreState().catalog?.customers;
     expect(customers).toEqual(cat.customers ?? []);
+  });
+
+  it('#738 review — guest-born projects carry the POSITIVE pre-DT signal; server sessions wait for the server projection', () => {
+    const cat = seedCatalog();
+
+    useWorkspaceStore.setState({ session: 'guest', activeOrg: null, workspaceSeq: 0 });
+    const guestStore = createProjectStore({ deps: makeDeps().deps });
+    guestStore.getState().createProject(projectDraft, cat, { id: 'user-1', role: 'admin' });
+    expect(guestStore.getState().projects[0]!.hasDigitalThreadContext).toBe(false);
+
+    // On a server-backed session the optimistic object carries NO guessed
+    // provenance — the server response owns the projection.
+    useWorkspaceStore.setState({ session: 'auth', activeOrg: null, workspaceSeq: 0 });
+    const authStore = createProjectStore({ deps: makeDeps().deps });
+    authStore.getState().createProject(projectDraft, cat, { id: 'user-1', role: 'admin' });
+    expect('hasDigitalThreadContext' in (authStore.getState().projects[0] ?? {})).toBe(false);
+
+    useWorkspaceStore.setState({ session: null, activeOrg: null, workspaceSeq: 0 });
   });
 });
 
