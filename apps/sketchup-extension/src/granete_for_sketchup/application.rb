@@ -120,6 +120,9 @@ module Granete
           host_reconciliation: @host_reconciliation,
           save_awareness: @save_awareness,
           position_sync_coordinator: @position_sync_coordinator,
+          # #731 PR2: the design-wide validation batch consumes the SAME
+          # canonical publication scope the gate and publisher manifest.
+          publication_scope_provider: method(:publication_scope_items),
           commercial_projection_service: commercial_projection_service,
           project_bootstrap: commercial_entry[:project_bootstrap], initial_quote: commercial_entry[:initial_quote]
         )

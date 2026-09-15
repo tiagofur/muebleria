@@ -18,7 +18,7 @@ module Granete
           @reviews = {}
         end
 
-        attr_reader :reviews
+        attr_reader :reviews, :tracker
 
         # Runs the authoritative preflight for a furniture-scoped semantic
         # target and returns the stored review. A missing furniture, a

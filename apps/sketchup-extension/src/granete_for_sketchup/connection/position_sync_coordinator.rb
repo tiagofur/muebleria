@@ -341,7 +341,132 @@ module Granete
           @known_transforms[model] = transforms
         end
 
+        # #731 PR2 — converge every pending_confirmation unit of the design
+        # in ONE authoritative working copy transaction: a single GET, one
+        # WorkingCopyMerger pass over all units, a single PUT and a
+        # per-unit authoritative readback (never N GET+PUT rounds). The
+        # caller is responsible for having classified the ids as
+        # pending_confirmation against a FRESH HostReconciliation
+        # projection — that classification already proves the instance is
+        # active, there is exactly one local root and the identity and
+        # definition match the authorities. This method adds the PR1
+        # invariants: exact context guards before and after the PUT, exact
+        # baseRevisionId validation, readback transform equivalence and no
+        # known-state advance when anything mismatches.
+        #
+        # It performs NO preflight by itself: the design-wide batch that
+        # follows owns validation. Positions it converges become
+        # present_synced for the next reconciliation projection.
+        def converge_pending(model, binding, furniture_instance_ids) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+          return convergence_failure(:unbound_model, 'modelo sin vincular a proyecto de Granete', []) unless binding
+          unless context_valid?(
+            model, binding
+          )
+            return convergence_failure(:context_changed, 'el modelo o binding cambió antes de sincronizar',
+                                       [])
+          end
+
+          metadata_store = @metadata_store_factory.call(model)
+          entries = furniture_instance_ids.map do |id|
+            entity = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, id)['entity']
+            { id: id, entity: entity }
+          end
+          located_entries = entries.select { |entry| entry[:entity] }
+          missing = entries.select { |entry| entry[:entity].nil? }.map { |entry| entry[:id] }
+          if located_entries.empty?
+            return convergence_failure(:not_placed, 'los muebles no están en el modelo',
+                                       missing)
+          end
+
+          working = @service.get_working_copy(binding.design_id)
+          unless context_valid?(
+            model, binding
+          )
+            return convergence_failure(:context_changed,
+                                       'el modelo o binding cambió antes de enviar cambios al servidor', missing)
+          end
+
+          merged_items = working.items
+          located_entries.each do |entry|
+            intent = read_intent_from_metadata(model, entry[:entity], entry[:id]) || {}
+            locator = ProjectFurniture::ManagedFurniture.persistent_locator(entry[:entity])
+            merged_items = ProjectFurniture::WorkingCopyMerger.merge(
+              Struct.new(:items).new(merged_items),
+              entry[:id], entry[:entity], intent: intent, locator: locator
+            )
+          end
+
+          unless context_valid?(
+            model, binding
+          )
+            return convergence_failure(:context_changed, 'el modelo o binding cambió durante la sincronización',
+                                       missing)
+          end
+
+          updated_wc = @service.update_working_copy(
+            binding.design_id,
+            items: merged_items,
+            base_revision_id: binding.base_revision_id,
+            source_type: 'sketchup'
+          )
+
+          unless context_valid?(model, binding)
+            return convergence_failure(:context_changed,
+                                       'el modelo o binding cambió durante la sincronización', missing)
+          end
+
+          unless updated_wc.design_id == binding.design_id &&
+                 updated_wc.project_id == binding.project_id &&
+                 updated_wc.base_revision_id == binding.base_revision_id
+            emit_sync_outcome(event: :converge, ids: located_entries.map { |entry| entry[:id] },
+                              status: :failed, code: :base_revision_mismatch,
+                              model: model, binding: binding)
+            return convergence_failure(:base_revision_mismatch,
+                                       'el Working Copy devuelto no coincide con la revisión base del modelo', missing)
+          end
+
+          synced = []
+          failed = missing.to_h { |id| [id, 'not_placed'] }
+          located_entries.each do |entry|
+            returned = updated_wc.items.find { |item| item.furniture_instance_id == entry[:id] }
+            host_transform = entry[:entity].respond_to?(:transformation) ? entry[:entity].transformation : nil
+            if returned&.transform && host_transform &&
+               ProjectFurniture::TransformContract.equivalent_to_host?(returned.transform, host_transform)
+              @known_transforms[model] ||= {}
+              @known_transforms[model][entry[:id]] = returned.transform
+              synced << entry[:id]
+            else
+              failed[entry[:id]] = 'readback_mismatch'
+            end
+          end
+
+          if synced.any?
+            @logger.info('position_sync_converge_synced', count: synced.length)
+            emit_sync_outcome(event: :converge, ids: synced, status: :success,
+                              code: :ok, model: model, binding: binding)
+          end
+          if failed.any?
+            @logger.warn('position_sync_converge_mismatch', failed: failed)
+            emit_sync_outcome(event: :converge, ids: failed.keys, status: :failed,
+                              code: :readback_mismatch, model: model, binding: binding)
+          end
+
+          { 'ok' => failed.empty?, 'code' => failed.empty? ? 'converged' : 'readback_mismatch',
+            'synced' => synced, 'failed' => failed }
+        rescue StandardError => e
+          @logger.error('position_sync_converge_failed', error: e,
+                                                         ids: furniture_instance_ids)
+          emit_sync_outcome(event: :converge, ids: furniture_instance_ids, status: :failed,
+                            code: extract_error_code(e), model: model, binding: binding)
+          convergence_failure(extract_error_code(e), e.message, [])
+        end
+
         private
+
+        def convergence_failure(code, reason, missing)
+          failed = missing.to_h { |id| [id, 'not_placed'] }
+          { 'ok' => false, 'code' => code.to_s, 'reason' => reason, 'synced' => [], 'failed' => failed }
+        end
 
         def emit_sync_outcome(event:, ids:, status:, model:, binding:, code: :ok)
           unless context_valid?(model, binding)

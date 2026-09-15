@@ -51,6 +51,7 @@ module Granete
         host/preflight_review
         host/preflight_review_session
         host/publication_preflight_gate
+        host/design_preflight_batch
         host/save_awareness
         host/position_sync_observer
         overlay/manufacturing_feature_view

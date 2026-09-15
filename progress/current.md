@@ -1374,3 +1374,47 @@ EOL.
   warnings de update-during-render. Panel 15/15; ui 1855; typecheck+pnpm
   test completos PASS; openapi:check PASS; browser gate 5/5 PASS (reintento
   tras un flake de carga del host en pairing, paso no relacionado).
+
+## #731 PR2 — validación automática del diseño + Publicar diseño como happy path (feat/731-pr2-design-validation-publish)
+
+- Base exacta: `main` = `189c755e` (merge de PR #734 / PR1 de #731, verificado
+  con `git merge-base --is-ancestor`).
+- Entrega A — `Host::DesignPreflightBatch` (nuevo, `host/`): loop sobre el
+  scope canónico inyectado (el MISMO `Application#publication_scope_items` del
+  gate/publisher), una unidad por tick del scheduler inyectado (`UI.start_timer`
+  en producción), contexto exacto revalidado antes de cada unidad, blocked/
+  unavailable son resultados (nunca abortan), generación/token para descartar
+  corridas superseded, revalida TODO el scope siempre (freshness no probable:
+  el fingerprint es server-side).
+- Entrega B — `PositionSyncCoordinator#converge_pending`: convergencia de N
+  pending_confirmation en 1 GET + 1 merge coalescido + 1 PUT + readback por
+  unidad, guards de contexto/base de PR1; sin preflight propio (el batch
+  posterior es el dueño).
+- Entrega C — `handle_publish_design_revision` ahora orquesta:
+  reconciliación fresca → converge sólo pending_confirmation → reconciliación
+  fresca → hard blockers detienen con excepciones → batch → gate FRESCO →
+  `Publisher.publish` intacto. Single-flight Ruby (`action_in_progress`),
+  guard `mutation_coordinator.busy?` antes de publicar.
+- Entrega D — callback `validate_design_revision` + botón `Validar diseño`
+  (el MISMO batch, sin publicar).
+- Entrega E — exceptions-only: payload Ruby `{total, ready, attention,
+  exceptions[]}` (displayName desde HostReconciliation, review autoritativo),
+  JS renderiza resumen + sólo cards de excepción con [Seleccionar]
+  (`select_project_furniture`) e [Ir al origen] (`navigate_issue` vía
+  `GranetePreflightReview.navigateFurnitureIssue`). El botón Publicar ya no se
+  deshabilita por gate pendiente: el click dispara la orquestación; Ruby
+  fail-closea.
+- Entrega F — `Verificar fabricación` unitario intacto como diagnóstico
+  contextual (engine, sesión y tests conservados).
+- Entrega G — rename `Validar de nuevo` → `Actualizar conexión` (sólo
+  refresca binding).
+- Entrega H — CommercialProjection: `:full` sólo tras publish exitoso
+  (regla simple elegida; converge_pending NO notifica :full), nunca por
+  unidad; sin QuoteRevision ni pricing en Ruby.
+- Verificación: `rake verify` PASS completo — RuboCop 0 offenses; unit
+  748 runs / 5041 assertions / 0 failures (incluye 8 batch + 8 workflow + 4
+  converge nuevos); boundary 6/6; RBZ determinista verificado
+  (sha256 55b8dedf833d36099958dbc3408b78e7938a6eec2eae16edd7ce34d35e53eec1);
+  `node test/js/dialog_publish_test.js` 22/22; `git diff --check` limpio.
+- SketchUp real (TestUp): NOT_TESTED en esta sesión (sin host disponible);
+  `TC_DesignPublishSmoke.rb` queda como smoke real-host para el merge gate.

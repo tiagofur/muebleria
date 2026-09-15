@@ -42,6 +42,10 @@ class PositionSyncCoordinatorTest < Minitest::Test
   REVISION_R1 = '53000000-0000-0000-0000-000000000001'
   DEFINITION_ID = '50000000-0000-0000-0000-0000000000d1'
   FI_1 = '51000000-0000-0000-0000-0000000000f1'
+  FI_2 = '51000000-0000-0000-0000-0000000000f2'
+  FI_3 = '51000000-0000-0000-0000-0000000000f3'
+  FI_4 = '51000000-0000-0000-0000-0000000000f4'
+  FI_5 = '51000000-0000-0000-0000-0000000000f5'
 
   class CoordModel < SketchupStub::ModelStub
     include SketchupStub::AttributeContainer
@@ -821,6 +825,80 @@ class PositionSyncCoordinatorTest < Minitest::Test
     refute panel['clean']
     row = panel['items'].find { |i| i['id'] == FI_1 }
     assert_equal 'pending_confirmation', row['reconciliationState']
+  end
+
+  # ------------------------------------------------------------------
+  # #731 PR2 — design-wide convergence of pending_confirmation units.
+  # ------------------------------------------------------------------
+
+  def test_converge_pending_coalesces_all_units_into_one_get_and_one_put
+    ids = [FI_1, FI_2, FI_3, FI_4, FI_5]
+    ids.each { |id| create_managed_root(id) }
+    binding = MB::Store.new(@model).read
+
+    result = @coordinator.converge_pending(@model, binding, ids)
+
+    assert result['ok'], result.inspect
+    assert_equal 'converged', result['code']
+    assert_equal ids.sort, result['synced'].sort
+    assert_empty result['failed']
+    # ONE authoritative working copy transaction, never N GET+PUT rounds.
+    assert_equal 1, @transport.requests_for('GET', %r{/working-copy}).length
+    assert_equal 1, @transport.requests_for('PUT', %r{/working-copy}).length
+    put_items = @transport.requests_for('PUT', %r{/working-copy}).first['body']['items']
+    assert_equal 5, put_items.length
+    # No per-unit preflight: the design-wide batch that follows owns it.
+    assert_empty @preflight_session.runs
+  end
+
+  def test_converge_pending_reports_readback_mismatch_without_advancing_known_state
+    create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 200,
+                       { 'project_id' => PROJECT_ID, 'design_id' => DESIGN_ID,
+                         'base_revision_id' => REVISION_R1,
+                         'items' => [
+                           { 'furniture_instance_id' => FI_1,
+                             'parameters' => {}, 'material_choices' => {},
+                             'transform' => { 'translation_mm' => [999_999.0, 0.0, 0.0],
+                                              'rotation_deg' => [0.0, 0.0, 0.0] } }
+                         ] })
+
+    result = @coordinator.converge_pending(@model, binding, [FI_1])
+
+    refute result['ok']
+    assert_equal 'readback_mismatch', result['code']
+    assert_equal({ FI_1 => 'readback_mismatch' }, result['failed'])
+    assert_empty result['synced']
+    assert_nil @coordinator.known_transforms[@model][FI_1],
+               'a mismatching readback must not advance the known state'
+  end
+
+  def test_converge_pending_aborts_without_put_when_context_changes
+    create_managed_root(FI_1)
+    binding = MB::Store.new(@model).read
+    @transport.before_request = lambda do |method, path|
+      @current_model = Object.new if method == 'GET' && path =~ %r{/working-copy}
+    end
+
+    result = @coordinator.converge_pending(@model, binding, [FI_1])
+
+    refute result['ok']
+    assert_equal 'context_changed', result['code']
+    assert_empty @transport.requests_for('PUT', %r{/working-copy}),
+                 'a context switch before the PUT must leave the server untouched'
+  ensure
+    @transport.before_request = nil
+  end
+
+  def test_converge_pending_requires_a_binding
+    create_managed_root(FI_1)
+
+    result = @coordinator.converge_pending(@model, nil, [FI_1])
+
+    refute result['ok']
+    assert_equal 'unbound_model', result['code']
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
   private
