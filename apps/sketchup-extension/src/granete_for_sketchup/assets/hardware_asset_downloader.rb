@@ -12,16 +12,20 @@ module Granete
       # to storage endpoints), validates the exact manifest pins, and caches the result via HardwareAssetCache.
       # Cached assets are served only with an active authorization grant from the server.
       class HardwareAssetDownloader
-        attr_reader :cache, :grant_manager
+        attr_reader :cache, :grant_manager, :clock
 
         MAX_ASSET_BYTES = 50 * 1024 * 1024 # 50 MB max geometry file size
 
-        def initialize(transport:, auth_provider:, cache: nil, logger: nil, http_fetcher: nil, grant_manager: nil)
+        def initialize(transport:, auth_provider:, cache: nil, logger: nil,
+                       http_fetcher: nil, grant_manager: nil, clock: nil)
           @transport = transport
           @auth_provider = auth_provider
           @cache = cache || HardwareAssetCache.new
           @logger = logger
-          @grant_manager = grant_manager || HardwareAssetGrantManager.new(transport: transport, logger: logger)
+          @clock = clock || (grant_manager.respond_to?(:clock) ? grant_manager.clock : Time)
+          @grant_manager = grant_manager || HardwareAssetGrantManager.new(
+            transport: transport, logger: logger, clock: @clock
+          )
           @http_fetcher = http_fetcher || method(:default_http_fetch)
           @lock_master = Mutex.new
           @key_locks = {}
@@ -53,6 +57,16 @@ module Granete
         end
 
         private
+
+        def current_time
+          @grant_manager.respond_to?(:current_time) ? @grant_manager.current_time : @clock.now
+        end
+
+        def grant_valid?(grant)
+          return false unless grant.is_a?(Hash)
+
+          @grant_manager.respond_to?(:grant_valid?) ? @grant_manager.grant_valid?(grant) : false
+        end
 
         def current_org_id
           return @auth_provider.current_organization_id if @auth_provider.respond_to?(:current_organization_id)
@@ -87,10 +101,11 @@ module Granete
           grant = @grant_manager.fetch_grant(
             asset_id: asset_id, revision_id: revision_id, auth_header: active_auth, org_id: active_org
           )
-          return nil unless grant.is_a?(Hash)
-          return nil if context_changed?(active_org, active_auth)
+          return nil unless grant.is_a?(Hash) && !context_changed?(active_org, active_auth)
 
-          manifest = @grant_manager.validate_and_match(grant, caller_sha: sha256, caller_size: expected_bytes)
+          manifest = @grant_manager.validate_and_match(
+            grant, caller_sha: sha256, caller_size: expected_bytes, current_time: current_time
+          )
           return nil unless manifest
 
           target_sha = manifest[:sha256]
@@ -100,7 +115,16 @@ module Granete
             asset_id: asset_id, revision_id: revision_id, sha256: target_sha,
             expected_bytes: target_size, org_id: active_org
           )
-          return cached if cached && !context_changed?(active_org, active_auth)
+          if cached
+            return nil if context_changed?(active_org, active_auth)
+            return cached if grant_valid?(grant)
+
+            return renew_and_deliver_cached(
+              asset_id: asset_id, revision_id: revision_id, target_sha: target_sha,
+              target_size: target_size, active_org: active_org, active_auth: active_auth,
+              cached_path: cached
+            )
+          end
 
           fetch_and_cache_asset(
             asset_id: asset_id, revision_id: revision_id, grant: grant,
@@ -109,13 +133,39 @@ module Granete
           )
         end
 
+        def request_fresh_grant(asset_id, revision_id, target_sha, target_size, active_org, active_auth)
+          @grant_manager.invalidate_grant(
+            auth_header: active_auth, org_id: active_org, asset_id: asset_id, revision_id: revision_id
+          )
+          fresh = @grant_manager.fetch_grant(
+            asset_id: asset_id, revision_id: revision_id, auth_header: active_auth, org_id: active_org
+          )
+          return nil unless fresh.is_a?(Hash) && !context_changed?(active_org, active_auth)
+          return nil unless @grant_manager.validate_and_match(
+            fresh, caller_sha: target_sha, caller_size: target_size, current_time: current_time
+          )
+
+          fresh
+        end
+
+        def renew_and_deliver_cached(asset_id:, revision_id:, target_sha:, target_size:, active_org:,
+                                     active_auth:, cached_path:)
+          return nil if context_changed?(active_org, active_auth)
+
+          fresh = request_fresh_grant(asset_id, revision_id, target_sha, target_size, active_org, active_auth)
+          return nil unless fresh && grant_valid?(fresh)
+
+          cached_path
+        end
+
         def fetch_and_cache_asset(asset_id:, revision_id:, grant:, target_sha:, target_size:, active_org:, active_auth:)
           url = resolve_grant_url(grant['url'])
           return nil unless url
 
           status, data = @http_fetcher.call(url)
+          current_grant = grant
           if [401, 403].include?(status)
-            status, data = retry_fetch_on_expired_grant(
+            status, data, current_grant = retry_fetch_on_expired_grant(
               asset_id, revision_id, target_sha, target_size, active_org, active_auth
             )
           end
@@ -123,28 +173,30 @@ module Granete
           return nil unless status == 200 && data && data.bytesize == target_size
           return nil if context_changed?(active_org, active_auth)
 
-          @cache.put(
+          cached_path = @cache.put(
             asset_id: asset_id, revision_id: revision_id, data: data,
             sha256: target_sha, expected_bytes: target_size, org_id: active_org
+          )
+          return nil unless cached_path
+          return nil if context_changed?(active_org, active_auth)
+          return cached_path if grant_valid?(current_grant)
+
+          renew_and_deliver_cached(
+            asset_id: asset_id, revision_id: revision_id, target_sha: target_sha,
+            target_size: target_size, active_org: active_org, active_auth: active_auth,
+            cached_path: cached_path
           )
         end
 
         def retry_fetch_on_expired_grant(asset_id, revision_id, target_sha, target_size, active_org, active_auth)
-          @grant_manager.invalidate_grant(
-            auth_header: active_auth, org_id: active_org, asset_id: asset_id, revision_id: revision_id
-          )
-          fresh_grant = @grant_manager.fetch_grant(
-            asset_id: asset_id, revision_id: revision_id, auth_header: active_auth, org_id: active_org
-          )
-          return [0, nil] unless fresh_grant.is_a?(Hash)
+          fresh = request_fresh_grant(asset_id, revision_id, target_sha, target_size, active_org, active_auth)
+          return [0, nil, nil] unless fresh
 
-          manifest = @grant_manager.validate_and_match(fresh_grant, caller_sha: target_sha, caller_size: target_size)
-          return [0, nil] unless manifest
+          url = resolve_grant_url(fresh['url'])
+          return [0, nil, nil] unless url
 
-          url = resolve_grant_url(fresh_grant['url'])
-          return [0, nil] unless url
-
-          @http_fetcher.call(url)
+          status, data = @http_fetcher.call(url)
+          [status, data, fresh]
         end
 
         def resolve_grant_url(raw_url)

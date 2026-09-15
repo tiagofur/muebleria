@@ -9,23 +9,35 @@ module Granete
       # download grants for hardware asset revisions. It enforces representation 'skp',
       # exact SHA-256 digests, and positive byte sizes within explicit limits.
       class HardwareAssetGrantManager
+        attr_reader :clock
+
         GRANT_CACHE_TTL = 300 # 5 minutes max in-memory grant validity
         MAX_ASSET_BYTES = 50 * 1024 * 1024 # 50 MB max geometry file size
         VALID_SHA = /\A[a-fA-F0-9]{64}\z/
 
-        def initialize(transport:, logger: nil)
+        def initialize(transport:, logger: nil, clock: Time)
           @transport = transport
           @logger = logger
+          @clock = clock
           @grant_cache = {}
           @grant_cache_mutex = Mutex.new
         end
 
+        def current_time
+          @clock.now
+        end
+
         def fetch_grant(asset_id:, revision_id:, auth_header:, org_id:)
           cached_grant = get_cached_grant(auth_header, org_id, asset_id, revision_id)
-          return cached_grant if cached_grant
+          return cached_grant if cached_grant && grant_valid?(cached_grant)
 
           grant = request_authorization(asset_id, revision_id, auth_header)
-          put_cached_grant(auth_header, org_id, asset_id, revision_id, grant) if grant
+          return nil unless grant.is_a?(Hash)
+          return nil unless grant_valid?(grant)
+
+          effective_exp = effective_expiration(grant)
+          grant['_effective_expires_at'] = effective_exp
+          put_cached_grant(auth_header, org_id, asset_id, revision_id, grant, effective_exp)
           grant
         end
 
@@ -38,8 +50,45 @@ module Granete
           @grant_cache_mutex.synchronize { @grant_cache.clear }
         end
 
-        def validate_and_match(grant, caller_sha:, caller_size:)
+        def grant_valid?(grant, current_time: nil)
+          return false unless grant.is_a?(Hash)
+
+          now_sec = (current_time || self.current_time).to_i
+          exp = effective_expiration(grant, current_time: now_sec)
+          return false if exp.nil?
+
+          exp > now_sec
+        end
+
+        def effective_expiration(grant, current_time: nil)
           return nil unless grant.is_a?(Hash)
+          return grant['_effective_expires_at'].to_i if grant['_effective_expires_at'].is_a?(Numeric)
+
+          server_exp = parse_expiration(grant)
+          return nil if server_exp.nil?
+
+          now_sec = (current_time || self.current_time).to_i
+          [server_exp, now_sec + GRANT_CACHE_TTL].min
+        end
+
+        def parse_expiration(grant)
+          return nil unless grant.is_a?(Hash)
+
+          raw = grant['expires_at'] || grant['expiresAt']
+          return nil if raw.nil? || raw.to_s.strip.empty?
+
+          if raw.is_a?(Numeric)
+            raw.to_i
+          else
+            Time.parse(raw.to_s).to_i
+          end
+        rescue StandardError
+          nil
+        end
+
+        def validate_and_match(grant, caller_sha:, caller_size:, current_time: nil)
+          return nil unless grant.is_a?(Hash)
+          return nil unless grant_valid?(grant, current_time: current_time)
 
           rep = grant['representation'].to_s.strip.downcase
           return nil unless rep == 'skp'
@@ -53,7 +102,11 @@ module Granete
           grant_size = raw_size.to_i
           return nil unless match_pins?(grant_sha, grant_size, caller_sha, caller_size)
 
-          { sha256: grant_sha, size_bytes: grant_size }
+          {
+            sha256: grant_sha,
+            size_bytes: grant_size,
+            expires_at: effective_expiration(grant, current_time: current_time)
+          }
         end
 
         def sanitize_sha(sha)
@@ -73,9 +126,10 @@ module Granete
 
         def get_cached_grant(auth, org, asset_id, revision_id)
           key = cache_key(auth, org, asset_id, revision_id)
+          now_sec = current_time.to_i
           @grant_cache_mutex.synchronize do
             entry = @grant_cache[key]
-            if entry && entry[:expires_at] > Time.now.to_i
+            if entry && entry[:expires_at] > now_sec
               entry[:grant]
             else
               @grant_cache.delete(key)
@@ -84,23 +138,11 @@ module Granete
           end
         end
 
-        def put_cached_grant(auth, org, asset_id, revision_id, grant)
+        def put_cached_grant(auth, org, asset_id, revision_id, grant, expires_at)
           key = cache_key(auth, org, asset_id, revision_id)
-          exp_sec = parse_expiration(grant)
           @grant_cache_mutex.synchronize do
-            @grant_cache[key] = { grant: grant, expires_at: exp_sec }
+            @grant_cache[key] = { grant: grant, expires_at: expires_at }
           end
-        end
-
-        def parse_expiration(grant)
-          raw = grant['expiresAt'] || grant['expires_at']
-          if raw
-            Time.parse(raw.to_s).to_i
-          else
-            Time.now.to_i + GRANT_CACHE_TTL
-          end
-        rescue StandardError
-          Time.now.to_i + GRANT_CACHE_TTL
         end
 
         def request_authorization(asset_id, revision_id, auth_header)

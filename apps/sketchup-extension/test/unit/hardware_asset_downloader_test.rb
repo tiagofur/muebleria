@@ -55,7 +55,20 @@ class HardwareAssetDownloaderTest < Minitest::Test
     end
   end
 
+  class ControllableClock
+    attr_accessor :now
+
+    def initialize(initial_time = Time.at(1_700_000_000))
+      @now = initial_time
+    end
+
+    def advance(seconds)
+      @now += seconds
+    end
+  end
+
   def setup
+    @clock = ControllableClock.new(Time.at(1_700_000_000))
     @tmp_dir = Dir.mktmpdir('hw_downloader_test')
     @cache = Granete::SketchUpExtension::Assets::HardwareAssetCache.new(cache_dir: @tmp_dir)
     @logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
@@ -134,7 +147,8 @@ class HardwareAssetDownloaderTest < Minitest::Test
         'representation' => 'skp',
         'url' => '/api/hardware-assets/files/key?grant=expired-grant',
         'sha256' => @model_sha,
-        'sizeBytes' => @model_size
+        'sizeBytes' => @model_size,
+        'expires_at' => (Time.now + 300).utc.iso8601
       }
     }
     fresh_grant = {
@@ -143,7 +157,8 @@ class HardwareAssetDownloaderTest < Minitest::Test
         'representation' => 'skp',
         'url' => '/api/hardware-assets/files/key?grant=fresh-grant',
         'sha256' => @model_sha,
-        'sizeBytes' => @model_size
+        'sizeBytes' => @model_size,
+        'expires_at' => (Time.now + 300).utc.iso8601
       }
     }
     transport = FakeTransport.new([initial_grant, fresh_grant])
@@ -203,7 +218,8 @@ class HardwareAssetDownloaderTest < Minitest::Test
         'representation' => 'skp',
         'sha256' => @model_sha,
         'size_bytes' => @model_size,
-        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token'
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token',
+        'expires_at' => (Time.now + 300).utc.iso8601
       }
     }
     transport = FakeTransport.new([grant_response])
@@ -236,7 +252,8 @@ class HardwareAssetDownloaderTest < Minitest::Test
         'representation' => 'obj',
         'sha256' => @model_sha,
         'size_bytes' => @model_size,
-        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token'
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token',
+        'expires_at' => (Time.now + 300).utc.iso8601
       }
     }
     transport = FakeTransport.new([grant_response])
@@ -367,7 +384,8 @@ class HardwareAssetDownloaderTest < Minitest::Test
         'representation' => 'skp',
         'sha256' => @model_sha,
         'size_bytes' => @model_size,
-        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token'
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token',
+        'expires_at' => (Time.now + 300).utc.iso8601
       }
     }
     transport = FakeTransport.new([grant_response])
@@ -403,7 +421,8 @@ class HardwareAssetDownloaderTest < Minitest::Test
         'representation' => 'skp',
         'sha256' => grant_sha,
         'size_bytes' => 100,
-        'url' => '/api/hardware-assets/files/key?grant=token'
+        'url' => '/api/hardware-assets/files/key?grant=token',
+        'expires_at' => (Time.now + 300).utc.iso8601
       }
     }
     transport = FakeTransport.new([grant_response])
@@ -438,7 +457,8 @@ class HardwareAssetDownloaderTest < Minitest::Test
         'representation' => 'skp',
         'sha256' => @model_sha,
         'size_bytes' => @model_size + 50,
-        'url' => '/api/hardware-assets/files/key?grant=token'
+        'url' => '/api/hardware-assets/files/key?grant=token',
+        'expires_at' => (Time.now + 300).utc.iso8601
       }
     }
     transport = FakeTransport.new([grant_response])
@@ -461,14 +481,25 @@ class HardwareAssetDownloaderTest < Minitest::Test
   end
 
   def test_rejects_grant_missing_mandatory_representation_or_digest_or_size
+    valid_future = (Time.now + 300).utc.iso8601
+    expired_time = (Time.now - 30).utc.iso8601
     invalid_grants = [
-      { 'sha256' => @model_sha, 'size_bytes' => 100, 'url' => '/k' },
-      { 'representation' => 'glb', 'sha256' => @model_sha, 'size_bytes' => 100, 'url' => '/k' },
-      { 'representation' => 'skp', 'size_bytes' => 100, 'url' => '/k' },
-      { 'representation' => 'skp', 'sha256' => 'invalid_short_sha', 'size_bytes' => 100, 'url' => '/k' },
-      { 'representation' => 'skp', 'sha256' => @model_sha, 'url' => '/k' },
-      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 0, 'url' => '/k' },
-      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 60 * 1024 * 1024, 'url' => '/k' }
+      { 'sha256' => @model_sha, 'size_bytes' => 100, 'url' => '/k', 'expires_at' => valid_future },
+      { 'representation' => 'glb', 'sha256' => @model_sha, 'size_bytes' => 100,
+        'url' => '/k', 'expires_at' => valid_future },
+      { 'representation' => 'skp', 'size_bytes' => 100, 'url' => '/k', 'expires_at' => valid_future },
+      { 'representation' => 'skp', 'sha256' => 'invalid_short_sha', 'size_bytes' => 100,
+        'url' => '/k', 'expires_at' => valid_future },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'url' => '/k', 'expires_at' => valid_future },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 0,
+        'url' => '/k', 'expires_at' => valid_future },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 60 * 1024 * 1024,
+        'url' => '/k', 'expires_at' => valid_future },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 100, 'url' => '/k' },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 100,
+        'url' => '/k', 'expires_at' => 'malformed-date' },
+      { 'representation' => 'skp', 'sha256' => @model_sha, 'size_bytes' => 100,
+        'url' => '/k', 'expires_at' => expired_time }
     ]
 
     invalid_grants.each_with_index do |bad_grant, idx|
@@ -495,7 +526,8 @@ class HardwareAssetDownloaderTest < Minitest::Test
         'representation' => 'skp',
         'sha256' => @model_sha,
         'size_bytes' => @model_size,
-        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token'
+        'url' => '/api/hardware-assets/files/storage-key?grant=signed-grant-token',
+        'expires_at' => (Time.now + 300).utc.iso8601
       }
     }
     transport = FakeTransport.new([grant_response])
@@ -524,5 +556,302 @@ class HardwareAssetDownloaderTest < Minitest::Test
     refute File.exist?(expected_cache_file)
     temp_files = Dir.glob(File.join(@tmp_dir, '**', '*.tmp.*'))
     assert_empty temp_files
+  end
+
+  def test_cached_file_not_delivered_when_first_grant_response_is_expired
+    cached_path = @cache.put(
+      asset_id: 'ast-exp1',
+      revision_id: 'rev-1',
+      data: @model_data,
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+    assert File.file?(cached_path)
+
+    expired_grant = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/test',
+        'expires_at' => (@clock.now - 10).utc.iso8601
+      }
+    }
+    transport = FakeTransport.new([expired_grant])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger,
+      clock: @clock
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-exp1',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    assert_nil path, 'Must not deliver cached file when grant is expired'
+    assert File.file?(cached_path), 'Cached file on disk must not be deleted on auth refusal'
+  end
+
+  def test_far_future_grant_expires_after_300s_and_refuses_delivery_if_renewal_unauthorized
+    @cache.put(
+      asset_id: 'ast-ttl',
+      revision_id: 'rev-1',
+      data: @model_data,
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    first_grant = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/test',
+        'expires_at' => (@clock.now + 3600).utc.iso8601
+      }
+    }
+    second_grant = { 'status' => 401, 'body' => { 'error' => 'unauthorized' } }
+    transport = FakeTransport.new([first_grant, second_grant])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger,
+      clock: @clock
+    )
+
+    p1 = downloader.download_asset(
+      asset_id: 'ast-ttl',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+    refute_nil p1
+    assert_equal 1, transport.requests.length
+
+    @clock.advance(301)
+
+    p2 = downloader.download_asset(
+      asset_id: 'ast-ttl',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+    assert_nil p2
+    assert_equal 2, transport.requests.length
+  end
+
+  def test_grant_expiring_during_operation_triggers_renewal_before_delivery
+    cached_path = @cache.put(
+      asset_id: 'ast-inflight',
+      revision_id: 'rev-1',
+      data: @model_data,
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    initial_grant = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/test',
+        'expires_at' => (@clock.now + 5).utc.iso8601
+      }
+    }
+    renewal_grant = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/test-renewed',
+        'expires_at' => (@clock.now + 60).utc.iso8601
+      }
+    }
+    transport = FakeTransport.new([initial_grant, renewal_grant])
+
+    fake_cache = Object.new
+    cache_ref = @cache
+    clock_ref = @clock
+    fake_cache.define_singleton_method(:get) do |**args|
+      clock_ref.advance(10)
+      cache_ref.get(**args)
+    end
+    fake_cache.define_singleton_method(:put) { |**args| cache_ref.put(**args) }
+
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: fake_cache,
+      logger: @logger,
+      clock: @clock
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-inflight',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    assert_equal cached_path, path
+    assert_equal 2, transport.requests.length
+  end
+
+  def test_grant_expiring_during_operation_returns_nil_if_renewal_unauthorized
+    @cache.put(
+      asset_id: 'ast-inflight-fail',
+      revision_id: 'rev-1',
+      data: @model_data,
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    initial_grant = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/test',
+        'expires_at' => (@clock.now + 5).utc.iso8601
+      }
+    }
+    unauth_renewal = { 'status' => 401, 'body' => { 'error' => 'revoked' } }
+    transport = FakeTransport.new([initial_grant, unauth_renewal])
+
+    fake_cache = Object.new
+    cache_ref = @cache
+    clock_ref = @clock
+    fake_cache.define_singleton_method(:get) do |**args|
+      clock_ref.advance(10)
+      cache_ref.get(**args)
+    end
+    fake_cache.define_singleton_method(:put) { |**args| cache_ref.put(**args) }
+
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: fake_cache,
+      logger: @logger,
+      clock: @clock
+    )
+
+    path = downloader.download_asset(
+      asset_id: 'ast-inflight-fail',
+      revision_id: 'rev-1',
+      sha256: @model_sha,
+      expected_bytes: @model_size,
+      org_id: 'org-test'
+    )
+
+    assert_nil path
+    assert_equal 2, transport.requests.length
+  end
+
+  def test_reuses_authorization_and_cached_file_within_validity_without_new_download
+    grant = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/test',
+        'expires_at' => (@clock.now + 200).utc.iso8601
+      }
+    }
+    transport = FakeTransport.new([grant])
+    http_count = 0
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger,
+      clock: @clock,
+      http_fetcher: lambda do |_url|
+        http_count += 1
+        [200, @model_data]
+      end
+    )
+
+    p1 = downloader.download_asset(
+      asset_id: 'ast-reuse', revision_id: 'rev-1', sha256: @model_sha, expected_bytes: @model_size, org_id: 'org-test'
+    )
+    refute_nil p1
+    assert_equal 1, transport.requests.length
+    assert_equal 1, http_count
+
+    @clock.advance(50)
+
+    p2 = downloader.download_asset(
+      asset_id: 'ast-reuse', revision_id: 'rev-1', sha256: @model_sha, expected_bytes: @model_size, org_id: 'org-test'
+    )
+    assert_equal p1, p2
+    assert_equal 1, transport.requests.length
+    assert_equal 1, http_count
+  end
+
+  def test_expired_cached_entry_renews_once_preserving_pins_and_respects_server_rejection
+    grant1 = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => @model_sha,
+        'size_bytes' => @model_size,
+        'url' => '/api/test',
+        'expires_at' => (@clock.now + 100).utc.iso8601
+      }
+    }
+    renewal_wrong_sha = {
+      'status' => 200,
+      'body' => {
+        'representation' => 'skp',
+        'sha256' => Digest::SHA256.hexdigest('OTHER'),
+        'size_bytes' => @model_size,
+        'url' => '/api/test',
+        'expires_at' => (@clock.now + 200).utc.iso8601
+      }
+    }
+    transport = FakeTransport.new([grant1, renewal_wrong_sha])
+    downloader = Granete::SketchUpExtension::Assets::HardwareAssetDownloader.new(
+      transport: transport,
+      auth_provider: FakeAuth.new,
+      cache: @cache,
+      logger: @logger,
+      clock: @clock,
+      http_fetcher: lambda do |_url|
+        [200, @model_data]
+      end
+    )
+
+    p1 = downloader.download_asset(
+      asset_id: 'ast-pins', revision_id: 'rev-1', sha256: @model_sha, expected_bytes: @model_size, org_id: 'org-test'
+    )
+    refute_nil p1
+
+    @clock.advance(150)
+
+    p2 = downloader.download_asset(
+      asset_id: 'ast-pins', revision_id: 'rev-1', sha256: @model_sha, expected_bytes: @model_size, org_id: 'org-test'
+    )
+    assert_nil p2
+    assert_equal 2, transport.requests.length
   end
 end
