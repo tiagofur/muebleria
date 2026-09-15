@@ -11,9 +11,9 @@ module Granete
         attr_reader :diagnostics
 
         def initialize(resolver: nil, downloader: nil, cache: nil, logger: nil)
+          _ = cache
           @resolver = resolver || AssetResolver.new
           @downloader = downloader
-          @cache = cache || @downloader&.cache
           @logger = logger
           @diagnostics = []
         end
@@ -25,19 +25,21 @@ module Granete
         def prefetch_hardware_assets(hardware_placements, org_id: nil)
           return unless hardware_placements.is_a?(Array)
 
+          effective_org = org_id || default_org_id
           hardware_placements.each do |placement|
             next unless placement.respond_to?(:asset_id) && placement.asset_id
             next unless placement.respond_to?(:asset_revision_id) && placement.asset_revision_id
 
-            prefetch_single(placement, org_id: org_id)
+            prefetch_single(placement, org_id: effective_org)
           end
         end
 
         def load_asset_instance(model, asset_id, target_container, transform_mm = [0, 0, 0],
                                 basis: nil, revision_id: nil, sha256: nil, expected_bytes: nil, org_id: nil)
+          effective_org = org_id || default_org_id
           skp_path = resolve_asset_file(
             asset_id: asset_id, revision_id: revision_id, sha256: sha256,
-            expected_bytes: expected_bytes, org_id: org_id
+            expected_bytes: expected_bytes, org_id: effective_org
           )
           return nil unless skp_path && File.file?(skp_path)
 
@@ -53,25 +55,24 @@ module Granete
 
         private
 
+        def default_org_id
+          @downloader.respond_to?(:current_org_id, true) ? @downloader.send(:current_org_id) : nil
+        end
+
         def prefetch_single(placement, org_id: nil)
           asset_id = placement.asset_id
           revision_id = placement.asset_revision_id
           sha256 = placement.sha256
           expected_bytes = placement.expected_bytes
 
-          cached = @cache&.get(
-            asset_id: asset_id, revision_id: revision_id, sha256: sha256,
-            expected_bytes: expected_bytes, org_id: org_id
-          )
-          return cached if cached
-
+          path = nil
           if @downloader
             path = @downloader.download_asset(
               asset_id: asset_id, revision_id: revision_id, sha256: sha256,
               expected_bytes: expected_bytes, org_id: org_id
             )
-            return path if path
           end
+          return path if path
 
           record_diagnostic(
             'code' => 'hardware_asset_missing',
@@ -85,20 +86,13 @@ module Granete
         end
 
         def resolve_asset_file(asset_id:, revision_id:, sha256:, expected_bytes:, org_id:)
-          if revision_id && @cache
-            cached = @cache.get(
-              asset_id: asset_id, revision_id: revision_id, sha256: sha256,
-              expected_bytes: expected_bytes, org_id: org_id
-            )
-            return cached if cached
-          end
+          if revision_id
+            return nil unless @downloader
 
-          if revision_id && @downloader
-            downloaded = @downloader.download_asset(
+            return @downloader.download_asset(
               asset_id: asset_id, revision_id: revision_id, sha256: sha256,
               expected_bytes: expected_bytes, org_id: org_id
             )
-            return downloaded if downloaded
           end
 
           @resolver&.resolve_skp_path(asset_id)

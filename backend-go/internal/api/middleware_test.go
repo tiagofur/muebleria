@@ -926,6 +926,9 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		{"remove furniture instance (#385) denied", http.MethodPost, "/api/furniture-instances/" + projectID + ":remove", false},
 		{"reset working copy", http.MethodPost, "/api/designs/" + designID + "/working-copy:reset", false},
 		{"publish revision (#392)", http.MethodPost, "/api/designs/" + designID + "/revisions", false},
+		// #668 hardware asset revision read-only authorization grant
+		{"authorize hardware asset revision grant (#668)", http.MethodPost, "/api/hardware-assets/" + projectID + "/revisions/" + designID + ":authorize", true},
+		{"arbitrary hardware asset route denied", http.MethodPost, "/api/hardware-assets/" + projectID, false},
 		// Surrounding surface stays closed.
 		{"project detail reads", http.MethodGet, "/api/projects/" + projectID, false},
 		{"quote line links", http.MethodGet, "/api/projects/" + projectID + "/quote-lines/" + projectID + "/furniture-instances", false},

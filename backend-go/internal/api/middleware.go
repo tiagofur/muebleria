@@ -642,6 +642,9 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// #392: mint short-lived read grants for artifacts the extension token
 	// can already GET — read-only, no mutation.
 	regexp.MustCompile(`^/api/designs/[^/]+/revisions/[^/]+/artifacts/(model|manifest|preview):authorize$`),
+	// #668: mint short-lived read grants for hardware asset revisions the extension
+	// token can already resolve — read-only grant, no mutation.
+	regexp.MustCompile(`^/api/hardware-assets/[^/]+/revisions/[^/]+:authorize$`),
 }
 
 // Parameterized PUT surface for the extension credential (#389 / DT-5). This

@@ -848,16 +848,17 @@ func (s *PostgresStore) ResolveHardwareVisualAssetBinding(ctx context.Context, a
 		assetStatus    string
 		representation string
 		sha256         string
+		sizeBytes      int64
 		evidence       *string
 	)
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT a.status, r.representation, r.sha256,
+		SELECT a.status, r.representation, r.sha256, r.size_bytes,
 		       (SELECT v.result FROM hardware_asset_validations v
 		        WHERE v.revision_id = r.id ORDER BY v.created_at DESC, v.id DESC LIMIT 1)
 		FROM hardware_assets a
 		JOIN hardware_asset_revisions r ON r.asset_id = a.id AND r.id = $2
 		WHERE a.id = $1 AND a.organization_id = $3
-	`, assetID, revisionID, OrgFromCtx(ctx)).Scan(&assetStatus, &representation, &sha256, &evidence)
+	`, assetID, revisionID, OrgFromCtx(ctx)).Scan(&assetStatus, &representation, &sha256, &sizeBytes, &evidence)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Neutral: an unknown revision and a foreign one are
@@ -878,6 +879,7 @@ func (s *PostgresStore) ResolveHardwareVisualAssetBinding(ctx context.Context, a
 		AssetRevisionID: revisionID,
 		Representation:  rep,
 		SHA256:          sha256,
+		SizeBytes:      sizeBytes,
 	}
 	switch {
 	case evidence == nil:
@@ -1226,7 +1228,7 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		return nil
 	}
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT r.id, r.representation, r.sha256
+		SELECT r.id, r.representation, r.sha256, r.size_bytes
 		FROM hardware_asset_revisions r
 		WHERE r.organization_id = $1 AND r.id = ANY($2::uuid[])
 	`, OrgFromCtx(ctx), revisionIDs)
@@ -1237,16 +1239,19 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 	details := map[string]struct {
 		Representation domain.HardwareAssetRepresentation
 		SHA256         string
+		SizeBytes      int64
 	}{}
 	for rows.Next() {
 		var revisionID, representation, sha256 string
-		if err := rows.Scan(&revisionID, &representation, &sha256); err != nil {
+		var sizeBytes int64
+		if err := rows.Scan(&revisionID, &representation, &sha256, &sizeBytes); err != nil {
 			return err
 		}
 		details[revisionID] = struct {
 			Representation domain.HardwareAssetRepresentation
 			SHA256         string
-		}{domain.HardwareAssetRepresentation(representation), sha256}
+			SizeBytes      int64
+		}{domain.HardwareAssetRepresentation(representation), sha256, sizeBytes}
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -1266,11 +1271,13 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 			// expose no fabricated facts (fail-honest read).
 			binding.Representation = ""
 			binding.SHA256 = ""
+			binding.SizeBytes = 0
 			binding.ValidationState = ""
 			continue
 		}
 		binding.Representation = d.Representation
 		binding.SHA256 = d.SHA256
+		binding.SizeBytes = d.SizeBytes
 		binding.ValidationState = states[binding.AssetRevisionID]
 	}
 	return nil

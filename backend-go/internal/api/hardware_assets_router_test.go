@@ -1214,3 +1214,146 @@ func waitForSessionLockWaiter(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func onceClose(ch chan struct{}) { close(ch) }
+
+// TestExtensionClientHardwareAssetRevisionAuthorizeAndDownload (#668 / F1 acceptance):
+// A real ExtensionClient session (SketchUp plugin credential) with organization
+// membership must be permitted to request a signed read-only download grant for
+// its own org's hardware asset revision, and download the exact bytes.
+// It must be denied foreign revisions, unauthorized verbs/routes, and revoked sessions.
+// Byte download fails closed if an Authorization header is provided.
+func TestExtensionClientHardwareAssetRevisionAuthorizeAndDownload(t *testing.T) {
+	e := newHwAssetRouterEnv(t)
+	content := []byte("SKP-EXTENSION-CLIENT-TEST-PAYLOAD-1234567890")
+	sha := sha256.Sum256(content)
+	shaHex := hex.EncodeToString(sha[:])
+
+	// 1. Create asset and revision using web admin token.
+	startRR := e.do(t, http.MethodPost, "/api/hardware-assets/uploads",
+		`{"representation":"skp","display_name":"Extension Test Pull"}`, "hwext-up-000000000001")
+	if startRR.Code != http.StatusCreated {
+		t.Fatalf("start upload = %d: %s", startRR.Code, startRR.Body.String())
+	}
+	var session struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(startRR.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+	stagedRR := e.uploadBytes(t, session.ID, "skp", "pull.skp", content)
+	if stagedRR.Code != http.StatusOK {
+		t.Fatalf("staged upload = %d: %s", stagedRR.Code, stagedRR.Body.String())
+	}
+	finRR := e.do(t, http.MethodPost, "/api/hardware-assets/uploads/"+session.ID+":finalize", "", "hwext-fin-000000000001")
+	if finRR.Code != http.StatusCreated {
+		t.Fatalf("finalize = %d: %s", finRR.Code, finRR.Body.String())
+	}
+	var asset hwAssetJSON
+	if err := json.Unmarshal(finRR.Body.Bytes(), &asset); err != nil {
+		t.Fatal(err)
+	}
+	assetID := asset.ID
+	revisionID := asset.Revisions[0].ID
+
+	// 2. Create a real SketchUp Extension session and token for hwRouterUser in hwRouterOrg.
+	var membershipID string
+	var membershipVersion, orgVersion int64
+	if err := e.pool.QueryRow(context.Background(), `
+		SELECT m.id::text, m.version, o.credential_version
+		FROM memberships m JOIN organizations o ON o.id = m.organization_id
+		WHERE m.user_id = $1 AND m.organization_id = $2`, hwRouterUser, hwRouterOrg,
+	).Scan(&membershipID, &membershipVersion, &orgVersion); err != nil {
+		t.Fatalf("query membership state: %v", err)
+	}
+
+	extSession, err := e.store.CreateAuthSession(context.Background(), storage.CreateAuthSessionCommand{
+		UserID:            hwRouterUser,
+		MembershipID:      membershipID,
+		OrganizationID:    hwRouterOrg,
+		ClientType:        domain.SessionClientSketchup,
+		AbsoluteExpiresAt: time.Now().Add(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("create extension session: %v", err)
+	}
+	tc := auth.TokenContext{
+		Roles:                         []string{"member"},
+		OrgID:                         hwRouterOrg,
+		MembershipID:                  membershipID,
+		MembershipCredentialVersion:   membershipVersion,
+		OrganizationCredentialVersion: orgVersion,
+		SessionID:                     extSession.ID,
+	}
+	extToken, err := e.srv.Tokens.IssueTransportTokenUntil(hwRouterUser, hwRouterEmail, tc, "sketchup", extSession.AbsoluteExpiresAt)
+	if err != nil {
+		t.Fatalf("mint extension token: %v", err)
+	}
+
+	// Helper for extension requests:
+	doExt := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+extToken)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		rr := httptest.NewRecorder()
+		e.router.ServeHTTP(rr, req)
+		return rr
+	}
+
+	// 3. ExtensionClient calls :authorize on its own org's asset revision -> 200 OK.
+	authRR := doExt(http.MethodPost, "/api/hardware-assets/"+assetID+"/revisions/"+revisionID+":authorize", "")
+	if authRR.Code != http.StatusOK {
+		t.Fatalf("extension authorize = %d: %s", authRR.Code, authRR.Body.String())
+	}
+	var grant struct {
+		URL            string `json:"url"`
+		SizeBytes      int64  `json:"size_bytes"`
+		Sha256         string `json:"sha256"`
+		Representation string `json:"representation"`
+	}
+	if err := json.Unmarshal(authRR.Body.Bytes(), &grant); err != nil {
+		t.Fatalf("unmarshal grant: %v", err)
+	}
+	if grant.SizeBytes != int64(len(content)) {
+		t.Fatalf("grant size_bytes = %d, want %d", grant.SizeBytes, len(content))
+	}
+	if grant.Sha256 != "sha256-"+shaHex {
+		t.Fatalf("grant sha256 = %s, want sha256-%s", grant.Sha256, shaHex)
+	}
+	if grant.Representation != "skp" {
+		t.Fatalf("grant representation = %s, want skp", grant.Representation)
+	}
+
+	// 4. Download file using grant URL without bearer token -> 200 OK and exact payload.
+	getRR := e.readWithGrant(t, grant.URL)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("download with grant = %d: %s", getRR.Code, getRR.Body.String())
+	}
+	if !bytes.Equal(getRR.Body.Bytes(), content) {
+		t.Fatalf("downloaded content mismatch: got %d bytes, want %d", getRR.Body.Len(), len(content))
+	}
+
+	// 5. Download file with Authorization header -> fails closed with 401 Unauthorized.
+	badGetReq := httptest.NewRequest(http.MethodGet, grant.URL, nil)
+	badGetReq.Header.Set("Authorization", "Bearer "+extToken)
+	badGetRR := httptest.NewRecorder()
+	e.router.ServeHTTP(badGetRR, badGetReq)
+	if badGetRR.Code != http.StatusUnauthorized {
+		t.Fatalf("download with Authorization header = %d, want 401", badGetRR.Code)
+	}
+
+	// 6. ExtensionClient attempting administrative or unlisted route is rejected (403 Forbidden).
+	retireRR := doExt(http.MethodPost, "/api/hardware-assets/"+assetID+":retire", "")
+	if retireRR.Code != http.StatusForbidden {
+		t.Fatalf("extension retire = %d, want 403 Forbidden", retireRR.Code)
+	}
+
+	// 7. Revoked extension session -> 401 Unauthorized.
+	if _, err := e.store.RevokeAuthSession(context.Background(), extSession.ID, hwRouterUser, "test revocation"); err != nil {
+		t.Fatalf("revoke session: %v", err)
+	}
+	revokedRR := doExt(http.MethodPost, "/api/hardware-assets/"+assetID+"/revisions/"+revisionID+":authorize", "")
+	if revokedRR.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked extension authorize = %d, want 401 Unauthorized", revokedRR.Code)
+	}
+}
