@@ -117,6 +117,87 @@ func TestHardwareAssets_DeriveRevision_ByteReuseAndImmutability(t *testing.T) {
 	if reloadedR2.PreparationState() != domain.HardwareAssetPreparationPrepared {
 		t.Errorf("expected R2 to be prepared, got %s", reloadedR2.PreparationState())
 	}
+
+	// Verify ResolveHardwareVisualAssetBinding for R1 vs R2:
+	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		bindingR1, err := w.fx.store.ResolveHardwareVisualAssetBinding(ctx, asset.ID, r1.ID)
+		if err != nil {
+			return err
+		}
+		if bindingR1.PreparationState != domain.HardwareAssetPreparationUnprepared {
+			t.Errorf("expected R1 binding to be unprepared, got %s", bindingR1.PreparationState)
+		}
+		if bindingR1.MountFrame != nil {
+			t.Errorf("expected R1 binding to have nil MountFrame, got %+v", bindingR1.MountFrame)
+		}
+
+		bindingR2, err := w.fx.store.ResolveHardwareVisualAssetBinding(ctx, asset.ID, r2.ID)
+		if err != nil {
+			return err
+		}
+		if bindingR2.PreparationState != domain.HardwareAssetPreparationPrepared {
+			t.Errorf("expected R2 binding to be prepared, got %s", bindingR2.PreparationState)
+		}
+		if bindingR2.MountFrame == nil || bindingR2.MountFrame.OriginMm != [3]float64{10, 20, 30} {
+			t.Errorf("expected R2 binding to carry MountFrame [10,20,30], got %+v", bindingR2.MountFrame)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("ResolveHardwareVisualAssetBinding test failed: %v", err)
+	}
+
+	// 2. An uploaded asset with valid origin but NO MountFrame: must be strictly unprepared
+	assetUnprepared := stageAndFinalizeAsset(t, w, "Jaladera Unprepared", "")
+	rUnprep := assetUnprepared.Revisions[0]
+	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		binding, err := w.fx.store.ResolveHardwareVisualAssetBinding(ctx, assetUnprepared.ID, rUnprep.ID)
+		if err != nil {
+			return err
+		}
+		if binding.PreparationState != domain.HardwareAssetPreparationUnprepared {
+			t.Errorf("expected unprepared, got %s", binding.PreparationState)
+		}
+		if binding.MountFrame != nil {
+			t.Errorf("expected nil MountFrame, got %+v", binding.MountFrame)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("ResolveHardwareVisualAssetBinding unprepared test failed: %v", err)
+	}
+
+	// 3. Attempting to derive with invalid/corrupt MountFrame must fail-closed (ErrHardwareAssetInvalid)
+	invalidMountFrameJSON := []byte(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [0, 0, 0],
+			"basis": {
+				"x": [1, 0, 0],
+				"y": [1, 0, 0],
+				"z": [0, 0, 1]
+			}
+		}
+	}`)
+	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		_, err := w.fx.store.DeriveHardwareAssetRevision(ctx, storage.DeriveHardwareAssetRevisionCommand{
+			AssetID:          asset.ID,
+			SourceRevisionID: r2.ID,
+			Origin:           invalidMountFrameJSON,
+			ActorUserID:      rlsUserA,
+		})
+		if err == nil {
+			t.Fatal("expected error deriving revision with invalid basis, got nil")
+		}
+		if !errors.Is(err, domain.ErrHardwareAssetInvalid) {
+			t.Fatalf("expected ErrHardwareAssetInvalid, got %v", err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("fail-closed invalid origin test failed: %v", err)
+	}
 }
 
 func TestHardwareAssets_DeriveRevision_ConcurrentFinalizeAndDerive(t *testing.T) {

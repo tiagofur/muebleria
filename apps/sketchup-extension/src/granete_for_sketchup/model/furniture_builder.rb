@@ -250,6 +250,9 @@ module Granete
                      normalize_parameters(definition, parameters)
                    end
           prefetch_visual_assets(resolved_layout)
+          prep_err = invalid_asset_preparation_error
+          return { 'success' => false, 'error' => prep_err } if prep_err
+
           host_transform = transformation || Geom::Transformation.new
           model.start_operation("Colocar Mueble del Proyecto #{definition['name']}", true) if transaction
           begin
@@ -388,16 +391,100 @@ module Granete
         end
       end
 
-      # Renders resolved Library::NativeLayout composition (#414 contract).
-      # Extracted from FurnitureBuilder to keep the class within its length budget.
-      module NativeLayoutRenderer
+      # Hardware rendering for Library::NativeLayout (#414 / #668).
+      module NativeHardwareRenderer
         def prefetch_visual_assets(resolved_layout)
           return unless resolved_layout.is_a?(Library::NativeLayout)
           return unless @asset_loader.respond_to?(:prefetch_hardware_assets)
 
+          @asset_loader.clear_diagnostics if @asset_loader.respond_to?(:clear_diagnostics)
           @asset_loader.prefetch_hardware_assets(resolved_layout.hardware)
         end
 
+        def invalid_asset_preparation_error
+          return nil unless @asset_loader.respond_to?(:diagnostics)
+
+          diag = @asset_loader.diagnostics.find { |d| d['code'] == 'asset_preparation_invalid' }
+          diag ? "Preparación de herraje inválida: #{diag['reason']}" : nil
+        end
+
+        def render_native_hardware(model, parent_definition, furniture_instance_id, placement)
+          name = placement.name || 'Herraje'
+          pos = placement.local_translation || placement.translation || [0.0, 0.0, 0.0]
+
+          instance = try_load_hardware_asset(model, parent_definition, placement, pos)
+          return attach_hardware_metadata(instance, placement, name, furniture_instance_id) if instance
+          return nil if invalid_hardware_preparation?(placement.placement_id)
+
+          fallback = build_fallback_hardware(model, parent_definition, name, placement, pos)
+          attach_hardware_metadata(fallback, placement, name, furniture_instance_id)
+        end
+
+        private
+
+        def try_load_hardware_asset(model, parent_definition, placement, pos)
+          asset_id = placement.asset_id || placement.hardware_id
+          return nil unless @asset_loader && asset_id
+
+          @asset_loader.load_asset_instance(
+            model, asset_id, parent_definition, pos,
+            basis: placement.basis,
+            revision_id: placement.asset_revision_id,
+            sha256: placement.sha256,
+            expected_bytes: placement.expected_bytes,
+            mount_frame: placement.respond_to?(:mount_frame) ? placement.mount_frame : nil,
+            preparation_state: placement.respond_to?(:preparation_state) ? placement.preparation_state : nil,
+            placement_id: placement.placement_id
+          )
+        end
+
+        def invalid_hardware_preparation?(placement_id)
+          return false unless @asset_loader.respond_to?(:diagnostics)
+
+          @asset_loader.diagnostics.any? do |d|
+            d['code'] == 'asset_preparation_invalid' && d['placementId'] == placement_id
+          end
+        end
+
+        def build_fallback_hardware(model, parent_definition, name, placement, pos)
+          dims = placement.dimensions || FurnitureBuilder::DEFAULT_HARDWARE_DIMS_MM
+          hardware_definition = model.definitions.add(
+            "#{FurnitureBuilder::HARDWARE_DEFINITION_PREFIX}#{name} · #{placement.placement_id}"
+          )
+          LocalGeometry.build_local_box(hardware_definition, dims[0], dims[1], dims[2])
+          transform = if placement.basis
+                        LocalGeometry.axes_transform(pos, placement.basis)
+                      else
+                        LocalGeometry.translation_only(pos)
+                      end
+          instance = parent_definition.entities.add_instance(hardware_definition, transform)
+          instance.name = name
+          MaterialApplier.apply(model, instance, name, placement.color_hex)
+          instance
+        end
+
+        def attach_hardware_metadata(instance, placement, name, furniture_instance_id)
+          instance.name = name
+          ChildMetadataWriter.write_hardware(
+            @metadata_store, instance, placement.placement_id,
+            furniture_ref: furniture_instance_id,
+            hardware_definition_id: placement.hardware_id,
+            host_component_instance_id: placement.host_component_instance_id,
+            placement_kind: placement.placement_kind,
+            anchor_face: placement.anchor_face,
+            offset_mm: placement.offset_mm,
+            asset_id: placement.asset_id,
+            asset_revision_id: placement.asset_revision_id,
+            representation: placement.representation,
+            preparation_state: placement.respond_to?(:preparation_state) ? placement.preparation_state : nil
+          )
+          instance
+        end
+      end
+
+      # Renders resolved Library::NativeLayout composition (#414 contract).
+      # Extracted from FurnitureBuilder to keep the class within its length budget.
+      module NativeLayoutRenderer
         def render_native_layout(model, furniture_definition, instance_id, native_layout)
           native_layout.boards.each do |board|
             render_native_board(model, furniture_definition, instance_id, board)
@@ -438,52 +525,6 @@ module Granete
           instance
         end
 
-        def render_native_hardware(model, parent_definition, furniture_instance_id, placement)
-          name = placement.name || 'Herraje'
-          pos = placement.local_translation || placement.translation || [0.0, 0.0, 0.0]
-
-          asset_id = placement.asset_id || placement.hardware_id
-          if @asset_loader && asset_id
-            instance = @asset_loader.load_asset_instance(
-              model, asset_id, parent_definition, pos,
-              basis: placement.basis,
-              revision_id: placement.asset_revision_id,
-              sha256: placement.sha256,
-              expected_bytes: placement.expected_bytes
-            )
-            return attach_hardware_metadata(instance, placement, name, furniture_instance_id) if instance
-          end
-
-          dims = placement.dimensions || FurnitureBuilder::DEFAULT_HARDWARE_DIMS_MM
-          hardware_definition = model.definitions.add(
-            "#{FurnitureBuilder::HARDWARE_DEFINITION_PREFIX}#{name} · #{placement.placement_id}"
-          )
-          LocalGeometry.build_local_box(hardware_definition, dims[0], dims[1], dims[2])
-          transform = if placement.basis
-                        LocalGeometry.axes_transform(pos, placement.basis)
-                      else
-                        LocalGeometry.translation_only(pos)
-                      end
-          instance = parent_definition.entities.add_instance(hardware_definition, transform)
-          instance.name = name
-          MaterialApplier.apply(model, instance, name, placement.color_hex)
-          attach_hardware_metadata(instance, placement, name, furniture_instance_id)
-        end
-
-        def attach_hardware_metadata(instance, placement, name, furniture_instance_id)
-          instance.name = name
-          ChildMetadataWriter.write_hardware(
-            @metadata_store, instance, placement.placement_id,
-            furniture_ref: furniture_instance_id,
-            hardware_definition_id: placement.hardware_id,
-            host_component_instance_id: placement.host_component_instance_id,
-            placement_kind: placement.placement_kind,
-            anchor_face: placement.anchor_face,
-            offset_mm: placement.offset_mm
-          )
-          instance
-        end
-
         def paint_board(model, instance, board)
           material_name = board.material_name || board.option_role || board.slot_id || 'Tablero'
           texture_url = board.material_texture_url || board.material_image_url
@@ -512,6 +553,7 @@ module Granete
         include FurnitureIntent
         include ProjectPlacement
         include LegacyMigrationBuild
+        include NativeHardwareRenderer
         include NativeLayoutRenderer
 
         MM_TO_INCHES = 1.0 / 25.4
@@ -539,6 +581,9 @@ module Granete
           instance_id = generate_instance_id
 
           prefetch_visual_assets(resolved_layout)
+          prep_err = invalid_asset_preparation_error
+          return { 'success' => false, 'error' => prep_err } if prep_err
+
           model.start_operation("Insertar Mueble #{definition['name']}", true)
           begin
             furniture_definition = create_furniture_definition(model, definition, instance_id)
@@ -586,6 +631,9 @@ module Granete
           end
 
           prefetch_visual_assets(resolved_layout)
+          prep_err = invalid_asset_preparation_error
+          return { 'success' => false, 'error' => prep_err } if prep_err
+
           model.start_operation("Editar Mueble #{definition['name']}", true) if transaction
           begin
             # A native copy/paste can temporarily leave two top-level furniture
@@ -712,12 +760,12 @@ module Granete
         end
 
         # write_hardware: managed hardware placement occurrence (#476). The
-        # entity class, hardware definition and #350 placement provenance
-        # ('manual'/'derived', straight from the resolved layout contract)
-        # are stored data — selection never infers them from names.
+        # rubocop:disable-next Metrics/ParameterLists
         def write_hardware(store, entity, placement_id, furniture_ref:,
                            hardware_definition_id: nil, host_component_instance_id: nil,
-                           placement_kind: nil, anchor_face: nil, offset_mm: nil)
+                           placement_kind: nil, anchor_face: nil, offset_mm: nil,
+                           asset_id: nil, asset_revision_id: nil, representation: nil,
+                           preparation_state: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -737,6 +785,10 @@ module Granete
           intent['placementKind'] = placement_kind if placement_kind
           intent['anchorFace'] = anchor_face if anchor_face
           intent['offsetMm'] = offset_mm if offset_mm
+          intent['assetId'] = asset_id if asset_id
+          intent['assetRevisionId'] = asset_revision_id if asset_revision_id
+          intent['representation'] = representation if representation
+          intent['preparationState'] = preparation_state if preparation_state
 
           write_child(store, entity, identity, intent)
         end

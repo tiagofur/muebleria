@@ -159,14 +159,16 @@ module Granete
                     :host_component_instance_id, :translation, :dimensions, :color_hex,
                     :anchor_face, :offset_mm,
                     :asset_revision_id, :sha256, :expected_bytes, :representation,
-                    :validation_state, :local_transform
+                    :validation_state, :local_transform,
+                    :preparation_state, :mount_frame
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
                        placement_kind: nil, host_component_instance_id: nil, translation: nil,
                        dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil,
                        asset_revision_id: nil, sha256: nil, expected_bytes: nil,
-                       representation: nil, validation_state: nil, local_transform: nil)
+                       representation: nil, validation_state: nil, local_transform: nil,
+                       preparation_state: nil, mount_frame: nil)
           @placement_id = placement_id
           @hardware_id = hardware_id
           @asset_id = asset_id
@@ -184,6 +186,8 @@ module Granete
           @representation = representation
           @validation_state = validation_state
           @local_transform = local_transform
+          @preparation_state = preparation_state
+          @mount_frame = mount_frame
         end
 
         def basis
@@ -387,6 +391,14 @@ module Granete
                               }
                             end
 
+          preparation_state = ContractCoercions.optional_opaque_string(
+            raw['preparationState'], "preparationState de #{placement_id}"
+          )
+          mount_frame = parse_mount_frame(raw['mountFrame'], placement_id)
+          if preparation_state == 'prepared' && mount_frame.nil?
+            raise LayoutContract::ContractError, "Herraje #{placement_id} marcado como prepared sin mountFrame"
+          end
+
           LayoutHardwarePlacement.new(
             placement_id: placement_id,
             hardware_id: ContractCoercions.optional_opaque_string(raw['hardwareId'],
@@ -416,8 +428,36 @@ module Granete
             color_hex: ContractCoercions.optional_opaque_string(raw['colorHex'],
                                                                 "colorHex de #{placement_id}"),
             anchor_face: anchor_face,
-            offset_mm: offset_mm
+            offset_mm: offset_mm,
+            preparation_state: preparation_state,
+            mount_frame: mount_frame
           )
+        end
+
+        def parse_mount_frame(raw, placement_id)
+          return nil if raw.nil?
+
+          raise LayoutContract::ContractError, "mountFrame de #{placement_id} no es un Hash" unless raw.is_a?(Hash)
+
+          origin_mm = ContractCoercions.numeric_triple(raw['originMm'], "originMm de mountFrame de #{placement_id}")
+          raw_basis = raw['basis']
+          unless raw_basis.is_a?(Hash)
+            msg = "basis de mountFrame de #{placement_id} no es un Hash"
+            raise LayoutContract::ContractError, msg
+          end
+
+          basis_x = ContractCoercions.numeric_triple(raw_basis['x'], "basis.x de mountFrame de #{placement_id}")
+          basis_y = ContractCoercions.numeric_triple(raw_basis['y'], "basis.y de mountFrame de #{placement_id}")
+          basis_z = ContractCoercions.numeric_triple(raw_basis['z'], "basis.z de mountFrame de #{placement_id}")
+
+          basis = Assets::MountFrame::BasisData.new(x: basis_x, y: basis_y, z: basis_z)
+          begin
+            Assets::MountFrame.validate_basis!(basis, "mountFrame.basis de #{placement_id}")
+          rescue ArgumentError => e
+            raise LayoutContract::ContractError, e.message
+          end
+
+          Assets::MountFrame::MountFrameData.new(origin_mm: origin_mm, basis: basis)
         end
       end
 

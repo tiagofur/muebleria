@@ -3,6 +3,7 @@
 require 'json'
 
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/assets/mount_frame'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
 
@@ -318,5 +319,73 @@ class LayoutContractTest < Minitest::Test
     assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError) do
       Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
     end
+  end
+
+  def test_hardware_with_prepared_mount_frame_parses_successfully
+    hw_raw = golden_hardware(
+      'preparationState' => 'prepared',
+      'mountFrame' => {
+        'originMm' => [25.0, -10.0, 8.0],
+        'basis' => {
+          'x' => [1.0, 0.0, 0.0],
+          'y' => [0.0, 1.0, 0.0],
+          'z' => [0.0, 0.0, 1.0]
+        }
+      }
+    )
+    body = golden_layout.merge('hardware' => [hw_raw])
+    layout = Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+
+    placement = layout.hardware.first
+    assert_equal 'prepared', placement.preparation_state
+    refute_nil placement.mount_frame
+    assert_equal [25.0, -10.0, 8.0], placement.mount_frame.origin_mm
+    assert_equal [1.0, 0.0, 0.0], placement.mount_frame.basis.x
+    assert_equal [0.0, 1.0, 0.0], placement.mount_frame.basis.y
+    assert_equal [0.0, 0.0, 1.0], placement.mount_frame.basis.z
+  end
+
+  def test_hardware_with_prepared_state_without_mount_frame_raises_contract_error
+    hw_raw = golden_hardware(
+      'preparationState' => 'prepared'
+    )
+    body = golden_layout.merge('hardware' => [hw_raw])
+
+    err = assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+    end
+    assert_includes err.message, 'marcado como prepared sin mountFrame'
+  end
+
+  def test_hardware_with_invalid_mount_frame_basis_raises_contract_error
+    hw_raw = golden_hardware(
+      'preparationState' => 'prepared',
+      'mountFrame' => {
+        'originMm' => [0.0, 0.0, 0.0],
+        'basis' => {
+          'x' => [1.0, 0.0, 0.0],
+          'y' => [0.0, 1.0, 0.0],
+          'z' => [0.0, 0.0, -1.0] # Left-handed (mirror, det = -1)
+        }
+      }
+    )
+    body = golden_layout.merge('hardware' => [hw_raw])
+
+    err = assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+    end
+    assert_includes err.message, 'mirror is rejected'
+  end
+
+  def test_hardware_with_unprepared_state_parses_without_mount_frame
+    hw_raw = golden_hardware(
+      'preparationState' => 'unprepared'
+    )
+    body = golden_layout.merge('hardware' => [hw_raw])
+    layout = Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+
+    placement = layout.hardware.first
+    assert_equal 'unprepared', placement.preparation_state
+    assert_nil placement.mount_frame
   end
 end

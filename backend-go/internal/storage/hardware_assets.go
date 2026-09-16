@@ -1006,16 +1006,17 @@ func (s *PostgresStore) ResolveHardwareVisualAssetBinding(ctx context.Context, a
 		representation string
 		sha256         string
 		sizeBytes      int64
+		originRaw      []byte
 		evidence       *string
 	)
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT a.status, r.representation, r.sha256, r.size_bytes,
+		SELECT a.status, r.representation, r.sha256, r.size_bytes, r.origin,
 		       (SELECT v.result FROM hardware_asset_validations v
 		        WHERE v.revision_id = r.id ORDER BY v.created_at DESC, v.id DESC LIMIT 1)
 		FROM hardware_assets a
 		JOIN hardware_asset_revisions r ON r.asset_id = a.id AND r.id = $2
 		WHERE a.id = $1 AND a.organization_id = $3
-	`, assetID, revisionID, OrgFromCtx(ctx)).Scan(&assetStatus, &representation, &sha256, &sizeBytes, &evidence)
+	`, assetID, revisionID, OrgFromCtx(ctx)).Scan(&assetStatus, &representation, &sha256, &sizeBytes, &originRaw, &evidence)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Neutral: an unknown revision and a foreign one are
@@ -1032,11 +1033,25 @@ func (s *PostgresStore) ResolveHardwareVisualAssetBinding(ctx context.Context, a
 		return nil, fmt.Errorf("%w: una miniatura no puede ser el modelo del herraje", domain.ErrHardwareAssetBindingInvalid)
 	}
 	binding := &domain.HardwareVisualAssetBinding{
-		AssetID:         assetID,
-		AssetRevisionID: revisionID,
-		Representation:  rep,
-		SHA256:          sha256,
-		SizeBytes:      sizeBytes,
+		AssetID:          assetID,
+		AssetRevisionID:  revisionID,
+		Representation:   rep,
+		SHA256:           sha256,
+		SizeBytes:       sizeBytes,
+		PreparationState: domain.HardwareAssetPreparationUnprepared,
+	}
+	if len(originRaw) > 0 && string(originRaw) != "null" {
+		origin, err := domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
+		if err != nil {
+			return nil, fmt.Errorf("%w: origen del recurso inválido: %v", domain.ErrHardwareAssetBindingInvalid, err)
+		}
+		if origin != nil {
+			rev := domain.HardwareAssetRevision{Origin: origin}
+			binding.PreparationState = rev.PreparationState()
+			if binding.PreparationState == domain.HardwareAssetPreparationPrepared {
+				binding.MountFrame = origin.MountFrame
+			}
+		}
 	}
 	switch {
 	case evidence == nil:
@@ -1385,7 +1400,7 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		return nil
 	}
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT r.id, r.representation, r.sha256, r.size_bytes
+		SELECT r.id, r.representation, r.sha256, r.size_bytes, r.origin
 		FROM hardware_asset_revisions r
 		WHERE r.organization_id = $1 AND r.id = ANY($2::uuid[])
 	`, OrgFromCtx(ctx), revisionIDs)
@@ -1394,21 +1409,41 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 	}
 	defer rows.Close()
 	details := map[string]struct {
-		Representation domain.HardwareAssetRepresentation
-		SHA256         string
-		SizeBytes      int64
+		Representation   domain.HardwareAssetRepresentation
+		SHA256           string
+		SizeBytes        int64
+		PreparationState domain.HardwareAssetPreparationState
+		MountFrame       *domain.HardwareMountFrame
 	}{}
 	for rows.Next() {
 		var revisionID, representation, sha256 string
 		var sizeBytes int64
-		if err := rows.Scan(&revisionID, &representation, &sha256, &sizeBytes); err != nil {
+		var originRaw []byte
+		if err := rows.Scan(&revisionID, &representation, &sha256, &sizeBytes, &originRaw); err != nil {
 			return err
 		}
+		prepState := domain.HardwareAssetPreparationUnprepared
+		var mountFrame *domain.HardwareMountFrame
+		if len(originRaw) > 0 && string(originRaw) != "null" {
+			origin, err := domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
+			if err != nil {
+				return fmt.Errorf("%w: revision %s origen del recurso inválido: %v", domain.ErrHardwareAssetBindingInvalid, revisionID, err)
+			}
+			if origin != nil {
+				rev := domain.HardwareAssetRevision{Origin: origin}
+				prepState = rev.PreparationState()
+				if prepState == domain.HardwareAssetPreparationPrepared {
+					mountFrame = origin.MountFrame
+				}
+			}
+		}
 		details[revisionID] = struct {
-			Representation domain.HardwareAssetRepresentation
-			SHA256         string
-			SizeBytes      int64
-		}{domain.HardwareAssetRepresentation(representation), sha256, sizeBytes}
+			Representation   domain.HardwareAssetRepresentation
+			SHA256           string
+			SizeBytes        int64
+			PreparationState domain.HardwareAssetPreparationState
+			MountFrame       *domain.HardwareMountFrame
+		}{domain.HardwareAssetRepresentation(representation), sha256, sizeBytes, prepState, mountFrame}
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -1430,12 +1465,16 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 			binding.SHA256 = ""
 			binding.SizeBytes = 0
 			binding.ValidationState = ""
+			binding.PreparationState = ""
+			binding.MountFrame = nil
 			continue
 		}
 		binding.Representation = d.Representation
 		binding.SHA256 = d.SHA256
 		binding.SizeBytes = d.SizeBytes
 		binding.ValidationState = states[binding.AssetRevisionID]
+		binding.PreparationState = d.PreparationState
+		binding.MountFrame = d.MountFrame
 	}
 	return nil
 }
