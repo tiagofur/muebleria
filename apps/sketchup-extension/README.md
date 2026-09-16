@@ -263,7 +263,7 @@ the quick path before running Bundler.
 
 ### Extension is missing after installation
 
-Confirm Extension Manager shows **Granete for SketchUp 0.1.0** as enabled,
+Confirm Extension Manager shows **Granete for SketchUp 0.1.1** as enabled,
 restart SketchUp, and inspect the Ruby Console for a redacted
 `extension_started` message. Rebuild the RBZ rather than copying `src/` into a
 Plugins folder.
