@@ -136,6 +136,16 @@ func DeriveAssetNormalization(mf HardwareMountFrame) (HardwareAssetNormalization
 // HardwareAssetOrigin records the declared physical normalization and mounting
 // preparation of the asset file.
 //
+// AUTHORITY & PERSISTENCE CONTRACT:
+// - MountFrame is the sole persisted geometric authority in origin.
+// - AssetNormalization is derivable as its rigid inverse:
+//     DeriveAssetNormalization(*origin.MountFrame)
+// - If the client provides assetNormalization, it must match the derived normalization
+//   within strict numerical tolerance (basisTolerance), or the origin is rejected.
+// - When assetNormalization is omitted by the client, it is not duplicated in
+//   physical database rows; on read, the domain materializes the derived assetNormalization
+//   in memory so consumers and PreparationState() always have a complete normalized frame.
+//
 // INVARIANT: measuredBoundsMm MUST NOT live in HardwareAssetOrigin;
 // measured geometry belongs exclusively to append-only validation evidence.
 type HardwareAssetOrigin struct {
@@ -145,9 +155,9 @@ type HardwareAssetOrigin struct {
 	UpAxis string `json:"upAxis"`
 	// AnchorOffsetMm is the visual anchor offset in millimeters.
 	AnchorOffsetMm *HardwareAssetAnchor `json:"anchorOffsetMm,omitempty"`
-	// MountFrame specifies the mount point and canonical axes in Asset space.
+	// MountFrame specifies the mount point and canonical axes in Asset space (persisted authority).
 	MountFrame *HardwareMountFrame `json:"mountFrame,omitempty"`
-	// AssetNormalization specifies the rigid normalization into canonical frame.
+	// AssetNormalization specifies the rigid normalization into canonical frame (materialized/derived).
 	AssetNormalization *HardwareAssetNormalization `json:"assetNormalization,omitempty"`
 }
 

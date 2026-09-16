@@ -329,3 +329,138 @@ func TestHardwareAssets_ValidationMeasuredBoundsDoesNotMutateRevision(t *testing
 		t.Errorf("origin corrupted: %+v", fetchedRev.Origin)
 	}
 }
+
+// TestHardwareAssets_MountFrameOnly_DerivedNormalizationAvailableOnReadback verifies
+// that when a client uploads an origin declaring only MountFrame:
+// 1. MountFrame is the sole physically persisted authority in PostgreSQL (no duplicated assetNormalization row data).
+// 2. Finalize succeeds and preserves the raw JSON in hardware_asset_revisions.
+// 3. On readback, domain.ValidateHardwareAssetOrigin materializes the derived assetNormalization in memory.
+// 4. PreparationState() returns "prepared".
+// 5. R1 remains append-only immutable under PostgreSQL triggers.
+func TestHardwareAssets_MountFrameOnly_DerivedNormalizationAvailableOnReadback(t *testing.T) {
+	w := newHwAssetWorld(t)
+
+	originJSON := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [12.0, -24.0, 48.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		}
+	}`)
+
+	var asset *domain.HardwareAsset
+	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		res, err := w.fx.store.CreateHardwareAssetUploadSession(ctx, storage.CreateHardwareAssetUploadSessionCommand{
+			Representation: domain.HardwareAssetRepresentationSKP,
+			DisplayName:    "Tirador MountFrame Autoridad",
+			Provenance:     "Fabricante Demo",
+			License:        "Comercial",
+			Origin:         originJSON,
+			ActorUserID:    rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		session := res.Session
+		storageKey := "hardware-assets/" + session.ID + "/skp-mount-only.skp"
+		sha := "sha256-" + strings.Repeat("d4", 32)
+		if _, err := w.fx.store.PromoteHardwareAssetSessionBytes(ctx, storage.PromoteHardwareAssetSessionBytesCommand{
+			SessionID:      session.ID,
+			StorageKey:     storageKey,
+			ContentType:    "application/octet-stream",
+			SizeBytes:      2048,
+			SHA256:         sha,
+			Representation: domain.HardwareAssetRepresentationSKP,
+		}); err != nil {
+			return err
+		}
+		a, err := w.fx.store.FinalizeHardwareAssetUpload(ctx, storage.FinalizeHardwareAssetUploadCommand{
+			SessionID:   session.ID,
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		asset = a
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("finalize asset with mount-frame only: %v", err)
+	}
+
+	if len(asset.Revisions) != 1 {
+		t.Fatalf("expected 1 revision, got %d", len(asset.Revisions))
+	}
+	r1 := asset.Revisions[0]
+
+	// 1. Direct PostgreSQL query: origin column must NOT contain physically duplicated assetNormalization
+	ctx := context.Background()
+	var rawOriginDB []byte
+	err = w.fx.admin.QueryRow(ctx, `
+		SELECT origin FROM hardware_asset_revisions WHERE id = $1
+	`, r1.ID).Scan(&rawOriginDB)
+	if err != nil {
+		t.Fatalf("query raw origin from DB: %v", err)
+	}
+	var originMap map[string]interface{}
+	if err := json.Unmarshal(rawOriginDB, &originMap); err != nil {
+		t.Fatalf("unmarshal raw origin from DB: %v", err)
+	}
+	if _, exists := originMap["assetNormalization"]; exists {
+		t.Errorf("assetNormalization must NOT be physically persisted when omitted by client; DB row: %s", string(rawOriginDB))
+	}
+	if _, exists := originMap["mountFrame"]; !exists {
+		t.Fatalf("mountFrame must be physically persisted in DB row; got: %s", string(rawOriginDB))
+	}
+
+	// 2. Readback via domain store: derived assetNormalization is materialized in memory
+	var fetchedRev *domain.HardwareAssetRevision
+	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		rev, err := w.fx.store.GetHardwareAssetRevision(ctx, asset.ID, r1.ID)
+		if err != nil {
+			return err
+		}
+		fetchedRev = rev
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GetHardwareAssetRevision: %v", err)
+	}
+
+	if fetchedRev.Origin == nil || fetchedRev.Origin.MountFrame == nil {
+		t.Fatalf("fetched revision missing MountFrame: %+v", fetchedRev.Origin)
+	}
+	if fetchedRev.Origin.MountFrame.OriginMm != [3]float64{12.0, -24.0, 48.0} {
+		t.Errorf("expected MountFrame origin [12, -24, 48], got %v", fetchedRev.Origin.MountFrame.OriginMm)
+	}
+	if fetchedRev.Origin.AssetNormalization == nil {
+		t.Fatal("expected derived assetNormalization to be materialized in memory on readback, got nil")
+	}
+	expectedTrans := [3]float64{-12.0, 24.0, -48.0}
+	if fetchedRev.Origin.AssetNormalization.TranslationMm != expectedTrans {
+		t.Errorf("expected derived translation %v, got %v", expectedTrans, fetchedRev.Origin.AssetNormalization.TranslationMm)
+	}
+
+	// 3. PreparationState() is prepared
+	if fetchedRev.PreparationState() != domain.HardwareAssetPreparationPrepared {
+		t.Errorf("expected PreparationState=prepared, got %s", fetchedRev.PreparationState())
+	}
+
+	// 4. R1 immutability: trigger rejects direct update
+	_, err = w.fx.admin.Exec(ctx, `
+		UPDATE hardware_asset_revisions
+		SET origin = '{"tampered": true}'::jsonb
+		WHERE id = $1
+	`, r1.ID)
+	if err == nil {
+		t.Fatal("expected immutability trigger to block update on R1, got nil")
+	}
+	if !strings.Contains(err.Error(), "hardware_asset_revisions is immutable once written") {
+		t.Errorf("expected immutable trigger violation, got: %v", err)
+	}
+}
