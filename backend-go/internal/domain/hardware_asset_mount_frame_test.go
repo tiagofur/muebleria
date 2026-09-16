@@ -273,3 +273,107 @@ func TestHardwareHandle_CompareNominalVsMeasured(t *testing.T) {
 		t.Errorf("expected delta 1440 mm, got %g", discB.DeltaMm)
 	}
 }
+
+func TestValidateHardwareAssetOrigin_MountFrameAuthorityAndCoherence(t *testing.T) {
+	// Case 1: Valid MountFrame with incompatible AssetNormalization -> REJECTED
+	rawIncompatible := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [10.0, 20.0, 5.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		},
+		"assetNormalization": {
+			"translationMm": [999.0, 999.0, 999.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		}
+	}`)
+	_, errIncompat := domain.ValidateHardwareAssetOrigin(rawIncompatible)
+	if errIncompat == nil {
+		t.Fatal("expected error for incompatible AssetNormalization, got nil")
+	}
+
+	// Case 2: Valid MountFrame with compatible AssetNormalization -> ACCEPTED and Prepared
+	rawCompatible := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [10.0, 20.0, 5.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		},
+		"assetNormalization": {
+			"translationMm": [-10.0, -20.0, -5.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		}
+	}`)
+	originCompat, errCompat := domain.ValidateHardwareAssetOrigin(rawCompatible)
+	if errCompat != nil {
+		t.Fatalf("unexpected error for compatible pair: %v", errCompat)
+	}
+	revCompat := domain.HardwareAssetRevision{Origin: originCompat}
+	if revCompat.PreparationState() != domain.HardwareAssetPreparationPrepared {
+		t.Errorf("expected prepared state for compatible pair, got %s", revCompat.PreparationState())
+	}
+
+	// Case 3: Valid MountFrame alone -> ACCEPTED, AssetNormalization derived automatically
+	rawOnlyMount := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [10.0, 20.0, 5.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		}
+	}`)
+	originDerived, errDerived := domain.ValidateHardwareAssetOrigin(rawOnlyMount)
+	if errDerived != nil {
+		t.Fatalf("unexpected error when assetNormalization is omitted: %v", errDerived)
+	}
+	if originDerived.AssetNormalization == nil {
+		t.Fatal("expected assetNormalization to be derived from authoritative mountFrame, got nil")
+	}
+	if originDerived.AssetNormalization.TranslationMm != [3]float64{-10.0, -20.0, -5.0} {
+		t.Errorf("unexpected derived translation: %v", originDerived.AssetNormalization.TranslationMm)
+	}
+	revDerived := domain.HardwareAssetRevision{Origin: originDerived}
+	if revDerived.PreparationState() != domain.HardwareAssetPreparationPrepared {
+		t.Errorf("expected prepared state when derived from mountFrame, got %s", revDerived.PreparationState())
+	}
+
+	// Case 4: AssetNormalization alone without MountFrame -> REJECTED
+	rawOrphanNorm := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"assetNormalization": {
+			"translationMm": [-10.0, -20.0, -5.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		}
+	}`)
+	_, errOrphan := domain.ValidateHardwareAssetOrigin(rawOrphanNorm)
+	if errOrphan == nil {
+		t.Fatal("expected error for assetNormalization without authoritative mountFrame, got nil")
+	}
+}

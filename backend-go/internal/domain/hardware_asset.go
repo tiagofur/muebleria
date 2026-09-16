@@ -197,8 +197,27 @@ func ValidateHardwareBasis(b HardwareBasis, label string) error {
 	return nil
 }
 
+// IsAssetNormalizationEqual verifies whether two normalizations match within numerical tolerance.
+func IsAssetNormalizationEqual(a, b HardwareAssetNormalization, tol float64) bool {
+	for i := 0; i < 3; i++ {
+		if math.Abs(a.TranslationMm[i]-b.TranslationMm[i]) > tol {
+			return false
+		}
+		if math.Abs(a.Basis.X[i]-b.Basis.X[i]) > tol {
+			return false
+		}
+		if math.Abs(a.Basis.Y[i]-b.Basis.Y[i]) > tol {
+			return false
+		}
+		if math.Abs(a.Basis.Z[i]-b.Basis.Z[i]) > tol {
+			return false
+		}
+	}
+	return true
+}
+
 // ValidateHardwareAssetOrigin enforces structure: finite, bounded values, explicit units,
-// and orthonormal right-handed bases for MountFrame and AssetNormalization when present.
+// authoritative MountFrame, and strict coherence with AssetNormalization.
 func ValidateHardwareAssetOrigin(raw json.RawMessage) (*HardwareAssetOrigin, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
@@ -224,6 +243,9 @@ func ValidateHardwareAssetOrigin(raw json.RawMessage) (*HardwareAssetOrigin, err
 			}
 		}
 	}
+	if o.AssetNormalization != nil && o.MountFrame == nil {
+		return nil, fmt.Errorf("%w: origin.assetNormalization cannot exist without authoritative origin.mountFrame", ErrHardwareAssetInvalid)
+	}
 	if o.MountFrame != nil {
 		for i, v := range o.MountFrame.OriginMm {
 			if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > hardwareAssetMMagnitudeCap {
@@ -233,15 +255,27 @@ func ValidateHardwareAssetOrigin(raw json.RawMessage) (*HardwareAssetOrigin, err
 		if err := ValidateHardwareBasis(o.MountFrame.Basis, "origin.mountFrame.basis"); err != nil {
 			return nil, err
 		}
-	}
-	if o.AssetNormalization != nil {
-		for i, v := range o.AssetNormalization.TranslationMm {
-			if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > hardwareAssetMMagnitudeCap {
-				return nil, fmt.Errorf("%w: origin.assetNormalization.translationMm[%d] must be finite and within ±%g mm", ErrHardwareAssetInvalid, i, hardwareAssetMMagnitudeCap)
-			}
-		}
-		if err := ValidateHardwareBasis(o.AssetNormalization.Basis, "origin.assetNormalization.basis"); err != nil {
+
+		expectedNorm, err := DeriveAssetNormalization(*o.MountFrame)
+		if err != nil {
 			return nil, err
+		}
+
+		if o.AssetNormalization != nil {
+			for i, v := range o.AssetNormalization.TranslationMm {
+				if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > hardwareAssetMMagnitudeCap {
+					return nil, fmt.Errorf("%w: origin.assetNormalization.translationMm[%d] must be finite and within ±%g mm", ErrHardwareAssetInvalid, i, hardwareAssetMMagnitudeCap)
+				}
+			}
+			if err := ValidateHardwareBasis(o.AssetNormalization.Basis, "origin.assetNormalization.basis"); err != nil {
+				return nil, err
+			}
+			if !IsAssetNormalizationEqual(*o.AssetNormalization, expectedNorm, basisTolerance) {
+				return nil, fmt.Errorf("%w: origin.assetNormalization is incompatible with authoritative origin.mountFrame (not the rigid inverse)", ErrHardwareAssetInvalid)
+			}
+		} else {
+			// MountFrame is authoritative: populate derived normalization if omitted
+			o.AssetNormalization = &expectedNorm
 		}
 	}
 	return &o, nil
@@ -256,7 +290,10 @@ const (
 
 func (r *HardwareAssetRevision) PreparationState() HardwareAssetPreparationState {
 	if r.Origin != nil && r.Origin.MountFrame != nil && r.Origin.AssetNormalization != nil {
-		return HardwareAssetPreparationPrepared
+		expectedNorm, err := DeriveAssetNormalization(*r.Origin.MountFrame)
+		if err == nil && IsAssetNormalizationEqual(*r.Origin.AssetNormalization, expectedNorm, basisTolerance) {
+			return HardwareAssetPreparationPrepared
+		}
 	}
 	return HardwareAssetPreparationUnprepared
 }

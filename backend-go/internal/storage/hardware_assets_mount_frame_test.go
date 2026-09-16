@@ -125,6 +125,17 @@ func TestHardwareAssets_Immutability_OriginCannotBeUpdatedOnR1(t *testing.T) {
 	}
 }
 
+// TestHardwareAssets_R2CanShareSHAWithNewPreparation proves that a new revision (R2)
+// can share the exact same binary payload (SHA256) while declaring a new MountFrame
+// and AssetNormalization preparation.
+//
+// ARCHITECTURAL DECISION FOR INCREMENT B (Visual Preparer):
+// In Increment A, creating R2 in tests uses the existing upload/finalize flow.
+// Increment B will need to decide between:
+//   Option A: Re-uploading bytes for each new preparation revision; or
+//   Option B: Introducing a derived-revision command (e.g. POST /revisions:derive)
+//             that reuses the exact bytes/sha256 of R1 on the server without re-uploading.
+// Option B is deliberately NOT implemented in Increment A to preserve scope.
 func TestHardwareAssets_R2CanShareSHAWithNewPreparation(t *testing.T) {
 	w := newHwAssetWorld(t)
 	sha := "sha256-" + strings.Repeat("33", 32)
