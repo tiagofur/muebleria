@@ -68,6 +68,7 @@ module Granete
         assets/hardware_asset_cache
         assets/hardware_asset_grant_manager
         assets/hardware_asset_downloader
+        assets/mount_frame
         assets/hardware_asset_validator
         assets/asset_loader
         assets/texture_cache

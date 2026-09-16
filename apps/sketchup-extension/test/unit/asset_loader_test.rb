@@ -164,4 +164,43 @@ class AssetLoaderTest < Minitest::Test
     )
     assert_nil result
   end
+
+  def test_mount_frame_contract_does_not_modify_existing_skp_placement_pose
+    # Increment A contract guarantees: introducing mountFrame / assetNormalization
+    # does NOT prematurely alter how existing SKP hardware assets are placed in SketchUp.
+    # Placement transform must remain purely based on placement.translation and placement.basis
+    # until visual preparation consumption is explicitly wired in subsequent increments.
+    dummy_file = File.join(@tmp_dir, 'handle_legacy.skp')
+    File.binwrite(dummy_file, 'SKP LEGACY')
+
+    downloader = FakeDownloader.new(dummy_file)
+    loader = Granete::SketchUpExtension::Assets::AssetLoader.new(
+      downloader: downloader,
+      cache: @cache
+    )
+
+    basis = {
+      'x' => [1.0, 0.0, 0.0],
+      'y' => [0.0, 1.0, 0.0],
+      'z' => [0.0, 0.0, 1.0]
+    }
+    pos_mm = [100.0, 200.0, 300.0]
+
+    instance = loader.load_asset_instance(
+      @model, 'ast-legacy', @target_group, pos_mm,
+      basis: basis,
+      revision_id: 'rev-legacy-1'
+    )
+    refute_nil instance
+
+    # Pose in host is strictly pos_mm / 25.4 and basis, unchanged by mount frame existence
+    transform = instance.transformation
+    assert_in_delta(100.0 / 25.4, transform.origin.x, 1e-4)
+    assert_in_delta(200.0 / 25.4, transform.origin.y, 1e-4)
+    assert_in_delta(300.0 / 25.4, transform.origin.z, 1e-4)
+
+    assert_equal [1.0, 0.0, 0.0], transform.xaxis.to_a
+    assert_equal [0.0, 1.0, 0.0], transform.yaxis.to_a
+    assert_equal [0.0, 0.0, 1.0], transform.zaxis.to_a
+  end
 end
