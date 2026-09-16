@@ -75,6 +75,20 @@ La primera entrega puede limitarse a acceso/lectura y estados honestos: no neces
 
 ### B — Despiece congelado y candidato PTX desde Ingeniería (P0)
 
+> **Estado (2026-09-15, PR #750 + evidencia completa sobre `d5d6dbbd`): IMPLEMENTADO.**
+> `GET /projects/{id}/production-releases/{releaseId}/cutting-demand` expone la proyección
+> tenant-safe del snapshot privado (identidad/cantidades/medidas/espesor/material/veta/cantos);
+> Despiece y Optimización consumen esa base exacta con preparación editable (disco/refilados/
+> estrategia/formato como inputs versionados del plan, `CutPlan.releaseBase` pinea
+> P/R/fingerprint y persiste por-release); el mismo plan alimenta PDF y PTX/ZIP reales —
+> PDF sin validar máquina, PTX respetando perfil/programa (#591/#650) con manifiesto que
+> ahora lleva `productionReleaseId`/`designRevisionId`/`bomFingerprint`. Bloqueos concretos
+> por formato y acción; catálogo divergente no reconstruye la demanda; material/canto
+> ausente y snapshot faltante fallan accionable. Verificado con browser real
+> Chromium+Go+PostgreSQL (Q1 600 → R2 650 → Q2/P1, PDF byte-exacto, readback PTX
+> independiente) y suites Go/TS completas. Lo no cubierto aquí sigue en sus owners:
+> finalización/gates físicos (#740), continuidad P1/P2 (#741), etiquetas/QR (#682).
+
 Consumir `GetProductionReleaseManufacturingSnapshot` y lectores existentes del release exacto; exponer sólo la proyección tenant-safe generada que falte. Usar los componentes/optimizer/preview/PDF/PTX/ZIP actuales. Ninguna reconstrucción productiva desde Project mutable, current catalog, un preset aproximado o defaults 18 mm/0.45 mm.
 
 Conservar identidades de unidad y ocurrencia de pieza, cantidades, dimensiones, espesores efectivos, material, veta y cantos. Datos de formato de tablero y parámetros de optimización que no estén congelados en P deben capturarse explícitamente con versión/hash en el plan; no fingir que formaban parte del release. Un mismo material no equivale a un único formato de stock.
