@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
+import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
 import { required } from './support/api';
 
 /**
@@ -205,6 +206,48 @@ function revisionById(revisions: readonly { id: string }[], revisionId: string, 
   const found = revisions.find((r) => r.id === revisionId);
   expect(found, `${label} ${revisionId} not found by exact id`).toBeTruthy();
   return found!;
+}
+
+/**
+ * Stable commercial snapshot of one QuoteRevision's items, keyed by physical
+ * identity (#644 B): what must stay bit-identical through a spatial-only
+ * move — dimensions, materials, quantities (implied by the instance set) and
+ * lifecycle — with no revision metadata mixed in.
+ */
+function commercialItemsSnapshot(revision: {
+  items: readonly {
+    furnitureInstanceId: string;
+    furnitureDefinitionId?: string | null;
+    parameters: Record<string, unknown>;
+    materialChoices: Record<string, string>;
+    lifecycleStatus: string;
+  }[];
+}): Record<string, unknown> {
+  return Object.fromEntries(
+    revision.items.map((item) => [
+      item.furnitureInstanceId,
+      {
+        definition: item.furnitureDefinitionId ?? null,
+        parameters: item.parameters,
+        materials: item.materialChoices,
+        lifecycle: item.lifecycleStatus,
+      },
+    ]),
+  );
+}
+
+/**
+ * Placement poses keyed by furnitureInstanceId from the canonical design
+ * contract items (#644 B): the server readback shape used to prove a spatial
+ * move PERSISTED — never the payload the test sent.
+ */
+function transformsByInstance(
+  items: readonly {
+    furniture_instance_id: string;
+    transform?: { translation_mm: readonly number[]; rotation_deg: readonly number[] } | null;
+  }[],
+): Record<string, unknown> {
+  return Object.fromEntries(items.map((item) => [item.furniture_instance_id, item.transform ?? null]));
 }
 
 /** The #392/#633 SketchUp publish contract: manifest prepare → multipart artifacts → finalize. */
@@ -451,6 +494,75 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     for (const item of q1A) expectedChoices.set(item.furnitureInstanceId, { ...CHOICES_A });
     for (const item of q1B) expectedChoices.set(item.furnitureInstanceId, { ...CHOICES_B });
     note(`truth: Project.status=draft at acceptance time (QuoteRevision Q1 accepted independently — separate truth sources)`);
+  });
+
+  // ------------------------------------------------------------------
+  // Stage 1b (#644 milestone negative) — an accepted QuoteRevision WITHOUT a
+  // compatible release fabricates nothing: no ProductionRelease is created,
+  // Ingeniería is neither completed nor entered, no release content or
+  // downloads are offered, and Project.status stays draft (no
+  // accepted/produced stamp smuggles the obra forward).
+  // ------------------------------------------------------------------
+  test('stage 1b — accepted Q without a release creates no P, no Ingeniería entry and no release downloads', async ({ page }) => {
+    test.setTimeout(90_000);
+    const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
+    const apiBase = required('ORGANIZATION_API_BASE');
+
+    // Acceptance is a commercial fact only: no release row exists.
+    expect(await client.listProjectProductionReleases(owner.token, PROJECT_ID)).toEqual([]);
+
+    // Server truth: draft project, no engineering completion, no materials.
+    const detail = (await (
+      await fetch(`${apiBase}/projects/${PROJECT_ID}`, {
+        headers: { Authorization: `Bearer ${owner.token}` },
+      })
+    ).json()) as Record<string, unknown>;
+    expect(detail['status']).toBe('draft');
+    expect(detail['engineering_log']).toBeFalsy();
+    expect(detail['materials_release']).toBeFalsy();
+
+    // UI truth — only RESOLVED states count (absence while a list is still
+    // loading proves nothing): the queue must first reach a terminal state
+    // (its empty state or a rendered list) before the obra's absence from
+    // Ingeniería means anything.
+    await loginToA(page);
+    await page.goto('/engineering');
+    await expect(
+      page.getByText('No hay obras para ingeniería').or(page.locator('.eng-project-list')),
+      'the engineering queue must finish resolving before asserting absence',
+    ).toBeVisible();
+    await expect(page.getByTestId(`eng-project-${PROJECT_ID}`)).toHaveCount(0);
+
+    // The workspace resolves (its tab bar renders) and, with no liberation
+    // behind the accepted Q, offers only the live working view: none of the
+    // release-content markers appears. The Optimización surface stays a
+    // legitimate draft estimate — generation/exports of frozen liberation
+    // content (#739 markers) are canonical-mode-only and remain absent here;
+    // draft working documents are NOT prohibited by this test.
+    await page.goto(`/engineering/${PROJECT_ID}`);
+    await expect(page.getByTestId('eng-tab-despiece')).toBeVisible();
+    await expect(page.getByTestId('eng-release-context')).toHaveCount(0);
+    await page.getByTestId('eng-tab-optimizacion').click();
+    await expect(page.getByTestId('prod-hub-optimizacion')).toBeVisible();
+    await expect(page.getByText('Estimación previa')).toBeVisible();
+    await expect(page.getByTestId('eng-release-prep-notice')).toHaveCount(0);
+    await expect(page.getByTestId('prod-opt-demand-gate')).toHaveCount(0);
+    await expect(page.getByTestId('prod-opt-release-requisition-note')).toHaveCount(0);
+
+    // Server truth re-read AFTER the journey: navigating the queue, the
+    // workspace and the preparation surface created no release and stamped
+    // no operational state.
+    const detailAfter = (await (
+      await fetch(`${apiBase}/projects/${PROJECT_ID}`, {
+        headers: { Authorization: `Bearer ${owner.token}` },
+      })
+    ).json()) as Record<string, unknown>;
+    expect(detailAfter['status']).toBe('draft');
+    expect(detailAfter['engineering_log']).toBeFalsy();
+    expect(detailAfter['materials_release']).toBeFalsy();
+    expect(await client.listProjectProductionReleases(owner.token, PROJECT_ID)).toEqual([]);
+
+    await browserErrors.assertEmpty('stage 1b — accepted Q without release');
   });
 
   // ------------------------------------------------------------------
@@ -906,5 +1018,153 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     note(`provenance: ${JSON.stringify(provenance)}`);
     note(`ids: project=${track.projectId} Q1=${track.quoteRevisionId} Q2=${track.q2Id} instances=[${track.furnitureInstanceIds.join(', ')}] design=${track.designId} R1=${track.r1Id} R2=${track.r2Id} release=${track.productionReleaseId}`);
     note(`findings total: ${findings.length}`);
+  });
+
+  // ------------------------------------------------------------------
+  // Stage 11 (#644 milestone) — a SPATIAL-ONLY change keeps the accepted
+  // commercial baseline. The working copy returns to Q2's exact commercial
+  // content (dimensions, materials, identities, quantities) and only the
+  // admitted spatial transform moves: unit A slides along the wall, unit B
+  // turns 90° in place. The moved poses are proven PERSISTED through server
+  // readbacks — WorkingCopy and the published revision's canonical contract
+  // items — never through the payload this test sends. Publishing the moved
+  // world must NOT create another Q: compatibility comes from the backend's
+  // reconciliation classification (zero commercial/manufacturing deltas),
+  // never from comparing revision numbers, and approval/release stay
+  // explicit commands. The quote-side
+  // snapshot carries no spatial evidence by contract (#394: quote revisions
+  // store only commercial state), so a design-side move is not a commercial
+  // delta; the both-sides-evidence spatial path is owned by the Go unit
+  // suite (reconciliation_impact_test.go) and is not re-proven here.
+  // ------------------------------------------------------------------
+  test('stage 11 — spatial-only move keeps the accepted commercial baseline (no new Q)', async () => {
+    test.setTimeout(120_000);
+
+    type QuoteRevisionRow = {
+      id: string;
+      status: string;
+      revisionNumber: number;
+      items: readonly {
+        furnitureInstanceId: string;
+        furnitureDefinitionId?: string | null;
+        parameters: Record<string, unknown>;
+        materialChoices: Record<string, string>;
+        lifecycleStatus: string;
+      }[];
+    };
+
+    const quotesBefore = (await client.listProjectQuoteRevisions(owner.token, PROJECT_ID)) as unknown as readonly { id: string; status: string }[];
+    const q2Before = revisionById(quotesBefore, track.q2Id, 'Q2 before spatial move') as unknown as QuoteRevisionRow;
+    const baselineItems = commercialItemsSnapshot(q2Before);
+
+    // Baseline BEFORE the move: per-instance placement read back from the
+    // server (the R3 world left every unit on the identity grid, unrotated).
+    // This readback is the comparison base that proves the move is a REAL
+    // persisted change — not a re-send of the same pose.
+    const fiA = track.furnitureInstanceIds[0]!;
+    const fiB = track.furnitureInstanceIds[1]!;
+    const fiC = track.furnitureInstanceIds[2]!;
+    const beforeMove = await client.getDesignWorkingCopy(owner.token, track.designId);
+    const transformBefore = transformsByInstance(beforeMove.items);
+    expect(transformBefore[fiA]).toEqual({ translation_mm: [0, 0, 0], rotation_deg: [0, 0, 0] });
+    expect(transformBefore[fiB]).toEqual({ translation_mm: [600, 0, 0], rotation_deg: [0, 0, 0] });
+    expect(transformBefore[fiC]).toEqual({ translation_mm: [1200, 0, 0], rotation_deg: [0, 0, 0] });
+
+    // Q2's exact commercial content with ONLY the placement transformed.
+    await client.updateDesignWorkingCopy(owner.token, track.designId, {
+      source_type: 'sketchup',
+      items: track.furnitureInstanceIds.map((instanceId, index) => ({
+        furniture_instance_id: instanceId,
+        furniture_definition_id: GOLD_MODULE,
+        parameters: { widthMm: index === 2 ? 650 : 600, heightMm: 720, depthMm: 590 },
+        material_choices: { ...(index === 2 ? CHOICES_B : CHOICES_A) },
+        transform:
+          index === 0
+            ? { translation_mm: [900, 0, 0], rotation_deg: [0, 0, 0] } // position move
+            : index === 1
+              ? { translation_mm: [600, 0, 0], rotation_deg: [0, 0, 90] } // rotation in place
+              : { translation_mm: [1200, 0, 0], rotation_deg: [0, 0, 0] },
+      })),
+    });
+
+    // Persistence proof #1 — WorkingCopy readback: the exact displacement and
+    // rotation survived the round trip, per physical identity.
+    const afterMove = await client.getDesignWorkingCopy(owner.token, track.designId);
+    const transformAfter = transformsByInstance(afterMove.items);
+    expect(transformAfter[fiA]).toEqual({ translation_mm: [900, 0, 0], rotation_deg: [0, 0, 0] });
+    expect(transformAfter[fiB]).toEqual({ translation_mm: [600, 0, 0], rotation_deg: [0, 0, 90] });
+    expect(transformAfter[fiC]).toEqual({ translation_mm: [1200, 0, 0], rotation_deg: [0, 0, 0] });
+    expect(transformAfter[fiA], 'the position move must be a real change').not.toEqual(transformBefore[fiA]);
+    expect(transformAfter[fiB], 'the in-place rotation must be a real change').not.toEqual(transformBefore[fiB]);
+    expect(transformAfter[fiC], 'the unmoved unit keeps its exact pose').toEqual(transformBefore[fiC]);
+
+    const r4 = await publishViaSketchUpContract(
+      client, owner.token, track.designId, track.furnitureInstanceIds,
+      afterMove.base_revision_id ?? track.r2Id, 'golden-publish-r4-spatial',
+    );
+
+    // Persistence proof #2 — the published revision's CANONICAL contract items
+    // freeze the moved poses (read back via getDesignRevision, never the sent
+    // payload).
+    const r4Canonical = await client.getDesignRevision(owner.token, track.designId, r4.id);
+    expect(r4Canonical.revision_number).toBe(r4.revision_number);
+    expect(r4Canonical.items.map((item) => item.furniture_instance_id).sort()).toEqual([...track.furnitureInstanceIds].sort());
+    const r4Transforms = transformsByInstance(r4Canonical.items);
+    expect(r4Transforms[fiA]).toEqual({ translation_mm: [900, 0, 0], rotation_deg: [0, 0, 0] });
+    expect(r4Transforms[fiB]).toEqual({ translation_mm: [600, 0, 0], rotation_deg: [0, 0, 90] });
+    expect(r4Transforms[fiC]).toEqual({ translation_mm: [1200, 0, 0], rotation_deg: [0, 0, 0] });
+
+    // Identities, dimensions, materials and quantities conserved by the move.
+    expect(r4.items.map((item) => item.furniture_instance_id).sort()).toEqual([...track.furnitureInstanceIds].sort());
+    for (const item of r4.items) {
+      const widthMm = item.furniture_instance_id === track.furnitureInstanceIds[2] ? 650 : 600;
+      expectExactDimensions(item.parameters, widthMm);
+      expectQuotedChoices(item.furniture_instance_id, 'R4-spatial', item.material_choices);
+    }
+
+    // Backend classification — not revision numbers — decides compatibility:
+    // the moved R4 (revision 4) reconciles against the accepted Q2
+    // (revision 2) with zero commercial and zero manufacturing deltas.
+    const reconciliation = await client.reconcileProjectDesign(owner.token, PROJECT_ID, {
+      quoteRevisionId: track.q2Id,
+      designRevisionId: r4.id,
+    });
+    expect(reconciliation.impact.requiresRequote).toBe(false);
+    expect(reconciliation.impact.requiresResolution).toBe(false);
+    expect(reconciliation.impact.commercialChanges).toBe(0);
+    expect(reconciliation.impact.manufacturingChanges).toBe(0);
+    for (const item of reconciliation.items) {
+      expect(item.differences, `furniture ${item.furnitureInstanceId} must carry no commercial delta`).toEqual([]);
+    }
+    expect(r4.revision_number, 'compatible despite differing revision numbers').toBeGreaterThan(q2Before.revisionNumber);
+
+    // Moving furniture and publishing the moved world created NO new Q; the
+    // accepted baseline is intact and nothing was accepted automatically.
+    const quotesAfter = (await client.listProjectQuoteRevisions(owner.token, PROJECT_ID)) as unknown as readonly { id: string; status: string }[];
+    expect(quotesAfter.map((q) => q.id).sort()).toEqual(quotesBefore.map((q) => q.id).sort());
+    const statusesAfter = Object.fromEntries(quotesAfter.map((q) => [q.id, q.status]));
+    const statusesBefore = Object.fromEntries(quotesBefore.map((q) => [q.id, q.status]));
+    expect(statusesAfter).toEqual(statusesBefore);
+    const q2After = revisionById(quotesAfter, track.q2Id, 'Q2 after spatial move') as unknown as QuoteRevisionRow;
+    expect(q2After.status).toBe('accepted');
+    expect(commercialItemsSnapshot(q2After)).toEqual(baselineItems);
+
+    // Approval of the moved world is still an EXPLICIT command against the
+    // SAME accepted Q2 — and it creates no release by itself.
+    const approved = await client.approveProjectDesignRevisionForProduction(
+      owner.token, PROJECT_ID, track.designId, r4.id,
+      { quoteRevisionId: track.q2Id }, 'golden-approve-r4-spatial',
+    );
+    expect(approved.status).toBe('approved');
+    expect((await client.listProjectProductionReleases(owner.token, PROJECT_ID)).map((r) => r.id))
+      .toEqual([track.productionReleaseId]);
+
+    // The whole spatial round-trip left Project.status untouched.
+    const project = (await (
+      await fetch(`${required('ORGANIZATION_API_BASE')}/projects/${PROJECT_ID}`, {
+        headers: { Authorization: `Bearer ${owner.token}` },
+      })
+    ).json()) as Record<string, unknown>;
+    expect(project['status']).toBe('draft');
   });
 });

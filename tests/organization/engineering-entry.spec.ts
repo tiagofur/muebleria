@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
+import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
 import { GATE_MODULE_A_ID, required } from './support/api';
 
 /**
@@ -358,5 +359,35 @@ test.describe.serial('Engineering entry: canonical release → queue + workspace
       await page.keyboard.press('Enter');
       await expect(page.locator('#eng-panel-despiece')).toBeVisible();
     }
+  });
+
+  // ------------------------------------------------------------------
+  // #644 milestone negative — a pinned release that does not exist for this
+  // obra is never silently substituted by the real P1: the workspace fails
+  // SAFE with the honest "Liberación no disponible" state (#738 hook), and
+  // no release-scoped content or downloads render for the bogus pin.
+  // ------------------------------------------------------------------
+  test('pinned nonexistent release fails safe: no substitution by the real P1', async ({ page }) => {
+    test.setTimeout(90_000);
+    expect(releaseId).not.toBe('');
+    const browserErrors = collectBrowserErrors(page, {
+      // This test deliberately pins an unknown release: the exact 404 the
+      // probe provokes on the release-context endpoint is an EXPECTED
+      // negative response, allowlisted by status AND endpoint so any other
+      // console error still fails the journey.
+      allow: (message, resourceUrl) =>
+        allowLoggedOutSessionProbe(message, resourceUrl)
+        || (message.includes('404') && resourceUrl.includes('/production-releases/')),
+    });
+    await loginToA(page);
+
+    const nonexistentReleaseId = 'deadbeef-0000-4000-8000-0000000000ee';
+    await page.goto(`/engineering/${PROJECT_ID}?release=${nonexistentReleaseId}`);
+
+    await expect(page.getByText('Liberación no disponible')).toBeVisible();
+    // No release strip, no workspace tabs: the real P1 never stands in.
+    await expect(page.getByTestId('eng-release-context')).toHaveCount(0);
+    await expect(page.getByTestId('eng-tab-despiece')).toHaveCount(0);
+    await browserErrors.assertEmpty('engineering entry — nonexistent pinned release');
   });
 });

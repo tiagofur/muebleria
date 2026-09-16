@@ -16,6 +16,7 @@ import {
   verifyCutPlanPtxReadback,
 } from '@granete/excel';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
+import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
 import { GATE_MODULE_A_ID, required } from './support/api';
 
 /**
@@ -327,7 +328,8 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
   }
 
   test('despiece y optimización usan las piezas congeladas de P1 (no el proyecto ni el catálogo vivos)', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(150_000);
+    const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
     await login(page);
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
     await expect(page.getByTestId('eng-release-context')).toContainText('Liberación #1 · Diseño R2');
@@ -368,10 +370,33 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     expect(truth['status']).toBe('draft');
     expect((truth['engineering_log'] as Record<string, unknown> | null)).toBeFalsy();
     expect((truth['materials_release'] as Record<string, unknown> | null)).toBeFalsy();
+
+    // #644 — the frozen-despiece surface is part of the milestone journey:
+    // it renders without overflow across the supported viewports (the entry
+    // surface is already pinned by engineering-entry.spec.ts).
+    for (const viewport of [
+      { name: 'compact', width: 390, height: 844 },
+      { name: 'medium', width: 768, height: 900 },
+      { name: 'expanded', width: 1280, height: 800 },
+    ] as const) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
+      await expect(page.getByTestId('eng-release-context')).toContainText('Liberación #1');
+      await page.getByTestId('eng-tab-despiece').click();
+      await expect(page.locator('#eng-panel-despiece')).toBeVisible();
+      const geometry = await page.locator('html').evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(geometry.scrollWidth, `viewport ${viewport.name}`).toBeLessThanOrEqual(geometry.clientWidth);
+    }
+
+    await browserErrors.assertEmpty('frozen despiece journey');
   });
 
   test('ajustar disco genera otro resultado técnico; guardar + recargar recupera el plan con su base', async ({ page }) => {
     test.setTimeout(120_000);
+    const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
     await login(page);
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
     await page.getByTestId('eng-tab-optimizacion').click();
@@ -410,10 +435,12 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     expect(widths).toEqual([600, 600, 650]);
     expect(demand.units.every((unit) => unit.pieces.every((piece) => piece.materialId === MAT_ID))).toBe(true);
     expect(demand.units.every((unit) => unit.pieces.every((piece) => piece.thicknessMm === 18))).toBe(true);
+    await browserErrors.assertEmpty('plan save + reload journey');
   });
 
   test('descarga real de PDF y PTX genérico del mismo plan (org sin salida configurada)', async ({ page }) => {
     test.setTimeout(120_000);
+    const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
     await login(page);
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
     await page.getByTestId('eng-tab-optimizacion').click();
@@ -456,10 +483,12 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     expect(text).toContain('650');
     expect(text).toContain('600');
     expect(text).toContain(MAT_CODE);
+    await browserErrors.assertEmpty('PDF + PTX download journey');
   });
 
   test('candidato CADmatic 4 r3: manifiesto con procedencia del release + lectura independiente de bytes', async ({ page }) => {
     test.setTimeout(150_000);
+    const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
 
     // Configure the exact output tuple through the real Settings UI (#591).
     await login(page);
@@ -530,5 +559,6 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
       .map((record) => (record as { width: number }).width)
       .sort((a, b) => a - b);
     expect(demandedWidths).toEqual([600, 600, 650]);
+    await browserErrors.assertEmpty('CADmatic candidate + readback journey');
   });
 });
