@@ -431,7 +431,16 @@ module SketchupStub
     end
 
     def load(path)
-      name = File.basename(path, ".*")
+      return nil unless path && File.file?(path)
+
+      content = begin
+        File.binread(path)
+      rescue StandardError
+        ''
+      end
+      return nil if content.include?('CORRUPT_SKP') || content.empty?
+
+      name = File.basename(path, '.*')
       @definitions[name] ||= ComponentDefinitionStub.new(name)
     end
   end

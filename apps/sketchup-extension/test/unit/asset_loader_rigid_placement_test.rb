@@ -692,6 +692,312 @@ class AssetLoaderRigidPlacementTest < Minitest::Test
                  'Undo stack must be coherent: no operations started'
   end
 
+  # R3: Real loadability probe failure on multi-placement rebuild reverts
+  # newly loaded definitions so DefinitionList is left completely clean.
+  # Placement A: valid SKP and loadable in SketchUp.
+  # Placement B: corrupted SKP on disk (definitions.load returns nil).
+  # Uses real DefinitionListStub#load without stubbing probe_loadability.
+  def test_r3_real_loadability_probe_failure_reverts_definitions_and_preserves_geometry
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    builder_ok = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: store,
+      asset_loader: @loader
+    )
+
+    definition = {
+      'id' => 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+      'furniture_definition_id' => 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+      'furnitureDefinitionId' => 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+      'name' => 'Bajo Mesada R3',
+      'parameters' => []
+    }
+    valid_mf = MountFrameData.new(
+      origin_mm: [0.0, 0.0, 0.0],
+      basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], z: [0.0, 0.0, 1.0])
+    )
+    initial_placement = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-r3-init',
+      asset_id: 'ast-handle',
+      asset_revision_id: 'rev-2',
+      representation: 'mesh',
+      preparation_state: 'prepared',
+      mount_frame: valid_mf,
+      translation: [100.0, 20.0, 300.0]
+    )
+    board = Granete::SketchUpExtension::Library::LayoutBoardTransform.new(
+      component_instance_id: 'board-r3',
+      slot_id: 'left_side',
+      name: 'Lateral',
+      dims: { 'width' => 18.0, 'thickness' => 590.0, 'length' => 720.0 },
+      local_transform: {
+        'translation' => [0.0, 0.0, 0.0],
+        'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+      }
+    )
+    initial_layout = Granete::SketchUpExtension::Library::NativeLayout.new(
+      'granete.local-basis.v1', [board], [initial_placement]
+    )
+    insert_res = builder_ok.insert_furniture(@model, definition, {}, resolved_layout: initial_layout)
+    assert insert_res['success'], "Initial insert failed: #{insert_res['error']}"
+
+    furniture = @model.active_entities.grep(Sketchup::ComponentInstance).first
+    refute_nil furniture
+    prev_hw = furniture.definition.entities.instances.find do |ci|
+      store.read(ci)&.dig('identity', 'hardwarePlacementId') == 'hw-r3-init'
+    end
+    refute_nil prev_hw
+    prev_hw_def = prev_hw.definition
+    prev_hw_transform = prev_hw.transformation.to_a
+    prev_meta = store.read(prev_hw)
+    prev_entity_count = furniture.definition.entities.instances.length
+    initial_def_count = @model.definitions.to_a.length
+    initial_op_count = @model.operations.length
+
+    # Create real files on disk: A is valid, B is corrupt (causes definitions.load -> nil)
+    skp_a = File.join(@tmp_dir, 'handle_r3_a.skp')
+    File.binwrite(skp_a, 'SKP VALID HANDLE A')
+    skp_b = File.join(@tmp_dir, 'handle_r3_b.skp')
+    File.binwrite(skp_b, 'CORRUPT_SKP')
+
+    downloader_r3 = Class.new do
+      def initialize(map)
+        @map = map
+      end
+
+      def download_asset(asset_id:, **)
+        @map[asset_id]
+      end
+    end.new('ast-handle-r3-a' => skp_a, 'ast-handle-r3-b' => skp_b)
+
+    loader_r3 = Granete::SketchUpExtension::Assets::AssetLoader.new(downloader: downloader_r3)
+    builder_r3 = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: store,
+      asset_loader: loader_r3
+    )
+
+    placement_a = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-r3-a',
+      asset_id: 'ast-handle-r3-a',
+      asset_revision_id: 'rev-a',
+      representation: 'mesh',
+      preparation_state: 'prepared',
+      mount_frame: valid_mf,
+      translation: [150.0, 20.0, 300.0]
+    )
+    placement_b = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-r3-b',
+      asset_id: 'ast-handle-r3-b',
+      asset_revision_id: 'rev-b',
+      representation: 'mesh',
+      preparation_state: 'prepared',
+      mount_frame: valid_mf,
+      translation: [250.0, 20.0, 300.0]
+    )
+    multi_layout = Granete::SketchUpExtension::Library::NativeLayout.new(
+      'granete.local-basis.v1', [board], [placement_a, placement_b]
+    )
+
+    # Rebuild attempt: Placement A succeeds loadability probe; Placement B fails loadability probe.
+    # Entire preflight aborts BEFORE start_operation.
+    update_result = builder_r3.update_furniture(
+      @model, furniture, definition, {}, resolved_layout: multi_layout
+    )
+
+    refute update_result['success'], 'Rebuild must fail when any placement fails loadability probe'
+    assert_includes update_result['error'], 'geometría 3D del herraje'
+    assert_includes update_result['error'], 'hw-r3-b'
+
+    # R3 Invariants verification:
+    # 1. Furniture geometry and previous handle 100% intact
+    assert prev_hw.valid?, 'Previous handle ComponentInstance must still be valid'
+    assert_equal prev_hw_def, prev_hw.definition, 'Previous handle definition must be unchanged'
+    assert_equal prev_hw_transform, prev_hw.transformation.to_a, 'Previous handle transform unchanged'
+    assert_equal prev_meta, store.read(prev_hw), 'Previous handle metadata unchanged'
+
+    # 2. Zero new instances, zero partial children
+    assert_equal prev_entity_count, furniture.definition.entities.instances.length,
+                 'Zero partial children: entity count unchanged'
+
+    # 3. DefinitionList reverted: handle_r3_a was loaded during probe but reverted on failure
+    assert_nil @model.definitions['handle_r3_a'],
+               'DefinitionList reverted: handle_r3_a definition must be removed on preflight failure'
+    assert_nil @model.definitions['handle_r3_b']
+    assert_equal initial_def_count, @model.definitions.to_a.length,
+                 'DefinitionList restored to exact pre-preflight definition set'
+
+    # 4. Undo stack coherent: zero operations opened
+    assert_equal initial_op_count, @model.operations.length,
+                 'Undo stack coherent: no operation opened before abort'
+  end
+
+  # R3: Download -> validate MountFrame -> only then probe loadability.
+  # When MountFrame validation fails in Stage 2, Stage 3 is skipped entirely
+  # so no definitions are ever loaded into SketchUp.
+  def test_r3_preflight_order_skips_load_probe_when_mount_frame_invalid
+    skp_a = File.join(@tmp_dir, 'handle_order_a.skp')
+    File.binwrite(skp_a, 'SKP VALID A')
+
+    invalid_mf = MountFrameData.new(
+      origin_mm: [0.0, 0.0, 0.0],
+      basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [1.0, 0.0, 0.0], z: [0.0, 0.0, 1.0])
+    )
+    valid_mf = MountFrameData.new(
+      origin_mm: [0.0, 0.0, 0.0],
+      basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], z: [0.0, 0.0, 1.0])
+    )
+
+    placement_a = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-order-a',
+      asset_id: 'ast-order-a',
+      asset_revision_id: 'rev-a',
+      preparation_state: 'prepared',
+      mount_frame: valid_mf
+    )
+    placement_b = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-order-b',
+      asset_id: 'ast-order-b',
+      asset_revision_id: 'rev-b',
+      preparation_state: 'prepared',
+      mount_frame: invalid_mf
+    )
+
+    downloader = Class.new do
+      def initialize(path)
+        @path = path
+      end
+
+      def download_asset(*)
+        @path
+      end
+    end.new(skp_a)
+
+    loader = Granete::SketchUpExtension::Assets::AssetLoader.new(downloader: downloader)
+    loader.prefetch_hardware_assets([placement_a, placement_b], model: @model)
+
+    ok, err = loader.rebuild_preflight_ok?
+    refute ok
+    assert_includes err, 'Preparación de herraje inválida'
+    # handle_order_a must NEVER have been loaded into model.definitions because
+    # stage 2 (MountFrame validation) aborted preflight before stage 3 (loadability probe)
+    assert_nil @model.definitions['handle_order_a'],
+               'Stage 3 loadability probe must not run when stage 2 validation fails'
+  end
+
+  # R4: Policy B — New furniture insertion falls back to proxy box when asset is :missing.
+  def test_r4_insertion_policy_b_fallback_to_proxy_on_missing_asset
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    failing_loader = Granete::SketchUpExtension::Assets::AssetLoader.new(
+      downloader: FakeDownloader.new(nil)
+    )
+    builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: store,
+      asset_loader: failing_loader
+    )
+
+    definition = {
+      'id' => 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+      'furniture_definition_id' => 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+      'furnitureDefinitionId' => 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+      'name' => 'Bajo Mesada R4 Fallback',
+      'parameters' => []
+    }
+    valid_mf = MountFrameData.new(
+      origin_mm: [0.0, 0.0, 0.0],
+      basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], z: [0.0, 0.0, 1.0])
+    )
+    missing_placement = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-r4-missing',
+      asset_id: 'ast-handle-missing',
+      asset_revision_id: 'rev-missing',
+      representation: 'mesh',
+      preparation_state: 'prepared',
+      mount_frame: valid_mf,
+      translation: [100.0, 20.0, 300.0]
+    )
+    board = Granete::SketchUpExtension::Library::LayoutBoardTransform.new(
+      component_instance_id: 'board-r4',
+      slot_id: 'left_side',
+      name: 'Lateral',
+      dims: { 'width' => 18.0, 'thickness' => 590.0, 'length' => 720.0 },
+      local_transform: {
+        'translation' => [0.0, 0.0, 0.0],
+        'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+      }
+    )
+    layout = Granete::SketchUpExtension::Library::NativeLayout.new(
+      'granete.local-basis.v1', [board], [missing_placement]
+    )
+
+    # Policy B: New insertion proceeds with fallback proxy geometry instead of blocking
+    result = builder.insert_furniture(@model, definition, {}, resolved_layout: layout)
+    assert result['success'], "Insertion under Policy B must succeed: #{result['error']}"
+
+    furniture = @model.active_entities.grep(Sketchup::ComponentInstance).first
+    refute_nil furniture
+
+    # The hardware instance exists as a native component instance (proxy box)
+    hw_instance = furniture.definition.entities.instances.find do |ci|
+      store.read(ci)&.dig('identity', 'hardwarePlacementId') == 'hw-r4-missing'
+    end
+    refute_nil hw_instance, 'Hardware proxy instance must be present in inserted furniture'
+    assert hw_instance.definition.name.include?('Granete · Herraje ·')
+    meta = store.read(hw_instance)
+    assert_equal 'componentInstance', meta['kind']
+    assert_equal 'hardware_hw-r4-missing', meta['intent']['semanticRole']
+  end
+
+  # R4: Policy B — New furniture insertion fails closed when MountFrame is :invalid.
+  def test_r4_insertion_policy_b_fails_closed_on_invalid_mount_frame
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: store,
+      asset_loader: @loader
+    )
+
+    definition = {
+      'id' => 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      'furniture_definition_id' => 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      'furnitureDefinitionId' => 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      'name' => 'Bajo Mesada R4 Invalid',
+      'parameters' => []
+    }
+    invalid_mf = MountFrameData.new(
+      origin_mm: [0.0, 0.0, 0.0],
+      basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [1.0, 0.0, 0.0], z: [0.0, 0.0, 1.0])
+    )
+    invalid_placement = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-r4-invalid',
+      asset_id: 'ast-handle',
+      asset_revision_id: 'rev-2',
+      representation: 'mesh',
+      preparation_state: 'prepared',
+      mount_frame: invalid_mf,
+      translation: [100.0, 20.0, 300.0]
+    )
+    board = Granete::SketchUpExtension::Library::LayoutBoardTransform.new(
+      component_instance_id: 'board-r4-inv',
+      slot_id: 'left_side',
+      name: 'Lateral',
+      dims: { 'width' => 18.0, 'thickness' => 590.0, 'length' => 720.0 },
+      local_transform: {
+        'translation' => [0.0, 0.0, 0.0],
+        'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+      }
+    )
+    layout = Granete::SketchUpExtension::Library::NativeLayout.new(
+      'granete.local-basis.v1', [board], [invalid_placement]
+    )
+
+    initial_instances_count = @model.active_entities.grep(Sketchup::ComponentInstance).length
+
+    # Policy B: Invalid preparation fails closed before opening operation
+    result = builder.insert_furniture(@model, definition, {}, resolved_layout: layout)
+    refute result['success'], 'Insertion with invalid MountFrame must fail'
+    assert_includes result['error'], 'Preparación de herraje inválida'
+    assert_equal initial_instances_count, @model.active_entities.grep(Sketchup::ComponentInstance).length,
+                 'Zero furniture instances must be inserted on invalid preparation'
+  end
+
   private
 
   def vector_mag(vec)
@@ -703,4 +1009,3 @@ class AssetLoaderRigidPlacementTest < Minitest::Test
     MountFrame.dot_product(transform.xaxis.to_a, cross_yz)
   end
 end
-

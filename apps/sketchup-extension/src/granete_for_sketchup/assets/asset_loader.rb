@@ -14,7 +14,7 @@ module Granete
       # rebuild_preflight_ok? surfaces :missing/:invalid as a typed error so
       # update_furniture can fail-before-mutate on download failure, loadability
       # failure, or invalid MountFrame — not only on invalid preparation.
-      class AssetLoader
+      class AssetLoader # rubocop:disable Metrics/ClassLength
         attr_reader :diagnostics
 
         def initialize(resolver: nil, downloader: nil, cache: nil, logger: nil)
@@ -31,28 +31,32 @@ module Granete
           @prefetch_results.clear
         end
 
-        # Prefetches all hardware placements, populating @prefetch_results with
-        # a typed state per placement_id. When model is provided, R2 loadability
-        # is probed (definitions.load without inserting a productive instance).
+        # Staged preflight (R1/R2/R3, #668-C1):
+        # Stage 1: Download/cache all assets (pure I/O, zero model mutation).
+        # Stage 2: Validate MountFrame basis and math (in-memory, zero model mutation).
+        # Stage 3: Probe SketchUp loadability only when stages 1 & 2 succeed.
+        #          If any placement fails loadability, newly loaded definitions are
+        #          reverted so DefinitionList is restored with zero orphan definitions.
         def prefetch_hardware_assets(hardware_placements, model: nil, org_id: nil)
           return unless hardware_placements.is_a?(Array)
 
-          effective_org = org_id || default_org_id
-          hardware_placements.each do |placement|
-            next unless placement.respond_to?(:asset_id) && placement.asset_id
-            next unless placement.respond_to?(:asset_revision_id) && placement.asset_revision_id
+          placements = filter_hardware_placements(hardware_placements)
+          return if placements.empty?
 
-            pid = placement.respond_to?(:placement_id) ? placement.placement_id : nil
-            state = prefetch_result_for_rebuild(model, placement, org_id: effective_org)
-            @prefetch_results[pid] = state if pid
-          end
+          effective_org = org_id || default_org_id
+          paths_by_pid = stage_download_assets(placements, effective_org)
+          candidates = stage_validate_preparations(placements, paths_by_pid)
+          return if preflight_failed?
+
+          run_loadability_probe(model, candidates)
         end
+
+        # rubocop:disable Naming/PredicateMethod
 
         # Returns [true, nil] when all prefetched placements are :ready or
         # :unprepared (unprepared falls back to legacy, not a blocker).
-        # Returns [false, message] for the first :missing or :invalid placement.
-        # Falls back to the original diagnostics scan when no prefetch ran
-        # (backward-compatible with callers that never supply model:).
+        # Under Policy B (rebuild), returns [false, message] for the first :missing
+        # or :invalid placement. Rebuild of existing geometry never degrades a real handle.
         def rebuild_preflight_ok?
           if @prefetch_results.empty?
             err = legacy_invalid_asset_preparation_error
@@ -76,6 +80,30 @@ module Granete
 
           [true, nil]
         end
+
+        # Policy B (insertion fallback, R4):
+        # New furniture insertion (insert_furniture / place_existing_furniture)
+        # allows missing assets to fall back to proxy boxes so designers are
+        # not blocked by network or missing 3D assets.
+        # However, invalid MountFrame preparation fails closed to protect data integrity.
+        def insertion_preflight_ok?
+          if @prefetch_results.empty?
+            err = legacy_invalid_asset_preparation_error
+            return err ? [false, err] : [true, nil]
+          end
+
+          invalid_pid, = @prefetch_results.find { |_, s| s == :invalid }
+          if invalid_pid
+            diag = @diagnostics.find do |d|
+              d['code'] == 'asset_preparation_invalid' && d['placementId'] == invalid_pid
+            end
+            reason = diag ? diag['reason'] : 'Preparación de herraje inválida'
+            return [false, "Preparación de herraje inválida: #{reason}"]
+          end
+
+          [true, nil]
+        end
+        # rubocop:enable Naming/PredicateMethod
 
         # rubocop:disable-next Metrics/ParameterLists
         def load_asset_instance(model, asset_id, target_container, transform_mm = [0, 0, 0],
@@ -111,33 +139,115 @@ module Granete
           @downloader.respond_to?(:current_org_id, true) ? @downloader.send(:current_org_id) : nil
         end
 
-        # R1: derive typed preflight state for a single placement.
-        # Step 1: download; Step 2: loadability (R2); Step 3: preparation validity.
-        def prefetch_result_for_rebuild(model, placement, org_id:)
-          path = prefetch_single(placement, org_id: org_id)
-          return :missing unless path && File.file?(path)
-
-          # R2: probe that the SKP can be loaded without inserting a productive instance.
-          return :missing if model && !probe_loadability(model, path)
-
-          prep_state = placement.respond_to?(:preparation_state) ? placement.preparation_state : nil
-          return :unprepared unless prep_state == 'prepared'
-
-          # prevalidate_preparation records diagnostic and returns false on invalid MountFrame.
-          prevalidate_preparation(placement) ? :ready : :invalid
+        def filter_hardware_placements(hardware_placements)
+          hardware_placements.select do |p|
+            p.respond_to?(:asset_id) && p.asset_id &&
+              p.respond_to?(:asset_revision_id) && p.asset_revision_id
+          end
         end
 
-        # R2: calls model.definitions.load without adding a ComponentInstance.
-        # Returns true when SketchUp can load the file (or when model is unavailable).
-        # definitions.load returns the cached definition if already loaded — safe,
-        # no allocation, no geometry mutation. Never inserts a productive instance.
-        def probe_loadability(model, skp_path)
-          return true unless model.respond_to?(:definitions)
+        def stage_download_assets(placements, org_id)
+          paths = {}
+          placements.each do |placement|
+            pid = placement.respond_to?(:placement_id) ? placement.placement_id : nil
+            next unless pid
 
-          defn = model.definitions.load(skp_path)
-          !defn.nil?
-        rescue StandardError
-          false
+            path = prefetch_single(placement, org_id: org_id)
+            if path && File.file?(path)
+              paths[pid] = path
+            else
+              @prefetch_results[pid] = :missing
+            end
+          end
+          paths
+        end
+
+        def stage_validate_preparations(placements, paths_by_pid)
+          candidates = []
+          placements.each do |placement|
+            pid = placement.respond_to?(:placement_id) ? placement.placement_id : nil
+            next unless pid
+            next if @prefetch_results[pid] == :missing
+
+            prep_state = placement.respond_to?(:preparation_state) ? placement.preparation_state : nil
+            if prep_state != 'prepared'
+              @prefetch_results[pid] = :unprepared
+            elsif prevalidate_preparation(placement)
+              candidates << [placement, paths_by_pid[pid]]
+            else
+              @prefetch_results[pid] = :invalid
+            end
+          end
+          mark_remaining_ready(candidates) if preflight_failed?
+          candidates
+        end
+
+        def mark_remaining_ready(candidates)
+          candidates.each do |(p, _)|
+            pid = p.respond_to?(:placement_id) ? p.placement_id : nil
+            @prefetch_results[pid] = :ready if pid
+          end
+        end
+
+        def preflight_failed?
+          @prefetch_results.values.intersect?(%i[missing invalid])
+        end
+
+        # R3: probes loadability in SketchUp with reversibility cleanup.
+        # If any placement fails to load, newly loaded definitions are removed.
+        def run_loadability_probe(model, candidates)
+          unless model.respond_to?(:definitions)
+            mark_remaining_ready(candidates)
+            return
+          end
+
+          initial_definitions = snapshot_definitions(model)
+          newly_loaded = []
+          probe_failed = false
+
+          candidates.each do |(placement, path)|
+            pid = placement.respond_to?(:placement_id) ? placement.placement_id : nil
+            defn = probe_loadability(model, path)
+            if defn
+              @prefetch_results[pid] = :ready if pid
+              newly_loaded << defn if !initial_definitions.include?(defn) && !newly_loaded.include?(defn)
+            else
+              @prefetch_results[pid] = :missing if pid
+              probe_failed = true
+            end
+          end
+
+          revert_definitions(model, newly_loaded) if probe_failed
+        end
+
+        def snapshot_definitions(model)
+          if model.definitions.respond_to?(:to_a)
+            model.definitions.to_a
+          elsif model.definitions.respond_to?(:map)
+            model.definitions.map { |d| d }
+          else
+            []
+          end
+        end
+
+        def revert_definitions(model, definitions)
+          return unless model.respond_to?(:definitions) && model.definitions.respond_to?(:remove)
+
+          definitions.each do |defn|
+            model.definitions.remove(defn)
+          rescue StandardError => e
+            @logger&.warn('preflight_definition_revert_failed', error: e)
+          end
+          definitions.clear
+        end
+
+        def probe_loadability(model, skp_path)
+          return nil unless model.respond_to?(:definitions)
+
+          model.definitions.load(skp_path)
+        rescue StandardError => e
+          @logger&.warn('preflight_probe_loadability_failed', error: e, path: skp_path)
+          nil
         end
 
         def prefetch_single(placement, org_id: nil)

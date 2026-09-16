@@ -539,7 +539,7 @@ module Granete
       # before any destructive model mutation.
       def build_always_failing_asset_loader
         failing_downloader = Class.new do
-          def download_asset(asset_id:, revision_id:, sha256: nil, expected_bytes: nil, org_id: nil)
+          def download_asset(*)
             nil
           end
         end.new

@@ -250,7 +250,7 @@ module Granete
                      normalize_parameters(definition, parameters)
                    end
           prefetch_visual_assets(model, resolved_layout)
-          prep_err = rebuild_preflight_error
+          prep_err = insertion_preflight_error
           return { 'success' => false, 'error' => prep_err } if prep_err
 
           host_transform = transformation || Geom::Transformation.new
@@ -416,6 +416,25 @@ module Granete
           end
 
           # Fallback: original behavior for loaders without preflight support.
+          return nil unless @asset_loader.respond_to?(:diagnostics)
+
+          diag = @asset_loader.diagnostics.find { |d| d['code'] == 'asset_preparation_invalid' }
+          diag ? "Preparación de herraje inválida: #{diag['reason']}" : nil
+        end
+
+        # Policy B (insertion fallback, R4): returns a typed error only when
+        # preparation is :invalid. Placements that are :missing (download failure
+        # or loadability failure) return nil here so new furniture insertion
+        # (insert_furniture / place_existing_furniture) falls back to parametric
+        # proxy geometry without blocking the designer workflow.
+        def insertion_preflight_error
+          if @asset_loader.respond_to?(:insertion_preflight_ok?)
+            ok, msg = @asset_loader.insertion_preflight_ok?
+            return msg unless ok
+
+            return nil
+          end
+
           return nil unless @asset_loader.respond_to?(:diagnostics)
 
           diag = @asset_loader.diagnostics.find { |d| d['code'] == 'asset_preparation_invalid' }
@@ -595,7 +614,7 @@ module Granete
           instance_id = generate_instance_id
 
           prefetch_visual_assets(model, resolved_layout)
-          prep_err = rebuild_preflight_error
+          prep_err = insertion_preflight_error
           return { 'success' => false, 'error' => prep_err } if prep_err
 
           model.start_operation("Insertar Mueble #{definition['name']}", true)
