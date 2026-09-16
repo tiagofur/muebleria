@@ -460,6 +460,10 @@ type HardwareVisualAssetBinding struct {
 	// ValidationState of the pinned revision, resolved server-side so every
 	// consumer can distinguish "bytes present" from "host-proven".
 	ValidationState HardwareAssetValidationState `json:"validationState,omitempty"`
+	// PreparationState of the pinned revision ("prepared" | "unprepared"), resolved server-side.
+	PreparationState HardwareAssetPreparationState `json:"preparationState,omitempty"`
+	// MountFrame specifies the mount point and canonical axes in Asset space (persisted authority).
+	MountFrame *HardwareMountFrame `json:"mountFrame,omitempty"`
 }
 
 // DesignRevisionHardwareAssetPin is one frozen reference written at

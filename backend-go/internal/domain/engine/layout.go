@@ -170,8 +170,10 @@ type LayoutHardware struct {
 	AssetRevisionID         string               `json:"assetRevisionId,omitempty"`
 	SHA256                  string               `json:"sha256,omitempty"`
 	ExpectedBytes           int64                `json:"expectedBytes,omitempty"`
-	Representation          string               `json:"representation,omitempty"`
-	ValidationState         string               `json:"validationState,omitempty"`
+	Representation          string                      `json:"representation,omitempty"`
+	ValidationState         string                      `json:"validationState,omitempty"`
+	PreparationState        string                      `json:"preparationState,omitempty"`
+	MountFrame              *domain.HardwareMountFrame  `json:"mountFrame,omitempty"`
 }
 
 const (
@@ -1312,8 +1314,9 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		Basis:         hwBasis,
 	}
 
-	var assetID, assetRevisionID, sha256, rep, valState string
+	var assetID, assetRevisionID, sha256, rep, valState, prepState string
 	var expectedBytes int64
+	var mountFrame *domain.HardwareMountFrame
 	if hw.VisualAsset != nil {
 		assetID = hw.VisualAsset.AssetID
 		assetRevisionID = hw.VisualAsset.AssetRevisionID
@@ -1321,6 +1324,8 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		rep = string(hw.VisualAsset.Representation)
 		valState = string(hw.VisualAsset.ValidationState)
 		expectedBytes = hw.VisualAsset.SizeBytes
+		prepState = string(hw.VisualAsset.PreparationState)
+		mountFrame = hw.VisualAsset.MountFrame
 	}
 
 	// Every placement this engine renders today is authored on a
@@ -1347,6 +1352,8 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		ExpectedBytes:           expectedBytes,
 		Representation:          rep,
 		ValidationState:         valState,
+		PreparationState:        prepState,
+		MountFrame:              mountFrame,
 	}, true
 }
 

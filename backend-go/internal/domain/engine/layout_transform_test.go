@@ -729,6 +729,37 @@ func TestLayoutHardwareAuthoritativeTransformAndVisualAsset(t *testing.T) {
 	if hw.LocalTransform.TranslationMm[0] != 250 || hw.LocalTransform.TranslationMm[1] != 100 || hw.LocalTransform.TranslationMm[2] != 18 {
 		t.Fatalf("expected translation [250 100 18], got %v", hw.LocalTransform.TranslationMm)
 	}
+
+	// Unprepared by default when MountFrame is omitted
+	if hw.PreparationState != "" && hw.PreparationState != "unprepared" {
+		t.Fatalf("expected empty or unprepared preparationState, got %s", hw.PreparationState)
+	}
+	if hw.MountFrame != nil {
+		t.Fatalf("expected nil mountFrame for unprepared asset, got %+v", hw.MountFrame)
+	}
+
+	// Test with prepared VisualAsset carrying MountFrame
+	catalog.Hardware[0].VisualAsset.PreparationState = domain.HardwareAssetPreparationPrepared
+	catalog.Hardware[0].VisualAsset.MountFrame = &domain.HardwareMountFrame{
+		OriginMm: [3]float64{0, 0, 0},
+		Basis: domain.HardwareBasis{
+			X: [3]float64{1, 0, 0},
+			Y: [3]float64{0, 1, 0},
+			Z: [3]float64{0, 0, 1},
+		},
+	}
+
+	hwPrepared, ok := resolveHardwareToWorld(board, hp, catalog, "hp-2")
+	if !ok {
+		t.Fatal("expected prepared hardware with VisualAsset to resolve")
+	}
+	if hwPrepared.PreparationState != "prepared" {
+		t.Fatalf("expected preparationState 'prepared', got %s", hwPrepared.PreparationState)
+	}
+	if hwPrepared.MountFrame == nil || hwPrepared.MountFrame.OriginMm != [3]float64{0, 0, 0} {
+		t.Fatalf("expected mountFrame with [0,0,0] origin, got %+v", hwPrepared.MountFrame)
+	}
+
 	// Normal should point along the face normal (workshop +Z for rot=0 front face)
 	if hw.LocalTransform.Basis.Z[2] != 1 {
 		t.Fatalf("expected basis.z (normal) to be +Z for rot=0, got %v", hw.LocalTransform.Basis.Z)

@@ -32,6 +32,7 @@ module Granete
         connection/duplicate_resolver
         connection/design_publish
         connection/position_sync_coordinator
+        assets/mount_frame
         library/catalog_parameter_contract
         library/catalog_provider
         library/layout_contract
@@ -68,7 +69,6 @@ module Granete
         assets/hardware_asset_cache
         assets/hardware_asset_grant_manager
         assets/hardware_asset_downloader
-        assets/mount_frame
         assets/hardware_asset_validator
         assets/asset_loader
         assets/texture_cache
