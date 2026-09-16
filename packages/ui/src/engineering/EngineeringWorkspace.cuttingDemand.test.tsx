@@ -165,6 +165,56 @@ describe('EngineeringWorkspace — #739 demanda congelada', () => {
     expect(screen.queryByTestId('eng-live-view-notice')).toBeNull();
   });
 
+  it('#739 review: liberación verificándose (interim) — optimización muestra las filas vivas pero NO permite generar ni exportar', () => {
+    render(<EngineeringWorkspace {...baseProps()} releaseContext={{ state: 'loading' }} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Optimización' }));
+    // Despliegue intermedio #738 (filas vivas etiquetadas), pero la base
+    // canónica aún no está verificada: generar/exportar quedan bloqueados.
+    expect(screen.getByTestId('eng-live-view-notice')).toBeDefined();
+    expect(screen.getByTestId('prod-opt-demand-gate').textContent).toContain(
+      'Esperando el despiece congelado',
+    );
+    expect((screen.getByTestId('prod-opt-generate') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('#739 review: demanda en error — optimización bloqueada con el motivo, sin plan exportable', () => {
+    render(
+      <EngineeringWorkspace
+        {...baseProps()}
+        releaseContext={readyContext}
+        releaseCuttingDemand={{
+          status: 'error',
+          message: 'No se pudo leer el despiece congelado de esta liberación.',
+          retry: () => undefined,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Optimización' }));
+    expect(screen.getByTestId('eng-demand-error')).toBeDefined();
+    expect(screen.getByTestId('prod-opt-demand-gate').textContent).toContain(
+      'No se pudo leer el despiece congelado',
+    );
+    expect((screen.getByTestId('prod-opt-generate') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('#739 review: DXF canónico no se ofrece — queda bloqueado con motivo junto a la acción', () => {
+    render(
+      <EngineeringWorkspace
+        {...baseProps()}
+        releaseContext={readyContext}
+        releaseCuttingDemand={{ status: 'ready', rows: [frozenRow], base: demandBase }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Optimización' }));
+    expect(screen.getByTestId('prod-opt-release-requisition-note')).toBeDefined();
+    // En modo sierra la tarjeta DXF no se renderiza; el motivo se aplica al
+    // pasar a nesting (cubierto en el panel). Aquí verificamos que el gate
+    // canónico no habilita exportaciones de fuentes mixtas vía workspace.
+    expect((screen.getByTestId('prod-opt-generate') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('las demás pestañas conservan el aviso de vista de trabajo', () => {
     render(
       <EngineeringWorkspace

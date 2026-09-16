@@ -46,7 +46,11 @@ import { ProductionOrderModulesPanel } from '../production/ProductionOrderModule
 import { ProductionOrderDespiecePanel } from '../production/ProductionOrderDespiecePanel';
 import { ProductionOrderViewsPanel } from '../production/ProductionOrderViewsPanel';
 import { ProductionOrderOptimizationPanel } from '../production/ProductionOrderOptimizationPanel';
-import type { CuttingOutputTargetView } from '../production/ProductionOrderOptimizationPanel';
+import type {
+  CuttingOutputTargetView,
+  OptimizationDemandGate,
+} from '../production/ProductionOrderOptimizationPanel';
+import type { ReleaseCutPlanSaveResult } from '@granete/storage';
 import { ProductionOrderDocumentsPanel } from '../production/ProductionOrderDocumentsPanel';
 import { ProductionOrderLabelsPanel } from '../production/ProductionOrderLabelsPanel';
 import { ProductionOrderHardwarePanel } from '../production/ProductionOrderHardwarePanel';
@@ -267,7 +271,11 @@ export function EngineeringWorkspace({
   readonly releaseCuttingDemand?: EngineeringReleaseCuttingDemandProp;
   /** #739 — plan persisted for the exact pinned release (undefined = legacy). */
   readonly releaseCutPlan?: CutPlan | null;
-  readonly onSaveReleaseCutPlan?: (cutPlan: CutPlan) => void;
+  /**
+   * Persists the plan for the exact release; returns the honest storage
+   * outcome so the panel never reports an unconfirmed write (#739 review).
+   */
+  readonly onSaveReleaseCutPlan?: (cutPlan: CutPlan) => ReleaseCutPlanSaveResult | void;
 }): ReactNode {
   const [activeTab, setActiveTab] = useState<EngineeringTab>('resumen');
 
@@ -314,6 +322,22 @@ export function EngineeringWorkspace({
     onExportCncPilot: documentExportsDisabled ? undefined : onExportCncPilot,
     onNavigateToTab: (tabId) => setActiveTab(tabId as EngineeringTab),
   });
+
+  // #739 review — the optimization gate is EXPLICIT about the context:
+  // legacy | canonical-loading | canonical-error | canonical-ready. While a
+  // canonical obra's base is not verified (release context or demand still
+  // resolving, or the demand failed) the panel may keep showing rows, but it
+  // can neither generate nor export — absence of a verified base is never
+  // equivalent to legacy.
+  const optimizationGate: OptimizationDemandGate = !hasReleaseContext
+    ? { mode: 'legacy' }
+    : releaseCuttingDemand === undefined
+      ? { mode: 'canonical', status: 'loading' }
+      : releaseCuttingDemand.status === 'loading'
+        ? { mode: 'canonical', status: 'loading' }
+        : releaseCuttingDemand.status === 'error'
+          ? { mode: 'canonical', status: 'error', message: releaseCuttingDemand.message }
+          : { mode: 'canonical', status: 'ready', base: releaseCuttingDemand.base };
 
   // Despiece rows for the active context: frozen release content when
   // available (canonical obra), live derivation otherwise (legacy view).
@@ -558,7 +582,7 @@ export function EngineeringWorkspace({
             cutRows={despieceRows}
             defaultCutStrategy={defaultCutStrategy}
             initialCutPlan={hasReleaseContext ? (releaseCutPlan ?? null) : undefined}
-            demandBase={frozenDemand?.base ?? null}
+            demandGate={optimizationGate}
             onSaveCutPlan={
               hasReleaseContext ? onSaveReleaseCutPlan : onSaveCutPlan
             }
@@ -573,7 +597,14 @@ export function EngineeringWorkspace({
                 ? 'El Optimizer XLSX se calcula desde el proyecto vivo. Para la liberación exacta usá el PDF del plan de corte, generado desde las piezas congeladas.'
                 : null
             }
-            onExportCutPlanDxf={onExportCutPlanDxf}
+            onExportCutPlanDxf={
+              documentExportsDisabled ? undefined : onExportCutPlanDxf
+            }
+            dxfUnavailableReason={
+              documentExportsDisabled
+                ? 'El DXF de esta liberación queda pendiente: sus perforaciones se resuelven hoy desde el proyecto vivo. Usá el PDF/PTX del plan congelado.'
+                : null
+            }
             onExportCutPlanPtx={onExportCutPlanPtx}
             cuttingOutputTarget={cuttingOutputTarget}
             resolveCuttingOutputTarget={resolveCuttingOutputTarget}

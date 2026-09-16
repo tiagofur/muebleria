@@ -39,4 +39,5 @@ export {
   loadReleaseCutPlan,
   saveReleaseCutPlan,
   type ReleaseCutPlanScope,
+  type ReleaseCutPlanSaveResult,
 } from './releaseCutPlanStore';

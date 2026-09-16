@@ -21,6 +21,7 @@ import type {
   ReleaseCuttingDemandBase,
 } from '@granete/domain';
 import { planMatchesReleaseBase } from '@granete/domain';
+import type { ReleaseCutPlanSaveResult } from '@granete/storage';
 import {
   estimateBoardSheets,
   generateProjectMaterialSummary,
@@ -56,7 +57,11 @@ export type ProductionOrderOptimizationPanelProps = {
   readonly cutRows: readonly ProductionCutRow[] | null;
   /** Workshop-level default (F133); the project's persisted plan always wins. */
   readonly defaultCutStrategy?: CutStrategy;
-  readonly onSaveCutPlan?: (cutPlan: CutPlan) => void;
+  /**
+   * Persists the plan; may return the honest storage outcome — the panel only
+   * reports success on a confirmed write (#739 review).
+   */
+  readonly onSaveCutPlan?: (cutPlan: CutPlan) => ReleaseCutPlanSaveResult | void;
   readonly onExportCutPlanPdf?: (cutPlan: CutPlan) => void;
   readonly onExportOptimizer?: () => void;
   readonly onExportCutPlanDxf?: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => void;
@@ -72,11 +77,30 @@ export type ProductionOrderOptimizationPanelProps = {
    * (undefined = legacy project-scoped view; null = no stored plan).
    */
   readonly initialCutPlan?: CutPlan | null;
-  /** #739 — frozen release base; generated plans are pinned to it. */
-  readonly demandBase?: ReleaseCuttingDemandBase | null;
+  /**
+   * #739 review — the EXPLICIT context gate. `legacy` is the only mode where
+   * the live project view may generate/export; a canonical obra must be
+   * `ready` (verified frozen base) to generate or export at all. `loading`
+   * and `error` are NOT a license to reuse a previously generated plan —
+   * absence of a verified base never equals legacy.
+   */
+  readonly demandGate?: OptimizationDemandGate;
   /** #739 — shown when the Optimizer XLSX isn't connected to the exact plan. */
   readonly optimizerUnavailableReason?: string | null;
+  /** #739 review — shown when DXF output is not connected to the exact plan. */
+  readonly dxfUnavailableReason?: string | null;
 };
+
+/** #739 review — discriminates legacy from canonical loading/error/ready. */
+export type OptimizationDemandGate =
+  | { readonly mode: 'legacy' }
+  | { readonly mode: 'canonical'; readonly status: 'loading' }
+  | { readonly mode: 'canonical'; readonly status: 'error'; readonly message: string }
+  | {
+      readonly mode: 'canonical';
+      readonly status: 'ready';
+      readonly base: ReleaseCuttingDemandBase;
+    };
 
 export function ProductionOrderOptimizationPanel({
   project,
@@ -92,8 +116,9 @@ export function ProductionOrderOptimizationPanel({
   resolveCuttingOutputTarget,
   exportBusy = false,
   initialCutPlan,
-  demandBase = null,
+  demandGate = { mode: 'legacy' },
   optimizerUnavailableReason = null,
+  dxfUnavailableReason = null,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
   // #739 — the release-scoped plan (when this panel prepares an exact
   // liberation) wins over the project's legacy single-slot plan.
@@ -167,14 +192,15 @@ export function ProductionOrderOptimizationPanel({
   // #739 — with a frozen release demand the pre-plan estimate must NOT be
   // derived from the live project; the exact requisition comes from the
   // generated plan itself.
+  const isCanonical = demandGate.mode === 'canonical';
   const summary = useMemo(() => {
-    if (!catalog || demandBase) return null;
+    if (!catalog || isCanonical) return null;
     try {
       return generateProjectMaterialSummary(project, catalog);
     } catch {
       return null;
     }
-  }, [project, catalog, demandBase]);
+  }, [project, catalog, isCanonical]);
 
   const sheetEstimates = useMemo(() => {
     if (!summary || !catalog) return [];
@@ -186,6 +212,9 @@ export function ProductionOrderOptimizationPanel({
   }, [summary, catalog]);
 
   const handleGenerateCutPlan = () => {
+    // #739 review — canonical generation REQUIRES the verified frozen base:
+    // loading/error/absent demand never authorizes a plan from live rows.
+    if (isCanonical && demandGate.status !== 'ready') return;
     if (!cutRows || cutRows.length === 0) return;
     const config: CutPlanConfig = {
       sawKerfMm: Math.max(0, sawKerfMm),
@@ -215,7 +244,10 @@ export function ProductionOrderOptimizationPanel({
     // #739 — a plan generated from the frozen demand carries its exact
     // release pin: changing the liberation invalidates the plan, never
     // retargets it.
-    const newPlan = demandBase ? { ...generated, releaseBase: demandBase } : generated;
+    const base = demandGate.mode === 'canonical' && demandGate.status === 'ready'
+      ? demandGate.base
+      : null;
+    const newPlan = base ? { ...generated, releaseBase: base } : generated;
 
     setCutPlanState(newPlan);
     setActiveSheetIndex(0);
@@ -228,8 +260,19 @@ export function ProductionOrderOptimizationPanel({
     if (!onSaveCutPlan) return;
     setSaveState({ kind: 'saving' });
     try {
-      onSaveCutPlan(currentCutPlan);
-      setSaveState({ kind: 'ok' });
+      const result = onSaveCutPlan(currentCutPlan);
+      // #739 review — success is declared ONLY on a confirmed write. A
+      // storage failure keeps the plan usable on this screen, but that is
+      // memory, not a saved plan — and the user must hear the difference.
+      if (result && result.kind === 'memory-only') {
+        setSaveState({
+          kind: 'error',
+          message:
+            'No se pudo guardar en este navegador. El plan sigue disponible en esta pantalla, pero puede perderse al recargar.',
+        });
+      } else {
+        setSaveState({ kind: 'ok' });
+      }
     } catch (err) {
       setSaveState({
         kind: 'error',
@@ -271,13 +314,26 @@ export function ProductionOrderOptimizationPanel({
   // always match the strategy that produced the layout on screen.
   const planStrategy = currentCutPlan?.config.cutStrategy ?? cutStrategy;
 
+  // #739 review — a canonical context that is not VERIFIED (loading or
+  // failed demand) must not leave a previously generated plan exportable:
+  // "sin base verificada" never behaves like legacy.
+  const canonicalBase =
+    demandGate.mode === 'canonical' && demandGate.status === 'ready' ? demandGate.base : null;
+  const canonicalBlocked = isCanonical && canonicalBase == null;
+  const canonicalBlockedReason =
+    demandGate.mode === 'canonical' && demandGate.status === 'loading'
+      ? 'Esperando el despiece congelado de la liberación…'
+      : demandGate.mode === 'canonical' && demandGate.status === 'error'
+        ? demandGate.message
+        : null;
   // #739 — a saved/generated plan only applies to the EXACT release it was
-  // generated from (defense in depth: the shell already keys storage by
-  // release, but a mismatched pin must never silently govern exports).
+  // generated from (defense in depth: the shell already keys storage and
+  // remounts by release, but a mismatched pin must never silently govern
+  // exports).
   const planBaseMismatch =
     currentCutPlan != null &&
-    demandBase != null &&
-    !planMatchesReleaseBase(currentCutPlan, demandBase);
+    canonicalBase != null &&
+    !planMatchesReleaseBase(currentCutPlan, canonicalBase);
   // #739 — parameter drift: the selectors describe the NEXT generation; if
   // they differ from the active plan's config, the on-screen result does NOT
   // include them and exporting it would misrepresent the configuration.
@@ -301,8 +357,9 @@ export function ProductionOrderOptimizationPanel({
     );
   }, [currentCutPlan, cutStrategy, sawKerfMm, trimTopMm, trimBottomMm, trimLeftMm, trimRightMm, deductEdgeBand, allowRotationNoGrain, toolSpacingMm]);
   // Exports are blocked while the visible result does not represent the
-  // current configuration or the current release.
-  const exportsStale = configDrift || planBaseMismatch;
+  // current configuration, the current release, or while the canonical base
+  // is not verified (loading/error) — the previous plan is not exportable.
+  const exportsStale = configDrift || planBaseMismatch || canonicalBlocked;
 
   return (
     <div className="prod-opt" data-testid="prod-hub-optimizacion">
@@ -483,7 +540,9 @@ export function ProductionOrderOptimizationPanel({
               type="button"
               className="btn btn--primary btn--small"
               onClick={handleGenerateCutPlan}
-              disabled={exportBusy || !cutRows || cutRows.length === 0}
+              disabled={exportBusy || !cutRows || cutRows.length === 0 || canonicalBlocked}
+              data-testid="prod-opt-generate"
+              title={canonicalBlockedReason ?? undefined}
             >
               ⚡ Generar Plan de Corte 2D
             </button>
@@ -499,6 +558,16 @@ export function ProductionOrderOptimizationPanel({
           </div>
         </div>
 
+        {canonicalBlocked ? (
+          <p
+            role="alert"
+            data-testid="prod-opt-demand-gate"
+            style={{ margin: '8px 0 0', fontSize: '0.9em', fontWeight: 500, color: 'var(--status-warning, #b45309)' }}
+          >
+            {canonicalBlockedReason ?? 'El despiece congelado de la liberación no está verificado.'}{' '}
+            No se puede generar ni exportar un plan para esta liberación hasta verificar su despiece exacto.
+          </p>
+        ) : null}
         {saveState.kind === 'saving' ? (
           <p style={{ fontSize: '0.9em', fontWeight: 500, margin: '8px 0 0', color: 'var(--text-secondary)' }} data-testid="prod-opt-save-saving">
             Guardando plan…
@@ -554,7 +623,7 @@ export function ProductionOrderOptimizationPanel({
               ))}
             </ul>
           </div>
-        ) : demandBase ? (
+        ) : isCanonical ? (
           <p className="prod-opt__disclaimer" data-testid="prod-opt-release-requisition-note">
             La requisición exacta se calcula con las piezas congeladas de la liberación al generar el plan de corte.
           </p>
@@ -829,6 +898,7 @@ export function ProductionOrderOptimizationPanel({
                   onClick={() => handleExportDxf('sheets')}
                   disabled={exportBusy || !currentCutPlan || !onExportCutPlanDxf || exportsStale}
                   data-testid="prod-opt-export-dxf-sheets"
+                  title={dxfUnavailableReason ?? undefined}
                 >
                   Descargar DXF (tableros)
                 </button>
@@ -838,9 +908,18 @@ export function ProductionOrderOptimizationPanel({
                   onClick={() => handleExportDxf('pieces')}
                   disabled={exportBusy || !currentCutPlan || !onExportCutPlanDxf || exportsStale}
                   data-testid="prod-opt-export-dxf-pieces"
+                  title={dxfUnavailableReason ?? undefined}
                 >
                   Descargar DXF (piezas)
                 </button>
+                {dxfUnavailableReason ? (
+                  <p
+                    style={{ margin: '8px 0 0', fontSize: '0.8em', color: 'var(--text-muted)' }}
+                    data-testid="prod-opt-dxf-unavailable"
+                  >
+                    {dxfUnavailableReason}
+                  </p>
+                ) : null}
               </div>
             </div>
           ) : (
@@ -874,9 +953,10 @@ export function ProductionOrderOptimizationPanel({
                   data-testid="prod-opt-export-pdf-manual"
                   style={{ alignSelf: 'flex-start' }}
                   title={
-                    exportsStale
+                    canonicalBlockedReason ??
+                    (configDrift || planBaseMismatch
                       ? 'La configuración cambió desde la generación: regenerá el plan antes de exportar.'
-                      : undefined
+                      : undefined)
                   }
                 >
                   Descargar PDF de Taller

@@ -1545,6 +1545,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         }
         return (
           <EngineeringWorkspace
+            key={`${engProject.id}:${routeEngineeringReleaseId ?? 'legacy'}`}
             project={engProject}
             releaseContext={engReleaseContext}
             modules={engModules}
@@ -1608,7 +1609,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             }
             onSaveReleaseCutPlan={(plan) => {
               if (engFrozenDemand?.status !== 'ready') return;
-              saveReleaseCutPlan(
+              return saveReleaseCutPlan(
                 { organizationId: activeOrg?.id ?? 'no-org' },
                 engProject.id,
                 engFrozenDemand.base.releaseId,
