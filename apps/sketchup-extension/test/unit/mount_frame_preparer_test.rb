@@ -298,6 +298,60 @@ class MountFramePreparerTest < Minitest::Test
     refute tool.normal_inverted
   end
 
+  def test_mount_frame_tool_origin_and_axis_mode
+    # Test origin + axis reference mode (for hinges / single-anchor hardware)
+    origin = [25.0, -15.0, 10.0]
+    axis_pt = [25.0, 35.0, 10.0] # 50mm along +Y in raw asset space
+    tool = MountFrameTool.new(anchor_mode: :origin_and_axis)
+    tool.set_origin_and_axis(origin, axis_pt)
+
+    assert_equal :ready, tool.step
+    assert_equal :origin_and_axis, tool.anchor_mode
+
+    mf = tool.mount_frame
+    refute_nil mf
+    # In origin_and_axis mode, origin is Point A directly
+    assert_equal origin, mf.origin_mm
+
+    # Longitudinal axis X points from A to B: [0, 50, 0] normalized -> [0, 1, 0]
+    assert_in_delta 0.0, mf.basis.x[0], 1e-4
+    assert_in_delta 1.0, mf.basis.x[1], 1e-4
+    assert_in_delta 0.0, mf.basis.x[2], 1e-4
+
+    # Default normal Z is [0, 0, 1]
+    assert_in_delta 0.0, mf.basis.z[0], 1e-4
+    assert_in_delta 0.0, mf.basis.z[1], 1e-4
+    assert_in_delta 1.0, mf.basis.z[2], 1e-4
+
+    # Y = Z x X = [0, 0, 1] x [0, 1, 0] = [-1, 0, 0]
+    assert_in_delta(-1.0, mf.basis.y[0], 1e-4)
+    assert_in_delta 0.0, mf.basis.y[1], 1e-4
+    assert_in_delta 0.0, mf.basis.y[2], 1e-4
+
+    # Validate basis is right-handed and orthonormal
+    assert MountFrame.validate_basis!(mf.basis)
+  end
+
+  def test_mount_frame_tool_origin_and_axis_invert_normal
+    origin = [25.0, -15.0, 10.0]
+    axis_pt = [25.0, 35.0, 10.0]
+    tool = MountFrameTool.new(anchor_mode: :origin_and_axis)
+    tool.set_origin_and_axis(origin, axis_pt)
+
+    tool.invert_normal!
+    assert tool.normal_inverted
+
+    mf = tool.mount_frame
+    # Inverted normal Z is [0, 0, -1]
+    assert_equal [0.0, 0.0, -1.0], mf.basis.z
+    # Y = Z x X = [0, 0, -1] x [0, 1, 0] = [1, 0, 0]
+    assert_in_delta 1.0, mf.basis.y[0], 1e-4
+    assert_in_delta 0.0, mf.basis.y[1], 1e-4
+    assert_in_delta 0.0, mf.basis.y[2], 1e-4
+
+    assert MountFrame.validate_basis!(mf.basis)
+  end
+
   # --- Host Preview Tests ---
 
   def test_host_preview_load_and_extract_bounds

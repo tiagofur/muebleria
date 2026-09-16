@@ -36,16 +36,17 @@ module Granete
         LABEL_SIZE = 13
 
         STATUS_TEXTS = {
-          pick_a: 'Preparar montaje: Hacé clic para fijar el punto A (primer agujero).',
-          pick_b: 'Preparar montaje: Hacé clic para fijar el punto B (segundo agujero).',
+          pick_a: 'Preparar montaje: Hacé clic para fijar el origen o punto A de montaje.',
+          pick_b: 'Preparar montaje: Hacé clic para fijar el punto B (eje longitudinal +X).',
           ready: 'Montaje definido. Verificá ejes (+Z azul hacia afuera). Podés invertir o guardar.'
         }.freeze
 
-        attr_reader :step, :point_a_mm, :point_b_mm, :mount_frame, :normal_inverted
+        attr_reader :step, :point_a_mm, :point_b_mm, :mount_frame, :normal_inverted, :anchor_mode
 
-        def initialize(expected_hole_spacing_mm: nil, tolerance_mm: 2.0, logger: nil, on_change: nil)
+        def initialize(expected_hole_spacing_mm: nil, tolerance_mm: 2.0, anchor_mode: nil, logger: nil, on_change: nil)
           @expected_hole_spacing_mm = expected_hole_spacing_mm
           @tolerance_mm = tolerance_mm
+          @anchor_mode = anchor_mode || (expected_hole_spacing_mm ? :midpoint : :origin_and_axis)
           @logger = logger
           @on_change = on_change
 
@@ -82,6 +83,17 @@ module Granete
         def set_points(hole_a_mm, hole_b_mm)
           @point_a_mm = hole_a_mm
           @point_b_mm = hole_b_mm
+          @step = :ready
+          recompute_mount_frame!
+          update_status_text
+          notify_change
+          Sketchup.active_model&.active_view&.invalidate if defined?(Sketchup)
+        end
+
+        def set_origin_and_axis(origin_mm, axis_point_mm)
+          @anchor_mode = :origin_and_axis
+          @point_a_mm = origin_mm
+          @point_b_mm = axis_point_mm
           @step = :ready
           recompute_mount_frame!
           update_status_text
@@ -222,14 +234,39 @@ module Granete
           return unless @point_a_mm && @point_b_mm
 
           normal_z = @normal_inverted ? [0.0, 0.0, -1.0] : [0.0, 0.0, 1.0]
-          @mount_frame = Assets::MountFrame.build_handle_mount_frame(
-            hole_a_mm: @point_a_mm,
-            hole_b_mm: @point_b_mm,
-            surface_normal_z: normal_z
-          )
+          @mount_frame = if @anchor_mode == :origin_and_axis
+                           compute_origin_and_axis_frame(normal_z)
+                         else
+                           Assets::MountFrame.build_handle_mount_frame(
+                             hole_a_mm: @point_a_mm,
+                             hole_b_mm: @point_b_mm,
+                             surface_normal_z: normal_z
+                           )
+                         end
         rescue StandardError => e
           @logger&.error('mount_frame_recompute_failed', error: e)
           @mount_frame = nil
+        end
+
+        def compute_origin_and_axis_frame(normal_z)
+          dir_ab = [
+            @point_b_mm[0] - @point_a_mm[0],
+            @point_b_mm[1] - @point_a_mm[1],
+            @point_b_mm[2] - @point_a_mm[2]
+          ]
+          axis_x = Assets::MountFrame.normalize_vector(dir_ab)
+          norm_z = Assets::MountFrame.normalize_vector(normal_z)
+          proj = Assets::MountFrame.dot_product(norm_z, axis_x)
+          z_ortho = [
+            norm_z[0] - (proj * axis_x[0]),
+            norm_z[1] - (proj * axis_x[1]),
+            norm_z[2] - (proj * axis_x[2])
+          ]
+          axis_z = Assets::MountFrame.normalize_vector(z_ortho)
+          axis_y = Assets::MountFrame.cross_product(axis_z, axis_x)
+          basis = Assets::MountFrame::BasisData.new(x: axis_x, y: axis_y, z: axis_z)
+          Assets::MountFrame.validate_basis!(basis, 'mount_frame.basis')
+          Assets::MountFrame::MountFrameData.new(origin_mm: @point_a_mm, basis: basis)
         end
 
         def update_status_text
@@ -241,6 +278,7 @@ module Granete
         def notify_change
           @on_change&.call(
             step: @step,
+            anchor_mode: @anchor_mode,
             point_a_mm: @point_a_mm,
             point_b_mm: @point_b_mm,
             measured_spacing_mm: measured_spacing_mm,

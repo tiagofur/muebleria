@@ -470,6 +470,7 @@
         sha256: '',
         measuredBounds: null,
         expectedHoleSpacingMm: null,
+        anchorMode: 'midpoint',
         step: 'pick_a',
         pointA: null,
         pointB: null,
@@ -502,6 +503,20 @@
           el('sha-badge').title = state.sha256;
         }
 
+        if (state.anchorMode === 'origin_and_axis') {
+          el('asset-subtitle').textContent = 'Definí el marco de montaje seleccionando el punto de origen y la dirección del eje +X en la vista 3D.';
+          el('step-a').querySelector('.step-title').textContent = 'Origen de montaje (Punto A)';
+          el('step-a').querySelector('.step-detail').textContent = 'Hacé clic en el centro canónico de montaje (ej. centro de cazoleta).';
+          el('step-b').querySelector('.step-title').textContent = 'Dirección eje +X (Punto B)';
+          el('step-b').querySelector('.step-detail').textContent = 'Hacé clic para definir la dirección longitudinal de montaje.';
+        } else {
+          el('asset-subtitle').textContent = 'Definí el marco de montaje (MountFrame) seleccionando los agujeros en la vista 3D.';
+          el('step-a').querySelector('.step-title').textContent = 'Agujero A (primer punto)';
+          el('step-a').querySelector('.step-detail').textContent = 'Hacé clic en el centro del primer orificio de fijación.';
+          el('step-b').querySelector('.step-title').textContent = 'Agujero B (segundo punto)';
+          el('step-b').querySelector('.step-detail').textContent = 'Hacé clic en el centro del segundo orificio de fijación.';
+        }
+
         // Measured bounds
         if (state.measuredBounds) {
           el('val-width').textContent = formatMm(state.measuredBounds.widthMm);
@@ -514,7 +529,7 @@
         if (state.measuredSpacingMm !== null && state.measuredSpacingMm !== undefined) {
           el('val-hole-dist').textContent = formatMm(state.measuredSpacingMm);
 
-          if (state.expectedHoleSpacingMm) {
+          if (state.expectedHoleSpacingMm && state.anchorMode !== 'origin_and_axis') {
             tolContainer.classList.remove('hidden');
             if (state.spacingComparison) {
               var comp = state.spacingComparison;
@@ -610,6 +625,7 @@
         state.sha256 = payload.sha256 || '';
         state.measuredBounds = payload.measuredBounds;
         state.expectedHoleSpacingMm = payload.expectedHoleSpacingMm;
+        state.anchorMode = payload.anchorMode || (payload.expectedHoleSpacingMm ? 'midpoint' : 'origin_and_axis');
         state.step = payload.step || 'pick_a';
         state.normalInverted = payload.normalInverted || false;
         render();
@@ -618,6 +634,9 @@
       window.updateToolState = function (toolState) {
         toolState = toolState || {};
         state.step = toolState.step || state.step;
+        if (toolState.anchorMode) {
+          state.anchorMode = toolState.anchorMode;
+        }
         state.pointA = toolState.pointA || null;
         state.pointB = toolState.pointB || null;
         state.measuredSpacingMm = toolState.measuredSpacingMm;
