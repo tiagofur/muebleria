@@ -258,6 +258,10 @@ export function ProductionOrderOptimizationPanel({
   const handleSavePlan = () => {
     if (!currentCutPlan) return;
     if (!onSaveCutPlan) return;
+    // Defense in depth: the button is disabled, but the handler itself must
+    // never persist while the canonical base is unverified or the plan
+    // belongs to another liberation.
+    if (saveBlocked) return;
     setSaveState({ kind: 'saving' });
     try {
       const result = onSaveCutPlan(currentCutPlan);
@@ -270,9 +274,20 @@ export function ProductionOrderOptimizationPanel({
           message:
             'No se pudo guardar en este navegador. El plan sigue disponible en esta pantalla, pero puede perderse al recargar.',
         });
-      } else {
-        setSaveState({ kind: 'ok' });
+        return;
       }
+      // #739 review R2 — canonical persistence must CONFIRM the write. The
+      // canonical callback returning void is a composition defect, never a
+      // success; only the legacy project-scoped view may resolve on void.
+      if (isCanonical && result?.kind !== 'saved') {
+        setSaveState({
+          kind: 'error',
+          message:
+            'El guardado no confirmó la escritura del plan. El plan sigue en esta pantalla; reintentá desde la liberación verificada.',
+        });
+        return;
+      }
+      setSaveState({ kind: 'ok' });
     } catch (err) {
       setSaveState({
         kind: 'error',
@@ -360,6 +375,10 @@ export function ProductionOrderOptimizationPanel({
   // current configuration, the current release, or while the canonical base
   // is not verified (loading/error) — the previous plan is not exportable.
   const exportsStale = configDrift || planBaseMismatch || canonicalBlocked;
+  // #739 review R2 — saving is blocked under the SAME base conditions: with
+  // an unverified base (or a plan from another liberation) there is nothing
+  // that can be persisted honestly for THIS screen.
+  const saveBlocked = canonicalBlocked || planBaseMismatch;
 
   return (
     <div className="prod-opt" data-testid="prod-hub-optimizacion">
@@ -551,6 +570,14 @@ export function ProductionOrderOptimizationPanel({
                 type="button"
                 className="btn btn--secondary btn--small"
                 onClick={handleSavePlan}
+                disabled={saveBlocked || saveState.kind === 'saving'}
+                data-testid="prod-opt-save"
+                title={
+                  canonicalBlockedReason ??
+                  (planBaseMismatch
+                    ? 'El plan activo pertenece a otra liberación; regenerá antes de guardar.'
+                    : undefined)
+                }
               >
                 💾 Guardar Plan
               </button>

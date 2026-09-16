@@ -1608,7 +1608,15 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                 : undefined
             }
             onSaveReleaseCutPlan={(plan) => {
-              if (engFrozenDemand?.status !== 'ready') return;
+              // #739 review R2 — the canonical callback never resolves with a
+              // silent void: saving without the verified base of THIS screen
+              // is a defect and must fail loudly (the panel also blocks the
+              // button, this is the second lock on the same door).
+              if (engFrozenDemand?.status !== 'ready') {
+                throw new Error(
+                  'La liberación de esta pantalla no está verificada; no se puede guardar el plan',
+                );
+              }
               return saveReleaseCutPlan(
                 { organizationId: activeOrg?.id ?? 'no-org' },
                 engProject.id,

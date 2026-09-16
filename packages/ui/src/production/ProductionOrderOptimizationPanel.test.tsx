@@ -907,6 +907,8 @@ describe('ProductionOrderOptimizationPanel — #739 preparación de liberación 
         demandGate={{ mode: 'canonical', status: 'ready', base: demandBaseFixture }}
         onSaveCutPlan={(plan) => {
           saved = plan;
+          // Canonical callbacks confirm the write (#739 review R2).
+          return { kind: 'saved' } as const;
         }}
       />,
     );
@@ -1097,6 +1099,68 @@ describe('ProductionOrderOptimizationPanel — #739 preparación de liberación 
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('#739 review R2: plan existente + demanda loading/error — Guardar deshabilitado y cero persistencia', () => {
+    for (const gate of [
+      { mode: 'canonical' as const, status: 'loading' as const },
+      { mode: 'canonical' as const, status: 'error' as const, message: 'No se pudo leer el despiece congelado.' },
+    ]) {
+      cleanup();
+      const saveSpy = vi.fn();
+      render(
+        <ProductionOrderOptimizationPanel
+          project={project()}
+          catalog={fixtureCatalog()}
+          cutRows={[]}
+          initialCutPlan={cutPlanFixture('saw-guillotine')}
+          demandGate={gate}
+          onSaveCutPlan={saveSpy}
+        />,
+      );
+      const saveBtn = screen.getByTestId('prod-opt-save') as HTMLButtonElement;
+      expect(saveBtn.disabled, JSON.stringify(gate)).toBe(true);
+      // A disabled button cannot invoke the handler; assert zero persistence
+      // attempts even if something forces the click path.
+      fireEvent.click(saveBtn);
+      expect(saveSpy).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('prod-opt-save-ok')).toBeNull();
+      expect(screen.queryByTestId('prod-opt-save-error')).toBeNull();
+    }
+  });
+
+  it('#739 review R2: callback canónico sin resultado NUNCA es éxito (void ≠ guardado)', () => {
+    const pinnedPlan: CutPlan = {
+      ...cutPlanFixture('saw-guillotine'),
+      releaseBase: demandBaseFixture,
+    };
+    render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={fixtureCatalog()}
+        cutRows={[]}
+        initialCutPlan={pinnedPlan}
+        demandGate={{ mode: 'canonical', status: 'ready', base: demandBaseFixture }}
+        onSaveCutPlan={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('prod-opt-save'));
+    expect(screen.queryByTestId('prod-opt-save-ok')).toBeNull();
+    expect(screen.getByTestId('prod-opt-save-error').textContent).toContain(
+      'no confirmó la escritura',
+    );
+  });
+
+  it('#739 review R2: plan de otra liberación — Guardar bloqueado con motivo', () => {
+    const foreignBase: CutPlan = {
+      ...cutPlanFixture('saw-guillotine'),
+      releaseBase: { ...demandBaseFixture, releaseId: 'rel-OTRA', releaseNumber: 7 },
+    };
+    renderPanel({
+      initialCutPlan: foreignBase,
+      demandGate: { mode: 'canonical', status: 'ready', base: demandBaseFixture },
+    });
+    expect((screen.getByTestId('prod-opt-save') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('#739 review: DXF canónico bloqueado con motivo visible (perforaciones del proyecto mutable)', () => {
