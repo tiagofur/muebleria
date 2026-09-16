@@ -941,20 +941,24 @@ export function AppContent({
         throw new Error('La configuración de salida de máquina requiere modo servidor.');
       }
       // Server-authoritative: after saving, refetch the whole read model —
-      // never fabricate labels/blockers locally.
+      // never fabricate labels/blockers locally. Also on failure: a 409 must
+      // leave the freshest record/version available for the retry.
       const requestedScopeKey = machineOutputScopeKey;
-      await repository.saveMachineOutputSelection(operation, selection, expectedVersion);
-      const currentScope = useWorkspaceStore.getState().sessionScope;
-      const currentScopeKey = currentScope
-        ? JSON.stringify(sessionScopeKey(currentScope))
-        : session === 'guest'
-          ? 'guest'
-          : null;
-      if (
-        requestedScopeKey !== null &&
-        isCurrentMachineOutputRequest(requestedScopeKey, currentScopeKey)
-      ) {
-        refreshMachineOutput();
+      try {
+        await repository.saveMachineOutputSelection(operation, selection, expectedVersion);
+      } finally {
+        const currentScope = useWorkspaceStore.getState().sessionScope;
+        const currentScopeKey = currentScope
+          ? JSON.stringify(sessionScopeKey(currentScope))
+          : session === 'guest'
+            ? 'guest'
+            : null;
+        if (
+          requestedScopeKey !== null &&
+          isCurrentMachineOutputRequest(requestedScopeKey, currentScopeKey)
+        ) {
+          refreshMachineOutput();
+        }
       }
     },
     [getRepository, refreshMachineOutput, machineOutputScopeKey, session],

@@ -89,3 +89,4 @@
 .machine-output-error { margin: 0; color: var(--text-muted); font-size: var(--text-base); }
 .machine-output-tech summary { cursor: pointer; font-size: var(--text-base); color: var(--text-muted); }
 .machine-output-tech ul { font-size: var(--text-base); font-family: ui-monospace, monospace; }
+.machine-output-autosave { margin: 0; color: var(--text-muted); font-size: var(--text-base); }

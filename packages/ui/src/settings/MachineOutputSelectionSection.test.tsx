@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   MachineOutputSelectionRecord,
@@ -63,6 +63,25 @@ function historicalRecord(): MachineOutputSelectionRecord {
   };
 }
 
+function currentRecord(): MachineOutputSelectionRecord {
+  return {
+    selection: {
+      operation: 'cutting',
+      machineProfileId: 'client-a-machine-b-hpp250',
+      machineProfileRevisionId: 'r1',
+      outputCompatibilityProfileId: 'ptx-cadmatic-4',
+      outputCompatibilityProfileRevisionId: 'r3',
+      outputCompatibilityProfileDigest: PROFILE_DIGEST,
+      postprocessorAdapterId: 'granete-ptx',
+      postprocessorAdapterVersion: '1.2.0',
+      postprocessorImplementationDigest: '954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236',
+    },
+    version: 2,
+    updatedAt: '2026-09-10T00:00:00Z',
+    updatedBy: 'admin@example.com',
+  };
+}
+
 describe('MachineOutputSelectionSection historical pins', () => {
   it('muestra r2 como desactualizada y exige reselección explícita de r3', async () => {
     const user = userEvent.setup();
@@ -111,5 +130,107 @@ describe('MachineOutputSelectionSection historical pins', () => {
       }),
       4,
     );
+  });
+
+  it('el click inmediato no duplica el PUT del auto-guardado pendiente', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MachineOutputSelectionSection
+        catalog={catalog}
+        selections={{}}
+        resolved={{}}
+        onSave={onSave}
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByTestId('machine-output-cutting-machine'),
+      'client-a-machine-b-hpp250',
+    );
+    await user.selectOptions(
+      screen.getByTestId('machine-output-cutting-profile'),
+      `ptx-cadmatic-4@r3#${PROFILE_DIGEST}`,
+    );
+    await user.click(screen.getByTestId('machine-output-cutting-save'));
+
+    // El timer de auto-guardado vence después del click: debe saltarse.
+    await waitFor(
+      () => expect(onSave).toHaveBeenCalledTimes(1),
+      { timeout: 3000 },
+    );
+  });
+});
+
+describe('MachineOutputSelectionSection auto-save', () => {
+  it('guarda solo con elegir máquina y perfil, sin tocar ningún botón', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MachineOutputSelectionSection
+        catalog={catalog}
+        selections={{}}
+        resolved={{}}
+        onSave={onSave}
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByTestId('machine-output-cutting-machine'),
+      'client-a-machine-b-hpp250',
+    );
+    await user.selectOptions(
+      screen.getByTestId('machine-output-cutting-profile'),
+      `ptx-cadmatic-4@r3#${PROFILE_DIGEST}`,
+    );
+
+    await waitFor(
+      () => expect(onSave).toHaveBeenCalledWith(
+        'cutting',
+        expect.objectContaining({
+          machineProfileId: 'client-a-machine-b-hpp250',
+          outputCompatibilityProfileRevisionId: 'r3',
+          outputCompatibilityProfileDigest: PROFILE_DIGEST,
+        }),
+        0,
+      ),
+      { timeout: 3000 },
+    );
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('un registro vigente idéntico no dispara auto-guardado', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MachineOutputSelectionSection
+        catalog={catalog}
+        selections={{ cutting: currentRecord() }}
+        resolved={{}}
+        onSave={onSave}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('machine-output-cutting-autosave').textContent,
+      ).toBe('La combinación elegida queda guardada para este taller.'),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('un pin histórico incompleto nunca auto-guarda: exige reselección explícita', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MachineOutputSelectionSection
+        catalog={catalog}
+        selections={{ cutting: historicalRecord() }}
+        resolved={{}}
+        onSave={onSave}
+      />,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(onSave).not.toHaveBeenCalled();
   });
 });
