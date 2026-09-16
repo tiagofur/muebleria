@@ -355,6 +355,35 @@
       flex: 1;
     }
 
+    .mode-selector {
+      display: flex;
+      gap: var(--space-2);
+    }
+
+    .mode-btn {
+      flex: 1;
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      padding: var(--space-2);
+      border: 1px solid var(--border-default);
+      background: var(--surface-card);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+    }
+
+    .mode-btn:hover:not(:disabled) {
+      background: var(--surface-hover);
+    }
+
+    .mode-btn.active {
+      border-color: var(--brand-500);
+      background: var(--brand-50);
+      color: var(--brand-700);
+      font-weight: var(--weight-semibold);
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -362,11 +391,24 @@
   <!-- Header Card -->
   <div class="card header-card">
     <h1 class="title" id="asset-title">Preparar montaje de herraje</h1>
-    <div class="subtitle" id="asset-subtitle">Definí el marco de montaje (MountFrame) seleccionando los agujeros en la vista 3D.</div>
+    <div class="subtitle" id="asset-subtitle">Definí el marco de montaje (MountFrame) seleccionando los puntos de referencia en la vista 3D.</div>
     <div class="meta-row">
       <span class="badge badge-brand" id="revision-badge">R1</span>
       <span class="badge" id="sha-badge">SHA: ...</span>
       <span class="badge" id="source-units-badge">Unidad: mm</span>
+    </div>
+  </div>
+
+  <!-- Anchor Mode Selector Card -->
+  <div class="card">
+    <div class="section-title">Modo de montaje</div>
+    <div class="mode-selector">
+      <button type="button" class="mode-btn active" id="mode-midpoint">
+        Punto medio (2 agujeros)
+      </button>
+      <button type="button" class="mode-btn" id="mode-origin-axis-plane">
+        Origen + Eje + Plano (3 puntos)
+      </button>
     </div>
   </div>
 
@@ -413,6 +455,15 @@
           <div class="step-title">Agujero B (segundo punto)</div>
           <div class="step-detail">Hacé clic en el centro del segundo orificio de fijación.</div>
           <div class="step-coord hidden" id="coord-b"></div>
+        </div>
+      </div>
+
+      <div class="step-item hidden" id="step-c">
+        <div class="step-number" id="step-c-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Referencia de plano (Punto C)</div>
+          <div class="step-detail">Hacé clic en un tercer punto coplanar para fijar el plano de montaje.</div>
+          <div class="step-coord hidden" id="coord-c"></div>
         </div>
       </div>
 
@@ -470,9 +521,11 @@
         sha256: '',
         measuredBounds: null,
         expectedHoleSpacingMm: null,
+        anchorMode: 'midpoint',
         step: 'pick_a',
         pointA: null,
         pointB: null,
+        pointC: null,
         measuredSpacingMm: null,
         normalInverted: false,
         spacingComparison: null,
@@ -502,6 +555,47 @@
           el('sha-badge').title = state.sha256;
         }
 
+        var btnModeMidpoint = el('mode-midpoint');
+        var btnModeOriginAxisPlane = el('mode-origin-axis-plane');
+        var stepC = el('step-c');
+
+        if (state.anchorMode === 'origin_axis_plane') {
+          if (btnModeOriginAxisPlane) btnModeOriginAxisPlane.classList.add('active');
+          if (btnModeMidpoint) btnModeMidpoint.classList.remove('active');
+          stepC.classList.remove('hidden');
+          el('step-axes-num').textContent = '4';
+
+          el('asset-subtitle').textContent = 'Definí el marco de montaje (MountFrame) seleccionando el origen, dirección +X y referencia de plano en 3D.';
+          el('step-a').querySelector('.step-title').textContent = 'Origen de montaje (Punto A)';
+          el('step-a').querySelector('.step-detail').textContent = 'Hacé clic en el centro canónico de montaje.';
+          el('step-b').querySelector('.step-title').textContent = 'Dirección eje +X (Punto B)';
+          el('step-b').querySelector('.step-detail').textContent = 'Hacé clic para definir la dirección longitudinal de montaje (+X).';
+          stepC.querySelector('.step-title').textContent = 'Referencia de plano (Punto C)';
+          stepC.querySelector('.step-detail').textContent = 'Hacé clic en un tercer punto coplanar para fijar el plano de montaje.';
+        } else if (state.anchorMode === 'origin_and_axis') {
+          if (btnModeOriginAxisPlane) btnModeOriginAxisPlane.classList.remove('active');
+          if (btnModeMidpoint) btnModeMidpoint.classList.remove('active');
+          stepC.classList.add('hidden');
+          el('step-axes-num').textContent = '3';
+
+          el('asset-subtitle').textContent = 'Definí el marco de montaje seleccionando el punto de origen y la dirección del eje +X en la vista 3D.';
+          el('step-a').querySelector('.step-title').textContent = 'Origen de montaje (Punto A)';
+          el('step-a').querySelector('.step-detail').textContent = 'Hacé clic en el centro canónico de montaje.';
+          el('step-b').querySelector('.step-title').textContent = 'Dirección eje +X (Punto B)';
+          el('step-b').querySelector('.step-detail').textContent = 'Hacé clic para definir la dirección longitudinal de montaje.';
+        } else {
+          if (btnModeMidpoint) btnModeMidpoint.classList.add('active');
+          if (btnModeOriginAxisPlane) btnModeOriginAxisPlane.classList.remove('active');
+          stepC.classList.add('hidden');
+          el('step-axes-num').textContent = '3';
+
+          el('asset-subtitle').textContent = 'Definí el marco de montaje (MountFrame) seleccionando los agujeros en la vista 3D.';
+          el('step-a').querySelector('.step-title').textContent = 'Agujero A (primer punto)';
+          el('step-a').querySelector('.step-detail').textContent = 'Hacé clic en el centro del primer orificio de fijación.';
+          el('step-b').querySelector('.step-title').textContent = 'Agujero B (segundo punto)';
+          el('step-b').querySelector('.step-detail').textContent = 'Hacé clic en el centro del segundo orificio de fijación.';
+        }
+
         // Measured bounds
         if (state.measuredBounds) {
           el('val-width').textContent = formatMm(state.measuredBounds.widthMm);
@@ -514,7 +608,7 @@
         if (state.measuredSpacingMm !== null && state.measuredSpacingMm !== undefined) {
           el('val-hole-dist').textContent = formatMm(state.measuredSpacingMm);
 
-          if (state.expectedHoleSpacingMm) {
+          if (state.expectedHoleSpacingMm && state.anchorMode === 'midpoint') {
             tolContainer.classList.remove('hidden');
             if (state.spacingComparison) {
               var comp = state.spacingComparison;
@@ -544,10 +638,12 @@
         var stepAxes = el('step-axes');
         var coordA = el('coord-a');
         var coordB = el('coord-b');
+        var coordC = el('coord-c');
 
         // Reset classes
         stepA.className = 'step-item';
         stepB.className = 'step-item';
+        stepC.className = 'step-item' + (state.anchorMode === 'origin_axis_plane' ? '' : ' hidden');
         stepAxes.className = 'step-item';
 
         if (state.pointA) {
@@ -566,10 +662,20 @@
           coordB.classList.add('hidden');
         }
 
+        if (state.pointC && state.anchorMode === 'origin_axis_plane') {
+          stepC.classList.add('completed');
+          coordC.classList.remove('hidden');
+          coordC.textContent = 'C: ' + formatCoord(state.pointC);
+        } else {
+          coordC.classList.add('hidden');
+        }
+
         if (state.step === 'pick_a') {
           stepA.classList.add('active');
         } else if (state.step === 'pick_b') {
           stepB.classList.add('active');
+        } else if (state.step === 'pick_c' && state.anchorMode === 'origin_axis_plane') {
+          stepC.classList.add('active');
         } else if (state.step === 'ready') {
           stepAxes.classList.add('active');
         }
@@ -610,6 +716,7 @@
         state.sha256 = payload.sha256 || '';
         state.measuredBounds = payload.measuredBounds;
         state.expectedHoleSpacingMm = payload.expectedHoleSpacingMm;
+        state.anchorMode = payload.anchorMode || 'midpoint';
         state.step = payload.step || 'pick_a';
         state.normalInverted = payload.normalInverted || false;
         render();
@@ -618,8 +725,12 @@
       window.updateToolState = function (toolState) {
         toolState = toolState || {};
         state.step = toolState.step || state.step;
+        if (toolState.anchorMode) {
+          state.anchorMode = toolState.anchorMode;
+        }
         state.pointA = toolState.pointA || null;
         state.pointB = toolState.pointB || null;
+        state.pointC = toolState.pointC || null;
         state.measuredSpacingMm = toolState.measuredSpacingMm;
         state.normalInverted = !!toolState.normalInverted;
         state.spacingComparison = toolState.spacingComparison;
@@ -644,6 +755,33 @@
       };
 
       // User Interactions
+      var btnMidpoint = el('mode-midpoint');
+      if (btnMidpoint) {
+        btnMidpoint.addEventListener('click', function () {
+          if (state.anchorMode !== 'midpoint') {
+            state.anchorMode = 'midpoint';
+            state.pointC = null;
+            if (window.sketchup && window.sketchup.set_anchor_mode) {
+              window.sketchup.set_anchor_mode('midpoint');
+            }
+            render();
+          }
+        });
+      }
+
+      var btnOriginAxisPlane = el('mode-origin-axis-plane');
+      if (btnOriginAxisPlane) {
+        btnOriginAxisPlane.addEventListener('click', function () {
+          if (state.anchorMode !== 'origin_axis_plane') {
+            state.anchorMode = 'origin_axis_plane';
+            if (window.sketchup && window.sketchup.set_anchor_mode) {
+              window.sketchup.set_anchor_mode('origin_axis_plane');
+            }
+            render();
+          }
+        });
+      }
+
       el('btn-invert-normal').addEventListener('click', function () {
         if (window.sketchup && window.sketchup.invert_normal) {
           window.sketchup.invert_normal();

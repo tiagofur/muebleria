@@ -26,37 +26,55 @@ module Granete
 
         COLOR_HOLE_A = [0, 180, 216].freeze    # Cyan
         COLOR_HOLE_B = [247, 37, 133].freeze   # Magenta
+        COLOR_POINT_C = [114, 9, 183].freeze   # Purple
         COLOR_AXIS_X = [230, 57, 70].freeze    # Red (+X)
         COLOR_AXIS_Y = [42, 157, 143].freeze   # Green (+Y)
         COLOR_AXIS_Z = [33, 150, 243].freeze   # Blue (+Z)
         COLOR_LINE_AB = [255, 193, 7].freeze   # Amber
+        COLOR_LINE_AC = [173, 181, 189].freeze # Muted Gray
 
         LINE_WIDTH = 2
         AXIS_LINE_WIDTH = 3
         LABEL_SIZE = 13
 
         STATUS_TEXTS = {
-          pick_a: 'Preparar montaje: Hacé clic para fijar el punto A (primer agujero).',
-          pick_b: 'Preparar montaje: Hacé clic para fijar el punto B (segundo agujero).',
+          pick_a: 'Preparar montaje: Hacé clic para fijar el origen o punto A de montaje.',
+          pick_b: 'Preparar montaje: Hacé clic para fijar el punto B (dirección eje +X).',
+          pick_c: 'Preparar montaje: Hacé clic para fijar el punto C (referencia de plano / segundo eje).',
           ready: 'Montaje definido. Verificá ejes (+Z azul hacia afuera). Podés invertir o guardar.'
         }.freeze
 
-        attr_reader :step, :point_a_mm, :point_b_mm, :mount_frame, :normal_inverted
+        attr_reader :step, :point_a_mm, :point_b_mm, :point_c_mm, :mount_frame, :normal_inverted, :anchor_mode
 
-        def initialize(expected_hole_spacing_mm: nil, tolerance_mm: 2.0, logger: nil, on_change: nil)
+        def initialize(expected_hole_spacing_mm: nil, tolerance_mm: 2.0, anchor_mode: nil, logger: nil, on_change: nil)
           @expected_hole_spacing_mm = expected_hole_spacing_mm
           @tolerance_mm = tolerance_mm
+          @anchor_mode = anchor_mode ? anchor_mode.to_sym : :midpoint
           @logger = logger
           @on_change = on_change
 
           @step = :pick_a
           @point_a_mm = nil
           @point_b_mm = nil
+          @point_c_mm = nil
           @normal_inverted = false
           @mount_frame = nil
 
           @ip1 = defined?(::Sketchup::InputPoint) ? ::Sketchup::InputPoint.new : nil
           @ip2 = defined?(::Sketchup::InputPoint) ? ::Sketchup::InputPoint.new : nil
+          @ip3 = defined?(::Sketchup::InputPoint) ? ::Sketchup::InputPoint.new : nil
+        end
+
+        def anchor_mode=(mode)
+          new_mode = mode ? mode.to_sym : :midpoint
+          return if @anchor_mode == new_mode
+
+          @anchor_mode = new_mode
+          reset!
+        end
+
+        def set_anchor_mode(mode) # rubocop:disable Naming/AccessorMethodName
+          self.anchor_mode = mode
         end
 
         def activate
@@ -72,6 +90,7 @@ module Granete
           @step = :pick_a
           @point_a_mm = nil
           @point_b_mm = nil
+          @point_c_mm = nil
           @mount_frame = nil
           @normal_inverted = false
           update_status_text
@@ -80,13 +99,43 @@ module Granete
         end
 
         def set_points(hole_a_mm, hole_b_mm)
+          @anchor_mode = :midpoint
           @point_a_mm = hole_a_mm
           @point_b_mm = hole_b_mm
+          @point_c_mm = nil
           @step = :ready
           recompute_mount_frame!
           update_status_text
           notify_change
           Sketchup.active_model&.active_view&.invalidate if defined?(Sketchup)
+        end
+
+        def set_origin_axis_plane(origin_mm, axis_point_mm, plane_point_mm)
+          @anchor_mode = :origin_axis_plane
+          @point_a_mm = origin_mm
+          @point_b_mm = axis_point_mm
+          @point_c_mm = plane_point_mm
+          @step = :ready
+          recompute_mount_frame!
+          update_status_text
+          notify_change
+          Sketchup.active_model&.active_view&.invalidate if defined?(Sketchup)
+        end
+
+        def set_origin_and_axis(origin_mm, axis_point_mm, plane_point_mm = nil)
+          if plane_point_mm
+            set_origin_axis_plane(origin_mm, axis_point_mm, plane_point_mm)
+          else
+            @anchor_mode = :origin_and_axis
+            @point_a_mm = origin_mm
+            @point_b_mm = axis_point_mm
+            @point_c_mm = nil
+            @step = :ready
+            recompute_mount_frame!
+            update_status_text
+            notify_change
+            Sketchup.active_model&.active_view&.invalidate if defined?(Sketchup)
+          end
         end
 
         def invert_normal!
@@ -105,6 +154,9 @@ module Granete
           elsif @step == :pick_b && @ip2
             @ip1.pick(view, x_pos, y_pos)
             @ip2.pick(view, x_pos, y_pos, @ip1)
+          elsif @step == :pick_c && @ip3
+            @ip1.pick(view, x_pos, y_pos)
+            @ip3.pick(view, x_pos, y_pos, @ip1)
           end
           view.invalidate
         end
@@ -132,6 +184,7 @@ module Granete
           bb = ::Geom::BoundingBox.new
           bb.add(point_to_sketchup(@point_a_mm)) if @point_a_mm
           bb.add(point_to_sketchup(@point_b_mm)) if @point_b_mm
+          bb.add(point_to_sketchup(@point_c_mm)) if @point_c_mm
           add_mount_frame_extents(bb) if @mount_frame
           bb.valid? ? bb : nil
         end
@@ -147,6 +200,7 @@ module Granete
           end
 
           draw_point_b_and_connector(view) if @point_b_mm
+          draw_point_c_and_connector(view) if @point_c_mm
           draw_mount_frame_gizmo(view) if @mount_frame
         end
 
@@ -171,17 +225,33 @@ module Granete
         private
 
         def handle_click_at(pt_mm, view)
-          if @step == :pick_a
+          case @step
+          when :pick_a
             @point_a_mm = pt_mm
             @step = :pick_b
             update_status_text
             notify_change
             view&.invalidate
-          elsif @step == :pick_b
+          when :pick_b
             dist = Assets::MountFrame.distance(@point_a_mm, pt_mm)
             return if dist < 1.0
 
             @point_b_mm = pt_mm
+            if @anchor_mode == :origin_axis_plane
+              @step = :pick_c
+            else
+              @step = :ready
+              recompute_mount_frame!
+            end
+            update_status_text
+            notify_change
+            view&.invalidate
+          when :pick_c
+            dist_a = Assets::MountFrame.distance(@point_a_mm, pt_mm)
+            dist_b = Assets::MountFrame.distance(@point_b_mm, pt_mm)
+            return if dist_a < 1.0 || dist_b < 1.0
+
+            @point_c_mm = pt_mm
             @step = :ready
             recompute_mount_frame!
             update_status_text
@@ -210,6 +280,17 @@ module Granete
           view.draw(GL_LINES, [point_to_sketchup(@point_a_mm), pt_b])
         end
 
+        def draw_point_c_and_connector(view)
+          pt_c = point_to_sketchup(@point_c_mm)
+          draw_point_marker(view, pt_c, COLOR_POINT_C, 'C')
+          return unless @point_a_mm
+
+          view.drawing_color = color_for(view, COLOR_LINE_AC)
+          view.line_width = LINE_WIDTH
+          view.line_stipple = '.'
+          view.draw(GL_LINES, [point_to_sketchup(@point_a_mm), pt_c])
+        end
+
         def point_to_sketchup(pt_mm)
           ::Geom::Point3d.new(
             pt_mm[0] / MM_PER_INCH,
@@ -221,15 +302,81 @@ module Granete
         def recompute_mount_frame!
           return unless @point_a_mm && @point_b_mm
 
-          normal_z = @normal_inverted ? [0.0, 0.0, -1.0] : [0.0, 0.0, 1.0]
-          @mount_frame = Assets::MountFrame.build_handle_mount_frame(
-            hole_a_mm: @point_a_mm,
-            hole_b_mm: @point_b_mm,
-            surface_normal_z: normal_z
-          )
+          @mount_frame = case @anchor_mode
+                         when :origin_axis_plane
+                           return unless @point_c_mm
+
+                           compute_origin_axis_plane_frame
+                         when :origin_and_axis
+                           normal_z = @normal_inverted ? [0.0, 0.0, -1.0] : [0.0, 0.0, 1.0]
+                           compute_origin_and_axis_frame(normal_z)
+                         else
+                           normal_z = @normal_inverted ? [0.0, 0.0, -1.0] : [0.0, 0.0, 1.0]
+                           Assets::MountFrame.build_handle_mount_frame(
+                             hole_a_mm: @point_a_mm,
+                             hole_b_mm: @point_b_mm,
+                             surface_normal_z: normal_z
+                           )
+                         end
         rescue StandardError => e
           @logger&.error('mount_frame_recompute_failed', error: e)
           @mount_frame = nil
+        end
+
+        # rubocop:disable-next Metrics/AbcSize
+        def compute_origin_axis_plane_frame
+          dir_ab = [
+            @point_b_mm[0] - @point_a_mm[0],
+            @point_b_mm[1] - @point_a_mm[1],
+            @point_b_mm[2] - @point_a_mm[2]
+          ]
+          axis_x = Assets::MountFrame.normalize_vector(dir_ab)
+
+          vec_ac = [
+            @point_c_mm[0] - @point_a_mm[0],
+            @point_c_mm[1] - @point_a_mm[1],
+            @point_c_mm[2] - @point_a_mm[2]
+          ]
+          proj = Assets::MountFrame.dot_product(vec_ac, axis_x)
+          y_ortho = [
+            vec_ac[0] - (proj * axis_x[0]),
+            vec_ac[1] - (proj * axis_x[1]),
+            vec_ac[2] - (proj * axis_x[2])
+          ]
+          axis_y = Assets::MountFrame.normalize_vector(y_ortho)
+
+          axis_z = Assets::MountFrame.cross_product(axis_x, axis_y)
+          axis_z = Assets::MountFrame.normalize_vector(axis_z)
+
+          if @normal_inverted
+            axis_z = [-axis_z[0], -axis_z[1], -axis_z[2]]
+            axis_y = Assets::MountFrame.cross_product(axis_z, axis_x)
+          end
+
+          basis = Assets::MountFrame::BasisData.new(x: axis_x, y: axis_y, z: axis_z)
+          Assets::MountFrame.validate_basis!(basis, 'mount_frame.basis')
+          Assets::MountFrame::MountFrameData.new(origin_mm: @point_a_mm, basis: basis)
+        end
+
+        def compute_origin_and_axis_frame(normal_z)
+          dir_ab = [
+            @point_b_mm[0] - @point_a_mm[0],
+            @point_b_mm[1] - @point_a_mm[1],
+            @point_b_mm[2] - @point_a_mm[2]
+          ]
+          axis_x = Assets::MountFrame.normalize_vector(dir_ab)
+          norm_z = Assets::MountFrame.normalize_vector(normal_z)
+          proj = Assets::MountFrame.dot_product(norm_z, axis_x)
+          z_ortho = [
+            norm_z[0] - (proj * axis_x[0]),
+            norm_z[1] - (proj * axis_x[1]),
+            norm_z[2] - (proj * axis_x[2])
+          ]
+          axis_z = Assets::MountFrame.normalize_vector(z_ortho)
+          axis_y = Assets::MountFrame.cross_product(axis_z, axis_x)
+          basis = Assets::MountFrame::BasisData.new(x: axis_x, y: axis_y, z: axis_z)
+          Assets::MountFrame.validate_basis!(basis, 'mount_frame.basis')
+          Assets::MountFrame::MountFrameData.new(origin_mm: @point_a_mm, basis: basis)
         end
 
         def update_status_text
@@ -241,8 +388,10 @@ module Granete
         def notify_change
           @on_change&.call(
             step: @step,
+            anchor_mode: @anchor_mode,
             point_a_mm: @point_a_mm,
             point_b_mm: @point_b_mm,
+            point_c_mm: @point_c_mm,
             measured_spacing_mm: measured_spacing_mm,
             mount_frame: @mount_frame,
             normal_inverted: @normal_inverted,
