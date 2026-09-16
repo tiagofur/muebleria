@@ -17,9 +17,16 @@ CREATE TABLE production_release_engineering (
     version INT NOT NULL DEFAULT 1 CHECK (version >= 1),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT fk_release_engineering_owner
-        FOREIGN KEY (release_id, project_id, organization_id)
-        REFERENCES production_releases(id, project_id, organization_id),
+    -- Simple FKs (not the composite release FK): migration 000122's DOWN must
+    -- stay independently executable — a composite FK to
+    -- production_releases(id, project_id, organization_id) would depend on
+    -- uq_production_releases_id_project_owner and break that rollback
+    -- contract. Project/org/release coherence is enforced by the INSERT
+    -- policy's EXISTS check plus the exact-release command guards.
+    CONSTRAINT fk_release_engineering_release
+        FOREIGN KEY (release_id) REFERENCES production_releases(id),
+    CONSTRAINT fk_release_engineering_project
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     CONSTRAINT engineering_completion_shape CHECK (
         (status = 'in_progress' AND completed_by IS NULL AND completed_at IS NULL)
         OR (status = 'completed' AND completed_by IS NOT NULL AND completed_at IS NOT NULL)
