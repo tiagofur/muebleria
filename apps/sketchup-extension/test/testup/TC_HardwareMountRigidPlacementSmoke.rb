@@ -259,6 +259,8 @@ module Granete
       end
 
       # H8: Controlled failure during rebuild (fail-before-mutate preserves existing geometry)
+      # H8a: invalid MountFrame basis → geometry intact.
+      # H8b: download failure → geometry intact (R1 coverage on real host).
       def test_h8_fail_before_mutate_on_invalid_preparation
         valid_placement = create_hardware_placement(
           placement_id: 'hp-handle-valid',
@@ -281,7 +283,7 @@ module Granete
         initial_entity_ids = root_entity.definition.entities.map(&:persistent_id)
         refute_empty initial_entity_ids
 
-        # Attempt rebuild with invalid MountFrame basis (non-orthogonal)
+        # ── H8a: invalid MountFrame basis (non-orthogonal) ──────────────────────
         invalid_mount_frame = Granete::SketchUpExtension::Assets::MountFrame::MountFrameData.new(
           origin_mm: [0.0, 0.0, 0.0],
           basis: Granete::SketchUpExtension::Assets::MountFrame::BasisData.new(
@@ -303,16 +305,13 @@ module Granete
           operation: :update
         )
 
-        refute update_result['success'], 'update with invalid preparation must fail'
-        assert_equal 'asset_preparation_invalid', update_result['error']
+        refute update_result['success'], 'H8a: update with invalid preparation must fail'
 
-        # Precision 2 Invariants after failed rebuild:
-        # 1. Previous handle is still the real one and still valid
-        assert prev_hw.valid?, 'previous handle ComponentInstance must still be valid'
-        assert_equal prev_hw_def, prev_hw.definition, 'handle definition must still be the real handle'
-        assert_equal prev_hw_transform, prev_hw.transformation.to_a, 'handle transform must remain unchanged'
+        # H8a Invariants after failed rebuild (invalid MountFrame):
+        assert prev_hw.valid?, 'H8a: previous handle ComponentInstance must still be valid'
+        assert_equal prev_hw_def, prev_hw.definition, 'H8a: handle definition must still be the real handle'
+        assert_equal prev_hw_transform, prev_hw.transformation.to_a, 'H8a: handle transform must remain unchanged'
 
-        # 2. assetId/revisionId/placementId did not change
         post_meta = @metadata_store.read(prev_hw)
         assert_equal HANDLE_ASSET_ID, post_meta.dig('intent', 'assetId')
         assert_equal HANDLE_REVISION_R2, post_meta.dig('intent', 'assetRevisionId')
@@ -320,16 +319,39 @@ module Granete
         assert_equal 'mesh', post_meta.dig('intent', 'representation')
         assert_equal 'prepared', post_meta.dig('intent', 'preparationState')
 
-        # 3. No proxy/cube appeared
         proxies = root_entity.definition.entities.grep(Sketchup::ComponentInstance).select do |ci|
           @metadata_store.read(ci)&.dig('intent', 'representation') == 'proxy' || ci.definition.name.include?('Proxy')
         end
-        assert_empty proxies, 'no proxy or placeholder cube must appear'
+        assert_empty proxies, 'H8a: no proxy or placeholder cube must appear'
 
-        # 4. No partial children left behind
         current_entity_ids = root_entity.definition.entities.map(&:persistent_id)
         assert_equal initial_entity_ids, current_entity_ids,
-                     'existing entities must survive intact without partial children'
+                     'H8a: existing entities must survive intact without partial children'
+
+        # ── H8b: download/prefetch failure (R1) ────────────────────────────────
+        # Build a loader whose downloader always fails, then attempt a second rebuild.
+        # The fixture loader already placed the real asset; now we confirm that a
+        # rebuild with a failing downloader also fails before mutating the geometry.
+        failing_loader = build_always_failing_asset_loader
+        builder_h8b = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+          metadata_store: @metadata_store,
+          asset_loader: failing_loader
+        )
+
+        h8b_result = builder_h8b.update_furniture(
+          model, root_entity, catalog_definition, {}, resolved_layout: build_resolved_layout([valid_placement])
+        )
+
+        refute h8b_result['success'], 'H8b: rebuild with download failure must fail'
+        assert_includes h8b_result['error'].to_s, 'geometría 3D del herraje'
+
+        # Geometry must remain exactly as captured before H8a
+        assert prev_hw.valid?, 'H8b: previous handle ComponentInstance must still be valid'
+        assert_equal prev_hw_def, prev_hw.definition, 'H8b: handle definition must be unchanged'
+        assert_equal prev_hw_transform, prev_hw.transformation.to_a, 'H8b: handle transform must be unchanged'
+        current_ids_h8b = root_entity.definition.entities.map(&:persistent_id)
+        assert_equal initial_entity_ids, current_ids_h8b,
+                     'H8b: entity set must be identical after download failure'
 
         # 5. Undo stack remains coherent
         assert Sketchup.undo, 'undo must succeed and revert initial placement cleanly'
@@ -510,6 +532,27 @@ module Granete
           comp_def
         end
         loader
+      end
+
+      # Returns an AssetLoader whose downloader always returns nil (simulates
+      # network/auth failure). Used by H8b to prove download failure is blocked
+      # before any destructive model mutation.
+      def build_always_failing_asset_loader
+        failing_downloader = Class.new do
+          def download_asset(asset_id:, revision_id:, sha256: nil, expected_bytes: nil, org_id: nil)
+            nil
+          end
+        end.new
+        Granete::SketchUpExtension::Assets::AssetLoader.new(downloader: failing_downloader)
+      end
+
+      # Wraps hardware placements in a minimal NativeLayout for update_furniture calls.
+      def build_resolved_layout(hardware_placements)
+        Granete::SketchUpExtension::Library::NativeLayout.new(
+          'granete.local-basis.v1',
+          [], # boards: none needed for the preflight gate test
+          hardware_placements
+        )
       end
 
       def fail_closed_unless_installed_extension_is_loaded

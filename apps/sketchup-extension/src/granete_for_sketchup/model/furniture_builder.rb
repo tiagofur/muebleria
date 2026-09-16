@@ -249,8 +249,8 @@ module Granete
                    else
                      normalize_parameters(definition, parameters)
                    end
-          prefetch_visual_assets(resolved_layout)
-          prep_err = invalid_asset_preparation_error
+          prefetch_visual_assets(model, resolved_layout)
+          prep_err = rebuild_preflight_error
           return { 'success' => false, 'error' => prep_err } if prep_err
 
           host_transform = transformation || Geom::Transformation.new
@@ -393,15 +393,29 @@ module Granete
 
       # Hardware rendering for Library::NativeLayout (#414 / #668).
       module NativeHardwareRenderer
-        def prefetch_visual_assets(resolved_layout)
+        # Prefetches visual assets, passing model so AssetLoader can probe
+        # R2 SKP loadability before any destructive rebuild (R1/R2, #668-C1).
+        def prefetch_visual_assets(model, resolved_layout)
           return unless resolved_layout.is_a?(Library::NativeLayout)
           return unless @asset_loader.respond_to?(:prefetch_hardware_assets)
 
           @asset_loader.clear_diagnostics if @asset_loader.respond_to?(:clear_diagnostics)
-          @asset_loader.prefetch_hardware_assets(resolved_layout.hardware)
+          @asset_loader.prefetch_hardware_assets(resolved_layout.hardware, model: model)
         end
 
-        def invalid_asset_preparation_error
+        # Returns a typed error message when any prefetched placement is
+        # :missing (download/loadability failure) or :invalid (bad MountFrame).
+        # Falls back to the original asset_preparation_invalid scan when the
+        # loader does not support rebuild_preflight_ok? (backward-compatible).
+        def rebuild_preflight_error
+          if @asset_loader.respond_to?(:rebuild_preflight_ok?)
+            ok, msg = @asset_loader.rebuild_preflight_ok?
+            return msg unless ok
+
+            return nil
+          end
+
+          # Fallback: original behavior for loaders without preflight support.
           return nil unless @asset_loader.respond_to?(:diagnostics)
 
           diag = @asset_loader.diagnostics.find { |d| d['code'] == 'asset_preparation_invalid' }
@@ -580,8 +594,8 @@ module Granete
           parameters = normalize_parameters(definition, raw_parameters)
           instance_id = generate_instance_id
 
-          prefetch_visual_assets(resolved_layout)
-          prep_err = invalid_asset_preparation_error
+          prefetch_visual_assets(model, resolved_layout)
+          prep_err = rebuild_preflight_error
           return { 'success' => false, 'error' => prep_err } if prep_err
 
           model.start_operation("Insertar Mueble #{definition['name']}", true)
@@ -630,8 +644,8 @@ module Granete
             return { 'success' => false, 'error' => MATERIAL_RESOLUTION_REQUIRED_ERROR }
           end
 
-          prefetch_visual_assets(resolved_layout)
-          prep_err = invalid_asset_preparation_error
+          prefetch_visual_assets(model, resolved_layout)
+          prep_err = rebuild_preflight_error
           return { 'success' => false, 'error' => prep_err } if prep_err
 
           model.start_operation("Editar Mueble #{definition['name']}", true) if transaction

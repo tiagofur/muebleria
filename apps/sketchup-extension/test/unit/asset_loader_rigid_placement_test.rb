@@ -496,6 +496,202 @@ class AssetLoaderRigidPlacementTest < Minitest::Test
                  'Undo stack must remain coherent (zero transactions started)'
   end
 
+  # H8b: download/prefetch failure — rebuild must not initiate destructive mutation.
+  # Proves that a :missing prefetch result (nil from downloader) blocks update_furniture
+  # before start_operation, leaving the existing geometry 100% intact.
+  def test_rebuild_h8b_download_failure_preserves_existing_geometry
+    # Phase 1: insert furniture with a real valid hardware handle using @loader (working downloader)
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    builder_ok = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: store,
+      asset_loader: @loader
+    )
+
+    definition = {
+      'id' => 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      'furniture_definition_id' => 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      'furnitureDefinitionId' => 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      'name' => 'Bajo Mesada H8b',
+      'parameters' => []
+    }
+    valid_mf = MountFrameData.new(
+      origin_mm: [0.0, 0.0, 0.0],
+      basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], z: [0.0, 0.0, 1.0])
+    )
+    valid_placement = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-h8b-valid',
+      asset_id: 'ast-handle',
+      asset_revision_id: 'rev-2',
+      representation: 'mesh',
+      preparation_state: 'prepared',
+      mount_frame: valid_mf,
+      translation: [100.0, 20.0, 300.0]
+    )
+    board = Granete::SketchUpExtension::Library::LayoutBoardTransform.new(
+      component_instance_id: 'board-h8b',
+      slot_id: 'left_side',
+      name: 'Lateral',
+      dims: { 'width' => 18.0, 'thickness' => 590.0, 'length' => 720.0 },
+      local_transform: {
+        'translation' => [0.0, 0.0, 0.0],
+        'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+      }
+    )
+    initial_layout = Granete::SketchUpExtension::Library::NativeLayout.new(
+      'granete.local-basis.v1', [board], [valid_placement]
+    )
+    result = builder_ok.insert_furniture(@model, definition, {}, resolved_layout: initial_layout)
+    assert result['success'], "Initial insert failed: #{result['error']}"
+
+    furniture = @model.active_entities.grep(Sketchup::ComponentInstance).first
+    refute_nil furniture
+
+    prev_hw = furniture.definition.entities.instances.find do |ci|
+      store.read(ci)&.dig('identity', 'hardwarePlacementId') == 'hw-h8b-valid'
+    end
+    refute_nil prev_hw, 'Real hardware handle must exist after initial insert'
+    assert prev_hw.valid?
+
+    prev_hw_def       = prev_hw.definition
+    prev_hw_transform = prev_hw.transformation.to_a
+    prev_meta         = store.read(prev_hw)
+    prev_entity_count = furniture.definition.entities.instances.length
+    initial_op_count  = @model.operations.length
+
+    # Phase 2: rebuild attempt using a downloader that always fails (returns nil)
+    failing_loader = Granete::SketchUpExtension::Assets::AssetLoader.new(
+      downloader: FakeDownloader.new(nil)
+    )
+    builder_fail = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: store,
+      asset_loader: failing_loader
+    )
+    # Use the same layout (valid MountFrame) — only the download fails
+    update_result = builder_fail.update_furniture(
+      @model, furniture, definition, {}, resolved_layout: initial_layout
+    )
+
+    # Must fail with a typed error before opening any operation
+    refute update_result['success'], 'Rebuild with download failure must fail'
+    assert_includes update_result['error'], 'geometría 3D del herraje'
+
+    # Invariants: existing geometry is fully preserved
+    assert prev_hw.valid?, 'Previous handle must still be valid'
+    assert_equal prev_hw_def, prev_hw.definition, 'Handle definition must be unchanged'
+    assert_equal prev_hw_transform, prev_hw.transformation.to_a, 'Handle transform must be unchanged'
+    post_meta = store.read(prev_hw)
+    assert_equal prev_meta, post_meta, 'Hardware metadata must be identical'
+    assert_equal 'ast-handle', post_meta.dig('intent', 'assetId')
+    assert_equal 'rev-2', post_meta.dig('intent', 'assetRevisionId')
+    assert_equal 'hw-h8b-valid', post_meta.dig('identity', 'hardwarePlacementId')
+
+    proxies = furniture.definition.entities.instances.select do |ci|
+      store.read(ci)&.dig('intent', 'representation') == 'proxy' || ci.definition.name.include?('Proxy')
+    end
+    assert_empty proxies, 'No proxy must appear after download failure'
+    assert_equal prev_entity_count, furniture.definition.entities.instances.length,
+                 'No partial entities must be left behind'
+    assert_equal initial_op_count, @model.operations.length,
+                 'Undo stack must be coherent: no operations started'
+  end
+
+  # H8c: SKP file is reachable but definitions.load fails — rebuild must not mutate.
+  # Proves that the R2 loadability gate (probe_loadability) blocks update_furniture
+  # when the downloader returns a valid path but SketchUp cannot load the file.
+  def test_rebuild_h8c_loadability_failure_preserves_existing_geometry
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    builder_ok = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: store,
+      asset_loader: @loader
+    )
+
+    definition = {
+      'id' => 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      'furniture_definition_id' => 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      'furnitureDefinitionId' => 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      'name' => 'Bajo Mesada H8c',
+      'parameters' => []
+    }
+    valid_mf = MountFrameData.new(
+      origin_mm: [0.0, 0.0, 0.0],
+      basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], z: [0.0, 0.0, 1.0])
+    )
+    valid_placement = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-h8c-valid',
+      asset_id: 'ast-handle',
+      asset_revision_id: 'rev-2',
+      representation: 'mesh',
+      preparation_state: 'prepared',
+      mount_frame: valid_mf,
+      translation: [100.0, 20.0, 300.0]
+    )
+    board = Granete::SketchUpExtension::Library::LayoutBoardTransform.new(
+      component_instance_id: 'board-h8c',
+      slot_id: 'left_side',
+      name: 'Lateral',
+      dims: { 'width' => 18.0, 'thickness' => 590.0, 'length' => 720.0 },
+      local_transform: {
+        'translation' => [0.0, 0.0, 0.0],
+        'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+      }
+    )
+    initial_layout = Granete::SketchUpExtension::Library::NativeLayout.new(
+      'granete.local-basis.v1', [board], [valid_placement]
+    )
+    result = builder_ok.insert_furniture(@model, definition, {}, resolved_layout: initial_layout)
+    assert result['success'], "Initial insert failed: #{result['error']}"
+
+    furniture = @model.active_entities.grep(Sketchup::ComponentInstance).first
+    refute_nil furniture
+
+    prev_hw = furniture.definition.entities.instances.find do |ci|
+      store.read(ci)&.dig('identity', 'hardwarePlacementId') == 'hw-h8c-valid'
+    end
+    refute_nil prev_hw, 'Real hardware handle must exist after initial insert'
+
+    prev_hw_def       = prev_hw.definition
+    prev_hw_transform = prev_hw.transformation.to_a
+    prev_meta         = store.read(prev_hw)
+    prev_entity_count = furniture.definition.entities.instances.length
+    initial_op_count  = @model.operations.length
+
+    # Phase 2: loader that returns the real file path but probe_loadability returns false.
+    # This simulates definitions.load failing (e.g. corrupt SKP, unsupported version).
+    loader_c = Granete::SketchUpExtension::Assets::AssetLoader.new(
+      downloader: FakeDownloader.new(@skp_file)
+    )
+    # Override probe_loadability to simulate a load failure despite file existing.
+    loader_c.define_singleton_method(:probe_loadability) { |_model, _path| false }
+
+    builder_c = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: store,
+      asset_loader: loader_c
+    )
+    update_result = builder_c.update_furniture(
+      @model, furniture, definition, {}, resolved_layout: initial_layout
+    )
+
+    refute update_result['success'], 'Rebuild with loadability failure must fail'
+    assert_includes update_result['error'], 'geometría 3D del herraje'
+
+    assert prev_hw.valid?, 'Previous handle must still be valid'
+    assert_equal prev_hw_def, prev_hw.definition, 'Handle definition must be unchanged'
+    assert_equal prev_hw_transform, prev_hw.transformation.to_a, 'Handle transform must be unchanged'
+    post_meta = store.read(prev_hw)
+    assert_equal prev_meta, post_meta, 'Hardware metadata must be identical'
+    assert_equal 'ast-handle', post_meta.dig('intent', 'assetId')
+    assert_equal 'hw-h8c-valid', post_meta.dig('identity', 'hardwarePlacementId')
+
+    proxies = furniture.definition.entities.instances.select do |ci|
+      store.read(ci)&.dig('intent', 'representation') == 'proxy' || ci.definition.name.include?('Proxy')
+    end
+    assert_empty proxies, 'No proxy must appear after loadability failure'
+    assert_equal prev_entity_count, furniture.definition.entities.instances.length,
+                 'No partial entities must be left behind'
+    assert_equal initial_op_count, @model.operations.length,
+                 'Undo stack must be coherent: no operations started'
+  end
+
   private
 
   def vector_mag(vec)
@@ -507,3 +703,4 @@ class AssetLoaderRigidPlacementTest < Minitest::Test
     MountFrame.dot_product(transform.xaxis.to_a, cross_yz)
   end
 end
+
