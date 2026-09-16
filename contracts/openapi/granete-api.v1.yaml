@@ -4329,6 +4329,55 @@
         }
       }
     },
+    "/hardware-assets/{assetId}/revisions:derive": {
+      "post": {
+        "operationId": "deriveHardwareAssetRevision",
+        "summary": "Derive a new immutable asset revision with updated MountFrame, reusing existing bytes",
+        "description": "Creates a new revision for an active asset reusing the exact storage bytes, SHA-256, and representation of the source revision while setting a new MountFrame and derived normalization. Replays with identical Idempotency-Key return the same revision.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HardwareAssetId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeriveHardwareAssetRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Derived revision created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareAssetRevision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/designs/{designId}/commercial-projection": {
       "get": {
         "operationId": "getDesignCommercialProjection",
@@ -11410,6 +11459,88 @@
           }
         }
       },
+      "HardwareBasis": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "x",
+          "y",
+          "z"
+        ],
+        "properties": {
+          "x": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "y": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "z": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        }
+      },
+      "HardwareMountFrame": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "origin_mm",
+          "basis"
+        ],
+        "properties": {
+          "origin_mm": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "basis": {
+            "$ref": "#/components/schemas/HardwareBasis"
+          }
+        }
+      },
+      "HardwareAssetNormalization": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "translation_mm",
+          "basis"
+        ],
+        "properties": {
+          "translation_mm": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "basis": {
+            "$ref": "#/components/schemas/HardwareBasis"
+          }
+        }
+      },
       "HardwareAssetOrigin": {
         "type": "object",
         "additionalProperties": false,
@@ -11437,6 +11568,12 @@
           },
           "anchor_offset_mm": {
             "$ref": "#/components/schemas/HardwareAssetAnchor"
+          },
+          "mount_frame": {
+            "$ref": "#/components/schemas/HardwareMountFrame"
+          },
+          "asset_normalization": {
+            "$ref": "#/components/schemas/HardwareAssetNormalization"
           }
         }
       },
@@ -11581,6 +11718,24 @@
             "type": "string",
             "format": "uuid",
             "description": "When set, finalize appends the next immutable revision to THIS existing active asset instead of creating a new one (replace-with-new-revision flow). Omitted: a new asset is created."
+          }
+        }
+      },
+      "DeriveHardwareAssetRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_revision_id",
+          "origin"
+        ],
+        "properties": {
+          "source_revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the source revision whose storage bytes and metadata are reused."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/HardwareAssetOrigin"
           }
         }
       },

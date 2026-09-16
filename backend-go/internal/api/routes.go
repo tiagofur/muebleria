@@ -101,6 +101,20 @@ func hardwareAssetSessionCommandRouter(commands map[string]http.Handler) http.Ha
 func hardwareAssetCommandRouter(commands map[string]http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		segment := r.PathValue("assetCommand")
+		if assetPrefix, command, hasRevisionsCmd := strings.Cut(segment, "/revisions:"); hasRevisionsCmd {
+			if !isValidUUID(assetPrefix) || command == "" || strings.ContainsAny(command, ":/") {
+				http.NotFound(w, r)
+				return
+			}
+			handler, found := commands[command]
+			if !found {
+				http.NotFound(w, r)
+				return
+			}
+			r.SetPathValue("assetId", assetPrefix)
+			handler.ServeHTTP(w, r)
+			return
+		}
 		if assetPrefix, revisionRest, hasRevision := strings.Cut(segment, "/revisions/"); hasRevision {
 			revisionID, command, ok := strings.Cut(revisionRest, ":")
 			if !ok || !isValidUUID(assetPrefix) || !isValidUUID(revisionID) ||
@@ -439,6 +453,7 @@ func RegisterRoutes(server *Server) http.Handler {
 		"retire":    server.RequireIdempotency("hardware-assets.retire", http.HandlerFunc(server.HandleHardwareAssetRetire)),
 		"authorize": http.HandlerFunc(server.HandleHardwareAssetRevisionAuthorize),
 		"validate":  http.HandlerFunc(server.HandleHardwareAssetRevisionValidate),
+		"derive":    server.RequireIdempotency("hardware-assets.derive-revision", http.HandlerFunc(server.HandleHardwareAssetRevisionDerive)),
 	}))))
 	mux.Handle("GET /api/hardware-assets/files/{key...}", server.hardwareAssetFileGetAuth(http.HandlerFunc(server.HandleHardwareAssetFileGet)))
 

@@ -2342,6 +2342,54 @@ module Granete
         end
       end
 
+      # HardwareMountBridge coordinates the MountFramePreparerController from DialogController.
+      module HardwareMountBridge
+        def handle_prepare_hardware_mount(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          asset_id = payload['assetId'] || payload['hardwareAssetId']
+          unless asset_id
+            @logger.warn('prepare_hardware_mount_missing_asset_id')
+            return
+          end
+
+          source_rev_id = payload['sourceRevisionId'] || payload['revisionId']
+          expected_spacing = payload['expectedHoleSpacingMm'] || payload['holeSpacingMm']
+          nominal_dims = payload['nominalDimensions']
+
+          mount_frame_preparer_controller.start_preparation(
+            asset_id: asset_id,
+            source_revision_id: source_rev_id,
+            expected_hole_spacing_mm: expected_spacing&.to_f,
+            nominal_dimensions: nominal_dims,
+            on_saved: lambda do |new_rev|
+              @logger.info('hardware_mount_prepared_success', asset_id: asset_id, revision: new_rev['revision_number'])
+              execute_bridge(dialog, 'onHardwareMountPrepared', new_rev)
+            end
+          )
+        rescue StandardError => e
+          @logger.error('prepare_hardware_mount_failed', error: e)
+        end
+
+        def mount_frame_preparer_controller
+          @mount_frame_preparer_controller ||= begin
+            transport = @session.respond_to?(:transport) ? @session.transport : nil
+            downloader = Assets::HardwareAssetDownloader.new(
+              transport: transport,
+              auth_provider: @session,
+              logger: @logger
+            )
+            validator = Assets::HardwareAssetValidator.new(logger: @logger)
+            MountFramePreparerController.new(
+              downloader: downloader,
+              validator: validator,
+              transport: transport,
+              auth_provider: @session,
+              logger: @logger
+            )
+          end
+        end
+      end
+
       class DialogController # rubocop:disable Metrics/ClassLength
         include SessionBridge
         include ModelBindingBridge
@@ -2357,6 +2405,7 @@ module Granete
         include ManufacturingInspectionBridge
         include PreflightReviewBridge
         include MigrationBridge
+        include HardwareMountBridge
 
         attr_reader :selection_observer, :entities_observer, :duplicate_resolver
 
@@ -2376,7 +2425,8 @@ module Granete
                        host_reconciliation: nil, save_awareness: nil,
                        position_sync_coordinator: nil,
                        publication_scope_provider: nil,
-                       project_bootstrap: nil, initial_quote: nil)
+                       project_bootstrap: nil, initial_quote: nil,
+                       mount_frame_preparer_controller: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -2409,6 +2459,7 @@ module Granete
           @app_observer = nil
           # #416: injectable for tests; production builds it lazily.
           @migration_review_controller = migration_review_controller
+          @mount_frame_preparer_controller = mount_frame_preparer_controller
 
           @selection_observer = Observers::SelectionObserver.new(
             metadata_store: metadata_store || ActiveModelMetadataStore.new(@metadata_store_factory),
@@ -2437,6 +2488,7 @@ module Granete
           @manufacturing_overlay&.disable
           @option_selector&.close
           @migration_review_controller&.close
+          @mount_frame_preparer_controller&.close
           @dialog&.close
         end
 
@@ -2522,6 +2574,7 @@ module Granete
             @manufacturing_overlay&.disable
             @option_selector&.close
             @migration_review_controller&.close
+            @mount_frame_preparer_controller&.close
             @dialog = nil if @dialog.equal?(dialog)
           end
           dialog
@@ -2543,6 +2596,7 @@ module Granete
           dialog.add_action_callback('manufacturing_inspection') { |_c, p| handle_manufacturing_inspection(dialog, p) }
           dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
+          dialog.add_action_callback('prepare_hardware_mount') { |_c, p| handle_prepare_hardware_mount(dialog, p) }
           dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(p) }
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
