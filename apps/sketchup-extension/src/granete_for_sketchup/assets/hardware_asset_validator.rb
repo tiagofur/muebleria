@@ -78,26 +78,86 @@ module Granete
           total = entities.respond_to?(:length) ? entities.length : 0
 
           bounds_info = extract_bounds(definition)
-          {
+          host_version = defined?(::Sketchup) && ::Sketchup.respond_to?(:version) ? ::Sketchup.version : 'unknown'
+
+          details = {
             'total_entities' => total,
             'faces_count' => faces,
             'edges_count' => edges,
             'instances_count' => instances,
-            'bounds' => bounds_info
+            'bounds' => bounds_info,
+            'host' => {
+              'application' => 'SketchUp',
+              'version' => host_version,
+              'os' => detect_os
+            },
+            'validatorVersion' => validator_version
           }
+
+          unless bounds_info['empty']
+            details['measuredBoundsMm'] = {
+              'widthMm' => bounds_info['width_mm'],
+              'heightMm' => bounds_info['height_mm'],
+              'depthMm' => bounds_info['depth_mm'],
+              'diagonalMm' => bounds_info['diagonal_mm']
+            }
+          end
+
+          details
+        end
+
+        def detect_os
+          if defined?(::Sketchup) && ::Sketchup.respond_to?(:platform)
+            case ::Sketchup.platform
+            when :platform_osx then 'macOS'
+            when :platform_win then 'Windows'
+            else ::Sketchup.platform.to_s
+            end
+          elsif RUBY_PLATFORM =~ /darwin/i
+            'macOS'
+          elsif RUBY_PLATFORM =~ /mswin|mingw|cygwin/i
+            'Windows'
+          else
+            RUBY_PLATFORM
+          end
+        end
+
+        def validator_version
+          if defined?(Granete::SketchUpExtension::EXTENSION_VERSION)
+            Granete::SketchUpExtension::EXTENSION_VERSION
+          else
+            '0.1.0'
+          end
         end
 
         def extract_bounds(definition)
           return {} unless definition.respond_to?(:bounds) && definition.bounds
 
           b = definition.bounds
+          info = base_bounds_info(b)
+          add_extents_info(info, b)
+          info
+        end
+
+        def base_bounds_info(bounds)
           {
-            'empty' => b.respond_to?(:empty?) ? b.empty? : false,
-            'width_mm' => b.respond_to?(:width) ? (b.width.to_f * 25.4).round(2) : 0.0,
-            'height_mm' => b.respond_to?(:height) ? (b.height.to_f * 25.4).round(2) : 0.0,
-            'depth_mm' => b.respond_to?(:depth) ? (b.depth.to_f * 25.4).round(2) : 0.0,
-            'diagonal_mm' => b.respond_to?(:diagonal) ? (b.diagonal.to_f * 25.4).round(2) : 0.0
+            'empty' => bounds.respond_to?(:empty?) ? bounds.empty? : false,
+            'width_mm' => bounds.respond_to?(:width) ? (bounds.width.to_f * 25.4).round(2) : 0.0,
+            'height_mm' => bounds.respond_to?(:height) ? (bounds.height.to_f * 25.4).round(2) : 0.0,
+            'depth_mm' => bounds.respond_to?(:depth) ? (bounds.depth.to_f * 25.4).round(2) : 0.0,
+            'diagonal_mm' => bounds.respond_to?(:diagonal) ? (bounds.diagonal.to_f * 25.4).round(2) : 0.0
           }
+        end
+
+        def add_extents_info(info, bounds)
+          return unless bounds.respond_to?(:min) && bounds.min && bounds.respond_to?(:max) && bounds.max
+
+          info['min_mm'] = [bounds.min.x.to_f * 25.4, bounds.min.y.to_f * 25.4, bounds.min.z.to_f * 25.4].map do |val|
+            val.round(2)
+          end
+          info['max_mm'] = [bounds.max.x.to_f * 25.4, bounds.max.y.to_f * 25.4, bounds.max.z.to_f * 25.4].map do |val|
+            val.round(2)
+          end
         end
 
         def evaluate_definition(details)

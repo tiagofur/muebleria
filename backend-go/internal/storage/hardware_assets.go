@@ -246,10 +246,11 @@ func (s *PostgresStore) GetHardwareAssetUploadSession(ctx context.Context, sessi
 		FROM hardware_asset_upload_sessions
 		WHERE id = $1
 	`, sessionID)
-	return scanHardwareAssetUploadSession(row)
+	sess, _, err := scanHardwareAssetUploadSession(row)
+	return sess, err
 }
 
-func scanHardwareAssetUploadSession(row pgx.Row) (*domain.HardwareAssetUploadSession, error) {
+func scanHardwareAssetUploadSession(row pgx.Row) (*domain.HardwareAssetUploadSession, []byte, error) {
 	var sess domain.HardwareAssetUploadSession
 	var originRaw []byte
 	var stagedKey, stagedCT, stagedSHA *string
@@ -262,14 +263,14 @@ func scanHardwareAssetUploadSession(row pgx.Row) (*domain.HardwareAssetUploadSes
 		&sess.FinalizedAssetID, &sess.FinalizedRevisionID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.ErrHardwareAssetSessionNotFound
+			return nil, nil, domain.ErrHardwareAssetSessionNotFound
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	if len(originRaw) > 0 && string(originRaw) != "null" {
 		origin, err := domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		sess.Origin = origin
 	}
@@ -284,7 +285,7 @@ func scanHardwareAssetUploadSession(row pgx.Row) (*domain.HardwareAssetUploadSes
 	if createdBy != nil {
 		sess.CreatedBy = *createdBy
 	}
-	return &sess, nil
+	return &sess, originRaw, nil
 }
 
 // PromoteHardwareAssetSessionBytes replaces the staged bytes of a prepared
@@ -398,7 +399,7 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 		WHERE id = $1
 		FOR UPDATE
 	`, cmd.SessionID)
-	sess, err := scanHardwareAssetUploadSession(row)
+	sess, originRaw, err := scanHardwareAssetUploadSession(row)
 	if err != nil {
 		return nil, err
 	}
@@ -457,12 +458,8 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 		Status:      domain.HardwareAssetStatusActive,
 	}
 	var originArg interface{}
-	if sess.Origin != nil {
-		raw, err := json.Marshal(sess.Origin)
-		if err != nil {
-			return nil, fmt.Errorf("%w: origin re-marshal: %v", domain.ErrSerializationFailed, err)
-		}
-		originArg = raw
+	if len(originRaw) > 0 && string(originRaw) != "null" {
+		originArg = originRaw
 	}
 	if existing != nil {
 		asset = existing
@@ -499,7 +496,7 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 		Origin:         sess.Origin,
 	}
 	var revisionCreatedBy *string
-	var originRaw []byte
+	var insertedOriginRaw []byte
 	err = s.db(ctx).QueryRow(ctx, `
 		INSERT INTO hardware_asset_revisions
 			(organization_id, asset_id, revision_number, representation, storage_key,
@@ -511,7 +508,7 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 	).Scan(
 		&revision.ID, &revision.OrganizationID, &revision.AssetID, &revision.RevisionNumber,
 		&revision.Representation, &revision.StorageKey, &revision.ContentType, &revision.SizeBytes,
-		&revision.SHA256, &originRaw, &revision.IntegrityVerifiedAt, &revisionCreatedBy, &revision.CreatedAt,
+		&revision.SHA256, &insertedOriginRaw, &revision.IntegrityVerifiedAt, &revisionCreatedBy, &revision.CreatedAt,
 	)
 	if err != nil {
 		if isUniqueViolationOn(err, "uq_hardware_asset_revisions_number") {

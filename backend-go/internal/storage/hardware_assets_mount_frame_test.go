@@ -1,0 +1,466 @@
+package storage_test
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
+)
+
+func TestHardwareAssets_MountFrameAndAssetNormalizationRoundtrip(t *testing.T) {
+	w := newHwAssetWorld(t)
+
+	originJSON := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [0.0, 15.0, 30.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		},
+		"assetNormalization": {
+			"translationMm": [0.0, -15.0, -30.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		}
+	}`)
+
+	var asset *domain.HardwareAsset
+	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		res, err := w.fx.store.CreateHardwareAssetUploadSession(ctx, storage.CreateHardwareAssetUploadSessionCommand{
+			Representation: domain.HardwareAssetRepresentationSKP,
+			DisplayName:    "Jaladera Tubular con MountFrame",
+			Provenance:     "Fabricante Demo",
+			License:        "Comercial",
+			Origin:         originJSON,
+			ActorUserID:    rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		session := res.Session
+		storageKey := "hardware-assets/" + session.ID + "/skp-prepared.skp"
+		sha := "sha256-" + strings.Repeat("a1", 32)
+		if _, err := w.fx.store.PromoteHardwareAssetSessionBytes(ctx, storage.PromoteHardwareAssetSessionBytesCommand{
+			SessionID:      session.ID,
+			StorageKey:     storageKey,
+			ContentType:    "application/octet-stream",
+			SizeBytes:      1024,
+			SHA256:         sha,
+			Representation: domain.HardwareAssetRepresentationSKP,
+		}); err != nil {
+			return err
+		}
+		a, err := w.fx.store.FinalizeHardwareAssetUpload(ctx, storage.FinalizeHardwareAssetUploadCommand{
+			SessionID:   session.ID,
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		asset = a
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("finalize asset with mount frame: %v", err)
+	}
+
+	if len(asset.Revisions) != 1 {
+		t.Fatalf("expected 1 revision, got %d", len(asset.Revisions))
+	}
+	r1 := asset.Revisions[0]
+	if r1.Origin == nil || r1.Origin.MountFrame == nil || r1.Origin.AssetNormalization == nil {
+		t.Fatalf("expected origin with MountFrame and AssetNormalization, got %+v", r1.Origin)
+	}
+	if r1.Origin.MountFrame.OriginMm != [3]float64{0.0, 15.0, 30.0} {
+		t.Errorf("expected MountFrame origin [0, 15, 30], got %v", r1.Origin.MountFrame.OriginMm)
+	}
+	if r1.Origin.AssetNormalization.TranslationMm != [3]float64{0.0, -15.0, -30.0} {
+		t.Errorf("expected AssetNormalization translation [0, -15, -30], got %v", r1.Origin.AssetNormalization.TranslationMm)
+	}
+	if r1.PreparationState() != domain.HardwareAssetPreparationPrepared {
+		t.Errorf("expected PreparationState=prepared, got %s", r1.PreparationState())
+	}
+
+	// Read directly via GetHardwareAssetRevision
+	var fetchedRev *domain.HardwareAssetRevision
+	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		rev, err := w.fx.store.GetHardwareAssetRevision(ctx, asset.ID, r1.ID)
+		if err != nil {
+			return err
+		}
+		fetchedRev = rev
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GetHardwareAssetRevision failed: %v", err)
+	}
+	if fetchedRev.Origin == nil || fetchedRev.Origin.MountFrame == nil {
+		t.Fatalf("fetched revision missing MountFrame: %+v", fetchedRev.Origin)
+	}
+}
+
+func TestHardwareAssets_Immutability_OriginCannotBeUpdatedOnR1(t *testing.T) {
+	w := newHwAssetWorld(t)
+	asset := stageAndFinalizeAsset(t, w, "Jaladera R1 Inmutable", "")
+	r1 := asset.Revisions[0]
+
+	// Direct SQL UPDATE must be rejected by PostgreSQL immutability trigger
+	newOrigin := `{"sourceUnits":"mm","upAxis":"z","mountFrame":{"originMm":[99,99,99]}}`
+	_, err := w.fx.admin.Exec(context.Background(), `UPDATE hardware_asset_revisions SET origin = $1::jsonb WHERE id = $2`, newOrigin, r1.ID)
+	if err == nil {
+		t.Fatalf("expected error updating immutable revision row, got nil")
+	}
+	if !strings.Contains(err.Error(), "hardware_asset_revisions is immutable once written") {
+		t.Errorf("expected immutability error message, got %v", err)
+	}
+}
+
+// TestHardwareAssets_R2CanShareSHAWithNewPreparation proves that a new revision (R2)
+// can share the exact same binary payload (SHA256) while declaring a new MountFrame
+// and AssetNormalization preparation.
+//
+// ARCHITECTURAL DECISION FOR INCREMENT B (Visual Preparer):
+// In Increment A, creating R2 in tests uses the existing upload/finalize flow.
+// Increment B will need to decide between:
+//   Option A: Re-uploading bytes for each new preparation revision; or
+//   Option B: Introducing a derived-revision command (e.g. POST /revisions:derive)
+//             that reuses the exact bytes/sha256 of R1 on the server without re-uploading.
+// Option B is deliberately NOT implemented in Increment A to preserve scope.
+func TestHardwareAssets_R2CanShareSHAWithNewPreparation(t *testing.T) {
+	w := newHwAssetWorld(t)
+	sha := "sha256-" + strings.Repeat("33", 32)
+
+	// Finalize R1 with initial MountFrame
+	originR1 := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [0.0, 0.0, 0.0],
+			"basis": {"x":[1,0,0],"y":[0,1,0],"z":[0,0,1]}
+		},
+		"assetNormalization": {
+			"translationMm": [0.0, 0.0, 0.0],
+			"basis": {"x":[1,0,0],"y":[0,1,0],"z":[0,0,1]}
+		}
+	}`)
+	var asset *domain.HardwareAsset
+	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		res, err := w.fx.store.CreateHardwareAssetUploadSession(ctx, storage.CreateHardwareAssetUploadSessionCommand{
+			Representation: domain.HardwareAssetRepresentationSKP,
+			DisplayName:    "Jaladera Piloto",
+			Provenance:     "Test",
+			Origin:         originR1,
+			ActorUserID:    rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		storageKey := "hardware-assets/" + res.Session.ID + "/jaladera.skp"
+		if _, err := w.fx.store.PromoteHardwareAssetSessionBytes(ctx, storage.PromoteHardwareAssetSessionBytesCommand{
+			SessionID:      res.Session.ID,
+			StorageKey:     storageKey,
+			ContentType:    "application/octet-stream",
+			SizeBytes:      2048,
+			SHA256:         sha,
+			Representation: domain.HardwareAssetRepresentationSKP,
+		}); err != nil {
+			return err
+		}
+		a, err := w.fx.store.FinalizeHardwareAssetUpload(ctx, storage.FinalizeHardwareAssetUploadCommand{
+			SessionID:   res.Session.ID,
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		asset = a
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("create R1: %v", err)
+	}
+
+	// Finalize R2 on same asset (TargetAssetID = asset.ID), using the SAME SHA256 bytes,
+	// but with an adjusted MountFrame (e.g. origin shifted by 10mm)
+	originR2 := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [10.0, 0.0, 0.0],
+			"basis": {"x":[1,0,0],"y":[0,1,0],"z":[0,0,1]}
+		},
+		"assetNormalization": {
+			"translationMm": [-10.0, 0.0, 0.0],
+			"basis": {"x":[1,0,0],"y":[0,1,0],"z":[0,0,1]}
+		}
+	}`)
+	var assetAfterR2 *domain.HardwareAsset
+	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		res, err := w.fx.store.CreateHardwareAssetUploadSession(ctx, storage.CreateHardwareAssetUploadSessionCommand{
+			Representation: domain.HardwareAssetRepresentationSKP,
+			DisplayName:    "Jaladera Piloto R2",
+			Provenance:     "Test",
+			TargetAssetID:  asset.ID,
+			Origin:         originR2,
+			ActorUserID:    rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		storageKey := "hardware-assets/" + res.Session.ID + "/jaladera.skp"
+		if _, err := w.fx.store.PromoteHardwareAssetSessionBytes(ctx, storage.PromoteHardwareAssetSessionBytesCommand{
+			SessionID:      res.Session.ID,
+			StorageKey:     storageKey,
+			ContentType:    "application/octet-stream",
+			SizeBytes:      2048,
+			SHA256:         sha,
+			Representation: domain.HardwareAssetRepresentationSKP,
+		}); err != nil {
+			return err
+		}
+		a, err := w.fx.store.FinalizeHardwareAssetUpload(ctx, storage.FinalizeHardwareAssetUploadCommand{
+			SessionID:   res.Session.ID,
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		assetAfterR2 = a
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("create R2: %v", err)
+	}
+
+	if len(assetAfterR2.Revisions) != 2 {
+		t.Fatalf("expected 2 revisions, got %d", len(assetAfterR2.Revisions))
+	}
+	r1After := assetAfterR2.Revisions[0]
+	r2After := assetAfterR2.Revisions[1]
+
+	// Invariant check: R1 origin is untouched!
+	if r1After.Origin.MountFrame.OriginMm != [3]float64{0.0, 0.0, 0.0} {
+		t.Errorf("R1 origin was mutated! Got %v", r1After.Origin.MountFrame.OriginMm)
+	}
+	// R2 has new origin:
+	if r2After.Origin.MountFrame.OriginMm != [3]float64{10.0, 0.0, 0.0} {
+		t.Errorf("R2 origin mismatch! Got %v", r2After.Origin.MountFrame.OriginMm)
+	}
+	// Same SHA256 preserved:
+	if r1After.SHA256 != sha || r2After.SHA256 != sha {
+		t.Errorf("expected both revisions to share SHA256 %s, got r1=%s r2=%s", sha, r1After.SHA256, r2After.SHA256)
+	}
+}
+
+func TestHardwareAssets_ValidationMeasuredBoundsDoesNotMutateRevision(t *testing.T) {
+	w := newHwAssetWorld(t)
+	asset := stageAndFinalizeAsset(t, w, "Jaladera Medida", "")
+	r1 := asset.Revisions[0]
+
+	// Host sends validation report with measuredBoundsMm in details
+	detailsJSON := json.RawMessage(`{
+		"tool": "sketchup-validator-v1",
+		"host": {
+			"version": "24.0.553",
+			"os": "mac"
+		},
+		"measuredBoundsMm": {
+			"width": 160.4,
+			"height": 22.1,
+			"depth": 37.0
+		},
+		"bounds": {
+			"empty": false,
+			"width_mm": 160.4,
+			"height_mm": 22.1,
+			"depth_mm": 37.0,
+			"diagonal_mm": 166.0,
+			"min_mm": [-80.2, -11.0, 0.0],
+			"max_mm": [80.2, 11.1, 37.0]
+		}
+	}`)
+
+	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		return w.fx.store.RecordHardwareAssetValidation(ctx, storage.RecordHardwareAssetValidationCommand{
+			AssetID:     asset.ID,
+			RevisionID:  r1.ID,
+			SHA256:      r1.SHA256,
+			Tool:        "sketchup-validator-v1",
+			Result:      "passed",
+			Details:     detailsJSON,
+			ActorUserID: rlsUserA,
+		})
+	})
+	if err != nil {
+		t.Fatalf("record validation with measured bounds: %v", err)
+	}
+
+	// Verify revision row was NOT mutated:
+	var fetchedRev *domain.HardwareAssetRevision
+	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		rev, err := w.fx.store.GetHardwareAssetRevision(ctx, asset.ID, r1.ID)
+		if err != nil {
+			return err
+		}
+		fetchedRev = rev
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("fetch revision: %v", err)
+	}
+
+	// ValidationState is now validated
+	if fetchedRev.ValidationState != domain.HardwareAssetValidationValidated {
+		t.Errorf("expected ValidationState=validated, got %s", fetchedRev.ValidationState)
+	}
+
+	// Revision Origin is completely unmodified and does NOT contain measuredBoundsMm
+	if fetchedRev.Origin == nil || fetchedRev.Origin.SourceUnits != "mm" {
+		t.Errorf("origin corrupted: %+v", fetchedRev.Origin)
+	}
+}
+
+// TestHardwareAssets_MountFrameOnly_DerivedNormalizationAvailableOnReadback verifies
+// that when a client uploads an origin declaring only MountFrame:
+// 1. MountFrame is the sole physically persisted authority in PostgreSQL (no duplicated assetNormalization row data).
+// 2. Finalize succeeds and preserves the raw JSON in hardware_asset_revisions.
+// 3. On readback, domain.ValidateHardwareAssetOrigin materializes the derived assetNormalization in memory.
+// 4. PreparationState() returns "prepared".
+// 5. R1 remains append-only immutable under PostgreSQL triggers.
+func TestHardwareAssets_MountFrameOnly_DerivedNormalizationAvailableOnReadback(t *testing.T) {
+	w := newHwAssetWorld(t)
+
+	originJSON := json.RawMessage(`{
+		"sourceUnits": "mm",
+		"upAxis": "z",
+		"mountFrame": {
+			"originMm": [12.0, -24.0, 48.0],
+			"basis": {
+				"x": [1.0, 0.0, 0.0],
+				"y": [0.0, 1.0, 0.0],
+				"z": [0.0, 0.0, 1.0]
+			}
+		}
+	}`)
+
+	var asset *domain.HardwareAsset
+	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		res, err := w.fx.store.CreateHardwareAssetUploadSession(ctx, storage.CreateHardwareAssetUploadSessionCommand{
+			Representation: domain.HardwareAssetRepresentationSKP,
+			DisplayName:    "Tirador MountFrame Autoridad",
+			Provenance:     "Fabricante Demo",
+			License:        "Comercial",
+			Origin:         originJSON,
+			ActorUserID:    rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		session := res.Session
+		storageKey := "hardware-assets/" + session.ID + "/skp-mount-only.skp"
+		sha := "sha256-" + strings.Repeat("d4", 32)
+		if _, err := w.fx.store.PromoteHardwareAssetSessionBytes(ctx, storage.PromoteHardwareAssetSessionBytesCommand{
+			SessionID:      session.ID,
+			StorageKey:     storageKey,
+			ContentType:    "application/octet-stream",
+			SizeBytes:      2048,
+			SHA256:         sha,
+			Representation: domain.HardwareAssetRepresentationSKP,
+		}); err != nil {
+			return err
+		}
+		a, err := w.fx.store.FinalizeHardwareAssetUpload(ctx, storage.FinalizeHardwareAssetUploadCommand{
+			SessionID:   session.ID,
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		asset = a
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("finalize asset with mount-frame only: %v", err)
+	}
+
+	if len(asset.Revisions) != 1 {
+		t.Fatalf("expected 1 revision, got %d", len(asset.Revisions))
+	}
+	r1 := asset.Revisions[0]
+
+	// 1. Direct PostgreSQL query: origin column must NOT contain physically duplicated assetNormalization
+	ctx := context.Background()
+	var rawOriginDB []byte
+	err = w.fx.admin.QueryRow(ctx, `
+		SELECT origin FROM hardware_asset_revisions WHERE id = $1
+	`, r1.ID).Scan(&rawOriginDB)
+	if err != nil {
+		t.Fatalf("query raw origin from DB: %v", err)
+	}
+	var originMap map[string]interface{}
+	if err := json.Unmarshal(rawOriginDB, &originMap); err != nil {
+		t.Fatalf("unmarshal raw origin from DB: %v", err)
+	}
+	if _, exists := originMap["assetNormalization"]; exists {
+		t.Errorf("assetNormalization must NOT be physically persisted when omitted by client; DB row: %s", string(rawOriginDB))
+	}
+	if _, exists := originMap["mountFrame"]; !exists {
+		t.Fatalf("mountFrame must be physically persisted in DB row; got: %s", string(rawOriginDB))
+	}
+
+	// 2. Readback via domain store: derived assetNormalization is materialized in memory
+	var fetchedRev *domain.HardwareAssetRevision
+	err = fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
+		rev, err := w.fx.store.GetHardwareAssetRevision(ctx, asset.ID, r1.ID)
+		if err != nil {
+			return err
+		}
+		fetchedRev = rev
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("GetHardwareAssetRevision: %v", err)
+	}
+
+	if fetchedRev.Origin == nil || fetchedRev.Origin.MountFrame == nil {
+		t.Fatalf("fetched revision missing MountFrame: %+v", fetchedRev.Origin)
+	}
+	if fetchedRev.Origin.MountFrame.OriginMm != [3]float64{12.0, -24.0, 48.0} {
+		t.Errorf("expected MountFrame origin [12, -24, 48], got %v", fetchedRev.Origin.MountFrame.OriginMm)
+	}
+	if fetchedRev.Origin.AssetNormalization == nil {
+		t.Fatal("expected derived assetNormalization to be materialized in memory on readback, got nil")
+	}
+	expectedTrans := [3]float64{-12.0, 24.0, -48.0}
+	if fetchedRev.Origin.AssetNormalization.TranslationMm != expectedTrans {
+		t.Errorf("expected derived translation %v, got %v", expectedTrans, fetchedRev.Origin.AssetNormalization.TranslationMm)
+	}
+
+	// 3. PreparationState() is prepared
+	if fetchedRev.PreparationState() != domain.HardwareAssetPreparationPrepared {
+		t.Errorf("expected PreparationState=prepared, got %s", fetchedRev.PreparationState())
+	}
+
+	// 4. R1 immutability: trigger rejects direct update
+	_, err = w.fx.admin.Exec(ctx, `
+		UPDATE hardware_asset_revisions
+		SET origin = '{"tampered": true}'::jsonb
+		WHERE id = $1
+	`, r1.ID)
+	if err == nil {
+		t.Fatal("expected immutability trigger to block update on R1, got nil")
+	}
+	if !strings.Contains(err.Error(), "hardware_asset_revisions is immutable once written") {
+		t.Errorf("expected immutable trigger violation, got: %v", err)
+	}
+}

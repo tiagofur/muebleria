@@ -2,6 +2,7 @@
 
 require 'tempfile'
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/identity'
 require_relative '../../src/granete_for_sketchup/assets/hardware_asset_validator'
 
 class HardwareAssetValidatorTest < Minitest::Test
@@ -138,9 +139,32 @@ class HardwareAssetValidatorTest < Minitest::Test
     assert_equal 'Bearer test-jwt-token', req[:auth]
     assert_equal 'passed', req[:payload]['body']['result']
 
+    # Evidence details contain host info and measuredBoundsMm
+    details = req[:payload]['body']['details']
+    assert_equal 'SketchUp', details['host']['application']
+    assert_equal '24.0.145-stub', details['host']['version']
+    assert_equal @validator.send(:detect_os), details['host']['os']
+    assert_equal '0.1.1', details['validatorVersion']
+    refute_nil details['measuredBoundsMm']
+    assert_in_delta 254.0, details['measuredBoundsMm']['widthMm'], 0.1
+    assert_in_delta 127.0, details['measuredBoundsMm']['heightMm'], 0.1
+    assert_in_delta 50.8, details['measuredBoundsMm']['depthMm'], 0.1
+
     # Definition was cleaned up from definitions list
     assert_nil @model.definitions[def_name]
   ensure
     file&.unlink
+  end
+
+  def test_detect_os_maps_sketchup_platform_correctly
+    singleton = class << ::Sketchup; self; end
+    singleton.send(:define_method, :platform) { :platform_osx }
+    assert_equal 'macOS', @validator.send(:detect_os)
+
+    singleton.send(:remove_method, :platform)
+    singleton.send(:define_method, :platform) { :platform_win }
+    assert_equal 'Windows', @validator.send(:detect_os)
+  ensure
+    singleton.send(:remove_method, :platform) if singleton&.method_defined?(:platform)
   end
 end
