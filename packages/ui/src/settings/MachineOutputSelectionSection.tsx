@@ -4,9 +4,12 @@
  * NORMAL generation. Presentational — server validates the tuple, the
  * export-layer resolver computes readiness; this component never infers
  * compatibility and never claims VALIDATED.
+ *
+ * A complete selection that differs from the persisted record auto-saves
+ * (debounced): leaving the screen must never drop a chosen tuple.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   MachineOutputSelection,
   MachineOutputSelectionRecord,
@@ -85,6 +88,40 @@ function persistedProfileKey(record: MachineOutputSelectionRecord): string {
   return `historical:${selection.outputCompatibilityProfileId}@${selection.outputCompatibilityProfileRevisionId}#${selection.outputCompatibilityProfileDigest ?? 'unpinned'}`;
 }
 
+function sameMachineOutputSelection(
+  a: MachineOutputSelection,
+  b: MachineOutputSelection,
+): boolean {
+  return (
+    a.operation === b.operation &&
+    a.machineProfileId === b.machineProfileId &&
+    a.machineProfileRevisionId === b.machineProfileRevisionId &&
+    a.outputCompatibilityProfileId === b.outputCompatibilityProfileId &&
+    a.outputCompatibilityProfileRevisionId === b.outputCompatibilityProfileRevisionId &&
+    a.outputCompatibilityProfileDigest === b.outputCompatibilityProfileDigest &&
+    a.postprocessorAdapterId === b.postprocessorAdapterId &&
+    a.postprocessorAdapterVersion === b.postprocessorAdapterVersion &&
+    a.postprocessorImplementationDigest === b.postprocessorImplementationDigest
+  );
+}
+
+function machineOutputSelectionKey(selection: MachineOutputSelection): string {
+  return [
+    selection.operation,
+    selection.machineProfileId,
+    selection.machineProfileRevisionId,
+    selection.outputCompatibilityProfileId,
+    selection.outputCompatibilityProfileRevisionId,
+    selection.outputCompatibilityProfileDigest ?? 'unpinned',
+    selection.postprocessorAdapterId,
+    selection.postprocessorAdapterVersion,
+    selection.postprocessorImplementationDigest,
+  ].join('|');
+}
+
+/** Debounce before the auto-save PUT: lets rapid dropdown changes settle. */
+const AUTO_SAVE_DEBOUNCE_MS = 600;
+
 const SUPPORT_LABELS: Record<string, string> = {
   // NOT_TESTED is deliberately explicit: serializing a candidate never
   // promotes a compatibility claim — the workshop reads "candidate, not
@@ -134,8 +171,44 @@ function MachineOutputOperationCard({
   );
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [savingNow, setSavingNow] = useState(false);
+  const savingRef = useRef(false);
+
+  const machine = machines.find((m) => m.machineProfileId === machineId);
+  const profile = profiles.find((candidate) => profileKey(candidate) === selectedProfileKey);
+  const adapter = profile
+    ? catalog.adapters.find((a) => a.producedFormatFamily === profile.formatFamily)
+    : undefined;
+
+  const tuple = useMemo<MachineOutputSelection | null>(
+    () =>
+      machine && profile && adapter
+        ? {
+            operation,
+            machineProfileId: machine.machineProfileId,
+            machineProfileRevisionId: machine.machineProfileRevisionId,
+            outputCompatibilityProfileId: profile.outputCompatibilityProfileId,
+            outputCompatibilityProfileRevisionId: profile.revisionId,
+            outputCompatibilityProfileDigest: profile.digest,
+            postprocessorAdapterId: adapter.postprocessorAdapterId,
+            postprocessorAdapterVersion: adapter.adapterVersion,
+            postprocessorImplementationDigest: adapter.implementationDigest,
+          }
+        : null,
+    [operation, machine, profile, adapter],
+  );
+  // Dirty = a complete tuple the server has not confirmed yet. Historical
+  // pins (profile outside the catalog) never produce a tuple, so they stay
+  // explicit re-selections by design.
+  const dirty = useMemo(
+    () => Boolean(tuple && (!record || !sameMachineOutputSelection(tuple, record.selection))),
+    [tuple, record],
+  );
 
   useEffect(() => {
+    // While the user holds unsaved local changes, their selection wins over
+    // incoming record refreshes; syncing here would clobber what they chose.
+    if (dirty) return;
     setMachineId(record?.selection.machineProfileId ?? '');
     setSelectedProfileKey(
       exactPersistedProfile
@@ -144,28 +217,7 @@ function MachineOutputOperationCard({
           ? persistedProfileKey(record)
           : '',
     );
-  }, [record, exactPersistedProfile]);
-
-  const machine = machines.find((m) => m.machineProfileId === machineId);
-  const profile = profiles.find((candidate) => profileKey(candidate) === selectedProfileKey);
-  const adapter = profile
-    ? catalog.adapters.find((a) => a.producedFormatFamily === profile.formatFamily)
-    : undefined;
-
-  const tuple: MachineOutputSelection | null =
-    machine && profile && adapter
-      ? {
-          operation,
-          machineProfileId: machine.machineProfileId,
-          machineProfileRevisionId: machine.machineProfileRevisionId,
-          outputCompatibilityProfileId: profile.outputCompatibilityProfileId,
-          outputCompatibilityProfileRevisionId: profile.revisionId,
-          outputCompatibilityProfileDigest: profile.digest,
-          postprocessorAdapterId: adapter.postprocessorAdapterId,
-          postprocessorAdapterVersion: adapter.adapterVersion,
-          postprocessorImplementationDigest: adapter.implementationDigest,
-        }
-      : null;
+  }, [record, exactPersistedProfile, dirty]);
 
   const configured = resolved?.status === 'CONFIGURED' ? resolved : null;
   const stale = Boolean(
@@ -177,24 +229,58 @@ function MachineOutputOperationCard({
     ? machineOutputBlockerMessageEs(configured.readiness.reasons)
     : null;
 
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  // One save attempt per settled tuple: the explicit button and the debounced
+  // auto-save share this so a click right after a change never double-PUTs.
+  const attemptedTupleKeyRef = useRef<string | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
+
   const handleSave = async () => {
     if (!tuple) {
       setError('Elegí una máquina y un perfil de salida.');
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSavingNow(true);
     setError(null);
     try {
-      await onSave(operation, tuple, record?.version ?? 0);
+      await onSaveRef.current(operation, tuple, record?.version ?? 0);
+      attemptedTupleKeyRef.current = machineOutputSelectionKey(tuple);
       setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2000);
+      if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = window.setTimeout(() => setSavedFlash(false), 2000);
     } catch (err) {
+      attemptedTupleKeyRef.current = machineOutputSelectionKey(tuple);
       setError(
         err instanceof Error && err.message
           ? err.message
           : 'No se pudo guardar la configuración de salida.',
       );
+    } finally {
+      savingRef.current = false;
+      setSavingNow(false);
     }
   };
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+
+  // Auto-save: the user's mental model is "elegí máquina y perfil → quedó
+  // guardado". Fires once per settled tuple; failures stay inline for an
+  // explicit retry and never loop.
+  useEffect(() => {
+    if (!dirty || !tuple) return;
+    if (attemptedTupleKeyRef.current === machineOutputSelectionKey(tuple)) return;
+    const timer = window.setTimeout(() => {
+      if (!savingRef.current) void handleSaveRef.current();
+    }, AUTO_SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [dirty, tuple]);
+
+  useEffect(() => () => {
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+  }, []);
 
   return (
     <section className="machine-output-card" data-testid={`machine-output-${operation}`}>
@@ -236,6 +322,13 @@ function MachineOutputOperationCard({
           </select>
         </label>
       </div>
+      <p className="machine-output-autosave" data-testid={`machine-output-${operation}-autosave`}>
+        {savingNow
+          ? 'Guardando…'
+          : dirty
+            ? 'Sin guardar — se guarda solo al completar máquina y perfil.'
+            : 'La combinación elegida queda guardada para este taller.'}
+      </p>
       {profile && adapter ? (
         <dl className="machine-output-meta">
           <div>
@@ -318,10 +411,10 @@ function MachineOutputOperationCard({
         type="button"
         className="btn-primary"
         onClick={handleSave}
-        disabled={saving || !tuple}
+        disabled={saving || savingNow || !tuple}
         data-testid={`machine-output-${operation}-save`}
       >
-        {savedFlash ? '✓ Guardado' : 'Guardar configuración'}
+        {savingNow ? 'Guardando…' : savedFlash ? '✓ Guardado' : 'Guardar configuración'}
       </button>
     </section>
   );
