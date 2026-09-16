@@ -645,6 +645,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	// preparation input). Read-only projection of the private manufacturing
 	// snapshot — the mutable project/catalog is never consulted.
 	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}/cutting-demand", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectProductionReleaseCuttingDemand))))
+	// #740 PR 1: durable Engineering state of the exact release. Reads never
+	// write; start is idempotent; complete is final, version-guarded (If-Match)
+	// and requires the frozen routing evidence. None of it authorizes
+	// materials or physical work.
+	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}/engineering", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectProductionReleaseEngineering))))
+	mux.Handle("POST /api/projects/{projectId}/production-releases/{releaseId}/engineering:start", noStoreMiddleware(authMW(server.RequireIdempotency("engineering.start", http.HandlerFunc(server.HandleProjectProductionReleaseEngineeringStart)))))
+	mux.Handle("POST /api/projects/{projectId}/production-releases/{releaseId}/engineering:complete", noStoreMiddleware(authMW(server.RequireIdempotency("engineering.complete", http.HandlerFunc(server.HandleProjectProductionReleaseEngineeringComplete)))))
 
 	// #392 / DT-8: staged publication of an immutable DesignRevision with
 	// manifest + artifacts. prepare and finalize are durable commands behind

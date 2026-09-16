@@ -25,6 +25,8 @@ func RedactProjectManufacturing(p *Project) {
 	// #577: the resolved release authority (release ids, revision pins,
 	// manufacturing fingerprint) is factory-internal.
 	p.ResolvedProductionRelease = nil
+	// #740: the durable per-release Engineering state is factory-internal.
+	p.ReleaseEngineering = nil
 	p.PartInstances = nil
 	p.ModuleUnits = nil
 	p.FloorEvents = nil

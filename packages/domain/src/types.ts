@@ -1265,6 +1265,13 @@ export interface Project {
    */
   readonly resolvedProductionRelease?: import('./releaseAuthority').ProductionReleaseAuthority;
   /**
+   * #740 — server-owned projection of the durable per-release Engineering
+   * state of the RESOLVED release authority (absent = pending). Computed on
+   * read by the API; engineering completion never implies material
+   * authorization or physical work.
+   */
+  readonly releaseEngineering?: import('./engineering').ReleaseEngineeringState;
+  /**
    * #697 review — server-owned projection that positively identifies this
    * project as participating in the Digital Thread (it has project-owned
    * FurnitureInstances, quote revisions, DT designs or a canonical production release). The ONE signal that

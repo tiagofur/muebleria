@@ -20,6 +20,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { FileQuestion } from 'lucide-react';
 import type {
   Catalog,
@@ -231,6 +232,12 @@ import {
   engineeringCuttingDemandQueryKey,
   useEngineeringCuttingDemand,
 } from './engineeringCuttingDemand';
+import {
+  completeEngineeringCommand,
+  engineeringStateQueryKey,
+  startEngineeringCommand,
+  useEngineeringState,
+} from './engineeringState';
 import {
   captureDeferredNavigationIntent,
   runDeferredNavigationGuarded,
@@ -1015,6 +1022,56 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       routeEngineeringReleaseId ?? 'no-release',
     ),
   });
+  // #740 — durable per-release Engineering state of the SAME pinned release:
+  // the exact-release evidence the workspace status chip and the EXPLICIT
+  // start/complete commands consume. Reading it never writes.
+  const engineeringStateKey = engineeringStateQueryKey(
+    sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+    routeEngineeringProjectId ?? 'no-project',
+    routeEngineeringReleaseId ?? 'no-release',
+  );
+  const engineeringStateContext = useEngineeringState({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    projectId: routeEngineeringProjectId,
+    releaseId: routeEngineeringReleaseId,
+    queryKey: engineeringStateKey,
+  });
+  // #740 — explicit user commands against the exact pinned release. Only
+  // these callbacks write engineering state; refresh + invalidation keep the
+  // chip, the queue and the dashboard on the durable truth. A rejected
+  // command surfaces its honest message (version conflict, permissions…).
+  const engineeringQueryClient = useQueryClient();
+  const [engineeringCommandBusy, setEngineeringCommandBusy] = useState(false);
+  const [engineeringCommandError, setEngineeringCommandError] = useState<string | null>(null);
+  const runReleaseEngineeringCommand = useCallback(
+    async (run: () => Promise<unknown>) => {
+      if (!authToken || !routeEngineeringProjectId || !routeEngineeringReleaseId) return;
+      setEngineeringCommandBusy(true);
+      setEngineeringCommandError(null);
+      try {
+        await run();
+        await engineeringQueryClient.invalidateQueries({ queryKey: engineeringStateKey });
+        await refreshWorkspace();
+      } catch (err) {
+        setEngineeringCommandError(
+          err instanceof Error
+            ? err.message
+            : 'No se pudo actualizar el estado de Ingeniería',
+        );
+      } finally {
+        setEngineeringCommandBusy(false);
+      }
+    },
+    [
+      authToken,
+      routeEngineeringProjectId,
+      routeEngineeringReleaseId,
+      engineeringQueryClient,
+      engineeringStateKey,
+      refreshWorkspace,
+    ],
+  );
   // #738 review — "Abrir Ingeniería" refreshes the read model and THEN
   // navigates. The deferred navigation is guarded: if the user moved to
   // another route/project, switched organization or the session ended while
@@ -1515,6 +1572,49 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               ? engFrozenDemand.message
               : (engCutError ?? null),
         });
+        // #740 — durable Engineering state of the pinned release for the
+        // workspace chip + commands. Fail-closed: while loading (or on error)
+        // no command is offered. The completion fact renders the server date
+        // and the actor when this session can name it honestly.
+        let engEngineeringState:
+          | { readonly status: 'loading' }
+          | { readonly status: 'error'; readonly message: string; readonly retry: () => void }
+          | {
+              readonly status: 'ready';
+              readonly phase: 'pending' | 'in_progress' | 'completed';
+              readonly version: number;
+              readonly completedByLabel: string | null;
+              readonly completedAtLabel: string | null;
+            }
+          | undefined;
+        if (engReleaseContext?.state === 'ready' && routeEngineeringReleaseId) {
+          if (engineeringStateContext.kind === 'loading') {
+            engEngineeringState = { status: 'loading' };
+          } else if (engineeringStateContext.kind === 'error') {
+            engEngineeringState = {
+              status: 'error',
+              message: engineeringStateContext.message,
+              retry: engineeringStateContext.retry,
+            };
+          } else if (engineeringStateContext.kind === 'ready') {
+            const engState = engineeringStateContext.state;
+            engEngineeringState = {
+              status: 'ready',
+              phase: engState.phase,
+              version: engState.version,
+              completedAtLabel: engState.completedAt
+                ? new Intl.DateTimeFormat('es-AR', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  }).format(new Date(engState.completedAt))
+                : null,
+              completedByLabel:
+                engState.completedBy && engState.completedBy === authUser?.id
+                  ? (authUser.name || 'vos')
+                  : null,
+            };
+          }
+        }
         let engLabels: ReturnType<typeof generatePieceLabels> | null = null;
         let engLabelsError: string | null = null;
         let engModuleLabels: ReturnType<typeof generateModuleLabels> | null = null;
@@ -1641,6 +1741,36 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               projectActions.recordEngineeringGeneration(
                 engProject.id,
                 authUser?.id ?? 'unknown',
+              );
+            }}
+            /* #740 — durable per-release Engineering state + the EXPLICIT
+               start/complete commands (exact pinned release; server actor +
+               timestamps; nothing fires on reads/navigation/exports). */
+            releaseEngineeringState={engEngineeringState}
+            releaseEngineeringBusy={engineeringCommandBusy}
+            releaseEngineeringError={engineeringCommandError}
+            onStartReleaseEngineering={() => {
+              if (!authToken || !routeEngineeringReleaseId) return;
+              void runReleaseEngineeringCommand(() =>
+                startEngineeringCommand({
+                  baseUrl: DEFAULT_API_BASE,
+                  token: authToken,
+                  projectId: engProject.id,
+                  releaseId: routeEngineeringReleaseId,
+                }),
+              );
+            }}
+            onCompleteReleaseEngineering={() => {
+              if (!authToken || !routeEngineeringReleaseId) return;
+              if (engineeringStateContext.kind !== 'ready') return;
+              void runReleaseEngineeringCommand(() =>
+                completeEngineeringCommand({
+                  baseUrl: DEFAULT_API_BASE,
+                  token: authToken,
+                  projectId: engProject.id,
+                  releaseId: routeEngineeringReleaseId,
+                  expectedVersion: engineeringStateContext.state.version,
+                }),
               );
             }}
           />

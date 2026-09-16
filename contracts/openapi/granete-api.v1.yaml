@@ -3374,6 +3374,123 @@
         }
       }
     },
+    "/projects/{projectId}/production-releases/{releaseId}/engineering": {
+      "get": {
+        "operationId": "getProjectProductionReleaseEngineering",
+        "summary": "Durable Engineering state of the exact release (#740)",
+        "description": "Server-owned evidence bound to the exact ProductionRelease: pending (no row), in_progress or completed with actor and server timestamps. Reading never writes. Engineering completion is its own authority — it never implies material authorization or physical work.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The durable engineering state of the exact release",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseEngineeringState"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/production-releases/{releaseId}/engineering:start": {
+      "post": {
+        "operationId": "startProjectProductionReleaseEngineering",
+        "summary": "Start the engineering preparation of the exact release (#740)",
+        "description": "Records the durable start for the exact release with server timestamp and actor. Idempotent: retries converge on the first recorded fact. Requires release permission (admin, gerente_produccion, ingeniero). Never touches Q/R/P content, materials or executions.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The durable engineering state after the command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseEngineeringState"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/production-releases/{releaseId}/engineering:complete": {
+      "post": {
+        "operationId": "completeProjectProductionReleaseEngineering",
+        "summary": "Complete the engineering preparation of the exact release (#740)",
+        "description": "Records the final, one-way completion for the exact release with server timestamp, actor and the expected version (If-Match). Requires a prior start and the release's frozen routing evidence. Idempotent for the already-completed fact; a stale version returns a version conflict. Never authorizes materials or physical work.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The durable engineering state after the command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseEngineeringState"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}": {
       "get": {
         "operationId": "getDesign",
@@ -8211,6 +8328,65 @@
           "staleness": {
             "$ref": "#/components/schemas/ProductionReleaseStaleness",
             "description": "Derived read-only projection against current authoring state; stale never mutates the release."
+          }
+        }
+      },
+      "ReleaseEngineeringState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "release_id",
+          "status",
+          "version"
+        ],
+        "properties": {
+          "release_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "completed"
+            ],
+            "description": "Durable per-release engineering phase (#740). pending = no durable evidence row; the legacy project-global engineeringLog never proves completion of a specific release."
+          },
+          "started_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Actor of the durable start (server-authored)."
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completed_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Actor of the durable completion (server-authored, final)."
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Row version for optimistic concurrency of the completion command; 0 while pending."
           }
         }
       },

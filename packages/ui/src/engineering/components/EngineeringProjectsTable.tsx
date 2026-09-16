@@ -14,6 +14,7 @@ import { EmptyState } from '../../common';
 const STATUS_BADGE_MODIFIERS: Readonly<Record<EngineeringEntryStatus, string>> = {
   pending: 'open',
   in_progress: 'progress',
+  completed: 'done',
   documented: 'done',
   unverified: 'progress',
 };

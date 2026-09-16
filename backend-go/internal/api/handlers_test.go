@@ -213,6 +213,12 @@ type stubStore struct {
 	getProductionReleaseErr      error
 	cuttingDemandResult          *storage.ReleaseCuttingDemandView
 	cuttingDemandErr             error
+	engineeringStateResult       *domain.ReleaseEngineeringState
+	engineeringStateErr          error
+	engineeringStartOutcome      *storage.ReleaseEngineeringOutcome
+	engineeringStartErr          error
+	engineeringCompleteOutcome   *storage.ReleaseEngineeringOutcome
+	engineeringCompleteErr       error
 	latestProductionRelease      *domain.ProductionRelease
 	latestProductionReleaseErr   error
 	materialReturnedByID         *domain.MaterialBoard
@@ -4143,6 +4149,27 @@ func (s *stubStore) GetProjectProductionReleaseCuttingDemand(_ context.Context, 
 		return nil, s.cuttingDemandErr
 	}
 	return s.cuttingDemandResult, nil
+}
+
+func (s *stubStore) GetReleaseEngineeringState(_ context.Context, _, _ string) (*domain.ReleaseEngineeringState, error) {
+	if s.engineeringStateErr != nil {
+		return nil, s.engineeringStateErr
+	}
+	return s.engineeringStateResult, nil
+}
+
+func (s *stubStore) StartReleaseEngineering(_ context.Context, _ storage.StartReleaseEngineeringCommand) (*storage.ReleaseEngineeringOutcome, error) {
+	if s.engineeringStartErr != nil {
+		return nil, s.engineeringStartErr
+	}
+	return s.engineeringStartOutcome, nil
+}
+
+func (s *stubStore) CompleteReleaseEngineering(_ context.Context, _ storage.CompleteReleaseEngineeringCommand) (*storage.ReleaseEngineeringOutcome, error) {
+	if s.engineeringCompleteErr != nil {
+		return nil, s.engineeringCompleteErr
+	}
+	return s.engineeringCompleteOutcome, nil
 }
 
 func (s *stubStore) GetLatestProjectProductionRelease(_ context.Context, _ string) (*domain.ProductionRelease, error) {

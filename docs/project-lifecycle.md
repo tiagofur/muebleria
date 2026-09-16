@@ -1,11 +1,13 @@
 # Project Lifecycle — Eventos, gates y trazabilidad
 
 **Estado:** CANÓNICO  
-**Actualizado:** 2026-09-15
+**Actualizado:** 2026-09-16
 
 > Este documento distingue **IMPLEMENTADO en la base examinada** de **CORRECCIÓN OBJETIVO**.
 > Base de la revisión: `556804c1cf57c79e064f3f32267634591b33dfbf`.
-> Las correcciones #738–#741 están planificadas, no entregadas por este cambio documental.
+> #738 (entrada/navegación de Ingeniería) y #739 (despiece congelado/PTX de prueba)
+> ya están integradas; #740 entrega su PR 1 (evidencia durable de Ingeniería por
+> release) y mantiene el gate físico transversal como segunda entrega.
 
 Documentos relacionados:
 
@@ -137,6 +139,29 @@ revision
 
 El envío antiguo exige Project accepted + documented y escribe produced antes de fabricar. No interpreta correctamente una finalización por P exacta. No reutilizar ese stamp para completar automáticamente Ingeniería de un nuevo release.
 
+**Estado durable por release (#740, primera entrega IMPLEMENTADA):** la tabla
+`production_release_engineering` (migración 000134, tenant-owned + RLS
+owner-org, transiciones protegidas por trigger) registra la evidencia de
+Ingeniería ligada al release EXACTO: ausencia = `pending`; una fila
+`in_progress`/`completed` con actor y timestamp del servidor. Comandos:
+
+```text
+POST /projects/{id}/production-releases/{releaseId}/engineering:start      (idempotente)
+POST /projects/{id}/production-releases/{releaseId}/engineering:complete   (final, If-Match)
+GET  /projects/{id}/production-releases/{releaseId}/engineering            (sólo lee)
+```
+
+`complete` exige inicio previo, la evidencia de routing congelado (schema v2)
+del mismo release y la versión esperada; auditoría de seguridad y evento de
+lifecycle (`engineering_started`/`engineering_completed`) se escriben en la
+misma transición. Ningún comando toca Q/R/P, materiales, ejecuciones ni
+`Project.status`; leer nunca escribe. El read model del proyecto proyecta el
+estado de Ingeniería del release AUTORIDAD (`release_engineering`); el
+workspace consulta el del release pineado. P2 nace genuinamente `pending` —
+nunca hereda timestamps, actor ni completion de P1. El `engineeringLog`
+legacy queda intacto como compatibilidad pre-DT (sin migrar; un log sin
+procedencia release-scoped sigue `unverified` en la proyección de #738).
+
 El cableado de Ingeniería en `apps/web/src/ShellView.tsx` todavía calcula despiece, etiquetas y herrajes desde Project/catalog actuales. #739 adapta el input congelado para despiece/optimización/candidatos; #682 conserva la propiedad de reimpresiones/QR históricos.
 
 ### 2.4 Materiales y ejecución actuales
@@ -144,6 +169,18 @@ El cableado de Ingeniería en `apps/web/src/ShellView.tsx` todavía calcula desp
 Material planning conserva requerimientos con procedencia exacta; el release de materiales registra evidencia/override y un stamp en Project. Picking realiza stock, estado y consumo con solicitudes separadas; #680 corrige esa atomicidad.
 
 El guard de ejecución canónica valida P/R/fingerprint y routing congelado. Esa comprobación no equivale a validar Ingeniería terminada/material autorizado. #740 requiere reproducir cada ruta física por HTTP y cubrir sus escritores, no sólo botones.
+
+**RED operacional reproducido (#740 PR 1, PostgreSQL + HTTP reales):** con Q/R/P
+válidos y SIN Ingeniería completada ni materiales autorizados, hoy avanzan el
+trabajo físico: `POST /parts/{partId}/advance` (pieza → operación completada,
+floor event), `PATCH /items/{itemId}/floor-status` y `POST /floor-scan` (item
+quote-line → `cut`/`edged`). El split-brain OC-033/034 NO protege estos items:
+las unidades canónicas referencian FurnitureInstances, no el id de la quote
+line. `POST /production/activity/finish` avanza el floor status del item sin
+resolver autoridad de release (inspección de código; sin gate). La suite
+`engineering_physical_gate_red_test.go` conserva el escenario asserting el
+comportamiento ACTUAL para que la segunda entrega de #740 (gate transversal)
+invierta la expectativa — no se borra la prueba al arreglarlo.
 
 ### 2.5 Pruebas históricas que se conservan
 
@@ -159,7 +196,7 @@ Estos hechos no deben volver a aparecer como trabajo pendiente por leer checklis
 |---|---|
 | #738 | Entrada, cola y navegación de Ingeniería sin Project.status ni salto implícito. |
 | #739 | Despiece congelado y preparación de PDF/PTX de prueba desde P exacta. |
-| #740 | Inicio/finalización de Ingeniería y gate físico con material autorizado del mismo contexto. |
+| #740 | PR 1 ENTREGADO: evidencia durable de Ingeniería por release exacto + comandos start/complete + RED operacional. PR 2 pendiente: gate transversal de avance físico con Ingeniería completa y material autorizado del mismo contexto. |
 | #741 | P1/P2 en trabajo iniciado, suspensión/cancelación sin retarget ni pérdida de historia. |
 | #642 | Continuación de consumidores comerciales, Q/R sencilla, export comercial y retiro de autoridad comercial legacy. |
 | #679 | Refresco entre clientes y escritura de WorkingCopy con detección de cambios concurrentes. |
@@ -263,9 +300,20 @@ La forma canónica es la de `backend-go/internal/domain/production_release.go` y
 
 P fija diseño/base comercial donde aplique y manufacturing fingerprint, con snapshot resuelto asociado. Conserva los controles de aprobación, reconciliación, preflight, tenant y concurrencia. Crear P no implica Ingeniería terminada, stock despachado ni una máquina compatible.
 
-### 7.2 Finalización de Ingeniería OBJETIVO
+### 7.2 Finalización de Ingeniería — PRIMERA ENTREGA IMPLEMENTADA (#740)
 
 #740 registra finalización sobre P exacta, con evidencia de preparación requerida y actor/timestamp. No existe una lista universal obligatoria Optimizer + CSV + etiquetas para todos los casos. La política mínima del alcance soportado se declara; resultados faltantes/incompatibles bloquean esa finalización.
+
+**Implementado (PR 1 de #740):** la comprobación objetiva mínima de
+preparación es la evidencia de routing congelado (schema v2) del MISMO
+release — sin ella `complete` falla cerrado (`engineering_routing_unavailable`).
+Descargar PDF/PTX o guardar el plan NO completa Ingeniería: la confirmación es
+siempre una acción explícita del usuario autorizado
+(admin/gerente_produccion/ingeniero). La UI muestra
+Pendiente → En proceso → Completa con CTAs contextuales y, al completar, el
+hecho (actor/fecha del servidor) más la etapa siguiente honesta
+(«autorización de materiales (pendiente)») — sin habilitar materiales ni
+trabajo físico (el gate transversal pertenece a la segunda entrega de #740).
 
 Si preparar Ingeniería descubre un cambio del contenido a fabricar, no se edita P1: se vuelve a autoría/revisiones y se obtiene la nueva autorización correspondiente.
 

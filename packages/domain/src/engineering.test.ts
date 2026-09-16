@@ -9,6 +9,7 @@ import {
   computeEngineeringDashboardStats,
   ENGINEERING_STATUS_LABELS_ES,
   type EngineeringLog,
+  type ReleaseEngineeringState,
 } from './engineering';
 
 describe('EngineeringLog', () => {
@@ -113,6 +114,78 @@ describe('engineeringEntryStatus (#738)', () => {
     expect(ENGINEERING_ENTRY_STATUS_LABELS_ES.in_progress).toBe('En proceso');
     expect(ENGINEERING_ENTRY_STATUS_LABELS_ES.documented).toBe('Documentado');
     expect(ENGINEERING_ENTRY_STATUS_LABELS_ES.unverified).toBe('Sin verificar');
+    expect(ENGINEERING_ENTRY_STATUS_LABELS_ES.completed).toBe('Completa');
+  });
+});
+
+/* ── #740 — durable per-release engineering state ────────────────────────── */
+
+describe('engineeringEntryStatus (#740 durable release evidence)', () => {
+  const canonical = {
+    resolvedProductionRelease: { source: 'canonical' as const, releaseId: 'P1', releaseNumber: 1 },
+  };
+  const durableInProgress: ReleaseEngineeringState = {
+    releaseId: 'P1',
+    status: 'in_progress',
+    startedBy: 'eng1',
+    startedAt: '2026-09-16T10:00:00Z',
+    version: 1,
+  };
+  const durableCompleted: ReleaseEngineeringState = {
+    ...durableInProgress,
+    status: 'completed',
+    completedBy: 'eng1',
+    completedAt: '2026-09-16T12:00:00Z',
+    version: 2,
+  };
+
+  it('the durable evidence of the resolved authority decides the entry status', () => {
+    expect(
+      engineeringEntryStatus({ status: 'draft', ...canonical, releaseEngineering: durableInProgress } as any),
+    ).toBe('in_progress');
+    expect(
+      engineeringEntryStatus({ status: 'draft', ...canonical, releaseEngineering: durableCompleted } as any),
+    ).toBe('completed');
+  });
+
+  it('a legacy log never overrides durable evidence and never fabricates completion', () => {
+    // Durable in_progress wins over a legacy "documented" log: the per-project
+    // log cannot prove anything about THIS release (#738 invariant preserved).
+    const legacyDocumented: EngineeringLog = {
+      startedBy: 'eng0',
+      startedAt: '2026-08-01T10:00:00Z',
+      generatedBy: 'eng0',
+      generatedAt: '2026-08-02T10:00:00Z',
+      revision: 1,
+    };
+    expect(
+      engineeringEntryStatus({
+        status: 'accepted',
+        ...canonical,
+        engineeringLog: legacyDocumented,
+        releaseEngineering: durableInProgress,
+      } as any),
+    ).toBe('in_progress');
+  });
+
+  it('without durable evidence the #738 honest statuses stand', () => {
+    expect(engineeringEntryStatus({ status: 'draft', ...canonical } as any)).toBe('pending');
+    expect(
+      engineeringEntryStatus({
+        status: 'draft',
+        ...canonical,
+        engineeringLog: { startedBy: 'eng1', startedAt: '2026-08-11T10:00:00Z', revision: 1 },
+      } as any),
+    ).toBe('unverified');
+  });
+
+  it('pre-DT projects are untouched by the durable projection (absent there)', () => {
+    expect(
+      engineeringEntryStatus({
+        status: 'accepted',
+        engineeringLog: { startedBy: 'eng1', startedAt: '2026-08-11T10:00:00Z', revision: 1 },
+      } as any),
+    ).toBe('in_progress');
   });
 });
 

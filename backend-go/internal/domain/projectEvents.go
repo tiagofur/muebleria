@@ -74,6 +74,7 @@ var projectEventTypes = map[string]struct{}{
 	"change_order_cancelled":       {},
 	"engineering_started":          {},
 	"engineering_documented":       {},
+	"engineering_completed":        {},
 	"production_released":          {},
 	"production_release_revoked":   {},
 	"materials_required":           {},

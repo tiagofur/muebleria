@@ -26,8 +26,30 @@ export type EngineeringStatus =
  * ProductionRelease plus legacy per-project log evidence that cannot prove
  * completion of THIS release (no correlation) — shown as evidence awaiting
  * review, never as completed work and never erased as "brand new".
+ * `completed` (#740): the durable per-release engineering evidence of the
+ * resolved release authority records a final, server-authored completion.
  */
-export type EngineeringEntryStatus = EngineeringStatus | 'unverified';
+export type EngineeringEntryStatus = EngineeringStatus | 'unverified' | 'completed';
+
+/**
+ * #740 — durable per-release Engineering evidence (server-owned projection
+ * of the resolved release authority; absent = pending). Engineering
+ * completion is its own authority: it never implies material authorization
+ * or physical work.
+ */
+export interface ReleaseEngineeringState {
+  /** Exact release this evidence belongs to. */
+  readonly releaseId: string;
+  readonly status: 'in_progress' | 'completed';
+  /** Actor of the durable start (server-authored). */
+  readonly startedBy: string;
+  readonly startedAt: string;
+  /** Actor of the final completion, when completed. */
+  readonly completedBy?: string;
+  readonly completedAt?: string;
+  /** Row version for optimistic concurrency of the completion command. */
+  readonly version: number;
+}
 
 /**
  * Immutable engineering audit log for a project.
@@ -113,14 +135,18 @@ export const ENGINEERING_STATUS_LABELS_ES: Readonly<Record<EngineeringStatus, st
 };
 
 /**
- * #738 — the engineering entry/preparation status of a project across the
- * shared projection (queue, workspace header, dashboard): with a canonical
- * ProductionRelease the obra is preparable ('pending') or carries
- * uncorrelated legacy evidence ('unverified'); the per-project log alone
- * never claims completion of the release.
+ * #738/#740 — the engineering entry/preparation status of a project across
+ * the shared projection (queue, workspace header, dashboard): with a
+ * canonical ProductionRelease the durable per-release evidence of the
+ * resolved authority decides ('pending' | 'in_progress' | 'completed');
+ * without it, uncorrelated legacy log evidence stays 'unverified' — the
+ * per-project log alone never claims completion of the release.
  */
 export function engineeringEntryStatus(project: Project): EngineeringEntryStatus {
   if (releaseAuthorityOf(project)?.source === 'canonical') {
+    const durable = project.releaseEngineering;
+    if (durable?.status === 'completed') return 'completed';
+    if (durable?.status === 'in_progress') return 'in_progress';
     return project.engineeringLog ? 'unverified' : 'pending';
   }
   return engineeringStatus(project.engineeringLog);
@@ -130,6 +156,7 @@ export function engineeringEntryStatus(project: Project): EngineeringEntryStatus
 export const ENGINEERING_ENTRY_STATUS_LABELS_ES: Readonly<Record<EngineeringEntryStatus, string>> = {
   ...ENGINEERING_STATUS_LABELS_ES,
   unverified: 'Sin verificar',
+  completed: 'Completa',
 };
 
 /* ── Engineering Dashboard Analytics ─────────────────────────────────────── */
@@ -227,6 +254,9 @@ export function computeEngineeringDashboardStats(
 
     const log = p.engineeringLog;
     const status = engineeringEntryStatus(p);
+    // #740: for canonical releases the durable per-release evidence owns the
+    // timing facts; the legacy log remains the pre-DT fallback.
+    const durable = p.releaseEngineering;
     // "Sent" is the legacy handshake conclusion (almacén/produccion stages);
     // a canonical release never fabricates it (#738).
     const isSent = stage === 'almacen' || stage === 'produccion';
@@ -243,8 +273,16 @@ export function computeEngineeringDashboardStats(
     // Time calculations
     const createdAtMs = p.createdAt ? new Date(p.createdAt).getTime() : now;
     const depositAtMs = createdAtMs;
-    const startedAtMs = log?.startedAt ? new Date(log.startedAt).getTime() : undefined;
-    const generatedAtMs = log?.generatedAt ? new Date(log.generatedAt).getTime() : undefined;
+    const startedAtMs = durable
+      ? new Date(durable.startedAt).getTime()
+      : log?.startedAt
+        ? new Date(log.startedAt).getTime()
+        : undefined;
+    const generatedAtMs = durable?.status === 'completed' && durable.completedAt
+      ? new Date(durable.completedAt).getTime()
+      : log?.generatedAt
+        ? new Date(log.generatedAt).getTime()
+        : undefined;
     const sentAtMs = log?.sentToProductionAt ? new Date(log.sentToProductionAt).getTime() : undefined;
 
     let waitTimeHours: number | undefined;
@@ -291,12 +329,18 @@ export function computeEngineeringDashboardStats(
           isStagnant = true;
           stagnantReason = `Lleva ${Math.floor(hoursInProgress / 24)} días en modelado sin documentar`;
         }
-      } else if (status === 'documented') {
+      } else if (status === 'documented' || status === 'completed') {
+        // #740: durable completion (canonical) and legacy documented both mean
+        // "preparation finished, waiting for the next stage" — the release's
+        // engineering is done, materials are a separate authority.
         documentedCount++;
         const hoursDoc = generatedAtMs ? (now - generatedAtMs) / (1000 * 3600) : 0;
         if (hoursDoc > 72) {
           isStagnant = true;
-          stagnantReason = `Documentado hace ${Math.floor(hoursDoc / 24)} días sin enviar a planta`;
+          stagnantReason =
+            status === 'completed'
+              ? `Ingeniería completa hace ${Math.floor(hoursDoc / 24)} días sin avance de materiales`
+              : `Documentado hace ${Math.floor(hoursDoc / 24)} días sin enviar a planta`;
         }
       }
     } else if (isSent) {
@@ -308,6 +352,8 @@ export function computeEngineeringDashboardStats(
 
     const engineerId =
       p.assignedEngineerId ||
+      durable?.startedBy ||
+      durable?.completedBy ||
       log?.startedBy ||
       log?.generatedBy ||
       log?.sentToProductionBy;
@@ -338,8 +384,9 @@ export function computeEngineeringDashboardStats(
       isSentToProduction: isSent,
       stage,
       engineerId,
-      startedAt: log?.startedAt,
-      generatedAt: log?.generatedAt,
+      startedAt: durable?.startedAt ?? log?.startedAt,
+      generatedAt:
+        durable?.status === 'completed' ? durable.completedAt : log?.generatedAt,
       sentToProductionAt: log?.sentToProductionAt,
       revision: log?.revision ?? 1,
       waitTimeHours,

@@ -657,6 +657,7 @@ export {
   type EngineeringLog,
   type EngineeringStatus,
   type EngineeringEntryStatus,
+  type ReleaseEngineeringState,
   type EngineeringDashboardProjectMetrics,
   type EngineerWorkloadSummary,
   type EngineeringDashboardStats,

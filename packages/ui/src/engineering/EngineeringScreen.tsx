@@ -43,6 +43,7 @@ const STATUS_CHIP_OPTIONS: readonly StatusChipOption<FilterStatus>[] = [
   { value: 'all', label: 'Todos' },
   { value: 'pending', label: 'Pendientes' },
   { value: 'in_progress', label: 'En proceso' },
+  { value: 'completed', label: 'Completas' },
   { value: 'documented', label: 'Documentados' },
   { value: 'unverified', label: 'Sin verificar' },
 ];
@@ -51,6 +52,7 @@ const STATUS_CHIP_OPTIONS: readonly StatusChipOption<FilterStatus>[] = [
 const STATUS_BADGE_MODIFIER: Readonly<Record<EngineeringEntryStatus, string>> = {
   pending: 'open',
   in_progress: 'progress',
+  completed: 'done',
   documented: 'done',
   unverified: 'progress',
 };

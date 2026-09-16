@@ -45,6 +45,7 @@ export type SurveyDesignApprovalEventType =
 export type EngineeringReleaseEventType =
   | 'engineering_started'
   | 'engineering_documented'
+  | 'engineering_completed'
   | 'production_released'
   | 'production_release_revoked';
 
@@ -128,6 +129,7 @@ export const PROJECT_EVENT_TYPES: readonly ProjectEventType[] = [
   'change_order_cancelled',
   'engineering_started',
   'engineering_documented',
+  'engineering_completed',
   'production_released',
   'production_release_revoked',
   'materials_required',
@@ -268,6 +270,7 @@ export const PROJECT_EVENT_TYPE_LABELS_ES: Readonly<Record<ProjectEventType, str
   change_order_cancelled: 'Orden de cambio cancelada',
   engineering_started: 'Ingeniería iniciada',
   engineering_documented: 'Documentación técnica generada',
+  engineering_completed: 'Ingeniería completa',
   production_released: 'Liberado a producción',
   production_release_revoked: 'Liberación a producción revocada',
   materials_required: 'Materiales requeridos por BOM',

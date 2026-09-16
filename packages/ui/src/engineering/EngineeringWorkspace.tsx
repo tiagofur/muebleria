@@ -112,6 +112,32 @@ export type EngineeringReleaseCuttingDemandProp =
       readonly base: ReleaseCuttingDemandBase;
     };
 
+/**
+ * #740 — durable per-release Engineering state of the PINNED release,
+ * resolved by the shell from the exact-release endpoint. `pending` is the
+ * honest absence of evidence; `completed` is final and server-authored.
+ * Completion never implies material authorization or physical work.
+ */
+export type EngineeringReleaseStateProp =
+  | { readonly status: 'loading' }
+  | { readonly status: 'error'; readonly message: string; readonly retry?: () => void }
+  | {
+      readonly status: 'ready';
+      readonly phase: 'pending' | 'in_progress' | 'completed';
+      readonly version: number;
+      /** Human label of the completion actor when the shell can resolve it. */
+      readonly completedByLabel: string | null;
+      readonly completedAtLabel: string | null;
+    };
+
+const RELEASE_ENGINEERING_PHASE_LABELS_ES: Readonly<
+  Record<'pending' | 'in_progress' | 'completed', string>
+> = {
+  pending: 'Pendiente',
+  in_progress: 'En proceso',
+  completed: 'Completa',
+};
+
 /** Tabs whose panels read the live editable project/catalog state. */
 const LIVE_DATA_TABS: ReadonlySet<EngineeringTab> = new Set([
   'resumen',
@@ -197,6 +223,11 @@ export function EngineeringWorkspace({
   releaseCuttingDemand,
   releaseCutPlan,
   onSaveReleaseCutPlan,
+  releaseEngineeringState,
+  onStartReleaseEngineering,
+  onCompleteReleaseEngineering,
+  releaseEngineeringBusy,
+  releaseEngineeringError,
 }: {
   readonly project: Project;
   readonly modules: readonly Module[];
@@ -276,6 +307,16 @@ export function EngineeringWorkspace({
    * outcome so the panel never reports an unconfirmed write (#739 review).
    */
   readonly onSaveReleaseCutPlan?: (cutPlan: CutPlan) => ReleaseCutPlanSaveResult | void;
+  /** #740 — durable Engineering state of the pinned release. */
+  readonly releaseEngineeringState?: EngineeringReleaseStateProp;
+  /**
+   * #740 — explicit user commands. Wired by the shell to the exact-release
+   * endpoints; NEVER fired by reads, navigation or exports.
+   */
+  readonly onStartReleaseEngineering?: () => void;
+  readonly onCompleteReleaseEngineering?: () => void;
+  readonly releaseEngineeringBusy?: boolean;
+  readonly releaseEngineeringError?: string | null;
 }): ReactNode {
   const [activeTab, setActiveTab] = useState<EngineeringTab>('resumen');
 
@@ -285,6 +326,13 @@ export function EngineeringWorkspace({
   const hasReleaseContext = releaseContext !== undefined;
   const releaseView = releaseContext?.state === 'ready' ? releaseContext.view : null;
   const entryStatus = engineeringEntryStatus(project);
+
+  // #740 — durable per-release Engineering state of the pinned release. When
+  // resolved it owns the status chip and the explicit commands; while it
+  // loads (or fails, fail-closed: no commands) the #738 projection stands.
+  const durableState =
+    releaseEngineeringState?.status === 'ready' ? releaseEngineeringState : null;
+  const durablePhase = durableState?.phase ?? null;
 
   // #739 — frozen demand wiring. Only surfaces connected to the exact
   // content get unlocked; everything else keeps its live working view. While
@@ -400,13 +448,74 @@ export function EngineeringWorkspace({
               {releaseView.quoteLabel ? ` · ${releaseView.quoteLabel}` : ''}
             </span>
             <span
-              className={`status-badge status-badge--${entryStatus === 'pending' ? 'open' : 'progress'}`}
+              className={`status-badge status-badge--${
+                durablePhase === 'completed'
+                  ? 'done'
+                  : durablePhase === 'in_progress'
+                    ? 'progress'
+                    : 'open'
+              }`}
               data-testid="eng-entry-status"
-              title="Estado de la preparación de Ingeniería para esta liberación. Ningún dato indica que la preparación esté terminada."
+              title={
+                durablePhase
+                  ? 'Estado durable de Ingeniería para esta liberación exacta. Completarla no autoriza materiales ni inicia producción.'
+                  : 'Estado de la preparación de Ingeniería para esta liberación. Ningún dato indica que la preparación esté terminada.'
+              }
             >
               <span className="status-badge__dot" aria-hidden>●</span>
-              {ENGINEERING_ENTRY_STATUS_LABELS_ES[entryStatus]}
+              {durablePhase
+                ? RELEASE_ENGINEERING_PHASE_LABELS_ES[durablePhase]
+                : ENGINEERING_ENTRY_STATUS_LABELS_ES[entryStatus]}
             </span>
+            {/* #740 — explicit durable Engineering commands for the PINNED
+                release. Only user actions fire them; nothing here runs on
+                reads, navigation or exports. */}
+            {durablePhase === 'pending' && onStartReleaseEngineering ? (
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={onStartReleaseEngineering}
+                disabled={releaseEngineeringBusy}
+                data-testid="eng-start-engineering"
+                title="Registra el inicio de la preparación de Ingeniería para esta liberación (quién/cuándo, autoridad del servidor)"
+              >
+                Iniciar Ingeniería
+              </button>
+            ) : null}
+            {durablePhase === 'in_progress' && onCompleteReleaseEngineering ? (
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={onCompleteReleaseEngineering}
+                disabled={releaseEngineeringBusy}
+                data-testid="eng-complete-engineering"
+                title="Confirma que la preparación de esta liberación terminó. Es final, con actor y fecha del servidor. No autoriza materiales ni inicia producción."
+              >
+                Completar Ingeniería
+              </button>
+            ) : null}
+            {durablePhase === 'completed' && durableState ? (
+              <span
+                className="eng-workspace__engineering-fact"
+                data-testid="eng-engineering-completed"
+              >
+                Ingeniería completa
+                {durableState.completedAtLabel ? ` · ${durableState.completedAtLabel}` : ''}
+                {durableState.completedByLabel ? ` · por ${durableState.completedByLabel}` : ''}
+                <span className="eng-workspace__engineering-next">
+                  {' '}· Siguiente etapa: autorización de materiales (pendiente)
+                </span>
+              </span>
+            ) : null}
+            {releaseEngineeringError ? (
+              <span
+                className="status-badge status-badge--open"
+                data-testid="eng-engineering-error"
+                role="alert"
+              >
+                {releaseEngineeringError}
+              </span>
+            ) : null}
           </div>
         ) : releaseContext?.state === 'loading' ? (
           <span
