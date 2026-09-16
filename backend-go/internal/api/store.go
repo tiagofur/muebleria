@@ -122,6 +122,7 @@ type Store interface {
 	GetHardwareAsset(ctx context.Context, assetID string) (*domain.HardwareAsset, error)
 	GetHardwareAssetRevision(ctx context.Context, assetID, revisionID string) (*domain.HardwareAssetRevision, error)
 	RetireHardwareAsset(ctx context.Context, cmd storage.RetireHardwareAssetCommand) error
+	DeriveHardwareAssetRevision(ctx context.Context, cmd storage.DeriveHardwareAssetRevisionCommand) (*domain.HardwareAssetRevision, error)
 	ResolveHardwareVisualAssetBinding(ctx context.Context, assetID, revisionID string) (*domain.HardwareVisualAssetBinding, error)
 	RecordHardwareAssetValidation(ctx context.Context, cmd storage.RecordHardwareAssetValidationCommand) error
 	// CollectHardwareAssetStagedFile decides under the session row lock

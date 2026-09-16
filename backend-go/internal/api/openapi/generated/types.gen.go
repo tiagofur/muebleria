@@ -1965,10 +1965,28 @@ type HardwareAssetAnchor struct {
 	ZMm float64 `json:"z_mm"`
 }
 
+type HardwareBasis struct {
+	X []float64 `json:"x"`
+	Y []float64 `json:"y"`
+	Z []float64 `json:"z"`
+}
+
+type HardwareMountFrame struct {
+	OriginMm []float64     `json:"origin_mm"`
+	Basis    HardwareBasis `json:"basis"`
+}
+
+type HardwareAssetNormalization struct {
+	TranslationMm []float64     `json:"translation_mm"`
+	Basis         HardwareBasis `json:"basis"`
+}
+
 type HardwareAssetOrigin struct {
-	SourceUnits    string               `json:"source_units"`
-	UpAxis         string               `json:"up_axis"`
-	AnchorOffsetMm *HardwareAssetAnchor `json:"anchor_offset_mm,omitempty"`
+	SourceUnits        string                      `json:"source_units"`
+	UpAxis             string                      `json:"up_axis"`
+	AnchorOffsetMm     *HardwareAssetAnchor        `json:"anchor_offset_mm,omitempty"`
+	MountFrame         *HardwareMountFrame         `json:"mount_frame,omitempty"`
+	AssetNormalization *HardwareAssetNormalization `json:"asset_normalization,omitempty"`
 }
 
 type HardwareAssetRevision struct {
@@ -2003,6 +2021,11 @@ type StartHardwareAssetUploadRequest struct {
 	License        *string                     `json:"license,omitempty"`
 	Origin         *HardwareAssetOrigin        `json:"origin,omitempty"`
 	AssetID        *string                     `json:"asset_id,omitempty"`
+}
+
+type DeriveHardwareAssetRevisionRequest struct {
+	SourceRevisionID string              `json:"source_revision_id"`
+	Origin           HardwareAssetOrigin `json:"origin"`
 }
 
 type HardwareAssetUploadStaged struct {

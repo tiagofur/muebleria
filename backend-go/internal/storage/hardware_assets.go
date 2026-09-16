@@ -562,6 +562,166 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 	return asset, nil
 }
 
+type DeriveHardwareAssetRevisionCommand struct {
+	AssetID          string
+	SourceRevisionID string
+	Origin           []byte
+	ActorUserID      string
+	IP               string
+	RequestID        string
+}
+
+// DeriveHardwareAssetRevision creates a new immutable revision for an active asset
+// by reusing the exact storage bytes, representation, content-type, size, and SHA-256
+// of a source revision, while persisting a new authoritative MountFrame in origin.
+// Serializes on the same asset row lock (FOR UPDATE) as FinalizeHardwareAssetUpload
+// to guarantee consecutive, collision-free revision numbers.
+func (s *PostgresStore) DeriveHardwareAssetRevision(ctx context.Context, cmd DeriveHardwareAssetRevisionCommand) (*domain.HardwareAssetRevision, error) {
+	if !isValidUUID(cmd.AssetID) {
+		return nil, fmt.Errorf("%w: invalid asset id", domain.ErrHardwareAssetInvalid)
+	}
+	if !isValidUUID(cmd.SourceRevisionID) {
+		return nil, fmt.Errorf("%w: invalid source revision id", domain.ErrHardwareAssetInvalid)
+	}
+
+	if transactionFromContext(ctx) == nil {
+		var rev *domain.HardwareAssetRevision
+		actor, _ := TenantActorFromCtx(ctx)
+		if actor.OrganizationID == "" {
+			actor.OrganizationID = OrgFromCtx(ctx)
+		}
+		err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+			r, err := s.DeriveHardwareAssetRevision(txCtx, cmd)
+			if err != nil {
+				return err
+			}
+			rev = r
+			return nil
+		})
+		return rev, err
+	}
+
+	// 1. Lock the asset row to serialize revision number assignment and concurrent mutators (#667 R5).
+	asset, err := s.lockHardwareAssetRow(ctx, cmd.AssetID)
+	if err != nil {
+		return nil, err
+	}
+	if asset.Status != domain.HardwareAssetStatusActive {
+		return nil, domain.ErrHardwareAssetRetired
+	}
+
+	// 2. Validate Origin: must be valid and must have authoritative MountFrame.
+	if len(cmd.Origin) == 0 || string(cmd.Origin) == "null" {
+		return nil, fmt.Errorf("%w: derived revision requires non-empty origin", domain.ErrHardwareAssetInvalid)
+	}
+	validatedOrigin, err := domain.ValidateHardwareAssetOrigin(json.RawMessage(cmd.Origin))
+	if err != nil {
+		return nil, err
+	}
+	if validatedOrigin == nil || validatedOrigin.MountFrame == nil {
+		return nil, fmt.Errorf("%w: derived revision requires origin with authoritative mountFrame", domain.ErrHardwareAssetInvalid)
+	}
+
+	// 3. Load source revision (must belong to this asset and current tenant).
+	var sourceRev domain.HardwareAssetRevision
+	var sourceOriginRaw []byte
+	var sourceCreatedBy *string
+	err = s.db(ctx).QueryRow(ctx, `
+		SELECT id, organization_id, asset_id, revision_number, representation, storage_key,
+		       content_type, size_bytes, sha256, origin, integrity_verified_at, created_by, created_at
+		FROM hardware_asset_revisions
+		WHERE asset_id = $1 AND id = $2 AND organization_id = $3
+	`, cmd.AssetID, cmd.SourceRevisionID, OrgFromCtx(ctx)).Scan(
+		&sourceRev.ID, &sourceRev.OrganizationID, &sourceRev.AssetID, &sourceRev.RevisionNumber,
+		&sourceRev.Representation, &sourceRev.StorageKey, &sourceRev.ContentType, &sourceRev.SizeBytes,
+		&sourceRev.SHA256, &sourceOriginRaw, &sourceRev.IntegrityVerifiedAt, &sourceCreatedBy, &sourceRev.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("%w: source revision %s not found on asset %s", domain.ErrHardwareAssetNotFound, cmd.SourceRevisionID, cmd.AssetID)
+		}
+		return nil, err
+	}
+
+	// 4. Compute next revision number using the exact same asset lock & sequence logic:
+	var nextRevision int
+	if err := s.db(ctx).QueryRow(ctx, `
+		SELECT COALESCE(MAX(revision_number), 0) + 1
+		FROM hardware_asset_revisions WHERE asset_id = $1
+	`, asset.ID).Scan(&nextRevision); err != nil {
+		return nil, err
+	}
+
+	var createdBy *string
+	if isValidUUID(cmd.ActorUserID) {
+		createdBy = &cmd.ActorUserID
+	}
+
+	// Persist authoritative origin.
+	marshaledOrigin, err := json.Marshal(validatedOrigin)
+	if err != nil {
+		return nil, fmt.Errorf("marshal origin: %w", err)
+	}
+
+	revision := &domain.HardwareAssetRevision{
+		AssetID:        asset.ID,
+		RevisionNumber: nextRevision,
+		Representation: sourceRev.Representation,
+		StorageKey:     sourceRev.StorageKey,
+		ContentType:    sourceRev.ContentType,
+		SizeBytes:      sourceRev.SizeBytes,
+		SHA256:         sourceRev.SHA256,
+		Origin:         validatedOrigin,
+	}
+
+	var revisionCreatedBy *string
+	var insertedOriginRaw []byte
+	err = s.db(ctx).QueryRow(ctx, `
+		INSERT INTO hardware_asset_revisions
+			(organization_id, asset_id, revision_number, representation, storage_key,
+			 content_type, size_bytes, sha256, origin, integrity_verified_at, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
+		RETURNING `+hardwareAssetRevisionColumns,
+		OrgFromCtx(ctx), asset.ID, revision.RevisionNumber, string(revision.Representation), revision.StorageKey,
+		revision.ContentType, revision.SizeBytes, revision.SHA256, marshaledOrigin, createdBy,
+	).Scan(
+		&revision.ID, &revision.OrganizationID, &revision.AssetID, &revision.RevisionNumber,
+		&revision.Representation, &revision.StorageKey, &revision.ContentType, &revision.SizeBytes,
+		&revision.SHA256, &insertedOriginRaw, &revision.IntegrityVerifiedAt, &revisionCreatedBy, &revision.CreatedAt,
+	)
+	if err != nil {
+		if isUniqueViolationOn(err, "uq_hardware_asset_revisions_number") {
+			return nil, domain.ErrHardwareAssetRevisionConflict
+		}
+		return nil, fmt.Errorf("insert derived hardware asset revision: %w", err)
+	}
+	if revisionCreatedBy != nil {
+		revision.CreatedBy = *revisionCreatedBy
+	}
+	revision.ValidationState = domain.HardwareAssetValidationPending
+
+	if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
+		EventType:      "hardware_asset_revision_derived",
+		ActorUserID:    nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
+		OrganizationID: OrgFromCtx(ctx),
+		IP:             cmd.IP,
+		RequestID:      cmd.RequestID,
+		Details: map[string]interface{}{
+			"asset_id":           asset.ID,
+			"revision_id":        revision.ID,
+			"revision_number":    revision.RevisionNumber,
+			"source_revision_id": cmd.SourceRevisionID,
+			"representation":     string(revision.Representation),
+			"sha256":             revision.SHA256,
+			"size_bytes":         revision.SizeBytes,
+		},
+	}); err != nil {
+		return nil, fmt.Errorf("audit hardware_asset_revision_derived: %w", err)
+	}
+
+	return revision, nil
+}
+
 // CancelHardwareAssetUploadSession abandons a prepared session. A previously
 // associated hardware binding is untouched by definition: sessions never
 // mutate the catalog (spec §6).

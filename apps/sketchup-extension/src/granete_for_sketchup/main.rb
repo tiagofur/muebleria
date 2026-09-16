@@ -84,8 +84,11 @@ module Granete
         observers/selection_observer
         observers/entities_observer
         tools/internal_component_move_tool
+        tools/mount_frame_tool
         ui/option_selector_controller
         ui/migration_review_controller
+        ui/mount_frame_host_preview
+        ui/mount_frame_preparer_controller
         ui/component_authoring_bridge
         ui/dialog_controller
         lifecycle

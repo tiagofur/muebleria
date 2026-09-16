@@ -106,6 +106,26 @@ func toHardwareAssetOriginDTO(o *domain.HardwareAssetOrigin) *openapi.HardwareAs
 			ZMm: o.AnchorOffsetMm.ZMm,
 		}
 	}
+	if o.MountFrame != nil {
+		dto.MountFrame = &openapi.HardwareMountFrame{
+			OriginMm: []float64{o.MountFrame.OriginMm[0], o.MountFrame.OriginMm[1], o.MountFrame.OriginMm[2]},
+			Basis: openapi.HardwareBasis{
+				X: []float64{o.MountFrame.Basis.X[0], o.MountFrame.Basis.X[1], o.MountFrame.Basis.X[2]},
+				Y: []float64{o.MountFrame.Basis.Y[0], o.MountFrame.Basis.Y[1], o.MountFrame.Basis.Y[2]},
+				Z: []float64{o.MountFrame.Basis.Z[0], o.MountFrame.Basis.Z[1], o.MountFrame.Basis.Z[2]},
+			},
+		}
+	}
+	if o.AssetNormalization != nil {
+		dto.AssetNormalization = &openapi.HardwareAssetNormalization{
+			TranslationMm: []float64{o.AssetNormalization.TranslationMm[0], o.AssetNormalization.TranslationMm[1], o.AssetNormalization.TranslationMm[2]},
+			Basis: openapi.HardwareBasis{
+				X: []float64{o.AssetNormalization.Basis.X[0], o.AssetNormalization.Basis.X[1], o.AssetNormalization.Basis.X[2]},
+				Y: []float64{o.AssetNormalization.Basis.Y[0], o.AssetNormalization.Basis.Y[1], o.AssetNormalization.Basis.Y[2]},
+				Z: []float64{o.AssetNormalization.Basis.Z[0], o.AssetNormalization.Basis.Z[1], o.AssetNormalization.Basis.Z[2]},
+			},
+		}
+	}
 	return dto
 }
 
@@ -119,6 +139,38 @@ func originDomainFromDTO(dto *openapi.HardwareAssetOrigin) (json.RawMessage, err
 			XMm: dto.AnchorOffsetMm.XMm,
 			YMm: dto.AnchorOffsetMm.YMm,
 			ZMm: dto.AnchorOffsetMm.ZMm,
+		}
+	}
+	if dto.MountFrame != nil {
+		if len(dto.MountFrame.OriginMm) != 3 ||
+			len(dto.MountFrame.Basis.X) != 3 ||
+			len(dto.MountFrame.Basis.Y) != 3 ||
+			len(dto.MountFrame.Basis.Z) != 3 {
+			return nil, fmt.Errorf("%w: mountFrame vectors must have 3 coordinates", domain.ErrHardwareAssetInvalid)
+		}
+		o.MountFrame = &domain.HardwareMountFrame{
+			OriginMm: [3]float64{dto.MountFrame.OriginMm[0], dto.MountFrame.OriginMm[1], dto.MountFrame.OriginMm[2]},
+			Basis: domain.HardwareBasis{
+				X: [3]float64{dto.MountFrame.Basis.X[0], dto.MountFrame.Basis.X[1], dto.MountFrame.Basis.X[2]},
+				Y: [3]float64{dto.MountFrame.Basis.Y[0], dto.MountFrame.Basis.Y[1], dto.MountFrame.Basis.Y[2]},
+				Z: [3]float64{dto.MountFrame.Basis.Z[0], dto.MountFrame.Basis.Z[1], dto.MountFrame.Basis.Z[2]},
+			},
+		}
+	}
+	if dto.AssetNormalization != nil {
+		if len(dto.AssetNormalization.TranslationMm) != 3 ||
+			len(dto.AssetNormalization.Basis.X) != 3 ||
+			len(dto.AssetNormalization.Basis.Y) != 3 ||
+			len(dto.AssetNormalization.Basis.Z) != 3 {
+			return nil, fmt.Errorf("%w: assetNormalization vectors must have 3 coordinates", domain.ErrHardwareAssetInvalid)
+		}
+		o.AssetNormalization = &domain.HardwareAssetNormalization{
+			TranslationMm: [3]float64{dto.AssetNormalization.TranslationMm[0], dto.AssetNormalization.TranslationMm[1], dto.AssetNormalization.TranslationMm[2]},
+			Basis: domain.HardwareBasis{
+				X: [3]float64{dto.AssetNormalization.Basis.X[0], dto.AssetNormalization.Basis.X[1], dto.AssetNormalization.Basis.X[2]},
+				Y: [3]float64{dto.AssetNormalization.Basis.Y[0], dto.AssetNormalization.Basis.Y[1], dto.AssetNormalization.Basis.Y[2]},
+				Z: [3]float64{dto.AssetNormalization.Basis.Z[0], dto.AssetNormalization.Basis.Z[1], dto.AssetNormalization.Basis.Z[2]},
+			},
 		}
 	}
 	raw, err := json.Marshal(o)
@@ -712,6 +764,49 @@ func (s *Server) HandleHardwareAssetRetire(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	respondWithJSON(w, http.StatusOK, toHardwareAssetDTO(*asset))
+}
+
+// HandleHardwareAssetRevisionDerive: POST /api/hardware-assets/{assetId}/revisions:derive.
+func (s *Server) HandleHardwareAssetRevisionDerive(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "no tenés permiso para administrar recursos del catálogo") {
+		return
+	}
+	assetID := r.PathValue("assetId")
+	if !isValidUUID(assetID) {
+		respondWithError(w, http.StatusBadRequest, "invalid asset id")
+		return
+	}
+	var body openapi.DeriveHardwareAssetRevisionRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	if !isValidUUID(body.SourceRevisionID) {
+		respondWithError(w, http.StatusBadRequest, "invalid source revision id")
+		return
+	}
+	originRaw, err := originDomainFromDTO(&body.Origin)
+	if err != nil {
+		respondWithHardwareAssetError(w, err)
+		return
+	}
+	revision, err := s.Store.DeriveHardwareAssetRevision(r.Context(), storage.DeriveHardwareAssetRevisionCommand{
+		AssetID:          assetID,
+		SourceRevisionID: body.SourceRevisionID,
+		Origin:           originRaw,
+		ActorUserID:      claims.UserID,
+		IP:               clientIP(r),
+		RequestID:        RequestIDFromContext(r.Context()),
+	})
+	if err != nil {
+		respondWithHardwareAssetError(w, err)
+		return
+	}
+	respondWithJSON(w, http.StatusCreated, toHardwareAssetRevisionDTO(*revision))
 }
 
 // HandleHardwareAssetRevisionAuthorize: POST /api/hardware-assets/{assetId}/revisions/{revisionId}:authorize.

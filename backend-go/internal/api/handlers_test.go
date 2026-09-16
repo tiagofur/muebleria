@@ -39,6 +39,8 @@ type stubStore struct {
 	assetResolvedBinding         *domain.HardwareVisualAssetBinding
 	assetResolveBindingCmd       *[2]string
 	assetRevisionResult          *domain.HardwareAssetRevision
+	deriveRevisionCmd            *storage.DeriveHardwareAssetRevisionCommand
+	deriveRevisionCalls          int
 	recordValidationCmd          *storage.RecordHardwareAssetValidationCommand
 	recordValidationErr          error
 	listHardwareAssets           []domain.HardwareAsset
@@ -4215,6 +4217,14 @@ func (s *stubStore) GetHardwareAssetRevision(_ context.Context, _, _ string) (*d
 }
 func (s *stubStore) RetireHardwareAsset(_ context.Context, _ storage.RetireHardwareAssetCommand) error {
 	return nil
+}
+func (s *stubStore) DeriveHardwareAssetRevision(_ context.Context, cmd storage.DeriveHardwareAssetRevisionCommand) (*domain.HardwareAssetRevision, error) {
+	s.deriveRevisionCalls++
+	s.deriveRevisionCmd = &cmd
+	if s.assetRevisionResult == nil {
+		return nil, errors.New("not configured in stubStore")
+	}
+	return s.assetRevisionResult, nil
 }
 func (s *stubStore) ResolveHardwareVisualAssetBinding(_ context.Context, assetID, revisionID string) (*domain.HardwareVisualAssetBinding, error) {
 	if s.assetResolveBindingCmd != nil {

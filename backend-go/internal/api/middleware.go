@@ -541,6 +541,8 @@ var extensionClientGetPatterns = []*regexp.Regexp{
 	// receives no broader project, quote, or commercial mutation access.
 	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/commercial-projection$`),
 	regexp.MustCompile(`^/api/designs/[^/]+/working-copy$`),
+	// #668: read hardware asset details and revision list for visual mount-frame preparation.
+	regexp.MustCompile(`^/api/hardware-assets/[^/]+$`),
 }
 
 // extensionClientMayAccess is the deny-by-default boundary for the SketchUp
@@ -645,6 +647,10 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// #668: mint short-lived read grants for hardware asset revisions the extension
 	// token can already resolve — read-only grant, no mutation.
 	regexp.MustCompile(`^/api/hardware-assets/[^/]+/revisions/[^/]+:authorize$`),
+	// #668: derive a new immutable hardware asset revision with updated MountFrame,
+	// reusing existing server-side bytes and metadata. Narrow capability; requires
+	// RoleCanMutateCatalog and tenant scope.
+	regexp.MustCompile(`^/api/hardware-assets/[^/]+/revisions:derive$`),
 }
 
 // Parameterized PUT surface for the extension credential (#389 / DT-5). This
