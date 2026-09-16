@@ -352,6 +352,151 @@ class MountFramePreparerTest < Minitest::Test
     assert MountFrame.validate_basis!(mf.basis)
   end
 
+  def test_mount_frame_tool_defaults_to_midpoint_without_anchor_mode_or_spacing
+    # R2 regression: absent anchorMode AND absent expectedHoleSpacingMm
+    # must strictly default to legacy midpoint mode without guessing hardware topology.
+    tool = MountFrameTool.new(expected_hole_spacing_mm: nil, anchor_mode: nil)
+    assert_equal :midpoint, tool.anchor_mode
+
+    # Points A and B define midpoint anchor
+    tool.set_points([0.0, 0.0, 0.0], [128.0, 0.0, 0.0])
+    assert_equal [64.0, 0.0, 0.0], tool.mount_frame.origin_mm
+  end
+
+  def test_mount_frame_tool_set_anchor_mode_switches_and_resets
+    tool = MountFrameTool.new
+    assert_equal :midpoint, tool.anchor_mode
+
+    tool.set_points([0.0, 0.0, 0.0], [96.0, 0.0, 0.0])
+    assert_equal :ready, tool.step
+    refute_nil tool.mount_frame
+
+    # Switching mode resets state and updates anchor_mode
+    tool.set_anchor_mode(:origin_axis_plane)
+    assert_equal :origin_axis_plane, tool.anchor_mode
+    assert_equal :pick_a, tool.step
+    assert_nil tool.point_a_mm
+    assert_nil tool.mount_frame
+  end
+
+  def test_mount_frame_tool_origin_axis_plane_step_by_step_picking
+    tool = MountFrameTool.new(anchor_mode: :origin_axis_plane)
+    assert_equal :pick_a, tool.step
+
+    # Step 1: Click A (origin)
+    tool.send(:handle_click_at, [10.0, 20.0, 30.0], nil)
+    assert_equal :pick_b, tool.step
+    assert_equal [10.0, 20.0, 30.0], tool.point_a_mm
+    assert_nil tool.mount_frame
+
+    # Step 2: Click B (direction +X)
+    tool.send(:handle_click_at, [60.0, 20.0, 30.0], nil)
+    assert_equal :pick_c, tool.step
+    assert_equal [60.0, 20.0, 30.0], tool.point_b_mm
+    assert_nil tool.mount_frame
+
+    # Step 3: Click C (plane reference)
+    tool.send(:handle_click_at, [10.0, 70.0, 30.0], nil)
+    assert_equal :ready, tool.step
+    assert_equal [10.0, 70.0, 30.0], tool.point_c_mm
+
+    mf = tool.mount_frame
+    refute_nil mf
+    assert_equal [10.0, 20.0, 30.0], mf.origin_mm
+    assert_equal [1.0, 0.0, 0.0], mf.basis.x
+    assert_equal [0.0, 1.0, 0.0], mf.basis.y
+    assert_equal [0.0, 0.0, 1.0], mf.basis.z
+  end
+
+  def test_mount_frame_tool_origin_axis_plane_arbitrary_cad_orientation_r1_proof
+    # R1 requirement:
+    # Completely unaligned with global axes:
+    #   origin != 0
+    #   X != global X/Y/Z
+    #   Z != global ±Z
+    # Demonstrate:
+    #   T_norm = inverse(T_mountFrame)
+    #   mount origin -> canonical origin
+    #   det = +1
+    #   scale = [1,1,1]
+    #   distances preserved across arbitrary physical points.
+    origin = [120.0, -45.0, 78.0]
+    # Vector AB: [30.0, 60.0, 60.0] -> dir: [1/3, 2/3, 2/3]
+    pt_b = [150.0, 15.0, 138.0]
+    # Vector AC: [40.0, 20.0, -40.0] -> dir: [2/3, 1/3, -2/3] (perpendicular to AB)
+    pt_c = [160.0, -25.0, 38.0]
+
+    tool = MountFrameTool.new(anchor_mode: :origin_axis_plane)
+    tool.set_origin_axis_plane(origin, pt_b, pt_c)
+
+    assert_equal :ready, tool.step
+    mf = tool.mount_frame
+    refute_nil mf
+
+    # Origin check
+    assert_equal origin, mf.origin_mm
+    refute_equal [0.0, 0.0, 0.0], mf.origin_mm
+
+    # X axis is unaligned with any global axis: [1/3, 2/3, 2/3]
+    assert_in_delta(1.0 / 3.0, mf.basis.x[0], 1e-4)
+    assert_in_delta(2.0 / 3.0, mf.basis.x[1], 1e-4)
+    assert_in_delta(2.0 / 3.0, mf.basis.x[2], 1e-4)
+    refute_equal [1.0, 0.0, 0.0], mf.basis.x
+    refute_equal [0.0, 1.0, 0.0], mf.basis.x
+    refute_equal [0.0, 0.0, 1.0], mf.basis.x
+
+    # Z axis is normal to plane: [-2/3, 2/3, -1/3] -> NOT global ±Z
+    assert_in_delta(-2.0 / 3.0, mf.basis.z[0], 1e-4)
+    assert_in_delta(2.0 / 3.0, mf.basis.z[1], 1e-4)
+    assert_in_delta(-1.0 / 3.0, mf.basis.z[2], 1e-4)
+    refute_equal [0.0, 0.0, 1.0], mf.basis.z
+    refute_equal [0.0, 0.0, -1.0], mf.basis.z
+
+    # Orthonormal basis validation with det = +1
+    assert MountFrame.validate_basis!(mf.basis)
+
+    # Derive normalization and prove:
+    # 1. Mount origin maps EXACTLY to canonical [0, 0, 0]
+    norm = MountFrame.derive_normalization(mf)
+    canonical_origin = norm.apply(origin)
+    assert_in_delta 0.0, canonical_origin[0], 1e-4
+    assert_in_delta 0.0, canonical_origin[1], 1e-4
+    assert_in_delta 0.0, canonical_origin[2], 1e-4
+
+    # 2. Point B along +X maps to [+X, 0, 0]
+    canonical_b = norm.apply(pt_b)
+    dist_ab = MountFrame.distance(origin, pt_b)
+    assert_in_delta dist_ab, canonical_b[0], 1e-4
+    assert_in_delta 0.0, canonical_b[1], 1e-4
+    assert_in_delta 0.0, canonical_b[2], 1e-4
+
+    # 3. Distance preservation across arbitrary test points
+    p1 = [135.0, 10.0, 50.0]
+    p2 = [90.0, -80.0, 120.0]
+    p3 = [200.0, -10.0, -15.0]
+    assert norm.distance_preserved?(origin, pt_b)
+    assert norm.distance_preserved?(origin, pt_c)
+    assert norm.distance_preserved?(p1, p2)
+    assert norm.distance_preserved?(p2, p3)
+    assert norm.distance_preserved?(p1, p3)
+
+    # 4. Invert normal preserves det = +1 and scale = [1, 1, 1]
+    tool.invert_normal!
+    assert tool.normal_inverted
+    mf_inv = tool.mount_frame
+    assert MountFrame.validate_basis!(mf_inv.basis)
+    assert_in_delta(2.0 / 3.0, mf_inv.basis.z[0], 1e-4)
+    assert_in_delta(-2.0 / 3.0, mf_inv.basis.z[1], 1e-4)
+    assert_in_delta(1.0 / 3.0, mf_inv.basis.z[2], 1e-4)
+
+    norm_inv = MountFrame.derive_normalization(mf_inv)
+    canonical_origin_inv = norm_inv.apply(origin)
+    assert_in_delta 0.0, canonical_origin_inv[0], 1e-4
+    assert_in_delta 0.0, canonical_origin_inv[1], 1e-4
+    assert_in_delta 0.0, canonical_origin_inv[2], 1e-4
+    assert norm_inv.distance_preserved?(p1, p2)
+  end
+
   # --- Host Preview Tests ---
 
   def test_host_preview_load_and_extract_bounds

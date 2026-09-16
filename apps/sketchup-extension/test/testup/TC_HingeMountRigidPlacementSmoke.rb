@@ -6,7 +6,8 @@ require 'fileutils'
 require 'testup/testcase'
 
 # Real-host smoke test for #668 Increment C2:
-# Proves against the real INSTALLED extension and SketchUp host:
+# Environment: real SketchUp host + synthetic hinge fixture.
+# Demonstrates that the rigid placement pipeline is 100% hardware-agnostic:
 #   B1: Base hinge mount (cup center lands precisely on placement target).
 #   B2: Second hinge sharing ComponentDefinition with independent instances.
 #   B3: Opposite orientation via rigid rotation (det = 1.0, scale = [1,1,1], no mirror).
@@ -15,6 +16,7 @@ require 'testup/testcase'
 #   B6: Save, close, and reopen .skp preserves hinge instances, transforms, and metadata.
 #   B7: Undo and Redo revert and restore cleanly.
 #   B8: Fail-before-mutate under Policy B (invalid MountFrame and download failure).
+#   B10: Preparer -> A/B/C -> MountFrame -> renderer with arbitrary CAD orientation (normal != ±global Z).
 module Granete
   module SketchUpExtension
     class TC_HingeMountRigidPlacementSmoke < TestUp::TestCase
@@ -297,6 +299,40 @@ module Granete
         assert prev_hw.valid?
         assert_equal prev_def, prev_hw.definition
         assert_equal prev_transform, prev_hw.transformation.to_a
+      end
+
+      # B10: Preparer + Renderer with arbitrary CAD orientation (normal != ±global Z)
+      # Execution path: preparer -> A/B/C -> MountFrame -> renderer on real SketchUp host.
+      def test_b10_preparer_origin_axis_plane_arbitrary_cad_orientation_on_real_host
+        raw_origin = [120.0, -45.0, 78.0]
+        raw_axis_b = [150.0, 15.0, 138.0]
+        raw_plane_c = [160.0, -25.0, 38.0]
+
+        tool = Granete::SketchUpExtension::Tools::MountFrameTool.new(anchor_mode: :origin_axis_plane)
+        tool.set_origin_axis_plane(raw_origin, raw_axis_b, raw_plane_c)
+
+        arbitrary_mf = tool.mount_frame
+        refute_nil arbitrary_mf
+
+        # Essential gate: normal is NOT ± global Z
+        refute_equal [0.0, 0.0, 1.0], arbitrary_mf.basis.z
+        refute_equal [0.0, 0.0, -1.0], arbitrary_mf.basis.z
+
+        placement_target = [100.0, 18.0, 600.0]
+        placement = create_hinge_placement(
+          placement_id: 'hp-cad-b10',
+          position_mm: placement_target,
+          rotation_deg: [0.0, 0.0, 0.0],
+          mount_frame: arbitrary_mf
+        )
+
+        result = place_furniture_with_hardware(furniture_instance_id: FI_1, hardware: [placement])
+        assert result['success'], "placement failed: #{result['error']}"
+
+        hw_instance = find_hardware_instance(FI_1, 'hp-cad-b10')
+        refute_nil hw_instance
+        assert_rigid_transformation(hw_instance.transformation)
+        assert_anchor_at(hw_instance, raw_origin, placement_target)
       end
 
       private

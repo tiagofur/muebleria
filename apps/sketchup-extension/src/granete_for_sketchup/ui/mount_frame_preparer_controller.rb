@@ -56,7 +56,7 @@ module Granete
           @on_saved = on_saved
           @expected_hole_spacing_mm = expected_hole_spacing_mm
           @nominal_dimensions = nominal_dimensions || {}
-          @anchor_mode = anchor_mode
+          @anchor_mode = anchor_mode ? anchor_mode.to_sym : :midpoint
 
           return nil unless prepare_source_revision?(asset_id, source_revision_id)
 
@@ -200,6 +200,9 @@ module Granete
 
         def bind_callbacks(dialog)
           dialog.add_action_callback('preparer_ready') { handle_ready(dialog) }
+          dialog.add_action_callback('set_anchor_mode') do |_action_context, mode_str|
+            @tool&.set_anchor_mode(mode_str)
+          end
           dialog.add_action_callback('invert_normal') { @tool&.invert_normal! }
           dialog.add_action_callback('reset_selection') { @tool&.reset! }
           dialog.add_action_callback('save_preparation') { handle_save(dialog) }
@@ -219,6 +222,7 @@ module Granete
             'anchorMode' => tool_state[:anchor_mode]&.to_s,
             'pointA' => tool_state[:point_a_mm],
             'pointB' => tool_state[:point_b_mm],
+            'pointC' => tool_state[:point_c_mm],
             'measuredSpacingMm' => tool_state[:measured_spacing_mm],
             'normalInverted' => tool_state[:normal_inverted],
             'spacingComparison' => tool_state[:spacing_comparison],
@@ -229,7 +233,7 @@ module Granete
 
         def handle_save(dialog)
           unless @tool&.mount_frame
-            execute_bridge(dialog, 'showSaveError', { 'error' => 'Falta definir los puntos A y B de montaje.' })
+            execute_bridge(dialog, 'showSaveError', { 'error' => 'Falta definir la orientación completa del montaje.' })
             return
           end
 
@@ -304,7 +308,7 @@ module Granete
             'measuredBounds' => @measured_bounds,
             'expectedHoleSpacingMm' => @expected_hole_spacing_mm,
             'nominalDimensions' => @nominal_dimensions,
-            'anchorMode' => @tool&.anchor_mode&.to_s,
+            'anchorMode' => (@tool&.anchor_mode || @anchor_mode || :midpoint).to_s,
             'step' => @tool&.step.to_s,
             'normalInverted' => @tool&.normal_inverted || false
           }

@@ -96,7 +96,7 @@ class HingeRigidPlacementTest < Minitest::Test
 
   # =========================================================================
   # Increment B authoring flow test:
-  # Prepares MountFrame via MountFrameTool (:origin_and_axis mode)
+  # Prepares MountFrame via MountFrameTool (:origin_and_axis and :origin_axis_plane mode)
   # =========================================================================
   def test_increment_b_hinge_preparation_flow
     tool = MountFrameTool.new(anchor_mode: :origin_and_axis)
@@ -117,6 +117,27 @@ class HingeRigidPlacementTest < Minitest::Test
     assert_equal [0.0, 0.0, 1.0], mf.basis.z
 
     # Derived normalization maps cup center exactly to canonical [0, 0, 0]
+    norm = MountFrame.derive_normalization(mf)
+    canonical_cup = norm.apply(CUP_CENTER_RAW)
+    assert_in_delta 0.0, canonical_cup[0], 1e-4
+    assert_in_delta 0.0, canonical_cup[1], 1e-4
+    assert_in_delta 0.0, canonical_cup[2], 1e-4
+  end
+
+  def test_increment_b_hinge_preparation_flow_origin_axis_plane
+    # Authoring with explicit 3-reference mode (origin, +X axis, and in-plane reference)
+    tool = MountFrameTool.new(anchor_mode: :origin_axis_plane)
+    axis_pt = [25.0, 35.0, 10.0]       # 50mm along +Y
+    plane_ref = [15.0, -15.0, 10.0]    # displaced in -X (towards door center on mating face)
+    tool.set_origin_axis_plane(CUP_CENTER_RAW, axis_pt, plane_ref)
+
+    assert_equal :ready, tool.step
+    mf = tool.mount_frame
+    refute_nil mf
+    assert_equal CUP_CENTER_RAW, mf.origin_mm
+    assert_in_delta 1.0, mf.basis.x[1], 1e-4
+    assert MountFrame.validate_basis!(mf.basis)
+
     norm = MountFrame.derive_normalization(mf)
     canonical_cup = norm.apply(CUP_CENTER_RAW)
     assert_in_delta 0.0, canonical_cup[0], 1e-4
@@ -523,6 +544,56 @@ class HingeRigidPlacementTest < Minitest::Test
     refute_nil hinge_inst
     assert_rigid_transform(handle_inst.transformation)
     assert_rigid_transform(hinge_inst.transformation)
+  end
+
+  # =========================================================================
+  # B10: Arbitrary CAD orientation — Normal is NOT ± global Z
+  # Demonstrates that a CAD model authored in an arbitrary coordinate system:
+  #   - origin != 0
+  #   - X != global X/Y/Z
+  #   - Z != global ±Z
+  # is prepared via origin_axis_plane and placed via the EXACT same AssetLoader
+  # with zero changes in production renderer code, lands at placement target,
+  # and has det = +1.0, scale = [1, 1, 1].
+  # =========================================================================
+  def test_b10_arbitrary_cad_orientation_hinge_placement_without_renderer_changes
+    raw_origin = [120.0, -45.0, 78.0]
+    raw_axis_b = [150.0, 15.0, 138.0]
+    raw_plane_c = [160.0, -25.0, 38.0]
+
+    tool = MountFrameTool.new(anchor_mode: :origin_axis_plane)
+    tool.set_origin_axis_plane(raw_origin, raw_axis_b, raw_plane_c)
+
+    arbitrary_mf = tool.mount_frame
+    refute_nil arbitrary_mf
+
+    # Ensure normal is NOT global ±Z
+    refute_equal [0.0, 0.0, 1.0], arbitrary_mf.basis.z
+    refute_equal [0.0, 0.0, -1.0], arbitrary_mf.basis.z
+
+    target_pos = [250.0, 18.0, 750.0]
+    placement_basis = {
+      'x' => [0.0, 0.0, 1.0],
+      'y' => [1.0, 0.0, 0.0],
+      'z' => [0.0, 1.0, 0.0]
+    }
+
+    # Placed using exact existing AssetLoader
+    instance = @loader.load_asset_instance(
+      @model, 'ast-arbitrary-cad', @target_group, target_pos,
+      basis: placement_basis, revision_id: 'rev-cad-r2',
+      mount_frame: arbitrary_mf, preparation_state: 'prepared', placement_id: 'hw-cad-b10'
+    )
+    refute_nil instance
+    assert_rigid_transform(instance.transformation)
+
+    # Prove raw_origin lands EXACTLY at target_pos
+    t_instance = instance.transformation
+    raw_origin_in = Geom::Point3d.new(raw_origin[0] / 25.4, raw_origin[1] / 25.4, raw_origin[2] / 25.4)
+    placed_point_mm = raw_origin_in.transform(t_instance).to_a.map { |v| v * 25.4 }
+    assert_in_delta target_pos[0], placed_point_mm[0], 1e-4
+    assert_in_delta target_pos[1], placed_point_mm[1], 1e-4
+    assert_in_delta target_pos[2], placed_point_mm[2], 1e-4
   end
 
   private
