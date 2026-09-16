@@ -84,9 +84,19 @@ La primera entrega puede limitarse a acceso/lectura y estados honestos: no neces
 > PDF sin validar máquina, PTX respetando perfil/programa (#591/#650) con manifiesto que
 > ahora lleva `productionReleaseId`/`designRevisionId`/`bomFingerprint`. Bloqueos concretos
 > por formato y acción; catálogo divergente no reconstruye la demanda; material/canto
-> ausente y snapshot faltante fallan accionable. Verificado con browser real
-> Chromium+Go+PostgreSQL (Q1 600 → R2 650 → Q2/P1, PDF byte-exacto, readback PTX
-> independiente) y suites Go/TS completas. Lo no cubierto aquí sigue en sus owners:
+> ausente y snapshot faltante fallan accionable. Correcciones de revisión (PR #755):
+> guardado verificable (el éxito se declara sólo con escritura confirmada; un fallo de
+> storage se comunica como "puede perderse al recargar"), gate explícito
+> legacy/canonical-loading/error/ready que exige la base verificada para generar y
+> exportar (un plan previo de otra liberación no queda exportable mientras la nueva
+> base carga o falla) y DXF canónico bloqueado mientras sus perforaciones dependan
+> del proyecto vivo. Verificado con browser real
+> Chromium+Go+PostgreSQL (Q1 600 → R2 650 → Q2/P1, PDF byte-exacto — consistencia
+> contra el mismo generador, no revisión independiente de geometría —, readback PTX
+> independiente) y suites Go/TS completas. Limitación declarada: el plan persiste
+> por-release en localStorage del navegador (no compartido entre usuarios/equipos);
+> etiquetas de material y espesor de canto son inputs del catálogo vigente. Lo no
+> cubierto aquí sigue en sus owners:
 > finalización/gates físicos (#740), continuidad P1/P2 (#741), etiquetas/QR (#682).
 
 Consumir `GetProductionReleaseManufacturingSnapshot` y lectores existentes del release exacto; exponer sólo la proyección tenant-safe generada que falte. Usar los componentes/optimizer/preview/PDF/PTX/ZIP actuales. Ninguna reconstrucción productiva desde Project mutable, current catalog, un preset aproximado o defaults 18 mm/0.45 mm.
