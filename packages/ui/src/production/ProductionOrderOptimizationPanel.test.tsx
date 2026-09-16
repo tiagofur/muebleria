@@ -16,6 +16,33 @@ import {
   type Project,
 } from '@granete/domain';
 import { ProductionOrderOptimizationPanel } from './ProductionOrderOptimizationPanel';
+import { loadReleaseCutPlan, saveReleaseCutPlan } from '@granete/storage';
+
+/** Storage fake whose setItem can be told to fail (quota / rejection). */
+function createStorageStub(): Storage & { failSetItem: null | 'quota' | 'reject' } {
+  const store = new Map<string, string>();
+  const stub = {
+    failSetItem: null as null | 'quota' | 'reject',
+    get length() {
+      return store.size;
+    },
+    key: (index: number) => [...store.keys()][index] ?? null,
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      if (stub.failSetItem) {
+        const err = new Error('persist failed');
+        err.name = stub.failSetItem === 'quota' ? 'QuotaExceededError' : 'SecurityError';
+        throw err;
+      }
+      store.set(k, v);
+    },
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+    clear: () => store.clear(),
+  };
+  return stub as Storage & { failSetItem: null | 'quota' | 'reject' };
+}
 
 function project(): Project {
   return {
@@ -833,7 +860,7 @@ describe('ProductionOrderOptimizationPanel — #739 preparación de liberación 
       ...cutPlanFixture('saw-guillotine'),
       releaseBase: demandBaseFixture,
     };
-    renderPanel({ initialCutPlan: pinnedPlan, demandBase: demandBaseFixture });
+    renderPanel({ initialCutPlan: pinnedPlan, demandGate: { mode: 'canonical', status: 'ready', base: demandBaseFixture } });
     // El plan fixture usa kerf 4: igual config → exportable.
     expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(false);
 
@@ -851,7 +878,7 @@ describe('ProductionOrderOptimizationPanel — #739 preparación de liberación 
   });
 
   it('el plan generado desde demanda congelada lleva el pin de la liberación', () => {
-    renderPanel({ demandBase: demandBaseFixture });
+    renderPanel({ demandGate: { mode: 'canonical', status: 'ready', base: demandBaseFixture } });
     fireEvent.click(screen.getByRole('button', { name: /Generar Plan de Corte 2D/i }));
     // El pin viaja en el plan generado: guardar entrega exactamente esa base.
     let saved: CutPlan | undefined;
@@ -877,9 +904,11 @@ describe('ProductionOrderOptimizationPanel — #739 preparación de liberación 
             W2: 0,
           },
         ]}
-        demandBase={demandBaseFixture}
+        demandGate={{ mode: 'canonical', status: 'ready', base: demandBaseFixture }}
         onSaveCutPlan={(plan) => {
           saved = plan;
+          // Canonical callbacks confirm the write (#739 review R2).
+          return { kind: 'saved' } as const;
         }}
       />,
     );
@@ -894,7 +923,7 @@ describe('ProductionOrderOptimizationPanel — #739 preparación de liberación 
       ...cutPlanFixture('saw-guillotine'),
       releaseBase: { ...demandBaseFixture, releaseId: 'rel-OTRA', releaseNumber: 7 },
     };
-    renderPanel({ initialCutPlan: foreignBase, demandBase: demandBaseFixture });
+    renderPanel({ initialCutPlan: foreignBase, demandGate: { mode: 'canonical', status: 'ready', base: demandBaseFixture } });
     expect(screen.getByTestId('prod-opt-plan-base-mismatch')).toBeDefined();
     expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled).toBe(true);
@@ -939,8 +968,211 @@ describe('ProductionOrderOptimizationPanel — #739 preparación de liberación 
   });
 
   it('requisición previa: con demanda congelada no estima desde el proyecto vivo', () => {
-    renderPanel({ demandBase: demandBaseFixture });
+    renderPanel({ demandGate: { mode: 'canonical', status: 'ready', base: demandBaseFixture } });
     expect(screen.getByTestId('prod-opt-release-requisition-note')).toBeDefined();
+  });
+
+  it('#739 review: contexto canónico cargando — un plan previo NO queda generable ni exportable', () => {
+    renderPanel({
+      initialCutPlan: cutPlanFixture('saw-guillotine'),
+      demandGate: { mode: 'canonical', status: 'loading' },
+    });
+    expect((screen.getByTestId('prod-opt-generate') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('prod-opt-demand-gate').textContent).toContain(
+      'Esperando el despiece congelado',
+    );
+  });
+
+  it('#739 review: contexto canónico con error de demanda — sin generación ni exportación del plan previo', () => {
+    renderPanel({
+      initialCutPlan: cutPlanFixture('saw-guillotine'),
+      demandGate: {
+        mode: 'canonical',
+        status: 'error',
+        message: 'El catálogo vigente ya no tiene los materiales de la liberación (mat-x).',
+      },
+    });
+    expect((screen.getByTestId('prod-opt-generate') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('prod-opt-demand-gate').textContent).toContain('mat-x');
+  });
+
+  it('#739 review: al verificarse la base (loading → ready) la generación y exportación se habilitan', () => {
+    const rows: ProductionCutRow[] = [
+      {
+        description: 'LAT-01 · Lateral · M01', partCode: 'LAT-01', partName: 'Lateral',
+        moduleCode: 'M01', materialName: 'MDF Blanco 18mm', lengthMm: 800, widthMm: 500,
+        quantity: 2, grain: 1, L1: 0, L2: 0, W1: 0, W2: 0,
+      },
+    ];
+    const { rerender } = render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={fixtureCatalog()}
+        cutRows={rows}
+        demandGate={{ mode: 'canonical', status: 'loading' }}
+      />,
+    );
+    expect((screen.getByTestId('prod-opt-generate') as HTMLButtonElement).disabled).toBe(true);
+    rerender(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={fixtureCatalog()}
+        cutRows={rows}
+        onExportCutPlanPdf={() => undefined}
+        demandGate={{ mode: 'canonical', status: 'ready', base: demandBaseFixture }}
+      />,
+    );
+    expect((screen.getByTestId('prod-opt-generate') as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByTestId('prod-opt-generate'));
+    expect((screen.getByTestId('prod-opt-export-pdf-manual') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('#739 review: cadena REAL de guardado — fallo de storage no reporta éxito y lo dice en pantalla', () => {
+    const storage = createStorageStub();
+    storage.failSetItem = 'quota';
+    vi.stubGlobal('localStorage', storage);
+    try {
+      render(
+        <ProductionOrderOptimizationPanel
+          project={project()}
+          catalog={fixtureCatalog()}
+          cutRows={[
+            {
+              description: 'LAT-01 · Lateral · M01', partCode: 'LAT-01', partName: 'Lateral',
+              moduleCode: 'M01', materialName: 'MDF Blanco 18mm', lengthMm: 800, widthMm: 500,
+              quantity: 2, grain: 1, L1: 0, L2: 0, W1: 0, W2: 0,
+            },
+          ]}
+          demandGate={{ mode: 'canonical', status: 'ready', base: demandBaseFixture }}
+          onSaveCutPlan={(plan) =>
+            saveReleaseCutPlan({ organizationId: 'org-a' }, plan.projectId, demandBaseFixture.releaseId, plan)
+          }
+        />,
+      );
+      fireEvent.click(screen.getByTestId('prod-opt-generate'));
+      fireEvent.click(screen.getByRole('button', { name: /Guardar Plan/i }));
+      expect(screen.queryByTestId('prod-opt-save-ok')).toBeNull();
+      const error = screen.getByTestId('prod-opt-save-error');
+      expect(error.textContent).toContain('puede perderse al recargar');
+      // Nothing was persisted for the release.
+      expect(
+        loadReleaseCutPlan({ organizationId: 'org-a' }, 'p1', demandBaseFixture.releaseId),
+      ).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('#739 review: cadena REAL de guardado — éxito confirmado y recarga devuelve exactamente el disco guardado', () => {
+    const storage = createStorageStub();
+    vi.stubGlobal('localStorage', storage);
+    try {
+      render(
+        <ProductionOrderOptimizationPanel
+          project={project()}
+          catalog={fixtureCatalog()}
+          cutRows={[
+            {
+              description: 'LAT-01 · Lateral · M01', partCode: 'LAT-01', partName: 'Lateral',
+              moduleCode: 'M01', materialName: 'MDF Blanco 18mm', lengthMm: 800, widthMm: 500,
+              quantity: 2, grain: 1, L1: 0, L2: 0, W1: 0, W2: 0,
+            },
+          ]}
+          demandGate={{ mode: 'canonical', status: 'ready', base: demandBaseFixture }}
+          onSaveCutPlan={(plan) =>
+            saveReleaseCutPlan({ organizationId: 'org-a' }, plan.projectId, demandBaseFixture.releaseId, plan)
+          }
+        />,
+      );
+      // Ajuste técnico concreto: disco 5 (primer spinbutton del panel en modo sierra).
+      const inputs = screen.getAllByRole('spinbutton');
+      fireEvent.change(inputs[0]!, { target: { value: '5' } });
+      fireEvent.click(screen.getByTestId('prod-opt-generate'));
+      fireEvent.click(screen.getByRole('button', { name: /Guardar Plan/i }));
+      expect(screen.getByTestId('prod-opt-save-ok')).toBeDefined();
+      const saved = loadReleaseCutPlan({ organizationId: 'org-a' }, 'p1', demandBaseFixture.releaseId);
+      expect(saved?.config.sawKerfMm).toBe(5);
+      expect(saved?.releaseBase?.releaseId).toBe(demandBaseFixture.releaseId);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('#739 review R2: plan existente + demanda loading/error — Guardar deshabilitado y cero persistencia', () => {
+    for (const gate of [
+      { mode: 'canonical' as const, status: 'loading' as const },
+      { mode: 'canonical' as const, status: 'error' as const, message: 'No se pudo leer el despiece congelado.' },
+    ]) {
+      cleanup();
+      const saveSpy = vi.fn();
+      render(
+        <ProductionOrderOptimizationPanel
+          project={project()}
+          catalog={fixtureCatalog()}
+          cutRows={[]}
+          initialCutPlan={cutPlanFixture('saw-guillotine')}
+          demandGate={gate}
+          onSaveCutPlan={saveSpy}
+        />,
+      );
+      const saveBtn = screen.getByTestId('prod-opt-save') as HTMLButtonElement;
+      expect(saveBtn.disabled, JSON.stringify(gate)).toBe(true);
+      // A disabled button cannot invoke the handler; assert zero persistence
+      // attempts even if something forces the click path.
+      fireEvent.click(saveBtn);
+      expect(saveSpy).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('prod-opt-save-ok')).toBeNull();
+      expect(screen.queryByTestId('prod-opt-save-error')).toBeNull();
+    }
+  });
+
+  it('#739 review R2: callback canónico sin resultado NUNCA es éxito (void ≠ guardado)', () => {
+    const pinnedPlan: CutPlan = {
+      ...cutPlanFixture('saw-guillotine'),
+      releaseBase: demandBaseFixture,
+    };
+    render(
+      <ProductionOrderOptimizationPanel
+        project={project()}
+        catalog={fixtureCatalog()}
+        cutRows={[]}
+        initialCutPlan={pinnedPlan}
+        demandGate={{ mode: 'canonical', status: 'ready', base: demandBaseFixture }}
+        onSaveCutPlan={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('prod-opt-save'));
+    expect(screen.queryByTestId('prod-opt-save-ok')).toBeNull();
+    expect(screen.getByTestId('prod-opt-save-error').textContent).toContain(
+      'no confirmó la escritura',
+    );
+  });
+
+  it('#739 review R2: plan de otra liberación — Guardar bloqueado con motivo', () => {
+    const foreignBase: CutPlan = {
+      ...cutPlanFixture('saw-guillotine'),
+      releaseBase: { ...demandBaseFixture, releaseId: 'rel-OTRA', releaseNumber: 7 },
+    };
+    renderPanel({
+      initialCutPlan: foreignBase,
+      demandGate: { mode: 'canonical', status: 'ready', base: demandBaseFixture },
+    });
+    expect((screen.getByTestId('prod-opt-save') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('#739 review: DXF canónico bloqueado con motivo visible (perforaciones del proyecto mutable)', () => {
+    renderPanel({
+      initialCutPlan: cutPlanFixture('cnc-nesting'),
+      onExportCutPlanDxf: undefined,
+      dxfUnavailableReason:
+        'El DXF de esta liberación queda pendiente: sus perforaciones se resuelven hoy desde el proyecto vivo. Usá el PDF/PTX del plan congelado.',
+    });
+    expect((screen.getByTestId('prod-opt-export-dxf-sheets') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('prod-opt-export-dxf-pieces') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('prod-opt-dxf-unavailable').textContent).toContain('perforaciones');
   });
 
   it('plan legacy sin cutStrategy en la config no genera drift falso (regresión #739)', () => {
