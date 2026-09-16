@@ -143,7 +143,7 @@ class HardwareAssetValidatorTest < Minitest::Test
     details = req[:payload]['body']['details']
     assert_equal 'SketchUp', details['host']['application']
     assert_equal '24.0.145-stub', details['host']['version']
-    assert_equal 'macOS', details['host']['os']
+    assert_equal @validator.send(:detect_os), details['host']['os']
     assert_equal '0.1.1', details['validatorVersion']
     refute_nil details['measuredBoundsMm']
     assert_in_delta 254.0, details['measuredBoundsMm']['widthMm'], 0.1
@@ -154,5 +154,17 @@ class HardwareAssetValidatorTest < Minitest::Test
     assert_nil @model.definitions[def_name]
   ensure
     file&.unlink
+  end
+
+  def test_detect_os_maps_sketchup_platform_correctly
+    singleton = class << ::Sketchup; self; end
+    singleton.send(:define_method, :platform) { :platform_osx }
+    assert_equal 'macOS', @validator.send(:detect_os)
+
+    singleton.send(:remove_method, :platform)
+    singleton.send(:define_method, :platform) { :platform_win }
+    assert_equal 'Windows', @validator.send(:detect_os)
+  ensure
+    singleton.send(:remove_method, :platform) if singleton&.method_defined?(:platform)
   end
 end
