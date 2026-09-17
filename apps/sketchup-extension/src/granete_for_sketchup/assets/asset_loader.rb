@@ -265,8 +265,10 @@ module Granete
           end
           return path if path
 
+          is_hist = placement.respond_to?(:historical?) && placement.historical?
+          diag_code = is_hist ? 'historical_asset_missing' : 'hardware_asset_missing'
           record_diagnostic(
-            'code' => 'hardware_asset_missing',
+            'code' => diag_code,
             'placementId' => placement.placement_id,
             'hardwareId' => placement.hardware_id,
             'assetId' => asset_id,
@@ -290,6 +292,8 @@ module Granete
         end
 
         def build_transform(transform_mm, basis)
+          return transform_mm if defined?(::Geom::Transformation) && transform_mm.is_a?(::Geom::Transformation)
+
           scale = 1.0 / 25.4
           pts = transform_mm.map { |v| v * scale }
 
