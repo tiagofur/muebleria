@@ -500,11 +500,15 @@ type Agregado struct {
 	WidthMm       int                 `json:"width_mm,omitempty"`
 	HeightMm      int                 `json:"height_mm,omitempty"`
 	DepthMm       int                 `json:"depth_mm,omitempty"`
-	Components    []ComponentInstance `json:"components,omitempty"`
-	HardwareLines []HardwareLine      `json:"hardware_lines,omitempty"`
-	Active        bool                `json:"active"`
-	CreatedAt     time.Time           `json:"created_at"`
-	UpdatedAt     time.Time           `json:"updated_at"`
+	Components              []ComponentInstance         `json:"components,omitempty"`
+	HardwareLines           []HardwareLine              `json:"hardware_lines,omitempty"`
+	CommercialKitHardwareID *string                     `json:"commercial_kit_hardware_id,omitempty"`
+	RigidMembers            []AgregadoRigidMember       `json:"rigid_members,omitempty"`
+	VariantSets             []AgregadoVariantSet        `json:"variant_sets,omitempty"`
+	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibility_rules,omitempty"`
+	Active                  bool                        `json:"active"`
+	CreatedAt               time.Time                   `json:"created_at"`
+	UpdatedAt               time.Time                   `json:"updated_at"`
 }
 
 // HardwarePlacement attaches a visible hardware instance to a component face for
