@@ -83,10 +83,23 @@ export {
 export {
   resolveProject3DPreview,
   resolveModuleHardwarePlacements,
+  resolveModuleAssemblies,
   type Project3DPreviewResult,
   type ProjectModule3DInstance,
   type ResolveProject3DOptions,
 } from './project3dPreview';
+export {
+  BoardMesh,
+  type BoardMeshProps,
+} from './BoardMesh';
+export {
+  AssemblyMesh,
+  assemblyTransformToThreeMatrix4,
+  assemblyPoseToThree,
+  composeFullVisualTransform,
+  type AssemblyMeshProps,
+  type ThreePose,
+} from './AssemblyMesh';
 export { type ModelFormat } from './ModelExporter';
 export { downloadBlob, sanitizeFilename } from './exportModel';
 export {

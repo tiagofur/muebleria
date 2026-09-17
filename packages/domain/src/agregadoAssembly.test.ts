@@ -4,13 +4,22 @@ import {
   type AgregadoRigidMember,
   type AgregadoVariantSet,
   type AssemblyDimensionRule,
+  type HardwareMountFrame,
   type PublishedAssemblySnapshot,
   type ResolvedAssembly,
   AssemblyVariantNotFoundError,
+  applyAssetNormalization,
+  applyAssetNormalizationVector,
+  applyAssemblyBasis,
   attachVisualPins,
+  composeMemberTransform,
+  deriveAssetNormalization,
   deriveHardwareBasisFromEuler,
   evaluateDimensionRule,
   freezePublishedAssemblySnapshot,
+  multiplyAssemblyBases,
+  projectPublishedAssemblySnapshotFor3D,
+  projectResolvedAssemblyFor3D,
   resolveAgregadoAssembly,
   validateAgregadoAssemblyDefinition,
   validateAgregadoRigidMember,
@@ -622,4 +631,324 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
       expect(m.mountFrame?.originMm).toEqual([10, 20, 30]);
     });
   });
+
+  describe('deriveAssetNormalization and Canonical #668 Parity', () => {
+    // Exact Go & Ruby cross-language fixture
+    const crossLangMountFrame: HardwareMountFrame = {
+      originMm: [15.0, 30.0, 45.0],
+      basis: {
+        x: [0.0, 1.0, 0.0],
+        y: [0.0, 0.0, 1.0],
+        z: [1.0, 0.0, 0.0],
+      },
+    };
+
+    it('matches Go/Ruby exact fixture: origin maps to [0, 0, 0]', () => {
+      const norm = deriveAssetNormalization(crossLangMountFrame);
+      const canonicalOrigin = applyAssetNormalization(norm, crossLangMountFrame.originMm);
+
+      expect(Math.abs(canonicalOrigin[0])).toBeLessThan(1e-6);
+      expect(Math.abs(canonicalOrigin[1])).toBeLessThan(1e-6);
+      expect(Math.abs(canonicalOrigin[2])).toBeLessThan(1e-6);
+    });
+
+    it('matches Go/Ruby exact fixture: primary and normal axes map to canonical +X and +Z', () => {
+      const norm = deriveAssetNormalization(crossLangMountFrame);
+
+      const pAxis = applyAssetNormalizationVector(norm, crossLangMountFrame.basis.x);
+      expect(Math.abs(pAxis[0] - 1.0)).toBeLessThan(1e-6);
+      expect(Math.abs(pAxis[1])).toBeLessThan(1e-6);
+      expect(Math.abs(pAxis[2])).toBeLessThan(1e-6);
+
+      const pNorm = applyAssetNormalizationVector(norm, crossLangMountFrame.basis.z);
+      expect(Math.abs(pNorm[0])).toBeLessThan(1e-6);
+      expect(Math.abs(pNorm[1])).toBeLessThan(1e-6);
+      expect(Math.abs(pNorm[2] - 1.0)).toBeLessThan(1e-6);
+    });
+
+    it('preserves exact distance between arbitrary 3D points (rigid transform invariant)', () => {
+      const norm = deriveAssetNormalization(crossLangMountFrame);
+      const pt1: [number, number, number] = [10.0, 50.0, 20.0];
+      const pt2: [number, number, number] = [80.0, -20.0, 95.0];
+
+      const dx = pt2[0] - pt1[0];
+      const dy = pt2[1] - pt1[1];
+      const dz = pt2[2] - pt1[2];
+      const distRaw = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      const c1 = applyAssetNormalization(norm, pt1);
+      const c2 = applyAssetNormalization(norm, pt2);
+      const cdx = c2[0] - c1[0];
+      const cdy = c2[1] - c1[1];
+      const cdz = c2[2] - c1[2];
+      const distCanonical = Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz);
+
+      expect(Math.abs(distRaw - distCanonical)).toBeLessThan(1e-6);
+    });
+
+    it('rejects mirrored (left-handed, det = -1) mount frame basis', () => {
+      const mirrored: HardwareMountFrame = {
+        originMm: [0, 0, 0],
+        basis: {
+          x: [1, 0, 0],
+          y: [0, 1, 0],
+          z: [0, 0, -1],
+        },
+      };
+      expect(() => deriveAssetNormalization(mirrored)).toThrow(/must be right-handed with det=\+1/);
+    });
+
+    it('rejects non-finite coordinates in mount frame origin', () => {
+      const badOrigin: HardwareMountFrame = {
+        originMm: [Number.NaN, 0, 0],
+        basis: {
+          x: [1, 0, 0],
+          y: [0, 1, 0],
+          z: [0, 0, 1],
+        },
+      };
+      expect(() => deriveAssetNormalization(badOrigin)).toThrow(/must be finite/);
+    });
+  });
+
+  describe('composeMemberTransform and Transform Composition', () => {
+    it('returns member transform unchanged when no mountFrame is supplied', () => {
+      const memberTransform = {
+        translationMm: [100, 200, 300] as const,
+        basis: {
+          x: [1, 0, 0] as const,
+          y: [0, 1, 0] as const,
+          z: [0, 0, 1] as const,
+        },
+      };
+      const composed = composeMemberTransform(memberTransform);
+      expect(composed.translationMm).toEqual([100, 200, 300]);
+      expect(composed.basis).toEqual(memberTransform.basis);
+    });
+
+    it('composes T_member * T_norm such that mount origin lands exactly on member nominal translation', () => {
+      const mountFrame: HardwareMountFrame = {
+        originMm: [25.0, -10.0, 8.0],
+        basis: {
+          x: [0.0, 1.0, 0.0],
+          y: [-1.0, 0.0, 0.0],
+          z: [0.0, 0.0, 1.0],
+        },
+      };
+      const memberTransform = {
+        translationMm: [300.0, 400.0, 500.0] as const,
+        basis: {
+          x: [1.0, 0.0, 0.0] as const,
+          y: [0.0, 1.0, 0.0] as const,
+          z: [0.0, 0.0, 1.0] as const,
+        },
+      };
+
+      const composed = composeMemberTransform(memberTransform, mountFrame);
+
+      // In asset space, point at mount origin [25, -10, 8]
+      // In assembly space: composed.translation + composed.basis * point
+      const pAsset = mountFrame.originMm;
+      const rotP = applyAssemblyBasis(composed.basis, pAsset);
+      const pAssembly: readonly [number, number, number] = [
+        composed.translationMm[0] + rotP[0],
+        composed.translationMm[1] + rotP[1],
+        composed.translationMm[2] + rotP[2],
+      ];
+
+      expect(Math.abs(pAssembly[0] - 300.0)).toBeLessThan(1e-4);
+      expect(Math.abs(pAssembly[1] - 400.0)).toBeLessThan(1e-4);
+      expect(Math.abs(pAssembly[2] - 500.0)).toBeLessThan(1e-4);
+    });
+
+    it('double application of normalization breaks position (negative test)', () => {
+      const mountFrame: HardwareMountFrame = {
+        originMm: [25.0, -10.0, 8.0],
+        basis: {
+          x: [0.0, 1.0, 0.0],
+          y: [-1.0, 0.0, 0.0],
+          z: [0.0, 0.0, 1.0],
+        },
+      };
+      const memberTransform = {
+        translationMm: [300.0, 400.0, 500.0] as const,
+        basis: {
+          x: [1.0, 0.0, 0.0] as const,
+          y: [0.0, 1.0, 0.0] as const,
+          z: [0.0, 0.0, 1.0] as const,
+        },
+      };
+
+      const composedOnce = composeMemberTransform(memberTransform, mountFrame);
+      // Double normalize!
+      const composedTwice = composeMemberTransform(composedOnce, mountFrame);
+
+      const pAsset = mountFrame.originMm;
+      const rotP = applyAssemblyBasis(composedTwice.basis, pAsset);
+      const pAssemblyDouble: readonly [number, number, number] = [
+        composedTwice.translationMm[0] + rotP[0],
+        composedTwice.translationMm[1] + rotP[1],
+        composedTwice.translationMm[2] + rotP[2],
+      ];
+
+      // Double normalization does NOT land on nominal [300, 400, 500]
+      expect(Math.abs(pAssemblyDouble[0] - 300.0)).toBeGreaterThan(1.0);
+    });
+  });
+
+  describe('3D Projection: projectResolvedAssemblyFor3D & projectPublishedAssemblySnapshotFor3D', () => {
+    const mockResolved: ResolvedAssembly = {
+      agregadoId: 'agr-drawer-system',
+      resolvedDimensionsMm: [600, 550, 200],
+      selectedVariants: [
+        { variantSetId: 'vs-depth', hardwareId: 'hw-runner-500', nominalDimensionMm: 500 },
+      ],
+      rigidMembers: [
+        {
+          memberId: 'side_left',
+          role: 'side',
+          hardwareId: 'hw-side-500',
+          bomRole: 'included_in_kit',
+          localTransform: {
+            translationMm: [0, 0, 0],
+            basis: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+          },
+        },
+        {
+          memberId: 'side_right',
+          role: 'side',
+          hardwareId: 'hw-side-500',
+          bomRole: 'included_in_kit',
+          localTransform: {
+            translationMm: [600, 0, 0],
+            basis: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+          },
+        },
+      ],
+      fabricatedComponents: [
+        {
+          componentId: 'comp-bottom',
+          quantity: 1,
+          lengthMm: 490,
+          widthMm: 565,
+          transform: {
+            translationMm: [17.5, 10, 16],
+            basis: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+          },
+        },
+      ],
+      bomItems: [],
+    };
+
+    it('projectResolvedAssemblyFor3D projects live preview without scaling rigid members', () => {
+      const projected = projectResolvedAssemblyFor3D({
+        assembly: mockResolved,
+        placement: { originMm: [100, 200, 300] },
+        assemblyInstanceId: 'inst-drawer-1',
+      });
+
+      expect(projected.assemblyInstanceId).toBe('inst-drawer-1');
+      expect(projected.isHistorical).toBe(false);
+      expect(projected.recipeRevision).toBeUndefined();
+      expect(projected.rigidMembers).toHaveLength(2);
+
+      for (const m of projected.rigidMembers) {
+        expect(m.renderStatus).toBe('proxy');
+        // Rigorous invariant: ProjectedRigidMember has NO scale property
+        expect((m as any).scale).toBeUndefined();
+        // Effective basis has det = +1
+        const b = m.effectiveTransform.basis;
+        const det = b.x[0] * (b.y[1] * b.z[2] - b.y[2] * b.z[1]) +
+                    b.x[1] * (b.y[2] * b.z[0] - b.y[0] * b.z[2]) +
+                    b.x[2] * (b.y[0] * b.z[1] - b.y[1] * b.z[0]);
+        expect(Math.abs(det - 1.0)).toBeLessThan(1e-6);
+      }
+
+      expect(projected.fabricatedComponents[0]!.widthMm).toBe(565);
+    });
+
+    it('projectResolvedAssemblyFor3D rejects PublishedAssemblySnapshot to enforce explicit entrypoints', () => {
+      const snapshotLike = {
+        ...mockResolved,
+        agregadoRevisionNumber: 3,
+      } as any;
+
+      expect(() =>
+        projectResolvedAssemblyFor3D({
+          assembly: snapshotLike,
+          placement: { originMm: [0, 0, 0] },
+          assemblyInstanceId: 'inst-1',
+        }),
+      ).toThrow(/use projectPublishedAssemblySnapshotFor3D for historical snapshots/);
+    });
+
+    it('projectPublishedAssemblySnapshotFor3D reports exact when asset is available in store', () => {
+      const snapshot: PublishedAssemblySnapshot = {
+        ...mockResolved,
+        agregadoRevisionNumber: 4,
+        rigidMembers: mockResolved.rigidMembers.map((m) => ({
+          ...m,
+          assetId: 'ast-1',
+          assetRevisionId: 'rev-ar-2',
+          sha256: 'sha-2',
+        })),
+      };
+
+      const availableAssets = new Set(['rev-ar-2']);
+      const projected = projectPublishedAssemblySnapshotFor3D({
+        snapshot,
+        placement: { originMm: [0, 0, 0] },
+        assemblyInstanceId: 'hist-drawer-1',
+        availableAssets,
+      });
+
+      expect(projected.isHistorical).toBe(true);
+      expect(projected.recipeRevision).toBe(4);
+      expect(projected.rigidMembers[0]!.renderStatus).toBe('exact');
+      expect(projected.rigidMembers[0]!.assetRevisionId).toBe('rev-ar-2');
+    });
+
+    it('projectPublishedAssemblySnapshotFor3D fails closed with historical_asset_missing when exact asset is missing (no fallback)', () => {
+      const snapshot: PublishedAssemblySnapshot = {
+        ...mockResolved,
+        agregadoRevisionNumber: 4,
+        rigidMembers: mockResolved.rigidMembers.map((m) => ({
+          ...m,
+          assetId: 'ast-1',
+          assetRevisionId: 'rev-ar-2',
+          sha256: 'sha-2',
+        })),
+      };
+
+      // Only rev-ar-5 is available in catalog, NOT the historical rev-ar-2
+      const availableAssets = new Set(['rev-ar-5']);
+      const projected = projectPublishedAssemblySnapshotFor3D({
+        snapshot,
+        placement: { originMm: [0, 0, 0] },
+        assemblyInstanceId: 'hist-drawer-1',
+        availableAssets,
+      });
+
+      expect(projected.rigidMembers[0]!.renderStatus).toBe('historical_asset_missing');
+      expect(projected.rigidMembers[0]!.statusDiagnostic).toContain('exact historical asset unavailable (rev: rev-ar-2)');
+      // MUST NOT fall back to rev-ar-5!
+      expect(projected.rigidMembers[0]!.assetRevisionId).toBe('rev-ar-2');
+    });
+
+    it('projectPublishedAssemblySnapshotFor3D rejects invalid or non-positive recipeRevision', () => {
+      const badSnapshot = {
+        ...mockResolved,
+        agregadoRevisionNumber: 0,
+      } as any;
+
+      expect(() =>
+        projectPublishedAssemblySnapshotFor3D({
+          snapshot: badSnapshot,
+          placement: { originMm: [0, 0, 0] },
+          assemblyInstanceId: 'hist-1',
+        }),
+      ).toThrow(/recipeRevision must be positive integer/);
+    });
+  });
 });
+

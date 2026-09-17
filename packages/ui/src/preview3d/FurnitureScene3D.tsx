@@ -43,6 +43,9 @@ import {
 } from '@granete/domain';
 import { HardwareMesh } from './HardwareMesh';
 import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementGizmo';
+import { BoardMesh } from './BoardMesh';
+import { AssemblyMesh } from './AssemblyMesh';
+import type { ProjectedAssembly } from '@granete/domain';
 import {
   beginDragFeedbackSample,
   endDragFeedbackSample,
@@ -159,9 +162,12 @@ export type FurnitureSceneModule = {
   readonly plinthSides?: PlinthSides;
   /** Visual countertop slab on top of floor cabinets (presentation). */
   readonly showCountertop?: boolean;
-  readonly showOuterGhost?: boolean;
   /** Per-part resolved hardware placements (handles, hinges) for 3D rendering. */
   readonly resolvedHardwarePlacements?: readonly ResolvedHardwarePlacement[];
+  /** Parametric hardware assemblies (drawers, runners, lifts) resolved for 3D rendering. */
+  readonly assemblies?: readonly ProjectedAssembly[];
+  /** Outer ghost box visibility for this module. */
+  readonly showOuterGhost?: boolean;
 };
 
 /** Simple room wall segment in workshop mm (plan X/Y). */
@@ -444,171 +450,7 @@ export type FurnitureScene3DProps = {
   readonly boardPaintHoverModuleKey?: string | null;
 };
 
-function BoardMesh({
-  visual,
-  showWireframe = false,
-  showOutlines = false,
-  selected = false,
-  dimmed = false,
-  onSelect,
-  lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
-  hardwarePlacements,
-  hardwareCatalog,
-  hardwareSelectedId,
-  onSelectHardwareId,
-  gizmoRawPlacement,
-  onGizmoPlacementChange,
-}: {
-  readonly visual: BoardPartVisual;
-  readonly showWireframe?: boolean;
-  readonly showOutlines?: boolean;
-  readonly selected?: boolean;
-  readonly dimmed?: boolean;
-  readonly onSelect?: (partId: string) => void;
-  readonly lightingMode?: SceneLightingMode;
-  /**
-   * Resolved hardware placements filtered to this board (by
-   * componentInstanceId === visual.id). Rendered as children of the board group
-   * so they inherit the board transform — the group's local frame matches the
-   * resolver contract.
-   */
-  readonly hardwarePlacements?: readonly ResolvedHardwarePlacement[];
-  readonly hardwareCatalog?: Readonly<Map<string, Hardware>>;
-  /** F143 — id de herraje seleccionado (modo detalle) para highlight. */
-  readonly hardwareSelectedId?: string | null;
-  /** F143 — click en herraje (modo detalle). */
-  readonly onSelectHardwareId?: (hardwareId: string) => void;
-  /** F131: raw placement backing the first resolved one (gizmo edit target). */
-  readonly gizmoRawPlacement?: HardwarePlacement;
-  /** F131: gizmo edits flow up (snap 32mm); absent → gizmo mounts read-only. */
-  readonly onGizmoPlacementChange?: (patch: Partial<HardwarePlacement>) => void;
-}): ReactNode {
-  const [w, t, l] = visual.size;
-  const transparent = showWireframe || dimmed;
-  const opacity = dimmed ? 0.12 : showWireframe ? 0.3 : 1;
-  const showEdges = showOutlines || showWireframe || selected;
-  // Black outlines for clear board boundaries; selection keeps amber.
-  const edgeColor = selected
-    ? '#f5c542'
-    : showWireframe
-      ? visual.color
-      : '#000000';
-  const handleMeshes =
-    hardwarePlacements && hardwarePlacements.length > 0 && hardwareCatalog
-      ? hardwarePlacements.map((placement) => {
-          const hardware = hardwareCatalog.get(placement.hardwareId);
-          if (!hardware) return null; // swapped/removed → no orphan mesh (VH-09)
-          // Remount on hardware/shape swap so material + geometry refresh
-          // cleanly (mirrors BoardMeshMaterial key discipline).
-          const hardwareId = `${placement.componentInstanceId}:${placement.hardwareId}`;
-          return (
-            <HardwareMesh
-              key={`${visual.id}:${placement.hardwareId}:${placement.componentInstanceId}`}
-              placement={placement}
-              hardware={hardware}
-              lightingMode={lightingMode}
-              selected={hardwareSelectedId === hardwareId}
-              onSelect={
-                onSelectHardwareId ? () => onSelectHardwareId(hardwareId) : undefined
-              }
-            />
-          );
-        })
-      : null;
-  // F131 (deuda F070): gizmo montado en el viewport para la pieza seleccionada.
-  const showGizmo =
-    selected && pickGizmoPlacement(selected, hardwarePlacements ?? []);
-  const gizmoAnchor = hardwarePlacements?.[0];
-  return (
-    <group position={visual.position} rotation={visual.rotation}>
-      {showGizmo && gizmoAnchor ? (
-        <group position={gizmoAnchor.localPosition}>
-          <HardwarePlacementGizmo
-            placement={
-              gizmoRawPlacement ?? {
-                hardwareId: gizmoAnchor.hardwareId,
-                anchorFace: 'front',
-                relativePosition: {
-                  xMm: gizmoAnchor.localPosition[0],
-                  yMm: gizmoAnchor.localPosition[2],
-                },
-              }
-            }
-            anchorFace={gizmoRawPlacement?.anchorFace ?? 'front'}
-            boardWidthMm={visual.size[0]}
-            boardHeightMm={visual.size[2]}
-            snapMm={32}
-            onChangePlacement={onGizmoPlacementChange}
-          />
-        </group>
-      ) : null}
-      <mesh
-        position={[w / 2, t / 2, l / 2]}
-        castShadow={!showWireframe && !dimmed}
-        receiveShadow={!showWireframe && !dimmed}
-        userData={{
-          partId: visual.id,
-          description: visual.description,
-          optionRole: visual.optionRole,
-        }}
-        onClick={(e) => {
-          if (!onSelect) return;
-          e.stopPropagation();
-          onSelect(visual.id);
-        }}
-        onPointerOver={
-          onSelect
-            ? (e) => {
-                e.stopPropagation();
-                if (typeof document !== 'undefined') {
-                  document.body.style.cursor = 'pointer';
-                }
-              }
-            : undefined
-        }
-        onPointerOut={
-          onSelect
-            ? () => {
-                if (typeof document !== 'undefined') {
-                  document.body.style.cursor = 'auto';
-                }
-              }
-            : undefined
-        }
-      >
-        <boxGeometry args={[w, t, l]} />
-        <Suspense
-          fallback={
-            <meshStandardMaterial
-              color={visual.color}
-              transparent={transparent}
-              opacity={opacity}
-              depthWrite={!transparent}
-              roughness={0.55}
-              metalness={0.04}
-            />
-          }
-        >
-          <BoardMeshMaterial
-            key={`${visual.id}:${visual.textureUrl ?? ''}:${visual.grain}:${visual.color}:${lightingMode}`}
-            visual={visual}
-            selected={selected}
-            transparent={transparent}
-            opacity={opacity}
-            lightingMode={lightingMode}
-          />
-        </Suspense>
-        {showEdges ? (
-          <Edges scale={1} threshold={15} color={edgeColor} />
-        ) : null}
-      </mesh>
-      {/* Hardware (handles/hinges) mount as siblings of the <mesh> inside the
-          board group: they share the group's local frame ([0,W]×[0,T]×[0,L]),
-          so the resolver's localPosition lands on the anchor face. */}
-      {handleMeshes}
-    </group>
-  );
-}
+export { BoardMesh } from './BoardMesh';
 
 function OuterGhost({
   width,
@@ -1584,6 +1426,21 @@ function ModuleGroup({
           />
         );
       })}
+      {mod.assemblies?.map((assembly) => (
+        <AssemblyMesh
+          key={`${mod.key}-${assembly.assemblyInstanceId}`}
+          assembly={assembly}
+          hardwareCatalog={hardwareCatalog}
+          lightingMode={lightingMode}
+          showWireframe={showWireframe}
+          showOutlines={showOutlines || moduleSelected}
+          selected={moduleSelected}
+          colorMode={colorMode}
+          materialColors={materialColors}
+          materialTextures={materialTextures}
+          surfaceMode={surfaceMode}
+        />
+      ))}
     </group>
   );
 }
@@ -1753,8 +1610,13 @@ function CameraViewSetter({
  * queda en telemetría para el gate de draw calls del smoke de performance.
  */
 function ScenePerfProbe(): null {
-  const gl = useThree((s) => s.gl);
+  const { gl, scene } = useThree();
   const frameCount = useRef(0);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __graneteScene?: unknown }).__graneteScene = scene;
+    }
+  }, [scene]);
   useFrame(() => {
     frameCount.current += 1;
     if (frameCount.current % 30 !== 0) return;

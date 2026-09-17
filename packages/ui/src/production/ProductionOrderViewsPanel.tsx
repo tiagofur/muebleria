@@ -441,6 +441,7 @@ export function ProductionOrderViewsPanel({
                 showCountertop: m.showCountertop,
                 showOuterGhost: true,
                 resolvedHardwarePlacements: m.resolvedHardwarePlacements,
+                assemblies: m.assemblies,
               }))}
               walls={sceneWalls}
               totalWidth={preview.totalWidth}

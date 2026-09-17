@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { createSeedWorkspace } from '@granete/storage';
 
 /**
  * #444 — Proyectar: deterministic WebGL visual regression gate.
@@ -39,7 +40,9 @@ import { test, expect, type Page } from '@playwright/test';
 test.use({
   viewport: { width: 1280, height: 800 },
   deviceScaleFactor: 1,
-  reducedMotion: 'reduce',
+  contextOptions: {
+    reducedMotion: 'reduce',
+  },
 });
 
 // Drag MIME types the studio canvas recognizes (paintMaterial.ts).
@@ -490,4 +493,419 @@ test.describe('Proyectar visual regression (WebGL)', () => {
       maxDiffPixelRatio: 0.002,
     });
   });
+
+  // ── Scenario 7 — #670-C Point 10: Real WebGL Assembly Resolution ─────────
+
+  test('Point 10: WebGL real — FixtureDrawerSystem W=600 -> W=800 live scene graph mutation', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+
+    const consoleErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        const text = msg.text();
+        if (!text.includes('favicon') && !text.includes('404')) {
+          consoleErrors.push(text);
+        }
+      }
+    });
+    page.on('pageerror', (err) => {
+      consoleErrors.push(err.message);
+    });
+
+    const customWs = createDrawerAssemblySeedWorkspace();
+    await page.addInitScript((wsJson) => {
+      try {
+        sessionStorage.setItem('granete_session', 'guest');
+        sessionStorage.setItem('granete_proyectar_visible', '1');
+        localStorage.setItem('granete_guest_workspace', wsJson);
+        localStorage.setItem('muebles_workspace_v1', wsJson);
+      } catch {
+        /* storage unavailable */
+      }
+    }, JSON.stringify(customWs));
+
+    // 1. Abrir Proyectar
+    await page.goto('/quotes');
+    const draftCard = page
+      .locator('.project-card', { hasText: 'Demo plantilla' })
+      .first();
+    await draftCard.waitFor({ timeout: 20_000 });
+    await draftCard.click();
+    await page.waitForSelector('.workspace-chrome, .project-detail', {
+      timeout: 20_000,
+    });
+    await page.waitForSelector('[data-testid="project-chrome-projectar"]', {
+      timeout: 20_000,
+    });
+    await page.click('[data-testid="project-chrome-projectar"]');
+    await waitForStudioCanvas(page);
+
+    // 2. Insertar primer módulo del catálogo (pre-configurado con DrawerSystem)
+    await insertFirstLibraryCard(page);
+    await fitCamera(page);
+    await settleCanvas(page);
+
+    type SceneMemberInfo = {
+      assemblyInstanceId: string;
+      posX: number;
+      posY: number;
+      posZ: number;
+      scale: [number, number, number];
+      det: number;
+      worldMatrix: number[];
+      memberId: string;
+      hardwareId: string;
+      assetRevisionId: string;
+      renderStatus: string;
+    };
+
+    type SceneBottomInfo = {
+      size: [number, number, number];
+      description: string;
+    };
+
+    type SceneQueryResult = {
+      leftMember: SceneMemberInfo | null;
+      rightMember: SceneMemberInfo | null;
+      bottomComponent: SceneBottomInfo | null;
+      allUserData: any[];
+      count: number;
+    };
+
+    // 3. Helper de consulta programática del grafo Three.js
+    const queryScene = async (): Promise<SceneQueryResult | null> => {
+      return page.evaluate<SceneQueryResult | null>(() => {
+        const scene = (window as any).__graneteScene;
+        if (!scene) return null;
+
+        let leftMember: SceneMemberInfo | null = null;
+        let rightMember: SceneMemberInfo | null = null;
+        let bottomComponent: SceneBottomInfo | null = null;
+
+        scene.traverse((obj: any) => {
+          if (obj.userData?.memberId === 'runner-left') {
+            obj.updateMatrix();
+            obj.updateWorldMatrix(true, true);
+            leftMember = {
+              assemblyInstanceId: obj.userData.assemblyInstanceId ?? '',
+              posX: obj.position.x,
+              posY: obj.position.y,
+              posZ: obj.position.z,
+              scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+              det: obj.matrix.determinant(),
+              worldMatrix: Array.from(obj.matrixWorld.elements as number[]),
+              memberId: obj.userData.memberId,
+              hardwareId: obj.userData.hardwareId,
+              assetRevisionId: obj.userData.assetRevisionId ?? '',
+              renderStatus: obj.userData.renderStatus ?? '',
+            };
+          }
+          if (obj.userData?.memberId === 'runner-right') {
+            obj.updateMatrix();
+            obj.updateWorldMatrix(true, true);
+            rightMember = {
+              assemblyInstanceId: obj.userData.assemblyInstanceId ?? '',
+              posX: obj.position.x,
+              posY: obj.position.y,
+              posZ: obj.position.z,
+              scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+              det: obj.matrix.determinant(),
+              worldMatrix: Array.from(obj.matrixWorld.elements as number[]),
+              memberId: obj.userData.memberId,
+              hardwareId: obj.userData.hardwareId,
+              assetRevisionId: obj.userData.assetRevisionId ?? '',
+              renderStatus: obj.userData.renderStatus ?? '',
+            };
+          }
+          if (obj.userData?.description === 'comp-bottom-panel' && obj.userData?.size) {
+            bottomComponent = {
+              size: obj.userData.size,
+              description: obj.userData.description,
+            };
+          }
+        });
+
+        const allUserData: any[] = [];
+        scene.traverse((obj: any) => {
+          if (obj.userData && Object.keys(obj.userData).length > 0) {
+            allUserData.push({ type: obj.type, userData: obj.userData });
+          }
+        });
+
+        return { leftMember, rightMember, bottomComponent, allUserData, count: scene.children.length };
+      });
+    };
+
+    // Esperar a que los miembros del assembly aparezcan en el canvas WebGL
+    await expect
+      .poll(async () => {
+        const data = await queryScene();
+        return Boolean(data?.leftMember && data?.rightMember && data?.bottomComponent);
+      }, { timeout: 20_000 })
+      .toBe(true);
+
+    const initial = (await queryScene())!;
+    expect(initial.leftMember).not.toBeNull();
+    expect(initial.rightMember).not.toBeNull();
+    expect(initial.bottomComponent).not.toBeNull();
+
+    // Verificaciones W=600 inicial:
+    // assemblyInstanceId estable
+    expect(initial.leftMember!.assemblyInstanceId).toBe('inst-drawer-1');
+    expect(initial.rightMember!.assemblyInstanceId).toBe('inst-drawer-1');
+
+    // runners visibles con hardwareId 'runner-500' y visual pins exactos
+    expect(initial.leftMember!.memberId).toBe('runner-left');
+    expect(initial.rightMember!.memberId).toBe('runner-right');
+    expect(initial.leftMember!.hardwareId).toBe('runner-500');
+    expect(initial.rightMember!.hardwareId).toBe('runner-500');
+    expect(initial.leftMember!.assetRevisionId).toBe('rev-runner-500');
+    expect(initial.rightMember!.assetRevisionId).toBe('rev-runner-500');
+    expect(initial.leftMember!.renderStatus).toBe('exact');
+    expect(initial.rightMember!.renderStatus).toBe('exact');
+
+    // world matrix programmatically captured
+    expect(initial.leftMember!.worldMatrix).toHaveLength(16);
+    expect(initial.rightMember!.worldMatrix).toHaveLength(16);
+
+    // scale [1,1,1] y det +1
+    expect(initial.leftMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(initial.leftMember!.scale[1]).toBeCloseTo(1.0, 4);
+    expect(initial.leftMember!.scale[2]).toBeCloseTo(1.0, 4);
+    expect(initial.leftMember!.det).toBeCloseTo(1.0, 4);
+    expect(initial.rightMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(initial.rightMember!.scale[1]).toBeCloseTo(1.0, 4);
+    expect(initial.rightMember!.scale[2]).toBeCloseTo(1.0, 4);
+    expect(initial.rightMember!.det).toBeCloseTo(1.0, 4);
+    // bottom ancho = 600 - 35 = 565 mm
+    expect(initial.bottomComponent!.size[0]).toBeCloseTo(565, 1);
+    expect(initial.bottomComponent!.size[1]).toBeCloseTo(15, 1); // thickness 15mm autoritativo
+
+    // 4. Actualizar W=800 mediante el input de Ancho
+    const widthInput = page.locator('label:has-text("Ancho") input');
+    await widthInput.waitFor({ timeout: 10_000 });
+    await widthInput.fill('800');
+    await widthInput.press('Enter');
+
+    // 5. Esperar escena estable con ancho actualizado
+    await expect
+      .poll(async () => {
+        const data = await queryScene();
+        return data?.bottomComponent?.size[0];
+      }, { timeout: 20_000 })
+      .toBeCloseTo(765, 1);
+
+    await settleCanvas(page);
+
+    // 6. Volver a capturar estado en W=800
+    const updated = (await queryScene())!;
+
+    // Aserciones obligatorias:
+    // right member delta = +200 mm
+    const deltaRightX = updated.rightMember!.posX - initial.rightMember!.posX;
+    expect(deltaRightX).toBeCloseTo(200, 1);
+
+    // left member translation delta = 0
+    const deltaLeftX = updated.leftMember!.posX - initial.leftMember!.posX;
+    expect(deltaLeftX).toBeCloseTo(0, 1);
+
+    // rigid members: scale = [1,1,1], det = +1
+    expect(updated.leftMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(updated.leftMember!.scale[1]).toBeCloseTo(1.0, 4);
+    expect(updated.leftMember!.scale[2]).toBeCloseTo(1.0, 4);
+    expect(updated.leftMember!.det).toBeCloseTo(1.0, 4);
+    expect(updated.rightMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(updated.rightMember!.scale[1]).toBeCloseTo(1.0, 4);
+    expect(updated.rightMember!.scale[2]).toBeCloseTo(1.0, 4);
+    expect(updated.rightMember!.det).toBeCloseTo(1.0, 4);
+
+    // bottom: 565 → 765
+    expect(updated.bottomComponent!.size[0]).toBeCloseTo(765, 1);
+    expect(updated.bottomComponent!.size[1]).toBeCloseTo(15, 1); // espesor preservado
+
+    // member & assembly IDs estables
+    expect(updated.leftMember!.assemblyInstanceId).toBe('inst-drawer-1');
+    expect(updated.rightMember!.assemblyInstanceId).toBe('inst-drawer-1');
+    expect(updated.leftMember!.memberId).toBe('runner-left');
+    expect(updated.rightMember!.memberId).toBe('runner-right');
+
+    // assetRevision / hardware IDs / renderStatus estables
+    expect(updated.leftMember!.hardwareId).toBe(initial.leftMember!.hardwareId);
+    expect(updated.rightMember!.hardwareId).toBe(initial.rightMember!.hardwareId);
+    expect(updated.leftMember!.assetRevisionId).toBe('rev-runner-500');
+    expect(updated.rightMember!.assetRevisionId).toBe('rev-runner-500');
+    expect(updated.leftMember!.renderStatus).toBe('exact');
+    expect(updated.rightMember!.renderStatus).toBe('exact');
+    expect(updated.leftMember!.worldMatrix).toHaveLength(16);
+    expect(updated.rightMember!.worldMatrix).toHaveLength(16);
+
+    // console: sin errores inesperados
+    expect(consoleErrors).toEqual([]);
+  });
 });
+
+function createDrawerAssemblySeedWorkspace() {
+  const seed = createSeedWorkspace();
+  const runner400 = {
+    id: 'runner-400',
+    code: 'RUN-400',
+    name: 'Runner 400mm',
+    unit: 'piece',
+    costPerUnit: 15,
+    active: true,
+    previewShape: 'slide' as const,
+    previewSizeMm: 400,
+    previewDiameterMm: 45,
+    previewColor: '#888888',
+    visualAsset: {
+      assetId: 'ast-runner-400',
+      assetRevisionId: 'rev-runner-400',
+      sha256: 'd'.repeat(64),
+    },
+  };
+  const runner500 = {
+    id: 'runner-500',
+    code: 'RUN-500',
+    name: 'Runner 500mm',
+    unit: 'piece',
+    costPerUnit: 18,
+    active: true,
+    previewShape: 'slide' as const,
+    previewSizeMm: 500,
+    previewDiameterMm: 45,
+    previewColor: '#888888',
+    visualAsset: {
+      assetId: 'ast-runner-500',
+      assetRevisionId: 'rev-runner-500',
+      sha256: 'e'.repeat(64),
+    },
+  };
+  const kitBoxRunner = {
+    id: 'kit-box-runner',
+    code: 'KIT-BOX',
+    name: 'Drawer Box Kit',
+    unit: 'set',
+    costPerUnit: 45,
+    active: true,
+  };
+  const compBottomPanel = {
+    id: 'comp-bottom-panel',
+    code: 'CMP-BTM',
+    name: 'Bottom Panel',
+    active: true,
+    placement: 'inferior',
+    geometry: { kind: 'rectangular_board' as const, lengthMm: 500, widthMm: 500, thicknessMm: 15 },
+    defaultEdges: [
+      { side: 'L1' as const, enabled: false },
+      { side: 'L2' as const, enabled: false },
+      { side: 'W1' as const, enabled: false },
+      { side: 'W2' as const, enabled: false },
+    ],
+    optionRoles: ['INTERIOR'],
+  };
+  const fixtureAgregado = {
+    id: 'agr-drawer-system',
+    code: 'AGR-SYS',
+    name: 'Drawer System Subassembly',
+    commercialKitHardwareId: 'kit-box-runner',
+    variantSets: [
+      {
+        id: 'depth-runners',
+        dimension: 'depth' as const,
+        variants: [
+          { nominalDimensionMm: 400, hardwareId: 'runner-400' },
+          { nominalDimensionMm: 500, hardwareId: 'runner-500' },
+        ],
+      },
+    ],
+    compatibilityRules: [
+      {
+        variantSetId: 'depth-runners',
+        clearanceMm: 20,
+        selectionStrategy: 'max_fitting' as const,
+      },
+    ],
+    rigidMembers: [
+      {
+        memberId: 'runner-left',
+        role: 'guide_left',
+        source: {
+          kind: 'variant' as const,
+          variant: { variantSetId: 'depth-runners' },
+        },
+        placement: {
+          x: { ref: 'min' as const, offsetMm: 0 },
+          y: { ref: 'min' as const, offsetMm: 0 },
+          z: { ref: 'min' as const, offsetMm: 0 },
+        },
+        bomRole: 'included_in_kit' as const,
+      },
+      {
+        memberId: 'runner-right',
+        role: 'guide_right',
+        source: {
+          kind: 'variant' as const,
+          variant: { variantSetId: 'depth-runners' },
+        },
+        placement: {
+          x: { ref: 'max' as const, offsetMm: 0 },
+          y: { ref: 'min' as const, offsetMm: 0 },
+          z: { ref: 'min' as const, offsetMm: 0 },
+        },
+        bomRole: 'included_in_kit' as const,
+      },
+    ],
+    components: [
+      {
+        componentId: 'comp-bottom-panel',
+        quantity: 1,
+        overrides: {
+          widthRule: {
+            source: 'assembly_width' as const,
+            multiplier: 1.0,
+            offsetMm: -35,
+          },
+          lengthRule: {
+            source: 'selected_variant' as const,
+            variantSetId: 'depth-runners',
+            multiplier: 1.0,
+            offsetMm: -10,
+          },
+          placementRule: {
+            x: { ref: 'min' as const, offsetMm: 17.5 },
+            y: { ref: 'min' as const, offsetMm: 5 },
+            z: { ref: 'min' as const, offsetMm: 15 },
+          },
+        },
+      },
+    ],
+  };
+
+  const baseModule = seed.catalog.modules[0]!;
+  const drawerModule = {
+    ...baseModule,
+    externalDims: { width: 600, height: 720, depth: 590 },
+    agregados: [
+      {
+        id: 'inst-drawer-1',
+        agregadoId: 'agr-drawer-system',
+        quantity: 1,
+        position: { xFormula: '0', yFormula: '0', zFormula: '100' },
+        dimensions: { widthFormula: 'PW', heightFormula: '200', depthFormula: 'PD' },
+      },
+    ],
+  };
+
+  return {
+    ...seed,
+    catalog: {
+      ...seed.catalog,
+      hardware: [...seed.catalog.hardware, runner400, runner500, kitBoxRunner],
+      components: [...(seed.catalog.components ?? []), compBottomPanel],
+      agregados: [...(seed.catalog.agregados ?? []), fixtureAgregado],
+      modules: [drawerModule, ...seed.catalog.modules.slice(1)],
+    },
+  };
+}
