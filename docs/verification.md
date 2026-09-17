@@ -276,6 +276,15 @@ Features de `ProjectEvent`, Approval, ProductionRelease o ChangeOrder deben prob
   #741: con P2 pendiente, avanzar pieza P1 ahora responde el bloqueo de
   continuidad (la pregunta de pertenencia precede a la preparación) en vez
   del «Ingeniería pendiente» de P2.
+- Corrección de revisión P0 (procedencia ambigua cierra, mismo PR):
+  `TestReleaseContinuity_MixedProvenanceBlocksItemWriters` (mixto P1/P2 →
+  floor-status y floor-scan 409 con 0 F092, activity-finish bloqueado con
+  finished_at NULL, advance y regeneración bloqueados),
+  `TestReleaseContinuity_UnpinnedExecutionsBlockItemWriters` (ejecuciones
+  canónicas sin pin de release → ítems bloqueados) y
+  `TestReleaseContinuity_MalformedExecutionPayloadFailsClosed` (payload
+  presente pero indecodificable → writer físico cerrado, 0 mutaciones, nada
+  se repara).
 - Dominio/UI TS: `releaseAuthority.test.ts` (señal de continuidad: single
   ownership, normal, mixta, legacy, progreso) y `ProductionOrderHub.test.tsx`
   (banner «Nueva revisión disponible» con copy §16, detalle Liberación #N sin

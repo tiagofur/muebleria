@@ -534,3 +534,181 @@ func TestReleaseContinuity_RaceRegenerateVsP2Creation(t *testing.T) {
 		t.Fatalf("executions must never mix or cross releases in the race, got %v", revisions)
 	}
 }
+
+// ── Review correction (P0): ambiguous provenance must fail CLOSED ──────────
+//
+// The first version of the guard conflated "no executions" with "mixed or
+// unpinned provenance" (both left Release empty and returned nil). The
+// item-level writers (floor-status, floor-scan, activity finish) have NO
+// per-target ProductionRevision check — that conflation was their fail-open
+// hole. These regressions pin the corrected policy: canonical project +
+// executions whose provenance cannot be verified → continuity blocker with
+// zero mutations, and a payload that does not decode NEVER becomes "no
+// executions".
+
+// continuityRewritePartRevisions rewrites the persisted part_instances with
+// the given production_revision values (one per part; "" strips the pin).
+func continuityRewritePartRevisions(t *testing.T, gs *gateSetup, revisions []string) {
+	t.Helper()
+	tag, err := gs.fx.admin.Exec(gs.ctx, `
+		UPDATE projects SET part_instances = (
+			SELECT jsonb_agg(
+				CASE WHEN revs.ord IS NOT NULL
+				     THEN pi.elem || jsonb_build_object('production_revision', NULLIF(revs.revision, ''))
+				     ELSE pi.elem END
+				ORDER BY pi.ord)
+			FROM jsonb_array_elements(part_instances) WITH ORDINALITY AS pi(elem, ord)
+			LEFT JOIN unnest($2::text[]) WITH ORDINALITY AS revs(revision, ord)
+				ON revs.ord = pi.ord
+		) WHERE id = $1`,
+		gs.fx.projectID, revisions)
+	if err != nil || tag.RowsAffected() == 0 {
+		t.Fatalf("rewrite part revisions %v: %v", revisions, err)
+	}
+}
+
+// Mixed P1/P2 provenance: every item-level physical writer blocks with the
+// continuity copy and leaves zero mutations (floor status, 0 F092, activity
+// unfinished).
+func TestReleaseContinuity_MixedProvenanceBlocksItemWriters(t *testing.T) {
+	gs := gateSetupFixture(t)
+	gs.completeEngineering(t, gs.p1.Release.ID, "mix741")
+	gs.seedMaterialsAuthorization(t, gs.p1.Release.ID, gs.p1.Release.ManufacturingFingerprint, false)
+	if rr := gs.advance(`{"operation_type":"cut","operator_name":"Op"}`); rr.Code != 200 {
+		t.Fatalf("P1 advance=%d %s", rr.Code, rr.Body.String())
+	}
+	p2ID, _ := continuityCreateP2(t, gs, "mix")
+
+	// Part 1 re-pinned to P2 while the rest stay P1: mixed provenance.
+	continuityRewritePartRevisions(t, gs, []string{p2ID})
+
+	// floor-status PATCH: blocked, zero mutations.
+	before := gs.counts(t)
+	rr := gs.call(http.MethodPatch, "/api/projects/"+gs.fx.projectID+"/items/"+gs.itemID+"/floor-status",
+		gs.h.tokenA, `{"status":"cut"}`, "", "")
+	continuityBlocked(t, rr.Code, rr.Body.String(), "mixed floor-status")
+	gs.gateAssertZeroMutations(t, before, "mixed floor-status")
+
+	// floor-scan: blocked, zero mutations.
+	before = gs.counts(t)
+	rr = gs.call(http.MethodPost, "/api/projects/"+gs.fx.projectID+"/floor-scan",
+		gs.h.tokenA, `{"item_id":"`+gs.itemID+`","advance":true}`, "", "")
+	continuityBlocked(t, rr.Code, rr.Body.String(), "mixed floor-scan")
+	gs.gateAssertZeroMutations(t, before, "mixed floor-scan")
+
+	// activity finish with physical effect: blocked in ONE transaction — the
+	// activity row is NOT finished (finished_at NULL) and no floor event was
+	// minted.
+	gateClaimActivity(t, gs, "mix-741-act-0001")
+	actorA := fiActorA()
+	err := fiTx(t, gs.fx.store, actorA, func(ctx context.Context) error {
+		_, fErr := gs.fx.store.FinishProductionActivityWithPhysicalEffect(ctx, storage.FinishActivityPhysicalCommand{
+			ActivityID: "mix-741-act-0001", PiecesCount: 2, Notes: "must not finish", ActorID: rlsUserA,
+		})
+		return fErr
+	})
+	if err == nil || !strings.Contains(err.Error(), "liberación anterior") {
+		t.Fatalf("mixed activity finish must block with the continuity copy, got=%v", err)
+	}
+	finishedAt, _, _ := gateActivityPoststate(t, gs, "mix-741-act-0001")
+	if finishedAt != nil {
+		t.Fatalf("mixed activity finish must leave finished_at NULL, got %v", finishedAt)
+	}
+
+	// Part advance on the mixed set is equally blocked BEFORE any closure
+	// logic (the pre-guard owns the ambiguous verdict).
+	before = gs.counts(t)
+	rr = gs.advance(`{"operation_type":"cnc","operator_name":"Op"}`)
+	continuityBlocked(t, rr.Code, rr.Body.String(), "mixed part advance")
+	gs.gateAssertZeroMutations(t, before, "mixed part advance")
+
+	// Regeneration over the mixed set never reconciles automatically.
+	before = gs.counts(t)
+	rr = gs.call(http.MethodPut, "/api/projects/"+gs.fx.projectID+"/part-executions",
+		gs.h.tokenA, `{"force":true}`, "", "mix-force-741")
+	continuityBlocked(t, rr.Code, rr.Body.String(), "mixed regeneration")
+	gs.gateAssertZeroMutations(t, before, "mixed regeneration")
+}
+
+// Canonical executions WITHOUT a ProductionRevision pin: unverifiable
+// provenance blocks the item-level writers (no correlation is invented, and
+// the empty revision is NOT treated as "no executions").
+func TestReleaseContinuity_UnpinnedExecutionsBlockItemWriters(t *testing.T) {
+	gs := gateSetupFixture(t)
+	gs.completeEngineering(t, gs.p1.Release.ID, "nopin741")
+	gs.seedMaterialsAuthorization(t, gs.p1.Release.ID, gs.p1.Release.ManufacturingFingerprint, false)
+
+	// Every part loses its release pin (authority stays P1): ambiguous.
+	continuityRewritePartRevisions(t, gs, []string{""})
+
+	before := gs.counts(t)
+	rr := gs.call(http.MethodPatch, "/api/projects/"+gs.fx.projectID+"/items/"+gs.itemID+"/floor-status",
+		gs.h.tokenA, `{"status":"cut"}`, "", "")
+	continuityBlocked(t, rr.Code, rr.Body.String(), "unpinned floor-status")
+	gs.gateAssertZeroMutations(t, before, "unpinned floor-status")
+
+	rr = gs.call(http.MethodPost, "/api/projects/"+gs.fx.projectID+"/floor-scan",
+		gs.h.tokenA, `{"item_id":"`+gs.itemID+`","advance":true}`, "", "")
+	continuityBlocked(t, rr.Code, rr.Body.String(), "unpinned floor-scan")
+	gs.gateAssertZeroMutations(t, before, "unpinned floor-scan")
+
+	// Regeneration also refuses the unverifiable set.
+	rr = gs.call(http.MethodPut, "/api/projects/"+gs.fx.projectID+"/part-executions",
+		gs.h.tokenA, `{}`, "", "nopin-regen-741")
+	continuityBlocked(t, rr.Code, rr.Body.String(), "unpinned regeneration")
+}
+
+// A present-but-undecodable execution payload is CORRUPT STATE, never "no
+// executions": the physical writer fails closed with zero mutations (the
+// error propagates; data is never repaired here).
+func TestReleaseContinuity_MalformedExecutionPayloadFailsClosed(t *testing.T) {
+	gs := gateSetupFixture(t)
+	gs.completeEngineering(t, gs.p1.Release.ID, "badjson741")
+	gs.seedMaterialsAuthorization(t, gs.p1.Release.ID, gs.p1.Release.ManufacturingFingerprint, false)
+	before := gs.counts(t)
+
+	if _, err := gs.fx.admin.Exec(gs.ctx, `
+		UPDATE projects SET part_instances = '{"shape":"not-an-array"}'::jsonb
+		WHERE id = $1`, gs.fx.projectID); err != nil {
+		t.Fatal(err)
+	}
+
+	// floor-status: NOT 200, zero mutations (fail closed on corrupt state).
+	rr := gs.call(http.MethodPatch, "/api/projects/"+gs.fx.projectID+"/items/"+gs.itemID+"/floor-status",
+		gs.h.tokenA, `{"status":"cut"}`, "", "")
+	if rr.Code == 200 {
+		t.Fatalf("malformed payload must block the floor writer, got 200 %s", rr.Body.String())
+	}
+	var floorStatus string
+	if err := gs.fx.admin.QueryRow(gs.ctx, `
+		SELECT COALESCE(floor_status,'pending') FROM project_items WHERE id=$1`, gs.itemID).Scan(&floorStatus); err != nil {
+		t.Fatal(err)
+	}
+	if floorStatus != "pending" {
+		t.Fatalf("malformed payload: item must stay pending, got %q", floorStatus)
+	}
+	var events int
+	if err := gs.fx.admin.QueryRow(gs.ctx, `
+		SELECT COUNT(*) FROM project_item_floor_events WHERE project_id=$1`, gs.fx.projectID).Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if events != before.floorEvents {
+		t.Fatalf("malformed payload: 0 new floor events expected, before=%d after=%d", before.floorEvents, events)
+	}
+
+	// activity finish: same fail-closed frontier (nothing finishes).
+	gateClaimActivity(t, gs, "badjson-741-act-0001")
+	actorA := fiActorA()
+	if err := fiTx(t, gs.fx.store, actorA, func(ctx context.Context) error {
+		_, fErr := gs.fx.store.FinishProductionActivityWithPhysicalEffect(ctx, storage.FinishActivityPhysicalCommand{
+			ActivityID: "badjson-741-act-0001", PiecesCount: 1, Notes: "must not finish", ActorID: rlsUserA,
+		})
+		return fErr
+	}); err == nil {
+		t.Fatal("malformed payload: activity finish must fail closed")
+	}
+	finishedAt, _, _ := gateActivityPoststate(t, gs, "badjson-741-act-0001")
+	if finishedAt != nil {
+		t.Fatalf("malformed payload: activity must stay unfinished, got %v", finishedAt)
+	}
+}

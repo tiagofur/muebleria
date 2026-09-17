@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -19,51 +20,68 @@ import (
 // resolve implicitly — continuing P1 versus replacing it with P2 is an
 // operational decision this PR deliberately does not automate.
 //
-// Conservative policy (fail closed, zero mutations):
+// Conservative policy (fail closed, zero mutations), for canonical projects:
 //
-//   - executions all belong to the authority → normal gates apply;
-//   - executions all belong to an OLDER release → continuity blocker BEFORE
-//     any preparation evidence is consulted (the operator must hear about
-//     the discontinuity, not about the new release's pending engineering);
-//   - no executions → nothing owns anything yet, normal gates apply;
-//   - mixed/ambiguous provenance → the per-target guards in the command
-//     closures keep failing closed.
+//   - no executions at all → normal gates apply (nothing owns anything yet);
+//   - single release == authority → normal gates apply;
+//   - single release != authority → continuity blocker BEFORE any
+//     preparation evidence is consulted (the operator must hear about the
+//     discontinuity, not about the new release's pending engineering);
+//   - AMBIGUOUS provenance (mixed releases, or executions without a reliable
+//     ProductionRevision) → continuity blocker too. The item-level writers
+//     (floor-status, floor-scan, activity finish) have NO per-target release
+//     check to catch these later — the guard is their only frontier, so it
+//     must fail closed. Executions are never repaired or guessed here.
 //
-// Regeneration (GenerateCanonicalPartExecutions) adds the same split: a
-// discontinuity with physical progress blocks even under supervisor force
-// (no reconciliation exists to preserve completed operations), a
-// discontinuity with an authorized material commitment for the older
-// release blocks with its own copy, and a clean discontinuity (untouched,
-// uncommitted executions) stays available as preparation.
+// Pre-Digital-Thread projects (legacy authority) keep the explicit
+// compatibility boundary of the #740 gate: no release identity to correlate.
+//
+// Regeneration (GenerateCanonicalPartExecutions) adds the same split: an
+// ambiguous or older-release ownership with physical progress blocks even
+// under supervisor force (no reconciliation exists to preserve completed
+// operations), an older release with an authorized material commitment
+// blocks with its own copy, and a clean discontinuity (untouched,
+// uncommitted, single older release) stays available as preparation.
 
-// executionReleaseOwnership summarizes the release identity of the
-// materialized executions.
+// executionReleaseOwnership is the EXPLICIT provenance classification of the
+// materialized executions — the three states are never conflated.
 type executionReleaseOwnership struct {
-	// Release is the single distinct ProductionRevision across
-	// part_instances/module_units (empty when none or mixed).
-	Release string
-	// HasExecutions reports whether any execution exists at all.
+	// HasExecutions reports whether any part/unit execution exists at all.
 	HasExecutions bool
+	// Release is the single distinct non-empty ProductionRevision across
+	// part_instances/module_units. Empty unless every execution pins the
+	// SAME non-empty release.
+	Release string
+	// Ambiguous reports unverifiable provenance: executions exist but they
+	// pin more than one release, or at least one carries an empty
+	// ProductionRevision. Never true when !HasExecutions.
+	Ambiguous bool
 }
 
 func executionOwnershipOf(parts []domain.PartInstance, units []domain.ModuleUnitExecution) executionReleaseOwnership {
 	distinct := map[string]struct{}{}
+	unpinned := false
 	for _, p := range parts {
-		if p.ProductionRevision != "" {
-			distinct[p.ProductionRevision] = struct{}{}
+		if p.ProductionRevision == "" {
+			unpinned = true
+			continue
 		}
+		distinct[p.ProductionRevision] = struct{}{}
 	}
 	for _, u := range units {
-		if u.ProductionRevision != "" {
-			distinct[u.ProductionRevision] = struct{}{}
+		if u.ProductionRevision == "" {
+			unpinned = true
+			continue
 		}
+		distinct[u.ProductionRevision] = struct{}{}
 	}
 	ownership := executionReleaseOwnership{HasExecutions: len(parts) > 0 || len(units) > 0}
-	if len(distinct) == 1 {
+	if len(distinct) == 1 && !unpinned {
 		for release := range distinct {
 			ownership.Release = release
 		}
 	}
+	ownership.Ambiguous = ownership.HasExecutions && ownership.Release == ""
 	return ownership
 }
 
@@ -88,52 +106,27 @@ func executionsHavePhysicalProgress(parts []domain.PartInstance, units []domain.
 	return false
 }
 
-// decodeExecutionsRaw best-effort decodes the part_instances/module_units
-// JSONB payloads for the continuity guards. A malformed payload yields empty
-// slices: the guards treat "no executions" as "nothing to own yet" and the
-// per-target release checks inside each command closure keep failing closed
-// for anything the guards could not classify.
-func decodeExecutionsRaw(partsRaw, unitsRaw []byte) ([]domain.PartInstance, []domain.ModuleUnitExecution) {
-	var parts []domain.PartInstance
-	var units []domain.ModuleUnitExecution
-	if len(partsRaw) > 0 && string(partsRaw) != "null" {
-		_ = json.Unmarshal(partsRaw, &parts)
-	}
-	if len(unitsRaw) > 0 && string(unitsRaw) != "null" {
-		_ = json.Unmarshal(unitsRaw, &units)
-	}
-	return parts, units
-}
-
 // guardWorkReleaseContinuity is the shared #741 pre-guard for every writer
-// over materialized executions: when the whole execution set belongs to a
-// release older than the authority, the continuity blocker fires BEFORE the
-// technical guard and the operational gate — the ownership question comes
-// first, so the operator never sees the newer release's preparation state
-// presented as the reason their in-progress work cannot advance.
+// over materialized executions. See the policy block at the top of this
+// file: ambiguous provenance blocks exactly like an older-release
+// discontinuity — the item-level writers have no second, per-target check.
 func (s *PostgresStore) guardWorkReleaseContinuity(parts []domain.PartInstance, units []domain.ModuleUnitExecution, authority *domain.ResolvedProductionRelease) error {
 	if authority == nil || authority.Source != domain.ProductionReleaseAuthorityCanonical {
 		// Pre-Digital-Thread compatibility, same boundary as the #740 gate.
 		return nil
 	}
 	ownership := executionOwnershipOf(parts, units)
-	if !ownership.HasExecutions || ownership.Release == "" {
-		// Nothing materialized, or ambiguous provenance: the per-target
-		// release checks inside each command closure keep failing closed.
+	if !ownership.HasExecutions || ownership.Release == authority.ReleaseID {
 		return nil
 	}
-	if ownership.Release != authority.ReleaseID {
-		return domain.ErrPhysicalWorkReleaseMismatch
-	}
-	return nil
+	// Older release OR ambiguous/unverifiable provenance.
+	return domain.ErrPhysicalWorkReleaseMismatch
 }
 
 // guardItemFloorContinuity is the item-level variant: quote-line items carry
-// NO release identity of their own, so once the project's materialized
-// executions belong to a release other than the authority, an item floor
-// write cannot be unambiguously correlated with any release — it fails
-// closed instead of guessing (#741 §11: never correlate by position, index,
-// date or "latest").
+// NO release identity of their own, so this guard is their ONLY frontier —
+// it fails closed on ambiguous provenance instead of guessing (#741 §11:
+// never correlate by position, index, date or "latest").
 func (s *PostgresStore) guardItemFloorContinuity(parts []domain.PartInstance, units []domain.ModuleUnitExecution, authority *domain.ResolvedProductionRelease) error {
 	return s.guardWorkReleaseContinuity(parts, units, authority)
 }
@@ -158,16 +151,16 @@ func materialCommitmentFor(planningRaw []byte, releaseID string) bool {
 // guardRegenerationContinuity applies the #741 regeneration policy inside
 // GenerateCanonicalPartExecutions's locked transaction. The regeneration
 // derives from the AUTHORITY; when the executions being replaced belong to
-// an older release, the discontinuity policy decides before any force flag
-// is consulted.
+// an older release — or their provenance cannot be verified — the
+// discontinuity policy decides before any force flag is consulted.
 func (s *PostgresStore) guardRegenerationContinuity(ctx context.Context, q dbtx, projectID string, snap *domain.PartExecutionsSnapshot, authority *domain.ResolvedProductionRelease) error {
 	if authority == nil || authority.Source != domain.ProductionReleaseAuthorityCanonical {
 		return nil
 	}
 	ownership := executionOwnershipOf(snap.Parts, snap.Units)
-	if ownership.HasExecutions && ownership.Release == "" {
-		// Mixed provenance: no automatic reconciliation decides which
-		// executions survive. Fail closed.
+	if ownership.Ambiguous {
+		// Mixed or unpinned provenance: no automatic reconciliation decides
+		// which executions survive. Fail closed.
 		return domain.ErrPhysicalWorkReleaseMismatch
 	}
 	if !ownership.HasExecutions || ownership.Release == authority.ReleaseID {
@@ -195,4 +188,26 @@ func (s *PostgresStore) guardRegenerationContinuity(ctx context.Context, q dbtx,
 	// Clean discontinuity: untouched, uncommitted executions of the previous
 	// release may be replaced by the authority's derived ones (preparation).
 	return nil
+}
+
+// decodeExecutionsRaw decodes the part_instances/module_units JSONB payloads
+// for the continuity guards. A NULL/absent payload is the honest "no
+// executions" state; a payload that is present but does not decode into the
+// execution shape is CORRUPT STATE, never "no executions" — the error
+// propagates and the physical writer fails closed. Data is never repaired
+// or guessed here.
+func decodeExecutionsRaw(partsRaw, unitsRaw []byte) ([]domain.PartInstance, []domain.ModuleUnitExecution, error) {
+	var parts []domain.PartInstance
+	var units []domain.ModuleUnitExecution
+	if len(partsRaw) > 0 && string(partsRaw) != "null" {
+		if err := json.Unmarshal(partsRaw, &parts); err != nil {
+			return nil, nil, fmt.Errorf("error decoding part_instances for continuity: %w", err)
+		}
+	}
+	if len(unitsRaw) > 0 && string(unitsRaw) != "null" {
+		if err := json.Unmarshal(unitsRaw, &units); err != nil {
+			return nil, nil, fmt.Errorf("error decoding module_units for continuity: %w", err)
+		}
+	}
+	return parts, units, nil
 }

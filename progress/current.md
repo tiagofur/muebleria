@@ -15,6 +15,21 @@
   - SketchUp extension: `bundle exec rake verify` PASS (rbenv 3.2.11; RuboCop 204 files 0 offenses, unit 855 runs/5686 assertions 0 failures, boundary 6/3179, RBZ sha256 c46b9df4…) — sin cambios en esa superficie. Máquina real: NOT_TESTED (sin cambios ni claims).
 - Docs: `docs/project-lifecycle.md` §2.4 (regla ejecutable + tabla de regeneración + clasificación de consumidores de latest A/B/C + límites suspend/cancel), `docs/architecture/project-design-digital-thread.md` §25.10, `docs/demo/engineering-flow-recovery-2026-09-15.md` (entrega D con estado), `docs/verification.md` (§ #741), este entry.
 - Límites explícitos (PR 2+ de #741): reemplazo parcial universal, matching heurístico P1↔P2, compensaciones/devolución de stock (#680), cancelación comercial (#678), suspend/resume/cancel del trabajo con decisión durable. La política conservadora NO bloquea Producción sin discontinuidad real (P1 sin P2 funciona igual; discontinuidad limpia regenera).
+- Revisión del PR #767 (corrección P0 en la MISMA rama): el guard original
+  representaba "sin ejecuciones" y "procedencia mixta/sin pin" con el mismo
+  `Release == ""` y devolvía nil para ambos — fail-open en los writers de
+  ítem (floor-status, floor-scan, activity-finish), que no tienen check por
+  objetivo. Corregido con clasificación EXPLÍCITA (`HasExecutions` /
+  `Release` / `Ambiguous`): mixta o sin `ProductionRevision` fiable → mismo
+  blocker de continuidad; `decodeExecutionsRaw` propaga el error de decode
+  (payload presente pero indecodificable = estado corrupto que falla
+  cerrado, jamás "sin ejecuciones", jamás reparado). Regresiones PostgreSQL
+  nuevas: mixto P1/P2 (floor-status/floor-scan 409 con 0 F092, activity
+  finish con finished_at NULL, advance y regeneración bloqueados), sin pin
+  de release, y payload malformado. Re-verificado: continuity 9/9, subsets
+  #740/#577/OPS-DT-1/calidad/floor PASS, api/domain/auth PASS; suite storage
+  completa serializada re-ejecutada sobre el HEAD corregido antes de
+  publicar (resultado en el comentario del PR).
 - Delivery: el PR #767 declara `Refs #741` + `Delivery: partial` (la aceptación de la issue incluye suspend/cancel y reemplazo parcial, que quedan para incrementos siguientes; el alcance del PR 1 —política conservadora de no-retarget— está demostrado de extremo a extremo). Label `type:bug`, cuerpo conforme a `check_pr_metadata.py` (corrección post-publicación: el cuerpo original llevaba el enlace al final y `Delivery: complete`; validado localmente contra las regexes del checker antes del re-run de CI). Sin merge/cierre manual; publicación para revisión humana.
 
 # Issue #740 — [P0][OPS-GATE] PR 2: gate operacional transversal antes de cualquier avance físico

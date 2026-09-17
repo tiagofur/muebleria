@@ -202,8 +202,13 @@ func (s *PostgresStore) FinishProductionActivityWithPhysicalEffect(ctx context.C
 			// #741: the activity's floor effect belongs to an item without
 			// release identity — if the materialized executions belong to a
 			// release older than the authority, the continuity blocker fires
-			// before any preparation evidence is consulted.
-			parts, units := decodeExecutionsRaw(partsRaw, unitsRaw)
+			// before any preparation evidence is consulted. Ambiguous
+			// provenance or a payload that fails to decode also fail CLOSED
+			// (this guard is the item writers' only frontier).
+			parts, units, err := decodeExecutionsRaw(partsRaw, unitsRaw)
+			if err != nil {
+				return nil, err
+			}
 			if err := s.guardItemFloorContinuity(parts, units, authority); err != nil {
 				return nil, err
 			}
@@ -364,8 +369,14 @@ func (s *PostgresStore) SetProjectItemFloorStatusGated(ctx context.Context, adv 
 	if authority != nil && authority.Source == domain.ProductionReleaseAuthorityCanonical {
 		// #741: quote-line items carry no release identity — the floor write
 		// fails closed when the materialized executions belong to a release
-		// older than the authority (no correlation is invented).
-		parts, units := decodeExecutionsRaw(partsRaw, unitsRaw)
+		// older than the authority (no correlation is invented), and ALSO on
+		// ambiguous provenance or a payload that fails to decode: this guard
+		// is the item writers' only frontier, corrupt state never becomes
+		// "no executions".
+		parts, units, err := decodeExecutionsRaw(partsRaw, unitsRaw)
+		if err != nil {
+			return err
+		}
 		if err := s.guardItemFloorContinuity(parts, units, authority); err != nil {
 			return err
 		}

@@ -259,8 +259,12 @@ cualquier guard técnico o evidencia de preparación:
   continuidad con copy accionable y CERO mutaciones (el operador escucha la
   discontinuidad, nunca el estado de preparación de la liberación nueva);
 - sin ejecuciones → nada que ser dueño, gates normales;
-- procedencia mixta/ambigua → los checks por objetivo en cada closure
-  siguen fallando cerrado.
+- procedencia mixta/ambigua o sin `ProductionRevision` fiable → MISMO blocker
+  de continuidad en el pre-guard (los ítems quote-line NO tienen un segundo
+  check por objetivo — el pre-guard es su única frontera y falla cerrado);
+  un payload de ejecuciones presente pero indecodificable es estado corrupto:
+  el error se propaga y el writer físico falla cerrado (nunca se repara ni
+  se interpreta como "sin ejecuciones").
 
 Writers cubiertos por el pre-guard: advance/rework de pieza, advance/override
 de unidad (`MutateProjectPartExecutions`), rework/QC físicos de calidad

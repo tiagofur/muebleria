@@ -1495,8 +1495,12 @@ allowed to consider preparation
   than the authority — the operator hears about the discontinuity, never
   about the new release's pending engineering. Quote-line items carry no
   release identity: their floor writes fail closed rather than correlating
-  by position/index/date/latest. Mixed provenance keeps failing closed in the
-  per-target closure checks.
+  by position/index/date/latest. AMBIGUOUS provenance (mixed releases, or
+  executions without a reliable ProductionRevision) blocks at the SAME
+  pre-guard — the item-level writers have no per-target check, so this guard
+  is their only frontier — and a present-but-undecodable execution payload is
+  corrupt state that propagates the error and fails closed (never "no
+  executions", never repaired here).
 - Regeneration (`GenerateCanonicalPartExecutions`) applies the conservative
   policy BEFORE any force flag: physical progress on the older release's
   work blocks (supervisor force is NOT a continuity decision — no
