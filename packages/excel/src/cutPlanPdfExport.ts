@@ -799,6 +799,15 @@ export async function cutPlanPdfExport(input: CutPlanPdfExportInput): Promise<Ui
   }
 
   const doc = await PDFDocument.create();
+  // pdf-lib stamps wall-clock CreationDate/ModDate on every new document
+  // (updateInfoDict); left as-is, two renders of the SAME plan that straddle a
+  // second boundary produce different bytes (#778). The plan's own timestamp
+  // is the document's authoritative date — the cover page already uses it.
+  const docDate = new Date(input.dateIso || plan.generatedAt);
+  if (Number.isFinite(docDate.getTime())) {
+    doc.setCreationDate(docDate);
+    doc.setModificationDate(docDate);
+  }
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
