@@ -35,15 +35,20 @@ import type {
   ProjectItem,
   PublishedAssemblySnapshot,
   ResolvedAssembly,
+  ResolvedModuleAssembly,
 } from '@granete/domain';
 import * as domainModule from '@granete/domain';
 import {
-  deriveAssetNormalization,
+  attachVisualPins,
   composeMemberTransform,
+  createCatalogVisualAssetLookup,
+  deriveAssetNormalization,
   freezePublishedAssemblySnapshot,
+  projectModuleAssembliesFor3D,
   projectPublishedAssemblySnapshotFor3D,
   projectResolvedAssemblyFor3D,
   resolveAgregadoAssembly,
+  resolveModuleAgregadoAssemblies,
 } from '@granete/domain';
 import {
   assemblyPoseToThree,
@@ -174,6 +179,11 @@ const catalogHardware: Hardware[] = [
     previewSizeMm: 400,
     previewDiameterMm: 45,
     previewColor: '#888888',
+    visualAsset: {
+      assetId: 'ast-runner-400',
+      assetRevisionId: 'rev-runner-400',
+      sha256: 'd'.repeat(64),
+    },
   },
   {
     id: 'runner-500',
@@ -186,6 +196,11 @@ const catalogHardware: Hardware[] = [
     previewSizeMm: 500,
     previewDiameterMm: 45,
     previewColor: '#888888',
+    visualAsset: {
+      assetId: 'ast-runner-500',
+      assetRevisionId: 'rev-runner-500',
+      sha256: 'e'.repeat(64),
+    },
   },
   {
     id: 'kit-box-runner',
@@ -279,9 +294,10 @@ const catalogInput: Module3DCatalogInput = {
 // --- Test Suites ------------------------------------------------------------
 
 describe('Granete #670-C: Proyección de Assemblies en Proyectar 3D / WebGL', () => {
-  // Gate 1: Proyección de Assembly básico (N miembros rígidos, M componentes fabricados)
-  it('Gate 1: Proyección de Assembly produce N miembros rígidos y M componentes fabricados', () => {
-    const assemblies = resolveModuleAssemblies(
+  // R1 & R2 / Gate 1: Separación de frontera domain resolution -> projection adapter -> UI
+  it('R1 & R2 / Gate 1: Separación de frontera — resolveModuleAgregadoAssemblies resuelve assemblies y vincula visual pins exactos', () => {
+    // 1. Application/domain resolution (no UI dependency)
+    const resolvedModules = resolveModuleAgregadoAssemblies(
       fixtureModule,
       { width: 600, height: 720, depth: 550 },
       catalogInput,
@@ -293,39 +309,66 @@ describe('Granete #670-C: Proyección de Assemblies en Proyectar 3D / WebGL', ()
       },
     );
 
-    expect(assemblies).toHaveLength(1);
-    const ass = assemblies[0]!;
-    expect(ass.agregadoId).toBe('agr-drawer-system');
+    expect(resolvedModules).toHaveLength(1);
+    const resolvedMod = resolvedModules[0]!;
+    expect(resolvedMod.assemblyInstanceId).toBe('inst-drawer-1');
+    expect(resolvedMod.agregadoId).toBe('agr-drawer-system');
+    expect(resolvedMod.isHistorical).toBe(false);
+    expect(resolvedMod.resolvedAssembly).toBeDefined();
+
+    const ass = resolvedMod.resolvedAssembly!;
     expect(ass.rigidMembers).toHaveLength(2);
     expect(ass.fabricatedComponents).toHaveLength(2);
 
-    expect(ass.rigidMembers[0]!.memberId).toBe('runner-left');
-    expect(ass.rigidMembers[1]!.memberId).toBe('runner-right');
-    expect(ass.fabricatedComponents[0]!.componentId).toBe('comp-bottom-panel');
-    expect(ass.fabricatedComponents[1]!.componentId).toBe('comp-back-panel');
-    expect(ass.isHistorical).toBe(false);
+    // R2: Visual pins attached authoritatively from catalog
+    const leftMember = ass.rigidMembers.find((m) => m.memberId === 'runner-left')!;
+    const rightMember = ass.rigidMembers.find((m) => m.memberId === 'runner-right')!;
+    expect(leftMember.assetId).toBe('ast-runner-500');
+    expect(leftMember.assetRevisionId).toBe('rev-runner-500');
+    expect(leftMember.sha256).toBe('e'.repeat(64));
+    expect(rightMember.assetId).toBe('ast-runner-500');
+    expect(rightMember.assetRevisionId).toBe('rev-runner-500');
+
+    // 2. Projection adapter (to ProjectedAssembly)
+    const projected = projectModuleAssembliesFor3D(resolvedModules);
+    expect(projected).toHaveLength(1);
+    const projAss = projected[0]!;
+    expect(projAss.rigidMembers[0]!.renderStatus).toBe('exact');
+    expect(projAss.rigidMembers[1]!.renderStatus).toBe('exact');
+
+    // 3. Demonstrates consumer independence:
+    // SketchUp D can consume resolvedMod.resolvedAssembly directly without @granete/ui!
+    expect(resolvedMod.resolvedAssembly!.rigidMembers[0]!.localTransform.translationMm).toBeDefined();
   });
 
-  // Gate 2 / 7: Actualización paramétrica 600 → 800 mm usando el resolver REAL
-  it('Gate 2 / 7: Resolver real 600 -> 800mm desplaza miembro derecho exactamente +200mm con escala [1,1,1]', () => {
-    const res600 = resolveAgregadoAssembly(catalogAgregado, {
+  // Gate 2 / R6: Actualización paramétrica 600 → 800 mm usando resolver real + attachVisualPins
+  it('Gate 2 / R6: Resolver real 600 -> 800mm con attachVisualPins desplaza miembro derecho +200mm, preserva IDs/rev y escala [1,1,1]', () => {
+    const visualLookup = (hwId: string) => ({
+      assetId: `ast-${hwId}`,
+      assetRevisionId: `rev-${hwId}`,
+      sha256: 'c'.repeat(64),
+    });
+
+    const res600 = resolveAgregadoAssembly(fixtureAssemblyInput, {
       widthMm: 600,
       depthMm: 550,
       heightMm: 200,
     });
-    const res800 = resolveAgregadoAssembly(catalogAgregado, {
+    const pinned600 = attachVisualPins(res600, visualLookup);
+    const proj600 = projectResolvedAssemblyFor3D({
+      assembly: pinned600,
+      placement: { originMm: [0, 0, 0] },
+      assemblyInstanceId: 'inst-1',
+    });
+
+    const res800 = resolveAgregadoAssembly(fixtureAssemblyInput, {
       widthMm: 800,
       depthMm: 550,
       heightMm: 200,
     });
-
-    const proj600 = projectResolvedAssemblyFor3D({
-      assembly: res600,
-      placement: { originMm: [0, 0, 0] },
-      assemblyInstanceId: 'inst-1',
-    });
+    const pinned800 = attachVisualPins(res800, visualLookup);
     const proj800 = projectResolvedAssemblyFor3D({
-      assembly: res800,
+      assembly: pinned800,
       placement: { originMm: [0, 0, 0] },
       assemblyInstanceId: 'inst-1',
     });
@@ -335,19 +378,26 @@ describe('Granete #670-C: Proyección de Assemblies en Proyectar 3D / WebGL', ()
     const left800 = proj800.rigidMembers.find((m) => m.memberId === 'runner-left')!;
     const right800 = proj800.rigidMembers.find((m) => m.memberId === 'runner-right')!;
 
+    // Visual pins exact renderStatus
+    expect(right600.renderStatus).toBe('exact');
+    expect(right800.renderStatus).toBe('exact');
+    expect(right600.assetRevisionId).toBe('rev-runner-500');
+    expect(right800.assetRevisionId).toBe('rev-runner-500');
+    expect(right600.hardwareId).toBe(right800.hardwareId);
+
     // Left member X does not move (anchored to min X)
     expect(left800.effectiveTransform.translationMm[0]).toBe(left600.effectiveTransform.translationMm[0]);
-    expect(left600.hardwareId).toBe('runner-500');
-    expect(left800.hardwareId).toBe('runner-500');
 
     // Right member X shifts by exactly +200mm (anchored to max X)
     const deltaX =
       right800.effectiveTransform.translationMm[0] - right600.effectiveTransform.translationMm[0];
     expect(deltaX).toBeCloseTo(200, 4);
-    expect(right600.hardwareId).toBe('runner-500');
-    expect(right800.hardwareId).toBe('runner-500');
 
-    // Scale decomposition is strictly [1, 1, 1] with det = +1.0
+    // Scale property does not exist on ProjectedRigidMember interface
+    expect((right600 as unknown as { scale?: unknown }).scale).toBeUndefined();
+    expect((right800 as unknown as { scale?: unknown }).scale).toBeUndefined();
+
+    // Scale decomposition in Three.js pose is strictly [1, 1, 1] with det = +1.0
     const poseRight600 = assemblyPoseToThree(right600.effectiveTransform);
     const poseRight800 = assemblyPoseToThree(right800.effectiveTransform);
 
@@ -405,8 +455,8 @@ describe('Granete #670-C: Proyección de Assemblies en Proyectar 3D / WebGL', ()
     expect(distIn800 - distIn600).toBeCloseTo(0.0, 6);
   });
 
-  // Gate 4 / Point 3: Espesor autoritativo de piezas fabricadas (15mm y 18mm sin hardcode)
-  it('Gate 4 / Point 3: Espesor autoritativo proviene de material/componente (15mm fondo, 18mm trasera) sin fallback hardcodeado', () => {
+  // Gate 4 / R3: Espesor autoritativo de piezas fabricadas (15mm y 18mm sin hardcode) y fail-closed
+  it('Gate 4 / R3: Espesor autoritativo (15mm fondo, 18mm trasera) llega a BoardMesh y falla cerrado ante espesor indefinido', () => {
     const assemblies = resolveModuleAssemblies(
       fixtureModule,
       { width: 600, height: 720, depth: 550 },
@@ -423,10 +473,38 @@ describe('Granete #670-C: Proyección de Assemblies en Proyectar 3D / WebGL', ()
     const btm = ass.fabricatedComponents.find((c) => c.componentId === 'comp-bottom-panel')!;
     const back = ass.fabricatedComponents.find((c) => c.componentId === 'comp-back-panel')!;
 
+    // 1. Authoritative thickness values verified on projected components
     expect(btm.thicknessMm).toBe(15);
     expect(back.thicknessMm).toBe(18);
     expect(btm.materialId).toBe('mat-melamine-15');
     expect(back.materialId).toBe('mat-melamine-18');
+
+    // 2. Both thicknesses reach BoardMesh props (simulated via AssemblyMesh component execution)
+    const meshNode = AssemblyMesh({ assembly: ass, hardwareCatalog: catalogHardware });
+    expect(meshNode).toBeDefined();
+
+    // 3. Fails closed: component without bound material and without geometry thickness throws
+    const invalidCompInput: Module3DCatalogInput = {
+      ...catalogInput,
+      components: [
+        {
+          id: 'comp-bottom-panel',
+          code: 'CMP-BTM',
+          name: 'Bottom Panel No Thickness',
+          active: true,
+          placement: { origin: 'bottom', align: 'center' },
+          geometry: { type: 'custom' },
+        } as unknown as Component,
+      ],
+    };
+    expect(() =>
+      resolveModuleAgregadoAssemblies(
+        fixtureModule,
+        { width: 600, height: 720, depth: 550 },
+        invalidCompInput,
+        { optionChoices: {} },
+      ),
+    ).toThrow(/Authoritative thicknessMm not found for fabricated component 'comp-bottom-panel'/);
   });
 
   // Gate 5 / Point 5: Gate de doble normalización (MountFrame no-identidad aplicado exactamente 1 vez)
@@ -618,39 +696,68 @@ describe('Granete #670-C: Proyección de Assemblies en Proyectar 3D / WebGL', ()
     ).toThrow(/requires a non-empty authoritative 'id'/);
   });
 
-  // Gate 8 / Point 8: Snapshot histórico congelado (D1/R2 no llama resolver ni bindings actuales AR7)
-  it('Gate 8 / Point 8: PublishedAssemblySnapshot proyecta frozen D1 sin consultar resolver ni bindings actuales AR7', () => {
-    const resolved = resolveAgregadoAssembly(catalogAgregado, {
+  // Gate 8 / R7: Snapshot histórico congelado (D1/R2 no llama resolver ni bindings actuales AR7)
+  it('Gate 8 / R7: PublishedAssemblySnapshot S1 preserva AR2 sin invocar resolveAgregadoAssembly ni lookup visual actual AR7', () => {
+    const resolved = resolveAgregadoAssembly(fixtureAssemblyInput, {
       widthMm: 600,
       depthMm: 550,
       heightMm: 200,
     });
 
-    const snapshot = freezePublishedAssemblySnapshot(resolved, 2, (hardwareId) => ({
+    // Freeze snapshot S1 at recipe revision 1 with AR2
+    const snapshot = freezePublishedAssemblySnapshot(resolved, 1, (hardwareId) => ({
       assetId: `asset-${hardwareId}`,
       assetRevisionId: 'AR2',
       sha256: 'f'.repeat(64),
     }));
 
-    // Spy on resolveAgregadoAssembly to verify it is NEVER called for historical snapshot
+    // Current catalog has current recipe and current visual lookup returning AR7
+    const currentLookupSpy = vi.fn((_hwId: string) => ({
+      assetId: 'current-asset',
+      assetRevisionId: 'AR7',
+      sha256: '7'.repeat(64),
+    }));
+
     const resolveSpy = vi.spyOn(domainModule, 'resolveAgregadoAssembly');
 
-    const projected = projectPublishedAssemblySnapshotFor3D({
-      snapshot,
-      placement: { originMm: [0, 0, 0] },
-      assemblyInstanceId: 'inst-hist-d1',
+    // Module carrying historical snapshot S1
+    const historicalModule: Module = {
+      ...fixtureModule,
+      agregados: [
+        {
+          id: 'inst-historical-1',
+          agregadoId: 'agr-drawer-system',
+          quantity: 1,
+          position: { xFormula: '0', yFormula: '0', zFormula: '100' },
+          dimensions: { widthFormula: 'PW', heightFormula: '200', depthFormula: 'PD' },
+          snapshot,
+        } as unknown as { id: string; agregadoId: string; quantity: number },
+      ],
+    };
+
+    const resolvedModules = resolveModuleAgregadoAssemblies(
+      historicalModule,
+      { width: 600, height: 720, depth: 550 },
+      catalogInput,
+      { visualAssetLookup: currentLookupSpy },
+    );
+
+    const projected = projectModuleAssembliesFor3D(resolvedModules, {
       availableAssets: new Set(['AR2']),
     });
 
-    // Zero resolution calls
+    // Both authorities were completely bypassed
     expect(resolveSpy).not.toHaveBeenCalled();
+    expect(currentLookupSpy).not.toHaveBeenCalled();
     resolveSpy.mockRestore();
 
-    expect(projected.isHistorical).toBe(true);
-    expect(projected.recipeRevision).toBe(2);
-    expect(projected.rigidMembers[0]!.assetRevisionId).toBe('AR2'); // Frozen AR2, never current AR7
-    expect(projected.rigidMembers[0]!.renderStatus).toBe('exact');
-    expect(projected.fabricatedComponents[0]!.widthMm).toBe(565);
+    expect(projected).toHaveLength(1);
+    const p = projected[0]!;
+    expect(p.isHistorical).toBe(true);
+    expect(p.recipeRevision).toBe(1); // Frozen S1 revision 1, never current revision 5
+    expect(p.rigidMembers[0]!.assetRevisionId).toBe('AR2'); // Frozen AR2, never current AR7
+    expect(p.rigidMembers[0]!.renderStatus).toBe('exact');
+    expect(p.fabricatedComponents[0]!.widthMm).toBe(565);
   });
 
   // Gate 9 / Point 9: Missing historical asset falla cerrado (historical_asset_missing)

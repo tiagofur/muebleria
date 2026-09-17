@@ -193,6 +193,7 @@ export function AssemblyMesh({
       position={rootPos}
       quaternion={rootQuat}
       data-testid={`assembly-${assembly.assemblyInstanceId}`}
+      userData={{ assemblyInstanceId: assembly.assemblyInstanceId }}
     >
       {/* 1. Rigid Hardware Members (unscaled purchased hardware) */}
       {assembly.rigidMembers.map((member: ProjectedRigidMember) => {
@@ -203,6 +204,8 @@ export function AssemblyMesh({
               key={`${assembly.assemblyInstanceId}-${member.memberId}`}
               data-testid={`assembly-member-missing-${member.memberId}`}
               userData={{
+                assemblyInstanceId: assembly.assemblyInstanceId,
+                memberId: member.memberId,
                 diagnostic: member.statusDiagnostic,
                 renderStatus: 'historical_asset_missing',
               }}
@@ -230,6 +233,7 @@ export function AssemblyMesh({
             scale={[1, 1, 1]}
             data-testid={`assembly-member-${member.memberId}`}
             userData={{
+              assemblyInstanceId: assembly.assemblyInstanceId,
               memberId: member.memberId,
               role: member.role,
               hardwareId: member.hardwareId,

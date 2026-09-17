@@ -16,7 +16,20 @@
  * 9. Multiplier contract: omitted = 1.0; explicit 0 = 0.0; non-finite rejected (R9).
  */
 
-import type { ModuleComponentInstance } from './types';
+import type {
+  Agregado,
+  Component,
+  Hardware,
+  MaterialBoard,
+  Module,
+  ModuleComponentInstance,
+  OptionChoices,
+  Structure,
+} from './types';
+import { calculateAgregadoSubspaceUnits } from './agregados';
+import { evaluatePartFormula } from './engine/shared';
+import { materialBindingRole } from './materialRole';
+import { resolveBoardOptionChoiceId } from './plinth';
 
 export interface HardwareRotationDeg {
   readonly x?: number;
@@ -930,6 +943,36 @@ export type VisualAssetLookup = (hardwareId: string) => {
   sha256: string;
 } | null;
 
+/**
+ * Creates a VisualAssetLookup from the active hardware catalog.
+ * Connects visual bindings (#667/#668) to rigid hardware members for live previews.
+ */
+export function createCatalogVisualAssetLookup(
+  hardwareCatalog?: readonly Hardware[],
+): VisualAssetLookup {
+  if (!hardwareCatalog || hardwareCatalog.length === 0) {
+    return () => null;
+  }
+  const map = new Map<string, Hardware>();
+  for (const hw of hardwareCatalog) {
+    map.set(hw.id, hw);
+  }
+  return (hardwareId: string) => {
+    const hw = map.get(hardwareId);
+    if (!hw || !hw.visualAsset) return null;
+    const va = hw.visualAsset;
+    if (!va.assetId || !va.assetRevisionId) return null;
+    return {
+      assetId: va.assetId,
+      assetRevisionId: va.assetRevisionId,
+      sha256: va.sha256 ?? '0'.repeat(64),
+      mountFrame:
+        (va as unknown as { mountFrame?: HardwareMountFrame }).mountFrame ??
+        (hw as unknown as { mountFrame?: HardwareMountFrame }).mountFrame,
+    };
+  };
+}
+
 export function attachVisualPins(
   assembly: ResolvedAssembly,
   lookup?: VisualAssetLookup,
@@ -1224,4 +1267,263 @@ export function projectPublishedAssemblySnapshotFor3D(
     rigidMembers,
     fabricatedComponents,
   };
+}
+
+export interface ResolvedModuleAssembly {
+  readonly assemblyInstanceId: string;
+  readonly agregadoId: string;
+  readonly placement: ProjectedAssemblyPlacement;
+  readonly resolvedAssembly?: ResolvedAssembly;
+  readonly snapshot?: PublishedAssemblySnapshot;
+  readonly isHistorical: boolean;
+}
+
+export interface ResolveModuleAgregadoAssembliesOptions {
+  readonly optionChoices?: OptionChoices;
+  readonly visualAssetLookup?: VisualAssetLookup;
+}
+
+/**
+ * Resolves all agregado multi-member hardware assemblies attached to a module
+ * or its structure into pure domain ResolvedModuleAssembly instances.
+ *
+ * Domain Boundary:
+ * application/domain resolution -> ResolvedModuleAssembly -> projection adapter -> UI / SketchUp
+ *
+ * Invariants:
+ * 1. Stable identity: Uses authoritative instance id; unitIndex is solely relative to the instance's own linear array.
+ * 2. Authoritative thickness: Derived strictly from bound material or component geometry (never hardcoded 18mm fallback).
+ * 3. Live visual pins: Attaches visual assets from catalog (#668) so live rigid members carry renderStatus = 'exact'.
+ * 4. Historical snapshots: Passthrough without recipe re-evaluation or current catalog lookup.
+ */
+export function resolveModuleAgregadoAssemblies(
+  module: Module,
+  moduleDims: { width: number; height: number; depth: number },
+  catalog: {
+    readonly structures?: readonly Structure[];
+    readonly agregados?: readonly Agregado[];
+    readonly components?: readonly Component[];
+    readonly materials?: readonly MaterialBoard[];
+    readonly hardware?: readonly Hardware[];
+  },
+  options: ResolveModuleAgregadoAssembliesOptions = {},
+): readonly ResolvedModuleAssembly[] {
+  const structure = catalog.structures?.find((s) => s.id === module.structureId);
+  const allAgregadoInstances = [
+    ...(structure?.agregados ?? []),
+    ...(module.agregados ?? []),
+  ];
+  if (allAgregadoInstances.length === 0) return [];
+
+  const PW = moduleDims.width;
+  const PH = moduleDims.height;
+  const PD = moduleDims.depth;
+  const parentDims = { PW, PH, PD, W: PW, H: PH, D: PD };
+
+  const out: ResolvedModuleAssembly[] = [];
+  const visualLookup =
+    options.visualAssetLookup ?? createCatalogVisualAssetLookup(catalog.hardware);
+
+  for (const agrInst of allAgregadoInstances) {
+    const agregado = catalog.agregados?.find((a) => a.id === agrInst.agregadoId);
+    if (!agregado) continue;
+
+    // Only process agregados that define a multi-member assembly recipe
+    const isAssembly = Boolean(
+      agregado.rigidMembers && agregado.rigidMembers.length > 0,
+    );
+    if (!isAssembly) continue;
+
+    const rawW = agrInst.dimensions?.widthFormula
+      ? evaluatePartFormula(agrInst.dimensions.widthFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'width',
+        })
+      : PW;
+    const spaceW = rawW > 0 ? rawW : PW;
+
+    const rawH = agrInst.dimensions?.heightFormula
+      ? evaluatePartFormula(agrInst.dimensions.heightFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'length',
+        })
+      : PH;
+    const spaceH = rawH > 0 ? rawH : PH;
+
+    const rawD = agrInst.dimensions?.depthFormula
+      ? evaluatePartFormula(agrInst.dimensions.depthFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'length',
+        })
+      : PD;
+    const spaceD = rawD > 0 ? rawD : PD;
+
+    const spaceX = agrInst.position?.xFormula
+      ? evaluatePartFormula(agrInst.position.xFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'x',
+        })
+      : 0;
+
+    const spaceY = agrInst.position?.yFormula
+      ? evaluatePartFormula(agrInst.position.yFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'y',
+        })
+      : 0;
+
+    const spaceZ = agrInst.position?.zFormula
+      ? evaluatePartFormula(agrInst.position.zFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'z',
+        })
+      : 0;
+
+    if (!agrInst.id || !agrInst.id.trim()) {
+      throw new Error(
+        `ModuleAgregadoInstance for agregado '${agrInst.agregadoId}' requires a non-empty authoritative 'id' for stable 3D assembly projection`,
+      );
+    }
+
+    const units = calculateAgregadoSubspaceUnits(
+      agrInst.quantity,
+      { width: spaceW, height: spaceH, depth: spaceD },
+      { x: spaceX, y: spaceY, z: spaceZ },
+      agrInst.layoutDirection ?? 'none',
+      agrInst.gapMm ?? 0,
+    );
+
+    for (const unit of units) {
+      const assemblyInstanceId =
+        units.length > 1 ? `${agrInst.id}:u${unit.unitIndex}` : agrInst.id;
+      const placement: ProjectedAssemblyPlacement = {
+        originMm: [unit.x, unit.y, unit.z],
+      };
+
+      // Check if instance carries a historical published snapshot
+      const snapshot =
+        (agrInst as unknown as { assemblySnapshot?: PublishedAssemblySnapshot; snapshot?: PublishedAssemblySnapshot })
+          .assemblySnapshot ??
+        (agrInst as unknown as { snapshot?: PublishedAssemblySnapshot }).snapshot;
+
+      if (snapshot) {
+        out.push({
+          assemblyInstanceId,
+          agregadoId: agrInst.agregadoId,
+          placement,
+          snapshot,
+          isHistorical: true,
+        });
+      } else {
+        const resolved = resolveAgregadoAssembly(agregado, {
+          widthMm: unit.width,
+          depthMm: unit.depth,
+          heightMm: unit.height,
+        });
+
+        // Enrich fabricated components with authoritative thickness & material from catalog (R3)
+        const enrichedFabricated = resolved.fabricatedComponents.map((c) => {
+          const compDef = catalog.components?.find((cmp) => cmp.id === c.componentId);
+          let thicknessMm = c.thicknessMm;
+          let materialId = c.materialId;
+
+          if (thicknessMm === undefined || !materialId) {
+            let role: string | undefined;
+            if (compDef) {
+              try {
+                role = materialBindingRole(compDef);
+              } catch {
+                role = compDef.optionRoles?.[0];
+              }
+            }
+            const resolvedMatId = role
+              ? resolveBoardOptionChoiceId(role, options.optionChoices ?? {})
+              : undefined;
+            if (!materialId && resolvedMatId) {
+              materialId = resolvedMatId;
+            }
+            const mat = materialId
+              ? catalog.materials?.find((m) => m.id === materialId)
+              : undefined;
+
+            if (thicknessMm === undefined) {
+              thicknessMm =
+                mat?.thicknessMm ??
+                (compDef?.geometry?.kind === 'rectangular_board'
+                  ? compDef.geometry.thicknessMm
+                  : undefined);
+            }
+          }
+
+          if (thicknessMm === undefined || !Number.isFinite(thicknessMm) || thicknessMm <= 0) {
+            throw new Error(
+              `Authoritative thicknessMm not found for fabricated component '${c.componentId}': must be defined on bound material or component geometry (no hardcoded fallback allowed)`,
+            );
+          }
+
+          return {
+            ...c,
+            thicknessMm,
+            ...(materialId ? { materialId } : {}),
+          };
+        });
+
+        // Attach visual pins (R2)
+        const pinned = attachVisualPins(
+          {
+            ...resolved,
+            fabricatedComponents: enrichedFabricated,
+          },
+          visualLookup,
+        );
+
+        out.push({
+          assemblyInstanceId,
+          agregadoId: agrInst.agregadoId,
+          placement,
+          resolvedAssembly: pinned,
+          isHistorical: false,
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+/**
+ * 3D Projection adapter: transforms ResolvedModuleAssembly instances into UI/Three.js-ready ProjectedAssembly.
+ */
+export function projectModuleAssembliesFor3D(
+  resolvedAssemblies: readonly ResolvedModuleAssembly[],
+  options: {
+    readonly availableAssets?: ReadonlySet<string>;
+  } = {},
+): readonly ProjectedAssembly[] {
+  return resolvedAssemblies.map((item) => {
+    if (item.isHistorical && item.snapshot) {
+      return projectPublishedAssemblySnapshotFor3D({
+        snapshot: item.snapshot,
+        placement: item.placement,
+        assemblyInstanceId: item.assemblyInstanceId,
+        availableAssets: options.availableAssets,
+      });
+    }
+    if (item.resolvedAssembly) {
+      return projectResolvedAssemblyFor3D({
+        assembly: item.resolvedAssembly,
+        placement: item.placement,
+        assemblyInstanceId: item.assemblyInstanceId,
+      });
+    }
+    throw new Error(
+      `ResolvedModuleAssembly '${item.assemblyInstanceId}' missing both resolvedAssembly and snapshot`,
+    );
+  });
 }

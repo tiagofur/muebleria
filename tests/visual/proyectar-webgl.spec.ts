@@ -548,14 +548,17 @@ test.describe('Proyectar visual regression (WebGL)', () => {
     await settleCanvas(page);
 
     type SceneMemberInfo = {
+      assemblyInstanceId: string;
       posX: number;
       posY: number;
       posZ: number;
       scale: [number, number, number];
       det: number;
+      worldMatrix: number[];
       memberId: string;
       hardwareId: string;
       assetRevisionId: string;
+      renderStatus: string;
     };
 
     type SceneBottomInfo = {
@@ -581,32 +584,39 @@ test.describe('Proyectar visual regression (WebGL)', () => {
         let rightMember: SceneMemberInfo | null = null;
         let bottomComponent: SceneBottomInfo | null = null;
 
-
         scene.traverse((obj: any) => {
           if (obj.userData?.memberId === 'runner-left') {
             obj.updateMatrix();
+            obj.updateWorldMatrix(true, true);
             leftMember = {
+              assemblyInstanceId: obj.userData.assemblyInstanceId ?? '',
               posX: obj.position.x,
               posY: obj.position.y,
               posZ: obj.position.z,
               scale: [obj.scale.x, obj.scale.y, obj.scale.z],
               det: obj.matrix.determinant(),
+              worldMatrix: Array.from(obj.matrixWorld.elements as number[]),
               memberId: obj.userData.memberId,
               hardwareId: obj.userData.hardwareId,
               assetRevisionId: obj.userData.assetRevisionId ?? '',
+              renderStatus: obj.userData.renderStatus ?? '',
             };
           }
           if (obj.userData?.memberId === 'runner-right') {
             obj.updateMatrix();
+            obj.updateWorldMatrix(true, true);
             rightMember = {
+              assemblyInstanceId: obj.userData.assemblyInstanceId ?? '',
               posX: obj.position.x,
               posY: obj.position.y,
               posZ: obj.position.z,
               scale: [obj.scale.x, obj.scale.y, obj.scale.z],
               det: obj.matrix.determinant(),
+              worldMatrix: Array.from(obj.matrixWorld.elements as number[]),
               memberId: obj.userData.memberId,
               hardwareId: obj.userData.hardwareId,
               assetRevisionId: obj.userData.assetRevisionId ?? '',
+              renderStatus: obj.userData.renderStatus ?? '',
             };
           }
           if (obj.userData?.description === 'comp-bottom-panel' && obj.userData?.size) {
@@ -642,11 +652,24 @@ test.describe('Proyectar visual regression (WebGL)', () => {
     expect(initial.bottomComponent).not.toBeNull();
 
     // Verificaciones W=600 inicial:
-    // runners visibles con hardwareId 'runner-500'
+    // assemblyInstanceId estable
+    expect(initial.leftMember!.assemblyInstanceId).toBe('inst-drawer-1');
+    expect(initial.rightMember!.assemblyInstanceId).toBe('inst-drawer-1');
+
+    // runners visibles con hardwareId 'runner-500' y visual pins exactos
     expect(initial.leftMember!.memberId).toBe('runner-left');
     expect(initial.rightMember!.memberId).toBe('runner-right');
     expect(initial.leftMember!.hardwareId).toBe('runner-500');
     expect(initial.rightMember!.hardwareId).toBe('runner-500');
+    expect(initial.leftMember!.assetRevisionId).toBe('rev-runner-500');
+    expect(initial.rightMember!.assetRevisionId).toBe('rev-runner-500');
+    expect(initial.leftMember!.renderStatus).toBe('exact');
+    expect(initial.rightMember!.renderStatus).toBe('exact');
+
+    // world matrix programmatically captured
+    expect(initial.leftMember!.worldMatrix).toHaveLength(16);
+    expect(initial.rightMember!.worldMatrix).toHaveLength(16);
+
     // scale [1,1,1] y det +1
     expect(initial.leftMember!.scale[0]).toBeCloseTo(1.0, 4);
     expect(initial.leftMember!.scale[1]).toBeCloseTo(1.0, 4);
@@ -702,15 +725,21 @@ test.describe('Proyectar visual regression (WebGL)', () => {
     expect(updated.bottomComponent!.size[0]).toBeCloseTo(765, 1);
     expect(updated.bottomComponent!.size[1]).toBeCloseTo(15, 1); // espesor preservado
 
-    // member IDs estables
+    // member & assembly IDs estables
+    expect(updated.leftMember!.assemblyInstanceId).toBe('inst-drawer-1');
+    expect(updated.rightMember!.assemblyInstanceId).toBe('inst-drawer-1');
     expect(updated.leftMember!.memberId).toBe('runner-left');
     expect(updated.rightMember!.memberId).toBe('runner-right');
 
-    // assetRevision / hardware IDs estables
+    // assetRevision / hardware IDs / renderStatus estables
     expect(updated.leftMember!.hardwareId).toBe(initial.leftMember!.hardwareId);
     expect(updated.rightMember!.hardwareId).toBe(initial.rightMember!.hardwareId);
-    expect(updated.leftMember!.assetRevisionId).toBe(initial.leftMember!.assetRevisionId);
-    expect(updated.rightMember!.assetRevisionId).toBe(initial.rightMember!.assetRevisionId);
+    expect(updated.leftMember!.assetRevisionId).toBe('rev-runner-500');
+    expect(updated.rightMember!.assetRevisionId).toBe('rev-runner-500');
+    expect(updated.leftMember!.renderStatus).toBe('exact');
+    expect(updated.rightMember!.renderStatus).toBe('exact');
+    expect(updated.leftMember!.worldMatrix).toHaveLength(16);
+    expect(updated.rightMember!.worldMatrix).toHaveLength(16);
 
     // console: sin errores inesperados
     expect(consoleErrors).toEqual([]);
@@ -730,6 +759,11 @@ function createDrawerAssemblySeedWorkspace() {
     previewSizeMm: 400,
     previewDiameterMm: 45,
     previewColor: '#888888',
+    visualAsset: {
+      assetId: 'ast-runner-400',
+      assetRevisionId: 'rev-runner-400',
+      sha256: 'd'.repeat(64),
+    },
   };
   const runner500 = {
     id: 'runner-500',
@@ -742,6 +776,11 @@ function createDrawerAssemblySeedWorkspace() {
     previewSizeMm: 500,
     previewDiameterMm: 45,
     previewColor: '#888888',
+    visualAsset: {
+      assetId: 'ast-runner-500',
+      assetRevisionId: 'rev-runner-500',
+      sha256: 'e'.repeat(64),
+    },
   };
   const kitBoxRunner = {
     id: 'kit-box-runner',
