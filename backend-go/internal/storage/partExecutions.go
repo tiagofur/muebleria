@@ -105,6 +105,14 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 	}
 	if authority != nil {
 		snap.ProductionRelease = authority
+		// #741 PR 1: ownership precedes preparation. When the materialized
+		// executions belong to a release older than the authority, the
+		// continuity blocker fires BEFORE the technical guard and the
+		// operational gate — the operator hears about the discontinuity,
+		// never about the new release's pending engineering.
+		if err := s.guardWorkReleaseContinuity(snap.Parts, snap.Units, authority); err != nil {
+			return nil, err
+		}
 		// Shared guard for generation, advance, rework and supervisor
 		// override: exact frozen P1/R2/fingerprint, then the frozen routing
 		// evidence decides (schema v2 authorizes, v1 keeps failing closed).
@@ -194,6 +202,12 @@ func (s *PostgresStore) GenerateCanonicalPartExecutions(
 	}
 	if authority == nil || authority.Source != domain.ProductionReleaseAuthorityCanonical {
 		return nil, nil, errors.New("BAD_REQUEST:la obra no tiene una liberación canónica; use la generación legacy")
+	}
+	// #741 PR 1: the regeneration derives from the AUTHORITY — when the
+	// executions being replaced belong to an older release, the continuity
+	// policy decides before anything is derived or any force flag consulted.
+	if err := s.guardRegenerationContinuity(ctx, tx, projectID, snap, authority); err != nil {
+		return nil, nil, err
 	}
 	if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {
 		return nil, nil, err

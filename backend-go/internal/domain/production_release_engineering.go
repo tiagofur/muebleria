@@ -45,9 +45,20 @@ var (
 	// with the exact governing release (a regular release or an audited
 	// exception both count; anything else does not).
 	ErrPhysicalWorkMaterialsPending = errors.New("Material pendiente de autorización para esta liberación: autorizá los materiales antes de iniciar el trabajo físico")
-	// ErrPhysicalWorkReleaseMismatch: the execution being advanced belongs to
-	// a previous release; the current authority does not govern that work.
-	ErrPhysicalWorkReleaseMismatch = errors.New("el trabajo pertenece a una liberación anterior; la liberación vigente no autoriza avanzarlo")
+	// ErrPhysicalWorkReleaseMismatch: the materialized work belongs to a
+	// previous release while a newer one governs the project (#741): neither
+	// continuing nor replacing the fabrication may be decided implicitly, so
+	// the command fails closed asking for the continuity review.
+	ErrPhysicalWorkReleaseMismatch = errors.New("hay una liberación más reciente y este trabajo pertenece a la liberación anterior; revisá la continuidad antes de continuar o reemplazar la fabricación")
+)
+
+// #741 PR 1: conservative continuity policy blockers.
+var (
+	// ErrPhysicalWorkMaterialsCommitted: replacing the materialized work of
+	// a release would leave its authorized materials/reservations committed
+	// to work nobody executes — the substitution needs an explicit review of
+	// those commitments first (#680 owns the compensations).
+	ErrPhysicalWorkMaterialsCommitted = errors.New("hay materiales comprometidos para la liberación en curso; la sustitución requiere revisar esos compromisos")
 )
 
 // ReleaseEngineeringState is the durable evidence row for one release.

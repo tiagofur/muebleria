@@ -282,7 +282,8 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 func respondWithActivityFinishError(w http.ResponseWriter, err error) {
 	if errors.Is(err, domain.ErrPhysicalWorkEngineeringPending) ||
 		errors.Is(err, domain.ErrPhysicalWorkMaterialsPending) ||
-		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) {
+		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) ||
+		errors.Is(err, domain.ErrPhysicalWorkMaterialsCommitted) {
 		respondWithError(w, http.StatusConflict, err.Error())
 		return
 	}

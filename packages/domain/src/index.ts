@@ -694,8 +694,11 @@ export {
   releaseAuthorityOf,
   projectAllowsProductionAccess,
   releaseAuthorityLabel,
+  releaseWorkContinuityOf,
   type ProductionReleaseAuthority,
   type ProductionReleaseAuthoritySource,
+  type ReleaseWorkContinuity,
+  type ReleaseWorkContinuityInput,
 } from './releaseAuthority';
 
 export {

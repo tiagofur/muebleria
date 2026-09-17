@@ -257,3 +257,61 @@ describe('ProductionOrderHub (PROD-0.3)', () => {
   });
 
 });
+
+describe('ProductionOrderHub — release continuity banner (#741 PR 1)', () => {
+  it('informs the newer release when in-progress work belongs to the previous one', () => {
+    const readiness = buildProductionOrderReadiness({ project: project(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        project={project()} customerLabel="Ana" salePrice={null} readiness={readiness}
+        activeTab="resumen" onTabChange={vi.fn()} onBackToQueue={vi.fn()}
+        onOpenDesign={vi.fn()} onExportOptimizer={vi.fn()} onExportHardware={vi.fn()}
+        releaseContinuity={{
+          workReleaseId: 'rel-p1',
+          authorityReleaseId: 'rel-p2',
+          authorityReleaseNumber: 2,
+          hasPhysicalProgress: true,
+        }}
+      />,
+    );
+    const banner = screen.getByTestId('prod-release-continuity');
+    expect(banner.textContent).toContain('Nueva revisión disponible');
+    expect(banner.textContent).toContain(
+      'Hay trabajo de fabricación en curso sobre la versión anterior',
+    );
+    // Secondary detail: labels, never raw ids.
+    expect(banner.textContent).toContain('Nueva liberación: Liberación #2');
+    expect(banner.textContent).not.toContain('rel-p1');
+    expect(banner.textContent).not.toContain('rel-p2');
+    // No automatic replacement action is offered.
+    const actions = banner.querySelectorAll('button');
+    expect(actions.length).toBe(0);
+  });
+
+  it('stays silent without physical progress or without a discontinuity', () => {
+    const readiness = buildProductionOrderReadiness({ project: project(), cutRows: [] });
+    const { rerender } = render(
+      <ProductionOrderHub
+        project={project()} customerLabel="Ana" salePrice={null} readiness={readiness}
+        activeTab="resumen" onTabChange={vi.fn()} onBackToQueue={vi.fn()}
+        onOpenDesign={vi.fn()} onExportOptimizer={vi.fn()} onExportHardware={vi.fn()}
+        releaseContinuity={{
+          workReleaseId: 'rel-p1',
+          authorityReleaseId: 'rel-p2',
+          authorityReleaseNumber: 2,
+          hasPhysicalProgress: false,
+        }}
+      />,
+    );
+    expect(screen.queryByTestId('prod-release-continuity')).toBeNull();
+    rerender(
+      <ProductionOrderHub
+        project={project()} customerLabel="Ana" salePrice={null} readiness={readiness}
+        activeTab="resumen" onTabChange={vi.fn()} onBackToQueue={vi.fn()}
+        onOpenDesign={vi.fn()} onExportOptimizer={vi.fn()} onExportHardware={vi.fn()}
+        releaseContinuity={null}
+      />,
+    );
+    expect(screen.queryByTestId('prod-release-continuity')).toBeNull();
+  });
+});

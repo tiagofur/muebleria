@@ -25,6 +25,7 @@ import {
   listProductionSpaceOptions,
   PRODUCTION_SCOPE_ALL,
   projectScopedToProductionSpace,
+  releaseWorkContinuityOf,
 } from '@granete/domain';
 import { EmptyState } from '../common';
 import { Factory } from 'lucide-react';
@@ -312,6 +313,10 @@ export function ProductionWorkspace({
       production: projectForHubBase.production,
     };
     const staleInfo = getProductionStaleInfo(projectForHubBase);
+    // #741 PR 1: work-release continuity — the executions belong to a
+    // release older than the canonical authority while physical progress
+    // exists. Informative banner only; the server owns the blocking.
+    const releaseContinuity = releaseWorkContinuityOf(orderProject);
 
     return (
       <ProductionOrderHub
@@ -381,6 +386,7 @@ export function ProductionWorkspace({
         }
         canSetFloorStatus={canSetFloorStatus}
         staleInfo={staleInfo}
+        releaseContinuity={releaseContinuity}
         onExportCncPilot={
           onExportCncPilot
             ? () => onExportCncPilot(orderProject.id)

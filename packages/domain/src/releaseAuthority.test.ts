@@ -13,6 +13,7 @@ import {
   projectProcessStage,
   releaseAuthorityLabel,
   releaseAuthorityOf,
+  releaseWorkContinuityOf,
   type Project,
 } from './index';
 import type { ProductionRelease } from './projectLifecycle';
@@ -177,5 +178,79 @@ describe('projectAllowsProductionAccess (#697 review — one access rule)', () =
     expect(projectAllowsProductionAccess({ status: 'accepted' })).toBe(false);
     expect(projectAllowsProductionAccess({ status: 'produced' })).toBe(false);
     expect(projectAllowsProductionAccess({ status: 'draft' })).toBe(false);
+  });
+});
+
+describe('releaseWorkContinuityOf (#741 PR 1 — the work owns its release)', () => {
+  const canonicalP2 = {
+    source: 'canonical' as const,
+    releaseId: 'rel-p2',
+    releaseNumber: 2,
+  };
+  const executionsP1 = {
+    partInstances: [
+      {
+        productionRevision: 'rel-p1',
+        requiredOperations: [{ status: 'completed' }],
+      },
+    ],
+    moduleUnits: [{ productionRevision: 'rel-p1', status: 'awaiting_parts' }],
+  };
+
+  it('detects the discontinuity: executions pin P1 while the authority is P2', () => {
+    const continuity = releaseWorkContinuityOf({
+      resolvedProductionRelease: canonicalP2,
+      ...executionsP1,
+    });
+    expect(continuity).toBeDefined();
+    expect(continuity?.workReleaseId).toBe('rel-p1');
+    expect(continuity?.authorityReleaseId).toBe('rel-p2');
+    expect(continuity?.authorityReleaseNumber).toBe(2);
+    expect(continuity?.hasPhysicalProgress).toBe(true);
+  });
+
+  it('normal path: executions matching the authority are not a discontinuity', () => {
+    expect(
+      releaseWorkContinuityOf({
+        resolvedProductionRelease: canonicalP2,
+        partInstances: [{ productionRevision: 'rel-p2', requiredOperations: [] }],
+        moduleUnits: [{ productionRevision: 'rel-p2', status: 'assembly' }],
+      }),
+    ).toBeUndefined();
+  });
+
+  it('no executions or mixed provenance: undefined (the server fails closed per target)', () => {
+    expect(
+      releaseWorkContinuityOf({ resolvedProductionRelease: canonicalP2 }),
+    ).toBeUndefined();
+    expect(
+      releaseWorkContinuityOf({
+        resolvedProductionRelease: canonicalP2,
+        partInstances: [
+          { productionRevision: 'rel-p1', requiredOperations: [] },
+          { productionRevision: 'rel-p2', requiredOperations: [] },
+        ],
+      }),
+    ).toBeUndefined();
+  });
+
+  it('legacy authority never signals continuity (pre-DT compatibility)', () => {
+    expect(
+      releaseWorkContinuityOf({
+        resolvedProductionRelease: { source: 'legacy', releaseId: 'legacy-rel-1' },
+        ...executionsP1,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('untouched planned executions carry no physical progress', () => {
+    const continuity = releaseWorkContinuityOf({
+      resolvedProductionRelease: canonicalP2,
+      partInstances: [
+        { productionRevision: 'rel-p1', requiredOperations: [{ status: 'queued' }] },
+      ],
+      moduleUnits: [{ productionRevision: 'rel-p1', status: 'awaiting_parts' }],
+    });
+    expect(continuity?.hasPhysicalProgress).toBe(false);
   });
 });

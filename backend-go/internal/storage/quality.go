@@ -102,6 +102,16 @@ func (s *PostgresStore) mutateProjectQuality(
 		snap.ReleasedRevision = authority.ReleaseID
 	}
 	if authority != nil && authority.Source == domain.ProductionReleaseAuthorityCanonical {
+		// #741 PR 1: ownership precedes preparation for physical quality
+		// effects — when the executions belong to a release older than the
+		// authority, the continuity blocker fires before the technical guard
+		// and the operational gate. Observation mutations keep their ungated
+		// contract (the guard only runs for physicalExecution).
+		if physicalExecution {
+			if err := s.guardWorkReleaseContinuity(snap.Parts, snap.Units, authority); err != nil {
+				return nil, err
+			}
+		}
 		// #577: quality gates advance physical unit state; without frozen
 		// routing evidence they fail closed like every station command.
 		if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {

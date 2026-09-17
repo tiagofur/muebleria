@@ -751,9 +751,11 @@ func respondWithMutationError(w http.ResponseWriter, err error) {
 		respondWithError(w, http.StatusNotFound, "obra no encontrada")
 	case errors.Is(err, domain.ErrPhysicalWorkEngineeringPending),
 		errors.Is(err, domain.ErrPhysicalWorkMaterialsPending),
-		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch):
-		// #740: the operational gate blocks physical work — surface the
-		// actionable reason verbatim (which preparation step is missing).
+		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch),
+		errors.Is(err, domain.ErrPhysicalWorkMaterialsCommitted):
+		// #740/#741: the operational gate blocks physical work — surface the
+		// actionable reason verbatim (which preparation step is missing, or
+		// that a newer release requires the continuity review).
 		respondWithError(w, http.StatusConflict, msg)
 	default:
 		respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar la ejecución física")
