@@ -17,11 +17,13 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // ─── Request/Response Types ──────────────────────────────────────────────────
@@ -233,6 +235,24 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// #740 — fail-before-mutate: when finishing this station job would move
+	// the item's floor status (a physical effect), the operational gate must
+	// authorize it BEFORE the activity row is written. Activities without a
+	// floor side-effect (F095 project×station claims, sectors without a
+	// floor status) are telemetry and stay finishable.
+	if activity.ItemID != "" && domain.TargetStatusForSector(string(activity.Sector)) != "" {
+		if err := s.Store.CheckPhysicalWorkAuthorization(r.Context(), activity.ProjectID); err != nil {
+			if errors.Is(err, domain.ErrPhysicalWorkEngineeringPending) ||
+				errors.Is(err, domain.ErrPhysicalWorkMaterialsPending) ||
+				errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) {
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
+			respondWithError(w, http.StatusInternalServerError, "no se pudo verificar la autorización de trabajo físico")
+			return
+		}
+	}
+
 	if err := s.Store.FinishProductionActivity(r.Context(), activityID, body.PiecesCount, body.Notes); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "no se pudo finalizar la actividad")
 		return
@@ -241,7 +261,10 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 	// F094 — finishing a station job moves the floor pipeline (and leaves
 	// the F092 audit trail). Claims are no longer floating telemetry: when
 	// the sector produces a floor status and the item has not reached it,
-	// the finish advances it exactly like the station queue would.
+	// the finish advances it exactly like the station queue would. The
+	// advance runs through the SAME gated atomic write (#740): if the gate
+	// blocks under the lock (authority changed between the preflight and
+	// here), the item stays put and no false progress is audited.
 	s.advanceItemOnActivityFinish(r, *activity, actorID)
 
 	// Update the activity with finish info
@@ -281,10 +304,6 @@ func (s *Server) advanceItemOnActivityFinish(r *http.Request, activity domain.Pr
 		if before == target || domain.FloorStatusRank(before) >= domain.FloorStatusRank(target) {
 			return
 		}
-		if err := s.Store.SetProjectItemFloorStatus(r.Context(), activity.ProjectID, activity.ItemID, target); err != nil {
-			log.Printf("[activity-finish] floor status update failed for item %s: %v", activity.ItemID, err)
-			return
-		}
 		ev := domain.FloorStatusEvent{
 			ID:        newFloorEventID(),
 			ProjectID: activity.ProjectID,
@@ -300,8 +319,22 @@ func (s *Server) advanceItemOnActivityFinish(r *http.Request, activity domain.Pr
 		if domain.FloorStatusRank(target)-domain.FloorStatusRank(before) != 1 {
 			ev.Note = domain.FloorEventJumpNote(ev.Note, before, target)
 		}
-		if err := s.Store.InsertFloorEvent(r.Context(), ev); err != nil {
-			log.Printf("[activity-finish] floor event insert failed for item %s: %v", activity.ItemID, err)
+		// #740 — the side-effect advances physical state, so it runs through
+		// the SAME gated atomic write as the manual and scan routes: status +
+		// F092 event in one transaction, gate blockers leave both untouched.
+		if err := s.Store.SetProjectItemFloorStatusGated(r.Context(), storage.ItemFloorAdvance{
+			ProjectID: activity.ProjectID,
+			ItemID:    activity.ItemID,
+			Status:    target,
+			Event:     &ev,
+		}); err != nil {
+			if errors.Is(err, domain.ErrPhysicalWorkEngineeringPending) ||
+				errors.Is(err, domain.ErrPhysicalWorkMaterialsPending) ||
+				errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) {
+				log.Printf("[activity-finish] physical work gate blocked item %s advance: %v", activity.ItemID, err)
+			} else {
+				log.Printf("[activity-finish] floor status update failed for item %s: %v", activity.ItemID, err)
+			}
 		}
 		return
 	}

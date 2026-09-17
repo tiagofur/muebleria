@@ -12,6 +12,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -286,6 +287,12 @@ func (s *Server) HandleAdvancePartOperation(w http.ResponseWriter, r *http.Reque
 		}
 		before := deriveItemStatuses(snap)
 		part := snap.Parts[idx]
+		// #740: the piece must belong to the release that governs the work —
+		// evidence of a previous release never authorizes advancing stale
+		// executions once a newer release exists (P1 work under P2 authority).
+		if snap.ProductionRelease != nil && part.ProductionRevision != snap.ProductionRelease.ReleaseID {
+			return nil, domain.ErrPhysicalWorkReleaseMismatch
+		}
 		opType := domain.PartOperationType(body.OperationType)
 		if scannerMode {
 			// Resolve the piece's CURRENT operation — the scan identifies the
@@ -401,6 +408,10 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 			return nil, fmt.Errorf("NOT_FOUND:unidad no encontrada en esta obra")
 		}
 		unit := snap.Units[idx]
+		// #740: the unit must belong to the release that governs the work.
+		if snap.ProductionRelease != nil && unit.ProductionRevision != snap.ProductionRelease.ReleaseID {
+			return nil, domain.ErrPhysicalWorkReleaseMismatch
+		}
 
 		target := domain.ModuleUnitStatus(body.TargetStatus)
 		if target == "" {
@@ -539,6 +550,12 @@ func (s *Server) HandleAssemblyOverride(w http.ResponseWriter, r *http.Request) 
 			return nil, fmt.Errorf("NOT_FOUND:unidad no encontrada en esta obra")
 		}
 		unit := snap.Units[idx]
+		// #740: an override is not a backdoor around Engineering/materials —
+		// the operational gate already ran in storage, and the unit must
+		// still belong to the governing release.
+		if snap.ProductionRelease != nil && unit.ProductionRevision != snap.ProductionRelease.ReleaseID {
+			return nil, domain.ErrPhysicalWorkReleaseMismatch
+		}
 		check := domain.CheckAssemblyReadiness(unit, snap.Parts, "")
 		if unit.SupervisorOverride != nil {
 			return nil, fmt.Errorf("CONFLICT:la unidad ya tiene un override registrado")
@@ -635,6 +652,11 @@ func (s *Server) HandlePartRework(w http.ResponseWriter, r *http.Request) {
 			return nil, fmt.Errorf("NOT_FOUND:pieza no encontrada en esta obra")
 		}
 		part := snap.Parts[idx]
+		// #740: rework is physical work — the piece must belong to the
+		// governing release (the operational gate already ran in storage).
+		if snap.ProductionRelease != nil && part.ProductionRevision != snap.ProductionRelease.ReleaseID {
+			return nil, domain.ErrPhysicalWorkReleaseMismatch
+		}
 		before := deriveItemStatuses(snap)
 		reworked, changed := domain.TriggerPartRework(part, body.Action, body.Reason, domain.PartOperationType(body.TargetOperation))
 		if !changed {
@@ -727,6 +749,12 @@ func respondWithMutationError(w http.ResponseWriter, err error) {
 		respondWithError(w, http.StatusConflict, "el gate de armado bloquea el avance")
 	case msg == "project not found":
 		respondWithError(w, http.StatusNotFound, "obra no encontrada")
+	case errors.Is(err, domain.ErrPhysicalWorkEngineeringPending),
+		errors.Is(err, domain.ErrPhysicalWorkMaterialsPending),
+		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch):
+		// #740: the operational gate blocks physical work — surface the
+		// actionable reason verbatim (which preparation step is missing).
+		respondWithError(w, http.StatusConflict, msg)
 	default:
 		respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar la ejecución física")
 	}

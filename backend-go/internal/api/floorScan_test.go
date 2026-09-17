@@ -366,3 +366,30 @@ func TestFloorEventJumpNoteHelper(t *testing.T) {
 		t.Fatalf("unexpected note: %q", got)
 	}
 }
+
+// #740 — the operational gate blockers surface as 409 with the actionable
+// copy (which preparation step is missing) on both legacy floor writers, and
+// NO audit event is recorded for the blocked transition.
+func TestFloorWriters_PhysicalWorkGateSurfacesActionableBlocker(t *testing.T) {
+	store, srv := floorScanTestFixtures()
+	store.physicalAuthErr = domain.ErrPhysicalWorkEngineeringPending
+
+	rr := doFloorScan(srv, domain.RoleProduccion, `{"module":"GAB-01","advance":true}`)
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "Ingeniería pendiente") {
+		t.Fatalf("scan: expected 409 Ingeniería pendiente, got=%d %s", rr.Code, rr.Body.String())
+	}
+
+	req := withClaims(httptest.NewRequest(http.MethodPatch, "/api/projects/p1/items/i1/floor-status", strings.NewReader(`{"status":"cut"}`)), "u1", string(domain.RoleProduccion))
+	req.SetPathValue("id", "p1")
+	req.SetPathValue("itemId", "i1")
+	req.Header.Set("Content-Type", "application/json")
+	patchRR := httptest.NewRecorder()
+	srv.HandleProjectItemFloorStatus(patchRR, req)
+	if patchRR.Code != http.StatusConflict || !strings.Contains(patchRR.Body.String(), "Ingeniería pendiente") {
+		t.Fatalf("patch: expected 409 Ingeniería pendiente, got=%d %s", patchRR.Code, patchRR.Body.String())
+	}
+
+	if len(store.floorStatusWrites) != 0 || len(store.floorEventWrites) != 0 {
+		t.Fatalf("blocked transitions must leave zero writes: %+v %+v", store.floorStatusWrites, store.floorEventWrites)
+	}
+}

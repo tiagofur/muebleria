@@ -111,6 +111,16 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {
 			return nil, err
 		}
+		// #740 PR 2: the operational gate SUMS to the technical guard for
+		// every execution mutation (advance, rework, unit advance, override).
+		// Canonical PLANNED generation never crosses here — it lives in
+		// GenerateCanonicalPartExecutions, which stays open as preparation
+		// (#739). Both guards run under the project row lock taken above, so
+		// engineering completion / material authorization commands serialize
+		// with this decision.
+		if err := s.authorizePhysicalWorkTx(ctx, tx, projectID, authority); err != nil {
+			return nil, err
+		}
 	}
 
 	mutation, err := mutate(snap)

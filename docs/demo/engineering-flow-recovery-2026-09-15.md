@@ -5,14 +5,21 @@
 > Prioridad solicitada por el propietario: simplificar Q/R y desbloquear Ingeniería para preparar PTX de prueba.
 > El único orden de producto vive en [roadmap-comercial-v2.md](../roadmap-comercial-v2.md). Este documento explica entregas y evidencias, no crea otro backlog/dispatcher.
 
-**Avance (2026-09-16):** A (#738) y B (#739) integradas. C avanza por PRs: el
-**PR 1 de #740** entrega la evidencia durable de Ingeniería por release exacto
+**Avance (2026-09-16):** A (#738) y B (#739) integradas. C completada en dos PRs:
+el **PR 1 de #740** entregó la evidencia durable de Ingeniería por release exacto
 (tabla `production_release_engineering` + comandos `engineering:start`/`:complete`
-idempotentes/versionados + proyección del read model) y conserva el **RED
-operacional** (`backend-go/internal/storage/engineering_physical_gate_red_test.go`:
-part advance, floor-status y floor-scan avanzan trabajo físico hoy sin Ingeniería
-completada ni materiales autorizados). El gate transversal de los writers físicos
-es la **segunda entrega** de #740.
+idempotentes/versionados + proyección del read model) con el **RED operacional**
+conservado. El **PR 2 de #740** invirtió ese RED e implementó el **gate
+operacional transversal** (`storage/physical_work_gate.go`): todo writer de
+trabajo físico exige, para el release EXACTO y bajo el lock de la fila del
+proyecto, Ingeniería `completed` + autorización de materiales correlacionada
+(liberación regular o excepción autorizada auditada), SUMADO a los gates
+técnicos existentes; las piezas/unidades deben pertenecer al release vigente
+(evidencia de P1 nunca autoriza trabajo de P2); el PUT agregado deja de ser
+canal físico (floor_status/F092 del cliente se descartan en obras canónicas); y
+la preparación (despiece congelado, optimización, plan, PDF/PTX de #739)
+sigue disponible antes de la autorización. La regla final vive en
+`docs/project-lifecycle.md` §2.4 y `docs/architecture/project-design-digital-thread.md` §25.9.
 
 ## 1. Resultado inmediato y límites
 

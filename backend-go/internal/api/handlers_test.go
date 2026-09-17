@@ -309,6 +309,8 @@ type stubStore struct {
 	itemQuantities    map[string]int
 	mutateFloorEvents []domain.FloorStatusEvent
 	mutateErr         error
+	// #740 operational gate stub error for the read-only preflight.
+	physicalAuthErr error
 	// #577 canonical execution generation stubs.
 	canonicalExecParts    []domain.PartInstance
 	canonicalExecUnits    []domain.ModuleUnitExecution
@@ -910,6 +912,24 @@ func (s *stubStore) SetProjectItemFloorStatus(_ context.Context, projectID, item
 	return nil
 }
 
+func (s *stubStore) SetProjectItemFloorStatusGated(_ context.Context, adv storage.ItemFloorAdvance) error {
+	if s.physicalAuthErr != nil {
+		return s.physicalAuthErr
+	}
+	if s.floorStatusErr != nil {
+		return s.floorStatusErr
+	}
+	s.floorStatusWrites = append(s.floorStatusWrites, floorStatusWrite{adv.ProjectID, adv.ItemID, adv.Status})
+	if adv.Event != nil {
+		s.floorEventWrites = append(s.floorEventWrites, *adv.Event)
+	}
+	return nil
+}
+
+func (s *stubStore) CheckPhysicalWorkAuthorization(_ context.Context, _ string) error {
+	return s.physicalAuthErr
+}
+
 func (s *stubStore) InsertFloorEvent(_ context.Context, ev domain.FloorStatusEvent) error {
 	s.floorEventWrites = append(s.floorEventWrites, ev)
 	return nil
@@ -1039,6 +1059,20 @@ func (s *stubStore) mutateMaterialPlanning(
 func (s *stubStore) MutateProjectQuality(
 	_ context.Context,
 	_ string,
+	mutate func(*domain.QualitySnapshot) (*domain.QualityMutation, error),
+) (*domain.QualityMutation, error) {
+	return s.mutateQualityInMemory(mutate)
+}
+
+func (s *stubStore) MutateProjectQualityPhysical(
+	_ context.Context,
+	_ string,
+	mutate func(*domain.QualitySnapshot) (*domain.QualityMutation, error),
+) (*domain.QualityMutation, error) {
+	return s.mutateQualityInMemory(mutate)
+}
+
+func (s *stubStore) mutateQualityInMemory(
 	mutate func(*domain.QualitySnapshot) (*domain.QualityMutation, error),
 ) (*domain.QualityMutation, error) {
 	snap := &domain.QualitySnapshot{

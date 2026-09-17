@@ -170,17 +170,72 @@ Material planning conserva requerimientos con procedencia exacta; el release de 
 
 El guard de ejecución canónica valida P/R/fingerprint y routing congelado. Esa comprobación no equivale a validar Ingeniería terminada/material autorizado. #740 requiere reproducir cada ruta física por HTTP y cubrir sus escritores, no sólo botones.
 
-**RED operacional reproducido (#740 PR 1, PostgreSQL + HTTP reales):** con Q/R/P
-válidos y SIN Ingeniería completada ni materiales autorizados, hoy avanzan el
-trabajo físico: `POST /parts/{partId}/advance` (pieza → operación completada,
-floor event), `PATCH /items/{itemId}/floor-status` y `POST /floor-scan` (item
-quote-line → `cut`/`edged`). El split-brain OC-033/034 NO protege estos items:
-las unidades canónicas referencian FurnitureInstances, no el id de la quote
-line. `POST /production/activity/finish` avanza el floor status del item sin
-resolver autoridad de release (inspección de código; sin gate). La suite
-`engineering_physical_gate_red_test.go` conserva el escenario asserting el
-comportamiento ACTUAL para que la segunda entrega de #740 (gate transversal)
-invierta la expectativa — no se borra la prueba al arreglarlo.
+**RED operacional reproducido (#740 PR 1) e invertido (#740 PR 2, PostgreSQL +
+HTTP reales):** con Q/R/P válidos y SIN Ingeniería completada ni materiales
+autorizados, avanzaban el trabajo físico: `POST /parts/{partId}/advance`
+(pieza → operación completada, floor event), `PATCH /items/{itemId}/floor-status`
+y `POST /floor-scan` (item quote-line → `cut`/`edged`), y el side-effect de
+`POST /production/activity/finish` movía el floor status sin resolver autoridad
+de release. Desde el PR 2 todos esos writers fallan cerrado (409 con motivo
+accionable) y dejan 0 mutaciones — la suite `engineering_physical_gate_red_test.go`
+conserva el escenario con la expectativa INVERTIDA y
+`engineering_physical_gate_test.go` cubre la matriz completa (§ más abajo).
+
+**Gate operacional transversal (#740 PR 2) — la regla ejecutable vigente:**
+
+```text
+Trabajo físico permitido
+= ProductionRelease exacto (autoridad vigente)
++ Ingeniería COMPLETA para ese release (production_release_engineering)
++ materiales AUTORIZADOS para ese MISMO release
+  (material_planning.Requirements pina release + manufacturing fingerprint
+   Y MaterialPlanning.Release evidencia presente — liberación regular
+   o excepción autorizada auditada; ambas conservan actor/timestamp/alcance)
++ los gates técnicos existentes (P/R/fingerprint, routing congelado v2,
+  secuencia, permisos por sector, QC)
+```
+
+La autoridad común vive en `backend-go/internal/storage/physical_work_gate.go`
+(`authorizePhysicalWork`), se resuelve DENTRO de la transacción del writer bajo
+el lock `FOR UPDATE` de la fila de `projects` (los comandos de Ingeniería y de
+materiales toman el mismo lock → la decisión y la mutación comparten frontera,
+sin TOCTOU), y se cablea en:
+
+| Writer | Clasificación | Camino |
+|---|---|---|
+| `POST /parts/{partId}/advance` | trabajo físico | `MutateProjectPartExecutions` |
+| `POST /units/{unitId}/advance` | trabajo físico | `MutateProjectPartExecutions` |
+| `POST /units/{unitId}/assembly-override` | trabajo físico (override ≠ puerta trasera) | `MutateProjectPartExecutions` |
+| `POST /parts/{partId}/rework` | trabajo físico | `MutateProjectPartExecutions` |
+| `POST /quality/rework`, `/quality/qc/{unitId}[/override]` | trabajo físico | `MutateProjectQualityPhysical` |
+| `PATCH /items/{itemId}/floor-status` | trabajo físico (bypass confirmado, cerrado) | `SetProjectItemFloorStatusGated` (atómico con su evento F092) |
+| `POST /floor-scan` | trabajo físico (bypass confirmado, cerrado) | `SetProjectItemFloorStatusGated` |
+| `POST /production/activity/finish/{id}` | telemetría; su side-effect físico SÍ pasa el gate (prefail antes de mutar la actividad + re-check bajo lock) | `CheckPhysicalWorkAuthorization` + write gated |
+| `PUT /projects/{id}` (agregado) | NO es canal físico para obras canónicas: `part_instances`/`module_units` ya se congelaban (#577); ahora también se preservan `floor_status` por item y se descartan `floor_events` del cliente | handler del PUT |
+
+Además, cada avance exige que la pieza/unidad PERTENEZCA al release vigente
+(`ProductionRevision == authority.ReleaseID`): evidencia de P1 nunca autoriza
+avanzar trabajo de P2 ni viceversa (P2 completamente re-preparado sigue
+rechazando avanzar piezas de P1 — blocker de liberación anterior).
+
+**Clasificación preparación vs ejecución (documentada, §12):** generación de
+ejecuciones PLANIFICADAS (`PUT /part-executions`, incluida regeneración
+supervisada con `force`), abrir/consultar Ingeniería, despiece congelado,
+optimización, guardado de plan y descarga PDF/PTX (#738/#739) siguen
+disponibles ANTES de Ingeniería completa/materiales — generar un plan o
+descargar un archivo NO es producción iniciada y no descuenta stock. Reportar
+un problema de calidad y su ciclo administrativo (transiciones de issue) son
+observación, no avance físico. Claim de actividad y reporte de daño son
+telemetría/observación.
+
+**Compatibilidad pre-DT (explícita):** proyectos sin release canónico no tienen
+identidad de release que correlacionar y conservan su cadena OC-022 (el gate no
+aplica); esa compatibilidad NUNCA habilita un proyecto moderno — cualquier
+release canónico hace canónica la autoridad y activa el gate. Los blockers del
+gate se mapean a 409 con copy accionable ("Ingeniería pendiente…" /
+"Material pendiente de autorización…" / "el trabajo pertenece a una liberación
+anterior…"); React los muestra verbatim (toast) — la visibilidad de pantallas
+NO es el gate, el backend manda.
 
 ### 2.5 Pruebas históricas que se conservan
 
@@ -196,7 +251,7 @@ Estos hechos no deben volver a aparecer como trabajo pendiente por leer checklis
 |---|---|
 | #738 | Entrada, cola y navegación de Ingeniería sin Project.status ni salto implícito. |
 | #739 | Despiece congelado y preparación de PDF/PTX de prueba desde P exacta. |
-| #740 | PR 1 ENTREGADO: evidencia durable de Ingeniería por release exacto + comandos start/complete + RED operacional. PR 2 pendiente: gate transversal de avance físico con Ingeniería completa y material autorizado del mismo contexto. |
+| #740 | ENTREGADO (PR 1 + PR 2): evidencia durable de Ingeniería por release exacto, comandos start/complete y gate operacional transversal de avance físico con Ingeniería completa y material autorizado del mismo release, bajo lock y con correlación exacta. |
 | #741 | P1/P2 en trabajo iniciado, suspensión/cancelación sin retarget ni pérdida de historia. |
 | #642 | Continuación de consumidores comerciales, Q/R sencilla, export comercial y retiro de autoridad comercial legacy. |
 | #679 | Refresco entre clientes y escritura de WorkingCopy con detección de cambios concurrentes. |
