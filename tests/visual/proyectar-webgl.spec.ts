@@ -40,7 +40,9 @@ import { createSeedWorkspace } from '@granete/storage';
 test.use({
   viewport: { width: 1280, height: 800 },
   deviceScaleFactor: 1,
-  reducedMotion: 'reduce',
+  contextOptions: {
+    reducedMotion: 'reduce',
+  },
 });
 
 // Drag MIME types the studio canvas recognizes (paintMaterial.ts).
