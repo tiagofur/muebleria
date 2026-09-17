@@ -29,6 +29,7 @@ el arranque rutinario del agente. Comandos locales y CI proporcional:
 | Arquitectura / convenciones | `docs/architecture.md`, `docs/conventions.md` |
 | Producto / prioridad | `docs/prd-v2.md`, `docs/roadmap-comercial-v2.md`, `docs/demo-mvp-plan-2026-09-05.md` |
 | Users / Auth / Memberships / Organizations / Sales Network | `docs/architecture/organization-foundation-v2.md`, ADR-0005, ADR-0006, #446 y child exacta, proofs #462 |
+| Librerías de manufactura / releases / overlays / distribución local | `docs/architecture/manufacturing-library-platform.md`, ADR-0008; además `parametric-furniture-library.md` y `3d-asset-library.md` cuando toque definiciones/assets |
 | Project / FurnitureInstance / Design / Q-R-P | `docs/architecture/project-design-digital-thread.md`, ADR-0003, #384; cliente generado #496 |
 | Integración SketchUp ↔ Go ↔ React | `docs/architecture/sketchup-backend-web-integration-excellence.md`, #465 y contrato generado #496 |
 | Mutación / interacción SketchUp | `apps/sketchup-extension/AGENTS.md`, contrato de autoría/nativo, runtime #498; no coordinadores por feature |
@@ -59,6 +60,10 @@ contrato actual de inicio humano; sus invariantes de producto no se relajan.
 - APIs/DTOs generados; fixtures de paridad cuando una regla viva en TS y Go.
   Sin fallback silencioso a legacy, IDs derivados de nombres/geometría ni `latest`
   implícito en revisiones, approvals, releases, artifacts o fabricación.
+- Librerías de manufactura: no duplicar el catálogo canónico por cliente; releases
+  publicados son inmutables, proyectos fijan `effectiveLibraryReleaseId`, overlays
+  se resuelven en backend con conflictos explícitos y `LibraryStore` persistente no
+  se trata como cache descartable. Free/Standard comparten recursos canónicos.
 - Auth + capability + ownership + RLS. Tenant ID no autoriza. Runtime DB sin
   BYPASSRLS ni ownership; `SET LOCAL` transaccional; sin InitialOrganization fallback.
   Audit/outbox durable con la mutación; idempotencia/If-Match donde corresponda.
