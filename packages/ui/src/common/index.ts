@@ -33,6 +33,11 @@ export {
   type FabricationFlowStepsProps,
 } from './FabricationFlowSteps';
 export {
+  ProcessStrip,
+  type ProcessStripActionProp,
+  type ProcessStripProps,
+} from './ProcessStrip';
+export {
   EmptyState,
   type EmptyStateProps,
   type EmptyStateVariant,
