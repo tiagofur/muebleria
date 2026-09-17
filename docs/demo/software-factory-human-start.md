@@ -33,6 +33,30 @@ Una sola issue propietaria por PR y enlace parcial/cierre correcto:
 - Parcial: primera línea `Refs #N`, segunda `Delivery: partial`; remaining scope
   explícito y la issue sigue abierta. PR apilado hacia rama intermedia no cierra.
 
+Reglas mecánicas obligatorias validadas por `scripts/check_pr_metadata.py`:
+
+1. **Etiqueta obligatoria (`type:`)**: El PR debe tener **exactamente una** etiqueta de tipo soportada:
+   `type:feature`, `type:bug`, `type:docs`, `type:refactor`, `type:chore` o `type:breaking-change`.
+2. **Estructura estricta de las 2 primeras líneas no vacías del cuerpo**:
+   - Línea 1: Únicamente `Refs #N` o `Closes/Fixes/Resolves #N`. No anteponer `## Summary` ni otros encabezados.
+   - Línea 2: Únicamente `Delivery: partial` o `Delivery: complete`.
+   - Resto del cuerpo: No incluir palabras clave adicionales de vinculación (`closes`, `fixes`, `resolves`, `refs` seguidos de `#` o URLs).
+3. **Issue vinculada**: Debe estar abierta y tener la etiqueta `status:approved`.
+
+Plantilla de creación recomendada vía GitHub CLI:
+
+```bash
+gh pr create \
+  --title "<type>(<scope>): <resumen conciso> (#N)" \
+  --label "type:<type>" \
+  --body "Refs #N
+
+Delivery: partial
+
+## Summary
+<descripción del incremento>"
+```
+
 No uses Refs para una bounded realmente completa ni closing keyword para una META
 incompleta. «No auto-cerrar» prohíbe API de cierre por efecto de publicar/revisar,
 no el cierre nativo posterior al merge humano. Implementador clasifica, líder

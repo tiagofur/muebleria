@@ -174,3 +174,15 @@ Los nombres hacen el resto.
 - Piezas de tablero: `{moduleCode}-P{index:02d}` (ej. `MOD-GAB-01-P01`).
 - Líneas de herraje: `{moduleCode}-H{index:02d}`.
 - UUIDs internos para entidades que no tienen `code` externo.
+
+## Pull Requests y metadatos de publicación
+
+Cada PR debe satisfacer el validador mecánico `scripts/check_pr_metadata.py`:
+
+- **Etiqueta obligatoria:** exactamente una etiqueta `type:*` (`type:feature`, `type:bug`, `type:docs`, `type:refactor`, `type:chore`, `type:breaking-change`).
+- **Encabezado del cuerpo:**
+  - Línea 1 (no vacía): `Refs #N` (entrega parcial) o `Closes #N` / `Fixes #N` / `Resolves #N` (entrega completa).
+  - Línea 2 (no vacía): `Delivery: partial` o `Delivery: complete`.
+  - No anteponer títulos ni texto antes de estas líneas.
+- **Sin enlaces secundarios:** no incluir verbos de vinculación (`closes`, `fixes`, `refs`) con números o URLs en el resto del cuerpo.
+- **Issue autoritativa:** debe existir, estar abierta y tener la etiqueta `status:approved`.
