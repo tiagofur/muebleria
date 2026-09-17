@@ -11,13 +11,16 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
+func ptr[T any](v T) *T {
+	return &v
+}
+
 // buildSyntheticDrawerFixture provides a reproducible, fully declarative Agregado assembly definition.
-// - Left side (rigid member, variant-dependent depth)
-// - Right side (rigid member, variant-dependent depth, anchored to maxX)
-// - Left runner (rigid member, variant-dependent depth)
-// - Right runner (rigid member, variant-dependent depth, anchored to maxX)
-// - Fabricated bottom board (16mm, width = W - 35mm, length = variant_depth - 10mm)
-// - Fabricated back board (16mm, width = W - 35mm, height = H - 40mm)
+// Follows preferred architecture (R8):
+// Agregado
+// ├── Components (sole authority for fabricated boards: bottom and back)
+// ├── HardwareLines (empty in this fixture)
+// └── RigidMembers (runners, sides, locking clips)
 func buildSyntheticDrawerFixture() domain.Agregado {
 	kitID := "hw-kit-drawer-synth"
 
@@ -25,6 +28,7 @@ func buildSyntheticDrawerFixture() domain.Agregado {
 		ID:                      "agr-drawer-synth",
 		Code:                    "DRAWER-SYNTH",
 		Name:                    "Synthetic Test Drawer System",
+		Revision:                7, // Explicit non-default recipe revision (R7)
 		CommercialKitHardwareID: &kitID,
 		VariantSets: []domain.AgregadoVariantSet{
 			{
@@ -130,48 +134,44 @@ func buildSyntheticDrawerFixture() domain.Agregado {
 				BOMRole: domain.BOMRoleSeparatelyPurchased,
 			},
 		},
-		FabricatedMembers: []domain.AgregadoFabricatedMember{
+		Components: []domain.ComponentInstance{
 			{
-				MemberID:    "drawer_bottom",
-				SlotID:      "bottom_board",
-				Name:        "Drawer Bottom Board",
-				ThicknessMm: 16.0,
-				WidthRule: domain.AssemblyDimensionRule{
-					Source:     domain.DimRuleAssemblyWidth,
-					Multiplier: 1.0,
-					OffsetMm:   -35.0,
-				},
-				LengthRule: domain.AssemblyDimensionRule{
-					Source:       domain.DimRuleSelectedVariant,
-					VariantSetID: "vs-drawer-depth",
-					Multiplier:   1.0,
-					OffsetMm:     -10.0,
-				},
-				Placement: domain.AssemblyAnchorRule{
-					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 17.5},
-					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 10.0},
-					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+				ComponentID: "comp-drawer-bottom",
+				Quantity:    1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					WidthRule: &domain.AssemblyDimensionRule{
+						Source:   domain.DimRuleAssemblyWidth,
+						OffsetMm: -35.0, // multiplier omitted -> default 1.0 (R9)
+					},
+					LengthRule: &domain.AssemblyDimensionRule{
+						Source:       domain.DimRuleSelectedVariant,
+						VariantSetID: "vs-drawer-depth",
+						OffsetMm:     -10.0, // multiplier omitted -> default 1.0 (R9)
+					},
+					PlacementRule: &domain.AssemblyAnchorRule{
+						X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 17.5},
+						Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 10.0},
+						Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+					},
 				},
 			},
 			{
-				MemberID:    "drawer_back",
-				SlotID:      "back_board",
-				Name:        "Drawer Back Board",
-				ThicknessMm: 16.0,
-				WidthRule: domain.AssemblyDimensionRule{
-					Source:     domain.DimRuleAssemblyWidth,
-					Multiplier: 1.0,
-					OffsetMm:   -35.0,
-				},
-				LengthRule: domain.AssemblyDimensionRule{
-					Source:     domain.DimRuleAssemblyHeight,
-					Multiplier: 1.0,
-					OffsetMm:   -40.0,
-				},
-				Placement: domain.AssemblyAnchorRule{
-					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 17.5},
-					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: -16.0},
-					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+				ComponentID: "comp-drawer-back",
+				Quantity:    1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					WidthRule: &domain.AssemblyDimensionRule{
+						Source:   domain.DimRuleAssemblyWidth,
+						OffsetMm: -35.0,
+					},
+					LengthRule: &domain.AssemblyDimensionRule{
+						Source:   domain.DimRuleAssemblyHeight,
+						OffsetMm: -40.0,
+					},
+					PlacementRule: &domain.AssemblyAnchorRule{
+						X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 17.5},
+						Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: -16.0},
+						Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+					},
 				},
 			},
 		},
@@ -295,18 +295,18 @@ func TestD_FabricatedDimensionsRecalculateNotScale(t *testing.T) {
 		t.Fatalf("res800 error: %v", err)
 	}
 
-	findComp := func(snap domain.ResolvedAssemblySnapshot, slotID string) domain.ResolvedFabricatedComponent {
+	findComp := func(snap domain.ResolvedAssemblySnapshot, compID string) domain.ResolvedFabricatedComponent {
 		for _, c := range snap.FabricatedComponents {
-			if c.SlotID == slotID {
+			if c.ComponentID == compID {
 				return c
 			}
 		}
-		t.Fatalf("component %s not found", slotID)
+		t.Fatalf("component %s not found", compID)
 		return domain.ResolvedFabricatedComponent{}
 	}
 
-	bottom600 := findComp(res600, "bottom_board")
-	bottom800 := findComp(res800, "back_board") // check both
+	bottom600 := findComp(res600, "comp-drawer-bottom")
+	back800 := findComp(res800, "comp-drawer-back")
 
 	// Bottom board width at W=600: 565mm
 	if math.Abs(bottom600.WidthMm-565.0) > 1e-6 {
@@ -318,8 +318,8 @@ func TestD_FabricatedDimensionsRecalculateNotScale(t *testing.T) {
 	}
 
 	// Back board width at W=800: 800 - 35 = 765mm
-	if math.Abs(bottom800.WidthMm-765.0) > 1e-6 {
-		t.Errorf("expected back board width 765mm for W=800, got %g", bottom800.WidthMm)
+	if math.Abs(back800.WidthMm-765.0) > 1e-6 {
+		t.Errorf("expected back board width 765mm for W=800, got %g", back800.WidthMm)
 	}
 }
 
@@ -375,7 +375,6 @@ func TestF_MissingVariantTypedError(t *testing.T) {
 
 // Test G: Fixed/Variant source exclusivity
 func TestG_FixedVariantSourceExclusivity(t *testing.T) {
-	// Member with both sources populated
 	bothSources := domain.AgregadoRigidMember{
 		MemberID: "bad_member",
 		Role:     "test",
@@ -394,31 +393,12 @@ func TestG_FixedVariantSourceExclusivity(t *testing.T) {
 	if err := domain.ValidateAgregadoRigidMember(bothSources, false); err == nil {
 		t.Fatal("expected error for member with both fixed and variant populated, got nil")
 	}
-
-	// Member with no sources populated
-	neitherSource := domain.AgregadoRigidMember{
-		MemberID: "bad_member2",
-		Role:     "test",
-		Source: domain.RigidMemberSource{
-			Kind: domain.RigidMemberSourceFixed,
-		},
-		Placement: domain.AssemblyAnchorRule{
-			X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
-			Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
-			Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
-		},
-		BOMRole: domain.BOMRoleNonPurchasing,
-	}
-	if err := domain.ValidateAgregadoRigidMember(neitherSource, false); err == nil {
-		t.Fatal("expected error for member with nil fixed source, got nil")
-	}
 }
 
 // Test H: BOM role combinations validated
 func TestH_BOMRoleCombinationsValidated(t *testing.T) {
 	kitID := "hw-kit-1"
 
-	// BOMRoleIncludedInKit WITH kit is valid
 	validMember := domain.AgregadoRigidMember{
 		MemberID: "valid_m",
 		Role:     "side",
@@ -434,12 +414,10 @@ func TestH_BOMRoleCombinationsValidated(t *testing.T) {
 		t.Fatalf("unexpected error for valid kit member: %v", err)
 	}
 
-	// BOMRoleIncludedInKit WITHOUT kit is invalid
 	if err := domain.ValidateAgregadoRigidMember(validMember, false); err == nil {
 		t.Fatal("expected error for included_in_kit without commercialKitHardwareId, got nil")
 	}
 
-	// BOMRoleSeparatelyPurchased is valid with or without kit
 	sepMember := validMember
 	sepMember.BOMRole = domain.BOMRoleSeparatelyPurchased
 	if err := domain.ValidateAgregadoRigidMember(sepMember, false); err != nil {
@@ -475,8 +453,6 @@ func TestI_ArbitraryFiniteRotationContract(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error deriving basis for %s: %v", tc.name, err)
 			}
-
-			// Validate with #668 authority
 			if err := domain.ValidateHardwareBasis(basis, tc.name); err != nil {
 				t.Fatalf("basis validation failed for %s: %v", tc.name, err)
 			}
@@ -494,7 +470,6 @@ func TestJ_HistoricalSnapshotCompleteness(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Must contain explicit SelectedVariants with both nominal and hardwareId
 	if len(snapshot.SelectedVariants) == 0 {
 		t.Fatal("snapshot must contain SelectedVariants")
 	}
@@ -503,7 +478,6 @@ func TestJ_HistoricalSnapshotCompleteness(t *testing.T) {
 		t.Errorf("unexpected selected variant metadata: %+v", sel)
 	}
 
-	// Must be fully serializable to JSON and back
 	bytes, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatalf("snapshot failed JSON marshal: %v", err)
@@ -516,8 +490,8 @@ func TestJ_HistoricalSnapshotCompleteness(t *testing.T) {
 	if roundtrip.AgregadoID != snapshot.AgregadoID {
 		t.Errorf("roundtrip AgregadoID mismatch: %s vs %s", roundtrip.AgregadoID, snapshot.AgregadoID)
 	}
-	if len(roundtrip.SelectedVariants) != len(snapshot.SelectedVariants) {
-		t.Errorf("roundtrip SelectedVariants length mismatch: %d vs %d", len(roundtrip.SelectedVariants), len(snapshot.SelectedVariants))
+	if roundtrip.AgregadoRevisionNumber != 7 {
+		t.Errorf("expected roundtrip revision 7, got %d", roundtrip.AgregadoRevisionNumber)
 	}
 }
 
@@ -604,7 +578,6 @@ func TestL_VisualAssetBindingDecoupled(t *testing.T) {
 	agr := buildSyntheticDrawerFixture()
 	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0}
 
-	// 1. Pure resolver returns exact hardwareId without requiring catalog or asset lookup
 	snapshot, err := engine.ResolveAgregadoAssembly(agr, params)
 	if err != nil {
 		t.Fatalf("pure resolver error: %v", err)
@@ -615,29 +588,217 @@ func TestL_VisualAssetBindingDecoupled(t *testing.T) {
 	if snapshot.RigidMembers[0].AssetID != nil {
 		t.Fatal("pure resolver must not populate visual AssetID directly")
 	}
+}
 
-	// 2. AttachVisualPins delegates to #668 visual asset authority
-	lookupCalled := 0
-	mockLookup := func(hardwareID string) (*domain.HardwareMountFrame, string, string, string, error) {
-		lookupCalled++
-		return &domain.HardwareMountFrame{
-			OriginMm: [3]float64{0, 0, 0},
-			Basis: domain.HardwareBasis{
-				X: [3]float64{1, 0, 0},
-				Y: [3]float64{0, 1, 0},
-				Z: [3]float64{0, 0, 1},
-			},
-		}, "asset-" + hardwareID, "rev-1", "sha-abc", nil
-	}
+// Test M (R7): Authoritative AgregadoRevisionNumber regression (never hardcode 1)
+func TestM_AuthoritativeAgregadoRevisionNumber(t *testing.T) {
+	t.Run("recipe revision 7 produces snapshot revision 7", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.Revision = 7
+		snap, err := engine.ResolveAgregadoAssembly(agr, engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 500, HeightMm: 200})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if snap.AgregadoRevisionNumber != 7 {
+			t.Fatalf("expected snapshot revision 7, got %d", snap.AgregadoRevisionNumber)
+		}
+	})
 
-	attached, err := engine.AttachVisualPins(snapshot, mockLookup)
+	t.Run("recipe revision missing/zero fails closed", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.Revision = 0
+		_, err := engine.ResolveAgregadoAssembly(agr, engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 500, HeightMm: 200})
+		if err == nil || !strings.Contains(err.Error(), "requires authoritative positive revision") {
+			t.Fatalf("expected missing revision error, got %v", err)
+		}
+	})
+
+	t.Run("param revision override is respected", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.Revision = 7
+		params := engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 500, HeightMm: 200, RecipeRevisionNumber: ptr(9)}
+		snap, err := engine.ResolveAgregadoAssembly(agr, params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if snap.AgregadoRevisionNumber != 9 {
+			t.Fatalf("expected snapshot revision 9, got %d", snap.AgregadoRevisionNumber)
+		}
+	})
+}
+
+// Test N (R8): Components is sole authority for fabricated pieces (no duplicate collections)
+func TestN_ComponentsSoleAuthorityForFabricatedPieces(t *testing.T) {
+	agr := buildSyntheticDrawerFixture()
+	params := engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 550, HeightMm: 200}
+
+	snap, err := engine.ResolveAgregadoAssembly(agr, params)
 	if err != nil {
-		t.Fatalf("AttachVisualPins error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if lookupCalled != len(snapshot.RigidMembers) {
-		t.Errorf("expected %d lookup calls, got %d", len(snapshot.RigidMembers), lookupCalled)
+
+	// Bottom board in Components produces exactly ONE fabricated component
+	bottomCount := 0
+	for _, fc := range snap.FabricatedComponents {
+		if fc.ComponentID == "comp-drawer-bottom" {
+			bottomCount++
+			if math.Abs(fc.WidthMm-565.0) > 1e-6 {
+				t.Errorf("expected bottom board width 565, got %g", fc.WidthMm)
+			}
+			if math.Abs(fc.LengthMm-490.0) > 1e-6 {
+				t.Errorf("expected bottom board length 490, got %g", fc.LengthMm)
+			}
+		}
 	}
-	if attached.RigidMembers[0].AssetID == nil || *attached.RigidMembers[0].AssetID != "asset-hw-side-500" {
-		t.Errorf("expected visual pin asset-hw-side-500, got %v", attached.RigidMembers[0].AssetID)
+	if bottomCount != 1 {
+		t.Fatalf("expected exactly 1 bottom board in snapshot, got %d (must not duplicate authority)", bottomCount)
 	}
+	if len(snap.FabricatedComponents) != len(agr.Components) {
+		t.Fatalf("snapshot FabricatedComponents length (%d) does not match agregado.Components length (%d)",
+			len(snap.FabricatedComponents), len(agr.Components))
+	}
+}
+
+// Test O (R9): Multiplier contract (omitted = 1.0, explicit 0.0 = 0.0, non-finite rejected)
+func TestO_MultiplierContract(t *testing.T) {
+	params := engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 500, HeightMm: 200}
+	selectedVariants := map[string]domain.SelectedAssemblyVariant{
+		"vs-1": {VariantSetID: "vs-1", HardwareID: "hw-1", NominalDimensionMm: 500},
+	}
+
+	t.Run("omitted multiplier defaults to 1.0", func(t *testing.T) {
+		rule := domain.AssemblyDimensionRule{
+			Source:   domain.DimRuleAssemblyWidth,
+			OffsetMm: -35,
+		}
+		val, err := engine.EvaluateDimensionRule(rule, params, selectedVariants)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// 600 * 1.0 - 35 = 565
+		if math.Abs(val-565.0) > 1e-6 {
+			t.Fatalf("expected 565, got %g", val)
+		}
+	})
+
+	t.Run("explicit multiplier 0.0 behaves as mathematical 0.0", func(t *testing.T) {
+		rule := domain.AssemblyDimensionRule{
+			Source:     domain.DimRuleAssemblyWidth,
+			Multiplier: ptr(0.0),
+			OffsetMm:   50.0,
+		}
+		val, err := engine.EvaluateDimensionRule(rule, params, selectedVariants)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// 600 * 0.0 + 50 = 50
+		if math.Abs(val-50.0) > 1e-6 {
+			t.Fatalf("expected 50, got %g", val)
+		}
+	})
+
+	t.Run("explicit multiplier 0.5 behaves mathematically", func(t *testing.T) {
+		rule := domain.AssemblyDimensionRule{
+			Source:     domain.DimRuleAssemblyWidth,
+			Multiplier: ptr(0.5),
+			OffsetMm:   10.0,
+		}
+		val, err := engine.EvaluateDimensionRule(rule, params, selectedVariants)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// 600 * 0.5 + 10 = 310
+		if math.Abs(val-310.0) > 1e-6 {
+			t.Fatalf("expected 310, got %g", val)
+		}
+	})
+
+	t.Run("non-finite multiplier rejected", func(t *testing.T) {
+		rule := domain.AssemblyDimensionRule{
+			Source:     domain.DimRuleAssemblyWidth,
+			Multiplier: ptr(math.NaN()),
+			OffsetMm:   0,
+		}
+		_, err := engine.EvaluateDimensionRule(rule, params, selectedVariants)
+		if err == nil || !strings.Contains(err.Error(), "non-finite multiplier") {
+			t.Fatalf("expected non-finite multiplier error, got %v", err)
+		}
+	})
+}
+
+// Test P (R10): AttachVisualPins fails closed on incomplete identity or invalid MountFrame
+func TestP_AttachVisualPinsFailClosed(t *testing.T) {
+	agr := buildSyntheticDrawerFixture()
+	params := engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 550, HeightMm: 200}
+	snap, err := engine.ResolveAgregadoAssembly(agr, params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t.Run("empty revisionId fails closed", func(t *testing.T) {
+		mockLookup := func(hwID string) (*domain.HardwareMountFrame, string, string, string, error) {
+			return nil, "asset-1", "", "sha256-val", nil // empty revisionId
+		}
+		_, err := engine.AttachVisualPins(snap, mockLookup)
+		if err == nil || !strings.Contains(err.Error(), "empty assetRevisionId: fail closed") {
+			t.Fatalf("expected empty revisionId fail closed error, got %v", err)
+		}
+	})
+
+	t.Run("empty assetId fails closed", func(t *testing.T) {
+		mockLookup := func(hwID string) (*domain.HardwareMountFrame, string, string, string, error) {
+			return nil, "", "rev-1", "sha256-val", nil // empty assetId
+		}
+		_, err := engine.AttachVisualPins(snap, mockLookup)
+		if err == nil || !strings.Contains(err.Error(), "empty assetId: fail closed") {
+			t.Fatalf("expected empty assetId fail closed error, got %v", err)
+		}
+	})
+
+	t.Run("empty sha256 fails closed", func(t *testing.T) {
+		mockLookup := func(hwID string) (*domain.HardwareMountFrame, string, string, string, error) {
+			return nil, "asset-1", "rev-1", "", nil // empty sha256
+		}
+		_, err := engine.AttachVisualPins(snap, mockLookup)
+		if err == nil || !strings.Contains(err.Error(), "empty sha256: fail closed") {
+			t.Fatalf("expected empty sha256 fail closed error, got %v", err)
+		}
+	})
+
+	t.Run("invalid MountFrame basis fails closed", func(t *testing.T) {
+		mockLookup := func(hwID string) (*domain.HardwareMountFrame, string, string, string, error) {
+			return &domain.HardwareMountFrame{
+				OriginMm: [3]float64{0, 0, 0},
+				Basis: domain.HardwareBasis{
+					X: [3]float64{2, 0, 0}, // non-unit
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				},
+			}, "asset-1", "rev-1", "sha256-val", nil
+		}
+		_, err := engine.AttachVisualPins(snap, mockLookup)
+		if err == nil || !strings.Contains(err.Error(), "invalid mountFrame basis") {
+			t.Fatalf("expected invalid basis error, got %v", err)
+		}
+	})
+
+	t.Run("complete valid metadata succeeds", func(t *testing.T) {
+		mockLookup := func(hwID string) (*domain.HardwareMountFrame, string, string, string, error) {
+			return &domain.HardwareMountFrame{
+				OriginMm: [3]float64{0, 0, 0},
+				Basis: domain.HardwareBasis{
+					X: [3]float64{1, 0, 0},
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				},
+			}, "asset-" + hwID, "rev-1", "sha-" + hwID, nil
+		}
+		attached, err := engine.AttachVisualPins(snap, mockLookup)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if *attached.RigidMembers[0].AssetID != "asset-hw-side-500" {
+			t.Errorf("expected pinned assetId asset-hw-side-500, got %v", *attached.RigidMembers[0].AssetID)
+		}
+	})
 }

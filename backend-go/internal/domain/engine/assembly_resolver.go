@@ -5,15 +5,17 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 // AssemblyResolutionParams provides target bounding-box dimensions for resolving an Agregado assembly.
 type AssemblyResolutionParams struct {
-	WidthMm  float64 `json:"widthMm"`
-	DepthMm  float64 `json:"depthMm"`
-	HeightMm float64 `json:"heightMm"`
+	WidthMm              float64 `json:"widthMm"`
+	DepthMm              float64 `json:"depthMm"`
+	HeightMm             float64 `json:"heightMm"`
+	RecipeRevisionNumber *int    `json:"recipeRevisionNumber,omitempty"` // Optional authoritative revision override
 }
 
 func ValidateAssemblyResolutionParams(params AssemblyResolutionParams) error {
@@ -26,20 +28,30 @@ func ValidateAssemblyResolutionParams(params AssemblyResolutionParams) error {
 	if math.IsNaN(params.HeightMm) || math.IsInf(params.HeightMm, 0) || params.HeightMm <= 0 {
 		return fmt.Errorf("invalid height: %g mm (must be finite and positive)", params.HeightMm)
 	}
+	if params.RecipeRevisionNumber != nil && *params.RecipeRevisionNumber <= 0 {
+		return fmt.Errorf("invalid recipeRevisionNumber: %d (must be positive)", *params.RecipeRevisionNumber)
+	}
 	return nil
 }
 
-// EvaluateDimensionRule deterministically calculates dimension from declarative rules (no eval, no scripts).
+// EvaluateDimensionRule deterministically calculates dimension from declarative rules (R1, R9).
 func EvaluateDimensionRule(
 	rule domain.AssemblyDimensionRule,
 	params AssemblyResolutionParams,
 	selectedVariants map[string]domain.SelectedAssemblyVariant,
 ) (float64, error) {
-	mult := rule.Multiplier
-	if mult == 0 {
-		mult = 1.0
+	if rule.Multiplier != nil {
+		if math.IsNaN(*rule.Multiplier) || math.IsInf(*rule.Multiplier, 0) {
+			return 0, fmt.Errorf("dimension rule has non-finite multiplier: %g", *rule.Multiplier)
+		}
 	}
+	if math.IsNaN(rule.OffsetMm) || math.IsInf(rule.OffsetMm, 0) {
+		return 0, fmt.Errorf("dimension rule has non-finite offsetMm: %g", rule.OffsetMm)
+	}
+
+	mult := rule.EffectiveMultiplier()
 	var base float64
+
 	switch rule.Source {
 	case domain.DimRuleAssemblyWidth:
 		base = params.WidthMm
@@ -72,11 +84,12 @@ func EvaluateDimensionRule(
 //
 // Invariants enforced:
 // 1. Definition is fully validated (ValidateAgregadoAssemblyDefinition) before resolution.
-// 2. RigidMember geometry NEVER scales (scale = [1,1,1], det = +1.0).
-// 3. Fabricated member dimensions are recalculated from declarative rules (not geometrically scaled).
-// 4. Variant resolution selects discrete commercial SKUs based on available space and clearance rules.
-// 5. BOM lines are expanded strictly according to commercial kit and member BOM roles.
-// 6. Visual asset binding remains decoupled: #668 retains sole visual authority; pins are attached on publication.
+// 2. Authoritative recipe revision is preserved; never hardcoded (R7).
+// 3. Fabricated boards resolve solely from Agregado.Components (R8).
+// 4. RigidMember geometry NEVER scales (scale = [1,1,1], det = +1.0).
+// 5. Variant resolution selects discrete commercial SKUs based on available space and clearance rules.
+// 6. BOM lines are expanded strictly according to commercial kit and member BOM roles.
+// 7. Visual asset binding remains decoupled: #668 retains sole visual authority; pins are attached on publication (R10).
 func ResolveAgregadoAssembly(
 	agregado domain.Agregado,
 	params AssemblyResolutionParams,
@@ -91,7 +104,16 @@ func ResolveAgregadoAssembly(
 		return domain.ResolvedAssemblySnapshot{}, err
 	}
 
-	// 3. Variant resolution
+	// 3. Authoritative recipe revision (R7: never hardcode)
+	recipeRev := agregado.Revision
+	if params.RecipeRevisionNumber != nil && *params.RecipeRevisionNumber > 0 {
+		recipeRev = *params.RecipeRevisionNumber
+	}
+	if recipeRev <= 0 {
+		return domain.ResolvedAssemblySnapshot{}, errors.New("assembly resolution requires authoritative positive recipe revision")
+	}
+
+	// 4. Variant resolution
 	selectedVariantsMap := make(map[string]domain.SelectedAssemblyVariant)
 	selectedVariantsList := make([]domain.SelectedAssemblyVariant, 0, len(agregado.VariantSets))
 
@@ -103,7 +125,6 @@ func ResolveAgregadoAssembly(
 	for _, vs := range agregado.VariantSets {
 		rule, hasRule := compatRuleBySet[vs.ID]
 		if !hasRule {
-			// Default rule: 0 clearance, max_fitting
 			rule = domain.AssemblyCompatibilityRule{
 				VariantSetID:      vs.ID,
 				ClearanceMm:       0.0,
@@ -132,12 +153,11 @@ func ResolveAgregadoAssembly(
 		selectedVariantsList = append(selectedVariantsList, selectedVariant)
 	}
 
-	// Sort selected variants deterministically by variantSetId
 	sort.Slice(selectedVariantsList, func(i, j int) bool {
 		return selectedVariantsList[i].VariantSetID < selectedVariantsList[j].VariantSetID
 	})
 
-	// 4. Resolve Rigid Members
+	// 5. Resolve Rigid Members
 	resolvedRigidMembers := make([]domain.ResolvedRigidMember, 0, len(agregado.RigidMembers))
 	for _, member := range agregado.RigidMembers {
 		var hardwareID string
@@ -196,38 +216,55 @@ func ResolveAgregadoAssembly(
 		})
 	}
 
-	// 5. Resolve Fabricated Members
-	resolvedFabricated := make([]domain.ResolvedFabricatedComponent, 0, len(agregado.FabricatedMembers))
-	for _, fm := range agregado.FabricatedMembers {
-		length, err := EvaluateDimensionRule(fm.LengthRule, params, selectedVariantsMap)
-		if err != nil {
-			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("fabricated member '%s' length error: %w", fm.MemberID, err)
-		}
-		width, err := EvaluateDimensionRule(fm.WidthRule, params, selectedVariantsMap)
-		if err != nil {
-			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("fabricated member '%s' width error: %w", fm.MemberID, err)
-		}
-
-		xCoord, err := calculateAxisPlacementCoord("x", fm.Placement.X, params.WidthMm)
-		if err != nil {
-			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("fabricated member '%s': %w", fm.MemberID, err)
-		}
-		yCoord, err := calculateAxisPlacementCoord("y", fm.Placement.Y, params.DepthMm)
-		if err != nil {
-			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("fabricated member '%s': %w", fm.MemberID, err)
-		}
-		zCoord, err := calculateAxisPlacementCoord("z", fm.Placement.Z, params.HeightMm)
-		if err != nil {
-			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("fabricated member '%s': %w", fm.MemberID, err)
-		}
-
+	// 6. Resolve Fabricated Components (Sole authority: Agregado.Components - R8)
+	resolvedFabricated := make([]domain.ResolvedFabricatedComponent, 0, len(agregado.Components))
+	for _, c := range agregado.Components {
+		var length, width float64
 		var basis domain.HardwareBasis
-		if fm.Placement.RotationDeg != nil {
-			b, err := domain.DeriveHardwareBasisFromEuler(*fm.Placement.RotationDeg)
+		var translation [3]float64
+		var err error
+
+		if c.Overrides != nil && c.Overrides.LengthRule != nil {
+			length, err = EvaluateDimensionRule(*c.Overrides.LengthRule, params, selectedVariantsMap)
 			if err != nil {
-				return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("fabricated member '%s' rotation error: %w", fm.MemberID, err)
+				return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("component '%s' length error: %w", c.ComponentID, err)
 			}
-			basis = b
+		}
+		if c.Overrides != nil && c.Overrides.WidthRule != nil {
+			width, err = EvaluateDimensionRule(*c.Overrides.WidthRule, params, selectedVariantsMap)
+			if err != nil {
+				return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("component '%s' width error: %w", c.ComponentID, err)
+			}
+		}
+
+		if c.Overrides != nil && c.Overrides.PlacementRule != nil {
+			xCoord, err := calculateAxisPlacementCoord("x", c.Overrides.PlacementRule.X, params.WidthMm)
+			if err != nil {
+				return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("component '%s': %w", c.ComponentID, err)
+			}
+			yCoord, err := calculateAxisPlacementCoord("y", c.Overrides.PlacementRule.Y, params.DepthMm)
+			if err != nil {
+				return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("component '%s': %w", c.ComponentID, err)
+			}
+			zCoord, err := calculateAxisPlacementCoord("z", c.Overrides.PlacementRule.Z, params.HeightMm)
+			if err != nil {
+				return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("component '%s': %w", c.ComponentID, err)
+			}
+			translation = [3]float64{xCoord, yCoord, zCoord}
+
+			if c.Overrides.PlacementRule.RotationDeg != nil {
+				b, err := domain.DeriveHardwareBasisFromEuler(*c.Overrides.PlacementRule.RotationDeg)
+				if err != nil {
+					return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("component '%s' rotation error: %w", c.ComponentID, err)
+				}
+				basis = b
+			} else {
+				basis = domain.HardwareBasis{
+					X: [3]float64{1, 0, 0},
+					Y: [3]float64{0, 1, 0},
+					Z: [3]float64{0, 0, 1},
+				}
+			}
 		} else {
 			basis = domain.HardwareBasis{
 				X: [3]float64{1, 0, 0},
@@ -237,20 +274,18 @@ func ResolveAgregadoAssembly(
 		}
 
 		resolvedFabricated = append(resolvedFabricated, domain.ResolvedFabricatedComponent{
-			MemberID:    fm.MemberID,
-			SlotID:      fm.SlotID,
-			Name:        fm.Name,
+			ComponentID: c.ComponentID,
+			Quantity:    c.Quantity,
 			LengthMm:    length,
 			WidthMm:     width,
-			ThicknessMm: fm.ThicknessMm,
 			Transform: domain.AssemblyMemberTransform{
-				TranslationMm: [3]float64{xCoord, yCoord, zCoord},
+				TranslationMm: translation,
 				Basis:         basis,
 			},
 		})
 	}
 
-	// 6. Generate BOM
+	// 7. Generate BOM
 	bomItems := make([]domain.AssemblyBOMItem, 0)
 	if agregado.CommercialKitHardwareID != nil && *agregado.CommercialKitHardwareID != "" {
 		bomItems = append(bomItems, domain.AssemblyBOMItem{
@@ -270,7 +305,6 @@ func ResolveAgregadoAssembly(
 		}
 	}
 
-	// Deterministic sorting of separately purchased BOM items
 	hwIDs := make([]string, 0, len(separateCounts))
 	for hwID := range separateCounts {
 		hwIDs = append(hwIDs, hwID)
@@ -287,7 +321,7 @@ func ResolveAgregadoAssembly(
 
 	snapshot := domain.ResolvedAssemblySnapshot{
 		AgregadoID:              agregado.ID,
-		AgregadoRevisionNumber:  1,
+		AgregadoRevisionNumber:  recipeRev,
 		CommercialKitHardwareID: agregado.CommercialKitHardwareID,
 		ResolvedDimensionsMm:    [3]float64{params.WidthMm, params.DepthMm, params.HeightMm},
 		SelectedVariants:        selectedVariantsList,
@@ -302,8 +336,8 @@ func ResolveAgregadoAssembly(
 // VisualAssetLookupFunc defines the binding function supplied by #668 visual asset authority.
 type VisualAssetLookupFunc func(hardwareID string) (mountFrame *domain.HardwareMountFrame, assetID, revisionID, sha256 string, err error)
 
-// AttachVisualPins binds #668 visual asset authorities into a resolved assembly snapshot
-// without duplicating asset selection logic inside the assembly resolver.
+// AttachVisualPins binds #668 visual asset authorities into a resolved assembly snapshot (R10: fail closed).
+// Exiges complete identification (non-empty assetId, assetRevisionId, sha256) and validates mountFrame.
 func AttachVisualPins(
 	snapshot domain.ResolvedAssemblySnapshot,
 	lookup VisualAssetLookupFunc,
@@ -318,6 +352,26 @@ func AttachVisualPins(
 		if err != nil {
 			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("failed looking up visual asset for hardware '%s': %w", m.HardwareID, err)
 		}
+		if strings.TrimSpace(assetID) == "" {
+			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("visual asset for hardware '%s' returned empty assetId: fail closed", m.HardwareID)
+		}
+		if strings.TrimSpace(revID) == "" {
+			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("visual asset for hardware '%s' returned empty assetRevisionId: fail closed", m.HardwareID)
+		}
+		if strings.TrimSpace(sha256) == "" {
+			return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("visual asset for hardware '%s' returned empty sha256: fail closed", m.HardwareID)
+		}
+		if mf != nil {
+			if err := domain.ValidateHardwareBasis(mf.Basis, "mountFrame.basis"); err != nil {
+				return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("visual asset for hardware '%s' has invalid mountFrame basis: %w", m.HardwareID, err)
+			}
+			for axisIdx, v := range mf.OriginMm {
+				if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 100000.0 {
+					return domain.ResolvedAssemblySnapshot{}, fmt.Errorf("visual asset for hardware '%s' mountFrame origin[%d] is non-finite: %g", m.HardwareID, axisIdx, v)
+				}
+			}
+		}
+
 		memberCopy := m
 		memberCopy.MountFrame = mf
 		memberCopy.AssetID = &assetID
@@ -337,7 +391,6 @@ func selectAssemblyVariant(
 ) (domain.SelectedAssemblyVariant, error) {
 	maxAllowedNominal := availableSpaceMm - rule.ClearanceMm
 
-	// Sort variants ascending by nominal dimension
 	variants := make([]domain.ProductVariant, len(vs.Variants))
 	copy(variants, vs.Variants)
 	sort.Slice(variants, func(i, j int) bool {

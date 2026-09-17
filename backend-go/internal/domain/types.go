@@ -500,11 +500,11 @@ type Agregado struct {
 	WidthMm       int                 `json:"width_mm,omitempty"`
 	HeightMm      int                 `json:"height_mm,omitempty"`
 	DepthMm       int                 `json:"depth_mm,omitempty"`
+	Revision                int                         `json:"revision,omitempty"`
 	Components              []ComponentInstance         `json:"components,omitempty"`
 	HardwareLines           []HardwareLine              `json:"hardware_lines,omitempty"`
 	CommercialKitHardwareID *string                     `json:"commercial_kit_hardware_id,omitempty"`
 	RigidMembers            []AgregadoRigidMember       `json:"rigid_members,omitempty"`
-	FabricatedMembers       []AgregadoFabricatedMember  `json:"fabricated_members,omitempty"`
 	VariantSets             []AgregadoVariantSet        `json:"variant_sets,omitempty"`
 	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibility_rules,omitempty"`
 	Active                  bool                        `json:"active"`
@@ -549,10 +549,13 @@ type ComponentInstanceOverrides struct {
 	XFormula           string              `json:"xFormula,omitempty"`
 	YFormula           string              `json:"yFormula,omitempty"`
 	ZFormula           string              `json:"zFormula,omitempty"`
-	RotateX            *int                `json:"rotateX,omitempty"`
-	RotateY            *int                `json:"rotateY,omitempty"`
-	RotateZ            *int                `json:"rotateZ,omitempty"`
-	HardwarePlacements []HardwarePlacement `json:"hardwarePlacements,omitempty"`
+	RotateX            *int                   `json:"rotateX,omitempty"`
+	RotateY            *int                   `json:"rotateY,omitempty"`
+	RotateZ            *int                   `json:"rotateZ,omitempty"`
+	HardwarePlacements []HardwarePlacement    `json:"hardwarePlacements,omitempty"`
+	LengthRule         *AssemblyDimensionRule `json:"lengthRule,omitempty"`
+	WidthRule          *AssemblyDimensionRule `json:"widthRule,omitempty"`
+	PlacementRule      *AssemblyAnchorRule    `json:"placementRule,omitempty"`
 }
 
 // ComponentPlacement represents where a component goes in the cabinet structure.

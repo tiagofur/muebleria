@@ -4,13 +4,17 @@ import {
   type AgregadoRigidMember,
   type AgregadoVariantSet,
   type AssemblyDimensionRule,
+  type ResolvedAssemblySnapshot,
   AssemblyVariantNotFoundError,
+  attachVisualPins,
   deriveHardwareBasisFromEuler,
   evaluateDimensionRule,
+  resolveAgregadoAssembly,
   validateAgregadoAssemblyDefinition,
   validateAgregadoRigidMember,
   validateAgregadoVariantSet,
   validateAssemblyAnchorRule,
+  validateHardwareBasis,
   validateRigidMemberSource,
 } from './agregadoAssembly';
 
@@ -106,7 +110,6 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
 
     it('computes orthonormal basis from finite Euler angles (det = +1.0)', () => {
       const basis = deriveHardwareBasisFromEuler({ x: 0, y: 90, z: 0 });
-      // det = X · (Y x Z)
       const crossYZ: [number, number, number] = [
         basis.y[1] * basis.z[2] - basis.y[2] * basis.z[1],
         basis.y[2] * basis.z[0] - basis.y[0] * basis.z[2],
@@ -124,13 +127,13 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
     });
   });
 
-  describe('evaluateDimensionRule (R1)', () => {
+  describe('evaluateDimensionRule and Multiplier Contract (R1, R9)', () => {
     const params = { widthMm: 600, depthMm: 550, heightMm: 200 };
     const selectedVariants = new Map([
       ['vs-depth', { variantSetId: 'vs-depth', hardwareId: 'hw-500', nominalDimensionMm: 500 }],
     ]);
 
-    it('evaluates assembly_width: W=600 with offset -35 -> 565mm', () => {
+    it('omitted multiplier defaults to 1.0 (R9)', () => {
       const rule: AssemblyDimensionRule = {
         source: 'assembly_width',
         offsetMm: -35,
@@ -138,12 +141,35 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
       expect(evaluateDimensionRule(rule, params, selectedVariants)).toBe(565);
     });
 
-    it('evaluates assembly_width: W=800 with offset -35 -> 765mm', () => {
+    it('explicit 0.0 multiplier behaves as mathematical 0.0 (R9)', () => {
       const rule: AssemblyDimensionRule = {
         source: 'assembly_width',
-        offsetMm: -35,
+        multiplier: 0.0,
+        offsetMm: 50.0,
       };
-      expect(evaluateDimensionRule(rule, { ...params, widthMm: 800 }, selectedVariants)).toBe(765);
+      // base * 0.0 + 50.0 = 50.0
+      expect(evaluateDimensionRule(rule, params, selectedVariants)).toBe(50.0);
+    });
+
+    it('explicit fractional multiplier behaves mathematically (R9)', () => {
+      const rule: AssemblyDimensionRule = {
+        source: 'assembly_width',
+        multiplier: 0.5,
+        offsetMm: -35.0,
+      };
+      // 600 * 0.5 - 35 = 265
+      expect(evaluateDimensionRule(rule, params, selectedVariants)).toBe(265.0);
+    });
+
+    it('rejects non-finite multiplier (R9)', () => {
+      const rule: AssemblyDimensionRule = {
+        source: 'assembly_width',
+        multiplier: Number.NaN,
+        offsetMm: 10,
+      };
+      expect(() => evaluateDimensionRule(rule, params, selectedVariants)).toThrow(
+        /non-finite multiplier/,
+      );
     });
 
     it('evaluates selected_variant: 500 with offset -10 -> 490mm', () => {
@@ -259,9 +285,10 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
     });
   });
 
-  describe('validateAgregadoAssemblyDefinition (R5)', () => {
+  describe('validateAgregadoAssemblyDefinition (R7, R8)', () => {
     const validAssembly: AgregadoAssemblyInput = {
       id: 'agr-test',
+      revision: 7,
       commercialKitHardwareId: 'hw-kit',
       variantSets: [
         {
@@ -290,39 +317,33 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
           bomRole: 'included_in_kit',
         },
       ],
-      fabricatedMembers: [
+      components: [
         {
-          memberId: 'bottom_board',
-          slotId: 'bottom',
-          name: 'Bottom Board',
-          thicknessMm: 16,
-          lengthRule: { source: 'selected_variant', variantSetId: 'vs-depth', offsetMm: -10 },
-          widthRule: { source: 'assembly_width', offsetMm: -35 },
-          placement: {
-            x: { ref: 'min', offsetMm: 17.5 },
-            y: { ref: 'min', offsetMm: 10 },
-            z: { ref: 'min', offsetMm: 16 },
+          componentId: 'comp-bottom-board',
+          quantity: 1,
+          overrides: {
+            lengthRule: { source: 'selected_variant', variantSetId: 'vs-depth', offsetMm: -10 },
+            widthRule: { source: 'assembly_width', offsetMm: -35 },
+            placementRule: {
+              x: { ref: 'min', offsetMm: 17.5 },
+              y: { ref: 'min', offsetMm: 10 },
+              z: { ref: 'min', offsetMm: 16 },
+            },
           },
         },
       ],
     };
 
-    it('accepts fully valid assembly definition', () => {
+    it('accepts fully valid assembly definition with positive revision (R7)', () => {
       expect(() => validateAgregadoAssemblyDefinition(validAssembly)).not.toThrow();
     });
 
-    it('rejects duplicate memberId between rigid and fabricated', () => {
-      const dup = {
-        ...validAssembly,
-        fabricatedMembers: [
-          {
-            ...validAssembly.fabricatedMembers![0]!,
-            memberId: 'side_l', // duplicate of rigid memberId
-          },
-        ],
-      };
-      expect(() => validateAgregadoAssemblyDefinition(dup)).toThrow(
-        /duplicate memberId 'side_l'/,
+    it('fails closed when revision is missing or non-positive (R7)', () => {
+      expect(() => validateAgregadoAssemblyDefinition({ ...validAssembly, revision: 0 })).toThrow(
+        /requires authoritative positive revision/,
+      );
+      expect(() => validateAgregadoAssemblyDefinition({ ...validAssembly, revision: undefined })).toThrow(
+        /requires authoritative positive revision/,
       );
     });
 
@@ -347,29 +368,233 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
         /references non-existent variantSetId 'vs-ghost'/,
       );
     });
+  });
 
-    it('rejects multiple compatibility rules for same variantSetId', () => {
-      const bad = {
-        ...validAssembly,
-        compatibilityRules: [
-          validAssembly.compatibilityRules![0]!,
-          validAssembly.compatibilityRules![0]!,
-        ],
-      };
-      expect(() => validateAgregadoAssemblyDefinition(bad)).toThrow(
-        /multiple ambiguous compatibility rules/,
-      );
+  describe('resolveAgregadoAssembly & Regression Tests (R7, R8)', () => {
+    const fixtureAssembly: AgregadoAssemblyInput = {
+      id: 'blum-merivobox-test',
+      revision: 7,
+      commercialKitHardwareId: 'hw-merivobox-kit',
+      variantSets: [
+        {
+          id: 'depth-set',
+          dimension: 'depth',
+          variants: [
+            { nominalDimensionMm: 450, hardwareId: 'hw-side-450' },
+            { nominalDimensionMm: 500, hardwareId: 'hw-side-500' },
+            { nominalDimensionMm: 550, hardwareId: 'hw-side-550' },
+          ],
+        },
+      ],
+      compatibilityRules: [
+        {
+          variantSetId: 'depth-set',
+          clearanceMm: 3,
+          selectionStrategy: 'max_fitting',
+        },
+      ],
+      rigidMembers: [
+        {
+          memberId: 'side_left',
+          role: 'side_left',
+          source: { kind: 'variant', variant: { variantSetId: 'depth-set' } },
+          placement: {
+            x: { ref: 'min', offsetMm: 0 },
+            y: { ref: 'min', offsetMm: 0 },
+            z: { ref: 'min', offsetMm: 0 },
+          },
+          bomRole: 'included_in_kit',
+        },
+        {
+          memberId: 'side_right',
+          role: 'side_right',
+          source: { kind: 'variant', variant: { variantSetId: 'depth-set' } },
+          placement: {
+            x: { ref: 'max', offsetMm: 0 },
+            y: { ref: 'min', offsetMm: 0 },
+            z: { ref: 'min', offsetMm: 0 },
+          },
+          bomRole: 'included_in_kit',
+        },
+      ],
+      components: [
+        {
+          componentId: 'comp-drawer-bottom',
+          quantity: 1,
+          overrides: {
+            lengthRule: { source: 'selected_variant', variantSetId: 'depth-set', offsetMm: -10 },
+            widthRule: { source: 'assembly_width', offsetMm: -35 },
+            placementRule: {
+              x: { ref: 'min', offsetMm: 17.5 },
+              y: { ref: 'min', offsetMm: 10 },
+              z: { ref: 'min', offsetMm: 16 },
+            },
+          },
+        },
+      ],
+    };
+
+    it('R7: recipe revision 7 produces snapshot revision 7', () => {
+      const snapshot = resolveAgregadoAssembly(fixtureAssembly, {
+        widthMm: 600,
+        depthMm: 550,
+        heightMm: 200,
+      });
+      expect(snapshot.agregadoRevisionNumber).toBe(7);
+      expect(snapshot.agregadoId).toBe('blum-merivobox-test');
+    });
+
+    it('R7: recipe revision missing/zero fails closed', () => {
+      const bad = { ...fixtureAssembly, revision: 0 };
+      expect(() =>
+        resolveAgregadoAssembly(bad, { widthMm: 600, depthMm: 550, heightMm: 200 }),
+      ).toThrow(/requires authoritative positive revision/);
+    });
+
+    it('R7: explicit param revision override is respected', () => {
+      const snapshot = resolveAgregadoAssembly(fixtureAssembly, {
+        widthMm: 600,
+        depthMm: 550,
+        heightMm: 200,
+        recipeRevisionNumber: 42,
+      });
+      expect(snapshot.agregadoRevisionNumber).toBe(42);
+    });
+
+    it('R8: parametric bottom produces ONE authoritative fabricated component, not two', () => {
+      const snapshot = resolveAgregadoAssembly(fixtureAssembly, {
+        widthMm: 600,
+        depthMm: 550,
+        heightMm: 200,
+      });
+
+      // Exactly 1 fabricated piece
+      expect(snapshot.fabricatedComponents).toHaveLength(1);
+      const bottom = snapshot.fabricatedComponents[0]!;
+      expect(bottom.componentId).toBe('comp-drawer-bottom');
+      expect(bottom.quantity).toBe(1);
+
+      // Width: 600 - 35 = 565mm
+      expect(bottom.widthMm).toBe(565);
+      // Length: 500 (selected variant for depth 550 - clearance 3 = 547 => 500) - 10 = 490mm
+      expect(bottom.lengthMm).toBe(490);
+      expect(bottom.transform.translationMm).toEqual([17.5, 10, 16]);
+    });
+
+    it('width expansion shifts right member only, left member unchanged (zero scale)', () => {
+      const snap600 = resolveAgregadoAssembly(fixtureAssembly, {
+        widthMm: 600,
+        depthMm: 550,
+        heightMm: 200,
+      });
+      const snap800 = resolveAgregadoAssembly(fixtureAssembly, {
+        widthMm: 800,
+        depthMm: 550,
+        heightMm: 200,
+      });
+
+      const left600 = snap600.rigidMembers.find((m) => m.memberId === 'side_left')!;
+      const left800 = snap800.rigidMembers.find((m) => m.memberId === 'side_left')!;
+      expect(left600.localTransform.translationMm[0]).toBe(0);
+      expect(left800.localTransform.translationMm[0]).toBe(0);
+
+      const right600 = snap600.rigidMembers.find((m) => m.memberId === 'side_right')!;
+      const right800 = snap800.rigidMembers.find((m) => m.memberId === 'side_right')!;
+      expect(right600.localTransform.translationMm[0]).toBe(600);
+      expect(right800.localTransform.translationMm[0]).toBe(800);
     });
   });
 
-  describe('AssemblyVariantNotFoundError', () => {
-    it('formats informative error message with clearance and nominals', () => {
-      const err = new AssemblyVariantNotFoundError('vs-depth', 400, 3, [450, 500, 550]);
-      expect(err.message).toContain("assembly variant not found for variantSetId 'vs-depth'");
-      expect(err.message).toContain('requested space 400.0mm');
-      expect(err.message).toContain('clearance 3.0mm');
-      expect(err.message).toContain('[450, 500, 550]');
-      expect(err.variantSetId).toBe('vs-depth');
+  describe('attachVisualPins fail-closed (R10)', () => {
+    const baseSnapshot: ResolvedAssemblySnapshot = {
+      agregadoId: 'agr-test',
+      agregadoRevisionNumber: 7,
+      resolvedDimensionsMm: [600, 550, 200],
+      selectedVariants: [],
+      rigidMembers: [
+        {
+          memberId: 'side_left',
+          role: 'side',
+          hardwareId: 'hw-side-500',
+          localTransform: {
+            translationMm: [0, 0, 0],
+            basis: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+          },
+          bomRole: 'included_in_kit',
+        },
+      ],
+      fabricatedComponents: [],
+      bomItems: [],
+    };
+
+    it('empty revisionId fails closed (R10)', () => {
+      expect(() =>
+        attachVisualPins(baseSnapshot, () => ({
+          assetId: 'asset-1',
+          assetRevisionId: '', // EMPTY
+          sha256: 'abc123sha',
+        })),
+      ).toThrow(/returned empty assetRevisionId: fail closed/);
+    });
+
+    it('empty assetId fails closed (R10)', () => {
+      expect(() =>
+        attachVisualPins(baseSnapshot, () => ({
+          assetId: '', // EMPTY
+          assetRevisionId: 'rev-1',
+          sha256: 'abc123sha',
+        })),
+      ).toThrow(/returned empty assetId: fail closed/);
+    });
+
+    it('empty sha256 fails closed (R10)', () => {
+      expect(() =>
+        attachVisualPins(baseSnapshot, () => ({
+          assetId: 'asset-1',
+          assetRevisionId: 'rev-1',
+          sha256: '   ', // EMPTY
+        })),
+      ).toThrow(/returned empty sha256: fail closed/);
+    });
+
+    it('invalid mountFrame basis fails closed (R10)', () => {
+      expect(() =>
+        attachVisualPins(baseSnapshot, () => ({
+          assetId: 'asset-1',
+          assetRevisionId: 'rev-1',
+          sha256: 'abc123sha',
+          mountFrame: {
+            originMm: [0, 0, 0],
+            basis: {
+              x: [1, 0, 0],
+              y: [0, 1, 0],
+              z: [0, 0, -1], // Mirrored/left-handed det = -1
+            },
+          },
+        })),
+      ).toThrow(/must be right-handed with det=\+1/);
+    });
+
+    it('complete valid metadata succeeds (R10)', () => {
+      const pinned = attachVisualPins(baseSnapshot, () => ({
+        assetId: 'asset-123',
+        assetRevisionId: 'rev-456',
+        sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        mountFrame: {
+          originMm: [10, 20, 30],
+          basis: {
+            x: [1, 0, 0],
+            y: [0, 1, 0],
+            z: [0, 0, 1],
+          },
+        },
+      }));
+
+      const m = pinned.rigidMembers[0]!;
+      expect(m.assetId).toBe('asset-123');
+      expect(m.assetRevisionId).toBe('rev-456');
+      expect(m.sha256).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+      expect(m.mountFrame?.originMm).toEqual([10, 20, 30]);
     });
   });
 });

@@ -4,10 +4,11 @@
 
 import type { HardwareFinishId } from './hardwareFinishes';
 import type {
-  AgregadoFabricatedMember,
   AgregadoRigidMember,
   AgregadoVariantSet,
+  AssemblyAnchorRule,
   AssemblyCompatibilityRule,
+  AssemblyDimensionRule,
   HardwareRotationDeg,
 } from './agregadoAssembly';
 
@@ -695,6 +696,12 @@ export interface ModuleComponentInstance {
      * renderer resolves each via `resolveHardwarePlacement` (PR2).
      */
     readonly hardwarePlacements?: readonly HardwarePlacement[];
+    /** Declarative dimension calculation for length (R1, R8, R9) */
+    readonly lengthRule?: AssemblyDimensionRule;
+    /** Declarative dimension calculation for width (R1, R8, R9) */
+    readonly widthRule?: AssemblyDimensionRule;
+    /** Declarative rigid placement in assembly space (R8) */
+    readonly placementRule?: AssemblyAnchorRule;
   };
 }
 
@@ -710,12 +717,14 @@ export interface Agregado {
   readonly description?: string;
   readonly notes?: string;
   readonly active?: boolean;
+  /** Authoritative revision number (R7: required for historical snapshot reproducibility) */
+  readonly revision?: number;
   /**
    * Reference (bounding-box) dimensions for the sub-assembly.
    * W/H/D formulas in child components resolve against these.
    */
   readonly externalDims?: ExternalDims;
-  /** Board components that make up this sub-assembly. */
+  /** Board components that make up this sub-assembly. Sole authority for fabricated parts (R8). */
   readonly components?: readonly ModuleComponentInstance[];
   /** Fixed hardware included per unit (bisagras, correderas, jaladeras, etc.). */
   readonly hardwareLines?: readonly HardwareLine[];
@@ -723,8 +732,6 @@ export interface Agregado {
   readonly commercialKitHardwareId?: string;
   /** Rigid 3D hardware members (runners, sides, brackets) */
   readonly rigidMembers?: readonly AgregadoRigidMember[];
-  /** Manufactured board components recalculated by declarative dimension rules */
-  readonly fabricatedMembers?: readonly AgregadoFabricatedMember[];
   /** Sets of discrete commercial sizing options for this assembly */
   readonly variantSets?: readonly AgregadoVariantSet[];
   /** Rules for selecting and validating variants based on available space */

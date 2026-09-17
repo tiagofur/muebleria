@@ -1,5 +1,5 @@
 /**
- * Agregado Hardware Assembly Domain Contract
+ * Agregado Hardware Assembly Domain Contract & Resolver
  *
  * Extends Agregado sub-assemblies with multi-member parametric hardware systems
  * (e.g. drawer runner systems like Blum MERIVOBOX, lift systems, sliding systems).
@@ -10,8 +10,13 @@
  * 3. Assembly space follows workshop frame (+X width/right, +Y depth/front, +Z height/up).
  * 4. Distinct left/right parts are modeled as separate rigid members (never mirrored with negative scale).
  * 5. Strict discriminated union for rigid member source (fixed vs variant).
- * 6. Visual asset binding remains decoupled: visual pins (#668 authority) are attached on publication.
+ * 6. Visual asset binding remains decoupled: visual pins (#668 authority) are attached on publication (fail-closed).
+ * 7. Authoritative recipe revision is preserved; never hardcoded (R7).
+ * 8. Fabricated boards resolve solely from Agregado.Components (R8).
+ * 9. Multiplier contract: omitted = 1.0; explicit 0 = 0.0; non-finite rejected (R9).
  */
+
+import type { ModuleComponentInstance } from './types';
 
 export interface HardwareRotationDeg {
   readonly x?: number;
@@ -68,21 +73,18 @@ export type DimensionRuleSource =
   | 'assembly_height'
   | 'selected_variant';
 
+/**
+ * AssemblyDimensionRule provides declarative, bounded dimension calculation (no eval, no scripts).
+ * Multiplier contract (R9):
+ * - omitted (undefined) -> default 1.0
+ * - explicit 0.0 -> mathematical 0.0
+ * Computed dimension = (SourceValue * effectiveMultiplier) + offsetMm.
+ */
 export interface AssemblyDimensionRule {
   readonly source: DimensionRuleSource;
   readonly variantSetId?: string;
   readonly multiplier?: number;
   readonly offsetMm: number;
-}
-
-export interface AgregadoFabricatedMember {
-  readonly memberId: string;
-  readonly slotId: string;
-  readonly name: string;
-  readonly thicknessMm: number;
-  readonly lengthRule: AssemblyDimensionRule;
-  readonly widthRule: AssemblyDimensionRule;
-  readonly placement: AssemblyAnchorRule;
 }
 
 export interface ProductVariant {
@@ -135,13 +137,15 @@ export interface AssemblyBOMItem {
   readonly notes?: string;
 }
 
+/**
+ * ResolvedFabricatedComponent describes a dimensioned and placed fabricated board component.
+ * Originates solely from Agregado.Components without parallel domain entities (R8).
+ */
 export interface ResolvedFabricatedComponent {
-  readonly memberId: string;
-  readonly slotId: string;
-  readonly name: string;
+  readonly componentId: string;
+  readonly quantity: number;
   readonly lengthMm: number;
   readonly widthMm: number;
-  readonly thicknessMm: number;
   readonly transform: AssemblyMemberTransform;
 }
 
@@ -166,6 +170,7 @@ export interface AssemblyResolutionParams {
   readonly widthMm: number;
   readonly depthMm: number;
   readonly heightMm: number;
+  readonly recipeRevisionNumber?: number;
 }
 
 export class AssemblyVariantNotFoundError extends Error {
@@ -226,6 +231,42 @@ export function deriveHardwareBasisFromEuler(rot: HardwareRotationDeg): Assembly
   return basis;
 }
 
+export function validateHardwareBasis(basis: AssemblyBasis, label = 'basis'): void {
+  const axes = [
+    { name: 'x', v: basis.x },
+    { name: 'y', v: basis.y },
+    { name: 'z', v: basis.z },
+  ];
+  for (const { name, v } of axes) {
+    for (const coord of v) {
+      if (!Number.isFinite(coord) || Math.abs(coord) > 1e6) {
+        throw new Error(`${label}.${name} must be finite and bounded`);
+      }
+    }
+    const norm = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if (Math.abs(norm - 1.0) > 1e-4) {
+      throw new Error(`${label}.${name} must be a unit vector (|v|=${norm})`);
+    }
+  }
+
+  const dotXY = basis.x[0] * basis.y[0] + basis.x[1] * basis.y[1] + basis.x[2] * basis.y[2];
+  const dotXZ = basis.x[0] * basis.z[0] + basis.x[1] * basis.z[1] + basis.x[2] * basis.z[2];
+  const dotYZ = basis.y[0] * basis.z[0] + basis.y[1] * basis.z[1] + basis.y[2] * basis.z[2];
+  if (Math.abs(dotXY) > 1e-4 || Math.abs(dotXZ) > 1e-4 || Math.abs(dotYZ) > 1e-4) {
+    throw new Error(`${label} axes must be mutually orthogonal`);
+  }
+
+  const crossYZ: [number, number, number] = [
+    basis.y[1] * basis.z[2] - basis.y[2] * basis.z[1],
+    basis.y[2] * basis.z[0] - basis.y[0] * basis.z[2],
+    basis.y[0] * basis.z[1] - basis.y[1] * basis.z[0],
+  ];
+  const det = basis.x[0] * crossYZ[0] + basis.x[1] * crossYZ[1] + basis.x[2] * crossYZ[2];
+  if (Math.abs(det - 1.0) > 1e-4) {
+    throw new Error(`${label} must be right-handed with det=+1 (got det=${det}); mirror is rejected`);
+  }
+}
+
 // Declarative Dimension Evaluation
 
 export function evaluateDimensionRule(
@@ -233,7 +274,14 @@ export function evaluateDimensionRule(
   params: AssemblyResolutionParams,
   selectedVariants: ReadonlyMap<string, SelectedAssemblyVariant>,
 ): number {
-  const mult = rule.multiplier ?? 1.0;
+  if (rule.multiplier !== undefined && !Number.isFinite(rule.multiplier)) {
+    throw new Error(`dimension rule has non-finite multiplier: ${rule.multiplier}`);
+  }
+  if (!Number.isFinite(rule.offsetMm)) {
+    throw new Error(`dimension rule has non-finite offsetMm: ${rule.offsetMm}`);
+  }
+
+  const mult = rule.multiplier !== undefined ? rule.multiplier : 1.0;
   let base: number;
 
   switch (rule.source) {
@@ -403,39 +451,29 @@ export function validateDimensionRule(
   }
 }
 
-export function validateAgregadoFabricatedMember(
-  fm: AgregadoFabricatedMember,
-  validVariantSets?: ReadonlySet<string>,
-): void {
-  if (!fm.memberId.trim()) {
-    throw new Error('fabricated member must have a non-empty memberId');
-  }
-  if (!fm.slotId.trim()) {
-    throw new Error(`fabricated member '${fm.memberId}' must have a non-empty slotId`);
-  }
-  if (!fm.name.trim()) {
-    throw new Error(`fabricated member '${fm.memberId}' must have a non-empty name`);
-  }
-  if (!Number.isFinite(fm.thicknessMm) || fm.thicknessMm <= 0) {
-    throw new Error(`fabricated member '${fm.memberId}' thicknessMm must be finite and positive`);
-  }
-  validateDimensionRule('lengthRule', fm.lengthRule, validVariantSets);
-  validateDimensionRule('widthRule', fm.widthRule, validVariantSets);
-  validateAssemblyAnchorRule(fm.placement);
-}
-
 export interface AgregadoAssemblyInput {
   readonly id: string;
+  readonly revision?: number;
   readonly commercialKitHardwareId?: string;
+  readonly components?: readonly ModuleComponentInstance[];
   readonly rigidMembers?: readonly AgregadoRigidMember[];
-  readonly fabricatedMembers?: readonly AgregadoFabricatedMember[];
   readonly variantSets?: readonly AgregadoVariantSet[];
   readonly compatibilityRules?: readonly AssemblyCompatibilityRule[];
 }
 
 export function validateAgregadoAssemblyDefinition(agregado: AgregadoAssemblyInput): void {
-  if (!agregado.id.trim()) {
+  if (!agregado.id || !agregado.id.trim()) {
     throw new Error('agregado must have a non-empty id');
+  }
+
+  if (
+    agregado.revision === undefined ||
+    !Number.isInteger(agregado.revision) ||
+    agregado.revision <= 0
+  ) {
+    throw new Error(
+      `agregado '${agregado.id}' requires authoritative positive revision (got ${agregado.revision})`,
+    );
   }
 
   const hasKit =
@@ -475,6 +513,9 @@ export function validateAgregadoAssemblyDefinition(agregado: AgregadoAssemblyInp
       if (!Number.isFinite(rule.clearanceMm) || rule.clearanceMm < 0) {
         throw new Error(`compatibility rule for '${rule.variantSetId}' has non-finite or negative clearance: ${rule.clearanceMm}`);
       }
+      if (rule.selectionStrategy !== 'max_fitting' && rule.selectionStrategy !== 'exact') {
+        throw new Error(`compatibility rule for '${rule.variantSetId}' has invalid selectionStrategy '${rule.selectionStrategy}'`);
+      }
     }
   }
 
@@ -495,13 +536,322 @@ export function validateAgregadoAssemblyDefinition(agregado: AgregadoAssemblyInp
     }
   }
 
-  if (agregado.fabricatedMembers) {
-    for (const fm of agregado.fabricatedMembers) {
-      if (seenMemberIds.has(fm.memberId)) {
-        throw new Error(`duplicate memberId '${fm.memberId}' (fabricated) in assembly definition`);
+  // 4. Validate Components (Fabricated board members authority - R8)
+  if (agregado.components) {
+    let i = 0;
+    for (const c of agregado.components) {
+      if (!c.componentId || !c.componentId.trim()) {
+        throw new Error(`component index ${i} must have non-empty componentId`);
       }
-      seenMemberIds.add(fm.memberId);
-      validateAgregadoFabricatedMember(fm, seenVariantSets);
+      if (!c.quantity || c.quantity <= 0) {
+        throw new Error(`component '${c.componentId}' index ${i} must have positive quantity`);
+      }
+      if (c.overrides) {
+        if (c.overrides.lengthRule) {
+          validateDimensionRule('lengthRule', c.overrides.lengthRule, seenVariantSets);
+        }
+        if (c.overrides.widthRule) {
+          validateDimensionRule('widthRule', c.overrides.widthRule, seenVariantSets);
+        }
+        if (c.overrides.placementRule) {
+          validateAssemblyAnchorRule(c.overrides.placementRule);
+        }
+      }
+      i++;
     }
   }
+}
+
+// Assembly Resolution Engine
+
+function calculateAxisPlacementCoord(
+  axisName: string,
+  p: AssemblyAxisPlacement,
+  dimensionMm: number,
+): number {
+  let base: number;
+  switch (p.ref) {
+    case 'min':
+      base = 0;
+      break;
+    case 'max':
+      base = dimensionMm;
+      break;
+    case 'center':
+      base = dimensionMm / 2;
+      break;
+    default:
+      throw new Error(`axis ${axisName} has invalid reference '${(p as { ref: string }).ref}'`);
+  }
+  return base + p.offsetMm;
+}
+
+export function resolveAgregadoAssembly(
+  agregado: AgregadoAssemblyInput,
+  params: AssemblyResolutionParams,
+): ResolvedAssemblySnapshot {
+  validateAgregadoAssemblyDefinition(agregado);
+
+  if (!Number.isFinite(params.widthMm) || params.widthMm <= 0) {
+    throw new Error(`invalid width: ${params.widthMm} mm (must be finite and positive)`);
+  }
+  if (!Number.isFinite(params.depthMm) || params.depthMm <= 0) {
+    throw new Error(`invalid depth: ${params.depthMm} mm (must be finite and positive)`);
+  }
+  if (!Number.isFinite(params.heightMm) || params.heightMm <= 0) {
+    throw new Error(`invalid height: ${params.heightMm} mm (must be finite and positive)`);
+  }
+
+  // R7: authoritative recipe revision; never hardcode
+  const recipeRev = params.recipeRevisionNumber ?? agregado.revision;
+  if (!recipeRev || recipeRev <= 0) {
+    throw new Error('assembly resolution requires authoritative positive recipe revision');
+  }
+
+  // Variant resolution
+  const selectedVariantsMap = new Map<string, SelectedAssemblyVariant>();
+  const selectedVariantsList: SelectedAssemblyVariant[] = [];
+
+  const compatRules = new Map<string, AssemblyCompatibilityRule>();
+  if (agregado.compatibilityRules) {
+    for (const r of agregado.compatibilityRules) {
+      compatRules.set(r.variantSetId, r);
+    }
+  }
+
+  if (agregado.variantSets) {
+    for (const vs of agregado.variantSets) {
+      const rule = compatRules.get(vs.id) ?? {
+        variantSetId: vs.id,
+        clearanceMm: 0,
+        selectionStrategy: 'max_fitting',
+      };
+
+      let targetSpace: number;
+      switch (vs.dimension) {
+        case 'depth':
+          targetSpace = params.depthMm;
+          break;
+        case 'height':
+          targetSpace = params.heightMm;
+          break;
+        case 'width':
+          targetSpace = params.widthMm;
+          break;
+      }
+
+      const availableNominal = targetSpace - rule.clearanceMm;
+      const sortedVariants = [...vs.variants].sort((a, b) => a.nominalDimensionMm - b.nominalDimensionMm);
+
+      let chosen: ProductVariant | undefined;
+      if (rule.selectionStrategy === 'max_fitting') {
+        for (let i = sortedVariants.length - 1; i >= 0; i--) {
+          if (sortedVariants[i]!.nominalDimensionMm <= availableNominal) {
+            chosen = sortedVariants[i];
+            break;
+          }
+        }
+      } else if (rule.selectionStrategy === 'exact') {
+        chosen = sortedVariants.find((v) => Math.abs(v.nominalDimensionMm - availableNominal) < 1e-3);
+      }
+
+      if (!chosen) {
+        throw new AssemblyVariantNotFoundError(
+          vs.id,
+          targetSpace,
+          rule.clearanceMm,
+          sortedVariants.map((v) => v.nominalDimensionMm),
+        );
+      }
+
+      const selected: SelectedAssemblyVariant = {
+        variantSetId: vs.id,
+        hardwareId: chosen.hardwareId,
+        nominalDimensionMm: chosen.nominalDimensionMm,
+      };
+      selectedVariantsMap.set(vs.id, selected);
+      selectedVariantsList.push(selected);
+    }
+  }
+
+  // Rigid members resolution (zero scaling, det = +1)
+  const resolvedRigidMembers: ResolvedRigidMember[] = [];
+  if (agregado.rigidMembers) {
+    for (const member of agregado.rigidMembers) {
+      let hardwareId = '';
+      if (member.source.kind === 'fixed') {
+        hardwareId = member.source.fixed!.hardwareId;
+      } else if (member.source.kind === 'variant') {
+        const variant = selectedVariantsMap.get(member.source.variant!.variantSetId);
+        if (!variant) {
+          throw new Error(`variant for '${member.source.variant!.variantSetId}' not resolved`);
+        }
+        hardwareId = variant.hardwareId;
+      }
+
+      const xCoord = calculateAxisPlacementCoord('x', member.placement.x, params.widthMm);
+      const yCoord = calculateAxisPlacementCoord('y', member.placement.y, params.depthMm);
+      const zCoord = calculateAxisPlacementCoord('z', member.placement.z, params.heightMm);
+
+      const basis = member.placement.rotationDeg
+        ? deriveHardwareBasisFromEuler(member.placement.rotationDeg)
+        : { x: [1, 0, 0] as const, y: [0, 1, 0] as const, z: [0, 0, 1] as const };
+
+      resolvedRigidMembers.push({
+        memberId: member.memberId,
+        role: member.role,
+        hardwareId,
+        localTransform: {
+          translationMm: [xCoord, yCoord, zCoord],
+          basis,
+        },
+        bomRole: member.bomRole,
+      });
+    }
+  }
+
+  // Fabricated components resolution (sole authority: Agregado.Components - R8)
+  const resolvedFabricated: ResolvedFabricatedComponent[] = [];
+  if (agregado.components) {
+    for (const c of agregado.components) {
+      let length = 0;
+      let width = 0;
+      let translation: [number, number, number] = [0, 0, 0];
+      let basis: AssemblyBasis = {
+        x: [1, 0, 0],
+        y: [0, 1, 0],
+        z: [0, 0, 1],
+      };
+
+      if (c.overrides?.lengthRule) {
+        length = evaluateDimensionRule(c.overrides.lengthRule, params, selectedVariantsMap);
+      }
+      if (c.overrides?.widthRule) {
+        width = evaluateDimensionRule(c.overrides.widthRule, params, selectedVariantsMap);
+      }
+      if (c.overrides?.placementRule) {
+        const xCoord = calculateAxisPlacementCoord('x', c.overrides.placementRule.x, params.widthMm);
+        const yCoord = calculateAxisPlacementCoord('y', c.overrides.placementRule.y, params.depthMm);
+        const zCoord = calculateAxisPlacementCoord('z', c.overrides.placementRule.z, params.heightMm);
+        translation = [xCoord, yCoord, zCoord];
+
+        if (c.overrides.placementRule.rotationDeg) {
+          basis = deriveHardwareBasisFromEuler(c.overrides.placementRule.rotationDeg);
+        }
+      }
+
+      resolvedFabricated.push({
+        componentId: c.componentId,
+        quantity: c.quantity,
+        lengthMm: length,
+        widthMm: width,
+        transform: {
+          translationMm: translation,
+          basis,
+        },
+      });
+    }
+  }
+
+  // BOM Generation
+  const bomItems: AssemblyBOMItem[] = [];
+  if (agregado.commercialKitHardwareId && agregado.commercialKitHardwareId.trim()) {
+    bomItems.push({
+      hardwareId: agregado.commercialKitHardwareId,
+      quantity: 1,
+      role: 'commercial_kit',
+      notes: `Commercial kit for assembly ${agregado.id}`,
+    });
+  }
+
+  const separateCounts = new Map<string, { quantity: number; role: string }>();
+  for (const m of resolvedRigidMembers) {
+    if (m.bomRole === 'separately_purchased') {
+      const existing = separateCounts.get(m.hardwareId);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        separateCounts.set(m.hardwareId, { quantity: 1, role: m.role });
+      }
+    }
+  }
+
+  const sortedHardwareIds = [...separateCounts.keys()].sort();
+  for (const hwId of sortedHardwareIds) {
+    const item = separateCounts.get(hwId)!;
+    bomItems.push({
+      hardwareId: hwId,
+      quantity: item.quantity,
+      role: item.role,
+    });
+  }
+
+  return {
+    agregadoId: agregado.id,
+    agregadoRevisionNumber: recipeRev,
+    commercialKitHardwareId: agregado.commercialKitHardwareId,
+    resolvedDimensionsMm: [params.widthMm, params.depthMm, params.heightMm],
+    selectedVariants: selectedVariantsList,
+    rigidMembers: resolvedRigidMembers,
+    fabricatedComponents: resolvedFabricated,
+    bomItems,
+  };
+}
+
+// Visual Pinning Authority (#668 - R10)
+
+export type VisualAssetLookup = (hardwareId: string) => {
+  mountFrame?: {
+    originMm: readonly [number, number, number];
+    basis: AssemblyBasis;
+  };
+  assetId: string;
+  assetRevisionId: string;
+  sha256: string;
+} | null;
+
+export function attachVisualPins(
+  snapshot: ResolvedAssemblySnapshot,
+  lookup?: VisualAssetLookup,
+): ResolvedAssemblySnapshot {
+  if (!lookup) {
+    return snapshot;
+  }
+
+  const updatedMembers = snapshot.rigidMembers.map((m) => {
+    const asset = lookup(m.hardwareId);
+    if (!asset) {
+      return m;
+    }
+    if (!asset.assetId || !asset.assetId.trim()) {
+      throw new Error(`visual asset for hardware '${m.hardwareId}' returned empty assetId: fail closed`);
+    }
+    if (!asset.assetRevisionId || !asset.assetRevisionId.trim()) {
+      throw new Error(`visual asset for hardware '${m.hardwareId}' returned empty assetRevisionId: fail closed`);
+    }
+    if (!asset.sha256 || !asset.sha256.trim()) {
+      throw new Error(`visual asset for hardware '${m.hardwareId}' returned empty sha256: fail closed`);
+    }
+    if (asset.mountFrame) {
+      validateHardwareBasis(asset.mountFrame.basis, 'mountFrame.basis');
+      for (let i = 0; i < 3; i++) {
+        const v = asset.mountFrame.originMm[i];
+        if (v === undefined || !Number.isFinite(v) || Math.abs(v) > 100000.0) {
+          throw new Error(`visual asset for hardware '${m.hardwareId}' mountFrame origin[${i}] is non-finite: ${v}`);
+        }
+      }
+    }
+    return {
+      ...m,
+      assetId: asset.assetId,
+      assetRevisionId: asset.assetRevisionId,
+      sha256: asset.sha256,
+      mountFrame: asset.mountFrame,
+    };
+  });
+
+  return {
+    ...snapshot,
+    rigidMembers: updatedMembers,
+  };
 }
