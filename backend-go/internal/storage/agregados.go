@@ -14,7 +14,7 @@ import (
 
 func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, error) {
 	query := `
-		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, created_at, updated_at
+		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, current_revision_id, created_at, updated_at
 		FROM agregados
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -41,7 +41,7 @@ func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, e
 
 func (s *PostgresStore) GetAgregadoByID(ctx context.Context, id string) (*domain.Agregado, error) {
 	query := `
-		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, created_at, updated_at
+		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, current_revision_id, created_at, updated_at
 		FROM agregados
 		WHERE id = $1 AND organization_id = $2;
 	`
@@ -173,7 +173,7 @@ func scanAgregado(r rowScanner) (domain.Agregado, error) {
 	var hwLinesRaw []byte
 	err := r.Scan(
 		&a.ID, &a.Code, &a.Name, &desc, &notes, &a.WidthMm, &a.HeightMm, &a.DepthMm, &componentsRaw, &hwLinesRaw, &a.Active,
-		&a.CreatedAt, &a.UpdatedAt,
+		&a.CurrentRevisionID, &a.CreatedAt, &a.UpdatedAt,
 	)
 	if err != nil {
 		return a, err
