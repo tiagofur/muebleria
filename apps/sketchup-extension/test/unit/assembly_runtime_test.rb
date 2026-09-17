@@ -112,6 +112,7 @@ class AssemblyRuntimeTest < Minitest::Test
   def test_d2_exact_visual_pins_and_historical_snapshot
     layout_data = build_drawer_assembly_layout(width_mm: 600.0)
     layout_data['assemblies'].first['isHistorical'] = true
+    layout_data['assemblies'].first['snapshotId'] = 'snap-merivobox-v1'
     layout_data['assemblies'].first['rigidMembers'].first['assetRevisionId'] = 'rev-side-historical-unavail'
 
     parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
@@ -496,8 +497,15 @@ class AssemblyRuntimeTest < Minitest::Test
     end
     assert_includes err2.message, 'número positivo'
 
-    # RED: isHistorical == true with invalid snapshotId
+    # RED: isHistorical == true with missing/nil snapshotId
     layout['assemblies'].first['recipeRevision'] = 2
+    layout['assemblies'].first.delete('snapshotId')
+    err_nil = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    end
+    assert_includes err_nil.message, 'requiere snapshotId no vacío'
+
+    # RED: isHistorical == true with invalid snapshotId
     layout['assemblies'].first['snapshotId'] = ''
     err3 = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
       Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
@@ -658,6 +666,131 @@ class AssemblyRuntimeTest < Minitest::Test
     assert_includes rebuild_result['error'], 'No se pudo descargar o cargar'
 
     assert_equal initial_child_count, furniture.definition.entities.instances.length
+  end
+
+  # R10: Historical assembly requires exact non-empty snapshotId (RED/GREEN)
+  def test_r10_historical_assembly_requires_exact_snapshot_id
+    layout = build_drawer_assembly_layout(width_mm: 600.0)
+
+    # RED: isHistorical == true with missing/nil snapshotId
+    layout['assemblies'].first['isHistorical'] = true
+    layout['assemblies'].first['recipeRevision'] = 2
+    layout['assemblies'].first.delete('snapshotId')
+    err_nil = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    end
+    assert_includes err_nil.message, 'requiere snapshotId no vacío'
+
+    # RED: isHistorical == true with empty snapshotId
+    layout['assemblies'].first['snapshotId'] = ''
+    err_empty = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    end
+    assert_includes err_empty.message, 'debe ser un string opaco no vacío'
+
+    # GREEN: Live/current does not require snapshotId
+    layout['assemblies'].first['isHistorical'] = false
+    layout['assemblies'].first['recipeRevision'] = 1
+    layout['assemblies'].first.delete('snapshotId')
+    live_parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    refute live_parsed.assemblies.first.historical?
+    assert_nil live_parsed.assemblies.first.snapshot_id
+
+    # GREEN: Historical with recipeRevision > 0 and snapshotId
+    layout['assemblies'].first['isHistorical'] = true
+    layout['assemblies'].first['recipeRevision'] = 2
+    layout['assemblies'].first['snapshotId'] = 'snap-merivobox-v2'
+    hist_parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    assert hist_parsed.assemblies.first.historical?
+    assert_equal 'snap-merivobox-v2', hist_parsed.assemblies.first.snapshot_id
+  end
+
+  # R11: Parent assembly is the sole authority for historical identity; contradictions rejected
+  def test_r11_parent_assembly_historical_authority_and_contradictions
+    base_layout = build_drawer_assembly_layout(width_mm: 600.0)
+    base_layout['assemblies'].first['isHistorical'] = true
+    base_layout['assemblies'].first['recipeRevision'] = 2
+    base_layout['assemblies'].first['snapshotId'] = 'snap-parent-1'
+
+    # Contradiction: Assembly historical=true, Member historical=false
+    layout_c1 = Marshal.load(Marshal.dump(base_layout))
+    layout_c1['assemblies'].first['rigidMembers'].first['isHistorical'] = false
+    err_c1 = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_c1)
+    end
+    assert_includes err_c1.message, 'contradice isHistorical del assembly padre'
+
+    # Contradiction: Assembly snapshot=S1, Member snapshot=S2
+    layout_c2 = Marshal.load(Marshal.dump(base_layout))
+    layout_c2['assemblies'].first['rigidMembers'].first['snapshotId'] = 'snap-other-2'
+    err_c2 = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_c2)
+    end
+    assert_includes err_c2.message, 'contradice snapshotId del assembly padre'
+
+    # Contradiction: Assembly recipeRevision=2, Member recipeRevision=3
+    layout_c3 = Marshal.load(Marshal.dump(base_layout))
+    layout_c3['assemblies'].first['rigidMembers'].first['recipeRevision'] = 3
+    err_c3 = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_c3)
+    end
+    assert_includes err_c3.message, 'contradice recipeRevision del assembly padre'
+
+    # GREEN: Member omits fields -> inherits parent authority
+    layout_ok = Marshal.load(Marshal.dump(base_layout))
+    layout_ok['assemblies'].first['rigidMembers'].each do |m|
+      m.delete('isHistorical')
+      m.delete('recipeRevision')
+      m.delete('snapshotId')
+    end
+    parsed_ok = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_ok)
+    assembly = parsed_ok.assemblies.first
+    assert assembly.rigid_members.all?(&:historical?)
+    assert(assembly.rigid_members.all? { |m| m.recipe_revision == 2 })
+    assert(assembly.rigid_members.all? { |m| m.snapshot_id == 'snap-parent-1' })
+
+    # GREEN: Member includes matching fields -> accepted
+    layout_matching = Marshal.load(Marshal.dump(base_layout))
+    layout_matching['assemblies'].first['rigidMembers'].first['isHistorical'] = true
+    layout_matching['assemblies'].first['rigidMembers'].first['recipeRevision'] = 2
+    layout_matching['assemblies'].first['rigidMembers'].first['snapshotId'] = 'snap-parent-1'
+    parsed_matching = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_matching)
+    assert parsed_matching.assemblies.first.rigid_members.first.historical?
+  end
+
+  # R12: Historical metadata preservation across rigid members
+  def test_r12_historical_metadata_preservation
+    layout = build_drawer_assembly_layout(width_mm: 600.0)
+    layout['assemblies'].first['isHistorical'] = true
+    layout['assemblies'].first['recipeRevision'] = 2
+    layout['assemblies'].first['snapshotId'] = 'snap-merivobox-v2'
+
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    definition = { 'name' => 'Historical Drawer Unit', 'furniture_definition_id' => 'f-def-hist' }
+
+    result = @builder.insert_furniture(@model, definition, {}, resolved_layout: parsed)
+    assert result['success']
+
+    furniture = @model.active_entities.instances.first
+    member_names = ['Lateral Izquierdo', 'Lateral Derecho', 'Guía Izquierda', 'Guía Derecha']
+    member_instances = member_names.map { |name| find_entity_by_name(furniture, name) }
+    assert member_instances.all?
+
+    snapshot_ids = []
+    member_instances.each do |ci|
+      meta = @store.read(ci)
+      assert_equal 'drawer-inst-1', meta.dig('identity', 'assemblyInstanceId')
+      refute_nil meta.dig('identity', 'memberId')
+      assert_equal 2, meta.dig('identity', 'recipeRevision')
+      assert_equal 'snap-merivobox-v2', meta.dig('identity', 'snapshotId')
+      refute_nil meta.dig('identity', 'assetRevisionId')
+      refute_nil meta.dig('intent', 'assetRevisionId')
+      assert_equal true, meta.dig('identity', 'isHistorical')
+      snapshot_ids << meta.dig('identity', 'snapshotId')
+    end
+
+    # All members of the same assembly have the exact same snapshotId
+    assert_equal ['snap-merivobox-v2'], snapshot_ids.uniq
   end
 
   private

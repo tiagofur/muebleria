@@ -906,6 +906,7 @@ module Granete
             'projectRef' => proj_ref
           }
           identity['furnitureInstanceRef'] = furniture_ref if furniture_ref
+          identity['assetRevisionId'] = asset_revision_id if asset_revision_id && assembly_instance_id
           apply_assembly_metadata(identity, assembly_instance_id, agregado_id, member_id, 'memberId',
                                   recipe_revision: recipe_revision, snapshot_id: snapshot_id,
                                   is_historical: is_historical)

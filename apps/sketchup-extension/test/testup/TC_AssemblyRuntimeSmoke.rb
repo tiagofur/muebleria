@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'digest'
 require 'json'
 require 'tmpdir'
 require 'fileutils'
@@ -35,11 +36,21 @@ module Granete
       # Shared evidence accumulator persisted to progress/host_smoke_670_d_assembly_runtime_evidence.json
       class << self
         attr_accessor :evidence
+
+        def current_rbz_sha256
+          rbz_path = File.join(REPOSITORY_ROOT, 'apps/sketchup-extension/dist/granete_for_sketchup.rbz')
+          File.exist?(rbz_path) ? Digest::SHA256.file(rbz_path).hexdigest : 'unavailable'
+        end
+
+        def current_head_sha
+          head = `git -C "#{REPOSITORY_ROOT}" rev-parse HEAD 2>/dev/null`.strip
+          head.empty? ? 'unavailable' : head
+        end
       end
 
       self.evidence = {
-        'head' => '1e38def4047aae39ef52246adee78078129787a6',
-        'rbz_sha256' => '589e455bda442d99eb42999ac6c3283d34e4bc0f6811961f120cb3a3d6a013e6',
+        'head' => current_head_sha,
+        'rbz_sha256' => current_rbz_sha256,
         'sketchup_version' => nil,
         'ruby_version' => RUBY_VERSION,
         'platform' => RUBY_PLATFORM,
@@ -470,6 +481,12 @@ module Granete
         assert_equal 2, side_r_meta.dig('identity', 'recipeRevision')
         assert_equal true, side_r_meta.dig('identity', 'isHistorical')
         assert_equal 'snap-merivobox-v2', side_r_meta.dig('identity', 'snapshotId')
+        assert_equal 'rev-side-1', side_r_meta.dig('identity', 'assetRevisionId')
+
+        side_l = find_child_by_name(furniture, 'Lateral Izquierdo')
+        side_l_meta = @metadata_store.read(side_l)
+        assert_equal 'snap-merivobox-v2', side_l_meta.dig('identity', 'snapshotId')
+        assert_equal side_r_meta.dig('identity', 'snapshotId'), side_l_meta.dig('identity', 'snapshotId')
 
         assert_equal 'ast-side', side_r_meta.dig('intent', 'assetId')
         assert_equal 'rev-side-1', side_r_meta.dig('intent', 'assetRevisionId')

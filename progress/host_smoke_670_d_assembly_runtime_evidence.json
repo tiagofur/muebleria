@@ -1,30 +1,25 @@
 {
-  "head": "1e38def4047aae39ef52246adee78078129787a6",
-  "rbz_sha256": "589e455bda442d99eb42999ac6c3283d34e4bc0f6811961f120cb3a3d6a013e6",
+  "head": "07e7993a5552cffdcaffceb230ee424f363b232b",
+  "rbz_sha256": "df88c5b7784f22cd53b9f1e0a8c7762dee4b4f6f547c5f7b459834c81158f8c6",
   "sketchup_version": "26.2.242",
   "ruby_version": "3.2.2",
   "platform": "arm64-darwin",
   "tests": {
-    "h5_shared_component_definition": {
-      "status": "pass",
-      "shared_definition_name": "FixtureDef_side_fixture"
-    },
     "h10_no_scaling_or_mirror": {
       "status": "pass",
       "verified_rigid_members_count": 8
     },
-    "h4_multiple_assemblies": {
+    "h5_shared_component_definition": {
       "status": "pass",
-      "assemblies_count": 2,
-      "total_children": 11
+      "shared_definition_name": "FixtureDef_side_fixture"
     },
-    "h6_save_and_reopen": {
-      "status": "pass"
+    "h1_insert_w600": {
+      "status": "pass",
+      "rigid_members_count": 4,
+      "fabricated_components_count": 1,
+      "bottom_width_mm": 565.0
     },
-    "h2_rebuild_w800": {
-      "status": "pass"
-    },
-    "h7_undo_redo": {
+    "h8_fail_before_mutate": {
       "status": "pass"
     },
     "h9_metadata_identities": {
@@ -39,18 +34,23 @@
         "snapshotId"
       ]
     },
-    "h8_fail_before_mutate": {
+    "h4_multiple_assemblies": {
+      "status": "pass",
+      "assemblies_count": 2,
+      "total_children": 11
+    },
+    "h7_undo_redo": {
+      "status": "pass"
+    },
+    "h2_rebuild_w800": {
+      "status": "pass"
+    },
+    "h6_save_and_reopen": {
       "status": "pass"
     },
     "h3_non_identity_world_transform": {
       "status": "pass",
       "error_mm": 0.0
-    },
-    "h1_insert_w600": {
-      "status": "pass",
-      "rigid_members_count": 4,
-      "fabricated_components_count": 1,
-      "bottom_width_mm": 565.0
     }
   },
   "r7_rebuild_w600_to_w800": {

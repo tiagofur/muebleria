@@ -699,9 +699,9 @@ module Granete
               raise LayoutContract::ContractError,
                     "Assembly histórico #{inst_id} requiere recipeRevision > 0 (obtenido: #{recipe_rev.inspect})"
             end
-            if raw.key?('snapshotId') && snapshot_id.nil?
+            if snapshot_id.nil?
               raise LayoutContract::ContractError,
-                    "Assembly histórico #{inst_id} contiene snapshotId inválido o vacío"
+                    "Assembly histórico #{inst_id} requiere snapshotId no vacío"
             end
           end
 
@@ -770,6 +770,48 @@ module Granete
           { 'translation' => trans, 'basis' => basis }
         end
 
+        def validate_member_historical_consistency(raw, member_id, assembly_instance_id,
+                                                   is_historical, recipe_revision, snapshot_id)
+          placement_id = "#{assembly_instance_id}:#{member_id}"
+          validate_member_historical_flag(raw, member_id, assembly_instance_id, is_historical)
+          validate_member_recipe_revision(raw, member_id, assembly_instance_id, placement_id, recipe_revision)
+          validate_member_snapshot_id(raw, member_id, assembly_instance_id, placement_id, snapshot_id)
+        end
+
+        def validate_member_historical_flag(raw, member_id, assembly_instance_id, is_historical)
+          return unless raw.key?('isHistorical')
+
+          member_is_hist = raw['isHistorical'] == true
+          return if member_is_hist == is_historical
+
+          raise LayoutContract::ContractError,
+                "Miembro #{member_id} de #{assembly_instance_id} contradice isHistorical del assembly padre " \
+                "(member=#{member_is_hist}, assembly=#{is_historical})"
+        end
+
+        def validate_member_recipe_revision(raw, member_id, assembly_instance_id, placement_id, recipe_revision)
+          return unless raw.key?('recipeRevision') || raw.key?('agregadoRevisionNumber')
+
+          member_recipe_rev = parse_recipe_revision(raw, placement_id)
+          return if member_recipe_rev == recipe_revision
+
+          raise LayoutContract::ContractError,
+                "Miembro #{member_id} de #{assembly_instance_id} contradice recipeRevision del assembly padre " \
+                "(member=#{member_recipe_rev.inspect}, assembly=#{recipe_revision.inspect})"
+        end
+
+        def validate_member_snapshot_id(raw, member_id, assembly_instance_id, placement_id, snapshot_id)
+          return unless raw.key?('snapshotId')
+
+          member_snapshot_id = ContractCoercions.optional_opaque_string(raw['snapshotId'],
+                                                                        "snapshotId de #{placement_id}")
+          return if member_snapshot_id == snapshot_id
+
+          raise LayoutContract::ContractError,
+                "Miembro #{member_id} de #{assembly_instance_id} contradice snapshotId del assembly padre " \
+                "(member=#{member_snapshot_id.inspect}, assembly=#{snapshot_id.inspect})"
+        end
+
         # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
         def parse_rigid_member(raw, assembly_instance_id, agregado_id, is_historical,
                                recipe_revision: nil, snapshot_id: nil)
@@ -781,6 +823,9 @@ module Granete
           if member_id.nil?
             raise LayoutContract::ContractError, "Miembro rígido sin memberId en #{assembly_instance_id}"
           end
+
+          validate_member_historical_consistency(raw, member_id, assembly_instance_id,
+                                                 is_historical, recipe_revision, snapshot_id)
 
           placement_id = "#{assembly_instance_id}:#{member_id}"
           lt_raw = raw['localTransform'] || raw['transform']
