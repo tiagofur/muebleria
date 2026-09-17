@@ -504,6 +504,7 @@ type Agregado struct {
 	HardwareLines           []HardwareLine              `json:"hardware_lines,omitempty"`
 	CommercialKitHardwareID *string                     `json:"commercial_kit_hardware_id,omitempty"`
 	RigidMembers            []AgregadoRigidMember       `json:"rigid_members,omitempty"`
+	FabricatedMembers       []AgregadoFabricatedMember  `json:"fabricated_members,omitempty"`
 	VariantSets             []AgregadoVariantSet        `json:"variant_sets,omitempty"`
 	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibility_rules,omitempty"`
 	Active                  bool                        `json:"active"`

@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -50,7 +51,7 @@ type AssemblyAnchorRule struct {
 	X           AssemblyAxisPlacement `json:"x"`
 	Y           AssemblyAxisPlacement `json:"y"`
 	Z           AssemblyAxisPlacement `json:"z"`
-	RotationDeg *HardwareRotationDeg  `json:"rotationDeg,omitempty"` // Rigid rotation (multiples of 90 deg: 0, 90, 180, 270)
+	RotationDeg *HardwareRotationDeg  `json:"rotationDeg,omitempty"` // Arbitrary finite rigid rotation
 }
 
 // FixedHardwareSource points to a single fixed Hardware definition.
@@ -79,6 +80,37 @@ type AgregadoRigidMember struct {
 	BOMRole   RigidMemberBOMRole `json:"bomRole"`
 }
 
+// DimensionRuleSource defines the authoritative source for recalculating fabricated member dimensions.
+type DimensionRuleSource string
+
+const (
+	DimRuleAssemblyWidth   DimensionRuleSource = "assembly_width"
+	DimRuleAssemblyDepth   DimensionRuleSource = "assembly_depth"
+	DimRuleAssemblyHeight  DimensionRuleSource = "assembly_height"
+	DimRuleSelectedVariant DimensionRuleSource = "selected_variant"
+)
+
+// AssemblyDimensionRule provides declarative, bounded dimension calculation (no eval, no scripts).
+// Computed dimension = (SourceValue * Multiplier) + OffsetMm.
+type AssemblyDimensionRule struct {
+	Source       DimensionRuleSource `json:"source"`
+	VariantSetID string              `json:"variantSetId,omitempty"` // Required if Source == DimRuleSelectedVariant
+	Multiplier   float64             `json:"multiplier"`             // Default is 1.0
+	OffsetMm     float64             `json:"offsetMm"`               // Delta in mm
+}
+
+// AgregadoFabricatedMember represents a manufactured part (bottom board, back board, etc.)
+// whose dimensions are deterministically recalculated by declarative rules without geometric scaling.
+type AgregadoFabricatedMember struct {
+	MemberID    string                `json:"memberId"`
+	SlotID      string                `json:"slotId"`
+	Name        string                `json:"name"`
+	ThicknessMm float64               `json:"thicknessMm"`
+	LengthRule  AssemblyDimensionRule `json:"lengthRule"`
+	WidthRule   AssemblyDimensionRule `json:"widthRule"`
+	Placement   AssemblyAnchorRule    `json:"placement"`
+}
+
 // ProductVariant represents one discrete commercial option in a VariantSet.
 type ProductVariant struct {
 	NominalDimensionMm float64 `json:"nominalDimensionMm"` // e.g. 450.0, 500.0, 550.0
@@ -105,17 +137,19 @@ type AssemblyMemberTransform struct {
 	Basis         HardwareBasis `json:"basis"`
 }
 
-// ResolvedRigidMember is the fully resolved rigid hardware member ready for 3D placement.
+// ResolvedRigidMember is the fully resolved rigid hardware member produced by the assembly resolver.
+// It resolves memberId, role, exact hardwareId, local rigid transform (det=+1), and bomRole.
+// Visual pins (AssetID, AssetRevisionID, SHA256, MountFrame) are populated via visual binding authority (#668).
 type ResolvedRigidMember struct {
 	MemberID        string                  `json:"memberId"`
 	Role            string                  `json:"role"`
 	HardwareID      string                  `json:"hardwareId"`
-	AssetID         string                  `json:"assetId"`
-	AssetRevisionID string                  `json:"assetRevisionId"`
-	SHA256          string                  `json:"sha256"`
-	MountFrame      *HardwareMountFrame     `json:"mountFrame,omitempty"`
 	LocalTransform  AssemblyMemberTransform `json:"localTransform"` // Rigid placement in Assembly Space (det = +1.0)
 	BOMRole         RigidMemberBOMRole      `json:"bomRole"`
+	AssetID         *string                 `json:"assetId,omitempty"`
+	AssetRevisionID *string                 `json:"assetRevisionId,omitempty"`
+	SHA256          *string                 `json:"sha256,omitempty"`
+	MountFrame      *HardwareMountFrame     `json:"mountFrame,omitempty"`
 }
 
 // AssemblyBOMItem is one purchasing row produced by the assembly.
@@ -128,7 +162,7 @@ type AssemblyBOMItem struct {
 
 // ResolvedFabricatedComponent describes a dimensioned and placed fabricated board.
 type ResolvedFabricatedComponent struct {
-	ComponentID string                  `json:"componentId"`
+	MemberID    string                  `json:"memberId"`
 	SlotID      string                  `json:"slotId"`
 	Name        string                  `json:"name"`
 	LengthMm    float64                 `json:"lengthMm"`
@@ -137,24 +171,33 @@ type ResolvedFabricatedComponent struct {
 	Transform   AssemblyMemberTransform `json:"transform"`
 }
 
+// SelectedAssemblyVariant explicitly records the chosen product variant per variant set.
+// Freezes both nominal dimension and exact commercial hardwareId to avoid historical ambiguity.
+type SelectedAssemblyVariant struct {
+	VariantSetID       string  `json:"variantSetId"`
+	HardwareID         string  `json:"hardwareId"`
+	NominalDimensionMm float64 `json:"nominalDimensionMm"`
+}
+
 // ResolvedAssemblySnapshot freezes all resolved state for immutable historical DesignRevisions.
 type ResolvedAssemblySnapshot struct {
 	AgregadoID              string                        `json:"agregadoId"`
 	AgregadoRevisionNumber  int                           `json:"agregadoRevisionNumber"`
 	CommercialKitHardwareID *string                       `json:"commercialKitHardwareId,omitempty"`
 	ResolvedDimensionsMm    [3]float64                    `json:"resolvedDimensionsMm"`
-	SelectedVariants        map[string]float64            `json:"selectedVariants"` // variantSetId -> nominalDimensionMm
+	SelectedVariants        []SelectedAssemblyVariant     `json:"selectedVariants"`
 	RigidMembers            []ResolvedRigidMember         `json:"rigidMembers"`
 	FabricatedComponents    []ResolvedFabricatedComponent `json:"fabricatedComponents"`
 	BOMItems                []AssemblyBOMItem             `json:"bomItems"`
 }
 
 // Domain Errors
+
 type ErrAssemblyVariantNotFound struct {
-	VariantSetID       string
-	RequestedSpaceMm   float64
+	VariantSetID      string
+	RequestedSpaceMm  float64
 	RequiredClearance float64
-	AvailableNominals  []float64
+	AvailableNominals []float64
 }
 
 func (e *ErrAssemblyVariantNotFound) Error() string {
@@ -162,6 +205,59 @@ func (e *ErrAssemblyVariantNotFound) Error() string {
 		"assembly variant not found for variantSetId '%s': requested space %.1fmm (clearance %.1fmm) cannot accommodate available nominals %v",
 		e.VariantSetID, e.RequestedSpaceMm, e.RequiredClearance, e.AvailableNominals,
 	)
+}
+
+// Math and Geometry Helpers
+
+// DeriveHardwareBasisFromEuler converts arbitrary finite Euler angles in degrees (X, Y, Z order)
+// into an orthonormal right-handed basis with det = +1.0.
+func DeriveHardwareBasisFromEuler(rot HardwareRotationDeg) (HardwareBasis, error) {
+	for _, angle := range []float64{rot.X, rot.Y, rot.Z} {
+		if math.IsNaN(angle) || math.IsInf(angle, 0) {
+			return HardwareBasis{}, errors.New("rotation angles must be finite")
+		}
+	}
+
+	radX := rot.X * math.Pi / 180.0
+	radY := rot.Y * math.Pi / 180.0
+	radZ := rot.Z * math.Pi / 180.0
+
+	cx, sx := math.Cos(radX), math.Sin(radX)
+	cy, sy := math.Cos(radY), math.Sin(radY)
+	cz, sz := math.Cos(radZ), math.Sin(radZ)
+
+	// Composite rotation matrix R = Rz * Ry * Rx
+	// R00 = cz*cy,              R01 = cz*sy*sx - sz*cx,     R02 = cz*sy*cx + sz*sx
+	// R10 = sz*cy,              R11 = sz*sy*sx + cz*cx,     R12 = sz*sy*cx - cz*sx
+	// R20 = -sy,                R21 = cy*sx,                R22 = cy*cx
+	basis := HardwareBasis{
+		X: [3]float64{cz * cy, sz * cy, -sy},
+		Y: [3]float64{cz*sy*sx - sz*cx, sz*sy*sx + cz*cx, cy * sx},
+		Z: [3]float64{cz*sy*cx + sz*sx, sz*sy*cx - cz*sx, cy * cx},
+	}
+
+	// Sanitize near-zero numerical noise for clean unit vectors
+	cleanVec := func(v [3]float64) [3]float64 {
+		for i := 0; i < 3; i++ {
+			if math.Abs(v[i]) < 1e-12 {
+				v[i] = 0.0
+			} else if math.Abs(v[i]-1.0) < 1e-12 {
+				v[i] = 1.0
+			} else if math.Abs(v[i]+1.0) < 1e-12 {
+				v[i] = -1.0
+			}
+		}
+		return v
+	}
+
+	basis.X = cleanVec(basis.X)
+	basis.Y = cleanVec(basis.Y)
+	basis.Z = cleanVec(basis.Z)
+
+	if err := ValidateHardwareBasis(basis, "derivedEulerBasis"); err != nil {
+		return HardwareBasis{}, err
+	}
+	return basis, nil
 }
 
 // Validation Functions
@@ -189,14 +285,18 @@ func ValidateRigidMemberSource(s RigidMemberSource) error {
 	return nil
 }
 
-// ValidateAxisPlacement verifies axis reference value.
+// ValidateAxisPlacement verifies axis reference and finite offset.
 func ValidateAxisPlacement(axisName string, p AssemblyAxisPlacement) error {
 	switch p.Ref {
 	case AxisRefMin, AxisRefMax, AxisRefCenter:
-		return nil
+		// valid
 	default:
 		return fmt.Errorf("axis %s has invalid reference '%s' (expected min, max, or center)", axisName, p.Ref)
 	}
+	if math.IsNaN(p.OffsetMm) || math.IsInf(p.OffsetMm, 0) || math.Abs(p.OffsetMm) > 100000.0 {
+		return fmt.Errorf("axis %s has non-finite or out-of-bounds offsetMm: %g", axisName, p.OffsetMm)
+	}
+	return nil
 }
 
 // ValidateAssemblyAnchorRule validates placement references and rigid rotation.
@@ -210,6 +310,20 @@ func ValidateAssemblyAnchorRule(r AssemblyAnchorRule) error {
 	if err := ValidateAxisPlacement("z", r.Z); err != nil {
 		return err
 	}
+	if r.RotationDeg != nil {
+		for _, angle := range []float64{r.RotationDeg.X, r.RotationDeg.Y, r.RotationDeg.Z} {
+			if math.IsNaN(angle) || math.IsInf(angle, 0) {
+				return errors.New("rotationDeg angles must be finite")
+			}
+		}
+		basis, err := DeriveHardwareBasisFromEuler(*r.RotationDeg)
+		if err != nil {
+			return fmt.Errorf("invalid anchor rotation: %w", err)
+		}
+		if err := ValidateHardwareBasis(basis, "anchorRule.rotation"); err != nil {
+			return fmt.Errorf("invalid rotation basis: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -219,24 +333,24 @@ func ValidateAgregadoRigidMember(m AgregadoRigidMember, hasCommercialKit bool) e
 		return errors.New("rigid member must have a non-empty memberId")
 	}
 	if strings.TrimSpace(m.Role) == "" {
-		return fmt.Errorf("rigid member %s must have a non-empty role", m.MemberID)
+		return fmt.Errorf("rigid member '%s' must have a non-empty role", m.MemberID)
 	}
 	if err := ValidateRigidMemberSource(m.Source); err != nil {
-		return fmt.Errorf("rigid member %s: %w", m.MemberID, err)
+		return fmt.Errorf("rigid member '%s': %w", m.MemberID, err)
 	}
 	if err := ValidateAssemblyAnchorRule(m.Placement); err != nil {
-		return fmt.Errorf("rigid member %s: %w", m.MemberID, err)
+		return fmt.Errorf("rigid member '%s': %w", m.MemberID, err)
 	}
 
 	switch m.BOMRole {
 	case BOMRoleIncludedInKit:
 		if !hasCommercialKit {
-			return fmt.Errorf("rigid member %s: bomRole 'included_in_kit' is invalid when no commercialKitHardwareId is configured", m.MemberID)
+			return fmt.Errorf("rigid member '%s': bomRole 'included_in_kit' is invalid when no commercialKitHardwareId is configured", m.MemberID)
 		}
 	case BOMRoleSeparatelyPurchased, BOMRoleNonPurchasing:
 		// Always valid
 	default:
-		return fmt.Errorf("rigid member %s: invalid bomRole '%s'", m.MemberID, m.BOMRole)
+		return fmt.Errorf("rigid member '%s': invalid bomRole '%s'", m.MemberID, m.BOMRole)
 	}
 
 	return nil
@@ -251,18 +365,152 @@ func ValidateAgregadoVariantSet(vs AgregadoVariantSet) error {
 	case "depth", "height", "width":
 		// valid
 	default:
-		return fmt.Errorf("variant set %s has invalid dimension '%s' (expected depth, height, or width)", vs.ID, vs.Dimension)
+		return fmt.Errorf("variant set '%s' has invalid dimension '%s' (expected depth, height, or width)", vs.ID, vs.Dimension)
 	}
 	if len(vs.Variants) == 0 {
-		return fmt.Errorf("variant set %s must define at least one ProductVariant", vs.ID)
+		return fmt.Errorf("variant set '%s' must define at least one ProductVariant", vs.ID)
 	}
+	seenNominals := make(map[float64]bool)
 	for i, v := range vs.Variants {
-		if v.NominalDimensionMm <= 0 {
-			return fmt.Errorf("variant set %s variant %d: nominalDimensionMm must be positive", vs.ID, i)
+		if math.IsNaN(v.NominalDimensionMm) || math.IsInf(v.NominalDimensionMm, 0) || v.NominalDimensionMm <= 0 {
+			return fmt.Errorf("variant set '%s' variant %d: nominalDimensionMm must be finite and positive", vs.ID, i)
 		}
+		if seenNominals[v.NominalDimensionMm] {
+			return fmt.Errorf("variant set '%s' has duplicate nominalDimensionMm: %g", vs.ID, v.NominalDimensionMm)
+		}
+		seenNominals[v.NominalDimensionMm] = true
 		if strings.TrimSpace(v.HardwareID) == "" {
-			return fmt.Errorf("variant set %s variant %d: hardwareId must be non-empty", vs.ID, i)
+			return fmt.Errorf("variant set '%s' variant %d: hardwareId must be non-empty", vs.ID, i)
 		}
 	}
+	return nil
+}
+
+// ValidateDimensionRule validates declarative dimension calculation rules.
+func ValidateDimensionRule(axisName string, rule AssemblyDimensionRule, validVariantSets map[string]bool) error {
+	switch rule.Source {
+	case DimRuleAssemblyWidth, DimRuleAssemblyDepth, DimRuleAssemblyHeight:
+		// Valid
+	case DimRuleSelectedVariant:
+		if strings.TrimSpace(rule.VariantSetID) == "" {
+			return fmt.Errorf("%s dimension rule with 'selected_variant' requires non-empty variantSetId", axisName)
+		}
+		if validVariantSets != nil && !validVariantSets[rule.VariantSetID] {
+			return fmt.Errorf("%s dimension rule references non-existent variantSetId '%s'", axisName, rule.VariantSetID)
+		}
+	default:
+		return fmt.Errorf("%s dimension rule has invalid source '%s'", axisName, rule.Source)
+	}
+
+	if math.IsNaN(rule.Multiplier) || math.IsInf(rule.Multiplier, 0) {
+		return fmt.Errorf("%s dimension rule has non-finite multiplier: %g", axisName, rule.Multiplier)
+	}
+	if math.IsNaN(rule.OffsetMm) || math.IsInf(rule.OffsetMm, 0) || math.Abs(rule.OffsetMm) > 100000.0 {
+		return fmt.Errorf("%s dimension rule has non-finite or out-of-bounds offsetMm: %g", axisName, rule.OffsetMm)
+	}
+	return nil
+}
+
+// ValidateAgregadoFabricatedMember validates declarative fabricated member definition.
+func ValidateAgregadoFabricatedMember(fm AgregadoFabricatedMember, validVariantSets map[string]bool) error {
+	if strings.TrimSpace(fm.MemberID) == "" {
+		return errors.New("fabricated member must have a non-empty memberId")
+	}
+	if strings.TrimSpace(fm.SlotID) == "" {
+		return fmt.Errorf("fabricated member '%s' must have a non-empty slotId", fm.MemberID)
+	}
+	if strings.TrimSpace(fm.Name) == "" {
+		return fmt.Errorf("fabricated member '%s' must have a non-empty name", fm.MemberID)
+	}
+	if math.IsNaN(fm.ThicknessMm) || math.IsInf(fm.ThicknessMm, 0) || fm.ThicknessMm <= 0 {
+		return fmt.Errorf("fabricated member '%s' thicknessMm must be finite and positive", fm.MemberID)
+	}
+	if err := ValidateDimensionRule("lengthRule", fm.LengthRule, validVariantSets); err != nil {
+		return fmt.Errorf("fabricated member '%s': %w", fm.MemberID, err)
+	}
+	if err := ValidateDimensionRule("widthRule", fm.WidthRule, validVariantSets); err != nil {
+		return fmt.Errorf("fabricated member '%s': %w", fm.MemberID, err)
+	}
+	if err := ValidateAssemblyAnchorRule(fm.Placement); err != nil {
+		return fmt.Errorf("fabricated member '%s': %w", fm.MemberID, err)
+	}
+	return nil
+}
+
+// ValidateAgregadoAssemblyDefinition performs comprehensive validation of an entire assembly recipe.
+// Fails closed if any identifier is duplicate, missing, referencing non-existent sets, ambiguous, or non-finite.
+func ValidateAgregadoAssemblyDefinition(agregado Agregado) error {
+	if strings.TrimSpace(agregado.ID) == "" {
+		return errors.New("agregado must have a non-empty id")
+	}
+
+	hasKit := agregado.CommercialKitHardwareID != nil && strings.TrimSpace(*agregado.CommercialKitHardwareID) != ""
+	if agregado.CommercialKitHardwareID != nil && strings.TrimSpace(*agregado.CommercialKitHardwareID) == "" {
+		return errors.New("commercialKitHardwareId cannot be empty or whitespace")
+	}
+
+	// 1. Validate VariantSets & detect duplicates
+	seenVariantSets := make(map[string]bool)
+	for _, vs := range agregado.VariantSets {
+		if seenVariantSets[vs.ID] {
+			return fmt.Errorf("duplicate variantSetId '%s' in assembly definition", vs.ID)
+		}
+		seenVariantSets[vs.ID] = true
+		if err := ValidateAgregadoVariantSet(vs); err != nil {
+			return err
+		}
+	}
+
+	// 2. Validate CompatibilityRules
+	seenRuleSets := make(map[string]bool)
+	for _, rule := range agregado.CompatibilityRules {
+		if strings.TrimSpace(rule.VariantSetID) == "" {
+			return errors.New("compatibility rule requires non-empty variantSetId")
+		}
+		if !seenVariantSets[rule.VariantSetID] {
+			return fmt.Errorf("compatibility rule references non-existent variantSetId '%s'", rule.VariantSetID)
+		}
+		if seenRuleSets[rule.VariantSetID] {
+			return fmt.Errorf("multiple ambiguous compatibility rules for variantSetId '%s'", rule.VariantSetID)
+		}
+		seenRuleSets[rule.VariantSetID] = true
+		if math.IsNaN(rule.ClearanceMm) || math.IsInf(rule.ClearanceMm, 0) || rule.ClearanceMm < 0 {
+			return fmt.Errorf("compatibility rule for '%s' has non-finite or negative clearance: %g", rule.VariantSetID, rule.ClearanceMm)
+		}
+		switch rule.SelectionStrategy {
+		case "max_fitting", "exact":
+			// Valid
+		default:
+			return fmt.Errorf("compatibility rule for '%s' has invalid selectionStrategy '%s'", rule.VariantSetID, rule.SelectionStrategy)
+		}
+	}
+
+	// 3. Validate Member IDs & definitions
+	seenMemberIDs := make(map[string]bool)
+	for _, m := range agregado.RigidMembers {
+		if seenMemberIDs[m.MemberID] {
+			return fmt.Errorf("duplicate memberId '%s' in assembly definition", m.MemberID)
+		}
+		seenMemberIDs[m.MemberID] = true
+		if err := ValidateAgregadoRigidMember(m, hasKit); err != nil {
+			return err
+		}
+		if m.Source.Kind == RigidMemberSourceVariant {
+			if !seenVariantSets[m.Source.Variant.VariantSetID] {
+				return fmt.Errorf("rigid member '%s' references non-existent variantSetId '%s'", m.MemberID, m.Source.Variant.VariantSetID)
+			}
+		}
+	}
+
+	for _, fm := range agregado.FabricatedMembers {
+		if seenMemberIDs[fm.MemberID] {
+			return fmt.Errorf("duplicate memberId '%s' (fabricated) in assembly definition", fm.MemberID)
+		}
+		seenMemberIDs[fm.MemberID] = true
+		if err := ValidateAgregadoFabricatedMember(fm, seenVariantSets); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

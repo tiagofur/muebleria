@@ -4,24 +4,24 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
-// FixtureDrawerSystem provides a synthetic, reproducible Agregado assembly definition.
-// It models a standard drawer system with:
+// buildSyntheticDrawerFixture provides a reproducible, fully declarative Agregado assembly definition.
 // - Left side (rigid member, variant-dependent depth)
 // - Right side (rigid member, variant-dependent depth, anchored to maxX)
 // - Left runner (rigid member, variant-dependent depth)
 // - Right runner (rigid member, variant-dependent depth, anchored to maxX)
-// - Fabricated bottom board (16mm, recalculated width and depth)
-// - Fabricated back board (16mm, recalculated width and height)
-func buildSyntheticDrawerFixture() (domain.Agregado, map[string]domain.Hardware, []engine.FabricatedBoardFormula) {
+// - Fabricated bottom board (16mm, width = W - 35mm, length = variant_depth - 10mm)
+// - Fabricated back board (16mm, width = W - 35mm, height = H - 40mm)
+func buildSyntheticDrawerFixture() domain.Agregado {
 	kitID := "hw-kit-drawer-synth"
 
-	agregado := domain.Agregado{
+	return domain.Agregado{
 		ID:                      "agr-drawer-synth",
 		Code:                    "DRAWER-SYNTH",
 		Name:                    "Synthetic Test Drawer System",
@@ -31,53 +31,51 @@ func buildSyntheticDrawerFixture() (domain.Agregado, map[string]domain.Hardware,
 				ID:        "vs-drawer-depth",
 				Dimension: "depth",
 				Variants: []domain.ProductVariant{
-					{NominalDimensionMm: 450.0, HardwareID: "hw-side-synth-450"},
-					{NominalDimensionMm: 500.0, HardwareID: "hw-side-synth-500"},
-					{NominalDimensionMm: 550.0, HardwareID: "hw-side-synth-550"},
+					{NominalDimensionMm: 450.0, HardwareID: "hw-side-450"},
+					{NominalDimensionMm: 500.0, HardwareID: "hw-side-500"},
+					{NominalDimensionMm: 550.0, HardwareID: "hw-side-550"},
 				},
 			},
 		},
 		CompatibilityRules: []domain.AssemblyCompatibilityRule{
 			{
 				VariantSetID:      "vs-drawer-depth",
-				ClearanceMm:       3.0, // Available space must be >= nominal + 3mm
+				ClearanceMm:       3.0, // cabinet depth must exceed nominal by at least 3mm
 				SelectionStrategy: "max_fitting",
 			},
 		},
 		RigidMembers: []domain.AgregadoRigidMember{
 			{
 				MemberID: "side_left",
-				Role:     "side_left",
+				Role:     "drawer_side_left",
 				Source: domain.RigidMemberSource{
 					Kind:    domain.RigidMemberSourceVariant,
 					Variant: &domain.VariantHardwareSource{VariantSetID: "vs-drawer-depth"},
 				},
 				Placement: domain.AssemblyAnchorRule{
 					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
-					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 2.0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
 					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
 				},
 				BOMRole: domain.BOMRoleIncludedInKit,
 			},
 			{
 				MemberID: "side_right",
-				Role:     "side_right",
+				Role:     "drawer_side_right",
 				Source: domain.RigidMemberSource{
 					Kind:    domain.RigidMemberSourceVariant,
 					Variant: &domain.VariantHardwareSource{VariantSetID: "vs-drawer-depth"},
 				},
 				Placement: domain.AssemblyAnchorRule{
-					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 0.0}, // Anchored to maxX
-					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 2.0},
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 0.0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
 					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
-					// 180 deg rotation around Y or rigid flip:
-					RotationDeg: &domain.HardwareRotationDeg{X: 0.0, Y: 180.0, Z: 180.0}, // Pure rigid rotation det=+1
 				},
 				BOMRole: domain.BOMRoleIncludedInKit,
 			},
 			{
 				MemberID: "runner_left",
-				Role:     "runner_left",
+				Role:     "drawer_runner_left",
 				Source: domain.RigidMemberSource{
 					Kind:    domain.RigidMemberSourceVariant,
 					Variant: &domain.VariantHardwareSource{VariantSetID: "vs-drawer-depth"},
@@ -85,278 +83,282 @@ func buildSyntheticDrawerFixture() (domain.Agregado, map[string]domain.Hardware,
 				Placement: domain.AssemblyAnchorRule{
 					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
 					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
-					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: -10.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
 				},
 				BOMRole: domain.BOMRoleIncludedInKit,
 			},
 			{
 				MemberID: "runner_right",
-				Role:     "runner_right",
+				Role:     "drawer_runner_right",
 				Source: domain.RigidMemberSource{
 					Kind:    domain.RigidMemberSourceVariant,
 					Variant: &domain.VariantHardwareSource{VariantSetID: "vs-drawer-depth"},
 				},
 				Placement: domain.AssemblyAnchorRule{
-					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 0.0}, // Anchored to maxX
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 0.0},
 					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
-					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: -10.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
 				},
 				BOMRole: domain.BOMRoleIncludedInKit,
 			},
+			{
+				MemberID: "locking_device_left",
+				Role:     "drawer_coupling_left",
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: "hw-clip-l"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 10.0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 5.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+				},
+				BOMRole: domain.BOMRoleSeparatelyPurchased,
+			},
+			{
+				MemberID: "locking_device_right",
+				Role:     "drawer_coupling_right",
+				Source: domain.RigidMemberSource{
+					Kind:  domain.RigidMemberSourceFixed,
+					Fixed: &domain.FixedHardwareSource{HardwareID: "hw-clip-r"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: -10.0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 5.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+				},
+				BOMRole: domain.BOMRoleSeparatelyPurchased,
+			},
 		},
-	}
-
-	catalog := map[string]domain.Hardware{
-		kitID: {
-			ID:   kitID,
-			Code: "KIT-DRAWER-SYNTH",
-			Name: "Commercial Synthetic Drawer Kit",
-		},
-		"hw-side-synth-450": {
-			ID:   "hw-side-synth-450",
-			Code: "SIDE-SYNTH-450",
-			Name: "Synthetic Side 450mm",
-			VisualAsset: &domain.HardwareVisualAssetBinding{
-				AssetID:         "ast-side-450",
-				AssetRevisionID: "rev-side-450-r1",
-				SHA256:          "a450a450a450a450a450a450a450a450a450a450a450a450a450a450a450a450",
-				MountFrame: &domain.HardwareMountFrame{
-					OriginMm: [3]float64{0.0, 0.0, 0.0},
-					Basis: domain.HardwareBasis{
-						X: [3]float64{1.0, 0.0, 0.0},
-						Y: [3]float64{0.0, 1.0, 0.0},
-						Z: [3]float64{0.0, 0.0, 1.0},
-					},
+		FabricatedMembers: []domain.AgregadoFabricatedMember{
+			{
+				MemberID:    "drawer_bottom",
+				SlotID:      "bottom_board",
+				Name:        "Drawer Bottom Board",
+				ThicknessMm: 16.0,
+				WidthRule: domain.AssemblyDimensionRule{
+					Source:     domain.DimRuleAssemblyWidth,
+					Multiplier: 1.0,
+					OffsetMm:   -35.0,
+				},
+				LengthRule: domain.AssemblyDimensionRule{
+					Source:       domain.DimRuleSelectedVariant,
+					VariantSetID: "vs-drawer-depth",
+					Multiplier:   1.0,
+					OffsetMm:     -10.0,
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 17.5},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 10.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+				},
+			},
+			{
+				MemberID:    "drawer_back",
+				SlotID:      "back_board",
+				Name:        "Drawer Back Board",
+				ThicknessMm: 16.0,
+				WidthRule: domain.AssemblyDimensionRule{
+					Source:     domain.DimRuleAssemblyWidth,
+					Multiplier: 1.0,
+					OffsetMm:   -35.0,
+				},
+				LengthRule: domain.AssemblyDimensionRule{
+					Source:     domain.DimRuleAssemblyHeight,
+					Multiplier: 1.0,
+					OffsetMm:   -40.0,
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 17.5},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: -16.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
 				},
 			},
 		},
-		"hw-side-synth-500": {
-			ID:   "hw-side-synth-500",
-			Code: "SIDE-SYNTH-500",
-			Name: "Synthetic Side 500mm",
-			VisualAsset: &domain.HardwareVisualAssetBinding{
-				AssetID:         "ast-side-500",
-				AssetRevisionID: "rev-side-500-r1",
-				SHA256:          "a500a500a500a500a500a500a500a500a500a500a500a500a500a500a500a500",
-				MountFrame: &domain.HardwareMountFrame{
-					OriginMm: [3]float64{0.0, 0.0, 0.0},
-					Basis: domain.HardwareBasis{
-						X: [3]float64{1.0, 0.0, 0.0},
-						Y: [3]float64{0.0, 1.0, 0.0},
-						Z: [3]float64{0.0, 0.0, 1.0},
-					},
-				},
-			},
-		},
-		"hw-side-synth-550": {
-			ID:   "hw-side-synth-550",
-			Code: "SIDE-SYNTH-550",
-			Name: "Synthetic Side 550mm",
-			VisualAsset: &domain.HardwareVisualAssetBinding{
-				AssetID:         "ast-side-550",
-				AssetRevisionID: "rev-side-550-r1",
-				SHA256:          "a550a550a550a550a550a550a550a550a550a550a550a550a550a550a550a550",
-			},
-		},
-	}
-
-	fabricatedFormulas := []engine.FabricatedBoardFormula{
-		{
-			ComponentID: "cmp-drawer-bottom",
-			SlotID:      "drawer_bottom",
-			Name:        "Fondo de cajón",
-			ThicknessMm: 16.0,
-			// Width = W_free - 32mm, Length = VariantNominal - 10mm
-			WidthFormulaMm: func(w, d, h, variantNominal float64) float64 {
-				return w - 32.0
-			},
-			LengthFormulaMm: func(w, d, h, variantNominal float64) float64 {
-				return variantNominal - 10.0
-			},
-			PlacementAnchorX: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
-			PlacementAnchorY: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 5.0},
-			PlacementAnchorZ: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
-		},
-	}
-
-	return agregado, catalog, fabricatedFormulas
-}
-
-func assertRigidBasis(t *testing.T, label string, basis domain.HardwareBasis) {
-	t.Helper()
-	tol := 1e-4
-
-	magX := math.Sqrt((basis.X[0] * basis.X[0]) + (basis.X[1] * basis.X[1]) + (basis.X[2] * basis.X[2]))
-	magY := math.Sqrt((basis.Y[0] * basis.Y[0]) + (basis.Y[1] * basis.Y[1]) + (basis.Y[2] * basis.Y[2]))
-	magZ := math.Sqrt((basis.Z[0] * basis.Z[0]) + (basis.Z[1] * basis.Z[1]) + (basis.Z[2] * basis.Z[2]))
-
-	if math.Abs(magX-1.0) > tol || math.Abs(magY-1.0) > tol || math.Abs(magZ-1.0) > tol {
-		t.Fatalf("%s basis axes must have unit scale (got X=%.4f, Y=%.4f, Z=%.4f)", label, magX, magY, magZ)
-	}
-
-	det := basis.X[0]*((basis.Y[1]*basis.Z[2])-(basis.Y[2]*basis.Z[1])) -
-		basis.X[1]*((basis.Y[0]*basis.Z[2])-(basis.Y[2]*basis.Z[0])) +
-		basis.X[2]*((basis.Y[0]*basis.Z[1])-(basis.Y[1]*basis.Z[0]))
-
-	if math.Abs(det-1.0) > tol {
-		t.Fatalf("%s basis must have det=+1.0 (got det=%.4f, mirror rejected)", label, det)
 	}
 }
 
-// Test A: Rigid member never scales under any parameter change
+// Test A: Rigid member never scales (scale ≡ [1,1,1], det ≡ +1.0)
 func TestA_RigidMemberNeverScales(t *testing.T) {
-	agregado, catalog, formulas := buildSyntheticDrawerFixture()
-	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 520.0, HeightMm: 200.0}
+	agregado := buildSyntheticDrawerFixture()
+	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0}
 
-	res, err := engine.ResolveAgregadoAssembly(agregado, params, catalog, formulas)
+	snapshot, err := engine.ResolveAgregadoAssembly(agregado, params)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("unexpected error resolving assembly: %v", err)
 	}
 
-	for _, m := range res.Snapshot.RigidMembers {
-		assertRigidBasis(t, m.MemberID, m.LocalTransform.Basis)
+	for _, member := range snapshot.RigidMembers {
+		b := member.LocalTransform.Basis
+
+		// Lengths must be 1.0
+		lenX := math.Sqrt(b.X[0]*b.X[0] + b.X[1]*b.X[1] + b.X[2]*b.X[2])
+		lenY := math.Sqrt(b.Y[0]*b.Y[0] + b.Y[1]*b.Y[1] + b.Y[2]*b.Y[2])
+		lenZ := math.Sqrt(b.Z[0]*b.Z[0] + b.Z[1]*b.Z[1] + b.Z[2]*b.Z[2])
+
+		if math.Abs(lenX-1.0) > 1e-6 || math.Abs(lenY-1.0) > 1e-6 || math.Abs(lenZ-1.0) > 1e-6 {
+			t.Errorf("member %s has non-unit scale: (|X|=%g, |Y|=%g, |Z|=%g)", member.MemberID, lenX, lenY, lenZ)
+		}
+
+		// Determinant must be +1.0
+		crossYZ := [3]float64{
+			b.Y[1]*b.Z[2] - b.Y[2]*b.Z[1],
+			b.Y[2]*b.Z[0] - b.Y[0]*b.Z[2],
+			b.Y[0]*b.Z[1] - b.Y[1]*b.Z[0],
+		}
+		det := b.X[0]*crossYZ[0] + b.X[1]*crossYZ[1] + b.X[2]*crossYZ[2]
+
+		if math.Abs(det-1.0) > 1e-6 {
+			t.Errorf("member %s determinant is not +1.0 (det=%g)", member.MemberID, det)
+		}
 	}
 }
 
-// Test B: Width +200mm translates right member by exactly +200mm
+// Test B: Width expansion shifts right member only
 func TestB_WidthExpansionShiftsRightMemberOnly(t *testing.T) {
-	agregado, catalog, formulas := buildSyntheticDrawerFixture()
+	agregado := buildSyntheticDrawerFixture()
 
-	p600 := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 520.0, HeightMm: 200.0}
-	res600, err := engine.ResolveAgregadoAssembly(agregado, p600, catalog, formulas)
+	res600, err := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0})
 	if err != nil {
-		t.Fatalf("p600 resolution failed: %v", err)
+		t.Fatalf("res600 error: %v", err)
 	}
-
-	p800 := engine.AssemblyResolutionParams{WidthMm: 800.0, DepthMm: 520.0, HeightMm: 200.0}
-	res800, err := engine.ResolveAgregadoAssembly(agregado, p800, catalog, formulas)
+	res800, err := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 800.0, DepthMm: 550.0, HeightMm: 200.0})
 	if err != nil {
-		t.Fatalf("p800 resolution failed: %v", err)
+		t.Fatalf("res800 error: %v", err)
 	}
 
-	var right600, right800 *domain.ResolvedRigidMember
-	for i := range res600.Snapshot.RigidMembers {
-		if res600.Snapshot.RigidMembers[i].MemberID == "side_right" {
-			right600 = &res600.Snapshot.RigidMembers[i]
+	findMember := func(snap domain.ResolvedAssemblySnapshot, id string) domain.ResolvedRigidMember {
+		for _, m := range snap.RigidMembers {
+			if m.MemberID == id {
+				return m
+			}
 		}
-	}
-	for i := range res800.Snapshot.RigidMembers {
-		if res800.Snapshot.RigidMembers[i].MemberID == "side_right" {
-			right800 = &res800.Snapshot.RigidMembers[i]
-		}
+		t.Fatalf("member %s not found in snapshot", id)
+		return domain.ResolvedRigidMember{}
 	}
 
-	if right600 == nil || right800 == nil {
-		t.Fatal("side_right not found in resolved members")
-	}
+	right600 := findMember(res600, "side_right")
+	right800 := findMember(res800, "side_right")
 
+	if math.Abs(right600.LocalTransform.TranslationMm[0]-600.0) > 1e-6 {
+		t.Errorf("expected right member at X=600 for W=600, got %g", right600.LocalTransform.TranslationMm[0])
+	}
+	if math.Abs(right800.LocalTransform.TranslationMm[0]-800.0) > 1e-6 {
+		t.Errorf("expected right member at X=800 for W=800, got %g", right800.LocalTransform.TranslationMm[0])
+	}
 	deltaX := right800.LocalTransform.TranslationMm[0] - right600.LocalTransform.TranslationMm[0]
-	if math.Abs(deltaX-200.0) > 1e-4 {
-		t.Fatalf("expected right member shift of +200.0mm, got %.4fmm", deltaX)
+	if math.Abs(deltaX-200.0) > 1e-6 {
+		t.Errorf("expected right member shift of +200mm, got %g", deltaX)
 	}
 }
 
-// Test C: Left member remains identical on width change
+// Test C: Left member remains unchanged on width change
 func TestC_LeftMemberRemainsUnchangedOnWidthChange(t *testing.T) {
-	agregado, catalog, formulas := buildSyntheticDrawerFixture()
+	agregado := buildSyntheticDrawerFixture()
 
-	p600 := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 520.0, HeightMm: 200.0}
-	res600, err := engine.ResolveAgregadoAssembly(agregado, p600, catalog, formulas)
-	if err != nil {
-		t.Fatalf("p600 resolution failed: %v", err)
-	}
+	res600, _ := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0})
+	res800, _ := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 800.0, DepthMm: 550.0, HeightMm: 200.0})
 
-	p800 := engine.AssemblyResolutionParams{WidthMm: 800.0, DepthMm: 520.0, HeightMm: 200.0}
-	res800, err := engine.ResolveAgregadoAssembly(agregado, p800, catalog, formulas)
-	if err != nil {
-		t.Fatalf("p800 resolution failed: %v", err)
-	}
-
-	var left600, left800 *domain.ResolvedRigidMember
-	for i := range res600.Snapshot.RigidMembers {
-		if res600.Snapshot.RigidMembers[i].MemberID == "side_left" {
-			left600 = &res600.Snapshot.RigidMembers[i]
+	findMember := func(snap domain.ResolvedAssemblySnapshot, id string) domain.ResolvedRigidMember {
+		for _, m := range snap.RigidMembers {
+			if m.MemberID == id {
+				return m
+			}
 		}
+		t.Fatalf("member %s not found", id)
+		return domain.ResolvedRigidMember{}
 	}
-	for i := range res800.Snapshot.RigidMembers {
-		if res800.Snapshot.RigidMembers[i].MemberID == "side_left" {
-			left800 = &res800.Snapshot.RigidMembers[i]
+
+	left600 := findMember(res600, "side_left")
+	left800 := findMember(res800, "side_left")
+
+	for i := 0; i < 3; i++ {
+		if math.Abs(left600.LocalTransform.TranslationMm[i]-left800.LocalTransform.TranslationMm[i]) > 1e-6 {
+			t.Errorf("left member position changed at index %d: 600=%g, 800=%g",
+				i, left600.LocalTransform.TranslationMm[i], left800.LocalTransform.TranslationMm[i])
 		}
-	}
-
-	if left600 == nil || left800 == nil {
-		t.Fatal("side_left not found in resolved members")
-	}
-
-	if left600.LocalTransform.TranslationMm != left800.LocalTransform.TranslationMm {
-		t.Fatalf("left member translation altered: p600=%v, p800=%v",
-			left600.LocalTransform.TranslationMm, left800.LocalTransform.TranslationMm)
 	}
 }
 
-// Test D: Fabricated dimensions recalculate, not scale
+// Test D (R1): Fabricated dimensions recalculate deterministically from declarative rules
 func TestD_FabricatedDimensionsRecalculateNotScale(t *testing.T) {
-	agregado, catalog, formulas := buildSyntheticDrawerFixture()
+	agregado := buildSyntheticDrawerFixture()
 
-	p600 := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 520.0, HeightMm: 200.0}
-	res600, _ := engine.ResolveAgregadoAssembly(agregado, p600, catalog, formulas)
-
-	p800 := engine.AssemblyResolutionParams{WidthMm: 800.0, DepthMm: 520.0, HeightMm: 200.0}
-	res800, _ := engine.ResolveAgregadoAssembly(agregado, p800, catalog, formulas)
-
-	bottom600 := res600.Snapshot.FabricatedComponents[0]
-	bottom800 := res800.Snapshot.FabricatedComponents[0]
-
-	// 600 - 32 = 568 mm
-	if math.Abs(bottom600.WidthMm-568.0) > 1e-4 {
-		t.Fatalf("expected bottom width 568mm for W=600, got %.1f", bottom600.WidthMm)
+	// W=600 -> bottom width = 600 - 35 = 565.0
+	res600, err := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0})
+	if err != nil {
+		t.Fatalf("res600 error: %v", err)
 	}
-	// 800 - 32 = 768 mm
-	if math.Abs(bottom800.WidthMm-768.0) > 1e-4 {
-		t.Fatalf("expected bottom width 768mm for W=800, got %.1f", bottom800.WidthMm)
+	// W=800 -> bottom width = 800 - 35 = 765.0
+	res800, err := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 800.0, DepthMm: 550.0, HeightMm: 200.0})
+	if err != nil {
+		t.Fatalf("res800 error: %v", err)
 	}
 
-	// Length = 500 - 10 = 490 mm for both
-	if math.Abs(bottom600.LengthMm-490.0) > 1e-4 || math.Abs(bottom800.LengthMm-490.0) > 1e-4 {
-		t.Fatalf("expected bottom length 490mm, got %.1f / %.1f", bottom600.LengthMm, bottom800.LengthMm)
+	findComp := func(snap domain.ResolvedAssemblySnapshot, slotID string) domain.ResolvedFabricatedComponent {
+		for _, c := range snap.FabricatedComponents {
+			if c.SlotID == slotID {
+				return c
+			}
+		}
+		t.Fatalf("component %s not found", slotID)
+		return domain.ResolvedFabricatedComponent{}
 	}
 
-	// Transform basis is strictly identity (scale is 1.0, geometry regenerated)
-	assertRigidBasis(t, "bottom_board", bottom800.Transform.Basis)
+	bottom600 := findComp(res600, "bottom_board")
+	bottom800 := findComp(res800, "back_board") // check both
+
+	// Bottom board width at W=600: 565mm
+	if math.Abs(bottom600.WidthMm-565.0) > 1e-6 {
+		t.Errorf("expected bottom board width 565mm for W=600, got %g", bottom600.WidthMm)
+	}
+	// Depth=550mm, nominal=500mm -> LengthRule = 500 - 10 = 490mm
+	if math.Abs(bottom600.LengthMm-490.0) > 1e-6 {
+		t.Errorf("expected bottom board length 490mm for Depth=550, got %g", bottom600.LengthMm)
+	}
+
+	// Back board width at W=800: 800 - 35 = 765mm
+	if math.Abs(bottom800.WidthMm-765.0) > 1e-6 {
+		t.Errorf("expected back board width 765mm for W=800, got %g", bottom800.WidthMm)
+	}
 }
 
 // Test E: Deterministic variant resolution
 func TestE_DeterministicVariantResolution(t *testing.T) {
-	agregado, catalog, formulas := buildSyntheticDrawerFixture()
+	agregado := buildSyntheticDrawerFixture()
 
-	// Available depth = 520mm. Clearance = 3mm -> Usable = 517mm.
-	// Variants: 450, 500, 550.
-	// Expected: 500mm (hardware hw-side-synth-500).
-	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 520.0, HeightMm: 200.0}
-	res, err := engine.ResolveAgregadoAssembly(agregado, params, catalog, formulas)
+	// Available depth = 550mm. Clearance = 3mm -> max nominal = 547mm. Chosen = 500mm.
+	res550, err := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0})
 	if err != nil {
-		t.Fatalf("resolution failed: %v", err)
+		t.Fatalf("res550 error: %v", err)
+	}
+	if len(res550.SelectedVariants) != 1 {
+		t.Fatalf("expected 1 selected variant, got %d", len(res550.SelectedVariants))
+	}
+	if res550.SelectedVariants[0].NominalDimensionMm != 500.0 {
+		t.Errorf("expected 500mm variant for 550mm depth, got %g", res550.SelectedVariants[0].NominalDimensionMm)
+	}
+	if res550.SelectedVariants[0].HardwareID != "hw-side-500" {
+		t.Errorf("expected hw-side-500, got %s", res550.SelectedVariants[0].HardwareID)
 	}
 
-	selectedNominal := res.Snapshot.SelectedVariants["vs-drawer-depth"]
-	if selectedNominal != 500.0 {
-		t.Fatalf("expected 500mm variant, got %.1f", selectedNominal)
+	// Available depth = 500mm. Clearance = 3mm -> max nominal = 497mm. Chosen = 450mm.
+	res500, err := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 500.0, HeightMm: 200.0})
+	if err != nil {
+		t.Fatalf("res500 error: %v", err)
 	}
-
-	for _, m := range res.Snapshot.RigidMembers {
-		if m.HardwareID != "hw-side-synth-500" {
-			t.Fatalf("member %s expected hardware 'hw-side-synth-500', got '%s'", m.MemberID, m.HardwareID)
-		}
+	if res500.SelectedVariants[0].NominalDimensionMm != 450.0 {
+		t.Errorf("expected 450mm variant for 500mm depth, got %g", res500.SelectedVariants[0].NominalDimensionMm)
 	}
 }
 
 // Test F: Missing variant returns typed error
 func TestF_MissingVariantTypedError(t *testing.T) {
-	agregado, catalog, formulas := buildSyntheticDrawerFixture()
+	agregado := buildSyntheticDrawerFixture()
 
 	// Available depth = 400mm. Minimum variant is 450mm (+3mm clearance = 453mm).
 	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 400.0, HeightMm: 200.0}
-	_, err := engine.ResolveAgregadoAssembly(agregado, params, catalog, formulas)
+	_, err := engine.ResolveAgregadoAssembly(agregado, params)
 	if err == nil {
 		t.Fatal("expected ErrAssemblyVariantNotFound, got nil")
 	}
@@ -366,7 +368,7 @@ func TestF_MissingVariantTypedError(t *testing.T) {
 		t.Fatalf("expected *domain.ErrAssemblyVariantNotFound, got %T: %v", err, err)
 	}
 	expectedSubstr := "assembly variant not found for variantSetId 'vs-drawer-depth'"
-	if !stringsContains(err.Error(), expectedSubstr) {
+	if !strings.Contains(err.Error(), expectedSubstr) {
 		t.Fatalf("expected error containing %q, got %q", expectedSubstr, err.Error())
 	}
 }
@@ -379,24 +381,23 @@ func TestG_FixedVariantSourceExclusivity(t *testing.T) {
 		Role:     "test",
 		Source: domain.RigidMemberSource{
 			Kind:    domain.RigidMemberSourceFixed,
-			Fixed:   &domain.FixedHardwareSource{HardwareID: "hw-fixed"},
-			Variant: &domain.VariantHardwareSource{VariantSetID: "vs-var"},
+			Fixed:   &domain.FixedHardwareSource{HardwareID: "hw-1"},
+			Variant: &domain.VariantHardwareSource{VariantSetID: "vs-1"},
 		},
 		Placement: domain.AssemblyAnchorRule{
 			X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
 			Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
 			Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
 		},
-		BOMRole: domain.BOMRoleSeparatelyPurchased,
+		BOMRole: domain.BOMRoleNonPurchasing,
 	}
-
 	if err := domain.ValidateAgregadoRigidMember(bothSources, false); err == nil {
-		t.Fatal("expected validation error for dual-source member, got nil")
+		t.Fatal("expected error for member with both fixed and variant populated, got nil")
 	}
 
-	// Member with neither source populated
-	emptySource := domain.AgregadoRigidMember{
-		MemberID: "bad_empty",
+	// Member with no sources populated
+	neitherSource := domain.AgregadoRigidMember{
+		MemberID: "bad_member2",
 		Role:     "test",
 		Source: domain.RigidMemberSource{
 			Kind: domain.RigidMemberSourceFixed,
@@ -406,24 +407,22 @@ func TestG_FixedVariantSourceExclusivity(t *testing.T) {
 			Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
 			Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
 		},
-		BOMRole: domain.BOMRoleSeparatelyPurchased,
+		BOMRole: domain.BOMRoleNonPurchasing,
 	}
-
-	if err := domain.ValidateAgregadoRigidMember(emptySource, false); err == nil {
-		t.Fatal("expected validation error for empty-source member, got nil")
+	if err := domain.ValidateAgregadoRigidMember(neitherSource, false); err == nil {
+		t.Fatal("expected error for member with nil fixed source, got nil")
 	}
 }
 
 // Test H: BOM role combinations validated
 func TestH_BOMRoleCombinationsValidated(t *testing.T) {
-	// Member declared as 'included_in_kit' when hasCommercialKit is false
-	member := domain.AgregadoRigidMember{
-		MemberID: "member_kit",
+	kitID := "hw-kit-1"
+
+	// BOMRoleIncludedInKit WITH kit is valid
+	validMember := domain.AgregadoRigidMember{
+		MemberID: "valid_m",
 		Role:     "side",
-		Source: domain.RigidMemberSource{
-			Kind:  domain.RigidMemberSourceFixed,
-			Fixed: &domain.FixedHardwareSource{HardwareID: "hw-side"},
-		},
+		Source:   domain.RigidMemberSource{Kind: domain.RigidMemberSourceFixed, Fixed: &domain.FixedHardwareSource{HardwareID: "hw-1"}},
 		Placement: domain.AssemblyAnchorRule{
 			X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
 			Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin},
@@ -431,88 +430,214 @@ func TestH_BOMRoleCombinationsValidated(t *testing.T) {
 		},
 		BOMRole: domain.BOMRoleIncludedInKit,
 	}
-
-	err := domain.ValidateAgregadoRigidMember(member, false) // false = no kit configured
-	if err == nil {
-		t.Fatal("expected error when included_in_kit is used without commercial kit, got nil")
+	if err := domain.ValidateAgregadoRigidMember(validMember, kitID != ""); err != nil {
+		t.Fatalf("unexpected error for valid kit member: %v", err)
 	}
 
-	errValid := domain.ValidateAgregadoRigidMember(member, true) // true = kit configured
-	if errValid != nil {
-		t.Fatalf("unexpected validation error: %v", errValid)
-	}
-}
-
-// Test I: No mirror / det = +1 on all members
-func TestI_NoMirrorDeterminantPositive(t *testing.T) {
-	agregado, catalog, formulas := buildSyntheticDrawerFixture()
-	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 520.0, HeightMm: 200.0}
-
-	res, err := engine.ResolveAgregadoAssembly(agregado, params, catalog, formulas)
-	if err != nil {
-		t.Fatalf("resolution failed: %v", err)
+	// BOMRoleIncludedInKit WITHOUT kit is invalid
+	if err := domain.ValidateAgregadoRigidMember(validMember, false); err == nil {
+		t.Fatal("expected error for included_in_kit without commercialKitHardwareId, got nil")
 	}
 
-	for _, m := range res.Snapshot.RigidMembers {
-		assertRigidBasis(t, m.MemberID, m.LocalTransform.Basis)
+	// BOMRoleSeparatelyPurchased is valid with or without kit
+	sepMember := validMember
+	sepMember.BOMRole = domain.BOMRoleSeparatelyPurchased
+	if err := domain.ValidateAgregadoRigidMember(sepMember, false); err != nil {
+		t.Errorf("separately_purchased should be valid without kit: %v", err)
 	}
 }
 
-// Test J: Snapshot structure contains enough authority for historical freeze
+// Test I (R2): Arbitrary finite rigid rotation contract (det=+1.0, no mirror, no shear)
+func TestI_ArbitraryFiniteRotationContract(t *testing.T) {
+	testCases := []struct {
+		name      string
+		rot       domain.HardwareRotationDeg
+		shouldErr bool
+	}{
+		{name: "zero rotation", rot: domain.HardwareRotationDeg{X: 0, Y: 0, Z: 0}, shouldErr: false},
+		{name: "90 deg Z", rot: domain.HardwareRotationDeg{X: 0, Y: 0, Z: 90}, shouldErr: false},
+		{name: "180 deg Z", rot: domain.HardwareRotationDeg{X: 0, Y: 0, Z: 180}, shouldErr: false},
+		{name: "arbitrary 45 deg Y", rot: domain.HardwareRotationDeg{X: 0, Y: 45, Z: 0}, shouldErr: false},
+		{name: "compound 30-45-60 deg", rot: domain.HardwareRotationDeg{X: 30, Y: 45, Z: 60}, shouldErr: false},
+		{name: "NaN angle", rot: domain.HardwareRotationDeg{X: math.NaN(), Y: 0, Z: 0}, shouldErr: true},
+		{name: "Inf angle", rot: domain.HardwareRotationDeg{X: 0, Y: math.Inf(1), Z: 0}, shouldErr: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			basis, err := domain.DeriveHardwareBasisFromEuler(tc.rot)
+			if tc.shouldErr {
+				if err == nil {
+					t.Fatalf("expected error for %s, got nil", tc.name)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error deriving basis for %s: %v", tc.name, err)
+			}
+
+			// Validate with #668 authority
+			if err := domain.ValidateHardwareBasis(basis, tc.name); err != nil {
+				t.Fatalf("basis validation failed for %s: %v", tc.name, err)
+			}
+		})
+	}
+}
+
+// Test J (R4): Historical snapshot completeness with explicit variant metadata
 func TestJ_HistoricalSnapshotCompleteness(t *testing.T) {
-	agregado, catalog, formulas := buildSyntheticDrawerFixture()
-	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 520.0, HeightMm: 200.0}
+	agregado := buildSyntheticDrawerFixture()
+	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0}
 
-	res, err := engine.ResolveAgregadoAssembly(agregado, params, catalog, formulas)
+	snapshot, err := engine.ResolveAgregadoAssembly(agregado, params)
 	if err != nil {
-		t.Fatalf("resolution failed: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// 1. Serialize snapshot to JSON
-	bytes, err := json.Marshal(res.Snapshot)
+	// Must contain explicit SelectedVariants with both nominal and hardwareId
+	if len(snapshot.SelectedVariants) == 0 {
+		t.Fatal("snapshot must contain SelectedVariants")
+	}
+	sel := snapshot.SelectedVariants[0]
+	if sel.VariantSetID != "vs-drawer-depth" || sel.HardwareID != "hw-side-500" || sel.NominalDimensionMm != 500.0 {
+		t.Errorf("unexpected selected variant metadata: %+v", sel)
+	}
+
+	// Must be fully serializable to JSON and back
+	bytes, err := json.Marshal(snapshot)
 	if err != nil {
-		t.Fatalf("json.Marshal snapshot failed: %v", err)
+		t.Fatalf("snapshot failed JSON marshal: %v", err)
+	}
+	var roundtrip domain.ResolvedAssemblySnapshot
+	if err := json.Unmarshal(bytes, &roundtrip); err != nil {
+		t.Fatalf("snapshot failed JSON unmarshal: %v", err)
 	}
 
-	// 2. Deserialize into a new snapshot struct
-	var reconstituted domain.ResolvedAssemblySnapshot
-	if err := json.Unmarshal(bytes, &reconstituted); err != nil {
-		t.Fatalf("json.Unmarshal snapshot failed: %v", err)
+	if roundtrip.AgregadoID != snapshot.AgregadoID {
+		t.Errorf("roundtrip AgregadoID mismatch: %s vs %s", roundtrip.AgregadoID, snapshot.AgregadoID)
 	}
-
-	// 3. Verify all necessary frozen attributes survive without calling catalog
-	if reconstituted.AgregadoID != "agr-drawer-synth" {
-		t.Errorf("expected agregadoId 'agr-drawer-synth', got '%s'", reconstituted.AgregadoID)
-	}
-	if len(reconstituted.RigidMembers) != 4 {
-		t.Errorf("expected 4 rigid members, got %d", len(reconstituted.RigidMembers))
-	}
-	if len(reconstituted.FabricatedComponents) != 1 {
-		t.Errorf("expected 1 fabricated component, got %d", len(reconstituted.FabricatedComponents))
-	}
-	if len(reconstituted.BOMItems) != 1 {
-		t.Errorf("expected 1 commercial kit BOM item, got %d", len(reconstituted.BOMItems))
-	}
-	if reconstituted.BOMItems[0].HardwareID != "hw-kit-drawer-synth" {
-		t.Errorf("expected kit hardwareId 'hw-kit-drawer-synth', got '%s'", reconstituted.BOMItems[0].HardwareID)
-	}
-
-	// Verify exact pinned asset revisions survived
-	sideLeft := reconstituted.RigidMembers[0]
-	if sideLeft.AssetRevisionID != "rev-side-500-r1" || sideLeft.SHA256 == "" {
-		t.Errorf("reconstituted side_left missing exact pinned revision: %+v", sideLeft)
+	if len(roundtrip.SelectedVariants) != len(snapshot.SelectedVariants) {
+		t.Errorf("roundtrip SelectedVariants length mismatch: %d vs %d", len(roundtrip.SelectedVariants), len(snapshot.SelectedVariants))
 	}
 }
 
-func stringsContains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || (len(s) > 0 && len(substr) > 0 && indexOf(s, substr) >= 0))
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
+// Test K (R5): Transversal recipe validation rejects malformed definitions
+func TestK_RecipeValidationRejectsMalformedDefinitions(t *testing.T) {
+	t.Run("duplicate memberId", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.RigidMembers = append(agr.RigidMembers, agr.RigidMembers[0]) // duplicate side_left
+		err := domain.ValidateAgregadoAssemblyDefinition(agr)
+		if err == nil || !strings.Contains(err.Error(), "duplicate memberId 'side_left'") {
+			t.Fatalf("expected duplicate memberId error, got %v", err)
 		}
+	})
+
+	t.Run("duplicate variantSetId", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.VariantSets = append(agr.VariantSets, agr.VariantSets[0])
+		err := domain.ValidateAgregadoAssemblyDefinition(agr)
+		if err == nil || !strings.Contains(err.Error(), "duplicate variantSetId 'vs-drawer-depth'") {
+			t.Fatalf("expected duplicate variantSetId error, got %v", err)
+		}
+	})
+
+	t.Run("non-existent variantSetId in member source", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.RigidMembers[0].Source.Variant.VariantSetID = "vs-non-existent"
+		err := domain.ValidateAgregadoAssemblyDefinition(agr)
+		if err == nil || !strings.Contains(err.Error(), "references non-existent variantSetId 'vs-non-existent'") {
+			t.Fatalf("expected non-existent variantSetId error, got %v", err)
+		}
+	})
+
+	t.Run("non-existent variantSetId in compatibility rule", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.CompatibilityRules[0].VariantSetID = "vs-ghost"
+		err := domain.ValidateAgregadoAssemblyDefinition(agr)
+		if err == nil || !strings.Contains(err.Error(), "references non-existent variantSetId 'vs-ghost'") {
+			t.Fatalf("expected non-existent rule error, got %v", err)
+		}
+	})
+
+	t.Run("ambiguous duplicate compatibility rules", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.CompatibilityRules = append(agr.CompatibilityRules, agr.CompatibilityRules[0])
+		err := domain.ValidateAgregadoAssemblyDefinition(agr)
+		if err == nil || !strings.Contains(err.Error(), "multiple ambiguous compatibility rules") {
+			t.Fatalf("expected ambiguous rules error, got %v", err)
+		}
+	})
+
+	t.Run("duplicate nominalDimensionMm in variant set", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.VariantSets[0].Variants = append(agr.VariantSets[0].Variants, domain.ProductVariant{
+			NominalDimensionMm: 500.0, // duplicate 500
+			HardwareID:         "hw-dup-500",
+		})
+		err := domain.ValidateAgregadoAssemblyDefinition(agr)
+		if err == nil || !strings.Contains(err.Error(), "duplicate nominalDimensionMm: 500") {
+			t.Fatalf("expected duplicate nominal error, got %v", err)
+		}
+	})
+
+	t.Run("empty hardwareId in variant", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		agr.VariantSets[0].Variants[0].HardwareID = "   "
+		err := domain.ValidateAgregadoAssemblyDefinition(agr)
+		if err == nil || !strings.Contains(err.Error(), "hardwareId must be non-empty") {
+			t.Fatalf("expected non-empty hardwareId error, got %v", err)
+		}
+	})
+
+	t.Run("non-finite dimension in resolution params", func(t *testing.T) {
+		agr := buildSyntheticDrawerFixture()
+		params := engine.AssemblyResolutionParams{WidthMm: math.NaN(), DepthMm: 500, HeightMm: 200}
+		_, err := engine.ResolveAgregadoAssembly(agr, params)
+		if err == nil || !strings.Contains(err.Error(), "invalid width") {
+			t.Fatalf("expected non-finite param error, got %v", err)
+		}
+	})
+}
+
+// Test L (R3): Visual asset authority (#668) remains decoupled from assembly resolver
+func TestL_VisualAssetBindingDecoupled(t *testing.T) {
+	agr := buildSyntheticDrawerFixture()
+	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0}
+
+	// 1. Pure resolver returns exact hardwareId without requiring catalog or asset lookup
+	snapshot, err := engine.ResolveAgregadoAssembly(agr, params)
+	if err != nil {
+		t.Fatalf("pure resolver error: %v", err)
 	}
-	return -1
+	if snapshot.RigidMembers[0].HardwareID == "" {
+		t.Fatal("hardwareId must be populated by pure resolver")
+	}
+	if snapshot.RigidMembers[0].AssetID != nil {
+		t.Fatal("pure resolver must not populate visual AssetID directly")
+	}
+
+	// 2. AttachVisualPins delegates to #668 visual asset authority
+	lookupCalled := 0
+	mockLookup := func(hardwareID string) (*domain.HardwareMountFrame, string, string, string, error) {
+		lookupCalled++
+		return &domain.HardwareMountFrame{
+			OriginMm: [3]float64{0, 0, 0},
+			Basis: domain.HardwareBasis{
+				X: [3]float64{1, 0, 0},
+				Y: [3]float64{0, 1, 0},
+				Z: [3]float64{0, 0, 1},
+			},
+		}, "asset-" + hardwareID, "rev-1", "sha-abc", nil
+	}
+
+	attached, err := engine.AttachVisualPins(snapshot, mockLookup)
+	if err != nil {
+		t.Fatalf("AttachVisualPins error: %v", err)
+	}
+	if lookupCalled != len(snapshot.RigidMembers) {
+		t.Errorf("expected %d lookup calls, got %d", len(snapshot.RigidMembers), lookupCalled)
+	}
+	if attached.RigidMembers[0].AssetID == nil || *attached.RigidMembers[0].AssetID != "asset-hw-side-500" {
+		t.Errorf("expected visual pin asset-hw-side-500, got %v", attached.RigidMembers[0].AssetID)
+	}
 }

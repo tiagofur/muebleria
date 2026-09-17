@@ -4,6 +4,7 @@
 
 import type { HardwareFinishId } from './hardwareFinishes';
 import type {
+  AgregadoFabricatedMember,
   AgregadoRigidMember,
   AgregadoVariantSet,
   AssemblyCompatibilityRule,
@@ -722,6 +723,8 @@ export interface Agregado {
   readonly commercialKitHardwareId?: string;
   /** Rigid 3D hardware members (runners, sides, brackets) */
   readonly rigidMembers?: readonly AgregadoRigidMember[];
+  /** Manufactured board components recalculated by declarative dimension rules */
+  readonly fabricatedMembers?: readonly AgregadoFabricatedMember[];
   /** Sets of discrete commercial sizing options for this assembly */
   readonly variantSets?: readonly AgregadoVariantSet[];
   /** Rules for selecting and validating variants based on available space */
