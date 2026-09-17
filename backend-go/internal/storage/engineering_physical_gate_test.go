@@ -717,3 +717,184 @@ func TestPhysicalWorkGate_CompletionUnderLockUnblocks(t *testing.T) {
 		t.Fatalf("completion under lock: item must advance to cut, got %q", floorStatus)
 	}
 }
+
+// gateClaimActivity inserts one ACTIVE item-scoped cutting activity claimed
+// by the admin operator (direct fixture row — claims are telemetry).
+func gateClaimActivity(t *testing.T, gs *gateSetup, id string) {
+	t.Helper()
+	if _, err := gs.fx.admin.Exec(gs.ctx, `
+		INSERT INTO production_activities
+			(id, project_id, project_name, item_id, sector, type, operator_id, operator_name, started_at, organization_id)
+		VALUES ($1, $2, 'Obra Gate Físico E2E', $3, 'cutting', 'claim', $4, 'Gate Operator', NOW(), $5)
+	`, id, gs.fx.projectID, gs.itemID, rlsUserA, rlsOrgA); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// gateActivityPoststate reads the durable activity row.
+func gateActivityPoststate(t *testing.T, gs *gateSetup, id string) (finishedAt *string, piecesCount *int, notes *string) {
+	t.Helper()
+	if err := gs.fx.admin.QueryRow(gs.ctx, `
+		SELECT finished_at::text, pieces_count, NULLIF(notes, '')
+		FROM production_activities WHERE id = $1`, id).
+		Scan(&finishedAt, &piecesCount, &notes); err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+// Review fix — the activity finish and its physical effect are ONE
+// transaction under the project row lock. Positive: with valid authority the
+// finish persists finished_at/pieces/notes AND advances the item with its
+// F092 event in the same commit.
+func TestPhysicalWorkGate_ActivityFinishAtomicHappyPath(t *testing.T) {
+	gs := gateSetupFixture(t)
+	gs.completeEngineering(t, gs.p1.Release.ID, "act-ok")
+	gs.seedMaterialsAuthorization(t, gs.p1.Release.ID, gs.p1.Release.ManufacturingFingerprint, false)
+	gateClaimActivity(t, gs, "act-atomic-ok-0001")
+
+	actorA := fiActorA()
+	var result *storage.FinishActivityResult
+	err := fiTx(t, gs.fx.store, actorA, func(ctx context.Context) error {
+		r, fErr := gs.fx.store.FinishProductionActivityWithPhysicalEffect(ctx, storage.FinishActivityPhysicalCommand{
+			ActivityID: "act-atomic-ok-0001", PiecesCount: 4, Notes: "corte terminado",
+			ActorID: rlsUserA,
+		})
+		result = r
+		return fErr
+	})
+	if err != nil {
+		t.Fatalf("atomic finish: %v", err)
+	}
+	if !result.FloorAdvanced || result.FromStatus != "pending" || result.ToStatus != "cut" {
+		t.Fatalf("atomic finish must advance pending→cut in the same commit: %+v", result)
+	}
+
+	finishedAt, pieces, notes := gateActivityPoststate(t, gs, "act-atomic-ok-0001")
+	if finishedAt == nil || pieces == nil || *pieces != 4 || notes == nil || *notes != "corte terminado" {
+		t.Fatalf("atomic finish must persist the activity facts: finished=%v pieces=%v notes=%v", finishedAt, pieces, notes)
+	}
+	var floorStatus string
+	if err := gs.fx.admin.QueryRow(gs.ctx,
+		`SELECT COALESCE(floor_status,'pending') FROM project_items WHERE id=$1`, gs.itemID).Scan(&floorStatus); err != nil {
+		t.Fatal(err)
+	}
+	if floorStatus != "cut" {
+		t.Fatalf("item must be cut, got %q", floorStatus)
+	}
+	var events int
+	if err := gs.fx.admin.QueryRow(gs.ctx, `
+		SELECT COUNT(*) FROM project_item_floor_events
+		WHERE project_id=$1 AND item_id=$2 AND source='activity'`, gs.fx.projectID, gs.itemID).
+		Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if events != 1 {
+		t.Fatalf("exactly one F092 activity event expected, got %d", events)
+	}
+}
+
+// Review fix — RED/TOCTOU: P1 authorized → claim with physical effect → the
+// authorization is withdrawn under the SAME project lock while the finish
+// waits → the finish acquires the lock, re-evaluates the POST-commit
+// evidence and blocks. Poststate: the activity is NOT finished (rollback of
+// everything), the item did not move and no F092 row exists.
+func TestPhysicalWorkGate_ActivityFinishAtomicTOCTOUWithdrawal(t *testing.T) {
+	gs := gateSetupFixture(t)
+	gs.completeEngineering(t, gs.p1.Release.ID, "act-toctou")
+	gs.seedMaterialsAuthorization(t, gs.p1.Release.ID, gs.p1.Release.ManufacturingFingerprint, false)
+	gateClaimActivity(t, gs, "act-atomic-toctou-0001")
+
+	actorA := fiActorA()
+	now := time.Now().UTC()
+	locked := make(chan struct{})
+	release := make(chan struct{})
+	holderDone := make(chan error, 1)
+
+	// Holder: re-pins the material authorization to a foreign release under
+	// the project row lock and holds it until released.
+	go func() {
+		err := fiTx(t, gs.fx.store, actorA, func(ctx context.Context) error {
+			_, mErr := gs.fx.store.MutateProjectMaterialPlanning(ctx, gs.fx.projectID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+				planning := &domain.MaterialPlanning{
+					ID:          domain.NewMaterialPlanningID("mplan"),
+					ProjectID:   gs.fx.projectID,
+					Requirements: &domain.MaterialRequirementsSnapshot{
+						ReleaseID:      "99999999-9999-9999-9999-999999999999",
+						BomFingerprint: "fingerprint-of-another-release",
+						DerivedAt:      now,
+						DerivedBy:      rlsUserA,
+						Lines:          []domain.MaterialRequirementLine{{Kind: "tableros", MaterialID: releaseMaterial, Quantity: 4}},
+					},
+					Reservations: []domain.MaterialReservation{},
+					Release:      &domain.MaterialsReleaseEvidence{ReleasedAt: now, ReleasedBy: rlsUserA},
+					CreatedAt:    now,
+				}
+				return &domain.MaterialPlanningMutation{Planning: planning}, nil
+			})
+			if mErr != nil {
+				return mErr
+			}
+			close(locked)
+			<-release
+			return nil
+		})
+		holderDone <- err
+	}()
+	<-locked
+
+	finishDone := make(chan error, 1)
+	go func() {
+		finishDone <- fiTx(t, gs.fx.store, actorA, func(ctx context.Context) error {
+			_, fErr := gs.fx.store.FinishProductionActivityWithPhysicalEffect(ctx, storage.FinishActivityPhysicalCommand{
+				ActivityID: "act-atomic-toctou-0001", PiecesCount: 2, Notes: "debería rodar todo back",
+				ActorID:    rlsUserA,
+			})
+			return fErr
+		})
+	}()
+	// Let the finish queue behind the holder's project lock, then commit the
+	// authorization withdrawal.
+	time.Sleep(150 * time.Millisecond)
+	close(release)
+	if err := <-holderDone; err != nil {
+		t.Fatalf("holder tx: %v", err)
+	}
+
+	err := <-finishDone
+	if err == nil {
+		t.Fatal("TOCTOU: the atomic finish must fail closed when the authorization changed under the lock")
+	}
+	if !strings.Contains(err.Error(), "Material pendiente") {
+		t.Fatalf("TOCTOU: expected the material blocker, got=%v", err)
+	}
+
+	// Poststate: NOTHING persisted — the whole transaction rolled back.
+	finishedAt, pieces, notes := gateActivityPoststate(t, gs, "act-atomic-toctou-0001")
+	if finishedAt != nil {
+		t.Fatal("TOCTOU: finished_at must stay NULL when the gate blocks under the lock")
+	}
+	if pieces != nil && *pieces != 0 {
+		t.Fatalf("TOCTOU: pieces_count must stay untouched, got %d", *pieces)
+	}
+	if notes != nil && *notes != "" {
+		t.Fatalf("TOCTOU: notes must stay untouched, got %q", *notes)
+	}
+	var floorStatus string
+	if err := gs.fx.admin.QueryRow(gs.ctx,
+		`SELECT COALESCE(floor_status,'pending') FROM project_items WHERE id=$1`, gs.itemID).Scan(&floorStatus); err != nil {
+		t.Fatal(err)
+	}
+	if floorStatus != "pending" {
+		t.Fatalf("TOCTOU: item must stay pending, got %q", floorStatus)
+	}
+	var events int
+	if err := gs.fx.admin.QueryRow(gs.ctx, `
+		SELECT COUNT(*) FROM project_item_floor_events WHERE project_id=$1`, gs.fx.projectID).
+		Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if events != 0 {
+		t.Fatalf("TOCTOU: 0 F092 events expected, got %d", events)
+	}
+}

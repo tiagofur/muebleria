@@ -18,8 +18,8 @@ package api
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -235,37 +235,34 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// #740 — fail-before-mutate: when finishing this station job would move
-	// the item's floor status (a physical effect), the operational gate must
-	// authorize it BEFORE the activity row is written. Activities without a
-	// floor side-effect (F095 project×station claims, sectors without a
-	// floor status) are telemetry and stay finishable.
+	// F094 + #740 review fix: activities whose finish produces a physical
+	// effect (item-scoped, sector owns a floor status) run in ONE storage
+	// transaction — activity finish + floor status + F092 event under the
+	// project row lock with the operational gate. There is NO
+	// preflight/mutation gap: an authorization change that commits first is
+	// exactly what the transaction re-evaluates, and any error rolls back
+	// EVERYTHING (no finished activity without its physical effect).
+	// Activities without a floor side-effect (F095 project×station claims,
+	// sectors without a floor status) are telemetry and keep their path.
 	if activity.ItemID != "" && domain.TargetStatusForSector(string(activity.Sector)) != "" {
-		if err := s.Store.CheckPhysicalWorkAuthorization(r.Context(), activity.ProjectID); err != nil {
-			if errors.Is(err, domain.ErrPhysicalWorkEngineeringPending) ||
-				errors.Is(err, domain.ErrPhysicalWorkMaterialsPending) ||
-				errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) {
-				respondWithError(w, http.StatusConflict, err.Error())
-				return
-			}
-			respondWithError(w, http.StatusInternalServerError, "no se pudo verificar la autorización de trabajo físico")
+		result, err := s.Store.FinishProductionActivityWithPhysicalEffect(r.Context(), storage.FinishActivityPhysicalCommand{
+			ActivityID:  activityID,
+			PiecesCount: body.PiecesCount,
+			Notes:       body.Notes,
+			ActorID:     actorID,
+		})
+		if err != nil {
+			respondWithActivityFinishError(w, err)
 			return
 		}
+		respondWithJSON(w, http.StatusOK, finishResponse{Activity: result.Activity})
+		return
 	}
 
 	if err := s.Store.FinishProductionActivity(r.Context(), activityID, body.PiecesCount, body.Notes); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "no se pudo finalizar la actividad")
 		return
 	}
-
-	// F094 — finishing a station job moves the floor pipeline (and leaves
-	// the F092 audit trail). Claims are no longer floating telemetry: when
-	// the sector produces a floor status and the item has not reached it,
-	// the finish advances it exactly like the station queue would. The
-	// advance runs through the SAME gated atomic write (#740): if the gate
-	// blocks under the lock (authority changed between the preflight and
-	// here), the item stays put and no false progress is audited.
-	s.advanceItemOnActivityFinish(r, *activity, actorID)
 
 	// Update the activity with finish info
 	now := time.Now().UTC()
@@ -279,64 +276,26 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 	respondWithJSON(w, http.StatusOK, finishResponse{Activity: *activity})
 }
 
-// advanceItemOnActivityFinish moves the item to its station's floor status
-// when the finished activity's sector owns one. Idempotent (no-op when the
-// item already reached it); failures are logged, never block the finish.
-func (s *Server) advanceItemOnActivityFinish(r *http.Request, activity domain.ProductionActivity, actorID string) {
-	if activity.ItemID == "" {
-		// F095 project × station claims measure work but do not advance items.
+// respondWithActivityFinishError maps the atomic finish errors: the #740
+// gate blockers surface as 409 with their actionable copy; a concurrently
+// finished activity conflicts; anything else is a server error.
+func respondWithActivityFinishError(w http.ResponseWriter, err error) {
+	if errors.Is(err, domain.ErrPhysicalWorkEngineeringPending) ||
+		errors.Is(err, domain.ErrPhysicalWorkMaterialsPending) ||
+		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) {
+		respondWithError(w, http.StatusConflict, err.Error())
 		return
 	}
-	target := domain.TargetStatusForSector(string(activity.Sector))
-	if target == "" {
-		// warehouse / cnc produce no floor status yet (Fase 3).
-		return
-	}
-	project, err := s.Store.GetProjectByID(r.Context(), activity.ProjectID)
-	if err != nil || project == nil {
-		return
-	}
-	for i := range project.Items {
-		if project.Items[i].ID != activity.ItemID {
-			continue
-		}
-		before := domain.NormalizeItemFloorStatus(project.Items[i].FloorStatus)
-		if before == target || domain.FloorStatusRank(before) >= domain.FloorStatusRank(target) {
-			return
-		}
-		ev := domain.FloorStatusEvent{
-			ID:        newFloorEventID(),
-			ProjectID: activity.ProjectID,
-			ItemID:    activity.ItemID,
-			From:      before,
-			To:        target,
-			At:        time.Now().UTC(),
-			ByUserID:  actorID,
-			ByName:    activity.OperatorName,
-			Source:    domain.FloorEventSourceActivity,
-			Note:      "fin de actividad en " + string(activity.Sector),
-		}
-		if domain.FloorStatusRank(target)-domain.FloorStatusRank(before) != 1 {
-			ev.Note = domain.FloorEventJumpNote(ev.Note, before, target)
-		}
-		// #740 — the side-effect advances physical state, so it runs through
-		// the SAME gated atomic write as the manual and scan routes: status +
-		// F092 event in one transaction, gate blockers leave both untouched.
-		if err := s.Store.SetProjectItemFloorStatusGated(r.Context(), storage.ItemFloorAdvance{
-			ProjectID: activity.ProjectID,
-			ItemID:    activity.ItemID,
-			Status:    target,
-			Event:     &ev,
-		}); err != nil {
-			if errors.Is(err, domain.ErrPhysicalWorkEngineeringPending) ||
-				errors.Is(err, domain.ErrPhysicalWorkMaterialsPending) ||
-				errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) {
-				log.Printf("[activity-finish] physical work gate blocked item %s advance: %v", activity.ItemID, err)
-			} else {
-				log.Printf("[activity-finish] floor status update failed for item %s: %v", activity.ItemID, err)
-			}
-		}
-		return
+	msg := err.Error()
+	switch {
+	case strings.HasPrefix(msg, "CONFLICT:"):
+		respondWithError(w, http.StatusConflict, strings.TrimPrefix(msg, "CONFLICT:"))
+	case strings.HasPrefix(msg, "NOT_FOUND:"):
+		respondWithError(w, http.StatusNotFound, strings.TrimPrefix(msg, "NOT_FOUND:"))
+	case strings.HasPrefix(msg, "BAD_REQUEST:"):
+		respondWithError(w, http.StatusBadRequest, strings.TrimPrefix(msg, "BAD_REQUEST:"))
+	default:
+		respondWithError(w, http.StatusInternalServerError, "no se pudo finalizar la actividad")
 	}
 }
 

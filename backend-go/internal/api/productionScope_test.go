@@ -314,3 +314,28 @@ func TestRoleCanAdvanceStationParity(t *testing.T) {
 		t.Fatal("vendedor never advances floor status")
 	}
 }
+
+// #740 review fix — the finish runs through the ONE-transaction storage
+// operation; when the gate blocks, the handler answers 409 with the
+// actionable copy and NOTHING is recorded (no activity mutation, no floor
+// writes, no audit events).
+func TestProductionFinish_PhysicalGateBlocksAtomically(t *testing.T) {
+	store, srv := scopedFixtures([]domain.UserSector{{UserID: "u1", Sector: "cutting"}})
+	store.activitiesByID = []domain.ProductionActivity{{
+		ID: "a-gated", ProjectID: "p1", ItemID: "i1", Sector: domain.SectorCutting,
+		Type: domain.ActivityClaim, OperatorID: "u1", OperatorName: "Ramón",
+	}}
+	store.physicalAuthErr = domain.ErrPhysicalWorkEngineeringPending
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/production/activity/finish/a-gated",
+		strings.NewReader(`{"pieces_count":2}`)), "u1", string(domain.RoleProduccion))
+	req.SetPathValue("activityId", "a-gated")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProductionFinish(rr, req)
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "Ingeniería pendiente") {
+		t.Fatalf("expected 409 Ingeniería pendiente, got=%d %s", rr.Code, rr.Body.String())
+	}
+	if len(store.floorStatusWrites) != 0 || len(store.floorEventWrites) != 0 {
+		t.Fatalf("blocked finish must leave zero writes: %+v %+v", store.floorStatusWrites, store.floorEventWrites)
+	}
+}

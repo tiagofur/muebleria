@@ -210,7 +210,7 @@ sin TOCTOU), y se cablea en:
 | `POST /quality/rework`, `/quality/qc/{unitId}[/override]` | trabajo físico | `MutateProjectQualityPhysical` |
 | `PATCH /items/{itemId}/floor-status` | trabajo físico (bypass confirmado, cerrado) | `SetProjectItemFloorStatusGated` (atómico con su evento F092) |
 | `POST /floor-scan` | trabajo físico (bypass confirmado, cerrado) | `SetProjectItemFloorStatusGated` |
-| `POST /production/activity/finish/{id}` | telemetría; su side-effect físico SÍ pasa el gate (prefail antes de mutar la actividad + re-check bajo lock) | `CheckPhysicalWorkAuthorization` + write gated |
+| `POST /production/activity/finish/{id}` | telemetría sin efecto físico; actividades con efecto físico terminan en UNA transacción storage (finish + floor + F092 bajo el lock del proyecto con el gate; cualquier error hace rollback de TODO — corrección de revisión: sin brecha preflight/mutación) | `FinishProductionActivityWithPhysicalEffect` |
 | `PUT /projects/{id}` (agregado) | NO es canal físico para obras canónicas: `part_instances`/`module_units` ya se congelaban (#577); ahora también se preservan `floor_status` por item y se descartan `floor_events` del cliente | handler del PUT |
 
 Además, cada avance exige que la pieza/unidad PERTENEZCA al release vigente

@@ -1445,8 +1445,10 @@ allowed ⇔ authority.Source == canonical
   (`MutateProjectQualityPhysical` — observation flows keep the ungated
   `MutateProjectQuality`), item floor-status PATCH + floor-scan
   (`SetProjectItemFloorStatusGated`: status + F092 event atomically), and the
-  activity-finish floor side-effect (fail-before-mutate preflight +
-  re-check under lock in the gated write).
+  activity-finish floor effect (`FinishProductionActivityWithPhysicalEffect`:
+  activity finish + floor status + F092 in ONE transaction under the project
+  row lock — review fix, no preflight/mutation gap; any error rolls back
+  everything, proven by a concurrent PostgreSQL TOCTOU regression).
 - The aggregate project PUT is NOT a physical channel for canonical projects:
   client-sent `part_instances`/`module_units` were already frozen (#577); PR 2
   additionally preserves per-item `floor_status` and discards client

@@ -926,8 +926,54 @@ func (s *stubStore) SetProjectItemFloorStatusGated(_ context.Context, adv storag
 	return nil
 }
 
-func (s *stubStore) CheckPhysicalWorkAuthorization(_ context.Context, _ string) error {
-	return s.physicalAuthErr
+func (s *stubStore) FinishProductionActivityWithPhysicalEffect(_ context.Context, cmd storage.FinishActivityPhysicalCommand) (*storage.FinishActivityResult, error) {
+	// Mirror of the real transaction: gate blocker first (everything rolls
+	// back), then finish + physical effect together.
+	if s.physicalAuthErr != nil {
+		return nil, s.physicalAuthErr
+	}
+	var act *domain.ProductionActivity
+	for i := range s.activitiesByID {
+		if s.activitiesByID[i].ID == cmd.ActivityID {
+			act = &s.activitiesByID[i]
+			break
+		}
+	}
+	if act == nil {
+		return nil, fmt.Errorf("NOT_FOUND:actividad no encontrada")
+	}
+	now := time.Now().UTC()
+	finished := *act
+	finished.FinishedAt = &now
+	finished.PiecesCount = cmd.PiecesCount
+	finished.Notes = cmd.Notes
+	result := &storage.FinishActivityResult{Activity: finished}
+	target := domain.TargetStatusForSector(string(act.Sector))
+	if act.ItemID == "" || target == "" {
+		return nil, fmt.Errorf("BAD_REQUEST:la actividad no produce efecto físico")
+	}
+	before := "pending"
+	if s.projectReturnedByID != nil {
+		for i := range s.projectReturnedByID.Items {
+			if s.projectReturnedByID.Items[i].ID == act.ItemID {
+				before = domain.NormalizeItemFloorStatus(s.projectReturnedByID.Items[i].FloorStatus)
+				break
+			}
+		}
+	}
+	result.FromStatus = before
+	result.ToStatus = before
+	if before != target && domain.FloorStatusRank(before) < domain.FloorStatusRank(target) {
+		s.floorStatusWrites = append(s.floorStatusWrites, floorStatusWrite{act.ProjectID, act.ItemID, target})
+		s.floorEventWrites = append(s.floorEventWrites, domain.FloorStatusEvent{
+			ID: newFloorEventID(), ProjectID: act.ProjectID, ItemID: act.ItemID,
+			From: before, To: target, At: now, ByUserID: cmd.ActorID,
+			ByName: act.OperatorName, Source: domain.FloorEventSourceActivity,
+		})
+		result.FloorAdvanced = true
+		result.ToStatus = target
+	}
+	return result, nil
 }
 
 func (s *stubStore) InsertFloorEvent(_ context.Context, ev domain.FloorStatusEvent) error {
