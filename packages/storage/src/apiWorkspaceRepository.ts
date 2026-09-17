@@ -277,6 +277,23 @@ function claimedProductionActivityFromApi(raw: Record<string, unknown>): {
   };
 }
 
+
+/** Surfaces the server's actionable error message verbatim — the #740
+ * operational gate blockers (Ingeniería pendiente / Material pendiente /
+ * liberación anterior) arrive as {code,message} JSON; showing the raw body
+ * would hide the reason behind a generic failure. */
+function apiActionableErrorMessage(status: number, text: string): string {
+  try {
+    const raw = JSON.parse(text) as Record<string, unknown>;
+    const message = typeof raw.message === 'string' ? raw.message.trim() : '';
+    if (message) return message;
+    if (typeof raw.error === 'string' && raw.error.trim()) return raw.error.trim();
+  } catch {
+    // not JSON — fall through to the raw text
+  }
+  return `Error ${status}${text ? `: ${text}` : ''}`;
+}
+
 export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
   private readonly injectedFetch?: typeof fetch;
@@ -1063,7 +1080,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(`Floor scan failed: ${res.status} ${text}`);
+      throw new Error(apiActionableErrorMessage(res.status, text));
     }
     const raw = (await res.json()) as Record<string, unknown>;
     const progressRaw = (raw.loading_progress ?? {}) as Record<string, unknown>;
@@ -1355,6 +1372,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     };
   }
 
+
   /** Shared POST + parse for the part-executions endpoints. */
   private async postPartExecution<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const res = await this.fetch(`${this.baseUrl}${path}`, {
@@ -1364,7 +1382,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(`Part execution failed: ${res.status} ${text}`);
+      throw new Error(apiActionableErrorMessage(res.status, text));
     }
     const raw = (await res.json()) as Record<string, unknown>;
     const part = raw.part ? partInstanceFromApi(raw.part as Record<string, unknown>) : undefined;
@@ -1438,7 +1456,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     );
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(`Failed to set floor status: ${res.status} ${text}`);
+      throw new Error(apiActionableErrorMessage(res.status, text));
     }
     const raw = (await res.json()) as Record<string, unknown>;
     return {

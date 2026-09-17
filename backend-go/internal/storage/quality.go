@@ -24,9 +24,33 @@ var ErrQualityProjectNotFound = errors.New("project not found")
 
 // MutateProjectQuality loads the quality job plus the physical executions a
 // rework action may touch, runs the mutator and persists everything atomically.
+// Observation semantics (#740 PR 2 classification): reporting an issue or
+// managing its administrative lifecycle never advances physical work, so this
+// variant does NOT run the operational gate.
 func (s *PostgresStore) MutateProjectQuality(
 	ctx context.Context,
 	projectID string,
+	mutate func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error),
+) (*domain.QualityMutation, error) {
+	return s.mutateProjectQuality(ctx, projectID, false, mutate)
+}
+
+// MutateProjectQualityPhysical is the execution variant: rework actions and
+// unit QC advance/reopen physical state, so the #740 operational gate
+// (Engineering completed + materials authorized for the exact release) runs
+// under the same project row lock before the mutator.
+func (s *PostgresStore) MutateProjectQualityPhysical(
+	ctx context.Context,
+	projectID string,
+	mutate func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error),
+) (*domain.QualityMutation, error) {
+	return s.mutateProjectQuality(ctx, projectID, true, mutate)
+}
+
+func (s *PostgresStore) mutateProjectQuality(
+	ctx context.Context,
+	projectID string,
+	physicalExecution bool,
 	mutate func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error),
 ) (*domain.QualityMutation, error) {
 	tx, err := s.beginTx(ctx)
@@ -83,6 +107,14 @@ func (s *PostgresStore) MutateProjectQuality(
 		if err := s.guardCanonicalExecutionRouting(ctx, tx, projectID, authority); err != nil {
 			return nil, err
 		}
+		// #740 PR 2: physical quality effects (rework/scrap/refabricate, unit
+		// QC and its override) demand completed Engineering and authorized
+		// materials for the exact release, under the lock taken above.
+		if physicalExecution {
+			if err := s.authorizePhysicalWorkTx(ctx, tx, projectID, authority); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	rows, err := tx.Query(ctx, `
@@ -110,9 +142,14 @@ func (s *PostgresStore) MutateProjectQuality(
 		return nil, err
 	}
 
+	// Observation mutations (issue report / lifecycle) carry no Parts/Units
+	// and must NOT wipe the stored executions: NULL keeps the previous
+	// payload, same convention as MutateProjectPartExecutions' quality
+	// column. Found by the #740 gate matrix — the pre-existing write erased
+	// part_instances/module_units on every observation.
 	if _, err := tx.Exec(ctx, `
 		UPDATE projects
-		SET quality = $2, part_instances = $3, module_units = $4, updated_at = CURRENT_TIMESTAMP
+		SET quality = $2, part_instances = COALESCE($3, part_instances), module_units = COALESCE($4, module_units), updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND (organization_id = $5 OR sales_organization_id = $5 OR manufacturing_organization_id = $5);
 	`, projectID, jsonbStructArg(mutation.Quality), jsonbSliceArg(mutation.Parts), jsonbSliceArg(mutation.Units), OrgFromCtx(ctx)); err != nil {
 		return nil, fmt.Errorf("error persisting quality: %w", err)

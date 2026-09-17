@@ -218,15 +218,34 @@ Features de `ProjectEvent`, Approval, ProductionRelease o ChangeOrder deben prob
   durable; P2 no hereda P1 (incluida la proyección del read model de la
   autoridad); vendedor 403; cross-org 404 sin escrituras; auditoría de
   seguridad y eventos de lifecycle en la misma transición.
-- `backend-go/internal/storage/engineering_physical_gate_red_test.go`:
-  **RED operacional conservado** — part advance, floor-status y floor-scan
-  avanzan trabajo físico hoy sin Ingeniería/materiales. La suite asserts el
-  comportamiento ACTUAL; cuando el gate transversal de #740 (PR 2) aterrice,
-  las expectativas se invierten — nunca se borra la prueba para "arreglarlo".
+- `backend-go/internal/storage/engineering_physical_gate_red_test.go`
+  (**RED del PR 1 invertido por el PR 2**): part advance, floor-status y
+  floor-scan ahora fallan cerrado (409 con copy accionable) dejando 0
+  mutaciones físicas y 0 eventos; la generación de ejecuciones PLANIFICADAS
+  sigue disponible antes de la autorización (#739).
+- `backend-go/internal/storage/engineering_physical_gate_test.go`
+  (PostgreSQL + HTTP reales, #740 PR 2): matriz secuencial (pendiente →
+  en_proceso → completa-sin-materiales → materiales autorizados → avance
+  permitido con floor event); excepción autorizada autoriza y conserva
+  motivo auditable; stamp no correlacionado NO autoriza; TODOS los writers
+  físicos bloqueados con cero mutaciones mientras la OBSERVACIÓN de calidad
+  sigue operando (incluido finish de actividad sin mutar su propia fila);
+  P2 no reutiliza evidencia de P1 (pendiente → re-preparada → mismatch de
+  liberación); vendedor 403 / cross-org fail-closed sin escrituras; dos
+  avances concurrentes de la misma pieza dejan exactamente un ganador; el
+  cambio de autoridad BAJO el lock re-evalúa la evidencia post-commit
+  (bloqueo honesto al retirar la autorización; desbloqueo honesto al
+  completar Ingeniería en curso).
 - `tests/organization/engineering-state.spec.ts` (Chromium + Go +
   PostgreSQL): P1 → Pendiente → Iniciar → En proceso (reload) → descargar
   PDF/PTX NO completa → Completar → Completa con actor/fecha y etapa
   siguiente honesta (reload); cero materiales/progreso físico/produced.
+- `tests/organization/engineering-physical-gate.spec.ts` (Chromium + Go +
+  PostgreSQL, #740 PR 2): Ingeniería en proceso → acción física en la orden
+  → UI muestra el bloqueo accionable y el servidor confirma 0 progreso;
+  Completa + materiales pendientes → sigue bloqueada; materiales autorizados
+  (excepción auditada vía APIs soportadas) → el MISMO avance tiene éxito con
+  estado y evento F092 reales.
 
 ---
 

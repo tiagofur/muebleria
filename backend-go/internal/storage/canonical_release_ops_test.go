@@ -273,10 +273,29 @@ func TestOpsDt1_ExecutionMutationFrozenRoutingGate(t *testing.T) {
 	if _, err := fx.admin.Exec(context.Background(), `UPDATE project_items SET quantity = 9 WHERE project_id = $1`, fx.projectID); err != nil {
 		t.Fatal(err)
 	}
+	// #740 PR 2: the operational gate SUMS to the frozen-routing guard — the
+	// station mutation additionally needs the release's Engineering completion
+	// and material authorization, so seed both before asserting that frozen
+	// v2 routing authorizes the mutation.
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		if _, err := fx.store.StartReleaseEngineering(ctx, storage.StartReleaseEngineeringCommand{
+			ProjectID: fx.projectID, ReleaseID: p1.Release.ID, ActorUserID: rlsUserA,
+		}); err != nil {
+			return err
+		}
+		_, err := fx.store.CompleteReleaseEngineering(ctx, storage.CompleteReleaseEngineeringCommand{
+			ProjectID: fx.projectID, ReleaseID: p1.Release.ID, ActorUserID: rlsUserA, ExpectedVersion: 1,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed engineering completion: %v", err)
+	}
+	gateSeedMaterialsAuthorization(t, fx, fx.projectID, p1.Release.ID, p1.Release.ManufacturingFingerprint, false)
 	// Frozen v2 routing authorizes the station mutation — with membership
 	// still the frozen revision's, never the editable quote's.
 	stationRan := false
-	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		frozen, err := fx.store.GetProductionReleaseManufacturingSnapshot(ctx, fx.projectID, p1.Release.ID)
 		if err != nil || len(frozen.Units) != 2 || frozen.Units[0].Resolved.FurnitureInstanceID == frozen.Units[1].Resolved.FurnitureInstanceID {
 			t.Fatalf("released physical membership changed: %+v %v", frozen, err)

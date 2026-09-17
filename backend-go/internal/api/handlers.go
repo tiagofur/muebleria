@@ -1563,6 +1563,21 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			// through the generic aggregate surface either; keep the stored copy.
 			p.PartInstances = existing.PartInstances
 			p.ModuleUnits = existing.ModuleUnits
+			// #740: item floor status and the F092 floor-event log are
+			// operational physical state. Canonical projects advance them ONLY
+			// through the gated station endpoints (operational gate + audit
+			// in one transaction) — a client-sent copy is ignored, never
+			// persisted, exactly like the executions above.
+			storedFloorStatus := make(map[string]string, len(existing.Items))
+			for _, item := range existing.Items {
+				storedFloorStatus[item.ID] = item.FloorStatus
+			}
+			for i := range p.Items {
+				if stored, ok := storedFloorStatus[p.Items[i].ID]; ok {
+					p.Items[i].FloorStatus = stored
+				}
+			}
+			p.FloorEvents = nil
 		}
 
 		// #327: organization ownership is server-authoritative. It is

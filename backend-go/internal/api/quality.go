@@ -328,7 +328,7 @@ func (s *Server) HandleQualityRework(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var view qualityViewResponse
-	mutation, err := s.Store.MutateProjectQuality(r.Context(), projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
+	mutation, err := s.Store.MutateProjectQualityPhysical(r.Context(), projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
 		if snap.Quality == nil {
 			return nil, fmt.Errorf("NOT_FOUND:el proyecto no tiene registro de calidad")
 		}
@@ -365,6 +365,13 @@ func (s *Server) HandleQualityRework(w http.ResponseWriter, r *http.Request) {
 			}
 			if partIdx == -1 {
 				return nil, fmt.Errorf("NOT_FOUND:pieza no encontrada: %s", body.PartInstanceID)
+			}
+			// #740: a rework action reopens physical work — the piece must
+			// belong to the governing release (the operational gate already
+			// ran in storage; this catches stale executions of a previous
+			// release).
+			if snap.ReleasedRevision != "" && parts[partIdx].ProductionRevision != snap.ReleasedRevision {
+				return nil, domain.ErrPhysicalWorkReleaseMismatch
 			}
 			before := itemStatuses[parts[partIdx].ProjectItemID]
 			if body.Action == "scrap" {
@@ -516,7 +523,7 @@ func (s *Server) HandleQualityUnitQc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var view qualityViewResponse
-	_, err := s.Store.MutateProjectQuality(r.Context(), projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
+	_, err := s.Store.MutateProjectQualityPhysical(r.Context(), projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
 		var unit *domain.ModuleUnitExecution
 		for i := range snap.Units {
 			if snap.Units[i].ID == unitID {
@@ -526,6 +533,11 @@ func (s *Server) HandleQualityUnitQc(w http.ResponseWriter, r *http.Request) {
 		}
 		if unit == nil {
 			return nil, fmt.Errorf("NOT_FOUND:unidad no encontrada: %s", unitID)
+		}
+		// #740: unit QC gates the physical packaging chain — the unit must
+		// belong to the governing release.
+		if snap.ReleasedRevision != "" && unit.ProductionRevision != snap.ReleasedRevision {
+			return nil, domain.ErrPhysicalWorkReleaseMismatch
 		}
 
 		now := time.Now().UTC()
@@ -608,7 +620,7 @@ func (s *Server) HandleQualityUnitQcOverride(w http.ResponseWriter, r *http.Requ
 	}
 
 	var view qualityViewResponse
-	_, err := s.Store.MutateProjectQuality(r.Context(), projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
+	_, err := s.Store.MutateProjectQualityPhysical(r.Context(), projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
 		var unit *domain.ModuleUnitExecution
 		for i := range snap.Units {
 			if snap.Units[i].ID == unitID {
@@ -618,6 +630,11 @@ func (s *Server) HandleQualityUnitQcOverride(w http.ResponseWriter, r *http.Requ
 		}
 		if unit == nil {
 			return nil, fmt.Errorf("NOT_FOUND:unidad no encontrada: %s", unitID)
+		}
+		// #740: the QC override is a physical pass, not a backdoor — the unit
+		// must belong to the governing release.
+		if snap.ReleasedRevision != "" && unit.ProductionRevision != snap.ReleasedRevision {
+			return nil, domain.ErrPhysicalWorkReleaseMismatch
 		}
 
 		now := time.Now().UTC()

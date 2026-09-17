@@ -2032,7 +2032,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onImportNesting={importNestingResult}
           canImportNesting={canMutateProjects || canMarkProduced}
           onSetFloorStatus={(projectId, itemId, status) => {
-            setItemFloorStatus(projectId, itemId, status);
+            // #740: the order screen's status select goes through the gated
+            // server endpoint (409 + actionable reason when the operational
+            // gate blocks) instead of the local-only mirror, so the server —
+            // not React — decides.
+            handleFloorAdvance(projectId, itemId, status);
           }}
           canSetFloorStatus={
             session === 'auth' &&

@@ -240,6 +240,11 @@ type Store interface {
 	DeleteProject(ctx context.Context, id string) error
 	// Floor scan (PROD-3.1 / F089-RN): atomic single-item floor status write.
 	SetProjectItemFloorStatus(ctx context.Context, projectID, itemID, status string) error
+	// #740 operational gate: the legacy item floor writers advance physical
+	// state, so the release authority is resolved and the gate evaluated
+	// under the project row lock with the status + F092 event written in ONE
+	// transaction; gate blockers return with zero writes.
+	SetProjectItemFloorStatusGated(ctx context.Context, adv storage.ItemFloorAdvance) error
 	// Floor event log (F092): immutable who/when/how audit trail.
 	InsertFloorEvent(ctx context.Context, ev domain.FloorStatusEvent) error
 	ListFloorEvents(ctx context.Context, projectID string) ([]domain.FloorStatusEvent, error)
@@ -289,6 +294,14 @@ type Store interface {
 	// (issues, rework actions, unit QC) plus the physical executions a rework
 	// action may touch, with audit events in the same transaction.
 	MutateProjectQuality(
+		ctx context.Context,
+		projectID string,
+		mutate func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error),
+	) (*domain.QualityMutation, error)
+	// #740: the execution variant for rework actions and unit QC — the
+	// operational physical work gate runs under the same lock before the
+	// mutator (observation flows keep using MutateProjectQuality).
+	MutateProjectQualityPhysical(
 		ctx context.Context,
 		projectID string,
 		mutate func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error),
@@ -503,6 +516,10 @@ type Store interface {
 	GetActiveActivitiesByOperator(ctx context.Context, operatorID string) ([]domain.ProductionActivity, error)
 	GetActiveActivityByID(ctx context.Context, id string) (*domain.ProductionActivity, error)
 	FinishProductionActivity(ctx context.Context, id string, piecesCount int, notes string) error
+	// #740 review fix: activities with a physical effect finish in ONE
+	// transaction — activity finish + floor status + F092 event under the
+	// project row lock with the operational gate; any error rolls back all.
+	FinishProductionActivityWithPhysicalEffect(ctx context.Context, cmd storage.FinishActivityPhysicalCommand) (*storage.FinishActivityResult, error)
 	ListProductionActivitiesByProject(ctx context.Context, projectID string, limit int) ([]domain.ProductionActivity, error)
 	GetSectorMetrics(ctx context.Context, sector domain.ProductionSector, since string) (*domain.SectorDashboard, error)
 	GetOperatorMetrics(ctx context.Context, operatorID, since string) (*domain.OperatorMetrics, error)

@@ -9,6 +9,7 @@ package api
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 type floorScanRequest struct {
@@ -165,20 +167,28 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// F094 — station separation: scoped operators only advance their sectors.
+	// #740 — the physical advance goes through the operational gate under the
+	// project row lock: Engineering completed + materials authorized for the
+	// exact release, atomically with the status write and its F092 event.
+	var event *domain.FloorStatusEvent
 	if after != before {
 		if !s.actorCanAdvanceStation(w, r, roles, actorID(claims), after) {
 			return
 		}
-		if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, match.item.ID, after); err != nil {
+		ev := s.buildFloorScanEvent(r, projectID, match.item.ID, before, after, domain.FloorEventSourceScan)
+		if err := s.Store.SetProjectItemFloorStatusGated(r.Context(), storage.ItemFloorAdvance{
+			ProjectID: projectID,
+			ItemID:    match.item.ID,
+			Status:    after,
+			Event:     &ev,
+		}); err != nil {
+			if respondWithFloorGateError(w, err) {
+				return
+			}
 			respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar el estado")
 			return
 		}
-	}
-
-	// F092 — audit every real transition (who/when/how from the JWT actor).
-	var event *domain.FloorStatusEvent
-	if after != before {
-		event = s.recordFloorEvent(r, projectID, match.item.ID, before, after, domain.FloorEventSourceScan)
+		event = &ev
 	}
 
 	match.item.FloorStatus = after
@@ -242,10 +252,10 @@ func (s *Server) actorCanAdvanceStation(w http.ResponseWriter, r *http.Request, 
 	return false
 }
 
-// recordFloorEvent appends the transition to the audit log with the
-// authenticated actor. Failures are logged but never block the scan —
-// the status write already succeeded.
-func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to string, source domain.FloorEventSource) *domain.FloorStatusEvent {
+// buildFloorEvent builds the F092 transition record with the authenticated
+// actor WITHOUT inserting it — the gated floor writers persist it atomically
+// with the status change (#740), so a blocked gate leaves no orphan audit row.
+func (s *Server) buildFloorScanEvent(r *http.Request, projectID, itemID, from, to string, source domain.FloorEventSource) domain.FloorStatusEvent {
 	claims := claimsFromRequest(r)
 	ev := domain.FloorStatusEvent{
 		ID:        newFloorEventID(),
@@ -267,10 +277,30 @@ func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to s
 	if domain.FloorStatusRank(to)-domain.FloorStatusRank(from) != 1 {
 		ev.Note = domain.FloorEventJumpNote("", from, to)
 	}
+	return ev
+}
+
+// recordFloorEvent appends the transition to the audit log with the
+// authenticated actor. Failures are logged but never block the scan —
+// the status write already succeeded.
+func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to string, source domain.FloorEventSource) *domain.FloorStatusEvent {
+	ev := s.buildFloorScanEvent(r, projectID, itemID, from, to, source)
 	if err := s.Store.InsertFloorEvent(r.Context(), ev); err != nil {
 		log.Printf("[floor-events] insert failed for project %s item %s: %v", projectID, itemID, err)
 	}
 	return &ev
+}
+
+// respondWithFloorGateError surfaces the #740 operational gate blockers with
+// their actionable copy; returns false when the error is not a gate blocker.
+func respondWithFloorGateError(w http.ResponseWriter, err error) bool {
+	if errors.Is(err, domain.ErrPhysicalWorkEngineeringPending) ||
+		errors.Is(err, domain.ErrPhysicalWorkMaterialsPending) ||
+		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) {
+		respondWithError(w, http.StatusConflict, err.Error())
+		return true
+	}
+	return false
 }
 
 func newFloorEventID() string {
@@ -423,20 +453,29 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 	}
 
 	// F094 — station separation (same rule as floor-scan).
+	// #740 — the manual write passes the SAME operational gate as the scan
+	// route: under lock, atomically with its F092 event, fail-closed on
+	// missing Engineering completion or material authorization for the exact
+	// release (this was a confirmed bypass of the item-level floor status).
+	var event *domain.FloorStatusEvent
 	if targetStatus != before {
 		if !s.actorCanAdvanceStation(w, r, roles, actorID(claims), targetStatus) {
 			return
 		}
-	}
-
-	if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, itemID, targetStatus); err != nil {
-		respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar el estado de fábrica")
-		return
-	}
-
-	var event *domain.FloorStatusEvent
-	if targetStatus != before {
-		event = s.recordFloorEvent(r, projectID, itemID, before, targetStatus, domain.FloorEventSourceManual)
+		ev := s.buildFloorScanEvent(r, projectID, itemID, before, targetStatus, domain.FloorEventSourceManual)
+		if err := s.Store.SetProjectItemFloorStatusGated(r.Context(), storage.ItemFloorAdvance{
+			ProjectID: projectID,
+			ItemID:    itemID,
+			Status:    targetStatus,
+			Event:     &ev,
+		}); err != nil {
+			if respondWithFloorGateError(w, err) {
+				return
+			}
+			respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar el estado de fábrica")
+			return
+		}
+		event = &ev
 	}
 
 	respondWithJSON(w, http.StatusOK, patchItemFloorStatusResponse{

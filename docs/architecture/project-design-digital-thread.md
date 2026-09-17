@@ -1416,10 +1416,56 @@ Physical execution        = separate gates (PR 2 of #740)
   project-global `engineeringLog` JSONB stays untouched (pre-DT
   compatibility, `unverified` in the #738 projection — never reinterpreted
   as completion of any release).
-- Operational RED conserved (`engineering_physical_gate_red_test.go`): part
-  advance and the legacy item floor writers currently advance physical work
-  without engineering/material authorization — evidence for the transversal
-  physical gate (second delivery of #740).
+- Operational RED inverted by PR 2 (`engineering_physical_gate_red_test.go`
+  now asserts the gated behavior; the scenario shape is preserved): part
+  advance and the legacy item floor writers used to advance physical work
+  without engineering/material authorization.
+
+### 25.9 Operational physical work gate (#740 PR 2)
+
+ONE shared authority decides whether physical work may start —
+`storage/physical_work_gate.go` (`authorizePhysicalWork`), resolved INSIDE each
+writer's transaction under the `projects` row `FOR UPDATE` lock (the same lock
+the engineering and material commands take, so the decision and the mutation
+share a frontier — no TOCTOU):
+
+```text
+allowed ⇔ authority.Source == canonical
+          AND production_release_engineering.status == 'completed'  (exact release)
+          AND material_planning.Requirements pins (release_id, manufacturing_fingerprint)
+              AND MaterialPlanning.Release evidence exists           (exact release)
+```
+
+- Materials authorization is the OC-054 planning release: a regular release or
+  an explicitly authorized, audited override both pass (actor/timestamp/scope
+  preserved); the legacy `projects.materials_release` stamp column alone is
+  NOT evidence (no release identity).
+- Wired writers: part/unit advance, assembly override, part rework
+  (`MutateProjectPartExecutions`), quality rework/unit QC/override
+  (`MutateProjectQualityPhysical` — observation flows keep the ungated
+  `MutateProjectQuality`), item floor-status PATCH + floor-scan
+  (`SetProjectItemFloorStatusGated`: status + F092 event atomically), and the
+  activity-finish floor effect (`FinishProductionActivityWithPhysicalEffect`:
+  activity finish + floor status + F092 in ONE transaction under the project
+  row lock — review fix, no preflight/mutation gap; any error rolls back
+  everything, proven by a concurrent PostgreSQL TOCTOU regression).
+- The aggregate project PUT is NOT a physical channel for canonical projects:
+  client-sent `part_instances`/`module_units` were already frozen (#577); PR 2
+  additionally preserves per-item `floor_status` and discards client
+  `floor_events`.
+- Work-release pinning: every advance verifies the execution's
+  `ProductionRevision == authority.ReleaseID` — P1 evidence never authorizes
+  P2 work, and fully re-prepared P2 evidence never advances P1 pieces.
+- Blockers surface as 409 with actionable copy (domain sentinels
+  `ErrPhysicalWorkEngineeringPending` / `ErrPhysicalWorkMaterialsPending` /
+  `ErrPhysicalWorkReleaseMismatch`); React shows them verbatim.
+- Pre-DT compatibility is explicit: no canonical release → no release identity
+  to correlate → the legacy OC-022 chain keeps its own contract (the gate does
+  not apply); any canonical release makes the authority canonical and the gate
+  mandatory. Preparation stays open: planned-execution generation (incl.
+  supervised `force` regeneration), engineering open/consult, frozen cut list,
+  optimization, plan save, PDF/PTX downloads (#738/#739) and quality-issue
+  observation never require the gate.
 
 ---
 

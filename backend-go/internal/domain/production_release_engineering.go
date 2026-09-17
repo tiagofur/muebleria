@@ -34,6 +34,22 @@ var (
 	ErrEngineeringRoutingUnavailable = errors.New("release engineering preparation evidence unavailable")
 )
 
+// #740 PR 2: operational physical work gate blockers. The messages are the
+// actionable copy the API surfaces verbatim — the operator must know WHICH
+// preparation step is missing, not just that the action is unavailable.
+var (
+	// ErrPhysicalWorkEngineeringPending: the exact governing release has no
+	// durable completed Engineering evidence.
+	ErrPhysicalWorkEngineeringPending = errors.New("Ingeniería pendiente para esta liberación: completá la Ingeniería antes de iniciar el trabajo físico")
+	// ErrPhysicalWorkMaterialsPending: no material authorization correlates
+	// with the exact governing release (a regular release or an audited
+	// exception both count; anything else does not).
+	ErrPhysicalWorkMaterialsPending = errors.New("Material pendiente de autorización para esta liberación: autorizá los materiales antes de iniciar el trabajo físico")
+	// ErrPhysicalWorkReleaseMismatch: the execution being advanced belongs to
+	// a previous release; the current authority does not govern that work.
+	ErrPhysicalWorkReleaseMismatch = errors.New("el trabajo pertenece a una liberación anterior; la liberación vigente no autoriza avanzarlo")
+)
+
 // ReleaseEngineeringState is the durable evidence row for one release.
 // Version drives optimistic concurrency for the completion command.
 type ReleaseEngineeringState struct {
