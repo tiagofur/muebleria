@@ -698,6 +698,12 @@ type Project struct {
 	// "legacy"). Computed on read (list/detail); never persisted and never
 	// accepted from client writes.
 	ResolvedProductionRelease *ResolvedProductionRelease `json:"resolved_production_release,omitempty"`
+	// ReleaseEngineering is the server-owned projection of the durable
+	// Engineering state of the RESOLVED release authority (#740): nil while
+	// pending, in_progress/completed with actor + server timestamps
+	// otherwise. Computed on read (list/detail); never persisted on the
+	// projects row and never accepted from client writes.
+	ReleaseEngineering *ReleaseEngineeringState `json:"release_engineering,omitempty"`
 	// HasDigitalThreadContext is the server-owned projection that positively
 	// identifies a project as participating in the Digital Thread (#697
 	// review): it has at least one project-owned FurnitureInstance, quote

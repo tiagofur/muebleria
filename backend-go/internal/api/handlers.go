@@ -1308,6 +1308,9 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		// #697 review: the Digital Thread context projection is computed on
 		// read; a client-sent copy is never persisted.
 		p.HasDigitalThreadContext = false
+		// #740: the durable per-release Engineering state is computed on read;
+		// a client-sent copy is never persisted.
+		p.ReleaseEngineering = nil
 
 		if claims != nil {
 			p.CreatedBy = claims.UserID
@@ -1537,6 +1540,9 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		// #697 review: the Digital Thread context projection is computed on
 		// read; a client-sent copy is never persisted.
 		p.HasDigitalThreadContext = false
+		// #740: the durable per-release Engineering state is computed on read;
+		// a client-sent copy is never persisted.
+		p.ReleaseEngineering = nil
 		// OC-070..OC-074: the installation job is server-authoritative — it
 		// only changes through the dedicated installation endpoints (gates,
 		// RBAC and audit). A client-sent copy is ignored, never persisted.

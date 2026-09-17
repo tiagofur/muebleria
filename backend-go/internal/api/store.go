@@ -390,6 +390,11 @@ type Store interface {
 	GetProjectProductionRelease(ctx context.Context, projectID, releaseID string) (*storage.ProductionReleaseReadback, error)
 	// #739: frozen cutting demand projection of the exact release.
 	GetProjectProductionReleaseCuttingDemand(ctx context.Context, projectID, releaseID string) (*storage.ReleaseCuttingDemandView, error)
+	// #740: durable per-release Engineering state (nil row = pending) and
+	// the idempotent start / version-guarded final completion commands.
+	GetReleaseEngineeringState(ctx context.Context, projectID, releaseID string) (*domain.ReleaseEngineeringState, error)
+	StartReleaseEngineering(ctx context.Context, cmd storage.StartReleaseEngineeringCommand) (*storage.ReleaseEngineeringOutcome, error)
+	CompleteReleaseEngineering(ctx context.Context, cmd storage.CompleteReleaseEngineeringCommand) (*storage.ReleaseEngineeringOutcome, error)
 	// GetLatestProjectProductionRelease resolves the ONE release authority:
 	// the newest canonical release of the project (nil when none exists).
 	GetLatestProjectProductionRelease(ctx context.Context, projectID string) (*domain.ProductionRelease, error)

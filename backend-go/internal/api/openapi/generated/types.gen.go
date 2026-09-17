@@ -1068,6 +1068,16 @@ type ProductionRelease struct {
 	Staleness                ProductionReleaseStaleness `json:"staleness"`
 }
 
+type ReleaseEngineeringState struct {
+	ReleaseID   string  `json:"release_id"`
+	Status      string  `json:"status"`
+	StartedBy   *string `json:"started_by,omitempty"`
+	StartedAt   *string `json:"started_at,omitempty"`
+	CompletedBy *string `json:"completed_by,omitempty"`
+	CompletedAt *string `json:"completed_at,omitempty"`
+	Version     int64   `json:"version"`
+}
+
 type ReleaseCuttingDemand struct {
 	ReleaseID                string                     `json:"release_id"`
 	ReleaseNumber            int64                      `json:"release_number"`

@@ -16,6 +16,7 @@ import type {
   EdgeAssignment,
   EngineeringLog,
   FloorStatusEvent,
+  ReleaseEngineeringState,
   Hardware,
   HardwareLine,
   MaterialBoard,
@@ -2006,6 +2007,11 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     resolvedProductionRelease: releaseAuthorityFromApi(
       raw.resolved_production_release ?? raw.resolvedProductionRelease,
     ),
+    // #740 — durable per-release Engineering state of the resolved release
+    // authority. Computed on read by the API; never sent back on writes.
+    releaseEngineering: releaseEngineeringFromApi(
+      raw.release_engineering ?? raw.releaseEngineering,
+    ),
     // #697 review — server-owned Digital Thread context projection. Computed
     // on read; never sent back on writes (the write mapper below omits it).
     hasDigitalThreadContext: (() => {
@@ -3004,6 +3010,31 @@ function engineeringLogFromApi(raw: unknown): EngineeringLog | undefined {
     sentToProductionAt:
       str(r.sent_to_production_at ?? r.sentToProductionAt) || undefined,
     revision,
+  };
+}
+
+// #740 — durable per-release Engineering state of the resolved authority.
+// Fail-closed: an invalid/partial payload maps to undefined (pending), never
+// to a fabricated in_progress/completed fact.
+function releaseEngineeringFromApi(raw: unknown): ReleaseEngineeringState | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const releaseId = str(r.release_id ?? r.releaseId);
+  const status = str(r.status);
+  const startedBy = str(r.started_by ?? r.startedBy);
+  const startedAt = str(r.started_at ?? r.startedAt);
+  const version = num(r.version, 0);
+  if (!releaseId) return undefined;
+  if (status !== 'in_progress' && status !== 'completed') return undefined;
+  if (!startedBy || !startedAt || version < 1) return undefined;
+  return {
+    releaseId,
+    status,
+    startedBy,
+    startedAt,
+    completedBy: str(r.completed_by ?? r.completedBy) || undefined,
+    completedAt: str(r.completed_at ?? r.completedAt) || undefined,
+    version,
   };
 }
 

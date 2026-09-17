@@ -210,6 +210,24 @@ Features de `ProjectEvent`, Approval, ProductionRelease o ChangeOrder deben prob
 - backfill no inventa timestamps;
 - unauthorized bypass falla.
 
+### Estado durable de Ingeniería por release (#740)
+
+- `backend-go/internal/storage/production_release_engineering_test.go`
+  (PostgreSQL + HTTP reales): pending → start idempotente → complete final
+  (If-Match, version conflict, ya-completado como no-op honesto) → reload
+  durable; P2 no hereda P1 (incluida la proyección del read model de la
+  autoridad); vendedor 403; cross-org 404 sin escrituras; auditoría de
+  seguridad y eventos de lifecycle en la misma transición.
+- `backend-go/internal/storage/engineering_physical_gate_red_test.go`:
+  **RED operacional conservado** — part advance, floor-status y floor-scan
+  avanzan trabajo físico hoy sin Ingeniería/materiales. La suite asserts el
+  comportamiento ACTUAL; cuando el gate transversal de #740 (PR 2) aterrice,
+  las expectativas se invierten — nunca se borra la prueba para "arreglarlo".
+- `tests/organization/engineering-state.spec.ts` (Chromium + Go +
+  PostgreSQL): P1 → Pendiente → Iniciar → En proceso (reload) → descargar
+  PDF/PTX NO completa → Completar → Completa con actor/fecha y etapa
+  siguiente honesta (reload); cero materiales/progreso físico/produced.
+
 ---
 
 ## 8. Verificación producción pieza→mueble

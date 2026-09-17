@@ -209,6 +209,18 @@
   flex-wrap: wrap;
 }
 
+/* #740 — durable per-release engineering fact: final completion (actor +
+   server date) and the honest next stage. Informational only — it never
+   enables material authorization or physical work. */
+.eng-workspace__engineering-fact {
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--text-primary);
+}
+
+.eng-workspace__engineering-next {
+  color: var(--text-muted);
+}
+
 .eng-workspace__live-notice {
   margin: 0;
   padding: var(--space-3) var(--space-4);

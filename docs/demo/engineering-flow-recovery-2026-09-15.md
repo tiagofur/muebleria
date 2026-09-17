@@ -5,6 +5,15 @@
 > Prioridad solicitada por el propietario: simplificar Q/R y desbloquear Ingeniería para preparar PTX de prueba.
 > El único orden de producto vive en [roadmap-comercial-v2.md](../roadmap-comercial-v2.md). Este documento explica entregas y evidencias, no crea otro backlog/dispatcher.
 
+**Avance (2026-09-16):** A (#738) y B (#739) integradas. C avanza por PRs: el
+**PR 1 de #740** entrega la evidencia durable de Ingeniería por release exacto
+(tabla `production_release_engineering` + comandos `engineering:start`/`:complete`
+idempotentes/versionados + proyección del read model) y conserva el **RED
+operacional** (`backend-go/internal/storage/engineering_physical_gate_red_test.go`:
+part advance, floor-status y floor-scan avanzan trabajo físico hoy sin Ingeniería
+completada ni materiales autorizados). El gate transversal de los writers físicos
+es la **segunda entrega** de #740.
+
 ## 1. Resultado inmediato y límites
 
 ```text

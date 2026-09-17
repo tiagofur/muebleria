@@ -519,6 +519,10 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 	if err != nil {
 		return nil, err
 	}
+	engineeringStates, err := s.EngineeringStatesByRelease(ctx, releaseIDs)
+	if err != nil {
+		return nil, err
+	}
 	dtContext, err := s.DigitalThreadContextByProject(ctx, projectIDs)
 	if err != nil {
 		return nil, err
@@ -527,6 +531,8 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		list[i].ResolvedProductionRelease = resolveReleaseProjection(latestReleases[list[i].ID], list[i].ProductionRelease)
 		if canonical := latestReleases[list[i].ID]; canonical != nil {
 			list[i].ResolvedProductionRelease.FrozenRouting = frozenRouting[canonical.ID]
+			// #740: durable Engineering state of the resolved authority.
+			list[i].ReleaseEngineering = engineeringStates[canonical.ID]
 		}
 		list[i].HasDigitalThreadContext = dtContext[list[i].ID]
 	}
@@ -1033,6 +1039,13 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 				return nil, err
 			}
 			p.ResolvedProductionRelease.FrozenRouting = frozenRouting[canonical.ID]
+			// #740: durable Engineering state of the resolved authority —
+			// computed on read, never client-authored.
+			engineering, err := s.EngineeringStatesByRelease(ctx, []string{canonical.ID})
+			if err != nil {
+				return nil, err
+			}
+			p.ReleaseEngineering = engineering[canonical.ID]
 		}
 	}
 	// #697 review: server-owned Digital Thread context projection — same

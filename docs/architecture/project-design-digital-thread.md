@@ -1384,6 +1384,43 @@ the happy path as one plain verdict plus one action:
   workspace read model so a release created moments earlier resolves without
   a manual reload.
 
+### 25.8 Durable per-release Engineering state (#740 PR 1)
+
+Engineering completion is its OWN authority — neither the ProductionRelease
+nor `Project.status` records it, and it never implies material authorization
+or physical work:
+
+```text
+QuoteRevision accepted    = commercial commitment
+DesignRevision approved   = design decision
+ProductionRelease         = exact technical content frozen
+Engineering completed     = preparation of THAT release finished  ← NEW table
+Material authorization    = separate authority (release-scoped stamp)
+Physical execution        = separate gates (PR 2 of #740)
+```
+
+- `production_release_engineering` (migration 000134): one row per release
+  (absent = pending), tenant-owned with owner-org RLS, identity + one-way
+  completion enforced by trigger, `version` for optimistic concurrency.
+- Commands (release-exact, server actor/timestamps, audit + lifecycle event
+  in the same transaction): `engineering:start` (idempotent, first actor
+  wins), `engineering:complete` (requires prior start + the release's frozen
+  schema-v2 routing evidence + `If-Match`; final). Reads (`GET
+  .../engineering`) never write.
+- Projections: the project read model exposes `release_engineering` for the
+  RESOLVED AUTHORITY (queue/dashboard chip via `engineeringEntryStatus`);
+  the Engineering workspace reads the state of the release PINNED in its URL
+  and offers the explicit CTAs ("Iniciar Ingeniería" / "Completar
+  Ingeniería"). PDF/PTX preparation and downloads never complete anything.
+- P2 never inherits P1: rows are keyed by exact `release_id`. The legacy
+  project-global `engineeringLog` JSONB stays untouched (pre-DT
+  compatibility, `unverified` in the #738 projection — never reinterpreted
+  as completion of any release).
+- Operational RED conserved (`engineering_physical_gate_red_test.go`): part
+  advance and the legacy item floor writers currently advance physical work
+  without engineering/material authorization — evidence for the transversal
+  physical gate (second delivery of #740).
+
 ---
 
 ## 26. Anti-patterns — forbidden implementation shortcuts
