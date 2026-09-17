@@ -124,3 +124,77 @@ export function projectAllowsProductionAccess(
     (project.status === 'accepted' || project.status === 'produced')
   );
 }
+
+/**
+ * #741 PR 1 — work-release continuity signal.
+ *
+ * The latest release authority answers which release governs the project
+ * NOW; the materialized executions answer which release OWNS the work in
+ * progress. When the whole execution set pins a release OLDER than the
+ * canonical authority there is a discontinuity no surface may resolve
+ * implicitly: the server blocks the dangerous commands with the continuity
+ * copy, and the operational UI informs the user (never retargets, never
+ * offers automatic replacement).
+ */
+export interface ReleaseWorkContinuity {
+  /** The release the materialized executions belong to (older release). */
+  readonly workReleaseId: string;
+  /** The current canonical authority (the newer release). */
+  readonly authorityReleaseId: string;
+  readonly authorityReleaseNumber?: number;
+  /** Any completed/in-progress/rework operation or advanced unit exists. */
+  readonly hasPhysicalProgress: boolean;
+}
+
+/** Inputs of {@link releaseWorkContinuityOf}. */
+export type ReleaseWorkContinuityInput = ReleaseAuthorityInput & {
+  readonly partInstances?: readonly {
+    readonly productionRevision: string;
+    readonly requiredOperations?: readonly { readonly status: string }[];
+  }[];
+  readonly moduleUnits?: readonly {
+    readonly productionRevision: string;
+    readonly status?: string;
+  }[];
+};
+
+/**
+ * Resolve the work-release continuity of a project: defined ONLY when a
+ * canonical authority exists, executions are materialized, they ALL belong
+ * to one release and that release is not the authority. Mixed or absent
+ * provenance is `undefined` (the server keeps failing those closed per
+ * target); executions matching the authority are the normal path.
+ */
+export function releaseWorkContinuityOf(
+  project: ReleaseWorkContinuityInput,
+): ReleaseWorkContinuity | undefined {
+  const authority = releaseAuthorityOf(project);
+  if (!authority || authority.source !== 'canonical') return undefined;
+  const workReleases = new Set<string>();
+  for (const part of project.partInstances ?? []) {
+    if (part.productionRevision) workReleases.add(part.productionRevision);
+  }
+  for (const unit of project.moduleUnits ?? []) {
+    if (unit.productionRevision) workReleases.add(unit.productionRevision);
+  }
+  if (workReleases.size !== 1) return undefined;
+  const workReleaseId = [...workReleases][0];
+  if (!workReleaseId || workReleaseId === authority.releaseId) return undefined;
+  let hasPhysicalProgress = false;
+  for (const part of project.partInstances ?? []) {
+    for (const op of part.requiredOperations ?? []) {
+      if (op.status === 'completed' || op.status === 'in_progress' || op.status === 'rework') {
+        hasPhysicalProgress = true;
+      }
+    }
+  }
+  for (const unit of project.moduleUnits ?? []) {
+    if (unit.status && unit.status !== 'awaiting_parts') hasPhysicalProgress = true;
+  }
+  return {
+    workReleaseId,
+    authorityReleaseId: authority.releaseId,
+    authorityReleaseNumber: authority.releaseNumber,
+    hasPhysicalProgress,
+  };
+}

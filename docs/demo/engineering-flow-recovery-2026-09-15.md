@@ -135,6 +135,22 @@ Primera política: alcance completo del release. Si autorización parcial no est
 
 No seleccionar `latest` como autorización de un trabajo en curso. Revalidar la autoridad exacta de piezas/unidades y decisiones operativas. P2 no hereda Ingeniería/materiales de P1 ni borra progreso, reservas o artefactos. Hasta contar con reemplazo parcial probado, bloquear el retarget de trabajo en curso y explicar la resolución manual autorizada.
 
+**Estado (2026-09-17, PR 1 de #741 ENTREGADO):** el primer incremento de
+esta entrega está implementado — el trabajo materializado conserva su release
+(pre-guard de pertenencia en todos los writers físicos bajo el mismo lock que
+el gate de #740, la pregunta «¿a qué P pertenece ESTE trabajo?» precede a
+cualquier evidencia de preparación), la regeneración bajo una autoridad más
+reciente se bloquea con progreso físico o compromiso de material (ni force
+reemplaza: no existe reconciliación), la discontinuidad limpia (ejecuciones
+vírgenes sin compromiso) sigue disponible como preparación, P1 permanece
+legible sin mutaciones, P2 nace limpio y la UI de Producción informa sin
+ofrecer reemplazo automático. Detalle ejecutable en
+`docs/project-lifecycle.md` §2.4 y `docs/architecture/project-design-digital-thread.md`
+§25.10. Quedan para incrementos siguientes: reemplazo parcial/matching,
+compensaciones (#680) y suspend/resume/cancel completos con el contrato
+`suspend ≠ cancelación comercial`, `cancel trabajo ≠ revocar P`,
+`resume ≠ crear P nueva`.
+
 Suspender/reanudar/cancelar trabajo registra una decisión auditada y detiene nuevas acciones según política; no muta el contenido histórico de P ni simula una revocación canónica ya existente. Cancelación no crea automáticamente devoluciones de stock. Las compensaciones usan el dueño de inventario #680. Migración sin evidencia de procedencia falla cerrada, preservando datos para revisión.
 
 ## 5. Evidencia mínima por entrega

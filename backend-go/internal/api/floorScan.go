@@ -296,7 +296,8 @@ func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to s
 func respondWithFloorGateError(w http.ResponseWriter, err error) bool {
 	if errors.Is(err, domain.ErrPhysicalWorkEngineeringPending) ||
 		errors.Is(err, domain.ErrPhysicalWorkMaterialsPending) ||
-		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) {
+		errors.Is(err, domain.ErrPhysicalWorkReleaseMismatch) ||
+		errors.Is(err, domain.ErrPhysicalWorkMaterialsCommitted) {
 		respondWithError(w, http.StatusConflict, err.Error())
 		return true
 	}

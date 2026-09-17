@@ -159,12 +159,12 @@ func (s *PostgresStore) FinishProductionActivityWithPhysicalEffect(ctx context.C
 
 	// Project row lock — the same frontier the engineering/material commands
 	// and every physical writer take.
-	var planningRaw, legacyReleaseRaw []byte
+	var planningRaw, legacyReleaseRaw, partsRaw, unitsRaw []byte
 	err = tx.QueryRow(ctx, `
-		SELECT material_planning, production_release
+		SELECT material_planning, production_release, part_instances, module_units
 		FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2)
 		FOR UPDATE;
-	`, activity.ProjectID, OrgFromCtx(ctx)).Scan(&planningRaw, &legacyReleaseRaw)
+	`, activity.ProjectID, OrgFromCtx(ctx)).Scan(&planningRaw, &legacyReleaseRaw, &partsRaw, &unitsRaw)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("project not found")
@@ -199,6 +199,14 @@ func (s *PostgresStore) FinishProductionActivityWithPhysicalEffect(ctx context.C
 			return nil, fmt.Errorf("error resolving release authority: %w", err)
 		}
 		if authority != nil && authority.Source == domain.ProductionReleaseAuthorityCanonical {
+			// #741: the activity's floor effect belongs to an item without
+			// release identity — if the materialized executions belong to a
+			// release older than the authority, the continuity blocker fires
+			// before any preparation evidence is consulted.
+			parts, units := decodeExecutionsRaw(partsRaw, unitsRaw)
+			if err := s.guardItemFloorContinuity(parts, units, authority); err != nil {
+				return nil, err
+			}
 			if err := s.guardCanonicalExecutionRouting(ctx, tx, activity.ProjectID, authority); err != nil {
 				return nil, err
 			}
@@ -330,12 +338,12 @@ func (s *PostgresStore) SetProjectItemFloorStatusGated(ctx context.Context, adv 
 	}
 	defer tx.Rollback(ctx)
 
-	var planningRaw, legacyReleaseRaw []byte
+	var planningRaw, legacyReleaseRaw, partsRaw, unitsRaw []byte
 	err = tx.QueryRow(ctx, `
-		SELECT material_planning, production_release
+		SELECT material_planning, production_release, part_instances, module_units
 		FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2)
 		FOR UPDATE;
-	`, adv.ProjectID, OrgFromCtx(ctx)).Scan(&planningRaw, &legacyReleaseRaw)
+	`, adv.ProjectID, OrgFromCtx(ctx)).Scan(&planningRaw, &legacyReleaseRaw, &partsRaw, &unitsRaw)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("project not found")
@@ -354,6 +362,13 @@ func (s *PostgresStore) SetProjectItemFloorStatusGated(ctx context.Context, adv 
 		return fmt.Errorf("error resolving release authority: %w", err)
 	}
 	if authority != nil && authority.Source == domain.ProductionReleaseAuthorityCanonical {
+		// #741: quote-line items carry no release identity — the floor write
+		// fails closed when the materialized executions belong to a release
+		// older than the authority (no correlation is invented).
+		parts, units := decodeExecutionsRaw(partsRaw, unitsRaw)
+		if err := s.guardItemFloorContinuity(parts, units, authority); err != nil {
+			return err
+		}
 		// Same technical guard as every canonical physical writer, then the
 		// operational gate on top of it.
 		if err := s.guardCanonicalExecutionRouting(ctx, tx, adv.ProjectID, authority); err != nil {

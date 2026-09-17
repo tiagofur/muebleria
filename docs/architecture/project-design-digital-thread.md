@@ -1467,6 +1467,67 @@ allowed ⇔ authority.Source == canonical
   optimization, plan save, PDF/PTX downloads (#738/#739) and quality-issue
   observation never require the gate.
 
+### 25.10 Work-release continuity (#741 PR 1)
+
+`latest release != owner of existing work`; `a new release does not retarget
+work in progress`. Every materialized execution already carries its release
+identity (`ProductionRevision`, stamped by the canonical generation from the
+exact frozen snapshot) — the shared guard `storage/release_continuity.go`
+asks WHICH release owns the work before any technical guard or preparation
+evidence, under the same `projects` row lock the #740 gate uses:
+
+```text
+allowed to consider preparation
+⇔ authority is canonical
+  AND (no executions yet
+       OR all executions pin the authority
+       OR — for regeneration only — the discontinuity is clean:
+           untouched executions AND no material commitment for the older
+           release)
+```
+
+- Every physical writer over materialized work (part advance/rework, unit
+  advance/override via `MutateProjectPartExecutions`; physical quality via
+  `MutateProjectQualityPhysical`; item floor-status PATCH + floor-scan via
+  `SetProjectItemFloorStatusGated`; activity finish floor effect) fails with
+  the continuity blocker (`ErrPhysicalWorkReleaseMismatch`, 409, actionable
+  copy, zero mutations) when the whole execution set pins a release OLDER
+  than the authority — the operator hears about the discontinuity, never
+  about the new release's pending engineering. Quote-line items carry no
+  release identity: their floor writes fail closed rather than correlating
+  by position/index/date/latest. Mixed provenance keeps failing closed in the
+  per-target closure checks.
+- Regeneration (`GenerateCanonicalPartExecutions`) applies the conservative
+  policy BEFORE any force flag: physical progress on the older release's
+  work blocks (supervisor force is NOT a continuity decision — no
+  reconciliation exists that preserves completed operations/rework/QC/floor
+  progress); an authorized material commitment for the older release blocks
+  with `ErrPhysicalWorkMaterialsCommitted` (the substitution never orphans
+  P1's commitment; #680 owns the compensations); a clean discontinuity
+  (untouched + uncommitted) stays available as preparation, and the
+  same-release supervised force contract of #577/#740 is unchanged
+  (an explicit in-release redo, never a retarget).
+- P1 stays fully readable (releases list, exact release read, frozen cutting
+  demand #739, executions, progress, QC, events) and READ never EXECUTES:
+  historical consultation leaves zero mutations. P2 is born clean:
+  engineering `pending` (durable per-release state never carries over) and
+  materials pending (the #740 gate demands planning pinned to P2's exact
+  release+fingerprint; P2 appropriates nothing from P1's planning).
+- Material derivation cannot orphan a commitment either: `HandleMaterialsDerive`
+  keeps rejecting any re-derivation while a planning release exists
+  ("el material de esta obra ya fue liberado").
+- React only reflects: the Producción order hub shows an informative banner
+  (`prod-release-continuity`: "Nueva revisión disponible — Hay trabajo de
+  fabricación en curso sobre la versión anterior…", secondary detail
+  `Liberación #N`) with NO automatic replacement action; the blocked commands
+  surface the server copy verbatim (toast). Backend manda.
+- Latest-consumer classification (enforced by review): A creation/new
+  preparation keeps resolving latest; B existing materialized work resolves
+  the work-owned release (this guard); C history/consult resolves the exact
+  requested release. Suspend/resume/cancel of work are NOT implemented; the
+  documented contract notes suspend ≠ commercial cancel, cancel work ≠
+  revoke P, resume ≠ create a new P.
+
 ---
 
 ## 26. Anti-patterns — forbidden implementation shortcuts

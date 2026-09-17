@@ -233,9 +233,78 @@ identidad de release que correlacionar y conservan su cadena OC-022 (el gate no
 aplica); esa compatibilidad NUNCA habilita un proyecto moderno — cualquier
 release canónico hace canónica la autoridad y activa el gate. Los blockers del
 gate se mapean a 409 con copy accionable ("Ingeniería pendiente…" /
-"Material pendiente de autorización…" / "el trabajo pertenece a una liberación
-anterior…"); React los muestra verbatim (toast) — la visibilidad de pantallas
-NO es el gate, el backend manda.
+"Material pendiente de autorización…" / "hay una liberación más reciente y
+este trabajo pertenece a la liberación anterior; revisá la continuidad…" /
+"hay materiales comprometidos para la liberación en curso…"); React los
+muestra verbatim (toast) — la visibilidad de pantallas NO es el gate, el
+backend manda.
+
+**Continuidad P1/P2 (#741 PR 1) — el trabajo tiene dueño:**
+
+```text
+latest release ≠ dueño del trabajo existente
+nueva liberación ≠ retarget del trabajo en curso
+```
+
+La autoridad latest responde qué liberación gobierna el proyecto AHORA; jamás
+qué liberación es dueña del trabajo ya materializado. Toda ejecución
+materializada conserva la identidad de la liberación que la creó
+(`PartInstance/ModuleUnitExecution.ProductionRevision`, estampada por la
+generación canónica desde el snapshot congelado); el guard compartido
+`storage/release_continuity.go` hace la pregunta de pertenencia ANTES que
+cualquier guard técnico o evidencia de preparación:
+
+- ejecuciones todas de la autoridad → gates normales;
+- ejecuciones todas de una liberación ANTERIOR a la autoridad → 409 de
+  continuidad con copy accionable y CERO mutaciones (el operador escucha la
+  discontinuidad, nunca el estado de preparación de la liberación nueva);
+- sin ejecuciones → nada que ser dueño, gates normales;
+- procedencia mixta/ambigua → los checks por objetivo en cada closure
+  siguen fallando cerrado.
+
+Writers cubiertos por el pre-guard: advance/rework de pieza, advance/override
+de unidad (`MutateProjectPartExecutions`), rework/QC físicos de calidad
+(`MutateProjectQualityPhysical`), floor-status PATCH + floor-scan
+(`SetProjectItemFloorStatusGated`) y activity/finish con efecto físico
+(`FinishProductionActivityWithPhysicalEffect`) — los ítems quote-line NO
+tienen identidad de release propia: si las ejecuciones del proyecto son de una
+liberación anterior, la escritura de piso falla cerrado en vez de inventar
+correlación por posición/índice/fecha/latest.
+
+**Regeneración (`PUT /part-executions`, incl. force).** La regeneración deriva
+de la AUTORIDAD; cuando las ejecuciones a reemplazar son de una liberación
+anterior decide la política ANTES de consultar el force:
+
+| Estado del trabajo existente | Resultado |
+|---|---|
+| progreso físico (op completada/en proceso/rework o unidad avanzada) | 409 continuidad — ni force lo reemplaza: no existe reconciliación que preserve operaciones/QC/piso |
+| sin progreso pero materiales autorizados/reservados para esa liberación | 409 "materiales comprometidos" — la sustitución no huérfana el compromiso (#680 es dueño de las compensaciones) |
+| sin progreso y sin compromiso | regeneración permitida (preparación): las ejecuciones planificadas vírgenes de P1 se sustituyen por las de P2 |
+| misma liberación que la autoridad | contrato supervisor `force` auditor de #577/#740 SIN cambios (reinicio dentro de la misma liberación, explícito y auditado; no es retarget) |
+
+Nada de esto borra P1: su Q/R/fingerprint, despiece congelado (#739), plan de
+corte, piezas, progreso, QC, eventos y descargas históricas siguen legibles
+con los permisos existentes y LECTURA no es EJECUCIÓN (0 mutaciones,
+probado). P2 nace limpio: Ingeniería `pending` (sin heredar completion/actores
+de P1) y materiales pendientes (el gate exige planning pineando P2+fingerprint).
+La UI de Producción INFORMA ("Nueva revisión disponible — Hay trabajo de
+fabricación en curso sobre la versión anterior…", detalle `Liberación #N`)
+sin ofrecer reemplazo automático; el banner es visibilidad, no gate.
+
+**Clasificación de consumidores de la autoridad latest:**
+
+```text
+A. creación/preparación nueva     → latest correcto (generación inicial,
+                                    presentar autoridad actual)
+B. trabajo materializado existente → release dueño del trabajo gobierna
+C. historial/consulta             → release solicitado explícitamente
+                                    (cutting-demand, engineering state, list)
+```
+
+Suspend/resume/cancel del trabajo NO están implementados; el contrato
+preparado por este PR documenta `suspend ≠ cancelación comercial`,
+`cancel trabajo ≠ revocar P` y `resume ≠ crear P nueva`. La devolución de
+stock/compras es #680; el cambio comercial es #678.
 
 ### 2.5 Pruebas históricas que se conservan
 
@@ -252,7 +321,7 @@ Estos hechos no deben volver a aparecer como trabajo pendiente por leer checklis
 | #738 | Entrada, cola y navegación de Ingeniería sin Project.status ni salto implícito. |
 | #739 | Despiece congelado y preparación de PDF/PTX de prueba desde P exacta. |
 | #740 | ENTREGADO (PR 1 + PR 2): evidencia durable de Ingeniería por release exacto, comandos start/complete y gate operacional transversal de avance físico con Ingeniería completa y material autorizado del mismo release, bajo lock y con correlación exacta. |
-| #741 | P1/P2 en trabajo iniciado, suspensión/cancelación sin retarget ni pérdida de historia. |
+| #741 | PR 1 ENTREGADO: política conservadora de continuidad — el trabajo materializado conserva su release (pre-guard en todos los writers físicos), regeneración/force bloqueados ante discontinuidad con progreso o compromiso material, P1 histórico legible sin mutaciones, P2 nace limpio, banner informativo en Producción. Pendiente: reemplazo parcial universal, matching heurístico, compensaciones #680, suspend/resume/cancel completos. |
 | #642 | Continuación de consumidores comerciales, Q/R sencilla, export comercial y retiro de autoridad comercial legacy. |
 | #679 | Refresco entre clientes y escritura de WorkingCopy con detección de cambios concurrentes. |
 | #680 | Despacho/reversión atómicos e idempotentes. |

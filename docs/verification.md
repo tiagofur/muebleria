@@ -247,6 +247,46 @@ Features de `ProjectEvent`, Approval, ProductionRelease o ChangeOrder deben prob
   (excepción auditada vía APIs soportadas) → el MISMO avance tiene éxito con
   estado y evento F092 reales.
 
+### Continuidad P1/P2 sin retarget implícito (#741 PR 1)
+
+- `backend-go/internal/storage/release_continuity_red_test.go`
+  (**RED del PR invertido por su fix**, PostgreSQL + HTTP reales; la forma del
+  escenario se conserva para comparar antes/después): P1 con progreso físico
+  real (corte completado + evidencia autorizada) → P2 con diferencia real de
+  fabricación (600→650 mm, requote Q4 aceptada) → advance de pieza P1,
+  advance de unidad, floor-status PATCH, floor-scan, rework de pieza y
+  rework de calidad devuelven 409 de continuidad con CERO mutaciones (la
+  pertenencia se pregunta ANTES que la preparación; el operador nunca ve el
+  estado de P2 como motivo del bloqueo de P1); `PUT part-executions`
+  force=true YA NO reemplaza las ejecuciones P1 (ids, corte completado y
+  pinning de release intactos — hoy previo al fix devolvía 200 y destruía el
+  trabajo).
+- Mismo archivo, política de regeneración: sin progreso pero materiales P1
+  autorizados → 409 «materiales comprometidos» sin tocar planning/ejecuciones
+  (el compromiso no queda huérfano); discontinuidad limpia (vírgenes y sin
+  compromiso) → regeneración P2 permitida y el trabajo pasa a ser P2 con el
+  copy honesto de preparación de P2; histórico P1 legible (lista de releases,
+  cutting-demand) con 0 mutaciones.
+- Carreras (§13): advance P1 vs creación concurrente de P2 (gana como P1
+  completo o pierde 409 de continuidad; jamás empieza P1 y aterriza P2) y
+  force-regenerate vs creación de P2 (corre como regeneración dentro de P1 o
+  bloquea; las ejecuciones nunca quedan estampadas P2 sobre progreso P1) —
+  ambos sobre el lock de fila de projects, estables en repeticiones.
+- `TestPhysicalWorkGate_P2DoesNotReuseP1Evidence` actualizado al refinamiento
+  #741: con P2 pendiente, avanzar pieza P1 ahora responde el bloqueo de
+  continuidad (la pregunta de pertenencia precede a la preparación) en vez
+  del «Ingeniería pendiente» de P2.
+- Dominio/UI TS: `releaseAuthority.test.ts` (señal de continuidad: single
+  ownership, normal, mixta, legacy, progreso) y `ProductionOrderHub.test.tsx`
+  (banner «Nueva revisión disponible» con copy §16, detalle Liberación #N sin
+  ids técnicos, sin acciones de reemplazo, silencio sin progreso/discontinuidad).
+- `tests/organization/production-release-continuity.spec.ts` (Chromium + Go +
+  PostgreSQL): fixture por API soportada (P1 completa con avance físico, P2
+  con 650 mm vía requote) → Producción informa la nueva revisión con el
+  trabajo P1 visible y sin acción automática → la acción física bloqueada
+  explica la discontinuidad (toast con copy del servidor) con poststate
+  idéntico al prestate → recargar conserva exactamente el mismo estado.
+
 ---
 
 ## 8. Verificación producción pieza→mueble

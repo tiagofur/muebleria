@@ -470,10 +470,15 @@ func TestPhysicalWorkGate_P2DoesNotReuseP1Evidence(t *testing.T) {
 
 	// P2 is the authority and is pending: P1's completed engineering +
 	// authorized materials do NOT carry over — the next P1 advance blocks.
+	// #741 refines the blocker: the work-ownership question comes FIRST, so
+	// the operator gets the continuity copy (a newer release exists while
+	// the work belongs to the previous one) instead of P2's unrelated
+	// pending engineering.
 	before := gs.counts(t)
 	rr := gs.advance(`{"operation_type":"cnc","operator_name":"Op"}`)
-	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "Ingeniería pendiente") {
-		t.Fatalf("P2 pending: expected 409 Ingeniería pendiente, got=%d %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "liberación anterior") ||
+		!strings.Contains(rr.Body.String(), "continuidad") {
+		t.Fatalf("P2 pending: expected 409 continuity blocker, got=%d %s", rr.Code, rr.Body.String())
 	}
 	gs.gateAssertZeroMutations(t, before, "P2 pending")
 

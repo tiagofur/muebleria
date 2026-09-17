@@ -14,6 +14,7 @@ import type { Catalog,
   ProductionStaleInfo,
   Project,
   ProductionSpaceOption,
+  ReleaseWorkContinuity,
 } from '@granete/domain';
 import { PRODUCTION_SCOPE_ALL } from '@granete/domain';
 import { ArrowLeft, ExternalLink, Factory } from 'lucide-react';
@@ -85,6 +86,13 @@ export type ProductionOrderHubProps = {
   ) => void;
   readonly canSetFloorStatus?: boolean;
   readonly staleInfo?: ProductionStaleInfo | null;
+  /**
+   * #741 PR 1: work-release continuity signal — the materialized executions
+   * belong to a release older than the canonical authority while physical
+   * progress exists. Informative only: the server blocks the dangerous
+   * commands; the hub NEVER offers automatic replacement.
+   */
+  readonly releaseContinuity?: ReleaseWorkContinuity | null;
   readonly onExportCncPilot?: () => void | Promise<void>;
   readonly onExportAssemblySheets?: () => void | Promise<void>;
   /** PROD-4.4 multi-ambiente filter */
@@ -141,6 +149,7 @@ export function ProductionOrderHub({
   onSetFloorStatus,
   canSetFloorStatus = false,
   staleInfo = null,
+  releaseContinuity = null,
   onExportCncPilot,
   onExportAssemblySheets,
   spaceOptions = [],
@@ -229,6 +238,25 @@ export function ProductionOrderHub({
             <strong>Aviso de versión:</strong>{' '}
             {staleInfo.messageEs ||
               'La orden de producción se generó a partir de una versión anterior.'}
+          </aside>
+        ) : null}
+
+        {releaseContinuity?.hasPhysicalProgress ? (
+          <aside
+            className="prod-hub__stale-warning"
+            role="status"
+            aria-live="polite"
+            data-testid="prod-release-continuity"
+          >
+            <strong>Nueva revisión disponible:</strong> Hay trabajo de
+            fabricación en curso sobre la versión anterior. Revisá la
+            continuidad antes de cambiar la fabricación.
+            <p className="prod-hub__continuity-detail">
+              Trabajo actual: liberación anterior
+              {releaseContinuity.authorityReleaseNumber !== undefined
+                ? ` · Nueva liberación: Liberación #${releaseContinuity.authorityReleaseNumber}`
+                : ''}
+            </p>
           </aside>
         ) : null}
 
