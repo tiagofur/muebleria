@@ -35,6 +35,10 @@ GitHub Issues es la única cola. Sin aprobación de alcance: sólo propuesta.
   segunda `Delivery: complete`; base main y todo el DoD demostrado.
 - Parcial: primera línea `Refs #N`; segunda `Delivery: partial`;
   alcance restante concreto, issue abierta.
+- Requisitos mecánicos de `scripts/check_pr_metadata.py`:
+  - Incluir siempre `--label "type:<kind>"` en `gh pr create` (`type:feature`, `type:bug`, `type:docs`, etc.).
+  - Las 2 primeras líneas no vacías del cuerpo son estrictamente el enlace y la entrega (sin `## Summary` previo).
+  - No incluir otras palabras clave de vinculación (`closes`, `fixes`, `refs`) en el cuerpo.
 - Nunca uses `Refs #N` para una issue bounded ya completada para posponer su cierre.
   Tampoco uses closing keyword para una parcial o un PR dirigido a rama intermedia.
 - No llamar API de cierre, autoaplicar aprobación, force-push ni mergear. El cierre
