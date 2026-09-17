@@ -182,8 +182,10 @@ export function fabricationFlowOf(
   }
   const engineeringDone = engineeringStatus === 'done';
 
-  // Materials step — frozen requirements correlated with the exact release
-  // derive it; the audited release stamp authorizes it.
+  // Materials step — the FACT of authorization stands on its own exact-release
+  // evidence (correlated frozen requirements + audited stamp), independent of
+  // Engineering completion; requirements without the stamp are the pending
+  // derivation once Engineering is complete.
   const materialsLabel = materialsAuthorized
     ? 'Materiales autorizados'
     : materialsDerived && engineeringDone
@@ -195,15 +197,19 @@ export function fabricationFlowOf(
       ? 'current'
       : 'pending';
 
-  // Production step — ONLY real physical facts move it past pending; it is
-  // never marked done here (full completion is commercial close, out of
-  // this projection). "Producción iniciada" requires physical evidence,
-  // never `Project.status`.
+  // Production step — READINESS mirrors the #740 physical gate: engineering
+  // completed AND materials authorized. Authorized materials alone (with
+  // Engineering still pending/in progress/unconfirmed) keep Production
+  // pending — the server would reject the first physical command. Real
+  // physical work is a FACT that stands on its own evidence, never on
+  // `Project.status` nor on the gate. Never marked done here (full
+  // completion is commercial close, out of this projection).
+  const productionReady = engineeringDone && materialsAuthorized;
   const productionStatus: FabricationStepStatus =
-    physicalWork || materialsAuthorized ? 'current' : 'pending';
+    physicalWork || productionReady ? 'current' : 'pending';
   const productionLabel = physicalWork
     ? 'En producción'
-    : productionStatus === 'current'
+    : productionReady
       ? 'Listo para producción'
       : 'Producción';
 

@@ -121,6 +121,62 @@ describe('fabricationFlowOf — authority mapping (#768)', () => {
     expect(result.flow.nextAction).toBeNull();
   });
 
+  it('review PR #777 (1): materiales autorizados con Ingeniería EN PROCESO — el hecho done, Producción PENDIENTE (gate #740)', () => {
+    const result = fabricationFlowOf(
+      canonicalProject({
+        materialPlanning: { requirements: correlatedRequirements } as Project['materialPlanning'],
+        materialsRelease,
+      }),
+      { kind: 'phase', phase: 'in_progress' },
+    );
+    expect(step(result, 'engineering').status).toBe('current');
+    expect(step(result, 'engineering').stateLabel).toBe('En proceso');
+    expect(step(result, 'materials').status).toBe('done');
+    expect(step(result, 'materials').label).toBe('Materiales autorizados');
+    const production = step(result, 'production');
+    expect(production.status).toBe('pending');
+    expect(production.label).toBe('Producción');
+    expect(production.label).not.toBe('Listo para producción');
+    if (result.kind !== 'flow') throw new Error('unreachable');
+    expect(result.flow.nextAction).toBe('complete-engineering');
+    expect(result.flow.nextActionLabel).toBe('Completar Ingeniería');
+  });
+
+  it('review PR #777 (2): materiales autorizados con Ingeniería UNCONFIRMED — sin "Listo", sin acción', () => {
+    for (const evidence of [
+      { kind: 'unknown' } as const,
+      { kind: 'loading' } as const,
+      { kind: 'unconfirmed' } as const,
+    ]) {
+      const result = fabricationFlowOf(
+        canonicalProject({
+          materialPlanning: { requirements: correlatedRequirements } as Project['materialPlanning'],
+          materialsRelease,
+        }),
+        evidence,
+      );
+      expect(step(result, 'engineering').status).toBe('unconfirmed');
+      expect(step(result, 'materials').status).toBe('done');
+      const production = step(result, 'production');
+      expect(production.status).toBe('pending');
+      expect(production.label).not.toBe('Listo para producción');
+      if (result.kind !== 'flow') throw new Error('unreachable');
+      expect(result.flow.nextAction).toBeNull();
+    }
+  });
+
+  it('review PR #777 (4): trabajo físico real muestra "En producción" aunque Ingeniería no esté completa (hecho, no gate)', () => {
+    const result = fabricationFlowOf(
+      canonicalProject({
+        partInstances: [partWithProgress],
+      }),
+      { kind: 'phase', phase: 'in_progress' },
+    );
+    const production = step(result, 'production');
+    expect(production.status).toBe('current');
+    expect(production.label).toBe('En producción');
+  });
+
   it('Caso E: evidencia física real → En producción (nunca por Project.status)', () => {
     const result = fabricationFlowOf(
       canonicalProject({
