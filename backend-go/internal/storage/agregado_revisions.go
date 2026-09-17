@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
@@ -15,6 +17,7 @@ import (
 
 // CreateAgregadoRevision stores an immutable append-only recipe revision for an Agregado.
 // Locks the parent agregados row with FOR UPDATE to serialize revision number allocation safely under concurrency.
+// Scoped strictly to (organization_id, agregado_id, revision_number).
 func (s *PostgresStore) CreateAgregadoRevision(
 	ctx context.Context,
 	agregadoID string,
@@ -37,7 +40,7 @@ func (s *PostgresStore) CreateAgregadoRevision(
 	}
 	defer tx.Rollback(ctx)
 
-	// Lock the parent agregado to serialize revision allocations for this agregado
+	// Lock the parent agregado to serialize revision allocations for this agregado within this tenant
 	var dummy string
 	err = tx.QueryRow(ctx, `
 		SELECT id FROM agregados
@@ -51,13 +54,13 @@ func (s *PostgresStore) CreateAgregadoRevision(
 		return nil, fmt.Errorf("lock agregado for revision: %w", err)
 	}
 
-	// Compute next sequential revision number
+	// Compute next sequential revision number scoped strictly to organization and agregado
 	var nextRev int
 	err = tx.QueryRow(ctx, `
 		SELECT COALESCE(MAX(revision_number), 0) + 1
 		FROM agregado_revisions
-		WHERE agregado_id = $1
-	`, agregadoID).Scan(&nextRev)
+		WHERE agregado_id = $1 AND organization_id = $2
+	`, agregadoID, orgID).Scan(&nextRev)
 	if err != nil {
 		return nil, fmt.Errorf("calculate next revision number: %w", err)
 	}
@@ -149,8 +152,13 @@ func (s *PostgresStore) ListAgregadoRevisions(ctx context.Context, agregadoID st
 }
 
 // SetAgregadoCurrentRevision updates the current_revision_id pointer of an agregado.
+// Guaranteed by database foreign key constraint fk_agregados_current_revision to require
+// the revision to exist, belong to the exact same agregado, and belong to the exact same organization.
 func (s *PostgresStore) SetAgregadoCurrentRevision(ctx context.Context, agregadoID, revisionID string) error {
 	orgID := OrgFromCtx(ctx)
+	if strings.TrimSpace(orgID) == "" {
+		return errors.New("organization id required in context")
+	}
 	query := `
 		UPDATE agregados
 		SET current_revision_id = $1, updated_at = NOW()
@@ -158,7 +166,12 @@ func (s *PostgresStore) SetAgregadoCurrentRevision(ctx context.Context, agregado
 	`
 	tag, err := s.db(ctx).Exec(ctx, query, revisionID, agregadoID, orgID)
 	if err != nil {
-		return err
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return fmt.Errorf("%w: revision %s does not exist for agregado %s in organization %s",
+				domain.ErrAgregadoRevisionNotFound, revisionID, agregadoID, orgID)
+		}
+		return fmt.Errorf("update agregado current_revision_id: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("agregado not found: %s", agregadoID)
@@ -166,35 +179,36 @@ func (s *PostgresStore) SetAgregadoCurrentRevision(ctx context.Context, agregado
 	return nil
 }
 
-// GetAgregadoCurrentRevision returns the current head revision of an agregado.
+// GetAgregadoCurrentRevision retrieves the current active recipe revision for an agregado.
 func (s *PostgresStore) GetAgregadoCurrentRevision(ctx context.Context, agregadoID string) (*domain.AgregadoRevision, error) {
 	orgID := OrgFromCtx(ctx)
 	query := `
 		SELECT r.id, r.organization_id, r.agregado_id, r.revision_number, r.recipe, r.created_by, r.created_at
 		FROM agregados a
-		JOIN agregado_revisions r ON r.id = a.current_revision_id AND r.agregado_id = a.id
+		JOIN agregado_revisions r ON r.id = a.current_revision_id AND r.organization_id = a.organization_id AND r.agregado_id = a.id
 		WHERE a.id = $1 AND a.organization_id = $2
 	`
 	row := s.db(ctx).QueryRow(ctx, query, agregadoID, orgID)
 	return scanAgregadoRevision(row)
 }
 
-// SavePublishedAssemblySnapshot stores a frozen, immutable snapshot produced by FreezePublishedAssemblySnapshot.
-// Implements deterministic deduplication (R18-H): re-freezing the identical resolution with the same
-// payload_hash returns the existing snapshot record without creating duplicates or failing immutability triggers.
+// SavePublishedAssemblySnapshot idempotently saves a frozen assembly resolution snapshot.
+// Scoped to (organization_id, agregado_revision_id, payload_hash) to guarantee that distinct
+// recipe revisions never collide or silently alias each other, while repeated publish retries
+// for the same recipe revision return the existing snapshot idempotently.
 func (s *PostgresStore) SavePublishedAssemblySnapshot(ctx context.Context, record *domain.PublishedAssemblySnapshotRecord) error {
+	orgID := OrgFromCtx(ctx)
+	if orgID == "" {
+		return errors.New("organization id required in context")
+	}
+
 	if err := domain.ValidatePublishedAssemblySnapshot(record.Snapshot); err != nil {
-		return fmt.Errorf("cannot save invalid snapshot: %w", err)
+		return fmt.Errorf("validate published assembly snapshot: %w", err)
 	}
 
 	snapshotJSON, err := json.Marshal(record.Snapshot)
 	if err != nil {
-		return fmt.Errorf("marshal published snapshot: %w", err)
-	}
-
-	orgID := OrgFromCtx(ctx)
-	if orgID == "" {
-		return errors.New("organization id required in context")
+		return fmt.Errorf("marshal snapshot: %w", err)
 	}
 
 	if record.PayloadHash == "" {
@@ -213,7 +227,7 @@ func (s *PostgresStore) SavePublishedAssemblySnapshot(ctx context.Context, recor
 			COALESCE(NULLIF($1, '')::UUID, gen_random_uuid()), $2, $3, $4::UUID, $5,
 			$6, $7, $8, $9, $10, $11::UUID, NOW()
 		)
-		ON CONFLICT (organization_id, payload_hash) DO NOTHING
+		ON CONFLICT (organization_id, agregado_revision_id, payload_hash) DO NOTHING
 		RETURNING id, created_at
 	`
 	var id string
@@ -225,11 +239,11 @@ func (s *PostgresStore) SavePublishedAssemblySnapshot(ctx context.Context, recor
 	).Scan(&id, &createdAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Idempotent duplicate: fetch existing snapshot record by payload hash
+			// Idempotent duplicate: fetch existing snapshot record for this exact recipe revision
 			err = s.db(ctx).QueryRow(ctx, `
 				SELECT id, created_at FROM published_assembly_snapshots
-				WHERE organization_id = $1 AND payload_hash = $2
-			`, orgID, record.PayloadHash).Scan(&id, &createdAt)
+				WHERE organization_id = $1 AND agregado_revision_id = $2 AND payload_hash = $3
+			`, orgID, record.AgregadoRevisionID, record.PayloadHash).Scan(&id, &createdAt)
 			if err != nil {
 				return fmt.Errorf("retrieve existing idempotent published snapshot: %w", err)
 			}

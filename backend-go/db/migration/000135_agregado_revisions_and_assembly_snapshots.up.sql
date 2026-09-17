@@ -3,14 +3,15 @@
 --
 -- 1. agregados gains:
 --    - composite uniqueness (organization_id, id) for cross-tenant foreign key protection.
---    - current_revision_id UUID NULL referencing the latest mutable catalog revision pointer.
--- 2. agregado_revisions: immutable per-version recipe definitions (components with
---    parametric overrides, hardware lines, commercial kit hardware id, rigid members,
---    variant sets, compatibility rules, reference dimensions).
+--    - current_revision_id UUID NULL referencing the latest mutable catalog revision pointer
+--      scoped to (current_revision_id, organization_id, id) -> agregado_revisions(id, organization_id, agregado_id).
+-- 2. agregado_revisions: immutable per-version recipe definitions.
 --    Append-only; once written, rows cannot be updated or deleted.
+--    Tenant-scoped revision numbers: UNIQUE (organization_id, agregado_id, revision_number).
 -- 3. published_assembly_snapshots: frozen deterministic resolution results with
 --    exact dimensions, selected variants, rigid members with #668 visual pins,
---    fabricated components, and BOM lines. Never re-evaluates at read time.
+--    fabricated components, and BOM lines.
+--    Idempotent per recipe revision: UNIQUE (organization_id, agregado_revision_id, payload_hash).
 -- 4. design_revision_assembly_snapshots: pins frozen at DesignRevision publish
 --    time ({design_revision_id, agregado_id, slot_key} -> snapshot_id).
 --    Historical designs stay pinned to their original published snapshots.
@@ -18,8 +19,8 @@
 -- Classification: agregado_revisions and published_assembly_snapshots are tenant-owned;
 -- design_revision_assembly_snapshots follows the design family (explicitly shared).
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_agregados_organization_id
-    ON agregados (organization_id, id);
+ALTER TABLE agregados DROP CONSTRAINT IF EXISTS agregados_pkey;
+ALTER TABLE agregados ADD CONSTRAINT agregados_pkey PRIMARY KEY (organization_id, id);
 
 -- Immutability guard for append-only tables in this migration.
 CREATE OR REPLACE FUNCTION protect_agregado_assembly_immutability()
@@ -45,13 +46,12 @@ CREATE TABLE agregado_revisions (
         FOREIGN KEY (organization_id, agregado_id)
         REFERENCES agregados (organization_id, id)
         ON DELETE RESTRICT,
-    CONSTRAINT uq_agregado_revisions_number UNIQUE (agregado_id, revision_number),
-    CONSTRAINT uq_agregado_revisions_id_agregado UNIQUE (id, agregado_id),
-    CONSTRAINT uq_agregado_revisions_org_id UNIQUE (organization_id, id)
+    CONSTRAINT uq_agregado_revisions_number UNIQUE (organization_id, agregado_id, revision_number),
+    CONSTRAINT uq_agregado_revisions_identity UNIQUE (id, organization_id, agregado_id)
 );
 
 CREATE INDEX idx_agregado_revisions_organization ON agregado_revisions(organization_id);
-CREATE INDEX idx_agregado_revisions_agregado ON agregado_revisions(agregado_id);
+CREATE INDEX idx_agregado_revisions_agregado ON agregado_revisions(organization_id, agregado_id);
 
 ALTER TABLE agregado_revisions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agregado_revisions FORCE ROW LEVEL SECURITY;
@@ -88,8 +88,8 @@ REVOKE UPDATE, DELETE ON agregado_revisions FROM granete_app;
 ALTER TABLE agregados
     ADD COLUMN current_revision_id UUID NULL,
     ADD CONSTRAINT fk_agregados_current_revision
-        FOREIGN KEY (current_revision_id, id)
-        REFERENCES agregado_revisions (id, agregado_id)
+        FOREIGN KEY (current_revision_id, organization_id, id)
+        REFERENCES agregado_revisions (id, organization_id, agregado_id)
         ON DELETE SET NULL;
 
 CREATE INDEX idx_agregados_current_revision ON agregados(current_revision_id)
@@ -115,17 +115,17 @@ CREATE TABLE published_assembly_snapshots (
         REFERENCES agregados (organization_id, id)
         ON DELETE RESTRICT,
     CONSTRAINT fk_published_assembly_snapshots_revision
-        FOREIGN KEY (agregado_revision_id, agregado_id)
-        REFERENCES agregado_revisions (id, agregado_id)
+        FOREIGN KEY (agregado_revision_id, organization_id, agregado_id)
+        REFERENCES agregado_revisions (id, organization_id, agregado_id)
         ON DELETE RESTRICT,
-    CONSTRAINT uq_published_assembly_snapshots_org_id UNIQUE (organization_id, id),
-    CONSTRAINT uq_published_assembly_snapshots_payload_hash UNIQUE (organization_id, payload_hash)
+    CONSTRAINT uq_published_assembly_snapshots_identity UNIQUE (id, organization_id, agregado_id),
+    CONSTRAINT uq_published_assembly_snapshots_rev_hash UNIQUE (organization_id, agregado_revision_id, payload_hash)
 );
 
 CREATE INDEX idx_published_assembly_snapshots_org ON published_assembly_snapshots(organization_id);
-CREATE INDEX idx_published_assembly_snapshots_agregado ON published_assembly_snapshots(agregado_id);
+CREATE INDEX idx_published_assembly_snapshots_agregado ON published_assembly_snapshots(organization_id, agregado_id);
 CREATE INDEX idx_published_assembly_snapshots_revision ON published_assembly_snapshots(agregado_revision_id);
-CREATE INDEX idx_published_assembly_snapshots_hash ON published_assembly_snapshots(organization_id, payload_hash);
+CREATE INDEX idx_published_assembly_snapshots_rev_hash ON published_assembly_snapshots(organization_id, agregado_revision_id, payload_hash);
 
 ALTER TABLE published_assembly_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE published_assembly_snapshots FORCE ROW LEVEL SECURITY;
@@ -174,8 +174,9 @@ CREATE TABLE design_revision_assembly_snapshots (
         REFERENCES design_revisions (id, project_id)
         ON DELETE CASCADE,
     CONSTRAINT fk_design_revision_assembly_snapshots_snapshot
-        FOREIGN KEY (organization_id, snapshot_id)
-        REFERENCES published_assembly_snapshots (organization_id, id)
+        FOREIGN KEY (snapshot_id, organization_id, agregado_id)
+        REFERENCES published_assembly_snapshots (id, organization_id, agregado_id)
+        ON DELETE RESTRICT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_design_revision_assembly_snapshots_instance

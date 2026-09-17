@@ -8,7 +8,8 @@ DROP INDEX IF EXISTS idx_agregados_current_revision;
 ALTER TABLE agregados DROP COLUMN IF EXISTS current_revision_id;
 
 DROP TABLE IF EXISTS agregado_revisions;
-DROP INDEX IF EXISTS uq_agregados_organization_id;
+ALTER TABLE agregados DROP CONSTRAINT IF EXISTS agregados_pkey;
+ALTER TABLE agregados ADD CONSTRAINT agregados_pkey PRIMARY KEY (id);
 
 DELETE FROM rls_policy_inventory WHERE table_name IN (
     'agregado_revisions',

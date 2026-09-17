@@ -2,7 +2,9 @@ package storage_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +15,10 @@ import (
 )
 
 const validSha256 = "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+func stringPtr(s string) *string {
+	return &s
+}
 
 func sampleRecipeR1() domain.AgregadoRecipePayload {
 	kitID := "kit-drawer-box"
@@ -403,6 +409,18 @@ func TestAgregadoRevisions_TenantIsolationRLS(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Org B read check failed: %v", err)
+	}
+
+	// Verify rls_policy_inventory posture and FORCED RLS
+	for _, tbl := range []string{"agregado_revisions", "published_assembly_snapshots", "design_revision_assembly_snapshots"} {
+		var count int
+		if err := fx.admin.QueryRow(context.Background(), `SELECT COUNT(*) FROM rls_policy_inventory WHERE table_name = $1`, tbl).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("rls_policy_inventory row for %s missing (count=%d, err=%v)", tbl, count, err)
+		}
+		var rls, forced bool
+		if err := fx.admin.QueryRow(context.Background(), fmt.Sprintf(`SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = '%s'`, tbl)).Scan(&rls, &forced); err != nil || !rls || !forced {
+			t.Fatalf("%s must have FORCED row level security (rls=%v forced=%v err=%v)", tbl, rls, forced, err)
+		}
 	}
 }
 
@@ -861,3 +879,629 @@ func TestDesignRevisionAssemblySnapshots_PinningAndMultiInstance(t *testing.T) {
 		t.Fatalf("direct DELETE on design_revision_assembly_snapshots must fail with immutability error, got: %v", err)
 	}
 }
+
+// 7. R1: Tenant-scoped revision numbers (coexistence of identical agregado_id with R1 across orgs)
+func TestAgregadoRevisions_R1_TenantScopedRevisionNumbers(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	actorB := fiActorB()
+
+	// Both tenants use the same agregado ID
+	sharedAgregadoID := uniqueID("agr-shared-r1")
+
+	// Org A creates agregado and revision R1
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		if err := fx.store.CreateAgregado(ctx, &domain.Agregado{
+			ID:       sharedAgregadoID,
+			Code:     uniqueID("C-A"),
+			Name:     "Agregado Shared A",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		}); err != nil {
+			return err
+		}
+		r1A, err := fx.store.CreateAgregadoRevision(ctx, sharedAgregadoID, sampleRecipeR1(), nil)
+		if err != nil {
+			return err
+		}
+		if r1A.RevisionNumber != 1 {
+			t.Fatalf("Org A revision number = %d, want 1", r1A.RevisionNumber)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Org A setup failed: %v", err)
+	}
+
+	// Org B creates agregado with the SAME ID and revision R1: MUST COEXIST!
+	err = fiTx(t, fx.store, actorB, func(ctx context.Context) error {
+		if err := fx.store.CreateAgregado(ctx, &domain.Agregado{
+			ID:       sharedAgregadoID,
+			Code:     uniqueID("C-B"),
+			Name:     "Agregado Shared B",
+			WidthMm:  700,
+			HeightMm: 250,
+			DepthMm:  550,
+			Active:   true,
+		}); err != nil {
+			return err
+		}
+		r1B, err := fx.store.CreateAgregadoRevision(ctx, sharedAgregadoID, sampleRecipeR1(), nil)
+		if err != nil {
+			return err
+		}
+		if r1B.RevisionNumber != 1 {
+			t.Fatalf("Org B revision number = %d, want 1", r1B.RevisionNumber)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Org B setup failed (coexistence broken): %v", err)
+	}
+
+	// Org A creates revision R2 -> revision_number is 2
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		r2A, err := fx.store.CreateAgregadoRevision(ctx, sharedAgregadoID, sampleRecipeR2(), nil)
+		if err != nil {
+			return err
+		}
+		if r2A.RevisionNumber != 2 {
+			t.Fatalf("Org A R2 revision number = %d, want 2", r2A.RevisionNumber)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Org A R2 failed: %v", err)
+	}
+
+	// Org B still has revision 1 only
+	err = fiTx(t, fx.store, actorB, func(ctx context.Context) error {
+		revsB, err := fx.store.ListAgregadoRevisions(ctx, sharedAgregadoID)
+		if err != nil {
+			return err
+		}
+		if len(revsB) != 1 || revsB[0].RevisionNumber != 1 {
+			t.Fatalf("Org B revisions corrupted by Org A: %+v", revsB)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Org B check failed: %v", err)
+	}
+}
+
+// 8. R2: Cross-tenant and cross-agregado FK integrity rejected by DB constraints
+func TestAgregadoRevisions_R2_CrossTenantFKsRejectedByConstraint(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	actorB := fiActorB()
+
+	agrAID := uniqueID("agr-r2-a")
+	agrAYID := uniqueID("agr-r2-ay")
+	agrBID := uniqueID("agr-r2-b")
+
+	var revA1ID, revAY1ID, revB1ID, snapB1ID string
+
+	// Org A setup: agrAID with revA1, agrAYID with revAY1
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		if err := fx.store.CreateAgregado(ctx, &domain.Agregado{
+			ID:       agrAID,
+			Code:     uniqueID("C-A1"),
+			Name:     "Agregado A",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		}); err != nil {
+			return err
+		}
+		rA1, err := fx.store.CreateAgregadoRevision(ctx, agrAID, sampleRecipeR1(), nil)
+		if err != nil {
+			return err
+		}
+		revA1ID = rA1.ID
+
+		if err := fx.store.CreateAgregado(ctx, &domain.Agregado{
+			ID:       agrAYID,
+			Code:     uniqueID("C-AY"),
+			Name:     "Agregado AY",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		}); err != nil {
+			return err
+		}
+		rAY1, err := fx.store.CreateAgregadoRevision(ctx, agrAYID, sampleRecipeR1(), nil)
+		if err != nil {
+			return err
+		}
+		revAY1ID = rAY1.ID
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Org A setup failed: %v", err)
+	}
+
+	// Org B setup: agrBID with revB1, snapshot snapB1
+	err = fiTx(t, fx.store, actorB, func(ctx context.Context) error {
+		if err := fx.store.CreateAgregado(ctx, &domain.Agregado{
+			ID:       agrBID,
+			Code:     uniqueID("C-B1"),
+			Name:     "Agregado B",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		}); err != nil {
+			return err
+		}
+		rB1, err := fx.store.CreateAgregadoRevision(ctx, agrBID, sampleRecipeR1(), nil)
+		if err != nil {
+			return err
+		}
+		revB1ID = rB1.ID
+
+		sRec := domain.PublishedAssemblySnapshotRecord{
+			AgregadoID:             agrBID,
+			AgregadoRevisionID:     rB1.ID,
+			AgregadoRevisionNumber: 1,
+			ResolvedWidthMm:        600,
+			ResolvedHeightMm:       200,
+			ResolvedDepthMm:        500,
+			Snapshot: domain.PublishedAssemblySnapshot{
+				AgregadoID:             agrBID,
+				AgregadoRevisionNumber: 1,
+				ResolvedDimensionsMm:   [3]float64{600, 500, 200},
+				RigidMembers: []domain.ResolvedRigidMember{
+					{
+						MemberID:        "runner-left",
+						Role:            "runner_left",
+						HardwareID:      "hw-runner-500",
+						AssetID:         stringPtr("ast-001"),
+						AssetRevisionID: stringPtr("rev-001"),
+						SHA256:          stringPtr(validSha256),
+						LocalTransform: domain.AssemblyMemberTransform{
+							TranslationMm: [3]float64{10, 20, 30},
+							Basis: domain.HardwareBasis{
+								X: [3]float64{1, 0, 0},
+								Y: [3]float64{0, 1, 0},
+								Z: [3]float64{0, 0, 1},
+							},
+						},
+					},
+				},
+				FabricatedComponents: []domain.ResolvedFabricatedComponent{
+					{
+						ComponentID: "bottom-panel",
+						LengthMm:    490,
+						WidthMm:     565,
+						Quantity:    1,
+						Transform: domain.AssemblyMemberTransform{
+							TranslationMm: [3]float64{0, 0, 0},
+							Basis: domain.HardwareBasis{
+								X: [3]float64{1, 0, 0},
+								Y: [3]float64{0, 1, 0},
+								Z: [3]float64{0, 0, 1},
+							},
+						},
+					},
+				},
+				BOMItems: []domain.AssemblyBOMItem{
+					{HardwareID: "hw-runner-500", Quantity: 1},
+				},
+			},
+		}
+		if err := fx.store.SavePublishedAssemblySnapshot(ctx, &sRec); err != nil {
+			return err
+		}
+		snapB1ID = sRec.ID
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Org B setup failed: %v", err)
+	}
+
+	bgCtx := context.Background()
+
+	// 0. Setting Org A's agregado to its own revision MUST SUCCEED
+	_, err = fx.admin.Exec(bgCtx, `
+		UPDATE agregados SET current_revision_id = $1
+		WHERE id = $2 AND organization_id = $3
+	`, revA1ID, agrAID, actorA.OrganizationID)
+	if err != nil {
+		t.Fatalf("setting own valid revision failed: %v", err)
+	}
+
+	// 1. Direct SQL: Org A's agregado pointing current_revision_id to Org B's revision
+	// MUST FAIL via fk_agregados_current_revision constraint
+	_, err = fx.admin.Exec(bgCtx, `
+		UPDATE agregados SET current_revision_id = $1
+		WHERE id = $2 AND organization_id = $3
+	`, revB1ID, agrAID, actorA.OrganizationID)
+	if err == nil || !strings.Contains(err.Error(), "fk_agregados_current_revision") {
+		t.Fatalf("expected fk_agregados_current_revision error for cross-tenant revision pointer, got: %v", err)
+	}
+
+	// 2. Direct SQL: Org A's agregado pointing current_revision_id to revision of another agregado (agrAYID)
+	// MUST FAIL via fk_agregados_current_revision constraint
+	_, err = fx.admin.Exec(bgCtx, `
+		UPDATE agregados SET current_revision_id = $1
+		WHERE id = $2 AND organization_id = $3
+	`, revAY1ID, agrAID, actorA.OrganizationID)
+	if err == nil || !strings.Contains(err.Error(), "fk_agregados_current_revision") {
+		t.Fatalf("expected fk_agregados_current_revision error for cross-agregado revision pointer, got: %v", err)
+	}
+
+	// 3. Direct SQL: Org A inserting published_assembly_snapshots pointing to Org B's revision
+	// MUST FAIL via fk_published_assembly_snapshots_revision constraint
+	_, err = fx.admin.Exec(bgCtx, `
+		INSERT INTO published_assembly_snapshots (
+			organization_id, agregado_id, agregado_revision_id, agregado_revision_number,
+			resolved_width_mm, resolved_depth_mm, resolved_height_mm, payload_hash, snapshot
+		) VALUES (
+			$1, $2, $3, 1, 600, 500, 200, 'hash-fake-cross-org', '{}'::jsonb
+		)
+	`, actorA.OrganizationID, agrAID, revB1ID)
+	if err == nil || !strings.Contains(err.Error(), "fk_published_assembly_snapshots_revision") {
+		t.Fatalf("expected fk_published_assembly_snapshots_revision error for cross-tenant snapshot revision, got: %v", err)
+	}
+
+	// 4. Direct SQL: Org A inserting published_assembly_snapshots with agregado X pointing to revision of agregado Y
+	// MUST FAIL via fk_published_assembly_snapshots_revision constraint
+	_, err = fx.admin.Exec(bgCtx, `
+		INSERT INTO published_assembly_snapshots (
+			organization_id, agregado_id, agregado_revision_id, agregado_revision_number,
+			resolved_width_mm, resolved_depth_mm, resolved_height_mm, payload_hash, snapshot
+		) VALUES (
+			$1, $2, $3, 1, 600, 500, 200, 'hash-fake-cross-agr', '{}'::jsonb
+		)
+	`, actorA.OrganizationID, agrAID, revAY1ID)
+	if err == nil || !strings.Contains(err.Error(), "fk_published_assembly_snapshots_revision") {
+		t.Fatalf("expected fk_published_assembly_snapshots_revision error for cross-agregado snapshot revision, got: %v", err)
+	}
+
+	// 5. Direct SQL: Org A inserting design_revision_assembly_snapshots pointing to Org B's snapshot
+	// MUST FAIL via fk_design_revision_assembly_snapshots_snapshot constraint
+	projectID := "40000000-0000-0000-0000-000000000001"
+	designID := "72000000-0000-0000-0000-000000000088"
+	designRevID := "73000000-0000-0000-0000-000000000088"
+	_, err = fx.admin.Exec(bgCtx, fmt.Sprintf(`
+		INSERT INTO designs (id, organization_id, project_id, name)
+		VALUES ('%s', '%s', '%s', 'Test Design R2');
+
+		INSERT INTO design_revisions (id, organization_id, project_id, design_id, revision_number, source_type, status)
+		VALUES ('%s', '%s', '%s', '%s', 1, 'system', 'published');
+	`, designID, actorA.OrganizationID, projectID,
+		designRevID, actorA.OrganizationID, projectID, designID,
+	))
+	if err != nil {
+		t.Fatalf("seed design revision for R2 check: %v", err)
+	}
+
+	_, err = fx.admin.Exec(bgCtx, `
+		INSERT INTO design_revision_assembly_snapshots (
+			organization_id, project_id, design_revision_id, agregado_id, slot_key, snapshot_id
+		) VALUES (
+			$1, $2, $3, $4, 'slot1', $5
+		)
+	`, actorA.OrganizationID, projectID, designRevID, agrAID, snapB1ID)
+	if err == nil || !strings.Contains(err.Error(), "fk_design_revision_assembly_snapshots_snapshot") {
+		t.Fatalf("expected fk_design_revision_assembly_snapshots_snapshot error for cross-tenant snapshot pin, got: %v", err)
+	}
+}
+
+// 9. R3: Idempotence per recipe revision (R2 and R3 with identical geometry preserve distinct snapshots)
+func TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision(t *testing.T) {
+	store, pool := connectStore(t)
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+
+	agregadoID := uniqueID("agr-r3-dedup")
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	})
+
+	if err := store.CreateAgregado(ctx, &domain.Agregado{
+		ID:       agregadoID,
+		Code:     uniqueID("C-R3"),
+		Name:     "Agregado R3 Dedup",
+		WidthMm:  600,
+		HeightMm: 200,
+		DepthMm:  500,
+		Active:   true,
+	}); err != nil {
+		t.Fatalf("CreateAgregado: %v", err)
+	}
+
+	// Create Recipe Revision R2
+	r2Recipe := sampleRecipeR1()
+	r2Recipe.Notes = "Revision R2"
+	r2, err := store.CreateAgregadoRevision(ctx, agregadoID, r2Recipe, nil)
+	if err != nil {
+		t.Fatalf("CreateAgregadoRevision R2: %v", err)
+	}
+
+	// Create Recipe Revision R3: geometrically identical recipe
+	r3Recipe := sampleRecipeR1()
+	r3Recipe.Notes = "Revision R3 - identical geometry"
+	r3, err := store.CreateAgregadoRevision(ctx, agregadoID, r3Recipe, nil)
+	if err != nil {
+		t.Fatalf("CreateAgregadoRevision R3: %v", err)
+	}
+
+	makeSnapshot := func(revNumber int) domain.PublishedAssemblySnapshot {
+		return domain.PublishedAssemblySnapshot{
+			AgregadoID:             agregadoID,
+			AgregadoRevisionNumber: revNumber,
+			ResolvedDimensionsMm:   [3]float64{600, 500, 200},
+			RigidMembers: []domain.ResolvedRigidMember{
+				{
+					MemberID:        "runner-left",
+					Role:            "runner_left",
+					HardwareID:      "hw-runner-500",
+					AssetID:         stringPtr("ast-001"),
+					AssetRevisionID: stringPtr("rev-001"),
+					SHA256:          stringPtr(validSha256),
+					LocalTransform: domain.AssemblyMemberTransform{
+						TranslationMm: [3]float64{10, 20, 30},
+						Basis: domain.HardwareBasis{
+							X: [3]float64{1, 0, 0},
+							Y: [3]float64{0, 1, 0},
+							Z: [3]float64{0, 0, 1},
+						},
+					},
+				},
+			},
+			FabricatedComponents: []domain.ResolvedFabricatedComponent{
+				{
+					ComponentID: "bottom-panel",
+					LengthMm:    490,
+					WidthMm:     565,
+					Quantity:    1,
+					Transform: domain.AssemblyMemberTransform{
+						TranslationMm: [3]float64{0, 0, 0},
+						Basis: domain.HardwareBasis{
+							X: [3]float64{1, 0, 0},
+							Y: [3]float64{0, 1, 0},
+							Z: [3]float64{0, 0, 1},
+						},
+					},
+				},
+			},
+			BOMItems: []domain.AssemblyBOMItem{
+				{HardwareID: "hw-runner-500", Quantity: 1},
+			},
+		}
+	}
+
+	snapR2 := makeSnapshot(2)
+	recR2 := domain.PublishedAssemblySnapshotRecord{
+		AgregadoID:             agregadoID,
+		AgregadoRevisionID:     r2.ID,
+		AgregadoRevisionNumber: 2,
+		ResolvedWidthMm:        600,
+		ResolvedHeightMm:       200,
+		ResolvedDepthMm:        500,
+		Snapshot:               snapR2,
+	}
+	if err := store.SavePublishedAssemblySnapshot(ctx, &recR2); err != nil {
+		t.Fatalf("SavePublishedAssemblySnapshot R2: %v", err)
+	}
+
+	snapR3 := makeSnapshot(3)
+	recR3 := domain.PublishedAssemblySnapshotRecord{
+		AgregadoID:             agregadoID,
+		AgregadoRevisionID:     r3.ID,
+		AgregadoRevisionNumber: 3,
+		ResolvedWidthMm:        600,
+		ResolvedHeightMm:       200,
+		ResolvedDepthMm:        500,
+		Snapshot:               snapR3,
+	}
+	if err := store.SavePublishedAssemblySnapshot(ctx, &recR3); err != nil {
+		t.Fatalf("SavePublishedAssemblySnapshot R3: %v", err)
+	}
+
+	// R2 and R3 MUST NOT reuse each other's snapshots!
+	if recR2.ID == recR3.ID {
+		t.Fatalf("R2 and R3 erroneously reused the same snapshot ID: %s", recR2.ID)
+	}
+
+	// Verify snapshots preserve their respective recipe revision identities
+	get2, err := store.GetPublishedAssemblySnapshotByID(ctx, recR2.ID)
+	if err != nil {
+		t.Fatalf("GetPublishedAssemblySnapshotByID R2: %v", err)
+	}
+	if get2.AgregadoRevisionID != r2.ID || get2.AgregadoRevisionNumber != 2 {
+		t.Errorf("R2 snapshot revision mismatch: ID=%s, Number=%d", get2.AgregadoRevisionID, get2.AgregadoRevisionNumber)
+	}
+
+	get3, err := store.GetPublishedAssemblySnapshotByID(ctx, recR3.ID)
+	if err != nil {
+		t.Fatalf("GetPublishedAssemblySnapshotByID R3: %v", err)
+	}
+	if get3.AgregadoRevisionID != r3.ID || get3.AgregadoRevisionNumber != 3 {
+		t.Errorf("R3 snapshot revision mismatch: ID=%s, Number=%d", get3.AgregadoRevisionID, get3.AgregadoRevisionNumber)
+	}
+
+	// Retry publishing R3: must return the exact same snapshot R3, not create another
+	retryR3 := recR3
+	retryR3.ID = ""
+	if err := store.SavePublishedAssemblySnapshot(ctx, &retryR3); err != nil {
+		t.Fatalf("retry SavePublishedAssemblySnapshot R3: %v", err)
+	}
+	if retryR3.ID != recR3.ID {
+		t.Fatalf("retry publish created duplicate snapshot: %s vs %s", retryR3.ID, recR3.ID)
+	}
+}
+
+// 10. R4: SetAgregadoCurrentRevision database verification of exact agregado and tenant
+func TestAgregadoRevisions_R4_VerifyCurrentPointer(t *testing.T) {
+	fx := newRLSFixture(t)
+	actorA := fiActorA()
+	actorB := fiActorB()
+
+	agrX := uniqueID("agr-r4-x")
+	agrY := uniqueID("agr-r4-y")
+	agrZ := uniqueID("agr-r4-z")
+
+	var revX1, revY1, revZ1 *domain.AgregadoRevision
+
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		if err := fx.store.CreateAgregado(ctx, &domain.Agregado{
+			ID:       agrX,
+			Code:     uniqueID("C-X"),
+			Name:     "Agregado X",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		}); err != nil {
+			return err
+		}
+		rX, err := fx.store.CreateAgregadoRevision(ctx, agrX, sampleRecipeR1(), nil)
+		if err != nil {
+			return err
+		}
+		revX1 = rX
+
+		if err := fx.store.CreateAgregado(ctx, &domain.Agregado{
+			ID:       agrY,
+			Code:     uniqueID("C-Y"),
+			Name:     "Agregado Y",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		}); err != nil {
+			return err
+		}
+		rY, err := fx.store.CreateAgregadoRevision(ctx, agrY, sampleRecipeR1(), nil)
+		if err != nil {
+			return err
+		}
+		revY1 = rY
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Org A setup failed: %v", err)
+	}
+
+	err = fiTx(t, fx.store, actorB, func(ctx context.Context) error {
+		if err := fx.store.CreateAgregado(ctx, &domain.Agregado{
+			ID:       agrZ,
+			Code:     uniqueID("C-Z"),
+			Name:     "Agregado Z",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		}); err != nil {
+			return err
+		}
+		rZ, err := fx.store.CreateAgregadoRevision(ctx, agrZ, sampleRecipeR1(), nil)
+		if err != nil {
+			return err
+		}
+		revZ1 = rZ
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Org B setup failed: %v", err)
+	}
+
+	// 1. Pointing to valid revision of another Agregado (agrY) in the same organization must fail
+	_ = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		err := fx.store.SetAgregadoCurrentRevision(ctx, agrX, revY1.ID)
+		if err == nil {
+			t.Fatal("SetAgregadoCurrentRevision must reject revision belonging to another Agregado")
+		}
+		if !errors.Is(err, domain.ErrAgregadoRevisionNotFound) {
+			t.Errorf("expected ErrAgregadoRevisionNotFound, got: %v", err)
+		}
+		return nil
+	})
+
+	// 2. Pointing to valid revision of another organization (agrZ) must fail
+	_ = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		err := fx.store.SetAgregadoCurrentRevision(ctx, agrX, revZ1.ID)
+		if err == nil {
+			t.Fatal("SetAgregadoCurrentRevision must reject revision belonging to another organization")
+		}
+		if !errors.Is(err, domain.ErrAgregadoRevisionNotFound) {
+			t.Errorf("expected ErrAgregadoRevisionNotFound, got: %v", err)
+		}
+		return nil
+	})
+
+	// 3. Pointing to non-existent revision must fail
+	_ = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		err := fx.store.SetAgregadoCurrentRevision(ctx, agrX, "00000000-0000-0000-0000-000000000000")
+		if err == nil {
+			t.Fatal("SetAgregadoCurrentRevision must reject non-existent revision")
+		}
+		if !errors.Is(err, domain.ErrAgregadoRevisionNotFound) {
+			t.Errorf("expected ErrAgregadoRevisionNotFound, got: %v", err)
+		}
+		return nil
+	})
+
+	// 4. Pointing to its own revision must succeed
+	_ = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		if err := fx.store.SetAgregadoCurrentRevision(ctx, agrX, revX1.ID); err != nil {
+			t.Fatalf("SetAgregadoCurrentRevision with own revision failed: %v", err)
+		}
+
+		curr, err := fx.store.GetAgregadoCurrentRevision(ctx, agrX)
+		if err != nil {
+			t.Fatalf("GetAgregadoCurrentRevision: %v", err)
+		}
+		if curr.ID != revX1.ID {
+			t.Errorf("GetAgregadoCurrentRevision ID = %s, want %s", curr.ID, revX1.ID)
+		}
+		return nil
+	})
+}
+
+// 13. Up/down migration replay test for 000135
+func TestAgregadoRevisions_Migration_UpDownReplay(t *testing.T) {
+	pool := multiOrgFreshDB(t)
+	ctx := context.Background()
+	migrationStore := &storage.PostgresStore{Pool: pool}
+	if err := migrationStore.RunMigrations(ctx); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	down, err := os.ReadFile("../../db/migration/000135_agregado_revisions_and_assembly_snapshots.down.sql")
+	if err != nil {
+		t.Fatalf("read down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("execute down migration: %v", err)
+	}
+
+	for _, tbl := range []string{"agregado_revisions", "published_assembly_snapshots", "design_revision_assembly_snapshots"} {
+		var exists bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = $1)`, tbl).Scan(&exists); err != nil || exists {
+			t.Fatalf("down migration failed to drop table %s, exists=%v, err=%v", tbl, exists, err)
+		}
+	}
+
+	up, err := os.ReadFile("../../db/migration/000135_agregado_revisions_and_assembly_snapshots.up.sql")
+	if err != nil {
+		t.Fatalf("read up migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(up)); err != nil {
+		t.Fatalf("re-apply up migration: %v", err)
+	}
+
+	for _, tbl := range []string{"agregado_revisions", "published_assembly_snapshots", "design_revision_assembly_snapshots"} {
+		var exists bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = $1)`, tbl).Scan(&exists); err != nil || !exists {
+			t.Fatalf("re-applied migration missing table %s, exists=%v, err=%v", tbl, exists, err)
+		}
+	}
+}
+
