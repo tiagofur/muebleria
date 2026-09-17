@@ -3,6 +3,14 @@
  */
 
 import type { HardwareFinishId } from './hardwareFinishes';
+import type {
+  AgregadoRigidMember,
+  AgregadoVariantSet,
+  AssemblyAnchorRule,
+  AssemblyCompatibilityRule,
+  AssemblyDimensionRule,
+  HardwareRotationDeg,
+} from './agregadoAssembly';
 
 // --- Literal unions ---
 
@@ -632,7 +640,7 @@ export interface HardwarePlacement {
     readonly xFormula?: string;
     readonly yFormula?: string;
   };
-  readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
+  readonly rotationDeg?: HardwareRotationDeg;
   readonly scale?: number;
   /** Optional role within a multi-part hardware profile (F128): e.g. 'cam' vs 'bolt' for minifix. */
   readonly partRole?: string;
@@ -688,6 +696,12 @@ export interface ModuleComponentInstance {
      * renderer resolves each via `resolveHardwarePlacement` (PR2).
      */
     readonly hardwarePlacements?: readonly HardwarePlacement[];
+    /** Declarative dimension calculation for length (R1, R8, R9) */
+    readonly lengthRule?: AssemblyDimensionRule;
+    /** Declarative dimension calculation for width (R1, R8, R9) */
+    readonly widthRule?: AssemblyDimensionRule;
+    /** Declarative rigid placement in assembly space (R8) */
+    readonly placementRule?: AssemblyAnchorRule;
   };
 }
 
@@ -708,10 +722,18 @@ export interface Agregado {
    * W/H/D formulas in child components resolve against these.
    */
   readonly externalDims?: ExternalDims;
-  /** Board components that make up this sub-assembly. */
+  /** Board components that make up this sub-assembly. Sole authority for fabricated parts (R8). */
   readonly components?: readonly ModuleComponentInstance[];
   /** Fixed hardware included per unit (bisagras, correderas, jaladeras, etc.). */
   readonly hardwareLines?: readonly HardwareLine[];
+  /** Optional commercial kit hardware ID (e.g. Blum MERIVOBOX kit box) */
+  readonly commercialKitHardwareId?: string;
+  /** Rigid 3D hardware members (runners, sides, brackets) */
+  readonly rigidMembers?: readonly AgregadoRigidMember[];
+  /** Sets of discrete commercial sizing options for this assembly */
+  readonly variantSets?: readonly AgregadoVariantSet[];
+  /** Rules for selecting and validating variants based on available space */
+  readonly compatibilityRules?: readonly AssemblyCompatibilityRule[];
 }
 
 /**

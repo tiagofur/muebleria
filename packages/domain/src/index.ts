@@ -1448,3 +1448,6 @@ export {
   type RepositionHardwareOptions,
   type SyncHardwareResult,
 } from "./sketchupHardwareSync";
+
+// Agregado Hardware Assembly (#670)
+export * from "./agregadoAssembly";

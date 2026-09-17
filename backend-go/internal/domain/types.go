@@ -497,14 +497,18 @@ type Agregado struct {
 	Name          string              `json:"name"`
 	Description   string              `json:"description,omitempty"`
 	Notes         string              `json:"notes,omitempty"`
-	WidthMm       int                 `json:"width_mm,omitempty"`
-	HeightMm      int                 `json:"height_mm,omitempty"`
-	DepthMm       int                 `json:"depth_mm,omitempty"`
-	Components    []ComponentInstance `json:"components,omitempty"`
-	HardwareLines []HardwareLine      `json:"hardware_lines,omitempty"`
-	Active        bool                `json:"active"`
-	CreatedAt     time.Time           `json:"created_at"`
-	UpdatedAt     time.Time           `json:"updated_at"`
+	WidthMm                 int                         `json:"width_mm,omitempty"`
+	HeightMm                int                         `json:"height_mm,omitempty"`
+	DepthMm                 int                         `json:"depth_mm,omitempty"`
+	Components              []ComponentInstance         `json:"components,omitempty"`
+	HardwareLines           []HardwareLine              `json:"hardware_lines,omitempty"`
+	CommercialKitHardwareID *string                     `json:"commercial_kit_hardware_id,omitempty"`
+	RigidMembers            []AgregadoRigidMember       `json:"rigid_members,omitempty"`
+	VariantSets             []AgregadoVariantSet        `json:"variant_sets,omitempty"`
+	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibility_rules,omitempty"`
+	Active                  bool                        `json:"active"`
+	CreatedAt               time.Time                   `json:"created_at"`
+	UpdatedAt               time.Time                   `json:"updated_at"`
 }
 
 // HardwarePlacement attaches a visible hardware instance to a component face for
@@ -544,10 +548,13 @@ type ComponentInstanceOverrides struct {
 	XFormula           string              `json:"xFormula,omitempty"`
 	YFormula           string              `json:"yFormula,omitempty"`
 	ZFormula           string              `json:"zFormula,omitempty"`
-	RotateX            *int                `json:"rotateX,omitempty"`
-	RotateY            *int                `json:"rotateY,omitempty"`
-	RotateZ            *int                `json:"rotateZ,omitempty"`
-	HardwarePlacements []HardwarePlacement `json:"hardwarePlacements,omitempty"`
+	RotateX            *int                   `json:"rotateX,omitempty"`
+	RotateY            *int                   `json:"rotateY,omitempty"`
+	RotateZ            *int                   `json:"rotateZ,omitempty"`
+	HardwarePlacements []HardwarePlacement    `json:"hardwarePlacements,omitempty"`
+	LengthRule         *AssemblyDimensionRule `json:"lengthRule,omitempty"`
+	WidthRule          *AssemblyDimensionRule `json:"widthRule,omitempty"`
+	PlacementRule      *AssemblyAnchorRule    `json:"placementRule,omitempty"`
 }
 
 // ComponentPlacement represents where a component goes in the cabinet structure.
