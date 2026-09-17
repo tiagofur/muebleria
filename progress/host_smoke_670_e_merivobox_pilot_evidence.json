@@ -1,0 +1,139 @@
+{
+  "head": "fc3b53bb94c87c5706c8847501ef702a0280521b",
+  "rbz_sha256": "df88c5b7784f22cd53b9f1e0a8c7762dee4b4f6f547c5f7b459834c81158f8c6",
+  "sketchup_version": "26.2.242",
+  "ruby_version": "3.2.2",
+  "platform": "arm64-darwin",
+  "tests": {
+    "e1_e2_insert_w600": {
+      "status": "pass",
+      "rigid_members_count": 4,
+      "fabricated_components_count": 2,
+      "bottom_panel": {
+        "width_mm": 542.0,
+        "length_mm": 484.0,
+        "thickness_mm": 16.0
+      },
+      "back_panel": {
+        "width_mm": 542.0,
+        "length_mm": 69.0,
+        "thickness_mm": 16.0
+      },
+      "rigidity_verified": true
+    },
+    "e3_e20_rebuild_w800": {
+      "status": "pass"
+    },
+    "e5_e6_variant_switch": {
+      "status": "pass"
+    },
+    "e9_e10_mount_frame_world_transform": {
+      "status": "pass",
+      "error_mm": 0.0
+    },
+    "e11_save_close_reopen": {
+      "status": "pass"
+    },
+    "e12_undo_redo": {
+      "status": "pass"
+    },
+    "e13_fail_before_mutate": {
+      "status": "pass"
+    }
+  },
+  "w600_to_w800_delta": {
+    "side_right": {
+      "before_translation_mm": [
+        565.0,
+        0.0,
+        10.0
+      ],
+      "after_translation_mm": [
+        765.0,
+        0.0,
+        10.0
+      ],
+      "delta_mm": 200.0,
+      "definition_reused": true,
+      "scale_before": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "scale_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "determinant_before": 1.0,
+      "determinant_after": 1.0
+    },
+    "runner_right": {
+      "before_translation_mm": [
+        565.0,
+        0.0,
+        5.0
+      ],
+      "after_translation_mm": [
+        765.0,
+        0.0,
+        5.0
+      ],
+      "delta_mm": 200.0,
+      "definition_reused": true,
+      "scale_before": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "scale_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "determinant_before": 1.0,
+      "determinant_after": 1.0
+    },
+    "bottom": {
+      "width_mm_before": 542.0,
+      "width_mm_after": 742.0,
+      "delta_width_mm": 200.0,
+      "length_mm": 484.0,
+      "thickness_mm": 16.0,
+      "definition_regenerated": true
+    },
+    "back": {
+      "width_mm_before": 542.0,
+      "width_mm_after": 742.0,
+      "delta_width_mm": 200.0,
+      "length_mm": 69.0,
+      "thickness_mm": 16.0,
+      "definition_regenerated": true
+    }
+  },
+  "variant_switch_nl450_to_nl500": {
+    "hardware_id_450": "hw-merivobox-450",
+    "asset_revision_id_450": "rev-mbx-450-1",
+    "bottom_length_mm_450": 434.0,
+    "hardware_id_500": "hw-merivobox-500",
+    "asset_revision_id_500": "rev-mbx-500-1",
+    "bottom_length_mm_500": 484.0,
+    "delta_length_mm": 50.0,
+    "runner_definition_switched": true,
+    "scaling_detected": false
+  },
+  "world_transform": {
+    "expected_world_point_mm": [
+      1185.0,
+      645.0,
+      398.0
+    ],
+    "actual_world_point_mm": [
+      1185.0,
+      645.0,
+      398.0
+    ],
+    "error_mm": 0.0,
+    "tolerance_mm": 0.001
+  }
+}

@@ -744,6 +744,245 @@ test.describe('Proyectar visual regression (WebGL)', () => {
     // console: sin errores inesperados
     expect(consoleErrors).toEqual([]);
   });
+
+  // ── Scenario 8 — #670-E: MERIVOBOX Real Pilot WebGL End-to-End ───────────
+
+  test('Point 11: WebGL real — MERIVOBOX real pilot W600/A -> W800/A -> W800/B end-to-end scene graph mutation', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+
+    const consoleErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        const text = msg.text();
+        if (!text.includes('favicon') && !text.includes('404')) {
+          consoleErrors.push(text);
+        }
+      }
+    });
+    page.on('pageerror', (err) => {
+      consoleErrors.push(err.message);
+    });
+
+    const customWs = createMerivoboxPilotSeedWorkspace();
+    await page.addInitScript((wsJson) => {
+      try {
+        sessionStorage.setItem('granete_session', 'guest');
+        sessionStorage.setItem('granete_proyectar_visible', '1');
+        localStorage.setItem('granete_guest_workspace', wsJson);
+        localStorage.setItem('muebles_workspace_v1', wsJson);
+      } catch {
+        /* storage unavailable */
+      }
+    }, JSON.stringify(customWs));
+
+    // 1. Abrir Proyectar
+    await page.goto('/quotes');
+    const draftCard = page
+      .locator('.project-card', { hasText: 'Demo plantilla' })
+      .first();
+    await draftCard.waitFor({ timeout: 20_000 });
+    await draftCard.click();
+    await page.waitForSelector('.workspace-chrome, .project-detail', {
+      timeout: 20_000,
+    });
+    await page.waitForSelector('[data-testid="project-chrome-projectar"]', {
+      timeout: 20_000,
+    });
+    await page.click('[data-testid="project-chrome-projectar"]');
+    await waitForStudioCanvas(page);
+
+    // 2. Insertar primer módulo del catálogo (pre-configurado con MERIVOBOX)
+    await insertFirstLibraryCard(page);
+    await fitCamera(page);
+    await settleCanvas(page);
+
+    type SceneMemberInfo = {
+      assemblyInstanceId: string;
+      posX: number;
+      posY: number;
+      posZ: number;
+      scale: [number, number, number];
+      det: number;
+      worldMatrix: number[];
+      memberId: string;
+      hardwareId: string;
+      assetRevisionId: string;
+      renderStatus: string;
+    };
+
+    type SceneBottomInfo = {
+      size: [number, number, number];
+      description: string;
+    };
+
+    type SceneQueryResult = {
+      leftMember: SceneMemberInfo | null;
+      rightMember: SceneMemberInfo | null;
+      bottomComponent: SceneBottomInfo | null;
+    };
+
+    const queryScene = async (): Promise<SceneQueryResult | null> => {
+      return page.evaluate<SceneQueryResult | null>(() => {
+        const scene = (window as any).__graneteScene;
+        if (!scene) return null;
+
+        let leftMember: SceneMemberInfo | null = null;
+        let rightMember: SceneMemberInfo | null = null;
+        let bottomComponent: SceneBottomInfo | null = null;
+
+        scene.traverse((obj: any) => {
+          if (obj.userData?.memberId === 'side-left') {
+            obj.updateMatrix();
+            obj.updateWorldMatrix(true, true);
+            leftMember = {
+              assemblyInstanceId: obj.userData.assemblyInstanceId ?? '',
+              posX: obj.position.x,
+              posY: obj.position.y,
+              posZ: obj.position.z,
+              scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+              det: obj.matrix.determinant(),
+              worldMatrix: Array.from(obj.matrixWorld.elements as number[]),
+              memberId: obj.userData.memberId,
+              hardwareId: obj.userData.hardwareId,
+              assetRevisionId: obj.userData.assetRevisionId ?? '',
+              renderStatus: obj.userData.renderStatus ?? '',
+            };
+          }
+          if (obj.userData?.memberId === 'side-right') {
+            obj.updateMatrix();
+            obj.updateWorldMatrix(true, true);
+            rightMember = {
+              assemblyInstanceId: obj.userData.assemblyInstanceId ?? '',
+              posX: obj.position.x,
+              posY: obj.position.y,
+              posZ: obj.position.z,
+              scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+              det: obj.matrix.determinant(),
+              worldMatrix: Array.from(obj.matrixWorld.elements as number[]),
+              memberId: obj.userData.memberId,
+              hardwareId: obj.userData.hardwareId,
+              assetRevisionId: obj.userData.assetRevisionId ?? '',
+              renderStatus: obj.userData.renderStatus ?? '',
+            };
+          }
+          if (obj.userData?.description === 'comp-bottom' && obj.userData?.size) {
+            bottomComponent = {
+              size: obj.userData.size,
+              description: obj.userData.description,
+            };
+          }
+        });
+
+        return { leftMember, rightMember, bottomComponent };
+      });
+    };
+
+    // Esperar a que los miembros del assembly aparezcan en el canvas WebGL
+    await expect
+      .poll(async () => {
+        const data = await queryScene();
+        return Boolean(data?.leftMember && data?.rightMember && data?.bottomComponent);
+      }, { timeout: 20_000 })
+      .toBe(true);
+
+    const initial = (await queryScene())!;
+    expect(initial.leftMember).not.toBeNull();
+    expect(initial.rightMember).not.toBeNull();
+    expect(initial.bottomComponent).not.toBeNull();
+
+    // Stage 1: W=600 / Depth=480 (Variant A: NL 450)
+    expect(initial.leftMember!.assemblyInstanceId).toBe('inst-merivobox-1');
+    expect(initial.rightMember!.assemblyInstanceId).toBe('inst-merivobox-1');
+    expect(initial.leftMember!.memberId).toBe('side-left');
+    expect(initial.rightMember!.memberId).toBe('side-right');
+    expect(initial.leftMember!.hardwareId).toBe('hw-merivobox-450');
+    expect(initial.rightMember!.hardwareId).toBe('hw-merivobox-450');
+    expect(initial.leftMember!.assetRevisionId).toBe('rev-merivobox-450');
+    expect(initial.rightMember!.assetRevisionId).toBe('rev-merivobox-450');
+    expect(initial.leftMember!.renderStatus).toBe('exact');
+    expect(initial.rightMember!.renderStatus).toBe('exact');
+
+    // Scale [1,1,1] and det +1.0
+    expect(initial.leftMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(initial.leftMember!.scale[1]).toBeCloseTo(1.0, 4);
+    expect(initial.leftMember!.scale[2]).toBeCloseTo(1.0, 4);
+    expect(initial.leftMember!.det).toBeCloseTo(1.0, 4);
+    expect(initial.rightMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(initial.rightMember!.scale[1]).toBeCloseTo(1.0, 4);
+    expect(initial.rightMember!.scale[2]).toBeCloseTo(1.0, 4);
+    expect(initial.rightMember!.det).toBeCloseTo(1.0, 4);
+
+    // Bottom size: width = 600 - 58 = 542mm, length = 450 - 16 = 434mm, thickness = 16mm
+    expect(initial.bottomComponent!.size[0]).toBeCloseTo(542, 1);
+    expect(initial.bottomComponent!.size[1]).toBeCloseTo(16, 1);
+    expect(initial.bottomComponent!.size[2]).toBeCloseTo(434, 1);
+
+    // Stage 2: Mutate W=800 (Depth remains 480 -> Variant A)
+    const widthInput = page.locator('label:has-text("Ancho") input');
+    await widthInput.waitFor({ timeout: 10_000 });
+    await widthInput.fill('800');
+    await widthInput.press('Enter');
+
+    await expect
+      .poll(async () => {
+        const data = await queryScene();
+        return data?.bottomComponent?.size[0];
+      }, { timeout: 20_000 })
+      .toBeCloseTo(742, 1);
+
+    await settleCanvas(page);
+
+    const stage2 = (await queryScene())!;
+    const deltaRightX = stage2.rightMember!.posX - initial.rightMember!.posX;
+    expect(deltaRightX).toBeCloseTo(200, 1);
+    const deltaLeftX = stage2.leftMember!.posX - initial.leftMember!.posX;
+    expect(deltaLeftX).toBeCloseTo(0, 1);
+
+    // Rigid members stay unscaled, det = +1.0
+    expect(stage2.leftMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(stage2.leftMember!.det).toBeCloseTo(1.0, 4);
+    expect(stage2.rightMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(stage2.rightMember!.det).toBeCloseTo(1.0, 4);
+
+    // Bottom width = 800 - 58 = 742mm, length preserved = 434mm
+    expect(stage2.bottomComponent!.size[0]).toBeCloseTo(742, 1);
+    expect(stage2.bottomComponent!.size[2]).toBeCloseTo(434, 1);
+
+    // Stage 3: Mutate Depth=530 (W=800 -> selects Variant B: NL 500)
+    const depthInput = page.locator('label:has-text("Prof.") input');
+    await depthInput.waitFor({ timeout: 10_000 });
+    await depthInput.fill('530');
+    await depthInput.press('Enter');
+
+    await expect
+      .poll(async () => {
+        const data = await queryScene();
+        return data?.leftMember?.hardwareId;
+      }, { timeout: 20_000 })
+      .toBe('hw-merivobox-500');
+
+    await settleCanvas(page);
+
+    const stage3 = (await queryScene())!;
+    expect(stage3.leftMember!.hardwareId).toBe('hw-merivobox-500');
+    expect(stage3.rightMember!.hardwareId).toBe('hw-merivobox-500');
+    expect(stage3.leftMember!.assetRevisionId).toBe('rev-merivobox-500');
+    expect(stage3.rightMember!.assetRevisionId).toBe('rev-merivobox-500');
+
+    // Bottom board length regenerated to 500 - 16 = 484mm; width remains 742mm
+    expect(stage3.bottomComponent!.size[0]).toBeCloseTo(742, 1);
+    expect(stage3.bottomComponent!.size[2]).toBeCloseTo(484, 1);
+
+    // Invariant: Rigid members scale is [1,1,1] and det is +1.0
+    expect(stage3.leftMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(stage3.leftMember!.det).toBeCloseTo(1.0, 4);
+    expect(stage3.rightMember!.scale[0]).toBeCloseTo(1.0, 4);
+    expect(stage3.rightMember!.det).toBeCloseTo(1.0, 4);
+
+    expect(consoleErrors).toEqual([]);
+  });
 });
 
 function createDrawerAssemblySeedWorkspace() {
@@ -906,6 +1145,170 @@ function createDrawerAssemblySeedWorkspace() {
       components: [...(seed.catalog.components ?? []), compBottomPanel],
       agregados: [...(seed.catalog.agregados ?? []), fixtureAgregado],
       modules: [drawerModule, ...seed.catalog.modules.slice(1)],
+    },
+  };
+}
+
+function createMerivoboxPilotSeedWorkspace() {
+  const seed = createSeedWorkspace();
+  const mbx450 = {
+    id: 'hw-merivobox-450',
+    code: 'MBX-450',
+    name: 'Blum MERIVOBOX NL 450mm',
+    unit: 'pair',
+    costPerUnit: 40,
+    active: true,
+    previewShape: 'slide' as const,
+    previewSizeMm: 450,
+    previewDiameterMm: 45,
+    previewColor: '#7a8288',
+    visualAsset: {
+      assetId: 'ast-merivobox-450',
+      assetRevisionId: 'rev-merivobox-450',
+      sha256: 'c'.repeat(64),
+    },
+  };
+  const mbx500 = {
+    id: 'hw-merivobox-500',
+    code: 'MBX-500',
+    name: 'Blum MERIVOBOX NL 500mm',
+    unit: 'pair',
+    costPerUnit: 42,
+    active: true,
+    previewShape: 'slide' as const,
+    previewSizeMm: 500,
+    previewDiameterMm: 45,
+    previewColor: '#7a8288',
+    visualAsset: {
+      assetId: 'ast-merivobox-500',
+      assetRevisionId: 'rev-merivobox-500',
+      sha256: 'd'.repeat(64),
+    },
+  };
+  const kitMbx = {
+    id: 'kit-merivobox-m',
+    code: 'KIT-MBX-M',
+    name: 'Blum MERIVOBOX Height M Kit',
+    unit: 'set',
+    costPerUnit: 85,
+    active: true,
+  };
+  const compBottom = {
+    id: 'comp-bottom',
+    code: 'CMP-BTM',
+    name: 'MERIVOBOX Bottom Board',
+    active: true,
+    placement: 'inferior',
+    geometry: { kind: 'rectangular_board' as const, lengthMm: 500, widthMm: 500, thicknessMm: 16 },
+    defaultEdges: [
+      { side: 'L1' as const, enabled: false },
+      { side: 'L2' as const, enabled: false },
+      { side: 'W1' as const, enabled: false },
+      { side: 'W2' as const, enabled: false },
+    ],
+    optionRoles: ['INTERIOR'],
+  };
+  const merivoboxAgregado = {
+    id: 'agr-merivobox-m',
+    code: 'MBX-M',
+    name: 'Blum MERIVOBOX Height M',
+    commercialKitHardwareId: 'kit-merivobox-m',
+    variantSets: [
+      {
+        id: 'depth-variants',
+        dimension: 'depth' as const,
+        variants: [
+          { nominalDimensionMm: 450, hardwareId: 'hw-merivobox-450' },
+          { nominalDimensionMm: 500, hardwareId: 'hw-merivobox-500' },
+        ],
+      },
+    ],
+    compatibilityRules: [
+      {
+        variantSetId: 'depth-variants',
+        clearanceMm: 3.0, // REAL_VERIFIED: Blum KA-160/24-ES, p. 242
+        selectionStrategy: 'max_fitting' as const,
+      },
+    ],
+    rigidMembers: [
+      {
+        memberId: 'side-left',
+        role: 'drawer_side_left',
+        source: {
+          kind: 'variant' as const,
+          variant: { variantSetId: 'depth-variants' },
+        },
+        placement: {
+          x: { ref: 'min' as const, offsetMm: 0 },
+          y: { ref: 'min' as const, offsetMm: 0 },
+          z: { ref: 'min' as const, offsetMm: 0 },
+        },
+        bomRole: 'included_in_kit' as const,
+      },
+      {
+        memberId: 'side-right',
+        role: 'drawer_side_right',
+        source: {
+          kind: 'variant' as const,
+          variant: { variantSetId: 'depth-variants' },
+        },
+        placement: {
+          x: { ref: 'max' as const, offsetMm: 0 },
+          y: { ref: 'min' as const, offsetMm: 0 },
+          z: { ref: 'min' as const, offsetMm: 0 },
+        },
+        bomRole: 'included_in_kit' as const,
+      },
+    ],
+    components: [
+      {
+        componentId: 'comp-bottom',
+        quantity: 1,
+        overrides: {
+          widthRule: {
+            source: 'assembly_width' as const,
+            multiplier: 1.0,
+            offsetMm: -58,
+          },
+          lengthRule: {
+            source: 'selected_variant' as const,
+            variantSetId: 'depth-variants',
+            multiplier: 1.0,
+            offsetMm: -16,
+          },
+          placementRule: {
+            x: { ref: 'min' as const, offsetMm: 29 },
+            y: { ref: 'min' as const, offsetMm: 16 },
+            z: { ref: 'min' as const, offsetMm: 16 },
+          },
+        },
+      },
+    ],
+  };
+
+  const baseModule = seed.catalog.modules[0]!;
+  const merivoboxModule = {
+    ...baseModule,
+    externalDims: { width: 600, height: 720, depth: 480 },
+    agregados: [
+      {
+        id: 'inst-merivobox-1',
+        agregadoId: 'agr-merivobox-m',
+        quantity: 1,
+        position: { xFormula: '0', yFormula: '0', zFormula: '100' },
+        dimensions: { widthFormula: 'PW', heightFormula: '200', depthFormula: 'PD' },
+      },
+    ],
+  };
+
+  return {
+    ...seed,
+    catalog: {
+      ...seed.catalog,
+      hardware: [...seed.catalog.hardware, mbx450, mbx500, kitMbx],
+      components: [...(seed.catalog.components ?? []), compBottom],
+      agregados: [...(seed.catalog.agregados ?? []), merivoboxAgregado],
+      modules: [merivoboxModule, ...seed.catalog.modules.slice(1)],
     },
   };
 }

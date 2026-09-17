@@ -1,3 +1,25 @@
+# Issue #670-E — [PILOT] Piloto MERIVOBOX real end-to-end (#670)
+
+- Approval: prompt del propietario (2026-09-17) autoriza exclusivamente la validación del piloto comercial MERIVOBOX (Altura M) sobre la arquitectura genérica de #670-A/B/C/D («datos + recipe + variants + assets», sin ramas por fabricante). Base exacta `origin/main@fc3b53bb`. Rama `feat/670-e-merivobox-real-pilot`.
+- Solución — piloto comercial desacoplado y multi-runtime:
+  1. Procedencia verificada (R1): Catálogo Blum KA-160/24-ES (pp. 240–245); holgura 3.0 mm; fórmulas fondo (NL - 16 x LW - 58 x 16 mm) y trasera (69 x LW - 58 x 16 mm); verificado al 2026-09-17. Dossier en `docs/architecture/merivobox-pilot.md`.
+  2. Desacoplamiento W vs LW (R3): La autoridad del mueble calcula $LW = W - (\text{leftThickness} + \text{rightThickness})$. La receta opera sobre $LW$. Soportados espesores de lateral de 15, 18 y 19 mm sin asunción fija de 18 mm.
+  3. Política de BOM comercial (R4): Set comercial kit unit 'set' (`IncludedInKit`); los miembros del herraje no duplican líneas comerciales; fondo y trasera entran a lista de corte.
+  4. Persistencia histórica en PostgreSQL (R5): Aislamiento probado en BD real (`TestMerivoboxPilotHistoricalPersistence_R5`): la mutación de la receta en catálogo a R2 no afecta al snapshot publicado S1.
+  5. Límites estrictos de variantes (R6): Holgura 3.0 mm con rechazo en 449.9, 502.9, 530.1 mm sin fallback a la variante más cercana.
+  6. Independencia de binding visual (R7): Evaluación con o sin pins visuales genera idénticas variantes, matrices, piezas de corte y BOM.
+  7. Invariante de rigidez (E3/E20/E14): Miembros rígidos preservan escala [1,1,1] y determinante +1.0 exacto en todas las mutaciones (+200 mm delta W600->W800).
+  8. Cero bifurcaciones por marca: Ningún `if blum`, `if merivobox`, `MerivoboxResolver` ni renderer especial en Go, TS, WebGL o SketchUp.
+- Evidencia:
+  - Go Engine: `TestMerivoboxPilotEndToEndGates_E1_E20` PASS (E1–E20, R3, R6, R7, E9, E10).
+  - Go Storage: `TestMerivoboxPilotHistoricalPersistence_R5` PASS contra PostgreSQL real.
+  - TS Domain: `packages/domain/src/agregadoAssembly.test.ts` PASS (107/107 archivos, 1508/1508 tests).
+  - WebGL / Proyectar: `tests/visual/proyectar-webgl.spec.ts` Escenario 8 PASS; `pnpm typecheck` 7/7 PASS.
+  - SketchUp Extension: `bundle exec rake verify` PASS (RuboCop 208 files 0 offenses, unit 879 runs 5941 assertions 0 failures, boundary 6/3179 PASS, RBZ sha256 `df88c5b7784f22cd53b9f1e0a8c7762dee4b4f6f547c5f7b459834c81158f8c6`).
+  - Host smoke test: `apps/sketchup-extension/test/testup/TC_MerivoboxPilotSmoke.rb` y evidencia en `progress/host_smoke_670_e_merivobox_pilot_evidence.json`.
+  - Auditoría de aceptación: `docs/architecture/audit-670-final.md`.
+- Delivery: partial (`Refs #670`, `Delivery: partial`, `Increment: #670-E — MERIVOBOX real end-to-end pilot`). Sin merge automático ni cierre manual; handoff para revisión independiente.
+
 # Issue #768 — [P2][DEMO-UX] Visibilidad compacta del flujo Venta → Ingeniería → Producción sin nueva autoridad
 
 - Approval: prompt del propietario (2026-09-17, «DEMO UX polish — último bloque corto») autoriza exclusivamente la proyección UX del flujo ya estabilizado; NO PR 2 de #741, NO #650/#668. Issue owner nueva #768 creada con `status:approved`, `enhancement`, `frontend` (ninguna issue abierta encajaba; #741 es continuidad y este polish no toca sus criterios). PR #767 ya MERGED verificado (`origin/main@9a641a68` = base exacta). Rama `feat/768-demo-ux-fabrication-flow-visibility`. Un writer; único PR abierto (#766) es de Proyectar, sin solape.

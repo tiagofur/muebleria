@@ -1465,7 +1465,310 @@ func TestAgregadoRevisions_R4_VerifyCurrentPointer(t *testing.T) {
 	})
 }
 
-// 13. Up/down migration replay test for 000135
+// 14. Test R5: Prove real PostgreSQL storage persistence of Increment B with MERIVOBOX pilot data
+func TestMerivoboxPilotHistoricalPersistence_R5(t *testing.T) {
+	store, pool := connectStore(t)
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+
+	agregadoID := uniqueID("agr-mbx-pilot")
+	code := uniqueID("MBX-PILOT")
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM published_assembly_snapshots WHERE agregado_id = $1`, agregadoID)
+		_, _ = pool.Exec(ctx, `DELETE FROM agregado_revisions WHERE agregado_id = $1`, agregadoID)
+		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	})
+
+	// 1. Create parent Agregado in DB
+	err := store.CreateAgregado(ctx, &domain.Agregado{
+		ID:       agregadoID,
+		Code:     code,
+		Name:     "Blum MERIVOBOX Height M Pilot Drawer",
+		WidthMm:  600,
+		HeightMm: 200,
+		DepthMm:  530,
+		Active:   true,
+	})
+	if err != nil {
+		t.Fatalf("CreateAgregado failed: %v", err)
+	}
+
+	// 2. Insert AgregadoRevision R1 in DB
+	kitID := "kit-merivobox-m"
+	r1Recipe := domain.AgregadoRecipePayload{
+		WidthMm:                 600,
+		HeightMm:                200,
+		DepthMm:                 530,
+		Notes:                   "Blum MERIVOBOX Height M Pilot Recipe R1 (Blum Catalogue KA-160/24-ES)",
+		CommercialKitHardwareID: &kitID,
+		VariantSets: []domain.AgregadoVariantSet{
+			{
+				ID:        "depth-variants",
+				Dimension: "depth",
+				Variants: []domain.ProductVariant{
+					{HardwareID: "hw-merivobox-450", NominalDimensionMm: 450},
+					{HardwareID: "hw-merivobox-500", NominalDimensionMm: 500},
+				},
+			},
+		},
+		CompatibilityRules: []domain.AssemblyCompatibilityRule{
+			{
+				VariantSetID:      "depth-variants",
+				ClearanceMm:       3.0, // REAL_VERIFIED: Blum KA-160/24-ES, p. 242
+				SelectionStrategy: "max_fitting",
+			},
+		},
+		RigidMembers: []domain.AgregadoRigidMember{
+			{
+				MemberID: "side-left",
+				Role:     "drawer_side_left",
+				Source: domain.RigidMemberSource{
+					Kind:    domain.RigidMemberSourceVariant,
+					Variant: &domain.VariantHardwareSource{VariantSetID: "depth-variants"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+				},
+				BOMRole: domain.BOMRoleIncludedInKit,
+			},
+			{
+				MemberID: "side-right",
+				Role:     "drawer_side_right",
+				Source: domain.RigidMemberSource{
+					Kind:    domain.RigidMemberSourceVariant,
+					Variant: &domain.VariantHardwareSource{VariantSetID: "depth-variants"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+				},
+				BOMRole: domain.BOMRoleIncludedInKit,
+			},
+			{
+				MemberID: "runner-left",
+				Role:     "runner_left",
+				Source: domain.RigidMemberSource{
+					Kind:    domain.RigidMemberSourceVariant,
+					Variant: &domain.VariantHardwareSource{VariantSetID: "depth-variants"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+				},
+				BOMRole: domain.BOMRoleIncludedInKit,
+			},
+			{
+				MemberID: "runner-right",
+				Role:     "runner_right",
+				Source: domain.RigidMemberSource{
+					Kind:    domain.RigidMemberSourceVariant,
+					Variant: &domain.VariantHardwareSource{VariantSetID: "depth-variants"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0},
+				},
+				BOMRole: domain.BOMRoleIncludedInKit,
+			},
+		},
+		Components: []domain.ComponentInstance{
+			{
+				ComponentID: "comp-bottom",
+				Quantity:    1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					WidthRule: &domain.AssemblyDimensionRule{
+						Source:   domain.DimRuleAssemblyWidth,
+						OffsetMm: -58.0, // REAL_VERIFIED: LW - 58
+					},
+					LengthRule: &domain.AssemblyDimensionRule{
+						Source:       domain.DimRuleSelectedVariant,
+						VariantSetID: "depth-variants",
+						OffsetMm:     -16.0, // REAL_VERIFIED: NL - 16
+					},
+					PlacementRule: &domain.AssemblyAnchorRule{
+						X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 29.0},
+						Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+						Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+					},
+				},
+			},
+			{
+				ComponentID: "comp-back",
+				Quantity:    1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					WidthRule: &domain.AssemblyDimensionRule{
+						Source:   domain.DimRuleAssemblyWidth,
+						OffsetMm: -58.0, // REAL_VERIFIED: LW - 58
+					},
+					LengthRule: &domain.AssemblyDimensionRule{
+						Source:   domain.DimRuleAssemblyHeight,
+						OffsetMm: 69.0, // REAL_VERIFIED: 69mm
+					},
+					PlacementRule: &domain.AssemblyAnchorRule{
+						X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 29.0},
+						Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: -16.0},
+						Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 32.0},
+					},
+				},
+			},
+		},
+	}
+	zeroMult := 0.0
+	r1Recipe.Components[1].Overrides.LengthRule.Multiplier = &zeroMult
+
+	r1, err := store.CreateAgregadoRevision(ctx, agregadoID, r1Recipe, nil)
+	if err != nil {
+		t.Fatalf("CreateAgregadoRevision R1 failed: %v", err)
+	}
+	if r1.RevisionNumber != 1 {
+		t.Fatalf("expected R1 revision number 1, got %d", r1.RevisionNumber)
+	}
+	if err := store.SetAgregadoCurrentRevision(ctx, agregadoID, r1.ID); err != nil {
+		t.Fatalf("SetAgregadoCurrentRevision R1 failed: %v", err)
+	}
+
+	// 3. Resolve assembly for W600/D530 (selects NL 500)
+	resolved, err := engine.ResolveAgregadoAssembly(r1.Recipe.ToAgregado(agregadoID, code, "Blum MERIVOBOX"), engine.AssemblyResolutionParams{
+		WidthMm:  600,
+		DepthMm:  530,
+		HeightMm: 200,
+	})
+	if err != nil {
+		t.Fatalf("ResolveAgregadoAssembly failed: %v", err)
+	}
+
+	// 4. Attach exact visual pins and freeze snapshot S1
+	mountFrame := &domain.HardwareMountFrame{
+		OriginMm: [3]float64{15.0, 5.0, 2.0}, // PILOT_ASSUMPTION non-identity
+		Basis: domain.HardwareBasis{
+			X: [3]float64{1, 0, 0},
+			Y: [3]float64{0, 1, 0},
+			Z: [3]float64{0, 0, 1},
+		},
+	}
+	visualLookup := func(hardwareID string) (*domain.HardwareMountFrame, string, string, string, error) {
+		return mountFrame, "ast-" + hardwareID, "rev-merivobox-v1", validSha256, nil
+	}
+
+	s1Snapshot, err := engine.FreezePublishedAssemblySnapshot(resolved, r1.RevisionNumber, visualLookup)
+	if err != nil {
+		t.Fatalf("FreezePublishedAssemblySnapshot failed: %v", err)
+	}
+
+	// 5. Persist S1 in published_assembly_snapshots
+	s1Record := domain.PublishedAssemblySnapshotRecord{
+		AgregadoID:             agregadoID,
+		AgregadoRevisionID:     r1.ID,
+		AgregadoRevisionNumber: r1.RevisionNumber,
+		ResolvedWidthMm:        600,
+		ResolvedHeightMm:       200,
+		ResolvedDepthMm:        530,
+		Snapshot:               s1Snapshot,
+	}
+	if err := store.SavePublishedAssemblySnapshot(ctx, &s1Record); err != nil {
+		t.Fatalf("SavePublishedAssemblySnapshot S1 failed: %v", err)
+	}
+	if s1Record.ID == "" || s1Record.PayloadHash == "" {
+		t.Fatalf("s1Record missing ID or PayloadHash: %+v", s1Record)
+	}
+
+	// 6. Mutate mutable catalog to R2 (e.g. change clearance, notes, dimensions)
+	r2Recipe := r1Recipe
+	r2Recipe.Notes = "Blum MERIVOBOX Recipe R2 - mutated recipe"
+	r2Recipe.CompatibilityRules[0].ClearanceMm = 50.0 // aggressive clearance change that would disqualify NL 500 at 530mm
+	r2, err := store.CreateAgregadoRevision(ctx, agregadoID, r2Recipe, nil)
+	if err != nil {
+		t.Fatalf("CreateAgregadoRevision R2 failed: %v", err)
+	}
+	if r2.RevisionNumber != 2 {
+		t.Fatalf("expected R2 revision number 2, got %d", r2.RevisionNumber)
+	}
+	if err := store.SetAgregadoCurrentRevision(ctx, agregadoID, r2.ID); err != nil {
+		t.Fatalf("SetAgregadoCurrentRevision R2 failed: %v", err)
+	}
+
+	// Verify catalog currently points to R2
+	currRev, err := store.GetAgregadoCurrentRevision(ctx, agregadoID)
+	if err != nil {
+		t.Fatalf("GetAgregadoCurrentRevision: %v", err)
+	}
+	if currRev.ID != r2.ID || currRev.RevisionNumber != 2 {
+		t.Fatalf("expected current revision to be R2, got %+v", currRev)
+	}
+
+	// 7. Re-read S1 from database by ID: Prove historical snapshot S1 is 100% isolated from R2
+	s1Readback, err := store.GetPublishedAssemblySnapshotByID(ctx, s1Record.ID)
+	if err != nil {
+		t.Fatalf("GetPublishedAssemblySnapshotByID S1: %v", err)
+	}
+
+	// Verify identity and revision immutability
+	if s1Readback.ID != s1Record.ID {
+		t.Errorf("snapshot ID changed: got %s, want %s", s1Readback.ID, s1Record.ID)
+	}
+	if s1Readback.AgregadoRevisionID != r1.ID {
+		t.Errorf("AgregadoRevisionID changed: got %s, want %s", s1Readback.AgregadoRevisionID, r1.ID)
+	}
+	if s1Readback.AgregadoRevisionNumber != 1 {
+		t.Errorf("AgregadoRevisionNumber changed: got %d, want 1", s1Readback.AgregadoRevisionNumber)
+	}
+	if s1Readback.PayloadHash != s1Record.PayloadHash {
+		t.Errorf("PayloadHash changed: got %s, want %s", s1Readback.PayloadHash, s1Record.PayloadHash)
+	}
+
+	// Verify selected variants remain NL 500 (even though R2 with 50mm clearance would not fit at 530mm)
+	if len(s1Readback.Snapshot.SelectedVariants) != 1 {
+		t.Fatalf("expected 1 selected variant, got %d", len(s1Readback.Snapshot.SelectedVariants))
+	}
+	v := s1Readback.Snapshot.SelectedVariants[0]
+	if v.HardwareID != "hw-merivobox-500" || v.NominalDimensionMm != 500 {
+		t.Errorf("selected variant corrupted: got %+v, want hw-merivobox-500 / 500", v)
+	}
+
+	// Verify visual pins preserved
+	for _, m := range s1Readback.Snapshot.RigidMembers {
+		if *m.AssetID != "ast-hw-merivobox-500" {
+			t.Errorf("rigid member %s AssetID corrupted: %v", m.MemberID, *m.AssetID)
+		}
+		if *m.AssetRevisionID != "rev-merivobox-v1" {
+			t.Errorf("rigid member %s AssetRevisionID corrupted: %v", m.MemberID, *m.AssetRevisionID)
+		}
+		if *m.SHA256 != validSha256 {
+			t.Errorf("rigid member %s SHA256 corrupted: %v", m.MemberID, *m.SHA256)
+		}
+		if m.MountFrame == nil || m.MountFrame.OriginMm != [3]float64{15.0, 5.0, 2.0} {
+			t.Errorf("rigid member %s mount frame corrupted: %v", m.MemberID, m.MountFrame)
+		}
+	}
+
+	// Verify fabricated components preserved
+	var bottomReadback, backReadback *domain.ResolvedFabricatedComponent
+	for i := range s1Readback.Snapshot.FabricatedComponents {
+		if s1Readback.Snapshot.FabricatedComponents[i].ComponentID == "comp-bottom" {
+			bottomReadback = &s1Readback.Snapshot.FabricatedComponents[i]
+		}
+		if s1Readback.Snapshot.FabricatedComponents[i].ComponentID == "comp-back" {
+			backReadback = &s1Readback.Snapshot.FabricatedComponents[i]
+		}
+	}
+	if bottomReadback == nil || bottomReadback.WidthMm != 542.0 || bottomReadback.LengthMm != 484.0 {
+		t.Errorf("bottom board corrupted: %+v, want width 542, length 484", bottomReadback)
+	}
+	if backReadback == nil || backReadback.WidthMm != 542.0 || backReadback.LengthMm != 69.0 {
+		t.Errorf("back board corrupted: %+v, want width 542, length 69", backReadback)
+	}
+
+	// Verify BOM policy preserved
+	if len(s1Readback.Snapshot.BOMItems) != 1 || s1Readback.Snapshot.BOMItems[0].HardwareID != "kit-merivobox-m" {
+		t.Errorf("BOM items corrupted: %+v", s1Readback.Snapshot.BOMItems)
+	}
+}
+
+// 15. Up/down migration replay test for 000135
 func TestAgregadoRevisions_Migration_UpDownReplay(t *testing.T) {
 	pool := multiOrgFreshDB(t)
 	ctx := context.Background()

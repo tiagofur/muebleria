@@ -842,3 +842,485 @@ func TestP_AttachVisualPinsFailClosed(t *testing.T) {
 		}
 	})
 }
+
+func buildMerivoboxPilotFixture() domain.Agregado {
+	kitID := "kit-merivobox-m"
+	return domain.Agregado{
+		ID:                      "agr-merivobox-m",
+		Code:                    "MERIVOBOX-M",
+		Name:                    "MERIVOBOX Height M Standard Drawer",
+		CommercialKitHardwareID: &kitID,
+		VariantSets: []domain.AgregadoVariantSet{
+			{
+				ID:        "depth-variants",
+				Dimension: "depth",
+				Variants: []domain.ProductVariant{
+					{NominalDimensionMm: 450.0, HardwareID: "hw-merivobox-450"},
+					{NominalDimensionMm: 500.0, HardwareID: "hw-merivobox-500"},
+				},
+			},
+		},
+		CompatibilityRules: []domain.AssemblyCompatibilityRule{
+			{
+				VariantSetID:      "depth-variants",
+				ClearanceMm:       20.0, // PILOT_ASSUMPTION
+				SelectionStrategy: "max_fitting",
+			},
+		},
+		RigidMembers: []domain.AgregadoRigidMember{
+			{
+				MemberID: "side-left",
+				Role:     "drawer_side_left",
+				Source: domain.RigidMemberSource{
+					Kind:    domain.RigidMemberSourceVariant,
+					Variant: &domain.VariantHardwareSource{VariantSetID: "depth-variants"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+				},
+				BOMRole: domain.BOMRoleIncludedInKit,
+			},
+			{
+				MemberID: "side-right",
+				Role:     "drawer_side_right",
+				Source: domain.RigidMemberSource{
+					Kind:    domain.RigidMemberSourceVariant,
+					Variant: &domain.VariantHardwareSource{VariantSetID: "depth-variants"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 0.0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+				},
+				BOMRole: domain.BOMRoleIncludedInKit,
+			},
+			{
+				MemberID: "runner-left",
+				Role:     "drawer_runner_left",
+				Source: domain.RigidMemberSource{
+					Kind:    domain.RigidMemberSourceVariant,
+					Variant: &domain.VariantHardwareSource{VariantSetID: "depth-variants"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+				},
+				BOMRole: domain.BOMRoleIncludedInKit,
+			},
+			{
+				MemberID: "runner-right",
+				Role:     "drawer_runner_right",
+				Source: domain.RigidMemberSource{
+					Kind:    domain.RigidMemberSourceVariant,
+					Variant: &domain.VariantHardwareSource{VariantSetID: "depth-variants"},
+				},
+				Placement: domain.AssemblyAnchorRule{
+					X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: 0.0},
+					Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+					Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 0.0},
+				},
+				BOMRole: domain.BOMRoleIncludedInKit,
+			},
+		},
+		Components: []domain.ComponentInstance{
+			{
+				ComponentID: "comp-bottom",
+				Quantity:    1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					WidthRule: &domain.AssemblyDimensionRule{
+						Source:   domain.DimRuleAssemblyWidth,
+						OffsetMm: -58.0, // REAL_VERIFIED: LW - 58
+					},
+					LengthRule: &domain.AssemblyDimensionRule{
+						Source:       domain.DimRuleSelectedVariant,
+						VariantSetID: "depth-variants",
+						OffsetMm:     -16.0, // REAL_VERIFIED: NL - 16
+					},
+					PlacementRule: &domain.AssemblyAnchorRule{
+						X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 29.0},
+						Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+						Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 16.0},
+					},
+				},
+			},
+			{
+				ComponentID: "comp-back",
+				Quantity:    1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					WidthRule: &domain.AssemblyDimensionRule{
+						Source:   domain.DimRuleAssemblyWidth,
+						OffsetMm: -58.0, // REAL_VERIFIED: LW - 58
+					},
+					LengthRule: &domain.AssemblyDimensionRule{
+						Source:     domain.DimRuleAssemblyHeight,
+						Multiplier: ptr(0.0),
+						OffsetMm:   69.0, // REAL_VERIFIED: 69mm height for M
+					},
+					PlacementRule: &domain.AssemblyAnchorRule{
+						X: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 29.0},
+						Y: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMax, OffsetMm: -16.0},
+						Z: domain.AssemblyAxisPlacement{Ref: domain.AxisRefMin, OffsetMm: 32.0},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
+	fixture := buildMerivoboxPilotFixture()
+
+	t.Run("E1 & E2: Generic recipe resolves W600 with NL 500 variant", func(t *testing.T) {
+		res, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
+			WidthMm:  600.0,
+			DepthMm:  530.0,
+			HeightMm: 200.0,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error resolving MERIVOBOX: %v", err)
+		}
+
+		if res.AgregadoID != "agr-merivobox-m" {
+			t.Errorf("expected agregado ID agr-merivobox-m, got %s", res.AgregadoID)
+		}
+		if res.CommercialKitHardwareID == nil || *res.CommercialKitHardwareID != "kit-merivobox-m" {
+			t.Errorf("expected commercial kit kit-merivobox-m, got %v", res.CommercialKitHardwareID)
+		}
+		if len(res.SelectedVariants) != 1 || res.SelectedVariants[0].HardwareID != "hw-merivobox-500" {
+			t.Fatalf("expected variant hw-merivobox-500, got %v", res.SelectedVariants)
+		}
+
+		// Check rigid member placements
+		var sideLeft, sideRight *domain.ResolvedRigidMember
+		for i := range res.RigidMembers {
+			if res.RigidMembers[i].MemberID == "side-left" {
+				sideLeft = &res.RigidMembers[i]
+			}
+			if res.RigidMembers[i].MemberID == "side-right" {
+				sideRight = &res.RigidMembers[i]
+			}
+		}
+		if sideLeft == nil || sideRight == nil {
+			t.Fatal("expected side-left and side-right in resolved members")
+		}
+		if sideLeft.LocalTransform.TranslationMm[0] != 0.0 {
+			t.Errorf("expected side-left X=0, got %f", sideLeft.LocalTransform.TranslationMm[0])
+		}
+		if sideRight.LocalTransform.TranslationMm[0] != 600.0 {
+			t.Errorf("expected side-right X=600, got %f", sideRight.LocalTransform.TranslationMm[0])
+		}
+
+		// Check fabricated component dimensions
+		var bottom, back *domain.ResolvedFabricatedComponent
+		for i := range res.FabricatedComponents {
+			if res.FabricatedComponents[i].ComponentID == "comp-bottom" {
+				bottom = &res.FabricatedComponents[i]
+			}
+			if res.FabricatedComponents[i].ComponentID == "comp-back" {
+				back = &res.FabricatedComponents[i]
+			}
+		}
+		if bottom == nil || back == nil {
+			t.Fatal("expected comp-bottom and comp-back")
+		}
+		if bottom.WidthMm != 542.0 { // 600 - 58
+			t.Errorf("expected bottom width 542.0, got %f", bottom.WidthMm)
+		}
+		if bottom.LengthMm != 484.0 { // 500 - 16
+			t.Errorf("expected bottom length 484.0, got %f", bottom.LengthMm)
+		}
+		if back.WidthMm != 542.0 {
+			t.Errorf("expected back width 542.0, got %f", back.WidthMm)
+		}
+		if back.LengthMm != 69.0 {
+			t.Errorf("expected back length 69.0, got %f", back.LengthMm)
+		}
+	})
+
+	t.Run("R3: Decoupled W vs LW and varying carcase panel thickness (15mm, 18mm, 19mm)", func(t *testing.T) {
+		// Module outer width = 600mm. Furniture calculates LW based on panel thickness.
+		panels := []struct {
+			panelThickness float64
+			expectedLW     float64
+			expectedBottom float64
+		}{
+			{panelThickness: 15.0, expectedLW: 570.0, expectedBottom: 512.0}, // 570 - 58
+			{panelThickness: 18.0, expectedLW: 564.0, expectedBottom: 506.0}, // 564 - 58
+			{panelThickness: 19.0, expectedLW: 562.0, expectedBottom: 504.0}, // 562 - 58
+		}
+
+		for _, tc := range panels {
+			res, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
+				WidthMm:  tc.expectedLW, // Assembly receives LW as authoritative width
+				DepthMm:  530.0,
+				HeightMm: 200.0,
+			})
+			if err != nil {
+				t.Fatalf("thickness %f: unexpected error: %v", tc.panelThickness, err)
+			}
+
+			var sideRight *domain.ResolvedRigidMember
+			var bottom *domain.ResolvedFabricatedComponent
+			for i := range res.RigidMembers {
+				if res.RigidMembers[i].MemberID == "side-right" {
+					sideRight = &res.RigidMembers[i]
+				}
+			}
+			for i := range res.FabricatedComponents {
+				if res.FabricatedComponents[i].ComponentID == "comp-bottom" {
+					bottom = &res.FabricatedComponents[i]
+				}
+			}
+
+			if sideRight.LocalTransform.TranslationMm[0] != tc.expectedLW {
+				t.Errorf("thickness %f: expected side-right at LW %f, got %f",
+					tc.panelThickness, tc.expectedLW, sideRight.LocalTransform.TranslationMm[0])
+			}
+			if bottom.WidthMm != tc.expectedBottom {
+				t.Errorf("thickness %f: expected bottom width %f, got %f",
+					tc.panelThickness, tc.expectedBottom, bottom.WidthMm)
+			}
+		}
+	})
+
+	t.Run("E3 & E20: W800 moves right members exactly +200mm with NO scaling and det=+1.0", func(t *testing.T) {
+		res600, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
+			WidthMm:  600.0,
+			DepthMm:  530.0,
+			HeightMm: 200.0,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res800, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
+			WidthMm:  800.0,
+			DepthMm:  530.0,
+			HeightMm: 200.0,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res700, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
+			WidthMm:  700.0,
+			DepthMm:  530.0,
+			HeightMm: 200.0,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var right600, right800, right700 float64
+		for _, m := range res600.RigidMembers {
+			if m.MemberID == "side-right" {
+				right600 = m.LocalTransform.TranslationMm[0]
+			}
+		}
+		for _, m := range res800.RigidMembers {
+			if m.MemberID == "side-right" {
+				right800 = m.LocalTransform.TranslationMm[0]
+			}
+		}
+		for _, m := range res700.RigidMembers {
+			if m.MemberID == "side-right" {
+				right700 = m.LocalTransform.TranslationMm[0]
+			}
+		}
+
+		if right800-right600 != 200.0 {
+			t.Errorf("expected +200mm delta, got %f", right800-right600)
+		}
+		if right700-right600 != 100.0 {
+			t.Errorf("expected +100mm delta for W700, got %f", right700-right600)
+		}
+
+		// Assert invariant: scale=[1,1,1], det=+1.0
+		for _, m := range res800.RigidMembers {
+			b := m.LocalTransform.Basis
+			det := b.X[0]*(b.Y[1]*b.Z[2]-b.Y[2]*b.Z[1]) +
+				b.X[1]*(b.Y[2]*b.Z[0]-b.Y[0]*b.Z[2]) +
+				b.X[2]*(b.Y[0]*b.Z[1]-b.Y[1]*b.Z[0])
+			if math.Abs(det-1.0) > 1e-6 {
+				t.Errorf("expected determinant +1.0 for member %s, got %f", m.MemberID, det)
+			}
+		}
+	})
+
+	t.Run("R6 & E5-E7: Strict variant boundary testing for clearance=3mm (REAL_VERIFIED)", func(t *testing.T) {
+		// Fixture with clearance = 3.0 mm (Blum KA-160/24-ES, p. 242)
+		blumFixture := fixture
+		blumFixture.CompatibilityRules = []domain.AssemblyCompatibilityRule{
+			{
+				VariantSetID:      "depth-variants",
+				ClearanceMm:       3.0, // REAL_VERIFIED
+				SelectionStrategy: "max_fitting",
+			},
+		}
+
+		// 1. Below minimum: 449.9mm (< 450 + 3 = 453.0) -> fails closed
+		_, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
+			WidthMm: 600.0, DepthMm: 449.9, HeightMm: 200.0,
+		})
+		var variantErr *domain.ErrAssemblyVariantNotFound
+		if !errors.As(err, &variantErr) {
+			t.Errorf("expected *domain.ErrAssemblyVariantNotFound at 449.9mm, got %v", err)
+		}
+
+		// 2. Exact boundary for 450: 453.0mm (453.0 - 3 = 450.0) -> selects 450
+		res453, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
+			WidthMm: 600.0, DepthMm: 453.0, HeightMm: 200.0,
+		})
+		if err != nil || res453.SelectedVariants[0].NominalDimensionMm != 450.0 {
+			t.Errorf("expected 450mm at exact boundary 453.0mm, got %v, err: %v", res453.SelectedVariants, err)
+		}
+
+		// 3. Interior point for 450: 480.0mm -> selects 450
+		res480, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
+			WidthMm: 600.0, DepthMm: 480.0, HeightMm: 200.0,
+		})
+		if err != nil || res480.SelectedVariants[0].NominalDimensionMm != 450.0 {
+			t.Errorf("expected 450mm at 480.0mm, got %v, err: %v", res480.SelectedVariants, err)
+		}
+
+		// 4. Just below boundary for 500: 502.9mm (< 500 + 3 = 503.0) -> selects 450, NOT 500
+		res5029, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
+			WidthMm: 600.0, DepthMm: 502.9, HeightMm: 200.0,
+		})
+		if err != nil || res5029.SelectedVariants[0].NominalDimensionMm != 450.0 {
+			t.Errorf("expected 450mm at 502.9mm (no nearest fallback!), got %v, err: %v", res5029.SelectedVariants, err)
+		}
+
+		// 5. Exact boundary for 500: 503.0mm (503.0 - 3 = 500.0) -> selects 500
+		res503, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
+			WidthMm: 600.0, DepthMm: 503.0, HeightMm: 200.0,
+		})
+		if err != nil || res503.SelectedVariants[0].NominalDimensionMm != 500.0 {
+			t.Errorf("expected 500mm at exact boundary 503.0mm, got %v, err: %v", res503.SelectedVariants, err)
+		}
+
+		// 6. Interior point for 500: 530.0mm -> selects 500
+		res530, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
+			WidthMm: 600.0, DepthMm: 530.0, HeightMm: 200.0,
+		})
+		if err != nil || res530.SelectedVariants[0].NominalDimensionMm != 500.0 {
+			t.Errorf("expected 500mm at 530.0mm, got %v, err: %v", res530.SelectedVariants, err)
+		}
+	})
+
+	t.Run("E8: BOM policy returns 1 commercial kit line without duplicate members", func(t *testing.T) {
+		res, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
+			WidthMm:  600.0,
+			DepthMm:  530.0,
+			HeightMm: 200.0,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.BOMItems) != 1 {
+			t.Fatalf("expected 1 BOM item, got %d", len(res.BOMItems))
+		}
+		if res.BOMItems[0].HardwareID != "kit-merivobox-m" || res.BOMItems[0].Quantity != 1 {
+			t.Errorf("expected kit-merivobox-m qty 1, got %v", res.BOMItems[0])
+		}
+	})
+
+	t.Run("R7: Visual binding independence (mechanical regression)", func(t *testing.T) {
+		// Pure resolution without visual bindings
+		resRaw, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
+			WidthMm: 600.0, DepthMm: 530.0, HeightMm: 200.0,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Attach visual pins
+		mountFrame := &domain.HardwareMountFrame{
+			OriginMm: [3]float64{15.0, 5.0, 2.0},
+			Basis: domain.HardwareBasis{
+				X: [3]float64{1, 0, 0}, Y: [3]float64{0, 1, 0}, Z: [3]float64{0, 0, 1},
+			},
+		}
+		mockLookup := func(hwID string) (*domain.HardwareMountFrame, string, string, string, error) {
+			return mountFrame, "ast-" + hwID, "rev-1", "sha-" + hwID, nil
+		}
+		pinned, err := engine.AttachVisualPins(resRaw, mockLookup)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Mechanical results must be identical
+		if len(pinned.SelectedVariants) != len(resRaw.SelectedVariants) ||
+			pinned.SelectedVariants[0] != resRaw.SelectedVariants[0] {
+			t.Errorf("selected variants diverged: raw %v vs pinned %v", resRaw.SelectedVariants, pinned.SelectedVariants)
+		}
+		if len(pinned.BOMItems) != len(resRaw.BOMItems) || pinned.BOMItems[0] != resRaw.BOMItems[0] {
+			t.Errorf("BOM diverged: raw %v vs pinned %v", resRaw.BOMItems, pinned.BOMItems)
+		}
+		if len(pinned.FabricatedComponents) != len(resRaw.FabricatedComponents) {
+			t.Errorf("fabricated components count diverged")
+		}
+		for i := range pinned.FabricatedComponents {
+			if pinned.FabricatedComponents[i].WidthMm != resRaw.FabricatedComponents[i].WidthMm ||
+				pinned.FabricatedComponents[i].LengthMm != resRaw.FabricatedComponents[i].LengthMm {
+				t.Errorf("fabricated component %d dimensions diverged", i)
+			}
+		}
+		for i := range pinned.RigidMembers {
+			if pinned.RigidMembers[i].LocalTransform != resRaw.RigidMembers[i].LocalTransform {
+				t.Errorf("rigid member %d transform diverged", i)
+			}
+		}
+	})
+
+	t.Run("E9 & E10: Visual pins and non-identity MountFrame composition", func(t *testing.T) {
+		res, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
+			WidthMm:  600.0,
+			DepthMm:  530.0,
+			HeightMm: 200.0,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		mountFrame := &domain.HardwareMountFrame{
+			OriginMm: [3]float64{15.0, 5.0, 2.0}, // PILOT_ASSUMPTION non-identity
+			Basis: domain.HardwareBasis{
+				X: [3]float64{1, 0, 0},
+				Y: [3]float64{0, 1, 0},
+				Z: [3]float64{0, 0, 1},
+			},
+		}
+
+		mockLookup := func(hwID string) (*domain.HardwareMountFrame, string, string, string, error) {
+			return mountFrame, "ast-" + hwID, "rev-1", "sha-" + hwID, nil
+		}
+
+		pinned, err := engine.AttachVisualPins(res, mockLookup)
+		if err != nil {
+			t.Fatalf("unexpected attach error: %v", err)
+		}
+
+		for _, m := range pinned.RigidMembers {
+			if *m.AssetID != "ast-hw-merivobox-500" || *m.AssetRevisionID != "rev-1" {
+				t.Errorf("unexpected asset pin: %v", m)
+			}
+			if m.MountFrame == nil || m.MountFrame.OriginMm != [3]float64{15.0, 5.0, 2.0} {
+				t.Errorf("unexpected mountFrame: %v", m.MountFrame)
+			}
+		}
+
+		// Test normalization
+		norm, err := domain.DeriveAssetNormalization(*mountFrame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pt := [3]float64{100.0, 200.0, 50.0}
+		normPt := norm.Apply(pt)
+		expected := [3]float64{85.0, 195.0, 48.0}
+		if normPt != expected {
+			t.Errorf("expected normalized point %v, got %v", expected, normPt)
+		}
+	})
+}
