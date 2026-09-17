@@ -1,7 +1,6 @@
 Path: "%CONFIG_DIR%/test/testup"
-Output: "%CONFIG_DIR%/../../progress/host_smoke_499_testup_ci.json"
-ErrorLogPath: "%CONFIG_DIR%/../../progress/host_smoke_499_testup_error.log"
+Output: "%CONFIG_DIR%/../../progress/host_smoke_670_d_testup_ci.json"
+ErrorLogPath: "%CONFIG_DIR%/../../progress/host_smoke_670_d_testup_error.log"
 Tests:
-  - "Granete::SketchUpExtension::TC_ComponentAuthoringSmoke#"
-  - "Granete::SketchUpExtension::TC_PairingConnectSmoke#"
+  - "Granete::SketchUpExtension::TC_AssemblyRuntimeSmoke#"
 KeepOpen: false

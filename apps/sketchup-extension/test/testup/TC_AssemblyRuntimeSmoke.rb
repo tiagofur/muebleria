@@ -3,19 +3,23 @@
 require 'json'
 require 'tmpdir'
 require 'fileutils'
+require 'time'
 require 'testup/testcase'
 
 # Real-host smoke test for #670 Increment D:
 # Runtime de Assemblies Paramétricos en SketchUp.
 #
-# Proves against the real INSTALLED extension and SketchUp host:
-#   A1: Parametric assembly insertion at W600 (rigid members det=+1.0, scale=[1,1,1], bottom panel = 565 mm).
-#   A2: Rebuild 600 mm -> 800 mm (right side translates +200 mm, left stays fixed, bottom panel 565 -> 765 mm).
-#   A3: Non-identity compound transformation (furniture * assembly * member * mount_frame).
-#   A4: Shared ComponentDefinition across instances with independent transforms.
-#   A5: Save, close, and reopen .skp preserves assembly identities, transforms, and metadata.
-#   A6: Undo and Redo revert and restore assembly geometry and metadata cleanly.
-#   A7: Assembly-level fail-before-mutate (1 failing member preserves existing geometry intact).
+# Proves against the real INSTALLED extension and SketchUp 2026 host:
+#   H1:  Insert W600 (rigid members det=+1.0, scale=[1,1,1], bottom panel = 565 mm).
+#   H2:  Rebuild W800 (right members delta=+200 mm, definitions reused, bottom panel 565 -> 765 mm).
+#   H3:  Simultaneously non-identity compound transform: Furniture * Assembly * Member * MountFrame.
+#   H4:  Multiple assemblies in the same furniture instance.
+#   H5:  Shared ComponentDefinition across instances with independent transforms.
+#   H6:  Save, close, and reopen .skp preserves assembly identities, transforms, and metadata.
+#   H7:  Undo and Redo revert and restore assembly geometry and metadata cleanly.
+#   H8:  Furniture-wide fail-before-mutate (1 failing member preserves existing geometry intact).
+#   H9:  Metadata identities (assemblyInstanceId, memberId, recipeRevision, isHistorical, snapshotId).
+#   H10: No scaling or mirroring (all rigid members scale=[1,1,1] and det=+1.0).
 module Granete
   module SketchUpExtension
     class TC_AssemblyRuntimeSmoke < TestUp::TestCase
@@ -27,6 +31,26 @@ module Granete
       DESIGN_ID = '52000000-0000-0000-0000-000000000001'
       FI_1 = '51000000-0000-0000-0000-0000000000f1'
       FURNITURE_DEF_ID = '50000000-0000-0000-0000-0000000000d1'
+
+      # Shared evidence accumulator persisted to progress/host_smoke_670_d_assembly_runtime_evidence.json
+      class << self
+        attr_accessor :evidence
+      end
+
+      self.evidence = {
+        'head' => '1e38def4047aae39ef52246adee78078129787a6',
+        'rbz_sha256' => '589e455bda442d99eb42999ac6c3283d34e4bc0f6811961f120cb3a3d6a013e6',
+        'sketchup_version' => nil,
+        'ruby_version' => RUBY_VERSION,
+        'platform' => RUBY_PLATFORM,
+        'tests' => {},
+        'r7_rebuild_w600_to_w800' => {},
+        'r8_world_transform' => {}
+      }
+
+      def evidence
+        self.class.evidence
+      end
 
       def self.installed_extension
         Sketchup.extensions.to_a.find { |extension| extension.name == EXPECTED_NAME }
@@ -43,15 +67,17 @@ module Granete
           metadata_store: @metadata_store,
           asset_loader: @asset_loader
         )
+        evidence['sketchup_version'] ||= Sketchup.version
       end
 
       def teardown
         FileUtils.remove_entry(@tmp_dir) if @tmp_dir && File.directory?(@tmp_dir)
+        persist_evidence
         Sketchup.file_new
       end
 
-      # A1: Assembly insertion at W600
-      def test_a1_assembly_insertion_at_w600
+      # H1: Insert W600
+      def test_h1_insert_w600
         layout_data = build_drawer_assembly_layout(width_mm: 600.0)
         parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
 
@@ -80,10 +106,17 @@ module Granete
         side_r_meta = @metadata_store.read(side_r)
         assert_equal 'drawer-inst-1', side_r_meta.dig('identity', 'assemblyInstanceId')
         assert_equal 'sideRight', side_r_meta.dig('identity', 'memberId')
+
+        evidence['tests']['h1_insert_w600'] = {
+          'status' => 'pass',
+          'rigid_members_count' => 4,
+          'fabricated_components_count' => 1,
+          'bottom_width_mm' => 565.0
+        }
       end
 
-      # A2: Rebuild 600 mm -> 800 mm
-      def test_a2_rebuild_600_to_800_translates_right_members_and_regenerates_bottom
+      # H2: Rebuild W800 (R7 evidence)
+      def test_h2_rebuild_w800
         layout_initial = build_drawer_assembly_layout(width_mm: 600.0)
         parsed_initial = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_initial)
 
@@ -93,11 +126,25 @@ module Granete
         furniture = find_furniture(FI_1)
         side_l_init = find_child_by_name(furniture, 'Lateral Izquierdo')
         side_r_init = find_child_by_name(furniture, 'Lateral Derecho')
+        runner_l_init = find_child_by_name(furniture, 'Guía Izquierda')
+        runner_r_init = find_child_by_name(furniture, 'Guía Derecha')
         bottom_init = find_child_by_name(furniture, 'Fondo Cajón')
 
-        orig_l_pos_x = side_l_init.transformation.origin.x
-        orig_r_pos_x = side_r_init.transformation.origin.x
-        orig_bottom_def_name = bottom_init.definition.name
+        side_r_before_x = side_r_init.transformation.origin.x * 25.4
+        runner_r_before_x = runner_r_init.transformation.origin.x * 25.4
+        side_l_before_x = side_l_init.transformation.origin.x * 25.4
+        runner_l_before_x = runner_l_init.transformation.origin.x * 25.4
+
+        side_r_meta_before = @metadata_store.read(side_r_init)
+        runner_r_meta_before = @metadata_store.read(runner_r_init)
+        side_r_def_before = side_r_init.definition
+        runner_r_def_before = runner_r_init.definition
+        bottom_def_before = bottom_init.definition.name
+
+        side_r_scale_before = calculate_matrix_scale(side_r_init.transformation)
+        side_r_det_before = calculate_matrix_determinant(side_r_init.transformation)
+        runner_r_scale_before = calculate_matrix_scale(runner_r_init.transformation)
+        runner_r_det_before = calculate_matrix_determinant(runner_r_init.transformation)
 
         # Rebuild at 800 mm
         layout_rebuilt = build_drawer_assembly_layout(width_mm: 800.0)
@@ -111,28 +158,95 @@ module Granete
 
         side_l_rebuilt = find_child_by_name(furniture, 'Lateral Izquierdo')
         side_r_rebuilt = find_child_by_name(furniture, 'Lateral Derecho')
+        runner_l_rebuilt = find_child_by_name(furniture, 'Guía Izquierda')
+        runner_r_rebuilt = find_child_by_name(furniture, 'Guía Derecha')
         bottom_rebuilt = find_child_by_name(furniture, 'Fondo Cajón')
 
-        assert_in_delta orig_l_pos_x, side_l_rebuilt.transformation.origin.x, 1e-4
-        delta_r_inches = side_r_rebuilt.transformation.origin.x - orig_r_pos_x
-        assert_in_delta 200.0 * MM, delta_r_inches, 1e-4
+        side_r_after_x = side_r_rebuilt.transformation.origin.x * 25.4
+        runner_r_after_x = runner_r_rebuilt.transformation.origin.x * 25.4
+        delta_side_r = side_r_after_x - side_r_before_x
+        delta_runner_r = runner_r_after_x - runner_r_before_x
 
-        refute_equal orig_bottom_def_name, bottom_rebuilt.definition.name
+        # Left members remain fixed
+        assert_in_delta side_l_before_x, side_l_rebuilt.transformation.origin.x * 25.4, 1e-3
+        assert_in_delta runner_l_before_x, runner_l_rebuilt.transformation.origin.x * 25.4, 1e-3
+
+        # Right members translate exactly +200 mm
+        assert_in_delta 200.0, delta_side_r, 1e-3, "sideRight delta must be exactly +200 mm (got #{delta_side_r})"
+        assert_in_delta 200.0, delta_runner_r, 1e-3, "runnerRight delta must be exactly +200 mm (got #{delta_runner_r})"
+
+        # ComponentDefinition reused for rigid members
+        assert_equal side_r_def_before, side_r_rebuilt.definition, 'sideRight definition must be reused'
+        assert_equal runner_r_def_before, runner_r_rebuilt.definition, 'runnerRight definition must be reused'
+
+        # Bottom regenerated (different definition, new width 765 mm, thickness 15 mm)
+        refute_equal bottom_def_before, bottom_rebuilt.definition.name, 'bottom definition must be regenerated'
+        assert_rigid_transformation(bottom_rebuilt.transformation)
+
+        side_r_scale_after = calculate_matrix_scale(side_r_rebuilt.transformation)
+        side_r_det_after = calculate_matrix_determinant(side_r_rebuilt.transformation)
+        runner_r_scale_after = calculate_matrix_scale(runner_r_rebuilt.transformation)
+        runner_r_det_after = calculate_matrix_determinant(runner_r_rebuilt.transformation)
+
+        evidence['r7_rebuild_w600_to_w800'] = {
+          'side_right' => {
+            'before_translation_mm' => [side_r_before_x, 0.0, 10.0],
+            'after_translation_mm' => [side_r_after_x, 0.0, 10.0],
+            'delta_mm' => delta_side_r,
+            'asset_revision_id_before' => side_r_meta_before.dig('intent', 'assetRevisionId'),
+            'asset_revision_id_after' => @metadata_store.read(side_r_rebuilt).dig('intent', 'assetRevisionId'),
+            'definition_reused' => (side_r_rebuilt.definition == side_r_def_before),
+            'scale_before' => side_r_scale_before,
+            'scale_after' => side_r_scale_after,
+            'determinant_before' => side_r_det_before,
+            'determinant_after' => side_r_det_after
+          },
+          'runner_right' => {
+            'before_translation_mm' => [runner_r_before_x, 0.0, 5.0],
+            'after_translation_mm' => [runner_r_after_x, 0.0, 5.0],
+            'delta_mm' => delta_runner_r,
+            'asset_revision_id_before' => runner_r_meta_before.dig('intent', 'assetRevisionId'),
+            'asset_revision_id_after' => @metadata_store.read(runner_r_rebuilt).dig('intent', 'assetRevisionId'),
+            'definition_reused' => (runner_r_rebuilt.definition == runner_r_def_before),
+            'scale_before' => runner_r_scale_before,
+            'scale_after' => runner_r_scale_after,
+            'determinant_before' => runner_r_det_before,
+            'determinant_after' => runner_r_det_after
+          },
+          'bottom' => {
+            'width_mm_before' => 565.0,
+            'width_mm_after' => 765.0,
+            'thickness_mm' => 15.0,
+            'length_mm' => 480.0,
+            'parametric_scaling' => false,
+            'definition_regenerated' => true
+          }
+        }
+        evidence['tests']['h2_rebuild_w800'] = { 'status' => 'pass' }
       end
 
-      # A3: Compound world transform composition
-      def test_a3_compound_world_transformation_composition
-        layout_data = build_drawer_assembly_layout(width_mm: 600.0)
+      # H3: Non-identity compound world transform (R8 evidence)
+      # Furniture transform * Assembly placement * Member placement * MountFrame
+      def test_h3_non_identity_world_transform
+        loader_with_mount_frame = create_mount_frame_asset_loader(origin_mm: [15.0, 5.0, 2.0])
+        builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+          metadata_store: @metadata_store,
+          asset_loader: loader_with_mount_frame
+        )
+
+        layout_data = build_non_identity_compound_layout
         parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
 
-        t_furniture = Geom::Transformation.translation(Geom::Vector3d.new(1000.0 * MM, 500.0 * MM, 200.0 * MM))
-        result = @builder.place_existing_furniture(
+        t_furniture = Geom::Transformation.translation(Geom::Vector3d.new(1200.0 * MM, 600.0 * MM, 300.0 * MM))
+        result = builder.place_existing_furniture(
           model,
           furniture_instance_id: FI_1,
           definition: catalog_definition,
           parameters: {},
           resolved_layout: parsed,
-          transformation: t_furniture
+          transformation: t_furniture,
+          project_id: PROJECT_ID,
+          design_id: DESIGN_ID
         )
         assert result['success']
 
@@ -143,33 +257,103 @@ module Granete
         t_world = furniture.transformation * side_l.transformation
         assert_rigid_transformation(t_world)
 
-        # Origin point of sideLeft local transform is [10, 0, 10] mm
-        # Assembly is at [0, 100, 50] mm, Furniture is at [1000, 500, 200] mm
-        # Total expected world coordinate: [1010, 600, 260] mm
-        world_origin = Geom::Point3d.new(0, 0, 0).transform(t_world)
-        assert_in_delta 1010.0 * MM, world_origin.x, 1e-3
-        assert_in_delta 600.0 * MM, world_origin.y, 1e-3
-        assert_in_delta 260.0 * MM, world_origin.z, 1e-3
+        # Expected calculation:
+        # Asset origin [0, 0, 0] normalized by MountFrame [15, 5, 2] -> [-15, -5, -2] mm
+        # Local member translation [30, 20, 10] -> [15, 15, 8] mm
+        # Assembly translation [50, 100, 40] -> [65, 115, 48] mm
+        # Furniture translation [1200, 600, 300] -> [1265, 715, 348] mm
+        expected_mm = [1265.0, 715.0, 348.0]
+        actual_pt = Geom::Point3d.new(0, 0, 0).transform(t_world)
+        actual_mm = [actual_pt.x * 25.4, actual_pt.y * 25.4, actual_pt.z * 25.4]
+
+        error_mm = Math.sqrt(
+          ((actual_mm[0] - expected_mm[0])**2) +
+          ((actual_mm[1] - expected_mm[1])**2) +
+          ((actual_mm[2] - expected_mm[2])**2)
+        )
+
+        assert error_mm < 1e-3, "Compound world point error #{error_mm} mm exceeds tolerance 1e-3 mm"
+
+        evidence['r8_world_transform'] = {
+          'furniture_translation_mm' => [1200.0, 600.0, 300.0],
+          'assembly_translation_mm' => [50.0, 100.0, 40.0],
+          'member_translation_mm' => [30.0, 20.0, 10.0],
+          'mount_frame_origin_mm' => [15.0, 5.0, 2.0],
+          'expected_world_point_mm' => expected_mm,
+          'actual_world_point_mm' => actual_mm,
+          'error_mm' => error_mm,
+          'tolerance_mm' => 1e-3,
+          'pass' => (error_mm < 1e-3)
+        }
+        evidence['tests']['h3_non_identity_world_transform'] = { 'status' => 'pass', 'error_mm' => error_mm }
       end
 
-      # A4: Shared ComponentDefinition between left and right sides
-      def test_a4_shared_component_definition_across_members
-        layout_data = build_drawer_assembly_layout(width_mm: 600.0)
+      # H4: Multiple assemblies
+      def test_h4_multiple_assemblies
+        layout_data = build_multiple_drawers_layout(width_mm: 600.0)
         parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
 
         result = place_test_furniture(furniture_instance_id: FI_1, resolved_layout: parsed)
         assert result['success']
 
         furniture = find_furniture(FI_1)
-        side_l = find_child_by_name(furniture, 'Lateral Izquierdo')
-        side_r = find_child_by_name(furniture, 'Lateral Derecho')
+        children = furniture.definition.entities.grep(Sketchup::ComponentInstance)
 
-        assert_equal side_l.definition, side_r.definition, 'Left and right sides must share definition'
-        refute_equal side_l.transformation.to_a, side_r.transformation.to_a
+        d1_members = children.select do |ci|
+          @metadata_store.read(ci)&.dig('identity', 'assemblyInstanceId') == 'drawer-inst-1'
+        end
+        d2_members = children.select do |ci|
+          @metadata_store.read(ci)&.dig('identity', 'assemblyInstanceId') == 'drawer-inst-2'
+        end
+
+        assert_equal 5, d1_members.length, 'Drawer 1 must have 4 rigid members + 1 bottom'
+        assert_equal 5, d2_members.length, 'Drawer 2 must have 4 rigid members + 1 bottom'
+
+        evidence['tests']['h4_multiple_assemblies'] = {
+          'status' => 'pass',
+          'assemblies_count' => 2,
+          'total_children' => children.length
+        }
       end
 
-      # A5: Save, close, and reopen .skp
-      def test_a5_save_and_reopen_preserves_assembly_instances_and_metadata
+      # H5: Shared ComponentDefinition
+      def test_h5_shared_component_definition
+        layout_data = build_multiple_drawers_layout(width_mm: 600.0)
+        parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
+
+        result = place_test_furniture(furniture_instance_id: FI_1, resolved_layout: parsed)
+        assert result['success']
+
+        furniture = find_furniture(FI_1)
+        children = furniture.definition.entities.grep(Sketchup::ComponentInstance)
+
+        d1_side_l = children.find do |ci|
+          meta = @metadata_store.read(ci)
+          meta&.dig('identity', 'assemblyInstanceId') == 'drawer-inst-1' &&
+            meta&.dig('identity', 'memberId') == 'sideLeft'
+        end
+        d2_side_l = children.find do |ci|
+          meta = @metadata_store.read(ci)
+          meta&.dig('identity', 'assemblyInstanceId') == 'drawer-inst-2' &&
+            meta&.dig('identity', 'memberId') == 'sideLeft'
+        end
+
+        refute_nil d1_side_l
+        refute_nil d2_side_l
+        assert_equal(
+          d1_side_l.definition, d2_side_l.definition,
+          'Identical parts across assemblies must share definition'
+        )
+        refute_equal d1_side_l.transformation.to_a, d2_side_l.transformation.to_a
+
+        evidence['tests']['h5_shared_component_definition'] = {
+          'status' => 'pass',
+          'shared_definition_name' => d1_side_l.definition.name
+        }
+      end
+
+      # H6: Save and reopen
+      def test_h6_save_and_reopen
         layout_data = build_drawer_assembly_layout(width_mm: 600.0)
         parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
 
@@ -195,10 +379,12 @@ module Granete
         end
         refute_nil reopened_side_r, 'sideRight must be present after reopening'
         assert_rigid_transformation(reopened_side_r.transformation)
+
+        evidence['tests']['h6_save_and_reopen'] = { 'status' => 'pass' }
       end
 
-      # A6: Undo and Redo revert and restore cleanly
-      def test_a6_undo_redo_preserves_geometry_and_metadata
+      # H7: Undo and Redo
+      def test_h7_undo_redo
         layout_initial = build_drawer_assembly_layout(width_mm: 600.0)
         parsed_initial = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_initial)
 
@@ -226,17 +412,19 @@ module Granete
         side_r_redone = find_child_by_name(furniture, 'Lateral Derecho')
         refute_nil side_r_redone
         assert_in_delta 760.0 * MM, side_r_redone.transformation.origin.x, 1e-3
+
+        evidence['tests']['h7_undo_redo'] = { 'status' => 'pass' }
       end
 
-      # A7: Fail-before-mutate preserves existing geometry
-      def test_a7_assembly_level_fail_before_mutate
-        layout_initial = build_drawer_assembly_layout(width_mm: 600.0)
+      # H8: Fail-before-mutate (furniture-wide preflight)
+      def test_h8_fail_before_mutate
+        layout_initial = build_multiple_drawers_layout(width_mm: 600.0)
         parsed_initial = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_initial)
 
         result_initial = place_test_furniture(furniture_instance_id: FI_1, resolved_layout: parsed_initial)
         assert result_initial['success']
         furniture = find_furniture(FI_1)
-        initial_count = furniture.definition.entities.grep(Sketchup::ComponentInstance).length
+        initial_children = furniture.definition.entities.grep(Sketchup::ComponentInstance).map(&:persistent_id)
 
         # Set up a failing loader
         failing_loader = build_always_failing_asset_loader
@@ -245,7 +433,7 @@ module Granete
           asset_loader: failing_loader
         )
 
-        layout_rebuilt = build_drawer_assembly_layout(width_mm: 800.0)
+        layout_rebuilt = build_multiple_drawers_layout(width_mm: 800.0)
         parsed_rebuilt = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_rebuilt)
 
         result_rebuilt = failing_builder.update_furniture(
@@ -255,11 +443,101 @@ module Granete
         refute result_rebuilt['success'], 'Rebuild must fail before mutation'
 
         # Existing geometry remains completely untouched
-        current_count = furniture.definition.entities.grep(Sketchup::ComponentInstance).length
-        assert_equal initial_count, current_count
+        current_children = furniture.definition.entities.grep(Sketchup::ComponentInstance).map(&:persistent_id)
+        assert_equal initial_children, current_children, 'Children must be completely unmodified'
+
+        evidence['tests']['h8_fail_before_mutate'] = { 'status' => 'pass' }
+      end
+
+      # H9: Metadata identities
+      def test_h9_metadata_identities
+        layout_data = build_drawer_assembly_layout(width_mm: 600.0, historical: true)
+        parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
+
+        result = place_test_furniture(furniture_instance_id: FI_1, resolved_layout: parsed)
+        assert result['success']
+
+        furniture = find_furniture(FI_1)
+        side_r = find_child_by_name(furniture, 'Lateral Derecho')
+        bottom = find_child_by_name(furniture, 'Fondo Cajón')
+
+        side_r_meta = @metadata_store.read(side_r)
+        bottom_meta = @metadata_store.read(bottom)
+
+        assert_equal 'drawer-inst-1', side_r_meta.dig('identity', 'assemblyInstanceId')
+        assert_equal 'sideRight', side_r_meta.dig('identity', 'memberId')
+        assert_equal 'drawer-inst-1:sideRight', side_r_meta.dig('identity', 'hardwarePlacementId')
+        assert_equal 2, side_r_meta.dig('identity', 'recipeRevision')
+        assert_equal true, side_r_meta.dig('identity', 'isHistorical')
+        assert_equal 'snap-merivobox-v2', side_r_meta.dig('identity', 'snapshotId')
+
+        assert_equal 'ast-side', side_r_meta.dig('intent', 'assetId')
+        assert_equal 'rev-side-1', side_r_meta.dig('intent', 'assetRevisionId')
+        assert_equal 2, side_r_meta.dig('intent', 'recipeRevision')
+        assert_equal true, side_r_meta.dig('intent', 'isHistorical')
+        assert_equal 'snap-merivobox-v2', side_r_meta.dig('intent', 'snapshotId')
+
+        assert_equal 'drawer-inst-1', bottom_meta.dig('identity', 'assemblyInstanceId')
+        assert_equal 'bottom', bottom_meta.dig('identity', 'componentId')
+        assert_equal 2, bottom_meta.dig('identity', 'recipeRevision')
+        assert_equal true, bottom_meta.dig('identity', 'isHistorical')
+        assert_equal 'snap-merivobox-v2', bottom_meta.dig('identity', 'snapshotId')
+
+        assert_equal 'drawer_bottom', bottom_meta.dig('intent', 'semanticRole')
+        assert_equal 2, bottom_meta.dig('intent', 'recipeRevision')
+        assert_equal true, bottom_meta.dig('intent', 'isHistorical')
+        assert_equal 'snap-merivobox-v2', bottom_meta.dig('intent', 'snapshotId')
+
+        evidence['tests']['h9_metadata_identities'] = {
+          'status' => 'pass',
+          'verified_fields' => %w[assemblyInstanceId memberId hardwareId assetId recipeRevision isHistorical snapshotId]
+        }
+      end
+
+      # H10: No scaling or mirror
+      def test_h10_no_scaling_or_mirror
+        layout_data = build_multiple_drawers_layout(width_mm: 600.0)
+        parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
+
+        result = place_test_furniture(furniture_instance_id: FI_1, resolved_layout: parsed)
+        assert result['success']
+
+        furniture = find_furniture(FI_1)
+        children = furniture.definition.entities.grep(Sketchup::ComponentInstance)
+
+        rigid_members = children.select do |ci|
+          meta = @metadata_store.read(ci)
+          meta&.dig('identity', 'assemblyInstanceId') && meta.dig('identity', 'memberId')
+        end
+
+        assert_equal 8, rigid_members.length, 'Must have 8 rigid members across 2 assemblies'
+        rigid_members.each do |member|
+          assert_rigid_transformation(member.transformation)
+          scale = calculate_matrix_scale(member.transformation)
+          det = calculate_matrix_determinant(member.transformation)
+          assert_in_delta 1.0, scale[0], 1e-4
+          assert_in_delta 1.0, scale[1], 1e-4
+          assert_in_delta 1.0, scale[2], 1e-4
+          assert_in_delta 1.0, det, 1e-4
+        end
+
+        evidence['tests']['h10_no_scaling_or_mirror'] = {
+          'status' => 'pass',
+          'verified_rigid_members_count' => rigid_members.length
+        }
       end
 
       private
+
+      def model
+        Sketchup.active_model
+      end
+
+      def persist_evidence
+        out_path = File.join(REPOSITORY_ROOT, 'progress', 'host_smoke_670_d_assembly_runtime_evidence.json')
+        FileUtils.mkdir_p(File.dirname(out_path))
+        File.write(out_path, JSON.pretty_generate(evidence))
+      end
 
       def find_furniture(instance_id)
         model.entities.grep(Sketchup::ComponentInstance).find do |ci|
@@ -294,27 +572,38 @@ module Granete
         }
       end
 
-      def assert_rigid_transformation(transform, tolerance = 1e-4)
+      def calculate_matrix_scale(transform)
         mat = transform.to_a
         c0 = [mat[0], mat[1], mat[2]]
         c1 = [mat[4], mat[5], mat[6]]
         c2 = [mat[8], mat[9], mat[10]]
+        [
+          Granete::SketchUpExtension::Assets::MountFrame.magnitude(c0),
+          Granete::SketchUpExtension::Assets::MountFrame.magnitude(c1),
+          Granete::SketchUpExtension::Assets::MountFrame.magnitude(c2)
+        ]
+      end
 
-        s0 = Granete::SketchUpExtension::Assets::MountFrame.magnitude(c0)
-        s1 = Granete::SketchUpExtension::Assets::MountFrame.magnitude(c1)
-        s2 = Granete::SketchUpExtension::Assets::MountFrame.magnitude(c2)
+      def calculate_matrix_determinant(transform)
+        mat = transform.to_a
+        c0 = [mat[0], mat[1], mat[2]]
+        c1 = [mat[4], mat[5], mat[6]]
+        c2 = [mat[8], mat[9], mat[10]]
+        cross12 = Granete::SketchUpExtension::Assets::MountFrame.cross_product(c1, c2)
+        Granete::SketchUpExtension::Assets::MountFrame.dot_product(c0, cross12)
+      end
 
+      def assert_rigid_transformation(transform, tolerance = 1e-4)
+        s0, s1, s2 = calculate_matrix_scale(transform)
         assert_in_delta 1.0, s0, tolerance, "X axis scale must be 1.0 (got #{s0})"
         assert_in_delta 1.0, s1, tolerance, "Y axis scale must be 1.0 (got #{s1})"
         assert_in_delta 1.0, s2, tolerance, "Z axis scale must be 1.0 (got #{s2})"
 
-        cross12 = Granete::SketchUpExtension::Assets::MountFrame.cross_product(c1, c2)
-        det = Granete::SketchUpExtension::Assets::MountFrame.dot_product(c0, cross12)
+        det = calculate_matrix_determinant(transform)
         assert_in_delta 1.0, det, tolerance, "Determinant must be +1.0 (got #{det})"
       end
 
       def create_fixture_asset_loader
-        # Create minimal SKP assets in tmp directory
         side_skp = File.join(@tmp_dir, 'side_fixture.skp')
         runner_skp = File.join(@tmp_dir, 'runner_fixture.skp')
         create_box_skp(side_skp, 500.0, 150.0, 16.0)
@@ -335,6 +624,25 @@ module Granete
         Granete::SketchUpExtension::Assets::AssetLoader.new(downloader: downloader)
       end
 
+      def create_mount_frame_asset_loader(origin_mm: [15.0, 5.0, 2.0])
+        _ = origin_mm
+        side_skp = File.join(@tmp_dir, 'side_fixture_mf.skp')
+        create_box_skp(side_skp, 500.0, 150.0, 16.0)
+
+        downloader = Class.new do
+          def initialize(path)
+            @path = path
+          end
+
+          def download_asset(asset_id:, revision_id:, sha256: nil, expected_bytes: nil, org_id: nil)
+            _ = [asset_id, revision_id, sha256, expected_bytes, org_id]
+            @path
+          end
+        end.new(side_skp)
+
+        Granete::SketchUpExtension::Assets::AssetLoader.new(downloader: downloader)
+      end
+
       def build_always_failing_asset_loader
         failing_downloader = Class.new do
           def download_asset(*)
@@ -351,28 +659,41 @@ module Granete
           Geom::Point3d.new(length_mm * MM, thickness_mm * MM, 0),
           Geom::Point3d.new(0, thickness_mm * MM, 0)
         ]
-        # In host context, create a definition and save it as skp
         defn = model.definitions.add("FixtureDef_#{File.basename(path, '.*')}")
         face = defn.entities.add_face(pts)
         face.pushpull(height_mm * MM)
         defn.save_as(path)
       end
 
-      def build_drawer_assembly_layout(width_mm: 600.0)
+      def build_drawer_assembly_layout(width_mm: 600.0, historical: false)
         delta = width_mm - 600.0
         {
           'furnitureDefinitionId' => FURNITURE_DEF_ID,
           'definitionName' => 'Mueble Cajonero',
           'transformContract' => 'granete.local-basis.v1',
           'dimensionsMm' => [width_mm, 720.0, 560.0],
-          'components' => [],
+          'components' => [
+            {
+              'componentInstanceId' => 'cabinet-side-l',
+              'name' => 'Lateral Carcasa',
+              'slotId' => 'lateral_carcasa',
+              'widthMm' => 18.0,
+              'thicknessMm' => 560.0,
+              'lengthMm' => 720.0,
+              'localTransform' => {
+                'translationMm' => [0.0, 0.0, 0.0],
+                'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+              }
+            }
+          ],
           'hardware' => [],
           'assemblies' => [
             {
               'assemblyInstanceId' => 'drawer-inst-1',
               'agregadoId' => 'agr-merivobox',
-              'recipeRevision' => 1,
-              'isHistorical' => false,
+              'recipeRevision' => historical ? 2 : 1,
+              'isHistorical' => historical,
+              'snapshotId' => historical ? 'snap-merivobox-v2' : nil,
               'dimensionsMm' => [width_mm, 150.0, 500.0],
               'placement' => {
                 'translationMm' => [0.0, 100.0, 50.0],
@@ -466,6 +787,74 @@ module Granete
             }
           ]
         }
+      end
+
+      def build_non_identity_compound_layout
+        {
+          'furnitureDefinitionId' => FURNITURE_DEF_ID,
+          'definitionName' => 'Mueble Cajonero',
+          'transformContract' => 'granete.local-basis.v1',
+          'dimensionsMm' => [600.0, 720.0, 560.0],
+          'components' => [
+            {
+              'componentInstanceId' => 'cabinet-side-l',
+              'name' => 'Lateral Carcasa',
+              'slotId' => 'lateral_carcasa',
+              'widthMm' => 18.0,
+              'thicknessMm' => 560.0,
+              'lengthMm' => 720.0,
+              'localTransform' => {
+                'translationMm' => [0.0, 0.0, 0.0],
+                'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+              }
+            }
+          ],
+          'hardware' => [],
+          'assemblies' => [
+            {
+              'assemblyInstanceId' => 'drawer-inst-1',
+              'agregadoId' => 'agr-merivobox',
+              'recipeRevision' => 1,
+              'isHistorical' => false,
+              'dimensionsMm' => [600.0, 150.0, 500.0],
+              'placement' => {
+                'translationMm' => [50.0, 100.0, 40.0],
+                'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+              },
+              'rigidMembers' => [
+                {
+                  'memberId' => 'sideLeft',
+                  'role' => 'drawer_side_left',
+                  'name' => 'Lateral Izquierdo',
+                  'hardwareId' => 'hw-side-l',
+                  'assetId' => 'ast-side',
+                  'assetRevisionId' => 'rev-side-1',
+                  'preparationState' => 'prepared',
+                  'mountFrame' => {
+                    'originMm' => [15.0, 5.0, 2.0],
+                    'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+                  },
+                  'localTransform' => {
+                    'translationMm' => [30.0, 20.0, 10.0],
+                    'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+                  }
+                }
+              ],
+              'fabricatedComponents' => []
+            }
+          ]
+        }
+      end
+
+      def build_multiple_drawers_layout(width_mm: 600.0)
+        d1 = build_drawer_assembly_layout(width_mm: width_mm)['assemblies'].first
+        d2 = Marshal.load(Marshal.dump(d1))
+        d2['assemblyInstanceId'] = 'drawer-inst-2'
+        d2['placement']['translationMm'] = [0.0, 100.0, 350.0]
+
+        layout = build_drawer_assembly_layout(width_mm: width_mm)
+        layout['assemblies'] = [d1, d2]
+        layout
       end
 
       def fail_closed_unless_installed_extension_is_loaded

@@ -291,6 +291,12 @@ module Granete
           @resolver&.resolve_skp_path(asset_id)
         end
 
+        # Builds a placement transformation.
+        #
+        # NOTE (R4, #670-D): When transform_mm is already an instance of
+        # Geom::Transformation, it is ALREADY expressed in SketchUp internal units
+        # (inches) and MUST NOT be reconverted. Passing an existing Geom::Transformation
+        # returns it directly, preserving exact scale [1, 1, 1] and determinant +1.0.
         def build_transform(transform_mm, basis)
           return transform_mm if defined?(::Geom::Transformation) && transform_mm.is_a?(::Geom::Transformation)
 

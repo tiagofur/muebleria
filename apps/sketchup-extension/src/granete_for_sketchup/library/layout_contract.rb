@@ -160,7 +160,7 @@ module Granete
                     :anchor_face, :offset_mm,
                     :asset_revision_id, :sha256, :expected_bytes, :representation,
                     :validation_state, :local_transform,
-                    :preparation_state, :mount_frame
+                    :preparation_state, :mount_frame, :is_historical
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
@@ -168,7 +168,7 @@ module Granete
                        dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil,
                        asset_revision_id: nil, sha256: nil, expected_bytes: nil,
                        representation: nil, validation_state: nil, local_transform: nil,
-                       preparation_state: nil, mount_frame: nil)
+                       preparation_state: nil, mount_frame: nil, is_historical: false)
           @placement_id = placement_id
           @hardware_id = hardware_id
           @asset_id = asset_id
@@ -188,6 +188,7 @@ module Granete
           @local_transform = local_transform
           @preparation_state = preparation_state
           @mount_frame = mount_frame
+          @is_historical = is_historical
         end
 
         def basis
@@ -197,23 +198,29 @@ module Granete
         def local_translation
           @local_transform ? @local_transform['translation'] : @translation
         end
+
+        def historical?
+          @is_historical == true
+        end
       end
 
       # One resolved parametric assembly instance with rigid hardware members and fabricated components (#670-D).
       class LayoutAssembly
         attr_reader :assembly_instance_id, :agregado_id, :recipe_revision,
-                    :is_historical, :dimensions_mm, :placement,
+                    :snapshot_id, :is_historical, :dimensions_mm, :placement,
                     :rigid_members, :fabricated_components
 
         def initialize(assembly_instance_id:, agregado_id:, placement:,
                        rigid_members: [], fabricated_components: [],
-                       recipe_revision: nil, is_historical: false, dimensions_mm: nil)
+                       recipe_revision: nil, snapshot_id: nil, is_historical: false,
+                       dimensions_mm: nil)
           @assembly_instance_id = assembly_instance_id
           @agregado_id = agregado_id
           @placement = placement
           @rigid_members = rigid_members
           @fabricated_components = fabricated_components
           @recipe_revision = recipe_revision
+          @snapshot_id = snapshot_id
           @is_historical = is_historical
           @dimensions_mm = dimensions_mm
         end
@@ -231,70 +238,51 @@ module Granete
         end
       end
 
-      # One rigid hardware member of an assembly (#670-D). Duck-types as a
-      # hardware placement for AssetLoader prefetch and rendering.
-      class LayoutAssemblyRigidMember
-        attr_reader :member_id, :assembly_instance_id, :agregado_id, :role,
-                    :hardware_id, :asset_id, :asset_revision_id, :sha256,
-                    :expected_bytes, :representation, :preparation_state,
-                    :mount_frame, :local_transform, :render_status, :is_historical,
-                    :dimensions, :color_hex, :anchor_face, :offset_mm,
-                    :host_component_instance_id, :placement_kind
+      # One rigid hardware member of an assembly (#670-D). Subclasses
+      # LayoutHardwarePlacement so AssetLoader and NativeHardwareRenderer consume
+      # a single unified hardware placement contract authority (R1).
+      class LayoutAssemblyRigidMember < LayoutHardwarePlacement
+        attr_reader :member_id, :assembly_instance_id, :agregado_id, :role, :render_status,
+                    :recipe_revision, :snapshot_id
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(member_id:, assembly_instance_id:, agregado_id:, local_transform:,
                        name: nil, role: nil, hardware_id: nil, asset_id: nil, asset_revision_id: nil,
                        sha256: nil, expected_bytes: nil, representation: nil,
                        preparation_state: nil, mount_frame: nil, render_status: nil,
-                       is_historical: false, dimensions: nil, color_hex: nil,
-                       anchor_face: nil, offset_mm: nil, host_component_instance_id: nil,
-                       placement_kind: 'derived')
+                       is_historical: false, recipe_revision: nil, snapshot_id: nil,
+                       dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil,
+                       host_component_instance_id: nil, placement_kind: 'derived')
           @member_id = member_id
           @assembly_instance_id = assembly_instance_id
           @agregado_id = agregado_id
-          @local_transform = local_transform
-          @name = name
           @role = role
-          @hardware_id = hardware_id
-          @asset_id = asset_id
-          @asset_revision_id = asset_revision_id
-          @sha256 = sha256
-          @expected_bytes = expected_bytes
-          @representation = representation
-          @preparation_state = preparation_state
-          @mount_frame = mount_frame
           @render_status = render_status
-          @is_historical = is_historical
-          @dimensions = dimensions
-          @color_hex = color_hex
-          @anchor_face = anchor_face
-          @offset_mm = offset_mm
-          @host_component_instance_id = host_component_instance_id
-          @placement_kind = placement_kind
-        end
-
-        def placement_id
-          "#{@assembly_instance_id}:#{@member_id}"
-        end
-
-        def historical?
-          @is_historical == true
-        end
-
-        def name
-          @name || @role || @member_id
-        end
-
-        def translation
-          @local_transform['translation']
-        end
-
-        def local_translation
-          @local_transform['translation']
-        end
-
-        def basis
-          @local_transform['basis']
+          @recipe_revision = recipe_revision
+          @snapshot_id = snapshot_id
+          placement_id = "#{assembly_instance_id}:#{member_id}"
+          resolved_name = name || role || member_id
+          super(
+            placement_id: placement_id,
+            hardware_id: hardware_id,
+            asset_id: asset_id,
+            name: resolved_name,
+            placement_kind: placement_kind,
+            host_component_instance_id: host_component_instance_id,
+            translation: local_transform ? local_transform['translation'] : nil,
+            dimensions: dimensions,
+            color_hex: color_hex,
+            anchor_face: anchor_face,
+            offset_mm: offset_mm,
+            asset_revision_id: asset_revision_id,
+            sha256: sha256,
+            expected_bytes: expected_bytes,
+            representation: representation,
+            local_transform: local_transform,
+            preparation_state: preparation_state,
+            mount_frame: mount_frame,
+            is_historical: is_historical
+          )
         end
       end
 
@@ -691,6 +679,7 @@ module Granete
           raw.map { |entry| parse_assembly(entry) }
         end
 
+        # rubocop:disable-next Metrics/AbcSize
         def parse_assembly(raw)
           raise LayoutContract::ContractError, 'Assembly de composición inválido' unless raw.is_a?(Hash)
 
@@ -703,12 +692,26 @@ module Granete
 
           is_hist = raw['isHistorical'] == true
           recipe_rev = parse_recipe_revision(raw, inst_id)
+          snapshot_id = ContractCoercions.optional_opaque_string(raw['snapshotId'], "snapshotId de #{inst_id}")
+
+          if is_hist
+            if recipe_rev.nil? || recipe_rev <= 0
+              raise LayoutContract::ContractError,
+                    "Assembly histórico #{inst_id} requiere recipeRevision > 0 (obtenido: #{recipe_rev.inspect})"
+            end
+            if raw.key?('snapshotId') && snapshot_id.nil?
+              raise LayoutContract::ContractError,
+                    "Assembly histórico #{inst_id} contiene snapshotId inválido o vacío"
+            end
+          end
+
           placement = parse_placement(raw['placement'] || raw['localTransform'] || raw['transform'], inst_id)
           dims = ContractCoercions.optional_triple(
             raw['dimensionsMm'] || raw['resolvedDimensionsMm'], "dimensionsMm de #{inst_id}"
           )
 
-          rigid_members = parse_rigid_members_list(raw['rigidMembers'], inst_id, agr_id, is_hist)
+          rigid_members = parse_rigid_members_list(raw['rigidMembers'], inst_id, agr_id, is_hist,
+                                                   recipe_revision: recipe_rev, snapshot_id: snapshot_id)
           fabricated_components = parse_fabricated_components_list(raw['fabricatedComponents'], inst_id, agr_id)
 
           if rigid_members.empty? && fabricated_components.empty?
@@ -722,6 +725,7 @@ module Granete
             rigid_members: rigid_members,
             fabricated_components: fabricated_components,
             recipe_revision: recipe_rev,
+            snapshot_id: snapshot_id,
             is_historical: is_hist,
             dimensions_mm: dims
           )
@@ -733,14 +737,17 @@ module Granete
           )&.to_i
         end
 
-        def parse_rigid_members_list(raw_list, inst_id, agr_id, is_hist)
+        def parse_rigid_members_list(raw_list, inst_id, agr_id, is_hist, recipe_revision: nil, snapshot_id: nil)
           return [] if raw_list.nil?
 
           unless raw_list.is_a?(Array)
             raise LayoutContract::ContractError, "rigidMembers de #{inst_id} debe ser una lista"
           end
 
-          raw_list.map { |m| parse_rigid_member(m, inst_id, agr_id, is_hist) }
+          raw_list.map do |m|
+            parse_rigid_member(m, inst_id, agr_id, is_hist,
+                               recipe_revision: recipe_revision, snapshot_id: snapshot_id)
+          end
         end
 
         def parse_fabricated_components_list(raw_list, inst_id, agr_id)
@@ -764,7 +771,8 @@ module Granete
         end
 
         # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
-        def parse_rigid_member(raw, assembly_instance_id, agregado_id, is_historical)
+        def parse_rigid_member(raw, assembly_instance_id, agregado_id, is_historical,
+                               recipe_revision: nil, snapshot_id: nil)
           unless raw.is_a?(Hash)
             raise LayoutContract::ContractError, "Miembro rígido inválido en assembly #{assembly_instance_id}"
           end
@@ -817,6 +825,8 @@ module Granete
             render_status: ContractCoercions.optional_opaque_string(raw['renderStatus'],
                                                                     "renderStatus de #{placement_id}"),
             is_historical: is_historical,
+            recipe_revision: recipe_revision,
+            snapshot_id: snapshot_id,
             dimensions: ContractCoercions.optional_triple(raw['dimensionsMm'], "dimensionsMm de #{placement_id}"),
             color_hex: ContractCoercions.optional_opaque_string(raw['colorHex'], "colorHex de #{placement_id}"),
             anchor_face: ContractCoercions.optional_opaque_string(raw['anchorFace'], "anchorFace de #{placement_id}"),

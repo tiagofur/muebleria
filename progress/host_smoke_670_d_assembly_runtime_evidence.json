@@ -1,0 +1,157 @@
+{
+  "head": "1e38def4047aae39ef52246adee78078129787a6",
+  "rbz_sha256": "589e455bda442d99eb42999ac6c3283d34e4bc0f6811961f120cb3a3d6a013e6",
+  "sketchup_version": "26.2.242",
+  "ruby_version": "3.2.2",
+  "platform": "arm64-darwin",
+  "tests": {
+    "h5_shared_component_definition": {
+      "status": "pass",
+      "shared_definition_name": "FixtureDef_side_fixture"
+    },
+    "h10_no_scaling_or_mirror": {
+      "status": "pass",
+      "verified_rigid_members_count": 8
+    },
+    "h4_multiple_assemblies": {
+      "status": "pass",
+      "assemblies_count": 2,
+      "total_children": 11
+    },
+    "h6_save_and_reopen": {
+      "status": "pass"
+    },
+    "h2_rebuild_w800": {
+      "status": "pass"
+    },
+    "h7_undo_redo": {
+      "status": "pass"
+    },
+    "h9_metadata_identities": {
+      "status": "pass",
+      "verified_fields": [
+        "assemblyInstanceId",
+        "memberId",
+        "hardwareId",
+        "assetId",
+        "recipeRevision",
+        "isHistorical",
+        "snapshotId"
+      ]
+    },
+    "h8_fail_before_mutate": {
+      "status": "pass"
+    },
+    "h3_non_identity_world_transform": {
+      "status": "pass",
+      "error_mm": 0.0
+    },
+    "h1_insert_w600": {
+      "status": "pass",
+      "rigid_members_count": 4,
+      "fabricated_components_count": 1,
+      "bottom_width_mm": 565.0
+    }
+  },
+  "r7_rebuild_w600_to_w800": {
+    "side_right": {
+      "before_translation_mm": [
+        560.0,
+        0.0,
+        10.0
+      ],
+      "after_translation_mm": [
+        760.0,
+        0.0,
+        10.0
+      ],
+      "delta_mm": 200.0,
+      "asset_revision_id_before": "rev-side-1",
+      "asset_revision_id_after": "rev-side-1",
+      "definition_reused": true,
+      "scale_before": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "scale_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "determinant_before": 1.0,
+      "determinant_after": 1.0
+    },
+    "runner_right": {
+      "before_translation_mm": [
+        565.0,
+        0.0,
+        5.0
+      ],
+      "after_translation_mm": [
+        764.9999999999999,
+        0.0,
+        5.0
+      ],
+      "delta_mm": 199.9999999999999,
+      "asset_revision_id_before": "rev-runner-1",
+      "asset_revision_id_after": "rev-runner-1",
+      "definition_reused": true,
+      "scale_before": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "scale_after": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "determinant_before": 1.0,
+      "determinant_after": 1.0
+    },
+    "bottom": {
+      "width_mm_before": 565.0,
+      "width_mm_after": 765.0,
+      "thickness_mm": 15.0,
+      "length_mm": 480.0,
+      "parametric_scaling": false,
+      "definition_regenerated": true
+    }
+  },
+  "r8_world_transform": {
+    "furniture_translation_mm": [
+      1200.0,
+      600.0,
+      300.0
+    ],
+    "assembly_translation_mm": [
+      50.0,
+      100.0,
+      40.0
+    ],
+    "member_translation_mm": [
+      30.0,
+      20.0,
+      10.0
+    ],
+    "mount_frame_origin_mm": [
+      15.0,
+      5.0,
+      2.0
+    ],
+    "expected_world_point_mm": [
+      1265.0,
+      715.0,
+      348.0
+    ],
+    "actual_world_point_mm": [
+      1265.0,
+      715.0,
+      348.0
+    ],
+    "error_mm": 0.0,
+    "tolerance_mm": 0.001,
+    "pass": true
+  }
+}

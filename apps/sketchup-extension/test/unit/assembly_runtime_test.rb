@@ -417,6 +417,249 @@ class AssemblyRuntimeTest < Minitest::Test
     assert_in_delta 235.0 * MM, placed_world_point.z, 1e-4
   end
 
+  # R1: Unify hardware placement contract:
+  # LayoutAssemblyRigidMember is-a LayoutHardwarePlacement, and both go through
+  # the exact same prefetch/download/load path.
+  def test_r1_contract_unification_shared_prefetch_load_path
+    normal_hw = Granete::SketchUpExtension::Library::LayoutHardwarePlacement.new(
+      placement_id: 'hw-top-1',
+      hardware_id: 'hw-pull-1',
+      asset_id: 'ast-pull',
+      asset_revision_id: 'rev-pull-1',
+      preparation_state: 'prepared',
+      mount_frame: MountFrameData.new(
+        origin_mm: [0.0, 0.0, 0.0],
+        basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], z: [0.0, 0.0, 1.0])
+      ),
+      local_transform: {
+        'translation' => [100.0, 200.0, 300.0],
+        'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+      }
+    )
+
+    rigid_member = Granete::SketchUpExtension::Library::LayoutAssemblyRigidMember.new(
+      member_id: 'sideRight',
+      assembly_instance_id: 'asm-1',
+      agregado_id: 'agr-1',
+      hardware_id: 'hw-side-1',
+      asset_id: 'ast-side',
+      asset_revision_id: 'rev-side-1',
+      preparation_state: 'prepared',
+      mount_frame: MountFrameData.new(
+        origin_mm: [0.0, 0.0, 0.0],
+        basis: BasisData.new(x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], z: [0.0, 0.0, 1.0])
+      ),
+      local_transform: {
+        'translation' => [500.0, 0.0, 10.0],
+        'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+      }
+    )
+
+    assert rigid_member.is_a?(Granete::SketchUpExtension::Library::LayoutHardwarePlacement)
+    assert_equal 'asm-1:sideRight', rigid_member.placement_id
+    assert_equal [500.0, 0.0, 10.0], rigid_member.translation
+    assert_equal [500.0, 0.0, 10.0], rigid_member.local_translation
+    refute rigid_member.historical?
+
+    # Both pass filter_hardware_placements and prefetch identically
+    pull_skp = File.join(@tmp_dir, 'pull.skp')
+    File.binwrite(pull_skp, 'SKP PULL')
+    downloader = FakeDownloader.new(
+      nil,
+      'rev-pull-1' => pull_skp,
+      'rev-side-1' => @side_skp
+    )
+    loader = Granete::SketchUpExtension::Assets::AssetLoader.new(downloader: downloader, cache: @cache)
+    loader.prefetch_hardware_assets([normal_hw, rigid_member], model: @model)
+
+    assert loader.rebuild_preflight_ok?.first
+    assert_equal :ready, loader.instance_variable_get(:@prefetch_results)['hw-top-1']
+    assert_equal :ready, loader.instance_variable_get(:@prefetch_results)['asm-1:sideRight']
+  end
+
+  # R2: Historical identity fail-closed (RED/GREEN contract tests)
+  def test_r2_historical_identity_fail_closed_contract
+    layout = build_drawer_assembly_layout(width_mm: 600.0)
+    layout['assemblies'].first['isHistorical'] = true
+
+    # RED: isHistorical == true with recipeRevision nil
+    layout['assemblies'].first.delete('recipeRevision')
+    err1 = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    end
+    assert_includes err1.message, 'requiere recipeRevision > 0'
+
+    # RED: isHistorical == true with recipeRevision == 0
+    layout['assemblies'].first['recipeRevision'] = 0
+    err2 = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    end
+    assert_includes err2.message, 'número positivo'
+
+    # RED: isHistorical == true with invalid snapshotId
+    layout['assemblies'].first['recipeRevision'] = 2
+    layout['assemblies'].first['snapshotId'] = ''
+    err3 = assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    end
+    assert_includes err3.message, 'debe ser un string opaco no vacío'
+
+    # GREEN: isHistorical == true with recipeRevision > 0 and snapshotId
+    layout['assemblies'].first['snapshotId'] = 'snap-merivobox-v2'
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    assembly = parsed.assemblies.first
+    assert assembly.historical?
+    assert_equal 2, assembly.recipe_revision
+    assert_equal 'snap-merivobox-v2', assembly.snapshot_id
+    assert assembly.rigid_members.all?(&:historical?)
+    assert_equal 2, assembly.rigid_members.first.recipe_revision
+    assert_equal 'snap-merivobox-v2', assembly.rigid_members.first.snapshot_id
+  end
+
+  # R3: Historical asset must never fall back to current/latest
+  def test_r3_historical_asset_never_falls_back_to_current
+    download_calls = []
+    resolver_calls = []
+
+    tracking_downloader = Class.new do
+      attr_reader :download_calls
+
+      def initialize(calls)
+        @download_calls = calls
+      end
+
+      def download_asset(asset_id:, revision_id:, sha256: nil, expected_bytes: nil, org_id: nil)
+        _ = [sha256, expected_bytes, org_id]
+        @download_calls << { asset_id: asset_id, revision_id: revision_id }
+        # AR2 fails (unavailable), only AR7 exists as current
+        nil
+      end
+    end.new(download_calls)
+
+    tracking_resolver = Class.new do
+      attr_reader :resolver_calls
+
+      def initialize(calls)
+        @resolver_calls = calls
+      end
+
+      def resolve_skp_path(asset_id)
+        @resolver_calls << asset_id
+        '/fake/path/AR7.skp'
+      end
+    end.new(resolver_calls)
+
+    loader = Granete::SketchUpExtension::Assets::AssetLoader.new(
+      downloader: tracking_downloader,
+      resolver: tracking_resolver,
+      cache: @cache
+    )
+    builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: @store,
+      asset_loader: loader
+    )
+
+    layout = build_drawer_assembly_layout(width_mm: 600.0)
+    layout['assemblies'].first['isHistorical'] = true
+    layout['assemblies'].first['recipeRevision'] = 2
+    layout['assemblies'].first['snapshotId'] = 'snap-ar2'
+    layout['assemblies'].first['rigidMembers'].first['assetRevisionId'] = 'AR2'
+
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    member = parsed.assemblies.first.rigid_members.first
+
+    builder.prefetch_visual_assets(@model, parsed)
+
+    assert_equal 4, download_calls.length
+    assert(download_calls.any? { |c| c[:revision_id] == 'AR2' })
+    assert_equal 0, resolver_calls.length, 'Must never query resolver or current catalog for historical asset'
+
+    diag = loader.diagnostics.find { |d| d['placementId'] == member.placement_id }
+    refute_nil diag
+    assert_equal 'historical_asset_missing', diag['code']
+
+    definition = { 'name' => 'Drawer Unit 600', 'furniture_definition_id' => 'f-def-1' }
+    result = builder.insert_furniture(@model, definition, {}, resolved_layout: parsed)
+    assert result['success']
+
+    furniture = @model.active_entities.instances.first
+    side_left = find_entity_by_name(furniture, 'Lateral Izquierdo')
+    refute_nil side_left
+
+    meta = @store.read(side_left)
+    refute_nil meta
+    assert_equal 'AR2', meta.dig('intent', 'assetRevisionId')
+    assert_equal 'proxy', meta.dig('intent', 'representation')
+    refute_equal 'exact', meta.dig('intent', 'representation')
+  end
+
+  # R4: Geom::Transformation input equivalence regression
+  def test_r4_geom_transformation_input_equivalence
+    basis = {
+      'x' => [0.0, 1.0, 0.0],
+      'y' => [-1.0, 0.0, 0.0],
+      'z' => [0.0, 0.0, 1.0]
+    }
+    translation_mm = [254.0, 508.0, 762.0]
+
+    t_a = @asset_loader.send(:build_transform, translation_mm, basis)
+
+    t_b = Geom::Transformation.axes(
+      Geom::Point3d.new(10.0, 20.0, 30.0),
+      Geom::Vector3d.new(0.0, 1.0, 0.0),
+      Geom::Vector3d.new(-1.0, 0.0, 0.0),
+      Geom::Vector3d.new(0.0, 0.0, 1.0)
+    )
+    t_b_out = @asset_loader.send(:build_transform, t_b, nil)
+
+    assert_equal t_a.to_a, t_b_out.to_a, 'Both transform paths must produce identical 4x4 matrix'
+
+    origin_a = Geom::Point3d.new(0, 0, 0).transform(t_a)
+    origin_b = Geom::Point3d.new(0, 0, 0).transform(t_b_out)
+    assert_in_delta origin_a.x, origin_b.x, 1e-6
+    assert_in_delta origin_a.y, origin_b.y, 1e-6
+    assert_in_delta origin_a.z, origin_b.z, 1e-6
+
+    assert_in_delta 10.0, origin_b.x, 1e-6
+    assert_in_delta 20.0, origin_b.y, 1e-6
+    assert_in_delta 30.0, origin_b.z, 1e-6
+
+    det_a = compute_transform_determinant(t_a)
+    det_b = compute_transform_determinant(t_b_out)
+    assert_in_delta 1.0, det_a, 1e-6
+    assert_in_delta 1.0, det_b, 1e-6
+  end
+
+  # R5: Furniture-wide preflight: 1 failing member aborts before start_operation
+  def test_r5_furniture_wide_preflight_fail_before_mutate
+    layout_initial = build_drawer_assembly_layout(width_mm: 600.0)
+    asm_b = JSON.parse(JSON.generate(layout_initial['assemblies'].first))
+    asm_b['assemblyInstanceId'] = 'drawer-inst-2'
+    asm_b['rigidMembers'].each { |m| m['localTransform']['translationMm'][2] += 200.0 }
+    layout_initial['assemblies'] << asm_b
+
+    parsed_initial = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_initial)
+    definition = { 'name' => 'Double Drawer Unit', 'furniture_definition_id' => 'f-def-2' }
+
+    result_init = @builder.insert_furniture(@model, definition, {}, resolved_layout: parsed_initial)
+    assert result_init['success']
+    furniture = @model.active_entities.instances.first
+    initial_child_count = furniture.definition.entities.instances.length
+
+    layout_rebuild = JSON.parse(JSON.generate(layout_initial))
+    layout_rebuild['assemblies'][1]['rigidMembers'].first['assetRevisionId'] = 'rev-failing-member'
+    @downloader.fail_revision = 'rev-failing-member'
+
+    parsed_rebuild = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_rebuild)
+
+    rebuild_result = @builder.update_furniture(@model, furniture, definition, { 'widthMm' => 600.0 },
+                                               resolved_layout: parsed_rebuild)
+    refute rebuild_result['success'], 'Rebuild must fail preflight'
+    assert_includes rebuild_result['error'], 'No se pudo descargar o cargar'
+
+    assert_equal initial_child_count, furniture.definition.entities.instances.length
+  end
+
   private
 
   def find_entity_by_name(furniture, name)
