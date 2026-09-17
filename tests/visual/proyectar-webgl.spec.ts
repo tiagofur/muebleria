@@ -914,9 +914,9 @@ test.describe('Proyectar visual regression (WebGL)', () => {
     expect(initial.rightMember!.scale[2]).toBeCloseTo(1.0, 4);
     expect(initial.rightMember!.det).toBeCloseTo(1.0, 4);
 
-    // Bottom size: width = 600 - 58 = 542mm, length = 450 - 16 = 434mm, thickness = 16mm
+    // Bottom size: width = 600 - 58 = 542mm, length = 450 - 16 = 434mm, thickness = 15mm (material authority from seed)
     expect(initial.bottomComponent!.size[0]).toBeCloseTo(542, 1);
-    expect(initial.bottomComponent!.size[1]).toBeCloseTo(16, 1);
+    expect(initial.bottomComponent!.size[1]).toBeCloseTo(15, 1);
     expect(initial.bottomComponent!.size[2]).toBeCloseTo(434, 1);
 
     // Stage 2: Mutate W=800 (Depth remains 480 -> Variant A)
