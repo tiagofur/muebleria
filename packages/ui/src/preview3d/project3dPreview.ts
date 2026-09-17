@@ -13,13 +13,20 @@ import type {
   OptionChoices,
   Project,
   ProjectItem,
+  ProjectedAssembly,
+  PublishedAssemblySnapshot,
   ResolvedBoardPart,
   Structure,
 } from '@granete/domain';
 import {
+  calculateAgregadoSubspaceUnits,
   defaultMeasurePresetId,
+  evaluatePartFormula,
   layoutKitchenPlacements,
   plinthSidesForPlacement,
+  projectPublishedAssemblySnapshotFor3D,
+  projectResolvedAssemblyFor3D,
+  resolveAgregadoAssembly,
   resolveAgregadoInstance,
   resolveBaseClearanceWithContext,
   resolveBaseModeWithContext,
@@ -82,6 +89,7 @@ export type ProjectModule3DInstance = {
    * (VH-04 no-regression). Never reaches the Optimizer/cut path (VH-08).
    */
   readonly resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
+  readonly assemblies?: readonly ProjectedAssembly[];
   readonly error: string | null;
 };
 
@@ -129,9 +137,13 @@ function resolveItemBom(
   module: Module,
   project: Project,
   catalogInput: Module3DCatalogInput,
+  options: {
+    readonly availableAssets?: ReadonlySet<string>;
+  } = {},
 ): {
   parts: readonly ResolvedBoardPart[];
   resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
+  assemblies?: readonly ProjectedAssembly[];
   width: number;
   height: number;
   depth: number;
@@ -199,6 +211,16 @@ function resolveItemBom(
     ? catalogInput.materials.find((m) => m.id === plinthMaterialId)
     : undefined;
 
+  const assemblies = resolveModuleAssemblies(
+    module,
+    dims,
+    catalogInput,
+    {
+      optionChoices: choices,
+      availableAssets: options.availableAssets,
+    },
+  );
+
   try {
     const bom = resolveBom(module, choices, catalog, measurePresetId, undefined, baseContext, item.customDims);
     return {
@@ -213,6 +235,7 @@ function resolveItemBom(
           optionChoices: choices,
         },
       ),
+      assemblies,
       ...dims,
       baseMode,
       baseClearanceMm,
@@ -232,6 +255,7 @@ function resolveItemBom(
     return {
       parts: [],
       resolvedHardwarePlacements: [],
+      assemblies: [],
       ...dims,
       baseMode,
       baseClearanceMm,
@@ -332,6 +356,9 @@ function resolveItemBomCached(
   module: Module,
   project: Project,
   catalogInput: Module3DCatalogInput,
+  options: {
+    readonly availableAssets?: ReadonlySet<string>;
+  } = {},
 ): ItemBomResult {
   const plcKey: object =
     project.projectLevelChoices ?? NO_PROJECT_LEVEL_CHOICES;
@@ -354,7 +381,7 @@ function resolveItemBomCached(
     return hit;
   }
   project3dPreviewStats.missReasons.catalog += 1;
-  const resolved = resolveItemBom(item, module, project, catalogInput);
+  const resolved = resolveItemBom(item, module, project, catalogInput, options);
   project3dPreviewStats.resolutions += 1;
   if (byCatalog.size >= MAX_CATALOG_CACHE_ENTRIES) {
     const oldest = byCatalog.keys().next().value;
@@ -362,6 +389,160 @@ function resolveItemBomCached(
   }
   byCatalog.set(sig, resolved);
   return resolved;
+}
+
+/**
+ * Resolves all Agregado hardware assemblies attached to a module/structure into
+ * projected 3D assemblies (Refs #670-C).
+ *
+ * Invariants:
+ * - Rigid hardware members are projected without parametric scaling (scale = [1,1,1], det = +1).
+ * - Fabricated components recalculate from authoritative dimensions and bound materials.
+ * - Historical snapshots are projected via projectPublishedAssemblySnapshotFor3D (fails closed on missing asset).
+ * - Live previews resolve deterministically via resolveAgregadoAssembly -> projectResolvedAssemblyFor3D.
+ */
+export function resolveModuleAssemblies(
+  module: Module,
+  moduleDims: { width: number; height: number; depth: number },
+  catalogInput: Module3DCatalogInput,
+  options: {
+    readonly optionChoices?: OptionChoices;
+    readonly availableAssets?: ReadonlySet<string>;
+  } = {},
+): readonly ProjectedAssembly[] {
+  const structure = catalogInput.structures?.find((s) => s.id === module.structureId);
+  const allAgregadoInstances = [
+    ...(structure?.agregados ?? []),
+    ...(module.agregados ?? []),
+  ];
+  if (allAgregadoInstances.length === 0) return [];
+
+  const PW = moduleDims.width;
+  const PH = moduleDims.height;
+  const PD = moduleDims.depth;
+  const parentDims = { PW, PH, PD, W: PW, H: PH, D: PD };
+
+  const out: ProjectedAssembly[] = [];
+
+  for (const agrInst of allAgregadoInstances) {
+    const agregado = catalogInput.agregados?.find((a) => a.id === agrInst.agregadoId);
+    if (!agregado) continue;
+
+    // Only process agregados that define a multi-member assembly recipe
+    const isAssembly = Boolean(
+      agregado.rigidMembers && agregado.rigidMembers.length > 0,
+    );
+    if (!isAssembly) continue;
+
+    const rawW = agrInst.dimensions?.widthFormula
+      ? evaluatePartFormula(agrInst.dimensions.widthFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'width',
+        })
+      : PW;
+    const spaceW = rawW > 0 ? rawW : PW;
+
+    const rawH = agrInst.dimensions?.heightFormula
+      ? evaluatePartFormula(agrInst.dimensions.heightFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'length',
+        })
+      : PH;
+    const spaceH = rawH > 0 ? rawH : PH;
+
+    const rawD = agrInst.dimensions?.depthFormula
+      ? evaluatePartFormula(agrInst.dimensions.depthFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'length',
+        })
+      : PD;
+    const spaceD = rawD > 0 ? rawD : PD;
+
+    const spaceX = agrInst.position?.xFormula
+      ? evaluatePartFormula(agrInst.position.xFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'x',
+        })
+      : 0;
+
+    const spaceY = agrInst.position?.yFormula
+      ? evaluatePartFormula(agrInst.position.yFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'y',
+        })
+      : 0;
+
+    const spaceZ = agrInst.position?.zFormula
+      ? evaluatePartFormula(agrInst.position.zFormula, parentDims, {
+          structureCode: agregado.code,
+          partDescription: agregado.name,
+          field: 'z',
+        })
+      : 0;
+
+    const units = calculateAgregadoSubspaceUnits(
+      agrInst.quantity,
+      { width: spaceW, height: spaceH, depth: spaceD },
+      { x: spaceX, y: spaceY, z: spaceZ },
+      agrInst.layoutDirection ?? 'none',
+      agrInst.gapMm ?? 0,
+    );
+
+    for (const unit of units) {
+      const assemblyInstanceId = `${agrInst.id ?? agrInst.agregadoId}-u${unit.unitIndex}`;
+
+      // Check if instance carries a historical published snapshot
+      const snapshot = (agrInst as unknown as { assemblySnapshot?: PublishedAssemblySnapshot; snapshot?: PublishedAssemblySnapshot })
+        .assemblySnapshot ?? (agrInst as unknown as { snapshot?: PublishedAssemblySnapshot }).snapshot;
+
+      if (snapshot) {
+        const projected = projectPublishedAssemblySnapshotFor3D({
+          snapshot,
+          placement: { originMm: [unit.x, unit.y, unit.z] },
+          assemblyInstanceId,
+          availableAssets: options.availableAssets,
+        });
+        out.push(projected);
+      } else {
+        const resolved = resolveAgregadoAssembly(agregado, {
+          widthMm: unit.width,
+          depthMm: unit.depth,
+          heightMm: unit.height,
+        });
+
+        // Enrich fabricated components with authoritative thickness & material from catalog
+        const enrichedFabricated = resolved.fabricatedComponents.map((c) => {
+          const compDef = catalogInput.components?.find((cmp) => cmp.id === c.componentId);
+          const role = compDef?.optionRoles?.[0];
+          const matId = role ? options.optionChoices?.[role] : undefined;
+          const mat = catalogInput.materials?.find((m) => m.id === matId);
+          const thicknessMm = c.thicknessMm ?? mat?.thicknessMm ?? 16;
+          return {
+            ...c,
+            thicknessMm,
+            materialId: c.materialId ?? matId,
+          };
+        });
+
+        const projected = projectResolvedAssemblyFor3D({
+          assembly: {
+            ...resolved,
+            fabricatedComponents: enrichedFabricated,
+          },
+          placement: { originMm: [unit.x, unit.y, unit.z] },
+          assemblyInstanceId,
+        });
+        out.push(projected);
+      }
+    }
+  }
+
+  return out;
 }
 
 /**
@@ -514,6 +695,7 @@ export type ResolveProject3DOptions = {
    * (empty room for spatial studio).
    */
   readonly kitchenWallsOnly?: boolean;
+  readonly availableAssets?: ReadonlySet<string>;
 };
 
 /**
@@ -534,6 +716,7 @@ export function resolveProject3DPreview(
     module: Module | undefined;
     parts: readonly ResolvedBoardPart[];
     resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
+    assemblies?: readonly ProjectedAssembly[];
     width: number;
     height: number;
     depth: number;
@@ -554,6 +737,7 @@ export function resolveProject3DPreview(
         module: undefined,
         parts: [],
         resolvedHardwarePlacements: [],
+        assemblies: [],
         width: 600,
         height: 720,
         depth: 560,
@@ -563,12 +747,15 @@ export function resolveProject3DPreview(
         baseClearanceMm: 0,
       };
     }
-    const resolved = resolveItemBomCached(item, module, project, catalogInput);
+    const resolved = resolveItemBomCached(item, module, project, catalogInput, {
+      availableAssets: options.availableAssets,
+    });
     return {
       item,
       module,
       parts: resolved.parts,
       resolvedHardwarePlacements: resolved.resolvedHardwarePlacements,
+      assemblies: resolved.assemblies,
       width: resolved.width,
       height: resolved.height,
       depth: resolved.depth,
@@ -678,6 +865,7 @@ export function resolveProject3DPreview(
           showCountertop:
             showCountertop && place.elevation === 'floor',
           resolvedHardwarePlacements: row?.resolvedHardwarePlacements ?? [],
+          assemblies: row?.assemblies,
           error: row?.error ?? null,
         };
       },
@@ -766,6 +954,7 @@ export function resolveProject3DPreview(
           elevation: 'floor' as const,
           showCountertop: false,
           resolvedHardwarePlacements: row.resolvedHardwarePlacements,
+          assemblies: row.assemblies,
           error: row.error,
         };
       });
@@ -819,6 +1008,7 @@ export function resolveProject3DPreview(
         elevation: 'floor' as const,
         showCountertop: false,
         resolvedHardwarePlacements: row.resolvedHardwarePlacements,
+        assemblies: row.assemblies,
         error: row.error,
       };
     });
