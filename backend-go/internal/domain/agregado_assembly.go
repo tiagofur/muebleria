@@ -1,10 +1,14 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // RigidMemberSourceKind discriminates whether a rigid member points directly to a fixed
@@ -203,7 +207,222 @@ type PublishedAssemblySnapshot struct {
 	BOMItems                []AssemblyBOMItem             `json:"bomItems"`
 }
 
+// AgregadoRecipePayload encapsulates the self-contained recipe definition of an Agregado revision.
+// Can execute ResolveAgregadoAssembly historically without consulting live catalog recipes.
+type AgregadoRecipePayload struct {
+	WidthMm                 int                         `json:"widthMm"`
+	HeightMm                int                         `json:"heightMm"`
+	DepthMm                 int                         `json:"depthMm"`
+	Notes                   string                      `json:"notes,omitempty"`
+	CommercialKitHardwareID *string                     `json:"commercialKitHardwareId,omitempty"`
+	Components              []ComponentInstance         `json:"components"`
+	HardwareLines           []HardwareLine              `json:"hardwareLines"`
+	RigidMembers            []AgregadoRigidMember       `json:"rigidMembers"`
+	VariantSets             []AgregadoVariantSet        `json:"variantSets"`
+	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibilityRules"`
+}
+
+// ToRecipePayload extracts the recipe payload from an Agregado catalog entity.
+func (a Agregado) ToRecipePayload() AgregadoRecipePayload {
+	comps := a.Components
+	if comps == nil {
+		comps = []ComponentInstance{}
+	}
+	hwLines := a.HardwareLines
+	if hwLines == nil {
+		hwLines = []HardwareLine{}
+	}
+	rms := a.RigidMembers
+	if rms == nil {
+		rms = []AgregadoRigidMember{}
+	}
+	vss := a.VariantSets
+	if vss == nil {
+		vss = []AgregadoVariantSet{}
+	}
+	rules := a.CompatibilityRules
+	if rules == nil {
+		rules = []AssemblyCompatibilityRule{}
+	}
+	return AgregadoRecipePayload{
+		WidthMm:                 a.WidthMm,
+		HeightMm:                a.HeightMm,
+		DepthMm:                 a.DepthMm,
+		Notes:                   a.Notes,
+		CommercialKitHardwareID: a.CommercialKitHardwareID,
+		Components:              comps,
+		HardwareLines:           hwLines,
+		RigidMembers:            rms,
+		VariantSets:             vss,
+		CompatibilityRules:      rules,
+	}
+}
+
+// ToAgregado reconstructs an Agregado entity from a recipe payload and identity.
+func (p AgregadoRecipePayload) ToAgregado(id, code, name string) Agregado {
+	return Agregado{
+		ID:                      id,
+		Code:                    code,
+		Name:                    name,
+		Notes:                   p.Notes,
+		WidthMm:                 p.WidthMm,
+		HeightMm:                p.HeightMm,
+		DepthMm:                 p.DepthMm,
+		CommercialKitHardwareID: p.CommercialKitHardwareID,
+		Components:              p.Components,
+		HardwareLines:           p.HardwareLines,
+		RigidMembers:            p.RigidMembers,
+		VariantSets:             p.VariantSets,
+		CompatibilityRules:      p.CompatibilityRules,
+		Active:                  true,
+	}
+}
+
+// AgregadoRevision is an immutable append-only version of an Agregado recipe.
+type AgregadoRevision struct {
+	ID             string                `json:"id"`
+	OrganizationID string                `json:"organizationId"`
+	AgregadoID     string                `json:"agregadoId"`
+	RevisionNumber int                   `json:"revisionNumber"`
+	Recipe         AgregadoRecipePayload `json:"recipe"`
+	CreatedBy      *string               `json:"createdBy,omitempty"`
+	CreatedAt      time.Time             `json:"createdAt"`
+}
+
+// PublishedAssemblySnapshotRecord represents a persisted frozen assembly snapshot in PostgreSQL.
+type PublishedAssemblySnapshotRecord struct {
+	ID                     string                    `json:"id"`
+	OrganizationID         string                    `json:"organizationId"`
+	AgregadoID             string                    `json:"agregadoId"`
+	AgregadoRevisionID     string                    `json:"agregadoRevisionId"`
+	AgregadoRevisionNumber int                       `json:"agregadoRevisionNumber"`
+	ResolvedWidthMm        float64                   `json:"resolvedWidthMm"`
+	ResolvedDepthMm        float64                   `json:"resolvedDepthMm"`
+	ResolvedHeightMm       float64                   `json:"resolvedHeightMm"`
+	PayloadHash            string                    `json:"payloadHash"`
+	Snapshot               PublishedAssemblySnapshot `json:"snapshot"`
+	CreatedBy              *string                   `json:"createdBy,omitempty"`
+	CreatedAt              time.Time                 `json:"createdAt"`
+}
+
+// ComputePublishedAssemblySnapshotHash produces a deterministic sha256 hash string for an assembly snapshot.
+func ComputePublishedAssemblySnapshotHash(snapshot PublishedAssemblySnapshot) (string, error) {
+	bytes, err := json.Marshal(snapshot)
+	if err != nil {
+		return "", fmt.Errorf("marshal snapshot for hash: %w", err)
+	}
+	sum := sha256.Sum256(bytes)
+	return fmt.Sprintf("sha256-%x", sum), nil
+}
+
+// DesignRevisionAssemblySnapshot links a DesignRevision to a frozen published assembly snapshot.
+type DesignRevisionAssemblySnapshot struct {
+	ID                  string    `json:"id"`
+	OrganizationID      string    `json:"organizationId"`
+	ProjectID           string    `json:"projectId"`
+	DesignRevisionID    string    `json:"designRevisionId"`
+	FurnitureInstanceID *string   `json:"furnitureInstanceId,omitempty"`
+	AgregadoID          string    `json:"agregadoId"`
+	SlotKey             string    `json:"slotKey"`
+	SnapshotID          string    `json:"snapshotId"`
+	CreatedAt           time.Time `json:"createdAt"`
+}
+
+var sha256Regex = regexp.MustCompile(`^sha256-[0-9a-f]{64}$`)
+
+// ValidatePublishedAssemblySnapshot performs fail-closed validation on a published assembly snapshot
+// upon readback (R16). Any corrupted dimension, basis determinant != +1.0, missing visual pins,
+// or invalid revision identity returns a typed ErrCorruptAssemblySnapshot.
+func ValidatePublishedAssemblySnapshot(s PublishedAssemblySnapshot) error {
+	if strings.TrimSpace(s.AgregadoID) == "" {
+		return fmt.Errorf("%w: missing agregadoId", ErrCorruptAssemblySnapshot)
+	}
+	if s.AgregadoRevisionNumber < 1 {
+		return fmt.Errorf("%w: invalid agregadoRevisionNumber %d", ErrCorruptAssemblySnapshot, s.AgregadoRevisionNumber)
+	}
+	for i, dim := range s.ResolvedDimensionsMm {
+		if math.IsNaN(dim) || math.IsInf(dim, 0) || dim <= 0 {
+			return fmt.Errorf("%w: dimension axis %d is non-positive or non-finite: %g", ErrCorruptAssemblySnapshot, i, dim)
+		}
+	}
+
+	for _, m := range s.RigidMembers {
+		if strings.TrimSpace(m.MemberID) == "" {
+			return fmt.Errorf("%w: rigid member missing memberId", ErrCorruptAssemblySnapshot)
+		}
+		if strings.TrimSpace(m.Role) == "" {
+			return fmt.Errorf("%w: rigid member '%s' missing role", ErrCorruptAssemblySnapshot, m.MemberID)
+		}
+		if strings.TrimSpace(m.HardwareID) == "" {
+			return fmt.Errorf("%w: rigid member '%s' missing hardwareId", ErrCorruptAssemblySnapshot, m.MemberID)
+		}
+		// Visual pins must be fully pinned
+		if m.AssetID == nil || strings.TrimSpace(*m.AssetID) == "" {
+			return fmt.Errorf("%w: rigid member '%s' missing visual assetId", ErrCorruptAssemblySnapshot, m.MemberID)
+		}
+		if m.AssetRevisionID == nil || strings.TrimSpace(*m.AssetRevisionID) == "" {
+			return fmt.Errorf("%w: rigid member '%s' missing visual assetRevisionId", ErrCorruptAssemblySnapshot, m.MemberID)
+		}
+		if m.SHA256 == nil || !sha256Regex.MatchString(*m.SHA256) {
+			return fmt.Errorf("%w: rigid member '%s' missing or invalid visual sha256", ErrCorruptAssemblySnapshot, m.MemberID)
+		}
+		// Basis determinant must be +1.0 (orthonormal right-handed, no scaling)
+		det := basisDet(m.LocalTransform.Basis)
+		if math.IsNaN(det) || math.Abs(det-1.0) > 1e-4 {
+			return fmt.Errorf("%w: rigid member '%s' transform basis determinant is %g (expected +1.0)", ErrCorruptAssemblySnapshot, m.MemberID, det)
+		}
+		for i, trans := range m.LocalTransform.TranslationMm {
+			if math.IsNaN(trans) || math.IsInf(trans, 0) {
+				return fmt.Errorf("%w: rigid member '%s' translation axis %d is non-finite", ErrCorruptAssemblySnapshot, m.MemberID, i)
+			}
+		}
+	}
+
+	for _, c := range s.FabricatedComponents {
+		if strings.TrimSpace(c.ComponentID) == "" {
+			return fmt.Errorf("%w: fabricated component missing componentId", ErrCorruptAssemblySnapshot)
+		}
+		if c.Quantity <= 0 {
+			return fmt.Errorf("%w: fabricated component '%s' quantity <= 0", ErrCorruptAssemblySnapshot, c.ComponentID)
+		}
+		if math.IsNaN(c.LengthMm) || math.IsInf(c.LengthMm, 0) || c.LengthMm <= 0 {
+			return fmt.Errorf("%w: fabricated component '%s' invalid length %g", ErrCorruptAssemblySnapshot, c.ComponentID, c.LengthMm)
+		}
+		if math.IsNaN(c.WidthMm) || math.IsInf(c.WidthMm, 0) || c.WidthMm <= 0 {
+			return fmt.Errorf("%w: fabricated component '%s' invalid width %g", ErrCorruptAssemblySnapshot, c.ComponentID, c.WidthMm)
+		}
+		det := basisDet(c.Transform.Basis)
+		if math.IsNaN(det) || math.Abs(det-1.0) > 1e-4 {
+			return fmt.Errorf("%w: fabricated component '%s' transform basis determinant is %g (expected +1.0)", ErrCorruptAssemblySnapshot, c.ComponentID, det)
+		}
+	}
+
+	for _, b := range s.BOMItems {
+		if strings.TrimSpace(b.HardwareID) == "" {
+			return fmt.Errorf("%w: bom item missing hardwareId", ErrCorruptAssemblySnapshot)
+		}
+		if math.IsNaN(b.Quantity) || math.IsInf(b.Quantity, 0) || b.Quantity <= 0 {
+			return fmt.Errorf("%w: bom item '%s' quantity non-positive: %g", ErrCorruptAssemblySnapshot, b.HardwareID, b.Quantity)
+		}
+	}
+
+	return nil
+}
+
+func basisDet(b HardwareBasis) float64 {
+	return b.X[0]*(b.Y[1]*b.Z[2]-b.Y[2]*b.Z[1]) -
+		b.X[1]*(b.Y[0]*b.Z[2]-b.Y[2]*b.Z[0]) +
+		b.X[2]*(b.Y[0]*b.Z[1]-b.Y[1]*b.Z[0])
+}
+
 // Domain Errors
+
+var (
+	ErrAgregadoRevisionNotFound = errors.New("agregado revision not found")
+	ErrAgregadoRevisionConflict = errors.New("agregado revision number conflict")
+	ErrCorruptAssemblySnapshot  = errors.New("corrupt published assembly snapshot")
+	ErrAssemblySnapshotNotFound = errors.New("published assembly snapshot not found")
+)
 
 type ErrAssemblyVariantNotFound struct {
 	VariantSetID      string

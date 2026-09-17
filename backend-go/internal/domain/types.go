@@ -506,6 +506,7 @@ type Agregado struct {
 	RigidMembers            []AgregadoRigidMember       `json:"rigid_members,omitempty"`
 	VariantSets             []AgregadoVariantSet        `json:"variant_sets,omitempty"`
 	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibility_rules,omitempty"`
+	CurrentRevisionID       *string                     `json:"current_revision_id,omitempty"`
 	Active                  bool                        `json:"active"`
 	CreatedAt               time.Time                   `json:"created_at"`
 	UpdatedAt               time.Time                   `json:"updated_at"`
