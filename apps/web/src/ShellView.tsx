@@ -214,6 +214,7 @@ import {
   type CostingHandlers,
   type SurveyHandlers,
   type ProjectOverviewNav,
+  type EngineeringReleaseStateEvidence,
 } from '@granete/ui';
 import {
   APIWorkspaceRepository,
@@ -1037,6 +1038,38 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     releaseId: routeEngineeringReleaseId,
     queryKey: engineeringStateKey,
   });
+  // #768 — durable Engineering state of the ORDER project's canonical
+  // authority, for the production hub's "Preparación para fabricar"
+  // stepper. Same exact-release read the engineering workspace uses;
+  // reading never writes. Canonical authority only — legacy obras keep the
+  // pre-#768 presentation (no invented flow).
+  const orderEngineeringReleaseId = useMemo(() => {
+    if (!routeProductionOrderId) return null;
+    const project = projects.find((p) => p.id === routeProductionOrderId);
+    const authority = project ? releaseAuthorityOf(project) : undefined;
+    return authority?.source === 'canonical' ? authority.releaseId : null;
+  }, [projects, routeProductionOrderId]);
+  const orderEngineeringStateContext = useEngineeringState({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    projectId: routeProductionOrderId,
+    releaseId: orderEngineeringReleaseId,
+    queryKey: engineeringStateQueryKey(
+      sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+      routeProductionOrderId ?? 'no-project',
+      orderEngineeringReleaseId ?? 'no-release',
+    ),
+  });
+  const orderEngineeringState: EngineeringReleaseStateEvidence | undefined =
+    !orderEngineeringReleaseId
+      ? undefined
+      : orderEngineeringStateContext.kind === 'loading'
+        ? { status: 'loading' }
+        : orderEngineeringStateContext.kind === 'error'
+          ? { status: 'error' }
+          : orderEngineeringStateContext.kind === 'ready'
+            ? { status: 'ready', phase: orderEngineeringStateContext.state.phase }
+            : undefined;
   // #740 — explicit user commands against the exact pinned release. Only
   // these callbacks write engineering state; refresh + invalidation keep the
   // chip, the queue and the dashboard on the durable truth. A rejected
@@ -1914,6 +1947,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           }
           onOpenWarehouse={() => navigate(pathForNav('warehouse'))}
           orderProjectId={routeProductionOrderId}
+          orderEngineeringState={orderEngineeringState}
+          onOpenEngineering={(projectId, releaseId) => {
+            const target = engineeringProjectPath(projectId, { releaseId });
+            if (location.pathname + location.search !== target) navigate(target);
+          }}
           orderTab={routeProductionOrderTab}
           onOrderTabChange={(tab) => {
             if (!routeProductionOrderId) return;

@@ -747,3 +747,10 @@
   font-size: var(--text-sm);
 }
 
+
+/* #768 — the compact stepper shares the release strip row: it wraps below
+   the pins on narrow screens and stays a compact card, never full-width. */
+.eng-workspace__release-context .fab-flow {
+  flex: 1 1 360px;
+  max-width: 480px;
+}

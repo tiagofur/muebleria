@@ -314,6 +314,7 @@ export {
   type ProductionQueueProps,
   type ProductionWorkspaceProps,
   type ProductionOrderHubProps,
+  type EngineeringReleaseStateEvidence,
   ProductionBoardView,
   type ProductionBoardViewProps,
   type CuttingOutputTargetView,

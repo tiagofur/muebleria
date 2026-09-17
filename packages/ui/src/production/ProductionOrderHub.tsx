@@ -4,7 +4,8 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import type { Catalog,
+import type {
+  Catalog,
   HardwarePurchaseRow,
   ItemFloorStatus,
   Module,
@@ -16,7 +17,11 @@ import type { Catalog,
   ProductionSpaceOption,
   ReleaseWorkContinuity,
 } from '@granete/domain';
-import { PRODUCTION_SCOPE_ALL } from '@granete/domain';
+import {
+  fabricationFlowOf,
+  PRODUCTION_SCOPE_ALL,
+  type FabricationEngineeringEvidence,
+} from '@granete/domain';
 import { ArrowLeft, ExternalLink, Factory } from 'lucide-react';
 import {
   formatIsoDate,
@@ -24,6 +29,7 @@ import {
   projectStatusLabel,
 } from '../projects/projectHelpers';
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
+import { FabricationFlowSteps } from '../common/FabricationFlowSteps';
 import { WorkspaceTabs } from '../common/Tabs';
 import {
   HUB_TABS,
@@ -93,6 +99,21 @@ export type ProductionOrderHubProps = {
    * commands; the hub NEVER offers automatic replacement.
    */
   readonly releaseContinuity?: ReleaseWorkContinuity | null;
+  /**
+   * #741 PR 1 / #768: navigation from the continuity banner to the NEW
+   * revision's engineering surface (information only — never a command).
+   */
+  readonly onOpenNewRevision?: () => void;
+  /**
+   * #768: compact "Preparación para fabricar" of the obra's canonical
+   * release; `undefined` keeps the pre-#768 presentation (legacy obras
+   * without a release authority never get an invented flow).
+   */
+  readonly engineeringState?: EngineeringReleaseStateEvidence;
+  /** #768: navigate to the engineering workspace of the authority release. */
+  readonly onOpenEngineering?: () => void;
+  /** #768: navigate to the existing material authorization surface. */
+  readonly onOpenMaterialsSurface?: () => void;
   readonly onExportCncPilot?: () => void | Promise<void>;
   readonly onExportAssemblySheets?: () => void | Promise<void>;
   /** PROD-4.4 multi-ambiente filter */
@@ -115,6 +136,20 @@ function StatusBadge({
     </span>
   );
 }
+
+/**
+ * #768 — durable per-release Engineering state of the obra's canonical
+ * authority, as resolved by the shell (same shape the Engineering workspace
+ * consumes, minus the fields only Ingeniería displays). Absent → the flow
+ * shows the honest "Pendiente de confirmar" (fail closed, no actions).
+ */
+export type EngineeringReleaseStateEvidence =
+  | { readonly status: 'loading' }
+  | { readonly status: 'error' }
+  | {
+      readonly status: 'ready';
+      readonly phase: 'pending' | 'in_progress' | 'completed';
+    };
 
 export function ProductionOrderHub({
   catalog = null,
@@ -150,6 +185,10 @@ export function ProductionOrderHub({
   canSetFloorStatus = false,
   staleInfo = null,
   releaseContinuity = null,
+  onOpenNewRevision,
+  engineeringState,
+  onOpenEngineering,
+  onOpenMaterialsSurface,
   onExportCncPilot,
   onExportAssemblySheets,
   spaceOptions = [],
@@ -157,6 +196,41 @@ export function ProductionOrderHub({
   onProductionScopeChange,
 }: ProductionOrderHubProps): ReactNode {
   const [isCsvConfigOpen, setIsCsvConfigOpen] = useState(false);
+
+  // #768 — compact fabrication flow from existing authorities only. Rendered
+  // exclusively for obras with a canonical release; legacy obras keep the
+  // pre-#768 presentation instead of an invented flow.
+  const engineeringEvidence: FabricationEngineeringEvidence =
+    engineeringState === undefined
+      ? { kind: 'unknown' }
+      : engineeringState.status === 'loading'
+        ? { kind: 'loading' }
+        : engineeringState.status === 'error'
+          ? { kind: 'unconfirmed' }
+          : { kind: 'phase', phase: engineeringState.phase };
+  const fabResult = fabricationFlowOf(project, engineeringEvidence);
+  const fabFlow = fabResult.kind === 'flow' ? fabResult.flow : null;
+  const fabAction = fabFlow?.nextAction
+    ? fabFlow.nextAction === 'prepare-materials' && onOpenMaterialsSurface
+      ? {
+          label: 'Autorizar materiales',
+          onActivate: onOpenMaterialsSurface,
+          testId: 'prod-fab-authorize-materials',
+          title:
+            'Abre Almacén, la superficie existente donde se autorizan los materiales de esta liberación',
+        }
+      : (fabFlow.nextAction === 'start-engineering' ||
+          fabFlow.nextAction === 'complete-engineering') &&
+        onOpenEngineering
+        ? {
+            label: 'Abrir Ingeniería',
+            onActivate: onOpenEngineering,
+            testId: 'prod-fab-open-engineering',
+            title:
+              'Abre Ingeniería, donde se registra el estado de preparación de esta liberación',
+          }
+        : null
+    : null;
 
   const documents = useProductionOrderDocuments({
     project,
@@ -248,17 +322,46 @@ export function ProductionOrderHub({
             aria-live="polite"
             data-testid="prod-release-continuity"
           >
-            <strong>Nueva revisión disponible:</strong> Hay trabajo de
-            fabricación en curso sobre la versión anterior. Revisá la
-            continuidad antes de cambiar la fabricación.
+            <strong>Nueva revisión disponible.</strong> Hay una versión más
+            reciente del diseño; la fabricación actual no se cambiará
+            automáticamente.
             <p className="prod-hub__continuity-detail">
-              Trabajo actual: liberación anterior
+              Trabajo actual: versión anterior
               {releaseContinuity.authorityReleaseNumber !== undefined
-                ? ` · Nueva liberación: Liberación #${releaseContinuity.authorityReleaseNumber}`
+                ? ` · Nueva versión: Liberación #${releaseContinuity.authorityReleaseNumber}`
                 : ''}
             </p>
+            {/* #768 — information and navigation only. The server keeps
+                blocking the dangerous commands; no replacement, suspension
+                or cancellation action is ever offered here. */}
+            <div className="prod-hub__continuity-actions">
+              {onOpenNewRevision ? (
+                <button
+                  type="button"
+                  className="btn btn--small prod-hub__continuity-action"
+                  onClick={onOpenNewRevision}
+                  data-testid="prod-continuity-open-new-revision"
+                  title="Abre la Ingeniería de la nueva liberación para revisarla"
+                >
+                  Ver nueva revisión
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn--ghost btn--small prod-hub__continuity-action"
+                onClick={() => onTabChange('piso')}
+                data-testid="prod-continuity-view-current-work"
+                title="Muestra el estado de piso del trabajo en curso"
+              >
+                Ver trabajo actual
+              </button>
+            </div>
           </aside>
         ) : null}
+
+        {/* #768 — the same compact semantics as Ingeniería, below the
+            header; one primary action at most, honest text otherwise. */}
+        {fabFlow ? <FabricationFlowSteps flow={fabFlow} action={fabAction} testIdPrefix="prod" /> : null}
 
         <div className="prod-hub__header-actions">
           {salePrice !== null ? (

@@ -702,6 +702,21 @@ export {
 } from './releaseAuthority';
 
 export {
+  fabricationFlowOf,
+  hasMaterializedPhysicalWork,
+  FABRICATION_ENGINEERING_STATE_LABELS_ES,
+  FABRICATION_UNCONFIRMED_LABEL_ES,
+  FABRICATION_LOADING_LABEL_ES,
+  type FabricationEngineeringEvidence,
+  type FabricationFlow,
+  type FabricationFlowResult,
+  type FabricationFlowStep,
+  type FabricationFlowStepId,
+  type FabricationNextAction,
+  type FabricationStepStatus,
+} from './fabricationFlow';
+
+export {
   buildReleaseBomContext,
   releaseBomItemsToProjectItems,
   requirementLinesFromContext,
