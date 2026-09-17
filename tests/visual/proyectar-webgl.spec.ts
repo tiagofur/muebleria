@@ -545,38 +545,40 @@ test.describe('Proyectar visual regression (WebGL)', () => {
     await fitCamera(page);
     await settleCanvas(page);
 
+    type SceneMemberInfo = {
+      posX: number;
+      posY: number;
+      posZ: number;
+      scale: [number, number, number];
+      det: number;
+      memberId: string;
+      hardwareId: string;
+      assetRevisionId: string;
+    };
+
+    type SceneBottomInfo = {
+      size: [number, number, number];
+      description: string;
+    };
+
+    type SceneQueryResult = {
+      leftMember: SceneMemberInfo | null;
+      rightMember: SceneMemberInfo | null;
+      bottomComponent: SceneBottomInfo | null;
+      allUserData: any[];
+      count: number;
+    };
+
     // 3. Helper de consulta programática del grafo Three.js
-    const queryScene = async () => {
-      return page.evaluate(() => {
+    const queryScene = async (): Promise<SceneQueryResult | null> => {
+      return page.evaluate<SceneQueryResult | null>(() => {
         const scene = (window as any).__graneteScene;
         if (!scene) return null;
 
-        let leftMember: {
-          posX: number;
-          posY: number;
-          posZ: number;
-          scale: [number, number, number];
-          det: number;
-          memberId: string;
-          hardwareId: string;
-          assetRevisionId: string;
-        } | null = null;
+        let leftMember: SceneMemberInfo | null = null;
+        let rightMember: SceneMemberInfo | null = null;
+        let bottomComponent: SceneBottomInfo | null = null;
 
-        let rightMember: {
-          posX: number;
-          posY: number;
-          posZ: number;
-          scale: [number, number, number];
-          det: number;
-          memberId: string;
-          hardwareId: string;
-          assetRevisionId: string;
-        } | null = null;
-
-        let bottomComponent: {
-          size: [number, number, number];
-          description: string;
-        } | null = null;
 
         scene.traverse((obj: any) => {
           if (obj.userData?.memberId === 'runner-left') {
@@ -860,7 +862,7 @@ function createDrawerAssemblySeedWorkspace() {
     catalog: {
       ...seed.catalog,
       hardware: [...seed.catalog.hardware, runner400, runner500, kitBoxRunner],
-      components: [...seed.catalog.components, compBottomPanel],
+      components: [...(seed.catalog.components ?? []), compBottomPanel],
       agregados: [...(seed.catalog.agregados ?? []), fixtureAgregado],
       modules: [drawerModule, ...seed.catalog.modules.slice(1)],
     },
