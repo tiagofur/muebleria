@@ -160,7 +160,7 @@ module Granete
                     :anchor_face, :offset_mm,
                     :asset_revision_id, :sha256, :expected_bytes, :representation,
                     :validation_state, :local_transform,
-                    :preparation_state, :mount_frame
+                    :preparation_state, :mount_frame, :is_historical
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
@@ -168,7 +168,7 @@ module Granete
                        dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil,
                        asset_revision_id: nil, sha256: nil, expected_bytes: nil,
                        representation: nil, validation_state: nil, local_transform: nil,
-                       preparation_state: nil, mount_frame: nil)
+                       preparation_state: nil, mount_frame: nil, is_historical: false)
           @placement_id = placement_id
           @hardware_id = hardware_id
           @asset_id = asset_id
@@ -188,6 +188,7 @@ module Granete
           @local_transform = local_transform
           @preparation_state = preparation_state
           @mount_frame = mount_frame
+          @is_historical = is_historical
         end
 
         def basis
@@ -197,18 +198,218 @@ module Granete
         def local_translation
           @local_transform ? @local_transform['translation'] : @translation
         end
+
+        def historical?
+          @is_historical == true
+        end
       end
 
-      # A parsed resolved layout: contract marker + board transforms.
+      # One resolved parametric assembly instance with rigid hardware members and fabricated components (#670-D).
+      class LayoutAssembly
+        attr_reader :assembly_instance_id, :agregado_id, :recipe_revision,
+                    :snapshot_id, :is_historical, :dimensions_mm, :placement,
+                    :rigid_members, :fabricated_components
+
+        def initialize(assembly_instance_id:, agregado_id:, placement:,
+                       rigid_members: [], fabricated_components: [],
+                       recipe_revision: nil, snapshot_id: nil, is_historical: false,
+                       dimensions_mm: nil)
+          @assembly_instance_id = assembly_instance_id
+          @agregado_id = agregado_id
+          @placement = placement
+          @rigid_members = rigid_members
+          @fabricated_components = fabricated_components
+          @recipe_revision = recipe_revision
+          @snapshot_id = snapshot_id
+          @is_historical = is_historical
+          @dimensions_mm = dimensions_mm
+        end
+
+        def historical?
+          @is_historical == true
+        end
+
+        def translation
+          @placement['translation']
+        end
+
+        def basis
+          @placement['basis']
+        end
+      end
+
+      # One rigid hardware member of an assembly (#670-D). Subclasses
+      # LayoutHardwarePlacement so AssetLoader and NativeHardwareRenderer consume
+      # a single unified hardware placement contract authority (R1).
+      class LayoutAssemblyRigidMember < LayoutHardwarePlacement
+        attr_reader :member_id, :assembly_instance_id, :agregado_id, :role, :render_status,
+                    :recipe_revision, :snapshot_id
+
+        # rubocop:disable-next Metrics/ParameterLists
+        def initialize(member_id:, assembly_instance_id:, agregado_id:, local_transform:,
+                       name: nil, role: nil, hardware_id: nil, asset_id: nil, asset_revision_id: nil,
+                       sha256: nil, expected_bytes: nil, representation: nil,
+                       preparation_state: nil, mount_frame: nil, render_status: nil,
+                       is_historical: false, recipe_revision: nil, snapshot_id: nil,
+                       dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil,
+                       host_component_instance_id: nil, placement_kind: 'derived')
+          @member_id = member_id
+          @assembly_instance_id = assembly_instance_id
+          @agregado_id = agregado_id
+          @role = role
+          @render_status = render_status
+          @recipe_revision = recipe_revision
+          @snapshot_id = snapshot_id
+          placement_id = "#{assembly_instance_id}:#{member_id}"
+          resolved_name = name || role || member_id
+          super(
+            placement_id: placement_id,
+            hardware_id: hardware_id,
+            asset_id: asset_id,
+            name: resolved_name,
+            placement_kind: placement_kind,
+            host_component_instance_id: host_component_instance_id,
+            translation: local_transform ? local_transform['translation'] : nil,
+            dimensions: dimensions,
+            color_hex: color_hex,
+            anchor_face: anchor_face,
+            offset_mm: offset_mm,
+            asset_revision_id: asset_revision_id,
+            sha256: sha256,
+            expected_bytes: expected_bytes,
+            representation: representation,
+            local_transform: local_transform,
+            preparation_state: preparation_state,
+            mount_frame: mount_frame,
+            is_historical: is_historical
+          )
+        end
+      end
+
+      # One fabricated panel/board of an assembly (#670-D). Duck-types as a
+      # board transform for LocalGeometry and ChildMetadataWriter.
+      class LayoutAssemblyFabricatedComponent
+        attr_reader :component_id, :assembly_instance_id, :agregado_id,
+                    :name, :slot_id, :dims, :local_transform, :material, :identity
+
+        def initialize(component_id:, assembly_instance_id:, agregado_id:, dims:,
+                       local_transform:, name: nil, slot_id: nil, material: {}, identity: {})
+          @component_id = component_id
+          @assembly_instance_id = assembly_instance_id
+          @agregado_id = agregado_id
+          @dims = dims
+          @local_transform = local_transform
+          @name = name || component_id
+          @slot_id = slot_id || component_id
+          @material = material
+          @identity = identity
+        end
+
+        def component_instance_id
+          "#{@assembly_instance_id}:#{@component_id}"
+        end
+
+        def width_mm
+          @dims['width']
+        end
+
+        def thickness_mm
+          @dims['thickness']
+        end
+
+        def length_mm
+          @dims['length']
+        end
+
+        def translation
+          @local_transform['translation']
+        end
+
+        def basis
+          @local_transform['basis']
+        end
+
+        def authoring_capability
+          nil
+        end
+
+        def component_definition_id
+          @identity['componentDefinitionId']
+        end
+
+        def catalog_component_id
+          @identity['catalogComponentId']
+        end
+
+        def role
+          @identity['role']
+        end
+
+        def option_role
+          @identity['optionRole']
+        end
+
+        def material_id
+          @material['materialId']
+        end
+
+        def material_code
+          @material['materialCode']
+        end
+
+        def material_name
+          @material['materialName']
+        end
+
+        def material_color_hex
+          @material['materialColorHex']
+        end
+
+        def material_image_url
+          @material['materialImageUrl']
+        end
+
+        def material_texture_url
+          @material['materialTextureUrl']
+        end
+
+        def material_texture_tile_width_mm
+          @material['materialTextureTileWidthMm']
+        end
+
+        def material_texture_tile_length_mm
+          @material['materialTextureTileLengthMm']
+        end
+
+        def material_roughness
+          @material['materialRoughness']
+        end
+
+        def material_metalness
+          @material['materialMetalness']
+        end
+
+        def material_clearcoat
+          @material['materialClearcoat']
+        end
+
+        def material_grain
+          @material['materialGrain']
+        end
+      end
+
+      # A parsed resolved layout: contract marker + board transforms + hardware + assemblies.
       class NativeLayout
-        attr_reader :transform_contract, :boards, :hardware, :furniture_definition_id,
+        attr_reader :transform_contract, :boards, :hardware, :assemblies, :furniture_definition_id,
                     :definition_name, :dimensions_mm
 
-        def initialize(transform_contract, boards, hardware = [],
-                       furniture_definition_id: nil, definition_name: nil, dimensions_mm: nil)
+        def initialize(transform_contract, boards, hardware = [], assemblies_pos = nil,
+                       furniture_definition_id: nil, definition_name: nil, dimensions_mm: nil,
+                       assemblies: nil)
           @transform_contract = transform_contract
           @boards = boards
           @hardware = hardware
+          @assemblies = assemblies || assemblies_pos || []
           @furniture_definition_id = furniture_definition_id
           @definition_name = definition_name
           @dimensions_mm = dimensions_mm
@@ -216,6 +417,10 @@ module Granete
 
         def find_board(component_instance_id)
           boards.find { |board| board.component_instance_id == component_instance_id }
+        end
+
+        def find_assembly(assembly_instance_id)
+          assemblies.find { |assembly| assembly.assembly_instance_id == assembly_instance_id }
         end
       end
 
@@ -461,6 +666,267 @@ module Granete
         end
       end
 
+      # Assembly parsing of the resolved layout (#670-D).
+      # SketchUp receives pre-resolved assemblies with rigid members and
+      # fabricated components, materializing them without evaluating rules or variants.
+      module AssemblyContractParsing # rubocop:disable Metrics/ModuleLength
+        module_function
+
+        def parse(raw)
+          return [] if raw.nil?
+          raise LayoutContract::ContractError, 'assemblies debe ser una lista' unless raw.is_a?(Array)
+
+          raw.map { |entry| parse_assembly(entry) }
+        end
+
+        # rubocop:disable-next Metrics/AbcSize
+        def parse_assembly(raw)
+          raise LayoutContract::ContractError, 'Assembly de composición inválido' unless raw.is_a?(Hash)
+
+          inst_id = ContractCoercions.optional_opaque_string(raw['assemblyInstanceId'],
+                                                             'assemblyInstanceId de assembly')
+          raise LayoutContract::ContractError, 'Assembly sin assemblyInstanceId' if inst_id.nil?
+
+          agr_id = ContractCoercions.optional_opaque_string(raw['agregadoId'], "agregadoId de assembly #{inst_id}")
+          raise LayoutContract::ContractError, "Assembly #{inst_id} sin agregadoId" if agr_id.nil?
+
+          is_hist = raw['isHistorical'] == true
+          recipe_rev = parse_recipe_revision(raw, inst_id)
+          snapshot_id = ContractCoercions.optional_opaque_string(raw['snapshotId'], "snapshotId de #{inst_id}")
+
+          if is_hist
+            if recipe_rev.nil? || recipe_rev <= 0
+              raise LayoutContract::ContractError,
+                    "Assembly histórico #{inst_id} requiere recipeRevision > 0 (obtenido: #{recipe_rev.inspect})"
+            end
+            if snapshot_id.nil?
+              raise LayoutContract::ContractError,
+                    "Assembly histórico #{inst_id} requiere snapshotId no vacío"
+            end
+          end
+
+          placement = parse_placement(raw['placement'] || raw['localTransform'] || raw['transform'], inst_id)
+          dims = ContractCoercions.optional_triple(
+            raw['dimensionsMm'] || raw['resolvedDimensionsMm'], "dimensionsMm de #{inst_id}"
+          )
+
+          rigid_members = parse_rigid_members_list(raw['rigidMembers'], inst_id, agr_id, is_hist,
+                                                   recipe_revision: recipe_rev, snapshot_id: snapshot_id)
+          fabricated_components = parse_fabricated_components_list(raw['fabricatedComponents'], inst_id, agr_id)
+
+          if rigid_members.empty? && fabricated_components.empty?
+            raise LayoutContract::ContractError, "Assembly #{inst_id} no contiene miembros ni piezas fabricadas"
+          end
+
+          LayoutAssembly.new(
+            assembly_instance_id: inst_id,
+            agregado_id: agr_id,
+            placement: placement,
+            rigid_members: rigid_members,
+            fabricated_components: fabricated_components,
+            recipe_revision: recipe_rev,
+            snapshot_id: snapshot_id,
+            is_historical: is_hist,
+            dimensions_mm: dims
+          )
+        end
+
+        def parse_recipe_revision(raw, inst_id)
+          ContractCoercions.optional_positive_number(
+            raw['recipeRevision'] || raw['agregadoRevisionNumber'], "recipeRevision de #{inst_id}"
+          )&.to_i
+        end
+
+        def parse_rigid_members_list(raw_list, inst_id, agr_id, is_hist, recipe_revision: nil, snapshot_id: nil)
+          return [] if raw_list.nil?
+
+          unless raw_list.is_a?(Array)
+            raise LayoutContract::ContractError, "rigidMembers de #{inst_id} debe ser una lista"
+          end
+
+          raw_list.map do |m|
+            parse_rigid_member(m, inst_id, agr_id, is_hist,
+                               recipe_revision: recipe_revision, snapshot_id: snapshot_id)
+          end
+        end
+
+        def parse_fabricated_components_list(raw_list, inst_id, agr_id)
+          return [] if raw_list.nil?
+
+          unless raw_list.is_a?(Array)
+            raise LayoutContract::ContractError, "fabricatedComponents de #{inst_id} debe ser una lista"
+          end
+
+          raw_list.map { |c| parse_fabricated_component(c, inst_id, agr_id) }
+        end
+
+        def parse_placement(raw, id)
+          raise LayoutContract::ContractError, "Falta placement en assembly #{id}" unless raw.is_a?(Hash)
+
+          trans = ContractCoercions.numeric_triple(
+            raw['translationMm'] || raw['translation'], "translationMm de placement de assembly #{id}"
+          )
+          basis = BasisValidation.parse(raw['basis'], "placement de assembly #{id}")
+          { 'translation' => trans, 'basis' => basis }
+        end
+
+        def validate_member_historical_consistency(raw, member_id, assembly_instance_id,
+                                                   is_historical, recipe_revision, snapshot_id)
+          placement_id = "#{assembly_instance_id}:#{member_id}"
+          validate_member_historical_flag(raw, member_id, assembly_instance_id, is_historical)
+          validate_member_recipe_revision(raw, member_id, assembly_instance_id, placement_id, recipe_revision)
+          validate_member_snapshot_id(raw, member_id, assembly_instance_id, placement_id, snapshot_id)
+        end
+
+        def validate_member_historical_flag(raw, member_id, assembly_instance_id, is_historical)
+          return unless raw.key?('isHistorical')
+
+          member_is_hist = raw['isHistorical'] == true
+          return if member_is_hist == is_historical
+
+          raise LayoutContract::ContractError,
+                "Miembro #{member_id} de #{assembly_instance_id} contradice isHistorical del assembly padre " \
+                "(member=#{member_is_hist}, assembly=#{is_historical})"
+        end
+
+        def validate_member_recipe_revision(raw, member_id, assembly_instance_id, placement_id, recipe_revision)
+          return unless raw.key?('recipeRevision') || raw.key?('agregadoRevisionNumber')
+
+          member_recipe_rev = parse_recipe_revision(raw, placement_id)
+          return if member_recipe_rev == recipe_revision
+
+          raise LayoutContract::ContractError,
+                "Miembro #{member_id} de #{assembly_instance_id} contradice recipeRevision del assembly padre " \
+                "(member=#{member_recipe_rev.inspect}, assembly=#{recipe_revision.inspect})"
+        end
+
+        def validate_member_snapshot_id(raw, member_id, assembly_instance_id, placement_id, snapshot_id)
+          return unless raw.key?('snapshotId')
+
+          member_snapshot_id = ContractCoercions.optional_opaque_string(raw['snapshotId'],
+                                                                        "snapshotId de #{placement_id}")
+          return if member_snapshot_id == snapshot_id
+
+          raise LayoutContract::ContractError,
+                "Miembro #{member_id} de #{assembly_instance_id} contradice snapshotId del assembly padre " \
+                "(member=#{member_snapshot_id.inspect}, assembly=#{snapshot_id.inspect})"
+        end
+
+        # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength
+        def parse_rigid_member(raw, assembly_instance_id, agregado_id, is_historical,
+                               recipe_revision: nil, snapshot_id: nil)
+          unless raw.is_a?(Hash)
+            raise LayoutContract::ContractError, "Miembro rígido inválido en assembly #{assembly_instance_id}"
+          end
+
+          member_id = ContractCoercions.optional_opaque_string(raw['memberId'], "memberId en #{assembly_instance_id}")
+          if member_id.nil?
+            raise LayoutContract::ContractError, "Miembro rígido sin memberId en #{assembly_instance_id}"
+          end
+
+          validate_member_historical_consistency(raw, member_id, assembly_instance_id,
+                                                 is_historical, recipe_revision, snapshot_id)
+
+          placement_id = "#{assembly_instance_id}:#{member_id}"
+          lt_raw = raw['localTransform'] || raw['transform']
+          unless lt_raw.is_a?(Hash)
+            raise LayoutContract::ContractError,
+                  "Falta localTransform en miembro #{member_id} de #{assembly_instance_id}"
+          end
+
+          trans = ContractCoercions.numeric_triple(
+            lt_raw['translationMm'] || lt_raw['translation'], "translationMm de #{placement_id}"
+          )
+          basis = BasisValidation.parse(lt_raw['basis'], placement_id)
+          local_transform = { 'translation' => trans, 'basis' => basis }
+
+          prep_state = ContractCoercions.optional_opaque_string(
+            raw['preparationState'], "preparationState de #{placement_id}"
+          )
+          mount_frame = HardwareContractParsing.parse_mount_frame(raw['mountFrame'], placement_id)
+          if prep_state == 'prepared' && mount_frame.nil?
+            raise LayoutContract::ContractError,
+                  "Miembro #{member_id} de #{assembly_instance_id} marcado como prepared sin mountFrame"
+          end
+
+          LayoutAssemblyRigidMember.new(
+            member_id: member_id,
+            assembly_instance_id: assembly_instance_id,
+            agregado_id: agregado_id,
+            local_transform: local_transform,
+            name: ContractCoercions.optional_opaque_string(raw['name'], "name de #{placement_id}"),
+            role: ContractCoercions.optional_opaque_string(raw['role'], "role de #{placement_id}"),
+            hardware_id: ContractCoercions.optional_opaque_string(raw['hardwareId'], "hardwareId de #{placement_id}"),
+            asset_id: ContractCoercions.optional_opaque_string(raw['assetId'], "assetId de #{placement_id}"),
+            asset_revision_id: ContractCoercions.optional_opaque_string(raw['assetRevisionId'],
+                                                                        "assetRevisionId de #{placement_id}"),
+            sha256: ContractCoercions.optional_opaque_string(raw['sha256'], "sha256 de #{placement_id}"),
+            expected_bytes: ContractCoercions.optional_finite_number(raw['expectedBytes'],
+                                                                     "expectedBytes de #{placement_id}")&.to_i,
+            representation: ContractCoercions.optional_opaque_string(raw['representation'],
+                                                                     "representation de #{placement_id}"),
+            preparation_state: prep_state,
+            mount_frame: mount_frame,
+            render_status: ContractCoercions.optional_opaque_string(raw['renderStatus'],
+                                                                    "renderStatus de #{placement_id}"),
+            is_historical: is_historical,
+            recipe_revision: recipe_revision,
+            snapshot_id: snapshot_id,
+            dimensions: ContractCoercions.optional_triple(raw['dimensionsMm'], "dimensionsMm de #{placement_id}"),
+            color_hex: ContractCoercions.optional_opaque_string(raw['colorHex'], "colorHex de #{placement_id}"),
+            anchor_face: ContractCoercions.optional_opaque_string(raw['anchorFace'], "anchorFace de #{placement_id}"),
+            offset_mm: raw['offsetMm']&.to_f
+          )
+        end
+
+        def parse_fabricated_component(raw, assembly_instance_id, agregado_id)
+          unless raw.is_a?(Hash)
+            raise LayoutContract::ContractError, "Pieza fabricada inválida en assembly #{assembly_instance_id}"
+          end
+
+          component_id = ContractCoercions.optional_opaque_string(raw['componentId'],
+                                                                  "componentId en #{assembly_instance_id}")
+          if component_id.nil?
+            raise LayoutContract::ContractError, "Pieza fabricada sin componentId en #{assembly_instance_id}"
+          end
+
+          comp_uid = "#{assembly_instance_id}:#{component_id}"
+          ct_raw = raw['localTransform'] || raw['transform']
+          unless ct_raw.is_a?(Hash)
+            raise LayoutContract::ContractError, "Falta transform en pieza #{component_id} de #{assembly_instance_id}"
+          end
+
+          trans = ContractCoercions.numeric_triple(
+            ct_raw['translationMm'] || ct_raw['translation'], "translationMm de #{comp_uid}"
+          )
+          basis = BasisValidation.parse(ct_raw['basis'], comp_uid)
+          local_transform = { 'translation' => trans, 'basis' => basis }
+
+          dims = {
+            'width' => ContractCoercions.positive_number(raw['widthMm'] || raw['width'], "widthMm de #{comp_uid}"),
+            'thickness' => ContractCoercions.positive_number(raw['thicknessMm'] || raw['thickness'],
+                                                             "thicknessMm de #{comp_uid}"),
+            'length' => ContractCoercions.positive_number(raw['lengthMm'] || raw['length'],
+                                                          "lengthMm de #{comp_uid}")
+          }
+
+          material = LayoutContract.parse_material_fields(raw, comp_uid)
+          identity = LayoutContract.parse_identity_fields(raw, comp_uid)
+
+          LayoutAssemblyFabricatedComponent.new(
+            component_id: component_id,
+            assembly_instance_id: assembly_instance_id,
+            agregado_id: agregado_id,
+            dims: dims,
+            local_transform: local_transform,
+            name: ContractCoercions.optional_opaque_string(raw['name'], "name de #{comp_uid}"),
+            slot_id: ContractCoercions.optional_opaque_string(raw['slotId'], "slotId de #{comp_uid}"),
+            material: material,
+            identity: identity
+          )
+        end
+      end
+
       # Parser of the authoritative board-local transform contract (#414 /
       # ADR-0004 §9). The resolved layout publishes, per board:
       #
@@ -508,6 +974,7 @@ module Granete
           NativeLayout.new(contract,
                            components.map { |raw| parse_board(raw) },
                            HardwareContractParsing.parse(body['hardware']),
+                           AssemblyContractParsing.parse(body['assemblies']),
                            furniture_definition_id: ContractCoercions.optional_opaque_string(
                              body['furnitureDefinitionId'], 'furnitureDefinitionId'
                            ),

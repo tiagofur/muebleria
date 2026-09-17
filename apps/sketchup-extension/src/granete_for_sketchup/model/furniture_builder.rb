@@ -392,15 +392,21 @@ module Granete
       end
 
       # Hardware rendering for Library::NativeLayout (#414 / #668).
-      module NativeHardwareRenderer
+      module NativeHardwareRenderer # rubocop:disable Metrics/ModuleLength
         # Prefetches visual assets, passing model so AssetLoader can probe
-        # R2 SKP loadability before any destructive rebuild (R1/R2, #668-C1).
+        # R2 SKP loadability before any destructive rebuild (R1/R2, #668-C1 / #670-D).
         def prefetch_visual_assets(model, resolved_layout)
           return unless resolved_layout.is_a?(Library::NativeLayout)
           return unless @asset_loader.respond_to?(:prefetch_hardware_assets)
 
           @asset_loader.clear_diagnostics if @asset_loader.respond_to?(:clear_diagnostics)
-          @asset_loader.prefetch_hardware_assets(resolved_layout.hardware, model: model)
+          placements = resolved_layout.hardware.dup
+          if resolved_layout.respond_to?(:assemblies) && resolved_layout.assemblies
+            resolved_layout.assemblies.each do |assembly|
+              placements.concat(assembly.rigid_members) if assembly.respond_to?(:rigid_members)
+            end
+          end
+          @asset_loader.prefetch_hardware_assets(placements, model: model)
         end
 
         # Returns a typed error message when any prefetched placement is
@@ -441,16 +447,17 @@ module Granete
           diag ? "Preparación de herraje inválida: #{diag['reason']}" : nil
         end
 
-        def render_native_hardware(model, parent_definition, furniture_instance_id, placement)
+        def render_native_hardware(model, parent_definition, furniture_instance_id, placement,
+                                   placement_transform: nil)
           name = placement.name || 'Herraje'
-          pos = placement.local_translation || placement.translation || [0.0, 0.0, 0.0]
+          pos = placement_transform || placement.local_translation || placement.translation || [0.0, 0.0, 0.0]
 
           instance = try_load_hardware_asset(model, parent_definition, placement, pos)
-          return attach_hardware_metadata(instance, placement, name, furniture_instance_id) if instance
+          return attach_hardware_metadata(instance, placement, name, furniture_instance_id, exact: true) if instance
           return nil if invalid_hardware_preparation?(placement.placement_id)
 
           fallback = build_fallback_hardware(model, parent_definition, name, placement, pos)
-          attach_hardware_metadata(fallback, placement, name, furniture_instance_id)
+          attach_hardware_metadata(fallback, placement, name, furniture_instance_id, exact: false)
         end
 
         private
@@ -485,7 +492,9 @@ module Granete
             "#{FurnitureBuilder::HARDWARE_DEFINITION_PREFIX}#{name} · #{placement.placement_id}"
           )
           LocalGeometry.build_local_box(hardware_definition, dims[0], dims[1], dims[2])
-          transform = if placement.basis
+          transform = if defined?(::Geom::Transformation) && pos.is_a?(::Geom::Transformation)
+                        pos
+                      elsif placement.basis
                         LocalGeometry.axes_transform(pos, placement.basis)
                       else
                         LocalGeometry.translation_only(pos)
@@ -496,8 +505,9 @@ module Granete
           instance
         end
 
-        def attach_hardware_metadata(instance, placement, name, furniture_instance_id)
+        def attach_hardware_metadata(instance, placement, name, furniture_instance_id, exact: true)
           instance.name = name
+          rep = exact ? (placement.representation || 'exact') : 'proxy'
           ChildMetadataWriter.write_hardware(
             @metadata_store, instance, placement.placement_id,
             furniture_ref: furniture_instance_id,
@@ -508,16 +518,22 @@ module Granete
             offset_mm: placement.offset_mm,
             asset_id: placement.asset_id,
             asset_revision_id: placement.asset_revision_id,
-            representation: placement.representation,
-            preparation_state: placement.respond_to?(:preparation_state) ? placement.preparation_state : nil
+            representation: rep,
+            preparation_state: placement.respond_to?(:preparation_state) ? placement.preparation_state : nil,
+            assembly_instance_id: placement.respond_to?(:assembly_instance_id) ? placement.assembly_instance_id : nil,
+            agregado_id: placement.respond_to?(:agregado_id) ? placement.agregado_id : nil,
+            member_id: placement.respond_to?(:member_id) ? placement.member_id : nil,
+            recipe_revision: placement.respond_to?(:recipe_revision) ? placement.recipe_revision : nil,
+            snapshot_id: placement.respond_to?(:snapshot_id) ? placement.snapshot_id : nil,
+            is_historical: placement.respond_to?(:historical?) ? placement.historical? : false
           )
           instance
         end
       end
 
-      # Renders resolved Library::NativeLayout composition (#414 contract).
+      # Renders resolved Library::NativeLayout composition (#414 contract / #670-D).
       # Extracted from FurnitureBuilder to keep the class within its length budget.
-      module NativeLayoutRenderer
+      module NativeLayoutRenderer # rubocop:disable Metrics/ModuleLength
         def render_native_layout(model, furniture_definition, instance_id, native_layout)
           native_layout.boards.each do |board|
             render_native_board(model, furniture_definition, instance_id, board)
@@ -525,23 +541,88 @@ module Granete
           native_layout.hardware.each do |placement|
             render_native_hardware(model, furniture_definition, instance_id, placement)
           end
+          assembly_counts = render_native_assemblies(model, furniture_definition, instance_id, native_layout)
+          total_boards = native_layout.boards.length + assembly_counts['boards']
+          total_hardware = native_layout.hardware.length + assembly_counts['hardware']
           {
-            'total' => native_layout.boards.length + native_layout.hardware.length,
-            'boards' => native_layout.boards.length,
-            'hardware' => native_layout.hardware.length
+            'total' => total_boards + total_hardware,
+            'boards' => total_boards,
+            'hardware' => total_hardware,
+            'assemblies' => assembly_counts['assemblies']
           }
         end
 
-        def render_native_board(model, parent_definition, furniture_instance_id, board)
+        def render_native_assemblies(model, furniture_definition, instance_id, native_layout)
+          boards_count = 0
+          hardware_count = 0
+          assemblies_count = 0
+          if native_layout.respond_to?(:assemblies) && native_layout.assemblies
+            native_layout.assemblies.each do |assembly|
+              counts = render_native_assembly(model, furniture_definition, instance_id, assembly)
+              boards_count += counts['boards']
+              hardware_count += counts['hardware']
+              assemblies_count += 1
+            end
+          end
+          { 'boards' => boards_count, 'hardware' => hardware_count, 'assemblies' => assemblies_count }
+        end
+
+        def render_native_assembly(model, furniture_definition, instance_id, assembly)
+          t_assembly = LocalGeometry.axes_transform(assembly.translation, assembly.basis)
+          boards = render_assembly_fabricated_components(model, furniture_definition, instance_id,
+                                                         assembly, t_assembly)
+          hardware = render_assembly_rigid_members(model, furniture_definition, instance_id,
+                                                   assembly, t_assembly)
+          { 'boards' => boards, 'hardware' => hardware }
+        end
+
+        def render_assembly_fabricated_components(model, furniture_definition, instance_id, assembly, t_assembly)
+          count = 0
+          assembly.fabricated_components.each do |comp|
+            t_comp = LocalGeometry.axes_transform(comp.translation, comp.basis)
+            t_furniture = t_assembly * t_comp
+            render_native_board(
+              model, furniture_definition, instance_id, comp,
+              placement_transform: t_furniture,
+              assembly_instance_id: assembly.assembly_instance_id,
+              agregado_id: assembly.agregado_id,
+              component_id: comp.component_id,
+              recipe_revision: assembly.recipe_revision,
+              snapshot_id: assembly.snapshot_id,
+              is_historical: assembly.historical?
+            )
+            count += 1
+          end
+          count
+        end
+
+        def render_assembly_rigid_members(model, furniture_definition, instance_id, assembly, t_assembly)
+          count = 0
+          assembly.rigid_members.each do |member|
+            t_member = LocalGeometry.axes_transform(member.translation, member.basis)
+            t_furniture = t_assembly * t_member
+            render_native_hardware(
+              model, furniture_definition, instance_id, member,
+              placement_transform: t_furniture
+            )
+            count += 1
+          end
+          count
+        end
+
+        # rubocop:disable-next Metrics/ParameterLists
+        def render_native_board(model, parent_definition, furniture_instance_id, board,
+                                placement_transform: nil, assembly_instance_id: nil,
+                                agregado_id: nil, component_id: nil,
+                                recipe_revision: nil, snapshot_id: nil, is_historical: false)
           name = board.name || board.slot_id || board.component_instance_id
           board_definition = model.definitions.add(
             "#{FurnitureBuilder::PART_DEFINITION_PREFIX}#{name} · #{board.component_instance_id}"
           )
           LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm, board.length_mm)
 
-          instance = parent_definition.entities.add_instance(
-            board_definition, LocalGeometry.axes_transform(board.translation, board.basis)
-          )
+          transform = placement_transform || LocalGeometry.axes_transform(board.translation, board.basis)
+          instance = parent_definition.entities.add_instance(board_definition, transform)
           instance.name = name
 
           paint_board(model, instance, board)
@@ -553,7 +634,13 @@ module Granete
             role: board.role,
             material_binding_role: board.option_role,
             assembly_translation_mm: board.translation,
-            authoring_capability: board.authoring_capability
+            authoring_capability: board.authoring_capability,
+            assembly_instance_id: assembly_instance_id,
+            agregado_id: agregado_id,
+            component_id: component_id,
+            recipe_revision: recipe_revision,
+            snapshot_id: snapshot_id,
+            is_historical: is_historical
           )
           instance
         end
@@ -712,6 +799,7 @@ module Granete
             'hardware_count' => counts['hardware'],
             'parameters' => parameters
           }
+          res['assembly_count'] = counts['assemblies'] if counts['assemblies']
           if @asset_loader.respond_to?(:diagnostics) && !@asset_loader.diagnostics.empty?
             res['diagnostics'] = @asset_loader.diagnostics.dup
           end
@@ -774,12 +862,17 @@ module Granete
         def write_part(store, entity, comp_id, slot_id, component_definition_id: nil,
                        catalog_component_id: nil, furniture_ref: nil, role: nil,
                        material_binding_role: nil, entity_class: 'part',
-                       assembly_translation_mm: nil, authoring_capability: nil)
+                       assembly_translation_mm: nil, authoring_capability: nil,
+                       assembly_instance_id: nil, agregado_id: nil, component_id: nil,
+                       recipe_revision: nil, snapshot_id: nil, is_historical: false)
           return unless store
 
           identity = child_identity(store, comp_id, furniture_ref)
           identity['componentDefinitionId'] = component_definition_id if component_definition_id
           identity['catalogComponentId'] = catalog_component_id if catalog_component_id
+          apply_assembly_metadata(identity, assembly_instance_id, agregado_id, component_id, 'componentId',
+                                  recipe_revision: recipe_revision, snapshot_id: snapshot_id,
+                                  is_historical: is_historical)
 
           intent = { 'entityClass' => entity_class }
           intent['semanticRole'] = slot_id if slot_id
@@ -788,17 +881,22 @@ module Granete
           intent['materialBindingRole'] = material_binding_role if material_binding_role
           intent['assemblyTranslationMm'] = assembly_translation_mm if assembly_translation_mm
           intent['authoringCapability'] = authoring_capability if authoring_capability
+          apply_assembly_metadata(intent, assembly_instance_id, agregado_id, component_id, 'componentId',
+                                  recipe_revision: recipe_revision, snapshot_id: snapshot_id,
+                                  is_historical: is_historical)
 
           write_child(store, entity, identity, intent)
         end
 
-        # write_hardware: managed hardware placement occurrence (#476). The
+        # write_hardware: managed hardware placement occurrence (#476 / #670-D).
         # rubocop:disable-next Metrics/ParameterLists
         def write_hardware(store, entity, placement_id, furniture_ref:,
                            hardware_definition_id: nil, host_component_instance_id: nil,
                            placement_kind: nil, anchor_face: nil, offset_mm: nil,
                            asset_id: nil, asset_revision_id: nil, representation: nil,
-                           preparation_state: nil)
+                           preparation_state: nil,
+                           assembly_instance_id: nil, agregado_id: nil, member_id: nil,
+                           recipe_revision: nil, snapshot_id: nil, is_historical: false)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -808,6 +906,10 @@ module Granete
             'projectRef' => proj_ref
           }
           identity['furnitureInstanceRef'] = furniture_ref if furniture_ref
+          identity['assetRevisionId'] = asset_revision_id if asset_revision_id && assembly_instance_id
+          apply_assembly_metadata(identity, assembly_instance_id, agregado_id, member_id, 'memberId',
+                                  recipe_revision: recipe_revision, snapshot_id: snapshot_id,
+                                  is_historical: is_historical)
 
           intent = { 'entityClass' => 'hardware' }
           intent['semanticRole'] = "hardware_#{placement_id}"
@@ -822,8 +924,23 @@ module Granete
           intent['assetRevisionId'] = asset_revision_id if asset_revision_id
           intent['representation'] = representation if representation
           intent['preparationState'] = preparation_state if preparation_state
+          apply_assembly_metadata(intent, assembly_instance_id, agregado_id, member_id, 'memberId',
+                                  recipe_revision: recipe_revision, snapshot_id: snapshot_id,
+                                  is_historical: is_historical)
 
           write_child(store, entity, identity, intent)
+        end
+
+        def apply_assembly_metadata(hash, assembly_instance_id, agregado_id, item_id, item_key,
+                                    recipe_revision: nil, snapshot_id: nil, is_historical: false)
+          return unless assembly_instance_id
+
+          hash['assemblyInstanceId'] = assembly_instance_id
+          hash['agregadoId'] = agregado_id if agregado_id
+          hash[item_key] = item_id if item_id
+          hash['recipeRevision'] = recipe_revision if recipe_revision
+          hash['snapshotId'] = snapshot_id if snapshot_id
+          hash['isHistorical'] = true if is_historical
         end
 
         def child_identity(store, comp_id, furniture_ref)
