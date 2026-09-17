@@ -4,11 +4,13 @@ import {
   type AgregadoRigidMember,
   type AgregadoVariantSet,
   type AssemblyDimensionRule,
-  type ResolvedAssemblySnapshot,
+  type PublishedAssemblySnapshot,
+  type ResolvedAssembly,
   AssemblyVariantNotFoundError,
   attachVisualPins,
   deriveHardwareBasisFromEuler,
   evaluateDimensionRule,
+  freezePublishedAssemblySnapshot,
   resolveAgregadoAssembly,
   validateAgregadoAssemblyDefinition,
   validateAgregadoRigidMember,
@@ -285,10 +287,9 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
     });
   });
 
-  describe('validateAgregadoAssemblyDefinition (R7, R8)', () => {
+  describe('validateAgregadoAssemblyDefinition (R8)', () => {
     const validAssembly: AgregadoAssemblyInput = {
       id: 'agr-test',
-      revision: 7,
       commercialKitHardwareId: 'hw-kit',
       variantSets: [
         {
@@ -334,17 +335,8 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
       ],
     };
 
-    it('accepts fully valid assembly definition with positive revision (R7)', () => {
+    it('accepts fully valid assembly definition', () => {
       expect(() => validateAgregadoAssemblyDefinition(validAssembly)).not.toThrow();
-    });
-
-    it('fails closed when revision is missing or non-positive (R7)', () => {
-      expect(() => validateAgregadoAssemblyDefinition({ ...validAssembly, revision: 0 })).toThrow(
-        /requires authoritative positive revision/,
-      );
-      expect(() => validateAgregadoAssemblyDefinition({ ...validAssembly, revision: undefined })).toThrow(
-        /requires authoritative positive revision/,
-      );
     });
 
     it('rejects duplicate variantSetId', () => {
@@ -370,10 +362,9 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
     });
   });
 
-  describe('resolveAgregadoAssembly & Regression Tests (R7, R8)', () => {
+  describe('resolveAgregadoAssembly & Regression Tests (R8, R11, R12, R13)', () => {
     const fixtureAssembly: AgregadoAssemblyInput = {
       id: 'blum-merivobox-test',
-      revision: 7,
       commercialKitHardwareId: 'hw-merivobox-kit',
       variantSets: [
         {
@@ -434,31 +425,66 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
       ],
     };
 
-    it('R7: recipe revision 7 produces snapshot revision 7', () => {
-      const snapshot = resolveAgregadoAssembly(fixtureAssembly, {
+    it('R11: pure mechanical resolution produces ResolvedAssembly without revision or visual pins', () => {
+      const resolved = resolveAgregadoAssembly(fixtureAssembly, {
         widthMm: 600,
         depthMm: 550,
         heightMm: 200,
       });
-      expect(snapshot.agregadoRevisionNumber).toBe(7);
-      expect(snapshot.agregadoId).toBe('blum-merivobox-test');
+      expect(resolved.agregadoId).toBe('blum-merivobox-test');
+      expect((resolved as any).agregadoRevisionNumber).toBeUndefined();
+      for (const m of resolved.rigidMembers) {
+        expect(m.assetId).toBeUndefined();
+      }
     });
 
-    it('R7: recipe revision missing/zero fails closed', () => {
-      const bad = { ...fixtureAssembly, revision: 0 };
-      expect(() =>
-        resolveAgregadoAssembly(bad, { widthMm: 600, depthMm: 550, heightMm: 200 }),
-      ).toThrow(/requires authoritative positive revision/);
-    });
-
-    it('R7: explicit param revision override is respected', () => {
-      const snapshot = resolveAgregadoAssembly(fixtureAssembly, {
+    it('R12: recipe re-evaluation with W=800 produces new ResolvedFabricatedComponent and does not mutate previous', () => {
+      const snap600 = resolveAgregadoAssembly(fixtureAssembly, {
         widthMm: 600,
         depthMm: 550,
         heightMm: 200,
-        recipeRevisionNumber: 42,
       });
-      expect(snapshot.agregadoRevisionNumber).toBe(42);
+      const snap800 = resolveAgregadoAssembly(fixtureAssembly, {
+        widthMm: 800,
+        depthMm: 550,
+        heightMm: 200,
+      });
+
+      // Bottom in 600: width = 600 - 35 = 565mm
+      expect(snap600.fabricatedComponents[0]!.widthMm).toBe(565);
+      // Bottom in 800: width = 800 - 35 = 765mm
+      expect(snap800.fabricatedComponents[0]!.widthMm).toBe(765);
+      // snap600 was NOT mutated
+      expect(snap600.fabricatedComponents[0]!.widthMm).toBe(565);
+    });
+
+    it('R13: freezePublishedAssemblySnapshot fails closed if revision is missing/non-positive or visual lookup is falsy', () => {
+      const resolved = resolveAgregadoAssembly(fixtureAssembly, {
+        widthMm: 600,
+        depthMm: 550,
+        heightMm: 200,
+      });
+
+      const mockLookup = (hwId: string) => ({
+        assetId: `asset-${hwId}`,
+        assetRevisionId: 'rev-1',
+        sha256: `sha-${hwId}`,
+      });
+
+      // revision <= 0
+      expect(() => freezePublishedAssemblySnapshot(resolved, 0, mockLookup)).toThrow(
+        /publication freeze requires authoritative positive recipe revision/,
+      );
+
+      // nil visual authority
+      expect(() => freezePublishedAssemblySnapshot(resolved, 7, null as any)).toThrow(
+        /publication freeze requires #668 visual asset authority/,
+      );
+
+      // valid freeze succeeds with exact revision and visual pins
+      const frozen = freezePublishedAssemblySnapshot(resolved, 7, mockLookup);
+      expect(frozen.agregadoRevisionNumber).toBe(7);
+      expect(frozen.rigidMembers[0]!.assetId).toBe('asset-hw-side-500');
     });
 
     it('R8: parametric bottom produces ONE authoritative fabricated component, not two', () => {
@@ -506,9 +532,8 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
   });
 
   describe('attachVisualPins fail-closed (R10)', () => {
-    const baseSnapshot: ResolvedAssemblySnapshot = {
+    const baseAssembly: ResolvedAssembly = {
       agregadoId: 'agr-test',
-      agregadoRevisionNumber: 7,
       resolvedDimensionsMm: [600, 550, 200],
       selectedVariants: [],
       rigidMembers: [
@@ -529,7 +554,7 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
 
     it('empty revisionId fails closed (R10)', () => {
       expect(() =>
-        attachVisualPins(baseSnapshot, () => ({
+        attachVisualPins(baseAssembly, () => ({
           assetId: 'asset-1',
           assetRevisionId: '', // EMPTY
           sha256: 'abc123sha',
@@ -539,7 +564,7 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
 
     it('empty assetId fails closed (R10)', () => {
       expect(() =>
-        attachVisualPins(baseSnapshot, () => ({
+        attachVisualPins(baseAssembly, () => ({
           assetId: '', // EMPTY
           assetRevisionId: 'rev-1',
           sha256: 'abc123sha',
@@ -549,7 +574,7 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
 
     it('empty sha256 fails closed (R10)', () => {
       expect(() =>
-        attachVisualPins(baseSnapshot, () => ({
+        attachVisualPins(baseAssembly, () => ({
           assetId: 'asset-1',
           assetRevisionId: 'rev-1',
           sha256: '   ', // EMPTY
@@ -559,7 +584,7 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
 
     it('invalid mountFrame basis fails closed (R10)', () => {
       expect(() =>
-        attachVisualPins(baseSnapshot, () => ({
+        attachVisualPins(baseAssembly, () => ({
           assetId: 'asset-1',
           assetRevisionId: 'rev-1',
           sha256: 'abc123sha',
@@ -576,7 +601,7 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
     });
 
     it('complete valid metadata succeeds (R10)', () => {
-      const pinned = attachVisualPins(baseSnapshot, () => ({
+      const pinned = attachVisualPins(baseAssembly, () => ({
         assetId: 'asset-123',
         assetRevisionId: 'rev-456',
         sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',

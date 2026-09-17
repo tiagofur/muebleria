@@ -497,10 +497,9 @@ type Agregado struct {
 	Name          string              `json:"name"`
 	Description   string              `json:"description,omitempty"`
 	Notes         string              `json:"notes,omitempty"`
-	WidthMm       int                 `json:"width_mm,omitempty"`
-	HeightMm      int                 `json:"height_mm,omitempty"`
-	DepthMm       int                 `json:"depth_mm,omitempty"`
-	Revision                int                         `json:"revision,omitempty"`
+	WidthMm                 int                         `json:"width_mm,omitempty"`
+	HeightMm                int                         `json:"height_mm,omitempty"`
+	DepthMm                 int                         `json:"depth_mm,omitempty"`
 	Components              []ComponentInstance         `json:"components,omitempty"`
 	HardwareLines           []HardwareLine              `json:"hardware_lines,omitempty"`
 	CommercialKitHardwareID *string                     `json:"commercial_kit_hardware_id,omitempty"`

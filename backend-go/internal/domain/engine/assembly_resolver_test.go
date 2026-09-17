@@ -28,7 +28,6 @@ func buildSyntheticDrawerFixture() domain.Agregado {
 		ID:                      "agr-drawer-synth",
 		Code:                    "DRAWER-SYNTH",
 		Name:                    "Synthetic Test Drawer System",
-		Revision:                7, // Explicit non-default recipe revision (R7)
 		CommercialKitHardwareID: &kitID,
 		VariantSets: []domain.AgregadoVariantSet{
 			{
@@ -227,7 +226,7 @@ func TestB_WidthExpansionShiftsRightMemberOnly(t *testing.T) {
 		t.Fatalf("res800 error: %v", err)
 	}
 
-	findMember := func(snap domain.ResolvedAssemblySnapshot, id string) domain.ResolvedRigidMember {
+	findMember := func(snap domain.ResolvedAssembly, id string) domain.ResolvedRigidMember {
 		for _, m := range snap.RigidMembers {
 			if m.MemberID == id {
 				return m
@@ -259,7 +258,7 @@ func TestC_LeftMemberRemainsUnchangedOnWidthChange(t *testing.T) {
 	res600, _ := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0})
 	res800, _ := engine.ResolveAgregadoAssembly(agregado, engine.AssemblyResolutionParams{WidthMm: 800.0, DepthMm: 550.0, HeightMm: 200.0})
 
-	findMember := func(snap domain.ResolvedAssemblySnapshot, id string) domain.ResolvedRigidMember {
+	findMember := func(snap domain.ResolvedAssembly, id string) domain.ResolvedRigidMember {
 		for _, m := range snap.RigidMembers {
 			if m.MemberID == id {
 				return m
@@ -295,7 +294,7 @@ func TestD_FabricatedDimensionsRecalculateNotScale(t *testing.T) {
 		t.Fatalf("res800 error: %v", err)
 	}
 
-	findComp := func(snap domain.ResolvedAssemblySnapshot, compID string) domain.ResolvedFabricatedComponent {
+	findComp := func(snap domain.ResolvedAssembly, compID string) domain.ResolvedFabricatedComponent {
 		for _, c := range snap.FabricatedComponents {
 			if c.ComponentID == compID {
 				return c
@@ -461,28 +460,48 @@ func TestI_ArbitraryFiniteRotationContract(t *testing.T) {
 }
 
 // Test J (R4): Historical snapshot completeness with explicit variant metadata
+// Test J (R4, R13): Historical published snapshot completeness with explicit variant metadata and visual pins
 func TestJ_HistoricalSnapshotCompleteness(t *testing.T) {
 	agregado := buildSyntheticDrawerFixture()
 	params := engine.AssemblyResolutionParams{WidthMm: 600.0, DepthMm: 550.0, HeightMm: 200.0}
 
-	snapshot, err := engine.ResolveAgregadoAssembly(agregado, params)
+	resolved, err := engine.ResolveAgregadoAssembly(agregado, params)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(snapshot.SelectedVariants) == 0 {
-		t.Fatal("snapshot must contain SelectedVariants")
+	if len(resolved.SelectedVariants) == 0 {
+		t.Fatal("resolved assembly must contain SelectedVariants")
 	}
-	sel := snapshot.SelectedVariants[0]
+	sel := resolved.SelectedVariants[0]
 	if sel.VariantSetID != "vs-drawer-depth" || sel.HardwareID != "hw-side-500" || sel.NominalDimensionMm != 500.0 {
 		t.Errorf("unexpected selected variant metadata: %+v", sel)
+	}
+
+	mockLookup := func(hardwareID string) (*domain.HardwareMountFrame, string, string, string, error) {
+		return &domain.HardwareMountFrame{
+			OriginMm: [3]float64{0, 0, 0},
+			Basis: domain.HardwareBasis{
+				X: [3]float64{1, 0, 0},
+				Y: [3]float64{0, 1, 0},
+				Z: [3]float64{0, 0, 1},
+			},
+		}, "asset-" + hardwareID, "rev-7", "sha256-dummy", nil
+	}
+
+	snapshot, err := engine.FreezePublishedAssemblySnapshot(resolved, 7, mockLookup)
+	if err != nil {
+		t.Fatalf("unexpected freeze error: %v", err)
+	}
+	if snapshot.AgregadoRevisionNumber != 7 {
+		t.Fatalf("expected snapshot revision 7, got %d", snapshot.AgregadoRevisionNumber)
 	}
 
 	bytes, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatalf("snapshot failed JSON marshal: %v", err)
 	}
-	var roundtrip domain.ResolvedAssemblySnapshot
+	var roundtrip domain.PublishedAssemblySnapshot
 	if err := json.Unmarshal(bytes, &roundtrip); err != nil {
 		t.Fatalf("snapshot failed JSON unmarshal: %v", err)
 	}
@@ -590,56 +609,65 @@ func TestL_VisualAssetBindingDecoupled(t *testing.T) {
 	}
 }
 
-// Test M (R7): Authoritative AgregadoRevisionNumber regression (never hardcode 1)
-func TestM_AuthoritativeAgregadoRevisionNumber(t *testing.T) {
-	t.Run("recipe revision 7 produces snapshot revision 7", func(t *testing.T) {
-		agr := buildSyntheticDrawerFixture()
-		agr.Revision = 7
-		snap, err := engine.ResolveAgregadoAssembly(agr, engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 500, HeightMm: 200})
+// Test M (R11, R13): Mechanical resolution vs publication freeze (never invent revision numbers)
+func TestM_MechanicalResolutionVsPublicationFreeze(t *testing.T) {
+	agr := buildSyntheticDrawerFixture()
+	params := engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 500, HeightMm: 200}
+
+	t.Run("pure mechanical resolution succeeds without revision or visual pins", func(t *testing.T) {
+		resolved, err := engine.ResolveAgregadoAssembly(agr, params)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if snap.AgregadoRevisionNumber != 7 {
-			t.Fatalf("expected snapshot revision 7, got %d", snap.AgregadoRevisionNumber)
+		if resolved.AgregadoID != "agr-drawer-synth" {
+			t.Fatalf("expected AgregadoID 'agr-drawer-synth', got %s", resolved.AgregadoID)
+		}
+		for _, m := range resolved.RigidMembers {
+			if m.AssetID != nil {
+				t.Fatalf("expected unpopulated assetId in pure mechanical resolution, got %v", *m.AssetID)
+			}
 		}
 	})
 
-	t.Run("recipe revision missing/zero fails closed", func(t *testing.T) {
-		agr := buildSyntheticDrawerFixture()
-		agr.Revision = 0
-		_, err := engine.ResolveAgregadoAssembly(agr, engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 500, HeightMm: 200})
-		if err == nil || !strings.Contains(err.Error(), "requires authoritative positive revision") {
-			t.Fatalf("expected missing revision error, got %v", err)
-		}
-	})
-
-	t.Run("param revision override is respected", func(t *testing.T) {
-		agr := buildSyntheticDrawerFixture()
-		agr.Revision = 7
-		params := engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 500, HeightMm: 200, RecipeRevisionNumber: ptr(9)}
-		snap, err := engine.ResolveAgregadoAssembly(agr, params)
+	t.Run("freeze publication fails closed if recipeRevision is missing or <= 0 (R11)", func(t *testing.T) {
+		resolved, err := engine.ResolveAgregadoAssembly(agr, params)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if snap.AgregadoRevisionNumber != 9 {
-			t.Fatalf("expected snapshot revision 9, got %d", snap.AgregadoRevisionNumber)
+		mockLookup := func(hardwareID string) (*domain.HardwareMountFrame, string, string, string, error) {
+			return nil, "asset-1", "rev-1", "sha-1", nil
+		}
+		_, err = engine.FreezePublishedAssemblySnapshot(resolved, 0, mockLookup)
+		if err == nil || !strings.Contains(err.Error(), "requires authoritative positive recipe revision") {
+			t.Fatalf("expected positive revision error, got %v", err)
+		}
+	})
+
+	t.Run("freeze publication fails closed if visual authority is nil (R13)", func(t *testing.T) {
+		resolved, err := engine.ResolveAgregadoAssembly(agr, params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		_, err = engine.FreezePublishedAssemblySnapshot(resolved, 7, nil)
+		if err == nil || !strings.Contains(err.Error(), "requires #668 visual asset authority") {
+			t.Fatalf("expected nil visual authority error, got %v", err)
 		}
 	})
 }
 
-// Test N (R8): Components is sole authority for fabricated pieces (no duplicate collections)
-func TestN_ComponentsSoleAuthorityForFabricatedPieces(t *testing.T) {
+// Test N (R8, R12): Components is sole authority for fabricated pieces; recipe re-evaluates without mutating prior instances
+func TestN_ComponentsSoleAuthorityAndReevaluation(t *testing.T) {
 	agr := buildSyntheticDrawerFixture()
-	params := engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 550, HeightMm: 200}
+	params600 := engine.AssemblyResolutionParams{WidthMm: 600, DepthMm: 550, HeightMm: 200}
 
-	snap, err := engine.ResolveAgregadoAssembly(agr, params)
+	snap600, err := engine.ResolveAgregadoAssembly(agr, params600)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// Bottom board in Components produces exactly ONE fabricated component
 	bottomCount := 0
-	for _, fc := range snap.FabricatedComponents {
+	for _, fc := range snap600.FabricatedComponents {
 		if fc.ComponentID == "comp-drawer-bottom" {
 			bottomCount++
 			if math.Abs(fc.WidthMm-565.0) > 1e-6 {
@@ -651,11 +679,23 @@ func TestN_ComponentsSoleAuthorityForFabricatedPieces(t *testing.T) {
 		}
 	}
 	if bottomCount != 1 {
-		t.Fatalf("expected exactly 1 bottom board in snapshot, got %d (must not duplicate authority)", bottomCount)
+		t.Fatalf("expected exactly 1 fabricated bottom board, got %d", bottomCount)
 	}
-	if len(snap.FabricatedComponents) != len(agr.Components) {
-		t.Fatalf("snapshot FabricatedComponents length (%d) does not match agregado.Components length (%d)",
-			len(snap.FabricatedComponents), len(agr.Components))
+
+	// Re-evaluate with W=800 (R12)
+	params800 := engine.AssemblyResolutionParams{WidthMm: 800, DepthMm: 550, HeightMm: 200}
+	snap800, err := engine.ResolveAgregadoAssembly(agr, params800)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	bottom800 := snap800.FabricatedComponents[0]
+	if math.Abs(bottom800.WidthMm-765.0) > 1e-6 {
+		t.Errorf("expected bottom board width 765, got %g", bottom800.WidthMm)
+	}
+
+	// Immutability check (R12): snap600 was NOT mutated
+	if math.Abs(snap600.FabricatedComponents[0].WidthMm-565.0) > 1e-6 {
+		t.Errorf("snap600 was mutated: expected width 565.0, got %g", snap600.FabricatedComponents[0].WidthMm)
 	}
 }
 

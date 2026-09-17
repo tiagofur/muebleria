@@ -155,7 +155,26 @@ export interface SelectedAssemblyVariant {
   readonly nominalDimensionMm: number;
 }
 
-export interface ResolvedAssemblySnapshot {
+/**
+ * ResolvedAssembly is the pure deterministic outcome of evaluating an Agregado assembly recipe
+ * with concrete parametric inputs.
+ * It contains computed dimensions and transforms, but makes NO historical persistence or revision claims (R11).
+ */
+export interface ResolvedAssembly {
+  readonly agregadoId: string;
+  readonly commercialKitHardwareId?: string;
+  readonly resolvedDimensionsMm: readonly [number, number, number];
+  readonly selectedVariants: readonly SelectedAssemblyVariant[];
+  readonly rigidMembers: readonly ResolvedRigidMember[];
+  readonly fabricatedComponents: readonly ResolvedFabricatedComponent[];
+  readonly bomItems: readonly AssemblyBOMItem[];
+}
+
+/**
+ * PublishedAssemblySnapshot is the immutable historical freeze artifact (R11, R13).
+ * Requires explicit positive recipe revision and complete #668 visual asset pins.
+ */
+export interface PublishedAssemblySnapshot {
   readonly agregadoId: string;
   readonly agregadoRevisionNumber: number;
   readonly commercialKitHardwareId?: string;
@@ -170,7 +189,6 @@ export interface AssemblyResolutionParams {
   readonly widthMm: number;
   readonly depthMm: number;
   readonly heightMm: number;
-  readonly recipeRevisionNumber?: number;
 }
 
 export class AssemblyVariantNotFoundError extends Error {
@@ -453,7 +471,6 @@ export function validateDimensionRule(
 
 export interface AgregadoAssemblyInput {
   readonly id: string;
-  readonly revision?: number;
   readonly commercialKitHardwareId?: string;
   readonly components?: readonly ModuleComponentInstance[];
   readonly rigidMembers?: readonly AgregadoRigidMember[];
@@ -464,16 +481,6 @@ export interface AgregadoAssemblyInput {
 export function validateAgregadoAssemblyDefinition(agregado: AgregadoAssemblyInput): void {
   if (!agregado.id || !agregado.id.trim()) {
     throw new Error('agregado must have a non-empty id');
-  }
-
-  if (
-    agregado.revision === undefined ||
-    !Number.isInteger(agregado.revision) ||
-    agregado.revision <= 0
-  ) {
-    throw new Error(
-      `agregado '${agregado.id}' requires authoritative positive revision (got ${agregado.revision})`,
-    );
   }
 
   const hasKit =
@@ -589,7 +596,7 @@ function calculateAxisPlacementCoord(
 export function resolveAgregadoAssembly(
   agregado: AgregadoAssemblyInput,
   params: AssemblyResolutionParams,
-): ResolvedAssemblySnapshot {
+): ResolvedAssembly {
   validateAgregadoAssemblyDefinition(agregado);
 
   if (!Number.isFinite(params.widthMm) || params.widthMm <= 0) {
@@ -600,12 +607,6 @@ export function resolveAgregadoAssembly(
   }
   if (!Number.isFinite(params.heightMm) || params.heightMm <= 0) {
     throw new Error(`invalid height: ${params.heightMm} mm (must be finite and positive)`);
-  }
-
-  // R7: authoritative recipe revision; never hardcode
-  const recipeRev = params.recipeRevisionNumber ?? agregado.revision;
-  if (!recipeRev || recipeRev <= 0) {
-    throw new Error('assembly resolution requires authoritative positive recipe revision');
   }
 
   // Variant resolution
@@ -788,7 +789,6 @@ export function resolveAgregadoAssembly(
 
   return {
     agregadoId: agregado.id,
-    agregadoRevisionNumber: recipeRev,
     commercialKitHardwareId: agregado.commercialKitHardwareId,
     resolvedDimensionsMm: [params.widthMm, params.depthMm, params.heightMm],
     selectedVariants: selectedVariantsList,
@@ -798,7 +798,7 @@ export function resolveAgregadoAssembly(
   };
 }
 
-// Visual Pinning Authority (#668 - R10)
+// Visual Pinning Authority (#668 - R10, R13)
 
 export type VisualAssetLookup = (hardwareId: string) => {
   mountFrame?: {
@@ -811,14 +811,14 @@ export type VisualAssetLookup = (hardwareId: string) => {
 } | null;
 
 export function attachVisualPins(
-  snapshot: ResolvedAssemblySnapshot,
+  assembly: ResolvedAssembly,
   lookup?: VisualAssetLookup,
-): ResolvedAssemblySnapshot {
+): ResolvedAssembly {
   if (!lookup) {
-    return snapshot;
+    return assembly;
   }
 
-  const updatedMembers = snapshot.rigidMembers.map((m) => {
+  const updatedMembers = assembly.rigidMembers.map((m) => {
     const asset = lookup(m.hardwareId);
     if (!asset) {
       return m;
@@ -851,7 +851,52 @@ export function attachVisualPins(
   });
 
   return {
-    ...snapshot,
+    ...assembly,
     rigidMembers: updatedMembers,
+  };
+}
+
+/**
+ * freezePublishedAssemblySnapshot explicitly produces an immutable published snapshot (R11, R13).
+ * Enforces:
+ * 1. Authoritative positive recipe revision (recipeRevision > 0).
+ * 2. Mandatory #668 visual asset authority; nil/falsy lookup is rejected.
+ * 3. Complete visual identity (assetId, assetRevisionId, sha256) for every rigid member.
+ * Fails closed if revision <= 0, lookup is falsy, or any member cannot be fully pinned.
+ */
+export function freezePublishedAssemblySnapshot(
+  assembly: ResolvedAssembly,
+  recipeRevision: number,
+  lookup: VisualAssetLookup,
+): PublishedAssemblySnapshot {
+  if (!recipeRevision || !Number.isInteger(recipeRevision) || recipeRevision <= 0) {
+    throw new Error(`publication freeze requires authoritative positive recipe revision (got ${recipeRevision})`);
+  }
+  if (!lookup) {
+    throw new Error('publication freeze requires #668 visual asset authority; nil lookup is rejected');
+  }
+
+  const pinnedAssembly = attachVisualPins(assembly, lookup);
+  for (const m of pinnedAssembly.rigidMembers) {
+    if (!m.assetId || !m.assetId.trim()) {
+      throw new Error(`publication freeze incomplete: rigid member '${m.memberId}' missing visual assetId`);
+    }
+    if (!m.assetRevisionId || !m.assetRevisionId.trim()) {
+      throw new Error(`publication freeze incomplete: rigid member '${m.memberId}' missing visual assetRevisionId`);
+    }
+    if (!m.sha256 || !m.sha256.trim()) {
+      throw new Error(`publication freeze incomplete: rigid member '${m.memberId}' missing visual sha256`);
+    }
+  }
+
+  return {
+    agregadoId: assembly.agregadoId,
+    agregadoRevisionNumber: recipeRevision,
+    commercialKitHardwareId: assembly.commercialKitHardwareId,
+    resolvedDimensionsMm: assembly.resolvedDimensionsMm,
+    selectedVariants: assembly.selectedVariants,
+    rigidMembers: pinnedAssembly.rigidMembers,
+    fabricatedComponents: assembly.fabricatedComponents,
+    bomItems: assembly.bomItems,
   };
 }

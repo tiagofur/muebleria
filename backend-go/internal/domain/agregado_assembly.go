@@ -177,15 +177,28 @@ type SelectedAssemblyVariant struct {
 	NominalDimensionMm float64 `json:"nominalDimensionMm"`
 }
 
-// ResolvedAssemblySnapshot freezes all resolved state for immutable historical DesignRevisions.
-// Revision number must originate from an authoritative recipe revision (R7).
-type ResolvedAssemblySnapshot struct {
+// ResolvedAssembly is the pure deterministic result of resolving an Agregado recipe against dimensions.
+// Represents mechanical positions, discrete variant SKUs, BOM lines, and recalculated fabricated components.
+// Does NOT assert historical publication or snapshot immutability (R11).
+type ResolvedAssembly struct {
 	AgregadoID              string                        `json:"agregadoId"`
-	AgregadoRevisionNumber  int                           `json:"agregadoRevisionNumber"`
 	CommercialKitHardwareID *string                       `json:"commercialKitHardwareId,omitempty"`
 	ResolvedDimensionsMm    [3]float64                    `json:"resolvedDimensionsMm"`
 	SelectedVariants        []SelectedAssemblyVariant     `json:"selectedVariants"`
 	RigidMembers            []ResolvedRigidMember         `json:"rigidMembers"`
+	FabricatedComponents    []ResolvedFabricatedComponent `json:"fabricatedComponents"`
+	BOMItems                []AssemblyBOMItem             `json:"bomItems"`
+}
+
+// PublishedAssemblySnapshot freezes all resolved state with an authoritative recipe revision and visual pins.
+// Produced during publication freeze (R11, R13); will be persisted in Increment B/C.
+type PublishedAssemblySnapshot struct {
+	AgregadoID              string                        `json:"agregadoId"`
+	AgregadoRevisionNumber  int                           `json:"agregadoRevisionNumber"` // Must come from persistent authoritative recipe revision
+	CommercialKitHardwareID *string                       `json:"commercialKitHardwareId,omitempty"`
+	ResolvedDimensionsMm    [3]float64                    `json:"resolvedDimensionsMm"`
+	SelectedVariants        []SelectedAssemblyVariant     `json:"selectedVariants"`
+	RigidMembers            []ResolvedRigidMember         `json:"rigidMembers"` // Fully pinned with visual assets
 	FabricatedComponents    []ResolvedFabricatedComponent `json:"fabricatedComponents"`
 	BOMItems                []AssemblyBOMItem             `json:"bomItems"`
 }
@@ -412,9 +425,6 @@ func ValidateDimensionRule(axisName string, rule AssemblyDimensionRule, validVar
 func ValidateAgregadoAssemblyDefinition(agregado Agregado) error {
 	if strings.TrimSpace(agregado.ID) == "" {
 		return errors.New("agregado must have a non-empty id")
-	}
-	if agregado.Revision <= 0 {
-		return fmt.Errorf("agregado '%s' requires authoritative positive revision (got %d)", agregado.ID, agregado.Revision)
 	}
 
 	hasKit := agregado.CommercialKitHardwareID != nil && strings.TrimSpace(*agregado.CommercialKitHardwareID) != ""
