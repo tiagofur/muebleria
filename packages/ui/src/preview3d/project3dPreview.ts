@@ -485,6 +485,12 @@ export function resolveModuleAssemblies(
         })
       : 0;
 
+    if (!agrInst.id || !agrInst.id.trim()) {
+      throw new Error(
+        `ModuleAgregadoInstance for agregado '${agrInst.agregadoId}' requires a non-empty authoritative 'id' for stable 3D assembly projection`,
+      );
+    }
+
     const units = calculateAgregadoSubspaceUnits(
       agrInst.quantity,
       { width: spaceW, height: spaceH, depth: spaceD },
@@ -494,7 +500,8 @@ export function resolveModuleAssemblies(
     );
 
     for (const unit of units) {
-      const assemblyInstanceId = `${agrInst.id ?? agrInst.agregadoId}-u${unit.unitIndex}`;
+      const assemblyInstanceId =
+        units.length > 1 ? `${agrInst.id}:u${unit.unitIndex}` : agrInst.id;
 
       // Check if instance carries a historical published snapshot
       const snapshot = (agrInst as unknown as { assemblySnapshot?: PublishedAssemblySnapshot; snapshot?: PublishedAssemblySnapshot })
@@ -519,13 +526,22 @@ export function resolveModuleAssemblies(
         const enrichedFabricated = resolved.fabricatedComponents.map((c) => {
           const compDef = catalogInput.components?.find((cmp) => cmp.id === c.componentId);
           const role = compDef?.optionRoles?.[0];
-          const matId = role ? options.optionChoices?.[role] : undefined;
+          const matId = c.materialId ?? (role ? options.optionChoices?.[role] : undefined);
           const mat = catalogInput.materials?.find((m) => m.id === matId);
-          const thicknessMm = c.thicknessMm ?? mat?.thicknessMm ?? 16;
+          const geomThickness =
+            compDef?.geometry?.kind === 'rectangular_board'
+              ? compDef.geometry.thicknessMm
+              : undefined;
+          const thicknessMm = c.thicknessMm ?? mat?.thicknessMm ?? geomThickness;
+          if (thicknessMm === undefined || thicknessMm <= 0) {
+            throw new Error(
+              `Authoritative thicknessMm not found for fabricated component '${c.componentId}': must be defined on bound material or component geometry`,
+            );
+          }
           return {
             ...c,
             thicknessMm,
-            materialId: c.materialId ?? matId,
+            materialId: matId,
           };
         });
 

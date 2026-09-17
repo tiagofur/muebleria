@@ -1197,6 +1197,7 @@ export function ProjectSpatialStudio({
         showCountertop: m.showCountertop,
         showOuterGhost: true,
         resolvedHardwarePlacements: m.resolvedHardwarePlacements,
+        assemblies: m.assemblies,
       })),
     [preview.modules],
   );

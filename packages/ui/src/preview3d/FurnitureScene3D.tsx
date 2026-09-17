@@ -1610,8 +1610,13 @@ function CameraViewSetter({
  * queda en telemetría para el gate de draw calls del smoke de performance.
  */
 function ScenePerfProbe(): null {
-  const gl = useThree((s) => s.gl);
+  const { gl, scene } = useThree();
   const frameCount = useRef(0);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __graneteScene?: unknown }).__graneteScene = scene;
+    }
+  }, [scene]);
   useFrame(() => {
     frameCount.current += 1;
     if (frameCount.current % 30 !== 0) return;

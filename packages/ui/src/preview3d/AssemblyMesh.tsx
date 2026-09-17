@@ -233,6 +233,7 @@ export function AssemblyMesh({
               memberId: member.memberId,
               role: member.role,
               hardwareId: member.hardwareId,
+              assetRevisionId: member.assetRevisionId,
               renderStatus: member.renderStatus,
             }}
           >
@@ -262,7 +263,12 @@ export function AssemblyMesh({
         const pose = assemblyPoseToThree(comp.transform);
         const w = comp.widthMm;
         const l = comp.lengthMm;
-        const t = comp.thicknessMm ?? 16;
+        const t = comp.thicknessMm;
+        if (t === undefined || t <= 0) {
+          throw new Error(
+            `AssemblyMesh: fabricated component '${comp.componentId}' missing authoritative thicknessMm`,
+          );
+        }
 
         const visual: BoardPartVisual = {
           id: `${assembly.assemblyInstanceId}-${comp.componentId}`,

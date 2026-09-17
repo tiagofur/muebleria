@@ -103,6 +103,7 @@ export function BoardMesh({
           partId: visual.id,
           description: visual.description,
           optionRole: visual.optionRole,
+          size: visual.size,
         }}
         onClick={(e) => {
           if (!onSelect) return;
