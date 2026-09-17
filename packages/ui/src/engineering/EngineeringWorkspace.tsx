@@ -26,8 +26,10 @@ import {
   engineeringEntryStatus,
   engineeringStatus,
   ENGINEERING_ENTRY_STATUS_LABELS_ES,
+  fabricationFlowOf,
   releaseAuthorityLabel,
   releaseAuthorityOf,
+  type FabricationEngineeringEvidence,
   type CutPlan,
   type Project,
   type Module,
@@ -40,6 +42,7 @@ import {
   type ReleaseCuttingDemandBase,
 } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
+import { FabricationFlowSteps } from '../common/FabricationFlowSteps';
 import { WorkspaceTabs } from '../common/Tabs';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
 import { ProductionOrderModulesPanel } from '../production/ProductionOrderModulesPanel';
@@ -130,14 +133,6 @@ export type EngineeringReleaseStateProp =
       readonly completedAtLabel: string | null;
     };
 
-const RELEASE_ENGINEERING_PHASE_LABELS_ES: Readonly<
-  Record<'pending' | 'in_progress' | 'completed', string>
-> = {
-  pending: 'Pendiente',
-  in_progress: 'En proceso',
-  completed: 'Completa',
-};
-
 /** Tabs whose panels read the live editable project/catalog state. */
 const LIVE_DATA_TABS: ReadonlySet<EngineeringTab> = new Set([
   'resumen',
@@ -226,6 +221,7 @@ export function EngineeringWorkspace({
   releaseEngineeringState,
   onStartReleaseEngineering,
   onCompleteReleaseEngineering,
+  onAuthorizeMaterials,
   releaseEngineeringBusy,
   releaseEngineeringError,
 }: {
@@ -315,6 +311,13 @@ export function EngineeringWorkspace({
    */
   readonly onStartReleaseEngineering?: () => void;
   readonly onCompleteReleaseEngineering?: () => void;
+  /**
+   * #768 — navigation to the EXISTING material authorization surface
+   * (Almacén) once Engineering is complete and materials are derived. Pure
+   * navigation: the authorization command itself lives there, gated by the
+   * server.
+   */
+  readonly onAuthorizeMaterials?: () => void;
   readonly releaseEngineeringBusy?: boolean;
   readonly releaseEngineeringError?: string | null;
 }): ReactNode {
@@ -333,6 +336,55 @@ export function EngineeringWorkspace({
   const durableState =
     releaseEngineeringState?.status === 'ready' ? releaseEngineeringState : null;
   const durablePhase = durableState?.phase ?? null;
+
+  // #768 — compact fabrication flow of the canonical obra, derived ONLY from
+  // existing authorities (release, durable engineering state, correlated
+  // material evidence, physical executions). Rendered with the pinned
+  // release; the legacy (no-release) workspace keeps its #738 presentation.
+  const engineeringEvidence: FabricationEngineeringEvidence =
+    releaseEngineeringState === undefined
+      ? { kind: 'unknown' }
+      : releaseEngineeringState.status === 'loading'
+        ? { kind: 'loading' }
+        : releaseEngineeringState.status === 'error'
+          ? { kind: 'unconfirmed' }
+          : { kind: 'phase', phase: releaseEngineeringState.phase };
+  const fabResult = fabricationFlowOf(project, engineeringEvidence, {
+    unknownEngineeringLabel: ENGINEERING_ENTRY_STATUS_LABELS_ES[entryStatus],
+  });
+  const fabFlow = releaseView && fabResult.kind === 'flow' ? fabResult.flow : null;
+  // The stepper action mirrors the explicit #740 commands (only user actions
+  // fire them) plus #768 navigation to the existing material surface. No
+  // callback → the next step renders as honest text, never a dead button.
+  const fabAction = fabFlow?.nextAction
+    ? fabFlow.nextAction === 'start-engineering' && onStartReleaseEngineering
+      ? {
+          label: 'Iniciar Ingeniería',
+          onActivate: onStartReleaseEngineering,
+          busy: releaseEngineeringBusy,
+          testId: 'eng-start-engineering',
+          title:
+            'Registra el inicio de la preparación de Ingeniería para esta liberación (quién/cuándo, autoridad del servidor)',
+        }
+      : fabFlow.nextAction === 'complete-engineering' && onCompleteReleaseEngineering
+        ? {
+            label: 'Completar Ingeniería',
+            onActivate: onCompleteReleaseEngineering,
+            busy: releaseEngineeringBusy,
+            testId: 'eng-complete-engineering',
+            title:
+              'Confirma que la preparación de esta liberación terminó. Es final, con actor y fecha del servidor. No autoriza materiales ni inicia producción.',
+          }
+        : fabFlow.nextAction === 'prepare-materials' && onAuthorizeMaterials
+          ? {
+              label: 'Autorizar materiales',
+              onActivate: onAuthorizeMaterials,
+              testId: 'eng-authorize-materials',
+              title:
+                'Abre Almacén, la superficie existente donde se derivan y autorizan los materiales de esta liberación',
+            }
+          : null
+    : null;
 
   // #739 — frozen demand wiring. Only surfaces connected to the exact
   // content get unlocked; everything else keeps its live working view. While
@@ -447,65 +499,33 @@ export function EngineeringWorkspace({
               {releaseView.designRevisionNumber}
               {releaseView.quoteLabel ? ` · ${releaseView.quoteLabel}` : ''}
             </span>
-            <span
-              className={`status-badge status-badge--${
-                durablePhase === 'completed'
-                  ? 'done'
-                  : durablePhase === 'in_progress'
-                    ? 'progress'
-                    : 'open'
-              }`}
-              data-testid="eng-entry-status"
-              title={
-                durablePhase
-                  ? 'Estado durable de Ingeniería para esta liberación exacta. Completarla no autoriza materiales ni inicia producción.'
-                  : 'Estado de la preparación de Ingeniería para esta liberación. Ningún dato indica que la preparación esté terminada.'
-              }
-            >
-              <span className="status-badge__dot" aria-hidden>●</span>
-              {durablePhase
-                ? RELEASE_ENGINEERING_PHASE_LABELS_ES[durablePhase]
-                : ENGINEERING_ENTRY_STATUS_LABELS_ES[entryStatus]}
-            </span>
-            {/* #740 — explicit durable Engineering commands for the PINNED
-                release. Only user actions fire them; nothing here runs on
-                reads, navigation or exports. */}
-            {durablePhase === 'pending' && onStartReleaseEngineering ? (
-              <button
-                type="button"
-                className="btn btn--primary btn--small"
-                onClick={onStartReleaseEngineering}
-                disabled={releaseEngineeringBusy}
-                data-testid="eng-start-engineering"
-                title="Registra el inicio de la preparación de Ingeniería para esta liberación (quién/cuándo, autoridad del servidor)"
-              >
-                Iniciar Ingeniería
-              </button>
-            ) : null}
-            {durablePhase === 'in_progress' && onCompleteReleaseEngineering ? (
-              <button
-                type="button"
-                className="btn btn--primary btn--small"
-                onClick={onCompleteReleaseEngineering}
-                disabled={releaseEngineeringBusy}
-                data-testid="eng-complete-engineering"
-                title="Confirma que la preparación de esta liberación terminó. Es final, con actor y fecha del servidor. No autoriza materiales ni inicia producción."
-              >
-                Completar Ingeniería
-              </button>
-            ) : null}
-            {durablePhase === 'completed' && durableState ? (
-              <span
-                className="eng-workspace__engineering-fact"
-                data-testid="eng-engineering-completed"
-              >
-                Ingeniería completa
-                {durableState.completedAtLabel ? ` · ${durableState.completedAtLabel}` : ''}
-                {durableState.completedByLabel ? ` · por ${durableState.completedByLabel}` : ''}
-                <span className="eng-workspace__engineering-next">
-                  {' '}· Siguiente etapa: autorización de materiales (pendiente)
-                </span>
-              </span>
+            {/* #768 — the compact "Preparación para fabricar" stepper: one
+                cohesive view of design → release → engineering → materials →
+                production, derived only from existing authorities. It absorbs
+                the former status chip, the per-phase CTAs and the completion
+                fact (same testids, same explicit commands). */}
+            {fabFlow ? (
+              <FabricationFlowSteps
+                flow={fabFlow}
+                action={fabAction}
+                stateTestIds={{ engineering: 'eng-entry-status' }}
+                testIdPrefix="eng"
+                renderDetail={(stepId) =>
+                  stepId === 'engineering' && durablePhase === 'completed' && durableState ? (
+                    <span
+                      className="eng-workspace__engineering-fact"
+                      data-testid="eng-engineering-completed"
+                    >
+                      Ingeniería completa
+                      {durableState.completedAtLabel ? ` · ${durableState.completedAtLabel}` : ''}
+                      {durableState.completedByLabel ? ` · por ${durableState.completedByLabel}` : ''}
+                      <span className="eng-workspace__engineering-next">
+                        {' '}· Siguiente etapa: autorización de materiales (pendiente)
+                      </span>
+                    </span>
+                  ) : null
+                }
+              />
             ) : null}
             {releaseEngineeringError ? (
               <span

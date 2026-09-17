@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import type { ProductionCutRow, Project } from '@granete/domain';
@@ -277,15 +277,41 @@ describe('ProductionOrderHub — release continuity banner (#741 PR 1)', () => {
     const banner = screen.getByTestId('prod-release-continuity');
     expect(banner.textContent).toContain('Nueva revisión disponible');
     expect(banner.textContent).toContain(
-      'Hay trabajo de fabricación en curso sobre la versión anterior',
+      'la fabricación actual no se cambiará automáticamente',
     );
     // Secondary detail: labels, never raw ids.
-    expect(banner.textContent).toContain('Nueva liberación: Liberación #2');
+    expect(banner.textContent).toContain('Nueva versión: Liberación #2');
     expect(banner.textContent).not.toContain('rel-p1');
     expect(banner.textContent).not.toContain('rel-p2');
-    // No automatic replacement action is offered.
-    const actions = banner.querySelectorAll('button');
-    expect(actions.length).toBe(0);
+    // #768 — navigation only. Without the new-revision callback only the
+    // current-work navigation remains; a REPLACEMENT action never appears.
+    const actions = [...banner.querySelectorAll('button')].map((b) => b.textContent);
+    expect(actions).toEqual(['Ver trabajo actual']);
+    expect(actions.join(' ')).not.toMatch(/reemplaz|suspend|cancel|retarget/i);
+  });
+
+  it('offers both navigations when the shell wires the new revision', () => {
+    const readiness = buildProductionOrderReadiness({ project: project(), cutRows: [] });
+    const onOpenNewRevision = vi.fn();
+    const onTabChange = vi.fn();
+    render(
+      <ProductionOrderHub
+        project={project()} customerLabel="Ana" salePrice={null} readiness={readiness}
+        activeTab="resumen" onTabChange={onTabChange} onBackToQueue={vi.fn()}
+        onOpenDesign={vi.fn()} onExportOptimizer={vi.fn()} onExportHardware={vi.fn()}
+        releaseContinuity={{
+          workReleaseId: 'rel-p1',
+          authorityReleaseId: 'rel-p2',
+          authorityReleaseNumber: 2,
+          hasPhysicalProgress: true,
+        }}
+        onOpenNewRevision={onOpenNewRevision}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('prod-continuity-open-new-revision'));
+    expect(onOpenNewRevision).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('prod-continuity-view-current-work'));
+    expect(onTabChange).toHaveBeenCalledWith('piso');
   });
 
   it('stays silent without physical progress or without a discontinuity', () => {
@@ -313,5 +339,184 @@ describe('ProductionOrderHub — release continuity banner (#741 PR 1)', () => {
       />,
     );
     expect(screen.queryByTestId('prod-release-continuity')).toBeNull();
+  });
+});
+
+describe('ProductionOrderHub — Preparación para fabricar (#768)', () => {
+  function canonicalProject(overrides: Partial<Project> = {}): Project {
+    return {
+      ...project('draft'),
+      resolvedProductionRelease: {
+        source: 'canonical',
+        releaseId: 'rel-1',
+        releaseNumber: 1,
+        designRevisionId: 'dr-2',
+        designRevisionNumber: 2,
+        manufacturingFingerprint: 'fp-1',
+      },
+      materialPlanning: {
+        requirements: { releaseId: 'rel-1', bomFingerprint: 'fp-1' },
+      } as Project['materialPlanning'],
+      ...overrides,
+    } as unknown as Project;
+  }
+  const readyEng = (phase: 'pending' | 'in_progress' | 'completed') => ({
+    status: 'ready' as const,
+    phase,
+  });
+  const baseHubProps = {
+    customerLabel: 'Ana',
+    salePrice: null,
+    activeTab: 'resumen' as const,
+    onTabChange: vi.fn(),
+    onBackToQueue: vi.fn(),
+    onOpenDesign: vi.fn(),
+    onExportOptimizer: vi.fn(),
+    onExportHardware: vi.fn(),
+  };
+
+  it('Caso C: Ingeniería completa + materiales derivados → current Materiales pendientes con CTA a Almacén', () => {
+    const onOpenMaterialsSurface = vi.fn();
+    const readiness = buildProductionOrderReadiness({ project: canonicalProject(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={canonicalProject()}
+        readiness={readiness}
+        engineeringState={readyEng('completed')}
+        onOpenMaterialsSurface={onOpenMaterialsSurface}
+      />,
+    );
+    const materials = screen.getByTestId('prod-fab-step-materials');
+    expect(materials.getAttribute('data-state')).toBe('current');
+    expect(materials.textContent).toContain('Materiales pendientes');
+    const cta = screen.getByTestId('prod-fab-authorize-materials');
+    expect(cta.textContent).toContain('Autorizar materiales');
+    fireEvent.click(cta);
+    expect(onOpenMaterialsSurface).toHaveBeenCalledTimes(1);
+  });
+
+  it('Caso C sin permiso/superficie: texto honesto, sin CTA muerta', () => {
+    const readiness = buildProductionOrderReadiness({ project: canonicalProject(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={canonicalProject()}
+        readiness={readiness}
+        engineeringState={readyEng('completed')}
+      />,
+    );
+    expect(screen.getByTestId('prod-fab-next-text').textContent).toContain('Autorizar materiales');
+    expect(screen.queryByTestId('prod-fab-authorize-materials')).toBeNull();
+  });
+
+  it('Ingeniería pendiente sin navegación a Ingeniería → siguiente paso como texto', () => {
+    const readiness = buildProductionOrderReadiness({ project: canonicalProject(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={canonicalProject()}
+        readiness={readiness}
+        engineeringState={readyEng('pending')}
+      />,
+    );
+    expect(screen.getByTestId('prod-fab-step-engineering').textContent).toContain('Pendiente');
+    expect(screen.getByTestId('prod-fab-next-text').textContent).toContain('Iniciar Ingeniería');
+    expect(screen.queryByTestId('prod-fab-open-engineering')).toBeNull();
+  });
+
+  it('Ingeniería pendiente con navegación → CTA Abrir Ingeniería', () => {
+    const onOpenEngineering = vi.fn();
+    const readiness = buildProductionOrderReadiness({ project: canonicalProject(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={canonicalProject()}
+        readiness={readiness}
+        engineeringState={readyEng('pending')}
+        onOpenEngineering={onOpenEngineering}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('prod-fab-open-engineering'));
+    expect(onOpenEngineering).toHaveBeenCalledTimes(1);
+  });
+
+  it('Caso D: materiales autorizados → Listo para producción sin CTA', () => {
+    const readiness = buildProductionOrderReadiness({ project: canonicalProject(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={canonicalProject({
+          materialsRelease: { releasedBy: 'u1', releasedAt: '2026-09-06T10:00:00Z' },
+        })}
+        readiness={readiness}
+        engineeringState={readyEng('completed')}
+      />,
+    );
+    const production = screen.getByTestId('prod-fab-step-production');
+    expect(production.textContent).toContain('Listo para producción');
+    expect(production.getAttribute('aria-current')).toBe('step');
+    expect(screen.queryByTestId('prod-fab-next-text')).toBeNull();
+  });
+
+  it('Caso E: avance físico real → En producción (status legacy no importa)', () => {
+    const readiness = buildProductionOrderReadiness({ project: canonicalProject(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={canonicalProject({
+          status: 'draft',
+          materialsRelease: { releasedBy: 'u1', releasedAt: '2026-09-06T10:00:00Z' },
+          partInstances: [
+            {
+              id: 'part-1',
+              productionRevision: 'rel-1',
+              requiredOperations: [{ status: 'completed' }],
+            } as unknown as NonNullable<Project['partInstances']>[number],
+          ],
+        })}
+        readiness={readiness}
+        engineeringState={readyEng('completed')}
+      />,
+    );
+    expect(screen.getByTestId('prod-fab-step-production').textContent).toContain('En producción');
+  });
+
+  it('estado de Ingeniería no resuelto → Pendiente de confirmar, sin acciones (fail closed)', () => {
+    const readiness = buildProductionOrderReadiness({ project: canonicalProject(), cutRows: [] });
+    const { rerender } = render(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={canonicalProject()}
+        readiness={readiness}
+        engineeringState={{ status: 'error' }}
+      />,
+    );
+    const eng = screen.getByTestId('prod-fab-step-engineering');
+    expect(eng.textContent).toContain('Pendiente de confirmar');
+    expect(screen.queryByTestId('prod-fab-next-text')).toBeNull();
+    rerender(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={canonicalProject()}
+        readiness={readiness}
+      />,
+    );
+    expect(screen.getByTestId('prod-fab-step-engineering').textContent).toContain(
+      'Pendiente de confirmar',
+    );
+  });
+
+  it('sin release canónico el hub no inventa flujo (obra legacy intacta)', () => {
+    const readiness = buildProductionOrderReadiness({ project: project(), cutRows: [] });
+    render(
+      <ProductionOrderHub
+        {...baseHubProps}
+        project={project()}
+        readiness={readiness}
+        engineeringState={readyEng('completed')}
+      />,
+    );
+    expect(screen.queryByTestId('prod-fab-flow')).toBeNull();
   });
 });

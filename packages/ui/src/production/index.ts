@@ -55,6 +55,7 @@ export {
 export {
   ProductionOrderHub,
   type ProductionOrderHubProps,
+  type EngineeringReleaseStateEvidence,
 } from './ProductionOrderHub';
 
 export {

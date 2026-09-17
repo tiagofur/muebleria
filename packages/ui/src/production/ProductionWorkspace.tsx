@@ -25,12 +25,16 @@ import {
   listProductionSpaceOptions,
   PRODUCTION_SCOPE_ALL,
   projectScopedToProductionSpace,
+  releaseAuthorityOf,
   releaseWorkContinuityOf,
 } from '@granete/domain';
 import { EmptyState } from '../common';
 import { Factory } from 'lucide-react';
 import { ProductionQueue, type ProductionQueueProps } from './ProductionQueue';
-import { ProductionOrderHub } from './ProductionOrderHub';
+import {
+  ProductionOrderHub,
+  type EngineeringReleaseStateEvidence,
+} from './ProductionOrderHub';
 import type { FabricActiveClaim } from './fabricProjectCards';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
@@ -112,6 +116,16 @@ export type ProductionWorkspaceProps = {
   readonly lookupProject?: (projectId: string) => Project | undefined;
   /** Navigate to the warehouse queue where materials can be released. */
   readonly onOpenWarehouse?: () => void;
+  /**
+   * #768 — navigate to the engineering workspace of the obra's canonical
+   * release authority (next step / new revision; navigation only).
+   */
+  readonly onOpenEngineering?: (projectId: string, releaseId: string) => void;
+  /**
+   * #768 — durable per-release Engineering state of the ORDER project's
+   * canonical authority, resolved by the shell through the existing read.
+   */
+  readonly orderEngineeringState?: EngineeringReleaseStateEvidence;
 };
 
 export function ProductionWorkspace({
@@ -151,6 +165,8 @@ export function ProductionWorkspace({
   activeClaims = [],
   lookupProject,
   onOpenWarehouse,
+  onOpenEngineering,
+  orderEngineeringState,
 }: ProductionWorkspaceProps): ReactNode {
   const [productionScopeId, setProductionScopeId] =
     useState<string>(PRODUCTION_SCOPE_ALL);
@@ -317,6 +333,14 @@ export function ProductionWorkspace({
     // release older than the canonical authority while physical progress
     // exists. Informative banner only; the server owns the blocking.
     const releaseContinuity = releaseWorkContinuityOf(orderProject);
+    // #768 — navigation targets for the stepper's next step and the
+    // continuity banner: the obra's canonical authority release.
+    const authority = releaseAuthorityOf(orderProject);
+    const openAuthorityEngineering = onOpenEngineering
+      ? () => {
+          if (authority) onOpenEngineering(orderProject.id, authority.releaseId);
+        }
+      : undefined;
 
     return (
       <ProductionOrderHub
@@ -387,6 +411,10 @@ export function ProductionWorkspace({
         canSetFloorStatus={canSetFloorStatus}
         staleInfo={staleInfo}
         releaseContinuity={releaseContinuity}
+        onOpenNewRevision={openAuthorityEngineering}
+        engineeringState={orderEngineeringState}
+        onOpenEngineering={openAuthorityEngineering}
+        onOpenMaterialsSurface={onOpenWarehouse}
         onExportCncPilot={
           onExportCncPilot
             ? () => onExportCncPilot(orderProject.id)

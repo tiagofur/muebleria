@@ -356,10 +356,15 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
     const banner = page.getByTestId('prod-release-continuity');
     await expect(banner).toBeVisible({ timeout: 45_000 });
     await expect(banner).toContainText('Nueva revisión disponible');
-    await expect(banner).toContainText('Hay trabajo de fabricación en curso sobre la versión anterior');
-    await expect(banner).toContainText('Nueva liberación: Liberación #2');
-    // The banner offers NO automatic replacement action.
-    expect(await banner.locator('button').count()).toBe(0);
+    await expect(banner).toContainText('la fabricación actual no se cambiará automáticamente');
+    await expect(banner).toContainText('Nueva versión: Liberación #2');
+    // #768 — the banner offers NAVIGATION only: both actions inform (new
+    // revision / current work); no replacement, suspension or cancellation
+    // action ever appears.
+    await expect(banner.getByRole('button', { name: 'Ver nueva revisión' })).toBeVisible();
+    await expect(banner.getByRole('button', { name: 'Ver trabajo actual' })).toBeVisible();
+    const actionNames = await banner.getByRole('button').allTextContents();
+    expect(actionNames.join(' ')).not.toMatch(/reemplaz|suspend|cancel|retarget/i);
 
     // Server truth: nothing was retargeted — every execution still pins P1,
     // the advanced piece keeps its completed cut, the item keeps its floor
@@ -410,7 +415,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
     await expect(page.getByTestId('prod-release-continuity')).toBeVisible({ timeout: 45_000 });
     await page.reload();
     await expect(page.getByTestId('prod-release-continuity')).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByTestId('prod-release-continuity')).toContainText('Nueva liberación: Liberación #2');
+    await expect(page.getByTestId('prod-release-continuity')).toContainText('Nueva versión: Liberación #2');
 
     const after = await fetchExecutionState();
     expect(after).toEqual(before);

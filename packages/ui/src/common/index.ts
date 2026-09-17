@@ -28,6 +28,11 @@ export {
   type StatusChipOption,
 } from './StatusChips';
 export {
+  FabricationFlowSteps,
+  type FabricationFlowActionProp,
+  type FabricationFlowStepsProps,
+} from './FabricationFlowSteps';
+export {
   EmptyState,
   type EmptyStateProps,
   type EmptyStateVariant,
