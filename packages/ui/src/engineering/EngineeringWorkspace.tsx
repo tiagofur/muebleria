@@ -588,7 +588,7 @@ export function EngineeringWorkspace({
       {frozenDemand && tabUsesFrozenContent ? (
         <p className="eng-workspace__live-notice eng-workspace__live-notice--compact" data-testid="eng-release-prep-notice">
           <span className="eng-workspace__live-notice-icon" aria-hidden>ⓘ</span>
-          Preparación editable: {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} del contenido congelado de la liberación #{frozenDemand.base.releaseNumber} (R{frozenDemand.base.designRevisionNumber}).
+          Preparación editable: {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} del contenido congelado de la liberación #{frozenDemand.base.releaseNumber} (R{frozenDemand.base.designRevisionNumber}). Ajustar el corte no modifica la cotización ni la liberación.
         </p>
       ) : null}
       {/* #738 — canonical obra: the data tabs that still read the live

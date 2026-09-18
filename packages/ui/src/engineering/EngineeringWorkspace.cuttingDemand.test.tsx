@@ -111,6 +111,10 @@ describe('EngineeringWorkspace — #739 demanda congelada', () => {
     expect(screen.getByTestId('eng-release-prep-notice').textContent).toContain(
       'contenido congelado de la liberación',
     );
+    // #739 — editar la preparación nunca toca lo acordado comercialmente.
+    expect(screen.getByTestId('eng-release-prep-notice').textContent).toContain(
+      'no modifica la cotización',
+    );
     expect(screen.queryByTestId('eng-live-view-notice')).toBeNull();
   });
 

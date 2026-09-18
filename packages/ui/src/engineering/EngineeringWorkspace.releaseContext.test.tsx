@@ -106,6 +106,9 @@ describe('EngineeringWorkspace — exact release context (#738)', () => {
     expect(screen.getByTestId('eng-entry-status').textContent).toContain(
       'Pendiente de confirmar',
     );
+    // The fail-closed detail carries the same vocabulary as the state span;
+    // the strip must never render it twice.
+    expect(screen.getAllByText('Pendiente de confirmar')).toHaveLength(1);
     // The legacy log action is not offered for a canonical obra.
     expect(screen.queryByTestId('eng-mark-documented')).toBeNull();
     expect(screen.queryByTestId('eng-send-to-production')).toBeNull();

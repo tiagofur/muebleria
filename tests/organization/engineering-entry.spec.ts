@@ -9,7 +9,7 @@ import { GATE_MODULE_A_ID, required } from './support/api';
  *   fixture (Q1 accepted + R1 approved via the supported API commands) →
  *   release P1 through the real reconciliation UI → "Abrir Ingeniería"
  *   (primary contextual exit) → exact release context (Liberación #1 ·
- *   Diseño R1 · Q1) → honest pending preparation status → back to the
+ *   R1 · Q1) → honest pending preparation status → back to the
  *   queue → same obra visible there → reload the exact URL keeps the pinned
  *   release → ZERO business mutations caused by navigation/reads
  *   (Project.status stays draft; no engineering completion, no materials
@@ -232,7 +232,6 @@ test.describe.serial('Engineering entry: canonical release → queue + workspace
     await expect(page.getByTestId('eng-release-context')).toBeVisible();
     await expect(page.getByTestId('eng-release-context')).toContainText('Liberación #1');
     await expect(page.getByTestId('eng-release-context')).toContainText('R1 · Q1');
-    await expect(page.getByTestId('eng-release-context')).toContainText('Q1');
 
     // Honest preparation status: the release enables preparation; it does
     // NOT complete engineering.

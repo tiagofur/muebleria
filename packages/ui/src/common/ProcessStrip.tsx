@@ -51,6 +51,16 @@ function StepIcon({ step }: { readonly step: FabricationFlowStep }): ReactNode {
   return <Circle size={14} strokeWidth={1.75} aria-hidden />;
 }
 
+/**
+ * Inline state text for a step: `unconfirmed` carries the honest fail-closed
+ * label (the domain projection renders the same vocabulary as its detail),
+ * every other status surfaces the demonstrated-state vocabulary.
+ */
+function inlineStateText(step: FabricationFlowStep): string | null {
+  if (step.status === 'unconfirmed') return 'Pendiente de confirmar';
+  return step.stateLabel;
+}
+
 /** Short status label for inline display (avoids repeating full step label). */
 function InlineStatusLabel({
   step,
@@ -59,28 +69,14 @@ function InlineStatusLabel({
   readonly step: FabricationFlowStep;
   readonly stateTestId?: string;
 }): ReactNode | null {
-  if (step.status === 'current' && step.stateLabel) {
-    return (
-      <span className="ps__state" data-testid={stateTestId}>
-        {step.stateLabel}
-      </span>
-    );
-  }
-  if (step.status === 'unconfirmed') {
-    return (
-      <span className="ps__state ps__state--muted" data-testid={stateTestId}>
-        Pendiente de confirmar
-      </span>
-    );
-  }
-  if (step.stateLabel) {
-    return (
-      <span className="ps__state" data-testid={stateTestId}>
-        {step.stateLabel}
-      </span>
-    );
-  }
-  return null;
+  const text = inlineStateText(step);
+  if (!text) return null;
+  const muted = step.status === 'unconfirmed';
+  return (
+    <span className={muted ? 'ps__state ps__state--muted' : 'ps__state'} data-testid={stateTestId}>
+      {text}
+    </span>
+  );
 }
 
 export function ProcessStrip({
@@ -109,7 +105,9 @@ export function ProcessStrip({
             </span>
             <span className="ps__label">{step.label}</span>
             <InlineStatusLabel step={step} stateTestId={stateTestIds?.[step.id]} />
-            {step.detail ? (
+            {/* Detail never repeats the state text (fail-closed unconfirmed
+                emits both with the same vocabulary — #768 projection). */}
+            {step.detail && step.detail !== inlineStateText(step) ? (
               <span className="ps__detail" title={step.detail}>{step.detail}</span>
             ) : null}
             {/* Connector line between steps (not after last) */}
