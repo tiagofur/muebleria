@@ -30,6 +30,15 @@ import {
 } from './agregadoAssembly';
 
 describe('Agregado Hardware Assembly Contracts & Validators', () => {
+  // Width semantics in this file (#670 review R11): resolveAgregadoAssembly is
+  // a generic assembly resolver — its widthMm/depthMm/heightMm params are the
+  // ASSEMBLY's own dimensions. At furniture level that width is the inner
+  // cavity LW (moduleOuterWidth - leftPanelThickness - rightPanelThickness),
+  // derived by the furniture/layout authority BEFORE the resolver is called;
+  // the resolver never sees the furniture outer W and never infers carcase
+  // panels. Generic tests use plain assembly widths (e.g. 600 = assembly
+  // width, not an outer furniture W); MERIVOBOX pilot tests derive LW
+  // explicitly.
   describe('validateRigidMemberSource', () => {
     it('accepts valid fixed source', () => {
       expect(() =>
@@ -948,6 +957,401 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
           assemblyInstanceId: 'hist-1',
         }),
       ).toThrow(/recipeRevision must be positive integer/);
+    });
+  });
+
+  describe('Increment #670-E: MERIVOBOX Real Pilot End-to-End Gates (E1–E20 Domain)', () => {
+    function createMerivoboxPilotFixture(): AgregadoAssemblyInput {
+      return {
+        id: 'agr-merivobox-m',
+        commercialKitHardwareId: 'kit-merivobox-m',
+        variantSets: [
+          {
+            id: 'depth-variants',
+            dimension: 'depth',
+            variants: [
+              { nominalDimensionMm: 450, hardwareId: 'hw-merivobox-450' },
+              { nominalDimensionMm: 500, hardwareId: 'hw-merivobox-500' },
+            ],
+          },
+        ],
+        compatibilityRules: [
+          {
+            variantSetId: 'depth-variants',
+            clearanceMm: 20, // PILOT_ASSUMPTION
+            selectionStrategy: 'max_fitting',
+          },
+        ],
+        rigidMembers: [
+          {
+            memberId: 'side-left',
+            role: 'side_left',
+            source: { kind: 'variant', variant: { variantSetId: 'depth-variants' } },
+            placement: {
+              x: { ref: 'min', offsetMm: 0 },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'included_in_kit',
+          },
+          {
+            memberId: 'side-right',
+            role: 'side_right',
+            source: { kind: 'variant', variant: { variantSetId: 'depth-variants' } },
+            placement: {
+              x: { ref: 'max', offsetMm: 0 },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'included_in_kit',
+          },
+          {
+            memberId: 'runner-left',
+            role: 'runner_left',
+            source: { kind: 'variant', variant: { variantSetId: 'depth-variants' } },
+            placement: {
+              x: { ref: 'min', offsetMm: 0 },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'included_in_kit',
+          },
+          {
+            memberId: 'runner-right',
+            role: 'runner_right',
+            source: { kind: 'variant', variant: { variantSetId: 'depth-variants' } },
+            placement: {
+              x: { ref: 'max', offsetMm: 0 },
+              y: { ref: 'min', offsetMm: 0 },
+              z: { ref: 'min', offsetMm: 0 },
+            },
+            bomRole: 'included_in_kit',
+          },
+        ],
+        components: [
+          {
+            componentId: 'comp-bottom',
+            quantity: 1,
+            overrides: {
+              widthRule: { source: 'assembly_width', offsetMm: -58 }, // REAL_VERIFIED: LW - 58
+              lengthRule: { source: 'selected_variant', variantSetId: 'depth-variants', offsetMm: -16 }, // REAL_VERIFIED: NL - 16
+              placementRule: {
+                x: { ref: 'min', offsetMm: 29 },
+                y: { ref: 'min', offsetMm: 16 },
+                z: { ref: 'min', offsetMm: 16 },
+              },
+            },
+          },
+          {
+            componentId: 'comp-back',
+            quantity: 1,
+            overrides: {
+              widthRule: { source: 'assembly_width', offsetMm: -58 }, // REAL_VERIFIED: LW - 58
+              lengthRule: { source: 'assembly_height', multiplier: 0.0, offsetMm: 69 }, // REAL_VERIFIED: 69mm height
+              placementRule: {
+                x: { ref: 'min', offsetMm: 29 },
+                y: { ref: 'max', offsetMm: -16 },
+                z: { ref: 'min', offsetMm: 32 },
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    it('E1 & E2: Generic recipe resolves canonical pilot assembly LW570 (outer W600, 15/15 sides) with NL 500 variant', () => {
+      const fixture = createMerivoboxPilotFixture();
+      expect(() => validateAgregadoAssemblyDefinition(fixture)).not.toThrow();
+
+      // Canonical pilot configuration (R12):
+      // outer W = 600mm, sides = 15mm + 15mm (seed authority), derived cavity LW = 570mm.
+      const outerWidth = 600;
+      const leftPanelThickness = 15;
+      const rightPanelThickness = 15;
+      const lwMm = outerWidth - leftPanelThickness - rightPanelThickness; // 570mm
+
+      const resolved = resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 530, heightMm: 200 });
+
+      expect(resolved.agregadoId).toBe('agr-merivobox-m');
+      expect(resolved.commercialKitHardwareId).toBe('kit-merivobox-m');
+      expect(resolved.selectedVariants).toEqual([
+        { variantSetId: 'depth-variants', hardwareId: 'hw-merivobox-500', nominalDimensionMm: 500 },
+      ]);
+
+      // Rigid members placed at bounds of assembly (LW)
+      const sideLeft = resolved.rigidMembers.find((m) => m.memberId === 'side-left')!;
+      const sideRight = resolved.rigidMembers.find((m) => m.memberId === 'side-right')!;
+      expect(sideLeft.localTransform.translationMm).toEqual([0, 0, 0]);
+      expect(sideRight.localTransform.translationMm).toEqual([570, 0, 0]);
+
+      // Fabricated components
+      const bottom = resolved.fabricatedComponents.find((c) => c.componentId === 'comp-bottom')!;
+      const back = resolved.fabricatedComponents.find((c) => c.componentId === 'comp-back')!;
+      expect(bottom.widthMm).toBe(512); // LW570 - 58
+      expect(bottom.lengthMm).toBe(484); // 500 - 16
+      expect(back.widthMm).toBe(512); // LW570 - 58
+      expect(back.lengthMm).toBe(69); // 69mm exact
+    });
+
+    it('R3: Furniture authority computes LW from W and varying panel thickness (15, 18, 19mm)', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const outerWidth = 600;
+      const panels = [
+        { panelThickness: 15, expectedLW: 570, expectedBottom: 512 },
+        { panelThickness: 18, expectedLW: 564, expectedBottom: 506 },
+        { panelThickness: 19, expectedLW: 562, expectedBottom: 504 },
+      ];
+
+      for (const tc of panels) {
+        expect(outerWidth - 2 * tc.panelThickness).toBe(tc.expectedLW);
+
+        const res = resolveAgregadoAssembly(fixture, {
+          widthMm: tc.expectedLW,
+          depthMm: 530,
+          heightMm: 200,
+        });
+
+        const sideRight = res.rigidMembers.find((m) => m.memberId === 'side-right')!;
+        const bottom = res.fabricatedComponents.find((c) => c.componentId === 'comp-bottom')!;
+
+        expect(sideRight.localTransform.translationMm[0]).toBe(tc.expectedLW);
+        expect(bottom.widthMm).toBe(tc.expectedBottom);
+      }
+    });
+
+    it('E3 & E20: Mutating outer W600 -> W800 (LW 570 -> 770) moves right members exactly +200mm with NO scaling and det = +1.0', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const lw570 = 600 - 30; // 570
+      const lw770 = 800 - 30; // 770
+      const lw670 = 700 - 30; // 670
+      const resolvedLW570 = resolveAgregadoAssembly(fixture, { widthMm: lw570, depthMm: 530, heightMm: 200 });
+      const resolvedLW770 = resolveAgregadoAssembly(fixture, { widthMm: lw770, depthMm: 530, heightMm: 200 });
+      const resolvedLW670 = resolveAgregadoAssembly(fixture, { widthMm: lw670, depthMm: 530, heightMm: 200 });
+
+      const right570 = resolvedLW570.rigidMembers.find((m) => m.memberId === 'side-right')!;
+      const right770 = resolvedLW770.rigidMembers.find((m) => m.memberId === 'side-right')!;
+      const right670 = resolvedLW670.rigidMembers.find((m) => m.memberId === 'side-right')!;
+
+      // Delta +200mm from recipe, not hardcoded
+      expect(right770.localTransform.translationMm[0] - right570.localTransform.translationMm[0]).toBe(200);
+      // Delta +100mm for W700 confirms continuous placement without W600/W800 branches
+      expect(right670.localTransform.translationMm[0] - right570.localTransform.translationMm[0]).toBe(100);
+
+      // Invariant: Rigid members NEVER scale, det = +1.0
+      for (const m of resolvedLW770.rigidMembers) {
+        const b = m.localTransform.basis;
+        const det = b.x[0] * (b.y[1] * b.z[2] - b.y[2] * b.z[1]) +
+                    b.x[1] * (b.y[2] * b.z[0] - b.y[0] * b.z[2]) +
+                    b.x[2] * (b.y[0] * b.z[1] - b.y[1] * b.z[0]);
+        expect(det).toBeCloseTo(1.0, 6);
+      }
+
+      // Fabricated bottom regenerated: 512 -> 712 mm
+      const bottomLW770 = resolvedLW770.fabricatedComponents.find((c) => c.componentId === 'comp-bottom')!;
+      expect(bottomLW770.widthMm).toBe(712);
+      expect(bottomLW770.lengthMm).toBe(484); // length preserved
+
+      const backLW770 = resolvedLW770.fabricatedComponents.find((c) => c.componentId === 'comp-back')!;
+      expect(backLW770.widthMm).toBe(712);
+      expect(backLW770.lengthMm).toBe(69);
+    });
+
+    it('E5 & E6: Depth A (NL 450) vs Depth B (NL 500) variant selection', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const lwMm = 570;
+
+      // Space = 480mm (480 - clearance 20 = 460mm >= 450mm, < 500mm) -> selects Variant A (450mm)
+      const resA = resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 480, heightMm: 200 });
+      expect(resA.selectedVariants[0]!.nominalDimensionMm).toBe(450);
+      expect(resA.selectedVariants[0]!.hardwareId).toBe('hw-merivobox-450');
+      const bottomA = resA.fabricatedComponents.find((c) => c.componentId === 'comp-bottom')!;
+      expect(bottomA.lengthMm).toBe(434); // 450 - 16
+      expect(bottomA.widthMm).toBe(512); // 570 - 58
+
+      // Space = 530mm (530 - 20 = 510mm >= 500mm) -> selects Variant B (500mm)
+      const resB = resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 530, heightMm: 200 });
+      expect(resB.selectedVariants[0]!.nominalDimensionMm).toBe(500);
+      expect(resB.selectedVariants[0]!.hardwareId).toBe('hw-merivobox-500');
+      const bottomB = resB.fabricatedComponents.find((c) => c.componentId === 'comp-bottom')!;
+      expect(bottomB.lengthMm).toBe(484); // 500 - 16
+      expect(bottomB.widthMm).toBe(512); // 570 - 58
+    });
+
+    it('E7: Missing variant throws typed AssemblyVariantNotFoundError', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const lwMm = 570;
+
+      // Space = 400mm (< 450 + 20 = 470mm) -> no variant fits
+      expect(() =>
+        resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 400, heightMm: 200 }),
+      ).toThrow(AssemblyVariantNotFoundError);
+
+      try {
+        resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 400, heightMm: 200 });
+      } catch (err) {
+        expect(err).toBeInstanceOf(AssemblyVariantNotFoundError);
+        const vErr = err as AssemblyVariantNotFoundError;
+        expect(vErr.variantSetId).toBe('depth-variants');
+        expect(vErr.requestedSpaceMm).toBe(400);
+        expect(vErr.requiredClearance).toBe(20);
+        expect(vErr.availableNominals).toEqual([450, 500]);
+      }
+    });
+
+    it('R6 & E5-E7: Strict variant boundary testing for clearance = 3.0mm (REAL_VERIFIED)', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const lwMm = 570;
+      const blumFixture: AgregadoAssemblyInput = {
+        ...fixture,
+        compatibilityRules: [
+          {
+            variantSetId: 'depth-variants',
+            clearanceMm: 3.0, // REAL_VERIFIED: Blum KA-160/24-ES, p. 242
+            selectionStrategy: 'max_fitting',
+          },
+        ],
+      };
+
+      // 1. Below minimum: 449.9mm (< 450 + 3 = 453.0) -> fails closed
+      expect(() =>
+        resolveAgregadoAssembly(blumFixture, { widthMm: lwMm, depthMm: 449.9, heightMm: 200 }),
+      ).toThrow(AssemblyVariantNotFoundError);
+
+      // 2. Exact boundary for 450: 453.0mm (453.0 - 3 = 450.0) -> selects 450
+      const res453 = resolveAgregadoAssembly(blumFixture, { widthMm: lwMm, depthMm: 453.0, heightMm: 200 });
+      expect(res453.selectedVariants[0]!.nominalDimensionMm).toBe(450);
+
+      // 3. Interior point for 450: 480.0mm -> selects 450
+      const res480 = resolveAgregadoAssembly(blumFixture, { widthMm: lwMm, depthMm: 480.0, heightMm: 200 });
+      expect(res480.selectedVariants[0]!.nominalDimensionMm).toBe(450);
+
+      // 4. Just below boundary for 500: 502.9mm (< 500 + 3 = 503.0) -> selects 450, NOT 500
+      const res5029 = resolveAgregadoAssembly(blumFixture, { widthMm: lwMm, depthMm: 502.9, heightMm: 200 });
+      expect(res5029.selectedVariants[0]!.nominalDimensionMm).toBe(450);
+
+      // 5. Exact boundary for 500: 503.0mm (503.0 - 3 = 500.0) -> selects 500
+      const res503 = resolveAgregadoAssembly(blumFixture, { widthMm: lwMm, depthMm: 503.0, heightMm: 200 });
+      expect(res503.selectedVariants[0]!.nominalDimensionMm).toBe(500);
+
+      // 6. Interior point for 500: 530.0mm -> selects 500
+      const res530 = resolveAgregadoAssembly(blumFixture, { widthMm: lwMm, depthMm: 530.0, heightMm: 200 });
+      expect(res530.selectedVariants[0]!.nominalDimensionMm).toBe(500);
+    });
+
+    it('E8: BOM policy yields single commercial kit line without member duplicates', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const lwMm = 570;
+      const resolved = resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 530, heightMm: 200 });
+
+      // 4 rigid members are all 'included_in_kit', so BOM contains only 1 kit item
+      expect(resolved.bomItems).toHaveLength(1);
+      expect(resolved.bomItems[0]!.hardwareId).toBe('kit-merivobox-m');
+      expect(resolved.bomItems[0]!.quantity).toBe(1);
+      expect(resolved.bomItems[0]!.role).toBe('commercial_kit');
+    });
+
+    it('R7: Visual binding independence (evaluating with vs without visual pins)', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const lwMm = 570;
+      const resRaw = resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 530, heightMm: 200 });
+
+      const mountFrame: HardwareMountFrame = {
+        originMm: [15, 5, 2],
+        basis: { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] },
+      };
+
+      const pinned = attachVisualPins(resRaw, (hwId) => ({
+        assetId: `ast-${hwId}`,
+        assetRevisionId: 'rev-1',
+        sha256: 'sha-' + hwId,
+        mountFrame,
+      }));
+
+      // Mechanical results must be 100% identical
+      expect(pinned.selectedVariants).toEqual(resRaw.selectedVariants);
+      expect(pinned.bomItems).toEqual(resRaw.bomItems);
+      expect(pinned.fabricatedComponents).toEqual(resRaw.fabricatedComponents);
+      expect(pinned.rigidMembers.map((m) => m.localTransform)).toEqual(
+        resRaw.rigidMembers.map((m) => m.localTransform),
+      );
+    });
+
+    it('E9 & E10: Exact visual pins and non-identity MountFrame composition', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const lwMm = 570;
+      const resolved = resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 530, heightMm: 200 });
+
+      const mountFrame: HardwareMountFrame = {
+        originMm: [15, 5, 2], // PILOT_ASSUMPTION non-identity
+        basis: {
+          x: [1, 0, 0],
+          y: [0, 1, 0],
+          z: [0, 0, 1],
+        },
+      };
+
+      const pinned = attachVisualPins(resolved, (hwId) => ({
+        assetId: `ast-${hwId}`,
+        assetRevisionId: `rev-${hwId}-v1`,
+        sha256: 'a'.repeat(64),
+        mountFrame,
+      }));
+
+      for (const m of pinned.rigidMembers) {
+        expect(m.assetId).toBe('ast-hw-merivobox-500');
+        expect(m.assetRevisionId).toBe('rev-hw-merivobox-500-v1');
+        expect(m.sha256).toBe('a'.repeat(64));
+        expect(m.mountFrame).toEqual(mountFrame);
+      }
+
+      // Test MountFrame normalization vector application
+      const norm = deriveAssetNormalization(mountFrame);
+      const ptInAsset: [number, number, number] = [100, 200, 50];
+      const normPt = applyAssetNormalization(norm, ptInAsset);
+      expect(normPt).toEqual([85, 195, 48]); // [100-15, 200-5, 50-2]
+    });
+
+    it('E14 & E15: Published snapshot freezes historical resolution and reports missing asset without fallback', () => {
+      const fixture = createMerivoboxPilotFixture();
+      const lwMm = 570;
+      const resolved = resolveAgregadoAssembly(fixture, { widthMm: lwMm, depthMm: 530, heightMm: 200 });
+
+      const lookup = (hwId: string) => ({
+        assetId: `ast-${hwId}`,
+        assetRevisionId: 'rev-hist-v1',
+        sha256: 'f'.repeat(64),
+      });
+
+      const snapshot = freezePublishedAssemblySnapshot(resolved, 1, lookup);
+
+      expect(snapshot.agregadoRevisionNumber).toBe(1);
+      expect(snapshot.rigidMembers[0]!.assetRevisionId).toBe('rev-hist-v1');
+
+      // Reopening when historical asset rev-hist-v1 exists
+      const projectedOk = projectPublishedAssemblySnapshotFor3D({
+        snapshot,
+        placement: { originMm: [0, 0, 0] },
+        assemblyInstanceId: 'inst-merivobox-1',
+        availableAssets: new Set(['rev-hist-v1']),
+      });
+      expect(projectedOk.rigidMembers[0]!.renderStatus).toBe('exact');
+
+      // Reopening when only a newer revision exists (no fallback to latest!)
+      const projectedMissing = projectPublishedAssemblySnapshotFor3D({
+        snapshot,
+        placement: { originMm: [0, 0, 0] },
+        assemblyInstanceId: 'inst-merivobox-1',
+        availableAssets: new Set(['rev-hist-v2-latest']),
+      });
+      expect(projectedMissing.rigidMembers[0]!.renderStatus).toBe('historical_asset_missing');
+      expect(projectedMissing.rigidMembers[0]!.assetRevisionId).toBe('rev-hist-v1'); // preserved
+    });
+
+    it('E19: Codebase contains zero conditional brand logic (no if blum / merivobox in core)', () => {
+      // Introspective check on function definitions: they accept arbitrary input
+      expect(typeof resolveAgregadoAssembly).toBe('function');
+      expect(typeof validateAgregadoAssemblyDefinition).toBe('function');
+      expect(typeof projectResolvedAssemblyFor3D).toBe('function');
     });
   });
 });

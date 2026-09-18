@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "comment": "Canonical #670-E MERIVOBOX pilot configuration. Single numeric authority for cross-runtime parity: Go domain/engine, TS domain, Proyectar WebGL and SketchUp TestUp/evidence must all resolve against THESE values (review R12). The nominal component geometry thickness intentionally differs from the bound MERIVOBOX_BOARD material so the fabricated thickness authority is the MaterialBoard, never the geometry default nor any renderer (review R9).",
+  "pilot": "BLUM_MERIVOBOX_HEIGHT_M",
+  "provenance": {
+    "source": "Blum Catalogue KA-160/24-ES",
+    "pages": "240-245",
+    "clearanceMm": 3.0,
+    "verifiedAt": "2026-09-17",
+    "dossier": "docs/architecture/merivobox-pilot.md"
+  },
+  "configuration": {
+    "outerWidthMm": 600,
+    "leftPanelThicknessMm": 15,
+    "rightPanelThicknessMm": 15,
+    "derivedLwMm": 570,
+    "assemblyHeightMm": 200,
+    "carcaseDepthMm": 530,
+    "selectedNominalDepthMm": 500,
+    "mutatedOuterWidthMm": 800,
+    "mutatedDerivedLwMm": 770,
+    "variantASpaceDepthMm": 480,
+    "variantASelectedNominalDepthMm": 450
+  },
+  "materialAuthority": {
+    "optionRole": "MERIVOBOX_BOARD",
+    "materialId": "mat-merivobox-board-16",
+    "materialThicknessMm": 16,
+    "nominalGeometryThicknessMm": 15
+  },
+  "hardware": {
+    "variantSetId": "depth-variants",
+    "variantA": { "nominalDepthMm": 450, "hardwareId": "hw-merivobox-450" },
+    "variantB": { "nominalDepthMm": 500, "hardwareId": "hw-merivobox-500" },
+    "commercialKitHardwareId": "kit-merivobox-m"
+  },
+  "expectedFabricatedMm": {
+    "w600Nl450": {
+      "bottom": { "widthMm": 512, "lengthMm": 434, "thicknessMm": 16 },
+      "back": { "widthMm": 512, "lengthMm": 69, "thicknessMm": 16 }
+    },
+    "w600Nl500": {
+      "bottom": { "widthMm": 512, "lengthMm": 484, "thicknessMm": 16 },
+      "back": { "widthMm": 512, "lengthMm": 69, "thicknessMm": 16 }
+    },
+    "w800Nl450": {
+      "bottom": { "widthMm": 712, "lengthMm": 434, "thicknessMm": 16 },
+      "back": { "widthMm": 712, "lengthMm": 69, "thicknessMm": 16 }
+    },
+    "w800Nl500": {
+      "bottom": { "widthMm": 712, "lengthMm": 484, "thicknessMm": 16 },
+      "back": { "widthMm": 712, "lengthMm": 69, "thicknessMm": 16 }
+    },
+    "rightMembersDeltaMm": 200,
+    "rigidScale": [1.0, 1.0, 1.0],
+    "rigidBasisDeterminant": 1.0
+  },
+  "formulas": {
+    "lw": "outerWidthMm - leftPanelThicknessMm - rightPanelThicknessMm",
+    "bottomWidth": "LW - 58",
+    "bottomLength": "NL - 16",
+    "backWidth": "LW - 58",
+    "backHeight": "69 (Height M)",
+    "fabricatedThickness": "MERIVOBOX_BOARD MaterialBoard.thicknessMm"
+  }
+}

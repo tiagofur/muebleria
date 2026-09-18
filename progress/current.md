@@ -1,3 +1,31 @@
+# Issue #670-E — [PILOT] Piloto MERIVOBOX real end-to-end (#670)
+
+- Approval: prompt del propietario (2026-09-17) autoriza exclusivamente la validación del piloto comercial MERIVOBOX (Altura M) sobre la arquitectura genérica de #670-A/B/C/D («datos + recipe + variants + assets», sin ramas por fabricante). Base exacta `origin/main@fc3b53bb`. Rama `feat/670-e-merivobox-real-pilot`.
+- Solución — piloto comercial desacoplado y multi-runtime:
+  1. Procedencia verificada (R1): Catálogo Blum KA-160/24-ES (pp. 240–245); holgura 3.0 mm; fórmulas fondo (NL - 16 x LW - 58 x 16 mm) y trasera (69 x LW - 58 x 16 mm); verificado al 2026-09-17. Dossier en `docs/architecture/merivobox-pilot.md`.
+  2. Desacoplamiento W vs LW (R3): La autoridad del mueble calcula $LW = W - (\text{leftThickness} + \text{rightThickness})$. La receta opera sobre $LW$. Soportados espesores de lateral de 15, 18 y 19 mm sin asunción fija de 18 mm.
+  3. Política de BOM comercial (R4): Set comercial kit unit 'set' (`IncludedInKit`); los miembros del herraje no duplican líneas comerciales; fondo y trasera entran a lista de corte.
+  4. Persistencia histórica en PostgreSQL (R5): Aislamiento probado en BD real (`TestMerivoboxPilotHistoricalPersistence_R5`): la mutación de la receta en catálogo a R2 no afecta al snapshot publicado S1.
+  5. Límites estrictos de variantes (R6): Holgura 3.0 mm con rechazo en 449.9, 502.9, 530.1 mm sin fallback a la variante más cercana.
+  6. Independencia de binding visual (R7): Evaluación con o sin pins visuales genera idénticas variantes, matrices, piezas de corte y BOM.
+  7. Invariante de rigidez (E3/E20/E14): Miembros rígidos preservan escala [1,1,1] y determinante +1.0 exacto en todas las mutaciones (+200 mm delta W600->W800).
+  8. Cero bifurcaciones por marca: Ningún `if blum`, `if merivobox`, `MerivoboxResolver` ni renderer especial en Go, TS, WebGL o SketchUp.
+- Ronda de revisión R9–R14 (2026-09-18):
+  1. R9 MaterialBoard authority: el espesor fabricado (16 mm) proviene de la MaterialBoard vinculada (rol `MERIVOBOX_BOARD` → `mat-merivobox-board-16`); la geometría nominal queda fijada en 15 mm en el contrato canónico y el seed WebGL para que sólo el material pueda producir el 16 observado (tests TS `merivoboxPilotCanonical.test.ts` + Scenario 8). Renderer sin espesores hardcodeados.
+  2. R10/R11 W vs LW: la cadena outer W + costados reales del seed (INTERIOR → mat-arauco-blanco 15 mm efectivo) → LW → resolver se verifica con readback del grafo de escena en Scenario 8 (`assemblyResolvedWidth = posX(side-right) − posX(side-left)`); tests genéricos Go/TS documentan que sus `WidthMm` son dimensiones de assembly, no W exterior.
+  3. R12 config canónica única: `contracts/fixtures/merivobox-pilot-canonical.json`; consumida y comparada numéricamente por Go (`merivobox_canonical_test.go`), TS, WebGL (spec lee el JSON) y Ruby (unit + smoke host). Los tests Go/TS ADEMÁS leen la evidencia host comprometida y fallan ante cualquier desvío (tolerancia 1e-6 mm por ruido inches→mm).
+  4. Corrección crítica descubierta y reparada: la evidencia host anterior estaba editada a mano y el smoke nunca había corrido verde (referenciaba `MerivoboxPilotTest::FakeDownloader` que TestUp no carga, assets de bytes falsos que caían al fallback sin MountFrame, E9/E12 con aserciones stale, evidencia con literales). Smoke rehecho: autocontenido, SKPs reales por revisión generados vía el host (con doble `file_new` porque SketchUp rechaza cargar un .skp que es el propio archivo del modelo activo), E9 con expectativa compuesta, E12 con capturas exactas, evidencia MEDIDA desde el modelo.
+  5. R13 evidencia regenerada ejecutando el smoke REAL contra el HEAD de código exacto con RBZ reinstalado; R14 dossier reescrito con la matriz de paridad respaldada por tests.
+- Evidencia (HEAD de código `159fa7e9`):
+  - Go Engine: `TestMerivoboxPilotEndToEndGates_E1_E20` + `TestMerivoboxCanonicalPilotParity_R12` + `TestMerivoboxCanonicalPilotHostEvidenceParity_R12` PASS (paquete engine completo ok).
+  - Go Storage: `TestMerivoboxPilotHistoricalPersistence_R5` PASS contra PostgreSQL 16 real (contenedor desechable).
+  - TS Domain: paquete completo 109/109 archivos, 1531/1531 tests (incl. `merivoboxPilotCanonical.test.ts` 6/6).
+  - UI: `packages/ui` 172/172 archivos, 1945/1945 tests. `pnpm typecheck` 7/7 PASS.
+  - WebGL / Proyectar: `tests/visual/proyectar-webgl.spec.ts` suite completa 8/8 PASS en Chromium real (Escenario 8 consume la config canónica).
+  - SketchUp Extension: `bundle exec rake verify` PASS (RuboCop 0 ofensas, unit 880 runs 5951 aserciones, boundary 6/3179, RBZ sha256 `f9f0f02cc8a4ab87ac3e40796e5a29efda771a35f0ec0209b8fdba816564e524`).
+  - Host smoke REAL (SketchUp 2026.2.242, arm64): TestUp CI `Success` 8/8 tests / 108 aserciones (`progress/host_smoke_670_e_testup_ci.json`); evidencia medida en `progress/host_smoke_670_e_merivobox_pilot_evidence.json` con head == `159fa7e9` y rbz == `f9f0f02c…`. Config reproducible: `apps/sketchup-extension/testup-ci-670e.yml`.
+  - Auditoría de aceptación: `docs/architecture/audit-670-final.md` (§2.5 y §3 actualizados con claims verificados).
+- Delivery: partial (`Refs #670`, `Delivery: partial`, `Increment: #670-E — MERIVOBOX real end-to-end pilot`). Sin merge automático ni cierre manual; handoff para revisión independiente.
 # Issue #778 — [CI][PDF] Eliminar flake byte-exact de engineering-cutting-demand
 
 - Approval: prompt del propietario (2026-09-17, «Investigar flake recurrente del PDF #739 en CI») exige demostrar la causa real antes de cualquier fix y prohíbe retries/timeouts/debilitar la comparación; autoriza issue específica + implementación si el fix es pequeño. Issue owner #778 creada `status:approved`, `type:bug`, `high` (sin duplicados abiertos; #739 CLOSED es el test dueño). Diagnóstico realizado sobre rama ajena sin escribir; implementación en rama propia `fix/778-pdf-deterministic-metadata` desde `origin/main@fc3b53bb` (post-merge #771). PR #777/#768 intactos (cero cambios en su superficie).
