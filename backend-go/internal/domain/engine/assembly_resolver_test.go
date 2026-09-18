@@ -15,6 +15,15 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
+// Width semantics in this file (#670 review R11): ResolveAgregadoAssembly is a
+// generic assembly resolver — its WidthMm/DepthMm/HeightMm params are the
+// ASSEMBLY's own dimensions. At furniture level that width is the inner cavity
+// LW (moduleOuterWidth - leftPanelThickness - rightPanelThickness), derived by
+// the furniture/layout authority BEFORE the resolver is called; the resolver
+// never sees the furniture outer W and never infers carcase panels. The generic
+// tests below use plain assembly widths (e.g. 600.0 = assembly width, not an
+// outer furniture W); the MERIVOBOX pilot tests derive LW explicitly.
+
 // buildSyntheticDrawerFixture provides a reproducible, fully declarative Agregado assembly definition.
 // Follows preferred architecture (R8):
 // Agregado

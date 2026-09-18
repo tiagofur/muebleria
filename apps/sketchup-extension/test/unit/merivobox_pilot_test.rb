@@ -259,6 +259,57 @@ class MerivoboxPilotTest < Minitest::Test
     assert_in_delta 48.0 * MM, norm_test.z, 1e-4
   end
 
+  # R12: the pilot layout this suite resolves must match the single canonical
+  # configuration shared by Go, TS, Proyectar WebGL and the TestUp host smoke
+  # (contracts/fixtures/merivobox-pilot-canonical.json).
+  def test_r12_canonical_configuration_parity
+    repo_root = File.expand_path('../../../..', __dir__)
+    canonical = JSON.parse(File.read(File.join(repo_root, 'contracts', 'fixtures', 'merivobox-pilot-canonical.json')))
+    cfg = canonical['configuration']
+    mat = canonical['materialAuthority']
+
+    lw = cfg['outerWidthMm'] - cfg['leftPanelThicknessMm'] - cfg['rightPanelThicknessMm']
+    assert_in_delta cfg['derivedLwMm'], lw, 1e-9, 'canonical LW derivation mismatch'
+
+    layout = build_merivobox_pilot_layout(
+      width_mm: cfg['outerWidthMm'],
+      nominal_depth_mm: cfg['selectedNominalDepthMm'],
+      left_panel_mm: cfg['leftPanelThicknessMm'],
+      right_panel_mm: cfg['rightPanelThicknessMm']
+    )
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout)
+    assembly = parsed.assemblies.first
+
+    bottom = assembly.fabricated_components.find { |c| c.component_id == 'comp-bottom' }
+    back = assembly.fabricated_components.find { |c| c.component_id == 'comp-back' }
+    expected = canonical['expectedFabricatedMm']['w600Nl500']
+
+    assert_in_delta expected['bottom']['widthMm'], bottom.width_mm, 1e-9
+    assert_in_delta expected['bottom']['lengthMm'], bottom.length_mm, 1e-9
+    assert_in_delta mat['materialThicknessMm'], bottom.thickness_mm, 1e-9
+    assert_in_delta expected['back']['widthMm'], back.width_mm, 1e-9
+    assert_in_delta expected['back']['lengthMm'], back.length_mm, 1e-9
+    assert_in_delta mat['materialThicknessMm'], back.thickness_mm, 1e-9
+
+    layout800 = build_merivobox_pilot_layout(
+      width_mm: cfg['mutatedOuterWidthMm'],
+      nominal_depth_mm: cfg['selectedNominalDepthMm'],
+      left_panel_mm: cfg['leftPanelThicknessMm'],
+      right_panel_mm: cfg['rightPanelThicknessMm']
+    )
+    parsed800 = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout800)
+    assembly800 = parsed800.assemblies.first
+    bottom800 = assembly800.fabricated_components.find { |c| c.component_id == 'comp-bottom' }
+    side_r800 = assembly800.rigid_members.find { |m| m.member_id == 'side-right' }
+    side_r600 = assembly.rigid_members.find { |m| m.member_id == 'side-right' }
+    expected800 = canonical['expectedFabricatedMm']['w800Nl500']
+
+    assert_in_delta expected800['bottom']['widthMm'], bottom800.width_mm, 1e-9
+    assert_in_delta canonical['expectedFabricatedMm']['rightMembersDeltaMm'],
+                    side_r800.local_transform['translation'][0] - side_r600.local_transform['translation'][0],
+                    1e-9
+  end
+
   private
 
   def compute_transform_determinant(trans)

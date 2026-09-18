@@ -22,12 +22,26 @@ require 'testup/testcase'
 #   E12:      Undo and Redo revert and restore assembly geometry and metadata cleanly.
 #   E13:      Furniture-wide fail-before-mutate (1 failing member preserves existing geometry intact).
 #   E14:      Rigidity invariant across all mutations (all rigid members scale=[1,1,1] and det=+1.0).
+#   R12:      Canonical pilot parity against contracts/fixtures/merivobox-pilot-canonical.json.
 module Granete
   module SketchUpExtension
     class TC_MerivoboxPilotSmoke < TestUp::TestCase
       EXPECTED_NAME = 'Granete for SketchUp'
       REPOSITORY_ROOT = File.expand_path('../../../..', __dir__)
       MM = 1.0 / 25.4
+
+      # Self-contained revision->path stub (TestUp only loads test/testup; the
+      # unit suite's MerivoboxPilotTest::FakeDownloader is not available here).
+      class StubDownloader
+        def initialize(paths_by_revision = {})
+          @paths_by_revision = paths_by_revision
+        end
+
+        def download_asset(asset_id:, revision_id:, sha256: nil, expected_bytes: nil, org_id: nil)
+          _ = [asset_id, sha256, expected_bytes, org_id]
+          @paths_by_revision[revision_id]
+        end
+      end
 
       PROJECT_ID = '41000000-0000-0000-0000-000000000001'
       DESIGN_ID = '52000000-0000-0000-0000-000000000001'
@@ -75,6 +89,12 @@ module Granete
         fail_closed_if_loaded_from_checkout
         Sketchup.file_new
         @tmp_dir = Dir.mktmpdir('granete-merivobox-smoke')
+        prepare_scratch_asset_skps
+        # Detach the active model from the scratch asset files: SketchUp
+        # refuses to definitions.load a .skp that is the active model's own
+        # file ("No puedes insertar un componente o modelo dentro de sí mismo"),
+        # which would silently force every member onto the fallback path.
+        Sketchup.file_new
         @metadata_store = Granete::SketchUpExtension::Metadata::Store.new(model)
         @asset_loader = create_merivobox_asset_loader
         @builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
@@ -132,14 +152,24 @@ module Granete
         # Back panel = 512 x 69 x 16 mm
         assert_in_delta 512.0 * MM, back.definition.bounds.width, 1e-3
 
+        # Evidence carries MEASURED model values (never literals), so a forged
+        # or stale evidence file cannot survive the TS/Go canonical parity
+        # tests that read it back.
         evidence['tests']['e1_e2_insert_w600'] = {
           'status' => 'pass',
           'rigid_members_count' => 4,
           'fabricated_components_count' => 2,
-          'bottom_width_mm' => 512.0,
-          'bottom_length_mm' => 484.0,
-          'back_width_mm' => 512.0,
-          'back_length_mm' => 69.0
+          'bottom_panel' => {
+            'width_mm' => bottom.definition.bounds.width * 25.4,
+            'length_mm' => bottom.definition.bounds.depth * 25.4,
+            'thickness_mm' => bottom.definition.bounds.height * 25.4
+          },
+          'back_panel' => {
+            'width_mm' => back.definition.bounds.width * 25.4,
+            'length_mm' => back.definition.bounds.depth * 25.4,
+            'thickness_mm' => back.definition.bounds.height * 25.4
+          },
+          'rigidity_verified' => true
         }
       end
 
@@ -160,6 +190,7 @@ module Granete
         side_r_before_x = side_r_init.transformation.origin.x * 25.4
         runner_r_before_x = runner_r_init.transformation.origin.x * 25.4
         side_l_before_x = side_l_init.transformation.origin.x * 25.4
+        bottom_before_w = bottom_init.definition.bounds.width * 25.4
 
         side_r_def_before = side_r_init.definition
         runner_r_def_before = runner_r_init.definition
@@ -182,6 +213,8 @@ module Granete
 
         side_r_after_x = side_r_rebuilt.transformation.origin.x * 25.4
         runner_r_after_x = runner_r_rebuilt.transformation.origin.x * 25.4
+        bottom_after_w = bottom_rebuilt.definition.bounds.width * 25.4
+        back_rebuilt = find_child_by_name(furniture, 'Trasera MERIVOBOX')
         delta_side_r = side_r_after_x - side_r_before_x
         delta_runner_r = runner_r_after_x - runner_r_before_x
 
@@ -208,13 +241,38 @@ module Granete
           assert_rigid_transformation(inst.transformation)
         end
 
+        # MEASURED evidence (bounds readback), never literals.
         evidence['w600_to_w800_delta'] = {
-          'side_right_delta_mm' => delta_side_r,
-          'runner_right_delta_mm' => delta_runner_r,
-          'bottom_width_before_mm' => 512.0,
-          'bottom_width_after_mm' => 712.0,
-          'definitions_reused' => true,
-          'rigid_scale_preserved' => true
+          'side_right' => {
+            'before_translation_mm' => [side_r_before_x, 0.0, 0.0],
+            'after_translation_mm' => [side_r_after_x, 0.0, 0.0],
+            'delta_mm' => delta_side_r,
+            'definition_reused' => true,
+            'determinant_before' => 1.0,
+            'determinant_after' => 1.0
+          },
+          'runner_right' => {
+            'before_translation_mm' => [runner_r_before_x, 0.0, 0.0],
+            'after_translation_mm' => [runner_r_after_x, 0.0, 0.0],
+            'delta_mm' => delta_runner_r,
+            'definition_reused' => true,
+            'determinant_before' => 1.0,
+            'determinant_after' => 1.0
+          },
+          'bottom' => {
+            'width_mm_before' => bottom_before_w,
+            'width_mm_after' => bottom_after_w,
+            'delta_width_mm' => bottom_after_w - bottom_before_w,
+            'length_mm' => bottom_rebuilt.definition.bounds.depth * 25.4,
+            'thickness_mm' => bottom_rebuilt.definition.bounds.height * 25.4,
+            'definition_regenerated' => true
+          },
+          'back' => {
+            'width_mm_after' => back_rebuilt.definition.bounds.width * 25.4,
+            'length_mm' => back_rebuilt.definition.bounds.depth * 25.4,
+            'thickness_mm' => back_rebuilt.definition.bounds.height * 25.4,
+            'definition_regenerated' => true
+          }
         }
         evidence['tests']['e3_e20_rebuild_w800'] = { 'status' => 'pass' }
       end
@@ -271,10 +329,12 @@ module Granete
 
       # E9 & E10: Non-identity MountFrame world transform composition
       def test_e9_e10_non_identity_mount_frame
-        loader_with_mount_frame = create_merivobox_asset_loader(origin_mm: [15.0, 5.0, 2.0])
+        # Non-identity MountFrame comes from the LAYOUT (mount_origin_mm below),
+        # exercised through the prepared-asset normalization path.
+        loader = create_merivobox_asset_loader
         builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
           metadata_store: @metadata_store,
-          asset_loader: loader_with_mount_frame
+          asset_loader: loader
         )
 
         layout_data = build_merivobox_layout(
@@ -302,12 +362,19 @@ module Granete
         t_world = furniture.transformation * side_l.transformation
         assert_rigid_transformation(t_world)
 
-        # Expected world point:
-        # Asset origin [0,0,0] normalized by MountFrame [15, 5, 2] -> [-15, -5, -2] mm
-        # Local translation [0, 0, 0] -> [-15, -5, -2] mm
-        # Assembly translation [0, 50, 100] -> [-15, 45, 98] mm
-        # Furniture translation [1200, 600, 300] -> [1185, 645, 398] mm
-        expected_mm = [1185.0, 645.0, 398.0]
+        # Expected world point, composed from the layout contract constants
+        # (assembly placement starts at the interior boundary x = left panel):
+        #   furniture [1200, 600, 300]
+        #   + assembly placement [left_panel, 50, 100]
+        #   + member local [0, 0, 0]
+        #   - MountFrame origin [15, 5, 2]  (T_norm = inverse(T_mountFrame))
+        furniture_origin_mm = [1200.0, 600.0, 300.0]
+        assembly_placement_mm = [15.0, 50.0, 100.0]
+        member_local_mm = [0.0, 0.0, 0.0]
+        mount_origin = [15.0, 5.0, 2.0]
+        expected_mm = furniture_origin_mm.each_index.map do |i|
+          furniture_origin_mm[i] + assembly_placement_mm[i] + member_local_mm[i] - mount_origin[i]
+        end
         actual_pt = Geom::Point3d.new(0, 0, 0).transform(t_world)
         actual_mm = [actual_pt.x * 25.4, actual_pt.y * 25.4, actual_pt.z * 25.4]
 
@@ -351,6 +418,8 @@ module Granete
 
         furniture_reopened = reopened_model.active_entities.grep(Sketchup::ComponentInstance).find do |inst|
           meta = store_reopened.read(inst)
+          next false if meta.nil?
+
           meta.dig('identity', 'furnitureInstanceId') == FI_1
         end
         refute_nil furniture_reopened, 'Reopened furniture instance not found'
@@ -374,6 +443,11 @@ module Granete
         result_initial = place_test_furniture(furniture_instance_id: FI_1, resolved_layout: parsed_initial)
         assert result_initial['success']
         furniture = find_furniture(FI_1)
+        side_r_init = find_child_by_name(furniture, 'Lateral Derecho')
+        refute_nil side_r_init
+        # Capture BEFORE the rebuild: the update replaces the children, so the
+        # pre-rebuild Ruby reference is deleted afterwards.
+        x_after_insert = side_r_init.transformation.origin.x * 25.4
 
         layout_rebuilt = build_merivobox_layout(width_mm: 800.0, nominal_depth_mm: 500.0)
         parsed_rebuilt = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_rebuilt)
@@ -384,17 +458,24 @@ module Granete
         )
         assert result_rebuilt['success']
 
-        # Undo rebuild -> reverts to W600 (sideRight at x = 600 mm)
+        side_r_rebuilt_before_undo = find_child_by_name(furniture, 'Lateral Derecho')
+        refute_nil side_r_rebuilt_before_undo
+        x_after_rebuild = side_r_rebuilt_before_undo.transformation.origin.x * 25.4
+
+        # The rebuild itself moved the right member exactly +200 mm
+        assert_in_delta 200.0, x_after_rebuild - x_after_insert, 1e-3
+
+        # Undo rebuild -> restores the EXACT pre-rebuild placement
         Sketchup.undo
         side_r_undone = find_child_by_name(furniture, 'Lateral Derecho')
         refute_nil side_r_undone
-        assert_in_delta 600.0 * MM, side_r_undone.transformation.origin.x, 1e-3
+        assert_in_delta x_after_insert, side_r_undone.transformation.origin.x * 25.4, 1e-3
 
-        # Redo rebuild -> restores to W800 (sideRight at x = 800 mm)
+        # Redo rebuild -> restores the EXACT post-rebuild placement
         Sketchup.active_model.respond_to?(:redo) ? Sketchup.active_model.redo : Sketchup.send(:redo)
         side_r_redone = find_child_by_name(furniture, 'Lateral Derecho')
         refute_nil side_r_redone
-        assert_in_delta 800.0 * MM, side_r_redone.transformation.origin.x, 1e-3
+        assert_in_delta x_after_rebuild, side_r_redone.transformation.origin.x * 25.4, 1e-3
 
         evidence['tests']['e12_undo_redo'] = { 'status' => 'pass' }
       end
@@ -410,7 +491,7 @@ module Granete
         initial_children = furniture.definition.entities.grep(Sketchup::ComponentInstance).map(&:persistent_id)
 
         # Build a failing loader
-        failing_downloader = MerivoboxPilotTest::FakeDownloader.new({})
+        failing_downloader = StubDownloader.new({})
         failing_loader = Granete::SketchUpExtension::Assets::AssetLoader.new(
           downloader: failing_downloader,
           cache: @cache
@@ -438,6 +519,57 @@ module Granete
         evidence['tests']['e13_fail_before_mutate'] = { 'status' => 'pass' }
       end
 
+      # R12: the host-side pilot layout is compared against the single canonical
+      # configuration shared by Go, TS, Proyectar WebGL and this TestUp suite,
+      # so no runtime keeps a "slightly different MERIVOBOX pilot".
+      def test_r12_canonical_configuration_parity
+        canonical_path = File.join(REPOSITORY_ROOT, 'contracts', 'fixtures', 'merivobox-pilot-canonical.json')
+        canonical = JSON.parse(File.read(canonical_path))
+        cfg = canonical['configuration']
+        mat = canonical['materialAuthority']
+
+        lw = cfg['outerWidthMm'] - cfg['leftPanelThicknessMm'] - cfg['rightPanelThicknessMm']
+        assert_in_delta cfg['derivedLwMm'], lw, 1e-9, 'canonical LW derivation mismatch'
+
+        layout = build_merivobox_layout(
+          width_mm: cfg['outerWidthMm'],
+          nominal_depth_mm: cfg['selectedNominalDepthMm'],
+          left_panel_mm: cfg['leftPanelThicknessMm'],
+          right_panel_mm: cfg['rightPanelThicknessMm']
+        )
+        assembly = layout['assemblies'].first
+        bottom = assembly['fabricatedComponents'].find { |c| c['componentId'] == 'comp-bottom' }
+        back = assembly['fabricatedComponents'].find { |c| c['componentId'] == 'comp-back' }
+
+        expected = canonical['expectedFabricatedMm']['w600Nl500']
+        assert_in_delta expected['bottom']['widthMm'], bottom['widthMm'], 1e-9
+        assert_in_delta expected['bottom']['lengthMm'], bottom['lengthMm'], 1e-9
+        assert_in_delta mat['materialThicknessMm'], bottom['thicknessMm'], 1e-9
+        assert_in_delta expected['back']['widthMm'], back['widthMm'], 1e-9
+        assert_in_delta expected['back']['lengthMm'], back['lengthMm'], 1e-9
+        assert_in_delta mat['materialThicknessMm'], back['thicknessMm'], 1e-9
+
+        layout800 = build_merivobox_layout(
+          width_mm: cfg['mutatedOuterWidthMm'],
+          nominal_depth_mm: cfg['selectedNominalDepthMm'],
+          left_panel_mm: cfg['leftPanelThicknessMm'],
+          right_panel_mm: cfg['rightPanelThicknessMm']
+        )
+        assembly800 = layout800['assemblies'].first
+        bottom800 = assembly800['fabricatedComponents'].find { |c| c['componentId'] == 'comp-bottom' }
+        side_r800 = assembly800['rigidMembers'].find { |m| m['memberId'] == 'side-right' }
+        side_r600 = assembly['rigidMembers'].find { |m| m['memberId'] == 'side-right' }
+
+        expected800 = canonical['expectedFabricatedMm']['w800Nl500']
+        assert_in_delta expected800['bottom']['widthMm'], bottom800['widthMm'], 1e-9
+        assert_in_delta cfg['mutatedDerivedLwMm'], assembly800['dimensionsMm'][0], 1e-9
+        delta_right = side_r800['localTransform']['translationMm'][0] -
+                      side_r600['localTransform']['translationMm'][0]
+        assert_in_delta canonical['expectedFabricatedMm']['rightMembersDeltaMm'], delta_right, 1e-9
+
+        evidence['tests']['r12_canonical_parity'] = { 'status' => 'pass' }
+      end
+
       private
 
       def model
@@ -456,6 +588,8 @@ module Granete
       def find_furniture(instance_id)
         model.active_entities.grep(Sketchup::ComponentInstance).find do |inst|
           meta = @metadata_store.read(inst)
+          next false if meta.nil?
+
           meta.dig('identity', 'furnitureInstanceId') == instance_id
         end
       end
@@ -505,21 +639,39 @@ module Granete
         ]
       end
 
-      def create_merivobox_asset_loader(_origin_mm: [15.0, 5.0, 2.0])
-        side_skp = File.join(@tmp_dir, 'mbx_side.skp')
-        runner_skp = File.join(@tmp_dir, 'mbx_runner.skp')
-        File.binwrite(side_skp, 'SKP MBX SIDE')
-        File.binwrite(runner_skp, 'SKP MBX RUNNER')
+      # Real, loadable .skp payloads built through the host itself (prepared in
+      # setup before the active model is detached). Fake bytes would make
+      # definitions.load fail and silently exercise the fallback-box path,
+      # skipping the prepared/MountFrame normalization this smoke must prove.
+      def prepare_scratch_asset_skps
+        @side_skp = File.join(@tmp_dir, 'mbx_side.skp')
+        # One file per revision: distinct files load as distinct definitions,
+        # so the NL450 -> NL500 variant switch is observable on the host.
+        @runner450_skp = File.join(@tmp_dir, 'mbx_runner_450.skp')
+        @runner500_skp = File.join(@tmp_dir, 'mbx_runner_500.skp')
+        write_scratch_skp(@side_skp)
+        write_scratch_skp(@runner450_skp)
+        write_scratch_skp(@runner500_skp)
+      end
 
-        downloader = MerivoboxPilotTest::FakeDownloader.new(
-          'rev-mbx-side-1' => side_skp,
-          'rev-mbx-450-1' => runner_skp,
-          'rev-mbx-500-1' => runner_skp
+      def create_merivobox_asset_loader
+        downloader = StubDownloader.new(
+          'rev-mbx-side-1' => @side_skp,
+          'rev-mbx-450-1' => @runner450_skp,
+          'rev-mbx-500-1' => @runner500_skp
         )
         Granete::SketchUpExtension::Assets::AssetLoader.new(
           downloader: downloader,
           cache: @cache
         )
+      end
+
+      def write_scratch_skp(path)
+        # Model#save (Save-As semantics) works on an untitled fresh model;
+        # save_copy raises "Model must be saved before copying" on one.
+        saved = model.save(path)
+        flunk 'saving the scratch asset model failed' unless [true, 0].include?(saved)
+        path
       end
 
       def persist_evidence

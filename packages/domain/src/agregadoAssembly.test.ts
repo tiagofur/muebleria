@@ -30,6 +30,15 @@ import {
 } from './agregadoAssembly';
 
 describe('Agregado Hardware Assembly Contracts & Validators', () => {
+  // Width semantics in this file (#670 review R11): resolveAgregadoAssembly is
+  // a generic assembly resolver — its widthMm/depthMm/heightMm params are the
+  // ASSEMBLY's own dimensions. At furniture level that width is the inner
+  // cavity LW (moduleOuterWidth - leftPanelThickness - rightPanelThickness),
+  // derived by the furniture/layout authority BEFORE the resolver is called;
+  // the resolver never sees the furniture outer W and never infers carcase
+  // panels. Generic tests use plain assembly widths (e.g. 600 = assembly
+  // width, not an outer furniture W); MERIVOBOX pilot tests derive LW
+  // explicitly.
   describe('validateRigidMemberSource', () => {
     it('accepts valid fixed source', () => {
       expect(() =>
