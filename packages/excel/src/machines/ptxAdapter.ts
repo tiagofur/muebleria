@@ -406,7 +406,7 @@ export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
     },
     r4: {
       digest: '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc',
-      goldenBytesSha256: 'eadf184f1685f1a4aeae1375f3f571971da0485ea229ff098cf9542500ab5527',
+      goldenBytesSha256: '92209bfb8c35354a55f2289b6ab83ae22857c6ea496283ac5d7a3d6cee6df313',
     },
   },
   legacyGoldenBytesSha256: '544dcae574bc19e19f934f96b2ad1dc104a2d7b1f668262a83ae09df72510f09',

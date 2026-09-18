@@ -103,7 +103,10 @@ describe('golden r4 candidato LAB_FIXTURE NOT_MACHINE_VALIDATED (dialecto de cam
       (r): r is PtxOffcutRecord => r.type === 'OFFCUTS',
     );
     expect(offcuts).toHaveLength(1);
-    expect(offcuts[0]).toMatchObject({ code: 'place-3-1:rest', producedQuantity: 1 });
+    // #781 r4 micro-fix: the functional field samples carry an EMPTY
+    // OFFCUTS.CODE cell — the internal remnant identity stays in the mapping.
+    expect(offcuts[0]).toMatchObject({ producedQuantity: 1 });
+    expect(offcuts[0]!.code).toBeUndefined();
 
     // …and all of them are declared BEFORE the first BOARDS/PATTERNS/CUTS
     // record in the byte stream (no forward Xn references).

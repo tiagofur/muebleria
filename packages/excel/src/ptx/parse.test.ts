@@ -27,14 +27,13 @@ function captureParseError(fn: () => unknown): PtxParseError {
 
 describe('parsePtxText against the dossier fragments', () => {
   it('#781 reads the field-evidenced OFFCUTS shape (R2201/R7301): row ends in OFC_QTY, not WIDTH', () => {
-    // Sanitized assertion of the shape demonstrated by the two REAL working
-    // client PTX files (docs/machines/ptx-cadmatic4/field/): the OFFCUTS row
-    // carries a seventh content cell — OFC_QTY=1 — after LENGTH/WIDTH. Our
-    // own code cell stays non-empty (Granete's dialect labels its offcuts);
-    // the demonstrated WIDTH and the quantity column are the contract.
+    // EXACT sanitized shape of the two REAL working client PTX files
+    // (docs/machines/ptx-cadmatic4/field/): the OFFCUTS row carries an EMPTY
+    // CODE cell plus the seventh content cell — OFC_QTY=1 — after
+    // LENGTH/WIDTH. Empty CODE reads back as undefined (absent), never ''.
     const text = [
       'HEADER,1,LAB,0,0,1',
-      'OFFCUTS,1,1,OFFCUT_LAB,2,1718.601,862.601,1',
+      'OFFCUTS,1,1,,2,1718.601,862.601,1',
     ].join('\r\n');
     const { records } = parsePtxText(text);
     expect(records).toEqual([
@@ -42,7 +41,7 @@ describe('parsePtxText against the dossier fragments', () => {
         type: 'OFFCUTS',
         jobIndex: 1,
         offcutIndex: 1,
-        code: 'OFFCUT_LAB',
+        code: undefined,
         materialIndex: 2,
         length: 1718.601,
         width: 862.601,

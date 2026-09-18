@@ -1530,7 +1530,14 @@ export function compileCutPlanToPtxDocument(
           type: 'OFFCUTS',
           jobIndex: 1,
           offcutIndex,
-          code: ptxAscii(release.regionId) || `OFFCUT-${offcutIndex}`,
+          // #781 r4 micro-fix: the functional field samples carry an EMPTY
+          // OFFCUTS.CODE cell — the industrial r4 file never leaks Granete's
+          // internal remnant identity (`place-…:rest`). That identity stays in
+          // the mapping (offcutRegionRefByOffcutIndex), the CutProgram trace
+          // and the verifier. r2/r3 keep their historical codes byte-exact.
+          ...(options.offcutsWithQuantity === true
+            ? { code: undefined }
+            : { code: ptxAscii(release.regionId) || `OFFCUT-${offcutIndex}` }),
           materialIndex,
           length: q(terminal.rect.lengthMm, `OFFCUTS ${offcutIndex} LENGTH`),
           width: q(terminal.rect.widthMm, `OFFCUTS ${offcutIndex} WIDTH`),

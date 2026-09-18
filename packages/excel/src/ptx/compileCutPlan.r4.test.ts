@@ -30,8 +30,8 @@ import type {
   ProductionCutRow,
 } from '@granete/domain';
 import type { PtxCutRecord, PtxOffcutRecord, PtxRecord } from './records';
-import { parsePtxDocumentBytes } from './parse';
-import { serializePtxDocumentBytes } from './serialize';
+import { parsePtxDocumentBytes, parsePtxText } from './parse';
+import { serializePtxDocumentBytes, serializePtxDocumentUnchecked } from './serialize';
 import { validatePtxDocument } from './validate';
 import {
   compileCutPlanToPtxDocument,
@@ -273,15 +273,40 @@ describe('r4 (#781) — dialecto de campo: OFC_QTY + OFFCUTS declarado antes + X
     );
     const text = runFullChain(plan, GOLDEN_R4_OPTIONS);
 
-    // OFFCUTS row carries the evidenced 8th cell (OFC_QTY=1)…
+    // OFFCUTS row carries the evidenced 8th cell (OFC_QTY=1) with an EMPTY
+    // CODE cell (the functional field samples carry no offcut code)…
     const offcutLine = text.split('\r\n').find((line) => line.startsWith('OFFCUTS'))!;
-    expect(offcutLine).toMatch(/^OFFCUTS,1,1,.+,1,564,426,1$/);
+    expect(offcutLine).toBe('OFFCUTS,1,1,,1,564,426,1');
     // …and is declared BEFORE any PATTERNS/CUTS line (no forward Xn refs).
     const lines = text.split('\r\n').filter((line) => line !== '');
     const offcutPos = lines.findIndex((line) => line.startsWith('OFFCUTS'));
     const patternPos = lines.findIndex((line) => line.startsWith('PATTERNS') || line.startsWith('CUTS'));
     expect(offcutPos).toBeGreaterThan(-1);
     expect(offcutPos).toBeLessThan(patternPos);
+  });
+
+  it('forma real saneada OFFCUTS con CODE vacío: parsea, modela ausente, serializa vacío, OFC_QTY=1', () => {
+    // #781 r4 micro-fix — EXACT sanitized shape of the two REAL working
+    // client files: CODE cell empty. Parse → absent/undefined in the model →
+    // empty cell on re-serialize, OFC_QTY preserved as 1.
+    const { records } = parsePtxText(
+      ['HEADER,1,LAB,0,0,1', 'OFFCUTS,1,1,,2,1718.601,862.601,1'].join('\r\n'),
+    );
+    expect(records).toHaveLength(1);
+    const offcut = records[0] as PtxOffcutRecord;
+    expect(offcut.type).toBe('OFFCUTS');
+    expect(offcut.code).toBeUndefined();
+    expect(offcut.producedQuantity).toBe(1);
+    // Format-level re-serialization (Unchecked: no JOBS/MATERIALS rows in
+    // this fragment, so the relational validator is out of scope here).
+    const reserialized = serializePtxDocumentUnchecked(
+      {
+        header: { type: 'HEADER', version: 1, title: 'LAB', units: 0, origin: 0, trimType: 1 },
+        records,
+      },
+      { decimalPlaces: 3 },
+    );
+    expect(reserialized).toContain('OFFCUTS,1,1,,2,1718.601,862.601,1');
   });
 
   it('remanente no-92: sin fila CUTS Y sin registro OFFCUTS (sólo el pareado con 92 se declara)', () => {

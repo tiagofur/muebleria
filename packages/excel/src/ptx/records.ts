@@ -290,7 +290,16 @@ export interface PtxOffcutRecord {
   readonly type: 'OFFCUTS';
   readonly jobIndex: number;
   readonly offcutIndex: number;
-  readonly code: string;
+  /**
+   * OFFCUTS.CODE (#781 r4 micro-fix): the two functional field samples
+   * (R2201/R7301) carry an EMPTY code cell (`OFFCUTS,1,1,,2,1718.601,862.601,1`).
+   * The industrial r4 file therefore serializes this cell empty (undefined);
+   * Granete's internal remnant identity (regionId, e.g. `place-3-1:rest`)
+   * lives in the compilation mapping / CutProgram / verifier — never in this
+   * cell. Absent (undefined) = empty cell; a defined value serializes
+   * verbatim (r2/r3 historical rows keep their codes byte-exact).
+   */
+  readonly code?: string;
   readonly materialIndex: number;
   readonly length: number;
   readonly width: number;

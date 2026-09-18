@@ -290,7 +290,9 @@ function offcutLine(r: PtxOffcutRecord, f: Fmt): string {
     'OFFCUTS',
     f.int(r.jobIndex, 'OFFCUTS.JOB_INDEX'),
     f.int(r.offcutIndex, 'OFFCUTS.OFFCUT_INDEX'),
-    f.text(r.code, 'OFFCUTS.CODE'),
+    // #781 r4 micro-fix: empty CODE cell (undefined → '') per the functional
+    // field samples. Other families keep f.text (required, untouched).
+    f.optText(r.code, 'OFFCUTS.CODE'),
     f.int(r.materialIndex, 'OFFCUTS.MAT_INDEX'),
     f.real(r.length, 'OFFCUTS.LENGTH'),
     f.real(r.width, 'OFFCUTS.WIDTH'),

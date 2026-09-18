@@ -423,7 +423,9 @@ function checkCut(record: PtxCutRecord, issues: Issue[]): void {
 function checkOffcut(record: PtxOffcutRecord, issues: Issue[]): void {
   magnitudeIssue(record.length, `${recordLabel(record)} LENGTH`, true, issues);
   magnitudeIssue(record.width, `${recordLabel(record)} WIDTH`, true, issues);
-  textIssues(record.code, `${recordLabel(record)} CODE`, true, issues);
+  // #781 r4 micro-fix: OFFCUTS.CODE is optional (empty cell = absent).
+  // Other families' CODE checks stay required (untouched).
+  textIssues(record.code, `${recordLabel(record)} CODE`, false, issues);
 }
 
 function checkVector(record: PtxVectorRecord, issues: Issue[]): void {

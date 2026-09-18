@@ -444,7 +444,10 @@ function parseRecordRow(family: string, cells: readonly string[], lineNo: number
         type: 'OFFCUTS',
         jobIndex: c.int(0, 'JOB_INDEX'),
         offcutIndex: c.int(1, 'OFFCUT_INDEX'),
-        code: c.text(2, 'CODE'),
+        // #781 r4 micro-fix: the functional field samples carry an EMPTY
+        // CODE cell — absent/empty reads back as undefined, never as ''.
+        // Other families' CODE cells stay required (untouched).
+        code: c.optionalText(2),
         materialIndex: c.int(3, 'MAT_INDEX'),
         length: c.real(4, 'LENGTH'),
         width: c.real(5, 'WIDTH'),
