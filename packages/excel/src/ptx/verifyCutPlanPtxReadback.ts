@@ -655,7 +655,14 @@ export function verifyCutPlanPtxReadback(
     if (row.partIndex !== expectedPartIndex) {
       push('parts.order', `PARTS_REQ fila ${position + 1} PART_INDEX=${row.partIndex} ≠ ${expectedPartIndex} (pieza ${piece.id})`);
     }
-    const expectedCode = piece.partCode === '' ? `PART-${expectedPartIndex}` : piece.partCode;
+    // r4 (#781 §1): the CODE is the workshop manufacturing code (clean
+    // labelRef — one per physical piece), never the raw template partCode.
+    const expectedCode =
+      options.partCodeAuthority === 'workshop-labelref' && piece.labelRef.trim() !== ''
+        ? piece.labelRef
+        : piece.partCode === ''
+          ? `PART-${expectedPartIndex}`
+          : piece.partCode;
     if (row.code !== expectedCode) {
       push('parts.code', `PARTS_REQ ${expectedPartIndex} CODE='${row.code}' ≠ '${expectedCode}'`);
     }
@@ -735,7 +742,12 @@ export function verifyCutPlanPtxReadback(
     const stagingRoot = r3 && projection ? projection.usableRootRegionId : trace.boardRegionId;
     const expectations = deriveDivisionExpectations(trace, stagingRoot);
     if (expectations) {
-      totalReleases += deriveReleases(trace, expectations, r3).length;
+      const derived = deriveReleases(trace, expectations, r3);
+      // r4 (#781 §F): only FUNCTION 92 / part releases emit a CUTS row.
+      totalReleases +=
+        options.offcutCutMarkers === 'function92-only'
+          ? derived.filter((release) => release.kind === 'part' || release.offcutRelease92 === true).length
+          : derived.length;
     }
   }
   if (cutRows.length !== totalDivisions + totalReleases) {
@@ -743,6 +755,53 @@ export function verifyCutPlanPtxReadback(
   }
   if (offcutRows.length !== globalOffcutIndexByRegion.size) {
     push('offcuts.count', `OFFCUTS=${offcutRows.length} ≠ retazos ${globalOffcutIndexByRegion.size}`);
+  }
+  // r4 (#781 §B/§E/§F): field-dialect invariants the independent verifier
+  // must check beyond the structural round-trip.
+  if (options.offcutsWithQuantity === true) {
+    for (const row of offcutRows) {
+      if (row.producedQuantity !== 1) {
+        push(
+          'offcuts.ofc_qty',
+          `OFFCUTS ${row.offcutIndex} OFC_QTY=${row.producedQuantity ?? 'ausente'} ≠ 1 (cada registro representa un retazo físico individual)`,
+        );
+      }
+    }
+  }
+  if (options.offcutsBeforePatterns === true) {
+    // Byte-order invariant: every Xn reference must resolve to an OFFCUTS
+    // record declared EARLIER in the byte stream (single-pass reader
+    // safety; field-observed dialect).
+    const firstOffcutPos = parsed.records.findIndex((r) => r.type === 'OFFCUTS');
+    const firstPatternPos = parsed.records.findIndex((r) => r.type === 'PATTERNS' || r.type === 'CUTS');
+    if (offcutRows.length > 0 && (firstOffcutPos === -1 || (firstPatternPos !== -1 && firstOffcutPos > firstPatternPos))) {
+      push('offcuts.order', `OFFCUTS declarado en posición ${firstOffcutPos} después de PATTERNS/CUTS (${firstPatternPos}): el dialecto r4 exige OFFCUTS primero`);
+    }
+    for (let position = 0; position < parsed.records.length; position++) {
+      const record = parsed.records[position]!;
+      if (record.type !== 'CUTS') continue;
+      const reference = record.partReference;
+      if (reference.kind !== 'offcut') continue;
+      const offcutPos = parsed.records.findIndex(
+        (r, idx) => r.type === 'OFFCUTS' && r.offcutIndex === reference.offcutIndex && idx < position,
+      );
+      if (offcutPos === -1) {
+        push(
+          'offcuts.forward_reference',
+          `CUTS patrón ${record.patternIndex} fila ${record.cutIndex} referencia X${reference.offcutIndex} declarado DESPUÉS en el byte stream`,
+        );
+      }
+    }
+  }
+  if (options.offcutCutMarkers === 'function92-only') {
+    for (const row of cutRows) {
+      if (row.partReference.kind === 'offcut' && row.functionCode !== 92) {
+        push(
+          'cuts.xn_function',
+          `CUTS patrón ${row.patternIndex} fila ${row.cutIndex} referencia X${row.partReference.offcutIndex} con FUNCTION=${row.functionCode} ≠ 92 (subset evidenciado: Xn sólo en FUNCTION 92)`,
+        );
+      }
+    }
   }
   if (options.includeVectors === true) {
     if (vectorRows.length !== totalDivisions) {
@@ -810,6 +869,12 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
   }
   const expectationByCutId = new Map(expectations.map((e) => [e.division.cutId, e]));
   const releases = deriveReleases(trace, expectations, r3);
+  // r4 (#781 §F): Xn markers live ONLY on FUNCTION 92 rows — non-92 offcut
+  // releases have NO CUTS row (their OFFCUTS record alone declares them).
+  const emittedReleases =
+    options.offcutCutMarkers === 'function92-only'
+      ? releases.filter((release) => release.kind === 'part' || release.offcutRelease92 === true)
+      : releases;
   const schedule = r3 ? deriveScheduledSequences(expectations, releases) : undefined;
 
   if (!boardRow) {
@@ -854,8 +919,8 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
 
   // --- CUTS rows: divisions in structural preorder, then release rows -----
   const rows = cutsByPattern.get(sheetMapping.patternIndex) ?? [];
-  if (rows.length !== preorder.length + releases.length) {
-    push('cuts.sheet_count', `patrón ${sheetMapping.patternIndex}: CUTS=${rows.length} ≠ ${preorder.length} divisiones + ${releases.length} liberaciones`);
+  if (rows.length !== preorder.length + emittedReleases.length) {
+    push('cuts.sheet_count', `patrón ${sheetMapping.patternIndex}: CUTS=${rows.length} ≠ ${preorder.length} divisiones + ${emittedReleases.length} liberaciones`);
   }
 
   // Byte-derived extent reconstruction: the board extents come from BOARDS
@@ -964,7 +1029,7 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     }
   });
 
-  releases.forEach((release, position) => {
+  emittedReleases.forEach((release, position) => {
     const row = rows[preorder.length + position];
     const label = `liberación '${release.regionId}' (patrón ${sheetMapping.patternIndex})`;
     if (!row) return;

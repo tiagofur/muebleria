@@ -35,7 +35,7 @@ import {
   type MachineOutputSelection,
 } from '@granete/domain';
 import { evaluateSelectedCuttingOutputReadiness } from '../machines/outputSelectionResolver';
-import { CLIENT_A_HPP250_PROFILE, PTX_CADMATIC_4_R3_PROFILE } from '../machines/profiles';
+import { CLIENT_A_HPP250_PROFILE, PTX_CADMATIC_4_R3_PROFILE, PTX_CADMATIC_4_R4_PROFILE } from '../machines/profiles';
 import { PTX_POSTPROCESSOR_ADAPTER } from '../machines/ptxAdapter';
 import type { PtxCutRecord, PtxDocument, PtxMaterialRecord, PtxRecord } from './records';
 import { ptxDocumentsEqual } from './equivalence';
@@ -74,13 +74,16 @@ const R3_OPTIONS: CompileCutPlanToPtxOptions = {
 
 const KERF = 4;
 
+// #781: the CURRENT selectable CADmatic 4 revision is r4 — it inherits the
+// r3 trim frame, so the readiness assertions below still exercise the same
+// trim policy through the live selected route.
 const R3_SELECTION: MachineOutputSelection = {
   operation: 'cutting',
   machineProfileId: CLIENT_A_HPP250_PROFILE.ref.machineProfileId,
   machineProfileRevisionId: CLIENT_A_HPP250_PROFILE.ref.machineProfileRevisionId,
-  outputCompatibilityProfileId: PTX_CADMATIC_4_R3_PROFILE.ref.outputCompatibilityProfileId,
-  outputCompatibilityProfileRevisionId: PTX_CADMATIC_4_R3_PROFILE.ref.revisionId,
-  outputCompatibilityProfileDigest: PTX_CADMATIC_4_R3_PROFILE.digest,
+  outputCompatibilityProfileId: PTX_CADMATIC_4_R4_PROFILE.ref.outputCompatibilityProfileId,
+  outputCompatibilityProfileRevisionId: PTX_CADMATIC_4_R4_PROFILE.ref.revisionId,
+  outputCompatibilityProfileDigest: PTX_CADMATIC_4_R4_PROFILE.digest,
   postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
   postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
   postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,

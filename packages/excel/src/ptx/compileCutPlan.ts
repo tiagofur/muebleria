@@ -165,6 +165,40 @@ export interface CompileCutPlanToPtxOptions {
    * with ptx_compile.trim_unsupported and releases stay QTY_RPT=0 rows.
    */
   readonly supportsPositiveTrim?: boolean;
+  /**
+   * r4 candidate policy (#781): emit the evidenced OFFCUTS.OFC_QTY column
+   * (field samples R2201/R7301) with value 1 — every emitted OFFCUTS record
+   * represents exactly one physical remnant in this subset. r2/r3 rows keep
+   * ending at WIDTH and stay byte-exact.
+   */
+  readonly offcutsWithQuantity?: boolean;
+  /**
+   * r4 candidate policy (#781): declare every OFFCUTS record BEFORE the
+   * PATTERNS/CUTS blocks, matching the field-observed dialect so no CUTS row
+   * references an Xn declared later in the byte stream (single-pass reader
+   * safety). r2/r3 keep OFFCUTS after the CUTS blocks.
+   */
+  readonly offcutsBeforePatterns?: boolean;
+  /**
+   * r4 candidate policy (#781): emit NO Xn marker rows outside FUNCTION 92.
+   * Non-92 remnants are represented by their OFFCUTS record only (no
+   * pseudo-physical QTY_RPT=0/SEQUENCE=0 pass) — the field samples show Xn
+   * exclusively on FUNCTION 92 rows. Rest-side PIECE releases keep their
+   * attribution row (they reference a PARTS_REQ index, not Xn).
+   */
+  readonly offcutCutMarkers?: 'function92-only';
+  /**
+   * r4 candidate policy (#781): PARTS_REQ.CODE is the workshop manufacturing
+   * code — the placed piece's clean labelRef (`MOD-XXX[-Ln]-Pnn[-Cn]`,
+   * resolveCleanPieceCode authority, one code per physical piece) instead of
+   * the raw template partCode. pieceRef/id (joins, provenance) is NOT
+   * affected. Requires partCodeMaxLength; codes exceeding it or colliding
+   * across PARTS_REQ rows fail closed (part_code_too_long /
+   * part_code_duplicate) — never truncated.
+   */
+  readonly partCodeAuthority?: 'workshop-labelref';
+  /** Hard length limit for PARTS_REQ.CODE under partCodeAuthority (r4: 50). */
+  readonly partCodeMaxLength?: number;
 }
 
 /** Per-sheet slice of the inverse table linking durable identities to local PTX indexes. */
@@ -221,6 +255,8 @@ export type PtxCompilationErrorCode =
   | 'ptx_compile.kerf_not_uniform'
   | 'ptx_compile.magnitude_not_representable'
   | 'ptx_compile.identity_not_ascii'
+  | 'ptx_compile.part_code_too_long'
+  | 'ptx_compile.part_code_duplicate'
   | 'ptx_compile.material_thickness_missing'
   | 'ptx_compile.material_conflict'
   | 'ptx_compile.material_without_boards'
@@ -1108,6 +1144,33 @@ export function compileCutPlanToPtxDocument(
       { title: options.title },
     );
   }
+  if (
+    options.partCodeAuthority !== undefined &&
+    options.partCodeAuthority !== 'workshop-labelref'
+  ) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partCodeAuthority sólo implementa 'workshop-labelref' (#781 r4)",
+      { partCodeAuthority: options.partCodeAuthority },
+    );
+  }
+  if (
+    (options.partCodeAuthority !== undefined && !Number.isInteger(options.partCodeMaxLength)) ||
+    (options.partCodeMaxLength !== undefined && options.partCodeMaxLength! < 1)
+  ) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      'partCodeAuthority exige un partCodeMaxLength entero >= 1',
+      { partCodeMaxLength: options.partCodeMaxLength },
+    );
+  }
+  if (options.offcutCutMarkers !== undefined && options.offcutCutMarkers !== 'function92-only') {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "offcutCutMarkers sólo implementa 'function92-only' (#781 r4)",
+      { offcutCutMarkers: options.offcutCutMarkers },
+    );
+  }
   if (cutPlan.sheets.length === 0) {
     throw new PtxCompilationError(
       'ptx_compile.no_sheets',
@@ -1192,6 +1255,7 @@ export function compileCutPlanToPtxDocument(
   const partIndexByPieceRef = new Map<string, number>();
   const pieceRefByPartIndex: string[] = [];
   const partsReq: PtxRecord[] = [];
+  const seenPartCodes = new Map<string, number>();
   let partIndex = 1;
   for (const { sheet } of compiledSheets) {
     for (const piece of sheet.pieces) {
@@ -1208,10 +1272,44 @@ export function compileCutPlanToPtxDocument(
       // PARTS_REQ.CODE is contractual identity: non-ASCII fails closed (no
       // silent filtering that could merge two part codes); empty gets the
       // explicit technical code PART-<n> (the placement ref is the identity).
-      const partCode =
-        piece.partCode === ''
-          ? `PART-${partIndex}`
-          : requireAsciiIdentity(piece.partCode, 'partCode', { pieceRef: piece.id, partCode: piece.partCode });
+      let partCode: string;
+      if (options.partCodeAuthority === 'workshop-labelref' && piece.labelRef.trim() !== '') {
+        // r4 (#781): the workshop manufacturing code (clean labelRef, one per
+        // physical piece) — the SAME authority the app displays. Never the
+        // raw template partCode, never truncated.
+        partCode = requireAsciiIdentity(piece.labelRef, 'partCode (workshop labelRef)', {
+          pieceRef: piece.id,
+          partCode: piece.labelRef,
+        });
+      } else {
+        partCode =
+          piece.partCode === ''
+            ? `PART-${partIndex}`
+            : requireAsciiIdentity(piece.partCode, 'partCode', { pieceRef: piece.id, partCode: piece.partCode });
+      }
+      if (
+        options.partCodeAuthority === 'workshop-labelref' &&
+        partCode.length > options.partCodeMaxLength!
+      ) {
+        throw new PtxCompilationError(
+          'ptx_compile.part_code_too_long',
+          `El código de fabricación excede el límite del candidato (${partCode.length} > ${options.partCodeMaxLength}): se rechaza en vez de truncarse`,
+          { pieceRef: piece.id, partCode, maxLength: options.partCodeMaxLength },
+        );
+      }
+      if (options.partCodeAuthority === 'workshop-labelref') {
+        const previous = seenPartCodes.get(partCode);
+        if (previous !== undefined) {
+          // One code per physical piece (#781): identical pieces must be
+          // disambiguated upstream (-Cn copy suffix), never merged here.
+          throw new PtxCompilationError(
+            'ptx_compile.part_code_duplicate',
+            'Dos piezas físicas distintas comparten el código de fabricación',
+            { partCode, pieceRef: piece.id, previousPartIndex: previous },
+          );
+        }
+        seenPartCodes.set(partCode, partIndex);
+      }
       partsReq.push({
         type: 'PARTS_REQ',
         jobIndex: 1,
@@ -1278,6 +1376,11 @@ export function compileCutPlanToPtxDocument(
 
   const offcutRecords: PtxOffcutRecord[] = [];
   const vectorRecords: PtxVectorRecord[] = [];
+  // r4 (#781): per-sheet BOARDS/PATTERNS/CUTS blocks are assembled separately
+  // so OFFCUTS can be declared BEFORE them (field-observed dialect — no
+  // forward Xn references). r2/r3 keep appending blocks directly.
+  const sheetRecords: PtxRecord[] =
+    options.offcutsBeforePatterns === true ? [] : records;
   const sheetMappings: PtxCompiledSheetMapping[] = [];
   const offcutRegionRefByOffcutIndex: ScopedRegionRef[] = [];
   const sheetIndexByPatternIndex: number[] = [];
@@ -1289,7 +1392,7 @@ export function compileCutPlanToPtxDocument(
     const patternType = ptxPatternTypeForSheet(trace);
     sheetIndexByPatternIndex.push(sheet.sheetIndex);
 
-    records.push({
+    sheetRecords.push({
       type: 'BOARDS',
       jobIndex: 1,
       boardIndex: patternIndex,
@@ -1300,7 +1403,7 @@ export function compileCutPlanToPtxDocument(
       stockQuantity: 1,
       usedQuantity: 1,
     });
-    records.push({
+    sheetRecords.push({
       type: 'PATTERNS',
       jobIndex: 1,
       patternIndex,
@@ -1322,7 +1425,7 @@ export function compileCutPlanToPtxDocument(
         plan.keptPieceRef !== undefined
           ? { kind: 'part', partIndex: partIndexByPieceRef.get(plan.keptPieceRef)! }
           : { kind: 'none' };
-      records.push({
+      sheetRecords.push({
         type: 'CUTS',
         jobIndex: 1,
         patternIndex,
@@ -1353,8 +1456,44 @@ export function compileCutPlanToPtxDocument(
     const releaseCutIndexByRegionId = new Map<string, number>();
     const offcutIndexByRegionId = new Map<string, number>();
     const offcutIndexBy92Release = new Map<string, string>();
-    releases.forEach((release, i) => {
-      const cutIndex = plans.length + i + 1;
+    // CUT_INDEX of release rows continues after the division rows; r4 skips
+    // non-92 offcut marker rows (#781: Xn lives ONLY on FUNCTION 92) so the
+    // index only advances for rows that are actually emitted.
+    let releaseRowCutIndex = plans.length;
+    releases.forEach((release) => {
+      const isPhysical92 = release.offcutRelease92 === true;
+      const skipOffcutMarker =
+        options.offcutCutMarkers === 'function92-only' && release.kind === 'offcut' && !isPhysical92;
+      if (skipOffcutMarker) {
+        // r4: the remnant is declared by its OFFCUTS record only — no
+        // pseudo-physical QTY_RPT=0/SEQUENCE=0 pass (field samples show Xn
+        // exclusively on FUNCTION 92 rows). The OFFCUTS record + mapping are
+        // still produced below.
+        if (release.kind === 'offcut') {
+          const terminal = terminalByRegion.get(release.regionId)!;
+          offcutIndexByRegionId.set(release.regionId, offcutIndex);
+          offcutRegionRefByOffcutIndex.push({
+            sheetIndex: sheet.sheetIndex,
+            regionId: release.regionId,
+          });
+          offcutRecords.push({
+            type: 'OFFCUTS',
+            jobIndex: 1,
+            offcutIndex,
+            code: ptxAscii(release.regionId) || `OFFCUT-${offcutIndex}`,
+            materialIndex,
+            length: q(terminal.rect.lengthMm, `OFFCUTS ${offcutIndex} LENGTH`),
+            width: q(terminal.rect.widthMm, `OFFCUTS ${offcutIndex} WIDTH`),
+            // OFC_QTY=1: this record represents exactly ONE physical remnant
+            // of this pattern (#781 subset; R2201/R7301 evidence).
+            ...(options.offcutsWithQuantity === true ? { producedQuantity: 1 } : {}),
+          });
+          offcutIndex += 1;
+        }
+        return;
+      }
+      releaseRowCutIndex += 1;
+      const cutIndex = releaseRowCutIndex;
       releaseCutIndexByRegionId.set(release.regionId, cutIndex);
       const reference: PtxPartReference =
         release.kind === 'offcut'
@@ -1363,7 +1502,6 @@ export function compileCutPlanToPtxDocument(
       // r3 FUNCTION 92 (contract §6.2): a PHYSICAL release pass — QTY_RPT=1,
       // QTY_PARTS absent, positive scheduled SEQUENCE. Every other release
       // keeps the r2 relational representation: QTY_RPT=0/SEQUENCE=0.
-      const isPhysical92 = release.offcutRelease92 === true;
       if (isPhysical92) {
         const previous = offcutIndexBy92Release.get(`X${offcutIndex}`);
         if (previous !== undefined || release.producerCutId === undefined) {
@@ -1375,7 +1513,7 @@ export function compileCutPlanToPtxDocument(
         }
         offcutIndexBy92Release.set(`X${offcutIndex}`, release.regionId);
       }
-      records.push({
+      sheetRecords.push({
         type: 'CUTS',
         jobIndex: 1,
         patternIndex,
@@ -1405,6 +1543,9 @@ export function compileCutPlanToPtxDocument(
           materialIndex,
           length: q(terminal.rect.lengthMm, `OFFCUTS ${offcutIndex} LENGTH`),
           width: q(terminal.rect.widthMm, `OFFCUTS ${offcutIndex} WIDTH`),
+          // OFC_QTY=1: this record represents exactly ONE physical remnant
+          // of this pattern (#781 subset; R2201/R7301 evidence).
+          ...(options.offcutsWithQuantity === true ? { producedQuantity: 1 } : {}),
         });
         offcutIndex += 1;
       }
@@ -1422,7 +1563,14 @@ export function compileCutPlanToPtxDocument(
     });
   });
 
-  records.push(...offcutRecords, ...vectorRecords);
+  if (options.offcutsBeforePatterns === true) {
+    // r4 field-observed dialect (#781 §E): OFFCUTS declared before any
+    // PATTERNS/CUTS block, so every Xn reference resolves backwards in the
+    // byte stream. Descriptive provenance stays in the manifest, not here.
+    records.push(...offcutRecords, ...sheetRecords, ...vectorRecords);
+  } else {
+    records.push(...offcutRecords, ...vectorRecords);
+  }
 
   const document: PtxDocument = {
     header: {

@@ -15,7 +15,7 @@
  */
 
 import { ResolutionError } from './errors';
-import { formatOptimizerPartDescription } from './engine/cut';
+import { formatOptimizerPartDescription, resolveCleanPieceCode } from './engine/cut';
 import type {
   Catalog,
   ProductionCutRow,
@@ -108,11 +108,30 @@ export function releaseCutRowsFromDemand(
   const units = [...demand.units].sort((a, b) =>
     a.furnitureInstanceId.localeCompare(b.furnitureInstanceId),
   );
+  // #781 — manufacturing code authority. Rows carry the SAME clean
+  // partCode/labelRef style the BOM flow (engine/cut.ts) already emits, so
+  // the app, labels and PTX PARTS_REQ.CODE share one workshop code instead
+  // of the internal partId leaking into fabrication outputs. Duplicate
+  // module codes get the -L<n>- line suffix; partIdx is 1-based per unit
+  // line (mirrors generateCutRowsWithLinks). pieceRef identity is NOT
+  // touched: it stays partId-based wherever identity is the concept.
+  const moduleCounts = new Map<string, number>();
   for (const unit of units) {
     const moduleCode = modulesById.get(unit.furnitureDefinitionId)?.code ?? unit.furnitureDefinitionId;
+    const seenMod = (moduleCounts.get(moduleCode) ?? 0) + 1;
+    moduleCounts.set(moduleCode, seenMod);
+    const lineSuffix = seenMod === 1 ? undefined : `L${seenMod}`;
+    let partIdx = 0;
     for (const piece of unit.pieces) {
+      partIdx++;
       const material = materialsById.get(piece.materialId)!;
       const edge = piece.edgeBandId ? edgesById.get(piece.edgeBandId) : undefined;
+      const { partCode: cleanPartCode, labelRef } = resolveCleanPieceCode(
+        moduleCode,
+        piece.partCode ?? undefined,
+        partIdx,
+        lineSuffix,
+      );
       rows.push({
         quantity: piece.quantity,
         lengthMm: piece.lengthMm,
@@ -132,9 +151,9 @@ export function releaseCutRowsFromDemand(
         W1: piece.w1,
         W2: piece.w2,
         partName: piece.description,
-        partCode: piece.partCode || piece.partId,
+        partCode: cleanPartCode,
         moduleCode,
-        labelRef: `${unit.furnitureInstanceId}:${piece.partId}`,
+        labelRef,
         thicknessMm: piece.thicknessMm,
         edgeBandCode: edge?.code,
         edgeBandName: edge?.name,

@@ -12,6 +12,7 @@ import {
   PTX_CADMATIC_4_PROFILE,
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_4_R3_PROFILE,
+  PTX_CADMATIC_4_R4_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
@@ -20,6 +21,7 @@ import { canonicalJson, sha256Hex } from './digest';
 import { generatePtxString } from '../ptxCutPlanExport';
 import { GOLDEN_TEXT } from '../ptx/cutPlanPtxGolden';
 import { GOLDEN_R3_TEXT } from '../ptx/cutPlanPtxGoldenR3';
+import { GOLDEN_R4_TEXT } from '../ptx/cutPlanPtxGoldenR4';
 
 describe('PTX_POSTPROCESSOR_ADAPTER', () => {
   it('is ready for ptx-generic and produces bytes identical to the existing serializer', () => {
@@ -94,7 +96,7 @@ describe('PTX_POSTPROCESSOR_ADAPTER', () => {
     expect(digest).toBe(PTX_POSTPROCESSOR_ADAPTER.implementationDigest);
   });
 
-  it('binds the implementation digest to effective r2/r3 options and stable industrial goldens', async () => {
+  it('binds the implementation digest to effective r2/r3/r4 options and stable industrial goldens', async () => {
     const contract = PTX_ADAPTER_INDUSTRIAL_CONTRACT;
     expect(contract.implementationDigest).toBe(PTX_POSTPROCESSOR_ADAPTER.implementationDigest);
     expect(await sha256Hex(canonicalJson(PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR))).toBe(
@@ -104,6 +106,8 @@ describe('PTX_POSTPROCESSOR_ADAPTER', () => {
     expect(contract.profiles.r3.digest).toBe(PTX_CADMATIC_4_R3_PROFILE.digest);
     expect(await sha256Hex(GOLDEN_TEXT)).toBe(contract.profiles.r2.goldenBytesSha256);
     expect(await sha256Hex(GOLDEN_R3_TEXT)).toBe(contract.profiles.r3.goldenBytesSha256);
+    expect(contract.profiles.r4.digest).toBe(PTX_CADMATIC_4_R4_PROFILE.digest);
+    expect(await sha256Hex(GOLDEN_R4_TEXT)).toBe(contract.profiles.r4.goldenBytesSha256);
 
     const legacyBytes = PTX_POSTPROCESSOR_ADAPTER.serialize(
       buildFixtureCuttingJob(),
@@ -125,10 +129,26 @@ describe('PTX_POSTPROCESSOR_ADAPTER', () => {
       supportsPositiveTrim: true,
     });
     expect(r3.allowedFunctions).toEqual([0, 1, 2, 3, 92]);
+    const r4 = resolvePtxCompilerRoute(PTX_CADMATIC_4_R4_PROFILE).config!;
+    expect(r4.compileOptions).toMatchObject({
+      trimType: 1,
+      includeVectors: undefined,
+      supportsPositiveTrim: true,
+      offcutsWithQuantity: true,
+      offcutsBeforePatterns: true,
+      offcutCutMarkers: 'function92-only',
+      partCodeAuthority: 'workshop-labelref',
+      partCodeMaxLength: 50,
+    });
+    expect(r4.allowedFunctions).toEqual([0, 1, 2, 3, 92]);
     expect(contract.behaviorMarkers).toEqual({
-      compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3'],
+      compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4'],
       r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
       r3ReleaseScheduling: 'phase-2-rest-remnant-function-92-before-dependent-recut',
+      r4OffcutQuantity: 'ofc-qty-1-per-physical-remnant-row',
+      r4OffcutOrdering: 'offcuts-declared-before-patterns-no-forward-xn',
+      r4OffcutMarkers: 'xn-references-only-on-function-92',
+      r4PartCodes: 'workshop-labelref-unique-per-piece-max-50-fail-closed',
       readback: 'parser-plus-independent-cut-program-verifier',
       legacyRoute: 'ptx-generic@r1-only',
     });

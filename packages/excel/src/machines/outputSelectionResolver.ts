@@ -20,7 +20,7 @@ import {
   CLIENT_A_HPP250_PROFILE,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_3_PROFILE,
-  PTX_CADMATIC_4_R3_PROFILE,
+  PTX_CADMATIC_4_R4_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
@@ -38,11 +38,12 @@ export const KNOWN_MACHINE_PROFILES: readonly ClientMachineProfileData[] = [
 export const KNOWN_OUTPUT_PROFILES: readonly OutputCompatibilityProfile[] = [
   PTX_GENERIC_PROFILE,
   PTX_CADMATIC_3_PROFILE,
-  // r3 (#661, evidenced positive-trim subset) is the CURRENT selectable
-  // revision of the CADmatic 4 profile. r1/r2 keep existing as immutable
-  // historical constants, and selections pinned to them surface an
-  // actionable stale-revision blocker — never an automatic retarget.
-  PTX_CADMATIC_4_R3_PROFILE,
+  // r4 (#781, field dialect after the first CADLink rejection) is the
+  // CURRENT selectable revision of the CADmatic 4 profile. r1/r2/r3 keep
+  // existing as immutable historical constants, and selections pinned to
+  // them surface an actionable stale-revision blocker — never an automatic
+  // retarget to r4.
+  PTX_CADMATIC_4_R4_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
@@ -232,6 +233,29 @@ import {
   uniqueCutFileName,
 } from '../ptxCutPlanExport';
 import { ValidationError } from '@granete/domain';
+import { sha256Hex } from './digest';
+
+/**
+ * #781 r4 — conservative industrial file name for the CADmatic 4 lane:
+ * ASCII-only, no spaces/accents, ≤ 20 chars, deterministic and
+ * collision-safe (hash of the CutPlan identity — NOT the project-name slug,
+ * which can repeat across projects). Unified artifacts get `G<hex6>.ptx`;
+ * by-material adds a 1-based group index. The descriptive provenance
+ * (project name, plan identity) stays in the artifact manifest — the
+ * industrial file name is a lane label, not the label of the work.
+ */
+async function industrialArtifactFileName(
+  cutPlanId: string,
+  extension: string,
+  groupIndex?: number,
+): Promise<string> {
+  const token = (await sha256Hex(`granete:ptx-artifact:${cutPlanId}`))
+    .slice(0, 6)
+    .toUpperCase();
+  return groupIndex === undefined
+    ? `G${token}.${extension}`
+    : `G${token}-${groupIndex}.${extension}`;
+}
 
 export type CuttingOutputMode = 'unified' | 'by-material';
 
@@ -265,6 +289,11 @@ export async function generateSelectedCuttingOutput(
   const adapter = adapterForFamily(profile.formatFamily)!;
   const kind = profile.formatFamily === 'ptx' ? ('ptx' as const) : ('saw' as const);
   const extension = String(profile.dimensions.fileExtension ?? 'pending');
+  // #781 r4: the CADmatic 4 field-dialect lane uses the conservative short
+  // ASCII industrial file name; every other revision keeps the human name.
+  const useIndustrialNaming =
+    profile.ref.outputCompatibilityProfileId === 'ptx-cadmatic-4' &&
+    profile.ref.revisionId === 'r4';
 
   const buildBundle = (
     plan: CutPlan,
@@ -320,13 +349,19 @@ export async function generateSelectedCuttingOutput(
       // Human file names ('corte-mdf-blanco-18mm.ptx'): readable material
       // name first, technical code only as fallback; sanitization collisions
       // get a deterministic '-2' suffix instead of overwriting each other.
+      // r4 (#781) switches to the short industrial name with a 1-based group
+      // index (unique by construction, so no collision guard is needed).
       const usedFileNames = new Set<string>();
+      let industrialGroupIndex = 0;
       for (const group of groups) {
-        const fileName = uniqueCutFileName(
-          cutFileToken(group.materialName || group.materialCode),
-          extension,
-          usedFileNames,
-        );
+        industrialGroupIndex += 1;
+        const fileName = useIndustrialNaming
+          ? await industrialArtifactFileName(cutPlan.id, extension, industrialGroupIndex)
+          : uniqueCutFileName(
+              cutFileToken(group.materialName || group.materialCode),
+              extension,
+              usedFileNames,
+            );
         bundles.push(
           await buildBundle(
             cutPlanForMaterialGroup(cutPlan, group),
@@ -348,7 +383,9 @@ export async function generateSelectedCuttingOutput(
     await buildBundle(
       cutPlan,
       cutPlan.id,
-      `corte-${cutFileToken(cutPlan.projectName || cutPlan.projectId)}.${extension}`,
+      useIndustrialNaming
+        ? await industrialArtifactFileName(cutPlan.id, extension)
+        : `corte-${cutFileToken(cutPlan.projectName || cutPlan.projectId)}.${extension}`,
       { mode: 'unified' },
     ),
   ];

@@ -178,7 +178,7 @@ export function packSingleSheetMaxRects(
         partCode: piece.originalRow.partCode || `P${placeSequence}`,
         partName: piece.originalRow.partName || piece.originalRow.description || 'Pieza',
         moduleCode: piece.originalRow.moduleCode || '',
-        labelRef: piece.originalRow.labelRef || piece.id,
+        labelRef: piece.labelRef || piece.originalRow.labelRef || piece.id,
         materialName: piece.originalRow.materialName || materialName,
         materialCode: piece.originalRow.materialCode || materialCode,
         xMm: bestRect.x,

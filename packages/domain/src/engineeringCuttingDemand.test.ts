@@ -138,10 +138,13 @@ describe('releaseCutRowsFromDemand (#739)', () => {
     expect(rows).toHaveLength(3);
     const [front1, shelf, front2] = rows;
 
-    // Occurrence identity: unit + part, never deduplicated across units.
-    expect(front1?.labelRef).toBe('fi-1:part-front');
-    expect(front2?.labelRef).toBe('fi-2:part-front');
-    expect(shelf?.labelRef).toBe('fi-1:part-shelf');
+    // Occurrence identity (#781): the workshop clean labelRef, one per
+    // occurrence — the repeated module code gets the -L2- line suffix, so
+    // units are never deduplicated into one code. The internal identity
+    // stays in partId-based pieceRefs, never in this column.
+    expect(front1?.labelRef).toBe('MOD-BAJO-600-FRENTE');
+    expect(front2?.labelRef).toBe('MOD-BAJO-600-L2-FRENTE');
+    expect(shelf?.labelRef).toBe('MOD-BAJO-600-P02');
 
     // Frozen dimensions are the release truth (650 for fi-1, 600 for fi-2).
     expect(front1?.lengthMm).toBe(650);

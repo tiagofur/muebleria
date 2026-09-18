@@ -50,6 +50,7 @@ import {
   CLIENT_A_HPP250_PROFILE,
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_4_R3_PROFILE,
+  PTX_CADMATIC_4_R4_PROFILE,
 } from './profiles';
 import {
   PTX_CANDIDATE_TITLE,
@@ -59,10 +60,11 @@ import {
 } from './ptxAdapter';
 import type { MachineOutputSelection } from '@granete/domain';
 
-/** Current selectable CADmatic 4 revision (#661 r3): the download-route candidate. */
-const CANDIDATE = PTX_CADMATIC_4_R3_PROFILE;
-/** Historical r2 candidate: kept immutable; its trim=0 policy stays routed. */
+/** Current selectable CADmatic 4 revision (#781 r4): the download-route candidate. */
+const CANDIDATE = PTX_CADMATIC_4_R4_PROFILE;
+/** Historical r2/r3 candidates: kept immutable; their policies stay routed. */
 const CANDIDATE_R2 = PTX_CADMATIC_4_CANDIDATE_PROFILE;
+const CANDIDATE_R3 = PTX_CADMATIC_4_R3_PROFILE;
 
 function candidateSelection(): MachineOutputSelection {
   return {
@@ -411,7 +413,7 @@ describe('CADmatic 4 candidato (ptx-cadmatic-4@r2) — ruta del compilador docum
     expectBlockedWithDetail(job, profileVariant({ includeVectors: true }), 'VECTORS=off');
   });
 
-  it('r3 con refilados positivos exige TRIM_TYPE=1', () => {
+  it('r4 (como r3) con refilados positivos exige TRIM_TYPE=1', () => {
     const profile = profileVariant({ trimType: 0 });
     const readiness = PTX_POSTPROCESSOR_ADAPTER.canSerialize(candidateJob(), profile);
     expect(readiness.reasons).toContainEqual(expect.objectContaining({
@@ -565,7 +567,7 @@ describe('CADmatic 4 candidato — preflight bloquea con causa específica', () 
 // ---------------------------------------------------------------------------
 
 describe('CADmatic 4 candidato — descarga existente (#591) y manifest exacto', () => {
-  it('unified: un bundle con manifest r3 + adapter 1.2.0 y hashes deterministas', async () => {
+  it('unified: un bundle con manifest r4 + adapter 1.3.0, filename industrial y hashes deterministas', async () => {
     const plan = candidateJob().cutPlan;
     const bundles = await generateSelectedCuttingOutput(plan, candidateSelection());
     expect(bundles).toHaveLength(1);
@@ -575,13 +577,17 @@ describe('CADmatic 4 candidato — descarga existente (#591) y manifest exacto',
 
     expect(bundle!.manifest.outputCompatibilityProfile).toEqual({
       outputCompatibilityProfileId: 'ptx-cadmatic-4',
-      revisionId: 'r3',
+      revisionId: 'r4',
     });
     expect(bundle!.manifest.postprocessorAdapter).toEqual({
       postprocessorAdapterId: 'granete-ptx',
-      adapterVersion: '1.2.0',
+      adapterVersion: '1.3.0',
       implementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
     });
+    // #781: the CADmatic 4 lane delivers the conservative short ASCII
+    // industrial file name (G + 6 hex of the CutPlan identity), never the
+    // descriptive project slug.
+    expect(bundle!.artifact.fileName).toMatch(/^G[0-9A-F]{6}\.ptx$/);
     expect(bundle!.manifest.validationStatus).toBe('NOT_TESTED');
     expect(bundle!.manifest.compatibilityEvidence).toEqual({ claim: 'notClaimed' });
     expect(bundle!.manifest.nonProductionValidationArtifact).toBe(true);
@@ -607,14 +613,17 @@ describe('CADmatic 4 candidato — descarga existente (#591) y manifest exacto',
     expect(new Set(bundles.map((b) => b.artifact.fileName)).size).toBe(bundles.length);
     expect(new Set(bundles.map((b) => b.manifest.jobId)).size).toBe(bundles.length);
 
-    for (const bundle of bundles) {
+    for (const [index, bundle] of bundles.entries()) {
       const text = new TextDecoder().decode(bundle.artifact.bytes);
       expect(text.startsWith('HEADER,')).toBe(true);
-      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r3');
+      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r4');
+      // By-material keeps the industrial base token plus a 1-based group
+      // index — compact, ASCII, collision-safe.
+      expect(bundle.artifact.fileName).toMatch(new RegExp(`^G[0-9A-F]{6}-${index + 1}\\.ptx$`));
     }
   });
 
-  it('golden end-to-end: selección r3 → adapter → bytes descargados → parser → verifier === []', async () => {
+  it('golden end-to-end: selección r4 → adapter → bytes descargados → parser → verifier === []', async () => {
     const plan = optimizeCutPlan(GOLDEN_PROJECT_ID, GOLDEN_ROWS, GOLDEN_MATERIALS, GOLDEN_CONFIG);
     const resolved = resolveManufacturingOutputTarget(candidateSelection(), 'cutting');
     expect(resolved.status === 'CONFIGURED' && resolved.readiness.ready).toBe(true);

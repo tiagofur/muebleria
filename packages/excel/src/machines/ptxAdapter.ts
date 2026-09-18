@@ -44,7 +44,7 @@ import {
 } from '../ptx/compileCutPlan';
 import { PtxDocumentInvalidError } from '../ptx/validate';
 import { serializePtxDocumentBytes } from '../ptx/serialize';
-import { PTX_COMPILER_REQUIRED_DIMENSIONS, PTX_REQUIRED_DIMENSIONS } from './profiles';
+import { PTX_COMPILER_R4_REQUIRED_DIMENSIONS, PTX_COMPILER_REQUIRED_DIMENSIONS, PTX_REQUIRED_DIMENSIONS } from './profiles';
 
 function checkRequiredDimensions(
   profile: OutputCompatibilityProfile,
@@ -86,13 +86,14 @@ export const PTX_CANDIDATE_TITLE = 'GRANETE-PTX-CANDIDATE NOT_MACHINE_VALIDATED'
 
 /**
  * Exact profile revisions routed to the documented PTX compiler: r2 (#650,
- * trim = 0 only) and r3 (#661, evidenced positive-trim subset). Selection is
- * by EXACT revision — never by name or family.
+ * trim = 0 only), r3 (#661, evidenced positive-trim subset) and r4 (#781,
+ * field dialect after the first CADLink rejection). Selection is by EXACT
+ * revision — never by name or family.
  */
 export function profileUsesDocumentedPtxCompiler(profile: OutputCompatibilityProfile): boolean {
   return (
     profile.ref.outputCompatibilityProfileId === 'ptx-cadmatic-4' &&
-    (profile.ref.revisionId === 'r2' || profile.ref.revisionId === 'r3')
+    (profile.ref.revisionId === 'r2' || profile.ref.revisionId === 'r3' || profile.ref.revisionId === 'r4')
   );
 }
 
@@ -112,7 +113,13 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
   { config?: PtxCompilerRouteConfig; reasons: readonly AdapterBlockReason[] } {
   const label = `${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId}`;
   const isCadmatic4R3 = label === 'ptx-cadmatic-4@r3';
-  const missing = checkRequiredDimensions(profile, PTX_COMPILER_REQUIRED_DIMENSIONS);
+  const isCadmatic4R4 = label === 'ptx-cadmatic-4@r4';
+  // r4 (#781) additionally requires its field-dialect dimensions; r2/r3 keep
+  // their historical sets and must not fail on dimensions they never had.
+  const required = isCadmatic4R4
+    ? [...PTX_COMPILER_REQUIRED_DIMENSIONS, ...PTX_COMPILER_R4_REQUIRED_DIMENSIONS]
+    : PTX_COMPILER_REQUIRED_DIMENSIONS;
+  const missing = checkRequiredDimensions(profile, required);
   if (missing.length > 0) return { reasons: missing };
 
   const dims = profile.dimensions;
@@ -193,6 +200,59 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
     unsupported(`supportedFunctions '${String(dims.supportedFunctions)}' no es una lista de códigos enteros ≥ 0`);
   }
 
+  // r4 (#781) field-dialect options — each one reaches the bytes through the
+  // compiler; an unsupported value blocks instead of being decorative.
+  let offcutsWithQuantity: boolean | undefined;
+  let offcutsBeforePatterns: boolean | undefined;
+  let offcutCutMarkers: 'function92-only' | undefined;
+  let partCodeAuthority: 'workshop-labelref' | undefined;
+  let partCodeMaxLength: number | undefined;
+  if (isCadmatic4R4) {
+    if (dims.offcutsWithQuantity !== true) {
+      unsupported(`offcutsWithQuantity '${String(dims.offcutsWithQuantity)}' no implementado (r4 exige true: columna OFC_QTY evidenciada)`);
+    } else {
+      offcutsWithQuantity = true;
+    }
+    if (dims.offcutsBeforePatterns !== true) {
+      unsupported(`offcutsBeforePatterns '${String(dims.offcutsBeforePatterns)}' no implementado (r4 exige true: OFFCUTS declarado antes de PATTERNS/CUTS)`);
+    } else {
+      offcutsBeforePatterns = true;
+    }
+    if (dims.offcutCutMarkers !== 'function92-only') {
+      unsupported(`offcutCutMarkers '${String(dims.offcutCutMarkers)}' no implementado (r4 sólo 'function92-only': Xn exclusivamente en FUNCTION 92)`);
+    } else {
+      offcutCutMarkers = 'function92-only';
+    }
+    if (dims.partCodeAuthority !== 'workshop-labelref') {
+      unsupported(`partCodeAuthority '${String(dims.partCodeAuthority)}' no implementado (r4 sólo 'workshop-labelref': código de fabricación por pieza física)`);
+    } else {
+      partCodeAuthority = 'workshop-labelref';
+    }
+    partCodeMaxLength = dims.partCodeMaxLength as number;
+    if (
+      typeof partCodeMaxLength !== 'number' ||
+      !Number.isInteger(partCodeMaxLength) ||
+      partCodeMaxLength < 1
+    ) {
+      unsupported(`partCodeMaxLength '${String(dims.partCodeMaxLength)}' no es un entero ≥ 1`);
+      partCodeMaxLength = undefined;
+    }
+    if (includeVectors === true) {
+      reasons.push({
+        code: 'ptx_compile.profile_option_unsupported',
+        dimension: 'includeVectors',
+        detail: `${label} no implementa includeVectors=true: el contrato r4 mantiene VECTORS=off`,
+      });
+    }
+    if (trimType !== 1) {
+      reasons.push({
+        code: 'ptx_compile.profile_option_unsupported',
+        dimension: 'trimType',
+        detail: `${label} con refilados positivos exige trimType=1 (hereda el frame fijo del contrato r3)`,
+      });
+    }
+  }
+
   if (reasons.length > 0 || lineEnding === undefined || typeof decimalPlaces !== 'number') {
     return { reasons };
   }
@@ -207,6 +267,11 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
         decimalPlaces: decimalPlaces as number,
         includeVectors: (includeVectors as boolean) === true ? true : undefined,
         supportsPositiveTrim: (supportsPositiveTrim as boolean) === true ? true : undefined,
+        offcutsWithQuantity,
+        offcutsBeforePatterns,
+        offcutCutMarkers,
+        partCodeAuthority,
+        ...(partCodeMaxLength !== undefined ? { partCodeMaxLength } : {}),
       },
       lineEnding,
       allowedFunctions,
@@ -296,12 +361,18 @@ function serializeWithDocumentedCompiler(
  * evidenced positive-trim subset (supportsPositiveTrim + FUNCTION 92) and
  * forwards the flag to the compile options. r2 routing and the legacy route
  * are unchanged and keep their byte identities.
+ * v1.3.0: routes ptx-cadmatic-4@r4 (#781) with the field-dialect subset —
+ * OFFCUTS.OFC_QTY, OFFCUTS declared before PATTERNS/CUTS, Xn markers
+ * restricted to FUNCTION 92, and PARTS_REQ.CODE as the workshop
+ * manufacturing code (workshop-labelref authority, ≤50, fail-closed on
+ * collisions). r2/r3 routing and the legacy route are unchanged and keep
+ * their byte identities.
  */
 export const PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
   postprocessorAdapterId: 'granete-ptx',
-  adapterVersion: '1.2.0',
+  adapterVersion: '1.3.0',
   producedFormatFamily: 'ptx',
-  generator: 'packages/excel/src/machines/ptxAdapter.ts@3',
+  generator: 'packages/excel/src/machines/ptxAdapter.ts@4',
 } as const;
 
 /**
@@ -312,11 +383,15 @@ export const PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
  * adapter identity; CI compares every value against its independent source.
  */
 export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
-  implementationDigest: '954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236',
+  implementationDigest: 'dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd',
   behaviorMarkers: {
-    compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3'],
+    compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4'],
     r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
     r3ReleaseScheduling: 'phase-2-rest-remnant-function-92-before-dependent-recut',
+    r4OffcutQuantity: 'ofc-qty-1-per-physical-remnant-row',
+    r4OffcutOrdering: 'offcuts-declared-before-patterns-no-forward-xn',
+    r4OffcutMarkers: 'xn-references-only-on-function-92',
+    r4PartCodes: 'workshop-labelref-unique-per-piece-max-50-fail-closed',
     readback: 'parser-plus-independent-cut-program-verifier',
     legacyRoute: 'ptx-generic@r1-only',
   },
@@ -329,14 +404,18 @@ export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
       digest: '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537',
       goldenBytesSha256: 'f5e51ff7511960aae7eadef99a841fed9c824e4b28320ee83734db1430b2c7ee',
     },
+    r4: {
+      digest: '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc',
+      goldenBytesSha256: '022413f64361fe7ff646b4c2b3170242ca8cf4336f2db4bf03bed2eb688ed7b1',
+    },
   },
   legacyGoldenBytesSha256: '544dcae574bc19e19f934f96b2ad1dc104a2d7b1f668262a83ae09df72510f09',
 } as const;
 
 export const PTX_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob> = {
   postprocessorAdapterId: 'granete-ptx',
-  adapterVersion: '1.2.0',
-  implementationDigest: '954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236',
+  adapterVersion: '1.3.0',
+  implementationDigest: 'dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd',
   producedFormatFamily: 'ptx',
   requiredDimensions: PTX_REQUIRED_DIMENSIONS,
 

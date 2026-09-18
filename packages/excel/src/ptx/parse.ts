@@ -120,7 +120,12 @@ const FAMILY_SPECS: Readonly<Record<string, FamilySpec>> = {
     // carries it ABSENT (#661). COMMENT stays optional after it.
     required: 8,
   },
-  OFFCUTS: { columns: ['JOB_INDEX', 'OFFCUT_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH'], required: 6 },
+  OFFCUTS: {
+    columns: ['JOB_INDEX', 'OFFCUT_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH', 'OFC_QTY'],
+    // OFC_QTY (#781 r4) is optional: r2/r3 rows end at WIDTH (6 cells) and
+    // stay byte-exact; r4 rows carry the evidenced quantity column.
+    required: 6,
+  },
   VECTORS: {
     columns: ['JOB_INDEX', 'PTN_INDEX', 'CUT_INDEX', 'X_START', 'Y_START', 'X_END', 'Y_END'],
     required: 7,
@@ -443,6 +448,8 @@ function parseRecordRow(family: string, cells: readonly string[], lineNo: number
         materialIndex: c.int(3, 'MAT_INDEX'),
         length: c.real(4, 'LENGTH'),
         width: c.real(5, 'WIDTH'),
+        // Empty cell = r2/r3 row without the column; never coerced to 0.
+        producedQuantity: c.optionalInt(6, 'OFC_QTY'),
       };
     case 'VECTORS':
       return {

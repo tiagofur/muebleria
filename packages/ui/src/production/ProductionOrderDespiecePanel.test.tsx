@@ -105,6 +105,41 @@ describe('ProductionOrderDespiecePanel (PROD-1.3)', () => {
   });
 });
 
+describe('ProductionOrderDespiecePanel (#781) — código de fabricación, nunca el ID interno', () => {
+  it('muestra el labelRef taller aunque la identidad interna sea un ref compuesto UUID/timestamp/copy', () => {
+    // The EXACT internal-ref shape that leaked into the rejected field PTX
+    // (119-char placement identity). The row now carries the workshop clean
+    // labelRef — that is the code the operator must see.
+    const legacyInternalRef =
+      'agr-agr-1788565309044-01vb-instance-d82e52f4-9859-4e45-b459-6f80ad27324a-u0-b0000004-0000-0000-0000-000000000014-copy-0';
+    const rows: readonly ProductionCutRow[] = [
+      {
+        quantity: 1,
+        lengthMm: 506,
+        widthMm: 260,
+        description: 'Lateral · MOD-ALA-1P-IZQ',
+        materialName: 'Blanco 18mm',
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+        partName: 'Lateral',
+        partCode: legacyInternalRef,
+        moduleCode: 'MOD-ALA-1P-IZQ',
+        labelRef: 'MOD-ALA-1P-IZQ-P01',
+        thicknessMm: 18,
+      },
+    ];
+    render(<ProductionOrderDespiecePanel cutRows={rows} />);
+
+    expect(screen.getAllByText('MOD-ALA-1P-IZQ-P01').length).toBeGreaterThan(0);
+    // The internal placement identity never reaches the operator's code
+    // column (it stays in provenance/PTX mapping, not in the workshop UI).
+    expect(screen.queryByText(new RegExp(legacyInternalRef.slice(0, 40)))).toBeNull();
+  });
+});
+
 describe('ProductionOrderDespiecePanel tablist contract (F109)', () => {
   it('exposes workflow tablist with panel linkage and arrow-key roving', async () => {
     const user = userEvent.setup();

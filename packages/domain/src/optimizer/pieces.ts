@@ -20,6 +20,15 @@ export interface PieceToPlace {
   width: number;
   grain: 0 | 1;
   id: string;
+  /**
+   * #781 — per-placement workshop label. Same as the row's clean labelRef for
+   * single-copy rows; copies 2..N of a row with quantity > 1 get the `-C<n>`
+   * suffix so every physical piece keeps a unique manufacturing code (one
+   * PARTS_REQ row per piece; CNC files key per piece). Copy 1 stays bare to
+   * match what the app displays for the row. Optional: unrollRows always sets
+   * it; hand-built candidates fall back to the row's labelRef/id.
+   */
+  labelRef?: string;
 }
 
 export interface PlacementResult {
@@ -78,6 +87,7 @@ export function unrollRows(
 
     for (let i = 0; i < qty; i++) {
       seq++;
+      const rowLabel = row.labelRef?.trim() || '';
       result.push({
         originalRow: row,
         indexInUnrolled: seq,
@@ -85,6 +95,8 @@ export function unrollRows(
         width: rawWidth,
         grain: row.grain,
         id: `${row.partCode || 'P'}-${seq}`,
+        labelRef:
+          rowLabel !== '' && qty > 1 && i > 0 ? `${rowLabel}-C${i + 1}` : rowLabel,
       });
     }
   }
