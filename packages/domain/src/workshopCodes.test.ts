@@ -398,10 +398,31 @@ describe('applyFrozenWorkshopOccurrenceOrdinals — contexto BOM derivado (#781 
     ]);
   });
 
-  it('proyección vacía → ítems vivos intactos (sin liberación)', () => {
+  it('undefined → ítems vivos intactos (sin liberación: pre-release)', () => {
     const items = [baseItem('line-a', 2)];
     expect(applyFrozenWorkshopOccurrenceOrdinals(items, undefined)).toBe(items);
-    expect(applyFrozenWorkshopOccurrenceOrdinals(items, projection([]))).toBe(items);
+  });
+
+  it('#781 micro-task #2B — projection([]) + ítems → throw (claim frozen vacío)', () => {
+    expect(() =>
+      applyFrozenWorkshopOccurrenceOrdinals(
+        [baseItem('line-a', 2)],
+        projection([]),
+      ),
+    ).toThrow(/no contiene ocurrencias/i);
+  });
+
+  it('#781 micro-task #2B — projection([], coversAll=false) → throw aunque vacío', () => {
+    expect(() =>
+      applyFrozenWorkshopOccurrenceOrdinals(
+        [baseItem('line-a', 2)],
+        { ...projection([]), coversAllCurrentInstances: false },
+      ),
+    ).toThrow(/no cubre todas/i);
+  });
+
+  it('#781 micro-task #2B — projection([]) + proyecto vacío → [] (vacuidad)', () => {
+    expect(applyFrozenWorkshopOccurrenceOrdinals([], projection([]))).toEqual([]);
   });
 
   it('cobertura PARTIAL del ítem → falla cerrado (nunca mezcla congelado/vivo)', () => {

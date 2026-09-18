@@ -225,8 +225,10 @@ export interface WorkshopOccurrenceProjection {
  * quantity N and N linked instances becomes N derived items of quantity 1,
  * each keyed by its furniture instance id and carrying the FROZEN workshop
  * occurrence ordinal. The persisted Project is never mutated; callers that
- * only want the live view pass an empty projection and get the items back
- * unchanged. Partial coverage fails closed (never a silent mix).
+ * only want the live view pass an UNDEFINED projection (pre-release) and get
+ * the items back unchanged. An EXISTING projection is always a frozen claim:
+ * empty assignments, partial coverage, or unconsumed assignments all fail
+ * closed (never a silent mix, never a silent pass-through).
  *
  * #781 FIX — ProjectItem.id is NEVER mutated; furnitureInstanceId is
  * transported as a separate field so the original quote-line identity is
@@ -240,8 +242,31 @@ export function applyFrozenWorkshopOccurrenceOrdinals(
   items: readonly ProjectItem[],
   projection: WorkshopOccurrenceProjection | undefined,
 ): readonly ProjectItem[] {
-  if (!projection || projection.assignments.length === 0) {
+  // #781 micro-task #2B — undefined ALONE means pre-release (no frozen
+  // context exists): live items pass through. An EXISTING projection is a
+  // frozen claim and never degrades silently, even with zero assignments.
+  if (projection === undefined) {
     return items;
+  }
+  // Validate coversAllCurrentInstances FIRST: a released-but-drifted context
+  // fails closed even when it carries no assignments at all.
+  if (!projection.coversAllCurrentInstances) {
+    throw new ResolutionError(
+      'La proyección de ocurrencias no cubre todas las instancias actuales: el contexto BOM no puede mezclar instancias congeladas y vivas',
+      { releaseId: projection.releaseId },
+    );
+  }
+  if (projection.assignments.length === 0) {
+    // Degenerate frozen claim: a release context exists but projects no
+    // occurrences. Vacuously consistent only over an empty project;
+    // otherwise the frozen claim contradicts the live items → fail closed.
+    if (items.length === 0) {
+      return [];
+    }
+    throw new ResolutionError(
+      'La proyección congelada no contiene ocurrencias pero el proyecto tiene ítems: el contexto BOM no puede ignorar la liberación en silencio',
+      { releaseId: projection.releaseId, itemCount: items.length },
+    );
   }
   // Validate ordinal integrity: integer >= 1, no duplicates, dense 1..N.
   validateFrozenWorkshopOccurrenceOrdinals(
@@ -261,14 +286,6 @@ export function applyFrozenWorkshopOccurrenceOrdinals(
         { expected: i + 1, actual: ordinals[i], total: ordinals.length },
       );
     }
-  }
-  // Validate coversAllCurrentInstances: the projection MUST cover every
-  // current instance, and frozen instances == current instances exactly.
-  if (!projection.coversAllCurrentInstances) {
-    throw new ResolutionError(
-      'La proyección de ocurrencias no cubre todas las instancias actuales: el contexto BOM no puede mezclar instancias congeladas y vivas',
-      { releaseId: projection.releaseId },
-    );
   }
   // #781 micro-task #2 — physical identity guards (defense in depth: the TS
   // validation is autonomous and never trusts coversAllCurrentInstances
