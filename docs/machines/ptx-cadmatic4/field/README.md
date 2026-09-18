@@ -1,5 +1,7 @@
 # Muestras de campo saneadas — PTX del cliente
 
+> Nota de estado 2026-09-18: este archivo conserva la evidencia recibida el 2026-09-11. Posteriormente Granete envió candidatos propios; r4 (`GD8754F0B9995.ptx`) también fue rechazado por CADLink. Ver `../06_dossier_r5_segundo_rechazo.md` y META #787. Las muestras R siguen siendo evidencia funcional del dialecto del cliente, no prueba universal.
+
 Dos archivos `.ptx` reales enviados por el cliente al propietario (2026-09-11),
 generados por el optimizador que ellos usan (las notas internas referencian
 archivos fuente propios con extensión `.cvj`). **Los originales no se commitean**

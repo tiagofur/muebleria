@@ -1,29 +1,25 @@
-# PTX / CADmatic 4 — estado operativo v0.8
+# PTX / CADmatic 4 — estado operativo: r4 rechazado en campo, r5 en preparación
 
 Issue base técnica: [#650](https://github.com/tiagofur/muebleria/issues/650).
 Incrementos integrados: #661, #665, #691, #692. Hardening de cierre interno: #693.
-Dialecto de campo tras el primer rechazo CADLink: #781.
+Dialecto r4 tras el primer rechazo CADLink: #781. Reconstrucción r5: META #787, con investigación y plan en `06_dossier_r5_segundo_rechazo.md` y `07_plan_r5_receiver_labels_cnc.md`.
 
 ## Estado vigente
 
 ```text
-maturity: v0.8
+internalMaturity: v0.8
+fieldGate: BLOCKED_AFTER_SECOND_REJECTION
 machine: client-a-machine-b-hpp250@r1
-profile: ptx-cadmatic-4@r4
-adapter: granete-ptx@1.3.0
-implementation: complete within supported subset
-internal verification: complete
-field validation: pending (primer intento 2026-09-17: RECHAZADO — OnlineConvertedFailedMsg; causa única NO demostrada)
+latest field-tested profile: ptx-cadmatic-4@r4
+latest field-tested adapter: granete-ptx@1.3.0
+r4 field result: REJECTED
+next candidate: r5 PLANNED, not implemented yet
 supportStatus: NOT_TESTED
 compatibility claim: notClaimed
+physical cut: prohibited until later gate
 ```
 
-**Cierre interno no equivale a compatibilidad de campo.** Granete puede producir y
-verificar internamente un PTX r3 normal dentro del subconjunto documentado. Todavía
-no existe evidencia de que CADLink/CADmatic 4 lo importe, de cuál sea el `.rlt`
-resultante, de que el operador lo valide ni de que una HPP 250 ejecute el corte
-físico. Esos cuatro hechos permanecen desconocidos y no se infieren por marca,
-versión objetivo ni por tests internos.
+**Cierre interno no equivale a compatibilidad de campo.** Ya existe evidencia real de que los candidatos previos de Granete, incluido r4, fueron rechazados por el flujo CADLink/CADmatic 4 del cliente. No existe todavía una conversión exitosa, un `.rlt` de éxito, una validación semántica del operador ni un corte físico controlado. La etiqueta `internalMaturity` describe el pipeline interno; no debe interpretarse como nivel de compatibilidad de campo.
 
 ## Subconjunto implementado
 
@@ -91,13 +87,14 @@ se conserva explícitamente; no se elimina por heurística ni por edad.
 3. [Evidencia de campo](03_evidencia_campo.md): observaciones de dos muestras reales
    saneadas, sin extrapolación universal.
 4. [Contrato r3](04_contrato_r3_refilados.md): autoridad del subconjunto de trims y 92.
-5. [Contrato r4](05_contrato_r4_field_dialect.md): dialecto de campo tras el primer rechazo CADLink (#781) — códigos de fabricación por pieza, OFC_QTY, orden OFFCUTS/Xn, filename industrial.
-5. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
-6. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
+5. [Contrato r4](05_contrato_r4_field_dialect.md): segundo candidato preparado tras el primer rechazo; hoy es evidencia histórica de un candidato que también fue rechazado en campo.
+6. [Dossier r5](06_dossier_r5_segundo_rechazo.md): investigación web + comparación contra R2201/R7301 + defectos confirmados y preguntas abiertas tras el segundo rechazo.
+7. [Plan r5](07_plan_r5_receiver_labels_cnc.md): implementación por fases del receiver HPP250/CAD4, etiquetas, PARTS_INF/UDI, puente CNC y preflight CADLink.
+8. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
+9. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
    directa TS↔contrato↔Go.
 
-Los documentos `01`, `03` y `04` son evidencia/decisiones históricas preservadas;
-no se reescriben para simular validación posterior.
+Los documentos `01`–`05` preservan investigación/decisiones históricas y no se reescriben para simular que conocían los resultados posteriores. `06` y `07` gobiernan el discovery y el plan de r5.
 
 ## Condición de cierre de #650
 
@@ -109,15 +106,9 @@ de campo pendiente. #693 no cierra #650 automáticamente.
 
 ## Próximo gate externo
 
-Enviar un artefacto normal generado por producto sólo como candidato controlado y
-no productivo, conservando PTX + manifest sin editar. Registrar de forma sanitizada:
+**No enviar otro PTX al cliente todavía.** Primero completar el plan r5: strict spec preflight, receiver profile HPP250/CAD4, PARTS_INF/UDI, etiquetas, identidad CNC, differential fixtures y field pack con `/RESULT`. La siguiente prueba debe pedir idealmente sólo el `.rlt` o confirmación de éxito, no otra ronda manual de interpretación de popups.
 
-1. importación real por CADLink hacia CADmatic 4;
-2. `.rlt` o readback producido;
-3. validación explícita del operador;
-4. si corresponde, ejecución física controlada en HPP 250.
-
-Sólo esa evidencia puede cambiar `NOT_TESTED/notClaimed`.
+Sólo una conversión CADLink exitosa, seguida de revisión semántica del operador, puede cambiar `NOT_TESTED/notClaimed`.
 
 ## Verificación documental
 
