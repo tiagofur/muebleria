@@ -2,7 +2,7 @@
 
 Issue base técnica: [#650](https://github.com/tiagofur/muebleria/issues/650).
 Incrementos integrados: #661, #665, #691, #692. Hardening de cierre interno: #693.
-Dialecto r4 tras el primer rechazo CADLink: #781. Investigación y plan r5 tras el segundo rechazo: `06_dossier_r5_segundo_rechazo.md` y `07_plan_r5_receiver_labels_cnc.md`.
+Dialecto r4 tras el primer rechazo CADLink: #781. Reconstrucción r5: META #787, con investigación y plan en `06_dossier_r5_segundo_rechazo.md` y `07_plan_r5_receiver_labels_cnc.md`.
 
 ## Estado vigente
 
