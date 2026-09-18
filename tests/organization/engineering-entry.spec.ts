@@ -231,7 +231,7 @@ test.describe.serial('Engineering entry: canonical release → queue + workspace
 
     await expect(page.getByTestId('eng-release-context')).toBeVisible();
     await expect(page.getByTestId('eng-release-context')).toContainText('Liberación #1');
-    await expect(page.getByTestId('eng-release-context')).toContainText('Diseño R1');
+    await expect(page.getByTestId('eng-release-context')).toContainText('R1 · Q1');
     await expect(page.getByTestId('eng-release-context')).toContainText('Q1');
 
     // Honest preparation status: the release enables preparation; it does
