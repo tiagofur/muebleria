@@ -75,18 +75,19 @@ class MerivoboxPilotTest < Minitest::Test
     assert_equal 4, assembly.rigid_members.length
     assert_equal 2, assembly.fabricated_components.length
 
-    # Verify fabricated components: bottom board = 542 x 484 mm (600 - 58, 500 - 16)
+    # Verify fabricated components: bottom board = 512 x 484 x 16 mm (LW 570 - 58, 500 - 16)
     bottom = assembly.fabricated_components.find { |c| c.component_id == 'comp-bottom' }
     refute_nil bottom
-    assert_in_delta 542.0, bottom.width_mm, 1e-4
+    assert_in_delta 512.0, bottom.width_mm, 1e-4
     assert_in_delta 484.0, bottom.length_mm, 1e-4
     assert_in_delta 16.0, bottom.thickness_mm, 1e-4
 
-    # Back board = 542 x 69 mm
+    # Back board = 512 x 69 x 16 mm
     back = assembly.fabricated_components.find { |c| c.component_id == 'comp-back' }
     refute_nil back
-    assert_in_delta 542.0, back.width_mm, 1e-4
+    assert_in_delta 512.0, back.width_mm, 1e-4
     assert_in_delta 69.0, back.length_mm, 1e-4
+    assert_in_delta 16.0, back.thickness_mm, 1e-4
   end
 
   # E3 & E20: Continuous parametric width: W800 moves right members +200mm, W700 +100mm, no scaling
@@ -103,20 +104,20 @@ class MerivoboxPilotTest < Minitest::Test
     right700 = parsed700.assemblies.first.rigid_members.find { |m| m.member_id == 'side-right' }
     right800 = parsed800.assemblies.first.rigid_members.find { |m| m.member_id == 'side-right' }
 
-    # Translation X deltas: +100mm for W700, +200mm for W800
+    # Translation X deltas: +100mm for W700 (LW 670 - 570), +200mm for W800 (LW 770 - 570)
     delta700 = right700.local_transform['translation'][0] - right600.local_transform['translation'][0]
     delta800 = right800.local_transform['translation'][0] - right600.local_transform['translation'][0]
     assert_in_delta 100.0, delta700, 1e-4
     assert_in_delta 200.0, delta800, 1e-4
 
-    # Fabricated bottom panel width increases continuously: 542 -> 642 -> 742 mm
+    # Fabricated bottom panel width increases continuously: 512 -> 612 -> 712 mm
     bottom600 = parsed600.assemblies.first.fabricated_components.find { |c| c.component_id == 'comp-bottom' }
     bottom700 = parsed700.assemblies.first.fabricated_components.find { |c| c.component_id == 'comp-bottom' }
     bottom800 = parsed800.assemblies.first.fabricated_components.find { |c| c.component_id == 'comp-bottom' }
 
-    assert_in_delta 542.0, bottom600.width_mm, 1e-4
-    assert_in_delta 642.0, bottom700.width_mm, 1e-4
-    assert_in_delta 742.0, bottom800.width_mm, 1e-4
+    assert_in_delta 512.0, bottom600.width_mm, 1e-4
+    assert_in_delta 612.0, bottom700.width_mm, 1e-4
+    assert_in_delta 712.0, bottom800.width_mm, 1e-4
 
     # Length of bottom panel is preserved across width changes (484 mm)
     assert_in_delta 484.0, bottom600.length_mm, 1e-4
@@ -171,9 +172,9 @@ class MerivoboxPilotTest < Minitest::Test
     assert_in_delta 434.0, bottom_a.length_mm, 1e-4
     assert_in_delta 484.0, bottom_b.length_mm, 1e-4
 
-    # Both variants maintain identical width (542mm)
-    assert_in_delta 542.0, bottom_a.width_mm, 1e-4
-    assert_in_delta 542.0, bottom_b.width_mm, 1e-4
+    # Both variants maintain identical width (512mm for LW 570)
+    assert_in_delta 512.0, bottom_a.width_mm, 1e-4
+    assert_in_delta 512.0, bottom_b.width_mm, 1e-4
   end
 
   # Negative test: LayoutContract fails closed on mirrored basis (det = -1) or scaling (det != 1)
@@ -267,13 +268,13 @@ class MerivoboxPilotTest < Minitest::Test
       (m[2] * ((m[4] * m[9]) - (m[5] * m[8])))
   end
 
-  def build_merivobox_pilot_layout(width_mm: 600.0, nominal_depth_mm: 500.0)
-    delta_w = width_mm - 600.0
+  def build_merivobox_pilot_layout(width_mm: 600.0, nominal_depth_mm: 500.0, left_panel_mm: 15.0, right_panel_mm: 15.0)
+    lw_mm = width_mm - left_panel_mm - right_panel_mm
     is450 = (nominal_depth_mm - 450.0).abs < 1e-4
     hw_id = is450 ? 'hw-merivobox-450' : 'hw-merivobox-500'
     rev_id = is450 ? 'rev-mbx-450-1' : 'rev-mbx-500-1'
     bottom_length = nominal_depth_mm - 16.0 # REAL_VERIFIED: NL - 16
-    bottom_width = width_mm - 58.0          # REAL_VERIFIED: LW - 58
+    bottom_width = lw_mm - 58.0             # REAL_VERIFIED: LW - 58
 
     {
       'furnitureDefinitionId' => '50000000-0000-0000-0000-0000000000d1',
@@ -283,13 +284,25 @@ class MerivoboxPilotTest < Minitest::Test
       'components' => [
         {
           'componentInstanceId' => 'cabinet-side-l',
-          'name' => 'Lateral Carcasa',
+          'name' => 'Lateral Carcasa Izquierdo',
           'slotId' => 'lateral_carcasa',
-          'widthMm' => 18.0,
+          'widthMm' => left_panel_mm,
           'thicknessMm' => 560.0,
           'lengthMm' => 720.0,
           'localTransform' => {
             'translationMm' => [0.0, 0.0, 0.0],
+            'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+          }
+        },
+        {
+          'componentInstanceId' => 'cabinet-side-r',
+          'name' => 'Lateral Carcasa Derecho',
+          'slotId' => 'lateral_carcasa',
+          'widthMm' => right_panel_mm,
+          'thicknessMm' => 560.0,
+          'lengthMm' => 720.0,
+          'localTransform' => {
+            'translationMm' => [width_mm - right_panel_mm, 0.0, 0.0],
             'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
           }
         }
@@ -300,10 +313,10 @@ class MerivoboxPilotTest < Minitest::Test
           'agregadoId' => 'agr-merivobox-m',
           'recipeRevision' => 1,
           'isHistorical' => false,
-          'dimensionsMm' => [width_mm, 200.0, nominal_depth_mm],
+          'dimensionsMm' => [lw_mm, 200.0, nominal_depth_mm],
           'commercialKitHardwareId' => 'kit-merivobox-m',
           'placement' => {
-            'translationMm' => [0.0, 50.0, 100.0],
+            'translationMm' => [left_panel_mm, 50.0, 100.0],
             'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
           },
           'rigidMembers' => [
@@ -337,7 +350,7 @@ class MerivoboxPilotTest < Minitest::Test
                 'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
               },
               'localTransform' => {
-                'translationMm' => [600.0 + delta_w, 0.0, 0.0],
+                'translationMm' => [lw_mm, 0.0, 0.0],
                 'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
               }
             },
@@ -371,7 +384,7 @@ class MerivoboxPilotTest < Minitest::Test
                 'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
               },
               'localTransform' => {
-                'translationMm' => [600.0 + delta_w, 0.0, 0.0],
+                'translationMm' => [lw_mm, 0.0, 0.0],
                 'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
               }
             }

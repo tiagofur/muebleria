@@ -973,9 +973,16 @@ func buildMerivoboxPilotFixture() domain.Agregado {
 func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 	fixture := buildMerivoboxPilotFixture()
 
-	t.Run("E1 & E2: Generic recipe resolves W600 with NL 500 variant", func(t *testing.T) {
+	t.Run("E1 & E2: Generic recipe resolves canonical pilot assembly LW570 (outer W600, 15/15 sides) with NL 500 variant", func(t *testing.T) {
+		// Canonical pilot configuration (R12):
+		// outer W = 600mm, sides = 15mm + 15mm (seed authority), derived cavity LW = 570mm.
+		const outerWidthMm = 600.0
+		const leftPanelThicknessMm = 15.0
+		const rightPanelThicknessMm = 15.0
+		const lwMm = outerWidthMm - leftPanelThicknessMm - rightPanelThicknessMm // 570.0
+
 		res, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
-			WidthMm:  600.0,
+			WidthMm:  lwMm,
 			DepthMm:  530.0,
 			HeightMm: 200.0,
 		})
@@ -1009,8 +1016,8 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 		if sideLeft.LocalTransform.TranslationMm[0] != 0.0 {
 			t.Errorf("expected side-left X=0, got %f", sideLeft.LocalTransform.TranslationMm[0])
 		}
-		if sideRight.LocalTransform.TranslationMm[0] != 600.0 {
-			t.Errorf("expected side-right X=600, got %f", sideRight.LocalTransform.TranslationMm[0])
+		if sideRight.LocalTransform.TranslationMm[0] != 570.0 {
+			t.Errorf("expected side-right X=570, got %f", sideRight.LocalTransform.TranslationMm[0])
 		}
 
 		// Check fabricated component dimensions
@@ -1026,14 +1033,14 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 		if bottom == nil || back == nil {
 			t.Fatal("expected comp-bottom and comp-back")
 		}
-		if bottom.WidthMm != 542.0 { // 600 - 58
-			t.Errorf("expected bottom width 542.0, got %f", bottom.WidthMm)
+		if bottom.WidthMm != 512.0 { // 570 - 58
+			t.Errorf("expected bottom width 512.0, got %f", bottom.WidthMm)
 		}
 		if bottom.LengthMm != 484.0 { // 500 - 16
 			t.Errorf("expected bottom length 484.0, got %f", bottom.LengthMm)
 		}
-		if back.WidthMm != 542.0 {
-			t.Errorf("expected back width 542.0, got %f", back.WidthMm)
+		if back.WidthMm != 512.0 { // 570 - 58
+			t.Errorf("expected back width 512.0, got %f", back.WidthMm)
 		}
 		if back.LengthMm != 69.0 {
 			t.Errorf("expected back length 69.0, got %f", back.LengthMm)
@@ -1086,9 +1093,13 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 		}
 	})
 
-	t.Run("E3 & E20: W800 moves right members exactly +200mm with NO scaling and det=+1.0", func(t *testing.T) {
+	t.Run("E3 & E20: Mutating outer W600 -> W800 (LW 570 -> 770) moves right members exactly +200mm with NO scaling and det=+1.0", func(t *testing.T) {
+		const lw570 = 600.0 - 30.0 // 570.0
+		const lw800 = 800.0 - 30.0 // 770.0
+		const lw700 = 700.0 - 30.0 // 670.0
+
 		res600, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
-			WidthMm:  600.0,
+			WidthMm:  lw570,
 			DepthMm:  530.0,
 			HeightMm: 200.0,
 		})
@@ -1096,7 +1107,7 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 			t.Fatal(err)
 		}
 		res800, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
-			WidthMm:  800.0,
+			WidthMm:  lw800,
 			DepthMm:  530.0,
 			HeightMm: 200.0,
 		})
@@ -1104,7 +1115,7 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 			t.Fatal(err)
 		}
 		res700, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
-			WidthMm:  700.0,
+			WidthMm:  lw700,
 			DepthMm:  530.0,
 			HeightMm: 200.0,
 		})
@@ -1146,9 +1157,27 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 				t.Errorf("expected determinant +1.0 for member %s, got %f", m.MemberID, det)
 			}
 		}
+
+		// Bottom regenerated for LW 770: width = 770 - 58 = 712 mm
+		var bottom800, back800 *domain.ResolvedFabricatedComponent
+		for i := range res800.FabricatedComponents {
+			if res800.FabricatedComponents[i].ComponentID == "comp-bottom" {
+				bottom800 = &res800.FabricatedComponents[i]
+			}
+			if res800.FabricatedComponents[i].ComponentID == "comp-back" {
+				back800 = &res800.FabricatedComponents[i]
+			}
+		}
+		if bottom800 == nil || bottom800.WidthMm != 712.0 {
+			t.Errorf("expected bottom width 712.0 for LW 770, got %v", bottom800)
+		}
+		if back800 == nil || back800.WidthMm != 712.0 {
+			t.Errorf("expected back width 712.0 for LW 770, got %v", back800)
+		}
 	})
 
 	t.Run("R6 & E5-E7: Strict variant boundary testing for clearance=3mm (REAL_VERIFIED)", func(t *testing.T) {
+		const lwMm = 570.0
 		// Fixture with clearance = 3.0 mm (Blum KA-160/24-ES, p. 242)
 		blumFixture := fixture
 		blumFixture.CompatibilityRules = []domain.AssemblyCompatibilityRule{
@@ -1161,7 +1190,7 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 
 		// 1. Below minimum: 449.9mm (< 450 + 3 = 453.0) -> fails closed
 		_, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
-			WidthMm: 600.0, DepthMm: 449.9, HeightMm: 200.0,
+			WidthMm: lwMm, DepthMm: 449.9, HeightMm: 200.0,
 		})
 		var variantErr *domain.ErrAssemblyVariantNotFound
 		if !errors.As(err, &variantErr) {
@@ -1170,7 +1199,7 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 
 		// 2. Exact boundary for 450: 453.0mm (453.0 - 3 = 450.0) -> selects 450
 		res453, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
-			WidthMm: 600.0, DepthMm: 453.0, HeightMm: 200.0,
+			WidthMm: lwMm, DepthMm: 453.0, HeightMm: 200.0,
 		})
 		if err != nil || res453.SelectedVariants[0].NominalDimensionMm != 450.0 {
 			t.Errorf("expected 450mm at exact boundary 453.0mm, got %v, err: %v", res453.SelectedVariants, err)
@@ -1178,7 +1207,7 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 
 		// 3. Interior point for 450: 480.0mm -> selects 450
 		res480, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
-			WidthMm: 600.0, DepthMm: 480.0, HeightMm: 200.0,
+			WidthMm: lwMm, DepthMm: 480.0, HeightMm: 200.0,
 		})
 		if err != nil || res480.SelectedVariants[0].NominalDimensionMm != 450.0 {
 			t.Errorf("expected 450mm at 480.0mm, got %v, err: %v", res480.SelectedVariants, err)
@@ -1186,7 +1215,7 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 
 		// 4. Just below boundary for 500: 502.9mm (< 500 + 3 = 503.0) -> selects 450, NOT 500
 		res5029, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
-			WidthMm: 600.0, DepthMm: 502.9, HeightMm: 200.0,
+			WidthMm: lwMm, DepthMm: 502.9, HeightMm: 200.0,
 		})
 		if err != nil || res5029.SelectedVariants[0].NominalDimensionMm != 450.0 {
 			t.Errorf("expected 450mm at 502.9mm (no nearest fallback!), got %v, err: %v", res5029.SelectedVariants, err)
@@ -1194,7 +1223,7 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 
 		// 5. Exact boundary for 500: 503.0mm (503.0 - 3 = 500.0) -> selects 500
 		res503, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
-			WidthMm: 600.0, DepthMm: 503.0, HeightMm: 200.0,
+			WidthMm: lwMm, DepthMm: 503.0, HeightMm: 200.0,
 		})
 		if err != nil || res503.SelectedVariants[0].NominalDimensionMm != 500.0 {
 			t.Errorf("expected 500mm at exact boundary 503.0mm, got %v, err: %v", res503.SelectedVariants, err)
@@ -1202,7 +1231,7 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 
 		// 6. Interior point for 500: 530.0mm -> selects 500
 		res530, err := engine.ResolveAgregadoAssembly(blumFixture, engine.AssemblyResolutionParams{
-			WidthMm: 600.0, DepthMm: 530.0, HeightMm: 200.0,
+			WidthMm: lwMm, DepthMm: 530.0, HeightMm: 200.0,
 		})
 		if err != nil || res530.SelectedVariants[0].NominalDimensionMm != 500.0 {
 			t.Errorf("expected 500mm at 530.0mm, got %v, err: %v", res530.SelectedVariants, err)
@@ -1210,8 +1239,9 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 	})
 
 	t.Run("E8: BOM policy returns 1 commercial kit line without duplicate members", func(t *testing.T) {
+		const lwMm = 570.0
 		res, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
-			WidthMm:  600.0,
+			WidthMm:  lwMm,
 			DepthMm:  530.0,
 			HeightMm: 200.0,
 		})
@@ -1227,9 +1257,10 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 	})
 
 	t.Run("R7: Visual binding independence (mechanical regression)", func(t *testing.T) {
+		const lwMm = 570.0
 		// Pure resolution without visual bindings
 		resRaw, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
-			WidthMm: 600.0, DepthMm: 530.0, HeightMm: 200.0,
+			WidthMm: lwMm, DepthMm: 530.0, HeightMm: 200.0,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -1275,8 +1306,9 @@ func TestMerivoboxPilotEndToEndGates_E1_E20(t *testing.T) {
 	})
 
 	t.Run("E9 & E10: Visual pins and non-identity MountFrame composition", func(t *testing.T) {
+		const lwMm = 570.0
 		res, err := engine.ResolveAgregadoAssembly(fixture, engine.AssemblyResolutionParams{
-			WidthMm:  600.0,
+			WidthMm:  lwMm,
 			DepthMm:  530.0,
 			HeightMm: 200.0,
 		})

@@ -70,6 +70,28 @@ El Programa #670 implementa la arquitectura completa para la gestión, resoluci�
   - Despiece de fabricación y BOM comercial.
 - Prueba R5 en PostgreSQL demuestra que mutar el catálogo o la receta posterior a la publicación no altera el snapshot histórico recuperado.
 
+### 2.5. Configuración Canónica Piloto y Paridad Cross-Renderer (R9–R12)
+- **Cumplimiento:** 100% verificado.
+- **Autoridad de Espesor (R9):** Tanto Proyectar WebGL como SketchUp consumen el espesor de 16 mm de fondo y trasera desde la autoridad de `MaterialBoard` (`mat-merivobox-board-16`, asignado al rol `MERIVOBOX_BOARD` en el catálogo). Ningún renderer ni `BoardMesh` tiene valores hardcodeados de espesor.
+- **Unificación Semántica $W$ vs $LW$ (R10, R11):** La entidad Mueble/Layout calcula $W \to LW$ restando los espesores reales de los costados de carcasa (15 mm + 15 mm en el seed = 30 mm). El motor `ResolveAgregadoAssembly` recibe directamente $LW$ (570 mm para W600, 770 mm para W800) y no asume estructura de carcasa. En todos los tests de Go y TS las variables y aserciones se denominan inequívocamente `lwMm` / `assemblyWidthMm`.
+- **Matriz de Paridad Cross-Renderer y Cross-Runtime (R12):**
+
+| Propiedad Dimensional / Lógica | Go Domain / Engine | TS Domain | Proyectar WebGL | SketchUp Host | Paridad |
+|---|---|---|---|---|---|
+| **Assembly Inner Width ($LW$)** | 570.0 mm | 570.0 mm | 570.0 mm | 570.0 mm | **PARIDAD EXACTA** |
+| **Fondo: Ancho (W600)** | 512.0 mm | 512.0 mm | 512.0 mm | 512.0 mm | **PARIDAD EXACTA** |
+| **Fondo: Largo (NL 500)** | 484.0 mm | 484.0 mm | 484.0 mm | 484.0 mm | **PARIDAD EXACTA** |
+| **Fondo: Espesor** | 16.0 mm | 16.0 mm | 16.0 mm (MaterialBoard) | 16.0 mm (MaterialBoard) | **PARIDAD EXACTA** |
+| **Trasera: Ancho (W600)** | 512.0 mm | 512.0 mm | 512.0 mm | 512.0 mm | **PARIDAD EXACTA** |
+| **Trasera: Alto (Altura M)** | 69.0 mm | 69.0 mm | 69.0 mm | 69.0 mm | **PARIDAD EXACTA** |
+| **Trasera: Espesor** | 16.0 mm | 16.0 mm | 16.0 mm (MaterialBoard) | 16.0 mm (MaterialBoard) | **PARIDAD EXACTA** |
+| **Fondo/Trasera: Ancho (W800)** | 712.0 mm | 712.0 mm | 712.0 mm | 712.0 mm | **PARIDAD EXACTA** |
+| **Delta Miembros Derechos (W800)** | +200.0 mm | +200.0 mm | +200.0 mm | +200.0 mm | **PARIDAD EXACTA** |
+| **Invariante de Escala Rígida** | [1.0, 1.0, 1.0] | [1.0, 1.0, 1.0] | [1.0, 1.0, 1.0] | [1.0, 1.0, 1.0] | **PARIDAD EXACTA** |
+| **Determinante de Base Rígida** | +1.0 | +1.0 | +1.0 | +1.0 | **PARIDAD EXACTA** |
+| **Selección de Variante (NL 450 vs 500)** | Exacta por holgura nominal | Exacta por holgura nominal | Exacta por holgura nominal | Exacta por holgura nominal | **PARIDAD EXACTA** |
+| **BOM Comercial de Kit** | `kit-merivobox-m` (qty 1) | `kit-merivobox-m` (qty 1) | N/A (proyección 3D) | `kit-merivobox-m` (metadata) | **PARIDAD EXACTA** |
+
 ---
 
 ## 3. Matriz de Evidencia Ejecutable

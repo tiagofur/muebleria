@@ -1631,9 +1631,10 @@ func TestMerivoboxPilotHistoricalPersistence_R5(t *testing.T) {
 		t.Fatalf("SetAgregadoCurrentRevision R1 failed: %v", err)
 	}
 
-	// 3. Resolve assembly for W600/D530 (selects NL 500)
+	// 3. Resolve assembly for canonical pilot LW570/D530 (outer W600 - 2x15mm panels; selects NL 500)
+	lwMm := 570.0 // Canonical pilot LW = 600 - 30
 	resolved, err := engine.ResolveAgregadoAssembly(r1.Recipe.ToAgregado(agregadoID, code, "Blum MERIVOBOX"), engine.AssemblyResolutionParams{
-		WidthMm:  600,
+		WidthMm:  lwMm,
 		DepthMm:  530,
 		HeightMm: 200,
 	})
@@ -1755,11 +1756,11 @@ func TestMerivoboxPilotHistoricalPersistence_R5(t *testing.T) {
 			backReadback = &s1Readback.Snapshot.FabricatedComponents[i]
 		}
 	}
-	if bottomReadback == nil || bottomReadback.WidthMm != 542.0 || bottomReadback.LengthMm != 484.0 {
-		t.Errorf("bottom board corrupted: %+v, want width 542, length 484", bottomReadback)
+	if bottomReadback == nil || bottomReadback.WidthMm != 512.0 || bottomReadback.LengthMm != 484.0 {
+		t.Errorf("bottom board corrupted: %+v, want width 512, length 484", bottomReadback)
 	}
-	if backReadback == nil || backReadback.WidthMm != 542.0 || backReadback.LengthMm != 69.0 {
-		t.Errorf("back board corrupted: %+v, want width 542, length 69", backReadback)
+	if backReadback == nil || backReadback.WidthMm != 512.0 || backReadback.LengthMm != 69.0 {
+		t.Errorf("back board corrupted: %+v, want width 512, length 69", backReadback)
 	}
 
 	// Verify BOM policy preserved

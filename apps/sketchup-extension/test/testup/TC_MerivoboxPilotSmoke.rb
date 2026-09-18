@@ -12,9 +12,9 @@ require 'testup/testcase'
 #
 # Proves against the real INSTALLED extension and SketchUp 2026 host:
 #   E1 & E2:  Insert W600 (rigid members det=+1.0, scale=[1,1,1],
-#             bottom panel = 542 x 484 x 16 mm, back = 542 x 69 x 16 mm).
+#             bottom panel = 512 x 484 x 16 mm, back = 512 x 69 x 16 mm).
 #   E3 & E20: Rebuild W800 (right members delta=+200 mm, left delta=0,
-#             definitions reused, bottom panel 542 -> 742 mm, scale=[1,1,1], det=+1.0).
+#             definitions reused, bottom panel 512 -> 712 mm, scale=[1,1,1], det=+1.0).
 #   E5 & E6:  Discrete variant switch (NL 450 -> NL 500) without scaling,
 #             runner definition switched, bottom length 434 -> 484 mm.
 #   E9 & E10: Non-identity compound transform: Furniture * Assembly * Member * MountFrame (originMm [15, 5, 2]).
@@ -124,21 +124,21 @@ module Granete
         assert_equal 'inst-merivobox-1', side_r_meta.dig('identity', 'assemblyInstanceId')
         assert_equal 'side-right', side_r_meta.dig('identity', 'memberId')
 
-        # Dimensions check: bottom = 542 x 484 x 16 mm (600 - 58, 500 - 16)
-        assert_in_delta 542.0 * MM, bottom.definition.bounds.width, 1e-3
+        # Dimensions check: bottom = 512 x 484 x 16 mm (LW 570 - 58, 500 - 16)
+        assert_in_delta 512.0 * MM, bottom.definition.bounds.width, 1e-3
         assert_in_delta 16.0 * MM, bottom.definition.bounds.height, 1e-3
         assert_in_delta 484.0 * MM, bottom.definition.bounds.depth, 1e-3
 
-        # Back panel = 542 x 69 x 16 mm
-        assert_in_delta 542.0 * MM, back.definition.bounds.width, 1e-3
+        # Back panel = 512 x 69 x 16 mm
+        assert_in_delta 512.0 * MM, back.definition.bounds.width, 1e-3
 
         evidence['tests']['e1_e2_insert_w600'] = {
           'status' => 'pass',
           'rigid_members_count' => 4,
           'fabricated_components_count' => 2,
-          'bottom_width_mm' => 542.0,
+          'bottom_width_mm' => 512.0,
           'bottom_length_mm' => 484.0,
-          'back_width_mm' => 542.0,
+          'back_width_mm' => 512.0,
           'back_length_mm' => 69.0
         }
       end
@@ -196,9 +196,9 @@ module Granete
         assert_equal side_r_def_before, side_r_rebuilt.definition, 'sideRight definition must be reused'
         assert_equal runner_r_def_before, runner_r_rebuilt.definition, 'runnerRight definition must be reused'
 
-        # Bottom regenerated with new width: 542 -> 742 mm, thickness 16 mm preserved
+        # Bottom regenerated with new width: 512 -> 712 mm, thickness 16 mm preserved
         refute_equal bottom_def_before, bottom_rebuilt.definition.name, 'bottom definition must be regenerated'
-        assert_in_delta 742.0 * MM, bottom_rebuilt.definition.bounds.width, 1e-3
+        assert_in_delta 712.0 * MM, bottom_rebuilt.definition.bounds.width, 1e-3
         assert_in_delta 16.0 * MM, bottom_rebuilt.definition.bounds.height, 1e-3
         assert_in_delta 484.0 * MM, bottom_rebuilt.definition.bounds.depth, 1e-3
         assert_rigid_transformation(bottom_rebuilt.transformation)
@@ -211,8 +211,8 @@ module Granete
         evidence['w600_to_w800_delta'] = {
           'side_right_delta_mm' => delta_side_r,
           'runner_right_delta_mm' => delta_runner_r,
-          'bottom_width_before_mm' => 542.0,
-          'bottom_width_after_mm' => 742.0,
+          'bottom_width_before_mm' => 512.0,
+          'bottom_width_after_mm' => 712.0,
           'definitions_reused' => true,
           'rigid_scale_preserved' => true
         }
@@ -255,15 +255,15 @@ module Granete
         refute_equal runner_def450, runner_def500, 'Runner definition must switch between NL 450 and NL 500'
         assert_rigid_transformation(runner_l500.transformation)
 
-        # Bottom length regenerated from 434 to 484 mm; width stays 542 mm
+        # Bottom length regenerated from 434 to 484 mm; width stays 512 mm
         assert_in_delta 484.0, bottom_len500, 1e-3
-        assert_in_delta 542.0 * MM, bottom500.definition.bounds.width, 1e-3
+        assert_in_delta 512.0 * MM, bottom500.definition.bounds.width, 1e-3
 
         evidence['variant_switch_nl450_to_nl500'] = {
           'hardware_id_450' => 'hw-merivobox-450',
           'hardware_id_500' => 'hw-merivobox-500',
-          'bottom_length_450_mm' => bottom_len_450,
-          'bottom_length_500_mm' => bottom_len_500,
+          'bottom_length_450_mm' => bottom_len450,
+          'bottom_length_500_mm' => bottom_len500,
           'scale_preserved' => true
         }
         evidence['tests']['e5_e6_variant_switch'] = { 'status' => 'pass' }
@@ -528,13 +528,19 @@ module Granete
         File.write(evidence_path, JSON.pretty_generate(self.class.evidence))
       end
 
-      def build_merivobox_layout(width_mm: 600.0, nominal_depth_mm: 500.0, mount_origin_mm: [15.0, 5.0, 2.0])
-        delta_w = width_mm - 600.0
+      def build_merivobox_layout(
+        width_mm: 600.0,
+        nominal_depth_mm: 500.0,
+        mount_origin_mm: [15.0, 5.0, 2.0],
+        left_panel_mm: 15.0,
+        right_panel_mm: 15.0
+      )
+        lw_mm = width_mm - left_panel_mm - right_panel_mm
         is450 = (nominal_depth_mm - 450.0).abs < 1e-4
         hw_id = is450 ? 'hw-merivobox-450' : 'hw-merivobox-500'
         rev_id = is450 ? 'rev-mbx-450-1' : 'rev-mbx-500-1'
         bottom_length = nominal_depth_mm - 16.0 # REAL_VERIFIED: NL - 16
-        bottom_width = width_mm - 58.0          # REAL_VERIFIED: LW - 58
+        bottom_width = lw_mm - 58.0             # REAL_VERIFIED: LW - 58
 
         {
           'furnitureDefinitionId' => FURNITURE_DEF_ID,
@@ -544,13 +550,25 @@ module Granete
           'components' => [
             {
               'componentInstanceId' => 'cabinet-side-l',
-              'name' => 'Lateral Carcasa',
+              'name' => 'Lateral Carcasa Izquierdo',
               'slotId' => 'lateral_carcasa',
-              'widthMm' => 18.0,
+              'widthMm' => left_panel_mm,
               'thicknessMm' => 560.0,
               'lengthMm' => 720.0,
               'localTransform' => {
                 'translationMm' => [0.0, 0.0, 0.0],
+                'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+              }
+            },
+            {
+              'componentInstanceId' => 'cabinet-side-r',
+              'name' => 'Lateral Carcasa Derecho',
+              'slotId' => 'lateral_carcasa',
+              'widthMm' => right_panel_mm,
+              'thicknessMm' => 560.0,
+              'lengthMm' => 720.0,
+              'localTransform' => {
+                'translationMm' => [width_mm - right_panel_mm, 0.0, 0.0],
                 'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
               }
             }
@@ -561,10 +579,10 @@ module Granete
               'agregadoId' => 'agr-merivobox-m',
               'recipeRevision' => 1,
               'isHistorical' => false,
-              'dimensionsMm' => [width_mm, 200.0, nominal_depth_mm],
+              'dimensionsMm' => [lw_mm, 200.0, nominal_depth_mm],
               'commercialKitHardwareId' => 'kit-merivobox-m',
               'placement' => {
-                'translationMm' => [0.0, 50.0, 100.0],
+                'translationMm' => [left_panel_mm, 50.0, 100.0],
                 'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
               },
               'rigidMembers' => [
@@ -598,7 +616,7 @@ module Granete
                     'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
                   },
                   'localTransform' => {
-                    'translationMm' => [600.0 + delta_w, 0.0, 0.0],
+                    'translationMm' => [lw_mm, 0.0, 0.0],
                     'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
                   }
                 },
@@ -632,7 +650,7 @@ module Granete
                     'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
                   },
                   'localTransform' => {
-                    'translationMm' => [600.0 + delta_w, 0.0, 0.0],
+                    'translationMm' => [lw_mm, 0.0, 0.0],
                     'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
                   }
                 }
