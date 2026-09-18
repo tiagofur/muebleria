@@ -243,6 +243,22 @@ describe('deriveEngineeringWorkshopOccurrenceView — no live rows/labels while 
     expect(view.cutError).toContain('boom-500');
   });
 
+  it('#781 micro-task #3C — error never attempts module labels (no live fallback)', () => {
+    const bogusCatalog = {} as Catalog;
+    const view = deriveEngineeringWorkshopOccurrenceView({
+      project: liveProject(),
+      catalog: bogusCatalog,
+      modules: [],
+      occurrenceContext: { kind: 'error', message: 'boom-500' },
+      moduleLabelsMeta: { customerName: 'Lab', revision: undefined },
+    });
+    // generateModuleLabels() is NOT attempted: nulls, not even an error —
+    // while the principal error is preserved on the cut surface.
+    expect(view.moduleLabels).toBeNull();
+    expect(view.moduleLabelsError).toBeNull();
+    expect(view.cutError).toContain('boom-500');
+  });
+
   it('idle without catalog: live project flows, nothing frozen invented', () => {
     const project = liveProject();
     const view = deriveEngineeringWorkshopOccurrenceView({

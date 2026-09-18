@@ -302,13 +302,18 @@ export function deriveEngineeringWorkshopOccurrenceView(args: {
       labelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas';
     }
   }
-  // #781 micro-task #3B — module labels also derive from the live project,
-  // so they get the SAME authority gate (never live labels while any release
-  // authority loads). Ready/pre-release behavior is unchanged: they keep
+  // #781 micro-task #3B/#3C — module labels also derive from the live
+  // project, so they get the SAME authority gate (never live labels while
+  // any release authority loads, never on error either). Explicit whitelist
+  // (idle | ready): a future state must opt in, never leak through a
+  // negative check. Ready/pre-release behavior is unchanged: they keep
   // deriving from the live project, exactly as before.
+  const canDeriveModuleLabels =
+    args.occurrenceContext.kind === 'idle' ||
+    args.occurrenceContext.kind === 'ready';
   let moduleLabels: ModuleLabel[] | null = null;
   let moduleLabelsError: string | null = null;
-  if (args.catalog && !authorityLoading) {
+  if (args.catalog && canDeriveModuleLabels) {
     try {
       moduleLabels = generateModuleLabels(args.project, args.catalog, {
         customerName: args.moduleLabelsMeta.customerName,
