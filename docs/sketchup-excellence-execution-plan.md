@@ -174,19 +174,27 @@ After the professional mutation/review loop is stable:
 
 | Issue | Delivery | Coordination |
 |---:|---|---|
-| #469 | Constraint-aware placement, snapping and repeat | native hierarchy; connected business identity later via #390 |
+| #469 | Constraint-aware placement, semantic anchors, snapping and repeat | native hierarchy; commit-time connected identity via #390 |
 | #470 | ManufacturingFeature overlay/provenance | reuse #466 navigation and #498 accepted-state invalidation |
-| #471 | Multi-select/batch editing | reuse #498 atomicity; durable scopes wait #384 |
+| #471 | Multi-select/batch editing | reuse #498 atomicity; batch rollout reused by #784 |
+| #784 | Design defaults, inheritance/overrides and no-selection Inspector | Design working copy + #471 + #468; no extra permanent configuration screen |
 
 ### Wave 3 demo
 
 ```text
-place cabinets through preview/snap
+open connected Design with no selection
+→ Inspector shows Design defaults
+→ choose BODY/FRONT defaults
+→ place cabinets through cursor preview + visible semantic anchor + snap
+→ new furniture inherits supported Design defaults
+→ create and reset one furniture override
 → multi-select and show common/mixed/unsupported values honestly
-→ batch-change one compatible material/parameter
+→ explicitly roll one Design default to existing furniture while preserving overrides
 → inspect drilling/groove/edge provenance read-only
 → no Ruby/React manufacturing rule
 ```
+
+The detailed interaction contract is `docs/architecture/sketchup-designer-workflow.md`.
 
 ## 8. Host robustness and commercial support foundations
 
@@ -246,7 +254,7 @@ Existing host work adapts rather than being replaced.
 
 ### Selection/inspector
 
-#476 gains Project/Design/revision context while preserving component/hardware identity.
+#476 preserves component/hardware identity. #784 extends the same Inspector state model so a valid connected Design with no managed selection becomes the Design configuration context; one/many managed selections switch the same surface to furniture/child/batch scope.
 
 ### Authoring resolve
 
@@ -255,12 +263,23 @@ Existing host work adapts rather than being replaced.
 ### Placement
 
 ```text
+Library or Project source
+→ transient preview follows cursor from semantic anchor
+→ inference/snap/orientation/offset
+→ explicit click commit
+
 local/unconnected compatibility mode
 → explicit non-server compatibility identity/state
 
-connected Project mode
-→ #390 obtains server FurnitureInstance before productive placement
+connected Catalog mode
+→ #390 obtains exactly one server FurnitureInstance as part of commit
+→ then productive managed placement becomes valid
+
+existing Project Furniture
+→ preserves its existing FurnitureInstance identity
 ```
+
+Browsing, selecting a card and moving a preview must not allocate business identity.
 
 ### Copy
 
