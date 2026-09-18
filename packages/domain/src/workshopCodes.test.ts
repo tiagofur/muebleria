@@ -492,4 +492,65 @@ describe('applyFrozenWorkshopOccurrenceOrdinals — contexto BOM derivado (#781 
     expect(d.moduleId).toBe(IDS.modGab);
     expect(d.optionChoices).toEqual(plantillaChoices);
   });
+
+  it('#781 micro-task #2 A — assignment no consumido → falla cerrado', () => {
+    expect(() =>
+      applyFrozenWorkshopOccurrenceOrdinals(
+        [baseItem('line-a', 1)],
+        projection([
+          { furnitureInstanceId: 'fi-a', projectItemId: 'line-a', workshopOccurrenceOrdinal: 1 },
+          { furnitureInstanceId: 'fi-b', projectItemId: 'line-UNKNOWN', workshopOccurrenceOrdinal: 2 },
+        ]),
+      ),
+    ).toThrow(/no corresponden a ningún ítem/i);
+  });
+
+  it('#781 micro-task #2 B — projectItemId vacío → falla cerrado', () => {
+    expect(() =>
+      applyFrozenWorkshopOccurrenceOrdinals(
+        [baseItem('line-a', 1)],
+        projection([
+          { furnitureInstanceId: 'fi-a', projectItemId: '', workshopOccurrenceOrdinal: 1 },
+        ]),
+      ),
+    ).toThrow(/projectItemId vacío/i);
+  });
+
+  it('#781 micro-task #2 C — furnitureInstanceId duplicado → falla cerrado', () => {
+    expect(() =>
+      applyFrozenWorkshopOccurrenceOrdinals(
+        [baseItem('line-a', 1), baseItem('line-b', 1)],
+        projection([
+          { furnitureInstanceId: 'fi-a', projectItemId: 'line-a', workshopOccurrenceOrdinal: 1 },
+          { furnitureInstanceId: 'fi-a', projectItemId: 'line-b', workshopOccurrenceOrdinal: 2 },
+        ]),
+      ),
+    ).toThrow(/misma identidad física/i);
+  });
+
+  it('#781 micro-task #2 C2 — furnitureInstanceId vacío → falla cerrado', () => {
+    expect(() =>
+      applyFrozenWorkshopOccurrenceOrdinals(
+        [baseItem('line-a', 1)],
+        projection([
+          { furnitureInstanceId: '', projectItemId: 'line-a', workshopOccurrenceOrdinal: 1 },
+        ]),
+      ),
+    ).toThrow(/sin identidad física/i);
+  });
+
+  it('#781 micro-task #2 D — happy path: 2 frozen, 2 current, todos consumidos', () => {
+    const derived = applyFrozenWorkshopOccurrenceOrdinals(
+      [baseItem('line-a', 1), baseItem('line-b', 1)],
+      projection([
+        { furnitureInstanceId: 'fi-a', projectItemId: 'line-a', workshopOccurrenceOrdinal: 1 },
+        { furnitureInstanceId: 'fi-b', projectItemId: 'line-b', workshopOccurrenceOrdinal: 2 },
+      ]),
+    );
+    expect(derived).toHaveLength(2);
+    expect(derived.map((item) => [item.id, item.furnitureInstanceId, item.quantity, item.workshopOccurrenceOrdinal])).toEqual([
+      ['line-a', 'fi-a', 1, 1],
+      ['line-b', 'fi-b', 1, 2],
+    ]);
+  });
 });

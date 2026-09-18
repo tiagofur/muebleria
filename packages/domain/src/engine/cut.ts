@@ -270,6 +270,32 @@ export function applyFrozenWorkshopOccurrenceOrdinals(
       { releaseId: projection.releaseId },
     );
   }
+  // #781 micro-task #2 — physical identity guards (defense in depth: the TS
+  // validation is autonomous and never trusts coversAllCurrentInstances
+  // alone). Every assignment must carry a non-empty furnitureInstanceId and
+  // projectItemId, and each physical identity may appear exactly once.
+  const seenInstances = new Set<string>();
+  for (const assignment of projection.assignments) {
+    if (!assignment.furnitureInstanceId) {
+      throw new ResolutionError(
+        'Asignación de ocurrencia sin identidad física: furnitureInstanceId vacío',
+        { releaseId: projection.releaseId },
+      );
+    }
+    if (!assignment.projectItemId) {
+      throw new ResolutionError(
+        'Asignación de ocurrencia sin ítem de proyecto: projectItemId vacío (una unidad frozen sin link actual nunca puede aplicarse)',
+        { furnitureInstanceId: assignment.furnitureInstanceId, releaseId: projection.releaseId },
+      );
+    }
+    if (seenInstances.has(assignment.furnitureInstanceId)) {
+      throw new ResolutionError(
+        'Dos asignaciones comparten la misma identidad física: cada ocurrencia es única',
+        { furnitureInstanceId: assignment.furnitureInstanceId, releaseId: projection.releaseId },
+      );
+    }
+    seenInstances.add(assignment.furnitureInstanceId);
+  }
   // Group assignments by projectItemId, validate per-item count == quantity.
   const byItem = new Map<string, WorkshopOccurrenceAssignment[]>();
   for (const assignment of projection.assignments) {
@@ -278,6 +304,7 @@ export function applyFrozenWorkshopOccurrenceOrdinals(
     byItem.set(assignment.projectItemId, list);
   }
   const derived: ProjectItem[] = [];
+  const consumed = new Set<string>();
   for (const item of items) {
     const assignments = byItem.get(item.id);
     if (!assignments || assignments.length === 0) {
@@ -302,12 +329,29 @@ export function applyFrozenWorkshopOccurrenceOrdinals(
     // #781 FIX: ProjectItem.id is NEVER mutated. furnitureInstanceId is
     // transported as a separate field; workshopOccurrenceOrdinal stays separate.
     derived.push(
-      ...assignments.map((assignment) => ({
-        ...item,
-        furnitureInstanceId: assignment.furnitureInstanceId,
-        quantity: 1,
-        workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
-      })),
+      ...assignments.map((assignment) => {
+        consumed.add(assignment.furnitureInstanceId);
+        return {
+          ...item,
+          furnitureInstanceId: assignment.furnitureInstanceId,
+          quantity: 1,
+          workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
+        };
+      }),
+    );
+  }
+  // #781 micro-task #2 — 100% consumption: every frozen assignment must be
+  // consumed exactly once by the derived BOM context. An assignment pointing
+  // at an unknown/removed item (or any other drift) fails closed instead of
+  // being silently ignored.
+  if (consumed.size !== projection.assignments.length) {
+    throw new ResolutionError(
+      'La proyección congelada contiene ocurrencias que no corresponden a ningún ítem actual del proyecto: el contexto BOM no puede ignorarlas en silencio',
+      {
+        assigned: projection.assignments.length,
+        consumed: consumed.size,
+        releaseId: projection.releaseId,
+      },
     );
   }
   return derived;

@@ -166,6 +166,108 @@ func TestReleaseCuttingDemand_UnavailableAndIsolated(t *testing.T) {
 	}
 }
 
+func mustProjectWorkshopOccurrences(t *testing.T, fx *releaseFixture, releaseID string) *storage.WorkshopOccurrenceProjectionView {
+	t.Helper()
+	var view *storage.WorkshopOccurrenceProjectionView
+	if err := releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var innerErr error
+		view, innerErr = fx.store.GetProjectWorkshopOccurrences(ctx, fx.projectID, releaseID)
+		return innerErr
+	}); err != nil {
+		t.Fatalf("workshop occurrence projection must succeed: %v", err)
+	}
+	return view
+}
+
+func assignmentByInstance(view *storage.WorkshopOccurrenceProjectionView, instanceID string) *storage.WorkshopOccurrenceAssignmentView {
+	for i := range view.Assignments {
+		if view.Assignments[i].FurnitureInstanceID == instanceID {
+			return &view.Assignments[i]
+		}
+	}
+	return nil
+}
+
+// #781 micro-task #2 — CoversAllCurrentInstances is a BIDIRECTIONAL exact
+// set equality: {frozen instance ids} == {current linked instance ids}.
+// Frozen ⊊ current, frozen ⊋ current, and unlinked frozen units ALL force
+// false — while the frozen assignments stay reported as evidence. Each case
+// runs on its own fresh released fixture so every direction is isolated.
+func TestProjectWorkshopOccurrences_BidirectionalCoverage(t *testing.T) {
+	setupReleased := func(t *testing.T) (*releaseFixture, *storage.ReleaseCuttingDemandView) {
+		t.Helper()
+		fx := setupReleaseFixture(t)
+		return fx, createCuttingDemandRelease(t, fx)
+	}
+
+	// Case A — exact equality: frozen {fiA,fiB} == current {fiA,fiB} → true.
+	fxA, demandA := setupReleased(t)
+	viewA := mustProjectWorkshopOccurrences(t, fxA, demandA.ReleaseID)
+	if !viewA.CoversAllCurrentInstances {
+		t.Fatalf("exact frozen/current equality must cover: %+v", viewA)
+	}
+	if len(viewA.Assignments) != 2 {
+		t.Fatalf("frozen evidence must carry both units, got %d", len(viewA.Assignments))
+	}
+	for _, instanceID := range []string{fxA.fiA, fxA.fiB} {
+		assignment := assignmentByInstance(viewA, instanceID)
+		if assignment == nil {
+			t.Fatalf("frozen instance %s must be reported", instanceID)
+		}
+		if assignment.ProjectItemID == "" {
+			t.Fatalf("linked frozen instance %s must carry its project item: %+v", instanceID, assignment)
+		}
+	}
+
+	// Case B — current extra: a third live link the release never froze.
+	// Frozen {fiA,fiB} ⊂ current {fiA,fiB,fiC} → false; frozen evidence stays 2.
+	fxB, demandB := setupReleased(t)
+	fiC := "60000000-0000-0000-0000-0000000000c3"
+	var quoteLineID string
+	if err := fxB.admin.QueryRow(context.Background(),
+		`SELECT quote_line_id FROM quote_line_furniture_instances WHERE project_id=$1 AND state='current' LIMIT 1`,
+		fxB.projectID).Scan(&quoteLineID); err != nil {
+		t.Fatalf("read fixture quote line: %v", err)
+	}
+	multiOrgExec(t, fxB.admin, `
+		INSERT INTO furniture_instances (id, organization_id, project_id, furniture_definition_id, origin)
+		VALUES ('`+fiC+`', '`+rlsOrgA+`', '`+fxB.projectID+`', '`+fiModuleA+`', 'manual');
+		INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id, state)
+		VALUES ('`+rlsOrgA+`', '`+fxB.projectID+`', '`+quoteLineID+`', '`+fiC+`', 'current');`)
+	viewB := mustProjectWorkshopOccurrences(t, fxB, demandB.ReleaseID)
+	if viewB.CoversAllCurrentInstances {
+		t.Fatalf("a current instance the release never covered must break coverage: %+v", viewB)
+	}
+	if len(viewB.Assignments) != 2 {
+		t.Fatalf("frozen evidence must stay exactly the frozen units, got %d", len(viewB.Assignments))
+	}
+	if assignmentByInstance(viewB, fiC) != nil {
+		t.Fatalf("an unfrozen current instance must not appear in the frozen evidence")
+	}
+
+	// Case C — frozen without current link: supersede fiB on a fresh release.
+	// Frozen {fiA,fiB} ⊋ current {fiA} → false; B stays reported with "".
+	fxC, demandC := setupReleased(t)
+	multiOrgExec(t, fxC.admin, `
+		UPDATE quote_line_furniture_instances SET state='superseded'
+		WHERE project_id='`+fxC.projectID+`' AND furniture_instance_id='`+fxC.fiB+`';`)
+	viewC := mustProjectWorkshopOccurrences(t, fxC, demandC.ReleaseID)
+	if viewC.CoversAllCurrentInstances {
+		t.Fatalf("a frozen unit without a current link must break coverage: %+v", viewC)
+	}
+	unlinked := assignmentByInstance(viewC, fxC.fiB)
+	if unlinked == nil {
+		t.Fatalf("the unlinked frozen unit must still be reported for traceability")
+	}
+	if unlinked.ProjectItemID != "" {
+		t.Fatalf("the unlinked frozen unit must carry an empty project item, got %+v", unlinked)
+	}
+	linked := assignmentByInstance(viewC, fxC.fiA)
+	if linked == nil || linked.ProjectItemID == "" {
+		t.Fatalf("the still-linked frozen unit must keep its project item: %+v", linked)
+	}
+}
+
 func TestProjectWorkshopOccurrences_FrozenLatestReleaseOrder(t *testing.T) {
 	fx := setupReleaseFixture(t)
 	demand := createCuttingDemandRelease(t, fx)

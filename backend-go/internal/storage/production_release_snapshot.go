@@ -178,6 +178,11 @@ type WorkshopOccurrenceProjectionView struct {
 // snapshot unit position (index+1): decided when the work was liberated,
 // never recomputed, and historical releases need no migration.
 // #781 FIX — receives releaseId explicitly; never SELECT latest.
+// #781 micro-task #2 — CoversAllCurrentInstances is a BIDIRECTIONAL exact
+// set equality: {frozen instance ids} == {current linked instance ids}.
+// A frozen unit without a current link (empty ProjectItemID, kept for
+// traceability) and a current instance the release never covered BOTH
+// force false — never a silent partial freeze.
 func (s *PostgresStore) GetProjectWorkshopOccurrences(ctx context.Context, projectID, releaseID string) (*WorkshopOccurrenceProjectionView, error) {
 	if !isValidUUID(projectID) || !isValidUUID(releaseID) {
 		return nil, ErrReleaseSnapshotUnavailable
@@ -222,7 +227,9 @@ func (s *PostgresStore) GetProjectWorkshopOccurrences(ctx context.Context, proje
 		if !linked {
 			// A frozen unit without a current link: the live representation
 			// drifted; still report the occurrence (identity survives), with
-			// an empty item so the drift is visible.
+			// an empty item so the drift is visible — and the freeze is NOT
+			// complete (#781 micro-task #2: frozen ⊋ current ⇒ false).
+			view.CoversAllCurrentInstances = false
 			itemID = ""
 		}
 		view.Assignments = append(view.Assignments, WorkshopOccurrenceAssignmentView{
