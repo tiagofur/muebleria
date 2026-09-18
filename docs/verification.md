@@ -461,6 +461,46 @@ validate → verifier independiente === []):
 
 ---
 
+## PTX CADmatic 4 — strict spec preflight r5 (#788)
+
+Validador estricto de especificación Pattern Exchange ANTES de serializar
+(r5-A de #787, tras el segundo rechazo). Base: defecto objetivo confirmado
+`HEADER.TITLE` 43 chars > 25 documentado (causa del rechazo NO demostrada).
+Autoridad documental: diccionario §20 (pp. 166–178) de la Interface Guide V11
+(S03), citas verbatim por límite en
+`docs/machines/ptx-cadmatic4/08_spec_preflight_r5.md` §2.
+
+```sh
+pnpm --filter @granete/excel test    # specPreflight + externalDialect + suite
+pnpm typecheck
+```
+
+Cobertura contractual exigida por #788:
+
+- fail-closed sin truncado: `ptx_spec.header_title_too_long` con longitud
+  observada/máximo/locator (regresión 43 industrial y 33 lab); TITLE de 25
+  PASA;
+- independencia writer/validator: `ptxSpecPreflightBytes` parsea con el lector
+  independiente y detecta mutaciones de bytes post-serialización (título,
+  enums, fila borrada, salto de índice, referencia colgante, código de 60);
+  `serializePtxDocumentBytesSpecChecked` no entrega bytes rechazados y
+  `compileCutPlanToPtxDocument({ strictSpecPreflight })` bloquea con
+  `ptx_compile.spec_preflight_failed` (opción inerte para r2/r3/r4);
+- índices consecutivos/únicos/desde 1 y referencias por job (PART/BOARD/
+  MATERIAL/PATTERN/Xn/JOBS) re-derivadas sin compartir código con validate.ts;
+- shapes externos: R2201/R7301 saneados se leen estructuralmente (lector
+  tolerante: espacios, líneas en blanco, trailing documentado, familias
+  PARTS_INF/PARTS_UDI/NOTES opacas; fixtures sin modificar), distinguiendo
+  celda vacía de trailing omitido;
+- inmutabilidad: goldens r2/r3/r4 recompilan byte-exact con sus sha256 del
+  contrato industrial y el descriptor del adapter conserva su digest; los
+  bytes históricos se reportan honestamente como violadores del límite TITLE;
+- sin máquina, sin CADLink, sin nuevo candidato al cliente:
+  `NOT_TESTED/notClaimed` permanece; etiquetas/CNC/receiver/CUTS/RLT/profile
+  r5 siguen en #789–#793.
+
+---
+
 ## 15. Definition of Verified
 
 Antes de declarar una feature verificada:

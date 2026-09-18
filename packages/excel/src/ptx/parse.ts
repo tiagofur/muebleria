@@ -333,7 +333,11 @@ function parsePartReference(raw: string, lineNo: number): PtxPartReference {
 // Row → record
 // ---------------------------------------------------------------------------
 
-function parseHeaderRow(cells: readonly string[], lineNo: number): PtxHeaderRecord {
+/**
+ * HEADER row → typed record (#788: also consumed by the external-dialect
+ * reader). Pure; exported for reuse by readers only.
+ */
+export function parseHeaderRow(cells: readonly string[], lineNo: number): PtxHeaderRecord {
   const c = new CellCursor(cells, lineNo, 'HEADER');
   return {
     type: 'HEADER',
@@ -345,7 +349,13 @@ function parseHeaderRow(cells: readonly string[], lineNo: number): PtxHeaderReco
   };
 }
 
-function parseRecordRow(family: string, cells: readonly string[], lineNo: number): PtxRecord {
+/**
+ * Row → typed record for a modeled family (#788: also consumed by the
+ * external-dialect reader, which pre-trims unquoted cells and slices rows to
+ * the implemented width before delegating). Pure; exported for reuse by
+ * readers only — never by writers.
+ */
+export function parseRecordRow(family: string, cells: readonly string[], lineNo: number): PtxRecord {
   const c = new CellCursor(cells, lineNo, family);
   switch (family) {
     case 'JOBS':
