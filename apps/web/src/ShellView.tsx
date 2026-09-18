@@ -69,8 +69,6 @@ import {
   estimateBoardSheets,
   generateCutRows,
   generateHardwareList,
-  generatePieceLabels,
-  generateModuleLabels,
   generateProjectMaterialSummary,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
@@ -229,6 +227,12 @@ import {
   engineeringReleaseQueryKey,
   useEngineeringReleaseContext,
 } from './engineeringReleaseContext';
+import {
+  deriveEngineeringWorkshopOccurrenceView,
+  resolveEffectiveOccurrenceContext,
+  useProjectWorkshopOccurrences,
+  workshopOccurrenceQueryKey,
+} from './workshopOccurrenceContext';
 import {
   engineeringCuttingDemandQueryKey,
   useEngineeringCuttingDemand,
@@ -1006,6 +1010,24 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       routeEngineeringReleaseId ?? 'no-release',
     ),
   });
+  // #781 — the project's frozen manufacturing occurrence authority of the
+  // EXACT release. Only fetched when the engineering release context is
+  // ready (same project/release scope). Never falls back to "latest".
+  const projectWorkshopOccurrences = useProjectWorkshopOccurrences({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    projectId:
+      engineeringReleaseContext.kind === 'ready' && routeEngineeringProjectId
+        ? routeEngineeringProjectId
+        : null,
+    releaseId:
+      engineeringReleaseContext.kind === 'ready' ? routeEngineeringReleaseId : null,
+    queryKey: workshopOccurrenceQueryKey(
+      sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+      routeEngineeringProjectId ?? 'none',
+      routeEngineeringReleaseId ?? 'none',
+    ),
+  });
   // #739 — frozen cutting demand of the SAME pinned release (fetched only
   // once the release context is verified: same project/release scope, same
   // session keying, no cross-context leakage).
@@ -1531,18 +1553,35 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             : engineeringReleaseContext.kind === 'loading'
               ? { state: 'loading' as const }
               : undefined;
-        const engModules = modules.filter((m) =>
-          engProject.items.some((item) => item.moduleId === m.id),
-        );
-        let engCutRows: ReturnType<typeof generateCutRows> | null = null;
-        let engCutError: string | null = null;
-        if (catalog) {
-          try {
-            engCutRows = generateCutRows(engProject, catalog);
-          } catch (err) {
-            engCutError = err instanceof Error ? err.message : 'Error al resolver despiece';
-          }
-        }
+        // #781 micro-task #3B — the workshop query only starts after the
+        // exact release verifies, so while the URL already pins a releaseId
+        // but the release context still loads, the occurrence context would
+        // read `idle` (live allowed). That window reads `loading` instead —
+        // the fetch itself never starts early, only the view states combine.
+        const effectiveOccurrenceContext = resolveEffectiveOccurrenceContext({
+          routeReleaseId: routeEngineeringReleaseId,
+          releaseContextKind: engineeringReleaseContext.kind,
+          occurrenceContext: projectWorkshopOccurrences,
+        });
+        // #781 micro-task #3 — the occurrence-gated BOM view: while the
+        // exact release's frozen authority is still loading, NOTHING
+        // live-derived is produced (no BOM, no cut rows, no labels) — the
+        // screen waits for the frozen authority instead of flashing live
+        // content. Pre-release/legacy (idle) keeps the live working view.
+        const engWorkshopView = deriveEngineeringWorkshopOccurrenceView({
+          project: engProject,
+          catalog,
+          modules,
+          occurrenceContext: effectiveOccurrenceContext,
+          moduleLabelsMeta: {
+            customerName: resolveCustomerName(engProject.customerId, customers),
+            revision: engProject.production?.revision?.toString(),
+          },
+        });
+        const engBomProject = engWorkshopView.bomProject;
+        const engModules = engWorkshopView.modules;
+        const engCutRows = engWorkshopView.cutRows;
+        const engCutError = engWorkshopView.cutError;
         // #739 — with a verified release context the despiece/optimización
         // demand comes from the FROZEN cutting-demand projection of the exact
         // release — never from the live project/catálogo. Mapping failures
@@ -1648,25 +1687,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             };
           }
         }
-        let engLabels: ReturnType<typeof generatePieceLabels> | null = null;
-        let engLabelsError: string | null = null;
-        let engModuleLabels: ReturnType<typeof generateModuleLabels> | null = null;
-        let engModuleLabelsError: string | null = null;
-        if (catalog) {
-          try {
-            engLabels = generatePieceLabels(engProject, catalog);
-          } catch (err) {
-            engLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas';
-          }
-          try {
-            engModuleLabels = generateModuleLabels(engProject, catalog, {
-              customerName: resolveCustomerName(engProject.customerId, customers),
-              revision: engProject.production?.revision?.toString(),
-            });
-          } catch (err) {
-            engModuleLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas de módulo';
-          }
-        }
+        // engLabels/engLabelsError/engModuleLabels/engModuleLabelsError come
+        // from the occurrence-gated view above (all null while any release
+        // authority loads — never live labels).
+        const engLabels = engWorkshopView.labels;
+        const engLabelsError = engWorkshopView.labelsError;
+        const engModuleLabels = engWorkshopView.moduleLabels;
+        const engModuleLabelsError = engWorkshopView.moduleLabelsError;
         let engHardwareRows: ReturnType<typeof generateHardwareList> | null = null;
         let engHardwareError: string | null = null;
         if (catalog) {
@@ -1677,7 +1704,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           }
         }
         return (
-          <EngineeringWorkspace
+          <>
+            {/* #781 micro-task #3 — while the exact release's frozen
+                occurrence authority resolves, the BOM/labels surfaces below
+                are all null (never live content): say so explicitly. */}
+            {engWorkshopView.occurrencesLoading ? (
+              <p className="eng-workspace__live-notice" data-testid="eng-occurrences-loading">
+                Cargando ocurrencias congeladas de la liberación…
+              </p>
+            ) : null}
+            <EngineeringWorkspace
             key={`${engProject.id}:${routeEngineeringReleaseId ?? 'legacy'}`}
             project={engProject}
             releaseContext={engReleaseContext}
@@ -1807,6 +1843,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               );
             }}
           />
+          </>
         );
         })()}
         </ScreenBoundary>

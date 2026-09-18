@@ -149,6 +149,21 @@ export const PTX_COMPILER_REQUIRED_DIMENSIONS = [
 ] as const;
 
 /**
+ * Dimensions ONLY the r4 revision (#781) requires on top of the common
+ * compiler set: the field-dialect candidate policies (OFC_QTY column,
+ * OFFCUTS-before-CUTS ordering, Xn markers restricted to FUNCTION 92, and
+ * the workshop part-code authority with its hard length limit). r2/r3 keep
+ * their historical dimension sets and byte identities.
+ */
+export const PTX_COMPILER_R4_REQUIRED_DIMENSIONS = [
+  'offcutsWithQuantity',
+  'offcutsBeforePatterns',
+  'offcutCutMarkers',
+  'partCodeAuthority',
+  'partCodeMaxLength',
+] as const;
+
+/**
  * `ptx-cadmatic-4` r2 — the CANDIDATE revision routed to the documented PTX
  * compiler (#650 PR 6: CutProgram → PtxDocument → CADLink/CAD4 route).
  *
@@ -261,6 +276,72 @@ export const PTX_CADMATIC_4_R3_PROFILE: OutputCompatibilityProfile = {
   supportStatus: 'NOT_TESTED',
   digest: '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537',
   evidenceUri: 'docs/machines/ptx-cadmatic4/04_contrato_r3_refilados.md',
+};
+
+/**
+ * `ptx-cadmatic-4` r4 — the field-dialect candidate revision (#781), built
+ * on r3's positive-trim subset plus the differences observed against the
+ * two REAL working client PTX files (sanitized field samples) after the
+ * first CADLink rejection (OnlineConvertedFailedMsg, 2026-09-17):
+ *
+ * - offcutsWithQuantity: true — OFFCUTS.OFC_QTY=1 (both field samples carry
+ *   the column; one record = one physical remnant in this subset);
+ * - offcutsBeforePatterns: true — OFFCUTS is declared before the
+ *   PATTERNS/CUTS blocks so every Xn reference resolves backwards in the
+ *   byte stream (both field samples order it this way; NOT a claim that
+ *   CADLink is single-pass — a candidate compatibility fix);
+ * - offcutCutMarkers 'function92-only' — Xn appears exclusively on
+ *   FUNCTION 92 rows in the field samples; Granete's r3 QTY_RPT=0/SEQUENCE=0
+ *   pseudo-marker rows are dropped (non-92 remnants stay OFFCUTS-only);
+ * - partCodeAuthority 'workshop-labelref' + partCodeMaxLength 50 —
+ *   PARTS_REQ.CODE is the workshop manufacturing code (clean labelRef, one
+ *   per physical piece: `MOD-XXX[-Ln]-Pnn[-Cn]`), replacing the internal
+ *   placement refs (up to 119 chars, with real collisions across different
+ *   dimensions) that leaked into the rejected artifact. Codes exceeding the
+ *   limit or colliding fail closed (part_code_too_long / part_code_duplicate).
+ *
+ * EVIDENCE STATUS: repo implementation of the #781 field-dialect contract;
+ * none of it is receiver evidence — supportStatus stays NOT_TESTED and the
+ * first CADLink rejection is NOT attributed to any single difference.
+ * r2/r3 stay immutable historical constants: selections pinned to them keep
+ * their exact tuple and surface a stale-revision blocker (never an
+ * automatic retarget to r4).
+ */
+export const PTX_CADMATIC_4_R4_PROFILE: OutputCompatibilityProfile = {
+  ref: { outputCompatibilityProfileId: 'ptx-cadmatic-4', revisionId: 'r4' },
+  formatFamily: 'ptx',
+  targetSoftware: {
+    name: 'CADmatic',
+    version: '4',
+    provenance: 'FIELD_VERIFICATION_REQUIRED',
+  },
+  dimensions: {
+    fileExtension: 'ptx',
+    encoding: 'ascii',
+    lineEnding: 'crlf',
+    decimalPlaces: 2,
+    headerVersion: '1',
+    unit: 'mm',
+    headerOrigin: 0,
+    trimType: 1,
+    includeVectors: false,
+    supportsPositiveTrim: true,
+    supportedFunctions: '0,1,2,3,92',
+    offcutsWithQuantity: true,
+    offcutsBeforePatterns: true,
+    offcutCutMarkers: 'function92-only',
+    partCodeAuthority: 'workshop-labelref',
+    partCodeMaxLength: 50,
+  },
+  pendingEvidence: [
+    'fieldAvailability',
+    'recordOrdering',
+    'characterRestrictions',
+    'filenameConstraints',
+  ],
+  supportStatus: 'NOT_TESTED',
+  digest: '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc',
+  evidenceUri: 'docs/machines/ptx-cadmatic4/05_contrato_r4_field_dialect.md',
 };
 
 // ---------------------------------------------------------------------------

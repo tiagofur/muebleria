@@ -9,6 +9,7 @@ import {
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_4_PROFILE,
   PTX_CADMATIC_4_R3_PROFILE,
+  PTX_CADMATIC_4_R4_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
@@ -22,6 +23,7 @@ const ALL_PROFILES = [
   PTX_CADMATIC_4_PROFILE,
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_4_R3_PROFILE,
+  PTX_CADMATIC_4_R4_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
@@ -114,7 +116,7 @@ describe('machine output profiles', () => {
     expect(CLIENT_A_HPP250_PROFILE.identity.provenance).toBe('OWNER_CONFIRMED');
   });
 
-  it('CADmatic 4 r3 has direct TS parity with the shared catalog consumed by Go', () => {
+  it('CADmatic 4 r4 has direct TS parity with the shared catalog consumed by Go', () => {
     const catalog = JSON.parse(
       readFileSync(
         new URL('../../../../contracts/machineOutputCatalog.contract.json', import.meta.url),
@@ -129,11 +131,11 @@ describe('machine output profiles', () => {
       (entry) => entry.outputCompatibilityProfileId === 'ptx-cadmatic-4',
     );
     expect(profile).toEqual({
-      outputCompatibilityProfileId: PTX_CADMATIC_4_R3_PROFILE.ref.outputCompatibilityProfileId,
-      revisionId: PTX_CADMATIC_4_R3_PROFILE.ref.revisionId,
-      formatFamily: PTX_CADMATIC_4_R3_PROFILE.formatFamily,
-      supportStatus: PTX_CADMATIC_4_R3_PROFILE.supportStatus,
-      digest: PTX_CADMATIC_4_R3_PROFILE.digest,
+      outputCompatibilityProfileId: PTX_CADMATIC_4_R4_PROFILE.ref.outputCompatibilityProfileId,
+      revisionId: PTX_CADMATIC_4_R4_PROFILE.ref.revisionId,
+      formatFamily: PTX_CADMATIC_4_R4_PROFILE.formatFamily,
+      supportStatus: PTX_CADMATIC_4_R4_PROFILE.supportStatus,
+      digest: PTX_CADMATIC_4_R4_PROFILE.digest,
     });
     expect(catalog.adapters.find((entry) => entry.postprocessorAdapterId === 'granete-ptx'))
       .toEqual({

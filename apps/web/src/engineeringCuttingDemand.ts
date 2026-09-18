@@ -63,6 +63,7 @@ function mapDemand(raw: GeneratedReleaseCuttingDemand): ReleaseCuttingDemandView
   const units: ReleaseCuttingDemandUnitView[] = raw.units.map((unit) => ({
     furnitureInstanceId: unit.furniture_instance_id,
     furnitureDefinitionId: unit.furniture_definition_id,
+    workshopOccurrenceOrdinal: unit.workshop_occurrence_ordinal,
     pieces: unit.pieces.map(mapPiece),
   }));
   return {

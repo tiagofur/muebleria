@@ -6,6 +6,7 @@ import {
   compileCutPlanToPtxDocument,
   parsePtxDocumentBytes,
   PTX_CADMATIC_4_R3_PROFILE,
+  PTX_CADMATIC_4_R4_PROFILE,
   resolvePtxCompilerRoute,
   validatePtxDocument,
   verifyCutPlanPtxReadback,
@@ -19,7 +20,7 @@ import { TotpProvider, secretFromProvisioningUri } from './support/totp';
  * the factory pins the EXACT machine/profile/adapter tuple per operation,
  * it survives reload, the resolver read model returns only that target, a
  * blocked CADmatic 3 selection produces blockers (never a silent fallback to
- * ptx-generic), the CADmatic 4 r3 candidate evaluates the real active CutPlan,
+ * ptx-generic), the CADmatic 4 r4 candidate evaluates the real active CutPlan,
  * downloads bytes plus a durable manifest, stale writes conflict, and org B
  * never sees org A's config.
  */
@@ -32,15 +33,15 @@ const CUTTING_GENERIC = {
   outputProfileRevisionId: 'r1',
   outputProfileDigest: 'd05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595',
   adapterId: 'granete-ptx',
-  adapterVersion: '1.2.0',
-  adapterImplementationDigest: '954fd63d08425a241309826d936597a4f20f857ae18b94741643480d679f7236',
+  adapterVersion: '1.3.0',
+  adapterImplementationDigest: 'e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c',
 } as const;
 
 const CUTTING_CADMATIC4_CANDIDATE = {
   ...CUTTING_GENERIC,
   outputProfileId: 'ptx-cadmatic-4',
-  outputProfileRevisionId: 'r3',
-  outputProfileDigest: '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537',
+  outputProfileRevisionId: 'r4',
+  outputProfileDigest: '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc',
 } as const;
 const EXPORT_PROJECT_ID = '77777777-6910-4691-8691-777777777777';
 const EXPORT_PROJECT_B_ID = '77777777-6911-4691-8691-777777777777';
@@ -117,6 +118,9 @@ async function seedCuttingProject(repository: APIWorkspaceRepository, projectId 
   const cutPlan = optimizeCutPlan(projectId, [{
     quantity: 1, lengthMm: 600, widthMm: 400, description: 'Panel E2E', materialName: 'MDF E2E',
     materialCode: 'MDF-E2E', thicknessMm: 18, grain: 0, L1: 0, L2: 0, W1: 0, W2: 0,
+    // #781 r4: every real app flow assigns workshop codes; the synthetic
+    // seed carries one so the plan models production data.
+    partCode: 'P01', partName: 'Panel E2E', moduleCode: 'MOD-E2E', labelRef: 'MOD-E2E-P01',
   }], [], undefined, 'Salida CADmatic 4 E2E');
   await repository.saveProject({
     id: projectId, name: 'Salida CADmatic 4 E2E', customerId: customer.id,
@@ -179,7 +183,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     await page.getByText('Detalle técnico').click();
     const tech = page.getByTestId('machine-output-cutting');
     await expect(tech.getByText('profile: ptx-generic@r1')).toBeVisible();
-    await expect(tech.getByText('adapter: granete-ptx@1.2.0')).toBeVisible();
+    await expect(tech.getByText('adapter: granete-ptx@1.3.0')).toBeVisible();
 
     // Server read model: exactly ONE configured target, no blockers.
     const readModel = await repository.getMachineOutputSelections();
@@ -230,14 +234,14 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     );
   });
 
-  test('CADmatic 4 r3 evaluates the active plan and downloads verifiable bytes + manifest', async ({ page }) => {
+  test('CADmatic 4 r4 evaluates the active plan and downloads verifiable bytes + manifest', async ({ page }) => {
     test.setTimeout(90_000);
 
     const { repository } = await api();
     await loginToA(page);
     await openEngineeringSettings(page);
     // Switching is an explicit user action — never an automatic fallback.
-    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4 · r3', 'ptx-cadmatic-4');
+    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4 · r4', 'ptx-cadmatic-4');
     await page.reload();
     await page.getByTestId('settings-tab-tab-ingenieria').click();
 
@@ -249,7 +253,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     const readModel = await repository.getMachineOutputSelections();
     const cutting = readModel.selections.find((s) => s.selection.selection.operation === 'cutting');
     expect(cutting!.selection.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
-    expect(cutting!.selection.selection.outputCompatibilityProfileRevisionId).toBe('r3');
+    expect(cutting!.selection.selection.outputCompatibilityProfileRevisionId).toBe('r4');
     expect(cutting!.blockers).toEqual([]);
     expect(cutting!.supportStatus).toBe('NOT_TESTED');
 
@@ -262,7 +266,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     expect(output.manifest.manifestSchemaVersion).toBe('granete.machine-artifact-manifest.v2');
     expect(output.manifest.outputCompatibilityProfile).toEqual({
       outputCompatibilityProfileId: 'ptx-cadmatic-4',
-      revisionId: 'r3',
+      revisionId: 'r4',
     });
     expect(output.manifest.outputCompatibilityProfileDigest).toBe(CUTTING_CADMATIC4_CANDIDATE.outputProfileDigest);
     expect(output.manifest.postprocessorAdapter).toEqual({
@@ -288,7 +292,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
       }),
     ]);
 
-    const route = resolvePtxCompilerRoute(PTX_CADMATIC_4_R3_PROFILE);
+    const route = resolvePtxCompilerRoute(PTX_CADMATIC_4_R4_PROFILE);
     expect(route.reasons).toEqual([]);
     expect(route.config).toBeDefined();
     const mapping = compileCutPlanToPtxDocument(cutPlan, route.config!.compileOptions).mapping;
@@ -302,7 +306,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     const { repository } = await api();
     await loginToA(page);
     await openEngineeringSettings(page);
-    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4 · r3', 'ptx-cadmatic-4');
+    await saveCuttingSelection(page, repository, 'HOLZMA (HOMAG) HPP 250', 'PTX · CADmatic 4 · r4', 'ptx-cadmatic-4');
     const valid = await seedCuttingProject(repository, BLOCKED_PROJECT_ID);
     await repository.saveProject({
       id: BLOCKED_PROJECT_ID,

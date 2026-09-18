@@ -277,21 +277,41 @@ export interface PtxCutRecord {
 }
 
 /**
- * OFFCUTS,JOB_INDEX,OFFCUT_INDEX,CODE,MAT_INDEX,LENGTH,WIDTH (implemented
- * width: 7 cells with family). The documented inventory beyond these certain
- * columns differs between the abbreviated headers, examples and manual tables
- * (investigation §9), so nothing beyond WIDTH is modeled and rows carrying
- * extra columns fail closed instead of being guessed. Referenced from CUTS
- * via `Xn`. Create only from terminal rectangular leaves of the tree.
+ * OFFCUTS,JOB_INDEX,OFFCUT_INDEX,CODE,MAT_INDEX,LENGTH,WIDTH[,OFC_QTY]
+ * (r2/r3 implemented width: 7 cells with family; r4 (#781) adds the eighth
+ * cell OFC_QTY demonstrated by the two field samples — see producedQuantity).
+ * The documented inventory beyond these certain columns differs between the
+ * abbreviated headers, examples and manual tables (investigation §9), so
+ * nothing beyond OFC_QTY is modeled and rows carrying extra columns fail
+ * closed instead of being guessed. Referenced from CUTS via `Xn`. Create
+ * only from terminal rectangular leaves of the tree.
  */
 export interface PtxOffcutRecord {
   readonly type: 'OFFCUTS';
   readonly jobIndex: number;
   readonly offcutIndex: number;
-  readonly code: string;
+  /**
+   * OFFCUTS.CODE (#781 r4 micro-fix): the two functional field samples
+   * (R2201/R7301) carry an EMPTY code cell (`OFFCUTS,1,1,,2,1718.601,862.601,1`).
+   * The industrial r4 file therefore serializes this cell empty (undefined);
+   * Granete's internal remnant identity (regionId, e.g. `place-3-1:rest`)
+   * lives in the compilation mapping / CutProgram / verifier — never in this
+   * cell. Absent (undefined) = empty cell; a defined value serializes
+   * verbatim (r2/r3 historical rows keep their codes byte-exact).
+   */
+  readonly code?: string;
   readonly materialIndex: number;
   readonly length: number;
   readonly width: number;
+  /**
+   * OFC_QTY (#781 r4): count of physical remnants this record represents.
+   * Field evidence (R2201/R7301 sanitized samples) shows the column with
+   * value 1. ABSENT under r2/r3 (those revisions end the row at WIDTH and
+   * stay byte-exact). Undefined ≠ 0: absent means the revision's row has no
+   * such column, while 0 would be an explicit "no offcuts" value that the
+   * demonstrated subset never shows.
+   */
+  readonly producedQuantity?: number;
 }
 
 /**
@@ -333,6 +353,9 @@ export interface PtxDocument {
  * Implemented content width per family (cells AFTER the family token).
  * Mirrors the per-record documentation above; the reader in parse.ts keeps
  * an independent table and the tests cross-check both against the dossier.
+ * OFFCUTS counts the full r4 form (#781): the trailing OFC_QTY cell is
+ * OPTIONAL — r2/r3 rows omit the cell entirely (no trailing comma) and stay
+ * byte-exact, r4 rows carry the evidenced quantity.
  */
 export const PTX_RECORD_CONTENT_WIDTH: Readonly<Record<PtxRecordType | 'HEADER', number>> = {
   HEADER: 5,
@@ -342,6 +365,6 @@ export const PTX_RECORD_CONTENT_WIDTH: Readonly<Record<PtxRecordType | 'HEADER',
   MATERIALS: 19,
   PATTERNS: 7,
   CUTS: 10,
-  OFFCUTS: 6,
+  OFFCUTS: 7,
   VECTORS: 7,
 };

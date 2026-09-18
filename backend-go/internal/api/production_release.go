@@ -352,7 +352,73 @@ func (s *Server) HandleProjectProductionRelease(w http.ResponseWriter, r *http.R
 	respondWithJSON(w, http.StatusOK, toProductionReleaseDTO(*readback))
 }
 
-// HandleProjectProductionReleaseCuttingDemand serves GET
+// HandleProjectWorkshopOccurrences serves GET
+// /api/projects/{projectId}/production-releases/{releaseId}/workshop-occurrences
+// (#781). The EXACT release's frozen manufacturing occurrence authority:
+// the frozen unit order (ordinal = snapshot position, index+1) projected
+// onto the CURRENT quote-line↔instance links. Engineering consumes it to
+// build the derived BOM context so the same physical occurrence keeps the
+// same workshop code from preview to PTX/CNC. Tenant-safe (release + link
+// reads are org-scoped); no release or missing snapshot is a plain 404,
+// never a fallback to a live ordering. #781 FIX — uses EXACT releaseId
+// from the URL path; never falls back to "latest release".
+func (s *Server) HandleProjectWorkshopOccurrences(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	// Same industrial-preparation guard as the cutting demand: the frozen
+	// occurrence authority is factory engineering content.
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanReleaseProduction), "no tenés permiso para ver la ocurrencia de fabricación de esta obra") {
+		return
+	}
+	projectID := r.PathValue("projectId")
+	if !isValidUUID(projectID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "ID inválido", nil)
+		return
+	}
+	releaseID := r.PathValue("releaseId")
+	if !isValidUUID(releaseID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "releaseId inválido", nil)
+		return
+	}
+	view, err := s.Store.GetProjectWorkshopOccurrences(r.Context(), projectID, releaseID)
+	if err != nil {
+		switch {
+		case errors.Is(err, storage.ErrReleaseSnapshotUnavailable):
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound,
+				"Esta obra todavía no tiene una liberación congelada",
+				map[string]any{"blocker": "release_snapshot_unavailable"})
+		default:
+			respondWithProductionReleaseError(w, err)
+		}
+		return
+	}
+	respondWithJSON(w, http.StatusOK, toWorkshopOccurrencesDTO(view))
+}
+
+func toWorkshopOccurrencesDTO(view *storage.WorkshopOccurrenceProjectionView) openapi.ProjectWorkshopOccurrences {
+	dto := openapi.ProjectWorkshopOccurrences{
+		ReleaseID:                 view.ReleaseID,
+		ReleaseNumber:             int64(view.ReleaseNumber),
+		CoversAllCurrentInstances: view.CoversAllCurrentInstances,
+		Assignments:               make([]openapi.WorkshopOccurrenceAssignment, 0, len(view.Assignments)),
+	}
+	for _, assignment := range view.Assignments {
+		dto.Assignments = append(dto.Assignments, openapi.WorkshopOccurrenceAssignment{
+			FurnitureInstanceID:       assignment.FurnitureInstanceID,
+			ProjectItemID:             assignment.ProjectItemID,
+			WorkshopOccurrenceOrdinal: int64(assignment.Ordinal),
+		})
+	}
+	return dto
+}
+
 // /api/projects/{projectId}/production-releases/{releaseId}/cutting-demand
 // (#739). Tenant-safe projection of the FROZEN manufacturing snapshot: the
 // board cutting demand engineering prepares against — exact unit/part
@@ -414,6 +480,7 @@ func toReleaseCuttingDemandDTO(view *storage.ReleaseCuttingDemandView) openapi.R
 		unitDTO := openapi.ReleaseCuttingDemandUnit{
 			FurnitureInstanceID:   unit.FurnitureInstanceID,
 			FurnitureDefinitionID: unit.FurnitureDefinitionID,
+			WorkshopOccurrenceOrdinal: int64(unit.WorkshopOccurrenceOrdinal),
 			Pieces:                make([]openapi.ReleaseCuttingDemandPiece, 0, len(unit.Pieces)),
 		}
 		for _, piece := range unit.Pieces {

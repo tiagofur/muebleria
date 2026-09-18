@@ -286,15 +286,24 @@ function cutLine(r: PtxCutRecord, f: Fmt): string {
 }
 
 function offcutLine(r: PtxOffcutRecord, f: Fmt): string {
-  return [
+  const cells = [
     'OFFCUTS',
     f.int(r.jobIndex, 'OFFCUTS.JOB_INDEX'),
     f.int(r.offcutIndex, 'OFFCUTS.OFFCUT_INDEX'),
-    f.text(r.code, 'OFFCUTS.CODE'),
+    // #781 r4 micro-fix: empty CODE cell (undefined → '') per the functional
+    // field samples. Other families keep f.text (required, untouched).
+    f.optText(r.code, 'OFFCUTS.CODE'),
     f.int(r.materialIndex, 'OFFCUTS.MAT_INDEX'),
     f.real(r.length, 'OFFCUTS.LENGTH'),
     f.real(r.width, 'OFFCUTS.WIDTH'),
-  ].join(',');
+  ];
+  // OFC_QTY (#781 r4): the cell only exists when the value is defined — an
+  // absent optional must not append a trailing empty cell, or the r2/r3 rows
+  // (which end at WIDTH) would stop being byte-exact.
+  if (r.producedQuantity !== undefined) {
+    cells.push(f.int(r.producedQuantity, 'OFFCUTS.OFC_QTY'));
+  }
+  return cells.join(',');
 }
 
 function vectorLine(r: PtxVectorRecord, f: Fmt): string {

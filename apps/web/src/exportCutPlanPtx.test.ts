@@ -11,6 +11,7 @@ import type { CutPlan, MachineOutputSelection, ProductionCutRow } from '@granete
 import {
   generateSelectedCuttingOutput,
   PTX_CADMATIC_4_R3_PROFILE,
+  PTX_CADMATIC_4_R4_PROFILE,
   PTX_POSTPROCESSOR_ADAPTER,
 } from '@granete/excel';
 import type { MachineArtifactBundle } from '@granete/excel';
@@ -226,7 +227,7 @@ describe('exportCutPlanPtx', () => {
   });
 });
 
-describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r3, #661)', () => {
+describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r4, #781)', () => {
   it('by-material: el PTX documentado del compilador llega dentro del ZIP, un archivo por material', async () => {
     const { fakeAnchor, deps, blobs } = captureDeps();
 
@@ -278,6 +279,8 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r3, #661)', () => {
       W2: 0,
       partCode,
       partName: partCode,
+      // #781 r4: workshop codes are fail-closed — lab rows carry one.
+      labelRef: `MOD-LAB-${partCode}`,
       moduleCode: 'M01',
       thicknessMm: 18,
     });
@@ -322,14 +325,14 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r3, #661)', () => {
       expect(manifest.artifacts[0]?.fileName).toBe(name);
       expect(manifest.artifacts[0]?.sha256).toBe(actualHash);
       expect(manifest.outputCompatibilityProfileDigest).toBe(
-        PTX_CADMATIC_4_R3_PROFILE.digest,
+        PTX_CADMATIC_4_R4_PROFILE.digest,
       );
       expect(manifest.delivery.mode).toBe('by-material');
       expect(manifest.delivery.material?.code).toBeTruthy();
     }
     // Manifest exacto por material dentro del propio bundle.
     for (const bundle of bundles) {
-      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r3');
+      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r4');
       expect(bundle.manifest.validationStatus).toBe('NOT_TESTED');
       expect(bundle.manifest.compatibilityEvidence.claim).toBe('notClaimed');
     }
@@ -342,8 +345,8 @@ function cad4Selection(): MachineOutputSelection {
     machineProfileId: 'client-a-machine-b-hpp250',
     machineProfileRevisionId: 'r1',
     outputCompatibilityProfileId: 'ptx-cadmatic-4',
-    outputCompatibilityProfileRevisionId: 'r3',
-    outputCompatibilityProfileDigest: PTX_CADMATIC_4_R3_PROFILE.digest,
+    outputCompatibilityProfileRevisionId: 'r4',
+    outputCompatibilityProfileDigest: PTX_CADMATIC_4_R4_PROFILE.digest,
     postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
     postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
     postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
@@ -367,6 +370,7 @@ function buildCad4ReadyPlan(): CutPlan {
       W2: 0,
       partCode: 'P1',
       partName: 'Panel lab',
+      labelRef: 'MOD-LAB-P1',
       moduleCode: 'M01',
       thicknessMm: 18,
     }],
@@ -473,7 +477,7 @@ describe('downloadCuttingArtifactBundles (#591 machine output)', () => {
     expect(manifest.artifacts[0]?.fileName).toBe(downloads[0]);
     expect(manifest.artifacts[0]?.sha256).toBe(actualHash);
     expect(manifest.outputCompatibilityProfileDigest).toBe(
-      PTX_CADMATIC_4_R3_PROFILE.digest,
+      PTX_CADMATIC_4_R4_PROFILE.digest,
     );
   });
 

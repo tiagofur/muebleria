@@ -55,6 +55,7 @@ function validCad4Plan() {
     W2: 0,
     partCode: 'P1',
     partName: 'Panel lab',
+    labelRef: 'MOD-LAB-P1',
     moduleCode: 'M01',
     thicknessMm: 18,
   };
@@ -100,16 +101,16 @@ describe('resolveManufacturingOutputTarget', () => {
     expect(result.readiness.reasons).toEqual([]);
   });
 
-  it('CADmatic 4: la revisión candidata r3 resuelve lista; los pins históricos r1/r2 quedan stale sin fallback', () => {
+  it('CADmatic 4: la revisión candidata r4 resuelve lista; los pins históricos r1/r2/r3 quedan stale sin fallback', () => {
     const current = resolveManufacturingOutputTarget(cuttingSelection('ptx-cadmatic-4'), 'cutting');
     expect(current.status).toBe('CONFIGURED');
     if (current.status !== 'CONFIGURED') return;
-    expect(current.profileLabel).toBe('ptx-cadmatic-4@r3');
+    expect(current.profileLabel).toBe('ptx-cadmatic-4@r4');
     expect(current.supportStatus).toBe('NOT_TESTED');
     expect(current.readiness.ready).toBe(true);
     expect(current.readiness.reasons).toEqual([]);
 
-    for (const staleRevision of ['r1', 'r2']) {
+    for (const staleRevision of ['r1', 'r2', 'r3']) {
       const stale = {
         ...cuttingSelection('ptx-cadmatic-4'),
         outputCompatibilityProfileRevisionId: staleRevision,
@@ -185,7 +186,7 @@ describe('resolveManufacturingOutputTarget', () => {
     const result = resolveManufacturingOutputTarget(historical, 'cutting');
     expect(result.status).toBe('CONFIGURED');
     if (result.status !== 'CONFIGURED') return;
-    expect(result.profileLabel).toBe('ptx-cadmatic-4@r3');
+    expect(result.profileLabel).toBe('ptx-cadmatic-4@r4');
     expect(result.readiness.ready).toBe(false);
     expect(result.readiness.reasons[0]?.detail).toContain('sin digest histórico');
   });

@@ -71,6 +71,7 @@ function demandFixture(over: Partial<ReleaseCuttingDemandView> = {}): ReleaseCut
       {
         furnitureInstanceId: 'fi-1',
         furnitureDefinitionId: 'def-a',
+        workshopOccurrenceOrdinal: 1,
         pieces: [
           {
             partId: 'part-front',
@@ -108,6 +109,7 @@ function demandFixture(over: Partial<ReleaseCuttingDemandView> = {}): ReleaseCut
       {
         furnitureInstanceId: 'fi-2',
         furnitureDefinitionId: 'def-a',
+        workshopOccurrenceOrdinal: 2,
         pieces: [
           {
             partId: 'part-front',
@@ -131,6 +133,29 @@ function demandFixture(over: Partial<ReleaseCuttingDemandView> = {}): ReleaseCut
   };
 }
 
+describe('releaseCutRowsFromDemand — códigos canónicos (#781 review §1)', () => {
+  it('reordenar unidades y piezas del input NO cambia los códigos de fabricación', () => {
+    const demand = demandFixture();
+    const base = releaseCutRowsFromDemand(demand, catalogFixture());
+
+    // Shuffle units AND pieces: the canonical order (units by
+    // furnitureInstanceId, pieces by partId) must produce identical codes.
+    const shuffled: typeof demand = {
+      ...demand,
+      units: [...demand.units].reverse().map((unit) => ({
+        ...unit,
+        pieces: [...unit.pieces].reverse(),
+      })),
+    };
+    const reordered = releaseCutRowsFromDemand(shuffled, catalogFixture());
+
+    const byCode = (rows: typeof base) =>
+      rows.map((row) => ({ code: row.partCode, labelRef: row.labelRef, dims: [row.lengthMm, row.widthMm] }))
+        .sort((a, b) => a.labelRef!.localeCompare(b.labelRef!));
+    expect(byCode(reordered)).toEqual(byCode(base));
+  });
+});
+
 describe('releaseCutRowsFromDemand (#739)', () => {
   it('preserves unit/occurrence identity, quantities, frozen dims, material, grain, edges and thickness', () => {
     const rows = releaseCutRowsFromDemand(demandFixture(), catalogFixture());
@@ -138,10 +163,13 @@ describe('releaseCutRowsFromDemand (#739)', () => {
     expect(rows).toHaveLength(3);
     const [front1, shelf, front2] = rows;
 
-    // Occurrence identity: unit + part, never deduplicated across units.
-    expect(front1?.labelRef).toBe('fi-1:part-front');
-    expect(front2?.labelRef).toBe('fi-2:part-front');
-    expect(shelf?.labelRef).toBe('fi-1:part-shelf');
+    // Occurrence identity (#781): the workshop clean labelRef, one per
+    // occurrence — the repeated module code gets the -L2- line suffix, so
+    // units are never deduplicated into one code. The internal identity
+    // stays in partId-based pieceRefs, never in this column.
+    expect(front1?.labelRef).toBe('MOD-BAJO-600-FRENTE');
+    expect(front2?.labelRef).toBe('MOD-BAJO-600-L2-FRENTE');
+    expect(shelf?.labelRef).toBe('MOD-BAJO-600-P02');
 
     // Frozen dimensions are the release truth (650 for fi-1, 600 for fi-2).
     expect(front1?.lengthMm).toBe(650);

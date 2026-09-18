@@ -1,18 +1,19 @@
-# PTX / CADmatic 4 — estado operativo v0.7
+# PTX / CADmatic 4 — estado operativo v0.8
 
 Issue base técnica: [#650](https://github.com/tiagofur/muebleria/issues/650).
 Incrementos integrados: #661, #665, #691, #692. Hardening de cierre interno: #693.
+Dialecto de campo tras el primer rechazo CADLink: #781.
 
 ## Estado vigente
 
 ```text
-maturity: v0.7
+maturity: v0.8
 machine: client-a-machine-b-hpp250@r1
-profile: ptx-cadmatic-4@r3
-adapter: granete-ptx@1.2.0
+profile: ptx-cadmatic-4@r4
+adapter: granete-ptx@1.3.0
 implementation: complete within supported subset
 internal verification: complete
-field validation: pending
+field validation: pending (primer intento 2026-09-17: RECHAZADO — OnlineConvertedFailedMsg; causa única NO demostrada)
 supportStatus: NOT_TESTED
 compatibility claim: notClaimed
 ```
@@ -70,7 +71,7 @@ Auditoría de callers:
 |---|---|---|
 | `apps/web/src/exportCutPlanPtx.ts` | compatibilidad intencional | Sólo lo invoca el branch confirmado-empty de `runWithCuttingOutputAuthority`. |
 | `apps/web/src/exportProductionPack.ts` | compatibilidad intencional | Misma autoridad que descarga directa; cualquier otro estado bloquea el pack. |
-| `packages/excel/src/machines/ptxAdapter.ts` | compatibilidad por perfil | `ptx-generic@r1` conserva el serializer legacy; CAD4 r2/r3 usan el compiler documentado. |
+| `packages/excel/src/machines/ptxAdapter.ts` | compatibilidad por perfil | `ptx-generic@r1` conserva el serializer legacy; CAD4 r2/r3/r4 usan el compiler documentado. |
 | `packages/excel/src/ptxCutPlanExport.ts` | implementación legacy | Serializer y agrupación por material reutilizados únicamente por las rutas anteriores. |
 | `packages/excel/src/machines/outputSelectionResolver.ts` | utilidades compartidas | Reutiliza agrupación/nombres, pero genera sólo mediante el adapter seleccionado; nunca llama al serializer legacy. |
 | `packages/excel/src/index.ts` | API pública de compatibilidad | Re-exporta símbolos; no decide autoridad ni fallback. |
@@ -90,6 +91,7 @@ se conserva explícitamente; no se elimina por heurística ni por edad.
 3. [Evidencia de campo](03_evidencia_campo.md): observaciones de dos muestras reales
    saneadas, sin extrapolación universal.
 4. [Contrato r3](04_contrato_r3_refilados.md): autoridad del subconjunto de trims y 92.
+5. [Contrato r4](05_contrato_r4_field_dialect.md): dialecto de campo tras el primer rechazo CADLink (#781) — códigos de fabricación por pieza, OFC_QTY, orden OFFCUTS/Xn, filename industrial.
 5. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
 6. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
    directa TS↔contrato↔Go.

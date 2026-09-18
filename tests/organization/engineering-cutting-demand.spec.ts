@@ -11,6 +11,7 @@ import {
   cutPlanPdfExport,
   parsePtxDocumentBytes,
   PTX_CADMATIC_4_R3_PROFILE,
+  PTX_CADMATIC_4_R4_PROFILE,
   resolvePtxCompilerRoute,
   validatePtxDocument,
   verifyCutPlanPtxReadback,
@@ -27,7 +28,7 @@ import { GATE_MODULE_A_ID, required } from './support/api';
  *   mutable project/catálogo) → editable preparation (blade/trims/strategy)
  *   → plan saved with its exact base → reload recovers it
  *   → REAL PDF + PTX downloads of the SAME plan
- *   → configured CADmatic 4 r3 candidate with manifest provenance
+ *   → configured CADmatic 4 r4 candidate with manifest provenance
  *     (productionReleaseId/designRevisionId/bomFingerprint) and independent
  *     byte readback (#650 parser/verifier).
  *
@@ -46,7 +47,7 @@ const MAT_NAME = 'MDF Prueba 739';
 const DEPTH_MM = 590;
 
 const CUTTING_CADMATIC4_DIGEST =
-  '4998b6a53e131eda776934e18a24ee7f7e55ce526cbea3b8ba74d3340cbb9537';
+  '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc';
 
 interface Seeded {
   readonly projectId: string;
@@ -486,7 +487,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     await browserErrors.assertEmpty('PDF + PTX download journey');
   });
 
-  test('candidato CADmatic 4 r3: manifiesto con procedencia del release + lectura independiente de bytes', async ({ page }) => {
+  test('candidato CADmatic 4 r4: manifiesto con procedencia del release + lectura independiente de bytes', async ({ page }) => {
     test.setTimeout(150_000);
     const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
 
@@ -496,7 +497,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     await page.getByTestId('settings-tab-tab-ingenieria').click();
     await expect(page.getByTestId('machine-output-cutting')).toBeVisible();
     await page.getByTestId('machine-output-cutting-machine').selectOption({ label: 'HOLZMA (HOMAG) HPP 250' });
-    await page.getByTestId('machine-output-cutting-profile').selectOption({ label: 'PTX · CADmatic 4 · r3' });
+    await page.getByTestId('machine-output-cutting-profile').selectOption({ label: 'PTX · CADmatic 4 · r4' });
     await page.getByTestId('machine-output-cutting-save').click();
     await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
 
@@ -515,7 +516,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
 
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
     await page.getByTestId('eng-tab-optimizacion').click();
-    await expect(page.getByTestId('prod-opt-cutting-output')).toContainText('ptx-cadmatic-4@r3');
+    await expect(page.getByTestId('prod-opt-cutting-output')).toContainText('ptx-cadmatic-4@r4');
     await page.getByRole('button', { name: /Generar Plan de Corte 2D/i }).click();
     await expect(page.getByTestId('prod-opt-summary')).toContainText('tablero');
     await page.getByRole('button', { name: /Guardar Plan/i }).click();
@@ -542,7 +543,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     // correspond to the EXACT plan the browser generated from the frozen
     // demand (read back from its release-scoped persistence).
     const plan = await savedReleasePlan(page, seeded.releaseId);
-    const route = resolvePtxCompilerRoute(PTX_CADMATIC_4_R3_PROFILE);
+    const route = resolvePtxCompilerRoute(PTX_CADMATIC_4_R4_PROFILE);
     expect(route.reasons).toEqual([]);
     expect(route.config).toBeDefined();
     const { mapping } = compileCutPlanToPtxDocument(plan, route.config!.compileOptions);

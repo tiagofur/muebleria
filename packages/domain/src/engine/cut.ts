@@ -6,6 +6,7 @@
  */
 
 import { ResolutionError, ValidationError } from '../errors';
+import type { ProjectItem } from '../types';
 import { effectiveOptionChoices } from '../optionChoices';
 import { baseContextForItem } from '../plinth';
 import type {
@@ -119,6 +120,267 @@ export interface CutRowPieceLink {
   readonly part: import('../types').ResolvedBoardPart;
 }
 
+
+/**
+ * #781 — canonical workshop-code assignment rule, SHARED by every flow that
+ * produces manufacturing codes (BOM rows, piece labels, release demand).
+ *
+ * Rule: occurrences (muebles) are ordered by the FROZEN manufacturing
+ * occurrence ordinal (`workshopOccurrenceOrdinal` — the release lane always
+ * carries it, decided when the work was liberated; project items may carry
+ * it when the payload froze it) and the parts inside an occurrence by
+ * partId, BEFORE the `-L<n>` line suffix and the sequential `Pnn` are
+ * assigned. When no entry carries an ordinal, the durable id order is the
+ * documented fallback. The same physical occurrence therefore keeps the
+ * same code in every flow regardless of array or lexical id order.
+ */
+export interface WorkshopOccurrenceOrdering {
+  readonly id: string;
+  /** #781 — frozen manufacturing occurrence ordinal (1-based, shared authority). */
+  readonly workshopOccurrenceOrdinal?: number;
+}
+
+/**
+ * #781 review (validation hardening): PARTIAL ordinals never fall back
+ * silently. When ANY entry carries a workshop occurrence ordinal, every
+ * entry must carry a valid one (integer >= 1, no duplicates) — a mixed
+ * context means an upstream propagation bug and fails closed. The durable-id
+ * fallback only applies when NO entry carries an ordinal (live/legacy
+ * contexts that were never frozen).
+ */
+export function canonicalWorkshopOccurrences<T extends WorkshopOccurrenceOrdering>(
+  occurrences: readonly T[],
+): T[] {
+  const frozen = occurrences.filter(
+    (entry) => entry.workshopOccurrenceOrdinal !== undefined,
+  );
+  if (frozen.length === 0) {
+    return [...occurrences].sort((a, b) => a.id.localeCompare(b.id));
+  }
+  if (frozen.length !== occurrences.length) {
+    throw new ResolutionError(
+      'Contexto de ocurrencias mixto: algunas unidades llevan ordinal de fabricación congelado y otras no — la propagación upstream debe ser completa o nula, nunca parcial',
+      { frozen: frozen.length, total: occurrences.length },
+    );
+  }
+  validateFrozenWorkshopOccurrenceOrdinals(occurrences);
+  return [...occurrences].sort(
+    (a, b) =>
+      (a.workshopOccurrenceOrdinal! - b.workshopOccurrenceOrdinal!) || a.id.localeCompare(b.id),
+  );
+}
+
+/**
+ * #781 review — explicit guard for FROZEN contexts: every occurrence must
+ * carry an integer ordinal >= 1 and two physical occurrences can never share
+ * one (the ordinal IS the manufacturing occurrence authority).
+ */
+export function validateFrozenWorkshopOccurrenceOrdinals(
+  occurrences: readonly WorkshopOccurrenceOrdering[],
+): void {
+  const seen = new Map<number, string>();
+  for (const entry of occurrences) {
+    const ordinal = entry.workshopOccurrenceOrdinal;
+    if (ordinal === undefined || !Number.isInteger(ordinal) || ordinal < 1) {
+      throw new ResolutionError(
+        'Ordinal de ocurrencia de fabricación inválido: debe ser entero >= 1',
+        { id: entry.id, ordinal },
+      );
+    }
+    const previous = seen.get(ordinal);
+    if (previous !== undefined) {
+      throw new ResolutionError(
+        'Dos ocurrencias físicas comparten el mismo ordinal de fabricación: la autoridad de ocurrencia no puede duplicarse',
+        { ordinal, first: previous, second: entry.id },
+      );
+    }
+    seen.set(ordinal, entry.id);
+  }
+}
+
+/**
+ * #781 review — frozen occurrence assignment projected from a
+ * ProductionRelease: which physical instance backs each project item, with
+ * the release's frozen ordinal (snapshot unit order, index + 1). Server
+ * projection joins the release snapshot units with the CURRENT
+ * quote-line↔instance links; `coversAllCurrentInstances` lets the caller
+ * decide freeze-vs-live without re-deriving coverage.
+ */
+export interface WorkshopOccurrenceAssignment {
+  readonly furnitureInstanceId: string;
+  readonly projectItemId: string;
+  readonly workshopOccurrenceOrdinal: number;
+}
+
+export interface WorkshopOccurrenceProjection {
+  readonly releaseId: string;
+  readonly releaseNumber: number;
+  readonly coversAllCurrentInstances: boolean;
+  readonly assignments: readonly WorkshopOccurrenceAssignment[];
+}
+
+/**
+ * Builds the DERIVED BOM/Engineering context for a released project (#781
+ * review §5): items are expanded per physical instance — an item with
+ * quantity N and N linked instances becomes N derived items of quantity 1,
+ * each keyed by its furniture instance id and carrying the FROZEN workshop
+ * occurrence ordinal. The persisted Project is never mutated; callers that
+ * only want the live view pass an UNDEFINED projection (pre-release) and get
+ * the items back unchanged. An EXISTING projection is always a frozen claim:
+ * empty assignments, partial coverage, or unconsumed assignments all fail
+ * closed (never a silent mix, never a silent pass-through).
+ *
+ * #781 FIX — ProjectItem.id is NEVER mutated; furnitureInstanceId is
+ * transported as a separate field so the original quote-line identity is
+ * preserved for downstream consumers (pricing, project persistence, etc.).
+ *
+ * #781 FIX — Dense ordinal validation: ordinals must be exactly 1..N with
+ * no gaps, no duplicates, no missing. All assignments must be consumed.
+ * Per-projectItem assignment count must match item.quantity exactly.
+ */
+export function applyFrozenWorkshopOccurrenceOrdinals(
+  items: readonly ProjectItem[],
+  projection: WorkshopOccurrenceProjection | undefined,
+): readonly ProjectItem[] {
+  // #781 micro-task #2B — undefined ALONE means pre-release (no frozen
+  // context exists): live items pass through. An EXISTING projection is a
+  // frozen claim and never degrades silently, even with zero assignments.
+  if (projection === undefined) {
+    return items;
+  }
+  // Validate coversAllCurrentInstances FIRST: a released-but-drifted context
+  // fails closed even when it carries no assignments at all.
+  if (!projection.coversAllCurrentInstances) {
+    throw new ResolutionError(
+      'La proyección de ocurrencias no cubre todas las instancias actuales: el contexto BOM no puede mezclar instancias congeladas y vivas',
+      { releaseId: projection.releaseId },
+    );
+  }
+  if (projection.assignments.length === 0) {
+    // Degenerate frozen claim: a release context exists but projects no
+    // occurrences. Vacuously consistent only over an empty project;
+    // otherwise the frozen claim contradicts the live items → fail closed.
+    if (items.length === 0) {
+      return [];
+    }
+    throw new ResolutionError(
+      'La proyección congelada no contiene ocurrencias pero el proyecto tiene ítems: el contexto BOM no puede ignorar la liberación en silencio',
+      { releaseId: projection.releaseId, itemCount: items.length },
+    );
+  }
+  // Validate ordinal integrity: integer >= 1, no duplicates, dense 1..N.
+  validateFrozenWorkshopOccurrenceOrdinals(
+    projection.assignments.map((assignment) => ({
+      id: assignment.furnitureInstanceId,
+      workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
+    })),
+  );
+  // Validate dense 1..N (no gaps): ordinals must be exactly {1, 2, ..., N}.
+  const ordinals = projection.assignments
+    .map((a) => a.workshopOccurrenceOrdinal)
+    .sort((a, b) => a - b);
+  for (let i = 0; i < ordinals.length; i++) {
+    if (ordinals[i] !== i + 1) {
+      throw new ResolutionError(
+        'Ordinal denso inválido: los ordinales de fabricación deben ser exactamente 1..N sin huecos',
+        { expected: i + 1, actual: ordinals[i], total: ordinals.length },
+      );
+    }
+  }
+  // #781 micro-task #2 — physical identity guards (defense in depth: the TS
+  // validation is autonomous and never trusts coversAllCurrentInstances
+  // alone). Every assignment must carry a non-empty furnitureInstanceId and
+  // projectItemId, and each physical identity may appear exactly once.
+  const seenInstances = new Set<string>();
+  for (const assignment of projection.assignments) {
+    if (!assignment.furnitureInstanceId) {
+      throw new ResolutionError(
+        'Asignación de ocurrencia sin identidad física: furnitureInstanceId vacío',
+        { releaseId: projection.releaseId },
+      );
+    }
+    if (!assignment.projectItemId) {
+      throw new ResolutionError(
+        'Asignación de ocurrencia sin ítem de proyecto: projectItemId vacío (una unidad frozen sin link actual nunca puede aplicarse)',
+        { furnitureInstanceId: assignment.furnitureInstanceId, releaseId: projection.releaseId },
+      );
+    }
+    if (seenInstances.has(assignment.furnitureInstanceId)) {
+      throw new ResolutionError(
+        'Dos asignaciones comparten la misma identidad física: cada ocurrencia es única',
+        { furnitureInstanceId: assignment.furnitureInstanceId, releaseId: projection.releaseId },
+      );
+    }
+    seenInstances.add(assignment.furnitureInstanceId);
+  }
+  // Group assignments by projectItemId, validate per-item count == quantity.
+  const byItem = new Map<string, WorkshopOccurrenceAssignment[]>();
+  for (const assignment of projection.assignments) {
+    const list = byItem.get(assignment.projectItemId) ?? [];
+    list.push(assignment);
+    byItem.set(assignment.projectItemId, list);
+  }
+  const derived: ProjectItem[] = [];
+  const consumed = new Set<string>();
+  for (const item of items) {
+    const assignments = byItem.get(item.id);
+    if (!assignments || assignments.length === 0) {
+      throw new ResolutionError(
+        'La liberación congelada no cubre este ítem del proyecto: el contexto BOM no puede mezclar ítems con y sin ordinal de fabricación',
+        { projectItemId: item.id, releaseId: projection.releaseId },
+      );
+    }
+    if (assignments.length !== item.quantity) {
+      throw new ResolutionError(
+        'El número de instancias congeladas para este ítem no coincide con su cantidad',
+        {
+          projectItemId: item.id,
+          expectedQuantity: item.quantity,
+          frozenAssignments: assignments.length,
+          releaseId: projection.releaseId,
+        },
+      );
+    }
+    // Sort by ordinal to ensure deterministic order.
+    assignments.sort((a, b) => a.workshopOccurrenceOrdinal - b.workshopOccurrenceOrdinal);
+    // #781 FIX: ProjectItem.id is NEVER mutated. furnitureInstanceId is
+    // transported as a separate field; workshopOccurrenceOrdinal stays separate.
+    derived.push(
+      ...assignments.map((assignment) => {
+        consumed.add(assignment.furnitureInstanceId);
+        return {
+          ...item,
+          furnitureInstanceId: assignment.furnitureInstanceId,
+          quantity: 1,
+          workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
+        };
+      }),
+    );
+  }
+  // #781 micro-task #2 — 100% consumption: every frozen assignment must be
+  // consumed exactly once by the derived BOM context. An assignment pointing
+  // at an unknown/removed item (or any other drift) fails closed instead of
+  // being silently ignored.
+  if (consumed.size !== projection.assignments.length) {
+    throw new ResolutionError(
+      'La proyección congelada contiene ocurrencias que no corresponden a ningún ítem actual del proyecto: el contexto BOM no puede ignorarlas en silencio',
+      {
+        assigned: projection.assignments.length,
+        consumed: consumed.size,
+        releaseId: projection.releaseId,
+      },
+    );
+  }
+  return derived;
+}
+
+/** #781 — canonical part order inside one occurrence (see above). */
+export function canonicalWorkshopParts<T extends { readonly id: string }>(
+  parts: readonly T[],
+): T[] {
+  return [...parts].sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export function generateCutRowsWithLinks(
   project: BomProjectContext,
   catalog: Catalog,
@@ -126,7 +388,8 @@ export function generateCutRowsWithLinks(
   const sortable: SortableCutRow[] = [];
   const moduleCounts = new Map<string, number>();
 
-  for (const item of project.items) {
+  // #781 — canonical occurrence order (see canonicalWorkshopOccurrences).
+  for (const item of canonicalWorkshopOccurrences(project.items)) {
     if (!(item.quantity > 0)) {
       throw new ValidationError(
         `Project item quantity must be > 0 (got ${item.quantity})`,
@@ -166,7 +429,8 @@ export function generateCutRowsWithLinks(
     );
 
     let partIdx = 0;
-    for (const part of bom.boardParts) {
+    // #781 — canonical part order: Pnn follows partId, never array order.
+    for (const part of canonicalWorkshopParts(bom.boardParts)) {
       partIdx++;
       const material = findMaterial(catalog, part.materialId);
       if (!material) {
@@ -320,7 +584,8 @@ export function generatePieceLabels(
   const sortable: SortablePieceLabel[] = [];
   const moduleCounts = new Map<string, number>();
 
-  for (const item of project.items) {
+  // #781 — canonical occurrence order (see canonicalWorkshopOccurrences).
+  for (const item of canonicalWorkshopOccurrences(project.items)) {
     if (!(item.quantity > 0)) {
       throw new ValidationError(
         `Project item quantity must be > 0 (got ${item.quantity})`,
@@ -360,7 +625,8 @@ export function generatePieceLabels(
     );
 
     let partIdx = 0;
-    for (const part of bom.boardParts) {
+    // #781 — canonical part order: Pnn follows partId, never array order.
+    for (const part of canonicalWorkshopParts(bom.boardParts)) {
       partIdx++;
       const material = findMaterial(catalog, part.materialId);
       if (!material) {

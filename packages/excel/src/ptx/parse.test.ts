@@ -26,6 +26,30 @@ function captureParseError(fn: () => unknown): PtxParseError {
 }
 
 describe('parsePtxText against the dossier fragments', () => {
+  it('#781 reads the field-evidenced OFFCUTS shape (R2201/R7301): row ends in OFC_QTY, not WIDTH', () => {
+    // EXACT sanitized shape of the two REAL working client PTX files
+    // (docs/machines/ptx-cadmatic4/field/): the OFFCUTS row carries an EMPTY
+    // CODE cell plus the seventh content cell — OFC_QTY=1 — after
+    // LENGTH/WIDTH. Empty CODE reads back as undefined (absent), never ''.
+    const text = [
+      'HEADER,1,LAB,0,0,1',
+      'OFFCUTS,1,1,,2,1718.601,862.601,1',
+    ].join('\r\n');
+    const { records } = parsePtxText(text);
+    expect(records).toEqual([
+      {
+        type: 'OFFCUTS',
+        jobIndex: 1,
+        offcutIndex: 1,
+        code: undefined,
+        materialIndex: 2,
+        length: 1718.601,
+        width: 862.601,
+        producedQuantity: 1,
+      },
+    ]);
+  });
+
   it('reads 01_recorte_tres_fases: phases, dimensions and part references', () => {
     const { header, records } = parsePtxText(readExample('01_recorte_tres_fases.ptx.txt'));
     expect(header).toBeNull();
@@ -266,7 +290,7 @@ describe('parser column tables (independent witness of the documented layouts)',
       'QTY_RPT', 'PART_INDEX', 'QTY_PARTS', 'COMMENT',
     ]);
     expect(PTX_PARSER_FAMILY_SPECS['OFFCUTS']?.columns).toEqual([
-      'JOB_INDEX', 'OFFCUT_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH',
+      'JOB_INDEX', 'OFFCUT_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH', 'OFC_QTY',
     ]);
     expect(PTX_PARSER_FAMILY_SPECS['VECTORS']?.columns).toEqual([
       'JOB_INDEX', 'PTN_INDEX', 'CUT_INDEX', 'X_START', 'Y_START', 'X_END', 'Y_END',

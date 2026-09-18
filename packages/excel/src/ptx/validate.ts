@@ -423,7 +423,9 @@ function checkCut(record: PtxCutRecord, issues: Issue[]): void {
 function checkOffcut(record: PtxOffcutRecord, issues: Issue[]): void {
   magnitudeIssue(record.length, `${recordLabel(record)} LENGTH`, true, issues);
   magnitudeIssue(record.width, `${recordLabel(record)} WIDTH`, true, issues);
-  textIssues(record.code, `${recordLabel(record)} CODE`, true, issues);
+  // #781 r4 micro-fix: OFFCUTS.CODE is optional (empty cell = absent).
+  // Other families' CODE checks stay required (untouched).
+  textIssues(record.code, `${recordLabel(record)} CODE`, false, issues);
 }
 
 function checkVector(record: PtxVectorRecord, issues: Issue[]): void {
@@ -463,6 +465,12 @@ function checkIndexFields(record: PtxRecord, issues: Issue[]): void {
     case 'OFFCUTS':
       quantityIssue(record.offcutIndex, `${label} OFFCUT_INDEX`, 1, issues);
       quantityIssue(record.materialIndex, `${label} MAT_INDEX`, 1, issues);
+      // OFC_QTY (#781 r4): present ⇒ positive integer. Absent is the r2/r3
+      // row shape (no such column) and stays valid; the r4 profile enforces
+      // presence at the compiler level, not here.
+      if (record.producedQuantity !== undefined) {
+        quantityIssue(record.producedQuantity, `${label} OFC_QTY`, 1, issues);
+      }
       break;
     case 'VECTORS':
       quantityIssue(record.patternIndex, `${label} PTN_INDEX`, 1, issues);

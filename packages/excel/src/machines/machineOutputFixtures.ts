@@ -67,7 +67,18 @@ export function buildFixtureCuttingJobPartialProvenance(): ResolvedCuttingJob {
  * CutProgram). Used to exercise the candidate adapter end to end.
  */
 export function buildCad4CandidateCuttingJob(): ResolvedCuttingJob {
-  const cutPlan = optimizeCutPlan(GOLDEN_PROJECT_ID, GOLDEN_ROWS, GOLDEN_MATERIALS, GOLDEN_CONFIG);
+  // #781 r4: the workshop-code authority is fail-closed (part_code_missing),
+  // so the candidate lab job assigns labelRefs over the SAME frozen golden
+  // rows — the r2/r3 goldens themselves keep using GOLDEN_ROWS untouched.
+  const cutPlan = optimizeCutPlan(
+    GOLDEN_PROJECT_ID,
+    GOLDEN_ROWS.map((row, index) => ({
+      ...row,
+      labelRef: `MOD-LAB-P${String(index + 1).padStart(2, '0')}`,
+    })),
+    GOLDEN_MATERIALS,
+    GOLDEN_CONFIG,
+  );
   return {
     jobId: 'fixture-cad4-candidate-001',
     provenance: {

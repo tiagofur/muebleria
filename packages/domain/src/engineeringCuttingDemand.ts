@@ -15,7 +15,11 @@
  */
 
 import { ResolutionError } from './errors';
-import { formatOptimizerPartDescription } from './engine/cut';
+import {
+  canonicalWorkshopOccurrences,
+  formatOptimizerPartDescription,
+  resolveCleanPieceCode,
+} from './engine/cut';
 import type {
   Catalog,
   ProductionCutRow,
@@ -43,6 +47,13 @@ export interface ReleaseCuttingDemandView extends ReleaseCuttingDemandBase {
 export interface ReleaseCuttingDemandUnitView {
   readonly furnitureInstanceId: string;
   readonly furnitureDefinitionId: string;
+  /**
+   * #781 — frozen manufacturing occurrence ordinal (1-based): the position of
+   * this unit in the release's frozen unit order. The SERVER always carries
+   * it (the liberation order); it is the shared authority behind workshop
+   * codes, so this flow never orders occurrences by lexical instance id.
+   */
+  readonly workshopOccurrenceOrdinal: number;
   readonly pieces: readonly ReleaseCuttingDemandPieceView[];
 }
 
@@ -104,15 +115,33 @@ export function releaseCutRowsFromDemand(
   }
 
   const rows: ProductionCutRow[] = [];
-  // Deterministic order: unit identity, then the server's piece order.
-  const units = [...demand.units].sort((a, b) =>
-    a.furnitureInstanceId.localeCompare(b.furnitureInstanceId),
+  // Deterministic order: the FROZEN manufacturing occurrence ordinal (the
+  // liberation order — never lexical instance ids), then the canonical part
+  // order inside each unit.
+  const units = canonicalWorkshopOccurrences(
+    demand.units.map((unit) => ({ ...unit, id: unit.furnitureInstanceId })),
   );
+  // #781 — canonical workshop-code assignment (review §1): occurrences
+  // follow the FROZEN workshop occurrence ordinal (liberation order) and
+  // parts their canonical partId order, mirroring the BOM flow's shared
+  // rule — reordering the demand arrays never changes the codes.
+  const moduleCounts = new Map<string, number>();
   for (const unit of units) {
     const moduleCode = modulesById.get(unit.furnitureDefinitionId)?.code ?? unit.furnitureDefinitionId;
-    for (const piece of unit.pieces) {
+    const seenMod = (moduleCounts.get(moduleCode) ?? 0) + 1;
+    moduleCounts.set(moduleCode, seenMod);
+    const lineSuffix = seenMod === 1 ? undefined : `L${seenMod}`;
+    let partIdx = 0;
+    for (const piece of [...unit.pieces].sort((a, b) => a.partId.localeCompare(b.partId))) {
+      partIdx++;
       const material = materialsById.get(piece.materialId)!;
       const edge = piece.edgeBandId ? edgesById.get(piece.edgeBandId) : undefined;
+      const { partCode: cleanPartCode, labelRef } = resolveCleanPieceCode(
+        moduleCode,
+        piece.partCode ?? undefined,
+        partIdx,
+        lineSuffix,
+      );
       rows.push({
         quantity: piece.quantity,
         lengthMm: piece.lengthMm,
@@ -132,9 +161,9 @@ export function releaseCutRowsFromDemand(
         W1: piece.w1,
         W2: piece.w2,
         partName: piece.description,
-        partCode: piece.partCode || piece.partId,
+        partCode: cleanPartCode,
         moduleCode,
-        labelRef: `${unit.furnitureInstanceId}:${piece.partId}`,
+        labelRef,
         thicknessMm: piece.thicknessMm,
         edgeBandCode: edge?.code,
         edgeBandName: edge?.name,

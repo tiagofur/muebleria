@@ -424,6 +424,41 @@ Cuando una feature móvil cambia ejecución física/offline:
 - ❌ `git stash` como almacenamiento de trabajo.
 - ❌ mezclar features no relacionadas en el mismo commit.
 
+## PTX CADmatic 4 r4 — dialecto de campo (#781)
+
+Verificación proporcional del segundo candidato tras el primer rechazo real de
+CADLink (`OnlineConvertedFailedMsg`, 2026-09-17; causa única NO demostrada):
+
+```sh
+pnpm --filter @granete/domain test      # autoridad de códigos + copias -Cn
+pnpm --filter @granete/excel test       # r4 core + golden + adapter + rutas
+pnpm --filter @granete/web test         # descarga/manifest/filename industrial
+GOFLAGS='-p=1' go test ./internal/domain/ ./internal/api/ -run MachineOutput
+scripts/organization-browser-gate.sh tests/organization/machine-output-selection.spec.ts
+```
+
+Cobertura contractual exigida por #781 (además de la cadena serialize → parse →
+validate → verifier independiente === []):
+
+- códigos: `part_code_too_long` / `part_code_duplicate` fallan cerrado; copias
+  `-Cn` distintas; sin truncado; r2/r3 byte-exact (goldens intactos);
+- OFFCUTS: `OFC_QTY=1` presente y validado; declaración ANTES de PATTERNS/CUTS
+  (sin forward Xn — invariante del verifier); `Xn` sólo en FUNCTION 92;
+- identidad: profile `r4` + adapter `1.3.0` con digests verificados contra el
+  contrato industrial y el catálogo compartido TS/JSON/Go (paridad);
+- filename: `G<hex12>.ptx` / `G<hex12>-<n>.ptx` deterministas (hash de
+  cutPlan id+versión), manifest con SHA exacto y provenance descriptiva
+  intacta;
+- revisión del PR (Codex): asignación canónica compartida de códigos
+  (reorden de unidades/piezas/ítems no cambia códigos — tests en ambos
+  flujos), `part_code_missing` fail-closed (sin fallback al partCode de
+  plantilla; el optimizador ya no rellena labelRef con el id de colocación) y
+  OFFCUTS emitido SÓLO para el pareado demostrado con FUNCTION 92
+  (remanentes no-92 sin declarar — nada clasificado UNKNOWN se emite);
+- field: la aceptación real por CADLink es el próximo gate externo (runbook en
+  `docs/machines/ptx-cadmatic4/05_contrato_r4_field_dialect.md` §6); nada de
+  esto promueve `NOT_TESTED/notClaimed`.
+
 ---
 
 ## 15. Definition of Verified

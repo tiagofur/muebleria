@@ -69,7 +69,7 @@ describe('serializePtxDocument', () => {
     expect(byFamily.get('MATERIALS')).toHaveLength(20);
     expect(byFamily.get('PATTERNS')).toHaveLength(8);
     expect(byFamily.get('CUTS')).toHaveLength(11);
-    expect(byFamily.get('OFFCUTS')).toHaveLength(7);
+    expect(byFamily.get('OFFCUTS')).toHaveLength(8);
     expect(byFamily.get('VECTORS')).toHaveLength(8);
   });
 

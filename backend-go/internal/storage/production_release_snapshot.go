@@ -126,7 +126,13 @@ type ReleaseCuttingDemandView struct {
 type ReleaseCuttingDemandUnitView struct {
 	FurnitureInstanceID   string
 	FurnitureDefinitionID string
-	Pieces                []ReleaseCuttingDemandPieceView
+	// WorkshopOccurrenceOrdinal (#781) is the frozen manufacturing occurrence
+	// authority: the 1-based position of this unit in the release's frozen
+	// unit order. Decided when the work was liberated (materialization →
+	// working copy → revision → snapshot); never recomputed, never derived
+	// from lexical id order. Both TS flows order workshop occurrences by it.
+	WorkshopOccurrenceOrdinal int
+	Pieces                    []ReleaseCuttingDemandPieceView
 }
 
 type ReleaseCuttingDemandPieceView struct {
@@ -143,6 +149,104 @@ type ReleaseCuttingDemandPieceView struct {
 	L1, L2       int
 	W1, W2       int
 	OptionRole   string
+}
+
+// WorkshopOccurrenceAssignmentView is one frozen manufacturing occurrence:
+// the physical instance, the project item (quote line) it backs, and the
+// 1-based position of its unit in the release's frozen order.
+type WorkshopOccurrenceAssignmentView struct {
+	FurnitureInstanceID string `json:"furnitureInstanceId"`
+	ProjectItemID       string `json:"projectItemId"`
+	Ordinal             int    `json:"workshopOccurrenceOrdinal"`
+}
+
+// WorkshopOccurrenceProjectionView is the release-side occurrence authority
+// (#781): the LATEST production release's frozen unit order projected onto
+// the project's CURRENT quote-line↔instance links. coversAllCurrentInstances
+// is false when the live representation drifted from the frozen release
+// (e.g. a unit was added after liberating) — callers then keep the LIVE
+// canonical order instead of mixing frozen and unfrozen occurrences.
+type WorkshopOccurrenceProjectionView struct {
+	ReleaseID                  string                             `json:"releaseId"`
+	ReleaseNumber              int                                `json:"releaseNumber"`
+	CoversAllCurrentInstances  bool                               `json:"coversAllCurrentInstances"`
+	Assignments                []WorkshopOccurrenceAssignmentView `json:"assignments"`
+}
+
+// GetProjectWorkshopOccurrences projects the EXACT release's frozen unit
+// order as the manufacturing occurrence authority. The ordinal is the
+// snapshot unit position (index+1): decided when the work was liberated,
+// never recomputed, and historical releases need no migration.
+// #781 FIX — receives releaseId explicitly; never SELECT latest.
+// #781 micro-task #2 — CoversAllCurrentInstances is a BIDIRECTIONAL exact
+// set equality: {frozen instance ids} == {current linked instance ids}.
+// A frozen unit without a current link (empty ProjectItemID, kept for
+// traceability) and a current instance the release never covered BOTH
+// force false — never a silent partial freeze.
+func (s *PostgresStore) GetProjectWorkshopOccurrences(ctx context.Context, projectID, releaseID string) (*WorkshopOccurrenceProjectionView, error) {
+	if !isValidUUID(projectID) || !isValidUUID(releaseID) {
+		return nil, ErrReleaseSnapshotUnavailable
+	}
+	snapshot, err := s.GetProductionReleaseManufacturingSnapshot(ctx, projectID, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	// CURRENT quote-line↔instance links: the live commercial representation.
+	links := map[string]string{} // furniture_instance_id -> project item (quote line) id
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT qli.furniture_instance_id::text, qli.quote_line_id::text
+		FROM quote_line_furniture_instances qli
+		WHERE qli.project_id = $1 AND qli.state = 'current'`,
+		projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var instanceID, itemID string
+		if err := rows.Scan(&instanceID, &itemID); err != nil {
+			return nil, err
+		}
+		links[instanceID] = itemID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	view := &WorkshopOccurrenceProjectionView{
+		ReleaseID:                 snapshot.Release.ID,
+		ReleaseNumber:             snapshot.Release.ReleaseNumber,
+		CoversAllCurrentInstances: true,
+		Assignments:               make([]WorkshopOccurrenceAssignmentView, 0, len(snapshot.Units)),
+	}
+	frozen := map[string]struct{}{}
+	for index, unit := range snapshot.Units {
+		instanceID := unit.Resolved.FurnitureInstanceID
+		frozen[instanceID] = struct{}{}
+		itemID, linked := links[instanceID]
+		if !linked {
+			// A frozen unit without a current link: the live representation
+			// drifted; still report the occurrence (identity survives), with
+			// an empty item so the drift is visible — and the freeze is NOT
+			// complete (#781 micro-task #2: frozen ⊋ current ⇒ false).
+			view.CoversAllCurrentInstances = false
+			itemID = ""
+		}
+		view.Assignments = append(view.Assignments, WorkshopOccurrenceAssignmentView{
+			FurnitureInstanceID: instanceID,
+			ProjectItemID:       itemID,
+			Ordinal:             index + 1,
+		})
+	}
+	for instanceID := range links {
+		if _, ok := frozen[instanceID]; !ok {
+			// A current instance the frozen release never covered: the
+			// project moved past the release — freeze is not complete.
+			view.CoversAllCurrentInstances = false
+			break
+		}
+	}
+	return view, nil
 }
 
 // GetProjectProductionReleaseCuttingDemand projects the frozen snapshot's
@@ -163,10 +267,13 @@ func (s *PostgresStore) GetProjectProductionReleaseCuttingDemand(ctx context.Con
 		SchemaVersion:            snapshot.SchemaVersion,
 		Units:                    make([]ReleaseCuttingDemandUnitView, 0, len(snapshot.Units)),
 	}
-	for _, unit := range snapshot.Units {
+	for unitIndex, unit := range snapshot.Units {
 		unitView := ReleaseCuttingDemandUnitView{
 			FurnitureInstanceID:   unit.Resolved.FurnitureInstanceID,
 			FurnitureDefinitionID: unit.Resolved.FurnitureDefinitionID,
+			// #781: the frozen liberation order IS the manufacturing
+			// occurrence order — the array position of the frozen snapshot.
+			WorkshopOccurrenceOrdinal: unitIndex + 1,
 		}
 		for _, part := range unit.Resolved.BOM.BoardParts {
 			if part.Quantity <= 0 {

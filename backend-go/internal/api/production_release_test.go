@@ -578,3 +578,122 @@ func TestHandleProjectProductionReleaseCuttingDemand_ErrorMapping(t *testing.T) 
 		t.Fatalf("invalid ids: expected 400, got %d", w2.Code)
 	}
 }
+
+// #781 — workshop occurrence projection handler (#781 §3 §9: the route that
+// makes the frozen ordinal authority available to the Engineering/BOM context).
+
+func workshopOccurrencesStubView() *storage.WorkshopOccurrenceProjectionView {
+	return &storage.WorkshopOccurrenceProjectionView{
+		ReleaseID:                 releaseTestReleaseID,
+		ReleaseNumber:             1,
+		CoversAllCurrentInstances: true,
+		Assignments: []storage.WorkshopOccurrenceAssignmentView{
+			{
+				FurnitureInstanceID: releaseTestInstanceID,
+				ProjectItemID:       "item-1",
+				Ordinal:             1,
+			},
+			{
+				FurnitureInstanceID: "3f0c9c11-0000-4000-8000-000000000010",
+				ProjectItemID:       "item-2",
+				Ordinal:             2,
+			},
+		},
+	}
+}
+
+func newWorkshopOccurrencesRequest(userID string, roles []domain.UserRole) *http.Request {
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/projects/"+releaseTestProjectID+"/production-releases/"+releaseTestReleaseID+"/workshop-occurrences", nil)
+	req.SetPathValue("projectId", releaseTestProjectID)
+	req.SetPathValue("releaseId", releaseTestReleaseID)
+	return withTestClaims(req, userID, roles)
+}
+
+func TestHandleProjectWorkshopOccurrences_HappyPath(t *testing.T) {
+	store := &stubStore{workshopOccurrencesResult: workshopOccurrencesStubView()}
+	server := &Server{Store: store}
+	w := httptest.NewRecorder()
+	server.HandleProjectWorkshopOccurrences(w, newWorkshopOccurrencesRequest("user-1", []domain.UserRole{domain.RoleIngeniero}))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		ReleaseID                string `json:"release_id"`
+		ReleaseNumber            int    `json:"release_number"`
+		CoversAllCurrentInstances bool  `json:"covers_all_current_instances"`
+		Assignments              []struct {
+			FurnitureInstanceID       string `json:"furniture_instance_id"`
+			ProjectItemID            string `json:"project_item_id"`
+			WorkshopOccurrenceOrdinal int64 `json:"workshop_occurrence_ordinal"`
+		} `json:"assignments"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.ReleaseID != releaseTestReleaseID || body.ReleaseNumber != 1 {
+		t.Fatalf("projection must pin the exact release: %+v", body)
+	}
+	if !body.CoversAllCurrentInstances {
+		t.Fatalf("projection must cover all current instances")
+	}
+	if len(body.Assignments) != 2 {
+		t.Fatalf("projection must carry 2 assignments, got %d", len(body.Assignments))
+	}
+	// Ordinals must be dense 1-based.
+	for i, assignment := range body.Assignments {
+		if assignment.WorkshopOccurrenceOrdinal != int64(i+1) {
+			t.Fatalf("ordinal at position %d must be %d, got %d", i, i+1, assignment.WorkshopOccurrenceOrdinal)
+		}
+		if assignment.FurnitureInstanceID == "" {
+			t.Fatalf("every assignment must carry a furniture instance id")
+		}
+		if assignment.ProjectItemID == "" {
+			t.Fatalf("every assignment must carry a project item id")
+		}
+	}
+}
+
+func TestHandleProjectWorkshopOccurrences_PermissionDenial(t *testing.T) {
+	for _, role := range []domain.UserRole{domain.RoleVendedor, domain.RoleUser, domain.RoleProduccion, domain.RoleAlmacen} {
+		server := &Server{Store: &stubStore{workshopOccurrencesResult: workshopOccurrencesStubView()}}
+		w := httptest.NewRecorder()
+		server.HandleProjectWorkshopOccurrences(w, newWorkshopOccurrencesRequest("user-1", []domain.UserRole{role}))
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("role %s: expected 403, got %d", role, w.Code)
+		}
+	}
+	for _, role := range []domain.UserRole{domain.RoleAdmin, domain.RoleGerenteProduccion, domain.RoleIngeniero} {
+		server := &Server{Store: &stubStore{workshopOccurrencesResult: workshopOccurrencesStubView()}}
+		w := httptest.NewRecorder()
+		server.HandleProjectWorkshopOccurrences(w, newWorkshopOccurrencesRequest("user-1", []domain.UserRole{role}))
+		if w.Code != http.StatusOK {
+			t.Fatalf("role %s: expected 200, got %d: %s", role, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestHandleProjectWorkshopOccurrences_ErrorMapping(t *testing.T) {
+	// No liberation → 404 (never a live ordering).
+	server := &Server{Store: &stubStore{workshopOccurrencesErr: storage.ErrReleaseSnapshotUnavailable}}
+	w := httptest.NewRecorder()
+	server.HandleProjectWorkshopOccurrences(w, newWorkshopOccurrencesRequest("user-1", []domain.UserRole{domain.RoleAdmin}))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("snapshot unavailable: expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "release_snapshot_unavailable") {
+		t.Fatalf("404 must carry the typed blocker: %s", w.Body.String())
+	}
+
+	// Invalid IDs never reach storage.
+	bad := httptest.NewRequest(http.MethodGet, "/api/projects/not-a-uuid/production-releases/"+releaseTestReleaseID+"/workshop-occurrences", nil)
+	bad.SetPathValue("projectId", "not-a-uuid")
+	bad.SetPathValue("releaseId", releaseTestReleaseID)
+	bad = withTestClaims(bad, "user-1", []domain.UserRole{domain.RoleAdmin})
+	w2 := httptest.NewRecorder()
+	server2 := &Server{Store: &stubStore{workshopOccurrencesResult: workshopOccurrencesStubView()}}
+	server2.HandleProjectWorkshopOccurrences(w2, bad)
+	if w2.Code != http.StatusBadRequest {
+		t.Fatalf("invalid ids: expected 400, got %d", w2.Code)
+	}
+}

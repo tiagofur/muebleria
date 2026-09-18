@@ -171,6 +171,8 @@ export function buildLabGuillotineDocument(): PtxDocument {
       materialIndex: 1,
       length: 462,
       width: 320,
+      // #781 r4: full implemented width exercises the OFC_QTY cell.
+      producedQuantity: 1,
     },
     {
       type: 'VECTORS',
