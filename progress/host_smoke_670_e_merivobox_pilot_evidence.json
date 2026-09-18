@@ -1,5 +1,5 @@
 {
-  "head": "fc3b53bb94c87c5706c8847501ef702a0280521b",
+  "head": "5d68b00102e5a38b6179f380d4411d7309e18b31",
   "rbz_sha256": "df88c5b7784f22cd53b9f1e0a8c7762dee4b4f6f547c5f7b459834c81158f8c6",
   "sketchup_version": "26.2.242",
   "ruby_version": "3.2.2",
@@ -10,12 +10,12 @@
       "rigid_members_count": 4,
       "fabricated_components_count": 2,
       "bottom_panel": {
-        "width_mm": 542.0,
+        "width_mm": 512.0,
         "length_mm": 484.0,
         "thickness_mm": 16.0
       },
       "back_panel": {
-        "width_mm": 542.0,
+        "width_mm": 512.0,
         "length_mm": 69.0,
         "thickness_mm": 16.0
       },
@@ -95,16 +95,16 @@
       "determinant_after": 1.0
     },
     "bottom": {
-      "width_mm_before": 542.0,
-      "width_mm_after": 742.0,
+      "width_mm_before": 512.0,
+      "width_mm_after": 712.0,
       "delta_width_mm": 200.0,
       "length_mm": 484.0,
       "thickness_mm": 16.0,
       "definition_regenerated": true
     },
     "back": {
-      "width_mm_before": 542.0,
-      "width_mm_after": 742.0,
+      "width_mm_before": 512.0,
+      "width_mm_after": 712.0,
       "delta_width_mm": 200.0,
       "length_mm": 69.0,
       "thickness_mm": 16.0,
