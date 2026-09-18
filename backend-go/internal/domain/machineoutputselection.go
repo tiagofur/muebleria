@@ -123,7 +123,7 @@ const MachineOutputCatalogJSON = `{
     {"outputCompatibilityProfileId": "mpr-woodwop", "revisionId": "r1", "formatFamily": "mpr", "supportStatus": "NOT_TESTED", "digest": "28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1"}
   ],
   "adapters": [
-    {"postprocessorAdapterId": "granete-ptx", "adapterVersion": "1.3.0", "implementationDigest": "dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd", "producedFormatFamily": "ptx", "serializerImplemented": true},
+    {"postprocessorAdapterId": "granete-ptx", "adapterVersion": "1.3.0", "implementationDigest": "e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c", "producedFormatFamily": "ptx", "serializerImplemented": true},
     {"postprocessorAdapterId": "homag-saw", "adapterVersion": "0.1.0", "implementationDigest": "c6278fffdde1296eb508772d7a240c06695bba8b4bcac2e59b64761b38a74e9e", "producedFormatFamily": "saw", "serializerImplemented": false},
     {"postprocessorAdapterId": "woodwop-mpr", "adapterVersion": "0.1.0", "implementationDigest": "4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782", "producedFormatFamily": "mpr", "serializerImplemented": false}
   ]

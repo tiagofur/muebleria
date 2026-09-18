@@ -367,12 +367,17 @@ function serializeWithDocumentedCompiler(
  * manufacturing code (workshop-labelref authority, ≤50, fail-closed on
  * collisions). r2/r3 routing and the legacy route are unchanged and keep
  * their byte identities.
+ * v1.3.0 (unpublished, same version): r4 OFFCUTS.CODE serializes EMPTY per
+ * the functional field samples (R2201/R7301) — Granete's internal remnant
+ * identity (regionId) stays in the mapping/CutProgram/verifier and never
+ * leaks into the industrial bytes. Fingerprinted as r4OffcutCode below.
  */
 export const PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
   postprocessorAdapterId: 'granete-ptx',
   adapterVersion: '1.3.0',
   producedFormatFamily: 'ptx',
   generator: 'packages/excel/src/machines/ptxAdapter.ts@4',
+  r4OffcutCode: 'empty-field-internal-region-id-not-serialized',
 } as const;
 
 /**
@@ -383,7 +388,7 @@ export const PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
  * adapter identity; CI compares every value against its independent source.
  */
 export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
-  implementationDigest: 'dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd',
+  implementationDigest: 'e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c',
   behaviorMarkers: {
     compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4'],
     r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
@@ -391,6 +396,7 @@ export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
     r4OffcutQuantity: 'ofc-qty-1-92-paired-offcuts-only',
     r4OffcutOrdering: 'offcuts-declared-before-patterns-no-forward-xn',
     r4OffcutMarkers: 'xn-references-only-on-function-92',
+    r4OffcutCode: 'empty-field-internal-region-id-not-serialized',
     r4PartCodes: 'workshop-labelref-unique-per-piece-max-50-fail-closed',
     readback: 'parser-plus-independent-cut-program-verifier',
     legacyRoute: 'ptx-generic@r1-only',
@@ -415,7 +421,7 @@ export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
 export const PTX_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob> = {
   postprocessorAdapterId: 'granete-ptx',
   adapterVersion: '1.3.0',
-  implementationDigest: 'dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd',
+  implementationDigest: 'e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c',
   producedFormatFamily: 'ptx',
   requiredDimensions: PTX_REQUIRED_DIMENSIONS,
 

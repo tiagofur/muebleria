@@ -148,6 +148,7 @@ describe('PTX_POSTPROCESSOR_ADAPTER', () => {
       r4OffcutQuantity: 'ofc-qty-1-92-paired-offcuts-only',
       r4OffcutOrdering: 'offcuts-declared-before-patterns-no-forward-xn',
       r4OffcutMarkers: 'xn-references-only-on-function-92',
+      r4OffcutCode: 'empty-field-internal-region-id-not-serialized',
       r4PartCodes: 'workshop-labelref-unique-per-piece-max-50-fail-closed',
       readback: 'parser-plus-independent-cut-program-verifier',
       legacyRoute: 'ptx-generic@r1-only',

@@ -44,7 +44,7 @@ func validCuttingSelectionAPI() domain.MachineOutputSelection {
 		}(),
 		AdapterID:                   "granete-ptx",
 		AdapterVersion:              "1.3.0",
-		AdapterImplementationDigest: "dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd",
+		AdapterImplementationDigest: "e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c",
 	}
 }
 

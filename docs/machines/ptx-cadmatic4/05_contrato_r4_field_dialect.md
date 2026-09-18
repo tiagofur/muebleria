@@ -142,7 +142,7 @@ manifiesto.
 
 ```text
 profile   ptx-cadmatic-4@r4   digest 94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc
-adapter   granete-ptx@1.3.0   implementationDigest dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd
+adapter   granete-ptx@1.3.0   implementationDigest e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c
 golden r4 bytes sha256 92209bfb8c35354a55f2289b6ab83ae22857c6ea496283ac5d7a3d6cee6df313
 ```
 
