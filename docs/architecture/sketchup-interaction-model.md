@@ -6,6 +6,7 @@
 > **Host representation:** [sketchup-native-entity-model.md](sketchup-native-entity-model.md)  
 > **Resolución Material-Aware:** [material-aware-furniture-resolution.md](material-aware-furniture-resolution.md)  
 > **Digital Thread:** [project-design-digital-thread.md](project-design-digital-thread.md)  
+> **Designer UX:** [sketchup-designer-workflow.md](sketchup-designer-workflow.md)  
 > **Invariante central:** **SketchUp owns authoring/interaction; Granete owns business/manufacturing truth.**
 
 ---
@@ -51,7 +52,10 @@ Reglas UX:
 - mover/rotar el mueble en SketchUp es interacción de autoría;
 - parámetros productivos se cambian mediante intención semántica, no deformando geometría;
 - cambios relevantes son undoable como una acción coherente;
-- errores no destruyen el último estado válido.
+- errores no destruyen el último estado válido;
+- el shell diario se organiza alrededor de **Biblioteca / Proyecto / Inspector**;
+- con un Design válido y nada seleccionado, el Inspector muestra configuración del Design en vez de ser un estado muerto;
+- Biblioteca y Proyecto convergen en un único flujo de placement; no existen dos motores de colocación.
 
 ---
 
@@ -141,6 +145,21 @@ Renombrar una entidad en Outliner no cambia su Granete ID.
 
 ## 6. Inserción de muebles
 
+La UX detallada de inserción/placement está en [sketchup-designer-workflow.md](sketchup-designer-workflow.md) y #469.
+
+La inserción profesional es un **modo de colocación**, no un spawn productivo en el origen:
+
+```text
+elegir/configurar
+→ preview transitorio sigue cursor
+→ ancla semántica + inferencia/snap
+→ rotar/flip/offset antes de confirmar
+→ click
+→ commit
+```
+
+`Esc` cancela sin dejar entidad gestionada, definición productiva ni metadata residual.
+
 ### 6.1 Catálogo
 
 `RemoteCatalogProvider` consulta el catálogo real del taller mediante `GET /api/furniture/definitions`. La extensión no sustituye silenciosamente el catálogo remoto por muebles genéricos en producción.
@@ -164,6 +183,19 @@ El DTO publica el contrato #414 completo (local geometry + transform autoritativ
 ### 6.3 Placement exterior
 
 El top-level furniture transform representa el placement exterior del usuario en SketchUp. Los transforms internos de piezas son relativos al mueble/subassembly y se resuelven en Granete.
+
+Durante preview, Granete puede usar anclas semánticas de placement (por ejemplo `BACK_LEFT_BOTTOM`) para definir desde qué punto el usuario "agarra" el mueble. Esa ancla sólo transforma la preview/top-level placement; no forma parte de la geometría productiva ni altera BOM, dimensiones o machining.
+
+La preview puede calcular localmente hit point, InputPoint/inferencia, candidato de snap, orientación y transform visual. No debe hacer round trips de servidor por cada movimiento del mouse.
+
+Biblioteca y Project Furniture consumen el mismo placement tool:
+
+```text
+FurnitureDefinition → preview → commit
+FurnitureInstance   → preview → commit preserving identity
+```
+
+En Catalog insertion conectado, seleccionar/browsear el mueble no crea identidad física. #390 crea/reserva exactamente un `FurnitureInstance` como parte del commit explícito antes de que el objeto quede válido/productivo.
 
 Cambiar dimensión/material no debe llevar el mueble de regreso al origen ni borrar su rotación global.
 
@@ -244,7 +276,21 @@ no consolidar el Group renderer como target final.
 
 ### 8.4 Scope
 
-`this furniture` es un override del mueble. `toda la obra` usa `project defaults + item overrides`; la persistencia durable sigue el Digital Thread y un default temporal de sesión no se presenta como verdad persistida.
+`this furniture` es un override explícito del mueble.
+
+Para la experiencia de diseño, #784 define defaults durables del **Design working copy** + overrides por mueble:
+
+```text
+effective choice
+= Design default
+  unless explicit furniture override
+```
+
+La UI puede mostrar el nombre del Project para contexto, pero no debe guardar estos defaults como estado efímero de sesión ni asumir que todas las alternativas de un Project comparten acabados.
+
+Cambiar un default no reescribe silenciosamente los muebles existentes. "Aplicar a muebles existentes…" es una acción explícita que usa #471, muestra impacto y conserva overrides explícitos por defecto.
+
+Una revisión publicada congela los valores efectivos por item; manufacturing/release nunca depende del default mutable actual.
 
 ---
 
