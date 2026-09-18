@@ -23,6 +23,10 @@ import {
 } from '@granete/storage';
 import {
   applyFrozenWorkshopOccurrenceOrdinals,
+  generateCutRows,
+  generatePieceLabels,
+  type Catalog,
+  type Module,
   type Project,
   type ProjectItem,
   type WorkshopOccurrenceProjection,
@@ -70,13 +74,54 @@ export async function fetchProjectWorkshopOccurrences(args: {
 }
 
 /**
- * #781 — idle means no release context exists (pre-release project).
- * error means the release IS open but the projection failed (fail closed).
+ * #781 — idle means no release context exists (pre-release project: live
+ * order governs). loading means an exact release IS open and its frozen
+ * authority is still resolving: NO live fallback may be derived meanwhile
+ * (micro-task #3). error means the release IS open but the projection
+ * failed (fail closed).
  */
 export type ProjectWorkshopOccurrenceContext =
   | { readonly kind: 'idle' }
+  | { readonly kind: 'loading' }
   | { readonly kind: 'error'; readonly message: string }
   | { readonly kind: 'ready'; readonly projection: WorkshopOccurrenceProjection };
+
+/**
+ * Pure status resolution for the workshop-occurrence authority (#781
+ * micro-task #3): the hook's entire decision table, unit-testable without
+ * React. `hasReleaseContext` (token + projectId + releaseId present) is the
+ * ONLY gate for leaving idle — a resolving query under an open release is
+ * loading, never idle, so no caller can mistake "still fetching the frozen
+ * authority" for "no release exists, live order is fine".
+ */
+export type WorkshopOccurrenceQuerySnapshot =
+  | { readonly status: 'pending' }
+  | { readonly status: 'error'; readonly error: unknown }
+  | { readonly status: 'success'; readonly data: WorkshopOccurrenceProjection | null | undefined };
+
+export function resolveWorkshopOccurrenceContext(args: {
+  readonly hasReleaseContext: boolean;
+  readonly query: WorkshopOccurrenceQuerySnapshot;
+}): ProjectWorkshopOccurrenceContext {
+  if (!args.hasReleaseContext) return { kind: 'idle' };
+  switch (args.query.status) {
+    case 'pending':
+      return { kind: 'loading' };
+    case 'error': {
+      const message =
+        args.query.error instanceof Error
+          ? args.query.error.message
+          : 'Error al proyectar ocurrencias de fabricación';
+      return { kind: 'error', message };
+    }
+    case 'success':
+      if (!args.query.data) {
+        // Should not happen — fetchProjectWorkshopOccurrences always returns or throws.
+        return { kind: 'error', message: 'Proyección de ocurrencias vacía' };
+      }
+      return { kind: 'ready', projection: args.query.data };
+  }
+}
 
 export function useProjectWorkshopOccurrences(args: {
   readonly baseUrl: string;
@@ -87,7 +132,7 @@ export function useProjectWorkshopOccurrences(args: {
 }): ProjectWorkshopOccurrenceContext {
   // #781 FIX — query is only enabled when a release context is ready
   // (projectId + releaseId both present). No release = idle (pre-release).
-  const enabled = Boolean(args.token && args.projectId && args.releaseId);
+  const hasReleaseContext = Boolean(args.token && args.projectId && args.releaseId);
   const query = useQuery({
     queryKey: args.queryKey,
     queryFn: ({ signal }) =>
@@ -98,23 +143,17 @@ export function useProjectWorkshopOccurrences(args: {
         releaseId: args.releaseId as string,
         signal,
       }),
-    enabled,
+    enabled: hasReleaseContext,
     retry: false,
   });
-  if (!args.projectId || !args.token || !args.releaseId) return { kind: 'idle' };
-  if (query.isPending) return { kind: 'idle' };
-  if (query.isError) {
-    // #781 FIX — fail closed: when a release IS open, any projection error
-    // (network, permissions, 403, 500, mismatch) is a BLOCKER, not a silent
-    // degradation to live order. The caller must surface this as an error.
-    const message = query.error instanceof Error ? query.error.message : 'Error al proyectar ocurrencias de fabricación';
-    return { kind: 'error', message };
-  }
-  if (!query.data) {
-    // Should not happen — fetchProjectWorkshopOccurrences always returns or throws.
-    return { kind: 'error', message: 'Proyección de ocurrencias vacía' };
-  }
-  return { kind: 'ready', projection: query.data };
+  return resolveWorkshopOccurrenceContext({
+    hasReleaseContext,
+    query: query.isPending
+      ? { status: 'pending' }
+      : query.isError
+        ? { status: 'error', error: query.error }
+        : { status: 'success', data: query.data ?? null },
+  });
 }
 
 /**
@@ -126,12 +165,21 @@ export function useProjectWorkshopOccurrences(args: {
  * #781 FIX — when context.kind === 'error', this function throws instead
  * of silently returning project.items. A released project that can't
  * project its occurrences MUST NOT fall back to live order.
+ *
+ * #781 micro-task #3 — when context.kind === 'loading', this function
+ * throws instead of returning project.items: deriving a live BOM while the
+ * frozen authority is still resolving is the exact leak this closes. The
+ * throw is a backstop — callers branch on the context kind first and render
+ * an explicit loading state instead of ever reaching it.
  */
 export function deriveEngineeringBomItems(
   project: Project,
   context: ProjectWorkshopOccurrenceContext,
 ): readonly ProjectItem[] {
   if (context.kind === 'idle') return project.items;
+  if (context.kind === 'loading') {
+    throw new Error('Cargando ocurrencias congeladas de la liberación…');
+  }
   if (context.kind === 'error') {
     // #781 FIX — fail closed: a released project with a projection error
     // must not silently fall back to live order. Surface the error.
@@ -149,4 +197,86 @@ export function deriveEngineeringBomItems(
     project.items,
     context.projection,
   );
+}
+
+/**
+ * The occurrence-gated slice of the Engineering workspace view (#781
+ * micro-task #3): the exact derivation ShellView renders, extracted as a
+ * pure function so the loading gate is unit-testable.
+ *
+ * - `idle` (genuinely no release): live project items flow through, exactly
+ *   as the pre-release/legacy working view always behaved.
+ * - `loading` (exact release open, authority resolving): NOTHING is
+ *   derived — bomProject/cutRows/labels are all null and `occurrencesLoading`
+ *   is true, so the screen waits instead of flashing live content.
+ * - `error`: nothing derived; the message surfaces as the cut error.
+ * - `ready`: frozen BOM context, cut rows and labels derived from it.
+ */
+export interface EngineeringWorkshopOccurrenceView {
+  readonly occurrencesLoading: boolean;
+  readonly bomProject: Project | null;
+  readonly modules: readonly Module[];
+  readonly cutRows: ReturnType<typeof generateCutRows> | null;
+  readonly cutError: string | null;
+  readonly labels: ReturnType<typeof generatePieceLabels> | null;
+  readonly labelsError: string | null;
+}
+
+export function deriveEngineeringWorkshopOccurrenceView(args: {
+  readonly project: Project;
+  readonly catalog: Catalog | null;
+  readonly modules: readonly Module[];
+  readonly occurrenceContext: ProjectWorkshopOccurrenceContext;
+}): EngineeringWorkshopOccurrenceView {
+  if (args.occurrenceContext.kind === 'loading') {
+    return {
+      occurrencesLoading: true,
+      bomProject: null,
+      modules: [],
+      cutRows: null,
+      cutError: null,
+      labels: null,
+      labelsError: null,
+    };
+  }
+  let bomProject: Project | null = null;
+  let workshopError: string | null = null;
+  try {
+    bomProject = {
+      ...args.project,
+      items: deriveEngineeringBomItems(args.project, args.occurrenceContext),
+    };
+  } catch (err) {
+    workshopError = err instanceof Error ? err.message : 'Error al proyectar ocurrencias de fabricación';
+  }
+  const modules = bomProject
+    ? args.modules.filter((m) => bomProject!.items.some((item) => item.moduleId === m.id))
+    : [];
+  let cutRows: ReturnType<typeof generateCutRows> | null = null;
+  let cutError: string | null = null;
+  if (args.catalog && bomProject) {
+    try {
+      cutRows = generateCutRows(bomProject, args.catalog);
+    } catch (err) {
+      cutError = err instanceof Error ? err.message : 'Error al resolver despiece';
+    }
+  }
+  let labels: ReturnType<typeof generatePieceLabels> | null = null;
+  let labelsError: string | null = null;
+  if (args.catalog && bomProject) {
+    try {
+      labels = generatePieceLabels(bomProject, args.catalog);
+    } catch (err) {
+      labelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas';
+    }
+  }
+  return {
+    occurrencesLoading: false,
+    bomProject,
+    modules,
+    cutRows,
+    cutError: workshopError ?? cutError,
+    labels,
+    labelsError,
+  };
 }

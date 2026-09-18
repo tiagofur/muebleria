@@ -69,7 +69,6 @@ import {
   estimateBoardSheets,
   generateCutRows,
   generateHardwareList,
-  generatePieceLabels,
   generateModuleLabels,
   generateProjectMaterialSummary,
   duplicateModule as deepCopyModule,
@@ -230,7 +229,7 @@ import {
   useEngineeringReleaseContext,
 } from './engineeringReleaseContext';
 import {
-  deriveEngineeringBomItems,
+  deriveEngineeringWorkshopOccurrenceView,
   useProjectWorkshopOccurrences,
   workshopOccurrenceQueryKey,
 } from './workshopOccurrenceContext';
@@ -1554,31 +1553,21 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             : engineeringReleaseContext.kind === 'loading'
               ? { state: 'loading' as const }
               : undefined;
-        // #781 — the Engineering/BOM context derives from the project's
-        // FROZEN occurrence authority (never mutates the persisted Project;
-        // fail closed when a release IS open but projection fails).
-        let engBomProject: typeof engProject | null = null;
-        let engWorkshopError: string | null = null;
-        try {
-          engBomProject = {
-            ...engProject,
-            items: deriveEngineeringBomItems(engProject, projectWorkshopOccurrences),
-          };
-        } catch (err) {
-          engWorkshopError = err instanceof Error ? err.message : 'Error al proyectar ocurrencias de fabricación';
-        }
-        const engModules = engBomProject
-          ? modules.filter((m) => engBomProject!.items.some((item) => item.moduleId === m.id))
-          : [];
-        let engCutRows: ReturnType<typeof generateCutRows> | null = null;
-        let engCutError: string | null = null;
-        if (catalog && engBomProject) {
-          try {
-            engCutRows = generateCutRows(engBomProject, catalog);
-          } catch (err) {
-            engCutError = err instanceof Error ? err.message : 'Error al resolver despiece';
-          }
-        }
+        // #781 micro-task #3 — the occurrence-gated BOM view: while the
+        // exact release's frozen authority is still loading, NOTHING
+        // live-derived is produced (no BOM, no cut rows, no labels) — the
+        // screen waits for the frozen authority instead of flashing live
+        // content. Pre-release/legacy (idle) keeps the live working view.
+        const engWorkshopView = deriveEngineeringWorkshopOccurrenceView({
+          project: engProject,
+          catalog,
+          modules,
+          occurrenceContext: projectWorkshopOccurrences,
+        });
+        const engBomProject = engWorkshopView.bomProject;
+        const engModules = engWorkshopView.modules;
+        const engCutRows = engWorkshopView.cutRows;
+        const engCutError = engWorkshopView.cutError;
         // #739 — with a verified release context the despiece/optimización
         // demand comes from the FROZEN cutting-demand projection of the exact
         // release — never from the live project/catálogo. Mapping failures
@@ -1684,16 +1673,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             };
           }
         }
-        let engLabels: ReturnType<typeof generatePieceLabels> | null = null;
-        let engLabelsError: string | null = null;
         let engModuleLabels: ReturnType<typeof generateModuleLabels> | null = null;
         let engModuleLabelsError: string | null = null;
-        if (catalog && engBomProject) {
-          try {
-            engLabels = generatePieceLabels(engBomProject, catalog);
-          } catch (err) {
-            engLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas';
-          }
+        // engLabels/engLabelsError come from the occurrence-gated view above
+        // (null while the frozen authority loads — never live labels).
+        const engLabels = engWorkshopView.labels;
+        const engLabelsError = engWorkshopView.labelsError;
+        if (catalog) {
           try {
             engModuleLabels = generateModuleLabels(engProject, catalog, {
               customerName: resolveCustomerName(engProject.customerId, customers),
@@ -1713,7 +1699,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           }
         }
         return (
-          <EngineeringWorkspace
+          <>
+            {/* #781 micro-task #3 — while the exact release's frozen
+                occurrence authority resolves, the BOM/labels surfaces below
+                are all null (never live content): say so explicitly. */}
+            {engWorkshopView.occurrencesLoading ? (
+              <p className="eng-workspace__live-notice" data-testid="eng-occurrences-loading">
+                Cargando ocurrencias congeladas de la liberación…
+              </p>
+            ) : null}
+            <EngineeringWorkspace
             key={`${engProject.id}:${routeEngineeringReleaseId ?? 'legacy'}`}
             project={engProject}
             releaseContext={engReleaseContext}
@@ -1736,7 +1731,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                 : null
             }
             cutRows={engCutRows}
-            cutError={engWorkshopError ?? engCutError}
+            cutError={engCutError}
             readiness={engReadiness}
             labels={engLabels}
             labelsError={engLabelsError}
@@ -1843,6 +1838,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               );
             }}
           />
+          </>
         );
         })()}
         </ScreenBoundary>
