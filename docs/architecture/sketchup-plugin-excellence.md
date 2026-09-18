@@ -2,7 +2,8 @@
 
 Status: **Canonical target**  
 Program: #465, umbrella #290  
-Related authorities: #384, #413, #401, #446
+Related authorities: #384, #413, #401, #446  
+Designer UX contract: [sketchup-designer-workflow.md](sketchup-designer-workflow.md)
 
 ## 1. Purpose
 
@@ -78,6 +79,16 @@ The experience should feel direct:
 - see immediate visual feedback;
 - receive explicit blockers/remediation;
 - undo coherently.
+
+The normal authoring shell follows the designer workflow contract:
+
+```text
+Biblioteca = qué quiero agregar
+Proyecto   = qué contiene mi trabajo
+Inspector  = qué quiero modificar ahora
+```
+
+The Inspector is contextual: with a valid connected Design and no managed selection it becomes the Design-level configuration surface; with one furniture/part/hardware or multiple furniture selected it changes scope instead of opening parallel configuration screens. See `sketchup-designer-workflow.md` and #784.
 
 The engineering underneath may be complex. The interaction should not expose that complexity unnecessarily.
 
@@ -327,17 +338,23 @@ Ruby/HtmlDialog never hardcode a brand-specific drilling table.
 
 ## 13. Placement and snapping
 
-Owned by #469.
+Owned by #469. The detailed designer contract is `sketchup-designer-workflow.md`.
 
 Current origin-first insertion is an interim behavior. Target:
 
 ```text
-library item
-→ ghost preview
+Library or Project item
+→ resolved transient ghost preview
+→ preview follows cursor from a visible semantic placement anchor
 → SketchUp inference + semantic snap suggestion
-→ rotate/flip/offset
+→ rotate/flip/anchor/offset while still transient
+→ click
 → commit top-level transform
 ```
+
+The primary workflow must not create a managed furniture at model origin and then hand the user to generic Move.
+
+Supported semantic placement anchors may include rear/front + left/right + bottom corners, definition-driven where needed. The anchor is an authoring convenience only; it never changes manufacturing geometry.
 
 Allowed semantic aids include:
 
@@ -346,9 +363,14 @@ Allowed semantic aids include:
 - furniture side-to-side;
 - configurable gap;
 - exact mm offset;
+- orientation/front feedback;
 - repeat placement.
 
-Placement convenience cannot silently change manufacturing dimensions/materials.
+Library insertion and placement of an existing Project FurnitureInstance must converge on the same placement engine. Only identity provenance differs.
+
+In connected Catalog insertion, browsing/preview must not allocate a physical business identity. #390 creates exactly one Project FurnitureInstance only as part of the explicit placement commit path (or an equivalent commit-time reservation) before the object becomes a valid productive managed furniture.
+
+Placement convenience cannot silently change manufacturing dimensions/materials. Cancel leaves no productive residue.
 
 ## 14. Authoritative preflight UX
 
@@ -403,7 +425,9 @@ Multi-selection should distinguish common vs mixed values and never use the firs
 
 Initial batch scopes may include current SketchUp selection only.
 
-Durable room/project defaults require the corresponding #384 persistence. A session-local default may not be presented as project truth.
+#784 owns durable **Design-level** defaults, inheritance and per-furniture overrides. The no-selection Inspector is the Design configuration surface; "Aplicar a muebles existentes…" must reuse #471 batch semantics with an explicit impact review and preserve explicit overrides by default.
+
+Do not present a session-local default as durable Design/Project truth. A Project may contain multiple Design alternatives; defaults that affect authoring therefore belong to the Design working copy unless a future ADR introduces another explicit scope.
 
 ## 17. Project Digital Thread boundary
 
