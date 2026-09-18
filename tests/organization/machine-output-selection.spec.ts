@@ -34,7 +34,7 @@ const CUTTING_GENERIC = {
   outputProfileDigest: 'd05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595',
   adapterId: 'granete-ptx',
   adapterVersion: '1.3.0',
-  adapterImplementationDigest: 'dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd',
+  adapterImplementationDigest: 'e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c',
 } as const;
 
 const CUTTING_CADMATIC4_CANDIDATE = {
