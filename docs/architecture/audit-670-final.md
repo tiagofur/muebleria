@@ -7,9 +7,39 @@
 
 ---
 
-## 1. Resumen Ejecutivo y Matriz de Aceptación
+## 1. Resumen Ejecutivo — Incremento #670-E (PASS) y Criterios Diferidos
 
-El Programa #670 implementa la arquitectura completa para la gestión, resolución, proyección web y materialización en SketchUp de herrajes 3D y conjuntos paramétricos (`Agregados`), validado end-to-end con el piloto comercial MERIVOBOX (Altura M).
+Los incrementos #670-A…#670-E entregados implementan la gestión, resolución, proyección web y materialización en SketchUp de herrajes 3D y conjuntos paramétricos (`Agregados`), validados end-to-end con el piloto comercial MERIVOBOX (Altura M). Este dossier audita la entrega del **incremento #670-E** y **no declara cerrado el #670 original**: sus criterios restantes quedan explícitamente diferidos en §1.2 y ninguno se marca PASS.
+
+### 1.1 Incremento #670-E — PASS
+
+Dentro del alcance del incremento, con evidencia ejecutable en §3:
+
+- **Parametric rigid assembly** — engine genérico Go/TS (E1–E20); miembros rígidos, bindings y hosts como datos.
+- **Variants** — selección estricta por holgura REAL_VERIFIED 3.0 mm, rechazo sin nearest-fallback (R6).
+- **BOM kit semantics** — juego comercial `set` con `IncludedInKit`; fondo/trasera a lista de corte (R4).
+- **W → LW** — outer W + costados reales de carcasa derivan LW; el resolver sólo recibe LW (R3/R10/R11).
+- **MaterialBoard authority** — espesor fabricado desde el tablero vinculado; nominal en conflicto deliberado para demostrarlo (R9).
+- **Exact visual pins** — `assetRevisionId`/`sha256` exactos por miembro; sin fallback a `latest` (#668/#630).
+- **MountFrame** — normalización no-identidad aplicada exactamente una vez; error de punto mundial 0.0 mm (E9/E10).
+- **WebGL** — Proyectar Scenario 8 sobre Chromium real, consumiendo la configuración canónica.
+- **SketchUp** — smoke host real TestUp CI `Success` 8/8 (108 aserciones) sobre SketchUp 2026.2.242.
+- **Historical snapshots** — inmutabilidad del snapshot publicado frente a mutación de catálogo, en PostgreSQL real (R5).
+- **Cross-renderer parity** — misma configuración canónica y mismas dimensiones fabricadas en los cuatro runtimes, verificada por tests que leen la evidencia host (R12).
+- **No scaling / no mirror** — escala [1,1,1] y determinante +1.0 exacto en todas las mutaciones (E3/E20/E14).
+- **MERIVOBOX pilot** — procedencia Blum KA-160/24-ES (pp. 240–245) documentada en `merivobox-pilot.md` (R1).
+
+### 1.2 Criterios originales de #670 — diferidos / seguimiento (NO PASS)
+
+Estos criterios del #670 original **no** están satisfechos por esta entrega y no se declaran PASS:
+
+1. **Drilling host + provenance exacta** — estado: **DEFERRED**. Owner: el trabajo existente de provenance de manufactura/herrajes (issues de exportación a máquina y provenance). Regla vigente preservada: ninguna perforación se infiere desde el SKP; los miembros visuales nunca son autoridad de perforaciones.
+2. **UX de administración Agregado/variante: simular → diff → confirmar → aplicar atómico** — estado: **GAP / FOLLOW-UP**. Búsqueda de issues abiertas (2026-09-18): no existe issue propietaria dedicada más allá del #670 padre. Se propone issue acotada: flujo simulate→diff→confirm→apply para cambio de familia/SKU/receta sobre el runtime ya entregado (reuso de #498/comandos existentes), incluyendo rechazo/red/retry/conflicto sin pérdida de estado y confirmación atómica; sin tocar el engine.
+3. **Membresía de actores fijos/móviles para #529** — estado: **DEFERRED**. Owner: #529. Preservado el invariante: ninguna operación de apertura cambia la geometría canónica.
+
+### 1.3 Matriz de cobertura por incremento entregado
+
+La matriz siguiente evalúa los incrementos ya entregados del programa; no equivale a la clausura del #670 original (ver §1.2).
 
 | Requisito / Criterio Original (#670) | Incremento | Estado | Justificación y Evidencia Verificada |
 |---|---|---|---|
@@ -122,8 +152,8 @@ La comparación numérica no es prosa: los tests de paridad Go y TS leen la evid
 
 ## 4. Conclusión de la Auditoría
 
-El Incremento **#670-E** cumple satisfactoriamente todos los criterios de aceptación y las reglas arquitectónicas del Programa #670, incluyendo la ronda de revisión R9–R14: autoridad de espesor desde MaterialBoard (R9), semántica única $W \to LW$ end-to-end (R10/R11), configuración canónica única consumida y comparada numéricamente por Go, TS, WebGL y SketchUp (R12), y evidencia host real regenerada desde el HEAD de código exacto con RBZ verificado (R13/R14). La paridad cross-renderer declarada en §2.5 está respaldada por tests que leen la evidencia host comprometida, no por prosa.
+#670-E is complete and ready to merge.
+The parent #670 remains open until the remaining original criteria are
+explicitly delivered or formally reassigned to their owning issues.
 
-No existen brechas funcionales en los componentes comprometidos. Las áreas diferidas (CAD propietario en repo, exportación de perforaciones a CNC y animación interactiva) están correctamente clasificadas como `OUT-OF-SCOPE` con sus caminos de integración documentados.
-
-La entrega está lista para revisión independiente y handoff.
+(Ver §1.1 para el alcance PASS del incremento, §1.2 para los criterios diferidos — drilling host/provenance, UX simulate→diff→confirm→apply y membresía de actores #529 — y §2.5/§3 para la evidencia canónica, host y de CI que se conserva sin cambios.)
