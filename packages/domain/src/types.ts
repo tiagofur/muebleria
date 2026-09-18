@@ -825,6 +825,15 @@ export interface ProjectItem {
   readonly quantity: number;
   readonly optionChoices: OptionChoices;
   /**
+   * #781 — frozen manufacturing occurrence ordinal (1-based). The shared
+   * workshop-code authority: when present on every item, occurrence order
+   * (and therefore which repeated module is `-L2-`, `-L3-`…) follows it —
+   * identical to the release lane's frozen liberation order. Optional:
+   * hand-built contexts without a frozen order fall back to the documented
+   * canonical id order.
+   */
+  readonly workshopOccurrenceOrdinal?: number;
+  /**
    * Selected commercial measure preset from Module.presets (H09 / #104).
    * Required when the module defines presets; ignored when none.
    */

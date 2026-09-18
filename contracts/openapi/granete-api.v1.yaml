@@ -8442,6 +8442,7 @@
         "required": [
           "furniture_instance_id",
           "furniture_definition_id",
+          "workshop_occurrence_ordinal",
           "pieces"
         ],
         "properties": {
@@ -8451,6 +8452,11 @@
           },
           "furniture_definition_id": {
             "type": "string"
+          },
+          "workshop_occurrence_ordinal": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "#781 — frozen manufacturing occurrence ordinal: the 1-based position of this unit in the release's frozen unit order (decided when the work was liberated, never recomputed). The shared authority behind workshop codes (`MOD-X[-Ln]-Pnn`): both the project/BOM flow and this release flow order occurrences by it, so the same physical unit keeps the same code from preview to PTX/CNC regardless of array or lexical id order."
           },
           "pieces": {
             "type": "array",

@@ -414,6 +414,7 @@ func toReleaseCuttingDemandDTO(view *storage.ReleaseCuttingDemandView) openapi.R
 		unitDTO := openapi.ReleaseCuttingDemandUnit{
 			FurnitureInstanceID:   unit.FurnitureInstanceID,
 			FurnitureDefinitionID: unit.FurnitureDefinitionID,
+			WorkshopOccurrenceOrdinal: int64(unit.WorkshopOccurrenceOrdinal),
 			Pieces:                make([]openapi.ReleaseCuttingDemandPiece, 0, len(unit.Pieces)),
 		}
 		for _, piece := range unit.Pieces {

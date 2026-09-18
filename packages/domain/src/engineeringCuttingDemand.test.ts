@@ -71,6 +71,7 @@ function demandFixture(over: Partial<ReleaseCuttingDemandView> = {}): ReleaseCut
       {
         furnitureInstanceId: 'fi-1',
         furnitureDefinitionId: 'def-a',
+        workshopOccurrenceOrdinal: 1,
         pieces: [
           {
             partId: 'part-front',
@@ -108,6 +109,7 @@ function demandFixture(over: Partial<ReleaseCuttingDemandView> = {}): ReleaseCut
       {
         furnitureInstanceId: 'fi-2',
         furnitureDefinitionId: 'def-a',
+        workshopOccurrenceOrdinal: 2,
         pieces: [
           {
             partId: 'part-front',

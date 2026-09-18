@@ -65,11 +65,16 @@ func TestReleaseCuttingDemand_ExactUnitsAndFrozenFields(t *testing.T) {
 		t.Fatalf("both physical units must be projected, got %d", len(demand.Units))
 	}
 	seen := map[string]bool{}
-	for _, unit := range demand.Units {
+	for index, unit := range demand.Units {
 		if unit.FurnitureInstanceID == "" || seen[unit.FurnitureInstanceID] {
 			t.Fatalf("unit identities must be exact and unique: %+v", unit)
 		}
 		seen[unit.FurnitureInstanceID] = true
+		// #781: the frozen liberation order is the manufacturing occurrence
+		// authority — projected as a dense 1-based ordinal sequence.
+		if unit.WorkshopOccurrenceOrdinal != index+1 {
+			t.Fatalf("workshop occurrence ordinal must follow the frozen unit order: unit %d got ordinal %d", index+1, unit.WorkshopOccurrenceOrdinal)
+		}
 		if unit.FurnitureDefinitionID != fiModuleA {
 			t.Fatalf("definition identity must survive: %+v", unit)
 		}

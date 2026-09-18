@@ -126,7 +126,13 @@ type ReleaseCuttingDemandView struct {
 type ReleaseCuttingDemandUnitView struct {
 	FurnitureInstanceID   string
 	FurnitureDefinitionID string
-	Pieces                []ReleaseCuttingDemandPieceView
+	// WorkshopOccurrenceOrdinal (#781) is the frozen manufacturing occurrence
+	// authority: the 1-based position of this unit in the release's frozen
+	// unit order. Decided when the work was liberated (materialization →
+	// working copy → revision → snapshot); never recomputed, never derived
+	// from lexical id order. Both TS flows order workshop occurrences by it.
+	WorkshopOccurrenceOrdinal int
+	Pieces                    []ReleaseCuttingDemandPieceView
 }
 
 type ReleaseCuttingDemandPieceView struct {
@@ -163,10 +169,13 @@ func (s *PostgresStore) GetProjectProductionReleaseCuttingDemand(ctx context.Con
 		SchemaVersion:            snapshot.SchemaVersion,
 		Units:                    make([]ReleaseCuttingDemandUnitView, 0, len(snapshot.Units)),
 	}
-	for _, unit := range snapshot.Units {
+	for unitIndex, unit := range snapshot.Units {
 		unitView := ReleaseCuttingDemandUnitView{
 			FurnitureInstanceID:   unit.Resolved.FurnitureInstanceID,
 			FurnitureDefinitionID: unit.Resolved.FurnitureDefinitionID,
+			// #781: the frozen liberation order IS the manufacturing
+			// occurrence order — the array position of the frozen snapshot.
+			WorkshopOccurrenceOrdinal: unitIndex + 1,
 		}
 		for _, part := range unit.Resolved.BOM.BoardParts {
 			if part.Quantity <= 0 {

@@ -124,21 +124,33 @@ export interface CutRowPieceLink {
  * #781 — canonical workshop-code assignment rule, SHARED by every flow that
  * produces manufacturing codes (BOM rows, piece labels, release demand).
  *
- * Rule: occurrences (muebles) are ordered canonically by their durable key
- * (project item id / furniture instance id — each flow's own stable
- * identity), and the parts inside an occurrence by partId, BEFORE the
- * `-L<n>` line suffix and the sequential `Pnn` are assigned. The same set of
- * occurrences and parts always yields the same codes regardless of array
- * order. Cross-flow caveat: the BOM flow and the release flow key
- * occurrences by different durable ids (project item vs furniture
- * instance), so two identical repeated modules may swap which one is "L2"
- * between project preview and release until the demand contract carries a
- * canonical unit ordinal — documented in
- * docs/machines/ptx-cadmatic4/05_contrato_r4_field_dialect.md.
+ * Rule: occurrences (muebles) are ordered by the FROZEN manufacturing
+ * occurrence ordinal (`workshopOccurrenceOrdinal` — the release lane always
+ * carries it, decided when the work was liberated; project items may carry
+ * it when the payload froze it) and the parts inside an occurrence by
+ * partId, BEFORE the `-L<n>` line suffix and the sequential `Pnn` are
+ * assigned. When no entry carries an ordinal, the durable id order is the
+ * documented fallback. The same physical occurrence therefore keeps the
+ * same code in every flow regardless of array or lexical id order.
  */
-export function canonicalWorkshopOccurrences<T extends { readonly id: string }>(
+export interface WorkshopOccurrenceOrdering {
+  readonly id: string;
+  /** #781 — frozen manufacturing occurrence ordinal (1-based, shared authority). */
+  readonly workshopOccurrenceOrdinal?: number;
+}
+
+export function canonicalWorkshopOccurrences<T extends WorkshopOccurrenceOrdering>(
   occurrences: readonly T[],
 ): T[] {
+  const everyEntryFrozen = occurrences.every(
+    (entry) => Number.isInteger(entry.workshopOccurrenceOrdinal) && (entry.workshopOccurrenceOrdinal ?? 0) >= 1,
+  );
+  if (everyEntryFrozen && occurrences.length > 0) {
+    return [...occurrences].sort(
+      (a, b) =>
+        (a.workshopOccurrenceOrdinal! - b.workshopOccurrenceOrdinal!) || a.id.localeCompare(b.id),
+    );
+  }
   return [...occurrences].sort((a, b) => a.id.localeCompare(b.id));
 }
 

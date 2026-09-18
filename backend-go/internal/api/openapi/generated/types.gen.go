@@ -1089,9 +1089,10 @@ type ReleaseCuttingDemand struct {
 }
 
 type ReleaseCuttingDemandUnit struct {
-	FurnitureInstanceID   string                      `json:"furniture_instance_id"`
-	FurnitureDefinitionID string                      `json:"furniture_definition_id"`
-	Pieces                []ReleaseCuttingDemandPiece `json:"pieces"`
+	FurnitureInstanceID       string                      `json:"furniture_instance_id"`
+	FurnitureDefinitionID     string                      `json:"furniture_definition_id"`
+	WorkshopOccurrenceOrdinal int64                       `json:"workshop_occurrence_ordinal"`
+	Pieces                    []ReleaseCuttingDemandPiece `json:"pieces"`
 }
 
 type ReleaseCuttingDemandPiece struct {

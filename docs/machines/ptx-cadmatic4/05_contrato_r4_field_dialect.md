@@ -51,17 +51,22 @@ manufacturing code           → app, labels, PARTS_REQ.CODE
   referenciarse individualmente. Copias 2..N de una fila con cantidad > 1
   reciben el sufijo `-C<n>` en el optimizador (`MOD-CAJ-01-P04-C2`); la copia
   1 queda sin sufijo (es lo que muestra la app para la fila).
-- **Asignación canónica compartida (revisión §1)**: las ocurrencias de
-  muebles se ordenan por su identidad durable (ítem de proyecto en el flujo
-  BOM, instancia de mueble en el flujo release) y las piezas de cada
-  ocurrencia por `partId` ANTES de numerar `-L<n>`/`Pnn`
-  (`canonicalWorkshopOccurrences`/`canonicalWorkshopParts`): reordenar los
-  arrays de entrada jamás cambia los códigos (tests de reorden en ambos
-  flujos). Caveat documentado: BOM y release clavan ocurrencias por ids de
-  espacios distintos (ítem vs furniture instance), así que dos módulos
-  idénticos repetidos pueden intercambiar cuál es "L2" entre la vista de
-  proyecto y la liberación, hasta que el contrato de demanda cargue el
-  ordinal canónico de unidad (seguimiento posterior a #781).
+- **Asignación canónica compartida — una sola autoridad de ocurrencia
+  (revisión, blocker final)**: el ordinal de ocurrencia de fabricación
+  (`workshop_occurrence_ordinal`) se decide UNA vez al liberar la obra (el
+  orden de unidades congelado en el snapshot de `ProductionRelease`:
+  materialización → working copy → revisión → snapshot) y viaja congelado en
+  el contrato de demanda. El flujo release lo consume directamente; el flujo
+  BOM/proyecto consume el MISMO campo cuando el contexto lo lleva
+  (`ProjectItem.workshopOccurrenceOrdinal`). Ambos usan la regla única
+  `canonicalWorkshopOccurrences` (ordinal congelado; fallback documentado a
+  orden de id durable cuando ningún contexto lo lleva) y ordenan las piezas
+  de cada ocurrencia por `partId` (`canonicalWorkshopParts`) ANTES de numerar
+  `-L<n>`/`Pnn`. Resultado: la misma ocurrencia física recibe el mismo código
+  de vista previa a PTX/CNC, y reordenar arrays o ids léxicos NO puede
+  reasignar un L2 — demostrado por el test cross-flow con órdenes léxicos
+  OPUESTOS entre flujos y comparación por ocurrencia física (no por conjunto
+  de códigos), más los tests de reorden en ambos flujos.
 - **Fail-closed en el compilador r4** (`partCodeAuthority:
   'workshop-labelref'`, `partCodeMaxLength: 50`): `PARTS_REQ.CODE` es el
   labelRef taller; una pieza SIN código (`ptx_compile.part_code_missing`,
