@@ -644,19 +644,59 @@ furniture-instances, GET working-copy y su única superficie PUT
 
 ### Insert from catalog
 
-Con un Project conectado:
+Con un Project conectado, la selección/búsqueda de una definición y su preview siguen siendo **transitorios**. No crear una unidad física sólo porque el usuario abrió una tarjeta o está moviendo una preview.
+
+Flujo canónico:
 
 ```text
-FurnitureDefinition selected
+FurnitureDefinition selected/configured
         ↓
-create FurnitureInstance in Project
+transient resolved placement preview
+        ↓
+user commits placement with click
+        ↓
+create exactly one FurnitureInstance in Project (#390)
         ↓
 server returns furnitureInstanceId
         ↓
-render semantic furniture in SketchUp
+finalize managed semantic furniture + working-copy intent
 ```
 
+La preview puede mostrar geometría resuelta y usar inferencias/snaps sin poseer todavía identidad empresarial. Antes de quedar como objeto gestionado/productivo, el commit debe obtener identidad autoritativa.
+
+La creación en commit debe ser idempotente y definir cleanup/retry/orphan handling. Un fallo remoto no puede dejar un mueble que parezca válido con un ID local/falso.
+
 En la primera implementación connected/online, no permitir instancias productivas locales sin identidad autoritativa. Offline creation requerirá un contrato propio de IDs/sync y queda fuera del MVP.
+
+### Design authoring defaults and overrides
+
+La working copy puede poseer defaults de autoría del **Design** para acelerar trabajo repetitivo, por ejemplo roles de material y elecciones de herrajes explícitamente soportadas por las definiciones.
+
+Conceptualmente:
+
+```text
+Design working copy
+├── authoringDefaults
+│   ├── material choices
+│   ├── hardware choices
+│   └── explicitly defaultable parameters
+└── items
+    ├── inherited/default-backed intent
+    └── explicit furniture overrides
+```
+
+Reglas:
+
+- el scope es Design, no una variable de sesión del HtmlDialog;
+- no se presenta como Project-wide truth porque un Project puede tener diseños alternativos;
+- el estado inherited/override es explícito, no inferido comparando valores iguales;
+- cambiar el default no muta silenciosamente los items existentes;
+- aplicar un nuevo default a items existentes es un comando explícito/batch (#471/#784);
+- cada `DesignRevisionItem` publicada conserva los valores efectivos necesarios para interpretación histórica exacta;
+- una revisión puede snapshotear también los defaults de autoría para continuidad de edición, pero manufacturing/release nunca re-resuelve un item histórico contra defaults actuales;
+- published revisions siguen inmutables.
+
+La UX canónica vive en `sketchup-designer-workflow.md` y #784.
 
 ---
 
