@@ -6,14 +6,15 @@ This file is the scoped entry point for any agent modifying `apps/sketchup-exten
 
 Before implementation, read:
 
-1. `../../docs/architecture/sketchup-plugin-excellence.md`;
-2. `../../docs/architecture/sketchup-backend-web-integration-excellence.md`;
-3. `../../docs/architecture/sketchup-authoring-interaction-contract.md`;
-4. `../../docs/sketchup-excellence-execution-plan.md`;
-5. `../../docs/architecture/sketchup-interaction-model.md`;
-6. `../../docs/architecture/sketchup-native-entity-model.md` + ADR-0004;
-7. `../../docs/sketchup-manufacturing-contract.md` + ADR-0001;
-8. the exact GitHub issue and all hard prerequisites/comments.
+1. `../../docs/architecture/sketchup-designer-workflow.md`;
+2. `../../docs/architecture/sketchup-plugin-excellence.md`;
+3. `../../docs/architecture/sketchup-backend-web-integration-excellence.md`;
+4. `../../docs/architecture/sketchup-authoring-interaction-contract.md`;
+5. `../../docs/sketchup-excellence-execution-plan.md`;
+6. `../../docs/architecture/sketchup-interaction-model.md`;
+7. `../../docs/architecture/sketchup-native-entity-model.md` + ADR-0004;
+8. `../../docs/sketchup-manufacturing-contract.md` + ADR-0001;
+9. the exact GitHub issue and all hard prerequisites/comments.
 
 Additional routing:
 
@@ -25,6 +26,8 @@ Additional routing:
 - React Project/Design workspace: #396 and its children #500–#502;
 - auth/session/media/client credentials: #460;
 - audit/request/trace/support diagnostics: #461 + #504;
+- placement/semantic anchors/snapping/repeat: #469 + `sketchup-designer-workflow.md`;
+- Design defaults/inheritance/contextual no-selection Inspector: #784 + #471;
 - materials/thickness: `material-aware-furniture-resolution.md` and #402–#405;
 - relationships/hardware/machining: #356/#350 and `manufacturing-feature-model.md`;
 - machine output/evidence: #348/#351–#355 and #503.

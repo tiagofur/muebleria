@@ -3,7 +3,7 @@
 Status: **Canonical measurement method**  
 Program: #465  
 Owner issue: #506  
-Related: #466–#474, #498–#504, #355  
+Related: #466–#474, #498–#504, #784, #355  
 Date: 2026-08-30 America/Mexico_City
 
 ## 1. Purpose
@@ -171,28 +171,44 @@ Success requires correct interpretation, not merely dialog open.
 
 ```text
 navigate/search/filter catalog
+→ use top-level category shortcuts where available
 → identify correct base cabinet among similar items
 → understand availability/version state
 ```
+
+Repeat-use runs should explicitly measure whether **recent items** and, if implemented, favorites/pinned items remove unnecessary navigation.
 
 ### T3 — Place furniture
 
 ```text
 choose definition/preset
-→ preview/snapping
+→ preview follows cursor from a visible/useful semantic anchor
+→ understand front/orientation
+→ use SketchUp inference + at least one semantic snap
 → rotate/offset if needed
 → commit one correct placement
 ```
 
-No origin-first workaround in the target flow.
+No origin-first workaround in the target flow. The benchmark records whether the participant understands what point they are "holding" and whether cancel leaves them confident that nothing was created.
 
-### T4 — Configure material and typed parameter
+Run the equivalent task once from the reusable Library and once from pending Project Furniture when the connected flow is available; both should feel like the same placement interaction.
+
+### T4 — Configure Design default, furniture override and typed parameter
+
+When #784 is included:
 
 ```text
-change BODY material
+click/select empty model context
+→ Inspector becomes Design configuration
+→ set one material default
+→ place/select furniture and confirm inherited state
+→ create one furniture override
+→ restore it to Design
 → change one non-trivial typed parameter
 → understand pending/resolving/accepted result
 ```
+
+Measure whether the user searches for a separate Settings screen. The target is that contextual Inspector scope is discoverable without multiplying top-level screens.
 
 ### T5 — Edit internal component
 
@@ -230,7 +246,7 @@ select part
 → hide overlay without model mutation
 ```
 
-### T9 — Batch edit
+### T9 — Batch edit / roll out a Design default
 
 When #471 is included:
 
@@ -239,6 +255,16 @@ select several furniture units
 → recognize mixed/common values
 → apply one compatible batch change
 → understand any incompatibility
+```
+
+When #784 is also included:
+
+```text
+change one Design default
+→ choose "Aplicar a muebles existentes…"
+→ understand affected/compatible/overridden counts
+→ preserve explicit overrides by default
+→ confirm batch
 ```
 
 ### T10 — Connect exact Project/Design
@@ -410,6 +436,7 @@ Frequency is reported only within the observed sample; no population claim.
 - placement → #469;
 - manufacturing overlay → #470;
 - batch editing → #471;
+- Design defaults/inheritance/no-selection Inspector → #784;
 - degraded/recovery → #474;
 - catalog/parameter administration → #497;
 - library/onboarding/usability → #506;
