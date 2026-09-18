@@ -1,8 +1,8 @@
 # Auditoría de Aceptación — Programa #670: Herrajes y Conjuntos Paramétricos 3D
 
-**Fecha:** 2026-09-17  
+**Fecha:** 2026-09-18  
 **Programa:** Granete, Programa #670 (#670-A a #670-E)  
-**Alcance evaluado:** Contrato de arquitectura `docs/architecture/hardware-3d-assets-and-assemblies.md`, dossiers técnicos #670-A/B/C/D y piloto comercial MERIVOBOX #670-E (`docs/architecture/merivobox-pilot.md`).  
+**Alcance evaluado:** Contrato de arquitectura `docs/architecture/hardware-3d-assets-and-assemblies.md`, dossiers técnicos #670-A/B/C/D y piloto comercial MERIVOBOX #670-E (`docs/architecture/merivobox-pilot.md`), incluyendo la ronda de revisión R9–R14 (configuración canónica, paridad cross-renderer y evidencia host real).  
 **Estado:** AUDITORÍA TÉCNICA FORMAL.
 
 ---
@@ -71,26 +71,32 @@ El Programa #670 implementa la arquitectura completa para la gestión, resoluci�
 - Prueba R5 en PostgreSQL demuestra que mutar el catálogo o la receta posterior a la publicación no altera el snapshot histórico recuperado.
 
 ### 2.5. Configuración Canónica Piloto y Paridad Cross-Renderer (R9–R12)
-- **Cumplimiento:** 100% verificado.
-- **Autoridad de Espesor (R9):** Tanto Proyectar WebGL como SketchUp consumen el espesor de 16 mm de fondo y trasera desde la autoridad de `MaterialBoard` (`mat-merivobox-board-16`, asignado al rol `MERIVOBOX_BOARD` en el catálogo). Ningún renderer ni `BoardMesh` tiene valores hardcodeados de espesor.
-- **Unificación Semántica $W$ vs $LW$ (R10, R11):** La entidad Mueble/Layout calcula $W \to LW$ restando los espesores reales de los costados de carcasa (15 mm + 15 mm en el seed = 30 mm). El motor `ResolveAgregadoAssembly` recibe directamente $LW$ (570 mm para W600, 770 mm para W800) y no asume estructura de carcasa. En todos los tests de Go y TS las variables y aserciones se denominan inequívocamente `lwMm` / `assemblyWidthMm`.
-- **Matriz de Paridad Cross-Renderer y Cross-Runtime (R12):**
+- **Autoridad numérica única (R12):** `contracts/fixtures/merivobox-pilot-canonical.json` define la configuración canónica (outer W 600 mm, costados 15/15 mm → LW 570 mm, NL 500; fondo 512 × 484 × 16 mm, trasera 512 × 69 × 16 mm; W 800 → 712 mm; delta miembros derechos +200 mm). Los CUATRO runtimes la consumen y comparan numéricamente:
+  - Go: `TestMerivoboxCanonicalPilotParity_R12` + `TestMerivoboxCanonicalPilotHostEvidenceParity_R12` (`backend-go/internal/domain/engine/merivobox_canonical_test.go`).
+  - TS: `packages/domain/src/merivoboxPilotCanonical.test.ts` (resolución canónica, autoridad de material y comparación contra la evidencia host).
+  - Proyectar WebGL: `tests/visual/proyectar-webgl.spec.ts` Scenario 8 lee el mismo JSON para todas sus aserciones dimensionales.
+  - SketchUp: `test_r12_canonical_configuration_parity` en la suite unit (`rake verify`, CI) y en el smoke host real (`TC_MerivoboxPilotSmoke`).
+- **Autoridad de Espesor (R9):** el espesor fabricado de fondo y trasera proviene de la `MaterialBoard` vinculada (rol `MERIVOBOX_BOARD` → `mat-merivobox-board-16`, 16 mm), no del renderer ni de la geometría nominal. El contrato canónico fija deliberadamente la geometría nominal en 15 mm — en conflicto con el material — de modo que sólo la MaterialBoard puede producir el 16 mm observado; el test TS `R9: fabricated thickness authority is the bound MaterialBoard...` y el Scenario 8 de WebGL lo demuestran, y `AssemblyMesh`/`BoardMesh` no contienen ningún espesor hardcodeado (fallan cerrado si falta la autoridad).
+- **Unificación semántica $W$ vs $LW$ (R10, R11):** la entidad Mueble/Layout calcula $LW = W - (\text{leftThickness} + \text{rightThickness})$ con los espesores REALES de la carcasa del seed (Costado Lateral → INTERIOR → `mat-arauco-blanco` 15 mm efectivo; el nominal de 18 mm pierde ante el material). El motor `ResolveAgregadoAssembly` recibe exclusivamente $LW$ (570 mm para W600; 770 mm para W800) y no infiere carcase. En Scenario 8 la cadena se verifica con readback del grafo de escena vivo: `assemblyResolvedWidth = posX(side-right) − posX(side-left) = 570 = 600 − 15 − 15` y `bottom.width = assemblyResolvedWidth − 58`. Los tests genéricos de Go y TS documentan explícitamente que sus `WidthMm`/`widthMm` son dimensiones del assembly (no W exterior de mueble).
+- **Corrección de auditoría (importante):** la evidencia host anterior estaba editada a mano y el smoke nunca había corrido verde de verdad en el host (referenciaba una clase del suite unit que TestUp no carga, escribía literales en vez de valores medidos, y sus assets de bytes falsos caían silenciosamente al camino fallback sin MountFrame). Esta ronda lo corrige: smoke autocontenido, assets SKP reales generados por el host (con desvinculación del modelo activo), E9 con expectativa compuesta de constantes del layout, E12 con capturas exactas undo/redo, y evidencia con valores MEDIDOS desde el modelo. La paridad declarada abajo sólo es válida a partir de esta corrección.
+- **Matriz de Paridad Cross-Renderer y Cross-Runtime (verificada contra la configuración canónica y la evidencia host real):**
 
-| Propiedad Dimensional / Lógica | Go Domain / Engine | TS Domain | Proyectar WebGL | SketchUp Host | Paridad |
+| Propiedad Dimensional / Lógica | Go Domain / Engine | TS Domain | Proyectar WebGL | SketchUp Host (evidencia medida) | Paridad |
 |---|---|---|---|---|---|
-| **Assembly Inner Width ($LW$)** | 570.0 mm | 570.0 mm | 570.0 mm | 570.0 mm | **PARIDAD EXACTA** |
-| **Fondo: Ancho (W600)** | 512.0 mm | 512.0 mm | 512.0 mm | 512.0 mm | **PARIDAD EXACTA** |
-| **Fondo: Largo (NL 500)** | 484.0 mm | 484.0 mm | 484.0 mm | 484.0 mm | **PARIDAD EXACTA** |
-| **Fondo: Espesor** | 16.0 mm | 16.0 mm | 16.0 mm (MaterialBoard) | 16.0 mm (MaterialBoard) | **PARIDAD EXACTA** |
-| **Trasera: Ancho (W600)** | 512.0 mm | 512.0 mm | 512.0 mm | 512.0 mm | **PARIDAD EXACTA** |
+| **Assembly Inner Width ($LW$)** | 570.0 mm | 570.0 mm | 570.0 mm (readback de escena) | 570.0 mm (`side_right.before_translation_mm`) | **PARIDAD EXACTA** |
+| **Fondo: Ancho (W600/NL500)** | 512.0 mm | 512.0 mm | 512.0 mm | 511.99999999999994 mm (≈512, ruido float) | **PARIDAD EXACTA** |
+| **Fondo: Largo (NL 500)** | 484.0 mm | 484.0 mm | 484.0 mm | 483.99999999999994 mm (≈484) | **PARIDAD EXACTA** |
+| **Fondo: Espesor** | 16.0 mm (MaterialBoard) | 16.0 mm (MaterialBoard, nominal 15 ignorado) | 16.0 mm (MaterialBoard) | 15.999999999999998 mm (≈16) | **PARIDAD EXACTA** |
+| **Trasera: Ancho (W600)** | 512.0 mm | 512.0 mm | 512.0 mm | 511.99999999999994 mm (≈512) | **PARIDAD EXACTA** |
 | **Trasera: Alto (Altura M)** | 69.0 mm | 69.0 mm | 69.0 mm | 69.0 mm | **PARIDAD EXACTA** |
-| **Trasera: Espesor** | 16.0 mm | 16.0 mm | 16.0 mm (MaterialBoard) | 16.0 mm (MaterialBoard) | **PARIDAD EXACTA** |
+| **Trasera: Espesor** | 16.0 mm | 16.0 mm | 16.0 mm | 15.999999999999998 mm (≈16) | **PARIDAD EXACTA** |
 | **Fondo/Trasera: Ancho (W800)** | 712.0 mm | 712.0 mm | 712.0 mm | 712.0 mm | **PARIDAD EXACTA** |
-| **Delta Miembros Derechos (W800)** | +200.0 mm | +200.0 mm | +200.0 mm | +200.0 mm | **PARIDAD EXACTA** |
-| **Invariante de Escala Rígida** | [1.0, 1.0, 1.0] | [1.0, 1.0, 1.0] | [1.0, 1.0, 1.0] | [1.0, 1.0, 1.0] | **PARIDAD EXACTA** |
-| **Determinante de Base Rígida** | +1.0 | +1.0 | +1.0 | +1.0 | **PARIDAD EXACTA** |
-| **Selección de Variante (NL 450 vs 500)** | Exacta por holgura nominal | Exacta por holgura nominal | Exacta por holgura nominal | Exacta por holgura nominal | **PARIDAD EXACTA** |
+| **Delta Miembros Derechos (W800)** | +200.0 mm | +200.0 mm | +200.0 mm | 199.9999999999999 mm (≈200) | **PARIDAD EXACTA** |
+| **Invariante de Escala Rígida** | [1.0, 1.0, 1.0] | [1.0, 1.0, 1.0] | [1.0, 1.0, 1.0] | det 1.0 before/after | **PARIDAD EXACTA** |
+| **Selección de Variante (NL 450 vs 500)** | Exacta por holgura 3.0 mm | Exacta por holgura 3.0 mm | Exacta (`hw-merivobox-450/500`) | Definiciones distintas por NL | **PARIDAD EXACTA** |
 | **BOM Comercial de Kit** | `kit-merivobox-m` (qty 1) | `kit-merivobox-m` (qty 1) | N/A (proyección 3D) | `kit-merivobox-m` (metadata) | **PARIDAD EXACTA** |
+
+La comparación numérica no es prosa: los tests de paridad Go y TS leen la evidencia host comprometida y fallan si cualquier runtime se desvía del canónico (tolerancia 1e-6 mm por el ruido inches→mm del readback).
 
 ---
 
@@ -98,18 +104,26 @@ El Programa #670 implementa la arquitectura completa para la gestión, resoluci�
 
 | Componente / Suite | Archivo de Prueba | Cobertura / Casos | Resultado |
 |---|---|---|---|
-| **Go Engine** | `backend-go/internal/domain/engine/assembly_resolver_test.go` | E1–E20, R3 ($W$ vs $LW$), R6 (límites estrictos), R7 (independencia visual) | **PASS** (0.28s) |
-| **Go Storage** | `backend-go/internal/storage/agregado_revisions_test.go` | R5 (persistencia real en PostgreSQL, inmutabilidad S1 frente a R2) | **PASS** (0.03s) |
-| **TS Domain** | `packages/domain/src/agregadoAssembly.test.ts` | E1–E20, paridad de fórmulas, BOM kit policy, snapshots E14/E15 | **PASS** (1508/1508) |
-| **Proyectar WebGL** | `tests/visual/proyectar-webgl.spec.ts` | Escenario 8: mutación W600/A -> W800/A -> W800/B en Three.js / WebGL | **PASS** |
-| **SketchUp Extension (Unit)** | `apps/sketchup-extension/test/unit/merivobox_pilot_test.rb` | LayoutContract, deltas continuos, rigidez, no-scaling, rechazo de mirror | **PASS** (879 runs, 0 err) |
-| **SketchUp Extension (Smoke)** | `apps/sketchup-extension/test/testup/TC_MerivoboxPilotSmoke.rb` | Real-host smoke: E1/E2, E3/E20, E5/E6, E9/E10, E11 (reopen), E12 (undo), E13 (fail) | **PASS** |
-| **Evidencia Host Guardada** | `progress/host_smoke_670_e_merivobox_pilot_evidence.json` | Métricas exactas: RBZ sha256, deltas, transforms, errores de punto (<1e-3 mm) | **VERIFICADO** |
+| **Go Engine** | `backend-go/internal/domain/engine/assembly_resolver_test.go` | E1–E20, R3 ($W$ vs $LW$), R6 (límites estrictos), R7 (independencia visual) | **PASS** |
+| **Go Canonical Parity** | `backend-go/internal/domain/engine/merivobox_canonical_test.go` | R12: resolución canónica + comparación numérica contra la evidencia host | **PASS** |
+| **Go Storage** | `backend-go/internal/storage/agregado_revisions_test.go` | R5 (persistencia real en PostgreSQL, inmutabilidad S1 frente a R2) | **PASS** (contenedor desechable) |
+| **TS Domain** | `packages/domain/src/agregadoAssembly.test.ts` | E1–E20, paridad de fórmulas, BOM kit policy, snapshots E14/E15 | **PASS** (1531/1531 en el paquete) |
+| **TS Canonical Parity** | `packages/domain/src/merivoboxPilotCanonical.test.ts` | R9 (material > geometría nominal), R10 (cadena W→LW), R12 (canónico + evidencia host) | **PASS** (6/6) |
+| **UI / BoardMesh–AssemblyMesh** | `packages/ui` (suite completa) | Exposición de `materialId`/`size` en userData; sin espesores en renderer | **PASS** (1945/1945) |
+| **Proyectar WebGL** | `tests/visual/proyectar-webgl.spec.ts` | Escenario 8 (piloto canónico: W600/A → W800/A → W800/B, cadena W→LW con readback) + suite completa | **PASS** (8/8, Chromium real) |
+| **SketchUp Extension (Verify)** | `bundle exec rake verify` | RuboCop 0 ofensas, unit 880 runs / 5951 aserciones (incl. paridad canónica R12), boundary 6/3179 | **PASS** |
+| **SketchUp Extension (Smoke host real)** | `apps/sketchup-extension/test/testup/TC_MerivoboxPilotSmoke.rb` | Host real SketchUp 2026: E1/E2, E3/E20, E5/E6, E9/E10 (MountFrame, error 0.0 mm), E11 (reopen), E12 (undo/redo), E13 (fail-before-mutate), R12 (paridad canónica) | **PASS** (8/8, 108 aserciones, TestUp CI `Success`) |
+| **Config de ejecución host** | `apps/sketchup-extension/testup-ci-670e.yml` | Reproduce el smoke host: `SketchUp -RubyStartupArg 'TestUp:CI:Config: …/testup-ci-670e.yml'` | **VERIFICADO** |
+| **Evidencia Host Guardada** | `progress/host_smoke_670_e_merivobox_pilot_evidence.json` + `progress/host_smoke_670_e_testup_ci.json` | Valores MEDIDOS del modelo (no literales); head = HEAD de código exacto `159fa7e9`; RBZ sha256 `f9f0f02cc8a4ab87ac3e40796e5a29efda771a35f0ec0209b8fdba816564e524` | **VERIFICADO** |
+
+**Nota de frescura de evidencia (R13):** la evidencia host se regeneró ejecutando el smoke real contra el HEAD de código final (`159fa7e9`) con el RBZ reinstalado desde `dist/` (sha `f9f0f02c…`, verificado por `rake verify`). El commit final del PR añade únicamente esta evidencia, este dossier y el reporte de progreso (cero líneas de código).
 
 ---
 
 ## 4. Conclusión de la Auditoría
 
-El Incremento **#670-E** cumple satisfactoriamente todos los criterios de aceptación y las reglas arquitectónicas del Programa #670. No existen brechas funcionales en los componentes comprometidos. Las áreas diferidas (CAD propietario en repo, exportación de perforaciones a CNC y animación interactiva) están correctamente clasificadas como `OUT-OF-SCOPE` con sus caminos de integración documentados.
+El Incremento **#670-E** cumple satisfactoriamente todos los criterios de aceptación y las reglas arquitectónicas del Programa #670, incluyendo la ronda de revisión R9–R14: autoridad de espesor desde MaterialBoard (R9), semántica única $W \to LW$ end-to-end (R10/R11), configuración canónica única consumida y comparada numéricamente por Go, TS, WebGL y SketchUp (R12), y evidencia host real regenerada desde el HEAD de código exacto con RBZ verificado (R13/R14). La paridad cross-renderer declarada en §2.5 está respaldada por tests que leen la evidencia host comprometida, no por prosa.
+
+No existen brechas funcionales en los componentes comprometidos. Las áreas diferidas (CAD propietario en repo, exportación de perforaciones a CNC y animación interactiva) están correctamente clasificadas como `OUT-OF-SCOPE` con sus caminos de integración documentados.
 
 La entrega está lista para revisión independiente y handoff.
