@@ -350,7 +350,19 @@ STOP RULE:
     sin evidencia -> blank / configurable / fail closed
     nunca “probably” -> hardcoded bytes
 
-## 17. Gate antes de volver a pedir prueba al cliente
+## 17. Issues de implementación
+
+- #787 — META r5.
+- #788 — R5-A strict PTX spec validator.
+- #789 — R5-B PARTS_INF/PARTS_UDI, labels y CNC identity.
+- #790 — R5-C receiver profile HPP250/CAD4.
+- #791 — R5-D CUTS semantics + differential/golden.
+- #792 — R5-E CADLink preflight, RLT y field pack.
+- #793 — R5-F integración final r5 y gate de campo.
+
+Orden recomendado: #788 y #789 pueden investigarse en paralelo; #790 depende de la evidencia de #788; #791 integra decisiones de #789/#790; #792 puede avanzar en tooling sin bytes finales; #793 sólo inicia cuando #788–#792 están cerradas.
+
+## 18. Gate antes de volver a pedir prueba al cliente
 
 No enviar nada hasta que todo esto sea PASS:
 
@@ -367,7 +379,7 @@ No enviar nada hasta que todo esto sea PASS:
 - CI exact HEAD;
 - revision independiente.
 
-## 18. Gate de exito real
+## 19. Gate de exito real
 
 Nivel 1 — CADLink:
 
@@ -389,7 +401,7 @@ Nivel 3 — no-cut machine dry review.
 
 Nivel 4 — physical controlled cut, fuera de la primera validacion r5.
 
-## 19. Definition of Done
+## 20. Definition of Done
 
 r5 queda listo para campo cuando existe:
 
