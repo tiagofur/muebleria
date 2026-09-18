@@ -30,6 +30,21 @@ export function allowLoggedOutSessionProbe(message: string, resourceUrl: string)
   );
 }
 
+/**
+ * #781 — projects without a production release legitimately 404 on the
+ * workshop-occurrences endpoint. The frontend degrades to the live canonical
+ * order; this is not a user-visible error.
+ */
+export function allowWorkshopOccurrences404(message: string, resourceUrl: string): boolean {
+  return message.includes('404') && resourceUrl.includes('/workshop-occurrences');
+}
+
+/** Composed allowlist: logged-out auth probes + expected workshop-occurrences 404. */
+export function allowExpectedTransientErrors(message: string, resourceUrl: string): boolean {
+  return allowLoggedOutSessionProbe(message, resourceUrl)
+    || allowWorkshopOccurrences404(message, resourceUrl);
+}
+
 export function collectBrowserErrors(
   page: Page,
   options: { readonly allow?: ConsoleErrorAllow } = {},

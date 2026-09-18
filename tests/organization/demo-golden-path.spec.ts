@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
+import { allowExpectedTransientErrors, collectBrowserErrors } from './support/browserErrors';
 import { required } from './support/api';
 
 /**
@@ -505,13 +505,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
   // ------------------------------------------------------------------
   test('stage 1b — accepted Q without a release creates no P, no Ingeniería entry and no release downloads', async ({ page }) => {
     test.setTimeout(90_000);
-    const browserErrors = collectBrowserErrors(page, {
-      allow: (msg, url) =>
-        allowLoggedOutSessionProbe(msg, url)
-        // #781: the workshop-occurrences endpoint legitimately 404s for
-        // projects without a release; the frontend degrades to live order.
-        || (msg.includes('404') && url.includes('/workshop-occurrences')),
-    });
+    const browserErrors = collectBrowserErrors(page, { allow: allowExpectedTransientErrors });
     const apiBase = required('ORGANIZATION_API_BASE');
 
     // Acceptance is a commercial fact only: no release row exists.
