@@ -69,7 +69,6 @@ import {
   estimateBoardSheets,
   generateCutRows,
   generateHardwareList,
-  generateModuleLabels,
   generateProjectMaterialSummary,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
@@ -230,6 +229,7 @@ import {
 } from './engineeringReleaseContext';
 import {
   deriveEngineeringWorkshopOccurrenceView,
+  resolveEffectiveOccurrenceContext,
   useProjectWorkshopOccurrences,
   workshopOccurrenceQueryKey,
 } from './workshopOccurrenceContext';
@@ -1553,6 +1553,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             : engineeringReleaseContext.kind === 'loading'
               ? { state: 'loading' as const }
               : undefined;
+        // #781 micro-task #3B — the workshop query only starts after the
+        // exact release verifies, so while the URL already pins a releaseId
+        // but the release context still loads, the occurrence context would
+        // read `idle` (live allowed). That window reads `loading` instead —
+        // the fetch itself never starts early, only the view states combine.
+        const effectiveOccurrenceContext = resolveEffectiveOccurrenceContext({
+          routeReleaseId: routeEngineeringReleaseId,
+          releaseContextKind: engineeringReleaseContext.kind,
+          occurrenceContext: projectWorkshopOccurrences,
+        });
         // #781 micro-task #3 — the occurrence-gated BOM view: while the
         // exact release's frozen authority is still loading, NOTHING
         // live-derived is produced (no BOM, no cut rows, no labels) — the
@@ -1562,7 +1572,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           project: engProject,
           catalog,
           modules,
-          occurrenceContext: projectWorkshopOccurrences,
+          occurrenceContext: effectiveOccurrenceContext,
+          moduleLabelsMeta: {
+            customerName: resolveCustomerName(engProject.customerId, customers),
+            revision: engProject.production?.revision?.toString(),
+          },
         });
         const engBomProject = engWorkshopView.bomProject;
         const engModules = engWorkshopView.modules;
@@ -1673,22 +1687,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             };
           }
         }
-        let engModuleLabels: ReturnType<typeof generateModuleLabels> | null = null;
-        let engModuleLabelsError: string | null = null;
-        // engLabels/engLabelsError come from the occurrence-gated view above
-        // (null while the frozen authority loads — never live labels).
+        // engLabels/engLabelsError/engModuleLabels/engModuleLabelsError come
+        // from the occurrence-gated view above (all null while any release
+        // authority loads — never live labels).
         const engLabels = engWorkshopView.labels;
         const engLabelsError = engWorkshopView.labelsError;
-        if (catalog) {
-          try {
-            engModuleLabels = generateModuleLabels(engProject, catalog, {
-              customerName: resolveCustomerName(engProject.customerId, customers),
-              revision: engProject.production?.revision?.toString(),
-            });
-          } catch (err) {
-            engModuleLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas de módulo';
-          }
-        }
+        const engModuleLabels = engWorkshopView.moduleLabels;
+        const engModuleLabelsError = engWorkshopView.moduleLabelsError;
         let engHardwareRows: ReturnType<typeof generateHardwareList> | null = null;
         let engHardwareError: string | null = null;
         if (catalog) {

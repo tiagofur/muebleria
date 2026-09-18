@@ -24,13 +24,16 @@ import {
 import {
   applyFrozenWorkshopOccurrenceOrdinals,
   generateCutRows,
+  generateModuleLabels,
   generatePieceLabels,
   type Catalog,
   type Module,
+  type ModuleLabel,
   type Project,
   type ProjectItem,
   type WorkshopOccurrenceProjection,
 } from '@granete/domain';
+import type { EngineeringReleaseContext } from './engineeringReleaseContext';
 
 export function workshopOccurrenceQueryKey(
   scope: readonly unknown[],
@@ -157,6 +160,29 @@ export function useProjectWorkshopOccurrences(args: {
 }
 
 /**
+ * Effective occurrence authority for the Engineering screen (#781 micro-task
+ * #3B): the workshop-occurrences query only starts AFTER the exact release
+ * is verified, so while the URL already pins a releaseId but the release
+ * context is still loading, the occurrence context would read `idle` — and
+ * `idle` means "live allowed". That window must read `loading` instead, so
+ * no live BOM/labels are derived before either authority resolves. This
+ * never starts the fetch early: it only combines already-held states for
+ * the view. Release-context `error` keeps its existing EmptyState (the
+ * caller short-circuits before deriving), and pre-release (no releaseId)
+ * keeps the legitimate live working view.
+ */
+export function resolveEffectiveOccurrenceContext(args: {
+  readonly routeReleaseId: string | null | undefined;
+  readonly releaseContextKind: EngineeringReleaseContext['kind'];
+  readonly occurrenceContext: ProjectWorkshopOccurrenceContext;
+}): ProjectWorkshopOccurrenceContext {
+  if (args.routeReleaseId && args.releaseContextKind === 'loading') {
+    return { kind: 'loading' };
+  }
+  return args.occurrenceContext;
+}
+
+/**
  * Derives the Engineering/BOM item context from the frozen occurrence
  * authority. Freeze applies ONLY when the release covers every current
  * instance (a drifted project keeps the live view — never a silent mix of
@@ -220,6 +246,8 @@ export interface EngineeringWorkshopOccurrenceView {
   readonly cutError: string | null;
   readonly labels: ReturnType<typeof generatePieceLabels> | null;
   readonly labelsError: string | null;
+  readonly moduleLabels: ModuleLabel[] | null;
+  readonly moduleLabelsError: string | null;
 }
 
 export function deriveEngineeringWorkshopOccurrenceView(args: {
@@ -227,8 +255,10 @@ export function deriveEngineeringWorkshopOccurrenceView(args: {
   readonly catalog: Catalog | null;
   readonly modules: readonly Module[];
   readonly occurrenceContext: ProjectWorkshopOccurrenceContext;
+  readonly moduleLabelsMeta: { readonly customerName: string; readonly revision: string | undefined };
 }): EngineeringWorkshopOccurrenceView {
-  if (args.occurrenceContext.kind === 'loading') {
+  const authorityLoading = args.occurrenceContext.kind === 'loading';
+  if (authorityLoading) {
     return {
       occurrencesLoading: true,
       bomProject: null,
@@ -237,6 +267,8 @@ export function deriveEngineeringWorkshopOccurrenceView(args: {
       cutError: null,
       labels: null,
       labelsError: null,
+      moduleLabels: null,
+      moduleLabelsError: null,
     };
   }
   let bomProject: Project | null = null;
@@ -270,6 +302,22 @@ export function deriveEngineeringWorkshopOccurrenceView(args: {
       labelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas';
     }
   }
+  // #781 micro-task #3B — module labels also derive from the live project,
+  // so they get the SAME authority gate (never live labels while any release
+  // authority loads). Ready/pre-release behavior is unchanged: they keep
+  // deriving from the live project, exactly as before.
+  let moduleLabels: ModuleLabel[] | null = null;
+  let moduleLabelsError: string | null = null;
+  if (args.catalog && !authorityLoading) {
+    try {
+      moduleLabels = generateModuleLabels(args.project, args.catalog, {
+        customerName: args.moduleLabelsMeta.customerName,
+        revision: args.moduleLabelsMeta.revision,
+      });
+    } catch (err) {
+      moduleLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas de módulo';
+    }
+  }
   return {
     occurrencesLoading: false,
     bomProject,
@@ -278,5 +326,7 @@ export function deriveEngineeringWorkshopOccurrenceView(args: {
     cutError: workshopError ?? cutError,
     labels,
     labelsError,
+    moduleLabels,
+    moduleLabelsError,
   };
 }

@@ -14,6 +14,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
+  Catalog,
   Module,
   Project,
   WorkshopOccurrenceProjection,
@@ -22,6 +23,7 @@ import {
   deriveEngineeringBomItems,
   deriveEngineeringWorkshopOccurrenceView,
   fetchProjectWorkshopOccurrences,
+  resolveEffectiveOccurrenceContext,
   resolveWorkshopOccurrenceContext,
   workshopOccurrenceQueryKey,
 } from './workshopOccurrenceContext';
@@ -213,6 +215,7 @@ describe('deriveEngineeringWorkshopOccurrenceView — no live rows/labels while 
       catalog: null,
       modules: [{ id: 'mod-1' } as Module],
       occurrenceContext: { kind: 'loading' },
+      moduleLabelsMeta: { customerName: 'Lab', revision: undefined },
     });
     expect(view.occurrencesLoading).toBe(true);
     // The regression itself: no live BOM, no live cut rows, no live labels,
@@ -231,6 +234,7 @@ describe('deriveEngineeringWorkshopOccurrenceView — no live rows/labels while 
       catalog: null,
       modules: [],
       occurrenceContext: { kind: 'error', message: 'boom-500' },
+      moduleLabelsMeta: { customerName: 'Lab', revision: undefined },
     });
     expect(view.occurrencesLoading).toBe(false);
     expect(view.bomProject).toBeNull();
@@ -246,11 +250,105 @@ describe('deriveEngineeringWorkshopOccurrenceView — no live rows/labels while 
       catalog: null,
       modules: [],
       occurrenceContext: { kind: 'idle' },
+      moduleLabelsMeta: { customerName: 'Lab', revision: undefined },
     });
     expect(view.occurrencesLoading).toBe(false);
     expect(view.bomProject).not.toBeNull();
     expect(view.bomProject!.items).toBe(project.items);
     expect(view.cutRows).toBeNull();
     expect(view.cutError).toBeNull();
+  });
+});
+
+describe('resolveEffectiveOccurrenceContext — closing the release-loading window (#781 micro-task #3B)', () => {
+  const RELEASE_ID = '20000000-0000-4000-8000-000000000002';
+
+  it('1 — route release + release loading → effective loading, view derives nothing live', () => {
+    const effective = resolveEffectiveOccurrenceContext({
+      routeReleaseId: RELEASE_ID,
+      releaseContextKind: 'loading',
+      occurrenceContext: { kind: 'idle' },
+    });
+    expect(effective).toEqual({ kind: 'loading' });
+    const view = deriveEngineeringWorkshopOccurrenceView({
+      project: liveProject(),
+      catalog: null,
+      modules: [{ id: 'mod-1' } as Module],
+      occurrenceContext: effective,
+      moduleLabelsMeta: { customerName: 'Lab', revision: undefined },
+    });
+    expect(view.occurrencesLoading).toBe(true);
+    expect(view.bomProject).toBeNull();
+    expect(view.cutRows).toBeNull();
+    expect(view.labels).toBeNull();
+    expect(view.moduleLabels).toBeNull();
+  });
+
+  it('2 — occurrence loading gates module labels (never attempted, no error either)', () => {
+    const bogusCatalog = {} as Catalog;
+    const loadingView = deriveEngineeringWorkshopOccurrenceView({
+      project: liveProject(),
+      catalog: bogusCatalog,
+      modules: [],
+      occurrenceContext: { kind: 'loading' },
+      moduleLabelsMeta: { customerName: 'Lab', revision: undefined },
+    });
+    expect(loadingView.moduleLabels).toBeNull();
+    expect(loadingView.moduleLabelsError).toBeNull();
+    // Contrast: the SAME bogus catalog under idle IS attempted and fails
+    // loudly — proving the loading nulls come from the gate, not the input.
+    const idleView = deriveEngineeringWorkshopOccurrenceView({
+      project: liveProject(),
+      catalog: bogusCatalog,
+      modules: [],
+      occurrenceContext: { kind: 'idle' },
+      moduleLabelsMeta: { customerName: 'Lab', revision: undefined },
+    });
+    expect(idleView.moduleLabels).toBeNull();
+    // Attempted and failed loudly (bogus catalog) — proving the loading
+    // nulls above come from the gate, not from the input.
+    expect(idleView.moduleLabelsError).not.toBeNull();
+  });
+
+  it('3 — pre-release without releaseId: live behaviour intact', () => {
+    const idle = { kind: 'idle' } as const;
+    expect(
+      resolveEffectiveOccurrenceContext({
+        routeReleaseId: null,
+        releaseContextKind: 'idle',
+        occurrenceContext: idle,
+      }),
+    ).toBe(idle);
+    const project = liveProject();
+    expect(
+      deriveEngineeringWorkshopOccurrenceView({
+        project,
+        catalog: null,
+        modules: [],
+        occurrenceContext: idle,
+        moduleLabelsMeta: { customerName: 'Lab', revision: undefined },
+      }).bomProject!.items,
+    ).toBe(project.items);
+  });
+
+  it('4 — ready passes through untouched (current behaviour intact)', () => {
+    const ready = { kind: 'ready', projection: frozenProjection() } as const;
+    expect(
+      resolveEffectiveOccurrenceContext({
+        routeReleaseId: RELEASE_ID,
+        releaseContextKind: 'ready',
+        occurrenceContext: ready,
+      }),
+    ).toBe(ready);
+    // Release-context error keeps its existing EmptyState upstream: the
+    // effective context is NOT rewritten here.
+    const errorOccurrence = { kind: 'error', message: 'boom' } as const;
+    expect(
+      resolveEffectiveOccurrenceContext({
+        routeReleaseId: RELEASE_ID,
+        releaseContextKind: 'error',
+        occurrenceContext: errorOccurrence,
+      }),
+    ).toBe(errorOccurrence);
   });
 });
