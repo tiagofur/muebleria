@@ -333,7 +333,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
     await login(page);
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
-    await expect(page.getByTestId('eng-release-context')).toContainText('Liberación #1 · Diseño R2');
+    await expect(page.getByTestId('eng-release-context')).toContainText('Liberación #1 · R2 · Q2');
 
     // Despiece: frozen rows — the 650 mm unit is there with its full demand
     // (3 units × 1 panel), never the live project rows (which have no 650).
@@ -359,7 +359,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     });
 
     await page.reload();
-    await expect(page.getByTestId('eng-release-context')).toContainText('Liberación #1 · Diseño R2');
+    await expect(page.getByTestId('eng-release-context')).toContainText('Liberación #1 · R2 · Q2');
     await page.getByTestId('eng-tab-despiece').click();
     const afterDivergence = await page.locator('#eng-panel-despiece').innerText();
     expect(afterDivergence).toContain('650');

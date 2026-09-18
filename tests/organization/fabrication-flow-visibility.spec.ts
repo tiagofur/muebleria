@@ -237,7 +237,7 @@ test.describe.serial('Preparación para fabricar: stepper compacto Ingeniería/P
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
     const flow = page.getByTestId('eng-fab-flow');
     await expect(flow).toBeVisible({ timeout: 45_000 });
-    await expect(flow).toContainText('Preparación para fabricar');
+    await expect(flow).toHaveAttribute('aria-label', 'Preparación para fabricar');
     await expect(page.getByTestId('eng-fab-step-design')).toContainText('Diseño aprobado');
     await expect(page.getByTestId('eng-fab-step-release')).toContainText('Liberado a Ingeniería');
     await expect(page.getByTestId('eng-fab-step-release')).toContainText('Liberación #1 · Diseño R1');

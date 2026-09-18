@@ -79,7 +79,7 @@ describe('EngineeringWorkspace — exact release context (#738)', () => {
     render(<EngineeringWorkspace {...baseProps} releaseContext={readyContext} />);
     const strip = screen.getByTestId('eng-release-context');
     expect(strip.textContent).toContain('Liberación #1');
-    expect(strip.textContent).toContain('Diseño R2');
+    expect(strip.textContent).toContain('R2');
     expect(strip.textContent).toContain('Q2');
     expect(screen.getByTestId('eng-entry-status').textContent).toContain('Pendiente');
     // The implicit authority badge must not compete with the pinned context.
@@ -104,8 +104,11 @@ describe('EngineeringWorkspace — exact release context (#738)', () => {
       />,
     );
     expect(screen.getByTestId('eng-entry-status').textContent).toContain(
-      'Sin verificar',
+      'Pendiente de confirmar',
     );
+    // The fail-closed detail carries the same vocabulary as the state span;
+    // the strip must never render it twice.
+    expect(screen.getAllByText('Pendiente de confirmar')).toHaveLength(1);
     // The legacy log action is not offered for a canonical obra.
     expect(screen.queryByTestId('eng-mark-documented')).toBeNull();
     expect(screen.queryByTestId('eng-send-to-production')).toBeNull();
@@ -114,9 +117,9 @@ describe('EngineeringWorkspace — exact release context (#738)', () => {
   it('separates live data tabs from frozen release content', () => {
     render(<EngineeringWorkspace {...baseProps} releaseContext={readyContext} />);
     const notice = screen.getByTestId('eng-live-view-notice');
-    expect(notice.textContent).toContain('Vista de trabajo actual');
+    expect(notice.textContent).toContain('Vista provisional');
     expect(notice.textContent).toContain(
-      'no desde el contenido congelado de la liberación',
+      'El despiece exacto de esta liberación no está disponible aún',
     );
   });
 

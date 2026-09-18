@@ -42,7 +42,7 @@ import {
   type ReleaseCuttingDemandBase,
 } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
-import { FabricationFlowSteps } from '../common/FabricationFlowSteps';
+import { ProcessStrip } from '../common/ProcessStrip';
 import { WorkspaceTabs } from '../common/Tabs';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
 import { ProductionOrderModulesPanel } from '../production/ProductionOrderModulesPanel';
@@ -460,7 +460,30 @@ export function EngineeringWorkspace({
           Volver
         </button>
         <div className="eng-workspace__header-info">
-          <h2 className="eng-workspace__title">{project.name}</h2>
+          <div className="eng-workspace__title-row">
+            <h2 className="eng-workspace__title">{project.name}</h2>
+            {/* Release badge integrated into title row */}
+            {releaseView ? (
+              <span
+                className="eng-workspace__release-badge"
+                title="Liberación exacta con la que se abrió esta pantalla"
+                data-testid="eng-release-context"
+              >
+                <Factory size={14} strokeWidth={1.5} aria-hidden />
+                Liberación #{releaseView.releaseNumber} · R{releaseView.designRevisionNumber}
+                {releaseView.quoteLabel ? ` · ${releaseView.quoteLabel}` : ''}
+              </span>
+            ) : releaseAuthorityOf(project)?.source === 'canonical' ? (
+              <span
+                className="eng-workspace__release-badge"
+                data-testid="eng-canonical-release"
+                title="Liberación canónica: producción desbloqueada por la liberación del Digital Thread"
+              >
+                <Factory size={14} strokeWidth={1.5} aria-hidden />
+                {releaseAuthorityLabel(project)}
+              </span>
+            ) : null}
+          </div>
           {customerLabel ? (
             <span className="eng-workspace__customer">{customerLabel}</span>
           ) : null}
@@ -488,70 +511,13 @@ export function EngineeringWorkspace({
             Enviar a Producción
           </button>
         ) : null}
-        {releaseView ? (
-          <div className="eng-workspace__release-context" data-testid="eng-release-context">
-            <span
-              className="status-badge status-badge--done"
-              title="Liberación exacta con la que se abrió esta pantalla. La preparación de Ingeniería queda disponible; la liberación no la completa."
-            >
-              <Factory size={16} strokeWidth={1.5} aria-hidden />
-              Liberación #{releaseView.releaseNumber} · Diseño R
-              {releaseView.designRevisionNumber}
-              {releaseView.quoteLabel ? ` · ${releaseView.quoteLabel}` : ''}
-            </span>
-            {/* #768 — the compact "Preparación para fabricar" stepper: one
-                cohesive view of design → release → engineering → materials →
-                production, derived only from existing authorities. It absorbs
-                the former status chip, the per-phase CTAs and the completion
-                fact (same testids, same explicit commands). */}
-            {fabFlow ? (
-              <FabricationFlowSteps
-                flow={fabFlow}
-                action={fabAction}
-                stateTestIds={{ engineering: 'eng-entry-status' }}
-                testIdPrefix="eng"
-                renderDetail={(stepId) =>
-                  stepId === 'engineering' && durablePhase === 'completed' && durableState ? (
-                    <span
-                      className="eng-workspace__engineering-fact"
-                      data-testid="eng-engineering-completed"
-                    >
-                      Ingeniería completa
-                      {durableState.completedAtLabel ? ` · ${durableState.completedAtLabel}` : ''}
-                      {durableState.completedByLabel ? ` · por ${durableState.completedByLabel}` : ''}
-                      <span className="eng-workspace__engineering-next">
-                        {' '}· Siguiente etapa: autorización de materiales (pendiente)
-                      </span>
-                    </span>
-                  ) : null
-                }
-              />
-            ) : null}
-            {releaseEngineeringError ? (
-              <span
-                className="status-badge status-badge--open"
-                data-testid="eng-engineering-error"
-                role="alert"
-              >
-                {releaseEngineeringError}
-              </span>
-            ) : null}
-          </div>
-        ) : releaseContext?.state === 'loading' ? (
+        {/* Legacy workspace: release context loading */}
+        {releaseContext?.state === 'loading' ? (
           <span
             className="status-badge status-badge--progress"
             data-testid="eng-release-context-loading"
           >
             Verificando liberación…
-          </span>
-        ) : releaseAuthorityOf(project)?.source === 'canonical' ? (
-          <span
-            className="status-badge status-badge--done"
-            data-testid="eng-canonical-release"
-            title={`Liberación canónica: producción desbloqueada por la liberación del Digital Thread`}
-          >
-            <Factory size={16} strokeWidth={1.5} aria-hidden />
-            {releaseAuthorityLabel(project)}
           </span>
         ) : null}
         {!hasReleaseContext &&
@@ -570,6 +536,40 @@ export function EngineeringWorkspace({
         ) : null}
       </header>
 
+      {/* #768 — compact horizontal "Preparación para fabricar" strip:
+          one cohesive view of design → release → engineering → materials →
+          production, derived only from existing authorities. Replaces the
+          former vertical stepper for canonical obras to recover vertical space. */}
+      {fabFlow ? (
+        <ProcessStrip
+          flow={fabFlow}
+          action={fabAction}
+          stateTestIds={{ engineering: 'eng-entry-status' }}
+          testIdPrefix="eng"
+        />
+      ) : null}
+      {/* #740 — durable engineering completion fact: shown below the strip
+          when engineering is complete, providing actor/date evidence. */}
+      {fabFlow && durablePhase === 'completed' && durableState ? (
+        <div className="eng-workspace__engineering-fact" data-testid="eng-engineering-completed">
+          Ingeniería completa
+          {durableState.completedAtLabel ? ` · ${durableState.completedAtLabel}` : ''}
+          {durableState.completedByLabel ? ` · por ${durableState.completedByLabel}` : ''}
+          <span className="eng-workspace__engineering-next">
+            {' '}· Siguiente etapa: autorización de materiales (pendiente)
+          </span>
+        </div>
+      ) : null}
+      {releaseEngineeringError ? (
+        <span
+          className="status-badge status-badge--open"
+          data-testid="eng-engineering-error"
+          role="alert"
+        >
+          {releaseEngineeringError}
+        </span>
+      ) : null}
+
       {/* Tab bar */}
       <WorkspaceTabs
         tabs={tabs.map((tab) => ({
@@ -586,25 +586,18 @@ export function EngineeringWorkspace({
       {/* #739 — the exact base is connected: preparation is editable without
           touching what was commercially agreed. */}
       {frozenDemand && tabUsesFrozenContent ? (
-        <p className="eng-workspace__live-notice" data-testid="eng-release-prep-notice">
-          Preparación editable:{' '}
-          {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} provienen del contenido
-          congelado de la liberación #{frozenDemand.base.releaseNumber} (R
-          {frozenDemand.base.designRevisionNumber}). Ajustar disco, refilados,
-          estrategia o formato de tablero define cómo cortar estas piezas; no
-          modifica la cotización, el diseño ni la liberación acordados.
+        <p className="eng-workspace__live-notice eng-workspace__live-notice--compact" data-testid="eng-release-prep-notice">
+          <span className="eng-workspace__live-notice-icon" aria-hidden>ⓘ</span>
+          Preparación editable: {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} del contenido congelado de la liberación #{frozenDemand.base.releaseNumber} (R{frozenDemand.base.designRevisionNumber}). Ajustar el corte no modifica la cotización ni la liberación.
         </p>
       ) : null}
       {/* #738 — canonical obra: the data tabs that still read the live
           editable project/catalog stay explicitly separated from the frozen
           release content (never labeled as liberation documents). */}
       {hasReleaseContext && !tabUsesFrozenContent && activeTab !== 'documentos' ? (
-        <p className="eng-workspace__live-notice" data-testid="eng-live-view-notice">
-          Vista de trabajo actual:{' '}
-          {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} se calculan desde el
-          proyecto y el catálogo vigentes, no desde el contenido congelado de
-          la liberación. El despiece y los documentos exactos de esta
-          liberación todavía no están disponibles.
+        <p className="eng-workspace__live-notice eng-workspace__live-notice--compact" data-testid="eng-live-view-notice">
+          <span className="eng-workspace__live-notice-icon" aria-hidden>ⓘ</span>
+          Vista provisional: {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} calculados desde el proyecto/catálogo actuales. El despiece exacto de esta liberación no está disponible aún.
         </p>
       ) : null}
 

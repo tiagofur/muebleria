@@ -200,35 +200,64 @@
   min-height: 0;
 }
 
-/* #738 — exact release context in the workspace header + working-view
-   notice separating live data tabs from frozen release content. */
-.eng-workspace__release-context {
+/* #738 — release badge integrated into the title row; the working-view
+    notice below separates live data tabs from frozen release content. */
+.eng-workspace__title-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
 }
 
+.eng-workspace__release-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--success-700);
+  background: var(--success-50);
+  border: 1px solid var(--success-200);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
 /* #740 — durable per-release engineering fact: final completion (actor +
-   server date) and the honest next stage. Informational only — it never
-   enables material authorization or physical work. */
+    server date) and the honest next stage. Shown below the ProcessStrip
+    when engineering is complete. */
 .eng-workspace__engineering-fact {
-  font-size: var(--font-size-sm, 0.875rem);
+  font-size: var(--text-sm);
   color: var(--text-primary);
+  padding: var(--space-1) var(--space-3);
 }
 
 .eng-workspace__engineering-next {
   color: var(--text-muted);
 }
 
+/* #738 / #739 — compact live-data notices: reduced padding and font size
+    to recover vertical space. The icon + short text keep the warning
+    visible without dominating the viewport. */
 .eng-workspace__live-notice {
   margin: 0;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   background: var(--surface-muted);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md, 6px);
-  font-size: var(--font-size-sm, 0.875rem);
+  font-size: var(--text-sm);
   color: var(--text-secondary, inherit);
+}
+
+.eng-workspace__live-notice--compact {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.eng-workspace__live-notice-icon {
+  flex-shrink: 0;
+  font-size: var(--text-base);
 }
 
 /* #739 — honest error while reading the frozen cutting demand: actionable
@@ -748,9 +777,7 @@
 }
 
 
-/* #768 — the compact stepper shares the release strip row: it wraps below
-   the pins on narrow screens and stays a compact card, never full-width. */
-.eng-workspace__release-context .fab-flow {
-  flex: 1 1 360px;
-  max-width: 480px;
+/* ProcessStrip occupies the full width below the header */
+.eng-workspace .ps {
+  width: 100%;
 }
