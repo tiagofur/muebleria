@@ -213,6 +213,8 @@ type stubStore struct {
 	getProductionReleaseErr      error
 	cuttingDemandResult          *storage.ReleaseCuttingDemandView
 	cuttingDemandErr             error
+	workshopOccurrencesResult    *storage.WorkshopOccurrenceProjectionView
+	workshopOccurrencesErr       error
 	engineeringStateResult       *domain.ReleaseEngineeringState
 	engineeringStateErr          error
 	engineeringStartOutcome      *storage.ReleaseEngineeringOutcome
@@ -4229,6 +4231,13 @@ func (s *stubStore) GetProjectProductionReleaseCuttingDemand(_ context.Context, 
 		return nil, s.cuttingDemandErr
 	}
 	return s.cuttingDemandResult, nil
+}
+
+func (s *stubStore) GetProjectWorkshopOccurrences(_ context.Context, _ string) (*storage.WorkshopOccurrenceProjectionView, error) {
+	if s.workshopOccurrencesErr != nil {
+		return nil, s.workshopOccurrencesErr
+	}
+	return s.workshopOccurrencesResult, nil
 }
 
 func (s *stubStore) GetReleaseEngineeringState(_ context.Context, _, _ string) (*domain.ReleaseEngineeringState, error) {

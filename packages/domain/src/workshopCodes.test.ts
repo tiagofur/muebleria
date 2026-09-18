@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Catalog, PieceLabel, ProductionCutRow, Project } from './types';
+import type { Catalog, PieceLabel, ProductionCutRow, Project, ProjectItem } from './types';
 import {
   IDS,
   plantillaCatalogWithModules,
@@ -21,6 +21,13 @@ import {
   type ReleaseCuttingDemandPieceView,
   type ReleaseCuttingDemandView,
 } from './engineeringCuttingDemand';
+import {
+  applyFrozenWorkshopOccurrenceOrdinals,
+  canonicalWorkshopOccurrences,
+  validateFrozenWorkshopOccurrenceOrdinals,
+  type WorkshopOccurrenceAssignment,
+  type WorkshopOccurrenceProjection,
+} from './engine/cut';
 
 function withReversedItems(project: Project): Project {
   return { ...project, items: [...project.items].reverse() };
@@ -86,46 +93,65 @@ describe('generateCutRowsWithLinks — códigos canónicos (#781)', () => {
 describe('identidad cross-flow de fabricación (#781 review — blocker final)', () => {
   /**
    * §11 critical test: two units of the SAME moduleCode whose durable ids
-   * have OPPOSITE lexical orders in each flow (project items AND furniture
-   * instances both oppose the frozen ordinals), sharing the SAME frozen
-   * manufacturing occurrence ordinals. The demand fixture is derived from
-   * the BOM's own resolved parts so the comparison is PER PHYSICAL
-   * OCCURRENCE + PER PART — never the global code set (which would hide an
-   * A↔B swap).
+   * have OPPOSITE lexical orders in each flow, sharing ONE frozen
+   * occurrence authority. §10: the test knows the PHYSICAL IDENTITY FIRST
+   * (the frozen ordinal each derived item / demand unit carries) and checks
+   * the code afterwards — never deducing occurrences from dims or '-L2-'.
+   * No manual ordinal injection into the Project: the BOM context is
+   * DERIVED via the frozen projection, exactly as the web wiring does.
+   *
+   *   physical A = item-z (lexical last) = fi-a (lexical first), ordinal 1
+   *   physical B = item-a (lexical first) = fi-z (lexical last), ordinal 2
    */
+  const PROJECTION: WorkshopOccurrenceProjection = {
+    releaseId: 'rel-x',
+    releaseNumber: 1,
+    coversAllCurrentInstances: true,
+    assignments: [
+      { furnitureInstanceId: 'fi-a', projectItemId: 'item-z', workshopOccurrenceOrdinal: 1 },
+      { furnitureInstanceId: 'fi-z', projectItemId: 'item-a', workshopOccurrenceOrdinal: 2 },
+    ],
+  };
+
   function buildProject(): Project {
     return {
       ...plantillaGabOnlyProject,
       items: [
-        // item-z is ordinal 1 but lexically LAST; item-a is ordinal 2 but
-        // lexically FIRST — the item lexical order opposes the ordinals.
-        { id: 'item-z', moduleId: IDS.modGab, quantity: 1, optionChoices: plantillaChoices, workshopOccurrenceOrdinal: 1, customDims: { widthMm: 720, heightMm: 720, depthMm: 580 } },
-        { id: 'item-a', moduleId: IDS.modGab, quantity: 1, optionChoices: plantillaChoices, workshopOccurrenceOrdinal: 2, customDims: { widthMm: 650, heightMm: 720, depthMm: 580 } },
+        { id: 'item-z', moduleId: IDS.modGab, quantity: 1, optionChoices: plantillaChoices, customDims: { widthMm: 720, heightMm: 720, depthMm: 580 } },
+        { id: 'item-a', moduleId: IDS.modGab, quantity: 1, optionChoices: plantillaChoices, customDims: { widthMm: 650, heightMm: 690, depthMm: 580 } },
       ],
     } as Project;
   }
 
+  /** Full derived BOM context (both occurrences), as the web wiring builds it. */
   function bomSide() {
-    return generateCutRowsWithLinks(buildProject(), plantillaCatalogWithModules);
+    const project = buildProject();
+    const derived: Project = {
+      ...project,
+      items: applyFrozenWorkshopOccurrenceOrdinals(project.items, PROJECTION),
+    };
+    return generateCutRowsWithLinks(derived, plantillaCatalogWithModules);
   }
 
-  /** Demand built FROM the BOM's resolved parts, grouped per occurrence. */
-  function buildDemandFromBom(links: ReturnType<typeof generateCutRowsWithLinks>['links']): ReleaseCuttingDemandView {
+  /**
+   * BOM side of ONE physical occurrence: the derived context restricted to
+   * that occurrence's item — every link belongs to exactly that ordinal,
+   * by construction (identity first, code after).
+   */
+  function singleOccurrenceBom(ordinal: 1 | 2) {
+    const assignment = PROJECTION.assignments.find((a) => a.workshopOccurrenceOrdinal === ordinal)!;
+    const project = buildProject();
+    const item = project.items.find((i) => i.id === assignment.projectItemId)!;
+    const derived: Project = {
+      ...project,
+      items: applyFrozenWorkshopOccurrenceOrdinals([item], { ...PROJECTION, assignments: [assignment] }),
+    };
+    return generateCutRowsWithLinks(derived, plantillaCatalogWithModules);
+  }
+
+  /** Demand built from each occurrence's resolved parts. */
+  function buildDemand(): ReleaseCuttingDemandView {
     const materialId = plantillaCatalogWithModules.materials[0]?.id ?? '';
-    // Instance lexical order OPPOSES the item lexical order: under the
-    // legacy id-order fallback, occurrence A would be L2 in BOM but bare in
-    // Release (crossed codes) — only the frozen ordinal makes them agree.
-    //   physical A = item-z (lexical last) = fi-a (lexical first), ordinal 1
-    //   physical B = item-a (lexical first) = fi-z (lexical last), ordinal 2
-    const units: { fi: string; ordinal: number; links: typeof links }[] = [
-      { fi: 'fi-a', ordinal: 1, links: [] },
-      { fi: 'fi-z', ordinal: 2, links: [] },
-    ];
-    for (const link of links) {
-      // Occurrence 2 carries the -L2- line suffix in the BOM codes.
-      const isSecond = link.labelRef.includes('-L2-');
-      (isSecond ? units[1]! : units[0]!).links.push(link);
-    }
     return {
       releaseId: 'rel-x',
       releaseNumber: 1,
@@ -133,26 +159,26 @@ describe('identidad cross-flow de fabricación (#781 review — blocker final)',
       designRevisionNumber: 1,
       manufacturingFingerprint: 'fp-x',
       schemaVersion: 1,
-      // fi-a is ordinal 1 and lexically FIRST while its project item
-      // (item-z) is lexically LAST: the two flows' lexical orders OPPOSE
-      // each other, so only the shared frozen ordinal can align the codes.
-      units: units.map(({ fi, ordinal, links: unitLinks }) => ({
-        furnitureInstanceId: fi,
-        furnitureDefinitionId: IDS.modGab,
-        workshopOccurrenceOrdinal: ordinal,
-        pieces: unitLinks.map((link) => ({
-          partId: link.partId,
-          partCode: link.part.code ?? null,
-          description: link.part.description ?? link.partId,
-          quantity: link.part.quantity,
-          lengthMm: link.part.lengthMm,
-          widthMm: link.part.widthMm,
-          thicknessMm: link.part.thicknessMm ?? 18,
-          materialId: link.part.materialId || materialId,
-          grain: link.part.grain === 0 ? 0 : 1,
-          l1: 0, l2: 0, w1: 0, w2: 0,
-        }) as ReleaseCuttingDemandPieceView),
-      })),
+      units: PROJECTION.assignments.map((assignment) => {
+        const links = singleOccurrenceBom(assignment.workshopOccurrenceOrdinal as 1 | 2).links;
+        return {
+          furnitureInstanceId: assignment.furnitureInstanceId,
+          furnitureDefinitionId: IDS.modGab,
+          workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
+          pieces: links.map((link) => ({
+            partId: link.partId,
+            partCode: link.part.code ?? null,
+            description: link.part.description ?? link.partId,
+            quantity: link.part.quantity,
+            lengthMm: link.part.lengthMm,
+            widthMm: link.part.widthMm,
+            thicknessMm: link.part.thicknessMm ?? 18,
+            materialId: link.part.materialId || materialId,
+            grain: link.part.grain === 0 ? 0 : 1,
+            l1: 0, l2: 0, w1: 0, w2: 0,
+          }) as ReleaseCuttingDemandPieceView),
+        };
+      }),
     };
   }
 
@@ -162,55 +188,66 @@ describe('identidad cross-flow de fabricación (#781 review — blocker final)',
       ...plantillaCatalogWithModules,
       modules: plantillaCatalogWithModules.modules.map((m) => ({ ...m, code: moduleCode })),
     } as Catalog;
-    return releaseCutRowsFromDemand(demand, catalog);
+    return { rows: releaseCutRowsFromDemand(demand, catalog), demand };
   }
 
-  it('la misma ocurrencia física recibe el MISMO código en BOM y Release (órdenes léxicos opuestos, por ocurrencia y por parte)', () => {
-    const bom = bomSide();
-    expect(bom.links.length).toBeGreaterThan(0);
-    expect(bom.links.some((l) => l.labelRef.includes('-L2-'))).toBe(true);
+  it('la misma ocurrencia física recibe el MISMO código en BOM y Release (autoridad congelada, por ocurrencia y por parte)', () => {
+    const full = bomSide();
+    expect(full.links.length).toBeGreaterThan(0);
 
-    const demand = buildDemandFromBom(bom.links);
-    const demandRows = releaseSide(demand);
-    expect(demandRows).toHaveLength(demand.units.reduce((sum, u) => sum + u.pieces.length, 0));
+    // BOM code per FROZEN identity (ordinal, partId). The per-occurrence
+    // contexts establish WHICH parts belong to which physical occurrence
+    // (identity first); the FULL derived context supplies the code each
+    // occurrence actually gets (-L suffixes depend on the occurrence SET).
+    // Parts pair by partId + resolved dims, which differ per occurrence by
+    // construction (custom width AND height) — never by code suffix.
+    const bomCode = new Map<string, string>();
+    for (const assignment of PROJECTION.assignments) {
+      for (const single of singleOccurrenceBom(assignment.workshopOccurrenceOrdinal as 1 | 2).links) {
+        const fullLink = full.links.find(
+          (l) =>
+            l.partId === single.partId &&
+            l.part.lengthMm === single.part.lengthMm &&
+            l.part.widthMm === single.part.widthMm,
+        );
+        expect(fullLink, `part ${single.partId} of occurrence ${assignment.workshopOccurrenceOrdinal} must exist in the full context`).toBeDefined();
+        bomCode.set(`${assignment.workshopOccurrenceOrdinal}#${single.partId}`, fullLink!.labelRef);
+      }
+    }
+    expect(bomCode.size).toBe(full.links.length);
 
-    // BOM code per PHYSICAL identity: (occurrence ordinal, partId). PartIds
-    // repeat ACROSS occurrences (definition namespace) but are unique within
-    // one — the pair is the physical part identity.
-    const bomCode = new Map(
-      bom.links.map((l) => [`${l.labelRef.includes('-L2-') ? 2 : 1}#${l.partId}`, l.labelRef]),
-    );
-    expect(bomCode.size).toBe(bom.links.length);
-
-    // Release rows iterate units in frozen-ordinal order and pieces in
-    // canonical partId order — walk the SAME sequence and compare code by
-    // code. A swapped L2 fails here even though the global SET would match.
-    const expectedSequence = [...demand.units]
+    const release = releaseSide(buildDemand());
+    const expectedSequence = [...release.demand.units]
       .sort((a, b) => a.workshopOccurrenceOrdinal - b.workshopOccurrenceOrdinal)
       .flatMap((unit) =>
         [...unit.pieces]
           .sort((a, b) => a.partId.localeCompare(b.partId))
           .map((piece) => ({ ordinal: unit.workshopOccurrenceOrdinal, partId: piece.partId })),
       );
-    expect(expectedSequence).toHaveLength(demandRows.length);
+    expect(expectedSequence).toHaveLength(release.rows.length);
     expectedSequence.forEach(({ ordinal, partId }, index) => {
       expect(
-        demandRows[index]?.labelRef,
+        release.rows[index]?.labelRef,
         `physical identity (occurrence ${ordinal}, part ${partId})`,
       ).toBe(bomCode.get(`${ordinal}#${partId}`));
     });
+    // The repeated module really got distinct line suffixes per frozen
+    // ordinal in both flows.
+    expect(release.rows.some((row) => (row.labelRef ?? '').includes('-L2-'))).toBe(true);
+    expect(full.rows.some((row) => (row.labelRef ?? '').includes('-L2-'))).toBe(true);
   });
 
   it('§12: reordenar items/units/pieces con ordinales congelados no cambia el mapeo ocurrencia→código', () => {
-    const baseBom = bomSide().rows;
+    const base = bomSide();
+    const baseRelease = releaseSide(buildDemand());
     const shuffledProject: Project = { ...buildProject(), items: [...buildProject().items].reverse() };
-    const reorderedBom = generateCutRowsWithLinks(shuffledProject, plantillaCatalogWithModules).rows;
-
-    const bom = bomSide();
-    const baseRelease = releaseSide(buildDemandFromBom(bom.links));
+    const reorderedBom = generateCutRowsWithLinks(
+      { ...shuffledProject, items: applyFrozenWorkshopOccurrenceOrdinals(shuffledProject.items, PROJECTION) },
+      plantillaCatalogWithModules,
+    ).rows;
     const demand: ReleaseCuttingDemandView = {
-      ...buildDemandFromBom(bom.links),
-      units: [...buildDemandFromBom(bom.links).units].reverse().map((unit) => ({
+      ...buildDemand(),
+      units: [...buildDemand().units].reverse().map((unit) => ({
         ...unit,
         pieces: [...unit.pieces].reverse(),
       })),
@@ -219,9 +256,106 @@ describe('identidad cross-flow de fabricación (#781 review — blocker final)',
 
     const key = (rows: readonly ProductionCutRow[]) =>
       rows.map((row) => `${row.partName}→${row.labelRef}`).sort().join('|');
-    expect(key(reorderedBom)).toBe(key(baseBom));
-    expect(key(reorderedRelease)).toBe(key(baseRelease));
-    // Cross-flow equality survives the reordering too.
-    expect(key(reorderedRelease)).toBe(key(reorderedBom));
+    expect(key(reorderedBom)).toBe(key(base.rows));
+    expect(key(reorderedRelease.rows)).toBe(key(baseRelease.rows));
+    expect(key(reorderedRelease.rows)).toBe(key(reorderedBom));
+  });
+});
+
+describe('validación de ordinales congelados (#781 review §7/§8)', () => {
+  const occ = (id: string, ordinal?: number) => ({ id, workshopOccurrenceOrdinal: ordinal });
+
+  it('todos presentes y válidos → orden por ordinal', () => {
+    expect(
+      canonicalWorkshopOccurrences([occ('c', 3), occ('a', 1), occ('b', 2)]).map((o) => o.id),
+    ).toEqual(['a', 'b', 'c']);
+  });
+
+  it('ninguno presente → fallback por id durable (live/legacy)', () => {
+    expect(
+      canonicalWorkshopOccurrences([occ('z'), occ('a')]).map((o) => o.id),
+    ).toEqual(['a', 'z']);
+  });
+
+  it('PARCIAL (algunos sí, algunos no) → falla cerrado, sin fallback silencioso', () => {
+    expect(() => canonicalWorkshopOccurrences([occ('a', 1), occ('b')])).toThrow(
+      /mixto/i,
+    );
+  });
+
+  it('DUPLICADOS → dos ocurrencias físicas nunca comparten autoridad', () => {
+    expect(() => canonicalWorkshopOccurrences([occ('a', 1), occ('b', 1)])).toThrow(
+      /duplic/i,
+    );
+    expect(() => validateFrozenWorkshopOccurrenceOrdinals([occ('a', 2), occ('b', 2)])).toThrow(
+      /duplic/i,
+    );
+  });
+
+  it('INVÁLIDOS (no entero, < 1) → falla cerrado', () => {
+    expect(() => canonicalWorkshopOccurrences([occ('a', 0), occ('b', 1)])).toThrow(
+      /entero >= 1/i,
+    );
+    expect(() => canonicalWorkshopOccurrences([occ('a', 1.5), occ('b', 2)])).toThrow(
+      /entero >= 1/i,
+    );
+  });
+});
+
+describe('applyFrozenWorkshopOccurrenceOrdinals — contexto BOM derivado (#781 review §5)', () => {
+  const baseItem = (id: string, quantity: number): ProjectItem => ({
+    id,
+    moduleId: IDS.modGab,
+    quantity,
+    optionChoices: plantillaChoices,
+  });
+  const projection = (assignments: readonly WorkshopOccurrenceAssignment[]): WorkshopOccurrenceProjection => ({
+    releaseId: 'rel-1',
+    releaseNumber: 1,
+    coversAllCurrentInstances: true,
+    assignments,
+  });
+
+  it('expande un ítem quantity 3 en 3 ítems derivados 1:1 con su ordinal congelado (id = instancia)', () => {
+    const derived = applyFrozenWorkshopOccurrenceOrdinals(
+      [baseItem('line-a', 3)],
+      projection([
+        { furnitureInstanceId: 'fi-1', projectItemId: 'line-a', workshopOccurrenceOrdinal: 1 },
+        { furnitureInstanceId: 'fi-2', projectItemId: 'line-a', workshopOccurrenceOrdinal: 2 },
+        { furnitureInstanceId: 'fi-3', projectItemId: 'line-a', workshopOccurrenceOrdinal: 3 },
+      ]),
+    );
+    expect(derived.map((item) => [item.id, item.quantity, item.workshopOccurrenceOrdinal])).toEqual([
+      ['fi-1', 1, 1],
+      ['fi-2', 1, 2],
+      ['fi-3', 1, 3],
+    ]);
+  });
+
+  it('proyección vacía → ítems vivos intactos (sin liberación)', () => {
+    const items = [baseItem('line-a', 2)];
+    expect(applyFrozenWorkshopOccurrenceOrdinals(items, undefined)).toBe(items);
+    expect(applyFrozenWorkshopOccurrenceOrdinals(items, projection([]))).toBe(items);
+  });
+
+  it('cobertura PARTIAL del ítem → falla cerrado (nunca mezcla congelado/vivo)', () => {
+    expect(() =>
+      applyFrozenWorkshopOccurrenceOrdinals(
+        [baseItem('line-a', 1), baseItem('line-b', 1)],
+        projection([{ furnitureInstanceId: 'fi-1', projectItemId: 'line-a', workshopOccurrenceOrdinal: 1 }]),
+      ),
+    ).toThrow(/no cubre/i);
+  });
+
+  it('ordinales duplicados en la proyección → falla cerrado', () => {
+    expect(() =>
+      applyFrozenWorkshopOccurrenceOrdinals(
+        [baseItem('line-a', 2)],
+        projection([
+          { furnitureInstanceId: 'fi-1', projectItemId: 'line-a', workshopOccurrenceOrdinal: 1 },
+          { furnitureInstanceId: 'fi-2', projectItemId: 'line-a', workshopOccurrenceOrdinal: 1 },
+        ]),
+      ),
+    ).toThrow(/duplic/i);
   });
 });

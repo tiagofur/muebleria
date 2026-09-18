@@ -644,6 +644,12 @@ func RegisterRoutes(server *Server) http.Handler {
 	// #739: frozen cutting demand of the exact release (engineering
 	// preparation input). Read-only projection of the private manufacturing
 	// snapshot — the mutable project/catalog is never consulted.
+	// #781 — frozen manufacturing occurrence authority of the latest release.
+	// The project's frozen unit order (ordinal = snapshot position, index+1)
+	// projected onto the current quote-line↔instance links. Engineering
+	// consumes it to build the derived BOM context so the same physical
+	// occurrence keeps the same workshop code from preview to PTX/CNC.
+	mux.Handle("GET /api/projects/{projectId}/workshop-occurrences", authMW(http.HandlerFunc(server.HandleProjectWorkshopOccurrences)))
 	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}/cutting-demand", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectProductionReleaseCuttingDemand))))
 	// #740 PR 1: durable Engineering state of the exact release. Reads never
 	// write; start is idempotent; complete is final, version-guarded (If-Match)
