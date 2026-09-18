@@ -121,6 +121,7 @@ function makeRow(params: {
     W2: 0,
     partCode: params.partCode,
     partName: params.partCode,
+    labelRef: `MOD-LAB-${params.partCode}`,
     moduleCode: 'M01',
     thicknessMm: 18,
   };
@@ -145,7 +146,10 @@ function twoMaterialPlan(): CutPlan {
     },
   ];
   const rows = [
-    ...GOLDEN_ROWS,
+    ...GOLDEN_ROWS.map((row, index) => ({
+      ...row,
+      labelRef: `MOD-LAB-P${String(index + 1).padStart(2, '0')}`,
+    })),
     makeRow({ quantity: 1, lengthMm: 500, widthMm: 400, grain: 1, partCode: 'C', materialName: 'Lab Alt 18' }),
   ];
   return optimizeCutPlan('lab-650-two-materials', rows, materials, TRIM0_CONFIG);
@@ -587,7 +591,7 @@ describe('CADmatic 4 candidato — descarga existente (#591) y manifest exacto',
     // #781: the CADmatic 4 lane delivers the conservative short ASCII
     // industrial file name (G + 6 hex of the CutPlan identity), never the
     // descriptive project slug.
-    expect(bundle!.artifact.fileName).toMatch(/^G[0-9A-F]{6}\.ptx$/);
+    expect(bundle!.artifact.fileName).toMatch(/^G[0-9A-F]{12}\.ptx$/);
     expect(bundle!.manifest.validationStatus).toBe('NOT_TESTED');
     expect(bundle!.manifest.compatibilityEvidence).toEqual({ claim: 'notClaimed' });
     expect(bundle!.manifest.nonProductionValidationArtifact).toBe(true);
@@ -619,12 +623,20 @@ describe('CADmatic 4 candidato — descarga existente (#591) y manifest exacto',
       expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r4');
       // By-material keeps the industrial base token plus a 1-based group
       // index — compact, ASCII, collision-safe.
-      expect(bundle.artifact.fileName).toMatch(new RegExp(`^G[0-9A-F]{6}-${index + 1}\\.ptx$`));
+      expect(bundle.artifact.fileName).toMatch(new RegExp(`^G[0-9A-F]{12}-${index + 1}\\.ptx$`));
     }
   });
 
   it('golden end-to-end: selección r4 → adapter → bytes descargados → parser → verifier === []', async () => {
-    const plan = optimizeCutPlan(GOLDEN_PROJECT_ID, GOLDEN_ROWS, GOLDEN_MATERIALS, GOLDEN_CONFIG);
+    const plan = optimizeCutPlan(
+      GOLDEN_PROJECT_ID,
+      GOLDEN_ROWS.map((row, index) => ({
+        ...row,
+        labelRef: `MOD-LAB-P${String(index + 1).padStart(2, '0')}`,
+      })),
+      GOLDEN_MATERIALS,
+      GOLDEN_CONFIG,
+    );
     const resolved = resolveManufacturingOutputTarget(candidateSelection(), 'cutting');
     expect(resolved.status === 'CONFIGURED' && resolved.readiness.ready).toBe(true);
 

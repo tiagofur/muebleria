@@ -39,6 +39,14 @@ import {
   type CompileCutPlanToPtxOptions,
 } from './compileCutPlan';
 import { verifyCutPlanPtxReadback } from './verifyCutPlanPtxReadback';
+import { optimizeCutPlan } from '@granete/domain';
+import {
+  GOLDEN_R4_CONFIG,
+  GOLDEN_R4_MATERIALS,
+  GOLDEN_R4_OPTIONS,
+  GOLDEN_R4_PROJECT_ID,
+  GOLDEN_R4_ROWS,
+} from './cutPlanPtxGoldenR4';
 import { PTX_POSTPROCESSOR_ADAPTER } from '../machines/ptxAdapter';
 import { PTX_CADMATIC_4_R4_PROFILE } from '../machines/profiles';
 
@@ -255,12 +263,19 @@ function offcutsOf(records: readonly PtxRecord[]): PtxOffcutRecord[] {
 
 describe('r4 (#781) — dialecto de campo: OFC_QTY + OFFCUTS declarado antes + Xn sólo en 92', () => {
   it('emite OFFCUTS con OFC_QTY=1 antes de PATTERNS/CUTS y readback verde', () => {
-    const plan = buildDidacticPlan();
-    const text = runFullChain(plan, R4_OPTIONS);
+    // The golden r4 inputs (real optimizeCutPlan pipeline): its LAB15 sheet
+    // carries the 92-eligible rest-side remnant, so an OFFCUTS is declared.
+    const plan = optimizeCutPlan(
+      GOLDEN_R4_PROJECT_ID,
+      GOLDEN_R4_ROWS,
+      GOLDEN_R4_MATERIALS,
+      GOLDEN_R4_CONFIG,
+    );
+    const text = runFullChain(plan, GOLDEN_R4_OPTIONS);
 
     // OFFCUTS row carries the evidenced 8th cell (OFC_QTY=1)…
     const offcutLine = text.split('\r\n').find((line) => line.startsWith('OFFCUTS'))!;
-    expect(offcutLine).toMatch(/^OFFCUTS,1,1,.+,1,1200,376,1$/);
+    expect(offcutLine).toMatch(/^OFFCUTS,1,1,.+,1,564,426,1$/);
     // …and is declared BEFORE any PATTERNS/CUTS line (no forward Xn refs).
     const lines = text.split('\r\n').filter((line) => line !== '');
     const offcutPos = lines.findIndex((line) => line.startsWith('OFFCUTS'));
@@ -269,21 +284,19 @@ describe('r4 (#781) — dialecto de campo: OFC_QTY + OFFCUTS declarado antes + X
     expect(offcutPos).toBeLessThan(patternPos);
   });
 
-  it('no emite filas marcador Xn fuera de FUNCTION 92 (el resto phase-1 queda sólo como OFFCUTS)', () => {
+  it('remanente no-92: sin fila CUTS Y sin registro OFFCUTS (sólo el pareado con 92 se declara)', () => {
+    // The didactic sheet's remnant (1200×376) is a phase-1 leftover — NOT
+    // 92-eligible. Review §3: no evidenced machine representation exists for
+    // it, so r4 emits NEITHER a pseudo-pass marker NOR an OFFCUTS-only row;
+    // the CUTS tree stays complete and Granete keeps the remnant internally.
     const plan = buildDidacticPlan();
     const compiled = compileCutPlanToPtxDocument(plan, R4_OPTIONS);
 
     const xnRows = cutsOf(compiled.document.records).filter(
       (r) => r.partReference.kind === 'offcut',
     );
-    // The didactic sheet's only offcut (1200×376) is a phase-1 remnant —
-    // NOT eligible for FUNCTION 92 — so it must have NO CUTS row at all.
     expect(xnRows).toHaveLength(0);
-
-    // Its OFFCUTS record still exists, with OFC_QTY=1.
-    const offcuts = offcutsOf(compiled.document.records);
-    expect(offcuts).toHaveLength(1);
-    expect(offcuts[0]).toMatchObject({ length: 1200, width: 376, producedQuantity: 1 });
+    expect(offcutsOf(compiled.document.records)).toHaveLength(0);
 
     // The r2/r3 marker row (QTY_RPT=0, SEQUENCE=0, FUNCTION=1, X1) is gone.
     const marker = cutsOf(compiled.document.records).find(
@@ -391,6 +404,41 @@ describe('r4 (#781) — autoridad de código de fabricación por pieza física',
     }
     expect(thrown).toBeInstanceOf(PtxCompilationError);
     expect((thrown as PtxCompilationError).code).toBe('ptx_compile.part_code_too_long');
+  });
+
+  it('una pieza SIN labelRef taller bloquea (part_code_missing): r4 no cae al partCode de plantilla', () => {
+    // Review §2: the declared r4 authority is the workshop code — a plan
+    // from a flow that did not assign one BLOCKS instead of leaking the raw
+    // template partCode that #781 exists to replace.
+    const rows = [
+      makeRow({ quantity: 1, lengthMm: 450, widthMm: 320, grain: 1, partCode: 'agr-agr-1788565309044-01vb-instance-d82e52f4-9859-4e45-b459-6f80ad27324a-u0-b0000004-0000-0000-0000-000000000014-copy-0' }),
+    ];
+    const { sheet } = packSingleSheetStrip(
+      unroll(rows),
+      0,
+      1200,
+      700,
+      DIDACTIC_CONFIG,
+      'LAB18',
+      'Lab Board 18',
+      18,
+    );
+    const plan = planFromSheets([sheetFromPlacement(sheet)], DIDACTIC_CONFIG);
+    let thrown: unknown;
+    try {
+      compileCutPlanToPtxDocument(plan, R4_OPTIONS);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(PtxCompilationError);
+    expect((thrown as PtxCompilationError).code).toBe('ptx_compile.part_code_missing');
+    // …and the readiness path surfaces the same blocker before download.
+    const readiness = PTX_POSTPROCESSOR_ADAPTER.canSerialize(
+      { jobId: plan.id, cutPlan: plan } as never,
+      PTX_CADMATIC_4_R4_PROFILE,
+    );
+    expect(readiness.ready).toBe(false);
+    expect(readiness.reasons.map((reason) => reason.code)).toContain('ptx_compile.part_code_missing');
   });
 
   it('readiness real del adapter (#781 acceptance §10): colisión de códigos bloquea ANTES de descargar', () => {

@@ -496,8 +496,31 @@ export function verifyCutPlanPtxReadback(
         }
       }
       sheetProjections.set(sheet.sheetIndex, deriveTrimProjection(trace));
+      // r4 (#781 review §3): only remnants with the demonstrated
+      // OFFCUTS↔FUNCTION-92 pairing are expected as OFFCUTS rows; a non-92
+      // remnant stays undeclared in the industrial file by design.
+      const r4MarkersOnly = options.offcutCutMarkers === 'function92-only';
+      let declaredRemnantRegions: Set<string> | undefined;
+      if (r4MarkersOnly) {
+        const stagingRoot =
+          r3 && sheetProjections.get(sheet.sheetIndex)
+            ? sheetProjections.get(sheet.sheetIndex)!.usableRootRegionId
+            : trace.boardRegionId;
+        const expectations = deriveDivisionExpectations(trace, stagingRoot);
+        const sheetReleases = expectations
+          ? deriveReleases(trace, expectations, r3)
+          : [];
+        declaredRemnantRegions = new Set(
+          sheetReleases
+            .filter((release) => release.kind === 'offcut' && release.offcutRelease92 === true)
+            .map((release) => release.regionId),
+        );
+      }
       for (const terminal of trace.terminals) {
         if (terminal.kind === 'remnant') {
+          if (declaredRemnantRegions && !declaredRemnantRegions.has(terminal.regionId)) {
+            continue;
+          }
           globalOffcutIndexByRegion.set(
             scopedRegionKey({ sheetIndex: sheet.sheetIndex, regionId: terminal.regionId }),
             runningOffcutIndex++,
@@ -1138,9 +1161,14 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     const expectedIndex = globalOffcutIndexByRegion.get(
       scopedRegionKey({ sheetIndex: sheet.sheetIndex, regionId: terminal.regionId }),
     );
-    const row = offcutRows.find((r) => expectedIndex !== undefined && r.offcutIndex === expectedIndex);
+    if (expectedIndex === undefined) {
+      // r4 (#781 review §3): this remnant has no demonstrated machine
+      // representation (no 92 pairing) and is INTENTIONALLY undeclared.
+      continue;
+    }
+    const row = offcutRows.find((r) => r.offcutIndex === expectedIndex);
     if (!row) {
-      push('offcuts.missing', `retazo '${terminal.regionId}' (X${expectedIndex ?? '?'}) sin fila OFFCUTS`);
+      push('offcuts.missing', `retazo '${terminal.regionId}' (X${expectedIndex}) sin fila OFFCUTS`);
       continue;
     }
     if (

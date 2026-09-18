@@ -51,12 +51,27 @@ manufacturing code           → app, labels, PARTS_REQ.CODE
   referenciarse individualmente. Copias 2..N de una fila con cantidad > 1
   reciben el sufijo `-C<n>` en el optimizador (`MOD-CAJ-01-P04-C2`); la copia
   1 queda sin sufijo (es lo que muestra la app para la fila).
+- **Asignación canónica compartida (revisión §1)**: las ocurrencias de
+  muebles se ordenan por su identidad durable (ítem de proyecto en el flujo
+  BOM, instancia de mueble en el flujo release) y las piezas de cada
+  ocurrencia por `partId` ANTES de numerar `-L<n>`/`Pnn`
+  (`canonicalWorkshopOccurrences`/`canonicalWorkshopParts`): reordenar los
+  arrays de entrada jamás cambia los códigos (tests de reorden en ambos
+  flujos). Caveat documentado: BOM y release clavan ocurrencias por ids de
+  espacios distintos (ítem vs furniture instance), así que dos módulos
+  idénticos repetidos pueden intercambiar cuál es "L2" entre la vista de
+  proyecto y la liberación, hasta que el contrato de demanda cargue el
+  ordinal canónico de unidad (seguimiento posterior a #781).
 - **Fail-closed en el compilador r4** (`partCodeAuthority:
   'workshop-labelref'`, `partCodeMaxLength: 50`): `PARTS_REQ.CODE` es el
-  labelRef taller; un código > 50 (`ptx_compile.part_code_too_long`) o
-  duplicado entre piezas físicas (`ptx_compile.part_code_duplicate`) bloquea —
-  nunca se trunca ni se fusiona. PROHIBIDO derivar 1:1 del CODE legado
-  (heredaría las colisiones).
+  labelRef taller; una pieza SIN código (`ptx_compile.part_code_missing`,
+  revisión §2 — sin fallback al partCode de plantilla, que es la autoridad
+  que #781 reemplaza), un código > 50 (`ptx_compile.part_code_too_long`) o
+  duplicado entre piezas físicas (`ptx_compile.part_code_duplicate`) bloquea
+  — nunca se trunca ni se fusiona. El optimizador ya no rellena labelRef con
+  el id de colocación: si el flujo de origen no asignó código, el hueco
+  llega vacío hasta el compilador y falla cerrado. PROHIBIDO derivar 1:1 del
+  CODE legado (heredaría las colisiones).
 
 ## 3. Cambios de dialecto r4 (gobiernan los bytes)
 
@@ -64,7 +79,7 @@ manufacturing code           → app, labels, PARTS_REQ.CODE
 |---|---|---|
 | Cantidad de retazo | `offcutsWithQuantity: true` | `OFFCUTS.OFC_QTY=1` — cada registro representa un retazo físico individual del patrón (subset demostrado; no es una constante global: si el modelo futuro representa book/repetición, el valor y el contrato se revisan con evidencia) |
 | Orden de declaración | `offcutsBeforePatterns: true` | `OFFCUTS` se emite antes del primer bloque `BOARDS/PATTERNS/CUTS`; ninguna referencia `Xn` apunta a un OFFCUTS posterior en el byte stream (invariante verificada por el readback) |
-| Marcadores | `offcutCutMarkers: 'function92-only'` | `Xn` sólo en filas `FUNCTION 92` (subset §6.2 del contrato r3). Los remanentes no-92 quedan como registro `OFFCUTS` único — sin pseudo-operación física `QTY_RPT=0/SEQUENCE=0` |
+| Marcadores | `offcutCutMarkers: 'function92-only'` | `Xn` sólo en filas `FUNCTION 92` (subset §6.2 del contrato r3). Revisión §3: **sólo se declara el pareado OFFCUTS↔92 demostrado** — un remanente sin 92 no obtiene ni pseudo-operación `QTY_RPT=0/SEQUENCE=0` NI fila `OFFCUTS` (queda sin declarar en el archivo industrial; el inventario interno de Granete lo conserva). Ninguna semántica clasificada UNKNOWN se emite |
 | Código de pieza | `partCodeAuthority` + `partCodeMaxLength` | §2 arriba |
 
 r2/r3 quedan inmutables (digests y goldens intactos); las selecciones pineadas
@@ -73,8 +88,11 @@ a r3 muestran el blocker stale-revision — nunca un retarget automático a r4.
 ## 4. Clasificación de las diferencias observadas (§G de #781)
 
 ```text
-CHANGED IN R4              OFC_QTY · OFFCUTS antes de PATTERNS/CUTS · sin
-                           marcadores Xn fuera de 92 · PARTS_REQ.CODE taller ·
+CHANGED IN R4              OFC_QTY · OFFCUTS antes de PATTERNS/CUTS · Xn sólo
+                           en FUNCTION 92 con OFFCUTS declarado únicamente
+                           para el pareado demostrado (revisión §3: los
+                           remanentes no-92 no se emiten) · PARTS_REQ.CODE
+                           taller fail-closed (missing/too_long/duplicate) ·
                            filename industrial corto
 KEPT INTENTIONALLY         MATERIALS antes de PARTS_REQ (sólo OFFCUTS se
                            reordena — sin razón documental para más) ·
@@ -82,21 +100,22 @@ KEPT INTENTIONALLY         MATERIALS antes de PARTS_REQ (sólo OFFCUTS se
                            COST/STK_FLAG · JOBS con vacíos finales · enteros
                            vs decimales · quoting mínima (los códigos r4 son
                            ASCII sin comas)
-UNKNOWN / FIELD TEST NEEDED  OFFCUTS sin marcador CUTS (los remanentes no-92):
-                             las dos muestras del cliente sólo evidencian
-                             OFFCUTS emparejado con un 92 — se clasifica así,
-                             no como "evidenciado"; ruta ASCII vs UNC con
-                             acentos (§6)
+UNKNOWN / FIELD TEST NEEDED  ruta ASCII vs UNC con acentos (§6) — único resto;
+                             la representación OFFCUTS-sin-marcador dejó de
+                             emitirse (decisión conservadora revisión §3)
 ```
 
 ## 5. Filename industrial
 
-El lane CADmatic 4 r4 entrega `G<hex6>.ptx` (hash sha256 del id del CutPlan,
-10 caracteres, ASCII, sin espacios/acento) y `G<hex6>-<n>.ptx` por material
-(índice 1-based, único por construcción). Determinista y collision-safe (no
-deriva del nombre de proyecto, que puede repetirse). La provenance descriptiva
-(nombre de obra, identidad del plan, release) vive en el manifest — el nombre
-industrial no reemplaza al manifiesto.
+El lane CADmatic 4 r4 entrega `G<hex12>.ptx` (revisión §4: 48 bits del hash
+sha256 de `cutPlan.id + version`, 16 caracteres ASCII sin espacios/acento) y
+`G<hex12>-<n>.ptx` por material (índice 1-based, único por construcción).
+Determinista y collision-safe (el cumpleaños de 48 bits es despreciable a
+nuestros volúmenes; incluir la versión impide que un plan regenerado conserve
+el filename del anterior; no deriva del nombre de proyecto, que puede
+repetirse). La provenance descriptiva (nombre de obra, identidad del plan,
+release) vive en el manifest — el nombre industrial no reemplaza al
+manifiesto.
 
 ## 6. Runbook del segundo intento de campo (post-merge)
 
@@ -119,14 +138,15 @@ industrial no reemplaza al manifiesto.
 ```text
 profile   ptx-cadmatic-4@r4   digest 94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc
 adapter   granete-ptx@1.3.0   implementationDigest dce80ccded4d5e4454461de4cf219fc40fa7c95836d065d447c881a998c0a4bd
-golden r4 bytes sha256 022413f64361fe7ff646b4c2b3170242ca8cf4336f2db4bf03bed2eb688ed7b1
+golden r4 bytes sha256 eadf184f1685f1a4aeae1375f3f571971da0485ea229ff098cf9542500ab5527
 ```
 
 El golden r4 (`cutPlanPtxGoldenR4.ts`) proviene del pipeline real
 (`optimizeCutPlan` → compiler r4), NO escrito a mano; cubre trims positivos,
 `FUNCTION 92 + Xn`, recut fase 3 con `CUT_INDEX ≠ SEQUENCE`, dos materiales,
-tres hojas, códigos taller con sufijo `-C2` y `OFC_QTY=1` en todos los
-OFFCUTS declarados antes de los bloques de patrones.
+tres hojas, códigos taller con sufijo `-C2` y exactamente UN OFFCUTS (el
+pareado con su 92, `OFC_QTY=1`) declarado antes de los bloques de patrones —
+los remanentes no-92 de las hojas quedan sin declarar (revisión §3).
 
 ## 8. Límites
 

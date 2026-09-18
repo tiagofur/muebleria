@@ -238,19 +238,23 @@ import { sha256Hex } from './digest';
 /**
  * #781 r4 — conservative industrial file name for the CADmatic 4 lane:
  * ASCII-only, no spaces/accents, ≤ 20 chars, deterministic and
- * collision-safe (hash of the CutPlan identity — NOT the project-name slug,
- * which can repeat across projects). Unified artifacts get `G<hex6>.ptx`;
- * by-material adds a 1-based group index. The descriptive provenance
- * (project name, plan identity) stays in the artifact manifest — the
- * industrial file name is a lane label, not the label of the work.
+ * collision-safe (48-bit hash of the exact CutPlan identity — id AND
+ * version, so a regenerated plan never keeps a stale filename; birthday
+ * bound stays negligible for realistic plan volumes). Unified artifacts get
+ * `G<hex12>.ptx`; by-material adds a 1-based group index. The descriptive
+ * provenance (project name, plan identity) stays in the artifact manifest —
+ * the industrial file name is a lane label, not the label of the work.
  */
 async function industrialArtifactFileName(
   cutPlanId: string,
+  cutPlanVersion: number,
   extension: string,
   groupIndex?: number,
 ): Promise<string> {
-  const token = (await sha256Hex(`granete:ptx-artifact:${cutPlanId}`))
-    .slice(0, 6)
+  const token = (
+    await sha256Hex(`granete:ptx-artifact:${cutPlanId}:v${cutPlanVersion}`)
+  )
+    .slice(0, 12)
     .toUpperCase();
   return groupIndex === undefined
     ? `G${token}.${extension}`
@@ -356,7 +360,7 @@ export async function generateSelectedCuttingOutput(
       for (const group of groups) {
         industrialGroupIndex += 1;
         const fileName = useIndustrialNaming
-          ? await industrialArtifactFileName(cutPlan.id, extension, industrialGroupIndex)
+          ? await industrialArtifactFileName(cutPlan.id, cutPlan.version, extension, industrialGroupIndex)
           : uniqueCutFileName(
               cutFileToken(group.materialName || group.materialCode),
               extension,
@@ -384,7 +388,7 @@ export async function generateSelectedCuttingOutput(
       cutPlan,
       cutPlan.id,
       useIndustrialNaming
-        ? await industrialArtifactFileName(cutPlan.id, extension)
+        ? await industrialArtifactFileName(cutPlan.id, cutPlan.version, extension)
         : `corte-${cutFileToken(cutPlan.projectName || cutPlan.projectId)}.${extension}`,
       { mode: 'unified' },
     ),

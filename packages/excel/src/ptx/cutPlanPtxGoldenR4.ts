@@ -13,10 +13,9 @@
  * - MATERIALS.TRIM_FRIP/VRIP/FXCT/VXCT = 10 (totals including kerf);
  * - PARTS_REQ.CODE = workshop manufacturing codes (clean labelRef, one per
  *   physical piece; the qty-2 row shows the -C2 copy suffix);
- * - OFFCUTS records carry OFC_QTY=1 (evidenced column, R2201/R7301);
- * - OFFCUTS declared BEFORE the PATTERNS/CUTS blocks (no forward Xn refs);
- * - FUNCTION 92 + Xn only where the r3 subset proved it; other remnants are
- *   OFFCUTS-only rows (no pseudo-physical markers);
+ * - OFFCUTS is emitted ONLY for the demonstrated OFFCUTS<->FUNCTION-92
+ *   pairing, with OFC_QTY=1, declared BEFORE the PATTERNS/CUTS blocks;
+ *   non-92 remnants stay undeclared in the industrial file (review §3);
  * - CUT_INDEX (structural preorder) diverges from SEQUENCE (event schedule);
  * - readback verifier === [] over serialize -> parse bytes.
  */
@@ -89,7 +88,7 @@ export const GOLDEN_R4_ROWS: ProductionCutRow[] = [
     "partName": "A",
     "moduleCode": "MOD-CAJ-01",
     "labelRef": "MOD-CAJ-01-P01",
-    "thicknessMm": 18
+    "thicknessMm": 15
   },
   {
     "quantity": 1,
@@ -107,7 +106,7 @@ export const GOLDEN_R4_ROWS: ProductionCutRow[] = [
     "partName": "B",
     "moduleCode": "MOD-CAJ-01",
     "labelRef": "MOD-CAJ-01-P02",
-    "thicknessMm": 18
+    "thicknessMm": 15
   },
   {
     "quantity": 1,
@@ -125,7 +124,7 @@ export const GOLDEN_R4_ROWS: ProductionCutRow[] = [
     "partName": "C",
     "moduleCode": "MOD-CAJ-01",
     "labelRef": "MOD-CAJ-01-P03",
-    "thicknessMm": 18
+    "thicknessMm": 15
   },
   {
     "quantity": 2,
@@ -285,26 +284,6 @@ export const GOLDEN_R4_DOCUMENT: PtxDocument = {
       "materialIndex": 1,
       "length": 564,
       "width": 426,
-      "producedQuantity": 1
-    },
-    {
-      "type": "OFFCUTS",
-      "jobIndex": 1,
-      "offcutIndex": 2,
-      "code": "place-1-1:rest",
-      "materialIndex": 2,
-      "length": 496,
-      "width": 780,
-      "producedQuantity": 1
-    },
-    {
-      "type": "OFFCUTS",
-      "jobIndex": 1,
-      "offcutIndex": 3,
-      "code": "place-1-1:rest",
-      "materialIndex": 2,
-      "length": 496,
-      "width": 780,
       "producedQuantity": 1
     },
     {
@@ -567,14 +546,6 @@ export const GOLDEN_R4_MAPPING = {
     {
       "sheetIndex": 0,
       "regionId": "place-3-1:rest"
-    },
-    {
-      "sheetIndex": 1,
-      "regionId": "place-1-1:rest"
-    },
-    {
-      "sheetIndex": 2,
-      "regionId": "place-1-1:rest"
     }
   ],
   "sheetIndexByPatternIndex": [
@@ -625,9 +596,7 @@ export const GOLDEN_R4_MAPPING = {
         "place-1-2"
       ],
       "releaseCutIndexByRegionId": {},
-      "offcutIndexByRegionId": {
-        "place-1-1:rest": 2
-      }
+      "offcutIndexByRegionId": {}
     },
     {
       "sheetIndex": 2,
@@ -643,11 +612,9 @@ export const GOLDEN_R4_MAPPING = {
         "place-1-2"
       ],
       "releaseCutIndexByRegionId": {},
-      "offcutIndexByRegionId": {
-        "place-1-1:rest": 3
-      }
+      "offcutIndexByRegionId": {}
     }
   ]
 };
 
-export const GOLDEN_R4_TEXT = "HEADER,1,LAB_FIXTURE NOT_MACHINE_VALIDATED,0,0,1\r\nJOBS,1,lab-781-golden-r4,GRANETE NON-PRODUCTION PTX CANDIDATE,,,,,,,,\r\nMATERIALS,1,1,LAB15,Lab Board 15,15,1,4,4,10,10,10,10,,,,,,,\r\nMATERIALS,1,2,LAB18,Lab Board 18,18,1,4,4,10,10,10,10,,,,,,,\r\nPARTS_REQ,1,1,MOD-CAJ-01-P01,1,800,350,1,0,0,1,1\r\nPARTS_REQ,1,2,MOD-CAJ-01-P02,1,350,500,1,0,0,1,1\r\nPARTS_REQ,1,3,MOD-CAJ-01-P03,1,232,300,1,0,0,1,1\r\nPARTS_REQ,1,4,MOD-CAJ-01-P04,2,700,700,1,0,0,1,1\r\nPARTS_REQ,1,5,MOD-CAJ-01-P04-C2,2,700,700,1,0,0,1,1\r\nOFFCUTS,1,1,place-3-1:rest,1,564,426,1\r\nOFFCUTS,1,2,place-1-1:rest,2,496,780,1\r\nOFFCUTS,1,3,place-1-1:rest,2,496,780,1\r\nBOARDS,1,1,S1,1,1220,800,1,1\r\nPATTERNS,1,1,1,4,1,1,1\r\nCUTS,1,1,1,1,2,800,1,0,0,place-1-1\r\nCUTS,1,1,2,2,1,350,1,1,1,place-1-2\r\nCUTS,1,1,3,5,2,232,1,0,0,place-3-1\r\nCUTS,1,1,4,7,3,300,1,3,1,place-3-2\r\nCUTS,1,1,5,3,2,350,1,0,0,place-2-1\r\nCUTS,1,1,6,4,1,500,1,2,1,place-2-2\r\nCUTS,1,1,7,6,92,564,1,X1,,place-3-1:rest\r\nBOARDS,1,2,S2,2,1220,800,1,1\r\nPATTERNS,1,2,2,4,1,1,1\r\nCUTS,1,2,1,1,2,700,1,0,0,place-1-1\r\nCUTS,1,2,2,2,1,700,1,4,1,place-1-2\r\nBOARDS,1,3,S3,2,1220,800,1,1\r\nPATTERNS,1,3,3,4,1,1,1\r\nCUTS,1,3,1,1,2,700,1,0,0,place-1-1\r\nCUTS,1,3,2,2,1,700,1,5,1,place-1-2\r\n";
+export const GOLDEN_R4_TEXT = "HEADER,1,LAB_FIXTURE NOT_MACHINE_VALIDATED,0,0,1\r\nJOBS,1,lab-781-golden-r4,GRANETE NON-PRODUCTION PTX CANDIDATE,,,,,,,,\r\nMATERIALS,1,1,LAB15,Lab Board 15,15,1,4,4,10,10,10,10,,,,,,,\r\nMATERIALS,1,2,LAB18,Lab Board 18,18,1,4,4,10,10,10,10,,,,,,,\r\nPARTS_REQ,1,1,MOD-CAJ-01-P01,1,800,350,1,0,0,1,1\r\nPARTS_REQ,1,2,MOD-CAJ-01-P02,1,350,500,1,0,0,1,1\r\nPARTS_REQ,1,3,MOD-CAJ-01-P03,1,232,300,1,0,0,1,1\r\nPARTS_REQ,1,4,MOD-CAJ-01-P04,2,700,700,1,0,0,1,1\r\nPARTS_REQ,1,5,MOD-CAJ-01-P04-C2,2,700,700,1,0,0,1,1\r\nOFFCUTS,1,1,place-3-1:rest,1,564,426,1\r\nBOARDS,1,1,S1,1,1220,800,1,1\r\nPATTERNS,1,1,1,4,1,1,1\r\nCUTS,1,1,1,1,2,800,1,0,0,place-1-1\r\nCUTS,1,1,2,2,1,350,1,1,1,place-1-2\r\nCUTS,1,1,3,5,2,232,1,0,0,place-3-1\r\nCUTS,1,1,4,7,3,300,1,3,1,place-3-2\r\nCUTS,1,1,5,3,2,350,1,0,0,place-2-1\r\nCUTS,1,1,6,4,1,500,1,2,1,place-2-2\r\nCUTS,1,1,7,6,92,564,1,X1,,place-3-1:rest\r\nBOARDS,1,2,S2,2,1220,800,1,1\r\nPATTERNS,1,2,2,4,1,1,1\r\nCUTS,1,2,1,1,2,700,1,0,0,place-1-1\r\nCUTS,1,2,2,2,1,700,1,4,1,place-1-2\r\nBOARDS,1,3,S3,2,1220,800,1,1\r\nPATTERNS,1,3,3,4,1,1,1\r\nCUTS,1,3,1,1,2,700,1,0,0,place-1-1\r\nCUTS,1,3,2,2,1,700,1,5,1,place-1-2\r\n";

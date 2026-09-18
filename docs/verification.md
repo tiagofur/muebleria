@@ -446,8 +446,15 @@ validate → verifier independiente === []):
   (sin forward Xn — invariante del verifier); `Xn` sólo en FUNCTION 92;
 - identidad: profile `r4` + adapter `1.3.0` con digests verificados contra el
   contrato industrial y el catálogo compartido TS/JSON/Go (paridad);
-- filename: `G<hex6>.ptx` / `G<hex6>-<n>.ptx` deterministas, manifest con SHA
-  exacto y provenance descriptiva intacta;
+- filename: `G<hex12>.ptx` / `G<hex12>-<n>.ptx` deterministas (hash de
+  cutPlan id+versión), manifest con SHA exacto y provenance descriptiva
+  intacta;
+- revisión del PR (Codex): asignación canónica compartida de códigos
+  (reorden de unidades/piezas/ítems no cambia códigos — tests en ambos
+  flujos), `part_code_missing` fail-closed (sin fallback al partCode de
+  plantilla; el optimizador ya no rellena labelRef con el id de colocación) y
+  OFFCUTS emitido SÓLO para el pareado demostrado con FUNCTION 92
+  (remanentes no-92 sin declarar — nada clasificado UNKNOWN se emite);
 - field: la aceptación real por CADLink es el próximo gate externo (runbook en
   `docs/machines/ptx-cadmatic4/05_contrato_r4_field_dialect.md` §6); nada de
   esto promueve `NOT_TESTED/notClaimed`.

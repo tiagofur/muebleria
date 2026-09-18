@@ -55,6 +55,7 @@ function validCad4Plan() {
     W2: 0,
     partCode: 'P1',
     partName: 'Panel lab',
+    labelRef: 'MOD-LAB-P1',
     moduleCode: 'M01',
     thicknessMm: 18,
   };

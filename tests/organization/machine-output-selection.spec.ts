@@ -118,6 +118,9 @@ async function seedCuttingProject(repository: APIWorkspaceRepository, projectId 
   const cutPlan = optimizeCutPlan(projectId, [{
     quantity: 1, lengthMm: 600, widthMm: 400, description: 'Panel E2E', materialName: 'MDF E2E',
     materialCode: 'MDF-E2E', thicknessMm: 18, grain: 0, L1: 0, L2: 0, W1: 0, W2: 0,
+    // #781 r4: every real app flow assigns workshop codes; the synthetic
+    // seed carries one so the plan models production data.
+    partCode: 'P01', partName: 'Panel E2E', moduleCode: 'MOD-E2E', labelRef: 'MOD-E2E-P01',
   }], [], undefined, 'Salida CADmatic 4 E2E');
   await repository.saveProject({
     id: projectId, name: 'Salida CADmatic 4 E2E', customerId: customer.id,

@@ -119,6 +119,36 @@ export interface CutRowPieceLink {
   readonly part: import('../types').ResolvedBoardPart;
 }
 
+
+/**
+ * #781 — canonical workshop-code assignment rule, SHARED by every flow that
+ * produces manufacturing codes (BOM rows, piece labels, release demand).
+ *
+ * Rule: occurrences (muebles) are ordered canonically by their durable key
+ * (project item id / furniture instance id — each flow's own stable
+ * identity), and the parts inside an occurrence by partId, BEFORE the
+ * `-L<n>` line suffix and the sequential `Pnn` are assigned. The same set of
+ * occurrences and parts always yields the same codes regardless of array
+ * order. Cross-flow caveat: the BOM flow and the release flow key
+ * occurrences by different durable ids (project item vs furniture
+ * instance), so two identical repeated modules may swap which one is "L2"
+ * between project preview and release until the demand contract carries a
+ * canonical unit ordinal — documented in
+ * docs/machines/ptx-cadmatic4/05_contrato_r4_field_dialect.md.
+ */
+export function canonicalWorkshopOccurrences<T extends { readonly id: string }>(
+  occurrences: readonly T[],
+): T[] {
+  return [...occurrences].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** #781 — canonical part order inside one occurrence (see above). */
+export function canonicalWorkshopParts<T extends { readonly id: string }>(
+  parts: readonly T[],
+): T[] {
+  return [...parts].sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export function generateCutRowsWithLinks(
   project: BomProjectContext,
   catalog: Catalog,
@@ -126,7 +156,8 @@ export function generateCutRowsWithLinks(
   const sortable: SortableCutRow[] = [];
   const moduleCounts = new Map<string, number>();
 
-  for (const item of project.items) {
+  // #781 — canonical occurrence order (see canonicalWorkshopOccurrences).
+  for (const item of canonicalWorkshopOccurrences(project.items)) {
     if (!(item.quantity > 0)) {
       throw new ValidationError(
         `Project item quantity must be > 0 (got ${item.quantity})`,
@@ -166,7 +197,8 @@ export function generateCutRowsWithLinks(
     );
 
     let partIdx = 0;
-    for (const part of bom.boardParts) {
+    // #781 — canonical part order: Pnn follows partId, never array order.
+    for (const part of canonicalWorkshopParts(bom.boardParts)) {
       partIdx++;
       const material = findMaterial(catalog, part.materialId);
       if (!material) {
@@ -320,7 +352,8 @@ export function generatePieceLabels(
   const sortable: SortablePieceLabel[] = [];
   const moduleCounts = new Map<string, number>();
 
-  for (const item of project.items) {
+  // #781 — canonical occurrence order (see canonicalWorkshopOccurrences).
+  for (const item of canonicalWorkshopOccurrences(project.items)) {
     if (!(item.quantity > 0)) {
       throw new ValidationError(
         `Project item quantity must be > 0 (got ${item.quantity})`,
@@ -360,7 +393,8 @@ export function generatePieceLabels(
     );
 
     let partIdx = 0;
-    for (const part of bom.boardParts) {
+    // #781 — canonical part order: Pnn follows partId, never array order.
+    for (const part of canonicalWorkshopParts(bom.boardParts)) {
       partIdx++;
       const material = findMaterial(catalog, part.materialId);
       if (!material) {

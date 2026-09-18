@@ -96,14 +96,14 @@ describe('golden r4 candidato LAB_FIXTURE NOT_MACHINE_VALIDATED (dialecto de cam
       expect(code.length).toBeLessThanOrEqual(50);
     }
 
-    // Every OFFCUTS record carries OFC_QTY=1…
+    // ONLY the demonstrated OFFCUTS↔FUNCTION-92 pairing is emitted (review
+    // §3): the sheets' non-92 remnants stay undeclared in the industrial
+    // file, so this plan declares exactly the one 92-released offcut.
     const offcuts = doc.records.filter(
       (r): r is PtxOffcutRecord => r.type === 'OFFCUTS',
     );
-    expect(offcuts.length).toBeGreaterThanOrEqual(3);
-    for (const offcut of offcuts) {
-      expect(offcut.producedQuantity).toBe(1);
-    }
+    expect(offcuts).toHaveLength(1);
+    expect(offcuts[0]).toMatchObject({ code: 'place-3-1:rest', producedQuantity: 1 });
 
     // …and all of them are declared BEFORE the first BOARDS/PATTERNS/CUTS
     // record in the byte stream (no forward Xn references).

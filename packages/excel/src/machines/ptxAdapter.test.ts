@@ -145,7 +145,7 @@ describe('PTX_POSTPROCESSOR_ADAPTER', () => {
       compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4'],
       r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
       r3ReleaseScheduling: 'phase-2-rest-remnant-function-92-before-dependent-recut',
-      r4OffcutQuantity: 'ofc-qty-1-per-physical-remnant-row',
+      r4OffcutQuantity: 'ofc-qty-1-92-paired-offcuts-only',
       r4OffcutOrdering: 'offcuts-declared-before-patterns-no-forward-xn',
       r4OffcutMarkers: 'xn-references-only-on-function-92',
       r4PartCodes: 'workshop-labelref-unique-per-piece-max-50-fail-closed',

@@ -279,6 +279,8 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r4, #781)', () => {
       W2: 0,
       partCode,
       partName: partCode,
+      // #781 r4: workshop codes are fail-closed — lab rows carry one.
+      labelRef: `MOD-LAB-${partCode}`,
       moduleCode: 'M01',
       thicknessMm: 18,
     });
@@ -368,6 +370,7 @@ function buildCad4ReadyPlan(): CutPlan {
       W2: 0,
       partCode: 'P1',
       partName: 'Panel lab',
+      labelRef: 'MOD-LAB-P1',
       moduleCode: 'M01',
       thicknessMm: 18,
     }],

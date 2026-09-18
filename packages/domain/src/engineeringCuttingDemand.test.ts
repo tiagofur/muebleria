@@ -131,6 +131,29 @@ function demandFixture(over: Partial<ReleaseCuttingDemandView> = {}): ReleaseCut
   };
 }
 
+describe('releaseCutRowsFromDemand — códigos canónicos (#781 review §1)', () => {
+  it('reordenar unidades y piezas del input NO cambia los códigos de fabricación', () => {
+    const demand = demandFixture();
+    const base = releaseCutRowsFromDemand(demand, catalogFixture());
+
+    // Shuffle units AND pieces: the canonical order (units by
+    // furnitureInstanceId, pieces by partId) must produce identical codes.
+    const shuffled: typeof demand = {
+      ...demand,
+      units: [...demand.units].reverse().map((unit) => ({
+        ...unit,
+        pieces: [...unit.pieces].reverse(),
+      })),
+    };
+    const reordered = releaseCutRowsFromDemand(shuffled, catalogFixture());
+
+    const byCode = (rows: typeof base) =>
+      rows.map((row) => ({ code: row.partCode, labelRef: row.labelRef, dims: [row.lengthMm, row.widthMm] }))
+        .sort((a, b) => a.labelRef!.localeCompare(b.labelRef!));
+    expect(byCode(reordered)).toEqual(byCode(base));
+  });
+});
+
 describe('releaseCutRowsFromDemand (#739)', () => {
   it('preserves unit/occurrence identity, quantities, frozen dims, material, grain, edges and thickness', () => {
     const rows = releaseCutRowsFromDemand(demandFixture(), catalogFixture());

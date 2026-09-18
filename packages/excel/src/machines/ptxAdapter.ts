@@ -388,7 +388,7 @@ export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
     compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4'],
     r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
     r3ReleaseScheduling: 'phase-2-rest-remnant-function-92-before-dependent-recut',
-    r4OffcutQuantity: 'ofc-qty-1-per-physical-remnant-row',
+    r4OffcutQuantity: 'ofc-qty-1-92-paired-offcuts-only',
     r4OffcutOrdering: 'offcuts-declared-before-patterns-no-forward-xn',
     r4OffcutMarkers: 'xn-references-only-on-function-92',
     r4PartCodes: 'workshop-labelref-unique-per-piece-max-50-fail-closed',
@@ -406,7 +406,7 @@ export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
     },
     r4: {
       digest: '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc',
-      goldenBytesSha256: '022413f64361fe7ff646b4c2b3170242ca8cf4336f2db4bf03bed2eb688ed7b1',
+      goldenBytesSha256: 'eadf184f1685f1a4aeae1375f3f571971da0485ea229ff098cf9542500ab5527',
     },
   },
   legacyGoldenBytesSha256: '544dcae574bc19e19f934f96b2ad1dc104a2d7b1f668262a83ae09df72510f09',

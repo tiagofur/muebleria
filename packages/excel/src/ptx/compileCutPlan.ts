@@ -255,6 +255,7 @@ export type PtxCompilationErrorCode =
   | 'ptx_compile.kerf_not_uniform'
   | 'ptx_compile.magnitude_not_representable'
   | 'ptx_compile.identity_not_ascii'
+  | 'ptx_compile.part_code_missing'
   | 'ptx_compile.part_code_too_long'
   | 'ptx_compile.part_code_duplicate'
   | 'ptx_compile.material_thickness_missing'
@@ -1273,10 +1274,19 @@ export function compileCutPlanToPtxDocument(
       // silent filtering that could merge two part codes); empty gets the
       // explicit technical code PART-<n> (the placement ref is the identity).
       let partCode: string;
-      if (options.partCodeAuthority === 'workshop-labelref' && piece.labelRef.trim() !== '') {
-        // r4 (#781): the workshop manufacturing code (clean labelRef, one per
-        // physical piece) — the SAME authority the app displays. Never the
-        // raw template partCode, never truncated.
+      if (options.partCodeAuthority === 'workshop-labelref') {
+        // r4 (#781 review): the declared authority is the workshop code — a
+        // piece WITHOUT one BLOCKS (part_code_missing). Falling back to the
+        // raw template partCode would re-leak the authority this revision
+        // exists to replace; the plan must be re-generated from a flow that
+        // assigns workshop codes.
+        if (piece.labelRef.trim() === '') {
+          throw new PtxCompilationError(
+            'ptx_compile.part_code_missing',
+            'La pieza no tiene código de fabricación (labelRef taller): regenerá el plan desde un flujo que asigne códigos — no se usa el partCode de plantilla bajo r4',
+            { pieceRef: piece.id, partCode: piece.partCode },
+          );
+        }
         partCode = requireAsciiIdentity(piece.labelRef, 'partCode (workshop labelRef)', {
           pieceRef: piece.id,
           partCode: piece.labelRef,
@@ -1465,31 +1475,12 @@ export function compileCutPlanToPtxDocument(
       const skipOffcutMarker =
         options.offcutCutMarkers === 'function92-only' && release.kind === 'offcut' && !isPhysical92;
       if (skipOffcutMarker) {
-        // r4: the remnant is declared by its OFFCUTS record only — no
-        // pseudo-physical QTY_RPT=0/SEQUENCE=0 pass (field samples show Xn
-        // exclusively on FUNCTION 92 rows). The OFFCUTS record + mapping are
-        // still produced below.
-        if (release.kind === 'offcut') {
-          const terminal = terminalByRegion.get(release.regionId)!;
-          offcutIndexByRegionId.set(release.regionId, offcutIndex);
-          offcutRegionRefByOffcutIndex.push({
-            sheetIndex: sheet.sheetIndex,
-            regionId: release.regionId,
-          });
-          offcutRecords.push({
-            type: 'OFFCUTS',
-            jobIndex: 1,
-            offcutIndex,
-            code: ptxAscii(release.regionId) || `OFFCUT-${offcutIndex}`,
-            materialIndex,
-            length: q(terminal.rect.lengthMm, `OFFCUTS ${offcutIndex} LENGTH`),
-            width: q(terminal.rect.widthMm, `OFFCUTS ${offcutIndex} WIDTH`),
-            // OFC_QTY=1: this record represents exactly ONE physical remnant
-            // of this pattern (#781 subset; R2201/R7301 evidence).
-            ...(options.offcutsWithQuantity === true ? { producedQuantity: 1 } : {}),
-          });
-          offcutIndex += 1;
-        }
+        // r4 (#781 review §3): ONLY the demonstrated OFFCUTS↔FUNCTION-92
+        // pairing is emitted. A non-92 remnant has no evidenced machine
+        // representation (no pseudo-pass row, and no OFFCUTS-only row — the
+        // field samples show OFFCUTS exclusively paired with a 92), so it
+        // stays undeclared in the industrial file: the CUTS tree remains
+        // complete and Granete's internal inventory keeps the remnant.
         return;
       }
       releaseRowCutIndex += 1;

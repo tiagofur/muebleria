@@ -108,13 +108,10 @@ export function releaseCutRowsFromDemand(
   const units = [...demand.units].sort((a, b) =>
     a.furnitureInstanceId.localeCompare(b.furnitureInstanceId),
   );
-  // #781 — manufacturing code authority. Rows carry the SAME clean
-  // partCode/labelRef style the BOM flow (engine/cut.ts) already emits, so
-  // the app, labels and PTX PARTS_REQ.CODE share one workshop code instead
-  // of the internal partId leaking into fabrication outputs. Duplicate
-  // module codes get the -L<n>- line suffix; partIdx is 1-based per unit
-  // line (mirrors generateCutRowsWithLinks). pieceRef identity is NOT
-  // touched: it stays partId-based wherever identity is the concept.
+  // #781 — canonical workshop-code assignment (review §1): occurrences and
+  // parts are ordered canonically BEFORE numbering, mirroring the BOM flow's
+  // canonicalWorkshopOccurrences/canonicalWorkshopParts rule, so reordering
+  // the demand arrays never changes the codes.
   const moduleCounts = new Map<string, number>();
   for (const unit of units) {
     const moduleCode = modulesById.get(unit.furnitureDefinitionId)?.code ?? unit.furnitureDefinitionId;
@@ -122,7 +119,7 @@ export function releaseCutRowsFromDemand(
     moduleCounts.set(moduleCode, seenMod);
     const lineSuffix = seenMod === 1 ? undefined : `L${seenMod}`;
     let partIdx = 0;
-    for (const piece of unit.pieces) {
+    for (const piece of [...unit.pieces].sort((a, b) => a.partId.localeCompare(b.partId))) {
       partIdx++;
       const material = materialsById.get(piece.materialId)!;
       const edge = piece.edgeBandId ? edgesById.get(piece.edgeBandId) : undefined;
