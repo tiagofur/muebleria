@@ -53,21 +53,33 @@ export async function fetchProjectWorkshopOccurrences(args: {
   readonly token: string;
   readonly projectId: string;
   readonly signal?: AbortSignal;
-}): Promise<WorkshopOccurrenceProjection> {
+}): Promise<WorkshopOccurrenceProjection | null> {
   const client = new GraneteApiClient(args.baseUrl);
-  return toProjection(
-    await client.getProjectWorkshopOccurrences(
-      args.token,
-      args.projectId,
-      args.signal,
-    ),
-  );
+  try {
+    return toProjection(
+      await client.getProjectWorkshopOccurrences(
+        args.token,
+        args.projectId,
+        args.signal,
+      ),
+    );
+  } catch (err) {
+    // A 404 means no liberation exists yet — the project has no frozen
+    // occurrence authority. Return null so the hook degrades to the live
+    // canonical order without surfacing a console error (#781 §11).
+    if (
+      err instanceof Error
+      && /404/i.test(err.message)
+    ) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 export type ProjectWorkshopOccurrenceContext =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'ready'; readonly projection: WorkshopOccurrenceProjection }
-  | { readonly kind: 'error'; readonly message: string };
+  | { readonly kind: 'ready'; readonly projection: WorkshopOccurrenceProjection };
 
 export function useProjectWorkshopOccurrences(args: {
   readonly baseUrl: string;
@@ -90,14 +102,11 @@ export function useProjectWorkshopOccurrences(args: {
   if (!args.projectId || !args.token) return { kind: 'idle' };
   if (query.isPending) return { kind: 'idle' };
   if (query.isError || !query.data) {
-    // A missing liberation is not an error surface: no frozen authority
-    // means the live canonical order governs. Anything else (network,
-    // permissions) also degrades to live rather than blocking engineering.
-    return {
-      kind: 'error',
-      message:
-        'No se pudo leer la ocurrencia de fabricación congelada de esta obra; se muestra el orden vivo.',
-    };
+    // null data means no liberation exists (404 caught above). A missing
+    // liberation is not an error surface: no frozen authority means the live
+    // canonical order governs. Anything else (network, permissions) also
+    // degrades to live rather than blocking engineering.
+    return { kind: 'idle' };
   }
   return { kind: 'ready', projection: query.data };
 }
