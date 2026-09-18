@@ -109,7 +109,7 @@ describe('EngineeringWorkspace — #739 demanda congelada', () => {
     expect(screen.queryByText(/proyecto vivo/)).toBeNull();
     // El aviso anuncia preparación editable, no vista de trabajo.
     expect(screen.getByTestId('eng-release-prep-notice').textContent).toContain(
-      'no modifica la cotización',
+      'contenido congelado de la liberación',
     );
     expect(screen.queryByTestId('eng-live-view-notice')).toBeNull();
   });

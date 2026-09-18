@@ -52,13 +52,33 @@ function StepIcon({ step }: { readonly step: FabricationFlowStep }): ReactNode {
 }
 
 /** Short status label for inline display (avoids repeating full step label). */
-function InlineStatusLabel({ step }: { readonly step: FabricationFlowStep }): ReactNode | null {
-  if (step.status === 'done' && !step.detail) return null; // checkmark is enough
+function InlineStatusLabel({
+  step,
+  stateTestId,
+}: {
+  readonly step: FabricationFlowStep;
+  readonly stateTestId?: string;
+}): ReactNode | null {
   if (step.status === 'current' && step.stateLabel) {
-    return <span className="ps__state">{step.stateLabel}</span>;
+    return (
+      <span className="ps__state" data-testid={stateTestId}>
+        {step.stateLabel}
+      </span>
+    );
   }
   if (step.status === 'unconfirmed') {
-    return <span className="ps__state ps__state--muted">Pendiente de confirmar</span>;
+    return (
+      <span className="ps__state ps__state--muted" data-testid={stateTestId}>
+        Pendiente de confirmar
+      </span>
+    );
+  }
+  if (step.stateLabel) {
+    return (
+      <span className="ps__state" data-testid={stateTestId}>
+        {step.stateLabel}
+      </span>
+    );
   }
   return null;
 }
@@ -88,7 +108,7 @@ export function ProcessStrip({
               <StepIcon step={step} />
             </span>
             <span className="ps__label">{step.label}</span>
-            <InlineStatusLabel step={step} />
+            <InlineStatusLabel step={step} stateTestId={stateTestIds?.[step.id]} />
             {step.detail ? (
               <span className="ps__detail" title={step.detail}>{step.detail}</span>
             ) : null}
