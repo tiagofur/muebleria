@@ -1011,16 +1011,22 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       routeEngineeringReleaseId ?? 'no-release',
     ),
   });
-  // #781 — the project's frozen manufacturing occurrence authority (latest
-  // release). The Engineering/BOM context derives from it so the same
-  // physical occurrence keeps the same workshop code from preview to PTX.
+  // #781 — the project's frozen manufacturing occurrence authority of the
+  // EXACT release. Only fetched when the engineering release context is
+  // ready (same project/release scope). Never falls back to "latest".
   const projectWorkshopOccurrences = useProjectWorkshopOccurrences({
     baseUrl: DEFAULT_API_BASE,
     token: session === 'auth' ? authToken : null,
-    projectId: routeEngineeringProjectId,
+    projectId:
+      engineeringReleaseContext.kind === 'ready' && routeEngineeringProjectId
+        ? routeEngineeringProjectId
+        : null,
+    releaseId:
+      engineeringReleaseContext.kind === 'ready' ? routeEngineeringReleaseId : null,
     queryKey: workshopOccurrenceQueryKey(
       sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
       routeEngineeringProjectId ?? 'none',
+      routeEngineeringReleaseId ?? 'none',
     ),
   });
   // #739 — frozen cutting demand of the SAME pinned release (fetched only
@@ -1550,17 +1556,23 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               : undefined;
         // #781 — the Engineering/BOM context derives from the project's
         // FROZEN occurrence authority (never mutates the persisted Project;
-        // live order when no complete liberation covers it).
-        const engBomProject: typeof engProject = {
-          ...engProject,
-          items: deriveEngineeringBomItems(engProject, projectWorkshopOccurrences),
-        };
-        const engModules = modules.filter((m) =>
-          engBomProject.items.some((item) => item.moduleId === m.id),
-        );
+        // fail closed when a release IS open but projection fails).
+        let engBomProject: typeof engProject | null = null;
+        let engWorkshopError: string | null = null;
+        try {
+          engBomProject = {
+            ...engProject,
+            items: deriveEngineeringBomItems(engProject, projectWorkshopOccurrences),
+          };
+        } catch (err) {
+          engWorkshopError = err instanceof Error ? err.message : 'Error al proyectar ocurrencias de fabricación';
+        }
+        const engModules = engBomProject
+          ? modules.filter((m) => engBomProject!.items.some((item) => item.moduleId === m.id))
+          : [];
         let engCutRows: ReturnType<typeof generateCutRows> | null = null;
         let engCutError: string | null = null;
-        if (catalog) {
+        if (catalog && engBomProject) {
           try {
             engCutRows = generateCutRows(engBomProject, catalog);
           } catch (err) {
@@ -1676,7 +1688,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         let engLabelsError: string | null = null;
         let engModuleLabels: ReturnType<typeof generateModuleLabels> | null = null;
         let engModuleLabelsError: string | null = null;
-        if (catalog) {
+        if (catalog && engBomProject) {
           try {
             engLabels = generatePieceLabels(engBomProject, catalog);
           } catch (err) {
@@ -1724,7 +1736,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                 : null
             }
             cutRows={engCutRows}
-            cutError={engCutError}
+            cutError={engWorkshopError ?? engCutError}
             readiness={engReadiness}
             labels={engLabels}
             labelsError={engLabelsError}

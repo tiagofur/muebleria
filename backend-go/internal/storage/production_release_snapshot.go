@@ -173,27 +173,14 @@ type WorkshopOccurrenceProjectionView struct {
 	Assignments                []WorkshopOccurrenceAssignmentView `json:"assignments"`
 }
 
-// GetProjectWorkshopOccurrences projects the LATEST release's frozen unit
+// GetProjectWorkshopOccurrences projects the EXACT release's frozen unit
 // order as the manufacturing occurrence authority. The ordinal is the
 // snapshot unit position (index+1): decided when the work was liberated,
 // never recomputed, and historical releases need no migration.
-func (s *PostgresStore) GetProjectWorkshopOccurrences(ctx context.Context, projectID string) (*WorkshopOccurrenceProjectionView, error) {
-	if !isValidUUID(projectID) {
+// #781 FIX — receives releaseId explicitly; never SELECT latest.
+func (s *PostgresStore) GetProjectWorkshopOccurrences(ctx context.Context, projectID, releaseID string) (*WorkshopOccurrenceProjectionView, error) {
+	if !isValidUUID(projectID) || !isValidUUID(releaseID) {
 		return nil, ErrReleaseSnapshotUnavailable
-	}
-	// Latest release of the project (highest release_number).
-	var releaseID string
-	err := s.db(ctx).QueryRow(ctx, `
-		SELECT id::text FROM production_releases
-		WHERE project_id = $1 AND organization_id = $2
-		ORDER BY release_number DESC LIMIT 1`,
-		projectID, OrgFromCtx(ctx)).Scan(&releaseID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		// No liberation yet: the project has no frozen occurrence authority.
-		return nil, ErrReleaseSnapshotUnavailable
-	}
-	if err != nil {
-		return nil, err
 	}
 	snapshot, err := s.GetProductionReleaseManufacturingSnapshot(ctx, projectID, releaseID)
 	if err != nil {

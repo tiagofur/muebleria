@@ -168,12 +168,12 @@ func TestReleaseCuttingDemand_UnavailableAndIsolated(t *testing.T) {
 
 func TestProjectWorkshopOccurrences_FrozenLatestReleaseOrder(t *testing.T) {
 	fx := setupReleaseFixture(t)
-	_ = createCuttingDemandRelease(t, fx)
+	demand := createCuttingDemandRelease(t, fx)
 
 	var view *storage.WorkshopOccurrenceProjectionView
 	err := releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 		var innerErr error
-		view, innerErr = fx.store.GetProjectWorkshopOccurrences(ctx, fx.projectID)
+		view, innerErr = fx.store.GetProjectWorkshopOccurrences(ctx, fx.projectID, demand.ReleaseID)
 		return innerErr
 	})
 	if err != nil {
@@ -207,7 +207,7 @@ func TestProjectWorkshopOccurrences_FrozenLatestReleaseOrder(t *testing.T) {
 	// No liberation at all → unavailable (never a live ordering).
 	fx2 := setupReleaseFixture(t)
 	err2 := releaseTx(t, fx2.store, fiActorA(), func(ctx context.Context) error {
-		_, innerErr := fx2.store.GetProjectWorkshopOccurrences(ctx, fx2.projectID)
+		_, innerErr := fx2.store.GetProjectWorkshopOccurrences(ctx, fx2.projectID, "00000000-0000-0000-0000-000000000000")
 		return innerErr
 	})
 	if err2 == nil {

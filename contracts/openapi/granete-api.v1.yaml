@@ -3338,11 +3338,11 @@
         }
       }
     },
-    "/projects/{projectId}/workshop-occurrences": {
+    "/projects/{projectId}/production-releases/{releaseId}/workshop-occurrences": {
       "get": {
         "operationId": "getProjectWorkshopOccurrences",
-        "summary": "Frozen manufacturing occurrence authority of the latest release (#781)",
-        "description": "The project's frozen manufacturing occurrence authority: the LATEST production release's frozen unit order (workshop_occurrence_ordinal = snapshot position, index+1, decided when the work was liberated and never recomputed) projected onto the CURRENT quote-line↔instance links. Engineering builds its derived BOM context from it so the same physical occurrence keeps the same workshop code from preview to PTX/CNC. covers_all_current_instances is false when the live representation drifted from the frozen release — callers then keep the LIVE canonical order instead of mixing frozen and unfrozen occurrences.",
+        "summary": "Frozen manufacturing occurrence authority of the exact release (#781)",
+        "description": "The EXACT release's frozen manufacturing occurrence authority: the frozen unit order (workshop_occurrence_ordinal = snapshot position, index+1, decided when the work was liberated and never recomputed) projected onto the CURRENT quote-line↔instance links. Engineering builds its derived BOM context from it so the same physical occurrence keeps the same workshop code from preview to PTX/CNC. covers_all_current_instances is false when the live representation drifted from the frozen release — callers then keep the LIVE canonical order instead of mixing frozen and unfrozen occurrences. #781 FIX — uses EXACT releaseId; never falls back to latest.",
         "tags": ["projects"],
         "security": [
           {
@@ -3358,11 +3358,20 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "The frozen occurrence projection of the latest release.",
+            "description": "The frozen occurrence projection of the exact release.",
             "content": {
               "application/json": {
                 "schema": {

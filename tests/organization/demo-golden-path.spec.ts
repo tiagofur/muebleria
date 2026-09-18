@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { allowExpectedTransientErrors, collectBrowserErrors } from './support/browserErrors';
+import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
 import { required } from './support/api';
 
 /**
@@ -505,7 +505,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
   // ------------------------------------------------------------------
   test('stage 1b — accepted Q without a release creates no P, no Ingeniería entry and no release downloads', async ({ page }) => {
     test.setTimeout(90_000);
-    const browserErrors = collectBrowserErrors(page, { allow: allowExpectedTransientErrors });
+    const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
     const apiBase = required('ORGANIZATION_API_BASE');
 
     // Acceptance is a commercial fact only: no release row exists.

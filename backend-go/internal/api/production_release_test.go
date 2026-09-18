@@ -604,8 +604,9 @@ func workshopOccurrencesStubView() *storage.WorkshopOccurrenceProjectionView {
 
 func newWorkshopOccurrencesRequest(userID string, roles []domain.UserRole) *http.Request {
 	req := httptest.NewRequest(http.MethodGet,
-		"/api/projects/"+releaseTestProjectID+"/workshop-occurrences", nil)
+		"/api/projects/"+releaseTestProjectID+"/production-releases/"+releaseTestReleaseID+"/workshop-occurrences", nil)
 	req.SetPathValue("projectId", releaseTestProjectID)
+	req.SetPathValue("releaseId", releaseTestReleaseID)
 	return withTestClaims(req, userID, roles)
 }
 
@@ -685,8 +686,9 @@ func TestHandleProjectWorkshopOccurrences_ErrorMapping(t *testing.T) {
 	}
 
 	// Invalid IDs never reach storage.
-	bad := httptest.NewRequest(http.MethodGet, "/api/projects/not-a-uuid/workshop-occurrences", nil)
+	bad := httptest.NewRequest(http.MethodGet, "/api/projects/not-a-uuid/production-releases/"+releaseTestReleaseID+"/workshop-occurrences", nil)
 	bad.SetPathValue("projectId", "not-a-uuid")
+	bad.SetPathValue("releaseId", releaseTestReleaseID)
 	bad = withTestClaims(bad, "user-1", []domain.UserRole{domain.RoleAdmin})
 	w2 := httptest.NewRecorder()
 	server2 := &Server{Store: &stubStore{workshopOccurrencesResult: workshopOccurrencesStubView()}}

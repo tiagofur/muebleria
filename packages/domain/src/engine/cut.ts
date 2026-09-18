@@ -227,6 +227,14 @@ export interface WorkshopOccurrenceProjection {
  * occurrence ordinal. The persisted Project is never mutated; callers that
  * only want the live view pass an empty projection and get the items back
  * unchanged. Partial coverage fails closed (never a silent mix).
+ *
+ * #781 FIX — ProjectItem.id is NEVER mutated; furnitureInstanceId is
+ * transported as a separate field so the original quote-line identity is
+ * preserved for downstream consumers (pricing, project persistence, etc.).
+ *
+ * #781 FIX — Dense ordinal validation: ordinals must be exactly 1..N with
+ * no gaps, no duplicates, no missing. All assignments must be consumed.
+ * Per-projectItem assignment count must match item.quantity exactly.
  */
 export function applyFrozenWorkshopOccurrenceOrdinals(
   items: readonly ProjectItem[],
@@ -235,12 +243,34 @@ export function applyFrozenWorkshopOccurrenceOrdinals(
   if (!projection || projection.assignments.length === 0) {
     return items;
   }
+  // Validate ordinal integrity: integer >= 1, no duplicates, dense 1..N.
   validateFrozenWorkshopOccurrenceOrdinals(
     projection.assignments.map((assignment) => ({
       id: assignment.furnitureInstanceId,
       workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
     })),
   );
+  // Validate dense 1..N (no gaps): ordinals must be exactly {1, 2, ..., N}.
+  const ordinals = projection.assignments
+    .map((a) => a.workshopOccurrenceOrdinal)
+    .sort((a, b) => a - b);
+  for (let i = 0; i < ordinals.length; i++) {
+    if (ordinals[i] !== i + 1) {
+      throw new ResolutionError(
+        'Ordinal denso inválido: los ordinales de fabricación deben ser exactamente 1..N sin huecos',
+        { expected: i + 1, actual: ordinals[i], total: ordinals.length },
+      );
+    }
+  }
+  // Validate coversAllCurrentInstances: the projection MUST cover every
+  // current instance, and frozen instances == current instances exactly.
+  if (!projection.coversAllCurrentInstances) {
+    throw new ResolutionError(
+      'La proyección de ocurrencias no cubre todas las instancias actuales: el contexto BOM no puede mezclar instancias congeladas y vivas',
+      { releaseId: projection.releaseId },
+    );
+  }
+  // Group assignments by projectItemId, validate per-item count == quantity.
   const byItem = new Map<string, WorkshopOccurrenceAssignment[]>();
   for (const assignment of projection.assignments) {
     const list = byItem.get(assignment.projectItemId) ?? [];
@@ -256,13 +286,25 @@ export function applyFrozenWorkshopOccurrenceOrdinals(
         { projectItemId: item.id, releaseId: projection.releaseId },
       );
     }
-    // The frozen release expanded each item copy into one physical instance:
-    // derived items keep every commercial attribute, carry quantity 1 and
-    // take their durable identity from the furniture instance.
+    if (assignments.length !== item.quantity) {
+      throw new ResolutionError(
+        'El número de instancias congeladas para este ítem no coincide con su cantidad',
+        {
+          projectItemId: item.id,
+          expectedQuantity: item.quantity,
+          frozenAssignments: assignments.length,
+          releaseId: projection.releaseId,
+        },
+      );
+    }
+    // Sort by ordinal to ensure deterministic order.
+    assignments.sort((a, b) => a.workshopOccurrenceOrdinal - b.workshopOccurrenceOrdinal);
+    // #781 FIX: ProjectItem.id is NEVER mutated. furnitureInstanceId is
+    // transported as a separate field; workshopOccurrenceOrdinal stays separate.
     derived.push(
       ...assignments.map((assignment) => ({
         ...item,
-        id: assignment.furnitureInstanceId,
+        furnitureInstanceId: assignment.furnitureInstanceId,
         quantity: 1,
         workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
       })),

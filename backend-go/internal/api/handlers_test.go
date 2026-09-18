@@ -4233,7 +4233,7 @@ func (s *stubStore) GetProjectProductionReleaseCuttingDemand(_ context.Context, 
 	return s.cuttingDemandResult, nil
 }
 
-func (s *stubStore) GetProjectWorkshopOccurrences(_ context.Context, _ string) (*storage.WorkshopOccurrenceProjectionView, error) {
+func (s *stubStore) GetProjectWorkshopOccurrences(_ context.Context, _, _ string) (*storage.WorkshopOccurrenceProjectionView, error) {
 	if s.workshopOccurrencesErr != nil {
 		return nil, s.workshopOccurrencesErr
 	}

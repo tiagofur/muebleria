@@ -834,6 +834,12 @@ export interface ProjectItem {
    */
   readonly workshopOccurrenceOrdinal?: number;
   /**
+   * #781 — physical furniture instance id from the frozen release projection.
+   * Carried as a SEPARATE field so ProjectItem.id always retains the
+   * original quote-line/project-item identity. Never replaces item.id.
+   */
+  readonly furnitureInstanceId?: string;
+  /**
    * Selected commercial measure preset from Module.presets (H09 / #104).
    * Required when the module defines presets; ignored when none.
    */

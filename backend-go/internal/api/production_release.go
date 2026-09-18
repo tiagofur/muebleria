@@ -352,15 +352,16 @@ func (s *Server) HandleProjectProductionRelease(w http.ResponseWriter, r *http.R
 	respondWithJSON(w, http.StatusOK, toProductionReleaseDTO(*readback))
 }
 
-// HandleProjectProductionReleaseCuttingDemand serves GET
-// /api/projects/{projectId}/workshop-occurrences (#781). The project's
-// frozen manufacturing occurrence authority: the LATEST production release's
-// frozen unit order (ordinal = snapshot position, index+1) projected onto the
-// CURRENT quote-line↔instance links. Engineering consumes it to build the
-// derived BOM context so the same physical occurrence keeps the same workshop
-// code from preview to PTX/CNC. Tenant-safe (release + link reads are
-// org-scoped); no release yet is a plain 404-shaped unavailable answer, never
-// a fallback to a live ordering.
+// HandleProjectWorkshopOccurrences serves GET
+// /api/projects/{projectId}/production-releases/{releaseId}/workshop-occurrences
+// (#781). The EXACT release's frozen manufacturing occurrence authority:
+// the frozen unit order (ordinal = snapshot position, index+1) projected
+// onto the CURRENT quote-line↔instance links. Engineering consumes it to
+// build the derived BOM context so the same physical occurrence keeps the
+// same workshop code from preview to PTX/CNC. Tenant-safe (release + link
+// reads are org-scoped); no release or missing snapshot is a plain 404,
+// never a fallback to a live ordering. #781 FIX — uses EXACT releaseId
+// from the URL path; never falls back to "latest release".
 func (s *Server) HandleProjectWorkshopOccurrences(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
 	if claims == nil {
@@ -381,7 +382,12 @@ func (s *Server) HandleProjectWorkshopOccurrences(w http.ResponseWriter, r *http
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "ID inválido", nil)
 		return
 	}
-	view, err := s.Store.GetProjectWorkshopOccurrences(r.Context(), projectID)
+	releaseID := r.PathValue("releaseId")
+	if !isValidUUID(releaseID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "releaseId inválido", nil)
+		return
+	}
+	view, err := s.Store.GetProjectWorkshopOccurrences(r.Context(), projectID, releaseID)
 	if err != nil {
 		switch {
 		case errors.Is(err, storage.ErrReleaseSnapshotUnavailable):
