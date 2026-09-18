@@ -45,11 +45,20 @@ export {
 } from './pricing';
 export type { BoardLineCost, HardwareLineCost, LineCost } from './pricing';
 export {
+  applyFrozenWorkshopOccurrenceOrdinals,
+  canonicalWorkshopOccurrences,
+  canonicalWorkshopParts,
   formatEdgeBandingInstruction,
   formatOptimizerPartDescription,
   generateCutRows,
   generateCutRowsWithLinks,
   generatePieceLabels,
+  validateFrozenWorkshopOccurrenceOrdinals,
+} from './cut';
+export type {
+  WorkshopOccurrenceAssignment,
+  WorkshopOccurrenceOrdering,
+  WorkshopOccurrenceProjection,
 } from './cut';
 export {
   generateHardwareList,

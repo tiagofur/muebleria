@@ -165,3 +165,52 @@ func TestReleaseCuttingDemand_UnavailableAndIsolated(t *testing.T) {
 		t.Fatalf("reading the demand must not mutate the release, got status=%s", releaseStatus)
 	}
 }
+
+func TestProjectWorkshopOccurrences_FrozenLatestReleaseOrder(t *testing.T) {
+	fx := setupReleaseFixture(t)
+	_ = createCuttingDemandRelease(t, fx)
+
+	var view *storage.WorkshopOccurrenceProjectionView
+	err := releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var innerErr error
+		view, innerErr = fx.store.GetProjectWorkshopOccurrences(ctx, fx.projectID)
+		return innerErr
+	})
+	if err != nil {
+		t.Fatalf("workshop occurrence projection must succeed: %v", err)
+	}
+	if view.ReleaseID == "" || view.ReleaseNumber < 1 {
+		t.Fatalf("projection must identify the frozen release: %+v", view)
+	}
+	// The frozen unit order IS the occurrence authority: dense 1-based
+	// ordinals in snapshot order, every instance linked to its project item.
+	seen := map[string]bool{}
+	for index, assignment := range view.Assignments {
+		if assignment.Ordinal != index+1 {
+			t.Fatalf("ordinal must follow the frozen snapshot order: got %d at position %d", assignment.Ordinal, index+1)
+		}
+		if assignment.FurnitureInstanceID == "" || seen[assignment.FurnitureInstanceID] {
+			t.Fatalf("assignments must carry unique physical identities: %+v", assignment)
+		}
+		seen[assignment.FurnitureInstanceID] = true
+		if assignment.ProjectItemID == "" {
+			t.Fatalf("every frozen unit must map to its project item via the current link: %+v", assignment)
+		}
+	}
+	if len(view.Assignments) < 2 {
+		t.Fatalf("fixture must liberate repeated units, got %d", len(view.Assignments))
+	}
+	if !view.CoversAllCurrentInstances {
+		t.Fatalf("an unmodified released project must be fully covered: %+v", view)
+	}
+
+	// No liberation at all → unavailable (never a live ordering).
+	fx2 := setupReleaseFixture(t)
+	err2 := releaseTx(t, fx2.store, fiActorA(), func(ctx context.Context) error {
+		_, innerErr := fx2.store.GetProjectWorkshopOccurrences(ctx, fx2.projectID)
+		return innerErr
+	})
+	if err2 == nil {
+		t.Fatalf("a project without releases must not produce an occurrence authority")
+	}
+}

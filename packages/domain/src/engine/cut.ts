@@ -6,6 +6,7 @@
  */
 
 import { ResolutionError, ValidationError } from '../errors';
+import type { ProjectItem } from '../types';
 import { effectiveOptionChoices } from '../optionChoices';
 import { baseContextForItem } from '../plinth';
 import type {
@@ -139,19 +140,135 @@ export interface WorkshopOccurrenceOrdering {
   readonly workshopOccurrenceOrdinal?: number;
 }
 
+/**
+ * #781 review (validation hardening): PARTIAL ordinals never fall back
+ * silently. When ANY entry carries a workshop occurrence ordinal, every
+ * entry must carry a valid one (integer >= 1, no duplicates) — a mixed
+ * context means an upstream propagation bug and fails closed. The durable-id
+ * fallback only applies when NO entry carries an ordinal (live/legacy
+ * contexts that were never frozen).
+ */
 export function canonicalWorkshopOccurrences<T extends WorkshopOccurrenceOrdering>(
   occurrences: readonly T[],
 ): T[] {
-  const everyEntryFrozen = occurrences.every(
-    (entry) => Number.isInteger(entry.workshopOccurrenceOrdinal) && (entry.workshopOccurrenceOrdinal ?? 0) >= 1,
+  const frozen = occurrences.filter(
+    (entry) => entry.workshopOccurrenceOrdinal !== undefined,
   );
-  if (everyEntryFrozen && occurrences.length > 0) {
-    return [...occurrences].sort(
-      (a, b) =>
-        (a.workshopOccurrenceOrdinal! - b.workshopOccurrenceOrdinal!) || a.id.localeCompare(b.id),
+  if (frozen.length === 0) {
+    return [...occurrences].sort((a, b) => a.id.localeCompare(b.id));
+  }
+  if (frozen.length !== occurrences.length) {
+    throw new ResolutionError(
+      'Contexto de ocurrencias mixto: algunas unidades llevan ordinal de fabricación congelado y otras no — la propagación upstream debe ser completa o nula, nunca parcial',
+      { frozen: frozen.length, total: occurrences.length },
     );
   }
-  return [...occurrences].sort((a, b) => a.id.localeCompare(b.id));
+  validateFrozenWorkshopOccurrenceOrdinals(occurrences);
+  return [...occurrences].sort(
+    (a, b) =>
+      (a.workshopOccurrenceOrdinal! - b.workshopOccurrenceOrdinal!) || a.id.localeCompare(b.id),
+  );
+}
+
+/**
+ * #781 review — explicit guard for FROZEN contexts: every occurrence must
+ * carry an integer ordinal >= 1 and two physical occurrences can never share
+ * one (the ordinal IS the manufacturing occurrence authority).
+ */
+export function validateFrozenWorkshopOccurrenceOrdinals(
+  occurrences: readonly WorkshopOccurrenceOrdering[],
+): void {
+  const seen = new Map<number, string>();
+  for (const entry of occurrences) {
+    const ordinal = entry.workshopOccurrenceOrdinal;
+    if (ordinal === undefined || !Number.isInteger(ordinal) || ordinal < 1) {
+      throw new ResolutionError(
+        'Ordinal de ocurrencia de fabricación inválido: debe ser entero >= 1',
+        { id: entry.id, ordinal },
+      );
+    }
+    const previous = seen.get(ordinal);
+    if (previous !== undefined) {
+      throw new ResolutionError(
+        'Dos ocurrencias físicas comparten el mismo ordinal de fabricación: la autoridad de ocurrencia no puede duplicarse',
+        { ordinal, first: previous, second: entry.id },
+      );
+    }
+    seen.set(ordinal, entry.id);
+  }
+}
+
+/**
+ * #781 review — frozen occurrence assignment projected from a
+ * ProductionRelease: which physical instance backs each project item, with
+ * the release's frozen ordinal (snapshot unit order, index + 1). Server
+ * projection joins the release snapshot units with the CURRENT
+ * quote-line↔instance links; `coversAllCurrentInstances` lets the caller
+ * decide freeze-vs-live without re-deriving coverage.
+ */
+export interface WorkshopOccurrenceAssignment {
+  readonly furnitureInstanceId: string;
+  readonly projectItemId: string;
+  readonly workshopOccurrenceOrdinal: number;
+}
+
+export interface WorkshopOccurrenceProjection {
+  readonly releaseId: string;
+  readonly releaseNumber: number;
+  readonly coversAllCurrentInstances: boolean;
+  readonly assignments: readonly WorkshopOccurrenceAssignment[];
+}
+
+/**
+ * Builds the DERIVED BOM/Engineering context for a released project (#781
+ * review §5): items are expanded per physical instance — an item with
+ * quantity N and N linked instances becomes N derived items of quantity 1,
+ * each keyed by its furniture instance id and carrying the FROZEN workshop
+ * occurrence ordinal. The persisted Project is never mutated; callers that
+ * only want the live view pass an empty projection and get the items back
+ * unchanged. Partial coverage fails closed (never a silent mix).
+ */
+export function applyFrozenWorkshopOccurrenceOrdinals(
+  items: readonly ProjectItem[],
+  projection: WorkshopOccurrenceProjection | undefined,
+): readonly ProjectItem[] {
+  if (!projection || projection.assignments.length === 0) {
+    return items;
+  }
+  validateFrozenWorkshopOccurrenceOrdinals(
+    projection.assignments.map((assignment) => ({
+      id: assignment.furnitureInstanceId,
+      workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
+    })),
+  );
+  const byItem = new Map<string, WorkshopOccurrenceAssignment[]>();
+  for (const assignment of projection.assignments) {
+    const list = byItem.get(assignment.projectItemId) ?? [];
+    list.push(assignment);
+    byItem.set(assignment.projectItemId, list);
+  }
+  const derived: ProjectItem[] = [];
+  for (const item of items) {
+    const assignments = byItem.get(item.id);
+    if (!assignments || assignments.length === 0) {
+      throw new ResolutionError(
+        'La liberación congelada no cubre este ítem del proyecto: el contexto BOM no puede mezclar ítems con y sin ordinal de fabricación',
+        { projectItemId: item.id, releaseId: projection.releaseId },
+      );
+    }
+    // The frozen release expanded each item copy into one physical instance:
+    // derived items keep every commercial attribute, carry quantity 1 and
+    // take their durable identity from the furniture instance.
+    derived.push(
+      ...assignments.map((assignment) => ({
+        ...item,
+        id: assignment.furnitureInstanceId,
+        quantity: 1,
+        workshopOccurrenceOrdinal: assignment.workshopOccurrenceOrdinal,
+      })),
+    );
+  }
+  return derived;
 }
 
 /** #781 — canonical part order inside one occurrence (see above). */

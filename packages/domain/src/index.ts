@@ -303,7 +303,7 @@ export {
   type ComponentPreviewOptions,
 } from './previewComponentPart';
 
-export type { BoardLineCost, HardwareLineCost, LineCost, ComposedModuleInput, ComposedModuleResult } from './engine';
+export type { BoardLineCost, HardwareLineCost, LineCost, ComposedModuleInput, ComposedModuleResult, WorkshopOccurrenceAssignment, WorkshopOccurrenceOrdering, WorkshopOccurrenceProjection } from './engine';
 
 export {
   resolveBom,
@@ -322,6 +322,10 @@ export {
   transitionProjectStatus,
   generateCutRows,
   generateCutRowsWithLinks,
+  applyFrozenWorkshopOccurrenceOrdinals,
+  canonicalWorkshopOccurrences,
+  canonicalWorkshopParts,
+  validateFrozenWorkshopOccurrenceOrdinals,
   formatOptimizerPartDescription,
   generatePieceLabels,
   formatEdgeBandingInstruction,

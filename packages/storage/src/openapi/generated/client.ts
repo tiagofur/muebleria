@@ -95,6 +95,7 @@ import type {
   ProjectFurnitureWorkspace,
   ProjectFurnitureWorkspaceRequest,
   ProjectQuoteRequoteResult,
+  ProjectWorkshopOccurrences,
   ProvisionOrganizationRequest,
   PublishDesignRevisionRequest,
   QuoteLineFurnitureInstance,
@@ -238,6 +239,7 @@ export abstract class GeneratedGraneteApiClient {
   listProjectProductionReleases(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<ProductionRelease>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases`, { arrayOf: "ProductionRelease", token, signal }); }
   createProductionRelease(token: string, projectId: string, body: CreateProductionReleaseRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ProductionRelease> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/production-releases`, { schema: "ProductionRelease", token, bodySchema: "CreateProductionReleaseRequest", body, idempotencyKey: key, signal }); }
   getProjectProductionRelease(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ProductionRelease> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}`, { schema: "ProductionRelease", token, signal }); }
+  getProjectWorkshopOccurrences(token: string, projectId: string, signal?: AbortSignal): Promise<ProjectWorkshopOccurrences> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/workshop-occurrences`, { schema: "ProjectWorkshopOccurrences", token, signal }); }
   getProjectProductionReleaseCuttingDemand(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ReleaseCuttingDemand> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/cutting-demand`, { schema: "ReleaseCuttingDemand", token, signal }); }
   getProjectProductionReleaseEngineering(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ReleaseEngineeringState> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/engineering`, { schema: "ReleaseEngineeringState", token, signal }); }
   startProjectProductionReleaseEngineering(token: string, projectId: string, releaseId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ReleaseEngineeringState> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/engineering:start`, { schema: "ReleaseEngineeringState", token, idempotencyKey: key, signal }); }

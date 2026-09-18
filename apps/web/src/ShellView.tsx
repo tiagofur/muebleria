@@ -230,6 +230,11 @@ import {
   useEngineeringReleaseContext,
 } from './engineeringReleaseContext';
 import {
+  deriveEngineeringBomItems,
+  useProjectWorkshopOccurrences,
+  workshopOccurrenceQueryKey,
+} from './workshopOccurrenceContext';
+import {
   engineeringCuttingDemandQueryKey,
   useEngineeringCuttingDemand,
 } from './engineeringCuttingDemand';
@@ -1006,6 +1011,18 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       routeEngineeringReleaseId ?? 'no-release',
     ),
   });
+  // #781 — the project's frozen manufacturing occurrence authority (latest
+  // release). The Engineering/BOM context derives from it so the same
+  // physical occurrence keeps the same workshop code from preview to PTX.
+  const projectWorkshopOccurrences = useProjectWorkshopOccurrences({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    projectId: routeEngineeringProjectId,
+    queryKey: workshopOccurrenceQueryKey(
+      sessionScope ? sessionScopeKey(sessionScope) : ['no-session'],
+      routeEngineeringProjectId ?? 'none',
+    ),
+  });
   // #739 — frozen cutting demand of the SAME pinned release (fetched only
   // once the release context is verified: same project/release scope, same
   // session keying, no cross-context leakage).
@@ -1531,14 +1548,21 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             : engineeringReleaseContext.kind === 'loading'
               ? { state: 'loading' as const }
               : undefined;
+        // #781 — the Engineering/BOM context derives from the project's
+        // FROZEN occurrence authority (never mutates the persisted Project;
+        // live order when no complete liberation covers it).
+        const engBomProject: typeof engProject = {
+          ...engProject,
+          items: deriveEngineeringBomItems(engProject, projectWorkshopOccurrences),
+        };
         const engModules = modules.filter((m) =>
-          engProject.items.some((item) => item.moduleId === m.id),
+          engBomProject.items.some((item) => item.moduleId === m.id),
         );
         let engCutRows: ReturnType<typeof generateCutRows> | null = null;
         let engCutError: string | null = null;
         if (catalog) {
           try {
-            engCutRows = generateCutRows(engProject, catalog);
+            engCutRows = generateCutRows(engBomProject, catalog);
           } catch (err) {
             engCutError = err instanceof Error ? err.message : 'Error al resolver despiece';
           }
@@ -1654,7 +1678,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         let engModuleLabelsError: string | null = null;
         if (catalog) {
           try {
-            engLabels = generatePieceLabels(engProject, catalog);
+            engLabels = generatePieceLabels(engBomProject, catalog);
           } catch (err) {
             engLabelsError = err instanceof Error ? err.message : 'Error al resolver etiquetas';
           }

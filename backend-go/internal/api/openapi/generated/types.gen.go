@@ -1088,6 +1088,19 @@ type ReleaseCuttingDemand struct {
 	Units                    []ReleaseCuttingDemandUnit `json:"units"`
 }
 
+type ProjectWorkshopOccurrences struct {
+	ReleaseID                 string                         `json:"release_id"`
+	ReleaseNumber             int64                          `json:"release_number"`
+	CoversAllCurrentInstances bool                           `json:"covers_all_current_instances"`
+	Assignments               []WorkshopOccurrenceAssignment `json:"assignments"`
+}
+
+type WorkshopOccurrenceAssignment struct {
+	FurnitureInstanceID       string `json:"furniture_instance_id"`
+	ProjectItemID             string `json:"project_item_id"`
+	WorkshopOccurrenceOrdinal int64  `json:"workshop_occurrence_ordinal"`
+}
+
 type ReleaseCuttingDemandUnit struct {
 	FurnitureInstanceID       string                      `json:"furniture_instance_id"`
 	FurnitureDefinitionID     string                      `json:"furniture_definition_id"`
