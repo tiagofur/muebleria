@@ -45,12 +45,20 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
   - Compiler and independently derived readback now apply the policy. The existing real rotated fixture proves placed 39×549 versus PARTS_REQ 549×39, GRAIN=0, FIN 550×40, edge mapping, clean bytes/readback, an old-dimension mutation `parts.dims`, and non-rotated equality.
   - r2/r3/r4, adapter/profile, and FUNCTION 92 paths were not modified. Writer evidence: Excel 45 files / 534 passed / 3 skipped; diff check clean. Work-unit commit: `f4dac0af791fd58052b49b7acf91a31c70ebd118`.
 
-- [ ] **T5 — Document, verify, and publish r5 dimension correction** (delegated docs/verification)
+- [x] **T5 — Document, verify, and publish r5 dimension correction** (published as `0a524cc8c410bcfc17f59d1948a339fac0321056`)
   - Documentation/progress updated for the r5 dimension policy: SPEC `PARTS_REQ` part-local cut dimensions with `GRAIN=0` rotation allowance; PRODUCT POLICY `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`; absent/`placement` preserves r2/r3/r4 byte-exact and is not coupled to `partLabels`; independent readback keeps FIN as original finished dimensions and checks `FIN = part-local cut + edge deductions`.
   - Existing fixture facts recorded: rotated true; placed 39×549; `PARTS_REQ 549×39`; grain 0; `FIN 550×40`; `EDGE2`/`EDGE4`; old placement mutation fails with `parts.dims`; nonrotated equality remains.
   - CNC scope note recorded only: #793 productive r5 must derive scope from `CutPlan.releaseBase.manufacturingFingerprint` or an authoritative frozen equivalent and block without `releaseBase`; `release:789:r5:*` strings remain laboratory fixtures. No wiring implemented.
   - Work-unit containing the policy: `f4dac0af791fd58052b49b7acf91a31c70ebd118`. Final local candidate: `ed1d5066b61db18da64e774879f8f14f59b16011`, a test-only correction that imports `PtxRecord` after the initial candidate failed `pnpm typecheck`. Evidence at `ed1d5066`: Excel 45 files / 534 passed / 3 skipped; `pnpm typecheck` PASS; `git diff --check` PASS.
-  - Authorized selector ran once at `ed1d5066` against base `b7446866ed247677d8b8f83238cddbd96579db97` with 3600 s and blocked before selected gates because an isolated `DATABASE_URL` is required. Selected TypeScript/Go/Ruby/WebGL/Foundation gates did not run locally and are not PASS evidence. T5 remains pending same-PR push and exact-head CI; no delivery-complete claim.
+  - Authorized selector ran once at `ed1d5066` against base `b7446866ed247677d8b8f83238cddbd96579db97` with 3600 s and blocked before selected gates because an isolated `DATABASE_URL` is required. Selected TypeScript/Go/Ruby/WebGL/Foundation gates did not run locally and are not PASS evidence. Exact-head CI for `0a524cc8c410bcfc17f59d1948a339fac0321056` later reached SUCCESS; no delivery-complete claim.
+
+- [x] **T6 — Require r5 part-local policy with partLabels** (delegated writer; trigger: multi-file write)
+  - Fail-closed compiler preflight now rejects `partLabels` paired with absent or `placement`; the explicit local policy and all no-label historical/reusable combinations remain valid.
+  - Added CNC=false bytes→parse E2E coverage proving absent DRAWING/BARCODE1 and authoritative BARCODE2.
+  - Current rotated fixture/mutation and historical r2/r3/r4/F92 paths remain covered. Writer evidence: Excel 45 files / 539 passed / 3 skipped; diff check clean. Commit identity recorded after the work-unit commit.
+
+- [ ] **T7 — Document, verify, and publish final policy gate** (delegated docs/verification)
+  - State that the r5 labels combination is explicit and fail-closed; do not say labels auto-select the policy. Re-run requested evidence and wait for exact-head CI.
 
 ## Acceptance / required checks
 
@@ -63,6 +71,7 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 7. r2/r3/r4 recompile byte-exact and FUNCTION 92 remains unchanged.
 8. `pnpm --filter @granete/excel test`, `pnpm typecheck`, current selector, `git diff --check`, and exact-head CI are reported honestly.
 9. With `part-local-pre-rotation-cut`, a real rotated piece has PARTS_REQ part-local cut dimensions; an old placement-dimension mutation fails independent readback, while non-rotated dimensions are unchanged.
+10. `partLabels` without the explicit part-local policy blocks; CNC=false survives compiler→bytes→parse with no DRAWING/BARCODE1 and BARCODE2 bound to PARTS_REQ.CODE.
 
 ## Progress
 
@@ -74,7 +83,9 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 - 2026-09-19: The authorized selector command `python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600` ran once at candidate `32518fc47273f74af71520985953f68d9ca32bf3` against base `b7446866ed247677d8b8f83238cddbd96579db97` and blocked before executing gates because it requires an isolated `DATABASE_URL`. Selected jobs were typescript, backend-go, sketchup-extension, proyectar-visual, foundation-postgres, and organization-browser; none ran and none count as PASS.
 - 2026-09-19: Published `f0543e7766730cf07e6917c2217cb5e496194f5d` to the existing PR #797. Its exact-head CI reached SUCCESS for all reported checks. New independent review identified the separate rotated-placement identity blocker, authorized as T4/T5 only.
 - 2026-09-19: T4 completed by one scoped writer: the explicit r5 `part-local-pre-rotation-cut` policy was added to compiler and independent readback, with positive/negative rotated and non-rotated tests. Package Excel suite remained 45 files / 534 passed / 3 skipped; diff check clean. Work-unit commit `f4dac0af791fd58052b49b7acf91a31c70ebd118` records T4.
+- 2026-09-19: Published `0a524cc8c410bcfc17f59d1948a339fac0321056` to the same PR #797; exact-head CI reached SUCCESS. Final independent review identified the fail-open labels/policy configuration and missing CNC=false bytes→parse coverage, authorized as T6/T7 only.
+- 2026-09-19: T6 completed by one scoped writer: `partLabels` now requires the explicit r5 local policy; no-label policies remain valid, and CNC=false survives compiler→bytes→parse with only BARCODE2. Excel suite passed 45 files / 539 passed / 3 skipped; diff check clean.
 
 ## Next step
 
-Push `ed1d5066b61db18da64e774879f8f14f59b16011` to the same existing PR #797 branch, update the PR body if still needed, and wait for exact-head CI. Do not claim selected local gates passed: the selector blocked before them because `DATABASE_URL` was not isolated.
+Commit T6, then complete T7 documentation, verification, and publication on the same existing PR branch.

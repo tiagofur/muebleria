@@ -1261,6 +1261,16 @@ export function compileCutPlanToPtxDocument(
       { partsReqDimensionPolicy: options.partsReqDimensionPolicy },
     );
   }
+  if (
+    options.partLabels !== undefined &&
+    options.partsReqDimensionPolicy !== 'part-local-pre-rotation-cut'
+  ) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      'r5 PARTS_INF projection requires PARTS_REQ part-local cut frame so optimizer rotation cannot mutate dimensional identity; set partsReqDimensionPolicy to part-local-pre-rotation-cut when partLabels is provided',
+      { partsReqDimensionPolicy: options.partsReqDimensionPolicy },
+    );
+  }
   if (options.partsUdi === 'structural' && options.partLabels === undefined) {
     throw new PtxCompilationError(
       'ptx_compile.options_invalid',

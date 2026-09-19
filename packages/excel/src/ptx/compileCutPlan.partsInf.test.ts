@@ -414,24 +414,13 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
       })),
     );
     const { partsReqDimensionPolicy: _explicitPolicy, ...historicalOptions } = LABELS_GOLDEN_OPTIONS;
-    const historical = compileCutPlanToPtxDocument(plan, {
-      ...historicalOptions,
-      title: 'LAB-ROT-R5',
-      partLabels: labels,
-    });
-    const partIndex = historical.mapping.partIndexByPieceRef.get(rotatedPiece.id)!;
-    const historicalPart = historical.document.records.find(
-      (record): record is PtxPartsReqRecord => record.type === 'PARTS_REQ' && record.partIndex === partIndex,
-    )!;
-    expect(historicalPart).toMatchObject({ length: 39, width: 549, grain: 0 });
-    expect(
-      verifyCutPlanPtxReadback(
-        parsePtxDocumentBytes(serializePtxDocumentBytesSpecChecked(historical.document, { decimalPlaces: 2 })),
-        plan,
-        historical.mapping,
-        { ...historicalOptions, title: 'LAB-ROT-R5', partLabels: labels },
-      ),
-    ).toEqual([]);
+    expect(() =>
+      compileCutPlanToPtxDocument(plan, {
+        ...historicalOptions,
+        title: 'LAB-ROT-R5',
+        partLabels: labels,
+      }),
+    ).toThrowError(/part-local cut frame/);
 
     const compiled = compileCutPlanToPtxDocument(plan, {
       ...LABELS_GOLDEN_OPTIONS,
@@ -439,6 +428,7 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
       partLabels: labels,
       partsReqDimensionPolicy: 'part-local-pre-rotation-cut',
     });
+    const partIndex = compiled.mapping.partIndexByPieceRef.get(rotatedPiece.id)!;
     const part = compiled.document.records.find(
       (record): record is PtxPartsReqRecord => record.type === 'PARTS_REQ' && record.partIndex === partIndex,
     )!;
@@ -525,6 +515,13 @@ function optionsWith(labels: readonly PtxPartLabelData[]): CompileCutPlanToPtxOp
   return { ...LABELS_GOLDEN_OPTIONS, partLabels: labels };
 }
 
+function optionsWithoutLabels(
+  overrides: Partial<CompileCutPlanToPtxOptions> = {},
+): CompileCutPlanToPtxOptions {
+  const { partsUdi: _partsUdi, ...base } = LABELS_GOLDEN_OPTIONS;
+  return { ...base, ...overrides };
+}
+
 describe('#789 gates fail-closed del compilador', () => {
   it('pieza colocada sin proyección de etiqueta BLOQUEA (label_missing)', async () => {
     const { labels, plan } = await gateFixture();
@@ -591,6 +588,80 @@ describe('#789 gates fail-closed del compilador', () => {
     expect(() =>
       compileCutPlanToPtxDocument(plan, { ...rest, partLabels: labels }),
     ).toThrowError(/partLabels requiere partCodeAuthority/);
+  });
+
+  it('partLabels sin partsReqDimensionPolicy BLOQUEA: etiquetas r5 exigen frame de corte local', async () => {
+    const { labels, plan } = await gateFixture();
+    const { partsReqDimensionPolicy: _policy, ...withoutPolicy } = LABELS_GOLDEN_OPTIONS;
+    expect(() => compileCutPlanToPtxDocument(plan, { ...withoutPolicy, partLabels: labels })).toThrowError(
+      /part-local cut frame/,
+    );
+  });
+
+  it("partLabels con policy 'placement' BLOQUEA: el optimizador no puede mutar identidad dimensional", async () => {
+    const { labels, plan } = await gateFixture();
+    expect(() =>
+      compileCutPlanToPtxDocument(plan, {
+        ...LABELS_GOLDEN_OPTIONS,
+        partLabels: labels,
+        partsReqDimensionPolicy: 'placement',
+      }),
+    ).toThrowError(/part-local cut frame/);
+  });
+
+  it('partLabels con policy part-local explícita COMPILA', async () => {
+    const { labels, plan } = await gateFixture();
+    const compiled = compileCutPlanToPtxDocument(plan, optionsWith(labels));
+    expect(validatePtxDocument(compiled.document)).toEqual([]);
+  });
+
+  it('sin partLabels permite ausencia, placement explícito y part-local explícito históricamente', async () => {
+    const plan = optimizeCutPlan('lab-789-no-label-policy', aaRows(), LABELS_GOLDEN_MATERIALS, LABELS_GOLDEN_CONFIG);
+    const { partsReqDimensionPolicy: _policy, ...absentPolicy } = optionsWithoutLabels();
+    const absent = compileCutPlanToPtxDocument(plan, absentPolicy);
+    const placement = compileCutPlanToPtxDocument(
+      plan,
+      optionsWithoutLabels({ partsReqDimensionPolicy: 'placement' }),
+    );
+    const partLocal = compileCutPlanToPtxDocument(
+      plan,
+      optionsWithoutLabels({ partsReqDimensionPolicy: 'part-local-pre-rotation-cut' }),
+    );
+    expect(validatePtxDocument(absent.document)).toEqual([]);
+    expect(validatePtxDocument(placement.document)).toEqual([]);
+    expect(validatePtxDocument(partLocal.document)).toEqual([]);
+    expect(absent.document.records.some((record) => record.type === 'PARTS_INF')).toBe(false);
+  });
+
+  it('hasCncMachining false serializa y parsea sin DRAWING/BARCODE1 y con BARCODE2 = PARTS_REQ.CODE', async () => {
+    const rows = aaRows().slice(0, 1);
+    const labels = await buildPtxPartLabels(
+      rows.map((row) => ({
+        row,
+        unit: AA_UNIT_2,
+        orderRef: 'R5',
+        hasCncMachining: false,
+      })),
+    );
+    const plan = optimizeCutPlan('lab-789-cnc-false', rows, LABELS_GOLDEN_MATERIALS, LABELS_GOLDEN_CONFIG);
+    const compiled = compileCutPlanToPtxDocument(plan, {
+      ...LABELS_GOLDEN_OPTIONS,
+      partLabels: labels,
+      partsReqDimensionPolicy: 'part-local-pre-rotation-cut',
+    });
+    const bytes = serializePtxDocumentBytesSpecChecked(compiled.document, { decimalPlaces: 2 });
+    const parsed = parsePtxDocumentBytes(bytes);
+    expect(validatePtxDocument(parsed)).toEqual([]);
+    expect(ptxSpecPreflightDocument(parsed)).toEqual([]);
+    const parts = parsed.records.filter((record): record is PtxPartsReqRecord => record.type === 'PARTS_REQ');
+    const inf = parsed.records.filter((record): record is PtxPartsInfRecord => record.type === 'PARTS_INF');
+    expect(inf).toHaveLength(parts.length);
+    const partCodeByIndex = new Map(parts.map((part) => [part.partIndex, part.code]));
+    for (const row of inf) {
+      expect(row.drawing).toBeUndefined();
+      expect(row.barcode1).toBeUndefined();
+      expect(row.barcode2).toBe(partCodeByIndex.get(row.partIndex));
+    }
   });
 
   it("partsUdi 'structural' sin partLabels BLOQUEA", async () => {
