@@ -43,16 +43,16 @@ specific: it must not be hardcoded globally or backported into r2/r3/r4.
 
 | MATERIALS field | Spec semantics | Receiver evidence | Granete authority | Source policy | Emitted value / shape |
 |---|---|---|---|---|---|
-| `BOOK` | QTY; maximum book quantity for the material. Integer long quantity. | `3` in all observed material rows; `PATTERNS.MAX_BOOK=3` also repeats. | `RECEIVER_EVIDENCED` + `PRODUCT_POLICY`. | Lab receiver policy constant; must be coherent with `PATTERNS.MAX_BOOK`. | Emit integer `3`. Do not derive from stock count. |
+| `BOOK` | QTY; max sheets per book / cutting-height capacity. Integer long quantity. | `3` in all observed material rows; `PATTERNS.MAX_BOOK=3` also repeats. | `RECEIVER_EVIDENCED` + `PRODUCT_POLICY`. | Lab receiver policy constant; must be coherent with `PATTERNS.MAX_BOOK` when the policy flag is enabled. | Emit integer `3`. Do not derive from stock count, cycles, or total boards. |
 | `KERF_RIP` | DIM kerf for rip direction; numeric dimension under file units. | `4.400` in both samples. | `RECEIVER_EVIDENCED`. | Receiver policy value, not board/material metadata. | Emit `4.400` shape-equivalent numeric value (`4.4` semantic value allowed only if serializer policy normalizes consistently). |
 | `KERF_XCT` | DIM kerf for crosscut direction. | `4.400` in both samples. | `RECEIVER_EVIDENCED`. | Receiver policy value. | Emit `4.400` / numeric 4.4 under the lab receiver serializer. |
-| `TRIM_FRIP` | DIM fixed rip trim. | `10.000` in both samples. | `RECEIVER_EVIDENCED`. | Receiver policy value; for the currently projected r3 trim slot, any defined executed geometry value must match this policy or compilation blocks. | Emit `10.000` / numeric 10. |
-| `TRIM_VRIP` | DIM variable rip trim. | `0` in both samples. | `RECEIVER_EVIDENCED`. | Receiver policy value; for the currently projected r3 trim slot, any defined executed geometry value must match this policy or compilation blocks. | Emit `0`; do not mirror `TRIM_FRIP`. |
-| `TRIM_FXCT` | DIM fixed crosscut trim. | `10.000` in both samples. | `RECEIVER_EVIDENCED`. | Receiver policy value; for the currently projected r3 trim slot, any defined executed geometry value must match this policy or compilation blocks. | Emit `10.000` / numeric 10. |
-| `TRIM_VXCT` | DIM variable crosscut trim. | `0` in both samples. | `RECEIVER_EVIDENCED`. | Receiver policy value; for the currently projected r3 trim slot, any defined executed geometry value must match this policy or compilation blocks. | Emit `0`; do not mirror `TRIM_FXCT`. |
-| `TRIM_HEAD` | DIM head trim. | `20.000` in both samples. | `RECEIVER_EVIDENCED`. | Receiver override for #790; not geometry-derived. | Emit `20.000` / numeric 20. |
-| `TRIM_FRCT` | DIM fixed recut trim. | `20.000` in both samples. | `RECEIVER_EVIDENCED`. | Receiver override for #790; not geometry-derived. | Emit `20.000` / numeric 20. |
-| `TRIM_VRCT` | DIM variable recut trim. | `0` in both samples. | `RECEIVER_EVIDENCED`. | Receiver override for #790; not geometry-derived. | Emit `0`. |
+| `TRIM_FRIP` | DIM fixed rip trim. | `10.000` in both samples. | `RECEIVER_EVIDENCED` expected value; Granete emission authority is executed cut-plan geometry. | `FROM_CUTPLAN_GEOMETRY` with expected receiver value `10`; defined executed geometry must match or compilation blocks. | Emit the executed geometry value only. If geometry is absent while expected value is nonzero, block; never fabricate `0` or an override. |
+| `TRIM_VRIP` | DIM variable rip trim. | `0` in both samples. | `RECEIVER_EVIDENCED` expected value; Granete emission authority is executed cut-plan geometry. | `FROM_CUTPLAN_GEOMETRY` with expected receiver value `0`; defined executed geometry must match or compilation blocks. | Emit the executed geometry value only. If geometry is absent and expected is `0`, leave absent; do not mirror `TRIM_FRIP` and do not convenience-fill zero. |
+| `TRIM_FXCT` | DIM fixed crosscut trim. | `10.000` in both samples. | `RECEIVER_EVIDENCED` expected value; Granete emission authority is executed cut-plan geometry. | `FROM_CUTPLAN_GEOMETRY` with expected receiver value `10`; defined executed geometry must match or compilation blocks. | Emit the executed geometry value only. If geometry is absent while expected value is nonzero, block. |
+| `TRIM_VXCT` | DIM variable crosscut trim. | `0` in both samples. | `RECEIVER_EVIDENCED` expected value; Granete emission authority is executed cut-plan geometry. | `FROM_CUTPLAN_GEOMETRY` with expected receiver value `0`; defined executed geometry must match or compilation blocks. | Emit the executed geometry value only. If geometry is absent and expected is `0`, leave absent; do not mirror `TRIM_FXCT` and do not convenience-fill zero. |
+| `TRIM_HEAD` | DIM head trim. | `20.000` in both samples. | `RECEIVER_EVIDENCED` observed value, but #790 lacks product/geometry authority to emit it. | `OMIT_NO_OVERRIDE`; accidental value makes the policy invalid. | Omit/leave absent. |
+| `TRIM_FRCT` | DIM fixed recut trim. | `20.000` in both samples. | `RECEIVER_EVIDENCED` observed value, but #790 lacks product/geometry authority to emit it. | `OMIT_NO_OVERRIDE`; accidental value makes the policy invalid. | Omit/leave absent. |
+| `TRIM_VRCT` | DIM variable recut trim. | `0` in both samples. | `RECEIVER_EVIDENCED` observed value, but #790 lacks product/geometry authority to emit it. | `OMIT_NO_OVERRIDE`; accidental value makes the policy invalid. | Omit/leave absent. |
 | `RULE1` | INT `1..9` by Pattern Exchange. Optimization/material rule field. | `6` in both samples. | `SPEC_REQUIRED` range + `RECEIVER_EVIDENCED` value. | Receiver policy value. | Emit integer `6`; block outside `1..9`. |
 | `RULE2` | INT `0,1` by Pattern Exchange. | `1` in both samples. | `SPEC_REQUIRED` range + `RECEIVER_EVIDENCED` value. | Receiver policy value. | Emit integer `1`; block outside `{0,1}`. |
 | `RULE3` | INT `0,1` by Pattern Exchange. | `1` in both samples. | `SPEC_REQUIRED` range + `RECEIVER_EVIDENCED` value. | Receiver policy value. | Emit integer `1`; block outside `{0,1}`. |
@@ -110,9 +110,10 @@ shape only where authority exists.
   `OPT_PARAM`, or `SAW_PARAM`. Use only values Granete already owns; otherwise
   leave cells empty/omit trailing optional fields. Customer samples contain dates
   and customer/text values, but those are not Granete authority.
-- `PATTERNS`: keep `QTY_RUN=1` and `QTY_CYCLES=1`. Set `MAX_BOOK=3` under the
-  lab receiver policy because it is receiver-evidenced and coherent with
-  `MATERIALS.BOOK=3`. Do not multiply run/cycle counts to simulate book size.
+- `PATTERNS`: keep `QTY_RUN=1` and `QTY_CYCLES=1`. Set `MAX_BOOK=3` only when
+  `requireBookMaxBookCoherence` is enabled under the lab receiver policy,
+  because it is receiver-evidenced and coherent with `MATERIALS.BOOK=3`. Do
+  not multiply run/cycle counts to simulate book size.
 - `CUTS`: comments are disabled under receiver policy. Pattern Exchange permits
   comments, but r5 receiver policy should not carry internal `strip-*`/`place-*`
   debug text into CADLink.

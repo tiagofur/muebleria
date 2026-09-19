@@ -83,11 +83,10 @@
  *   (missing thickness fails closed; no hardcoded 4/18 mm); both kerf fields
  *   stay separate fields fed from Granete's single saw configuration, and
  *   every division kerf must equal config.sawKerfMm or compilation fails.
- *   The dossier only establishes that BOOK counts boards, not millimetres
- *   [S03 pp.134–135] — "total boards of the material in the job" is NOT
- *   documented, so the candidate emits the conservative one-board-per-cycle
- *   value BOOK = 1 (consistent with MAX_BOOK=1/QTY_CYCLES=1 and one BOARDS
- *   row per sheet). RULE1..4 stay EMPTY: their per-class receiver semantics
+ *   Pattern Exchange documents BOOK/MAX_BOOK as max sheets per book /
+ *   cutting-height capacity. Historical candidates keep BOOK=1/MAX_BOOK=1;
+ *   a receiver policy may pin BOOK and require PATTERNS.MAX_BOOK coherence.
+ *   RULE1..4 stay EMPTY by default: their per-class receiver semantics
  *   are a documented §9 ambiguity. TRIM_* are empty under r2 and carry the
  *   r3 projected margins (or stay absent per side without a trim pass).
  *
@@ -141,7 +140,11 @@ import type { ScopedRegionRef } from './scopedRegionRef';
 import { PtxDocumentInvalidError, validatePtxDocument } from './validate';
 import { PTX_SPEC_PREFLIGHT_REVISION, ptxSpecPreflightDocument } from './specPreflight';
 import {
-  HPP250_CAD4_R5_LAB_RECEIVER_POLICY,
+  PTX_RECEIVER_FIELD_SOURCE,
+  PTX_RECEIVER_GEOMETRY_TRIM_FIELDS,
+  PTX_RECEIVER_REQUIRED_MATERIAL_FIELDS,
+  optionalReceiverExpectedNumber,
+  requiredReceiverNumber,
   type PtxReceiverMaterialFieldName,
   type PtxReceiverPolicy,
 } from './receiverPolicy';
@@ -252,10 +255,10 @@ export interface CompileCutPlanToPtxOptions {
    */
   readonly partsReqDimensionPolicy?: 'placement' | 'part-local-pre-rotation-cut';
   /**
-   * r5 receiver profile (#790): gated target-specific PTX shaping. Only the
-   * exported HPP250 CAD4 R5 lab receiver policy is supported for now; invalid
-   * or incomplete policy data fails closed as options_invalid before bytes are
-   * produced.
+   * r5 receiver profile (#790): gated receiver-specific PTX shaping. The
+   * compiler consumes only the executable policy contract (sources, record
+   * shape and constraints); receiver ids and receiver-specific values live in
+   * receiverPolicy.ts.
    */
   readonly receiverPolicy?: PtxReceiverPolicy;
 }
@@ -1186,92 +1189,133 @@ function isPrintableAscii(value: string): boolean {
   return true;
 }
 
-const RECEIVER_POLICY_MATERIAL_FIELDS: readonly PtxReceiverMaterialFieldName[] = [
-  'BOOK',
-  'KERF_RIP',
-  'KERF_XCT',
-  'TRIM_FRIP',
-  'TRIM_VRIP',
-  'TRIM_FXCT',
-  'TRIM_VXCT',
-  'TRIM_HEAD',
-  'TRIM_FRCT',
-  'TRIM_VRCT',
-  'RULE1',
-  'RULE2',
-  'RULE3',
-  'RULE4',
-];
-
-const HPP250_RECEIVER_FAMILY_ORDER: readonly PtxRecord['type'][] = [
-  'JOBS',
-  'PARTS_REQ',
-  'PARTS_INF',
-  'PARTS_UDI',
-  'BOARDS',
-  'MATERIALS',
-  'OFFCUTS',
-  'PATTERNS',
-  'CUTS',
-];
-
 function receiverPolicyOptionError(message: string, context: Record<string, unknown>): never {
   throw new PtxCompilationError('ptx_compile.options_invalid', message, context);
 }
 
 function validateReceiverPolicyOption(policy: PtxReceiverPolicy | undefined): void {
   if (policy === undefined) return;
-  if (policy.id !== HPP250_CAD4_R5_LAB_RECEIVER_POLICY.id) {
-    receiverPolicyOptionError('receiverPolicy sólo soporta HPP250_CAD4_R5_LAB por ahora', {
+  const familyOrder = policy.recordShape?.familyOrder;
+  if (policy.id === '' || typeof policy.id !== 'string') {
+    receiverPolicyOptionError('receiverPolicy incompleto: id no vacío requerido', {
       receiverPolicyId: policy.id,
-      supportedReceiverPolicyId: HPP250_CAD4_R5_LAB_RECEIVER_POLICY.id,
     });
   }
-  for (const fieldName of RECEIVER_POLICY_MATERIAL_FIELDS) {
-    const field = policy.materialFields?.[fieldName];
-    if (field === undefined || field.value === undefined || !Number.isFinite(field.value)) {
-      receiverPolicyOptionError('receiverPolicy incompleto: falta un valor numérico requerido de MATERIALS', {
+  if (!Array.isArray(familyOrder) || familyOrder.length === 0) {
+    receiverPolicyOptionError('receiverPolicy incompleto: familyOrder requerido', {
+      receiverPolicyId: policy.id,
+      familyOrder,
+    });
+  }
+  const validFamilies = new Set<PtxRecord['type']>([
+    'JOBS',
+    'PARTS_REQ',
+    'PARTS_INF',
+    'PARTS_UDI',
+    'BOARDS',
+    'MATERIALS',
+    'OFFCUTS',
+    'PATTERNS',
+    'CUTS',
+    'VECTORS',
+  ]);
+  const seenFamilies = new Set<string>();
+  for (const family of familyOrder) {
+    if (!validFamilies.has(family as PtxRecord['type']) || seenFamilies.has(family)) {
+      receiverPolicyOptionError('receiverPolicy incompleto: familyOrder contiene una familia inválida o duplicada', {
         receiverPolicyId: policy.id,
-        fieldName,
+        familyOrder,
+        family,
       });
     }
-    const supportedField = HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields[fieldName];
-    if (field.source !== supportedField.source || field.value !== supportedField.value) {
-      receiverPolicyOptionError('receiverPolicy no coincide con el perfil HPP250 CAD4 R5 exportado para un campo MATERIALS', {
+    seenFamilies.add(family);
+  }
+  for (const required of ['JOBS', 'BOARDS', 'MATERIALS', 'PATTERNS', 'CUTS'] as const) {
+    if (!seenFamilies.has(required)) {
+      receiverPolicyOptionError('receiverPolicy incompleto: familyOrder omite una familia emitida requerida', {
         receiverPolicyId: policy.id,
-        fieldName,
-        value: field.value,
-        requiredValue: supportedField.value,
-        source: field.source,
-        requiredSource: supportedField.source,
+        familyOrder,
+        required,
       });
     }
   }
-  if (policy.recordShape?.emitCutComments !== false) {
-    receiverPolicyOptionError('receiverPolicy incompleto: CUTS.COMMENT debe omitirse para este receptor', {
+  if (policy.recordShape?.emitCutComments !== true && policy.recordShape?.emitCutComments !== false) {
+    receiverPolicyOptionError('receiverPolicy incompleto: emitCutComments debe ser booleano', {
       receiverPolicyId: policy.id,
       emitCutComments: policy.recordShape?.emitCutComments,
     });
   }
-  if (
-    policy.recordShape?.familyOrder === undefined ||
-    policy.recordShape.familyOrder.length !== HPP250_RECEIVER_FAMILY_ORDER.length ||
-    policy.recordShape.familyOrder.some((family, index) => family !== HPP250_RECEIVER_FAMILY_ORDER[index])
-  ) {
-    receiverPolicyOptionError('receiverPolicy incompleto: familyOrder no coincide con el orden HPP250 CAD4 R5 requerido', {
+  if (policy.recordShape?.requireBookMaxBookCoherence !== true && policy.recordShape?.requireBookMaxBookCoherence !== false) {
+    receiverPolicyOptionError('receiverPolicy incompleto: requireBookMaxBookCoherence debe ser booleano', {
       receiverPolicyId: policy.id,
-      familyOrder: policy.recordShape?.familyOrder,
-      requiredFamilyOrder: HPP250_RECEIVER_FAMILY_ORDER,
+      requireBookMaxBookCoherence: policy.recordShape?.requireBookMaxBookCoherence,
     });
+  }
+  for (const fieldName of PTX_RECEIVER_REQUIRED_MATERIAL_FIELDS) {
+    const field = policy.materialFields?.[fieldName];
+    if (field === undefined) {
+      receiverPolicyOptionError('receiverPolicy incompleto: falta política de MATERIALS', {
+        receiverPolicyId: policy.id,
+        fieldName,
+      });
+    }
+    const source = field.source;
+    if (!Object.values(PTX_RECEIVER_FIELD_SOURCE).includes(source)) {
+      receiverPolicyOptionError('receiverPolicy incompleto: source inválido de MATERIALS', {
+        receiverPolicyId: policy.id,
+        fieldName,
+        source,
+      });
+    }
+    if (source === PTX_RECEIVER_FIELD_SOURCE.OMIT_NO_OVERRIDE) {
+      if (field.value !== undefined) {
+        receiverPolicyOptionError('receiverPolicy inválido: OMIT_NO_OVERRIDE no puede traer valor', {
+          receiverPolicyId: policy.id,
+          fieldName,
+          value: field.value,
+        });
+      }
+      continue;
+    }
+    if (source === PTX_RECEIVER_FIELD_SOURCE.FROM_CUTPLAN_GEOMETRY) {
+      if (!(PTX_RECEIVER_GEOMETRY_TRIM_FIELDS as readonly string[]).includes(fieldName)) {
+        receiverPolicyOptionError('receiverPolicy inválido: FROM_CUTPLAN_GEOMETRY sólo está soportado para TRIM_* ejecutados', {
+          receiverPolicyId: policy.id,
+          fieldName,
+        });
+      }
+      if (field.value !== undefined && !Number.isFinite(field.value)) {
+        receiverPolicyOptionError('receiverPolicy inválido: expected receiver value no es numérico finito', {
+          receiverPolicyId: policy.id,
+          fieldName,
+          value: field.value,
+        });
+      }
+      continue;
+    }
+    if (field.value === undefined || !Number.isFinite(field.value)) {
+      receiverPolicyOptionError('receiverPolicy incompleto: falta un valor numérico requerido de MATERIALS', {
+        receiverPolicyId: policy.id,
+        fieldName,
+        source,
+      });
+    }
   }
 }
 
 function receiverNumber(policy: PtxReceiverPolicy, fieldName: PtxReceiverMaterialFieldName): number {
-  return policy.materialFields[fieldName].value!;
+  try {
+    return requiredReceiverNumber(policy, fieldName);
+  } catch (error) {
+    receiverPolicyOptionError((error as Error).message, {
+      receiverPolicyId: policy.id,
+      fieldName,
+    });
+  }
 }
 
-function reorderRecordsForReceiver(records: readonly PtxRecord[]): readonly PtxRecord[] {
-  const prefixFamilies = HPP250_RECEIVER_FAMILY_ORDER.filter(
+function reorderRecordsForReceiver(records: readonly PtxRecord[], familyOrder: readonly PtxRecord['type'][]): readonly PtxRecord[] {
+  const prefixFamilies = familyOrder.filter(
     (family) => family !== 'PATTERNS' && family !== 'CUTS',
   );
   const prefixRecords = prefixFamilies.flatMap((family) =>
@@ -1280,7 +1324,7 @@ function reorderRecordsForReceiver(records: readonly PtxRecord[]): readonly PtxR
   const patternCutRecords = records.filter(
     (record) => record.type === 'PATTERNS' || record.type === 'CUTS',
   );
-  const knownFamilies = new Set(HPP250_RECEIVER_FAMILY_ORDER);
+  const knownFamilies = new Set(familyOrder);
   const unknownRecords = records.filter((record) => !knownFamilies.has(record.type));
 
   return [...prefixRecords, ...patternCutRecords, ...unknownRecords];
@@ -1509,24 +1553,39 @@ export function compileCutPlanToPtxDocument(
 
     for (const material of materials.values()) {
       const trims = trimByMaterial.get(material.code);
-      if (trims === undefined) continue;
       for (const [receiverSlot, trimKey] of receiverTrimSlots) {
-        const executedValue = trims[trimKey];
-        if (executedValue === undefined) continue;
-        const receiverValue = receiverNumber(options.receiverPolicy, receiverSlot);
-        const tolerance = 1e-9 * Math.max(1, Math.abs(executedValue), Math.abs(receiverValue));
-        if (Math.abs(executedValue - receiverValue) > tolerance) {
-          throw new PtxCompilationError(
-            'ptx_compile.trim_geometry_mismatch',
-            'receiverPolicy exige coherencia fail-closed entre los TRIM_* ejecutados por r3 y los valores del perfil receptor',
-            {
-              materialCode: material.code,
-              slot: receiverSlot,
-              executedValue,
-              receiverValue,
-              receiverPolicyId: options.receiverPolicy.id,
-            },
-          );
+        const executedValue = trims?.[trimKey];
+        const expectedValue = optionalReceiverExpectedNumber(options.receiverPolicy, receiverSlot);
+        if (expectedValue !== undefined) {
+          if (executedValue === undefined && expectedValue !== 0) {
+            throw new PtxCompilationError(
+              'ptx_compile.trim_geometry_mismatch',
+              'receiverPolicy exige TRIM_* ejecutado desde geometría; no se fabrica cero ni override cuando la geometría está ausente',
+              {
+                materialCode: material.code,
+                slot: receiverSlot,
+                executedValue,
+                expectedValue,
+                receiverPolicyId: options.receiverPolicy.id,
+              },
+            );
+          }
+          if (executedValue !== undefined) {
+            const tolerance = 1e-9 * Math.max(1, Math.abs(executedValue), Math.abs(expectedValue));
+            if (Math.abs(executedValue - expectedValue) > tolerance) {
+              throw new PtxCompilationError(
+                'ptx_compile.trim_geometry_mismatch',
+                'receiverPolicy exige coherencia fail-closed entre los TRIM_* ejecutados por geometría y los valores esperados del receptor',
+                {
+                  materialCode: material.code,
+                  slot: receiverSlot,
+                  executedValue,
+                  expectedValue,
+                  receiverPolicyId: options.receiverPolicy.id,
+                },
+              );
+            }
+          }
         }
       }
     }
@@ -1647,10 +1706,9 @@ export function compileCutPlanToPtxDocument(
       code: material.code,
       description: ptxAscii(sampleSheet.materialName) || undefined,
       thickness: q(material.thicknessMm, `MATERIALS '${material.code}' THICK`),
-      // BOOK: the dossier only establishes that it counts boards, not
-      // millimetres [S03 pp.134–135]; "total boards of the material in the
-      // job" is NOT documented. The candidate's one-board-per-cycle policy
-      // (MAX_BOOK=1, QTY_CYCLES=1, one BOARDS row per sheet) emits BOOK = 1.
+      // BOOK/MAX_BOOK: Pattern Exchange documents max sheets per book /
+      // cutting-height capacity. Historical r2/r3/r4 keep BOOK=1; a receiver
+      // policy may pin BOOK and may require PATTERNS.MAX_BOOK to match it.
       bookQuantity:
         options.receiverPolicy !== undefined
           ? receiverNumber(options.receiverPolicy, 'BOOK')
@@ -1668,35 +1726,18 @@ export function compileCutPlanToPtxDocument(
       // a trim pass stays ABSENT (undefined → empty cell, never 0). G3:
       // TRIM_HEAD/TRIM_FRCT/TRIM_VRCT are never derived — no override.
       trimFRip:
-        options.receiverPolicy !== undefined
-          ? q(receiverNumber(options.receiverPolicy, 'TRIM_FRIP'), `MATERIALS '${material.code}' TRIM_FRIP`)
-          : trims?.trimFrip !== undefined ? q(trims.trimFrip, `MATERIALS '${material.code}' TRIM_FRIP`) : undefined,
+        trims?.trimFrip !== undefined ? q(trims.trimFrip, `MATERIALS '${material.code}' TRIM_FRIP`) : undefined,
       trimVRip:
-        options.receiverPolicy !== undefined
-          ? q(receiverNumber(options.receiverPolicy, 'TRIM_VRIP'), `MATERIALS '${material.code}' TRIM_VRIP`)
-          : trims?.trimVrip !== undefined ? q(trims.trimVrip, `MATERIALS '${material.code}' TRIM_VRIP`) : undefined,
+        trims?.trimVrip !== undefined ? q(trims.trimVrip, `MATERIALS '${material.code}' TRIM_VRIP`) : undefined,
       trimFXct:
-        options.receiverPolicy !== undefined
-          ? q(receiverNumber(options.receiverPolicy, 'TRIM_FXCT'), `MATERIALS '${material.code}' TRIM_FXCT`)
-          : trims?.trimFxct !== undefined ? q(trims.trimFxct, `MATERIALS '${material.code}' TRIM_FXCT`) : undefined,
+        trims?.trimFxct !== undefined ? q(trims.trimFxct, `MATERIALS '${material.code}' TRIM_FXCT`) : undefined,
       trimVXct:
-        options.receiverPolicy !== undefined
-          ? q(receiverNumber(options.receiverPolicy, 'TRIM_VXCT'), `MATERIALS '${material.code}' TRIM_VXCT`)
-          : trims?.trimVXct !== undefined ? q(trims.trimVXct, `MATERIALS '${material.code}' TRIM_VXCT`) : undefined,
-      trimHead:
-        options.receiverPolicy !== undefined
-          ? q(receiverNumber(options.receiverPolicy, 'TRIM_HEAD'), `MATERIALS '${material.code}' TRIM_HEAD`)
-          : undefined,
-      trimFRct:
-        options.receiverPolicy !== undefined
-          ? q(receiverNumber(options.receiverPolicy, 'TRIM_FRCT'), `MATERIALS '${material.code}' TRIM_FRCT`)
-          : undefined,
-      trimVRct:
-        options.receiverPolicy !== undefined
-          ? q(receiverNumber(options.receiverPolicy, 'TRIM_VRCT'), `MATERIALS '${material.code}' TRIM_VRCT`)
-          : undefined,
-      // RULE1..4 deliberately empty in the historical default; the receiver
-      // policy pins the HPP250 CAD4 R5 lab overrides only when opted in.
+        trims?.trimVXct !== undefined ? q(trims.trimVXct, `MATERIALS '${material.code}' TRIM_VXCT`) : undefined,
+      trimHead: undefined,
+      trimFRct: undefined,
+      trimVRct: undefined,
+      // RULE1..4 deliberately empty in the historical default; an opted-in
+      // receiver policy may pin machine/profile overrides.
       rule1: options.receiverPolicy !== undefined ? receiverNumber(options.receiverPolicy, 'RULE1') : undefined,
       rule2: options.receiverPolicy !== undefined ? receiverNumber(options.receiverPolicy, 'RULE2') : undefined,
       rule3: options.receiverPolicy !== undefined ? receiverNumber(options.receiverPolicy, 'RULE3') : undefined,
@@ -1907,7 +1948,7 @@ export function compileCutPlanToPtxDocument(
       runQuantity: 1,
       cyclesQuantity: 1,
       maxBook:
-        options.receiverPolicy !== undefined
+        options.receiverPolicy !== undefined && options.receiverPolicy.recordShape.requireBookMaxBookCoherence
           ? receiverNumber(options.receiverPolicy, 'BOOK')
           : 1,
     });
@@ -1938,7 +1979,7 @@ export function compileCutPlanToPtxDocument(
         partReference,
         producedQuantity: plan.keptPieceRef !== undefined ? 1 : 0,
         comment:
-          options.receiverPolicy !== undefined
+          options.receiverPolicy !== undefined && options.receiverPolicy.recordShape.emitCutComments === false
             ? undefined
             : ptxAscii(division.cutId) || undefined,
       });
@@ -2009,7 +2050,7 @@ export function compileCutPlanToPtxDocument(
         partReference: reference,
         producedQuantity: isPhysical92 ? undefined : 1,
         comment:
-          options.receiverPolicy !== undefined
+          options.receiverPolicy !== undefined && options.receiverPolicy.recordShape.emitCutComments === false
             ? undefined
             : ptxAscii(release.regionId) || undefined,
       });
@@ -2075,7 +2116,7 @@ export function compileCutPlanToPtxDocument(
     },
     records:
       options.receiverPolicy !== undefined
-        ? reorderRecordsForReceiver(records)
+        ? reorderRecordsForReceiver(records, options.receiverPolicy.recordShape.familyOrder as readonly PtxRecord['type'][])
         : records,
   };
 

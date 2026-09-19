@@ -51,6 +51,12 @@ import type {
   PtxCompiledSheetMapping,
 } from './compileCutPlan';
 import { scopedRegionKey } from './scopedRegionRef';
+import {
+  PTX_RECEIVER_FIELD_SOURCE,
+  optionalReceiverExpectedNumber,
+  requiredReceiverNumber,
+  type PtxReceiverMaterialFieldName,
+} from './receiverPolicy';
 
 export interface CutPlanPtxReadbackIssue {
   readonly code: string;
@@ -534,20 +540,33 @@ export function verifyCutPlanPtxReadback(
     options.receiverPolicy?.recordShape?.emitCutComments === false
       ? undefined
       : auxAscii(value) || undefined;
-  type ReceiverMaterialFieldName = keyof NonNullable<CompileCutPlanToPtxOptions['receiverPolicy']>['materialFields'];
   const expectedReceiverMaterialNumber = (
-    fieldName: ReceiverMaterialFieldName,
+    fieldName: PtxReceiverMaterialFieldName,
   ): number | undefined => {
     if (options.receiverPolicy === undefined) return undefined;
-    const value = options.receiverPolicy.materialFields?.[fieldName]?.value;
-    if (value === undefined || !Number.isFinite(value)) {
+    try {
+      return requiredReceiverNumber(options.receiverPolicy, fieldName);
+    } catch {
       push(
         'receiver_policy.material_field_missing',
-        `receiverPolicy '${options.receiverPolicy.id}' no trae MATERIALS.${fieldName} numérico para verificar el readback`,
+        `receiverPolicy '${options.receiverPolicy.id}' no trae MATERIALS.${fieldName} numérico requerido para verificar el readback`,
       );
       return undefined;
     }
-    return value;
+  };
+  const expectedReceiverOptionalNumber = (
+    fieldName: PtxReceiverMaterialFieldName,
+  ): number | undefined => {
+    if (options.receiverPolicy === undefined) return undefined;
+    try {
+      return optionalReceiverExpectedNumber(options.receiverPolicy, fieldName);
+    } catch {
+      push(
+        'receiver_policy.material_field_missing',
+        `receiverPolicy '${options.receiverPolicy.id}' trae MATERIALS.${fieldName} no numérico para verificar el readback`,
+      );
+      return undefined;
+    }
   };
   const expectedReceiverBook = (): number | undefined => {
     if (options.receiverPolicy === undefined) return 1;
@@ -720,8 +739,8 @@ export function verifyCutPlanPtxReadback(
 
   // 4. Materials: kerf must equal the plan kerf, thickness the industrial
   //    thickness (recomputed from the plan — raw codes, since the compiler
-  //    rejects non-ASCII identity), and BOOK the documented conservative
-  //    policy (1: "counts boards" is all S03 pp.134–135 establishes).
+  //    rejects non-ASCII identity), and BOOK the active max-sheets-per-book
+  //    policy (historical default 1 or receiver policy when opted in).
   const expectedThickness = new Map<string, number>();
   for (const sheet of cutPlan.sheets) {
     expectedThickness.set(sheet.materialCode, sheet.thicknessMm ?? Number.NaN);
@@ -759,23 +778,61 @@ export function verifyCutPlanPtxReadback(
       push('materials.thickness', `MATERIALS '${row.code}' THICK=${row.thickness} ≠ ${snap(thickness)}`);
     }
     if (expectedBookQuantity !== undefined && row.bookQuantity !== expectedBookQuantity) {
-      push('materials.book', `MATERIALS '${row.code}' BOOK=${row.bookQuantity} ≠ ${expectedBookQuantity} (política documentada: cuenta tableros, un tablero por ciclo; el total del job NO está establecido en S03)`);
+      push('materials.book', `MATERIALS '${row.code}' BOOK=${row.bookQuantity} ≠ ${expectedBookQuantity} (max sheets per book / cutting-height capacity)`);
+    }
+    if (options.receiverPolicy !== undefined) {
+      const receiverChecks = [
+        ['KERF_RIP', row.kerfRip],
+        ['KERF_XCT', row.kerfCrosscut],
+        ['RULE1', row.rule1],
+        ['RULE2', row.rule2],
+        ['RULE3', row.rule3],
+        ['RULE4', row.rule4],
+      ] as const satisfies readonly (readonly [PtxReceiverMaterialFieldName, number | undefined])[];
+      for (const [field, actual] of receiverChecks) {
+        const expected = expectedReceiverMaterialNumber(field);
+        if (expected !== undefined && (actual === undefined || !close(actual, snap(expected)))) {
+          push('materials.receiver_policy', `MATERIALS '${row.code}' ${field}=${actual ?? 'ausente'} ≠ receiverPolicy ${snap(expected)}`);
+        }
+      }
     }
     if (r3) {
       if (options.receiverPolicy !== undefined) {
-        const receiverTrimChecks = [
-          ['TRIM_FRIP', row.trimFRip],
-          ['TRIM_VRIP', row.trimVRip],
-          ['TRIM_FXCT', row.trimFXct],
-          ['TRIM_VXCT', row.trimVXct],
+        const expected = expectedTrimsByMaterial.get(row.code);
+        const geometryTrimChecks = [
+          ['TRIM_FRIP', row.trimFRip, expected !== undefined && expected !== 'inconsistent' ? expected.trimFripMm : undefined],
+          ['TRIM_VRIP', row.trimVRip, expected !== undefined && expected !== 'inconsistent' ? expected.trimVripMm : undefined],
+          ['TRIM_FXCT', row.trimFXct, expected !== undefined && expected !== 'inconsistent' ? expected.trimFxctMm : undefined],
+          ['TRIM_VXCT', row.trimVXct, expected !== undefined && expected !== 'inconsistent' ? expected.trimVXctMm : undefined],
+        ] as const satisfies readonly (readonly [PtxReceiverMaterialFieldName, number | undefined, number | undefined])[];
+        if (!expected) {
+          push('materials.trims', `MATERIALS '${row.code}' sin proyección de trims derivable para su material`);
+        } else if (expected === 'inconsistent') {
+          push('materials.trims', `MATERIALS '${row.code}': hojas del mismo material con refilados ejecutados distintos`);
+        }
+        for (const [field, actual, executed] of geometryTrimChecks) {
+          const expectedReceiver = expectedReceiverOptionalNumber(field);
+          if (executed === undefined) {
+            if (actual !== undefined) {
+              push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE: no hay geometría ejecutada, ausente ≠ 0`);
+            }
+            if (expectedReceiver !== undefined && expectedReceiver !== 0) {
+              push('materials.trims', `MATERIALS '${row.code}' ${field}=ausente pero receiverPolicy esperaba ${snap(expectedReceiver)}; no se fabrica cero ni override`);
+            }
+          } else if (actual === undefined || !close(actual, snap(executed))) {
+            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual ?? 'ausente'} ≠ margen ejecutado ${snap(executed)} (receiverPolicy no sobrescribe geometría)`);
+          } else if (expectedReceiver !== undefined && !close(actual, snap(expectedReceiver))) {
+            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} ≠ receiverPolicy expected ${snap(expectedReceiver)}`);
+          }
+        }
+        for (const [field, actual] of [
           ['TRIM_HEAD', row.trimHead],
           ['TRIM_FRCT', row.trimFRct],
           ['TRIM_VRCT', row.trimVRct],
-        ] as const;
-        for (const [field, actual] of receiverTrimChecks) {
-          const expected = expectedReceiverMaterialNumber(field);
-          if (expected !== undefined && (actual === undefined || !close(actual, snap(expected)))) {
-            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual ?? 'ausente'} ≠ receiverPolicy ${snap(expected)}`);
+        ] as const satisfies readonly (readonly [PtxReceiverMaterialFieldName, number | undefined])[]) {
+          const source = options.receiverPolicy.materialFields[field]?.source;
+          if (source === PTX_RECEIVER_FIELD_SOURCE.OMIT_NO_OVERRIDE && actual !== undefined) {
+            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE por receiverPolicy OMIT_NO_OVERRIDE`);
           }
         }
       } else {
@@ -1271,8 +1328,12 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     if (patternRow.runQuantity !== 1 || patternRow.cyclesQuantity !== 1) {
       push('patterns.compression', `PATTERNS QTY_RUN/QTY_CYCLES=${patternRow.runQuantity}/${patternRow.cyclesQuantity} ≠ 1/1 (un tablero por ciclo, sin compresión)`);
     }
-    if (expectedBookQuantity !== undefined && patternRow.maxBook !== expectedBookQuantity) {
-      push('patterns.max_book', `PATTERNS MAX_BOOK=${patternRow.maxBook} ≠ ${expectedBookQuantity} (debe seguir MATERIALS.BOOK esperado)`);
+    const expectedMaxBook =
+      options.receiverPolicy !== undefined && options.receiverPolicy.recordShape.requireBookMaxBookCoherence
+        ? expectedBookQuantity
+        : 1;
+    if (expectedMaxBook !== undefined && patternRow.maxBook !== expectedMaxBook) {
+      push('patterns.max_book', `PATTERNS MAX_BOOK=${patternRow.maxBook} ≠ ${expectedMaxBook} (coherencia BOOK/MAX_BOOK ${options.receiverPolicy?.recordShape.requireBookMaxBookCoherence === true ? 'activa' : 'inactiva'})`);
     }
   }
 

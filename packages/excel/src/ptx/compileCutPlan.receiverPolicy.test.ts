@@ -5,6 +5,7 @@
  * PTX compiler without changing the historical/default r4 byte contract.
  */
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { optimizeCutPlan } from '@granete/domain';
 import { compileCutPlanToPtxDocument, PtxCompilationError } from './compileCutPlan';
@@ -39,8 +40,8 @@ const RECEIVER_CONFIG = {
   sawKerfMm: 4.4,
   trim: {
     topMm: 0,
-    bottomMm: 0,
-    leftMm: 0,
+    bottomMm: 10,
+    leftMm: 10,
     rightMm: 0,
   },
 };
@@ -149,6 +150,12 @@ describe('#790 HPP250 CAD4 receiver policy compiler wiring', () => {
     expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.BOOK.source).toBe(
       PTX_RECEIVER_FIELD_SOURCE.FROM_MACHINE_PROFILE,
     );
+    expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_FRIP.source).toBe(
+      PTX_RECEIVER_FIELD_SOURCE.FROM_CUTPLAN_GEOMETRY,
+    );
+    expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_HEAD.source).toBe(
+      PTX_RECEIVER_FIELD_SOURCE.OMIT_NO_OVERRIDE,
+    );
   });
 
   it(
@@ -176,6 +183,11 @@ describe('#790 HPP250 CAD4 receiver policy compiler wiring', () => {
           bookQuantity: 3,
           kerfRip: 4.4,
           kerfCrosscut: 4.4,
+          trimFRip: 10,
+          trimFXct: 10,
+          trimHead: undefined,
+          trimFRct: undefined,
+          trimVRct: undefined,
           rule1: 6,
           rule2: 1,
           rule3: 1,
@@ -224,7 +236,7 @@ describe('#790 HPP250 CAD4 receiver policy compiler wiring', () => {
         materialCode: 'LAB15',
         slot: 'TRIM_VRIP',
         executedValue: 10,
-        receiverValue: 0,
+        expectedValue: 0,
         receiverPolicyId: HPP250_CAD4_R5_LAB_RECEIVER_POLICY.id,
       });
     },
@@ -243,6 +255,28 @@ describe('#790 HPP250 CAD4 receiver policy compiler wiring', () => {
       expect(error.code).toBe('ptx_compile.kerf_not_uniform');
     },
   );
+
+  it('blocks OMIT_NO_OVERRIDE receiver policy fields that accidentally carry a value', () => {
+    const mutatedPolicy = {
+      ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY,
+      materialFields: {
+        ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields,
+        TRIM_HEAD: {
+          ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_HEAD,
+          value: 20,
+        },
+      },
+    } satisfies PtxReceiverPolicy;
+
+    const error = captureCompileError(() =>
+      compileCutPlanToPtxDocument(buildGoldenR4Plan(), {
+        ...GOLDEN_R4_OPTIONS,
+        receiverPolicy: mutatedPolicy,
+      }),
+    );
+
+    expect(error.code).toBe('ptx_compile.options_invalid');
+  });
 
   it('blocks an incomplete receiver policy missing a required RULE value', () => {
     const mutatedPolicy = {
@@ -265,7 +299,7 @@ describe('#790 HPP250 CAD4 receiver policy compiler wiring', () => {
     expect(error.code).toBe('ptx_compile.options_invalid');
   });
 
-  it('blocks a same-id receiver policy clone whose BOOK differs from the exported HPP250 policy', () => {
+  it('uses a generic same-id receiver policy clone whose BOOK differs from the exported HPP250 policy', () => {
     const mutatedPolicy = {
       ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY,
       materialFields: {
@@ -277,20 +311,13 @@ describe('#790 HPP250 CAD4 receiver policy compiler wiring', () => {
       },
     } satisfies PtxReceiverPolicy;
 
-    const error = captureCompileError(() =>
-      compileCutPlanToPtxDocument(buildGoldenR4Plan(), {
-        ...GOLDEN_R4_OPTIONS,
-        receiverPolicy: mutatedPolicy,
-      }),
-    );
-
-    expect(error.code).toBe('ptx_compile.options_invalid');
-    expect(error.context).toMatchObject({
-      fieldName: 'BOOK',
-      value: 5,
-      requiredValue: 3,
-      receiverPolicyId: HPP250_CAD4_R5_LAB_RECEIVER_POLICY.id,
+    const compiled = compileCutPlanToPtxDocument(buildGoldenR4Plan(), {
+      ...GOLDEN_R4_OPTIONS,
+      receiverPolicy: mutatedPolicy,
     });
+
+    expect(materialRows(compiled.document.records).every((row) => row.bookQuantity === 5)).toBe(true);
+    expect(patternRows(compiled.document.records).every((row) => row.maxBook === 5)).toBe(true);
   });
 
   it(
@@ -378,6 +405,52 @@ describe('#790 HPP250 CAD4 receiver policy compiler wiring', () => {
       verifyCutPlanPtxReadback(mutated, plan, compiled.mapping, RECEIVER_OPTIONS)
         .map((issue) => issue.code),
     ).toContain('receiver.order');
+  });
+
+  it('keeps HPP250 receiver id/value/order constants out of the generic compiler source', () => {
+    const source = readFileSync(new URL('./compileCutPlan.ts', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('HPP250_CAD4_R5_LAB_RECEIVER_POLICY');
+    expect(source).not.toContain('HPP250_CAD4_R5_LAB');
+    expect(source).not.toContain('HPP250_RECEIVER_FAMILY_ORDER');
+  });
+
+  it('reports receiver MATERIALS rule, kerf, BOOK and PATTERNS MAX_BOOK mutations', () => {
+    const { plan, compiled, parsed } = compileParsedReceiverCandidate();
+    const materialMutations: readonly (readonly [keyof PtxMaterialRecord, number, string])[] = [
+      ['rule1', 7, 'materials.receiver_policy'],
+      ['rule2', 0, 'materials.receiver_policy'],
+      ['rule3', 0, 'materials.receiver_policy'],
+      ['rule4', 0, 'materials.receiver_policy'],
+      ['kerfRip', 4.3, 'materials.kerf'],
+      ['kerfCrosscut', 4.3, 'materials.kerf'],
+      ['bookQuantity', 2, 'materials.book'],
+    ];
+
+    for (const [field, value, code] of materialMutations) {
+      const mutated: PtxDocument = {
+        ...parsed,
+        records: parsed.records.map((record) =>
+          record.type === 'MATERIALS' ? { ...record, [field]: value } : record,
+        ),
+      };
+      expect(
+        verifyCutPlanPtxReadback(mutated, plan, compiled.mapping, RECEIVER_OPTIONS)
+          .map((issue) => issue.code),
+        `${String(field)} mutation`,
+      ).toContain(code);
+    }
+
+    const maxBookMutated: PtxDocument = {
+      ...parsed,
+      records: parsed.records.map((record) =>
+        record.type === 'PATTERNS' ? { ...record, maxBook: 2 } : record,
+      ),
+    };
+    expect(
+      verifyCutPlanPtxReadback(maxBookMutated, plan, compiled.mapping, RECEIVER_OPTIONS)
+        .map((issue) => issue.code),
+    ).toContain('patterns.max_book');
   });
 
   it('reports receiver BOARDS authority issues for cost and stock flag values', () => {

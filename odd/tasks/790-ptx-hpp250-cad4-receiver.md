@@ -35,3 +35,8 @@ Implement the lab-only receiver-specific policy for Client A HOLZMA HPP 250 / CA
 - Independent verifier → APPROVED.
 - `python3 scripts/verify_affected.py --base origin/main --plan` → selected full major jobs.
 - `python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600` → BLOCKED because isolated `DATABASE_URL` was missing.
+- Focused correction round after PR #801 CHANGES REQUESTED: made receiver policy executable/generic, moved HPP250 facts to `receiverPolicy.ts`, emitted TRIM_FRIP/VRIP/FXCT/VXCT from executed geometry only, omitted HEAD/FRCT/VRCT, gated BOOK/MAX_BOOK coherence by policy flag, added readback mutation checks for RULE1..4/KERF/BOOK/MAX_BOOK, and compared R2201/R7301 observed evidence vs emitted policy.
+- `pnpm --filter @granete/excel test -- compileCutPlan.receiverPolicy.test.ts externalDialect.test.ts specPreflight.test.ts cutPlanPtxGoldenR4.test.ts cutPlanPtxGoldenR3.test.ts cutPlanPtxGolden.test.ts` → PASS; 46 files / 559 passed + 3 skipped.
+- `pnpm --filter @granete/excel test` → PASS; 46 files / 559 passed + 3 skipped.
+- `pnpm typecheck` → PASS.
+- `git diff --check` → PASS.
