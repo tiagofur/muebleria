@@ -14,11 +14,14 @@
  *   fields instead of demanding the writer's exact width;
  * - the guide's own examples put SPACES after commas ("CUTS, 1,   1, …") and
  *   the samples separate sections with BLANK lines;
- * - documented families Granete does not model yet (PARTS_INF, PARTS_UDI,
- *   PARTS_DST, PTN_UDI, NOTES — §20 pp.168–178) appear between the modeled
- *   ones; they are recorded opaque here and get their typed shape in #789+
- *   (nothing in this reader may block that: the row view keeps every raw
- *   cell).
+ * - documented families Granete does not model yet (PARTS_DST, PTN_UDI,
+ *   NOTES — §20 pp.170–178) appear between the modeled ones; they are
+ *   recorded opaque here and get their typed shape later (nothing in this
+ *   reader may block that: the row view keeps every raw cell).
+ *   PARTS_INF and PARTS_UDI got their typed shape in #789: external rows of
+ *   those families now parse through the same modeled-family path (typed
+ *   record + shape info), including their PART_INDEX → PARTS_REQ relations
+ *   under the strict spec preflight — they stopped being opaque blobs.
  *
  * This reader changes NOTHING about the strict parsePtxText path used for
  * Granete's own bytes. It is for reading external evidence within the
@@ -29,10 +32,8 @@
 import { PtxParseError, PTX_PARSER_FAMILY_SPECS, parseHeaderRow, parseRecordRow } from './parse';
 import type { PtxHeaderRecord, PtxRecord, PtxRecordType } from './records';
 
-/** Documented (§20) families without a typed Granete model yet (#789+). */
+/** Documented (§20) families still without a typed Granete model (#790+). */
 export const PTX_DOCUMENTED_UNMODELED_FAMILIES = [
-  'PARTS_INF',
-  'PARTS_UDI',
   'PARTS_DST',
   'PTN_UDI',
   'NOTES',

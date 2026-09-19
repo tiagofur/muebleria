@@ -18,9 +18,10 @@
  * completions are forbidden around this model.
  *
  * Deliberately NOT implemented (first-profile subset, investigation §4
- * "Información y remanentes" and §9): PARTS_INF, PARTS_UDI, PARTS_DST,
- * PTN_UDI, NOTES, and every optional column beyond the implemented width of
- * each family (documented per record below). The reader fails closed on
+ * "Información y remanentes" and §9): PARTS_DST, PTN_UDI, NOTES, and every
+ * optional column beyond the implemented width of each family (documented per
+ * record below). PARTS_INF and PARTS_UDI got their full typed shape in #789
+ * (see the per-record documentation below). The reader fails closed on
  * unmodeled columns instead of guessing them.
  */
 
@@ -342,9 +343,114 @@ export interface PtxVectorRecord {
   readonly yEnd: number;
 }
 
+/**
+ * PARTS_INF,JOB_INDEX,PART_INDEX,DESC,LABEL_QTY,FIN_LENGTH,FIN_WIDTH,ORDER,
+ * EDGE1,EDGE2,EDGE3,EDGE4,EDG_PG1,EDG_PG2,EDG_PG3,EDG_PG4,FACE_LAM,BACK_LAM,
+ * CORE_MAT,PALLET,DRAWING,PRODUCT,PROD_INFO,PROD_WIDTH,PROD_HGT,PROD_DEPTH,
+ * PROD_NUM,ROOM,BARCODE1,BARCODE2,COLOUR,SECOND_CUT_LENGTH,SECOND_CUT_WIDTH
+ * (32 content cells — the FULL documented §20 width, #789).
+ *
+ * Documented per-field authority (S03 V11 Interface Guide §20 pp.168–169,
+ * extracted 2026-09-19): JOB_INDEX "IDX 1-250", PART_INDEX "IDX 1-9999" and
+ * EVERY other column is `TXT 200 chars max.` — including LABEL_QTY,
+ * FIN_LENGTH, FIN_WIDTH, PROD_WIDTH/HGT/DEPTH and PROD_NUM. The dictionary
+ * types them as TEXT, so the record model carries them as strings and never
+ * coerces numbers on read; numeric FORM on write is the candidate's own
+ * policy (compileCutPlan formats frozen magnitudes deterministically).
+ *
+ * Documented side semantics (§20 p.168, verbatim column comments): EDGE1
+ * "Btm length edge code", EDGE2 "Top length edge code", EDGE3 "Left width
+ * edge code", EDGE4 "Right width edge code"; EDG_PG1..4 are the per-side
+ * edge PROGRAM columns. The mapping from Granete's L1/L2/W1/W2 workshop
+ * sides (L1=top long, L2=bottom long, W1=left short, W2=right short —
+ * packages/ui PlankEdgeDiagram convention, zplLabels uses the same) is
+ * L2→EDGE1, L1→EDGE2, W1→EDGE3, W2→EDGE4 and lives in partLabels.ts (the
+ * industrial projection), never in the serializer.
+ *
+ * Fields without real authority stay `undefined` (empty cell) — PALLET,
+ * SECOND_CUT_LENGTH/WIDTH are modeled for the documented width but Granete
+ * has no pallet/second-cut authority, so the compiler never fills them.
+ */
+export interface PtxPartsInfRecord {
+  readonly type: 'PARTS_INF';
+  readonly jobIndex: number;
+  readonly partIndex: number;
+  /** DESC "Second part desc" — human part name when Granete has one. */
+  readonly description?: string;
+  /** LABEL_QTY "Label quantity" (TXT): candidate policy writes one label per physical piece ("1"). */
+  readonly labelQuantity?: string;
+  /** FIN_LENGTH "Finished length" (TXT): the frozen finished measure, never re-derived from cut dims. */
+  readonly finishedLength?: string;
+  readonly finishedWidth?: string;
+  /** ORDER "Original order" — short work/release reference. */
+  readonly order?: string;
+  /** EDGE1 "Btm length edge code" — edge band code when Granete's L2 side is banded. */
+  readonly edge1?: string;
+  /** EDGE2 "Top length edge code" — edge band code when Granete's L1 side is banded. */
+  readonly edge2?: string;
+  /** EDGE3 "Left width edge code" — edge band code when Granete's W1 side is banded. */
+  readonly edge3?: string;
+  /** EDGE4 "Right width edge code" — edge band code when Granete's W2 side is banded. */
+  readonly edge4?: string;
+  /** EDG_PG1..4 "Bottom/Top/Left/Right edge program" — only with a real operation/program authority (#789: never filled). */
+  readonly edgeProgram1?: string;
+  readonly edgeProgram2?: string;
+  readonly edgeProgram3?: string;
+  readonly edgeProgram4?: string;
+  readonly faceLaminate?: string;
+  readonly backLaminate?: string;
+  /** CORE_MAT "Core material" — board material code authorized by ProductionCutRow.materialCode. */
+  readonly coreMaterial?: string;
+  readonly pallet?: string;
+  /** DRAWING "Name of drawing file" — short deterministic CNC drawing reference (D<hex12>), never a UUID. */
+  readonly drawing?: string;
+  readonly product?: string;
+  readonly productInfo?: string;
+  readonly productWidth?: string;
+  readonly productHeight?: string;
+  readonly productDepth?: string;
+  /** PROD_NUM "Product number" (TXT) — the frozen workshop occurrence ordinal of the physical unit. */
+  readonly productNumber?: string;
+  /** ROOM "Room/group" — the named space of the project when the unit is placed in one. */
+  readonly room?: string;
+  readonly barcode1?: string;
+  readonly barcode2?: string;
+  readonly colour?: string;
+  readonly secondCutLength?: string;
+  readonly secondCutWidth?: string;
+}
+
+/**
+ * PARTS_UDI,JOB_INDEX,PART_INDEX,INFO1..INFO60 (62 content cells documented;
+ * §20 pp.169–171 list exactly 60 homogeneous "Information field N" columns of
+ * type TXT 200). The guide gives INFO1..60 NO semantics — they are free
+ * user-defined per-part fields. The R2201/R7301 field samples evidence the
+ * client's optimizer writing INFO1=<picture>.png, INFO2=<compact edge code>,
+ * INFO3/INFO4=<finish>, but that usage is RECEIVER_EVIDENCED, not standard:
+ * the compact encoding (e.g. `2WE2LE`) is UNKNOWN and Granete NEVER
+ * generates it (#789 decision).
+ *
+ * The typed model keeps the documented homogeneous shape as a positional
+ * array (`info[i - 1]` is INFO<i>); trailing undefined entries are OMITTED
+ * cells (the row ends after the last defined INFO), matching the field
+ * samples' short rows. Mid-row undefined entries are EMPTY cells.
+ */
+export interface PtxPartsUdiRecord {
+  readonly type: 'PARTS_UDI';
+  readonly jobIndex: number;
+  readonly partIndex: number;
+  /** INFO1..INFO60 (position i-1 = INFO i); all TXT 200. */
+  readonly info: readonly (string | undefined)[];
+}
+
+/** Documented maximum INFO column count (§20 pp.169–171). */
+export const PTX_PARTS_UDI_INFO_COLUMN_COUNT = 60;
+
 export type PtxRecord =
   | PtxJobRecord
   | PtxPartsReqRecord
+  | PtxPartsInfRecord
+  | PtxPartsUdiRecord
   | PtxBoardRecord
   | PtxMaterialRecord
   | PtxPatternRecord
@@ -372,6 +478,8 @@ export const PTX_RECORD_CONTENT_WIDTH: Readonly<Record<PtxRecordType | 'HEADER',
   HEADER: 5,
   JOBS: 11,
   PARTS_REQ: 11,
+  PARTS_INF: 32,
+  PARTS_UDI: 62,
   BOARDS: 8,
   MATERIALS: 19,
   PATTERNS: 7,

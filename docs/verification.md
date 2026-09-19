@@ -528,6 +528,82 @@ Cobertura contractual exigida por #788:
 
 ---
 
+## PTX CADmatic 4 — PARTS_INF/PARTS_UDI, etiquetas e identidad CNC r5 (#789)
+
+Modelo tipado de las familias de etiqueta (32 columnas PARTS_INF y
+JOB/PART+INFO1..60 PARTS_UDI según el diccionario §20 pp.168–171), proyección
+industrial congelada por pieza física (`PtxPartLabelData`/`buildPtxPartLabels`)
+y puente CNC `D<hex12>`/BARCODE. Autoridad y clasificación por campo en
+`docs/machines/ptx-cadmatic4/09_parts_inf_labels_cnc.md` (mapping §3,
+orientación de cantos §4, puente CNC §5, inventario UDI §6).
+
+Evidencia enfocada observada en el hardening #797:
+
+```sh
+# HEAD 32518fc47273f74af71520985953f68d9ca32bf3
+pnpm --filter @granete/excel test    # 45 archivos / 534 PASS / 3 skips
+pnpm typecheck                      # PASS
+# prior diff check                  # limpio
+```
+
+Intento de selector autorizado sobre el candidato
+`32518fc47273f74af71520985953f68d9ca32bf3`, base
+`b7446866ed247677d8b8f83238cddbd96579db97`:
+
+```sh
+python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600
+```
+
+Resultado: bloqueado antes de gates porque falta un `DATABASE_URL` aislado. El
+selector seleccionó `typescript`, `backend-go`, `sketchup-extension`,
+`proyectar-visual`, `foundation-postgres` y `organization-browser`, pero ninguno
+de esos gates corrió ni cuenta como PASS.
+
+Checks pendientes en este HEAD: selector con infraestructura aislada, CI
+exact-head y gates proporcionales que el líder/verificador ejecute antes de
+publicar/cerrar.
+
+Cobertura contractual exigida por #789/#797:
+
+- proyección pura: el serializer/compiler no reconstruye etiqueta — todo
+  PARTS_INF es proyección de `PtxPartLabelData`; el verifier exige celda a
+  celda la igualdad con la etiqueta de SU pieza y que los campos sin
+  autoridad (EDG_PG*/FACE/BACK/PALLET/COLOUR/SECOND_CUT) estén AUSENTES
+  (`parts_inf.authority_violation` ante un byte mutado);
+- CORE_MAT: `ProductionCutRow.materialCode` es la autoridad del tablero; esto
+  no introduce tuning de MATERIALS/receptor, que sigue perteneciendo a #790;
+- identidad de medidas: FIN_* (terminada, copiada de la fila de ingeniería)
+  contra PARTS_REQ (corte) + descuento del optimizador, re-derivada de forma
+  independiente por el verifier (`parts_inf.finished_identity`) y afirmada
+  desde los bytes en el golden;
+- orientación de cantos: L2→EDGE1, L1→EDGE2, W1→EDGE3, W2→EDGE4 con trampas
+  asimétricas y con un escenario real del optimizador `grain=0` +
+  `allowRotationNoGrain` que produce `piece.rotated === true`; las etiquetas
+  preservan lados físicos de pieza, no ejes del tablero;
+- edge fail-closed: cualquier bandera de canto sin `edgeBandCode` bloquea;
+  Granete sigue limitado a un código de banda por pieza;
+- ocurrencia física: PROD_NUM = `workshopOccurrenceOrdinal` congelado (#781);
+  golden con orden léxico de módulos OPUESTO al de ordinales y ocurrencia
+  repetida (`-L2`, ROOM distinto) — las etiquetas no cruzan ocurrencias;
+- puente CNC: DRAWING/BARCODE1 sólo existen con autoridad CNC explícita y
+  `cncScope` congelado no vacío; `D<hex12>` deriva de scope+CNC/release y
+  código de fabricación, no de un basename futuro para mecanizado desconocido;
+  autoridad false/ausente deja DRAWING/BARCODE1 vacíos; duplicados bloquean;
+- LABEL_QTY/quantities: una etiqueta por pieza física (`LABEL_QTY="1"`) y
+  cantidades inválidas de filas de ingeniería (0, negativas o decimales)
+  fallan cerrado;
+- PARTS_UDI: modelado estructural INFO1..60, INFO2 (encoding compacto
+  `2WE2LE`-style) clasificado UNKNOWN y JAMÁS generado; R2201/R7301 se leen
+  tipadas con referencias PART_INDEX → PARTS_REQ verificadas;
+- spec preflight extendido: TXT 200 en las columnas de texto de PARTS_INF y en
+  INFO1..60 (document y bytes), IDX 1-250/1-9999; unicidad por pieza es
+  PRODUCT (validate.ts DUPLICATE_INDEX), no SPEC;
+- inmutabilidad r2/r3/r4: sin la opción `partLabels` no se emiten PARTS_INF/
+  PARTS_UDI y los goldens históricos recompilan byte-exact dentro de la suite;
+  r2/r3/r4, FUNCTION 92, adapter/profile y outputs cliente no se tocaron.
+
+---
+
 ## 15. Definition of Verified
 
 Antes de declarar una feature verificada:
