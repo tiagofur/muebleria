@@ -37,7 +37,9 @@ import type {
   PtxJobRecord,
   PtxMaterialRecord,
   PtxOffcutRecord,
+  PtxPartsInfRecord,
   PtxPartsReqRecord,
+  PtxPartsUdiRecord,
   PtxPatternRecord,
   PtxVectorRecord,
 } from './records';
@@ -689,8 +691,15 @@ export function verifyCutPlanPtxReadback(
     if (row.code !== expectedCode) {
       push('parts.code', `PARTS_REQ ${expectedPartIndex} CODE='${row.code}' ≠ '${expectedCode}'`);
     }
-    if (!close(row.length, snap(piece.lengthMm)) || !close(row.width, snap(piece.widthMm))) {
-      push('parts.dims', `PARTS_REQ ${expectedPartIndex} ${row.length}×${row.width} ≠ medidas resueltas ${snap(piece.lengthMm)}×${snap(piece.widthMm)} (pieza ${piece.id})`);
+    const expectedReqDimensions =
+      options.partsReqDimensionPolicy === 'part-local-pre-rotation-cut' && piece.rotated
+        ? { lengthMm: piece.widthMm, widthMm: piece.lengthMm }
+        : { lengthMm: piece.lengthMm, widthMm: piece.widthMm };
+    if (
+      !close(row.length, snap(expectedReqDimensions.lengthMm)) ||
+      !close(row.width, snap(expectedReqDimensions.widthMm))
+    ) {
+      push('parts.dims', `PARTS_REQ ${expectedPartIndex} ${row.length}×${row.width} ≠ medidas esperadas ${snap(expectedReqDimensions.lengthMm)}×${snap(expectedReqDimensions.widthMm)} bajo política ${options.partsReqDimensionPolicy ?? 'placement'} (pieza ${piece.id})`);
     }
     const expectedGrain = piece.grain === 0 ? 0 : 1;
     if (row.grain !== expectedGrain) {
@@ -705,6 +714,174 @@ export function verifyCutPlanPtxReadback(
       push('parts.material', `PARTS_REQ ${expectedPartIndex} MAT_INDEX=${row.materialIndex} ≠ material '${materialCode}'`);
     }
   });
+
+  // 5b. PARTS_INF / PARTS_UDI (#789): when the compilation carried the label
+  //     projection, every row must be the PURE projection of the frozen
+  //     label of ITS part — including the FIN measure identity, re-derived
+  //     here from the placed piece's PRE-ROTATION cut measure plus the
+  //     optimizer's own edge-band deduction (the only deduction site,
+  //     unrollRows). Two independent derivations agreeing is the test; a
+  //     label wired to the wrong physical piece fails on dims or edges.
+  const partsInfRows = parsed.records.filter((r): r is PtxPartsInfRecord => r.type === 'PARTS_INF');
+  const partsUdiRows = parsed.records.filter((r): r is PtxPartsUdiRecord => r.type === 'PARTS_UDI');
+  if (options.partLabels === undefined) {
+    if (partsInfRows.length > 0) {
+      push('parts_inf.unexpected', `PARTS_INF=${partsInfRows.length} filas sin proyección de etiqueta en la compilación`);
+    }
+    if (partsUdiRows.length > 0) {
+      push('parts_udi.unexpected', `PARTS_UDI=${partsUdiRows.length} filas sin política estructural en la compilación`);
+    }
+  } else {
+    const labels = mapping.partLabelByPartIndex;
+    if (labels === undefined) {
+      push('parts_inf.mapping_missing', 'la compilación declaró partLabels pero el mapeo no lleva la proyección por PART_INDEX');
+    } else {
+      if (partsInfRows.length !== partsRows.length) {
+        push('parts_inf.count', `PARTS_INF=${partsInfRows.length} ≠ PARTS_REQ=${partsRows.length} (una fila por pieza física)`);
+      }
+      // Independent TXT rendering of a frozen magnitude (deliberate
+      // duplication of the writer's numeric form).
+      const renderTxt = (value: number): string => {
+        const factor = 10 ** options.decimalPlaces;
+        const snapped = Math.round(value * factor) / factor;
+        const fixed = snapped.toFixed(options.decimalPlaces);
+        return fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
+      };
+      const expectCell = (value: string | undefined): string | undefined =>
+        value === undefined ? undefined : auxAscii(value) || undefined;
+      const infByPartIndex = new Map(partsInfRows.map((row) => [row.partIndex, row]));
+      const udiByPartIndex = new Map(partsUdiRows.map((row) => [row.partIndex, row]));
+      for (const [position, { piece }] of expectedPieces.entries()) {
+        const partIndex = mapping.partIndexByPieceRef.get(piece.id);
+        if (partIndex === undefined) continue;
+        const label = labels[partIndex - 1];
+        if (label === undefined) {
+          push('parts_inf.label_missing', `PART_INDEX=${partIndex} (pieza ${piece.id}) sin proyección de etiqueta en el mapeo`);
+          continue;
+        }
+        const row = infByPartIndex.get(partIndex);
+        if (row === undefined) {
+          push('parts_inf.row_missing', `PART_INDEX=${partIndex} sin fila PARTS_INF (pieza ${piece.id})`);
+        } else {
+          const cellChecks: readonly (readonly [string | undefined, string | undefined, string])[] = [
+            [row.description, expectCell(label.description), 'DESC'],
+            [row.labelQuantity, String(label.labelQuantity), 'LABEL_QTY'],
+            [row.finishedLength, renderTxt(label.finishedLengthMm), 'FIN_LENGTH'],
+            [row.finishedWidth, renderTxt(label.finishedWidthMm), 'FIN_WIDTH'],
+            [row.order, expectCell(label.orderRef), 'ORDER'],
+            [row.edge1, expectCell(label.edge1), 'EDGE1'],
+            [row.edge2, expectCell(label.edge2), 'EDGE2'],
+            [row.edge3, expectCell(label.edge3), 'EDGE3'],
+            [row.edge4, expectCell(label.edge4), 'EDGE4'],
+            [row.coreMaterial, expectCell(label.coreMaterial), 'CORE_MAT'],
+            [row.drawing, expectCell(label.cncDrawingRef), 'DRAWING'],
+            [row.product, expectCell(label.productCode), 'PRODUCT'],
+            [row.productInfo, expectCell(label.productInfo), 'PROD_INFO'],
+            [
+              row.productWidth,
+              label.productWidthMm !== undefined ? renderTxt(label.productWidthMm) : undefined,
+              'PROD_WIDTH',
+            ],
+            [
+              row.productHeight,
+              label.productHeightMm !== undefined ? renderTxt(label.productHeightMm) : undefined,
+              'PROD_HGT',
+            ],
+            [
+              row.productDepth,
+              label.productDepthMm !== undefined ? renderTxt(label.productDepthMm) : undefined,
+              'PROD_DEPTH',
+            ],
+            [
+              row.productNumber,
+              label.productNumber !== undefined ? String(label.productNumber) : undefined,
+              'PROD_NUM',
+            ],
+            [row.room, expectCell(label.room), 'ROOM'],
+            [row.barcode1, expectCell(label.barcode1), 'BARCODE1'],
+            [row.barcode2, expectCell(label.barcode2), 'BARCODE2'],
+          ];
+          for (const [observed, expected, field] of cellChecks) {
+            if (observed !== expected) {
+              push(
+                'parts_inf.cell',
+                `PARTS_INF ${partIndex} ${field}='${observed ?? ''}' ≠ proyección '${expected ?? ''}' (código ${label.manufacturingPartCode})`,
+              );
+            }
+          }
+          // #789 contract: fields WITHOUT authority are always ABSENT —
+          // a mutated byte stream filling them is a violation, not a
+          // difference of policy.
+          const absentFields: readonly (readonly [string | undefined, string])[] = [
+            [row.edgeProgram1, 'EDG_PG1'],
+            [row.edgeProgram2, 'EDG_PG2'],
+            [row.edgeProgram3, 'EDG_PG3'],
+            [row.edgeProgram4, 'EDG_PG4'],
+            [row.faceLaminate, 'FACE_LAM'],
+            [row.backLaminate, 'BACK_LAM'],
+            [row.pallet, 'PALLET'],
+            [row.colour, 'COLOUR'],
+            [row.secondCutLength, 'SECOND_CUT_LENGTH'],
+            [row.secondCutWidth, 'SECOND_CUT_WIDTH'],
+          ];
+          for (const [observed, field] of absentFields) {
+            if (observed !== undefined) {
+              push(
+                'parts_inf.authority_violation',
+                `PARTS_INF ${partIndex} ${field}='${observed}' lleva un valor sin autoridad Granete (debe quedar vacío hasta #790)`,
+              );
+            }
+          }
+        }
+        // FIN measure identity, INDEPENDENTLY derived from the placed piece.
+        // The optimizer preserves the engineering row's FINISHED dim in
+        // originalLength/originalWidth (pre-rotation) and places the CUT dim
+        // (deducted by unrollRows — the single deduction site) in
+        // lengthMm/widthMm. Both truths must agree with the label, and a
+        // label wired to the wrong physical piece fails on dims or edges.
+        const bandThickness = piece.edgeBandThicknessMm ?? 0;
+        const cutLength = piece.rotated ? piece.widthMm : piece.lengthMm;
+        const cutWidth = piece.rotated ? piece.lengthMm : piece.widthMm;
+        const deduct = cutPlan.config.deductEdgeBand !== false;
+        const finishedFromCutLength =
+          cutLength +
+          (deduct && piece.L1 === 1 ? bandThickness : 0) +
+          (deduct && piece.L2 === 1 ? bandThickness : 0);
+        const finishedFromCutWidth =
+          cutWidth +
+          (deduct && piece.W1 === 1 ? bandThickness : 0) +
+          (deduct && piece.W2 === 1 ? bandThickness : 0);
+        if (
+          !close(label.finishedLengthMm, piece.originalLengthMm) ||
+          !close(label.finishedWidthMm, piece.originalWidthMm) ||
+          !close(label.finishedLengthMm, finishedFromCutLength) ||
+          !close(label.finishedWidthMm, finishedFromCutWidth)
+        ) {
+          push(
+            'parts_inf.finished_identity',
+            `PARTS_INF ${partIndex}: medidas finales ${label.finishedLengthMm}×${label.finishedWidthMm} ≠ identidad de la pieza ${piece.id} (fila terminada ${piece.originalLengthMm}×${piece.originalWidthMm}; corte+descuento ${finishedFromCutLength}×${finishedFromCutWidth})`,
+          );
+        }
+        if (options.partsUdi === 'structural') {
+          const udi = udiByPartIndex.get(partIndex);
+          if (udi === undefined) {
+            push('parts_udi.row_missing', `PART_INDEX=${partIndex} sin fila PARTS_UDI estructural`);
+          } else if (
+            udi.info.length > 1 ||
+            (udi.info[0] ?? undefined) !== expectCell(label.udiPictureRef)
+          ) {
+            push(
+              'parts_udi.cell',
+              `PARTS_UDI ${partIndex} INFO debe ser exactamente la proyección (INFO1=pictureRef opcional, resto vacío); observado [${udi.info.map((v) => v ?? '').join(',')}]`,
+            );
+          }
+        }
+      }
+      if (options.partsUdi === 'structural' && partsUdiRows.length !== partsRows.length) {
+        push('parts_udi.count', `PARTS_UDI=${partsUdiRows.length} ≠ PARTS_REQ=${partsRows.length} (una fila estructural por pieza física)`);
+      }
+    }
+  }
 
   // 6. BOARDS / PATTERNS / CUTS / OFFCUTS / VECTORS per sheet.
   if (boardRows.length !== cutPlan.sheets.length) {
