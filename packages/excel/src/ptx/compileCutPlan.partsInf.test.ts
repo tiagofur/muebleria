@@ -23,6 +23,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { optimizeCutPlan } from '@granete/domain';
+import type { CutPlanConfig, MaterialBoard, ProductionCutRow } from '@granete/domain';
 import { parsePtxDocumentBytes } from './parse';
 import { serializePtxDocument } from './serialize';
 import { validatePtxDocument } from './validate';
@@ -160,6 +161,22 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
     expect(aaRow.productWidth).toBe('800');
   });
 
+  it('CORE_MAT sigue materialCode de cada fila productiva sin cruzar materiales', async () => {
+    const { compiled } = await buildScenario();
+    const inf = compiled.document.records.filter(
+      (r): r is PtxPartsInfRecord => r.type === 'PARTS_INF',
+    );
+    const parts = compiled.document.records.filter(
+      (r): r is PtxPartsReqRecord => r.type === 'PARTS_REQ',
+    );
+    const byCode = new Map(parts.map((r) => [r.code, r.partIndex]));
+    const coreOf = (code: string) => inf.find((row) => row.partIndex === byCode.get(code))!.coreMaterial;
+    expect(coreOf('ZZ-ALTO-P01')).toBe('MDF-BCO-18');
+    expect(coreOf('ZZ-ALTO-L2-P01')).toBe('MDF-BCO-18');
+    expect(coreOf('AA-BAJO-P01')).toBe('MDF-ROBLE-18');
+    expect(coreOf('AA-BAJO-P02')).toBe('MDF-ROBLE-18');
+  });
+
   it('cantos por lado correctos bajo orientación (trampas asimétrica y de eje)', async () => {
     const { compiled } = await buildScenario();
     const inf = compiled.document.records.filter(
@@ -216,7 +233,7 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
       undefined,
       undefined,
     ]);
-    // EDG_PG1..4 y FACE/BACK/CORE/PALLETP/COLOUR/SECOND_CUT: sin autoridad → ausentes.
+    // EDG_PG1..4 y FACE/BACK/PALLET/COLOUR/SECOND_CUT: sin autoridad → ausentes.
     for (const row of inf) {
       expect(row.edgeProgram1).toBeUndefined();
       expect(row.edgeProgram2).toBeUndefined();
@@ -224,8 +241,8 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
       expect(row.edgeProgram4).toBeUndefined();
       expect(row.faceLaminate).toBeUndefined();
       expect(row.backLaminate).toBeUndefined();
-      expect(row.coreMaterial).toBeUndefined();
-      expect(row.palletLayout).toBeUndefined();
+      expect(row.coreMaterial).toBeDefined();
+      expect(row.pallet).toBeUndefined();
       expect(row.colour).toBeUndefined();
       expect(row.secondCutLength).toBeUndefined();
       expect(row.secondCutWidth).toBeUndefined();
@@ -314,6 +331,126 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
     expect(compiled.document.records.filter((r) => r.type === 'PARTS_INF')).toHaveLength(0);
     expect(compiled.document.records.filter((r) => r.type === 'PARTS_UDI')).toHaveLength(0);
   });
+
+  it('escenario real optimizer rotado: cantos y medidas siguen la pieza, no los ejes del tablero', async () => {
+    const rows: ProductionCutRow[] = [
+      {
+        quantity: 1,
+        lengthMm: 950,
+        widthMm: 580,
+        description: 'FIXED GRAIN',
+        materialName: 'MDF Test 18',
+        materialCode: 'MDF-ROT-18',
+        grain: 1,
+        L1: 0,
+        L2: 0,
+        W1: 0,
+        W2: 0,
+        partCode: 'ROT-FIXED-P01',
+        partName: 'FIXED',
+        moduleCode: 'ROT-MOD',
+        labelRef: 'ROT-MOD-P01',
+        thicknessMm: 18,
+      },
+      {
+        quantity: 1,
+        lengthMm: 550,
+        widthMm: 40,
+        description: 'ROTATED FREE',
+        materialName: 'MDF Test 18',
+        materialCode: 'MDF-ROT-18',
+        grain: 0,
+        L1: 1,
+        L2: 0,
+        W1: 0,
+        W2: 1,
+        partCode: 'ROT-FREE-P02',
+        partName: 'ROTATED',
+        moduleCode: 'ROT-MOD',
+        labelRef: 'ROT-MOD-P02',
+        thicknessMm: 18,
+        edgeBandCode: BAND_ABS_1MM,
+        edgeBandName: 'ABS blanco 1mm',
+        edgeBandThicknessMm: 1,
+      },
+    ];
+    const materials: MaterialBoard[] = [
+      {
+        id: 'mat-rot-18',
+        code: 'MDF-ROT-18',
+        name: 'MDF Test 18',
+        costPerM2: 10,
+        wastePercent: 10,
+        lengthMm: 1000,
+        widthMm: 600,
+        thicknessMm: 18,
+        grainDefault: true,
+        boardPrice: 8,
+        active: true,
+      },
+    ];
+    const config: CutPlanConfig = {
+      sawKerfMm: 4,
+      trim: { topMm: 0, bottomMm: 0, leftMm: 0, rightMm: 0 },
+      deductEdgeBand: true,
+      allowRotationNoGrain: true,
+      minRemnantWidthMm: 20,
+      minRemnantLengthMm: 20,
+      preferLongitudinalRips: true,
+      heuristic: 'guillotine-hybrid',
+    };
+    const plan = optimizeCutPlan('lab-789-rotated', rows, materials, config);
+    const rotatedPiece = plan.sheets.flatMap((sheet) => sheet.pieces).find((piece) => piece.labelRef === 'ROT-MOD-P02')!;
+    expect(rotatedPiece.rotated).toBe(true);
+    expect(rotatedPiece).toMatchObject({ originalLengthMm: 550, originalWidthMm: 40, lengthMm: 39, widthMm: 549 });
+
+    const labels = await buildPtxPartLabels(
+      rows.map((row) => ({
+        row,
+        unit: { workshopOccurrenceOrdinal: 1, moduleCode: 'ROT-MOD', moduleName: 'Rotated module' },
+        orderRef: 'R5',
+        hasCncMachining: true,
+        cncScope: 'release:789:r5:rotated-optimizer',
+      })),
+    );
+    const compiled = compileCutPlanToPtxDocument(plan, {
+      ...LABELS_GOLDEN_OPTIONS,
+      title: 'LAB-ROT-R5',
+      partLabels: labels,
+    });
+    const partIndex = compiled.mapping.partIndexByPieceRef.get(rotatedPiece.id)!;
+    const part = compiled.document.records.find(
+      (record): record is PtxPartsReqRecord => record.type === 'PARTS_REQ' && record.partIndex === partIndex,
+    )!;
+    const inf = compiled.document.records.find(
+      (record): record is PtxPartsInfRecord => record.type === 'PARTS_INF' && record.partIndex === partIndex,
+    )!;
+    expect(part.code).toBe('ROT-MOD-P02');
+    expect(inf.barcode2).toBe('ROT-MOD-P02');
+    expect(inf.finishedLength).toBe('550');
+    expect(inf.finishedWidth).toBe('40');
+    expect(part.length).toBe(39);
+    expect(part.width).toBe(549);
+    expect([inf.edge1, inf.edge2, inf.edge3, inf.edge4]).toEqual([
+      undefined,
+      BAND_ABS_1MM,
+      undefined,
+      BAND_ABS_1MM,
+    ]);
+    expect(inf.coreMaterial).toBe('MDF-ROT-18');
+
+    const bytes = serializePtxDocumentBytesSpecChecked(compiled.document, { decimalPlaces: 2 });
+    const parsed = parsePtxDocumentBytes(bytes);
+    expect(validatePtxDocument(parsed)).toEqual([]);
+    expect(ptxSpecPreflightDocument(parsed)).toEqual([]);
+    expect(
+      verifyCutPlanPtxReadback(parsed, plan, compiled.mapping, {
+        ...LABELS_GOLDEN_OPTIONS,
+        title: 'LAB-ROT-R5',
+        partLabels: labels,
+      }),
+    ).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -321,7 +458,14 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
 // ---------------------------------------------------------------------------
 
 async function gateFixture() {
-  const labels = await buildPtxPartLabels(aaRows().map((row) => ({ row, unit: AA_UNIT_2 })));
+  const labels = await buildPtxPartLabels(
+    aaRows().map((row) => ({
+      row,
+      unit: AA_UNIT_2,
+      hasCncMachining: true,
+      cncScope: 'release:789:r5:gates',
+    })),
+  );
   const plan = optimizeCutPlan(
     'lab-789-gates',
     aaRows(),
@@ -385,12 +529,14 @@ describe('#789 gates fail-closed del compilador', () => {
     );
   });
 
-  it('LABEL_QTY inválido BLOQUEA', async () => {
+  it('LABEL_QTY inválido BLOQUEA para cero, negativo, decimal y no finito', async () => {
     const { labels, plan } = await gateFixture();
-    const zero: PtxPartLabelData = { ...labels[0]!, labelQuantity: 0 };
-    expect(() => compileCutPlanToPtxDocument(plan, optionsWith([zero, labels[1]!]))).toThrowError(
-      /LABEL_QTY debe ser un entero >= 1/,
-    );
+    for (const labelQuantity of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const invalid: PtxPartLabelData = { ...labels[0]!, labelQuantity };
+      expect(() => compileCutPlanToPtxDocument(plan, optionsWith([invalid, labels[1]!]))).toThrowError(
+        /LABEL_QTY debe ser un entero >= 1/,
+      );
+    }
   });
 
   it('partLabels sin partCodeAuthority workshop-labelref BLOQUEA (la clave ES el CODE)', async () => {
@@ -424,7 +570,14 @@ describe('#789 gates fail-closed del compilador', () => {
   it('un plan irrepresentable sigue bloqueando antes que cualquier etiqueta (orden de gates)', async () => {
     // A CNC-nesting sheet is not representable — the compiler must reject it
     // regardless of labels (nesting_not_representable, not a label error).
-    const labels = await buildPtxPartLabels(aaRows().map((row) => ({ row, unit: AA_UNIT_2 })));
+    const labels = await buildPtxPartLabels(
+      aaRows().map((row) => ({
+        row,
+        unit: AA_UNIT_2,
+        hasCncMachining: true,
+        cncScope: 'release:789:r5:gates',
+      })),
+    );
     const plan = optimizeCutPlan('lab-789-nesting', aaRows(), LABELS_GOLDEN_MATERIALS, {
       ...LABELS_GOLDEN_CONFIG,
       cutStrategy: 'cnc-nesting',

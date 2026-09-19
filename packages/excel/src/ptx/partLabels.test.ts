@@ -52,6 +52,7 @@ function mirrorUnrollCodes(rowInput: ProductionCutRow): string[] {
 }
 
 const BAND = 'C-ABS-BCO-1';
+const CNC_SCOPE = 'release:789:r5:test-scope';
 
 function row(overrides: Partial<ProductionCutRow> = {}): ProductionCutRow {
   return {
@@ -144,6 +145,19 @@ describe('#789 orientación de cantos L1/L2/W1/W2 → EDGE1..4', () => {
     ]);
   });
 
+  it('bandera de canto sin edgeBandCode autoritativo BLOQUEA', async () => {
+    await expect(
+      buildPtxPartLabelData(
+        { row: row({ L1: 1, edgeBandCode: '', edgeBandName: undefined, edgeBandThicknessMm: undefined }), unit: UNIT },
+        1,
+      ),
+    ).rejects.toMatchObject({ code: 'ptx_compile.label_invalid' });
+  });
+
+  it('banda definida pero todas las banderas en 0: no emite EDGE', async () => {
+    expect(await edgesOf(row())).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
   it('banda definida pero lado sin bandera: el código NO se emite para ese lado', async () => {
     // La bandera por lado es la autoridad; tener banda asignada no rellena lados.
     expect(await edgesOf(row({ L1: 1 }))).toEqual([undefined, BAND, undefined, undefined]);
@@ -194,6 +208,14 @@ describe('#789 medidas finales congeladas', () => {
 // ---------------------------------------------------------------------------
 
 describe('#789 expansión por pieza física (quantity>1)', () => {
+  it('quantity cero, negativo, decimal y no finito BLOQUEA (no clamp/truncate)', async () => {
+    for (const quantity of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(buildPtxPartLabels([{ row: row({ quantity }), unit: UNIT }])).rejects.toMatchObject({
+        code: 'ptx_compile.label_invalid',
+      });
+    }
+  });
+
   it('las copias 2..N llevan el MISMO sufijo -C<n> que el optimizador asigna a labelRef', async () => {
     const engineering = row({ quantity: 3, labelRef: 'MOD-X-P03' });
     const labels = await buildPtxPartLabels([{ row: engineering, unit: UNIT }]);
@@ -225,24 +247,35 @@ describe('#789 expansión por pieza física (quantity>1)', () => {
 // ---------------------------------------------------------------------------
 
 describe('#789 puente CNC (DRAWING/BARCODE)', () => {
-  it('la referencia CNC es D + 12 hex mayúsculas, determinista y estable', async () => {
-    const first = await ptxCncDrawingRef('MOD-X-P01');
-    const again = await ptxCncDrawingRef('MOD-X-P01');
+  it('la referencia CNC es D + 12 hex mayúsculas, determinista y estable por scope+código', async () => {
+    const first = await ptxCncDrawingRef('MOD-X-P01', CNC_SCOPE);
+    const again = await ptxCncDrawingRef('MOD-X-P01', CNC_SCOPE);
     expect(first).toMatch(/^D[0-9A-F]{12}$/);
     expect(again).toBe(first);
-    const other = await ptxCncDrawingRef('MOD-X-P02');
-    expect(other).not.toBe(first);
+    const otherCode = await ptxCncDrawingRef('MOD-X-P02', CNC_SCOPE);
+    expect(otherCode).not.toBe(first);
+    const otherScope = await ptxCncDrawingRef('MOD-X-P01', 'release:789:r5:other-scope');
+    expect(otherScope).not.toBe(first);
+  });
+
+  it('scope CNC vacío BLOQUEA y no cae al código de fabricación', async () => {
+    await expect(ptxCncDrawingRef('MOD-X-P01', '')).rejects.toMatchObject({
+      code: 'ptx_compile.label_invalid',
+    });
   });
 
   it('la referencia está namespaced: el mismo digest jamás coincide con un filename G<hex12> del mismo id', async () => {
     // Espacio de nombres distinto por diseño (granete:ptx-cnc-drawing vs
     // granete:ptx-artifact): drawing ref y filename nunca comparten token.
-    const ref = await ptxCncDrawingRef('plan-1');
+    const ref = await ptxCncDrawingRef('plan-1', CNC_SCOPE);
     expect(ref).toMatch(/^D[0-9A-F]{12}$/);
   });
 
   it('BARCODE1 envuelve la referencia CNC como token Code 39 (asteriscos, como las muestras)', async () => {
-    const label = await buildPtxPartLabelData({ row: row(), unit: UNIT }, 1);
+    const label = await buildPtxPartLabelData(
+      { row: row(), unit: UNIT, hasCncMachining: true, cncScope: CNC_SCOPE },
+      1,
+    );
     expect(label.cncDrawingRef).toBeDefined();
     expect(label.barcode1).toBe(ptxBarcodeToken(label.cncDrawingRef!));
     expect(label.barcode1).toMatch(/^\*D[0-9A-F]{12}\*$/);
@@ -253,21 +286,39 @@ describe('#789 puente CNC (DRAWING/BARCODE)', () => {
     expect(label.barcode2).toBe('MOD-X-P01');
   });
 
-  it('pieza sin mecanizado declarado: DRAWING y BARCODE1 quedan vacíos (sin programa falso)', async () => {
+  it('pieza con mecanizado declarado true: DRAWING y BARCODE1 se emiten', async () => {
     const label = await buildPtxPartLabelData(
+      { row: row(), unit: UNIT, hasCncMachining: true, cncScope: CNC_SCOPE },
+      1,
+    );
+    expect(label.cncDrawingRef).toMatch(/^D[0-9A-F]{12}$/);
+    expect(label.barcode1).toBe(ptxBarcodeToken(label.cncDrawingRef!));
+  });
+
+  it('pieza con mecanizado false o ausente: DRAWING y BARCODE1 quedan vacíos (sin programa falso)', async () => {
+    const explicitlyFalse = await buildPtxPartLabelData(
       { row: row(), unit: UNIT, hasCncMachining: false },
       1,
     );
-    expect(label.cncDrawingRef).toBeUndefined();
-    expect(label.barcode1).toBeUndefined();
-    // BARCODE2 sigue siendo el código de fabricación: el tracking no depende
-    // del mecanizado.
-    expect(label.barcode2).toBe('MOD-X-P01');
+    const absent = await buildPtxPartLabelData({ row: row(), unit: UNIT }, 1);
+    for (const label of [explicitlyFalse, absent]) {
+      expect(label.cncDrawingRef).toBeUndefined();
+      expect(label.barcode1).toBeUndefined();
+      // BARCODE2 sigue siendo el código de fabricación: el tracking no depende
+      // del mecanizado.
+      expect(label.barcode2).toBe('MOD-X-P01');
+    }
   });
 
   it('dos piezas distintas obtienen referencias CNC distintas (puente no ambiguo)', async () => {
-    const a = await buildPtxPartLabelData({ row: row({ labelRef: 'MOD-X-P01' }), unit: UNIT }, 1);
-    const b = await buildPtxPartLabelData({ row: row({ labelRef: 'MOD-X-P02' }), unit: UNIT }, 1);
+    const a = await buildPtxPartLabelData(
+      { row: row({ labelRef: 'MOD-X-P01' }), unit: UNIT, hasCncMachining: true, cncScope: CNC_SCOPE },
+      1,
+    );
+    const b = await buildPtxPartLabelData(
+      { row: row({ labelRef: 'MOD-X-P02' }), unit: UNIT, hasCncMachining: true, cncScope: CNC_SCOPE },
+      1,
+    );
     expect(a.cncDrawingRef).not.toBe(b.cncDrawingRef);
     expect(a.barcode1).not.toBe(b.barcode1);
   });
@@ -299,6 +350,11 @@ describe('#789 producto, ordinal congelado, room y LABEL_QTY', () => {
     await expect(
       buildPtxPartLabelData({ row: row(), unit: noOrdinal }, 1),
     ).rejects.toMatchObject({ code: 'ptx_compile.label_invalid' });
+  });
+
+  it('CORE_MAT proviene de ProductionCutRow.materialCode', async () => {
+    const label = await buildPtxPartLabelData({ row: row({ materialCode: 'MDF-AUTH-18' }), unit: UNIT }, 1);
+    expect(label.coreMaterial).toBe('MDF-AUTH-18');
   });
 
   it('ORDER lleva la referencia corta de release cuando existe', async () => {

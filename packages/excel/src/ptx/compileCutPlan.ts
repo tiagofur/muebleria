@@ -1598,9 +1598,8 @@ export function compileCutPlanToPtxDocument(
         // EDG_PG1..4 stay ABSENT: Granete has no edge operation/program code
         // authority (#789 decision — a value like "EDGE" or "1" would be
         // invented semantics).
-        // FACE_LAM/BACK_LAM stay ABSENT (no separate lamination authority);
-        // CORE_MAT authority exists (board material) but stays unwritten
-        // until the #790 receiver profile decides it.
+        // FACE_LAM/BACK_LAM stay ABSENT (no separate lamination authority).
+        coreMaterial: cell(label.coreMaterial, 'CORE_MAT', code),
         drawing: cell(label.cncDrawingRef, 'DRAWING', code),
         product: cell(label.productCode, 'PRODUCT', code),
         productInfo: cell(label.productInfo, 'PROD_INFO', code),

@@ -245,7 +245,7 @@ function partsInfLine(r: PtxPartsInfRecord, f: Fmt): string {
     f.optText(r.faceLaminate, 'PARTS_INF.FACE_LAM'),
     f.optText(r.backLaminate, 'PARTS_INF.BACK_LAM'),
     f.optText(r.coreMaterial, 'PARTS_INF.CORE_MAT'),
-    f.optText(r.palletLayout, 'PARTS_INF.PALLETP'),
+    f.optText(r.pallet, 'PARTS_INF.PALLET'),
     f.optText(r.drawing, 'PARTS_INF.DRAWING'),
     f.optText(r.product, 'PARTS_INF.PRODUCT'),
     f.optText(r.productInfo, 'PARTS_INF.PROD_INFO'),

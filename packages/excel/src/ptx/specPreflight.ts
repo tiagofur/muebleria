@@ -207,7 +207,7 @@ const PARTS_INF_TXT_COLUMNS = [
   'DESC', 'LABEL_QTY', 'FIN_LENGTH', 'FIN_WIDTH', 'ORDER',
   'EDGE1', 'EDGE2', 'EDGE3', 'EDGE4',
   'EDG_PG1', 'EDG_PG2', 'EDG_PG3', 'EDG_PG4',
-  'FACE_LAM', 'BACK_LAM', 'CORE_MAT', 'PALLETP',
+  'FACE_LAM', 'BACK_LAM', 'CORE_MAT', 'PALLET',
   'DRAWING', 'PRODUCT', 'PROD_INFO',
   'PROD_WIDTH', 'PROD_HGT', 'PROD_DEPTH', 'PROD_NUM',
   'ROOM', 'BARCODE1', 'BARCODE2', 'COLOUR',
@@ -348,7 +348,7 @@ export const PTX_SPEC_LIMITS: readonly PtxSpecLimit[] = [
   // PARTS_INF (#789 — §20 pp.168–169): JOB_INDEX 'IDX 1-250', PART_INDEX
   // 'IDX 1-9999' and EVERY remaining column documented as 'TXT 200 chars
   // max.' (DESC, LABEL_QTY, FIN_LENGTH, FIN_WIDTH, ORDER, EDGE1..4,
-  // EDG_PG1..4, FACE_LAM, BACK_LAM, CORE_MAT, PALLETP, DRAWING, PRODUCT,
+  // EDG_PG1..4, FACE_LAM, BACK_LAM, CORE_MAT, PALLET, DRAWING, PRODUCT,
   // PROD_INFO, PROD_WIDTH, PROD_HGT, PROD_DEPTH, PROD_NUM, ROOM, BARCODE1,
   // BARCODE2, COLOUR, SECOND_CUT_LENGTH, SECOND_CUT_WIDTH). The dictionary
   // types the numeric-LOOKING columns as TXT — no DIM/QTY/INT rule exists for
@@ -771,7 +771,7 @@ function checkRecordFields(record: PtxRecord, units: number, issues: PtxSpecIssu
         [record.faceLaminate, 'PARTS_INF.FACE_LAM'],
         [record.backLaminate, 'PARTS_INF.BACK_LAM'],
         [record.coreMaterial, 'PARTS_INF.CORE_MAT'],
-        [record.palletLayout, 'PARTS_INF.PALLETP'],
+        [record.pallet, 'PARTS_INF.PALLET'],
         [record.drawing, 'PARTS_INF.DRAWING'],
         [record.product, 'PARTS_INF.PRODUCT'],
         [record.productInfo, 'PARTS_INF.PROD_INFO'],

@@ -346,7 +346,7 @@ export interface PtxVectorRecord {
 /**
  * PARTS_INF,JOB_INDEX,PART_INDEX,DESC,LABEL_QTY,FIN_LENGTH,FIN_WIDTH,ORDER,
  * EDGE1,EDGE2,EDGE3,EDGE4,EDG_PG1,EDG_PG2,EDG_PG3,EDG_PG4,FACE_LAM,BACK_LAM,
- * CORE_MAT,PALLETP,DRAWING,PRODUCT,PROD_INFO,PROD_WIDTH,PROD_HGT,PROD_DEPTH,
+ * CORE_MAT,PALLET,DRAWING,PRODUCT,PROD_INFO,PROD_WIDTH,PROD_HGT,PROD_DEPTH,
  * PROD_NUM,ROOM,BARCODE1,BARCODE2,COLOUR,SECOND_CUT_LENGTH,SECOND_CUT_WIDTH
  * (32 content cells — the FULL documented §20 width, #789).
  *
@@ -367,7 +367,7 @@ export interface PtxVectorRecord {
  * L2→EDGE1, L1→EDGE2, W1→EDGE3, W2→EDGE4 and lives in partLabels.ts (the
  * industrial projection), never in the serializer.
  *
- * Fields without real authority stay `undefined` (empty cell) — PALLETP,
+ * Fields without real authority stay `undefined` (empty cell) — PALLET,
  * SECOND_CUT_LENGTH/WIDTH are modeled for the documented width but Granete
  * has no pallet/second-cut authority, so the compiler never fills them.
  */
@@ -399,9 +399,9 @@ export interface PtxPartsInfRecord {
   readonly edgeProgram4?: string;
   readonly faceLaminate?: string;
   readonly backLaminate?: string;
-  /** CORE_MAT "Core material" — available authority (board material code) stays unwritten pending the #790 receiver policy. */
+  /** CORE_MAT "Core material" — board material code authorized by ProductionCutRow.materialCode. */
   readonly coreMaterial?: string;
-  readonly palletLayout?: string;
+  readonly pallet?: string;
   /** DRAWING "Name of drawing file" — short deterministic CNC drawing reference (D<hex12>), never a UUID. */
   readonly drawing?: string;
   readonly product?: string;

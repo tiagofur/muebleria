@@ -31,10 +31,10 @@
  *   the PTX column meanings are the §20 dictionary comments;
  * - product number: the FROZEN workshop occurrence ordinal of the unit
  *   (#781), never an array position;
- * - DRAWING: deterministic 48-bit digest of the manufacturing code
- *   (`D<hex12>`, same collision discipline as the r4 `G<hex12>` filename);
- *   a piece without machining authority carries NO drawing ref (empty cell)
- *   and no fake program is implied;
+ * - DRAWING: deterministic 48-bit digest of explicit frozen CNC/release
+ *   scope + manufacturing code (`D<hex12>`, same collision discipline as the
+ *   r4 `G<hex12>` filename); a piece without explicit machining authority
+ *   carries NO drawing ref (empty cell) and no fake program is implied;
  * - LABEL_QTY: one label per physical piece — the candidate ships one row
  *   per piece, so the quantity is "1" by product policy, never copied from
  *   a field sample.
@@ -82,9 +82,9 @@ export interface PtxPartLabelData {
   /** FACE_LAM/BACK_LAM — no separate lamination authority in Granete; stays unset. */
   readonly faceLaminate?: string;
   readonly backLaminate?: string;
-  /** CORE_MAT — board material authority EXISTS but stays unwritten pending #790 receiver policy. */
+  /** CORE_MAT — board material code authorized by ProductionCutRow.materialCode. */
   readonly coreMaterial?: string;
-  /** DRAWING — short CNC drawing reference; absent for a piece without machining authority. */
+  /** DRAWING — short CNC drawing reference; absent for a piece without explicit machining authority. */
   readonly cncDrawingRef?: string;
   /** PRODUCT — furniture/module code. */
   readonly productCode?: string;
@@ -132,12 +132,12 @@ export interface PtxPartLabelInput {
   /** ORDER — short release reference applied to every piece of the release. */
   readonly orderRef?: string;
   /**
-   * Whether this piece has real CNC machining authority. When false the
-   * projection carries NO cncDrawingRef/barcode1 (empty DRAWING/BARCODE1
-   * cells — no fake programs); the default is true because the r5 bridge
-   * assumes per-piece CNC programs keyed by manufacturing code.
+   * Explicit CNC machining authority. Only true permits DRAWING/BARCODE1;
+   * false or absent emits neither and never implies a fake program.
    */
   readonly hasCncMachining?: boolean;
+  /** Frozen deterministic release/CNC scope required when hasCncMachining is true. */
+  readonly cncScope?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,9 +155,21 @@ export const PTX_CNC_DRAWING_REF_NAMESPACE = 'granete:ptx-cnc-drawing' as const;
  * as the r4 `G<hex12>.ptx` filename (#781): the compiler fails closed on a
  * collision instead of disambiguating silently.
  */
-export async function ptxCncDrawingRef(manufacturingPartCode: string): Promise<string> {
+export async function ptxCncDrawingRef(
+  manufacturingPartCode: string,
+  cncScope: string,
+): Promise<string> {
+  const scope = cncScope.trim();
+  if (scope === '') {
+    throw new PtxCompilationError(
+      'ptx_compile.label_invalid',
+      'DRAWING exige un scope CNC/release congelado y explícito',
+      { manufacturingPartCode, cncScope },
+    );
+  }
+  requireAscii(scope, 'cncScope', manufacturingPartCode);
   const token = (
-    await sha256Hex(`${PTX_CNC_DRAWING_REF_NAMESPACE}:${manufacturingPartCode}`)
+    await sha256Hex(`${PTX_CNC_DRAWING_REF_NAMESPACE}:${scope}:${manufacturingPartCode}`)
   ).slice(0, 12).toUpperCase();
   return `D${token}`;
 }
@@ -307,13 +319,23 @@ export async function buildPtxPartLabelData(
   if (band !== undefined) {
     requireAscii(band, 'edgeBandCode', manufacturingPartCode);
   }
+  const edgeFlags = (['L1', 'L2', 'W1', 'W2'] as const).filter((side) => row[side] === 1);
+  if (edgeFlags.length > 0 && band === undefined) {
+    throw new PtxCompilationError(
+      'ptx_compile.label_invalid',
+      'Una bandera de canto exige edgeBandCode autoritativo no vacío',
+      { manufacturingPartCode, edgeFlags },
+    );
+  }
   // The ONLY L/W → EDGE translation: banded side carries the band code,
   // unbanded side stays undefined (empty cell). Never a synthesized value.
   const edgeOf = (side: 'L1' | 'L2' | 'W1' | 'W2'): string | undefined =>
-    row[side] === 1 && band !== undefined ? band : undefined;
+    row[side] === 1 ? band : undefined;
 
-  const hasCnc = input.hasCncMachining !== false;
-  const cncDrawingRef = hasCnc ? await ptxCncDrawingRef(manufacturingPartCode) : undefined;
+  const hasCnc = input.hasCncMachining === true;
+  const cncDrawingRef = hasCnc
+    ? await ptxCncDrawingRef(manufacturingPartCode, input.cncScope ?? '')
+    : undefined;
 
   return {
     manufacturingPartCode,
@@ -328,6 +350,7 @@ export async function buildPtxPartLabelData(
     edge2: edgeOf('L1'),
     edge3: edgeOf('W1'),
     edge4: edgeOf('W2'),
+    coreMaterial: requireAscii(row.materialCode, 'materialCode', manufacturingPartCode),
     cncDrawingRef,
     productCode: auxiliaryText(unit.moduleCode, 'productCode', manufacturingPartCode),
     productInfo: auxiliaryText(unit.moduleName, 'productInfo', manufacturingPartCode),
@@ -356,7 +379,14 @@ export async function buildPtxPartLabels(
 ): Promise<readonly PtxPartLabelData[]> {
   const labels: PtxPartLabelData[] = [];
   for (const input of inputs) {
-    const quantity = Math.max(1, Math.trunc(input.row.quantity));
+    const quantity = input.row.quantity;
+    if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity < 1) {
+      throw new PtxCompilationError(
+        'ptx_compile.label_invalid',
+        'row.quantity debe ser un entero finito >= 1 para emitir etiquetas físicas',
+        { quantity, rowPartCode: input.row.partCode ?? null, labelRef: input.row.labelRef ?? null },
+      );
+    }
     for (let copy = 1; copy <= quantity; copy++) {
       labels.push(await buildPtxPartLabelData(input, copy));
     }

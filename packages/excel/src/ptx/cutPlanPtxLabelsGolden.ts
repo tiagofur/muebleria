@@ -187,11 +187,13 @@ export function aaRows(): ProductionCutRow[] {
 }
 
 /** Label inputs in FROZEN OCCURRENCE order (ZZ@1, AA@2, ZZ@3) — never lexical. */
+export const LABELS_GOLDEN_CNC_SCOPE = 'release:789:r5:labels-golden' as const;
+
 export function labelInputs(orderRef = 'R3'): readonly PtxPartLabelInput[] {
   return [
-    ...zzRows('').map((row) => ({ row, unit: ZZ_UNIT_1, orderRef })),
-    ...aaRows().map((row) => ({ row, unit: AA_UNIT_2, orderRef })),
-    ...zzRows('-L2').map((row) => ({ row, unit: ZZ_UNIT_3, orderRef })),
+    ...zzRows('').map((row) => ({ row, unit: ZZ_UNIT_1, orderRef, hasCncMachining: true, cncScope: LABELS_GOLDEN_CNC_SCOPE })),
+    ...aaRows().map((row) => ({ row, unit: AA_UNIT_2, orderRef, hasCncMachining: true, cncScope: LABELS_GOLDEN_CNC_SCOPE })),
+    ...zzRows('-L2').map((row) => ({ row, unit: ZZ_UNIT_3, orderRef, hasCncMachining: true, cncScope: LABELS_GOLDEN_CNC_SCOPE })),
   ];
 }
 
