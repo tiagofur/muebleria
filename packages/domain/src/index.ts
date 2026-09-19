@@ -20,6 +20,7 @@ export type {
   EdgeBand,
   Hardware,
   HardwareVisualAssetBinding,
+  HardwareVisualGlbBinding,
   User,
   UserRole,
   Customer,

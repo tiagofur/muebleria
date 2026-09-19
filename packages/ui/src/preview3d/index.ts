@@ -110,3 +110,18 @@ export {
   findSceneCanvas,
   pngBlobToFile,
 } from './captureScenePng';
+export {
+  type GlbAssetSource,
+  GlbAssetLoadError,
+  GlbSceneCache,
+  cloneGlbScene,
+  createAssetSpaceSwapGroup,
+  glbToAssetMmMatrix4,
+  normalizeGlbSceneToAssetMm,
+  type GlbRepresentationRef,
+} from './glbSceneCache';
+export {
+  HardwareGlbMesh,
+  type HardwareGlbLoadStatus,
+  type HardwareGlbMeshProps,
+} from './HardwareGlbMesh';

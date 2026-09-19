@@ -292,6 +292,15 @@ func (s *Server) HandleHardwareAssetUploadStart(w http.ResponseWriter, r *http.R
 	if body.AssetID != nil {
 		targetAssetID = *body.AssetID
 	}
+	var derivation *domain.HardwareAssetDerivation
+	if body.Derivation != nil {
+		derivation = &domain.HardwareAssetDerivation{
+			SourceRevisionID: body.Derivation.SourceRevisionID,
+			ExporterName:     body.Derivation.ExporterName,
+			ExporterVersion:  body.Derivation.ExporterVersion,
+			ExportOptions:    body.Derivation.ExportOptions,
+		}
+	}
 	result, err := s.Store.CreateHardwareAssetUploadSession(r.Context(), storage.CreateHardwareAssetUploadSessionCommand{
 		Representation: representation,
 		DisplayName:    body.DisplayName,
@@ -299,6 +308,7 @@ func (s *Server) HandleHardwareAssetUploadStart(w http.ResponseWriter, r *http.R
 		License:        license,
 		Origin:         originRaw,
 		TargetAssetID:  targetAssetID,
+		Derivation:     derivation,
 		ActorUserID:    claims.UserID,
 	})
 	if err != nil {
@@ -619,6 +629,7 @@ func (s *Server) HandleHardwareAssetUploadFinalize(w http.ResponseWriter, r *htt
 		respondWithHardwareAssetError(w, err)
 		return
 	}
+	var glbSummary *domain.GlbDocumentSummary
 	if sess.Status == "prepared" && sess.Staged != nil {
 		path, ok := s.hardwareAssetStoragePath(sess.OrganizationID, sess.Staged.StorageKey)
 		if !ok {
@@ -629,12 +640,30 @@ func (s *Server) HandleHardwareAssetUploadFinalize(w http.ResponseWriter, r *htt
 			respondWithHardwareAssetError(w, err)
 			return
 		}
+		// #669 fail-closed publication frontier: a GLB revision only exists
+		// when the staged bytes pass the structural self-containment
+		// validation; the observation rides into finalize as evidence.
+		if sess.Representation == domain.HardwareAssetRepresentationGLB {
+			file, err := os.Open(path)
+			if err != nil {
+				respondWithHardwareAssetError(w, domain.ErrHardwareAssetBytesMissing)
+				return
+			}
+			summary, err := domain.ValidateGlbContainerStructure(file, domain.DefaultGlbValidationLimits())
+			file.Close()
+			if err != nil {
+				respondWithHardwareAssetError(w, err)
+				return
+			}
+			glbSummary = summary
+		}
 	}
 	asset, err := s.Store.FinalizeHardwareAssetUpload(r.Context(), storage.FinalizeHardwareAssetUploadCommand{
 		SessionID:   sessionID,
 		ActorUserID: claims.UserID,
 		IP:          clientIP(r),
 		RequestID:   RequestIDFromContext(r.Context()),
+		GlbSummary:  glbSummary,
 	})
 	if err != nil {
 		respondWithHardwareAssetError(w, err)

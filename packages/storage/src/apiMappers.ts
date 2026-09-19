@@ -4,6 +4,7 @@
  */
 
 import type {
+  HardwareVisualGlbBinding,
   AmbientCategory,
   AmbientMaterial,
   AmbientSurfaceType,
@@ -479,6 +480,11 @@ function normalizeVisualAsset(
   const stateRaw = str(value.validationState ?? value.validation_state);
   const validStates = ['pending', 'validated', 'failed'];
   const shaRaw = str(value.sha256);
+  const glbRaw = value.glb;
+  const glb =
+    glbRaw && typeof glbRaw === 'object'
+      ? normalizeVisualGlb(glbRaw as Record<string, unknown>)
+      : undefined;
   return {
     visualAsset: {
       assetId,
@@ -490,7 +496,32 @@ function normalizeVisualAsset(
       ...(validStates.includes(stateRaw)
         ? { validationState: stateRaw as 'pending' | 'validated' | 'failed' }
         : {}),
+      ...(glb ? { glb } : {}),
     },
+  };
+}
+
+/**
+ * Server-resolved GLB co-representation (#669). Malformed shapes are dropped
+ * (fail-honest) — the consumer renders the procedural representation.
+ */
+function normalizeVisualGlb(raw: Record<string, unknown>): HardwareVisualGlbBinding | undefined {
+  const revisionId = str(raw.revisionId ?? raw.revision_id);
+  const sha256 = str(raw.sha256);
+  if (!revisionId || !sha256.startsWith('sha256-')) return undefined;
+  const sourceUnitsRaw = str(raw.sourceUnits ?? raw.source_units);
+  const upAxisRaw = str(raw.upAxis ?? raw.up_axis);
+  const sourceRevisionId = str(raw.sourceRevisionId ?? raw.source_revision_id);
+  const sizeBytesRaw = raw.sizeBytes ?? raw.size_bytes;
+  return {
+    revisionId,
+    sha256,
+    ...(sourceRevisionId ? { sourceRevisionId } : {}),
+    ...(typeof sizeBytesRaw === 'number' && Number.isFinite(sizeBytesRaw) ? { sizeBytes: sizeBytesRaw } : {}),
+    ...(sourceUnitsRaw === 'mm' || sourceUnitsRaw === 'cm' || sourceUnitsRaw === 'm' || sourceUnitsRaw === 'inch'
+      ? { sourceUnits: sourceUnitsRaw }
+      : {}),
+    ...(upAxisRaw === 'y' || upAxisRaw === 'z' ? { upAxis: upAxisRaw } : {}),
   };
 }
 

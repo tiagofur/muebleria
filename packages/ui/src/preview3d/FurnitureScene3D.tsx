@@ -45,6 +45,7 @@ import { HardwareMesh } from './HardwareMesh';
 import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementGizmo';
 import { BoardMesh } from './BoardMesh';
 import { AssemblyMesh } from './AssemblyMesh';
+import type { GlbAssetSource } from './glbSceneCache';
 import type { ProjectedAssembly } from '@granete/domain';
 import {
   beginDragFeedbackSample,
@@ -288,6 +289,12 @@ export type FurnitureScene3DProps = {
   readonly onModuleWallDragEnd?: (moduleKey: string) => void;
   /** When true, pointer-drag on a module updates offset along its wall. */
   readonly wallDragEnabled?: boolean;
+  /**
+   * Exact GLB byte source for hardware members with a web representation
+   * (#669). Session-scoped by the owner; absent renders the explicit
+   * procedural representation.
+   */
+  readonly glbSource?: GlbAssetSource;
   /**
    * Free-floor drag (islands). Keys = module.instanceKey that use free place.
    * planShift converts displayed (shifted) floor hits back to layout plan mm.
@@ -1082,6 +1089,7 @@ function ModuleGroup({
   setOrbitSuppressed,
   rawPlacementsByInstanceId,
   onUpdatePlacement,
+  glbSource,
 }: {
   readonly mod: FurnitureSceneModule;
   readonly colorMode: BoardColorMode;
@@ -1128,6 +1136,8 @@ function ModuleGroup({
   readonly draggingInvalid?: boolean;
   /** Hardware catalog (id → entry) for rendering resolved placements. */
   readonly hardwareCatalog?: Readonly<Map<string, Hardware>>;
+  /** Exact GLB byte source (#669). */
+  readonly glbSource?: GlbAssetSource;
   readonly controlsRef: React.RefObject<any>;
   readonly setOrbitSuppressed: (v: boolean) => void;
   /** F131: raw placements by componentInstanceId for the 3D gizmo editor. */
@@ -1439,6 +1449,7 @@ function ModuleGroup({
           materialColors={materialColors}
           materialTextures={materialTextures}
           surfaceMode={surfaceMode}
+          glbSource={glbSource}
         />
       ))}
     </group>
@@ -1694,8 +1705,11 @@ function SceneContent({
   ghostPosition = null,
   draggingInvalid = false,
   hardwareCatalog,
+  glbSource,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
+  /** Exact GLB byte source (#669). */
+  readonly glbSource?: GlbAssetSource;
   readonly walls: readonly FurnitureSceneWall[];
   readonly totalWidth: number;
   readonly totalHeight: number;
@@ -2295,6 +2309,7 @@ function SceneContent({
               ambientCountertop={ambientCountertop}
               paintHoverCountertop={paintHoverSurface?.kind === 'countertop'}
               hardwareCatalog={hardwareById}
+              glbSource={glbSource}
               controlsRef={controlsRef}
               setOrbitSuppressed={setOrbitSuppressed}
             />
@@ -2449,6 +2464,7 @@ export function FurnitureScene3D({
   onModuleWallDragStart,
   onModuleWallDragEnd,
   wallDragEnabled = false,
+  glbSource,
   freeDragByKey,
   planShiftMm,
   onModuleFreeMove,
@@ -2781,6 +2797,7 @@ export function FurnitureScene3D({
               <ScenePerfProbe />
               <Suspense fallback={null}>
                 <SceneContent
+                  glbSource={glbSource}
                   rawHardwarePlacements={rawHardwarePlacements}
                   onUpdateHardwarePlacement={onUpdateHardwarePlacement}
                   modules={sceneModules}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -395,8 +396,75 @@ type HardwareAssetRevision struct {
 	IntegrityVerifiedAt time.Time                    `json:"integrity_verified_at"`
 	ValidationState     HardwareAssetValidationState `json:"validation_state"`
 	Validations         []HardwareAssetValidation    `json:"validations,omitempty"`
-	CreatedBy           string                       `json:"-"`
-	CreatedAt           time.Time                    `json:"created_at"`
+	// #669 derivation provenance (only GLB revisions carry it): the SKP
+	// revision this GLB was exported from plus the declared export tool.
+	// DB columns live on hardware_asset_revisions; they are set by the INSERT
+	// at finalize and never mutated (immutability respected).
+	SourceRevisionID string         `json:"sourceRevisionId,omitempty"`
+	ExporterName     string         `json:"exporterName,omitempty"`
+	ExporterVersion  string         `json:"exporterVersion,omitempty"`
+	ExportOptions    map[string]any `json:"exportOptions,omitempty"`
+	CreatedBy        string         `json:"-"`
+	CreatedAt        time.Time      `json:"created_at"`
+}
+
+// HardwareAssetDerivation is the declared provenance of a derived GLB
+// revision: the exact SKP revision it was exported from (same asset) and the
+// export tool that produced it. A derivation never changes the bytes' meaning
+// — it records which SKP revision the geometry claims to represent.
+type HardwareAssetDerivation struct {
+	SourceRevisionID string
+	ExporterName     string
+	ExporterVersion  string
+	ExportOptions    map[string]any
+}
+
+const hardwareAssetDerivationMaxOptionsBytes = 4 << 10
+
+// ValidateHardwareAssetDerivation enforces the #669 derivation contract:
+// the source revision must exist (lookup is the caller's org-scoped read),
+// belong to targetAssetID and carry representation 'skp' (a derived GLB always
+// derives from an SKP revision); exporter name/version are bounded non-empty
+// text and options stringify to at most 4 KiB of JSON.
+func ValidateHardwareAssetDerivation(
+	d HardwareAssetDerivation,
+	targetAssetID string,
+	lookup func(assetID, revisionID string) (HardwareAssetRevision, error),
+) error {
+	if lookup == nil {
+		return fmt.Errorf("%w: derivation lookup is required", ErrHardwareAssetInvalid)
+	}
+	if targetAssetID == "" {
+		return fmt.Errorf("%w: derivation requires a target asset (asset_id)", ErrHardwareAssetInvalid)
+	}
+	name := strings.TrimSpace(d.ExporterName)
+	if name == "" || len(name) > 64 {
+		return fmt.Errorf("%w: exporterName is required (1-64 chars)", ErrHardwareAssetInvalid)
+	}
+	version := strings.TrimSpace(d.ExporterVersion)
+	if version == "" || len(version) > 32 {
+		return fmt.Errorf("%w: exporterVersion is required (1-32 chars)", ErrHardwareAssetInvalid)
+	}
+	if d.ExportOptions != nil {
+		encoded, err := json.Marshal(d.ExportOptions)
+		if err != nil {
+			return fmt.Errorf("%w: exportOptions must be a JSON object: %v", ErrHardwareAssetInvalid, err)
+		}
+		if len(encoded) > hardwareAssetDerivationMaxOptionsBytes {
+			return fmt.Errorf("%w: exportOptions must not exceed %d bytes", ErrHardwareAssetInvalid, hardwareAssetDerivationMaxOptionsBytes)
+		}
+	}
+	source, err := lookup(targetAssetID, d.SourceRevisionID)
+	if err != nil {
+		return err
+	}
+	if source.AssetID != targetAssetID {
+		return fmt.Errorf("%w: derivation source revision belongs to asset %s, not %s", ErrHardwareAssetInvalid, source.AssetID, targetAssetID)
+	}
+	if source.Representation != HardwareAssetRepresentationSKP {
+		return fmt.Errorf("%w: derivation source revision must be representation skp (got %s)", ErrHardwareAssetInvalid, source.Representation)
+	}
+	return nil
 }
 
 // HardwareAssetUploadSession is the staging row of one
@@ -413,13 +481,16 @@ type HardwareAssetUploadSession struct {
 	Staged         *HardwareAssetStagedBytes   `json:"staged,omitempty"`
 	// TargetAssetID, when set, directs finalize to append the next immutable
 	// revision to that existing asset instead of creating a new one.
-	TargetAssetID       *string   `json:"target_asset_id,omitempty"`
-	Status              string    `json:"status"`
-	CreatedBy           string    `json:"-"`
-	CreatedAt           time.Time `json:"created_at"`
-	ExpiresAt           time.Time `json:"expires_at"`
-	FinalizedAssetID    *string   `json:"finalized_asset_id,omitempty"`
-	FinalizedRevisionID *string   `json:"finalized_revision_id,omitempty"`
+	TargetAssetID *string `json:"target_asset_id,omitempty"`
+	// Derivation stages the #669 GLB derivation block; finalize writes it onto
+	// the new revision (only representation 'glb' accepts one).
+	Derivation          *HardwareAssetDerivation `json:"derivation,omitempty"`
+	Status              string                   `json:"status"`
+	CreatedBy           string                   `json:"-"`
+	CreatedAt           time.Time                `json:"created_at"`
+	ExpiresAt           time.Time                `json:"expires_at"`
+	FinalizedAssetID    *string                  `json:"finalized_asset_id,omitempty"`
+	FinalizedRevisionID *string                  `json:"finalized_revision_id,omitempty"`
 }
 
 // HardwareAssetStagedBytes mirrors the server-computed metadata of the bytes
@@ -464,6 +535,23 @@ type HardwareVisualAssetBinding struct {
 	PreparationState HardwareAssetPreparationState `json:"preparationState,omitempty"`
 	// MountFrame specifies the mount point and canonical axes in Asset space (persisted authority).
 	MountFrame *HardwareMountFrame `json:"mountFrame,omitempty"`
+	// Glb is the server-resolved GLB co-representation for web consumers
+	// (#669): when the binding pins an SKP revision it carries the latest
+	// derived GLB revision of that exact SKP revision (nil when none exists);
+	// when the binding pins a GLB revision directly it mirrors that revision.
+	// Never client-declared; unreadable provenance omits it (fail-honest).
+	Glb *HardwareVisualGlbRepresentation `json:"glb,omitempty"`
+}
+
+// HardwareVisualGlbRepresentation is the exact GLB revision a binding exposes
+// to web consumers, with the declared coordinate space of the file.
+type HardwareVisualGlbRepresentation struct {
+	RevisionID      string `json:"revisionId"`
+	SHA256          string `json:"sha256"`
+	SourceRevisionID string `json:"sourceRevisionId,omitempty"`
+	SizeBytes       int64  `json:"sizeBytes,omitempty"`
+	SourceUnits     string `json:"sourceUnits,omitempty"`
+	UpAxis          string `json:"upAxis,omitempty"`
 }
 
 // DesignRevisionHardwareAssetPin is one frozen reference written at
@@ -480,5 +568,11 @@ type DesignRevisionHardwareAssetPin struct {
 	AssetRevisionID  string                      `json:"asset_revision_id"`
 	Representation   HardwareAssetRepresentation `json:"representation"`
 	SHA256           string                      `json:"sha256"`
-	CreatedAt        time.Time                   `json:"created_at"`
+	// GlbRevisionID/GlbSHA256 freeze, at publish time, the derived GLB
+	// revision resolved with the deterministic latest-derived rule (#669).
+	// NULL when the pinned revision had no derived GLB. Historical pins keep
+	// their exact GLB revision after later re-exports.
+	GlbRevisionID *string   `json:"glb_revision_id,omitempty"`
+	GlbSHA256     *string   `json:"glb_sha256,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }

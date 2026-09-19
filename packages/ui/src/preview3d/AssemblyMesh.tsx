@@ -13,6 +13,8 @@ import {
   deriveHardwareBasisFromEuler,
 } from '@granete/domain';
 import { HardwareMesh } from './HardwareMesh';
+import { HardwareGlbMesh } from './HardwareGlbMesh';
+import type { GlbAssetSource } from './glbSceneCache';
 import { BoardMesh } from './BoardMesh';
 import type { BoardColorMode, BoardPartVisual, MaterialColorLookup, MaterialSurfaceMode, MaterialTextureLookup } from './boardPartVisual';
 import { DEFAULT_SCENE_LIGHTING_MODE, type SceneLightingMode } from './sceneLighting';
@@ -140,6 +142,8 @@ export type AssemblyMeshProps = {
   readonly surfaceMode?: MaterialSurfaceMode;
   readonly onSelectMember?: (memberId: string) => void;
   readonly onSelectFabricated?: (componentId: string) => void;
+  /** Exact GLB byte source for web consumers (#669); absent = procedural only. */
+  readonly glbSource?: GlbAssetSource;
 };
 
 function resolveHardwareCatalogMap(
@@ -166,6 +170,7 @@ export function AssemblyMesh({
   selected = false,
   onSelectMember,
   onSelectFabricated,
+  glbSource,
 }: AssemblyMeshProps): ReactNode {
   const hwMap = resolveHardwareCatalogMap(hardwareCatalog);
 
@@ -225,6 +230,26 @@ export function AssemblyMesh({
           previewColor: '#9aa0a6',
         };
 
+        const proceduralHardware = (
+          <HardwareMesh
+            placement={{
+              componentInstanceId: member.memberId,
+              hardwareId: member.hardwareId,
+              localPosition: [0, 0, 0],
+              localNormal: [0, 1, 0],
+              standoffMm: 0,
+              rotationDeg: { x: 0, y: 0, z: 0 },
+              scale: 1,
+            }}
+            hardware={hardware}
+            lightingMode={lightingMode}
+            selected={selected}
+            onSelect={
+              onSelectMember ? () => onSelectMember(member.memberId) : undefined
+            }
+          />
+        );
+
         return (
           <group
             key={`${assembly.assemblyInstanceId}-${member.memberId}`}
@@ -239,25 +264,21 @@ export function AssemblyMesh({
               hardwareId: member.hardwareId,
               assetRevisionId: member.assetRevisionId,
               renderStatus: member.renderStatus,
+              ...(member.statusDiagnostic ? { statusDiagnostic: member.statusDiagnostic } : {}),
+              ...(member.glb ? { glbRevisionId: member.glb.revisionId } : {}),
             }}
           >
-            <HardwareMesh
-              placement={{
-                componentInstanceId: member.memberId,
-                hardwareId: member.hardwareId,
-                localPosition: [0, 0, 0],
-                localNormal: [0, 1, 0],
-                standoffMm: 0,
-                rotationDeg: { x: 0, y: 0, z: 0 },
-                scale: 1,
-              }}
-              hardware={hardware}
-              lightingMode={lightingMode}
-              selected={selected}
-              onSelect={
-                onSelectMember ? () => onSelectMember(member.memberId) : undefined
-              }
-            />
+            {member.glb ? (
+              <HardwareGlbMesh
+                member={member}
+                glbSource={glbSource}
+                selected={selected}
+                onSelect={onSelectMember ? () => onSelectMember(member.memberId) : undefined}
+                fallback={proceduralHardware}
+              />
+            ) : (
+              proceduralHardware
+            )}
           </group>
         );
       })}
