@@ -31,7 +31,7 @@ import { ptxSpecPreflightDocument, serializePtxDocumentBytesSpecChecked } from '
 import { buildPtxPartLabels, ptxBarcodeToken, type PtxPartLabelData } from './partLabels';
 import { compileCutPlanToPtxDocument, PtxCompilationError, type CompileCutPlanToPtxOptions } from './compileCutPlan';
 import { verifyCutPlanPtxReadback } from './verifyCutPlanPtxReadback';
-import type { PtxPartsInfRecord, PtxPartsReqRecord, PtxPartsUdiRecord } from './records';
+import type { PtxPartsInfRecord, PtxPartsReqRecord, PtxPartsUdiRecord, PtxRecord } from './records';
 import {
   AA_MODULE_CODE,
   AA_UNIT_2,
