@@ -29,6 +29,7 @@ import type {
   PtxMaterialRecord,
   PtxPartsInfRecord,
   PtxPartsUdiRecord,
+  PtxPartsReqRecord,
   PtxPatternRecord,
 } from './records';
 import { HPP250_CAD4_R5_LAB_RECEIVER_POLICY } from './receiverPolicy';
@@ -283,6 +284,78 @@ describe('#790 observed R2201/R7301 receiver evidence vs emitted policy', () => 
     });
   }
 });
+
+describe('#791 differential assertions over sanitized receiver samples', () => {
+  for (const [sample, name, expected] of [
+    ['01_muestra_a_saneada.ptx.txt', 'R2201', { parts: 5, boards: 2, materials: 6, patterns: 2, cuts: 12, offcutDimension: 1718.6 }],
+    ['02_muestra_b_saneada.ptx.txt', 'R7301', { parts: 12, boards: 1, materials: 4, patterns: 2, cuts: 26, offcutDimension: 845.6 }],
+  ] as const) {
+    it(`${name}: preserves observed properties separately from Granete emitted policy`, () => {
+      const readback = parsePtxExternalText(readSample(sample));
+      const modeledRows = readback.rows.filter(hasPtxExternalShape);
+      const parts = readback.records.filter((r): r is PtxPartsReqRecord => r.type === 'PARTS_REQ');
+      const partsInf = readback.records.filter((r): r is PtxPartsInfRecord => r.type === 'PARTS_INF');
+      const partsUdi = readback.records.filter((r): r is PtxPartsUdiRecord => r.type === 'PARTS_UDI');
+      const boards = readback.records.filter((r): r is PtxBoardRecord => r.type === 'BOARDS');
+      const materials = readback.records.filter((r): r is PtxMaterialRecord => r.type === 'MATERIALS');
+      const patterns = readback.records.filter((r): r is PtxPatternRecord => r.type === 'PATTERNS');
+      const cuts = readback.records.filter((r): r is PtxCutRecord => r.type === 'CUTS');
+      const offcuts = readback.records.filter((r) => r.type === 'OFFCUTS');
+
+      expect(parts).toHaveLength(expected.parts);
+      expect(partsInf).toHaveLength(expected.parts);
+      expect(partsUdi).toHaveLength(expected.parts);
+      expect(boards).toHaveLength(expected.boards);
+      expect(materials).toHaveLength(expected.materials);
+      expect(patterns).toHaveLength(expected.patterns);
+      expect(cuts).toHaveLength(expected.cuts);
+      expect(offcuts).toHaveLength(1);
+
+      const partIndexes = new Set(parts.map((part) => part.partIndex));
+      expect(partIndexes.size).toBe(parts.length);
+      for (const row of [...partsInf, ...partsUdi]) {
+        expect(row.jobIndex).toBe(1);
+        expect(partIndexes.has(row.partIndex)).toBe(true);
+      }
+      for (const cut of cuts) {
+        expect(patterns.some((pattern) => pattern.patternIndex === cut.patternIndex)).toBe(true);
+        if (cut.partReference.kind === 'part') {
+          expect(partIndexes.has(cut.partReference.partIndex)).toBe(true);
+        }
+      }
+
+      const materialShapes = modeledRows.filter((row) => row.family === 'MATERIALS');
+      const cutShapes = modeledRows.filter((row) => row.family === 'CUTS');
+      expect(materialShapes).toHaveLength(expected.materials);
+      expect(materialShapes.every((row) => row.cellsProvided === 19 && row.extraTrailingCells === 0)).toBe(true);
+      expect(cutShapes).toHaveLength(expected.cuts);
+      expect(cutShapes.some((row) => row.cellsProvided === 8)).toBe(true);
+      expect(cutShapes.some((row) => row.cellsProvided === 9)).toBe(true);
+
+      for (const material of materials) {
+        expect(material.bookQuantity).toBe(3);
+        expect(material.kerfRip).toBe(4.4);
+        expect(material.kerfCrosscut).toBe(4.4);
+        expect([material.rule1, material.rule2, material.rule3, material.rule4]).toEqual([6, 1, 1, 1]);
+        // Field observations include receiver trim columns that Granete's LAB
+        // policy deliberately does not emit without product/geometry authority.
+        expect([material.trimHead, material.trimFRct, material.trimVRct]).toEqual([20, 20, 0]);
+      }
+      expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_HEAD.source).toBe('OMIT_NO_OVERRIDE');
+      expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_FRCT.source).toBe('OMIT_NO_OVERRIDE');
+      expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_VRCT.source).toBe('OMIT_NO_OVERRIDE');
+
+      const x1Cuts = cuts.filter((cut) => cut.partReference.kind === 'offcut' && cut.partReference.offcutIndex === 1);
+      expect(x1Cuts).toHaveLength(1);
+      expect(x1Cuts[0]).toMatchObject({ functionCode: 92, producedQuantity: undefined, dimension: expected.offcutDimension });
+      expect(offcuts[0]).toMatchObject({ offcutIndex: 1, producedQuantity: 1 });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Shape: prefijo requerido / trailing opcional / vacío vs omitido
+// ---------------------------------------------------------------------------
 
 describe('#788 empty field vs omitted trailing field', () => {
   const header = 'HEADER,1,LAB,0,0,1\r\n';

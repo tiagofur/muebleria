@@ -993,9 +993,13 @@ describe('r3 — mutation tests M1..M8 (verifier independiente)', () => {
     return compileCutPlanToPtxDocument(plan, R3_OPTIONS).mapping;
   }
 
+  function verifierIssues(mutated: PtxDocument, plan: CutPlan): readonly CutPlanPtxReadbackIssue[] {
+    return verifyCutPlanPtxReadback(mutated, plan, mappingOf(plan), R3_OPTIONS);
+  }
+
   function expectVerifierFails(mutated: PtxDocument, plan: CutPlan, expectedCode: string): void {
     // El validador de formato puede seguir verde: el fallo es semántico.
-    const issues = verifyCutPlanPtxReadback(mutated, plan, mappingOf(plan), R3_OPTIONS);
+    const issues = verifierIssues(mutated, plan);
     expect(issues.length).toBeGreaterThan(0);
     expect(issueCodes(issues)).toContain(expectedCode);
   }
@@ -1053,7 +1057,26 @@ describe('r3 — mutation tests M1..M8 (verifier independiente)', () => {
     expectVerifierFails(mutated, plan, 'release.function');
   });
 
-  it('M5: X1 → X2 cruzado', () => {
+  it.each([91, 93])('M4b: FUNCTION 92 → %i reporta mismatch semántico de función', (functionCode) => {
+    const { doc, plan } = compiledMain();
+    const mutated: PtxDocument = {
+      ...doc,
+      records: doc.records.map((r) =>
+        r.type === 'CUTS' && r.functionCode === 92 && r.partReference.kind === 'offcut' && r.partReference.offcutIndex === 1
+          ? { ...r, functionCode }
+          : r,
+      ),
+    };
+    const issues = verifierIssues(mutated, plan);
+
+    expect(issueCodes(issues)).toContain('release.function');
+    expect(issues.find((issue) => issue.code === 'release.function')?.message).toContain(
+      `FUNCTION=${functionCode} ≠ 92`,
+    );
+    expect(issueCodes(issues)).not.toContain('release.offcut_ref');
+  });
+
+  it('M5: X1 → X2 cruzado reporta mismatch de identidad offcut, no de función', () => {
     const { doc, plan } = compiledMain();
     const mutated = mutateAndParse(doc, (records) =>
       records.map((r) =>
@@ -1063,7 +1086,48 @@ describe('r3 — mutation tests M1..M8 (verifier independiente)', () => {
       ),
     );
     expect(validatePtxDocument(mutated)).toEqual([]);
-    expectVerifierFails(mutated, plan, 'release.offcut_ref');
+    const issues = verifierIssues(mutated, plan);
+    expect(issueCodes(issues)).toContain('release.offcut_ref');
+    expect(issues.find((issue) => issue.code === 'release.offcut_ref')?.message).toContain(
+      'PART_INDEX=X2 no identifica el retazo esperado X1',
+    );
+    expect(issueCodes(issues)).not.toContain('release.function');
+  });
+
+  it('M5b: X1 → 0 reporta identidad offcut faltante sin asumir una regla genérica 92=>Xn', () => {
+    const { doc, plan } = compiledMain();
+    const mutated = mutateAndParse(doc, (records) =>
+      records.map((r) =>
+        r.type === 'CUTS' && r.functionCode === 92 && r.partReference.kind === 'offcut' && r.partReference.offcutIndex === 1
+          ? { ...r, partReference: { kind: 'none' } }
+          : r,
+      ),
+    );
+    expect(validatePtxDocument(mutated)).toEqual([]);
+    const issues = verifierIssues(mutated, plan);
+    expect(issueCodes(issues)).toContain('release.offcut_ref');
+    expect(issues.find((issue) => issue.code === 'release.offcut_ref')?.message).toContain(
+      'PART_INDEX=0 no identifica el retazo esperado X1',
+    );
+    expect(issueCodes(issues)).not.toContain('release.function');
+  });
+
+  it('M5c: X1 → PART_INDEX 1 reporta referencia de pieza donde se esperaba offcut', () => {
+    const { doc, plan } = compiledMain();
+    const mutated = mutateAndParse(doc, (records) =>
+      records.map((r) =>
+        r.type === 'CUTS' && r.functionCode === 92 && r.partReference.kind === 'offcut' && r.partReference.offcutIndex === 1
+          ? { ...r, partReference: { kind: 'part', partIndex: 1 } }
+          : r,
+      ),
+    );
+    expect(validatePtxDocument(mutated)).toEqual([]);
+    const issues = verifierIssues(mutated, plan);
+    expect(issueCodes(issues)).toContain('release.offcut_ref');
+    expect(issues.find((issue) => issue.code === 'release.offcut_ref')?.message).toContain(
+      'PART_INDEX=1 no identifica el retazo esperado X1',
+    );
+    expect(issueCodes(issues)).not.toContain('release.function');
   });
 
   it('M6: DIMENSION de la release alterada', () => {

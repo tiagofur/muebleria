@@ -2,7 +2,7 @@
 
 Issue base técnica: [#650](https://github.com/tiagofur/muebleria/issues/650).
 Incrementos integrados: #661, #665, #691, #692. Hardening de cierre interno: #693.
-Dialecto r4 tras el primer rechazo CADLink: #781. Reconstrucción r5: META #787, con investigación y plan en `06_dossier_r5_segundo_rechazo.md` y `07_plan_r5_receiver_labels_cnc.md`.
+Dialecto r4 tras el primer rechazo CADLink: #781. Reconstrucción r5: META #787, con investigación y plan en `06_dossier_r5_segundo_rechazo.md` y `07_plan_r5_receiver_labels_cnc.md`. Semántica CUTS/diferencial/golden r5: #791 en `11_cuts_semantics_differential_golden_r5.md`.
 
 ## Estado vigente
 
@@ -93,8 +93,9 @@ se conserva explícitamente; no se elimina por heurística ni por edad.
 8. [Strict spec preflight](08_spec_preflight_r5.md): validador independiente de límites documentados Pattern Exchange antes de serializar (#788, fase R5-A) — diccionario §20 de la Interface Guide con localizadores, fail-closed sin truncar y lector estructural del dialecto externo (R2201/R7301).
 9. [PARTS_INF/UDI y etiquetas](09_parts_inf_labels_cnc.md): modelo tipado de las familias de etiqueta, proyección industrial congelada por pieza física, mapping Granete → PARTS_INF con autoridad por campo y puente de identidad CNC DRAWING/BARCODE (#789, fase R5-B).
 10. [Receiver HPP250/CAD4](10_receiver_profile_hpp250_cad4.md): política lab-only para #790; autoridad de MATERIALS, orden de records, BOARDS/JOBS/PATTERNS/CUTS shape y límites CADLink sin publicar un perfil/adaptador r5 productivo.
-11. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
-12. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
+11. [CUTS semantics/differential/golden r5](11_cuts_semantics_differential_golden_r5.md): addendum #791 que separa `FUNCTION` de `PART_INDEX`, acota `92 + Xn`, resume R2201/R7301 por propiedades y documenta el golden LAB/TEST con SHA/conteos.
+12. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
+13. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
    directa TS↔contrato↔Go.
 
 Los documentos `01`–`05` preservan investigación/decisiones históricas y no se reescriben para simular que conocían los resultados posteriores. `06` y `07` gobiernan el discovery y el plan de r5.

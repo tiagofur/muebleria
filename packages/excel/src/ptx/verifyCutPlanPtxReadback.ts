@@ -170,6 +170,17 @@ function auxAscii(value: string): string {
   return out;
 }
 
+function renderPartReference(row: PtxCutRecord): string {
+  switch (row.partReference.kind) {
+    case 'none':
+      return '0';
+    case 'part':
+      return `${row.partReference.partIndex}`;
+    case 'offcut':
+      return `X${row.partReference.offcutIndex}`;
+  }
+}
+
 /** Independently derived expectation for one division (staging model). */
 interface LocalDivisionExpectation {
   readonly division: CutProgramTraceDivision;
@@ -524,11 +535,18 @@ export function verifyCutPlanPtxReadback(
     issues.push({ code, message });
   };
 
-  // 1. Format/relational validation of the parsed bytes.
-  for (const issue of validatePtxDocument(parsed)) {
+  // 1. Format/relational validation of the parsed bytes. Keep running for
+  // documented-but-currently-unsupported FUNCTION codes so the independent
+  // semantic verifier can still report the product/receiver expectation
+  // (for example an expected phase-2 FUNCTION 92 mutated to 91/93) instead
+  // of masking it as only a generic candidate-subset issue.
+  const validationIssues = validatePtxDocument(parsed);
+  for (const issue of validationIssues) {
     push(`ptx_invalid.${issue.code}`, issue.message);
   }
-  if (issues.length > 0) return issues;
+  if (validationIssues.some((issue) => issue.code !== 'UNSUPPORTED_FUNCTION_CODE')) {
+    return issues;
+  }
 
   const close = (a: number, b: number): boolean =>
     Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
@@ -1489,7 +1507,10 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
           expectedOffcutIndex === undefined ||
           row.partReference.offcutIndex !== expectedOffcutIndex
         ) {
-          push('release.offcut_ref', `${label}: PART_INDEX no referencia X${expectedOffcutIndex ?? '?'}`);
+          push(
+            'release.offcut_ref',
+            `${label}: PART_INDEX=${renderPartReference(row)} no identifica el retazo esperado X${expectedOffcutIndex ?? '?'} (identidad offcut requerida)`,
+          );
         }
       } else {
         push('release.function', `${label}: una release 92 debe referenciar un offcut`);
@@ -1524,7 +1545,10 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
         expectedOffcutIndex === undefined ||
         row.partReference.offcutIndex !== expectedOffcutIndex
       ) {
-        push('release.offcut_ref', `${label}: PART_INDEX no referencia X${expectedOffcutIndex ?? '?'}`);
+        push(
+          'release.offcut_ref',
+          `${label}: PART_INDEX=${renderPartReference(row)} no identifica el retazo esperado X${expectedOffcutIndex ?? '?'} (identidad offcut requerida)`,
+        );
       }
     } else if (
       row.partReference.kind !== 'part' ||
