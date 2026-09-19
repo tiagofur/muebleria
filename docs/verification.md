@@ -646,29 +646,6 @@ Cobertura contractual exigida por #789/#797:
   autoritativo y bloquear sin `releaseBase`; `release:789:r5:*` queda como
   fixture de laboratorio, no como wiring productivo.
 
-
----
-
-## PTX CADmatic 4 — receiver policy HPP250/CAD4 r5 (#790)
-
-Política documental lab-only del receiver HPP250/CAD4. No publica perfil r5,
-adapter, routing, field pack, `.RLT`, candidato de cliente ni claim de
-compatibilidad. Documento canónico: `docs/machines/ptx-cadmatic4/10_receiver_profile_hpp250_cad4.md`.
-
-Verificación proporcional para cambios documentales de #790:
-
-```sh
-python3 scripts/factory_preflight.py
-```
-
-Cuando #790 implemente bytes, su evidencia debe demostrar: opt-in lab-only;
-inmutabilidad r2/r3/r4; `MATERIALS` BOOK/kerf/trims/RULE1..4; coherencia
-`BOOK=3`/`PATTERNS.MAX_BOOK=3` con `QTY_RUN=QTY_CYCLES=1`; orden receiver-aware;
-BOARDS sin `COST`/`STK_FLAG` inventados; JOBS/PATTERNS/CUTS trailing policy;
-comments deshabilitados; y ausencia de `NOTES`/UDI compacto/fechas/customer
-inventados. CADLink `/CAD4`, `/RESULT`, `.RLT` y `cadlink.ini` efectivo quedan
-para #792; r5 productivo para #793.
-
 ---
 
 ## 15. Definition of Verified
