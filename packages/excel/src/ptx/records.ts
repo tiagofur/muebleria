@@ -77,28 +77,66 @@ export type PtxDocumentedPatternType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
  * code in the schema does NOT mean the target saw can execute that depth —
  * machine profiles govern the allowed subset.
  */
-export function describePtxCutFunction(code: number): string | undefined {
-  if (code === 0) return 'head';
-  if (code === 1) return 'rip';
-  if (code === 2) return 'cross';
-  if (code >= 3 && code <= 9) return `recut_phase_${code}`;
-  if (code >= 90 && code <= 99) return `trim_or_waste_phase_${code - 90}`;
+export type PtxRecutPhase = 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type PtxTrimWastePhase = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+export type PtxCutFunctionSemantic =
+  | { readonly kind: 'head'; readonly phase: 0 }
+  | { readonly kind: 'rip'; readonly phase: 1 }
+  | { readonly kind: 'cross'; readonly phase: 2 }
+  | { readonly kind: 'recut'; readonly phase: PtxRecutPhase }
+  | { readonly kind: 'trim-waste'; readonly phase: PtxTrimWastePhase };
+
+function isPtxRecutPhase(code: number): code is PtxRecutPhase {
+  return Number.isInteger(code) && code >= 3 && code <= 9;
+}
+
+function isPtxTrimWastePhase(code: number): code is PtxTrimWastePhase {
+  return Number.isInteger(code) && code >= 0 && code <= 9;
+}
+
+/** Interprets the documented CUTS.FUNCTION semantic domain, independent of PART_INDEX. */
+export function interpretPtxCutFunction(code: number): PtxCutFunctionSemantic | undefined {
+  if (code === 0) return { kind: 'head', phase: 0 };
+  if (code === 1) return { kind: 'rip', phase: 1 };
+  if (code === 2) return { kind: 'cross', phase: 2 };
+  if (isPtxRecutPhase(code)) {
+    return { kind: 'recut', phase: code };
+  }
+  const trimWastePhase = code - 90;
+  if (isPtxTrimWastePhase(trimWastePhase)) {
+    return { kind: 'trim-waste', phase: trimWastePhase };
+  }
   return undefined;
+}
+
+export function describePtxCutFunction(code: number): string | undefined {
+  const semantic = interpretPtxCutFunction(code);
+  if (!semantic) return undefined;
+  switch (semantic.kind) {
+    case 'head':
+    case 'rip':
+    case 'cross':
+      return semantic.kind;
+    case 'recut':
+      return `recut_phase_${semantic.phase}`;
+    case 'trim-waste':
+      return `trim_waste_phase_${semantic.phase}`;
+  }
 }
 
 /** Whether the code belongs to the documented interface dictionary. */
 export function isDocumentedPtxCutFunctionCode(code: number): boolean {
-  return describePtxCutFunction(code) !== undefined;
+  return interpretPtxCutFunction(code) !== undefined;
 }
 
 /**
  * FUNCTION codes the current Granete PTX candidate is willing to produce,
  * parse and validate: 0 head, 1 rip, 2 cross, 3 third-phase recut, and 92 —
- * the phase-2 trim/waste pass demonstrated by the two field samples
- * (04_contrato_r3_refilados.md §6; #661). FUNCTION 92 rows carry extra
- * semantic requirements enforced by validate.ts (QTY_RPT=1, PART_INDEX=Xn,
- * SEQUENCE > 0) and are emitted ONLY by the r3 candidate policy for the
- * demonstrated rest-side phase-2 remnant subset.
+ * the phase-2 trim/waste code demonstrated by the two field samples
+ * (04_contrato_r3_refilados.md §6; #661). FUNCTION semantics and PART_INDEX
+ * references are orthogonal: FUNCTION 92 means trim/waste phase 2, while an
+ * Xn PART_INDEX reference identifies an OFFCUTS row independently.
  *
  * Deliberately NOT supported (documented ≠ supported — "the manual
  * enumerates the code" is never "Granete can emit it"):
@@ -106,7 +144,7 @@ export function isDocumentedPtxCutFunctionCode(code: number): boolean {
  *   semantics before being enabled;
  * - 5..9 deeper recut phases: no case needs them;
  * - 81 tension: excluded from the first candidate (investigation §9);
- * - 90, 91, 93..99 trims/waste: no demonstrated mapping from Granete
+ * - 90, 91, 93..99 trim/waste phases: no demonstrated mapping from Granete
  *   geometry; the perimeter trims are projected to MATERIALS.TRIM_* instead.
  */
 export const PTX_SUPPORTED_CUT_FUNCTION_CODES = [0, 1, 2, 3, 92] as const;
@@ -272,13 +310,13 @@ export interface PtxPatternRecord {
  * of the sub-panel, never a global coordinate (investigation §5: the C cut
  * edge sits at global X=734 but its dimension is 280). CUT_INDEX preserves
  * nesting; SEQUENCE expresses execution order — reordering rows by SEQUENCE
- * destroys the tree. QTY_RPT=0 rows (e.g. an offcut release) are valid and
- * must not be animated as an extra saw pass.
+ * destroys the tree. QTY_RPT=0 rows are valid and must not be animated as an
+ * extra saw pass.
  *
- * QTY_PARTS is OPTIONAL: a physical FUNCTION 92 offcut-release pass (#661,
- * 04_contrato_r3_refilados.md §6.2) carries it ABSENT — an empty cell, never
- * 0 and never 1 — because the pass produces an Xn offcut, not a PARTS_REQ
- * part. Every other row emits an explicit value (0 or 1) as before.
+ * QTY_PARTS is OPTIONAL: absence is an empty cell, never an implicit 0 or 1.
+ * FUNCTION 92 is the documented trim/waste phase-2 code; whether a row points
+ * to no part, a PARTS_REQ row, or an OFFCUTS Xn row is determined only by
+ * PART_INDEX.
  */
 export interface PtxCutRecord {
   readonly type: 'CUTS';
