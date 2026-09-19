@@ -291,7 +291,7 @@ function partsUdiLine(r: PtxPartsUdiRecord, f: Fmt): string {
 }
 
 function boardLine(r: PtxBoardRecord, f: Fmt): string {
-  return [
+  const cells = [
     'BOARDS',
     f.int(r.jobIndex, 'BOARDS.JOB_INDEX'),
     f.int(r.boardIndex, 'BOARDS.BRD_INDEX'),
@@ -301,7 +301,17 @@ function boardLine(r: PtxBoardRecord, f: Fmt): string {
     f.real(r.width, 'BOARDS.WIDTH'),
     f.optInt(r.stockQuantity, 'BOARDS.QTY_STOCK'),
     f.optInt(r.usedQuantity, 'BOARDS.QTY_USED'),
-  ].join(',');
+  ];
+  // BOARDS.COST / STK_FLAG are optional trailing cells. Do not append either
+  // by default, preserving historical r2/r3/r4 bytes; when STK_FLAG is present
+  // without COST, emit the empty COST cell to preserve column position.
+  if (r.cost !== undefined || r.stockFlag !== undefined) {
+    cells.push(f.optNum(r.cost, 'BOARDS.COST', f.real));
+  }
+  if (r.stockFlag !== undefined) {
+    cells.push(f.int(r.stockFlag, 'BOARDS.STK_FLAG'));
+  }
+  return cells.join(',');
 }
 
 function materialLine(r: PtxMaterialRecord, f: Fmt): string {

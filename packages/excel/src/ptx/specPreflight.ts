@@ -386,6 +386,7 @@ export type PtxSpecIssueCode =
   | 'ptx_spec.quantity_out_of_range'
   | 'ptx_spec.quantity_not_integer'
   | 'ptx_spec.int_not_integer'
+  | 'ptx_spec.number_not_finite'
   | 'ptx_spec.job_scope_ambiguous'
   | 'ptx_spec.parse_error';
 
@@ -718,6 +719,42 @@ function intFormIssue(
   }
 }
 
+function productFiniteNumberShapeIssue(
+  value: number,
+  field: string,
+  rowLabel: string,
+  issues: PtxSpecIssue[],
+): void {
+  if (!Number.isFinite(value)) {
+    issues.push({
+      code: 'ptx_spec.number_not_finite',
+      message: `${rowLabel} ${field}=${value} no es un número finito (shape check; sin dominio de negocio inventado)`,
+      field,
+      classification: 'PRODUCT_POLICY',
+      locator: 'BOARDS.COST optional trailing shape (#790): documented cost per square area; authority text/domain not pinned here',
+      observed: String(value),
+    });
+  }
+}
+
+function productFiniteIntegerShapeIssue(
+  value: number,
+  field: string,
+  rowLabel: string,
+  issues: PtxSpecIssue[],
+): void {
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    issues.push({
+      code: 'ptx_spec.int_not_integer',
+      message: `${rowLabel} ${field}=${value} no es un entero finito (shape check; sin dominio de negocio inventado)`,
+      field,
+      classification: 'PRODUCT_POLICY',
+      locator: 'BOARDS.STK_FLAG optional trailing shape (#790): receiver-evidenced flag column; value domain not pinned here',
+      observed: String(value),
+    });
+  }
+}
+
 function checkRecordFields(record: PtxRecord, units: number, issues: PtxSpecIssue[]): void {
   const label = recordLabel(record);
   switch (record.type) {
@@ -808,6 +845,11 @@ function checkRecordFields(record: PtxRecord, units: number, issues: PtxSpecIssu
       dimIssue(record.width, 'BOARDS.WIDTH', units, label, issues);
       if (record.stockQuantity !== undefined) qtyIssue(record.stockQuantity, 'BOARDS.QTY_STOCK', label, issues);
       if (record.usedQuantity !== undefined) qtyIssue(record.usedQuantity, 'BOARDS.QTY_USED', label, issues);
+      // #790: COST/STK_FLAG authority is optional trailing shape only. Keep
+      // preflight to shape checks (finite number / finite integer), without
+      // inventing ranges, enums, or compiler emission authority.
+      if (record.cost !== undefined) productFiniteNumberShapeIssue(record.cost, 'BOARDS.COST', label, issues);
+      if (record.stockFlag !== undefined) productFiniteIntegerShapeIssue(record.stockFlag, 'BOARDS.STK_FLAG', label, issues);
       break;
     case 'MATERIALS':
       intRangeIssue(record.jobIndex, 'JOBS.JOB_INDEX', label, issues);

@@ -125,6 +125,18 @@ function quantityIssue(value: number, label: string, min: number, issues: Issue[
   }
 }
 
+function finiteNumberShapeIssue(value: number, label: string, issues: Issue[]): void {
+  if (!Number.isFinite(value)) {
+    issues.push({ code: 'INVALID_MAGNITUDE', message: `${label}=${value} must be a finite number` });
+  }
+}
+
+function finiteIntegerShapeIssue(value: number, label: string, issues: Issue[]): void {
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    issues.push({ code: 'INVALID_QUANTITY', message: `${label}=${value} must be a finite integer` });
+  }
+}
+
 function recordLabel(record: PtxRecord): string {
   switch (record.type) {
     case 'JOBS':
@@ -323,6 +335,12 @@ function checkBoard(record: PtxBoardRecord, issues: Issue[]): void {
   }
   if (record.usedQuantity !== undefined) {
     quantityIssue(record.usedQuantity, `${recordLabel(record)} QTY_USED`, 0, issues);
+  }
+  if (record.cost !== undefined) {
+    finiteNumberShapeIssue(record.cost, `${recordLabel(record)} COST`, issues);
+  }
+  if (record.stockFlag !== undefined) {
+    finiteIntegerShapeIssue(record.stockFlag, `${recordLabel(record)} STK_FLAG`, issues);
   }
 }
 

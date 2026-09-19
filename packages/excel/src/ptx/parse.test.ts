@@ -196,7 +196,7 @@ describe('parsePtxText syntax rules', () => {
   it('rejects unknown families, wrong column counts and bad cells', () => {
     expect(captureParseError(() => parsePtxText('WIDGETS,1,2')).code).toBe('UNKNOWN_RECORD_FAMILY');
     expect(captureParseError(() => parsePtxText('JOBS,1')).code).toBe('TOO_FEW_COLUMNS');
-    expect(captureParseError(() => parsePtxText('BOARDS,1,1,B,1,100,50,1,1,EXTRA')).code).toBe(
+    expect(captureParseError(() => parsePtxText('BOARDS,1,1,B,1,100,50,1,1,2.5,1,EXTRA')).code).toBe(
       'TOO_MANY_COLUMNS',
     );
     expect(captureParseError(() => parsePtxText('JOBS,,X')).code).toBe('REQUIRED_FIELD_EMPTY');
@@ -261,6 +261,27 @@ describe('parsePtxText syntax rules', () => {
       'REQUIRED_FIELD_EMPTY',
     );
   });
+
+  it('#790 reads optional trailing BOARDS COST/STK_FLAG without requiring COST', () => {
+    expect(parsePtxText('BOARDS,1,1,B,1,2800,2070,3,1,12.5,1').records[0]).toEqual({
+      type: 'BOARDS',
+      jobIndex: 1,
+      boardIndex: 1,
+      code: 'B',
+      materialIndex: 1,
+      length: 2800,
+      width: 2070,
+      stockQuantity: 3,
+      usedQuantity: 1,
+      cost: 12.5,
+      stockFlag: 1,
+    });
+    expect(parsePtxText('BOARDS,1,1,B,1,2800,2070,3,1,,7').records[0]).toMatchObject({
+      type: 'BOARDS',
+      cost: undefined,
+      stockFlag: 7,
+    });
+  });
 });
 
 describe('parser column tables (independent witness of the documented layouts)', () => {
@@ -277,6 +298,7 @@ describe('parser column tables (independent witness of the documented layouts)',
     expect(PTX_PARSER_FAMILY_SPECS['BOARDS']?.columns).toEqual([
       'JOB_INDEX', 'BRD_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH', 'QTY_STOCK', 'QTY_USED',
     ]);
+    expect(PTX_PARSER_FAMILY_SPECS['BOARDS']?.optionalTrailingColumns).toEqual(['COST', 'STK_FLAG']);
     expect(PTX_PARSER_FAMILY_SPECS['MATERIALS']?.columns).toEqual([
       'JOB_INDEX', 'MAT_INDEX', 'CODE', 'DESC', 'THICK', 'BOOK', 'KERF_RIP', 'KERF_XCT',
       'TRIM_FRIP', 'TRIM_VRIP', 'TRIM_FXCT', 'TRIM_VXCT', 'TRIM_HEAD', 'TRIM_FRCT', 'TRIM_VRCT',
@@ -299,7 +321,8 @@ describe('parser column tables (independent witness of the documented layouts)',
 
   it('agrees with the writer-side implemented widths (records.ts)', () => {
     for (const [family, spec] of Object.entries(PTX_PARSER_FAMILY_SPECS)) {
-      expect(spec.columns, family).toHaveLength(
+      const columns = [...spec.columns, ...(spec.optionalTrailingColumns ?? [])];
+      expect(columns, family).toHaveLength(
         PTX_RECORD_CONTENT_WIDTH[family as keyof typeof PTX_RECORD_CONTENT_WIDTH],
       );
     }
