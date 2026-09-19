@@ -54,11 +54,14 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 
 - [x] **T6 — Require r5 part-local policy with partLabels** (delegated writer; trigger: multi-file write)
   - Fail-closed compiler preflight now rejects `partLabels` paired with absent or `placement`; the explicit local policy and all no-label historical/reusable combinations remain valid.
-  - Added CNC=false bytes→parse E2E coverage proving absent DRAWING/BARCODE1 and authoritative BARCODE2.
-  - Current rotated fixture/mutation and historical r2/r3/r4/F92 paths remain covered. Writer evidence: Excel 45 files / 539 passed / 3 skipped; diff check clean. Commit identity recorded after the work-unit commit.
+  - Added CNC=false bytes→parse E2E coverage proving absent DRAWING/BARCODE1 and authoritative BARCODE2 bound to `PARTS_REQ.CODE`; no CNC implementation change.
+  - Current rotated fixture/mutation and historical r2/r3/r4/F92 paths remain covered. Writer evidence: Excel 45 files / 539 passed / 3 skipped; diff check clean. Work-unit commit: `d68aa969cbc47d243f1d51828ffbfa87866e3718`.
 
-- [ ] **T7 — Document, verify, and publish final policy gate** (delegated docs/verification)
-  - State that the r5 labels combination is explicit and fail-closed; do not say labels auto-select the policy. Re-run requested evidence and wait for exact-head CI.
+- [x] **T7 — Document final policy gate and pending verification** (docs/progress only)
+  - Documented that `partLabels` requires `partsReqDimensionPolicy='part-local-pre-rotation-cut'`; absent/`placement` with labels fails closed as `ptx_compile.options_invalid`, and labels do not auto-select or infer the policy.
+  - Documented that no-label absent/`placement` retain historical behavior and no-label part-local is reusable/valid.
+  - Recorded CNC=false bytes→parse E2E evidence: DRAWING/BARCODE1 absent and BARCODE2 bound to `PARTS_REQ.CODE`; no CNC implementation change.
+  - Recorded commit `d68aa969cbc47d243f1d51828ffbfa87866e3718`, prior writer evidence 45 files / 539 passed / 3 skipped / diff clean, and final new-head verification/selector/CI still pending. No delivery-complete or receiver/machine acceptance claim.
 
 ## Acceptance / required checks
 
@@ -84,8 +87,9 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 - 2026-09-19: Published `f0543e7766730cf07e6917c2217cb5e496194f5d` to the existing PR #797. Its exact-head CI reached SUCCESS for all reported checks. New independent review identified the separate rotated-placement identity blocker, authorized as T4/T5 only.
 - 2026-09-19: T4 completed by one scoped writer: the explicit r5 `part-local-pre-rotation-cut` policy was added to compiler and independent readback, with positive/negative rotated and non-rotated tests. Package Excel suite remained 45 files / 534 passed / 3 skipped; diff check clean. Work-unit commit `f4dac0af791fd58052b49b7acf91a31c70ebd118` records T4.
 - 2026-09-19: Published `0a524cc8c410bcfc17f59d1948a339fac0321056` to the same PR #797; exact-head CI reached SUCCESS. Final independent review identified the fail-open labels/policy configuration and missing CNC=false bytes→parse coverage, authorized as T6/T7 only.
-- 2026-09-19: T6 completed by one scoped writer: `partLabels` now requires the explicit r5 local policy; no-label policies remain valid, and CNC=false survives compiler→bytes→parse with only BARCODE2. Excel suite passed 45 files / 539 passed / 3 skipped; diff check clean.
+- 2026-09-19: T6 completed by one scoped writer: `partLabels` now requires the explicit r5 local policy; no-label policies remain valid, and CNC=false survives compiler→bytes→parse with only BARCODE2 bound to `PARTS_REQ.CODE`. Excel suite passed 45 files / 539 passed / 3 skipped; diff check clean. Work-unit commit `d68aa969cbc47d243f1d51828ffbfa87866e3718`.
+- 2026-09-19: T7 documentation/progress-only update recorded the final policy gate and pending evidence: final new-head verification, selector, and CI remain pending; no delivery-complete or receiver/machine acceptance claim.
 
 ## Next step
 
-Commit T6, then complete T7 documentation, verification, and publication on the same existing PR branch.
+Run final new-head verification/selector/CI when authorized, then publish/update the same existing PR branch without claiming delivery complete until those checks are observed.

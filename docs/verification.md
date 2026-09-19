@@ -568,8 +568,18 @@ selector corrió una sola vez con 3600 s y seleccionó `typescript`, `backend-go
 `organization-browser`, pero ninguno de esos gates corrió ni cuenta como PASS
 local.
 
-T5 sigue en curso: falta push al mismo PR #797 y CI exact-head del nuevo HEAD;
-no hay claim de entrega completa.
+T6/T7 documental quedan registrados en el HEAD
+`d68aa969cbc47d243f1d51828ffbfa87866e3718`. `partLabels` requiere
+`partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`; `partLabels` con la
+política ausente o `placement` falla cerrado como `ptx_compile.options_invalid`.
+Las etiquetas no auto-seleccionan ni infieren esa política. Sin etiquetas, la
+opción ausente/`placement` conserva el comportamiento histórico, y sin etiquetas
+`part-local-pre-rotation-cut` es reutilizable/válida. La cobertura E2E
+CNC=false compiler→bytes→parse confirma DRAWING/BARCODE1 ausentes y BARCODE2
+ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC. Evidencia del
+writer previo: Excel 45 archivos / 539 PASS / 3 skips y `git diff --check`
+limpio. La verificación final del nuevo HEAD, el selector y CI exact-head siguen
+pendientes; no hay claim de entrega completa ni de aceptación de receptor/máquina.
 
 Cobertura contractual exigida por #789/#797:
 
@@ -583,8 +593,11 @@ Cobertura contractual exigida por #789/#797:
 - dimensión PARTS_REQ r5: `partsReqDimensionPolicy:
   'part-local-pre-rotation-cut'` es política explícita del candidato r5;
   `PARTS_REQ.LENGTH/WIDTH` expresan el corte local de pieza antes de rotación,
-  `GRAIN=0` permite rotación, y la política ausente/`placement` preserva r2/r3/r4
-  byte-exact sin acoplarse a `partLabels`;
+  `GRAIN=0` permite rotación; `partLabels` requiere esta política y falla
+  cerrado como `ptx_compile.options_invalid` si la política está ausente o es
+  `placement`; las etiquetas no auto-seleccionan ni infieren la política; sin
+  etiquetas, la política ausente/`placement` preserva r2/r3/r4 byte-exact y
+  `part-local-pre-rotation-cut` sigue siendo reutilizable/válida;
 - fixture rotado vigente: pieza real `rotated === true`, colocada `39×549`,
   `PARTS_REQ 549×39`, `GRAIN=0`, `FIN 550×40`, `EDGE2`/`EDGE4`; la mutación
   vieja a dimensiones colocadas falla con `parts.dims` y el no rotado conserva
@@ -605,7 +618,10 @@ Cobertura contractual exigida por #789/#797:
 - puente CNC: DRAWING/BARCODE1 sólo existen con autoridad CNC explícita y
   `cncScope` congelado no vacío; `D<hex12>` deriva de scope+CNC/release y
   código de fabricación, no de un basename futuro para mecanizado desconocido;
-  autoridad false/ausente deja DRAWING/BARCODE1 vacíos; duplicados bloquean;
+  autoridad false/ausente deja DRAWING/BARCODE1 vacíos; el E2E
+  CNC=false compiler→bytes→parse confirma DRAWING/BARCODE1 ausentes y
+  BARCODE2 ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC;
+  duplicados bloquean;
 - LABEL_QTY/quantities: una etiqueta por pieza física (`LABEL_QTY="1"`) y
   cantidades inválidas de filas de ingeniería (0, negativas o decimales)
   fallan cerrado;

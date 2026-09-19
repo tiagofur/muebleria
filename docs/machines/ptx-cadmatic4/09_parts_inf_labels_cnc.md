@@ -102,10 +102,15 @@ clave de la proyección es exactamente el `PARTS_REQ.CODE` del candidato.
   optimizador coloca una pieza rotada, el compiler escribe `PARTS_REQ`
   intercambiando las dimensiones colocadas de vuelta al frame local de corte
   de la pieza; no recalcula descuentos ni inventa una segunda geometría.
-- **Compatibilidad histórica:** la opción ausente, o `placement`, conserva la
-  política r2/r3/r4 byte-exact: `PARTS_REQ` refleja las dimensiones colocadas.
-  Esta compatibilidad no depende de `partLabels`; `partLabels` no cambia por
-  sí mismo la política de dimensiones.
+- **Gate de etiquetas r5:** `partLabels` requiere
+  `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`. `partLabels` con
+  la política ausente o con `placement` falla cerrado en el compiler con
+  `ptx_compile.options_invalid`; las etiquetas NO seleccionan ni infieren
+  automáticamente la política local.
+- **Compatibilidad histórica:** sin `partLabels`, la opción ausente o
+  `placement` conserva la política r2/r3/r4 byte-exact: `PARTS_REQ` refleja
+  las dimensiones colocadas. Sin etiquetas,
+  `part-local-pre-rotation-cut` también es una opción reutilizable y válida.
 - **Readback independiente:** `verifyCutPlanPtxReadback` aplica una derivación
   condicional independiente de la del compiler. `FIN_LENGTH`/`FIN_WIDTH` se
   mantienen como dimensiones terminadas originales, y la identidad esperada
@@ -250,8 +255,10 @@ de lados/cantos ya viaja en EDGE1..4.
 - Gates del compiler: `label_missing`, `label_code_unknown`,
   `label_code_duplicate`, `label_drawing_duplicate`,
   `label_barcode_duplicate`, `label_invalid`, `options_invalid`
-  (partLabels exige `partCodeAuthority: 'workshop-labelref'`;
-  `partsUdi: 'structural'` exige partLabels).
+  (`partLabels` exige `partCodeAuthority: 'workshop-labelref'` y
+  `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`; `partLabels` con
+  política ausente/`placement` falla cerrado; las etiquetas no infieren esa
+  política; `partsUdi: 'structural'` exige partLabels).
 - Fixtures nuevos: `cutPlanPtxLabelsGolden.ts` (2 módulos, 3 unidades
   físicas con ocurrencia repetida, orden léxico OPUESTO al de ordinales
   —trampa antisimétrica—, nombres de pieza distintos, patrones de canto
@@ -261,7 +268,10 @@ de lados/cantos ya viaja en EDGE1..4.
   real del optimizador con `grain=0` y `allowRotationNoGrain`: la pieza queda
   `rotated === true`, colocada `39×549`, `PARTS_REQ 549×39`, `FIN 550×40`,
   `EDGE2`/`EDGE4`; preserva lados físicos L1/L2/W1/W2 en la etiqueta (no
-  ejes del tablero), y pasa serialize→parse→readback independiente. Tests en
+  ejes del tablero), y pasa serialize→parse→readback independiente. El
+  hardening T6 agrega cobertura E2E compiler→bytes→parse con
+  `hasCncMachining: false`, confirmando DRAWING/BARCODE1 ausentes y BARCODE2
+  ligado a `PARTS_REQ.CODE` sin cambiar la implementación CNC. Tests en
   `partLabels.test.ts`, `compileCutPlan.partsInf.test.ts`,
   `specPreflight.test.ts` (#789), `roundtrip.test.ts` (#789) y
   `externalDialect.test.ts` (R2201/R7301 ahora leídas TIPADAS en
@@ -321,8 +331,18 @@ seleccionó los jobs `typescript`, `backend-go`, `sketchup-extension`,
 `proyectar-visual`, `foundation-postgres` y `organization-browser`; ninguno de
 esos gates corrió ni se registra como PASS local.
 
-T5 sigue en curso: falta push al mismo PR #797 y CI exact-head del nuevo HEAD.
-No hay claim de entrega completa hasta observar esos checks en el HEAD exacto.
+T6 quedó registrado en el HEAD `d68aa969cbc47d243f1d51828ffbfa87866e3718`:
+`partLabels` exige `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`;
+`partLabels` con política ausente/`placement` falla cerrado como
+`ptx_compile.options_invalid`; las etiquetas no auto-seleccionan ni infieren esa
+política; sin etiquetas, las políticas ausente/`placement` conservan el
+comportamiento histórico y `part-local-pre-rotation-cut` es reutilizable/válida.
+La cobertura E2E CNC=false compiler→bytes→parse confirma DRAWING/BARCODE1
+ausentes y BARCODE2 ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC.
+Evidencia del writer previo: Excel 45 archivos / 539 PASS / 3 skips y
+`git diff --check` limpio. La verificación final del nuevo HEAD, el selector y
+CI exact-head siguen pendientes; no hay claim de entrega completa ni de
+aceptación de receptor/máquina.
 
 Inmutabilidad r2/r3/r4: los goldens históricos se recompilan byte-exact dentro
 de la suite focalizada; r2/r3/r4, FUNCTION 92, perfiles/adapters y salidas de
