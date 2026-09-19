@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "comment": "Canonical #669 SKP<->GLB parity fixture. Single numeric authority shared by TS domain, Go domain and the SketchUp TestUp host smoke. Evolves the #668 edge-wireframe bracket (progress/host_smoke_668_mount_frame_geometry_evidence.json) into a closed triangulated solid suitable for GLB, keeping the proven dimensions, MountFrame, reference points and placement-chain constants unchanged. expectedWorldMm values are hand-derived contract constants (independent arithmetic documented in this file), never produced by the transform functions under test.",
+  "issue": 669,
+  "provenance": {
+    "derivedFrom": "apps/sketchup-extension/test/testup/TC_MerivoboxPilotSmoke.rb E9/E10 bracket constants (#668)",
+    "hostEvidence": "progress/host_smoke_668_mount_frame_geometry_evidence.json",
+    "verifiedAt": "2026-09-19",
+    "dossier": "docs/architecture/hardware-3d-assets-and-assemblies.md sections 5, 7, 18 (V05)"
+  },
+  "asset": {
+    "name": "bracket-glb-parity",
+    "description": "Asymmetric L-shaped stepped bracket, closed solid: bottom outline extruded in +Z. Distinct X/Y/Z extents, geometric origin different from the mounting point, non-collinear reference points.",
+    "solid": {
+      "bottomOutlineMm": [
+        [17.0, 23.0, 11.0],
+        [87.0, 23.0, 11.0],
+        [87.0, 41.0, 11.0],
+        [31.0, 41.0, 11.0],
+        [31.0, 77.0, 11.0],
+        [17.0, 77.0, 11.0]
+      ],
+      "extrusionHeightMm": 18.0
+    },
+    "nominalExtentsMm": [70.0, 54.0, 18.0],
+    "referencePointsAssetMm": [
+      [17.0, 23.0, 11.0],
+      [87.0, 23.0, 11.0],
+      [31.0, 77.0, 11.0]
+    ],
+    "mountFrame": {
+      "originMm": [25.0, 30.0, 15.0],
+      "basis": {
+        "x": [0.0, 1.0, 0.0],
+        "y": [-1.0, 0.0, 0.0],
+        "z": [0.0, 0.0, 1.0]
+      }
+    }
+  },
+  "glbRepresentation": {
+    "fixtureFile": "contracts/fixtures/glb-parity-bracket.glb",
+    "producer": "SketchUp host smoke writes this file through GraneteForSketchup::Assets::GlbWriter from the solid above; the committed bytes are the host-produced evidence and CI tests must load exactly these bytes.",
+    "exporter": {
+      "name": "granete-sketchup-glb-exporter",
+      "version": "1.0.0"
+    },
+    "sourceUnits": "m",
+    "upAxis": "y",
+    "assetToGlb": "asset (x,y,z) mm Z-up -> glb (x, z, -y) m Y-up: glbX = x/1000, glbY = z/1000, glbZ = -y/1000",
+    "glbToAssetMm": "glb (X,Y,Z) m Y-up -> asset (X, -Z, Y) mm Z-up: assetX = X*1000, assetY = -Z*1000, assetZ = Y*1000",
+    "expectedGlbReferencePointsM": [
+      [0.017, 0.011, -0.023],
+      [0.087, 0.011, -0.023],
+      [0.031, 0.011, -0.077]
+    ]
+  },
+  "placementChain": {
+    "furniture": {
+      "translationMm": [1200.0, 600.0, 300.0],
+      "basis": "identity"
+    },
+    "assembly": {
+      "translationMm": [15.0, 50.0, 100.0],
+      "basis": "identity"
+    },
+    "member": {
+      "translationMm": [3.0, 7.0, 1.0],
+      "basis": {
+        "x": [1.0, 0.0, 0.0],
+        "y": [0.0, 0.0, 1.0],
+        "z": [0.0, -1.0, 0.0]
+      }
+    }
+  },
+  "expected": {
+    "assetNormalization": {
+      "translationMm": [-30.0, 25.0, -15.0],
+      "basis": {
+        "x": [0.0, -1.0, 0.0],
+        "y": [1.0, 0.0, 0.0],
+        "z": [0.0, 0.0, 1.0]
+      }
+    },
+    "effectiveMemberTransform": {
+      "translationMm": [-27.0, 22.0, 26.0],
+      "basis": {
+        "x": [0.0, 0.0, -1.0],
+        "y": [1.0, 0.0, 0.0],
+        "z": [0.0, -1.0, 0.0]
+      }
+    },
+    "referencePoints": [
+      {
+        "assetMm": [17.0, 23.0, 11.0],
+        "expectedWorldMm": [1211.0, 661.0, 409.0]
+      },
+      {
+        "assetMm": [87.0, 23.0, 11.0],
+        "expectedWorldMm": [1211.0, 661.0, 339.0]
+      },
+      {
+        "assetMm": [31.0, 77.0, 11.0],
+        "expectedWorldMm": [1265.0, 661.0, 395.0]
+      }
+    ],
+    "pairwiseDistancesMm": {
+      "p0p1": 70.0,
+      "p1p2": 77.79460135510689,
+      "p0p2": 55.78530272392541
+    },
+    "rigidity": {
+      "scale": [1.0, 1.0, 1.0],
+      "determinant": 1.0
+    },
+    "tolerance": {
+      "worldPointToleranceMm": 0.001,
+      "glbVertexMatchToleranceM": 1e-06,
+      "mutantMinErrorMm": 1.0
+    }
+  },
+  "handDerivation": "T_norm = inverse(T_mountFrame): R_norm = R_mount^T has columns x=(0,-1,0), y=(1,0,0), z=(0,0,1); t_norm = -R_norm.(25,30,15) = (-30,25,-15). Effective member transform = T_member x T_norm: basis rows of R_member are (1,0,0),(0,0,-1),(0,1,0); R_eff = R_member.R_norm = [[0,1,0],[0,0,-1],[-1,0,0]] with columns x=(0,0,-1), y=(1,0,0), z=(0,-1,0), det=+1; t_eff = (3,7,1) + R_member.(-30,25,-15) = (-27,22,26). P0=(17,23,11): R_eff.P0 = (23,-11,-17); +t_eff = (-4,11,9); +assembly = (11,61,109); +furniture = (1211,661,409). Same arithmetic gives P1 -> (1211,661,339) and P2 -> (1265,661,395). These world constants equal the #668 host-measured evidence (actualWorldMm), so SketchUp host, TS and Go all assert against the same independently derived numbers."
+}

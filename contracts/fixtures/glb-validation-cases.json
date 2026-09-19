@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "comment": "GLB ingestion validation contract (#669). The same byte/JSON mutations are applied by the Go upload-side validator suite and the TS domain reader suite against contracts/fixtures/glb-parity-bracket.glb, so both validators enforce the same self-containment policy and neither can drift. Expect 'valid' cases to pass every check; 'invalid' cases must be rejected before an immutable revision exists.",
+  "fixture": "glb-parity-bracket.glb",
+  "cases": [
+    {
+      "name": "valid-canonical",
+      "expect": "valid",
+      "mutation": null
+    },
+    {
+      "name": "bad-magic",
+      "expect": "invalid",
+      "mutation": { "type": "bytes", "offset": 0, "hex": "58" }
+    },
+    {
+      "name": "bad-container-version",
+      "expect": "invalid",
+      "mutation": { "type": "bytes", "offset": 4, "hex": "01000000" }
+    },
+    {
+      "name": "total-length-mismatch",
+      "expect": "invalid",
+      "mutation": { "type": "bytes", "offset": 8, "hex": "04000000" }
+    },
+    {
+      "name": "corrupt-json-chunk",
+      "expect": "invalid",
+      "mutation": { "type": "bytes", "offset": 21, "hex": "7b" }
+    },
+    {
+      "name": "truncated-container",
+      "expect": "invalid",
+      "mutation": { "type": "truncate", "bytesFromEnd": 8 }
+    },
+    {
+      "name": "external-buffer-uri",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "buffers.0.uri",
+        "value": "https://external.example/bracket.bin"
+      }
+    },
+    {
+      "name": "external-image-uri",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "images",
+        "value": [{ "uri": "https://external.example/tex.png" }]
+      }
+    },
+    {
+      "name": "image-without-bufferview",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "images",
+        "value": [{ "mimeType": "image/png" }]
+      }
+    },
+    {
+      "name": "required-extension",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "extensionsRequired",
+        "value": ["KHR_draco_mesh_compression"]
+      }
+    },
+    {
+      "name": "two-buffers",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "buffers",
+        "value": [{ "byteLength": 100 }, { "byteLength": 100 }]
+      }
+    },
+    {
+      "name": "no-meshes",
+      "expect": "invalid",
+      "mutation": { "type": "json-set", "path": "meshes", "value": [] }
+    },
+    {
+      "name": "primitive-without-position",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "meshes.0.primitives.0.attributes",
+        "value": {}
+      }
+    },
+    {
+      "name": "primitive-mode-lines",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "meshes.0.primitives.0.mode",
+        "value": 1
+      }
+    },
+    {
+      "name": "position-accessor-range-overrun",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "accessors.0.count",
+        "value": 1000000
+      }
+    },
+    {
+      "name": "buffer-byte-length-overrun",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "buffers.0.byteLength",
+        "value": 99999999
+      }
+    },
+    {
+      "name": "rename-generator-is-valid",
+      "expect": "valid",
+      "mutation": {
+        "type": "json-set",
+        "path": "asset.generator",
+        "value": "another-exporter 9.9"
+      }
+    }
+  ]
+}

@@ -1474,3 +1474,6 @@ export {
 
 // Agregado Hardware Assembly (#670)
 export * from "./agregadoAssembly";
+
+// GLB representation contract (#669)
+export * from "./glbRepresentation";

@@ -1,0 +1,177 @@
+{
+  "head": "b7446866ed247677d8b8f83238cddbd96579db97",
+  "rbzSha256": "b27f0df1efc4993e433d9b46f3b7aa651406c60b33888bcaff09c788b933a019",
+  "sketchupVersion": "26.2.242",
+  "canonicalFixture": "contracts/fixtures/glb-parity-canonical.json",
+  "glbFixture": "contracts/fixtures/glb-parity-bracket.glb",
+  "export": {
+    "exporter": "granete-sketchup-glb-exporter",
+    "exporterVersion": "1.0.0",
+    "faces": 8,
+    "triangles": 20,
+    "vertices": 12,
+    "byteLength": 1248,
+    "deterministicRewrite": true
+  },
+  "skpSide": {
+    "p0": {
+      "assetMm": [
+        17.0,
+        23.0,
+        11.0
+      ],
+      "actualWorldMm": [
+        1211.0,
+        661.0,
+        409.0
+      ],
+      "errorMm": 0.0
+    },
+    "p1": {
+      "assetMm": [
+        87.0,
+        23.0,
+        11.0
+      ],
+      "actualWorldMm": [
+        1211.0,
+        661.0,
+        339.00000000000006
+      ],
+      "errorMm": 5.684341886080802e-14
+    },
+    "p2": {
+      "assetMm": [
+        31.0,
+        77.0,
+        11.0
+      ],
+      "actualWorldMm": [
+        1265.0,
+        661.0,
+        395.00000000000006
+      ],
+      "errorMm": 5.684341886080802e-14
+    }
+  },
+  "glbSide": {
+    "p0": {
+      "expectedGlbM": [
+        0.017,
+        0.011,
+        -0.023
+      ],
+      "assetMm": [
+        17.000000923871994,
+        23.000000044703484,
+        10.999999940395355
+      ],
+      "actualWorldMm": [
+        1211.0000000447035,
+        661.0000000596046,
+        408.999999076128
+      ],
+      "errorMm": 9.268713915398113e-07
+    },
+    "p1": {
+      "expectedGlbM": [
+        0.087,
+        0.011,
+        -0.023
+      ],
+      "assetMm": [
+        86.99999749660492,
+        23.000000044703484,
+        10.999999940395355
+      ],
+      "actualWorldMm": [
+        1211.0000000447035,
+        661.0000000596046,
+        339.0000025033951
+      ],
+      "errorMm": 2.504503552508403e-06
+    },
+    "p2": {
+      "expectedGlbM": [
+        0.031,
+        0.011,
+        -0.077
+      ],
+      "assetMm": [
+        30.99999949336052,
+        76.99999958276749,
+        10.999999940395355
+      ],
+      "actualWorldMm": [
+        1264.9999995827675,
+        661.0000000596046,
+        395.0000005066395
+      ],
+      "errorMm": 6.59029018506288e-07
+    }
+  },
+  "parity": {
+    "p0": {
+      "skpGlbDeltaMm": 9.268713915398113e-07,
+      "expectedWorldMm": [
+        1211.0,
+        661.0,
+        409.0
+      ]
+    },
+    "p1": {
+      "skpGlbDeltaMm": 2.504503495690142e-06,
+      "expectedWorldMm": [
+        1211.0,
+        661.0,
+        339.0
+      ]
+    },
+    "p2": {
+      "skpGlbDeltaMm": 6.590289748069686e-07,
+      "expectedWorldMm": [
+        1265.0,
+        661.0,
+        395.0
+      ]
+    },
+    "dimensionsMm": [
+      69.99999657273293,
+      53.999999538064,
+      17.999999225139618
+    ],
+    "nominalExtentsMm": [
+      70.0,
+      54.0,
+      18.0
+    ],
+    "pairwiseDistancesMm": [
+      69.99999657273293,
+      77.79459959710756,
+      55.785301917768564
+    ]
+  },
+  "rigidity": {
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "determinant": 1.0
+  },
+  "mutantSensitivityMinErrorMm": {
+    "unit_x25_4": 747.6918076422772,
+    "unit_div25_4": 29.436685360904484,
+    "unit_x1000": 30612.463784672338,
+    "unit_div1000": 30.612463785197118,
+    "omitted": 32.03123475609393,
+    "double": 32.03123475609393,
+    "transposed": 21.260290900747325
+  },
+  "glbSha256": "bc98563a102e2da9038ba6d588a8726c6fc9b7184e32a8a1bf7631dc710d9aba",
+  "tests": {
+    "glb_parity_gate_p0": {
+      "status": "pass"
+    }
+  }
+}
