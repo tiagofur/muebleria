@@ -1,0 +1,1752 @@
+# Archived `progress/current.md` snapshot — 2026-09-19
+
+> Immutable historical snapshot captured from `main` after PR #797 / issue #789 merged.
+> This file preserves the former operational ledger verbatim below this separator.
+> Do not append new progress here; active status lives in `progress/current.md`.
+
+---
+# Issue #789 — [P0][PTX-CAD4][R5-B] PARTS_INF/PARTS_UDI, etiquetas, cantos y puente de identidad CNC
+
+- **PR #797 hardening T7 documentación/progreso final local sobre T6 (candidato `18d09e350c741b2c1a5f38ee95df22a1b161b700`)**: se registra la política final sin ampliar alcance ni reclamar aceptación de receptor/máquina. `partLabels` requiere `partsReqDimensionPolicy='part-local-pre-rotation-cut'`; si `partLabels` se usa con política ausente o `placement`, el compiler falla cerrado con `ptx_compile.options_invalid`. Las etiquetas no auto-seleccionan ni infieren la política. Sin etiquetas, la opción ausente/`placement` conserva el comportamiento histórico, y sin etiquetas `part-local-pre-rotation-cut` es reutilizable/válida. La cobertura E2E CNC=false compiler→bytes→parse confirma DRAWING/BARCODE1 ausentes y BARCODE2 ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC. Evidencia local final del candidato: Excel 45 archivos / 539 PASS / 3 skips, `pnpm typecheck` PASS y `git diff --check` PASS. El selector autorizado corrió una sola vez con 3600 s en `18d09e350c741b2c1a5f38ee95df22a1b161b700` contra base `b7446866ed247677d8b8f83238cddbd96579db97` y bloqueó antes de selected gates porque falta un `DATABASE_URL` aislado; los gates seleccionados de TypeScript/Go/Ruby/WebGL/Foundation no corrieron localmente y no son evidencia PASS. Nota de alcance CNC correcta para #793: el scope productivo debe derivar desde `CutPlan.releaseBase.manufacturingFingerprint` o equivalente congelado autoritativo y bloquear sin `releaseBase`; `release:789:r5:*` queda como fixture de laboratorio. T7 sigue en curso para push/CI del mismo PR #797; CI final del nuevo HEAD pendiente; sin claim de entrega completa ni de aceptación de receptor/máquina.
+
+- **PR #797 hardening T5 sobre T4 (candidato local final `ed1d5066b61db18da64e774879f8f14f59b16011`)**: se documenta la corrección r5 de dimensiones sin ampliar alcance ni reclamar aceptación de receptor/máquina. SPEC: `PARTS_REQ.LENGTH/WIDTH` describen dimensiones locales de pieza de lista de corte y `GRAIN=0` permite rotación. PRODUCT POLICY r5: `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`; al rotar, `PARTS_REQ` vuelve las dimensiones colocadas al frame local de corte de pieza sin recalcular descuentos. La opción ausente/`placement` preserva r2/r3/r4 byte-exact y no se acopla a `partLabels`. Readback independiente: derivación condicional separada; `FIN_*` conserva dimensiones terminadas originales y `FIN = corte local de pieza + descuentos de canto`. Fixture vigente: rotado true, colocado 39×549, `PARTS_REQ 549×39`, `grain 0`, `FIN 550×40`, `EDGE2`/`EDGE4`; la mutación vieja a dimensiones colocadas falla con `parts.dims` y el no rotado conserva igualdad. Nota de alcance CNC: #793 productivo debe derivar scope desde `CutPlan.releaseBase.manufacturingFingerprint` o equivalente congelado autoritativo y bloquear sin `releaseBase`; `release:789:r5:*` queda como fixture de laboratorio. Work-unit de política: `f4dac0af791fd58052b49b7acf91a31c70ebd118`; corrección test-only posterior: `ed1d5066b61db18da64e774879f8f14f59b16011`, que importa `PtxRecord` después de la falla inicial de `pnpm typecheck` del candidato. Evidencia local final en `ed1d5066`: Excel 45 archivos / 534 PASS / 3 skips; `pnpm typecheck` PASS; `git diff --check` PASS. El selector autorizado corrió una vez con 3600 s en `ed1d5066` contra base `b7446866ed247677d8b8f83238cddbd96579db97` y bloqueó antes de gates por falta de `DATABASE_URL` aislado; los jobs seleccionados no corrieron y no cuentan como PASS local. T5 sigue en curso/pending: falta push al mismo PR #797 y CI exact-head del nuevo HEAD; sin claim de entrega completa.
+
+
+- Approval: issue #789 OPEN `status:approved`, `type:feature`, `high`, `domain`, parent #787 (verificada al iniciar; único PR abierto #796 = assemblies/hardware, superficie distinta). Base `origin/main@056907e2` (post-merge PR #795/#788). Rama `feat/789-ptx-parts-inf-labels-cnc`. Un writer. Sólo #789: sin receiver profile/MATERIALS tuning (#790), sin semántica CUTS/F92 (#791), sin RLT/field pack (#792), sin profile r5/adapter 1.4.0/routing (#793). r2/r3/r4 sin cambios de bytes/digests; adapter/profile NO versionados.
+- Autoridad documental NUEVA extraída de la fuente primaria (S03 V11 Interface Guide, decodificación PDF CID+0x1D, 2026-09-19): diccionario §20 pp.168–171 completo — PARTS_INF son **32 columnas documentadas** con JOB_INDEX IDX 1-250, PART_INDEX IDX 1-9999 y TODO el resto **TXT 200** (incluidos LABEL_QTY/FIN_LENGTH/FIN_WIDTH/PROD_WIDTH/HGT/DEPTH/PROD_NUM: el modelo tipado lleva strings y el preflight NO aplica DIM/QTY a esta familia — no hay autoridad); los nombres nominales usados por Granete son **CORE_MAT** (no CORE) y PALLET, con EDGE1="Btm length", EDGE2="Top length", EDGE3="Left width", EDGE4="Right width"; PARTS_UDI = JOB/PART_INDEX + **INFO1..INFO60** homogéneas TXT 200. La ayuda CADLink (§5 p.240) cuenta "28 PARTS_INF / 60 PARTS_UDI" para sus information boxes — discrepancia registrada, el ancho del writer sigue al diccionario (32) y el shape final es de #790.
+- Implementación (aditiva; cambio de superficie SÓLO `packages/excel/src/ptx/*` + index):
+  1. **Modelo tipado** (`records.ts`): `PtxPartsInfRecord` (32 columnas, strings TXT) y `PtxPartsUdiRecord` (JOB/PART + array posicional INFO1..60; trailing omitido = disciplina OFFCUTS.OFC_QTY). Parser: specs de familia con prefijo requerido 2, acepta filas cortas (muestras R2201: 29 celdas PARTS_INF, 6 PARTS_UDI), TOO_MANY_COLUMNS >32/>62. Serializer: PARTS_INF a ancho completo (32 celdas, vacíos finales = filosofía JOBS), PARTS_UDI sólo el prefijo INFO definido.
+  2. **Proyección industrial congelada** (`partLabels.ts` NUEVO): `PtxPartLabelData` (una por pieza física) + `buildPtxPartLabels`. ÚNICO sitio de traducción L/W→EDGE: **L2→EDGE1, L1→EDGE2, W1→EDGE3, W2→EDGE4** (convención Granete documentada en PlankEdgeDiagram/zplLabels vs comentarios de columna §20; mapeo deliberadamente NO simétrico). Medidas terminadas COPIADAS de la fila de ingeniería (el descuento vive sólo en unrollRows); expansión quantity>1 con el MISMO sufijo -C<n> del optimizador; ordinal congelado (#781) para PROD_NUM; ROOM del espacio nombrado; LABEL_QTY=1 por pieza (política, no copia de muestra). Puente CNC: `D<hex12>` = sha256 namespaced del manufacturingPartCode (misma disciplina 48-bit que el filename r4, espacio de nombres distinto), BARCODE1=`*D<hex12>*` (Code 39 como las muestras), BARCODE2=código de fabricación; pieza sin mecanizado → DRAWING/BARCODE1 vacíos.
+  3. **Compiler** (`compileCutPlan.ts`): opciones `partLabels` + `partsUdi:'structural'`; PARTS_INF/PARTS_UDI en bloques contiguos inmediatamente tras PARTS_REQ (adyacencia RECEIVER_EVIDENCED; el resto del orden NO se toca — #790). Gates fail-closed: `label_missing`/`label_code_unknown`/`label_code_duplicate`/`label_drawing_duplicate`/`label_barcode_duplicate`/`label_invalid` (BARCODE2≠código, LABEL_QTY inválido) + `options_invalid` (partLabels exige workshop-labelref; partsUdi exige partLabels). Mapping extendido con `partLabelByPartIndex` (auditoría inversa). Sin la opción: cero filas PARTS_INF/UDI (bytes históricos intactos).
+  4. **validate.ts**: referencias (job,part)→PARTS_REQ, unicidad por pieza (PRODUCT — el diccionario NO documenta unicidad; documentado), ASCII imprimible en TXT.
+  5. **specPreflight.ts**: TXT 200 en las 30 columnas de texto PARTS_INF + INFO1..60, IDX 1-250/1-9999, referencias unknown — en document Y bytes; separación SPEC vs PRODUCT conservada (unicidad no es spec).
+  6. **externalDialect.ts**: PARTS_INF/PARTS_UDI dejan de ser opacas — R2201/R7301 se leen TIPADAS con relaciones verificadas; quedan opacas PARTS_DST/PTN_UDI/NOTES. Observación registrada: la fila 3 de R2201 lleva una celda vacía MÁS que las filas 1-2 (ST_AJUSTE cae en PRODUCT bajo lectura por posición documentada) — dialecto del cliente, se lee literal sin interpretar.
+  7. **verifyCutPlanPtxReadback.ts**: desde bytes, cada PARTS_INF debe ser la proyección pura de la etiqueta de SU pieza (todas las celdas + campos sin autoridad AUSENTES = `parts_inf.authority_violation`) y la identidad de medidas se re-deriva de forma independiente (`parts_inf.finished_identity`: fila terminada del optimizador `originalLength/WidthMm` pre-rotación Y corte colocado + descuento deben coincidir con la etiqueta — una etiqueta cableada a la pieza equivocada falla).
+- Campos SIN autoridad quedan vacíos (documentado): EDG_PG1..4 (sin código de operación de canto), FACE_LAM/BACK_LAM, PALLET, COLOUR, SECOND_CUT_*. CORE_MAT toma `ProductionCutRow.materialCode` como autoridad de tablero sin tuning receptor. PARTS_UDI: INFO2 (encoding compacto `2WE2LE`-style) clasificado **UNKNOWN y jamás generado**; INFO1=pictureRef opcional (hoy vacío); INFO3/4 RECEIVER_EVIDENCED → vacíos hasta #790.
+- Fixtures/tests nuevos: `cutPlanPtxLabelsGolden.ts` (2 módulos, 3 unidades físicas, ocurrencia repetida -L2 con ROOM distinto, orden léxico de módulos OPUESTO al de ordinales —trampa antisimétrica—, nombres de pieza distintos, patrones de canto 3+1/todos/1-L2/sólo-eje-W/ninguno, 2 materiales + 2 cantos con espesores distintos, qty-2 con -C2, ORDER, drawing refs, barcodes); `partLabels.test.ts` (27: trampas de orientación, identidad de medidas, -Cn, determinismo D-ref, fail-closed); `compileCutPlan.partsInf.test.ts` (21: golden end-to-end serializeSpecChecked→parse→readback===[], determinismo, posición de bloques, PROD_NUM/ROOM sin cruces, cantos, identidad de medidas DESDE BYTES, D/BARCODE únicos, UDI estructural, gates fail-closed); specPreflight #789 (9), roundtrip #789 (4), externalDialect actualizado (22). Limitación honesta documentada: un canto por pieza ⇒ dos lados encintados con el mismo código no se distinguen por valor; las trampas cubren todo patrón distinguible por lado/eje.
+- Evidence histórica previa a PR #797 (HEAD de la rama, base `origin/main@056907e2`, PG 16 desechable :5471; no reutilizar como evidencia actual del hardening): `pnpm --filter @granete/excel test` 45 archivos **526 PASS +3s** (goldens r2/r3/r4 recompilados byte-exact dentro de specPreflight); `pnpm typecheck` 7/7 PASS; `git diff --check` limpio; contracts drift 0 + ci-tests (31)/factory-efficiency (17)/factory-contract (4) OK; monorepo `pnpm test` exit 0 (domain 110 archivos/1560, storage 15/223, excel 45/526+3s, desktop 3/17, mobile 10/87, ui 172/1946, web 41/532 — TODOS PASS); backend-go serializado `GOFLAGS='-p=1'` con DATABASE_URL desechable exit 0 (storage 324.5s, pilotreadiness 234.8s, api 19.2s, resto ok); rake verify con PATH rbenv 3.2.11 (RuboCop 0 ofensas, unit 880 runs/5951 assertions, boundary 6/3179, RBZ sha256 f9f0f02c… verificado); visual proyectar-webgl 8/8 PASS (1.1m); foundation-gate-a postgres PASS y browser `[organization-gate] PASS`. CI exact-head del HEAD final pendiente de verificación tras push.
+- Docs: `docs/machines/ptx-cadmatic4/09_parts_inf_labels_cnc.md` (NUEVO — autoridad por campo §3, orientación §4, puente CNC §5, inventario UDI con clasificación §6, orden/shape §7, pertenencia #790+/CNC §9), README del área (pointer + gate externo actualizado), `08_spec_preflight_r5.md` (límites PARTS_INF/UDI ahora enforceados), `docs/verification.md` § #789, este entry.
+- Límites: sin máquina/CADLink/envío al cliente; `NOT_TESTED/notClaimed` permanece (ninguna frase del código/docs dice "CADmatic compatible/CADLink accepted/machine validated"); no se generan MPR/MPRX/BHX ni imágenes de etiqueta (sólo el contrato y la referencia preparados); la fusión de identidades por normalización del receptor (espacios/uppercase §20 p.166) sigue registrada para #790.
+- Delivery histórica previa a #797: complete para #789 (PR declara `Closes #789` + `Delivery: complete`; las casillas de aceptación de la issue demostradas: PARTS_INF/UDI parser/serializer/validator/readback ✓, cantos por lado bajo orientación ✓, código/nombre de mueble y pieza en label ✓, barcode estable testeado ✓, DRAWING corto no-UUID ✓, piezas con/sin canto y con/sin CNC ref ✓, manifest-mapping (`partLabelByPartIndex`) ✓). Sin merge/cierre manual; publicación para revisión humana.
+
+
+- **Ronda 3 de revisión independiente (2026-09-18, sobre `fd2a3f87`)**: confirma los blockers anteriores corregidos; 3 inconsistencias de contrato SPEC + limpieza documental resueltas en la MISMA rama: (1) **JOBS.STATUS no es enum exhaustivo** — la guía §5 p.120 documenta 0/1/2 como códigos CONOCIDOS y advierte "there may be a range of other error codes": la capa SPEC exige sólo la forma INT (`int-form`; decimal → `ptx_spec.int_not_integer`); otros enteros NO reciben SPEC_INVALID por valor (restringirlos es PRODUCT/RECEIVER policy); GRAIN {0,1,2} se mantiene enum (prosa §6 pp.122-123 enumera exactamente 0/1/2 sin salvedad — verificado). (2) **Contrato INT/QTY completo** — `qtyIssue` exige `Number.isInteger` (QTY=1.5 → `ptx_spec.quantity_not_integer`, independiente de validate.ts); `JOBS.CUT_TIME` (INT/segundos §20 p.167 + §5 p.121) entero en TODO el contrato (`optionalInt` en parse, `optInt` en serialize con fail-closed para decimales; goldens lo llevan ausente → bytes r2/r3/r4 intactos) e int-form en el preflight; `CUTS.SEQUENCE` (INT §20 p.178) con chequeo propio del spec preflight (PtxDocument mutado SEQUENCE=1.5 bloquea sin validate.ts). (3) **SPEC vs PRODUCT también en bytes** — el reading model de `PATTERNS.TYPE` se ensanchó al dominio documentado 0..8 (`PtxDocumentedPatternType`; el parser ya NO rechaza 5..8, sólo <0/>8): bytes TYPE=6 → SIN spec issue + clasificación `SPEC_VALID_BUT_PRODUCT_UNSUPPORTED`; bytes TYPE=9 → `ptx_spec.parse_error` con el rango documentado; el PRODUCTO sigue fail-closed (validate INVALID_ENUM_VALUE + serializePtxDocument rehúsa bytes + subset productivo 0..4 congelado por test). Limpieza documental: restos contradictorios de la ronda 1 eliminados (conteo de tests, QTY/DIM "no enforceados", título de 23). Tests vigentes 77 specPreflight + 22 externalDialect; excel 43 archivos 465 PASS +3s; typecheck 7/7; inmutabilidad r2/r3/r4 y candidato r5-like spec-checked siguen pasando. Evidence ronda 3 (HEAD final, base d187d348, PG 16 desechable :5463): plan completo del selector en UNA corrida con PATH rbenv — contracts/ci/factory/typecheck/typescript/backend-go (247.9s)/sketchup-local-os (880 runs/5951 + boundary 6/3179 + RBZ verificado)/visual 8/8/foundation-postgres (273.4s)/browser (266.2s) TODOS PASS; `git diff --check` limpio; un primer intento del selector falló sólo por cwd heredado del shell (script no encontrado; sin test ejecutado) — re-ejecutado desde la raíz. Cierre: PR #795 mergeado a main (056907e2) con CI exact-head verde; issue cerrada por el flujo nativo.
+# Hardening independiente post-auditoría — F1 Tenant/RLS + F2 MountFrame con geometría real (Refs #668, Refs #670)
+
+- Approval: prompt del propietario (2026-09-18) autoriza exclusivamente corregir F1 (P2: reads del storage que pueden ejecutarse contra `s.Pool` sin tenant transaction → `0 rows` silencioso bajo FORCE RLS) y F2 (P2: `TC_MerivoboxPilotSmoke.rb` con assets .skp vacíos que no demuestran la normalización de geometría interna real). F3 (`DEFAULT_THICKNESS_MM` del renderer offline) expresamente FUERA. No iniciar #669, no rehacer assemblies, no tocar #670 más que hardening. Base `origin/main@d187d348`; rama `fix/hardware-audit-f1-f2`; un writer (PR abierto #795 es PTX, sin solape).
+- **F1 — inventario de callers ANTES de implementar**: los 12 métodos de `agregado_revisions.go` NO tienen callers productivos (0 referencias fuera del repositorio y sus tests; verificado por grep exhaustivo incl. SQL directo a las 3 tablas). Matriz: tests con `fiTx` (WithinTenantTx) = A; tests con `WithOrgCtx` plano sobre pool superuser = C (ejecutan hoy sin tenant tx, con RLS inerte por superuser — exactamente el punto ciego auditado); D: sólo tests. Sin callers B. La condición de parada §27 NO aplica: el problema está contenido en un archivo de repositorio.
+- **F1 — solución (Opción B canónica del repo)**: helper genérico `runInTenantTx`/`runInTenantTxErr` en `tenant_transaction.go`; los 12 métodos ejecutan dentro de la tenant transaction del caller (boundary AuthMiddleware) o se auto-envuelven en `WithinTenantTx` (idiom de `design_publish.go`, 36 usos) — SET LOCAL pool-safe, commit/rollback, nada sobrevive en la conexión. Org ausente → `ErrNoOrgScope` tipado (nunca query con `organization_id = ''` que degradaba a not-found de negocio o cast SQL inválido). FORCE RLS intacto; `List/Get/GetForInstance` de pins (sin filtro org en SQL, 100% RLS) quedan cubiertos.
+- **F1 — tests (PostgreSQL 16 real, rol `granete_app_test` NOBYPASSRLS)**: F1-A read exacto en tx; **F1-B RED demostrado antes del fix** (org presente sin tx → falso `ErrAgregadoRevisionNotFound`) y GREEN después (encuentra el dato — nunca un false not-found); F1-C cross-tenant fail-closed (con tx y por self-wrap); F1-D ruta histórica R1→S1→pin→current R2; F1-E pool de UNA conexión reutilizada entre tenants A/B sin leak del GUC (`app.organization_id` muere con la transacción); F1-F org vacío → `errors.Is(ErrNoOrgScope)` en los 12 métodos, jamás not-found de negocio. Suite storage completa serializada PASS (240.6 s).
+- **F2 — fixture geométrico**: bracket escalonado asimétrico autoreado en el host (70×54×18 mm, 12 vértices, sin espejo, origen geométrico separado del mounting point) dentro de TODOS los .skp scratch; MountFrame por defecto rotado (origen [25,30,15], basis +90° sobre Z, det=+1); E9/E10 añade member basis rotada sobre X + translation no-cero, furniture translation [1200,600,300]. Matemática del test verificada contra implementación matricial 4×4 independiente (Gauss-Jordan, delta 0.0).
+- **F2 — prueba en host real (SketchUp 2026.2.242 arm64, TestUp CI 8/8, 131 aserciones, 0 fallos)**: E9/E10 (18 aserciones) mide vértices REALES de la definición cargada por el pipeline productivo (prefetch → definitions.load → compute_prepared_transform → ComponentInstance) y comprueba `T_furniture × T_assembly × T_member × inverse(T_mountFrame) × Pᵢ` desde constantes de contrato: 3 puntos de referencia con error 0.0 / 5.7e-14 mm (tolerancia 1e-3), distancias pares preservadas, scale [1,1,1], det +1.0, sin shear (ortogonalidad de columnas). Sensibilidad demostrada y registrada: T_norm omitido 32.03 mm, doble 32.03 mm, basis transpuesta 21.26 mm, mm/inches doble 35156 mm — todos ≫ tolerancia. E11 (24 aserciones) tras save/close/reopen conserva identidad de revisión exacta (`assetRevisionId`) y la geometría normalizada en los mismos puntos world.
+- **F2 — evidencia**: `progress/host_smoke_668_mount_frame_geometry_evidence.json` (head `08524bf1`, rbzSha256 `f9f0f02c…`, sketchupVersion 26.2.242, referencePoints con actualWorldMm MEDIDO del host, mutantSensitivity, rigidity) + regeneración de la evidencia 670-E (readers de paridad Go `TestMerivoboxCanonicalPilotHostEvidenceParity_R12` y TS `merivoboxPilotCanonical` 1560/1560 PASS sobre la evidencia nueva). Fixture documentado en el smoke para la futura paridad SKP/GLB (#669): dimensiones nominales, puntos de referencia, MountFrame y expected físico.
+- Evidence completa: `rake verify` PASS (RuboCop 0 ofensas, unit 880/5951, boundary 6/3179, RBZ determinista f9f0f02c verificado); `go test ./internal/storage/...` PASS completo; `go test ./internal/domain/...` PASS; suite Go ejecutada sobre PostgreSQL 16 desechable; TestUp CI host real Success 8/8.
+- Límites: F3 no implementado (expresamente fuera); sin cambios de schema/migraciones/resolver/BOM/PTX/GLB; el smoke sigue usando StubDownloader SOLO para el path local del asset (sin red en host; definitions.load/normalización/instanciación son el pipeline real).
+- Delivery: hardening (PR declara `Refs #668` + `Refs #670` + `Delivery: hardening`; no cierra #668/#670/#666, no inicia #669, sin merge — parado para revisión independiente).
+
+# Issue #788 — [P0][PTX-CAD4][R5-A] Strict PTX spec validator y límites antes de serializar
+
+- **Ronda 3 de revisión independiente (2026-09-18, sobre `fd2a3f87`)**: confirma los blockers anteriores corregidos; 3 inconsistencias de contrato SPEC + limpieza documental resueltas en la MISMA rama: (1) **JOBS.STATUS no es enum exhaustivo** — la guía §5 p.120 documenta 0/1/2 como códigos CONOCIDOS y advierte "there may be a range of other error codes": la capa SPEC exige sólo la forma INT (`int-form`; decimal → `ptx_spec.int_not_integer`); otros enteros NO reciben SPEC_INVALID por valor (restringirlos es PRODUCT/RECEIVER policy); GRAIN {0,1,2} se mantiene enum (prosa §6 pp.122-123 enumera exactamente 0/1/2 sin salvedad — verificado). (2) **Contrato INT/QTY completo** — `qtyIssue` exige `Number.isInteger` (QTY=1.5 → `ptx_spec.quantity_not_integer`, independiente de validate.ts); `JOBS.CUT_TIME` (INT/segundos §20 p.167 + §5 p.121) entero en TODO el contrato (`optionalInt` en parse, `optInt` en serialize con fail-closed para decimales; goldens lo llevan ausente → bytes r2/r3/r4 intactos) e int-form en el preflight; `CUTS.SEQUENCE` (INT §20 p.178) con chequeo propio del spec preflight (PtxDocument mutado SEQUENCE=1.5 bloquea sin validate.ts). (3) **SPEC vs PRODUCT también en bytes** — el reading model de `PATTERNS.TYPE` se ensanchó al dominio documentado 0..8 (`PtxDocumentedPatternType`; el parser ya NO rechaza 5..8, sólo <0/>8): bytes TYPE=6 → SIN spec issue + clasificación `SPEC_VALID_BUT_PRODUCT_UNSUPPORTED`; bytes TYPE=9 → `ptx_spec.parse_error` con el rango documentado; el PRODUCTO sigue fail-closed (validate INVALID_ENUM_VALUE + serializePtxDocument rehúsa bytes + subset productivo 0..4 congelado por test). Limpieza documental: restos contradictorios de la ronda 1 eliminados (conteo de tests, QTY/DIM "no enforceados", título de 23). Tests vigentes 77 specPreflight + 22 externalDialect; excel 43 archivos 465 PASS +3s; typecheck 7/7; inmutabilidad r2/r3/r4 y candidato r5-like spec-checked siguen pasando. Evidence ronda 3 (HEAD final, base d187d348, PG 16 desechable :5463): plan completo del selector en UNA corrida con PATH rbenv — contracts/ci/factory/typecheck/typescript/backend-go (247.9s)/sketchup-local-os (880 runs/5951 + boundary 6/3179 + RBZ verificado)/visual 8/8/foundation-postgres (273.4s)/browser (266.2s) TODOS PASS; `git diff --check` limpio; un primer intento del selector falló sólo por cwd heredado del shell (script no encontrado; sin test ejecutado) — re-ejecutado desde la raíz. CI exact-head del HEAD final pendiente de verificación tras push.
+- **Ronda de revisión independiente (2026-09-18, sobre `0b5ea656`)**: 3 blockers + gaps corregidos en la MISMA rama `fix/788-ptx-strict-spec-preflight`, sin tocar scope de #789–#793: (1) **DIM/QTY enforceados** — catálogo tipado nuevo (`dim-range` units-aware métrico 0.0..9999.9 / pulgadas 0.000..999.9 resuelto contra HEADER.UNITS; `qty-max` ≤ 99999) sobre TODOS los campos modelados cuyo tipo documental es DIM/QTY (PARTS_REQ/BOARDS/OFFCUTS LENGTH+WIDTH, MATERIALS THICK/KERFs/TRIMs, CUTS DIMENSION, QTY_REQ/OVER/UNDER/PROD, QTY_STOCK/USED, BOOK, OFC_QTY, QTY_RUN/CYCLES/MAX_BOOK, QTY_RPT/QTY_PARTS); sólo magnitud/máximo (precisión y mínimos semánticos quedan en producto); VECTORS sin rango (§20 no tiene fila VECTORS — autoridad verificada, no inventada); fronteras 9999.9/10000, 999.9/1000, 99999/100000 en document Y bytes mutados. (2) **Enums/ranges documentados como SPEC sin depender de validate.ts**: RULE1 1..9, RULE2/3/4 {0,1}, GRAIN {0,1,2}, JOBS.STATUS [corregido en ronda 3 a int-form no exhaustivo], PATTERNS.TYPE 0..8, CUTS.FUNCTION 0..9 ∪ 90..99; taxonomía tipada `classifyPtxDocumentedEnumSupport` — TYPE 5..8 y FUNCTION 4..9/90/91/93..99 NO reciben issue de spec (los rechaza validate.ts como producto); subsets productivos intactos. (3) **JOBS opcional bajo la especificación** (§5 p.120 verbatim): sin JOBS + job único = SPEC-válido; sin JOBS + 2 JOB_INDEX = `ptx_spec.job_scope_ambiguous` fail-closed; con JOBS la referencia sigue obligatoria; el compiler Granete SIGUE emitiendo su fila JOBS (política de producto, probada). Además: **r3 ahora se recompila de verdad** (byte-exact), VERSION sólo forma (1/1.06/1.08 PASAN; valor exacto UNKNOWN hasta receiver profile), correcciones documentales (historia precisa; GRANETE-PTX-R5-CANDIDATE = 24 chars).
+- Approval: issue #788 OPEN `status:approved`, `type:bug`, `high`, `domain`, parent #787 (verificada al iniciar; 0 PRs abiertos — sin trabajo concurrente). Base `origin/main@41ca73b2` (post-merge #783/#786), rebaseada a `origin/main@d187d348` al integrarse el PR #794 (docs). Rama `fix/788-ptx-strict-spec-preflight`. Un writer. Sólo #788: sin etiquetas (#789), receiver (#790), CUTS (#791), RLT (#792), profile r5/adapter 1.4.0 (#793). La semántica FUNCTION 92 NO se tocó (#791 es dueño).
+- Nota de procedencia: los docs `06_dossier…`/`07_plan…` referenciados por #787 NO existían al iniciar; la autoridad de límites se extrajo de la fuente primaria S03 (Magi-Cut Interface Guide V11, descarga local + decodificación del texto del PDF 2026-09-18) con citas verbatim del diccionario §20 (pp.166–178) en el doc 08 §2. El PR #794 (sólo docs) integró dossier+plan DURANTE la tarea (base rebaseada a `origin/main@d187d348`); contrastados contra esta implementación coinciden punto por punto (06 §5.1 TITLE 25 fail-closed; 07 §4 R5-A: ORIGIN 0..3, índices desde 1 consecutivos, espacios iniciales ignorados, empty vs omitted, acceptance completa).
+- Hallazgo base: `HEADER.TITLE` de r4 = 43 chars (industrial; 33 en goldens lab) > 25 documentado — `SPEC VIOLATION: CONFIRMED`, `ROOT CAUSE OF CADLINK FAILURE: NOT PROVEN` (no se afirma causalidad).
+- Implementación (aditiva; r2/r3/r4 sin cambios de bytes/digests/behavior):
+  1. **`packages/excel/src/ptx/specPreflight.ts`**: catálogo `PTX_SPEC_LIMITS` con clasificación (`SPEC_REQUIRED` todo lo enforceado) + localizador S03 por límite (TITLE ≤ 25 p.167; UNITS {0,1}; ORIGIN 0-3 — antes sólo "entero ≥ 0"; TRIM_TYPE {0,1}; códigos ≤ 50 (PARTS_REQ/BOARDS/MATERIALS/OFFCUTS + DESC/NAME/CUSTOMER/OPT/SAW_PARAM/COMMENT 100); índices 1-250/9999/5000/7500 + consecutividad única desde 1 por job/patrón §20 p.166 + §4 p.118; referencias por job re-derivadas SIN importar validate.ts). Errores `ptx_spec.*` accionables (code/field/observed/maximum/locator); `ptxSpecPreflightDocument` / `ptxSpecPreflightBytes` (parser independiente — detecta mutaciones post-serialización) / `serializePtxDocumentBytesSpecChecked` (frontera fail-closed que r5 debe usar). VERSION: sólo "positivo finito" (1.06 vs 1.08 vs ejemplos-1 = ambigüedad §9; no se inventa pin).
+  2. **`packages/excel/src/ptx/externalDialect.ts`**: lector estructural de dialecto externo — R2201/R7301 se leen sin exigir el shape del writer Granete: espacios alrededor de celdas sin comillas (la guía los usa), líneas en blanco, trailing documentado no modelado contado (BOARDS COST/STK_FLAG, PATTERNS PICTURE), familias documentadas opacas (PARTS_INF/PARTS_UDI/PARTS_DST/PTN_UDI/NOTES — camino abierto para #789: el row view conserva celdas crudas), distinción explícita celda-vacía vs trailing-omitido (`ptxExternalColumnPresence`). Fail-closed en familia no documentada/prefijo incompleto/valor inválido.
+  3. **`compileCutPlan.ts`**: opción `strictSpecPreflight: 'pattern-exchange-v1'` → gate `ptx_compile.spec_preflight_failed` con los `ptx_spec.*` en contexto (blocker futuro en canSerialize cuando la ruta r5 exista). Opción ausente para r2/r3/r4 (gate inerte para historia). parse.ts sólo exporta `parseHeaderRow`/`parseRecordRow` (reuso lector; sin cambio de behaviour).
+- Tests (ronda 1; el conteo vigente tras las 3 rondas es 77 specPreflight + 22 externalDialect): matriz mínima completa — TITLE 25 PASS / >25 BLOCK (regresiones 43 industrial + 33 lab con observed/maximum/locator), VERSION/UNITS/ORIGIN/TRIM_TYPE inválidos, duplicado/no-consecutivo/fuera-de-rango, refs PART/BOARD/MATERIAL/PATTERN/Xn/JOBS inexistentes, prefijo incompleto (parse_error en bytes), trailing omitido válido, vacío vs omitido, R2201 (5 piezas/2 tableros/6 materiales/2 patrones/12 cuts/X1-92; subset Pasa el preflight) y R7301 (12 piezas/TYPE 0+1/CUSTOMER vacío presente), 8 mutaciones de bytes detectadas, inmutabilidad r2/r3/r4 (sha256 exactos del contrato industrial + recompile byte-exact + descriptor digest intacto + honestidad: los bytes históricos violan TITLE y el preflight lo reporta), writer gating (opción inválida fail-closed; título 43 → spec_preflight_failed; título de 24 chars → compile+serializeSpecChecked+readback === []).
+- Evidence ronda 1 (HEAD `0b5ea656` sobre `origin/main@d187d348`, PostgreSQL 16 desechable :5461): `pnpm --filter @granete/excel test` 43 archivos 431 PASS +3 skips; `pnpm typecheck` 7/7; plan completo del selector (clasificación conservadora "docs→unknown means full") vía `verify_affected --base origin/main --budget-seconds 3600`: contracts/ci-tests/factory-tests/factory-contract PASS, typescript (monorepo) PASS, backend-go completo serializado PASS (497.6s), rake verify PASS con PATH rbenv 3.2.11 (880 runs/5951 assertions, boundary 6/3179, RBZ sha verificado; el primer intento falló SOLO por bundler sobre Homebrew Ruby 4.0 — 0 archivos Ruby cambiados), visual proyectar-webgl 8/8 PASS, foundation-gate-a postgres PASS (pilotreadiness 235s) y browser PASS (organization 86/86); CI remota del HEAD exacto 12/12 PASS (incluye Publication metadata). `git diff --check` limpio. Fixtures R2201/R7301 NO modificados. Evidence ronda 2 (HEAD final, misma base d187d348, PG 16 desechable :5462): plan completo del selector en UNA corrida con PATH rbenv — contracts/ci/factory/typecheck/typescript/backend-go (497.8s)/sketchup-local-os (880 runs/5951 assertions + boundary 6/3179 + RBZ sha f9f0f02c verificado)/visual (8/8)/foundation-postgres (270.2s)/browser (organization) TODOS PASS; excel 43 archivos 458 PASS +3s (70 specPreflight + 22 externalDialect); `git diff --check` limpio; CI exact-head del HEAD final pendiente de verificación tras push.
+- Docs: `docs/machines/ptx-cadmatic4/08_spec_preflight_r5.md` (nuevo — autoridad por límite, diseño de independencia, no-enforceado documentado: QTY/DIM ranges, normalización spaces/uppercase de códigos al importar §20 p.166 → #790), README del área (pointer), `docs/verification.md` § #788, este entry.
+- Límites: sin máquina/CADLink/envío al cliente; `NOT_TESTED/notClaimed` permanece (los rangos QTY/DIM pasaron a estar ENFORCEADOS desde la ronda 2 — ver arriba); hallazgo secundario: normalización de códigos del receptor (espacios→underscore, uppercase) puede fusionar identidades en import → #790.
+- Delivery: complete para #788 (PR declara `Closes #788` + `Delivery: complete`, label `type:bug`; las 7 casillas de aceptación de la issue demostradas). Sin merge/cierre manual; publicación para revisión humana.
+
+# Issue #781 — [P0][PTX-CAD4][FIELD] Códigos de pieza, OFFCUTS y filename tras primer rechazo CADLink
+
+- Approval: issue #781 OPEN `status:approved`, `type:bug`, `high`, `domain` (verificada al iniciar; 0 PRs abiertos sobre esta superficie — el único PR abierto #780 es MERIVOBOX/assemblies). Base `origin/main@5b3235b3`; rama `fix/781-ptx-cadmatic4-r4`. Un writer. Deadline de campo: segunda prueba CADLink con el cliente el 2026-09-18 por la mañana.
+- Alcance r4 decidido con el owner: (1) autoridad única de código de fabricación — el flujo release/demand pasa a emitir `partCode`+`labelRef` limpios vía `resolveCleanPieceCode` (el flujo BOM `engine/cut.ts` ya lo hacía; el PTX rechazado salió del flujo release que filtraba `partId` interno); piezas idénticas NO se consolidan (una fila PARTS_REQ por pieza física, código único por pieza porque habrá archivos CNC por pieza) con sufijo de copia `-Cn` en el optimizer cuando una fila se despliega en varias piezas; (2) `OFFCUTS.OFC_QTY=1` (ancho 7, subset R2201/R7301); (3) `OFFCUTS` declarado antes de PATTERNS/CUTS (sin forward refs Xn, dialecto observado en campo); (4) sin filas marcador `Xn` fuera de FUNCTION 92; (5) filename industrial corto ASCII (`G<hex6>.ptx` determinista collision-safe, por material `-n`); (6) profile `ptx-cadmatic-4@r4` + adapter `granete-ptx@1.3.0` con digests nuevos, r2/r3 byte-exact; golden r4 desde pipeline real; privacidad: originales R2201/R7301 NO se commitean (docs/ptx-example/ queda fuera del commit).
+- Implementación (detalles):
+  - **Dominio**: `engineeringCuttingDemand.ts` resuelve códigos limpios por línea de unidad (`-L<n>` para módulo repetido, `Pnn` secuencial por pieza del catálogo sin código) — misma autoridad que la app muestra; `optimizer/pieces.ts` agrega `labelRef` por placement con sufijo `-C<n>` para copias 2..N (primera copia sin sufijo = lo que muestra la fila); guillotine/nesting colocan `piece.labelRef || row.labelRef || id`.
+  - **Núcleo PTX**: `PtxOffcutRecord.producedQuantity` opcional (r2/r3 sin la celda → byte-exact; serializer sólo agrega la 7ª celda si está definida — un trailing comma habría mutado r3); parser acepta 6/7 celdas con OFC_QTY entero; validate exige >0 si presente. `compileCutPlan` r4: `offcutsWithQuantity`, `offcutsBeforePatterns`, `offcutCutMarkers: 'function92-only'`, `partCodeAuthority: 'workshop-labelref'` + `partCodeMaxLength: 50` con fail-closed `ptx_compile.part_code_too_long` / `part_code_duplicate`; remanentes no-92 quedan como registro OFFCUTS único (sin pseudo-operación QTY_RPT=0/SEQUENCE=0). Verifier independiente agrega `offcuts.ofc_qty`, `offcuts.order` + `offcuts.forward_reference` (invariante byte-stream) y `cuts.xn_function`.
+  - **Machines**: `PTX_CADMATIC_4_R4_PROFILE` (digest 94401b8c…) con `PTX_COMPILER_R4_REQUIRED_DIMENSIONS` (sólo r4 exige las dimensiones nuevas — r2/r3 no fallan por no tenerlas); adapter 1.3.0 (implementationDigest dce80ccd…, generator @4) con contrato industrial extendido (markers r4 + golden sha 022413f6…); catálogo compartido actualizado (contract JSON + espejo Go const): cadmatic-4 pasa a r4 y granete-ptx a 1.3.0 — selecciones pineadas a r3/1.2.0 quedan stale con blocker accionable, sin retarget; resolver entrega filename industrial `G<hex6>.ptx`/`-n` sólo para ptx-cadmatic-4@r4.
+  - **Golden r4** (`cutPlanPtxGoldenR4.ts`): generado desde `optimizeCutPlan` real (2 materiales, 3 hojas, qty-2 con `-C2`, trims 10/10/10/10, FUNCTION 92 + X1, recut fase-3 con CUT_INDEX≠SEQUENCE, 3 OFFCUTS con OFC_QTY=1 declarados antes de los bloques) — readback === [].
+  - **Docs**: `05_contrato_r4_field_dialect.md` (contrato r4, clasificación CHANGED/KEPT/UNKNOWN por §G, runbook del 2º intento), dossier README v0.8 (estado con primer rechazo registrado sin causa única), `docs/verification.md` § #781.
+- Evidence: domain 1514/1514 (incl. regresión colisiones/dims y `-L2-`/`P02`); excel 364/364 +3s (incluye assertion de la forma OFFCUTS R2201/R7301 con OFC_QTY y blocker de readiness part_code_duplicate a nivel adapter) (r2/r3 goldens byte-exact, r4 7/7, golden r4 3/3, adapter digests/contrato, rutas r2/r3/r4, catalog paridad TS↔JSON); ui 1946/1946 (regresión §46: el panel muestra `MOD-ALA-1P-IZQ-P01` con el ref interno real de 119 chars del artefacto rechazado y jamás lo renderiza); web 514/514 (manifest r4/1.3.0, filename industrial, ZIP by-material); storage 223/223; desktop 17, mobile 87; Go domain/api machine-output OK (espejo catálogo + pins 1.3.0); `pnpm typecheck` 7/7; `pnpm openapi:check` 0 drift; `git diff --check` limpio. Full GOFLAGS='-p=1' go test ./... exit 0 (10 paquetes ok, serializado). Browser gate real machine-output-selection.spec.ts: **9/9 PASS** (Chromium+Go+PostgreSQL, incluye r4: seleccionar → reload → plan activo → descarga PTX+manifest → hash → parse/readback).
+- Blocker final de identidad cross-flow (revisión GLM, 2026-09-18): cerrado con UNA autoridad de ocurrencia — `workshop_occurrence_ordinal` (1-based) congelado al liberar (posición de la unidad en el orden congelado del snapshot; proyectado por `GetProjectProductionReleaseCuttingDemand`, contrato OpenAPI requerido + DTO Go/TS + mapper web, sin migración ni cambio de snapshot). Regla única `canonicalWorkshopOccurrences` ordinal-aware compartida por BOM/labels/demand (+`ProjectItem.workshopOccurrenceOrdinal` opcional); piezas por `partId` (mismo namespace lógico en ambos flujos: los partIds de definición se repiten entre ocurrencias y son únicos dentro de cada una). Test crítico con trampa antisimétrica: órdenes léxicos de items e instancias OPUESTOS entre sí, demanda derivada de los links BOM, comparación POR ocurrencia física (ordinal, partId) — bajo el fallback id-orden los códigos se cruzarían y el test falla; sólo el ordinal congelado los alinea. Golden r4 sin cambios (una ocurrencia) → digests intactos.
+- Revisión independiente del PR (Codex, 2026-09-18): CHANGES REQUESTED con 3 blockers + 1 P1 — corregidos en la misma rama: (1) asignación canónica compartida de códigos (ocurrencias por identidad durable, piezas por partId; tests de reorden en BOM y release; caveat cross-flow item-id vs furniture-instance documentado como seguimiento); (2) `ptx_compile.part_code_missing` fail-closed — r4 SIN fallback al partCode de plantilla y el optimizador sin rellenar labelRef con el id de colocación (re-leak cerrado); (3) OFFCUTS sólo para el pareado demostrado con FUNCTION 92 — remanentes no-92 quedan SIN declarar (ninguna semántica UNKNOWN se emite; golden regenerado con 1 OFFCUTS, sha eadf184f…); (4) filename `G<hex12>.ptx` (48 bits, hash de id+versión). Golden LAB15 con espesor consistente (higiene del fixture). Post-hardening anotado (no bloqueante): el compiler no valida espesor de pieza contra MATERIALS.THICK del material ya registrado desde la hoja.
+- Límites honestos: causa única del rechazo NO demostrada (candidate compatibility fixes); `OFFCUTS` sin marcador CUTS clasificado UNKNOWN/FIELD TEST (las muestras del cliente sólo evidencian OFFCUTS emparejado con 92); soporte NOT_TESTED/notClaimed hasta el segundo intento real (runbook §6 del contrato r4).
+
+# Issue #670-E — [PILOT] Piloto MERIVOBOX real end-to-end (#670)
+
+- Approval: prompt del propietario (2026-09-17) autoriza exclusivamente la validación del piloto comercial MERIVOBOX (Altura M) sobre la arquitectura genérica de #670-A/B/C/D («datos + recipe + variants + assets», sin ramas por fabricante). Base exacta `origin/main@fc3b53bb`. Rama `feat/670-e-merivobox-real-pilot`.
+- Solución — piloto comercial desacoplado y multi-runtime:
+  1. Procedencia verificada (R1): Catálogo Blum KA-160/24-ES (pp. 240–245); holgura 3.0 mm; fórmulas fondo (NL - 16 x LW - 58 x 16 mm) y trasera (69 x LW - 58 x 16 mm); verificado al 2026-09-17. Dossier en `docs/architecture/merivobox-pilot.md`.
+  2. Desacoplamiento W vs LW (R3): La autoridad del mueble calcula $LW = W - (\text{leftThickness} + \text{rightThickness})$. La receta opera sobre $LW$. Soportados espesores de lateral de 15, 18 y 19 mm sin asunción fija de 18 mm.
+  3. Política de BOM comercial (R4): Set comercial kit unit 'set' (`IncludedInKit`); los miembros del herraje no duplican líneas comerciales; fondo y trasera entran a lista de corte.
+  4. Persistencia histórica en PostgreSQL (R5): Aislamiento probado en BD real (`TestMerivoboxPilotHistoricalPersistence_R5`): la mutación de la receta en catálogo a R2 no afecta al snapshot publicado S1.
+  5. Límites estrictos de variantes (R6): Holgura 3.0 mm con rechazo en 449.9, 502.9, 530.1 mm sin fallback a la variante más cercana.
+  6. Independencia de binding visual (R7): Evaluación con o sin pins visuales genera idénticas variantes, matrices, piezas de corte y BOM.
+  7. Invariante de rigidez (E3/E20/E14): Miembros rígidos preservan escala [1,1,1] y determinante +1.0 exacto en todas las mutaciones (+200 mm delta W600->W800).
+  8. Cero bifurcaciones por marca: Ningún `if blum`, `if merivobox`, `MerivoboxResolver` ni renderer especial en Go, TS, WebGL o SketchUp.
+- Ronda de revisión R9–R14 (2026-09-18):
+  1. R9 MaterialBoard authority: el espesor fabricado (16 mm) proviene de la MaterialBoard vinculada (rol `MERIVOBOX_BOARD` → `mat-merivobox-board-16`); la geometría nominal queda fijada en 15 mm en el contrato canónico y el seed WebGL para que sólo el material pueda producir el 16 observado (tests TS `merivoboxPilotCanonical.test.ts` + Scenario 8). Renderer sin espesores hardcodeados.
+  2. R10/R11 W vs LW: la cadena outer W + costados reales del seed (INTERIOR → mat-arauco-blanco 15 mm efectivo) → LW → resolver se verifica con readback del grafo de escena en Scenario 8 (`assemblyResolvedWidth = posX(side-right) − posX(side-left)`); tests genéricos Go/TS documentan que sus `WidthMm` son dimensiones de assembly, no W exterior.
+  3. R12 config canónica única: `contracts/fixtures/merivobox-pilot-canonical.json`; consumida y comparada numéricamente por Go (`merivobox_canonical_test.go`), TS, WebGL (spec lee el JSON) y Ruby (unit + smoke host). Los tests Go/TS ADEMÁS leen la evidencia host comprometida y fallan ante cualquier desvío (tolerancia 1e-6 mm por ruido inches→mm).
+  4. Corrección crítica descubierta y reparada: la evidencia host anterior estaba editada a mano y el smoke nunca había corrido verde (referenciaba `MerivoboxPilotTest::FakeDownloader` que TestUp no carga, assets de bytes falsos que caían al fallback sin MountFrame, E9/E12 con aserciones stale, evidencia con literales). Smoke rehecho: autocontenido, SKPs reales por revisión generados vía el host (con doble `file_new` porque SketchUp rechaza cargar un .skp que es el propio archivo del modelo activo), E9 con expectativa compuesta, E12 con capturas exactas, evidencia MEDIDA desde el modelo.
+  5. R13 evidencia regenerada ejecutando el smoke REAL contra el HEAD de código exacto con RBZ reinstalado; R14 dossier reescrito con la matriz de paridad respaldada por tests.
+- Evidencia (HEAD de código `159fa7e9`):
+  - Go Engine: `TestMerivoboxPilotEndToEndGates_E1_E20` + `TestMerivoboxCanonicalPilotParity_R12` + `TestMerivoboxCanonicalPilotHostEvidenceParity_R12` PASS (paquete engine completo ok).
+  - Go Storage: `TestMerivoboxPilotHistoricalPersistence_R5` PASS contra PostgreSQL 16 real (contenedor desechable).
+  - TS Domain: paquete completo 109/109 archivos, 1531/1531 tests (incl. `merivoboxPilotCanonical.test.ts` 6/6).
+  - UI: `packages/ui` 172/172 archivos, 1945/1945 tests. `pnpm typecheck` 7/7 PASS.
+  - WebGL / Proyectar: `tests/visual/proyectar-webgl.spec.ts` suite completa 8/8 PASS en Chromium real (Escenario 8 consume la config canónica).
+  - SketchUp Extension: `bundle exec rake verify` PASS (RuboCop 0 ofensas, unit 880 runs 5951 aserciones, boundary 6/3179, RBZ sha256 `f9f0f02cc8a4ab87ac3e40796e5a29efda771a35f0ec0209b8fdba816564e524`).
+  - Host smoke REAL (SketchUp 2026.2.242, arm64): TestUp CI `Success` 8/8 tests / 108 aserciones (`progress/host_smoke_670_e_testup_ci.json`); evidencia medida en `progress/host_smoke_670_e_merivobox_pilot_evidence.json` con head == `159fa7e9` y rbz == `f9f0f02c…`. Config reproducible: `apps/sketchup-extension/testup-ci-670e.yml`.
+  - Auditoría de aceptación: `docs/architecture/audit-670-final.md` (§2.5 y §3 actualizados con claims verificados).
+- Delivery: partial (`Refs #670`, `Delivery: partial`, `Increment: #670-E — MERIVOBOX real end-to-end pilot`). Sin merge automático ni cierre manual; handoff para revisión independiente.
+# Issue #778 — [CI][PDF] Eliminar flake byte-exact de engineering-cutting-demand
+
+- Approval: prompt del propietario (2026-09-17, «Investigar flake recurrente del PDF #739 en CI») exige demostrar la causa real antes de cualquier fix y prohíbe retries/timeouts/debilitar la comparación; autoriza issue específica + implementación si el fix es pequeño. Issue owner #778 creada `status:approved`, `type:bug`, `high` (sin duplicados abiertos; #739 CLOSED es el test dueño). Diagnóstico realizado sobre rama ajena sin escribir; implementación en rama propia `fix/778-pdf-deterministic-metadata` desde `origin/main@fc3b53bb` (post-merge #771). PR #777/#768 intactos (cero cambios en su superficie).
+- Causa demostrada (Caso A del protocolo del propietario — generador realmente no determinista): `pdf-lib@1.17.1` estampa `/CreationDate` + `/ModDate` con `new Date()` en CADA `PDFDocument.create()` (`updateInfoDict`, PDFDocument.js:1335-1344) y `cutPlanPdfExport` nunca las fijaba. El spec renderiza el PDF descargado en Chromium en el segundo S del reloj y el render de referencia en Node Δt≈0.1–0.5 s después; si entre ambos cruza un borde de segundo → bytes distintos → sha256 distinto (spec.ts:469). Reproducer Node puro, mismo CutPlan congelado: 300 renders → 2 hashes; 2000 renders → 4 hashes en bloques contiguos (= segundos del reloj); diff estructural (zlib) de variantes: la ÚNICA diferencia es `/ModDate (D:…3233Z)`→`(D:…3234Z)` y su gemela `/CreationDate`. 7 fallos CI 2026-09-15/17 con firma idéntica (incluye PR #777 intento 1 sobre 1f9a3fe3, verde al re-lanzar el mismo SHA; tabla completa en la issue #778). Descartado: carrera del test (in-memory == persistido, mismo objeto), contaminación (contexto aislado por test), TZ/ICU (ambos entornos UTC y `dateStr` day-granular coincide), selector #744 (PRs «documentales» #770/#771 ejecutaron Foundation por `AGENTS.md`/`.agents/**`/docs ejecutables → clasificación conservadora intencional «unknown means full»; el PR puramente documental #753 quedó en «documentation» sin browser y NINGÚN PR documental falló este test — no hay defecto del selector).
+- Solución (`packages/excel/src/cutPlanPdfExport.ts`): fijar las fechas del documento a la fecha autoritativa del plan (`input.dateIso || plan.generatedAt` — la misma que ya pinta la portada), con guard `Number.isFinite`; `/Producer`//`/Creator` constantes de pdf-lib se conservan. Contenido semántico intacto; las fechas del documento pasan de «reloj del export» a «timestamp del plan» (más honestas para un plan congelado).
+- Evidence (HEAD de la rama; entorno docker PostgreSQL 16 + Go + Chromium desechables):
+  - Regresión determinista nueva (RED demostrado revirtiendo sólo el src): dos renders del mismo plan con relojes falsos cruzando un borde de segundo → sha256 idéntico + readback independiente `PDFDocument.load(bytes, {updateMetadata:false})` de `/CreationDate`//`/ModDate` == `generatedAt` (granularidad segundo: PDF no lleva ms); `dateIso` explícito gobierna el metadata.
+  - Reproducer post-fix: Node 2000/2000 renders → 1 hash (`b26cd31b32c6199a…2222f3`); Chromium real (HeadlessChrome/149) 30 renders y Node 26.8.1 30 renders del mismo plan congelado → MISMO hash único en ambos entornos (byte-exact cross-env).
+  - `pnpm --filter @granete/excel test` 39 archivos/352 PASS +3 skipped; `pnpm typecheck` 7/7; `git diff --check` limpio.
+  - Browser real (organization-gate): `engineering-cutting-demand.spec.ts` 4/4 PASS en **3 ejecuciones consecutivas** sobre entornos desechables (incluida la comparación byte-exact descarga-browser vs render-Node, la aserción del flake).
+  - No ejecutados por esta entrega (superficie intacta, 0 archivos Go/Ruby/WebGL/UI cambiados): suites Go, rake verify SketchUp, WebGL, foundation gates completos, máquina real NOT_TESTED. `wallElevationsPdfExport`/`materialSummaryPdfExport`/`cutPreviewPdfExport` comparten el patrón pdf-lib pero NINGUNO se compara byte-exact en CI (documentado en #778 como alcance futuro, no de este fix).
+- Delivery: complete para #778 (PR declara `Closes #778` + `Delivery: complete`, `type:bug`). Sin merge automático ni cierre manual; publicación para revisión humana.
+
+# Issue #768 — [P2][DEMO-UX] Visibilidad compacta del flujo Venta → Ingeniería → Producción sin nueva autoridad
+
+- Approval: prompt del propietario (2026-09-17, «DEMO UX polish — último bloque corto») autoriza exclusivamente la proyección UX del flujo ya estabilizado; NO PR 2 de #741, NO #650/#668. Issue owner nueva #768 creada con `status:approved`, `enhancement`, `frontend` (ninguna issue abierta encajaba; #741 es continuidad y este polish no toca sus criterios). PR #767 ya MERGED verificado (`origin/main@9a641a68` = base exacta). Rama `feat/768-demo-ux-fabrication-flow-visibility`. Un writer; único PR abierto (#766) es de Proyectar, sin solape.
+- Solución — proyección de LECTURA, sin estados/commands/lifecycle nuevos ni endpoints nuevos:
+  1. Dominio (`packages/domain/src/fabricationFlow.ts`): `fabricationFlowOf(project, engineeringEvidence)` proyecta el stepper «Preparación para fabricar» (Diseño aprobado → Liberado a Ingeniería → Ingeniería → Materiales → Producción + siguiente acción) EXCLUSIVAMENTE desde autoridades existentes: `releaseAuthorityOf` canónico (el release sólo existe de Q aceptada + R aprobada, enforced por el servidor), estado durable de Ingeniería por release exacto (#740), `materialEvidenceCorrelatesWithRelease` + `materialsRelease` (#738/#577), y ejecuciones físicas materializadas (`hasMaterializedPhysicalWork`, misma clase de evidencia que `releaseWorkContinuityOf` #741). `Project.status` NO es input (draft con release muestra el flujo real; `produced` no prueba nada). Sin autoridad canónica → `{kind:'no-release'}`: la superficie no inventa flujo. Estado no demostrable → paso `unconfirmed` «Pendiente de confirmar» y SIN acción (fail closed).
+  2. UI compartida (`packages/ui/src/common/FabricationFlowSteps.tsx` + css con tokens): lista vertical compacta (nunca barra horizontal de 5 pasos), estado por icono+texto (✓/●/○/◌, nunca sólo color), `aria-current="step"`, CTA alcanzable por teclado; sin acción segura → «Siguiente paso» como texto honesto.
+  3. EngineeringWorkspace: el stepper absorbe el chip de estado, los CTAs por fase y el hecho de completación (mismos testids `eng-entry-status`/`eng-start-engineering`/`eng-complete-engineering`/`eng-engineering-completed`; contrato #740 intacto verificado). Nuevo `onAuthorizeMaterials` = navegación pura a Almacén (superficie existente; el comando de autorización vive allí). Despiece/Optimización/PDF/PTX (#739) intactos.
+  4. ProductionOrderHub/Workspace: misma semántica compacta bajo el header; el shell lee el estado durable de Ingeniería del release autoridad de la orden (misma lectura exact-release `useEngineeringState`, clave scoped por sesión/proyecto/release) y cablea navegaciones (Abrir Ingeniería / Autorizar materiales→Almacén). Banner «Nueva revisión disponible» de #741 refinado: copy no técnico («Hay una versión más reciente del diseño; la fabricación actual no se cambiará automáticamente») + acciones SÓLO de navegación [Ver nueva revisión]→Ingeniería del release autoridad / [Ver trabajo actual]→tab piso; sin reemplazo/suspensión/cancelación (el servidor sigue bloqueando).
+  5. Sin cambios: Go, migraciones, OpenAPI (0 drift), SketchUp, Proyectar, PTX, máquinas, permisos, Q/R.
+- Evidence (HEAD de la rama; entorno docker PostgreSQL 16 + Go + Chromium desechables):
+  - Dominio 108 archivos/1498 PASS (14 nuevos: casos A–E, no-release, P1 trabajando con P2 disponible, sin confiar en Project.status `produced`, requerimientos de otra P/huella incompatible no derivan, stamp legacy sin derivación no autoriza, unconfirmed fail-closed). Monorepo `pnpm test` PASS: domain 1498 / storage 223 / excel 350+3s / desktop 17 / mobile 87 / UI 1932 (7 nuevos stepper + 8 nuevos workspace + 9 nuevos hub) / web 514. `pnpm typecheck` 7/7; `pnpm openapi:check` 0 drift; `git diff --check` limpio; tsc tests 24 preexistentes/0 nuevos; unittest scripts (ci/factory ×3) OK.
+  - Browser real (organization-gate): `fabrication-flow-visibility.spec.ts` 3/3 PASS — fixture por API soportada (P1 + ejecuciones generadas) → workspace stepper A (Diseño aprobado ✓/Liberación #1 · Diseño R1/Ingeniería Pendiente current/Materiales ○/Producción ○ + CTA Iniciar) → comando explícito → B → hub misma semántica + CTA «Abrir Ingeniería» navega al release exacto → C (complete + derive: Materiales pendientes current + «Autorizar materiales» navega a /warehouse) → D (release: Materiales autorizados + «Listo para producción», sin «iniciada», sin CTA) → E (avance físico real: «En producción» con Project.status=draft de punta a punta) → viewports 390/768/1280 sin overflow horizontal en ambas superficies (scrollWidth ≤ clientWidth + documento sin scroll lateral).
+  - Regresión browser: `production-release-continuity.spec.ts` 3/3 (banner nuevo copy + 2 acciones de navegación + aserción de que JAMÁS aparece reemplazo/suspensión/cancelación; bloqueo físico y toast verbatim del servidor intactos) y `engineering-state.spec.ts` 4/4 (contrato durable #740 conservado).
+  - No ejecutados por esta entrega (superficie intacta, 0 archivos Go/Ruby/WebGL cambiados): suites Go completas, rake verify SketchUp, WebGL, foundation gates, máquina real NOT_TESTED.
+- Límites expresos: obra legacy/pre-DT sin release canónico no recibe stepper (StatusBadge pre-#768 se conserva); en modo guest/local sin token el estado de Ingeniería del hub queda «Pendiente de confirmar» (lectura no disponible, fail closed); «Producción» nunca se marca done (cierre comercial fuera de esta proyección); el banner P2 sigue sin ofrecer reemplazo/suspend/cancel (#741 PR 2+ es dueño); copy de toasts 409 del servidor sin cambios (backend es dueño).
+- Corrección de revisión del PR #777 (P1 funcional, misma rama): «Listo para producción» se marcaba con `materialsAuthorized` solo, aunque el gate físico #740 exige Ingeniería completa + materiales autorizados. Separado hecho vs readiness en `fabricationFlowOf`: `productionReady = engineeringDone && materialsAuthorized` («Materiales autorizados» sigue siendo un hecho done con evidencia exact-release propia, aunque Ingeniería no esté completa — Producción queda pendiente); «En producción» sigue siendo evidencia física independiente del gate. Regresiones nuevas en dominio: (1) in_progress + autorizados → Producción pendiente + nextAction complete-engineering; (2) unconfirmed/loading/unknown + autorizados → Producción pendiente + sin acción; (3) positivo completado+autorizados → «Listo para producción» conservado; (4) trabajo físico con Ingeniería incompleta → «En producción». Dominio 108/1501 PASS (17 del stepper), ui afectadas 422/422, typecheck 7/7, diff-check limpio; CI remota re-verifica el HEAD nuevo.
+- Delivery: complete para #768 (PR declara `Closes #768` + `Delivery: complete`, `enhancement`). Sin merge automático ni cierre manual; publicación para revisión humana.
+
+# Issue #741 — [P1][OPS-REV] PR 1: preservar trabajo P1 ante P2, sin retarget implícito
+
+- Approval: issue #741 OPEN con `status:approved`, `type:bug`, `high` (verificada al iniciar). Prompt del propietario (2026-09-17) define la PRIMERA entrega: política conservadora de no-retarget, sin motor de reemplazos, sin compensaciones, sin devolución de stock, sin suspender/cancelar completos. Dependencia cumplida: origin/main contiene #761 y #765 (verificado por merge-commits antes de empezar). Base exacta `origin/main@56238965`. Rama `feat/741-p1-work-preservation`. Un writer; el único PR abierto (#766) es de proyectar y no toca esta superficie.
+- RED primero (PostgreSQL 16 + HTTP reales, conservado e invertido en `backend-go/internal/storage/release_continuity_red_test.go`): P1 con Ingeniería completada + materiales autorizados + corte completado → P2 con diferencia REAL de fabricación (600→650 mm, requote Q4 aceptada, R4 aprobada) → comportamiento ACTUAL documentado: (a-d) advance de pieza/unidad, floor-status, floor-scan y rework sobre P1 devolvían 409 «Ingeniería pendiente» — el estado de preparación de P2 presentado como motivo del bloqueo del trabajo P1 (bloqueado con 0 mutaciones por el gate de #740, pero la discontinuidad nunca se explicaba); (e) **`PUT part-executions` force=true devolvía 200 y REEMPLAZABA las ejecuciones P1 por las de P2 destruyendo el corte completado** — el retarget silencioso real; (mc) la regeneración sin progreso con materiales P1 autorizados movía el trabajo a P2 dejando el compromiso huérfano. Ya protegidos por #740 (sin cambio): P2 no hereda Ingeniería (nace pending), el planning sigue pineando P1, el histórico era legible sin mutaciones.
+- Solución — el trabajo tiene dueño (`backend-go/internal/storage/release_continuity.go`):
+  1. **Pre-guard de pertenencia**: todo writer físico sobre trabajo materializado pregunta primero «¿a qué P pertenece ESTE trabajo?» (identidad existente `PartInstance/ModuleUnitExecution.ProductionRevision`, SIN campo nuevo) bajo el mismo lock FOR UPDATE del gate #740. Set de ejecuciones homogéneo de una liberación ANTERIOR a la autoridad → 409 de continuidad ANTES que cualquier guard técnico o evidencia de preparación. Cubierto: `MutateProjectPartExecutions` (advance/rework de pieza, advance/override de unidad), `MutateProjectQualityPhysical`, `SetProjectItemFloorStatusGated` (floor-status PATCH + floor-scan) y `FinishProductionActivityWithPhysicalEffect` — los ítems quote-line no tienen identidad de release: su escritura de piso falla cerrado ante la discontinuidad en vez de correlacionar por posición/índice/fecha/latest. Mixta/ausente: los checks por objetivo en los closures siguen fallando cerrado.
+  2. **Regeneración (`GenerateCanonicalPartExecutions`)**: la política decide ANTES del force — progreso físico en trabajo de la liberación anterior → 409 continuidad (ni force: no existe reconciliación que preserve operaciones/QC/piso); compromiso de material autorizado/reservas para esa liberación → 409 «materiales comprometidos» (nunca huérfano; #680 es dueño de compensaciones); discontinuidad limpia (vírgenes + sin compromiso) → regeneración P2 permitida como preparación (y el trabajo pasa a ser P2 con el copy honesto de P2); MISMA liberación → contrato supervisor force auditor de #577/#740 SIN cambios (reinicio explícito in-release, no retarget).
+  3. **Sentinels/copy**: `ErrPhysicalWorkReleaseMismatch` ahora explica la discontinuidad («hay una liberación más reciente y este trabajo pertenece a la liberación anterior; revisá la continuidad…», sin IDs técnicos) + nuevo `ErrPhysicalWorkMaterialsCommitted`; ambos mapeados a 409 en partExecutions/quality (respondWithMutationError), floorScan y productionActivity.
+  4. **UI refleja**: `releaseWorkContinuityOf` (domain TS) + banner en ProductionOrderHub «Nueva revisión disponible — Hay trabajo de fabricación en curso sobre la versión anterior…» con detalle secundario «Nueva liberación: Liberación #N», SIN acción de reemplazo (sólo el servidor bloquea; los toasts muestran el copy verbatim).
+  5. **Sin estado durable nuevo**: la señal de continuidad se deriva de identidad de release + progreso + evidencia existentes; suspend/resume/cancel NO implementados (contrato documentado: suspend ≠ cancelación comercial, cancel trabajo ≠ revocar P, resume ≠ crear P nueva).
+- Evidence (HEAD de la rama `d6d95bcf`; PostgreSQL 16 real dedicado desechable puerto 5448 para Go):
+  - Go storage: `TestReleaseContinuity_*` 6/6 (matriz completa con poststates exactos: ids/corte completado/pinning P1 intactos tras cada bloqueo; materiales comprometidos; discontinuidad limpia permitida + copy honesto P2; histórico legible 0 mutaciones; carreras §13 advance-vs-P2 y regenerate-vs-P2 estables en 5 repeticiones — gana como P1 completo o pierde 409 continuidad, jamás empieza P1 y aterriza P2). `TestPhysicalWorkGate_P2DoesNotReuseP1Evidence` actualizado al refinamiento (pertenencia precede preparación). Suite storage completa serializada PASS (225 s); api completa PASS (16 s); domain/auth/cmd PASS; pilotreadiness PASS (241 s).
+  - TS: domain 15/15 de releaseAuthority (señal de continuidad), ui hub 8/8 (banner §16: copy, detalle, sin acciones, silencio sin progreso); `pnpm test` monorepo PASS (ui 1908 / web 514 / storage / domain / excel / desktop / mobile); `pnpm typecheck` 7/7; `pnpm openapi:check` 0 drift; `git diff --check` limpio; tsc tests 24 preexistentes/0 nuevos.
+  - Browser real (Chromium + Go + PostgreSQL): `production-release-continuity.spec.ts` 3/3 PASS — fixture por API soportada (P1 completa con avance físico, P2 650 mm vía requote) → Producción informa la nueva revisión con el trabajo P1 visible y sin acción automática → la acción física bloqueada explica la discontinuidad con poststate idéntico → recargar conserva el mismo estado. Suite organization completa **83/83 PASS** (4.3 m, incluidas las regresiones engineering-physical-gate/state/entry/cutting-demand/demo-golden-path) y `foundation-gate-a.sh --stage browser` PASS (83/83).
+  - SketchUp extension: `bundle exec rake verify` PASS (rbenv 3.2.11; RuboCop 204 files 0 offenses, unit 855 runs/5686 assertions 0 failures, boundary 6/3179, RBZ sha256 c46b9df4…) — sin cambios en esa superficie. Máquina real: NOT_TESTED (sin cambios ni claims).
+- Docs: `docs/project-lifecycle.md` §2.4 (regla ejecutable + tabla de regeneración + clasificación de consumidores de latest A/B/C + límites suspend/cancel), `docs/architecture/project-design-digital-thread.md` §25.10, `docs/demo/engineering-flow-recovery-2026-09-15.md` (entrega D con estado), `docs/verification.md` (§ #741), este entry.
+- Límites explícitos (PR 2+ de #741): reemplazo parcial universal, matching heurístico P1↔P2, compensaciones/devolución de stock (#680), cancelación comercial (#678), suspend/resume/cancel del trabajo con decisión durable. La política conservadora NO bloquea Producción sin discontinuidad real (P1 sin P2 funciona igual; discontinuidad limpia regenera).
+- Revisión del PR #767 (corrección P0 en la MISMA rama): el guard original
+  representaba "sin ejecuciones" y "procedencia mixta/sin pin" con el mismo
+  `Release == ""` y devolvía nil para ambos — fail-open en los writers de
+  ítem (floor-status, floor-scan, activity-finish), que no tienen check por
+  objetivo. Corregido con clasificación EXPLÍCITA (`HasExecutions` /
+  `Release` / `Ambiguous`): mixta o sin `ProductionRevision` fiable → mismo
+  blocker de continuidad; `decodeExecutionsRaw` propaga el error de decode
+  (payload presente pero indecodificable = estado corrupto que falla
+  cerrado, jamás "sin ejecuciones", jamás reparado). Regresiones PostgreSQL
+  nuevas: mixto P1/P2 (floor-status/floor-scan 409 con 0 F092, activity
+  finish con finished_at NULL, advance y regeneración bloqueados), sin pin
+  de release, y payload malformado. Re-verificado: continuity 9/9, subsets
+  #740/#577/OPS-DT-1/calidad/floor PASS, api/domain/auth PASS; suite storage
+  completa serializada re-ejecutada sobre el HEAD corregido antes de
+  publicar (resultado en el comentario del PR).
+- Delivery: el PR #767 declara `Refs #741` + `Delivery: partial` (la aceptación de la issue incluye suspend/cancel y reemplazo parcial, que quedan para incrementos siguientes; el alcance del PR 1 —política conservadora de no-retarget— está demostrado de extremo a extremo). Label `type:bug`, cuerpo conforme a `check_pr_metadata.py` (corrección post-publicación: el cuerpo original llevaba el enlace al final y `Delivery: complete`; validado localmente contra las regexes del checker antes del re-run de CI). Sin merge/cierre manual; publicación para revisión humana.
+
+# Issue #740 — [P0][OPS-GATE] PR 2: gate operacional transversal antes de cualquier avance físico
+
+- Approval: issue #740 OPEN con `status:approved`, `type:bug`, `high` (verificada al iniciar; 0 PRs abiertos, ownership libre). Prompt del propietario (2026-09-16) define la SEGUNDA entrega. Dependencia cumplida: PR #761 MERGED en `origin/main@0d2ddbbc` (verificado por merge-commit antes de empezar). Base exacta `origin/main@0d2ddbbc`. Rama `fix/740-physical-work-operational-gate`. Un writer.
+- Regla implementada (la autoridad común vive en `backend-go/internal/storage/physical_work_gate.go`):
+  1. **Gate común `authorizePhysicalWork`**: se resuelve DENTRO de la transacción de cada writer bajo el lock `FOR UPDATE` de `projects` (los comandos de Ingeniería y materiales toman el mismo lock → decisión y mutación comparten frontera, sin TOCTOU). Para autoridad canónica exige `production_release_engineering.status='completed'` del release EXACTO y autorización de materiales correlacionada (`material_planning.Requirements` pina `release_id`+`manufacturing_fingerprint` Y `MaterialPlanning.Release` presente — liberación regular o excepción autorizada auditada ambas autorizan). Proyectos pre-DT conservan su cadena OC-022 (compatibilidad explícita; un release canónico activa el gate).
+  2. **Writers protegidos**: advance/rework de pieza, advance de unidad, assembly-override (vía `MutateProjectPartExecutions`), rework/QC/QC-override de calidad (nuevo `MutateProjectQualityPhysical`; observación de issues sigue sin gate), floor-status PATCH + floor-scan (nuevo `SetProjectItemFloorStatusGated`: estado + evento F092 atómicos) y el side-effect físico de activity/finish (preflight fail-before-mutate + re-check bajo lock). Clasificación preparación/observación documentada: generación de ejecuciones planificadas (PUT part-executions, incl. force supervisado), Ingeniería, despiece/optimización/plan/PDF/PTX (#738/#739), claim y reporte de daño siguen disponibles.
+  3. **Pertenencia release↔trabajo**: cada avance exige `ProductionRevision == authority.ReleaseID` — evidencia de P1 nunca autoriza trabajo de P2; P2 completamente re-preparada sigue rechazando piezas de P1 (blocker "liberación anterior").
+  4. **Bypass del PUT agregado cerrado**: para obras canónicas el PUT del proyecto ahora preserva `floor_status` por item y descarta `floor_events` del cliente (junto al freeze existente de part_instances/module_units del #577) — el canal físico son los endpoints gated.
+  5. **API/React**: sentinels de dominio con copy accionable (`ErrPhysicalWorkEngineeringPending`/`ErrPhysicalWorkMaterialsPending`/`ErrPhysicalWorkReleaseMismatch`) → 409; el cliente storage propaga el mensaje del servidor verbatim (toast) y el select de piso de la orden (`/orders`) pasó del espejo local al endpoint gated.
+- Defecto REAL encontrado y corregido durante la entrega (pre-existente en main, destapado por la matriz): `MutateProjectQuality` persistía `part_instances`/`module_units` con SQL NULL cuando la mutación no tocaba piezas → registrar una observación de calidad BORRABA las ejecuciones físicas del proyecto. Corregido con `COALESCE` (mismo convenio del writer hermano) + la prueba de la matriz como regresión.
+- Evidence (HEAD de la rama; PostgreSQL 16 real dedicado desechable puerto 5447 para Go serializado, contenedor compartido 5445 sufrió 57P01):
+  - Go storage: `TestEngineeringGate_*` (RED invertido: 409 + 0 mutaciones + generación planificada sigue 200) + `TestPhysicalWorkGate_*` (matriz secuencial, excepción autorizada, stamp no correlacionado, todos los writers + observación preservada + activity finish sin mutar su fila, P1/P2, roles/cross-org, concurrencia misma pieza = 1 ganador, TOCTOU retiro y completación bajo lock) — 11/11 PASS; suite storage completa serializada PASS (223s). TestOpsDt1 actualizado al contrato suma (routing v2 + gate) PASS.
+  - Go api: suite completa PASS (incl. handler nuevo del mapeo 409 accionable con 0 escrituras); resto de paquetes PASS; `pnpm openapi:check` 0 drift (sin cambios de contrato); `pnpm typecheck` 7/7; `pnpm test` monorepo PASS (domain 1479 / storage 223 / excel 350+3s / desktop 17 / mobile 87 / UI 1906 / web 514).
+  - Browser real: `engineering-physical-gate.spec.ts` 3/3 PASS (negativo en-proceso → toast "Ingeniería pendiente" + servidor 0 progreso; negativo completa+materiales pendientes → "Material pendiente de autorización"; positivo con excepción autorizada → avance exitoso con estado + evento F092). Regresiones: engineering-state + engineering-entry + engineering-cutting-demand + demo-golden-path + project-reconciliation + demo-flow-happy-path 30/30 PASS (una corrida inicial tuvo 1 fallo de reconciliation que no se reprodujo en 2 re-ejecuciones — flake de timing del journey largo, no causado por el cambio).
+  - Suite organization completa (Chromium + Go + PostgreSQL): **80/80 PASS** (3.7m), incluida la spec nueva y todas las regresiones. Una corrida inicial tuvo 1 timeout transitorio de la spec nueva bajo org saturada; endurecida la apertura del workspace (espera explícita del contexto de liberación + reintento único) y re-ejecutada completa en verde.
+  - `scripts/foundation-gate-a.sh --stage postgres`: PASS (pilotreadiness completo sobre PG efímero, migraciones fresh).
+- Docs: `docs/project-lifecycle.md` §2.4 (regla final + clasificación + tabla de writers), `docs/architecture/project-design-digital-thread.md` §25.9, `docs/demo/engineering-flow-recovery-2026-09-15.md`, `docs/verification.md`, este entry.
+- Corrección de revisión del PR #765 (atomicidad de activity/finish): el preflight `CheckPhysicalWorkAuthorization` + `FinishProductionActivity` + write gated tenía una brecha (la autorización podía cambiar entre preflight y mutación → actividad terminada sin efecto físico). Reemplazado por `FinishProductionActivityWithPhysicalEffect`: UNA transacción storage que toma el lock de la actividad y del proyecto, resuelve la autoridad exacta, ejecuta `authorizePhysicalWork` bajo ese lock, persiste finished_at/pieces/notes + floor_status + F092 y commitea junto; cualquier error hace rollback de TODO (sin preflight en el handler, sin log-and-continue). Telemetría sin efecto físico conserva su camino. Regresiones nuevas sobre PostgreSQL real: `TestPhysicalWorkGate_ActivityFinishAtomicTOCTOUWithdrawal` (retiro de autorización bajo el mismo lock mientras el finish espera → finish re-evalúa post-commit → blocked con finished_at NULL, pieces/notes intactos, item pendiente, 0 F092) y `TestPhysicalWorkGate_ActivityFinishAtomicHappyPath` (autoridad válida → actividad terminada + item avanzado + 1 F092 activity en el MISMO commit), más `TestProductionFinish_PhysicalGateBlocksAtomically` (handler 409 accionable con 0 escrituras). Gate 13/13 PASS; api completa PASS; browser gate + engineering-state 7/7 PASS.
+- Delivery: complete para #740 (PR 1 + PR 2 cubren la aceptación: RED invertido, estado durable PR 1, todas las rutas físicas rechazan sin escribir, preparación #739 intacta, happy path con avance real, P2 no hereda, excepción auditada, PostgreSQL/RLS/concurrencia/Chromium reales, docs de lifecycle). Lo pendiente expresamente FUERA de #740 (#741 continuidad P1/P2 en trabajo iniciado, #680 despacho atómico, persistencia server-side de planes, DXF/CNC) queda con sus owners. Sin merge/cierre manual; publicación para revisión humana.
+
+# Issue #740 — [P0][OPS-GATE] PR 1: estado durable de Ingeniería por release exacto + RED del gate físico
+
+- Approval: issue #740 OPEN con `status:approved`, `type:bug`, `high` (verificada remota al iniciar; 0 PRs abiertos, sin otra rama/reserva de #740). Prompt del propietario (2026-09-16) define la PRIMERA entrega parcial. Base exacta `origin/main@74217611c88ab05c5066e0723e0e83a882d4ef02`. Rama `fix/740-engineering-release-state`. Un writer.
+- RED operacional ANTES de implementar (PostgreSQL + HTTP reales, conservado en `backend-go/internal/storage/engineering_physical_gate_red_test.go`): con Q/R/P válido (P1 canónico, routing schema v2) y SIN Ingeniería completada/materiales autorizados, hoy avanzan trabajo físico: `POST /parts/{partId}/advance` (pieza → cut completado, `ready_for_assembly`, floor event), `PATCH /items/{itemId}/floor-status` y `POST /floor-scan` (item quote-line → `cut` → `edged`). El guard split-brain OC-033/034 NO cubre estos items (las unidades canónicas referencian FurnitureInstances, no la quote line); `activity/finish` tiene efecto físico sin resolver autoridad (inspección de código). La suite asserts el comportamiento ACTUAL para que PR 2 lo invierta.
+- Implementación:
+  1. Migración `000134_production_release_engineering`: tabla tenant-owned (release_id PK + FK compuesto a production_releases), shape CHECK, RLS owner-org (read/insert/update), trigger de identidad inmutable + completion one-way + version+1, registro en rls_policy_inventory.
+  2. Domain Go: `ReleaseEngineeringState`/errores; `Project.ReleaseEngineering` (proyección computed-on-read del release AUTORIDAD; redactada para sales org; PUT/POST la descartan). Evento `engineering_completed` añadido al vocabulario (fixture Go+TS+json en paridad).
+  3. Storage: `StartReleaseEngineering` (INSERT ON CONFLICT, primer actor gana, idempotente), `CompleteReleaseEngineering` (exige inicio previo + snapshot schema v2 del release exacto + expected version → `ErrVersionConflict`; ya-completado = no-op honesto), `GetReleaseEngineeringState` (ownership check: shared reader nunca ve un "pending" falso), `EngineeringStatesByRelease` batch; auditoría de seguridad + project_events en la MISMA transacción.
+  4. API generada: GET `.../engineering`, POST `.../engineering:start` (RequireIdempotency), POST `.../engineering:complete` (RequireIdempotency + If-Match `"v<N>"`); permiso `RoleCanReleaseProduction` (admin/gerente_produccion/ingeniero). OpenAPI sin drift.
+  5. TS/domain: `ReleaseEngineeringState`, `engineeringEntryStatus` consume la evidencia durable (`completed` nuevo estado, label "Completa"); dashboard/queue coherentes (completed ≡ preparación terminada, timestamps del hecho durable). UI: EngineeringWorkspace reutilizado — chip Pendiente/En proceso/Completa + CTAs "Iniciar Ingeniería"/"Completar Ingeniería" (sólo acción explícita del usuario; fail-closed mientras carga/error) + hecho final con actor/fecha y "autorización de materiales (pendiente)"; hook `useEngineeringState` + comandos en apps/web con invalidación react-query y refresh del workspace. Ninguna lectura/export escribe estado.
+- Evidencia (HEAD final `f96fd36d` = PR #761; commits: `decc5db3` feature → `3414ca0c` fix FK 000122-down → `15c35637` spec PTX+manifest → `f96fd36d` allowlist aborto benigno): Go storage sobre PG real 5/5 nuevos (`TestReleaseEngineeringLifecycleHttp`, `...P2DoesNotInheritP1`, `...IsolationAndExactness`, RED ×2); suite Go completa sobre PostgreSQL dedicado desechable (`./internal/storage` ok 351s EXIT=0; `./...` ok salvo 4 tests que necesitaban la DB `muebles` pre-creada en el contenedor — verdes tras CREATE DATABASE; la DB compartida 5445 sufrió 57P01 por otra corrida concurrente de otro proceso, sin efecto en el veredicto); domain/api completos PASS; `pnpm test` monorepo PASS (domain 1440 / storage 223 / excel 350+3 / desktop 17 / mobile 87 / UI 1906 / web 514), typecheck 7/7, `openapi:check` 0 drift; rake verify SketchUp PASS (rbenv 3.2.11, boundary 6/3179, RBZ d740a285…); scripts CI/factory 52 OK; browser real: organization gate `engineering-state.spec.ts` 4/4 + regresión entry/cutting-demand 9/9; foundation gate A postgres PASS (pilotreadiness incl.) y browser 77/77 (una corrida local posterior falló la spec #739 por hang ambiental del docker recién reiniciado; la CI del mismo HEAD la pasó). **CI remota del HEAD exacto: 12/12 PASS** (Foundation browser/PG, Go, TS, WebGL, SketchUp ×3 SO, metadata).
+- Límites explícitos: gate físico transversal = PR 2 de #740 (writers inventariados en el RED + lifecycle §2.4); #741 P1/P2 replacement/suspend/cancel, #680, DXF/CNC, Q/R, SketchUp intactos. `engineeringLog` legacy NO se migra (sin procedencia release-scoped sigue `unverified`).
+- Delivery: partial (PR #761 `Refs #740` + `Delivery: partial`, `type:bug`; sin merge, sin cierre, sin autoaprobación).
+
+# Issue #644 — [P0][DEMO] Golden path regression: Q/R → release → Ingeniería → PTX de prueba (cierre de hito)
+
+- Approval: issue #644 OPEN con `status:approved`, `type:validation`, `high` (verificada al iniciar; sin PRs abiertos — ownership libre). Prompt del propietario (2026-09-16) autoriza exclusivamente pruebas/fixtures/documentación para completar las 3 aserciones pendientes del hito; sin cambios de producto, merge automático ni ampliación de alcance. Base exacta `origin/main@37850b67`. Rama `test/644-milestone-missing-proofs`.
+- Entrega (sólo tests, reutilizando specs/helpers/gates existentes — sin nuevo framework):
+  1. **A — negativo comercial sin liberación compatible**: `demo-golden-path.spec.ts` stage 1b — tras aceptar Q1 (Project draft, sin diseño) NO existe liberación alguna (`listProjectProductionReleases` = []), no hay `engineering_log`/`materials_release`, la cola de Ingeniería no incluye la obra (`eng-project-<id>` ausente) y no se renderiza strip de liberación ni descargas (`eng-release-context` ausente); el status de Project sigue `draft`. Complemento en `engineering-entry.spec.ts`: pin `?release=<uuid inexistente>` → fail-safe "Liberación no disponible" SIN sustitución por el P1 real (sin strip ni tabs del workspace). El gate de #740 (inicio físico) NO se toca.
+  2. **B — cambio exclusivamente espacial**: `demo-golden-path.spec.ts` stage 11 — el working copy vuelve al contenido comercial exacto de Q2 (dims/materiales/identidades/cantidades) y SOLO mueve la transformación admitida (unidad A desplazada 900 mm; unidad B girada 90°); publica R4 (padre R3) por el contrato SketchUp; `reconcileProjectDesign(Q2, R4)` clasifica 0 deltas comerciales y 0 de manufactura (`requiresRequote=false`, `requiresResolution=false`, differences=[] por FI) aunque los números de revisión difieran (4 vs 2) — la compatibilidad procede de la clasificación del backend; NO se crea otra Q (mismos ids y statuses), Q2 queda intacta bit a bit (snapshot por FI), la aprobación sigue siendo comando explícito contra la MISMA Q2 (approved) y no nace liberación alguna (sólo P1); Project sigue `draft`. La ruta espacial con evidencia en AMBOS lados es propiedad de la suite Go (`reconciliation_impact_test.go`, cubierta) porque el snapshot comercial nunca persiste transform por contrato #394.
+  3. **C — recorrido normal sin intervenciones ocultas**: helper `tests/organization/support/browserErrors.ts` — recolecta `pageerror` y `console.error` con allowlists acotadas por status Y endpoint (401 pre-login sólo en `/auth/me`|`/auth/refresh`; el 404 deliberado del release inexistente sólo en `/production-releases/`); aplicado a las 4 pruebas del recorrido #739 (congelado, guardar/recarga, PDF/PTX, candidato CADmatic), stage 1b y la prueba de release inexistente. Viewports 390/768/1280 sin overflow añadidos a la superficie Despiece congelado (la de entrada ya estaba cubierta por engineering-entry). Las respuestas negativas esperadas NO se convierten en prohibición global ni se suprimen errores para pasar.
+- Evidence (HEAD de la rama, entorno desechable docker PostgreSQL 16 + Go + Chromium):
+  - `scripts/organization-browser-gate.sh demo-golden-path engineering-entry engineering-cutting-demand`: **21/21 PASS** (`[organization-gate] PASS`), incl. stages 1b/11 nuevos y la prueba de release inexistente; sin errores de consola inesperados en ningún recorrido.
+  - `npx tsc -p tests/tsconfig.json`: 24 errores preexistentes en main, 24 con el cambio — **0 nuevos**.
+  - `pnpm openapi:check` 0 drift; unittest fábrica 31+17 OK; `pnpm typecheck` 7/7; `git diff --check` limpio.
+  - Capas: browser real PASS / RUBY CONTRACT = contrato de publish SketchUp por multipart (como el resto del golden) / host con licencia NOT PROVEN (sin cambios) / máquina real NOT_TESTED (candidato sigue notClaimed).
+- Delivery: complete para el alcance del hito inmediato (las 13 casillas de aceptación de #644 quedan demostradas con este PR: 10 ya marcadas + 3 que cierra esta entrega). La verificación operacional posterior (#740/#741/#680) sigue en sus owners y no bloquea este cierre. Sin merge/cierre manual; publicación para revisión humana.
+- Corrección de revisión del PR #756 (mismo PR/rama, HEAD `bd8f5055`): (R1) stage 11 ahora demuestra el cambio espacial PERSISTIDO, no sólo enviado — baseline por `furnitureInstanceId` del readback previo (R3: identidad, sin giro), readback WorkingCopy con el desplazamiento exacto 900 mm / giro 90° / unidad sin mover idéntica, `not.toEqual` contra el antes, y readback de los items CANÓNICOS de R4 (`getDesignRevision`) con las poses movidas congeladas; se conservan dims/materiales/identidad, clasificación backend, Q2 intacta, sin nueva Q y sin nueva P. (R2) stage 1b ahora exige señal positiva de resolución antes de afirmar ausencias — la cola llega a estado terminal (vacío o lista) antes de verificar la obra ausente; el workspace renderiza tabs y la superficie Optimización resuelve como estimación de borrador legítima (`Estimación previa`) con los marcadores canónicos de liberación AUSENTES (`eng-release-context`, `eng-release-prep-notice`, `prod-opt-demand-gate`, `prod-opt-release-requisition-note`); relectura de verdad del servidor tras el recorrido (sin releases, sin engineering_log/materials_release, Project draft). Sin defectos de producto encontrados; verificación del HEAD nuevo: browser real golden 12/12 PASS, tsc tests 24 preexistentes/0 nuevos.
+
+# Issue #739 — [P0][ENG-INPUT] Ingeniería y PTX de prueba desde el despiece congelado del release exacto
+
+- Approval: issue #739 OPEN con `status:approved`, `type:bug`, `high` (verificada al iniciar; sin rama/PR previo — ownership libre). Base exacta `origin/main@bbddfa4b` (post-merge #743/#745). Rama `feat/739-engineering-frozen-cutting-demand`, commit `d5d6dbbd`, merge PR #750 (`c3421e8b`). Entrega B del plan `docs/demo/engineering-flow-recovery-2026-09-15.md`; la entrada de #738 se conserva intacta.
+- Regla de negocio implementada: la base liberada identifica QUÉ fabricar (snapshot congelado); Ingeniería configura CÓMO cortarlo (disco, refilados, estrategia, formato de tablero como inputs explícitos). Ajustar parámetros no toca Q/R/P; cambiar geometría/materiales/cantos congelados no es un ajuste libre y ninguna superficie lo permite.
+- Solución:
+  1. Backend: `GET /projects/{projectId}/production-releases/{releaseId}/cutting-demand` (operationId `getProjectProductionReleaseCuttingDemand`, contrato generado). Proyección tenant-safe del snapshot PRIVADO de fabricación (`GetProjectProductionReleaseCuttingDemand` en storage, scoped por organization_id): identidad de unidad/pieza, cantidades, medidas terminadas, espesor efectivo, material, canto, veta y flags L1/L2/W1/W2. Sin costes, routing ni parámetros evaluados. Permiso `RoleCanReleaseProduction` (admin/gerente_produccion/ingeniero — preparación industrial, no tienda). Snapshot ausente → 409 `blocker: release_snapshot_unavailable`; cross-org falla cerrado.
+  2. Dominio: `engineeringCuttingDemand.ts` — `releaseCutRowsFromDemand` mapea la proyección a `ProductionCutRow` conservando identidad de ocurrencia (`labelRef = fi:part`), cantidades y medidas; el catálogo vigente participa SÓLO como input explícito (etiquetas/formatos/cantos); material o canto ausente del catálogo falla cerrado con los IDs exactos (sin defaults 2440×1830 ni descuento 0 silencioso). `CutPlan.releaseBase` pinea release/número/revisión/fingerprint; `planMatchesReleaseBase` exige coincidencia exacta.
+  3. Persistencia: `releaseCutPlanStore.ts` (localStorage `granete_release_cut_plans_v1`, keyed org+proyecto+release). Recargar recupera el plan con parámetros y base exacta; cambiar release/organización/sesión no mezcla (validate pin en save/load).
+  4. UI: `EngineeringWorkspace` sustituye el bloqueo general de `releaseContext` por conexión por superficie — Despiece y Optimización consumen la demanda congelada (aviso `eng-release-prep-notice` "Preparación editable… no modifica la cotización"); el resto conserva la vista de trabajo #738; `documentos` sigue oculto para obras canónicas. Estados honestos `eng-demand-loading`/`eng-demand-error` con reintento, sin fallback al proyecto vivo. `ProductionOrderOptimizationPanel`: `configDrift` bloquea exportar un resultado anterior a un cambio de parámetros (normalizando configs legacy sin `cutStrategy`); `planBaseMismatch` bloquea planes de otra liberación; bug PDF corregido — el botón nunca parece habilitado sin su acción (RED acreditado restaurando el defecto). Optimizer XLSX no conectado muestra motivo junto a la acción; requisición previa no estima desde el proyecto vivo en modo release.
+  4b. Corrección de review (PR #755, HEAD `1404b4e2`): (i) guardado verificable — `saveReleaseCutPlan` devuelve `saved|memory-only` (cuota/almacenamiento ausente se comunican) y el panel sólo declara éxito con escritura confirmada, con regresiones sobre la cadena real store→panel; (ii) `OptimizationDemandGate` explícito (`legacy|canonical loading/error/ready`) — en modo canónico generar/exportar exigen la base verificada, un plan previo no queda exportable mientras la demanda carga o falla, y el workspace remonta por `key={project:release}`; (iii) DXF canónico bloqueado con motivo (sus perforaciones se resuelven hoy desde el proyecto mutable) conservando PDF/PTX.
+  5. Provenance de artefactos: `generateSelectedCuttingOutput` propaga `releaseBase` → manifiesto con `productionReleaseId`/`designRevisionId`/`bomFingerprint` (ya no figuran como missing provenance en planes de liberación).
+- Evidence:
+  - Go: `internal/api` PASS completo (18.6s, incluye 3 tests nuevos del handler: happy/permisos 403/409+400); `internal/storage` PASS serializado completo sobre PostgreSQL 16 real (127.0.0.1:5445, DB desechable, incluye `TestReleaseCuttingDemand_ExactUnitsAndFrozenFields`, `_IgnoresMutableCatalogAndProject`, `_UnavailableAndIsolated`); resto de paquetes PASS (pilotreadiness 239.375s).
+  - TS: domain 1436 (5 nuevos del mapper), ui 1884 (8 nuevos de panel + 6 de workspace con demanda), storage 216, web 514, excel 350 (+3 skips preexistentes); `pnpm typecheck` 7/7; `pnpm openapi:check` 0 drift; `git diff --check` limpio.
+  - Browser E2E real Chromium+Go+PostgreSQL `tests/organization/engineering-cutting-demand.spec.ts` 4/4 PASS sobre el HEAD final: (1) caso Q1 600mm→R2 650mm→Q2 aceptada→P1 — despiece muestra las piezas 650/600 de la liberación y NO las del proyecto; renombrar material + redimensionar módulo del catálogo no altera la demanda (sin '999'); 0 mutaciones comerciales (draft, sin engineering_log/materials_release); (2) ajustar disco bloquea exports hasta regenerar, guardar+recargar recupera el plan; demanda API exacta widths [600,600,650], material y espesor 18; (3) PDF real del MISMO plan guardado con SHA-256 idéntico al render determinista (comprobación de conexión/consistencia que usa el mismo generador como referencia — no una revisión independiente de geometría/legibilidad) + PTX genérico v1.14 con TOTAL_PIECES=3, 650/600 y código de material; (4) candidato CADmatic 4 r3 vía Settings real: manifiesto con provenance del release exacto (missingProvenance []) + lectura independiente `parsePtxDocumentBytes`/`validatePtxDocument`/`verifyCutPlanPtxReadback` verde y PARTS_REQ widths [600,600,650].
+  - Regresión detectada y corregida durante la verificación: `configDrift` marcaba planes legacy sin `cutStrategy` en la config (falso drift deshabilitaba PTX en #692); normalización `(c.cutStrategy ?? 'saw-guillotine')` + test de regresión; re-ejecutado `machine-output-selection.spec.ts` 9/9, `demo-golden-path.spec.ts` 10/10 y `engineering-entry.spec.ts` 4/4 sobre el código final.
+  - Host SketchUp y máquina real: NOT_TESTED (sin cambios en esa superficie; el candidato sigue NOT_TESTED/notClaimed).
+- Delivery: partial según PR #750 al momento del merge; la verificación restante declarada allí (browser E2E + storage completo) fue completada después sobre el MISMO HEAD `d5d6dbbd` y queda registrada en este entry y en el comentario del PR. La revisión posterior encontró tres defectos de frontera corregidos en el PR #755 (guardado verificable, gate de base verificada para generar/exportar, DXF por formato). Limitaciones vigentes: el plan persiste en localStorage del navegador (por org+proyecto+release, no compartido entre usuarios/equipos — persistencia server-side pendiente como continuación); etiquetas/códigos de material y espesor de canto provienen del catálogo vigente como inputs explícitos de Ingeniería (dimensiones/cantidades/identidad sí provienen del snapshot congelado); la comparación byte-exacta del PDF valida consistencia, no legibilidad independientemente. Sin implementar (dueños propios): #740 finalización/gates físicos, #741 continuidad P1/P2, #682 historial etiquetas/QR, serializadores no soportados → #650, conexión exacta de perforaciones DXF.
+
+# Issue #668 — [P1][AS3D-2] SketchUp: jaladera SKP real con descarga, montaje y diagnóstico completo
+
+- Approval: Prompt y handoff del propietario (2026-09-15) autorizan la implementación de #668 como parte del programa #666. Base exacta origin/main en worktree aislado .worktrees/issue-668-sketchup-hardware-3d, rama feat/668-sketchup-hardware-skp-assets.
+- Scope: Descarga autorizada mediante token de sesión JWT (POST /hardware-assets/{assetId}/revisions/{revisionId}:authorize), streaming de binario sin cabecera Bearer a endpoint de archivo firmado, verificación de hash sha256 y tamaño, caché atómica en disco (HardwareAssetCache), resolución de geometrías SKP nativas en SketchUp con orientación autoritativa de base ortonormal derecha (axes_transform), prefetching previo a la transacción de modelo (#498 pipeline, cero I/O de red dentro de model.start_operation), diagnósticos estructurados visibles ante fallos o ausencias (hardware_asset_missing), y validador en host (HardwareAssetValidator) con emisión de evidencia inmutable append-only a POST /api/hardware-assets/{assetId}/revisions/{revisionId}:validate. Sin fallback mutable por nombre en reconstrucción de revisiones históricas.
+- Solución por capas:
+  1. Go Domain & Engine: LayoutHardware enriquecido con LocalTransform, AssetID, AssetRevisionID, SHA256, ExpectedBytes, Representation, ValidationState. Wire golden sketchupAuthoringResolve.contract.json sincronizado con paridad exacta.
+  2. Go Backend: RecordHardwareAssetValidation en storage y HandleHardwareAssetRevisionValidate en API para registrar evidencia append-only desde el host validador.
+  3. Ruby Contratos & Cache: LayoutContract valida y parsea LayoutHardwarePlacement con base ortonormal y metadatos visuales. HardwareAssetCache con verificación sha256 y escritura atómica temporal. HardwareAssetDownloader con mutex por asset/revisión y reintento de grant.
+  4. Ruby Montaje & Renderizado: AssetLoader con prefetching y transformación rígida (axes_transform), integrado a FurnitureBuilder prefetch pipeline antes de model.start_operation. NativeLayoutRenderer modularizado.
+  5. Ruby Validador: HardwareAssetValidator inspecciona entidades y dimensiones en host SketchUp y remite reporte tipado (passed/failed) al backend.
+- Evidencia:
+  - Ruby Extension: 769 runs, 5136 assertions, 0 failures, 0 errors, 0 skips (bundle exec rake unit).
+  - RuboCop: 192 files inspected, no offenses detected (bundle exec rubocop).
+  - Go Backend: tests de internal/domain/engine y internal/api de hardware assets PASS (TestLayoutHardwareAuthoritativeTransformAndVisualAsset, TestHardwareAssetRevisionValidate, TestAuthoringResolveContractFixtureGolden).
+  - OpenAPI Drift: pnpm openapi:check PASS (0 drift, negative proofs passed).
+  - TypeScript Monorepo: pnpm test PASS (38 test files, 492 tests), pnpm typecheck PASS (7/7 packages/apps).
+- Delivery mode: complete.
+# Issue #738 — [P0][FLOW-ENG] Llevar el release canónico a Ingeniería sin depender de Project.status ni saltar etapas
+
+- Approval: issue #738 OPEN con `status:approved`, `type:bug`, `high` (verificada remota al iniciar). Base exacta `origin/main@888dcb596b3932f487758e0b006b3b76e53c54b8` (post-merge PR #737, verificado). Rama `fix/738-canonical-release-engineering-entry`. Durante la entrega se integró `origin/main@74bb90e0` (merge del PR documental #742): su documento `docs/demo/engineering-flow-recovery-2026-09-15.md` llegó por main (no copiado); el conflicto en `docs/project-lifecycle.md` §2.2 se resolvió conservando la estructura de #742 (contradicción de la base examinada) y actualizando el bloque al estado implementado por #738.
+- Causa raíz confirmada sobre la base vigente: `projectProcessStage` retornaba `ventas` para `Project.status ∉ {accepted, produced}` (obra draft + Q2 accepted + R2 approved + P1 canónico fuera de la cola de Ingeniería); `sentToProduction` interpretaba "existe P canónico" como envío ya realizado (accepted + P1 saltaba a `almacen` sin evidencia); `computeEngineeringDashboardStats` repetía el filtro de status (métricas excluían draft+P1); los exits post-release (#697) sólo ofrecían "Abrir en Producción" y `engineeringProjectPath` no transportaba el release exacto.
+- RED primero: 14 pruebas de dominio fallando por el defecto real (clasificación, envío fabricado, stamp de materiales, cola/contadores) antes del fix; luego GREEN. Invariante antigua reemplazada documentadamente en `releaseAuthority.test.ts` ("canonical P ⇒ almacén + canReleaseMaterials" congelaba el defecto; la correcta: P habilita preparación en `ingenieria`, nunca completa/materializa).
+- Solución (entrega A del plan #742, sin #739/#740/#741):
+  1. Dominio `processStage.ts`: cancelada → `ventas`; release canónico → `ingenieria` SIN evidencia material release-correlacionada; la obra canónica avanza sólo por evidencia explícita: requerimientos congelados derivados del release exacto → `almacen`, derivación + autorización de materiales release-scoped (stamp auditado en la misma transacción) → `produccion`; un stamp legacy sin demanda congelada no prueba nada del release; moderno positivo (`hasDigitalThreadContext === true`) con stamp residual y sin P falla cerrado; `undefined` = modo local conserva la cadena legacy pre-DT; `sentToProduction` sólo handshake OC-022; `canReleaseMaterials` excluye obras canónicas y modernas. (Refinamiento tras CI: la regla estricta «canónico ⇒ siempre ingeniería» cerraba la entrada UI al flujo de materiales congelados #577 ya entregado; la evidencia explícita preserva esa capacidad sin fabricar avance.)
+  2. `engineering.ts`: `engineeringEntryStatus` (`pending` | log legacy | `unverified` = release canónico + log no correlacionado) + labels ES; `computeEngineeringDashboardStats` incluye por etapa compartida (cola y contadores nunca divergen; `unverified` cuenta en pending sin borrar historia).
+  3. Navegación exacta: `engineeringProjectPath(:id, {releaseId})` con query param `?release=` (patrón `qrev/design/rev`); entrada general sin param pinea la autoridad del servidor en la URL una sola vez (replace); hook `useEngineeringReleaseContext` resuelve el release exacto + label Q con `getProjectProductionRelease` + `listProjectQuoteRevisions` (cliente generado, project-scoped; selección desconocida/ajena → fail-safe, jamás "latest" implícito); query keys session/project/release scoped.
+  4. CTA post-release: "Abrir Ingeniería" acción PRIMARIA en el éxito de liberación (usa el release devuelto por el comando; Producción pasa a secundaria como contexto distinto); menú "Abrir Ingeniería" en el chrome de Cotizaciones con el releaseId de la autoridad.
+  5. Workspace honesto: strip `Liberación #N · Diseño R{n} · Q{x}` + chip estado (`Pendiente`/`Sin verificar`); tabs de datos live marcadas "Vista de trabajo actual… no es el contenido congelado de la liberación"; descargas live (CSV/PDF/PTX/ZIP…) y tab Documentos NO se ofrecen como documentos de P; "Marcar documentado"/"Enviar a Producción" ocultos para obras canónicas; cola sin botón "Iniciar" para canónicas (ningún log legacy se crea al entrar).
+  6. Sin cambios de backend (lectores generados ya existían), sin OpenAPI drift, sin migraciones, sin Ruby/SketchUp.
+- Evidencia:
+  - Dominio 105 archivos/1427 PASS (incluye matriz #738 completa); `pnpm test` monorepo: domain 1427 / storage 216 / excel 350+3 skips / desktop 17 / mobile 87 / UI 1869 / web 502.
+  - `pnpm typecheck` 7/7; `pnpm openapi:check` 0 drift; `git diff --check` limpio.
+  - Browser gate real (Chromium + Go + PostgreSQL desechable): `engineering-entry.spec.ts` 4/4 PASS — fixture por API soportada → release P1 por UI real → "Abrir Ingeniería" con URL `/engineering/:id?release=<uuid>` → strip Liberación #1 · Diseño R1 · Q1 + Pendiente → cola con la obra (draft) accesible por teclado → recarga conserva release exacto → cero mutaciones por navegación (`status=draft`, sin `engineering_log`, sin `materials_release`, autoridad = P1) → viewports 390/768/1280 sin overflow + foco/teclado.
+  - Corrección post-CI: `project-reconciliation.spec.ts` actualizado a la invariante #738 (antes de cualquier evidencia material la obra NO aparece en Almacén y SÍ en la cola de Ingeniería como Pendiente; el flujo material #577 se conserva con derive inicial por comando release-scoped y el resto por UI; aserción final por cadena de evidencia).
+  - Flake preexistente corregido (descubierto por el CI de este PR, ajeno a #738): `project-designs.spec.ts:288` fallaba intermitente porque `design_revision_items.created_at` usa NOW() transaccional → todos los ítems de un publish empatan y `ORDER BY created_at ASC` deja el orden indefinido → `.first()` podía ser FI-A (600 mm) o FI-B (800 mm). Aserción hecha independiente del orden (anchos 600/800 afirmados a nivel tabla). Owner de la superficie: #501/#641.
+  - Regresión: `demo-flow-happy-path.spec.ts` 1/1 PASS (exit a Producción conserva).
+  - Hook: `engineeringReleaseContext.test.ts` 5/5 (resolución exacta, 404 fail-safe, release ajeno rechazado, sin label Q inventado, keys scoped).
+- Docs: `docs/project-lifecycle.md` §2 actualizado con la regla ejecutable vigente (#738) y su relación con `projectAllowsProductionAccess` (#697). Límites: despiece congelado/PTX de prueba = #739; finalización durable/gates físicos/materiales = #740; continuidad P1/P2 = #741.
+- Revisión independiente R1 (CHANGES_REQUESTED sobre c67c510e) — cuatro correcciones aplicadas sobre el mismo PR:
+  1. Correlación exacta evidencia↔P: `materialEvidenceCorrelatesWithRelease` exige `requirements.releaseId === authority.releaseId` Y `bomFingerprint === manufacturingFingerprint`; P2 jamás hereda etapa de evidencia de P1 (tests: P2+P1-reqs, P2+P1-reqs+stamp, reqs sin identidad, huella incompatible → todas `ingenieria`). `canReleaseMaterials` además excluye canonical explícitamente (un log legacy no vuelve aplicable el stamp).
+  2. Pre-DT estricto: la cadena legacy exige `hasDigitalThreadContext === false` (procedencia desconocida falla cerrado, también en `canReleaseMaterials`). Señal positiva local sin rellenar el mapper: `createSeedWorkspace`, `LocalStorageWorkspaceRepository.getWorkspace()` (declara pre-DT para todo payload local, incluidos los previos al campo) y `projectStore.createProject` en sesión guest ponen `false` positivamente; la creación en sesión auth deja el campo ausente (la respuesta del servidor es la autoridad). Test nuevo del nacimiento guest/auth.
+  3. Navegación diferida guardada: `deferredNavigation` captura scope+URL del intento y revalida sesión/scope/ruta vivos antes del `navigate()` (late completion jamás arrastra al usuario; navega también ante refresh rechazado SÓLO con intento vigente). Tests 4/4; cableado único `openInEngineeringGuarded` para reconciliation y chrome.
+  4. Inspector histórico: el fallo de CI estaba ya corregido en 8af49186 (empate `created_at` transaccional → orden indefinido; aserción independiente del orden; diagnóstico documentado, ajeno a #738). Reforzadas las dimensiones congeladas por revisión: R1 fija 600/800 y R2 600/800/900.
+- Evidence ronda R1: monorepo domain 1431 / storage 216 / excel 350(+3) / desktop 17 / mobile 87 / UI 1869 / web 514; typecheck 7/7; gate local conjunto 13/13 (engineering-entry, project-reconciliation, demo-flow-happy-path, project-designs); CI remota 9/9.
+- Mejoras de cierre R1 (mismo PR, HEAD final `10193776`, CI 9/9): descripción del PR corregida al comportamiento vigente (pre-DT estricto + correlación evidencia↔P) con verificación separada por HEAD (inicial `ddb1eda6` vs final); `runDeferredNavigationGuarded` extrae la composición refresh→guard→navigate a fábrica inyectable con 7 tests de integración (refresh pendiente controlable; cambio de ruta/organización; sesión caída; resolución y rechazo con efecto real sobre navigate; no re-navegación si la ruta ya es el objetivo). El test de integración destapó y corrigió un rechazo no manejado: `finally` propagaba la promesa rechazada bajo `void` (unhandled rejection en CI); ahora `then(complete, complete)` consume ambos desenlaces con el mismo guard.
+- Delivery: complete (para el alcance de #738). Sin merge, sin cierre de issues, sin labels protegidos.
+
+
+# Issue #736 — [P0][RELEASE] Desduplicar IDs de piezas en Go BOM resolve para estructura y agregados repetidos
+
+- Approval: prompt del propietario autoriza issue y PR (2026-09-14). Issue #736 creada con labels `status:approved`, `type:bug`, `backend`, `domain`, `high`. Base exacta `origin/main@556804c1`. Rama `fix/736-release-bom-duplicate-part-ids`.
+- Causa raíz confirmada (reproducción sobre DB real del proyecto `44e5c81d-4e28-4f56-b577-7b0464d885ea`): `CreateProductionRelease` fallaba con `ErrReleaseSnapshotResolution` (409 "La revisión no puede resolverse para fabricación"). En `resolve.go` (`expandComponentInstances`), piezas repetidas de estructura recibían siempre `-copy-0`. En agregados, prefijos fijos legacy (`st-agr-` / `mod-agr-`) y loop sobre cantidad generaban IDs duplicados sin las etiquetas de instancia hermanas ni la partición de espacio de `layout.go` / `bom.ts` (#442 / #434). Al validar `ValidateReleaseRoutingProgram`, las piezas colisionaban (`routing part appears more than once`). Además, `evaluateReleaseManufacturingReadiness` no evaluaba `DeriveReleaseRoutingProgram` en preflight.
+- Solución:
+  1. `expandComponentInstances`: `copyCounters := map[string]int{}` asigna copias secuenciales (`copy-0`, `copy-1`, ...).
+  2. `expandComposedModulePartsWithDims`: se unifica la expansión de agregados de estructura y módulo, evaluando dimensiones de sub-espacio, partición en unidades vía `agregadoSubspaceUnits`, etiquetas de instancia estables (`instance-%s-`) y prefijos exactos `agr-%s-%su%d-`.
+  3. `evaluateReleaseManufacturingReadiness`: evalúa `engine.DeriveReleaseRoutingProgram` en el gate para paridad total con release.
+- Regresiones y evidencia:
+  - Unitario `TestDeriveReleaseRoutingProgram_RepeatedStructureAndAgregadoComponents` en `release_routing_test.go` PASS.
+  - Suite de engine completa PASS.
+  - Storage: prueba transaccional sobre PostgreSQL real con Revisión 4 del proyecto real PASS (preflight READY, release creado exitosamente con fingerprint sha256).
+  - `pnpm openapi:check` PASS (0 drift); `git diff --check` limpio.
+
+# Issue #731 — [P0][SU-DEMO] Convergencia automática de posición, sincronización y validación del diseño (Parte 1/2)
+
+- Approval: issue #731 OPEN con `status:approved` y `type:feature`.
+- Base exacta: `origin/main@b330ecf9ee032f618eaf2a8a8b8a39e51b9e615d`. Rama: `feat/731-auto-position-convergence`.
+- Scope PR1 (Delivery: partial):
+  - Auto-confirm en INSERT (R1): post-inserción física mediante Placer se realiza convergencia explícita y síncrona vía `PositionSyncCoordinator#converge_inserted_unit`, sincronizando WorkingCopy con pose conocida y ejecutando preflight review inicial sin depender de observers que ignoran operaciones internas.
+  - Transform-aware reconciliation (R2): `HostReconciliation` compara el transform local contra el transform del WorkingCopy mediante `TransformContract.equivalent_to_host?`. Si difieren o el WorkingCopy no tiene transform, reporta `pending_confirmation` con razón honesta ("la posición local difiere de Granete; sincronización pendiente") y marca el panel como no limpio (`clean: false`).
+  - Boundary y arquitectura (R3): `PositionSyncObserver` (en capa `Host`) es un observer SketchUp puro sin dependencias de WorkingCopy ni red; delega en `PositionSyncCoordinator` (en capa `Connection`), respetando `OwnershipTest` y cero `require_relative` en runtime.
+  - Revalidación estricta de contexto: captura modelo, exact binding, projectId, designId y baseRevisionId al inicio; revalida antes del PUT (y durante debounce). Si cualquier autoridad cambia (switch de modelo o binding durante GET o debounce), aborta fail-closed con 0 llamadas PUT y 0 efectos colaterales.
+  - Readback autoritativo en PUT: utiliza la respuesta del PUT de WorkingCopy como autoridad; sólo avanza `known_transforms` y emite `on_sync_complete` si el transform devuelto por el servidor equivale al del host final. Si difiere, falla cerrado y la reconciliación permanece en `pending_confirmation` habilitando "Reintentar sincronización".
+  - UI fallback (Caso 4): En el flujo exitoso, la confirmación es automática y silenciosa. Ante falla de red/servidor, no se revierte la geometría local del usuario y el botón secundario presenta "Reintentar sincronización" (con feedback "Sincronizando…") en lugar del manual "Confirmar posición".
+  - Ciclo de vida y seguridad: `PositionSyncCoordinator` se vincula al ciclo de vida del modelo y del diálogo, previniendo fugas de observers o ejecuciones desalineadas si el modelo no está vinculado a Granete.
+- Evidencia de verificación:
+  - Ruby unit tests: 728 runs, 4933 assertions, 0 failures, 0 errors, 0 skips (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rake unit`).
+  - Boundary suite: 6 runs, 2855 assertions, 0 failures, 0 errors, 0 skips (`OwnershipTest` PASS completo).
+  - Deterministic RBZ: sha256 `8a0f7141ec75650e8bc8d75dba9e921c2cc3d73880b59753bb507d4209f0e82b` verificado y reproducible (`rake package:verify`).
+  - RuboCop: 183 files inspected, 0 offenses (`RBENV_VERSION=3.2.11 rbenv exec bundle exec rubocop`).
+  - JS tests: 16 test suites (266 tests) passing cleanly (`for f in test/js/*.js; do node "$f"; done`).
+  - Boundary & packaging: `rake verify` COMPLETO PASS (syntax, lint, unit, boundary, package:verify).
+- Delivery: partial.
+
+# Issue #732 — [P0][SU-COMM] Error en llamada HTTP de proyección comercial por kwargs de Ruby 3
+
+- Approval: issue #732 OPEN con `status:approved` y `type:bug`.
+- Base exacta: `origin/main@c8673d817584be8416109c062001e99d7d071829`. Rama: `fix/732-sketchup-commercial-projection-kwargs`.
+- Causa raíz: `Granete::SketchUpExtension::Connection::CommercialProjection::Service#fetch_projection` llamaba a `@transport.request` con un trailing hash sin llaves. Con la firma de `HttpAdapter#request(payload, authorization_header: nil)`, Ruby 3 interpreta los argumentos como keyword arguments y falla con `ArgumentError: wrong number of arguments (given 0, expected 1)`, degradando silenciosamente a `unconfirmed` en runtime.
+- Fix: envolver el hash con llaves explícitas `{ ... }` y sincronizar el mock de tests en `test/unit/commercial_projection_test.rb` con la firma real (`authorization_header: nil`).
+- Evidencia: tests unitarios en verde (20 runs, 46 assertions, 0 failures), rubocop sin ofensas.
+- Delivery: complete.
+
+# Issue #729 — [P0][DEMO-UX] SketchUp como única entrada visible de diseño para la demo
+
+- Approval: issue #729 OPEN con `status:approved` aplicada por el propietario
+  (2026-09-14T21:43:58Z) + `type:feature`; prompt del propietario define
+  alcance, exclusiones y DoD. Base exacta
+  `origin/main@69274cc5bb0e71ec60feec24cd2abdb890c720fb` (incluye #728 ya
+  mergeado; solape verificado nulo). Rama `feat/729-demo-ux-sketchup-only-design`.
+  Sin PR/issue concurrente (0 PRs abiertos verificados antes de empezar).
+- Scope: ocultar TODAS las entradas visibles de Proyectar en la experiencia
+  normal de la demo mediante UN único control
+  `demoExperience.proyectarVisible = false`
+  (`packages/ui/src/demoExperience.ts`): botón chrome "Proyectar"
+  (`project-chrome-projectar`), cue post-agregar "Colocar en Proyectar",
+  acciones "Ir a Proyectar" del modo Presentación (slides Planta y Vista 3D) —
+  gating en los tres choke points de props en `ProjectsScreen.tsx` — y copy
+  que nombra la superficie oculta (placeholder sin muros de Vistas de
+  producción; hint del campo B en editor de módulos). Sin launcher inventado:
+  SketchUp queda como único camino visible vía menú "Más" → "Diseños 3D y
+  revisiones" → "Abrir en SketchUp" (pairing #499, flujo existente).
+- No-removal guarantees: Proyectar NO se elimina ni depreca; componentes,
+  `ProjectSpatialStudio` (+ sus tests directos), visores 3D read-only ("Vista
+  3D cotización", "3D" por ítem), `onUpdateKitchenLayout`/KitchenPlanPanel 2D,
+  label factual de fuente `proyectar: 'Proyectar 3D'` (source_type) y
+  owners #643/#308/#444/#529 quedan intactos. La ruta directa preservada se
+  activa por sesión con `sessionStorage.granete_proyectar_visible=1` (mismo
+  patrón que la sesión guest): los gates #444 y los smokes del studio la
+  usan; nada del flujo normal de producto escribe esa clave.
+- Result: `IMPLEMENTED_PENDING_REVIEW`.
+- Evidence: RED primero confirmado (3 tests nuevos fallando por entradas
+  visibles); luego GREEN. `@granete/ui` completa 166 archivos/1858 PASS
+  (incluye #729 demo-hides, #729 reactivation-one-switch, #729 copy x2 y
+  `ProjectSpatialStudio` intactos); `apps/web` 38 archivos/492 PASS;
+  `pnpm typecheck` 7/7 sin errores; browser real: smoke studio
+  `proyectar-studio.spec.ts` 4/4 PASS (WebGL, entrada por opt-in de sesión) y
+  gate #444 `proyectar-webgl.spec.ts` 6/6 PASS (SwiftShader); `git diff
+  --check` limpio. Smokes perf/usability (#312/#314): NOT_RUN (mismo patrón
+  de opt-in verificado dos veces; presupuestos de 3–8 min ajenos a este
+  cambio). Diff: +167/−17 en 13 archivos + 1 nuevo (`demoExperience.ts`).
+- Docs: `docs/roadmap-comercial-v2.md` § "Demo design entry rule (#729)".
+
+# Issue #727 — [P0][RELEASE] DesignRevision con dimensiones explícitas falla al liberar módulos con presets
+
+- Approval: prompt del propietario (2026-09-14). Issue #727 creada específica para esta causa (sin absorber en #650/#644); sin PR/issue concurrente (verificado: 0 PRs abiertos). Base exacta `origin/main@096ebb49`; rama `fix/727-release-explicit-dims-presets`. Un único writer; sin merge, cierre ni cambios de labels protegidos.
+- Causa raíz confirmada contra la DB real del proyecto `44e5c81d…` ("Cocina Prueba (copia)"): `resolveReleaseUnit` llamaba `ResolveBomWithContext(..., "", nil, dims)` con `measurePresetID` vacío; para módulos con `Module.Presets`, `resolveModuleDims` rechaza antes de que `customDims` reemplace las dimensiones → `ResolveReleaseCollection` falla → `ErrReleaseSnapshotResolution` → 409 "La revisión no puede resolverse para fabricación" sin details. Los 4 items (MOD-BAJ-2P/3CAJ, MOD-ALA-1P/2P) tienen presets 3–4 c/u: release imposible. Además: preflight READY ≠ releasable (gap de paridad) y la causa se descartaba en el 409.
+- Solución: frontera explícita de autoridad de dimensiones sobre el MOTOR ÚNICO de BOM — `dimensionAuthority` interna (`commercialPresetAuthority` | `publishedDesignAuthority`) + entry point `ResolveBomForRelease`; H09 comercial intacto (preset exacto sigue obligatorio en Quote/Project, incluso con customDims). La resolución del snapshot (`evaluateReleaseManufacturingReadiness`: preflight + `ResolveReleaseCollection`, una sola resolución reutilizada por el insert) participa del MISMO gate que alimenta aprobación/release; el preflight read-only reporta BLOCKED con issue tipado `release_snapshot_resolution` (enum OpenAPI/UI regenerados) cuando el snapshot exacto no resuelve. Error accionable: `domain.ReleaseUnitResolutionFailure` (instance/definition/reason business-safe) → 409 con `blocker=release_snapshot_resolution` + details; UI lo presenta con unidad y causa.
+- RED primero: engine `release_unit_presets_test.go` confirmó RED con el error exacto de producción ("elegí un preset de medida para el mueble …"); storage happy path re-confirma RED con el fix temporalmente revertido (el parity gate atrapa el error original como issue `release_snapshot_resolution` antes del release). Guards: comercial sin preset → ERROR (con y sin customDims); dims ausentes/≤0/fraccionarias y overrides sobre módulo fijo siguen rechazadas.
+- Result: IMPLEMENTED_PENDING_REVIEW. Sin migración, sin cambios en SketchUp/PTX/DXF/optimizer/machine profiles, sin `measurePresetId` en DesignRevision, sin inferencia de preset. La revisión existente del proyecto real puede reintentarse sin recrear Q/R ni editar DB.
+- Evidence: domain+engine PASS; storage PostgreSQL real (default DSN 127.0.0.1:5445, DB desechable por test) suite completa PASS — incluye `TestProductionRelease_ExplicitDimensionsPresetModule` (happy path E), `TestProductionRelease_PreflightParityBlocksUnresolvableRevision` (negativa C/D/E), `TestEvaluateDesignRevisionPreflight_*` y `TestProductionRelease_SelectedMaterialAuthority` actualizado al contrato de paridad (escenario "empty": preflight BLOCKED `release_snapshot_resolution`, release sigue rechazando por resolución; missing/foreign siguen bloqueando por material). RED acreditado dos veces (engine con el error exacto; storage con el fix revertido temporalmente — restaurado en el commit final). api gate mapping + snapshot details PASS; `pnpm openapi:check` 0 drift; `pnpm typecheck` 7/7; packages/storage TS 216 PASS; UI digitalThread 1855 PASS (incl. mapping accionable nuevo); browser gate real Go+PostgreSQL desechable+Chromium `demo-golden-path.spec.ts` 10/10 PASS sobre el HEAD final (stage 10 ProductionRelease con snapshot congelado); `git diff --check` limpio. Full Go `go test ./... -count=1` serializado: ver PR. SketchUp/TestUp host real y máquina: NOT_TESTED (sin cambios en esa superficie).
+- Incidente de proceso (transparente): una restauración vía `git checkout` durante la demostración RED del storage overwriteó el fix de `release_unit.go` por ~25 min y invalidó una corrida de suite y un gate de browser; ambas evidencias fueron re-ejecutadas sobre el código final. La regresión de contrato detectada en esa ventana (`EvaluateDesignRevisionPreflight` devolvía error en vez de verdict BLOCKED) fue corregida y cubierta por los tests existentes de paridad.
+
+
+- Correction R1 / PR #722: #721 y #720 integrados; `origin/main@6cc9af39026c7965c331908666f90a1cc242772d`, rama reconciliada mediante merge no destructivo `3d38b3d60805692600583f7db787d3b46c130df3`. #718 permanece abierta con `status:approved` + `size:exception`; #722 permanece abierto contra `main`.
+- Correction scope: agregar `can_create_initial_quote` al contrato generated, derivada exactamente de `state == valid && RoleCanMutateProjects`; Ruby la exige fail-closed y HtmlDialog la consume sin debilitar ningún gate comercial existente. Sin cambios de pricing, provenance, pairing, allowlist ni lifecycle.
+- Correction plan:
+  1. Fijar RED de coherencia RBAC/Q1 para rol con acceso a Project sin `RoleCanMutateProjects`, estado archived y actor autorizado.
+  2. Actualizar OpenAPI, regenerar Go/TypeScript y proyectar la capability explícita en binding/pairing canónicos.
+  3. Endurecer contrato Ruby ante campo ausente/tipos inválidos y corregir el harness JS que reproduce el falso enablement.
+  4. Ejecutar gates focalizados de contrato, Go API, Ruby/RBZ, Node HtmlDialog, OpenAPI drift y diff check.
+- `delivery_mode=complete`: #722 contiene el slice SketchUp/HtmlDialog restante más esta corrección final; no queda producto bounded pendiente dentro de #718. Metadata/push/CI remoto quedan a cargo del líder.
+- Correction result: `can_create_initial_quote` es ahora obligatoria en OpenAPI/generated Go/TypeScript, viaja en binding y pairing canónicos, y se deriva de `state == valid && RoleCanMutateProjects` sin alterar `can_edit_working_copy` ni `can_publish_revision`. Ruby rechaza ausencia, `null`, string y number; HtmlDialog usa sólo la capability nueva para RBAC y conserva match/local-state/mutation/projection/reference/tokens/total/double-click/reconfirmación.
+- Correction evidence: Go API focal PASS (`TestHandleProjectDesignBindingValidate_*`, golden, pairing exchange y `TestHandleCreateInitialDesignQuoteRevision_*`), paquete `internal/api` completo PASS (21.838s); `pnpm openapi:check` y storage typecheck PASS; Ruby contract/model/bootstrap PASS y `rake verify` PASS (675 runs/4576 assertions, boundary 6/2675), RBZ SHA-256 `17e20a6f372d676e21006295d825f2e67b3c3fe2de8a2d12da332ac11a9f5fea`; 16 harnesses Node PASS, CommercialProjection 31/31; browser real Go+PostgreSQL+Chromium `sketchup-first-q1.spec.ts` 1/1 PASS (6.4s); `git diff --check` PASS. SketchUp/TestUp save-close-reopen: `NOT_TESTED`. CI remoto exact-head: pendiente del push del líder.
+- Approval/base vigente: issue #718 OPEN con `status:approved` + `size:exception`; PR #717/#721/#720 MERGED y #711 CLOSED verificados. Base exacta `origin/main@6cc9af39026c7965c331908666f90a1cc242772d`; el baseline inicial de #718 fue `56bb3cf494c809e4e573f38037d1d9d4117ddeb8`.
+- Rama/worktree: `codex/feat/718-sketchup-first-q1` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-718-sketchup-first-q1`.
+- Started: 2026-09-13. Un único writer de producto; sin push, PR, merge, cierre ni cambios de labels.
+- Baseline aislado: `GOFLAGS='-p=1' DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54476/muebles?sslmode=disable env -u MIGRATION_DATABASE_URL ./init.sh` terminó rc=0 sobre la base exacta. Log `/tmp/issue-718-baseline-init-isolated.log`, SHA-256 `29992ae3c14cb8b9a616f312a6e8273834a107005709bc47207f843e2887ef80`. La falla previa queda clasificada como contención de PostgreSQL/procesos compartidos, no como regresión de `origin/main`.
+- Scope: bootstrap atómico Customer?+Project+Design con contrato generado y auth SketchUp least-privilege; binding canónico #388; CommercialProjection #702; creación idempotente de Q1 mediante #717; Q1 visible por readers React existentes.
+- Exclusiones: #499, #679, #643, Presentation, Q2/requote/Change Orders, aceptación/publicación, Design approval, ProductionRelease, PTX/CNC, permisos generales, Web JWT, pricing local y estado paralelo.
+- Plan:
+  1. Fijar contratos OpenAPI y API/DB tests RED para summaries de Customer, bootstrap atómico, allowlist exacta, RLS, rollback e idempotencia.
+  2. Implementar bootstrap server-authoritative reutilizando writers canónicos y regenerar consumidores.
+  3. Implementar servicios Ruby `ProjectBootstrap`/`InitialQuote`, envelope técnico durable y binding/readback canónicos.
+  4. Extender el HtmlDialog con formulario accesible y CTA Q1 fail-closed sobre CommercialProjection exacta, sin pricing local.
+  5. Ejecutar gates focalizados Go/PostgreSQL, contratos, Ruby, Node HtmlDialog, browser cuando aplique y `git diff --check`; registrar host real como `NOT_TESTED` si no está disponible.
+- Result: bootstrap generado y atómico implementado con defaults del taller, IDs server-side, customer portfolio/tenant checks, working copy y audit durable en la misma transacción idempotente. El bearer SketchUp sólo suma summaries, bootstrap y el POST Q1 exacto. Ruby conserva envelopes técnicos hash-only antes del request, reusa la misma key tras pérdida/fallo de binding, impide aplicar respuestas a otro modelo activo y usa el connector #388 como único writer. El CTA revalida binding, mutation/local match y CommercialProjection fresca; un cambio de tokens/total exige otro click y Q1 existente nunca deriva a requote.
+- Evidence focal final: `pnpm openapi:check` y `pnpm --dir packages/storage typecheck` PASS; `GOFLAGS='-p=1' DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54476/muebles?sslmode=disable env -u MIGRATION_DATABASE_URL go test ./internal/api -count=1` PASS (20.142s); la misma infraestructura aislada con `go test ./internal/storage -run 'TestBootstrapProjectDesignPostgres|TestCreateInitialDesignQuoteRevision_' -count=1` PASS (10.738s). `RBENV_VERSION=3.2.11 rbenv exec bundle exec rake verify` PASS: 674 runs/4568 assertions, boundary 6/2675, RuboCop/syntax y readback del RBZ SHA-256 `c0def9d297c37e0a354914d4f7b124f4d8632dcba20ea574a8b9d407dc6477ee`. Node HtmlDialog real-source harnesses: bootstrap 6 PASS y CommercialProjection/Q1 31 PASS. `git diff --check` PASS. Browser React, SketchUp/TestUp host real y CI: `NOT_TESTED`/`NOT_RUN`; no se sustituyen con jsdom/Ruby. Diff actual: 2,090 líneas authored (+2,028/-62) excluyendo tres outputs generados; requiere gobernanza de tamaño antes de publicar.
+
+# Issue #711 — primera QuoteRevision desde Design working copy
+- Approval/base: issue #711 OPEN con `status:approved`, autorización “listo”, `origin/main@84fc820a444e9d536808afb490b1109290a2ee50`.
+- Rama/worktree: `feat/711-design-first-initial-quote` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-711-design-first-quote`.
+- Started: 2026-09-13 15:06 CST. Un solo implementador; sin push, PR, merge, cierre ni labels.
+- Scope: comando server/API design-first para crear Q1 desde el working copy canónico exacto, preservando FurnitureInstance IDs y reutilizando pricing, CommercialSnapshot, QuoteRevision writer, RLS/capabilities e idempotencia existentes. Sin `apps/sketchup-extension/**` ni `backend-go/internal/storage/projects.go`.
+- Corrección autorizada: #711 OPEN con `status:approved` + `size:exception` verificadas; R1 reutiliza `actorCanViewCosts`/`RedactQuoteCommercialSnapshot` y prueba vendedor sin costos vs. Admin.
+- Corrección R2: ownership/status se leen y validan bajo el mismo `FOR UPDATE`; una carrera determinística confirma rollback si `accepted` gana el lock.
+- Corrección R3: `decodeGeneratedJSONBody` rechaza campos desconocidos/JSON trailing y el fingerprint no canónico responde `BAD_REQUEST` sin llamar storage.
+- Concurrencia FI: RED confirmó que remove podía finalizar junto con Q1; `FOR UPDATE OF fi` bloquea sólo la fila no-nullable del `LEFT JOIN`, en el orden estable por FurnitureInstanceID. Remove-wins prueba rollback sin Q1/líneas. Focalizados PASS; full Go falló primero por contención DB compartida y PASS aislado con PostgreSQL dedicado, `-p=1 -parallel=1` (storage 326.420s; pilot 234.045s); `git diff --check` PASS.
+
+# Issues #642 → #677 — presupuesto del diseño actual dentro de SketchUp
+
+- Approval: prompt del propietario (2026-09-13). #642 y #677 permanecen OPEN;
+  #677 fue verificada con `status:approved`, `type:feature` y `size:exception`.
+  No se modifican labels, no se cierran issues y no se hace merge.
+- Base exacta: `origin/main@cc38c87a4cb29b14544708896be309aa6af68dd6`
+  (PR #697 integrado). Rama `feat/642-677-sketchup-budget`; worktree aislado
+  `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-677-commercial-projection`.
+- Started: 2026-09-13 08:17 CST. Un solo implementador; revisión independiente
+  secuencial al finalizar. Modelo solicitado: Codex Sol, razonamiento medio.
+- Scope autorizado: CommercialProjection backend-owned sobre la versión de
+  trabajo exacta, contrato OpenAPI generado, lectura autenticada con credencial
+  SketchUp, panel compacto y actualización tras mutaciones confirmadas, pruebas,
+  documentación y PR parcial con `Refs #642` / `Refs #677`.
+- Baseline: `./init.sh` pasó typecheck y toda la batería TypeScript; el Go completo
+  sufrió contención del PostgreSQL compartido (`tuple concurrently updated` en
+  migration 000094). La validación PostgreSQL final se ejecutará serializada o
+  contra instancia temporal aislada.
+- Plan:
+  1. Reutilizar `CalcProjectBreakdown` con FurnitureInstances del working copy
+     exacto y selección comercial de referencia explícita.
+  2. Añadir el read model role-safe y su ruta OpenAPI sin crear ni mutar Q/R.
+  3. Consumirlo desde el runtime/credencial existente del plugin y proteger
+     versiones, cambios de contexto y respuestas tardías.
+  4. Presentar estados honestos y el total/delta en el panel compacto, con costo
+     y margen sólo cuando el backend los autorice.
+  5. Ejecutar pruebas focalizadas, PostgreSQL real aislado, contratos/Ruby/JS,
+     empaquetado RBZ, gates finales, revisión independiente y publicación del PR.
+- Result: `IMPLEMENTED_PENDING_REREVIEW`. El endpoint calcula contra el
+  `DesignWorkingCopy` exacto y el catálogo vigente mediante
+  `CalcProjectBreakdown`, sin crear ni mutar QuoteRevision. Expone huellas de
+  working copy/catálogo/proyección, toma la aceptada como referencia (o la
+  emitida más reciente si no existe), conserva una emitida posterior visible,
+  omite porcentaje con base cero y toda comparación entre monedas distintas.
+  El panel usa credencial de dispositivo, oculta costos/venta por autoridad,
+  distingue estados incompletos y descarta respuestas tardías por sesión y
+  Project/Design.
+- Evidence local: `pnpm test` PASS (domain 1411, storage 207, excel 350 + 3
+  skips preexistentes, desktop 17, mobile 73, UI 1782, web 481);
+  `pnpm typecheck` 7/7 y `pnpm openapi:check` PASS; Go completo PASS por
+  paquetes sobre PostgreSQL 16 aislado (API y demás paquetes, luego storage
+  serial 338.351s) tras descartar la corrida contra el PostgreSQL compartido
+  por agotamiento de conexiones; `bundle exec rake verify` PASS (Ruby 648/648,
+  boundary 6/6, RuboCop, syntax y package); JS comercial 7/7; RBZ exacto
+  `47170b058cdaf406f2593a922033e0856b1df63e0cf887dadbff208331c8cbaf`.
+- Independent review R1: `CHANGES_REQUESTED` sobre
+  `c48b82231314170c28e3035f3c11b6bae334f97c` por enum Ruby divergente,
+  request pre-mutation no invalidado y callbacks de alta/colocación sin refresh.
+  Los tres defects quedaron corregidos con regresiones; falta readback del
+  revisor independiente sobre el nuevo HEAD.
+- Host evidence: `NOT_TESTED`. SketchUp 2026 estaba abierto con una sesión del
+  usuario; el intento de una segunda instancia con el RBZ exacto terminó sin
+  ejecutar TestUp por el comportamiento singleton. La instalación anterior se
+  restauró byte por byte. El próximo gate es reiniciar SketchUp de forma segura
+  con un modelo descartable, instalar ese RBZ y ejecutar el smoke de HtmlDialog.
+
+## Corrección de review R1/R2 — 2026-09-13
+
+- RED reproducido: un `committed` local sin fase previa aceptaba la respuesta ya
+  solicitada; una sincronización parcial limpiaba globalmente `localUnsynced`.
+- GREEN local: la autoridad `LocalWorkState` persiste por Project/Design y
+  generación en metadata del modelo. Mutaciones locales marcan pendiente;
+  confirmaciones parciales avanzan generación sin limpiar cambios ajenos; sólo
+  publicación completa exitosa limpia. El bridge compara generación antes y
+  después del fetch, y JavaScript invalida pendientes ante todo cambio.
+- Mensajes incompletos distinguen parámetros no admitidos, datos comerciales
+  faltantes, diseño vacío e importes no autorizados sin mostrar errores internos.
+- Evidence: JS comercial 15/15; Ruby `commercial_projection_test` 14/14;
+  `dialog_controller_test` 31/31; `bundle exec rake verify` PASS (659 runs,
+  4488 assertions; boundary 6/2567; RuboCop/syntax green). RBZ SHA-256
+  `592516ff4e1cc5455888832279bf075ff3911e7575caf7f90315c27a6099271a`.
+- Host real: `NOT_TESTED` hasta disponer de una sesión/modelo descartables sin
+  cerrar ni sustituir la extensión activa del usuario.
+
+# PR #697 — corrección final de acceso a Producción (Refs #642)
+
+- Approval: prompt del propietario (2026-09-12). PR existente #697, rama
+  `feat/642-demo-flow-happy-path`; sin PR/issue nuevos, merge ni cierre de #642.
+- Started: 2026-09-12 20:02 CST.
+- Scope: cerrar el fallback legacy de `Project.status=accepted|produced` para
+  proyectos Digital Thread modernos sin `ProductionRelease`, conservar acceso
+  compatibility-only para proyectos positivamente pre-DT, integrar `main`,
+  ejecutar gates completos y verificar CI/publication/mergeability exact-head.
+- Plan:
+  1. Proyectar en el read model una señal server-owned de contexto Digital Thread.
+  2. Centralizar acceso a Producción en una regla canónica fail-closed.
+  3. Cubrir moderno con stamp residual, pre-DT accepted/produced y respuestas PUT.
+  4. Integrar la rama remota/main sin perder commits paralelos y validar local/remoto.
+- Result: `IMPLEMENTED_PENDING_CI`. `hasDigitalThreadContext` se deriva en list/detail
+  de FurnitureInstance, QuoteRevision, Design o ProductionRelease; sólo `false`
+  explícito habilita status legacy. PUT relee el agregado para no devolver una
+  proyección falsa transitoria. `projectAllowsProductionAccess` gobierna filtro,
+  workspace y apertura de orden.
+- Evidence local: `git diff --check` PASS; `pnpm typecheck` 7/7; `pnpm test` PASS
+  (domain 1411, storage 207, excel 350 + 3 skips preexistentes, desktop 17,
+  mobile 73, UI 1782, web 481); `pnpm openapi:check` PASS;
+  `GOFLAGS=-p=1 go test ./... -count=1` PASS; browser gate real Go + PostgreSQL
+  + Chromium 57/57 PASS, incluyendo el golden Q1→Q2→R2→P1→Producción con
+  `Project.status=draft`.
+
+# Issue #693 — hardening final del pipeline CADmatic 4/PTX r3
+
+- Approval: prompt del propietario (2026-09-12); issue #693 OPEN con labels `status:approved`, `type:chore`, `domain`. PR #694/#691 y PR #695/#692 verificados como integrados en `origin/main`.
+- Base exacta: `origin/main@d2199a608d7df56b4635588d7a363a0778f5b883`.
+- Rama/worktree: `chore/693-cad4-pipeline-hardening` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-693`; índice CodeGraph propio inicializado.
+- Started: 2026-09-12 18:58 CST.
+- Scope autorizado: guards explícitos r3, verificación independiente de descarte de trims, gobernanza del `implementationDigest`, paridad TS↔contrato↔Go, auditoría legacy y documentación viva. Sin cambio de bytes industriales, identidades/digests, semántica de trims/F92/scheduler ni soporte declarado.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. r3 bloquea `trimType!=1` con refilados positivos y `includeVectors=true`; el verifier vuelve a derivar `waste + liberated=true` y el mutation proof falla con PTX válido; el digest 1.2.0 queda vinculado a descriptor, profile pins, markers y SHA de goldens legacy/r2/r3; TS↔contrato↔Go fija la tupla CAD4 r3; documentación v0.7 y audit legacy actualizados. Sin drift de identidades ni bytes.
+- Evidence local: `pnpm test` PASS (372 archivos, 4306 tests; 3 skips preexistentes), `pnpm typecheck` PASS (7/7), `pnpm openapi:check` PASS, `GOFLAGS='-p=1' go test ./... -count=1` PASS, browser real Go + PostgreSQL + Chromium `machine-output-selection.spec.ts` PASS 9/9 (r3 normal+manifest, invalid active plan, stale conflict, retry, confirmed-empty legacy y late cross-org 200/500), verificador documental PASS acotado, `git diff --check` limpio. Diff: 375 altas + 142 bajas = 517 authored.
+- Plan:
+  1. Fijar pruebas RED para opciones r3 inválidas y mutación semántica del terminal descartado manteniendo PTX sintácticamente válido.
+  2. Endurecer route/verifier sin alterar bytes, perfiles ni identidades históricas r2/r3.
+  3. Vincular el digest del adapter a marcadores industriales, opciones efectivas y golden bytes; sumar paridad directa TS↔contrato↔Go.
+  4. Auditar cada caller legacy, documentar madurez v0.7, límites, retiro y condición de cierre de #650 sin borrar históricos.
+  5. Ejecutar suites enfocadas/completas, Go serial, browser real, push/PR y readback de CI sobre el HEAD exacto.
+
+# Issue #692 — readiness real, identidad multi-sheet y provenance CADmatic 4
+
+- Approval: prompt del propietario (2026-09-12); issue #692 OPEN con labels `status:approved`, `type:bug`, `high`, `domain`. PR #694 / issue #691 verificados como integrados en `origin/main`.
+- Base exacta: `origin/main@4623205d2031ffd78769ebeedf89f1d40e363e56`.
+- Rama/worktree: `fix/692-cadmatic4-readiness` en `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-692`; índice CodeGraph propio inicializado.
+- Started: 2026-09-12 17:05 CST.
+- Delivery: PR único autorizado explícitamente por el propietario el 2026-09-12, con `size:exception` sobre el presupuesto recomendado de 800 líneas authored.
+- Scope autorizado: identidad de región `(sheetIndex, regionId)`, readiness contra el `CutPlan` activo, errores `ptx_compile.*` preservados, manifest/provenance durable en descarga directa/ZIP/Production Pack, pin exacto de digest de profile (estrategia A) y presentación histórica stale honesta.
+- Result: `IMPLEMENTED_PENDING_CI`. `ScopedRegionRef` elimina colisiones job-wide y la regresión de dos hojas conserva X1/X2 con readback/mutación semántica; readiness y descarga comparten `evaluateSelectedCuttingOutputReadiness` sobre el `CutPlan` activo; errores `ptx_compile.*` llegan tipados a UI; selección persiste digest exacto con migración 000132 nullable sólo para históricos; r1/r2 quedan stale sin retarget; salida configurada entrega manifest v2 directo, por material y en Production Pack con hash de los bytes entregados.
+- Evidence local: `pnpm test` PASS (372 archivos, 4302 tests; 3 skips preexistentes de fixtures/evidence), `pnpm typecheck` PASS (7/7), `pnpm openapi:check` PASS, `GOFLAGS='-p=1' go test ./...` PASS (incluye migration fresh + upgrade/historical NULL), browser real Go + PostgreSQL 16 + Chromium PASS 9/9 (Settings→save r3→reload→CutPlan real→readiness→PTX+manifest→SHA/readback; bloqueado específico antes de descarga; late org A 200/500 no gobierna B), `git diff --check` limpio.
+- Plan:
+  1. Fijar RED multi-sheet con ids locales repetidos y mutación semántica X1/X2; centralizar identidad scoped sin cambiar `CutProgram.regionId`.
+  2. Persistir el digest exacto del profile mediante migración aditiva forward-only y regenerar el contrato OpenAPI/cliente.
+  3. Unificar evaluación y generación sobre el `CutPlan` real, conservando error tipado y contexto hasta la UI.
+  4. Entregar manifests deterministas con hashes/pins exactos y mostrar selecciones stale sin reinterpretarlas como r3.
+  5. Ejecutar pruebas enfocadas, migraciones fresh/upgrade, suites completas, browser real, push/PR y readback de CI sobre el HEAD exacto.
+
+# Issue #691 — autoridad de selección CADmatic 4 sin fallback legacy
+- `IMPLEMENTED_PENDING_REVIEW` en `fix/691-machine-output-authority`: loading/error/blocked no exportan, configured usa la tupla exacta y sólo confirmed-empty habilita legacy; directa/Production Pack comparten autoridad scoped. Evidencia pos-merge: browser Go+PostgreSQL+Chromium 8/8 (retry real, empty→legacy, Settings→CAD4 r3→reload→CSV y A tardía 200/500 sin gobernar B), focused web 13/13, UI 21/21, typecheck 7/7, OpenAPI/diff limpios. Diff: 724 altas + 76 bajas = 800 authored; sin #692/#693 ni PTX/profiles/adapters.
+# Issue #667 — M2: administración de recursos 3D desde React (Correcciones R1–R3 sobre PR #690)
+
+- Approval: prompt del propietario (2026-09-12); issue #667 OPEN con label `status:approved`. PR #690 en rama `feat/667-hardware-3d-catalog-ui`. Single writer; worktree dedicado (`.worktrees/feat-667-hardware-3d-catalog-ui`).
+- Base revisada: `94d72be9e11253bf15ff415c2ace776e466892b2`.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Correcciones R1–R3 resueltas conservando C2 (resunción de sesión finalizada) y C4 (origen preservado con disclosure colapsado):
+  - **R1 — Unidad coherente de guardado y confirmación en cola** (`apps/web/src/stores/catalog/shared.ts`):
+    - *Problema:* `task()` enviaba `get().catalog` (proyección optimista completa con mutaciones posteriores en cola). Al confirmar, solo se incorporaba el updater propio a `confirmedCatalog`. Si fallaba una operación posterior (C), el servidor ya había recibido y persistido C dentro del payload de B, pero la UI la revertía al valor inicial en pantalla.
+    - *Solución:* La unidad de guardado es `op.updater(confirmedCatalog ?? current)`. Las operaciones posteriores en cola permanecen aisladas en `pendingOps`. Al resolver `saveCatalog`, se actualiza `confirmedCatalog = catalogToSave`. Si C falla antes de su escritura, servidor y cliente concuerdan exactamente sin desfasar el estado confirmado ni revertir efectos ya persistidos.
+    - *Evidencia:* Test RED reproducido (`expected 'C updated' to be 'C initial'`), corregido a GREEN en `apps/web/src/stores/catalogStore.test.ts`.
+  - **R2 — Invalidez de contexto tipada y rechazo explícito** (`apps/web/src/stores/catalog/shared.ts`, `apps/web/src/stores/catalogStore.ts`):
+    - *Problema:* El guard posterior al `await saveCatalog` hacía un `return;` silencioso, resolviendo la promesa de `patch()`. Por tanto, `saveAndToast` emitía `✓ Cambios guardados` tras logout o cambio de organización, y `patchSaved` retornaba `true`, habilitando escrituras dependientes (como `hardDeleteOnAuth`) sobre un contexto ajeno.
+    - *Solución:* Introducción y exportación de `ContextInvalidatedError`. `task()` lanza `ContextInvalidatedError` si el `workspaceSeq` cambia antes o después de `saveCatalog`. `saveAndToast` no emite toast de éxito ante invalidación de contexto y propaga el error tipado. `patchSaved` captura `ContextInvalidatedError` y retorna `false`, impidiendo continuaciones dependientes.
+    - *Evidencia:* Tests RED reproducidos (toast indebido y continuación de hard delete), corregidos a GREEN en `apps/web/src/stores/catalogStore.test.ts`.
+  - **R3 — Invalidación centralizada y control ocupado durante retry / confirmación** (`packages/ui/src/catalogs/hardware/HardwareAssetUploadModal.tsx`):
+    - *Problema:* Durante el reintento mientras `getSession` estaba en curso o durante el delay de confirmación de 300 ms, `isBusy` era `false` y el input de archivo permanecía habilitado. Cambiar el archivo no invalidaba `opGenerationRef`, no abortaba la petición en vuelo ni cancelaba el temporizador, provocando que una resolución tardía de A asociara el asset A y cerrara el modal del archivo B.
+    - *Solución:* Se añadió la etapa `'resuming'` al tipo `UploadStage` y se marca inmediatamente al consultar una sesión existente. `isBusy` abarca tanto `'resuming'` como `'confirmed'`. El input de archivo se deshabilita mientras `isBusy`. Se centralizó la invalidación activa en `invalidateActiveAttempt()` (`opGenerationRef++`, `abortController.abort()`, limpieza de `successTimerRef`) ejecutándose al iniciar un nuevo proceso, al desmontar/cerrar el modal, en `resetForm` y en el `onChange` del archivo. Al cancelar remotamente, se verifica `session.status !== 'finalized'` para no cancelar recursos ya completados.
+    - *Evidencia:* Tests RED reproducidos (`fileInput.disabled === false` durante retry y durante confirmed), corregidos a GREEN en `packages/ui/src/catalogs/hardware/Hardware3D.test.tsx` (16/16 PASS).
+- Evidence:
+  - Unitarias UI (`packages/ui/src/catalogs/hardware/Hardware3D.test.tsx`): 16/16 tests PASS.
+  - Unitarias Web (`apps/web/src/stores/catalogStore.test.ts`): 51/51 tests PASS.
+  - Monorepo unitarias completas: `@granete/ui` 162/162 archivos (1760/1760 PASS), `@granete/web` 36/36 archivos (458/458 PASS).
+  - Browser E2E real (`./scripts/organization-browser-gate.sh tests/organization/hardware-3d-catalog.spec.ts`): 10/10 PASS (27.1s en PostgreSQL desechable aislado).
+  - Integridad y contratos: `pnpm openapi:check` PASS (0 drift), `pnpm typecheck` PASS (7/7 paquetes), `git diff --check` limpio (0 errores de whitespace).
+- Exclusiones respetadas: sin merge de #690, sin cierre de #667/#666, sin inicio de #668/#669/#670, sin cambios de RLS, permisos o migraciones de M1, sin etiquetas protegidas alteradas.
+
+# Demo Flow Audit & Cleanup — happy path simplification (Refs #642)
+
+- Approval: prompt del propietario (2026-09-12). Rama `feat/642-demo-flow-happy-path`,
+  base `origin/main@009360e2`. Single writer GLM. Sin merge ni cierre.
+- Auditoría completa del flujo (Cotizaciones→Reconciliación→Diseños→Producción):
+  backend ya correcto (accept Q NO toca Project.status; ProductionRelease única
+  autoridad de fabricación; gates fail-closed). Hallazgos P0: ninguno nuevo; 10 P1
+  de UX/confusión implementados; P2 documentados sin absorber.
+- Entrega: banner veredicto simple (conflictos/afecta precio/sincronizado) con
+  acción única de requote; linkage exacto Q→R (sourceDesignRevisionId, opción
+  "origen de esta cotización"); aprobación "Aprobar R para Q" bloqueada
+  preemptivamente con la MISMA verdad server del gate comercial; auto-pin de la
+  Q tras requote; CTA contextual "Abrir en Producción" tras P1; FloorStrip por
+  release authority (no Project.status); retirados del chrome: "Marcar en
+  producción", botón no-op "Evaluar 6 Gates", modal OC-022 para proyectos DT,
+  cadenas muertas onChangeStatus/onReopen/confirmReopen/pendingConfirm + copy
+  huérfano. E2E browser real nuevo con transiciones UI y assertions UX.
+- P0 descubierto por el E2E y corregido: el workspace de Producción
+  (/orders/:id) estaba gateado por status legacy → un proyecto DT (status
+  draft) con P1 canónica no podía abrir su orden. Alineado a manufacturing
+  authority (projectAllowsProductionOrder/filterProductionVisible) + refresh
+  del read model antes de navegar.
+- Evidence final: browser gate 52/52 PASS (2.9m) incl. spec nuevo; pnpm test
+  monorepo exit 0 (ui 1758 / web 461 / domain 1407 / storage 191); typecheck
+  7/7; openapi sin drift; go test ./... OK (storage aislado PASS 360s); diff
+  check limpio. PR parcial `Refs #642`, label `type:feature`, sin merge.
+- Detalle: `progress/implementation_demo_flow_cleanup.md`.
+
+# Issue #667 — M1: base de recursos 3D versionados (contrato, storage, binding, pins)
+
+- Approval: prompt del propietario (2026-09-11) autoriza exclusivamente M1; #667 sigue
+  OPEN sin `status:approved` — el gate de publicación exige la label, no se autoconcede.
+- Base exacta `origin/main@ab3bcdb3c1ef8a025ef92a1dc2dd435949f5fa72`; rama
+  `feat/667-3d-asset-foundation`. Single writer GLM. Sin merge ni cierre.
+- Scope: contrato OpenAPI generado (recursos, revisiones, sesiones de carga,
+  validaciones, pins), migración 000131 aditiva (tenant-owned + RLS + FKs compuestas
+  cross-tenant-proof + inmutabilidad + auditoría durable), carga segura con SHA-256
+  server-side y límites configurables, separación carga/validación (estado derivado de
+  evidencia append-only; productor real = #668), binding exacto herraje↔revisión con
+  hechos resueltos server-side, pins congelados en la publicación de DesignRevision
+  (ambos caminos) con R1 inmutable ante rebind + R2, descarga autorizada vía grants
+  `hwasset/` con pins de integridad y re-verificación por lectura.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Detalle:
+  `progress/implementation_667_3d_asset_foundation.md`.
+- Evidence: storage 8/8 nuevos sobre PostgreSQL real (rol app real; RLS/direct-SQL
+  incluidos) + migración fresh/upgrade; API con E2E real PG+filesystem 3/3
+  (start→bytes→finalize→consult→authorize→readback); `GOFLAGS=-p=1 go test ./...` PASS
+  (pilotreadiness flaky bajo carga parallel-migraciones, PASS aislado);
+  `pnpm openapi:check` / `typecheck` / `test` (monorepo) PASS; `git diff --check`
+  limpio. Sin claims de navegador/WebGL/SketchUp: no aplican en M1 (M2/#668/#669).
+- Exclusiones: sin UI React, sin Ruby/host, sin GLB, sin Agregado/MERIVOBOX, sin
+  cambios en `FurnitureLayout`/parser Ruby. Validador simulado sólo en pruebas
+  etiquetadas, sin bypass productivo.
+
+# Issue #642 — Legacy Quote Recovery para presupuestos existentes
+
+- Approval: prompt del propietario (2026-09-11); issue #642 OPEN `status:approved`. Base exacta `origin/main@a453cd000a89bc490b8282aab66fec26db77d6dd` (post-merge PR #673). Rama `feat/642-legacy-quote-recovery`. Single writer; worktree aislado.
+- Started: 2026-09-11 21:00 CST.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Las QuoteRevisions pre-#642 sin `commercialSnapshot` muestran ahora su verdad persistida read-only (muebles, parámetros, dimensiones, materiales como ids estables, lifecycle, timestamps reales) con labels actuales marcados "(etiqueta actual)", precio histórico "No disponible con precisión" (ni 0 ni recálculo) y CTA "Crear nueva revisión actualizada". Modernización: `POST /projects/{id}/quote-revisions` con `baseQuoteRevisionId` exacto (comando inicial extendido, OpenAPI regenerado) crea la siguiente revisión con snapshot canónico desde el estado editable actual, pineando la legacy como base; rechazo tipado `ErrQuoteRevisionNotLegacy` si la última ya es moderna (requote es ese camino); la fila legacy queda byte-idéntica y aceptar la moderna suprime la baseline legacy atómicamente. Lista honesta: "Cotización anterior" + precio "No disponible". Sin migraciones ni backfill. Detalle: `progress/implementation_642_legacy_quote_recovery.md`.
+- Evidence:
+  - Storage PG real: `TestQuoteLegacyRecovery*` 4/4 (modernize draft/accepted, rechazo moderno, conflictos de base).
+  - UI: ProjectsScreen 67/67 (tests A/B/C legacy), digitalThread 157/157.
+  - Browser E2E real: `quote-legacy-recovery.spec.ts` 1/1 PASS (seed pre-migración vía DSN admin; flujo por API/UI); specs vecinos PASS.
+  - Batería completa y CI: ver PR.
+
+# Issue #642 — Golden path Q2+R2 → ProductionRelease sin `Project.status = accepted`
+
+- Approval: prompt del propietario (2026-09-11); issue #642 OPEN `status:approved`. Base exacta `origin/main@dee5e7a8aea5e60b808933f3d02482853bc98ff2` (sólo docs desde el merge del PR #664). Rama `feat/642-release-without-project-accepted`. Single writer; worktree aislado (lane #667 editaba el principal).
+- Started: 2026-09-11 17:00 CST.
+- Result: `IMPLEMENTED_PENDING_REVIEW` + corrección de review aplicada. El golden `Q2 accepted + R2 approved → ProductionRelease(Q2,R2)` se ejecuta completo con `Project.status = draft`: el stage 10 del E2E golden ya NO escribe el stamp legacy auxiliar (FOUND_DOUBLE_TRUTH resuelto) y añade negative proof HTTP (proyecto estampado accepted + Q3 published → 409 'la cotización base no está aceptada'). Storage test nuevo fija golden+negativa en PostgreSQL real (`TestProductionRelease_AuthorityIsQuoteRevisionNotProjectStatus`). Guards UI del chrome de Cotizaciones (`productionExportOk`, `resolveChromePrimary`) gobernados por la AUTORIDAD DE FABRICACIÓN (`releaseAuthorityOf(project)` canónico), NO por QuoteRevision aceptada (corrección de review: aceptación comercial ≠ plant-ready); statuses accepted/produced quedan compatibility-only para obras pre-DT sin revisiones DT; 'Marcar producida' queda ligado al lifecycle literal. Backend de producto SIN cambios (la autoridad ya era QuoteRevision en `enforceProductionGates`). Detalle: `progress/implementation_642_release_without_project_accepted.md`.
+- Evidence:
+  - Go completo `go test ./... -count=1`: OK (storage 559.629s PostgreSQL real; pilotreadiness 247.200s); suites enfocadas PASS 80.077s.
+  - `pnpm test`: domain 1407 / storage 191 / excel 335 (+3 skip) / desktop 17 / mobile 73 / ui 1736 / web 449.
+  - `pnpm typecheck` 7/7; `pnpm openapi:check` sin drift; `git diff --check` limpio.
+  - Browser gate completo 48/48 PASS (3.2m) con demo-golden-path 10/10 (`Project.status=draft / Q2=accepted / R2=approved / P1=active` + negative proof).
+  - PR #673 (label `type:feature`).
+
+# Issue #642 — Entrega 2A: Lista de Cotizaciones con QuoteRevision exacta y retiro del lifecycle comercial legacy
+
+- Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base exacta `origin/main@6495085be8024a558bba35a47c0c5985e1465bdc` (post-merge PR #663). Rama `feat/642-quote-list-authority`. Single writer.
+- Started: 2026-09-11 14:05 CST.
+- Result: `IMPLEMENTED_PENDING_REVIEW` — ronda de corrección de review sobre el mismo PR #664 (commit `b4ce24bc` + `9112dde8` + corrección). Paso 6 (wiring ShellView) y paso 7 (browser E2E) COMPLETADOS junto con los 6 bloqueos de la revisión: identidad congelada (snapshot dueño de nombre/cliente/moneda), qty sin fallback a units/itemCount (removed ⇒ 0), `commercialActivityAt` real y nullable (contrato `string | null`), error ≠ `Sin cotización` (dataset loading/ready/error explícito, filtros deshabilitados), `saleTotal` fail-closed para manufacturing-only, invalidación de summaries en create/publish/accept/requote y negative proof de que aceptar no escribe `Project.status`. Detalle: `progress/implementation_642_quote_list_authority.md`.
+- Evidence:
+  - `@granete/ui`: 161 archivos / 1727 tests pasados.
+  - `@granete/storage`: 12 archivos / 191 tests pasados.
+  - Go `internal/api`: OK (cached).
+  - Go `internal/storage` — `TestListProjectCommercialSummaries_*`: 4/4 tests en PostgreSQL real pasados.
+  - `pnpm openapi:check`: 0 drift.
+  - `git diff --check`: limpio.
+- Plan:
+  1. Contrato OpenAPI y read model batch `GET /projects/commercial-summaries` sin N+1, derivado de tablas canónicas sin nuevas migraciones.
+  2. Implementación Go (storage en PostgreSQL real, handler API con filtrado de ownership/tenancy, tests).
+  3. Mappers puros y badges en `@granete/ui` (`quoteRevisionPresentation.ts`, `CommercialStatusBadge.tsx`, tests unitarios).
+  4. Migración de tarjetas, contadores y filtros en `ProjectsListView.tsx` y `ProjectsScreen.tsx` eliminando la dependencia de `Project.status` y `projectEstimates`.
+  5. Retiro de la segunda UX comercial legacy en Cotizaciones (botones Enviar/Aceptar clásico y Reabrir).
+  6. Conexión de `useProjectsCommercialSummaries` en `ShellView.tsx` e invalidación al transicionar revisiones.
+  7. Batería de pruebas Casos A–G en UI, tests Go en PostgreSQL real, browser E2E y verificación completa.
+
+# Issue #642 — Entrega 1: coherencia de líneas y detalle comercial en QuoteRevision exacta
+
+- Approval: prompt del propietario (2026-09-11) y aprobación de `implementation_plan.md`. Base exacta `origin/main@b285cf316ab87bc95003de4dd6b4c00cbb713312` (verificada por `git merge-base`). Rama `feat/642-quote-revision-detail-lines`. PR #663. Single writer.
+- Started: 2026-09-11 11:16 CST.
+- Result: `IMPLEMENTED_PENDING_REVIEW` → `progress/implementation_642_quote_revision_detail_lines.md`.
+- Scope completado (incluye correcciones R1–R5 de revisión):
+  1. Conexión de `snapshot` e `items` en `quoteAuthorityView` (`ShellView.tsx`) y `projectDetailContext.tsx`.
+  2. Funciones puras en `quoteRevisionPresentation.ts` (`buildRevisionLines`, `formatRevisionUnitDimensions`, `formatLifecycleStatus`) que asocian líneas, unidades físicas e items estrictamente por `quoteLineId` y `furnitureInstanceId`, preservando líneas distintas con idéntico nombre y desglosando unidades en `quantity > 1`.
+  3. [R1] Moneda congelada de la cotización: `ProjectItemsSection.tsx` utiliza `formatProjectMoney(line.salePrice, quoteAuthority.currency)` eliminando `$` y `es-AR` fijos; preserva código de moneda histórico (EUR); se nota que el formateador compartido antepone `$` (`$0.00 EUR`) y no se altera el formateador global.
+  4. [R2] Cero real vs importe oculto: `buildRevisionLines` no usa `salePrice > 0` como heurística de autorización; conserva el cero legítimo (`salePrice: 0`) si los importes son visibles y mapea a `null` si están ocultos por visibilidad comercial.
+  5. [R3] Estados de ciclo de vida por unidad (`Activa`, `Retirada`, `Cancelada`) consistentes en líneas simples y múltiples con UUID técnico accesible; encabezado simplificado a `Unidad {n}` sin UUID en título; regresión con unidad terminal cancelada y cantidad 0 sin revivir demanda.
+  6. [R4] Cobertura extendida y navegador real:
+     - 4 pruebas de integración en `ProjectsScreen.test.tsx` (independencia post-mutación de catálogo/proyecto, switch de contexto/autoridad sin mezcla visual, flujo borrador pre-Q1 con controles disponibles para continuar a Crear Q1, y casos de moneda/cero/unidades terminales).
+     - Browser E2E (`tests/organization/project-reconciliation.spec.ts`) ejecutado con Chromium + Go + PostgreSQL en gate aislado: aserciones de badge `Q2 · Solo lectura`, dimensiones exactas `650×720×{depth} mm` y ausencia de controles mutables verificadas **dentro del bucle de viewports 390, 768 y 1280**, con capturas reales guardadas.
+  7. Ocultación de controles de edición mutable (`ProjectOptionsSection.tsx`, `ProjectMeasureDefaults.tsx`, `project-detail__tools`) cuando se visualiza una revisión histórica de cotización.
+  8. Contrato CSS en `projects.css` alineado a los tokens canónicos del design system (`--surface-input`, `--surface-muted`, `--border-subtle`).
+  9. Actualización de §16A en `docs/architecture/project-design-digital-thread.md`.
+  10. Suite de pruebas verde:
+      - `@granete/ui`: 161 archivos / 1719 tests pasados (incluye `quoteRevisionPresentation.test.ts` 6/6, `ProjectsScreen.test.tsx` 53/53, `designSystem.test.ts` 9/9).
+      - `@granete/domain`: 105 archivos / 1407 tests pasados.
+      - `@granete/storage`: 12 archivos / 191 tests pasados.
+      - `@granete/excel`: 37 archivos / 299 tests pasados (+3 skipped).
+      - `apps/web`: 35 archivos / 445 tests pasados.
+      - `apps/desktop`: 3 archivos / 17 tests pasados.
+      - `apps/mobile`: 10 archivos / 73 tests pasados.
+      - `backend-go`: `go test ./...` OK en todos los paquetes.
+      - `pnpm typecheck`: 7 de 7 paquetes pasados (0 errores).
+      - `pnpm openapi:check`: 0 drift.
+      - `git diff --check`: limpio.
+      - Browser E2E: `scripts/organization-browser-gate.sh` 4/4 passed (28.1s).
+
+
+# Issue #650 — PR 6: perfil CADmatic 4 efectivo + adapter + descarga candidata
+
+- Approval: prompt del propietario (2026-09-11), siguiente incremento de #650. Dependencia verificada: PR #657 MERGED en origin/main@598253d322e68a08f76adebf8324fa96ec633f9c. Frente Cotización/Diseño (agente paralelo, rama docs/642) fuera de alcance.
+- Started: 2026-09-11. Branch `feat/650-cadmatic4-ptx-integration`, base `origin/main@598253d3`. Single writer.
+- Result: `IMPLEMENTED_PENDING_REVIEW` → `progress/implementation_650_cadmatic4_ptx_integration.md`. Perfil `ptx-cadmatic-4@r2` (revisión inmutable, opciones efectivas con evidencia de repo, NOT_TESTED) + adapter granete-ptx v1.1.0 con ruteo por revisión exacta (r2 → compilador documentado #657 con preflight real ready⇒serialize; resto → legacy intacto) + descarga EXISTENTE #591 conectada (unified/by-material/ZIP + manifest notClaimed) + paridad Go/TS (catálogo compartido, pins stale accionables) + UI "Candidato — no validado en máquina". Golden end-to-end por adapter verde.
+- Evidence: `@granete/excel` 37/299 (+3 skipped); monorepo domain 105/1407, ui 160/1704, web 35/445, storage 12/191, desktop 3/17, mobile 10/73; `pnpm typecheck` 7/7; `go test ./...` backend-go OK; `pnpm openapi:check` sin drift; `git diff --check` limpio; golden #348 legacy y #657 intactos.
+
+# Issue #650 — PR 5: compilar CutProgram real a PTX documentado
+
+- Approval: prompt del propietario (2026-09-11), PR 5 de #650 con spec expandida de 33 secciones ("continuar PTX + integración CADmatic sin tocar Cotización/Diseño") + correcciones finales de revisión R1–R3 sobre el MISMO PR #657. Dependencia verificada: PR #656 MERGED en origin/main@25c2cbb55f86d379ffba9c47844ce850552b09f9. Frente Cotización/Diseño (agente paralelo) fuera de alcance; origin/main sin movimiento.
+- Started: 2026-09-11. Branch `feat/650-cut-program-to-ptx`, base `origin/main@25c2cbb5`. Single writer.
+- Result: `IMPLEMENTED_PENDING_REVIEW` → `progress/implementation_650_ptx_compiler.md`. PR #657. R1: verifier semánticamente independiente del compiler (sólo `import type`; derivaciones locales duplicadas de fase/preorder/TYPE/liberaciones/vectores; guard de fuente como test). R2: identidad ASCII crítica fail-closed (`ptx_compile.identity_not_ascii`; 'MDFÁ'≠'MDF' jamás se fusionan; partCode vacío → PART-n; texto auxiliar filtrado documentado). R3: BOOK=1 conservador (el dossier sólo documenta "cuenta tableros" [S03 pp.134–135]); golden intacto. Regresiones escritas RED primero (6 fallos confirmados antes de implementar).
+- Evidence: `@granete/excel` 36 archivos / 276 tests (+3 skipped hardware preexistentes); monorepo domain 105/1407, ui 160/1704, web 35/444, storage 12/191, desktop 3/17, mobile 10/73; `pnpm typecheck` 7/7; `pnpm openapi:check` sin drift; `git diff --check` limpio.
+- Scope: compilador `CutPlan/CutProgram → PtxDocument` sobre el núcleo #656. Sin conectar adapter productivo, sin tocar botón de descarga, sin sustituir ptxCutPlanExport.ts, sin MachineProfile/CADmatic profile, sin claim CADmatic 4, sin cinco cocinas, sin cambios en Cotización/Diseño.
+- Plan:
+  1. `compileCutPlanToPtxDocument(cutPlan, options) → { document, mapping }`: un job, MATERIALS por código, PARTS_REQ por pieza colocada (sin agregación), BOARDS+PATTERNS por tablero, CUTS por división en orden de programa + filas de liberación de retazos (QTY_RPT=0/SEQUENCE=0), OFFCUTS por terminal remnant, VECTORS opcionales (Y invertida a origen superior izquierdo).
+  2. Política FUNCTION documentada: fase = generación de la región padre (kept sube, rest conserva, trims transparentes); fase ≤ 2 → 1 rip (eje y) / 2 cross (eje x); fase 3 → 3; fase > 3 fail closed. TYPE 0 si primera división no-trim eje y, si no 4. Kerf uniforme exigido. MATERIALS trims vacíos (la geometría vive en CUTS; ambigüedad §9).
+  3. `verifyPtxCutPlanReadback(parsed, cutPlan, mapping, options)`: re-ejecuta executeCutProgram (independiente del compilador) y comprueba bytes↔programa vía mapping: orden/fila por división, dimensión cuantizada, función, secuencia, referencias de pieza/retazo, materiales/kerf, vectores absolutos.
+  4. Tests: cadena completa sobre plan real de optimizeCutPlan (con y sin vectores), emisión determinista con trims, detección de mutaciones semánticas (dimensión, reorden, PART_INDEX cruzado, kerf, fila borrada, vector mutado) y fail-closed (fase 4, cnc-nesting, programa ausente, espesor ausente, kerf no uniforme).
+  5. Exportar desde index.ts; `pnpm test`/`typecheck` de @granete/excel.
+
+# Issue #650 — PR #655: correcciones finales R1–R5 antes de PTX
+
+- Approval: prompt del propietario (2026-09-11) sobre el HEAD revisado `95626a10ed603beba66bd0e8428c2593ad3bdb5c` del PR #655. Alcance: únicamente R1–R5 del informe de revisión final; mismo PR, sin avanzar a PTX.
+- Regresiones primero: se escribieron los tests R1/R2/R3/R4A/R4B/R5 y se verificó el rojo antes de implementar (3 fallos de dominio + 4 de UI + 2 previos dependientes del fixture).
+- R1 — semánticas separadas y explícitas: `CutProgramStepView`/`CutInstruction` exponen `keptExtentMm` (tamaño conservado), `cutOffsetMm` (posición LOCAL de la línea desde el origen cercano del padre; 454→734 global = 280 local, testeado) y `trimAmountMm` (cantidad total retirada por refilado). `positionMm` ahora espejea `cutOffsetMm`; `relativeMeasureMm` queda documentado como alias de kept extent (compat). Descripciones de refilado muestran ambos valores ("Refilar borde derecho: 10 mm · línea a 2420 mm del origen"). leadingBand: kept 2430 / línea a 10 / retirado 10 (izq e inf), normal: kept 2420 / línea a 2420 (der y sup) — los cuatro lados testeados.
+- R2 — decimales preservados: helper puro `formatMm` (máx. 3 decimales explícitos, sin `.0`, sin ruido IEEE-754, sin tolerancia de fabricación) aplicado a descripciones, label del 1er corte, selector de pasadas, resumen de pasada, badge SVG y dimensiones operativas. Regresión 333.3 mm / disco 3.2: estructurado y visible sin redondeo (dominio + componente). Guard WinAnsi conservado.
+- R3 — fail-closed: el sidebar del panel se gobierna con `projectSheetCutProgram(activeSheet)` memoizada (mismas `steps[].instruction` validadas); programa inválido ⇒ sin lista clicable, estado bloqueado con motivo (`prod-opt-invalid-program-sidebar`) coherente con el banner del tablero; `sheet.instructions` deja de ser autoridad visual (contrato histórico intacto para exportadores).
+- R4 — plan vs selector: `activePlanIsNesting` derivado de `activeSheet.strategy` gobierna toda la representación del resultado; el selector vivo sólo parametriza la próxima generación. Tests A (Sierra visible, radio CNC sin regenerar sigue Sierra) y B (CNC visible, radio Sierra sin regenerar sigue CNC; tras regenerar cambia).
+- R5 — reset por identidad real: la reconciliación de selección depende de `[sheet, sheet?.cutProgram]` (referencia, sin serializar); reemplazo de programa en mismo sheet/material testeado.
+- Evidence (HEAD de este commit): `@granete/domain` 105 archivos / 1407 tests; `@granete/ui` 160 / 1704; `@granete/web` 35 / 444; `@granete/excel` 30 / 165 (+3 skipped hardware); `pnpm smoke` 15/15 (spec `cut-program-preview` actualizado a semántica Línea/Refilado); `pnpm typecheck` 7/7; `pnpm openapi:check` 0 drift; `git diff --check` limpio. Sin cambios en optimizador/núcleo `cutProgram.ts`, PTX, perfiles, adaptadores, descargas ni backend.
+
+# Issue #650 — PR 3: vista previa e instrucciones desde el programa real
+
+- Approval: continuación autorizada por el prompt del propietario (2026-09-10) tras la fusión de PR #654 (`main@a11996bc`). Alcance: vista previa SVG e instrucciones de corte desde el programa guillotina registrado por el optimizador.
+- Started: 2026-09-10 22:20 CST. Branch `feat/650-cut-program-preview`, base `origin/main@a11996bc46a6f6993ef2fe80e8e04e908b9e6932`. Single writer.
+- Scope: conectar la vista previa SVG (`ProductionBoardView`, `ProductionBoardSvg`, `productionBoardLayout`) y las instrucciones de corte (`CutInstruction`) a la reproducción validada del programa (`executeCutProgram`). Vista general acotada al padre, paso a paso con navegación anterior/siguiente y selección, refilados con semántica de margen total y huella nominal de disco, estados honestos para programas ausentes, inválidos y CNC nesting. Sin tocar PTX ni serialización.
+- Plan:
+  1. Proyección de dominio (`cutProgramProjection.ts`): transformar `executeCutProgram` en vista estructurada de pasos, líneas acotadas a la región padre, huella nominal y banda consumida de disco, piezas/retazos obtenidos e instrucciones con medidas relativas.
+  2. Sustituir la reconstrucción de `generateCuttingInstructions` en `guillotine.ts` por la proyección del programa para planes con programa válido.
+  3. Actualizar `productionBoardLayout.ts` y `ProductionBoardSvg.tsx` para consumir la proyección (cortes limitados a su padre, primer corte del programa, piezas y retazos de #654).
+  4. Integrar navegación paso a paso en `ProductionBoardView` y `ProductionOrderOptimizationPanel` con reconciliación de selección en cambio de tablero o regeneración, banners para programas ausentes (con botón de regenerar) e inválidos (con error y bloqueo), y modo CNC nesting sin decoración.
+  5. Batería de pruebas: matriz de dominio en `cutProgramProjection.test.ts`, tests de componentes en `ProductionBoardView.test.tsx` y `ProductionOrderOptimizationPanel.test.tsx`, y verificación en navegador Playwright en `tests/smoke/cut-program-preview.spec.ts`.
+- Result: `IMPLEMENTED_REVIEW_ADDRESSED`. Vista previa e instrucciones consumen de forma unificada la proyección de `executeCutProgram`. Eliminada la heurística de agrupación X/Y y conteo de piezas. Cortes limitados estrictamente a la región padre, primer corte destacado, banda consumida vs huella nominal de disco renderizadas con semántica honesta. Navegación paso a paso interactiva integrada y sincronizada entre toolbar SVG y sidebar lateral. Banners honestos para planes legados sin programa y planes con programa inválido; modo CNC nesting sin decoraciones de sierra. Sin cambios en la serialización PTX ni en backend.
+- Review: `progress/review_650_pr3.md` (CHANGES_REQUESTED) — correcciones aplicadas sobre el mismo HEAD:
+  1. `→` (U+2192) eliminado de las descripciones de instrucción; `cutPlanPdfExport` (WinAnsi) vuelto verde y cubierto con guard de codificabilidad WinAnsi sobre descripciones y label del primer corte.
+  2. Clasificación de refilado por metadato estructural `trim` en la división (input + trace + builder), no por nombre de cutId; test explícito que demuestra que `trim:fake` sin flag no es refilado.
+  3. Marco de coordenadas único: el SVG ahora dibuja Y=0 abajo (igual que el export PDF) vía helper único `sx`/`sy`; "inferior (Y=0)"/"superior" coinciden con lo visible en los cuatro lados.
+  4. Tests de los casos mínimos faltantes: regresión real 500×796 (inputs exactos de R3 vía `packSingleSheetStrip`), varios tableros con IDs locales repetidos proyectados de forma independiente, y reinicio explícito de la selección al cambiar tablero (con eco controlado como el panel).
+  5. UI: hex inline reemplazado por tokens existentes (`--danger-*`, `--warning-700`, `--success-700`, `--surface-selected`, `--border-brand`), tokens inexistentes eliminados, iconos Lucide (`Info`, `TriangleAlert`, `Zap`, `ChevronLeft/Right`, strokeWidth 1.5), una sola acción primaria por contexto, clase muerta `btn--tiny` eliminada, copy sentence case ("1er corte", "Región activa", "Pieza obtenida").
+- Evidence (final, verificada en HEAD de este commit): `cutProgramProjection.test.ts` 14/14; `ProductionBoardView.test.tsx` 5/5; `ProductionOrderOptimizationPanel.test.tsx` 16/16; `@granete/domain` 104 archivos / 1401 tests; `@granete/ui` 160 archivos / 1699 tests; `@granete/web` 35 archivos / 444 tests; `@granete/excel` 30 archivos / 165 tests pasados (3 skipped preexistentes, requieren hardware); `tests/smoke/cut-program-preview.spec.ts` 1/1 dentro de `pnpm smoke` 15/15; `pnpm typecheck` 7/7 con 0 errores; `pnpm openapi:check` 0 drift; `git diff --check` limpio.
+
+# Issue #650 — PR 2: conservar el programa real del optimizador
+
+- Approval: continuación autorizada por el prompt del propietario (2026-09-10) tras la fusión de PR #652 (`main@e1d2e832`, correcciones R1/R2 verificadas). Alcance: únicamente la integración del núcleo cutProgram con las heurísticas existentes.
+- Started: 2026-09-10 20:48 CST. Branch `feat/650-optimizer-cut-program`, base `origin/main@e1d2e832b07e936bbdb7884021b7bf3c6f0ca307`. Single writer.
+- Scope: registrar el programa de divisiones DURANTE el empaquetado (Best-Fit X/Y + Strip/Shelf), validar candidatas completas y transportar el programa serializable hasta `CutPlanSheet`. Sin vista previa, instrucciones, PTX ni backend.
+- Plan:
+  1. Extensión mínima del núcleo: `separateExtent` (clasificador único exact_fit/kerf_only/solid_rest/blade_exits), divisiones kerf-only (resto consumido exactamente como disco) y política explícita de salida de disco (`allowBladeExit`, banda recortada al padre, flag validado).
+  2. `cutProgramBuilder.ts`: helper interno compartido por las heurísticas (regiones/cortes/terminales + cadena de trims kerf 0), sin duplicar reglas del núcleo.
+  3. Instrumentar Best-Fit V/H (dos separaciones por colocación, orden por variante) y Strip (franja, troceado X, recorte Y de pieza menor, sobrantes reales de cualquier tamaño).
+  4. Candidatas: demanda completa obligatoria, validación programa↔colocación (identidad, medidas colocadas, posición), exclusión con causa y selección determinista; error claro si ninguna candidata satisface.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Best-Fit X/Y y Strip registran su programa real durante el empaquetado; candidatas completas validadas (demanda, geometría, correspondencia hoja↔colocación) y seleccionadas con los criterios deterministas existentes; `CutPlanSheet.cutProgram` serializable y validado. Colocaciones idénticas a las históricas (tests previos sin cambios). Extensión mínima del núcleo: `separateExtent` + kerf-only + política explícita de salida de disco (banda recortada, flag validado). Detalle: `progress/implementation_650_optimizer_cut_program.md`.
+- Evidence: cutProgram 64/64; optimizerCutProgram 24/24 (nuevo); optimizer 7/7 y nesting 5/5 sin cambios; domain 103 archivos / 1371 tests; `pnpm typecheck` raíz 0 errores; `pnpm test` monorepo verde; `git diff --check` limpio. Vista/instrucciones/PTX/persistencia/validación externa: pendientes, no reclamadas.
+- Review fix (2026-09-10, mismo PR #654): tres hallazgos corregidos con regresiones RED-primero (12 tests nuevos fallando sobre `fd42f023`). R1: refilados con geometría de disco real bajo semántica de margen total (margen 10 + disco 4 = sólido 0..6 + banda 6..10; margen==kerf → kerf-only; margen<kerf → banda recortada y disco saliendo del borde del tablero; kerf 0 ≠ kerf positivo), vía divisiones `leadingBand` ([resto][banda][kept]) para lados cercanos; coordenadas de piezas sin cambios. R2: `kept_exceeds_parent` falla siempre (la salida del disco es la herramienta fuera del padre, no la pieza; nunca banda negativa) y la sobre-marcha queda VERIFICADA por cobertura (`blade_overhang_obstructed`): sólo exterior del tablero, bandas de kerf previas o desperdicio explícitamente `liberated` (retazos de refilado); el contraejemplo con kerfs distintos (4 luego 12) se rechaza y el histórico 490-en-498/kerf-12 se acepta con evidencia (banda del refilado 1010..1020 cuando margen 10 < kerf 12). R3: `sheet.remnants` se deriva de las terminales del programa (`deriveSheetRemnants`): el retazo útil del recorte de franja (500×796 en el repro) ya no falta, sin duplicados ni reglas de utilidad duplicadas; selección de candidata y estadísticas usan esa única verdad. Además: merge con `origin/main@41e8a0bd` (PR #653) preservando ambos trabajos (conflicto sólo en current.md). cutProgram 73/73; optimizerCutProgram 31/31; optimizer 7/7; nesting 5/5; domain 103/1387; typecheck raíz 0; monorepo verde; diff-check limpio.
+
+# Issue #642 — Slice 2a: exact QuoteRevision authority in quote detail
+
+- Current base `origin/main@e1d2e832b07e936bbdb7884021b7bf3c6f0ca307`; branch
+  `feat/642-quote-revision-consumers`; partial PR #653; issue remains open.
+- Bounded partition: authenticated Cotizaciones detail only. Identity, status,
+  totals and lifecycle navigation use the accepted (otherwise newest exact)
+  QuoteRevision snapshot; missing/legacy authority fails closed.
+- Remaining list/dashboard/operations consumers stay inventoried for Slice 2b;
+  PDF/XLSX/export handlers remain Slice 3. See implementation report.
+- Current-main merge preserved the integrated #650 record below; post-merge
+  focused/full/type/OpenAPI/diff and real browser 4/4 evidence is green.
+
+# Issue #650 — PR 1: núcleo ejecutable del programa de corte guillotina
+
+- Approval: issue #650 `status:approved`; prompt del propietario autoriza únicamente el primer incremento técnico (núcleo de dominio para representar, validar y reproducir un programa de cortes guillotina), con publicación como PR parcial `Refs #650`.
+- Started: 2026-09-10 17:42 CST. Branch `feat/650-cut-program-core`, exact base `origin/main@ad8865e132c0d319324f34aa50505dd8149c7c48` (PR documental #651 integrado).
+- Scope: módulo `packages/domain/src/optimizer/cutProgram.ts` + tests + fixtures; exports en barrel del optimizer; sin tocar optimizador existente, `generateCuttingInstructions`, UI, serializador PTX ni backend.
+- Plan:
+  1. Modelo mínimo explícito: regiones rectangulares con identidad, divisiones (padre/eje de avance/medida relativa/kerf), terminales pieza/retazo/desperdicio y referencias de pieza esperadas.
+  2. `divideRegion` pura (geometría kept/kerf/rest) con dominio y casos de borde documentados.
+  3. `executeCutProgram`: reproducir/validar recalculando cada división, disponibilidad de padres, unicidad, huérfanos, completitud y conservación de superficie; `checkExpectedPieces` contra fixture acotado.
+  4. Tests: ejercicio de tercera fase (1200×700, kerf 4), contraejemplo vertical (1000×600), ejes/desplazamiento/decimales/kerf 0/duplicados/determinismo, y negativas (referencias, consumo doble, límites, geometría alterada, piezas, incompletitud, NaN/Infinity).
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Núcleo `packages/domain/src/optimizer/cutProgram.ts` (`divideRegion`, `executeCutProgram`, `checkExpectedPieces` + contrato `granete.cut-program.v1`) con fixtures documentales y 46 tests propios. Sin tocar optimizador existente, instrucciones, UI, PTX ni backend. Detalle: `progress/implementation_650_cut_program_core.md`.
+- Evidence: cutProgram 46/46; domain 102 archivos / 1329 tests; `pnpm typecheck` raíz (7 proyectos) pass; `pnpm test` monorepo verde (domain/storage/excel/desktop/mobile/ui/web); `git diff --check` limpio. Validación externa no ejecutada (fuera de alcance); campo sigue `NOT_TESTED/notClaimed`.
+- Review fix (2026-09-10, mismo PR #652): dos hallazgos corregidos sobre `e28cfdc9` con regresiones RED-primero (7 tests nuevos fallando antes del fix). R1: contención/borde/finitud ahora usan la MISMA política aritmética relativa 1e-9 (`sameMeasure`/`atMost`/`atLeast`, no finitos nunca equivalentes); particiones decimales válidas (2440×1830, kept 100.1, kerf 3.2) ya no se rechazan por ruido IEEE-754 y el corte al borde sigue explícito. R2: separación geometría declarada (inspección) vs ejecutada (autoridad): raíz copiada, cada división consume el rect ejecutado de su padre y registra hijos recalculados; traza/terminales/mapa/totales sin objetos compartidos con el input. cutProgram 56/56; domain 1339; monorepo typecheck/test verde; `git diff --check` limpio.
+
+# Issue #642 — [P1][QUOTE-AUTH] Slice 1: immutable commercial snapshot authority
+
+- Inicio: 2026-09-10 (autoinstrucción humana "Start ONLY with SLICE 1"). Issue OPEN
+  pero SIN label `status:approved` al iniciar (#640/#641 lo tienen): flag pendiente
+  para el preflight de publicación del PR.
+- Base exacta `origin/main@b3efd4191526010e440aafe20e80378f21615161`; rama
+  `feat/642-quote-commercial-snapshot`. Single writer GLM. Sin merge ni cierre.
+- Alcance Slice 1 ONLY: snapshot comercial inmutable por QuoteRevision
+  (`granete.quote-commercial-snapshot.v1`), timestamps de lifecycle reales
+  (published_at/accepted_at), fail-closed legacy, RLS/trigger hardening, API
+  generada. NO reescribe Cotizaciones/dashboard/PDF/XLSX (Slices 2–3).
+- Plan: (1) authority map + consumer inventory; (2) sección de arquitectura en
+  digital-thread doc; (3) migración 000130 aditiva; (4) dominio/storage/API;
+ (5) proofs PostgreSQL real; (6) PR parcial `Refs #642` + STOP.
+- Preflight init.sh: PASS (2026-09-10).
+- Resultado: `IMPLEMENTED_PENDING_REVIEW`. Snapshot congelado en la MISMA tx de
+  creación (Q1 live editable state; Q2+ sintetizado por unidad activa del draft),
+  published_at/accepted_at por transición exacta, fail-closed legacy en
+  publish/lectura (comando + trigger DB), redacción de costos para actores sin
+  permiso, migración fresh+upgrade+down, OpenAPI regenerado sin drift.
+- Evidencia: `go test ./... -count=1` 10/10 ok (storage 316s sobre PostgreSQL
+  real, cero skips); focused snapshot 10/10 (14 proofs); API quote surfaces
+  PASS; `pnpm openapi:check`/`typecheck` PASS; `pnpm test` verde (UI 1690, Web
+  442, Mobile 73, Desktop 17); browser gate golden path ver reporte.
+- Detalle: `progress/implementation_642_quote_commercial_snapshot.md`.
+- Publicación (2026-09-10): owner autorizó label `status:approved` + excepción
+  de tamaño documentada en la issue; PR parcial `Refs #642` publicado con label
+  único `type:feature`. Sin merge ni cierre; revisión independiente pendiente.
+
+# Issue #642 — PR #649 correction round
+
+- Corrección autorizada sobre `feat/642-quote-commercial-snapshot`, head inicial
+  `466174572c43742d089ecb79a56606e40f6f008d`, base
+  `b3efd4191526010e440aafe20e80378f21615161`; worktree limpio verificado.
+- Inicio: 2026-09-10. El owner autorizó resolver todos los bloqueos y la
+  excepción real de tamaño >1000; no autoriza nuevo PR, merge, cierre,
+  autoaprobación ni cambios de metadata GitHub.
+- Plan: (1) completar autoridad comercial por QuoteLine y cantidad; (2) hacer
+  real el upgrade fixture pre-000130 y endurecer INSERT; (3) fallar cerrado en
+  descriptores sin label y ordenar opciones; (4) probar replay HTTP exacto del
+  payload extendido; (5) regenerar OpenAPI, documentar §16A y verificar gates.
+- Resultado: `IMPLEMENTED_PENDING_REVIEW`. Snapshot v1 ahora conserva
+  `quoteLineId`, quantity, FurnitureInstanceIds y montos autoritativos por línea;
+  create/lifecycle/requote/list/detail devuelven la misma autoridad generada.
+  Descriptores ausentes fallan tipado, opciones/bytes son deterministas y la
+  redacción cubre costos por línea. Migración upgrade siembra legado antes de
+  000130, preserva status/identidad/NULL honestos, prueba down/replay/FORCE RLS
+  y bloquea INSERT app-role inválido. Replay HTTP exacto probado.
+- Evidencia de corrección: domain + 13 tests storage `TestQuoteCommercialSnapshot*`
+  + API quote enfocada PASS; OpenAPI check/typecheck PASS; browser gate real
+  Chromium+Go+PostgreSQL 4/4 PASS (29.5 s). Full Go exacto PASS (storage 336.081 s; pilotreadiness 235.452 s).
+
+# Issue #642 — PR #649 second focused correction
+
+- Inicio: 2026-09-10 sobre head exacto
+  `85beb97683b405481e98328cd4e5b9b92ea49c4f`; misma rama/PR, sin merge,
+  cierre, autoaprobación ni cambios de labels.
+- Alcance: bloquear TODO INSERT NULL posterior a 000130 sin alterar las filas
+  legacy pre-migración; validar semántica monetaria y sumas en PostgreSQL;
+  impedir publish de bytes corruptos; cerrar inferencia de labor fijo en la
+  proyección cost-blind; sincronizar contrato/evidencia.
+- Resultado: nuevos INSERT requieren snapshot canónico draft; legado existente
+  conserva NULL y continúa fail-closed. Breakdown y amounts vacíos o
+  irreconciliables son inválidos en DB. La proyección sin permiso mantiene el
+  total comercial y oculta todos los montos de línea, incluido line salePrice.
+- Evidencia enfocada: migración fresh/upgrade/down/replay, app-role NULL/corrupt
+  y API non-inference PASS. Ver reporte de implementación para gates finales.
+
+# Issue #641 — Design inspector async and accessibility correction
+
+- Corrección autorizada sobre PR #648, rama `fix/641-design-inspector-async-a11y`,
+  desde head exacto `5b9592aef900dbef273fb7b90627da4475e832fa` y base
+  `a20bc412bff0e4f6579d690385f7d40bec5658ea`. Excepción de tamaño ya autorizada.
+- Inicio: 2026-09-10 09:20 CST. Sin nuevo PR, merge, cierre, autoaprobación ni
+  cambios de metadata GitHub.
+- Plan ejecutado: (1) distinguir carga inicial, cache stale y ausencia honesta;
+  (2) preservar error/reintento antes del empty de revisiones; (3) aplicar tokens
+  e iconografía normativa; (4) ejecutar tests UI, typecheck y browser gate real;
+  (5) diagnosticar el timeout Go sin ampliar alcance.
+- Resultado: `IMPLEMENTED_PENDING_REVIEW`. Detalle en
+  `progress/implementation_641_design_inspector_async_a11y.md`.
+
+# Issue #640 — [P1][WEB-DT] Authoritative availability and integrity for DesignRevision artifacts
+
+- Aprobada para ejecución (execution prompt GLM MAX; issue OPEN). Base exacta `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` (post-merge #636/#638/#646); rama `feat/640-design-artifact-health`. Single writer: GLM. Sin merge ni cierre.
+- Estado: `IMPLEMENTED_PENDING_REVIEW` (corrección R1 de revisión aplicada).
+- Entrega: salud autoritativa `available|missing|integrity_mismatch` observada del storage (clasificador puro en domain + verificador streaming SHA-256 en la capa API dueña de `MediaDir`), expuesta como `health {status, checked_at}` en el read model de artefactos y el revision detail; autorización de grants fail-closed con errores tipados `ARTIFACT_MISSING` / `ARTIFACT_INTEGRITY_MISMATCH` (409) verificados DESPUÉS de la resolución tenant (cross-org sigue 404 neutral); OpenAPI Go/TS regenerado sin drift; UI con estados honestos por artefacto (incl. loading/request-failed con retry), acceso deshabilitado para no-available, preview missing/mismatch sin round-trip fallido, recovery que nombra publicar nueva revisión vía `Abrir en SketchUp`, digest canónico `sha256-<64hex>` con un solo prefijo y digest completo copiable con label accesible. #636 intacto (misma URL/grant mechanism, sin segundo store, sin URLs públicas). `processing/failed` NO agregados (sin lifecycle persistido que los avale).
+- Evidencia: `go test ./... -count=1` verde (incl. storage PostgreSQL real); focus domain 8/8 matriz, API 5 suites sobre filesystem real; `pnpm openapi:check` PASS; UI 39/39 + 18/18; browser gate real Chromium+Go+PostgreSQL `project-designs.spec.ts` 2/2 PASS (escenarios healthy / bytes borrados→missing+409 tipado+UI honesta / bytes alterados→integrity_mismatch+409 tipado+digest original intacto). Detalle: `progress/implementation_640_design_artifact_health.md`. Revisión independiente read-only: CHANGES_REQUIRED → corrección R1 aplicada (approve endpoints ahora emiten health válido con regresión, short-circuit por size implementado, riesgos residuales TOCTOU/partición documentados, NITs revertidos/limpiados); suites completas re-verificadas verde.
+
+# Issue #644 — [P0][DEMO] Golden path regression: Quote → SketchUp → DesignRevision → ProductionRelease
+
+- Verification lane (`status:approved`). Rama `test/644-demo-golden-path-regression`, integrada con base exacta `origin/main@fde538a839a7b882657fafbfe41bbdd1cf91fbee` mediante merge `b2dde534cd7e3fd264283e2d55adbbf2d54ebb4d`. Test-only: **cero archivos de producto**.
+- Entrega: `tests/organization/demo-golden-path.spec.ts` — un fixture canónico de cocina determinística (línea qty=2 con choices citadas reales + línea qty=1) que recorre las 10 etapas del DEMO sobre el stack real: Q1 accepted → materialización (ids físicos distintos) → Design base null → pairing extension-credential confirmed → working copy (#625 integer-or-omitted) → R1 multipart #633 source=sketchup → artifact grants #636 (`/api/design-artifacts/`, sin `/api/api`) → R2 con R1 inmutable → approval con gate #502 (rechaza Q1 desactualizada, requote Q2, acepta, aprueba R2 vs Q2) → ProductionRelease con frozen routing v2 y unidades `${release}:${instance}:u1`.
+- Evidencia de corrección post-#639: gate enfocado real Chromium+Go+PostgreSQL 10/10 PASS; gate completo 36 PASS, 2 timeouts ajenos, 3 no ejecutados tras fallo serial; `git diff --check` limpio.
+- Observaciones registradas (no se corrigen aquí): FOUND_DOUBLE_TRUTH — `QuoteRevision.status=accepted` convive con `Project.status=draft` hasta un save legacy separado para etapas operativas; Q1 snapshot SÍ congela `materialChoices` en main actual; provenance de materiales SIN pérdida en flujo quote-first fresco (12/12 superficies exactas) — #637 queda como lane de reparación para unidades pre-#621.
+- SketchUp-host con licencia sigue RUBY CONTRACT / NOT PROVEN en CI (programa real-host: #354).
+- Detalle: `progress/implementation_644_demo_golden_path_regression.md`.
+# Issue #639 — immutable DesignRevision presentation read model
+
+- Approved (`status:approved`); user-authorized one-PR size exception. Base `origin/main@55399890173e76b3ae30d858ec9a9472bcd78ab1`; branch `fix/639-design-revision-read-model`.
+- Started: 2026-09-09 15:00 CST. Scope: immutable human-readable revision descriptors, server-owned material provenance, honest legacy unavailable state, generated API, React presentation and focused proofs. No artifact health, Proyectar convergence, quote exports or `.skp` parsing.
+- Plan:
+  1. Add additive snapshot/provenance persistence and strict domain contract without backfilling historical revisions.
+  2. Build descriptors and actor labels atomically during publication/approval; preserve exact revision selection and RLS/immutability.
+  3. Regenerate OpenAPI clients and map frozen/legacy states without handwritten DTOs.
+  4. Extract the React revision panel, keep UUIDs inside technical audit, and cover behavior/a11y/responsive presentation.
+  5. Run focused backend/storage/UI/browser gates, commit logical units, push and record exact evidence.
+
+# Issue #637 — [P0][BUG][DT-MAT] Repair quoted materials missing from existing working snapshots
+
+- Aprobada (`status:approved`). Base `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`; rama `fix/637-dt-material-provenance-reconcile`.
+- Phase 1 (pre-edición): causa raíz verificada — pre-#621 la colocación no sembraba choices y `buildInitialQuoteItems` ponía `{}`; el merge/publish conservan verbatim, así que unidades ya conectadas congelaron `material_choices={}` en working copy y R1–R3 mientras la línea current de cotización sigue llevando la verdad (`project_item_choices`, misma autoridad que #621).
+- Entrega: clasificador puro 4 estados (`authored|quoted_missing_from_working|inherited_default|missing_unresolved`) + detección read-only `GET /designs/{id}/working-copy/material-provenance` + comando explícito idempotente `POST /designs/{id}/working-copy/material-choices:reconcile` (fill-only, expected_updated_at, audit durable misma tx, fail-closed). R1–R3 inmutables; R4 es la primera revisión con las choices. OpenAPI/codegen regenerado; Ruby: el plugin relee el working copy reconciliado y el merger lo conserva verbatim (2 pruebas nuevas).
+- Evidencia: `go test ./...` verde; PostgreSQL real (matriz completa incl. inmutabilidad R1–R3 + R4); `rake unit boundary` + rubocop verdes; `pnpm openapi:check`/`typecheck`/`test` verdes. Real-host SketchUp smoke: NOT PROVEN.
+- Detalle: `progress/implementation_637_dt_material_reconciliation.md`.
+- Correction 2026-09-09 18:30 CST: resolver únicamente el bloqueo de contrato de PR #638 declarando `IdempotencyKey` en el POST de reconciliación, regenerando Go/TS y agregando una regresión cliente→header; sin UI ni cambios de dominio/storage.
+- Correction evidence: preflight `./init.sh` PASS; después del cambio, storage 191/191, `pnpm openapi:check`, `pnpm typecheck` y `git diff --check` PASS. El cliente generado crea y envía `Idempotency-Key` por defecto.
+
+# Issue #635 — Design artifact URL resolution and browser access
+
+- Approval: GitHub issue #635 is open with `status:approved`; leader handoff authorized implementation only, without PR creation, merge, or issue closure.
+- Started: 2026-09-09 16:18:24 CST. Branch `fix/635-design-artifact-url`, exact base `origin/main@c40618688dd874e80aea8817e4c47e6615a0c3c0`.
+- Scope: one canonical fail-closed resolver for authorized DesignRevision artifact URLs; preview load error/retry; reliable explicit access after asynchronous authorization; realistic unit/component tests and existing real Go+PostgreSQL browser smoke when feasible. No backend contract/storage/publication, WebGL/SKP viewer, naming/material, or machine-output changes.
+- Plan:
+  1. Reproduce the `/api/api` URL and silent preview/popup failure paths in focused tests.
+  2. Add one canonical resolver and route preview plus explicit artifact access through it.
+  3. Surface distinct authorization, byte-load, retry, and blocked-navigation states using existing UI patterns/tokens.
+  4. Run focused UI tests, typecheck, relevant Go/PostgreSQL browser smoke, then commit and push one conventional commit.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. Canonical same-origin `/api/design-artifacts/` resolution, recoverable preview byte-load failure, and synchronous popup reservation are implemented. Focused 36/36, full UI 1,658/1,658, monorepo typecheck, real Chromium+Go+PostgreSQL artifact smoke 1/1, and diff check pass. See `progress/implementation_635_design_artifact_url.md`.
+- Review correction R1: PR #636 review at `81a878d2` requires honest distinct states for authorization, invalid grant, blocked/closed popup, failed navigation, and preview byte-load; specific close-behavior tests; 390/768/1280 captured responsive smoke; and 1.5 icon strokes. Scope remains #635 only; this is the single authorized correction round.
+- Review correction: PR #636 `CHANGES_REQUIRED` resolved in the single allowed round. Authorization, invalid grant, popup blocked/closed, navigation, and byte-load states/copy/tests are separate; error icons use 1.5 stroke; six Playwright screenshots cover invalid-grant and byte-load retry states at 390/768/1280. Focused 40/40, full UI 1,662/1,662, typecheck, browser gate 1/1, and diff check pass.
+
+# Issue #630 — SketchUp catalog pin and repeated agregado occurrence identity
+
+- Reported: furniture review before `Publicar diseño` failed on the real three-drawer cabinet. Investigation and local correction were authorized; no PR, merge, issue closure, or protected approval label was authorized.
+- Verified causes: project-level `FurnitureInstance.id` values already matched exactly between SketchUp and the backend. Four independent contract defects blocked the same review flow: split catalog revision assembly; duplicate occurrence identity for repeated agregado placements; the Go planner rejecting even the exact unchanged echo of a component template represented by multiple definition entries (the two alacenas); and the Ruby normalized-snapshot parser rejecting the server's optional `placementKind` field (the three-drawer cabinet).
+- Local correction: definitions delivery now reuses the exact full-catalog snapshot loader used by authoring resolve; catalog list queries use deterministic total ordering; repeated agregado placements derive authoring and occurrence identity from persisted `ModuleAgregadoInstance.ID`; exact unchanged multi-entry component snapshots are preflighted through the authoritative default expansion while any identity/count/transform change remains fail-closed; Ruby accepts only `manual|derived` for the optional `placementKind` and still rejects unknown fields/values.
+- Real-host evidence: after restarting backend and SketchUp 2026 with the installed corrected parser, the real model `Cocina Prueba - copia.skp` ran the authoritative `PreflightReviewSession` for all four managed furniture IDs. `Alacena 1 Puerta Izquierda`, `Alacena 2 Puertas`, `Gabinete Bajo 3 Cajones` and `Gabinete Bajo 2 Puertas` each returned `ready`, zero issues. The real `PublicationPreflightGate` projection was `allowed=true`, `total=4`, `verified=4`, `pending=0`. No publish command was executed.
+- Automated evidence: Go API and domain packages pass; storage package compiles; focused Ruby refresh/retry suites pass (36 runs / 131 assertions); the complete authoring-resolve Ruby contract suite passes (43 runs / 462 assertions); complete Ruby/RBZ gate previously passed (638 runs / 4,426 assertions plus 6 boundary runs / 2,531 assertions); monorepo typecheck and TypeScript tests previously passed. The full `./init.sh` run was interrupted while `internal/storage` was still executing after 61 seconds in this checkout, which already contains unrelated untracked migration-reconciliation work; no full-storage green claim is made.
+- Runtime: backend restarted from this checkout on port 8080; the corrected Ruby parser is installed in SketchUp 2026 and was loaded by a clean host restart. Changes remain local in the existing dirty checkout; issue #630 is open and unapproved.
+
+# Issue #624 — SketchUp working-copy definition version guard
+
+- Approval: user said `corregimos el 624`; GitHub issue #624 has `status:approved`.
+- Started: 2026-09-08 22:40 CST. Branch `codex/fix-624-sketchup-definition-version`, exact base `origin/main@3b2d08539b5d0e3aaf81fc4d6627636398a00fb7`.
+- Scope: prevent catalog semver and incompatible historical metadata from reaching the optional integer `definition_version` in confirm-placement and duplicate working-copy payloads; preserve identity, parameters, material choices, transform, locator, full merge, and rollback.
+- Plan:
+  1. Add RED Ruby regressions for realistic `version: "1.0.0"` placement intent and duplicate metadata.
+  2. Add an executable Ruby-to-generated-Go/OpenAPI boundary that rejects arbitrary payloads and proves the corrected payload decodes.
+  3. Implement one narrow integer-only normalization at the working-item contract boundary without changing OpenAPI/backend/material behavior.
+  4. Run focused Ruby and Go contract tests, `bundle exec rake verify`, `pnpm openapi:check`, then commit, push, and record exact evidence.
+- Result: `IMPLEMENTED_PENDING_REVIEW`. One integer-only normalization now protects placement, duplicate metadata fallback, parsed working copies, and final serialization. A shared fixture is produced by Ruby and accepted/rejected through the generated Go request type at the real handler boundary.
+- Evidence: RED reproduced in all three Ruby regressions; GREEN focused Ruby (57 runs / 357 assertions), Go API package, `bundle exec rake verify` (632 unit / 4,410 assertions; 6 boundary / 2,531 assertions), `pnpm openapi:check`, and final `./init.sh` all passed. RBZ SHA-256: `0a8913bd37eda3e5df5664714e206c5be701a9128f0b6256258da33b9c5f44e3`.
+- Remaining evidence: real SketchUp 2026 installation and save/reopen smoke are pending after review; no real-host claim is inferred from Ruby stubs or RBZ construction.
+- Rollback: revert the #624 working-copy version guard, shared fixture, Ruby/Go regressions, and this report together. No migration, OpenAPI change, material logic, UI, or backend production code changed.
+
+# PR #613 / #499 — R3 Actions correction
+
+- Approval: user authorized the minimum correction required to finish #499 correctly; branch `codex/499-plugin-receive-bind`, exact base/head `0897b17a199a4ed013c11c0de59354f5a73b142a`.
+- Started: 2026-09-08 America/Bahia_Banderas. Scope: repair the confirmed-terminal close race exposed by Actions in `SketchUpPairingModal`; no Slice 3 redesign, no issue closure or merge.
+- Plan: (1) reproduce the focused UI failure, (2) make close decide from the latest authoritative terminal status, (3) run focused UI tests and affected gates, then push/read back.
+- Result: the status poll now records the server terminal status before React schedules its render, so Escape/overlay close cannot cancel a grant already confirmed by the plugin. Focused modal test repeated 5/5; full `@granete/ui` suite 158 files / 1,642 tests and workspace typecheck passed. `git diff --check` passed.
+
+## #577 — final golden-path closure (DELIVERED as evidence PR; 2026-09-08)
+
+- Admitted per #573 authorization "#577 final golden-path closure child (executor GLM)" after observing PR #606 MERGED. Child `577/final-golden-path-closure`, branch `codex/577-final-golden-path-closure`, exact base `a64b2d133f3f305fee04b316c8675df5d11dc04d`. Single-writer: GLM (attempt 1/2). No late tokens accepted from prior children.
+- **DELIVERED (delta R2, zero product changes)**: mandatory legacy audit complete (report `progress/implementation_577_final_golden_path.md`); post-#606 code already supports the full chain. A single quote-first fixture WITH board choices was tried and honestly discarded: `CreateInitialQuoteRevision` captures definition/parameters but NOT optionChoices (#571 semantics — quote units stay choice-less, classify `modified` against a choices-carrying design and the release commercial gate blocks); the authoritatively supported fixtures were extended instead of changing product architecture. Delta = closure assertions in `tests/organization/project-reconciliation.spec.ts`: production stage without `sentToProductionAt` + physical unit identity (quote-first, 4 instances; `${P1}:${fi}:u1`) and per-unit piece identity (OPS-DT-1 boards; 4 pieces, 2 per unit) + `/engineering` sent-section readback.
+- Evidence: browser gate real Chromium+Go+PostgreSQL efímero — focused extended tests 2/2 PASS, full reconciliation spec **4/4 PASS (25.1s)**; `git diff --check` clean. No Go/TS package code touched → full suites not invalidated (last green = #606 on same product code).
+- All parent acceptance criteria walked: **PASS** → recommended **#577 READY TO CLOSE AFTER MERGE** (owner review; no auto-close). Documented non-blocking limitation: quote-first flows with board choices remain classified `modified` until requote (Q1 snapshot has no choices; board planning proven design-first).
+- Operational note: the shared worktree HEAD was switched twice by another lane mid-child (`codex/sketchup-ux-polish-dialog-states`, `codex/444-proyectar-visual-regression-gate`); this child's commits stayed intact on its own branch and unrelated untracked files were excluded from its commits.
+
+## #577 — frozen manufacturing routing/machining evidence (COMPLETED/MERGED via PR #606; 2026-09-08)
+
+- PR #606 merged 2026-09-08T03:25:27Z, merge commit `a64b2d133f3f305fee04b316c8675df5d11dc04d`. Branch `codex/577-frozen-manufacturing-routing-evidence` lineage: exact base `a27f6aa4aedfad4075711eadb8bd97999cd2761f`, head `5e51bc6861a864c740b6ca97d85d735744190648`. Single-writer: GLM (attempt 1/2). No late tokens accepted from this child anymore. All evidence below remains valid history.
+- Admitted per #573 comment 5576289273 after observing PR #604 MERGED.
+- **Path B chosen** (extend the existing exact snapshot): schema v2 freezes a machine-NEUTRAL routing program produced by the EXISTING #477 Go engine invoked server-side at P1 time over the definition-default state (no authored occurrences/relationships; catalog component-override hardware placements materialized). No second engine; projectDrilling.ts NOT ported (legacy TS path only); fingerprint v1 semantics unchanged.
+- Snapshot v2 payload: `granete.release-manufacturing-program.v1` — per unit `furnitureInstanceId`+`machiningFingerprint`(#477)+`industrialRulesRevision`; per frozen part: cut intent, edge-banding sides, `cncRequired` EXPLICIT resolved verdict, drill operations with holes (face/x/y/Ø/depth/type) + provenance (relationship|manualHardwarePlacement). Table 000122 reused (CHECK schema_version>=1); no new migration; immutability trigger untouched.
+- Guard evolution (#604 fail-closed preserved): exact P1/R2/fingerprint → v1 keeps `ErrReleaseRoutingUnavailable`; v2 with routing that re-validates against its own frozen units authorizes the command; v2 corrupt/incomplete → `ErrReleaseSnapshotUnavailable` (409, zero execution).
+- Canonical generation is 100% server-side: `PUT /part-executions` with EMPTY body derives PartInstances/ModuleUnits exclusively from the frozen snapshot+routing (`engine.DeriveCanonicalPartExecutions`); client payloads are refused 409; identities `<releaseID>:<furnitureInstanceID>:<partId>:pN` stamped with the exact release; drill→`cnc` station op, cut first, edge op iff frozen sides. Readiness/projection expose `frozen_routing` (batch query, no N+1); the UI blocker surfaces only for v1 releases.
+- Evidence: engine `release_routing_test.go` (hardware-driven drilling via real profile table, explicit no-CNC, identity/determinism, fail-closed validation matrix, foreign-host join rejection); storage on real PG `TestOpsDt1_CanonicalExecutionFromFrozenRouting` (freeze v2, byte-identical routing after R4+project/catalog mutation, server-derived generation, idempotent retry, readiness/projection readback, cross-org denial, v1 re-blocked) + updated #604 matrices (v2 allows quality/station, simulated v1 keeps the blanket blocker); API handler tests; FabricScreen v1/v2 card tests; browser gate 4/4 incl. golden R2→P1→frozen routing→exact PartExecutions (Chromium+Go+PostgreSQL efímero). `go test ./...`, `pnpm test`, `pnpm typecheck`, `pnpm openapi:check`, `git diff --check` PASS.
+- Authored ~500 production lines + ~570 test/E2E lines (within normal ceiling). No merge, no #577 closure: remaining legs = machine adapters (post-slice, #351 lane), relationship-bound modules still fail-closed at release units, full production-stage golden (materials→warehouse→executions→production) as the final #577 closure proof.
+
+## #577 — part/stage continuity (COMPLETED/MERGED via PR #604; 2026-09-07)
+
+- PR #604 merged 2026-09-07T22:38:39Z, merge commit `a27f6aa4aedfad4075711eadb8bd97999cd2761f`, branch `codex/577-part-stage-continuity` deleted after merge. Lineage preserved: attempt 1/2 Codex (stopped-work attestation, quarantined reservation released), attempt 2/2 GLM (handoff per #573 comment 5575143132, preserved HEAD `15c72be3`); 1,100 authored-line ceiling; all evidence below remains valid history. No late tokens accepted from this child anymore.
+
+- Authorized child `577/part-stage-continuity`, fresh branch `codex/577-part-stage-continuity`, exact base `aca051e219dda4f0114f8ab909f4cc79008b4b90`; #573 comments 5575121350/5575143132; independent 1,100 authored-line ceiling. Started 20:12 UTC. Parent owns live admission, validation and publication.
+- Fail closed for canonical execution commands under the existing project lock: the frozen snapshot has no routing/machining coverage proof. Never replace it with live catalog or fabricated no-CNC routes.
+- Preserve existing release authority, immutable snapshot, physical identities, warehouse event and legacy-only compatibility; align engineering stage and remove fabricated mapper revisions.
+- Extend one Q1 → Q2/R2 → P1 → materials → warehouse browser scenario to the explicit routing blocker. Full physical-production golden remains NOT PROVEN; no new engine, merge or #577 closure.
+- Focused 151 TS/UI/mapper tests and Go `TestPartExec_*` pass; Web TypeScript and diff checks pass. Single Q2/R2 browser scenario is authored, not yet executed. Final R3 Go/PostgreSQL/init/browser/independent review/exact-head CI remain parent-owned. Disabled/unmanaged RDD.
+
+## #577 — part/stage continuity — executor handoff Codex → GLM (2026-09-07)
+
+- Formal handoff under #573 comment 5575143132: quarantined Codex reservation released with a stopped-work attestation, child re-admitted as attempt 2/2 on the same base/branch/worktree; preserved HEAD `15c72be3` kept as the sole implementation lineage (no parallel writer, no second implementation).
+- Frozen-routing analysis: schema-v1 snapshot freezes exact BOM/material demand and physical identities only; no machining/drilling evidence exists in ANY P1-time structure (revision items carry no placements/relationships; the drilling resolver is TS/client-side over mutable project state). Preferred options A/B unavailable without inventing evidence or a second engine → fail-closed stays the terminal behavior of this slice.
+- Independent review (read-only): APPROVE WITH NITS. Its MAJOR finding fixed here: the generic project PUT froze the legacy release blob but still persisted client `part_instances`/`module_units` for canonical projects, and `MutateProjectQuality` wrote both execution columns without the routing guard.
+- Corrections: shared `guardCanonicalExecutionRouting` (exact P1/R2/fingerprint then fail closed) now backs part-executions AND quality mutations; the aggregate PUT freezes execution columns to the stored copy when a canonical release exists; unreachable canonical branch removed from the generate handler; readiness uses the domain authority constant; E2E legacy-CTA negative made case-insensitive; FabricScreen blocker test satisfies the required sectors prop (full-monorepo typecheck gap in the inherited commit).
+- GLM readback evidence: domain 1283 / ui 1627 / storage TS 190 / web 433 tests pass; `TestOpsDt1`+`TestProductionRelease` storage suites pass on real PostgreSQL (frozen-routing identity matrix now includes the quality 409 and an accepted aggregate PUT with forged executions leaving columns untouched); browser gate PASS 4/4 (Chromium + Go + ephemeral PostgreSQL) executing the previously authored golden scenario; `pnpm typecheck`, `pnpm openapi:check`, `git diff --check` PASS. #577 remains open: physical-production leg NOT PROVEN until engineering freezes real routing/machining evidence at release time.
+
+## #577 — warehouse/reservations continuity (partial; 2026-09-07)
+
+- Authorized child `577/warehouse-reservations-continuity`, fresh branch `codex/577-warehouse-reservations-continuity`, exact base `97636e18ac0b827e3b77522a0015d0198987e6aa`; parent owns factory and publication. Started 18:39 UTC after baseline; owner #573 comment 5574451831 permits up to 1,000 authored lines excluding generated output.
+- Bind reserve/release to the existing exact frozen planning; cap demand/stock, serialize warehouse balances, preserve rollback/audit and legacy-only compatibility.
+- Canonical React actions bypass local recomputation, reject stale session/command results and present frozen planning/native board-sheet demand rather than mutable picking estimates.
+- Focused real PostgreSQL, domain parity, UI, typecheck and OpenAPI passed; final full Go/init/browser/independent review/exact-head CI remain parent-owned and pending. See `progress/implementation_577_warehouse_reservations.md`.
+- No part executions, machine integration, full stage continuity, ledger change, merge or #577 closure. Disabled/unmanaged RDD.
+
+## #577 — atomic canonical manufacturing capture (partial; 2026-09-07)
+
+- Authorized continuation and up-to-800-line exception; branch `feat/577-atomic-manufacturing-capture`, base `6691fcdffd819578fd71bd196ee53bbe977abd72`; factory ownership held by parent, started 16:06 UTC.
+- Capture exact revision units, existing fingerprint and aggregate demand with P1 in one coherent tenant transaction; reuse private immutable table 000122, with owner-private exact reader.
+- Canonical material derivation consumes frozen server requirements, not client lines or mutable catalog; Web sends only the exact release pin. Legacy-only derivation remains compatible.
+- Real PostgreSQL HTTP proofs cover failed snapshot insert/rollback, same-key retry, private read/tenant denial, later revision and project/catalog mutation, forged demand and missing-snapshot rejection. Focused storage/API evidence is recorded in the parent task; final exact-head gates/review pending.
+- No warehouse/reservation/part-execution continuity claim, new release/fingerprint, machine changes, ledger activation, issue closure or merge. Ordinary independent review; RDD disabled/unmanaged.
+
+## #591 — machine output selection (entrega parcial, wiring completo)
+
+- Rama `feat/591-machine-output-selection`; migración 000123 + API generada + resolver + UI de Ingeniería + export normal ligado al tuple exacto; sin fallback ni bulk (ver `progress/implementation_591_machine_output_selection.md`). Ronda de revisión corregida (GET factory-gate, mismatch path/body, error visible en UI, refetch tras save, mapper plano) + storage PG real y E2E browser 4/4 PASS; pendiente sólo CI del head final.
+## #577 — exact revision collection assembly (partial)
+
+- Assemble physical units through the existing Go resolver and one resolved-BOM demand aggregation; preserve revision identity, unit order and independent typed dimensions without reading mutable project items.
+- Share the existing conservative 10,000-work-unit budget across the collection before each BOM allocation; reject duplicate/missing identities, mixed revisions, empty manufacturing and partial results.
+- Focused and race suites pass: 19 top-level tests plus 145 subtests each, no skips; four new collection tests cover 19 subtests. Full engine package also passes.
+- This server-only helper is not wired to capture, API or operational consumers; PostgreSQL/React continuity, rollback/idempotency and tenant-isolation evidence remain pending. No new release/fingerprint, ledger mutation, review or merge; disabled/unmanaged.
+
+## #351 — machine-output adapters foundation (entrega parcial, lane autorizado por owner)
+
+- Trigger: fallo REAL de conversión PTX en Client A (REAL_FIELD_RED, registrado sanitizado en `docs/machines/client-a/ptx-conversion-failure.md`); owner autorizó avanzar el lane machine-integration sin cerrar #348/#351/#352.
+- Rama: `feat/351-machine-output-adapters` (apilada sobre PR #587); no toca archivos de #577 (`backend-go/internal/domain/engine/**`, `packages/domain/src/engine/**`).
+- Contrato neutral `packages/domain/src/machineOutput.ts`: `ResolvedCuttingJob`/`ResolvedMachiningJob` (wrappers provenance-exactos sobre CutPlan/ProjectDrillingData existentes), `OutputCompatibilityProfile` (concepto nuevo, decisión documentada en `docs/architecture/machine-profiles-and-adapters.md`), `PostprocessorAdapter` boundary fail-closed, `ArtifactManifest` (claim `notClaimed`, missingProvenance explícito, banner non-production).
+- Implementación `packages/excel/src/machines/`: adapter PTX (un serializador, el existente, byte-identical al golden #348) + perfiles versionados `ptx-generic` r1 / `ptx-cadmatic-3/4/5` / `saw-homag` / `mpr-woodwop` — CADmatic/SAW/MPR sin dimensiones evidenciadas → fallan cerrado con `FIELD_FORMAT_EVIDENCE_REQUIRED`; machine profiles HPP 250/BHX 050 con cero capabilities inferidas; pack de validación Client A (`buildClientValidationPack`) que hoy genera sólo `test-generic.ptx` + manifests y lista la evidencia exacta que falta por archivo.
+- 31 tests nuevos (determinismo, digests de perfil/adapter verificados, fail-closed, no-silent-drop de operaciones MPR, identidad de duplicados, manifest sin "latest" implícito); typecheck y suite excel completos verdes. Sin claim de compatibilidad: todo `NOT_TESTED`.
+- Corrección de contrato tras review: `SERIALIZER_NOT_IMPLEMENTED` como razón neutral distinta de `FIELD_FORMAT_EVIDENCE_REQUIRED`; SAW/MPR nunca reportan `ready=true` sin serializer real (invariante `ready ⇒ serialize ejecutable` probada en `adapterContract.test.ts`); PTX sin cambios (byte-identical al golden).
+## #577 — shared resolved-BOM demand aggregation (partial)
+
+- Added one pure resolved-BOM + physical-quantity batch adapter; the project adapter resolves each item once and delegates without rerunning hardware resolution.
+- Whole-collection sheet/package rounding reuses existing metrics/purchase helpers; deterministic output and fail-closed native-unit aggregate guards retain board-only, hardware-only and empty-project semantics.
+- Typed two-unit isolation, missing/inactive inputs, overflow and no-partial-output tests pass; existing TS/Go requirement and binding fixtures remain unchanged.
+- Go domain and focused race tests, TS domain/parity and domain typecheck pass; the existing unknown-definition-field Go subtest remains schema-layer-only/skipped. Full closing gate and exact-head CI remain required.
+- No collection identity/capture, API, storage, operational consumer or machine integration is wired; #577 and F202/ledger remain unchanged. Review mode: disabled/unmanaged.
+## #577 — pre-expansion release-unit budget (partial)
+
+- Guard the prepared Go release unit before the existing BOM expansion: at most 10,000 conservative work units across physical boards, hardware rows and agregado repetition; reserve six rows for possible base synthesis.
+- Check effective typed/default/static quantities and the referenced structure/component/agregado closure with overflow-safe arithmetic; unrelated catalog records do not block resolution. Existing bounded BOM and non-positive agregado default semantics are preserved.
+- Focused release-unit and full Go domain tests pass; the existing unknown-definition-field domain subtest remains skipped because its API envelope owns that proof. No capture, collection, consumers, machine outputs or ledger changes; #577 remains incomplete.
+
+## #577 — strict Go revision-unit resolution, chain unit 4B (partial)
+
+- Resolve one unversioned revision item through the existing BOM engine, preserving physical/definition identity and evaluating typed defaults without mutating inputs.
+- Reject unsupported version pins, missing explicit composed dimensions, fixed-module overrides/base synthesis, invalid or competing consumers, relationship bindings and unconsumed material/edge/hardware choices.
+- Backend-only pure boundary: tenant/catalog coherence, collection identity checks and resource limits remain caller responsibilities; no capture, API, TS adapter, purchase aggregation or operational consumer is wired.
+- Focused negative and same-definition unit tests pass; independent validation, closing full gate and exact-head CI remain required. #577 and the ledger remain open/unchanged.
+
+## #577 — shared component binding preparation, chain unit 4A (partial)
+
+- Extracted the existing Go quantity/condition binding helper without changing authoring behavior; added a TS counterpart keyed by binding kind and component ID, not parameter names.
+- Shared fixtures pass evaluated parameters through both existing BOM engines, proving separate same-definition quantities, conditions, dimensions, materials, each engine’s existing physical-ID namespace and unchanged source inputs; invalid scalar/name/range values remain evaluator errors.
+- This helper assumes validated definitions, unambiguous consumers and evaluated values. It is not a release gate: strict revision identity/version/dimension/material validation, relationship boundaries, collection aggregation, snapshot capture and operational wiring remain subsequent units.
+- No F202/ledger change or #577 closure; independent validation, full gate and exact-head CI remain required.
+
+## #348 — preparación de validación PTX import/readback (entrega parcial)
+
+- Rama: `feat/348-ptx-readback-validation-prep` (desde `main`); no toca #577/#351.
+- Auditoría completa del generador PTX (`packages/excel/src/ptxCutPlanExport.ts` + optimizer de dominio) documentada en `docs/machines/ptx-validation.md`: 16 hallazgos (A1–A16) incluyendo formato definido en repo sin verificación de receptor, identidad secuencial, `[CUTS]` derivado de geometría, ausencia de provenance (bomFingerprint/release) y fallbacks silenciosos.
+- Fixture sintético congelado `fixture-board-001` r1 (`packages/excel/src/ptxValidationFixture.ts`): 2 materiales, duplicados con identidad distinta, qty 2 con rotación mixta, grano 0/1, kerf 4.4 y deducción de canto no enteras, remanentes. Golden byte-exacto `__fixtures__/ptx/fixture-board-001.ptx` con SHA-256 `544dcae574bc19e19f934f96b2ad1dc104a2d7b1f668262a83ae09df72510f09` fijado en test (drift = falla).
+- Expected readback machine-neutral + comparador puro offline `packages/excel/src/ptxReadback.ts` (PASS/WARNING/BLOCKER/UNSUPPORTED_CAPABILITY/NOT_OBSERVABLE; sin estado "VALIDATED" — prueba negativa estructural). Runbook operator-safe, plantilla de evidencia sanitizada (`docs/templates/ptx-readback-evidence-template.md`) y lista de `FIELD_VERIFICATION_REQUIRED`.
+- Sin claim de compatibilidad; todos los estados de máquina siguen `NOT_TESTED`. Pendiente para cerrar #348: import real del fixture, readback en software receptor, sign-off del operador.
+
+## #577 — private immutable snapshot schema, chain unit 3 (preparatory)
+
+- CI browser gate synchronization: await the other tab's broadcast-driven logout before an explicit reload, preserving login/no-tenant-data assertions before and after reload; no runtime change or retry. Five repeated real PostgreSQL/browser logout scenarios and all 23 organization browser scenarios pass; closing gates and exact-head CI remain required.
+- Additive migration 122 separates owner-only manufacturing payloads from intentionally shared release metadata; composite release/project/owner binding and FORCE RLS protect direct SQL.
+- Runtime grants permit only owner SELECT/INSERT; immutable triggers reject UPDATE/DELETE even for privileged writers. Existing releases remain unchanged and receive no backfill.
+- Focused real PostgreSQL proofs cover fresh/upgrade/down, shared sales privacy, owner inserts, mismatches and immutability. Capture writes, public endpoints and operational consumers are not wired.
+- This does not freeze the live BOM or close #577; full gates, independent validation and exact-head CI remain required. F202 and the ledger are unchanged.
+
+## #577 — coherent tenant transaction foundation, chain unit 2 (preparatory)
+
+- Additive internal opt-in selects repeatable read before tenant setup; ordinary requests retain read committed.
+- Borrowed marked transactions must already be repeatable read or serializable; weaker isolation is refused before actor changes or callback execution.
+- Real PostgreSQL proofs cover a two-connection committed-edit barrier, borrowing, commit/rollback and same-connection context cleanup. Routes and release capture are not wired yet.
+- This does not freeze a production BOM or close #577. Full gate, independent validation and exact-head CI remain publication requirements; F202 and the ledger remain unchanged.
+
+## #577 — immutable release requirements, chain unit 1 (partial)
+
+- Base: `78116f20`; branch: `fix/577-immutable-release-bom`. Existing ledger unchanged.
+- Added a pure Go planning-demand adapter reusing the BOM, metrics and hardware-purchase engines; shared TS/Go fixtures cover physical units, board-only demand, sheet waste, edge meters and package rounding.
+- Invalid/missing catalog inputs and non-finite demand fail without partial requirement lines. This adapter is not connected to the live release path.
+- Typed authoring preparation, coherent immutable capture, canonical consumers and the real browser golden path remain subsequent dependent units; #577 remains open.
+- Focused parity/domain tests and typecheck are recorded in the unit implementation report; full gate and remote exact-head CI remain publication requirements.
+
+## DEMO — selected material integrity (bounded correction)
+
+- Base: `84c98698`; branch: `fix/577-demo-release-bom-integrity`.
+- Preflight and release now require selected IDs to exist in the owning organization catalog (boards, hardware, edges); unknown legacy roles remain compatible.
+- Real PostgreSQL RED: missing/foreign/unavailable board catalog incorrectly returned ready. GREEN: 15 catalog/scenario cases; rejection commits no release or release audit.
+- Focused regressions pass; independent validation: 52 top-level tests and 15 PostgreSQL scenarios PASS, zero skips. Full worktree gate and exact-head remote CI must pass before merge.
+- This does **not** freeze catalog-derived manufacturing output: immutable released BOM remains P0.
+- #577 is closed with its existing approval label; publication requires explicit tracking reconciliation, not inferred issue reopening or approval.
+- F202 and prior feature history below remain unchanged.
+
+# Revisión y corrección activa: PR #578 / #577 (entrega parcial)
+
+- Rama: `feat/577-canonical-release-ops-continuity`; correcciones sobre `6744442a`, sin activar otra feature del ledger.
+- Corregidos: listado de release más reciente, lector por ID exacto y generación/validación de unidades físicas desde FurnitureInstance liberadas, no cotización mutable.
+- Evidencia: suites completas TS y Go sobre PostgreSQL desechable, typecheck, OpenAPI y Chromium real 4/4 PASS. Detalle: `progress/implementation_577_canonical_release_ops.md`.
+- Pendientes: catálogo industrial no congelado por release; cobertura de definitionVersion/parámetros; aprobación humana de #577 para publication metadata. Sin merge ni cierre; readback exacto en PR #578. Receipt-driven: `disabled/unmanaged`.
+
+---
+
+# Historial: Ninguna feature activa tras F219 completada
+
+- Actualizado: 2026-09-06 America/Mexico_City
+- Última feature: F219 — `[P0][WEB-DT-4] Commercial QuoteRevision lifecycle — create, publish and accept exact revisions` (#571)
+- Rama: `feat/571-commercial-quote-revision-lifecycle`
+- Estado: `completed` (verificación completa; ver `progress/implementation_571_commercial_quote_revision_lifecycle.md`)
+- Logros:
+  1. Constraint DB y storage: migración `000121_quote_revision_accepted_uniqueness` (índice único parcial `uq_quote_revisions_one_accepted_per_project`). Endpoints de storage `CreateInitialQuoteRevision`, `PublishQuoteRevision`, y `AcceptQuoteRevision` con serialización transaccional, bloqueo pesimista por proyecto, superseding atómico de revisiones aceptadas previas y eventos de auditoría durables.
+  2. API Go generada: `POST /projects/{projectId}/quote-revisions` (creación de Q1 snapshotting estado comercial de quote lines y catálogo), `POST /projects/{projectId}/quote-revisions/{quoteRevisionId}:publish` (draft -> published) y `POST /projects/{projectId}/quote-revisions/{quoteRevisionId}:accept` (published -> accepted con superseding atómico). Gobernado por permiso RBAC `RoleCanAcceptQuoteRevisions`.
+  3. UI React: `QuoteLifecyclePanel` y modal de confirmación `AcceptQuoteModal` en `packages/ui/src/digitalThread/ReconciliationCommandPanels.tsx`, integrado en `ProjectReconciliationScreen.tsx`. Botón CTA en estado vacío cuando no existen revisiones, publicación explícita, modal de advertencia para aceptación de Q1/Q2, e histórico de revisiones inmutables.
+  4. Desambiguación de estado legacy: `ProjectDetailHeader.tsx` y `ProjectDetailView.tsx` diferencian "Enviar cotización (legacy)" de la autoridad de QuoteRevision del Digital Thread.
+  5. E2E browser + PostgreSQL real (`tests/organization/project-reconciliation.spec.ts`): eliminadas todas las mutaciones directas de SQL en el golden path comercial. El test ejecuta Q1 creación -> Q1 publicación -> Q1 aceptación -> requote Q2 -> Q2 publicación -> Q2 aceptación atómica -> aprobación -> release P1 mediante UI/API real sin SQL ni fixtures de bypass.
+  6. Rehearsal actualizado: `docs/demo/demo-golden-path-rehearsal-20260906.md` P0-1 cerrado con `PASS`. P0-2 permanece abierto.
+
+---
+
+# Historial previo — F218 (#502 / WEB-DT-3) — Reconciliation, approval and exact ProductionRelease workspace
+
+- Actualizado: 2026-09-06 America/Mexico_City
+- Feature: F218 — `[P0][WEB-DT-3] Reconciliation, approval and exact ProductionRelease workspace` (#502)
+- Rama: `feat/502-web-dt3-reconciliation-release`
+- Estado: `completed` (verificación completa; ver `progress/implementation_502_web_dt3.md`)
+- Logros:
+  1. Read model mínimo generado: `evaluateDesignRevisionPreflight` (`POST /designs/{designId}/revisions/{revisionId}/preflight`) — la MISMA función de dominio del gate de release (#466/#395, scope `production-release-v1`), sin segundo motor; proofs Go de paridad ready/blocked + fail-closed exact-revision + RLS.
+  2. Workspace React `/quotes/:projectId/reconciliacion?qrev=&design=&rev=` con contexto exacto fail-closed, reconciliación #393/#394 verbatim (rows por `furnitureInstanceId`, sin clasificación cliente), requote explícito con modal de review (Q inmutable, conflicto VERSION_CONFLICT tipado), panel de preflight autoritativo, aprobación de revisión exacta, ProductionRelease con propuesta + pins exactos e historial durable (R2 nunca retargeta P1).
+  3. E2E browser + PostgreSQL real (`tests/organization/project-reconciliation.spec.ts`): golden path quote-first con qty>1 + design-first, requote → Q2, conflicto stale, aprobación, release P1 (Q2+R1), durabilidad tras R2, failure rollback y tenant isolation.
+  4. `#499 Web↔SketchUp handoff: DEFERRED`; `#503: DEFERRED`. Sin Ruby/SketchUp/machines/DXF.
+  5. Limitación de demo documentada: no hay API para crear/aceptar la primera QuoteRevision — el fixture siembra Q1 accepted por SQL (rol migration), misma convención que el suite Go.
+
+---
+
+# Historial previo — Demo Golden Path Rehearsal post-#502 (2026-09-06)
+
+- Ejecutado sobre `main` `79f45b28` (post-PR #569; #500/#501/#502 integrados). Reporte completo: `docs/demo/demo-golden-path-rehearsal-20260906.md`.
+- Verdict: **DEMO READY: YES WITH MITIGATIONS**. 2 P0: (1) lifecycle comercial `quote_revisions` sin superficie HTTP/UI (cerrado en F219); (2) el ProductionRelease canónico no habilita el tramo operacional Web (blob legacy `project.productionRelease` gobierna `canDerive`/derivación → doble liberación legacy en guion).
+- Evidencia fresca en este SHA: browser gate #500/#501/#502 **5/5 (40.3 s)** sobre Chromium+Go+PostgreSQL efímero; TestUp real host `TC_ComponentAuthoringSmoke` **5/5, 48 assertions, 0F/0E/0S** (`progress/host_smoke_467_testup_ci.json`, 2026-09-06T14:11:40Z); `GOFLAGS='-p=1' go test ./... -count=1` 11/11 packages `ok`; `pnpm openapi:check`/`typecheck`/`test` verde.
+
+---
+
+# Historial previo — F217 (#501 / WEB-DT-2) — Designs, immutable revisions and 3D artifact history
+- Logros:
+  1. Pure model & algorithms: `designHistory.ts` + `designHistory.test.ts` (14/14 tests) con linaje inmutable $R1 \to R2 \to R3$, resolución de release activo, selección exacta de revisión snapshot, mapeo de artefactos y formateadores.
+  2. Workspace React `ProjectDesignsScreen.tsx` + `ProjectDesignsScreen.test.tsx` (9/9 tests) con alternativas en `WorkspaceTabs`, línea de tiempo inmutable con insignias de estado, visualización pineada de ítems y parámetros de revisión, visor 3D con grants firmados, tabla de artefactos con hashes SHA-256 y descarga por grants, drawer de auditoría técnica y estados vacíos honestos.
+  3. Tokens de diseño limpios en `digitalThread.css` sin hex no autorizados ni tokens inexistentes.
+  4. Ruteo y deep-linking en `routes.ts` + `routes.test.ts` (`/quotes/:id/disenos?design=&rev=`).
+  5. Navegación cruzada en `ShellView.tsx`, `ProjectsScreen.tsx`, `ProjectDetailView.tsx` y `ProjectFurnitureScreen.tsx`.
+  6. Negative proofs: R1 pineado nunca muta a R4; el browser jamás parsea `.skp`; los grants de descarga van firmados por backend sin JWT en query strings; handoff #499 diferido explícitamente (`#499 Web↔SketchUp handoff: DEFERRED`).
+  7. Verificación completa: `pnpm typecheck` verde (7/7 proyectos), `pnpm test` verde (UI 1552 tests, Web 419 tests), `pnpm openapi:check` verde.
+
+---
+
+# Historial previo — F216 (#500 / WEB-DT-1) — Project Furniture matrix and physical-unit traceability
+
+- Actualizado: 2026-09-05 America/Mexico_City
+- Feature: F216 — `[P0][WEB-DT-1] Project Furniture matrix and physical-unit traceability`
+- Rama: `feat/500-web-dt1-project-furniture-matrix` (PR #565 mergeado en `main@3a8f12aa`)
+- Estado: `completed` (verificación completa; ver `progress/implementation_500_web_dt1.md`)
+
+## Historial previo — Regression pass Demo Golden Path (2026-09-05)
+
+- Ejecutado sobre `main` `587961fd` (clean, con merges #559/#562/#564). Reporte: `docs/demo-golden-path-readiness-20260905.md`.
+- Resultado: **0 demo blockers**; Digital Thread E2E 9/9, Foundation browser gate 17/17, engine/golden authoring verde, `pnpm test`/typecheck/openapi verde. Los 3 defectos históricos de la auditoría 360 (DXF rotado, FM-03 order-dependence, template roundtrip) siguen reproduciéndose en el resolver TS legacy — POST-DEMO, no tocan la ruta autoritativa Go/SketchUp.
+- Primary gap: superficies React #500/#501/#502 (backend completo, sin UI). **Recommended next issue: #500.**
+
+---
+
+# Historial previo — F215 (#467 / SU-AUTH-1) — Direct internal component authoring with semantic constraints
+
+- Actualizado: 2026-09-05 10:30 America/Mexico_City
+- Feature: F215 — `[P0][SU-AUTH-1] Direct internal component authoring with semantic constraints`
+- Rama: `feat/466-authoritative-preflight-review` (PR #562)
+- Estado: `completed` (con corrección final de autoridad aplicada)
+- Logros (corrección final de autoridad incluida):
+  1. **Autoridad de topología**: el plugin YA NO construye/filtra relationships — eco verbatim del último set aceptado en move/add/duplicate y OMISIÓN en remove; el motor materializa/limpia identidades de relación y machining dependiente (`materializeBoundRelationships`, probado en 6 tests Go de autoridad).
+  2. **Identidad productiva (diseño A canónico)**: el contrato #477 exige `componentInstanceId` propuesto por cliente por ocurrencia (REQUEST_INVALID si falta, OCCURRENCE_DUPLICATE_ID en colisión, eco verbatim en golden 03) — el plugin propone `ci-*` y el host se guía por el eco ACEPTADO: render, metadata y SELECCIÓN usan el id aceptado (regla: draft si el eco lo conserva; si no, la ocurrencia aceptada de la misma definición con la transform pedida; si no, el id añadido al set base). Prueba draft≠accepted en unit (double que renombra) y real-host (golden re-identifica).
+  3. **Capability explícita del engine**: `LayoutComponent.authoringCapability {movable, axis}` publicada por el motor (regla movible unificada `movableInternal()` en authoringTemplateIndex, índice always-on también en GET layout) para internos movibles sólo; el guard del plugin y el CapabilityPolicy consumen esa capability (fail-closed en ausencia), y el Tool de viewport arrastra SOLO el eje publicado.
+  4. **Rango = autoridad del servidor**: el plugin valida sólo forma de transporte (3 mm finitos); el motor rechaza traslaciones fuera del envelope [0,W]×[0,D]×[0,H] con TRANSFORM_INVALID (nuevo `validateOccurrenceRanges`, escenario dorado `neg-shelf-out-of-range`, ceiling grueso 2400mm en TS para paridad de rechazo).
+  5. **Contratos**: schema JSON (`$defs.resolvedLayoutComponent.authoringCapability`, cerrado), tipos/validador TS (`ResolvedLayoutWireV1`, keys, validateResolvedLayout), golden regenerado (33 escenarios; capability en layouts del entrepaño), Ruby LayoutContract parsea la capability con fail-closed.
+  6. **Verificación completa**: Go `go test ./...` verde; TS 1245 tests + typecheck verde; extension 601 unit/4246 assertions, boundary 6, RuboCop 161/0, RBZ determinista `e709e30c…`; **TestUp real-host (RBZ instalado, SketchUp 2026): Success 5/5, 48 assertions, 0F/0E/0S** con guards semánticos del request (sin relationshipId client-minted, intent correcto, shelfCount consistente) y pruebas de identidad aceptada (add/duplicate seleccionan shelf-02 aceptado, no el draft) — evidencia sanitizada sin paths privados: `progress/host_smoke_467_testup_ci.json`.
+  7. **Cleanup final transform/eje/rango**: ecos y poses persistidas usan la pose autoritativa #414 `localTransform.translationMm` (`board.translation`), jamás el AABB (prueba negativa con basis rotada donde AABB.min ≠ pose, en echo y metadata); el Tool commitea/etiqueta SOLO el eje publicado con mapeo explícito x→0/y→1/z→2 (tests por eje, eje inválido falla antes de iniciar, Esc no commitea); el techo arbitrario de 2400mm se eliminó de TS (transporte = sólo forma: 3 números finitos; un request z=5000 pasa TS y Go lo evalúa contra el envelope real de 720mm); el escenario neg de rango salió del golden compartido (validez posicional 100% server-side).
+  8. **Preservación de dependencias en remove**: remove hace eco VERBATIM del último set de relaciones aceptado (incluida la anclada al entrepaño eliminado) y el servidor poda autoritativamente los anchors stale-by-removal conservando las relaciones independientes EXACTAS con su machining/provenance (`pruneRemovedAnchorRelationships` gated a snapshot; sin snapshot el anchor fantasma sigue rechazando RELATIONSHIP_ORPHANED; golden 07/neg-orphan ahora sin components; carve-out justificado en el harness de paridad TS; prueba requerida `TestAuthoringAuthorityRemovePreservesUnrelatedRelationships` + unit Ruby con set sembrado + smoke real-host con eco sin filtrar).
+
+## Historial previo — F214 (#466 / SU-UX-1) — Authoritative preflight review with viewport problem navigation
+
+- Feature: F214 — `[P0][SU-UX-1] Authoritative preflight review with viewport problem navigation`
+- Rama: `feat/466-authoritative-preflight-review`
+- Estado: `completed` (detalle en git history; publish gate design-wide de #392 incluido)
+
+## Historial previo — F213 (#468 / SU-AUTH-2)
+
+- #468 implementada y verificada:
+  Interactive HardwarePlacement editing and smart hardware substitution.
+
+## Historial previo — #498 (SU-HOST-1)
+
+- #498 implementada y mergeada a main (PR #555, merge `dfa6f348`):
+  Shared host interaction orchestration for atomic authoring and degraded states.
+
+
+## Historial previo — F211 (#398 / DT-14)
+
+- #398 implementada y mergeada a main (PR #554, merge `77b1ead8`):
+  End-to-End Digital Thread Contract & Regression Gate.
+
+
+## Historial previo — #393 DT-9
+
+- #393 implementada y mergeada a main (PR #549, merge `316df57c`):
+  reconciliación pura y determinística entre QuoteRevision y DesignRevision
+  unidas estrictamente por `FurnitureInstance.id` con estados canónicos
+  `synced`, `quoted_not_modeled`, `modeled_not_quoted`, `modified`, `removed`,
+  `conflict`, diferencias estructuradas normalizadas y writer atómico con
+  optimistic concurrency fail-closed. Detalle: `progress/implementation_393_dt9.md`.
+
+## Historial previo — #392 DT-8
+
+- #392 implementada y mergeada a main (PR #548): publicación escalonada de DesignRevision
+  inmutable con manifiesto y artefactos 3D. Detalle: `progress/implementation_392_dt8.md`.
+
+## Historial previo — F202/#460 Organization Foundation P0
+
+- Actualizado: 2026-09-02 America/Mexico_City
+- F199 (#458) cerrada (`done`); ninguna otra feature `in_progress` salvo F202.
+- F202 y #460 continúan abiertos. SEC-1, SEC-2A/B (PR #528), SEC-3 (PR #530),
+  SEC-4A (PR #531), SEC-4B, SEC-5 y SEC-6 (PR #534, merge `f5d59a46`) están
+  integrados; **SEC-7** (MFA TOTP + step-up para acciones sensibles) está integrado
+  en `main` por PR #535 (merge `355be4ea`).
+- Roadmap restante: SEC-8 trusted-proxy/rate limits distribuidos/account
+  hardening, SEC-9 gate final + ver4 EOL.
+
+## SEC-7 — qué se implementó
+
+### Modelo y storage (migration 000109)
+
+- `auth_mfa_factors`: factor TOTP por usuario, `pending → enabled → revoked`;
+  secreto AES-256-GCM (nonce‖ciphertext‖tag) kid-pinned; `pending_expires_at`
+  terminal; `last_used_counter` high-water de replay; CHECKs de shape.
+- `auth_mfa_recovery_codes`: 10 verificadores HMAC-SHA256 (nunca plaintext),
+  `used_at`/`revoked_at` single-use por UPDATE condicional.
+- `auth_step_up_grants`: autoridad server-side (sid, user, scope, method,
+  expiración ≤10 min); freshness joinea la fila viva de `auth_sessions` (la
+  revocación corta el grant sin cleanup); S2 nunca hereda (sid distinto).
+- `auth_sessions.step_up_at` (reservada en 000105) se mantiene como hint de
+  frescura; los grants son la autoridad por scope.
+- RLS platform-global self-or-platform en las tres tablas + registro en
+  `rls_policy_inventory`; sin DELETE (revocación/uso son UPDATE; grants
+  expiran solos).
+
+### Crypto
+
+- Keyring dedicado `MFA_ENCRYPTION_KEYS` (`{"active_kid","keys":{kid:base64}}`)
+  o `MFA_ENCRYPTION_KEY` single (kid `primary`); ≥32 bytes; boot fail-closed
+  (LoadConfig) igual que REFRESH_TOKEN_PEPPER. Subkeys por propósito vía
+  HKDF-SHA256 (AEAD TOTP vs HMAC recovery no cruzan). Rotación: active kid
+  sella lo nuevo; quitar un kid fail-closed su material.
+- TOTP RFC 6238 (SHA1/6/30, ventana ±1) con vectores del RFC; replay
+  protection atómica (counter aceptado una sola vez, incluso concurrente).
+- Disjunto de JWT/refresh/media/device secrets por construcción.
+
+### API y boundaries
+
+- Endpoints (`/api/auth/mfa/*`, OpenAPI generado sin drift): factors list,
+  totp:begin (URI una sola vez), totp/{id}:verify (habilita + recovery),
+  factors/{id}:remove y recovery-codes:regenerate (security_admin step-up),
+  step-up (un scope por verificación).
+- `RequireStepUp(scope)` corre DESPUÉS de auth/platform y ANTES del wrapper de
+  idempotencia: el challenge no consume la `Idempotency-Key`; el reintento
+  verificado reutiliza la misma key (proof HTTP + browser).
+- 403 tipado (nunca 401): `MFA_REQUIRED` (sin factor; sin bypass — enrollment
+  exige TOTP vivo), `STEP_UP_REQUIRED` (+`details.scope`), `STEP_UP_EXPIRED`.
+- Comandos protegidos: devices approve (device_enrollment), support entry
+  (support_access), MFA remove/regenerate (security_admin), team
+  change-roles/transfer-admin/offboard/revoke-sessions (organization_admin),
+  org lifecycle + entitlements + set-account-status (platform_admin).
+  Documentado: password change no existe aún (deberá nacer con step-up);
+  self-revoke/revocación de dispositivo propio/suspend memberships quedan en
+  su boundary (bajo impacto o reversibles); MFA obligatoria para admins NO se
+  fuerza aún (decision de rollout para SEC-8/9; MFA_REQUIRED es la mecánica).
+- Rate limiting por usuario+propósito: 5 fallos, refill 1/min, éxitos gratis
+  (in-memory; SEC-8 lo distribuye). Auditoría `mfa_*`/`step_up_*` sin material
+  secreto (proof de redacción en storage+HTTP).
+
+### Web / Mobile
+
+- `SecurityScreen` (`/security`, nav base para todo rol): wizard enrollment
+  (QR en memoria + clave manual), verificación, recovery codes one-time
+  (copiar/guardar), regenerar y eliminar factor con step-up.
+- `useStepUp` + `StepUpModal`: modal ligado a la acción exacta ("Confirma tu
+  identidad"), reintento del MISMO comando con la misma Idempotency-Key, sin
+  retry global automático; hint MFA_REQUIRED → Seguridad. Nada MFA toca
+  localStorage/sessionStorage/IndexedDB.
+- Wiring: DevicesScreen (approve), UsersScreen (roles/transfer/offboard/
+  revoke-sessions), PlatformScreen (support + account status),
+  OrganizationLifecyclePanel (suspend/reactivate/terminate/begin-offboarding).
+- Mobile: 403 STEP_UP se superficie como DomainError con code y NUNCA entra al
+  path de refresh (regression proof).
+
+## Evidencia ejecutada
+
+- `GOFLAGS='-p=1' go test ./... -count=1`: verde (crypto/TOTP unit, storage
+  PostgreSQL: migration fresh+upgrade, lifecycle, replay CON concurrencia,
+  recovery single-use CON concurrencia, TTL/binding/scopes/revocación, RLS,
+  redacción de audit; api: boundaries tipados, ver4 no elevable, fail-closed
+  sin keyring; pilotreadiness HTTP real: enrollment, challenge+retry misma
+  key, enrollment expirado post-MFA, scope isolation, TTL, session
+  replacement, recovery+management, rate limit, redacción).
+- `pnpm openapi:check`: sin drift. `pnpm typecheck`: verde.
+- `pnpm test` (monorepo): verde (UI 1503 incl. SecurityScreen/stepUp/
+  DevicesScreen challenge; mobile 6/6 apiClient).
+- `scripts/organization-browser-gate.sh`: PASS con `mfa.spec.ts` (enrollment
+  QR+manual, recovery one-time, STEP_UP_REQUIRED → verificación → mismo
+  comando prospera, sin secretos MFA en storage).
+- `scripts/smoke-deploy.sh`: 31/31 (con `MFA_ENCRYPTION_KEYS` añadida a la
+  validación de compose y a `.env.production.example`).
+- `git diff --check`: limpio.
+
+## Decisiones documentadas
+
+- ADR-0007 §12 (SEC-7) + status; organization-foundation-v2 §13 actualizado;
+  `.env.example`/`docker-compose.prod.yml`/gates con el nuevo secreto.
+
+## Estado de entrega
+
+SEC-6 y SEC-7 integrados en `main`. F202 sigue `in_progress` y #460 sigue
+abierto porque SEC-8/SEC-9 están pendientes. Roadmap restante explícito:
+SEC-8 trusted-proxy/rate limits/account hardening, SEC-9 gate final + ver4
+EOL.
+
+
+## Coordinación activa — #461 mínimo para Gate A
+
+- Rama: `feat/461-gate-a-durable-audit`, base `main@355be4ea`.
+- Alcance: acoplar login/session creation, select-org y platform org patch a
+  `security_audit_events` durable en la misma transacción; versión/correlación y
+  RLS org-less mínimos; pruebas PostgreSQL de rollback.
+- Fuera de alcance: #461 completo, outbox sin consumidor, Gate B, SEC-8/9 y #385.
+
+## Foundation Gate A #462 — GREEN
+
+- `pnpm gate:foundation:a`: PASS sobre PostgreSQL 16 fresh + upgrade fixtures,
+  roles migration/runtime separados (`NOBYPASSRLS`), Go HTTP/auth/MFA y
+  Chromium real.
+- Coverage final: 34/34 (`progress/gate_a_462_coverage.md`); 22 proofs
+  existentes reutilizados y sólo los 12 gaps exactos implementados.
+- Durable audit: conserva `security_audit_events` como autoridad; failure
+  injection prueba rollback de mutación crítica. No se agregó outbox sin
+  consumidor.
+- #460/F202 continúa `in_progress` por SEC-8/SEC-9; #461 completo y Gate B
+  siguen pendientes.
+- **#385 DT-1 may start.**
+
+## F204 — #385 DT-1: identidad estable de FurnitureInstance (COMPLETE)
+
+- Primera familia persistente post-Gate A. `furniture_instances`
+  (migration 000111): una identidad estable por unidad física, project-owned,
+  con provenance server-authoritative (`quote|design|manual|import|duplicate`),
+  lifecycle terminal (`active|removed|cancelled`) y versionado optimista.
+- RLS `explicitly-shared` + inventory + trigger de ownership + grants sin
+  DELETE desde la primera migración; fresh + upgrade fixture verdes.
+- API generada: `GET/POST /api/projects/{projectId}/furniture-instances`,
+  `POST /api/furniture-instances/{instanceId}:remove`; idempotency durable en
+  create/remove; audit `furniture_instance_created/removed` en la misma
+  transacción tenant.
+- Pruebas PostgreSQL real: identidad independiente (dos comandos idénticos →
+  dos IDs), cross-project rechazado, cross-org bloqueado con rol app incluso
+  sin filtro de tenant, projectId random → 404, retry no duplica identidad.
+- Detalle: `progress/implementation_385_dt1.md`. NO implementado: #386, #387,
+  SketchUp, reconciliation, release, machining.
+
+## F205 — #386 DT-2: QuoteLine ↔ FurnitureInstance (COMPLETE)
+
+- Segunda familia persistente post-Gate A. `quote_line_furniture_instances`
+  (migration 000112): relación explícita línea comercial ↔ unidades físicas.
+  Representación equivalente permitida por §4 del contrato digital-thread:
+  QuoteLine = `project_items`, aceptación = `projects.status`
+  (accepted/produced); sin modelo comercial paralelo.
+- `quantity=N` materializa N identidades únicas (`origin='quote'`, reutiliza
+  `CreateFurnitureInstance` de #385); idempotente por convergencia con
+  advisory lock por línea (concurrencia exacta); increase preserva IDs y agrega
+  sólo delta; decrease en draft retira las más nuevas con lifecycle terminal
+  `cancelled` y **nunca recicla IDs** (hook de historia durable documentado
+  para #387+).
+- Inmutabilidad de aceptada en tres capas: error tipado `ErrQuoteRevisionAccepted`
+  (409) en storage/API; policies RLS INSERT/DELETE con
+  `app_project_quote_mutable` + org dueña (bloquea SQL directo); guards tipados
+  contra eliminar/dropear líneas materializadas vía PUT de proyecto (FK
+  compuesta deferible como backstop estructural; cross-project imposible).
+- API generada: `GET /api/projects/{projectId}/quote-lines/{quoteLineId}/furniture-instances`,
+  `POST .../quote-lines/{quoteLineId}:materialize` (idempotency durable, sin
+  body: identidad server-authoritative). Audit `quote_line_furniture_materialized`
+  en la misma transacción.
+- Fix contenido de deuda preexistente desbloqueado por este trabajo:
+  `loadProjectItems` bufferea items antes de las queries anidadas de choices
+  (fallaba `conn busy` dentro de la tx de tenant del middleware).
+- Detalle: `progress/implementation_386_dt2.md`. NO implementado: #387,
+  #388 re-quote, SketchUp, reconciliation (#392), release, machining.
+  **#387 DT-3 may start.**
+
+# Issue #631 — SketchUp multipart publish transport
+
+- Publish retry diagnosis: the first real attempt created a prepared publish session at 2026-09-09 19:43:07 UTC but recorded zero artifacts. The failure was client-side: `HttpAdapter#upload` assigned the IO-like `MultipartBody` to `Net::HTTP#body`, whose send path calls `bytesize`; the resulting programming error was collapsed into the misleading `unreachable` message before any artifact byte reached the backend. The adapter now uses `body_stream`; the dialog also resets the stuck `Publicando…` label to `Reintentar publicación` on failure.
+- Publish retry evidence: focused Ruby publisher suite passes (20 runs / 90 assertions), the real dialog JavaScript suite passes (15/15), RuboCop on the changed Ruby files is clean, and the installed adapter passed an in-host SketchUp 2026 loopback upload (`status=201`, expected multipart payload received). The final design publication was not executed.
+
+## PR #646 — correction round 1 for issue #639
+
+- Authorized single correction round against reviewed head `d359ca305b5de0627a765c192795e322c4ed85b4`; same branch/worktree, no GitHub mutations.
+- Scope: repair Foundation Gate A semantic selector, cover all four server-owned presentation provenance states, strengthen real-browser descriptor/actor/overflow proof, restore RLS inventory metadata on migration down, complete disclosure interaction tokens/a11y, and correct the documentation typo.
+- Verification plan: focused Go migration/provenance tests, focused UI, real project-design browser gate, complete `pnpm gate:foundation:a`, diff check, commit and push exact readback.
+- Correction result: `IMPLEMENTED_PENDING_REVIEW`. Focused provenance/migration and UI tests pass; real project-design browser gate passes; full Foundation Gate A passes 34/34 with 31 Chromium cases. See `progress/implement_639_design_revision_read_model.md`.
+
+## PR #645 — issue #644 golden-path correction
+
+- Existing test-only PR updated after #639 landed on `main@fde538a839a7b882657fafbfe41bbdd1cf91fbee`; merge commit `b2dde534cd7e3fd264283e2d55adbbf2d54ebb4d` preserves the complete #639 record above.
+- Scope: turn Q1 choices/dimensions and display/working-copy/R1/R2 provenance into failing assertions; assert #639 immutable presentation descriptors; prove a post-R1 catalog rename cannot retarget R1; retain double-truth as an observation.
+- The canonical #502 commercial gate rejects R2+Q1, so the executable journey intentionally uses Q2 derived from R2 and documents that correction to issue #644's stale literal.
+- Focused real Chromium + Go + PostgreSQL gate: 10/10 PASS. Full organization browser run reached 36 PASS, 2 unrelated route/login visibility timeouts, and 3 skipped after the serial reconciliation failure; see `progress/implementation_644_demo_golden_path_regression.md`.
+
+## PR #647 — issue #640 correction R2
+
+- User-authorized correction on `feat/640-design-artifact-health`, including the cohesive `size:exception` already applied to the PR.
+- Scope: enforce owner-partition and immutable integrity pins through signed GET; remove bearer-only artifact reads; add API/app-role RLS and post-mint mutation proofs; fail preview closed on unknown health; repair UI tokens/icons and evidence.
+- No merge or issue closure. Delivery remains `IMPLEMENTED_PENDING_REVIEW` after verification and exact remote SHA readback.
+
+## PR #653 — issue #642 Slice 2a review correction
+
+- Cotizaciones now fails closed across loading/error/empty/legacy identity and
+  totals states; ready UI uses only exact QuoteRevision snapshot identity,
+  currency, quantity and permitted frozen totals.
+- WhatsApp resolves the phone by the snapshot customer ID, never the mutable
+  Project customer, and lifecycle commands invalidate the shared scoped
+  authority key so a return after Q1→Q2 acceptance cannot show cached Q1.
+- Evidence: focused UI 82/82; full workspace JS PASS (UI 1695/1695, web
+  444/444); typecheck/OpenAPI/diff PASS; real Chromium + Go + PostgreSQL 4/4.
+- No merge, issue closure or size-governance mutation. Status remains
+  `IMPLEMENTED_PENDING_REVIEW`; see
+  `progress/implementation_642_quote_revision_consumers.md`.
+- UI DoD rereview added real 390/768/1280 no-overflow/bounded-panel assertions
+  and six reviewed screenshots under
+  `test-results/issue-642-slice2a-responsive-rereview/`; browser gate 4/4 PASS.
+- The original Go job hit the global 600.211 s timeout without an assertion.
+  Exact rerun attempt 2 passed (job `103123806142`, 9m51s;
+  `internal/storage` 275.163 s), confirming suite-load flakiness with no backend
+  change.
+# PR #702 / issue #677 — corrección de sincronización comercial local
+
+- Approval: solicitud explícita del propietario (2026-09-13) para corregir R1/R2 en el mismo PR #702.
+- Head revisado: `90d17863c9c0d1ffcbe87a93560e646f931a6e2d`; rama/worktree existentes, limpios y alineados con remoto.
+- Started: 2026-09-13 12:00 CST.
+- Scope: preservar cambios locales pendientes ante sincronizaciones parciales, invalidar lecturas anteriores a cualquier mutación, persistir el estado por Project/Design en el modelo y mejorar motivos incompletos conocidos. Sin sincronización general, SSE, Change Orders, Proyectar ni nuevas funciones comerciales.
+- Plan:
+  1. Fijar regresiones RED para A pendiente + B parcialmente sincronizado, respuestas tardías, refresh manual y reapertura/cambio de diseño.
+  2. Reutilizar binding/model metadata y runtime de mutaciones para una autoridad persistente y design-scoped de coincidencia local↔servidor.
+  3. Separar sincronización parcial de completa; sólo una completa comprobada puede limpiar el estado pendiente.
+  4. Validar callbacks reales Ruby→HtmlDialog, mensajes incompletos, suites Ruby/JS, RBZ y gates aplicables.
+  5. Push al mismo PR, revisión independiente y readback exact-head de CI/publicación, sin merge ni cierre.
+
+## PR #702 / issue #677 — corrección incremental R1-B/R2-B
+
+- Approval: solicitud explícita del propietario (2026-09-13) para continuar en el mismo PR.
+- Head remoto revalidado: `f73277bc2e38d9f159eb55ef47c633f3c88e861a`; PR abierto, limpio y mergeable; worktree sin cambios ajenos antes de agregar las regresiones.
+- Started: 2026-09-13 13:38 CST.
+- Scope: distinguir seguimiento ausente de coincidencia probada y cerrar lecturas iniciadas o recibidas durante `resolving|applying_host_mutation`; sin tocar backend comercial, Proyectar, SSE, #679 ni el runtime compartido de mutaciones.
+- Plan:
+  1. Capturar RED real para modelo/contexto sin evidencia y sincronización parcial desde estado no confirmado.
+  2. Capturar RED real para refresh/receive durante las fases activas del runtime de mutaciones.
+  3. Corregir únicamente `LocalWorkState`, bridge/panel y pruebas, preservando pendientes previos ante rechazo/cancelación/aborto.
+  4. Ejecutar pruebas focalizadas, `rake verify`, OpenAPI/typecheck y gates aplicables; construir y hashear el RBZ final.
+  5. Actualizar el mismo PR y verificar head/checks/publicación sin mergear ni cerrar issues.
+- RED confirmado:
+  - JavaScript aceptaba como `true` una respuesta obtenida por `refresh()` durante `resolving` y podía volver a mostrar `Actualizado` antes del outcome.
+  - Ruby: 3 fallos demostraron que metadata ausente, contexto ausente y `partial` desde contexto no seguido se convertían en `localChangesPending:false`.
+- Corrección:
+  - `LocalWorkState` persiste `matchConfirmed` separado de `localChangesPending`; ausencia/corrupción/contexto nuevo y registros v1 previos sin esa prueba quedan no confirmados. `partial` preserva desconocido o pendiente; sólo `full` confirma.
+  - Un importe consultado al servidor sin prueba local se muestra como `Servidor no verificado`, nunca `Actualizado`; no requiere crear/aprobar QuoteRevision ni publicar DesignRevision.
+  - `request` y `receive` rechazan lecturas durante `resolving|applying_host_mutation`; outcomes terminales restauran únicamente la clasificación anterior válida y una cancelación no limpia pendientes.
+- GREEN focalizado final:
+  - JS comercial real: 21/21.
+  - `commercial_projection_test.rb`: 20 runs / 46 assertions.
+  - `dialog_controller_test.rb`: 31 runs / 192 assertions.
+  - RuboCop focalizado: sin offenses.
+- Gates finales ejecutados:
+  - `bundle exec rake verify`: 665 runs / 4516 assertions + boundary 6 runs / 2567 assertions, sin fallos; RBZ SHA256 `c41e3270c146dc84b3141dadbaf6b820a588550297cb657c47b9943d9b0e48cc`.
+  - `pnpm openapi:check`: PASS.
+  - `pnpm typecheck`: PASS, 7 workspaces.
+  - `pnpm test`: PASS completo.
+  - `git diff --check`: PASS.
+- Host real: `NOT_TESTED`. SketchUp 2026 continúa abierto con una sesión activa del usuario (PID 44023); no se cerró ni reemplazó y no se usó Ruby/JS como sustituto de evidencia host.
+
+## PR #702 / issue #677 — recuperación tras pérdida temporal de vinculación
+
+- Approval: solicitud explícita del propietario (2026-09-13) para corregir el único hallazgo incremental en el mismo PR.
+- Head revisado y remoto revalidado: `6b6c537f7682549ef6ffaf927fe57944afe2c00f`; PR abierto, `type:feature`, limpio y mergeable al iniciar.
+- Alcance: sólo reconciliar el ciclo de vida de `GraneteMutation` con el panel comercial cuando el binding desaparece temporalmente; sin tocar cálculo, permisos, contratos, historial, Proyectar, PTX/CNC ni trabajo GLM.
+- RED real: el harness cargando `granete-mutation.js` reprodujo `resolving → unreachable → unavailable → reconnect → refresh`; falló `false !== true` porque el outcome terminal no liberaba `mutationInFlight` con `binding == null`.
+- Corrección: el panel sigue el lifecycle aunque no haya binding, captura el Project/Design al iniciar y sólo aplica consecuencias si el contexto coincide. Al reconectar consulta `GraneteMutation.phase()`; una operación realmente activa sigue bloqueando y un outcome de otro contexto sólo provoca readback autoritativo del contexto actual.
+- GREEN focalizado: módulo comercial 26/26; todos los harness JavaScript de la extensión PASS; Ruby comercial 20 runs / 46 assertions y dialog controller 31 runs / 192 assertions.
+- Gates finales locales: `bundle exec rake verify` PASS (665 runs / 4516 assertions; boundary 6 runs / 2567 assertions; RuboCop 170 archivos); RBZ SHA256 `38fc433e9912e71a339b132a516540ff7e164abf461278124123b336f1d67fc0`; `pnpm openapi:check`, `pnpm typecheck` y `pnpm test` PASS; `git diff --check` PASS.
+- Host real: `NOT_TESTED`; no se cerró ni reemplazó la sesión activa de SketchUp del usuario y las pruebas Ruby/JavaScript no se presentan como evidencia del host.
+
+## Issue #714 — editar cotización + "Nuevo cliente" atómico — 2026-09-13
+
+- Approval: `status:approved` verificada en #714 (labels bug/frontend/status:approved).
+- Dependencia: PR #716 mergeado; base exacta `origin/main@02372786`.
+  Rama `fix/714-inline-customer-project-update`; worktree aislado
+  `/Users/tiagofur/dev/carpinteria/muebles-worktrees/issue-714`.
+- Started: 2026-09-13 23:30 CST. Rol: implementador.
+- Plan:
+  1. RED: store web documenta el PUT con id local + pin de frontera FK en PG.
+  2. Storage: `UpdateProjectWithInlineCustomer` — una tx: SELECT...FOR UPDATE
+     (serializa + valida base `inline_customer_replaces`), crea Customer con id
+     del servidor en la org dueña del project, UPDATE conjunto; rollback total.
+  3. Handler: PUT /projects/{id} acepta `inline_customer_name` +
+     `inline_customer_replaces` (retrocompatible); la ruta inline se envuelve en
+     `RequireIdempotency("projects.update-inline-customer")` (receipts durable
+     existentes) → replay exacto ante retry; guards: ambos→400, base ausente→400,
+     permisos projects+customers, sólo draft (§15), mapeo ErrProjectConcurrentUpdate→409.
+  4. Web: repo `updateProjectWithInlineCustomer` (PUT con Idempotency-Key, body
+     customer_id '' + inline fields); store updateProject sin canal paralelo, sin
+     optimista, reconciliación por id (upsertById) con entidades del servidor;
+     guest/local conserva camino local.
+  5. Pruebas PG reales (happy/rollback/existing/retry/concurrency/cross-tenant) +
+     handlers + repo + store; browser smoke con stack real; gates; PR Refs #714.
+- Retry-safety (§10): no existe mecanismo específico para PUT projects; se reutilizan
+  los receipts durable (`api_idempotency_receipts` + `ExecuteIdempotent`) SÓLO para la
+  capability nueva (los PUT actuales no cambian) y el base-check
+  `inline_customer_replaces` hace converger un retry con clave nueva (409 explícito,
+  sin huérfanos). Sin dedupe por nombre.
+- Size governance: el propietario autorizó explícitamente la excepción para el cambio
+  cohesivo de 1.591 líneas; `size:exception` aplicada a #714 el 2026-09-13.
+- Resultado local: transición inline atómica implementada sin Customer ID generado por
+  Web, sin mutación optimista y con adopción autoritativa de Project + Customer. El PUT
+  existente conserva su camino legacy para Customer ya persistido y guest/local.
+- GREEN focalizado:
+  - `pnpm --filter @granete/web exec vitest run src/stores/projectStore.test.ts`:
+    65/65 PASS.
+  - `pnpm --filter @granete/storage exec vitest run src/apiWorkspaceRepository.test.ts`:
+    34/34 PASS.
+  - `go test ./internal/api -run 'TestHandleProjectByIDUpdate' -count=1`: PASS.
+  - `go test ./internal/storage -run 'TestProjectInlineUpdate_|TestProjectInlineCustomerUpdateHTTP_Postgres' -count=1`:
+    PASS con PostgreSQL real.
+- Browser real: `./scripts/organization-browser-gate.sh tests/organization/project-inline-customer-update.spec.ts`:
+  Chromium + Go + PostgreSQL, 1/1 PASS; edición, refresh, relación persistida y ausencia
+  de Customer huérfano verificados.
+- Gates completos locales:
+  - `pnpm typecheck`: PASS.
+  - `pnpm test`: PASS (incluye Web 490/490 y Domain 1411/1411).
+  - `pnpm openapi:check`: PASS.
+  - `(cd backend-go && GOFLAGS='-p=1' go test ./... -count=1)`: PASS.
+  - `git diff --check`: PASS.
+- `origin/main` avanzó a `56bb3cf4` por el merge de PR #717 después de comenzar; se
+  incorporará antes del push y se repetirá la verificación afectada sin alterar #711.
+- Integración final: `origin/main@56bb3cf4` incorporado sin conflictos manuales.
+  Verificación post-merge en el HEAD local:
+  - `pnpm typecheck`, `pnpm test`, `pnpm openapi:check`, `git diff --check`: PASS.
+  - Primer `GOFLAGS='-p=1' go test ./... -count=1`: API/domain/pilot PASS; storage
+    recibió terminaciones administrativas PostgreSQL (`SQLSTATE 57P01`) por solapamiento
+    interno de tests DB, no un assertion failure del cambio.
+  - Rerun aislado y serial real `GOFLAGS='-p=1' go test -parallel=1 ./internal/storage -count=1`:
+    PASS en 554.135 s.
+  - Browser gate real post-merge: 1/1 Chromium PASS en 10.2 s.
+
+## PR #719 / issue #714 — corrección final R1: concurrencia exacta bajo lock
+
+- Approval: solicitud explícita del propietario (2026-09-13) para corregir el
+  hallazgo final en el mismo PR; #714 continúa OPEN con `status:approved` y
+  `size:exception`.
+- Head inicial exacto: `f0f10abfaeca3f95724c292e4ddd1d5d397fb584`;
+  rama/worktree existentes y limpios, PR abierto/mergeable con CI verde.
+- Scope: cerrar únicamente el TOCTOU/lost update de
+  `UpdateProjectWithInlineCustomer`; conservar atomicidad, idempotencia,
+  identidad server-owned, permisos/tenant, reconciliación Web, guest/local y
+  PUT con Customer existente.
+- Plan:
+  1. Usar `projects.updated_at` como token persistido exacto (no existe columna
+     `version` autoritativa para Project) y transportar la base leída por Web.
+  2. Bajo el mismo `FOR UPDATE`, revalidar customer base, `status=draft` y
+     `updated_at` antes de crear Customer.
+  3. Añadir interleavings PostgreSQL deterministas para lifecycle y metadata,
+     más prueba HTTP 409 y estabilidad payload/key/token en Web/repository.
+  4. Ejecutar suites focalizadas serializadas, browser happy path, gates
+     completos, actualizar el mismo PR y verificar CI exact-head; sin merge/cierre.
+- RED confirmado antes del fix con PostgreSQL real y espera de lock demostrada:
+  tanto el cambio concurrente `draft -> quoted` como la edición concurrente de
+  `name/notes` eran sobrescritos por la transición inline.
+- Implementado: `expected_project_updated_at` viaja desde la lectura Web hasta
+  storage; el mismo `SELECT ... FOR UPDATE` compara customer, lifecycle y
+  `updated_at` antes de insertar el Customer. El 409 queda tipado y exige
+  recarga; no hay retry automático.
+- GREEN local:
+  - Go API focalizado PASS.
+  - Go storage/HTTP PostgreSQL focalizado serial PASS.
+  - storage Vitest 35/35; Web projectStore 67/67.
+  - `pnpm typecheck`, `pnpm test` y `pnpm openapi:check` PASS.
+  - Go completo serial `GOFLAGS='-p=1' go test -parallel=1 ./... -count=1`
+    PASS (storage 462.588 s; pilotreadiness 232.931 s).
+  - Browser gate real Chromium PASS 1/1 en 8.1 s.
+  - `git diff --check` PASS.
+## Issue #658 — implementación — 2026-09-14
+
+- Handoff: implementar #658 sobre `main` (base `dd277ddd`), rama
+  `feat/658-design-working-materials-reconcile-ui`. Inicio bloqueado
+  temporalmente por falta de `status:approved`; el propietario lo añadió y la
+  implementación continuó el mismo día.
+- Superficie: `DesignWorkingMaterialsPanel`
+  (`packages/ui/src/digitalThread/DesignWorkingMaterialsPanel.tsx`) integrado
+  en el workspace de Diseños justo bajo el banner del Working Copy. Reutiliza
+  SOLO las operaciones generadas existentes
+  (`getDesignWorkingCopyMaterialProvenance`,
+  `reconcileDesignWorkingMaterials`, `listProjectFurnitureInstances`); sin
+  backend nuevo, sin segundo clasificador ni DTO paralelo. Nombres de material
+  resueltos por props del catálogo del shell (presentación only).
+- Semántica honrada: los 4 estados de provenance del contrato con copy propio
+  (Elegido en el diseño / Cotizado, falta en el borrador / Heredado del
+  diseño / Sin resolver); fuente quoted comunicada como «material cotizado
+  actual», nunca como revisión histórica; sólo `quoted_missing_from_working`
+  expone acción; confirmación por unidad con detalle de lo que se aplicará;
+  concurrencia con `working_copy_updated_at` del GET; Idempotency-Key reutilizada
+  por intención; 409 → mensaje + Recargar materiales (sin overwrite); respuesta
+  tardía de otro Design descartada por correlación de designId; read-back por
+  invalidación de las queries del mismo design; read-only sin acción de mutación.
+- Verificación:
+  - `pnpm typecheck` monorepo PASS; `pnpm test` completo PASS (ui 1851, web
+    492, storage 216, excel 350+3 skip, desktop 17, mobile 87, domain);
+    `pnpm openapi:check` PASS (sin drift); `git diff --check` PASS.
+  - Tests nuevos: 11 del panel (candidate/authored/empty/error/success/
+    double-click/conflict/context-switch/read-only/retry-key) + 1 de
+    integración de pantalla.
+  - Browser gate real Go+PostgreSQL
+    (`tests/organization/design-working-materials-reconcile.spec.ts`), verde
+    en 3 corridas: positivo (detect → revisar → confirmar → read-back real →
+    pendiente desaparece; unidad authored nunca ofrecida), conflicto stale
+    real (409 → recargar → reparación exitosa con token fresco, parámetros
+    concurrentes preservados), tenant denial cross-org (404) y smoke
+    responsive 390/768/1280 sin overflow.
+  - Hallazgo del gate: mi fixture inicial colisionaba PROJECT/QUOTE_LINE IDs
+    con project-pairing.spec.ts (rompía su selección default de design);
+    corregido con IDs únicos + preservación de customers. Las corridas full
+    locales posteriores mostraron flakes ambientales no relacionados
+    (mfa/machine-output con timeouts de 15-18 min; host con load 7+), cada
+    spec fallido pasa aislado y en combinación con el mío.
+  - SketchUp host: N/A / NOT_TESTED.
+- Review round (late-response context receipt): la correlación pasó de
+  designId-only a un context receipt completo — `JSON.stringify([...queryKeys.root,
+  projectId, designId])`, reutilizando la identidad de session/tenant scope que
+  `projectDesignsQueryKeys(sessionScopeKey(...))` ya hornea en las query keys
+  (sin parsear JWT ni autoridad paralela). El receipt activo se actualiza
+  sincrónicamente con el render (patrón React de ajuste de estado en fase de
+  render, sin useEffect): al cambiar session scope/project/design se descartan
+  modal, unitStates, idempotency keys y guards single-flight sin tocar el
+  command server-side ya emitido. Success, error y 409 se comparan contra el
+  receipt vivo y se descartan completos (sin setUnitState, sin invalidaciones
+  del contexto nuevo; el guard single-flight del contexto nuevo tampoco se
+  toca desde una intención vieja). Regresiones nuevas: Project A→B tardía,
+  session/org A→B tardía, 409 tardío (más la de Design conservada y la
+  verificación de estado idle fresco en B). Re-verificación: typecheck+pnpm
+  test completos PASS (ui 1854), openapi:check PASS, browser gate 6/6 PASS
+  (mi spec + pairing + inline-customer).
+- Review round 2 (setState durante render): el receipt sigue actualizándose
+  sincrónicamente con el render, pero ahora SOLO como asignación de ref —
+  sin setState en fase de render. El reset visual/intenciones (modal,
+  unitStates, idempotency keys, guards) vive en un useEffect por receipt,
+  posterior al commit; el guard de late responses NO depende del effect (el
+  ref ya cambió cuando el nuevo contexto renderiza, antes de cualquier
+  efecto). Regresión nueva: cambio de contexto design/project/session sin
+  warnings de update-during-render. Panel 15/15; ui 1855; typecheck+pnpm
+  test completos PASS; openapi:check PASS; browser gate 5/5 PASS (reintento
+  tras un flake de carga del host en pairing, paso no relacionado).
+
+## #731 PR2 — validación automática del diseño + Publicar diseño como happy path (feat/731-pr2-design-validation-publish)
+
+- Base exacta: `main` = `189c755e` (merge de PR #734 / PR1 de #731, verificado
+  con `git merge-base --is-ancestor`).
+- Entrega A — `Host::DesignPreflightBatch` (nuevo, `host/`): loop sobre el
+  scope canónico inyectado (el MISMO `Application#publication_scope_items` del
+  gate/publisher), una unidad por tick del scheduler inyectado (`UI.start_timer`
+  en producción), contexto exacto revalidado antes de cada unidad, blocked/
+  unavailable son resultados (nunca abortan), generación/token para descartar
+  corridas superseded, revalida TODO el scope siempre (freshness no probable:
+  el fingerprint es server-side).
+- Entrega B — `PositionSyncCoordinator#converge_pending`: convergencia de N
+  pending_confirmation en 1 GET + 1 merge coalescido + 1 PUT + readback por
+  unidad, guards de contexto/base de PR1; sin preflight propio (el batch
+  posterior es el dueño).
+- Entrega C — `handle_publish_design_revision` ahora orquesta:
+  reconciliación fresca → converge sólo pending_confirmation → reconciliación
+  fresca → hard blockers detienen con excepciones → batch → gate FRESCO →
+  `Publisher.publish` intacto. Single-flight Ruby (`action_in_progress`),
+  guard `mutation_coordinator.busy?` antes de publicar.
+- Entrega D — callback `validate_design_revision` + botón `Validar diseño`
+  (el MISMO batch, sin publicar).
+- Entrega E — exceptions-only: payload Ruby `{total, ready, attention,
+  exceptions[]}` (displayName desde HostReconciliation, review autoritativo),
+  JS renderiza resumen + sólo cards de excepción con [Seleccionar]
+  (`select_project_furniture`) e [Ir al origen] (`navigate_issue` vía
+  `GranetePreflightReview.navigateFurnitureIssue`). El botón Publicar ya no se
+  deshabilita por gate pendiente: el click dispara la orquestación; Ruby
+  fail-closea.
+- Entrega F — `Verificar fabricación` unitario intacto como diagnóstico
+  contextual (engine, sesión y tests conservados).
+- Entrega G — rename `Validar de nuevo` → `Actualizar conexión` (sólo
+  refresca binding).
+- Entrega H — CommercialProjection: `:full` sólo tras publish exitoso
+  (regla simple elegida; converge_pending NO notifica :full), nunca por
+  unidad; sin QuoteRevision ni pricing en Ruby.
+- Verificación: `rake verify` PASS completo — RuboCop 0 offenses; unit
+  748 runs / 5041 assertions / 0 failures (incluye 8 batch + 8 workflow + 4
+  converge nuevos); boundary 6/6; RBZ determinista verificado
+  (sha256 55b8dedf833d36099958dbc3408b78e7938a6eec2eae16edd7ce34d35e53eec1);
+  `node test/js/dialog_publish_test.js` 22/22; `git diff --check` limpio.
+- SketchUp real (TestUp): NOT_TESTED en esta sesión (sin host disponible);
+  `TC_DesignPublishSmoke.rb` queda como smoke real-host para el merge gate.
+
+## #731 PR2 — review correction (fail-closed en unexpected failure)
+
+- P1 de review corregido: el rescue inesperado de
+  `DesignPreflightBatch#run_unit` ahora invalida la verdad compartida, no
+  sólo el estado local del batch.
+  - Seam nuevo `PreflightReviewSession#mark_unavailable(scope, message_id:, reason:)`
+    (session seam, sin conocimiento extra del tracker en el batch).
+  - `PreflightTracker#mark_unavailable_furniture!(id, message_id:)` nueva:
+    invalida TODAS las aliases id/ref registradas del mueble (ningún
+    `ready` viejo puede sobrevivir; la prioridad del gate ya ponía
+    unavailable > ready, ahora además no quedan entradas contradictorias).
+  - Guardado también un review `unavailable` con el reason honesto para la
+    UX de excepciones.
+- Regresiones:
+  - `design_preflight_batch_test.rb#test_unexpected_failure_invalidates_previous_ready_and_blocks_the_gate`:
+    tracker pre-sembrado ready (con alias ref en FI_B) → revalidación con
+    RuntimeError en FI_B → batch completa, estado efectivo unavailable en
+    TODAS las aliases, `PublicationPreflightGate` REAL allowed=false
+    (unavailable=1, verified=2).
+  - `dialog_publish_workflow_test.rb#test_publish_after_unexpected_revalidation_failure_never_publishes`:
+    tracker all-ready (validación previa) → Publicar con raise inesperado
+    en FI_B → Publisher.publish calls 0, code preflight_incomplete,
+    exceptions-only [FI_B] state unavailable reason 'boom', ready=3/4.
+  - Semántica de resultados conocidos (ready/warning/blocked/
+    AuthoringResolveError/unavailable normal) intacta; el batch no aborta.
+- Verificación: `rake verify` PASS — RuboCop 0; unit 750 runs / 5060
+  assertions / 0 failures; boundary 6/6; RBZ sha256
+  53510b186aa67fbc52cbde54ab472502726a142dfaec4e318f5671e50f86ae93;
+  `node test/js/dialog_publish_test.js` 22/22; `git diff --check` limpio.
+  SketchUp real: NOT_TESTED (sin host en esta sesión).
