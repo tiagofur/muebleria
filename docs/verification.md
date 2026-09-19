@@ -537,16 +537,31 @@ y puente CNC `D<hex12>`/BARCODE. Autoridad y clasificación por campo en
 `docs/machines/ptx-cadmatic4/09_parts_inf_labels_cnc.md` (mapping §3,
 orientación de cantos §4, puente CNC §5, inventario UDI §6).
 
-Evidencia enfocada observada en el hardening #797, HEAD
-`5104cca822cc148979b802ccba6c0659c0b5e43d`:
+Evidencia enfocada observada en el hardening #797:
 
 ```sh
+# HEAD 32518fc47273f74af71520985953f68d9ca32bf3
 pnpm --filter @granete/excel test    # 45 archivos / 534 PASS / 3 skips
-git diff --check                    # limpio
+pnpm typecheck                      # PASS
+# prior diff check                  # limpio
 ```
 
-Checks pendientes en este HEAD: `pnpm typecheck`, selector actual, CI exact-head
-y gates proporcionales que el líder/verificador ejecute antes de publicar/cerrar.
+Intento de selector autorizado sobre el candidato
+`32518fc47273f74af71520985953f68d9ca32bf3`, base
+`b7446866ed247677d8b8f83238cddbd96579db97`:
+
+```sh
+python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600
+```
+
+Resultado: bloqueado antes de gates porque falta un `DATABASE_URL` aislado. El
+selector seleccionó `typescript`, `backend-go`, `sketchup-extension`,
+`proyectar-visual`, `foundation-postgres` y `organization-browser`, pero ninguno
+de esos gates corrió ni cuenta como PASS.
+
+Checks pendientes en este HEAD: selector con infraestructura aislada, CI
+exact-head y gates proporcionales que el líder/verificador ejecute antes de
+publicar/cerrar.
 
 Cobertura contractual exigida por #789/#797:
 

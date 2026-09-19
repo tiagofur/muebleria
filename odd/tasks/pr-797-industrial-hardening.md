@@ -32,10 +32,12 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
   - It asserts code/PART_INDEX/finished dimensions/orientation-independent edges/REQ-INF relation and clean serialize→parse→independent readback.
   - The r2/r3/r4 and FUNCTION 92 paths were not modified; package regression suite above exercised their existing tests. Work-unit commit: `5104cca822cc148979b802ccba6c0659c0b5e43d`.
 
-- [ ] **T3 — Document, verify, publish same PR head** (docs in progress; verifier/publish still pending)
-  - Documentation update in progress for the required PTX docs, verification record, progress entry, and this task document to accurately classify SPEC / PRODUCT POLICY / RECEIVER EVIDENCE / UNKNOWN.
-  - Observed evidence available for this PR head: `pnpm --filter @granete/excel test` = 45 files / 534 passed / 3 skipped; `git diff --check` clean.
-  - Pending: typecheck, verification selector, exact-head CI, PR #797 body/readback, push/publish steps, and any delegated verification explicitly authorized later.
+- [ ] **T3 — Document, verify, publish same PR head** (selector infrastructure/CI/publish still pending)
+  - Documentation/progress work-unit: `a2b2e303015d3f2021566f28dc1018baeff65e51` (`docs(ptx): record r5 label hardening`) accurately classifies SPEC / PRODUCT POLICY / RECEIVER EVIDENCE / UNKNOWN.
+  - Initial typecheck exposed `materialCode` optional typing at `partLabels.ts:353`; a fail-closed correction without fallback is committed in `32518fc47273f74af71520985953f68d9ca32bf3` (`fix(ptx): validate core material authority`). Exact-candidate re-verification: Excel = 45 files / 534 passed / 3 skipped; `pnpm typecheck` PASS; prior `git diff --check` clean.
+  - Authorized selector attempt: `python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600` ran once at candidate `32518fc47273f74af71520985953f68d9ca32bf3` against base `b7446866ed247677d8b8f83238cddbd96579db97` and blocked before gates because an isolated `DATABASE_URL` is required.
+  - Selector selected `typescript`, `backend-go`, `sketchup-extension`, `proyectar-visual`, `foundation-postgres`, and `organization-browser`; none of those gates ran, and none are PASS evidence.
+  - Pending: selector infrastructure with isolated `DATABASE_URL`, exact-head CI, PR #797 body/readback, and push/publish steps.
   - Do not merge, close #789, or open another PR.
 
 ## Acceptance / required checks
@@ -54,8 +56,10 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 - 2026-09-19: Isolated a clean detached worktree at approved PR HEAD after diagnosing the original worktree as an unrelated in-progress rebase with a conflict in `progress/current.md`. No recovery was applied to that original worktree.
 - 2026-09-19: Read-only mapping identified `partLabels.ts`, compiler, typed PTX records/parser/serializer/validator/spec preflight/verifier, real optimizer golden, focused tests, and required docs as the bounded scope.
 - 2026-09-19: T1/T2 completed by one scoped writer. The implementation is confined to 11 PTX files and has 301 additions / 61 deletions before docs. Focused package suite passed (45 files / 534 passed / 3 skipped); diff check clean. Work-unit commit `5104cca822cc148979b802ccba6c0659c0b5e43d` records T1/T2.
-- 2026-09-19: T3 documentation/progress update started at detached HEAD `5104cca822cc148979b802ccba6c0659c0b5e43d`; no tests were rerun in this documentation-only step per owner instruction.
+- 2026-09-19: T3 documentation/progress commit `a2b2e303015d3f2021566f28dc1018baeff65e51`; no tests were rerun in that documentation-only step per owner instruction.
+- 2026-09-19: Independent local verifier found an initial TypeScript error in the new CORE_MAT authority path. The minimal fail-closed correction is `32518fc47273f74af71520985953f68d9ca32bf3`; exact-candidate re-verification passed Excel 45 files / 534 passed / 3 skipped, typecheck, and a prior diff check.
+- 2026-09-19: The authorized selector command `python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600` ran once at candidate `32518fc47273f74af71520985953f68d9ca32bf3` against base `b7446866ed247677d8b8f83238cddbd96579db97` and blocked before executing gates because it requires an isolated `DATABASE_URL`. Selected jobs were typescript, backend-go, sketchup-extension, proyectar-visual, foundation-postgres, and organization-browser; none ran and none count as PASS.
 
 ## Next step
 
-Finish T3 by committing/pushing the documentation update only after authorized, then run/report the pending typecheck, selector, exact-head CI, PR body/readback, and publication verification on the same PR head.
+Provide isolated selector infrastructure (`DATABASE_URL`), rerun the exact-head selector when authorized, then record final evidence, push only the existing PR branch, and await exact-head CI without merge or issue closure.

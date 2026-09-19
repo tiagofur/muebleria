@@ -257,17 +257,32 @@ de lados/cantos ya viaja en EDGE1..4.
 
 ## 10. Verificación ejecutada
 
-Evidencia enfocada observada para el hardening #797 sobre HEAD
-`5104cca822cc148979b802ccba6c0659c0b5e43d`:
+Evidencia enfocada observada para el hardening #797:
 
 ```sh
+# HEAD 32518fc47273f74af71520985953f68d9ca32bf3
 pnpm --filter @granete/excel test   # 45 archivos, 534 PASS + 3 skips
-git diff --check                    # limpio
+pnpm typecheck                      # PASS
+# prior diff check                  # limpio
 ```
 
-Checks pendientes para cierre/publish del PR: `pnpm typecheck`, selector actual,
-CI exact-head y cualquier gate adicional que el líder/verificador exija. No se
-registran como PASS hasta observarlos en este HEAD.
+Intento de selector autorizado sobre el candidato
+`32518fc47273f74af71520985953f68d9ca32bf3` contra base
+`b7446866ed247677d8b8f83238cddbd96579db97`:
+
+```sh
+python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600
+```
+
+Resultado: bloqueado antes de ejecutar gates porque requiere un `DATABASE_URL`
+aislado. El selector alcanzó a seleccionar los jobs `typescript`, `backend-go`,
+`sketchup-extension`, `proyectar-visual`, `foundation-postgres` y
+`organization-browser`; ninguno de esos gates corrió ni se registra como PASS.
+
+Checks pendientes para cierre/publish del PR: infraestructura de selector con
+`DATABASE_URL` aislado, CI exact-head y cualquier gate adicional que el
+líder/verificador exija. No se registran como PASS hasta observarlos en este
+HEAD exacto.
 
 Inmutabilidad r2/r3/r4: los goldens históricos se recompilan byte-exact dentro
 de la suite focalizada; r2/r3/r4, FUNCTION 92, perfiles/adapters y salidas de
