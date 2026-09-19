@@ -26,7 +26,9 @@ import {
   type PtxJobRecord,
   type PtxMaterialRecord,
   type PtxOffcutRecord,
+  type PtxPartsInfRecord,
   type PtxPartsReqRecord,
+  type PtxPartsUdiRecord,
   type PtxPatternRecord,
   type PtxRecord,
   type PtxVectorRecord,
@@ -129,6 +131,10 @@ function recordLabel(record: PtxRecord): string {
       return `JOBS job=${record.jobIndex}`;
     case 'PARTS_REQ':
       return `PARTS_REQ job=${record.jobIndex} part=${record.partIndex}`;
+    case 'PARTS_INF':
+      return `PARTS_INF job=${record.jobIndex} part=${record.partIndex}`;
+    case 'PARTS_UDI':
+      return `PARTS_UDI job=${record.jobIndex} part=${record.partIndex}`;
     case 'BOARDS':
       return `BOARDS job=${record.jobIndex} board=${record.boardIndex}`;
     case 'MATERIALS':
@@ -428,6 +434,70 @@ function checkOffcut(record: PtxOffcutRecord, issues: Issue[]): void {
   textIssues(record.code, `${recordLabel(record)} CODE`, false, issues);
 }
 
+/**
+ * #789: PARTS_INF/PARTS_UDI are TXT-carried label rows keyed by
+ * (JOB_INDEX, PART_INDEX). Every text column is printable-ASCII-or-absent;
+ * numeric columns do not exist (§20 documents all of them as TXT 200). The
+ * label↔part relation and the one-row-per-part product contract are checked
+ * by the caller against the PARTS_REQ table.
+ */
+const PARTS_INF_TEXT_FIELDS = [
+  'DESC', 'LABEL_QTY', 'FIN_LENGTH', 'FIN_WIDTH', 'ORDER',
+  'EDGE1', 'EDGE2', 'EDGE3', 'EDGE4',
+  'EDG_PG1', 'EDG_PG2', 'EDG_PG3', 'EDG_PG4',
+  'FACE_LAM', 'BACK_LAM', 'CORE_MAT', 'PALLETP',
+  'DRAWING', 'PRODUCT', 'PROD_INFO',
+  'PROD_WIDTH', 'PROD_HGT', 'PROD_DEPTH', 'PROD_NUM',
+  'ROOM', 'BARCODE1', 'BARCODE2', 'COLOUR',
+  'SECOND_CUT_LENGTH', 'SECOND_CUT_WIDTH',
+] as const;
+
+function checkPartsInf(record: PtxPartsInfRecord, issues: Issue[]): void {
+  const label = recordLabel(record);
+  const values: Record<string, string | undefined> = {
+    DESC: record.description,
+    LABEL_QTY: record.labelQuantity,
+    FIN_LENGTH: record.finishedLength,
+    FIN_WIDTH: record.finishedWidth,
+    ORDER: record.order,
+    EDGE1: record.edge1,
+    EDGE2: record.edge2,
+    EDGE3: record.edge3,
+    EDGE4: record.edge4,
+    EDG_PG1: record.edgeProgram1,
+    EDG_PG2: record.edgeProgram2,
+    EDG_PG3: record.edgeProgram3,
+    EDG_PG4: record.edgeProgram4,
+    FACE_LAM: record.faceLaminate,
+    BACK_LAM: record.backLaminate,
+    CORE_MAT: record.coreMaterial,
+    PALLETP: record.palletLayout,
+    DRAWING: record.drawing,
+    PRODUCT: record.product,
+    PROD_INFO: record.productInfo,
+    PROD_WIDTH: record.productWidth,
+    PROD_HGT: record.productHeight,
+    PROD_DEPTH: record.productDepth,
+    PROD_NUM: record.productNumber,
+    ROOM: record.room,
+    BARCODE1: record.barcode1,
+    BARCODE2: record.barcode2,
+    COLOUR: record.colour,
+    SECOND_CUT_LENGTH: record.secondCutLength,
+    SECOND_CUT_WIDTH: record.secondCutWidth,
+  };
+  for (const field of PARTS_INF_TEXT_FIELDS) {
+    textIssues(values[field], `${label} ${field}`, false, issues);
+  }
+}
+
+function checkPartsUdi(record: PtxPartsUdiRecord, issues: Issue[]): void {
+  const label = recordLabel(record);
+  record.info.forEach((value, i) => {
+    textIssues(value, `${label} INFO${i + 1}`, false, issues);
+  });
+}
+
 function checkVector(record: PtxVectorRecord, issues: Issue[]): void {
   magnitudeIssue(record.xStart, `${recordLabel(record)} X_START`, false, issues);
   magnitudeIssue(record.yStart, `${recordLabel(record)} Y_START`, false, issues);
@@ -446,6 +516,12 @@ function checkIndexFields(record: PtxRecord, issues: Issue[]): void {
     case 'PARTS_REQ':
       quantityIssue(record.partIndex, `${label} PART_INDEX`, 1, issues);
       quantityIssue(record.materialIndex, `${label} MAT_INDEX`, 1, issues);
+      break;
+    case 'PARTS_INF':
+      quantityIssue(record.partIndex, `${label} PART_INDEX`, 1, issues);
+      break;
+    case 'PARTS_UDI':
+      quantityIssue(record.partIndex, `${label} PART_INDEX`, 1, issues);
       break;
     case 'BOARDS':
       quantityIssue(record.boardIndex, `${label} BRD_INDEX`, 1, issues);
@@ -491,6 +567,8 @@ export function validatePtxDocument(doc: PtxDocument): readonly Issue[] {
   checkHeader(doc, issues);
 
   const tables = buildTables(doc);
+  const seenPartsInfKeys = new Set<string>();
+  const seenPartsUdiKeys = new Set<string>();
 
   for (const record of doc.records) {
     checkIndexFields(record, issues);
@@ -502,6 +580,30 @@ export function validatePtxDocument(doc: PtxDocument): readonly Issue[] {
         checkPartsReq(record, issues);
         if (!tables.materials.has(`${record.jobIndex}:${record.materialIndex}`)) {
           issues.push({ code: 'UNKNOWN_MATERIAL_REFERENCE', message: `${recordLabel(record)} MAT_INDEX=${record.materialIndex} has no MATERIALS row in job ${record.jobIndex}` });
+        }
+        break;
+      case 'PARTS_INF':
+        checkPartsInf(record, issues);
+        // #789 product contract: at most ONE PARTS_INF row per part (one
+        // label projection per physical piece). The §20 dictionary does not
+        // document uniqueness — this is Granete candidate policy, and a
+        // duplicate blocks instead of merging.
+        if (seenPartsInfKeys.has(`${record.jobIndex}:${record.partIndex}`)) {
+          issues.push({ code: 'DUPLICATE_INDEX', message: `${recordLabel(record)}: duplicate PARTS_INF row for part ${record.partIndex} of job ${record.jobIndex} (one label projection per physical piece)` });
+        }
+        seenPartsInfKeys.add(`${record.jobIndex}:${record.partIndex}`);
+        if (!tables.parts.has(`${record.jobIndex}:${record.partIndex}`)) {
+          issues.push({ code: 'UNKNOWN_PART_REFERENCE', message: `${recordLabel(record)} PART_INDEX=${record.partIndex} has no PARTS_REQ row in job ${record.jobIndex}` });
+        }
+        break;
+      case 'PARTS_UDI':
+        checkPartsUdi(record, issues);
+        if (seenPartsUdiKeys.has(`${record.jobIndex}:${record.partIndex}`)) {
+          issues.push({ code: 'DUPLICATE_INDEX', message: `${recordLabel(record)}: duplicate PARTS_UDI row for part ${record.partIndex} of job ${record.jobIndex}` });
+        }
+        seenPartsUdiKeys.add(`${record.jobIndex}:${record.partIndex}`);
+        if (!tables.parts.has(`${record.jobIndex}:${record.partIndex}`)) {
+          issues.push({ code: 'UNKNOWN_PART_REFERENCE', message: `${recordLabel(record)} PART_INDEX=${record.partIndex} has no PARTS_REQ row in job ${record.jobIndex}` });
         }
         break;
       case 'BOARDS':

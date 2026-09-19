@@ -528,6 +528,57 @@ Cobertura contractual exigida por #788:
 
 ---
 
+## PTX CADmatic 4 — PARTS_INF/PARTS_UDI, etiquetas e identidad CNC r5 (#789)
+
+Modelo tipado de las familias de etiqueta (32 columnas PARTS_INF y
+JOB/PART+INFO1..60 PARTS_UDI según el diccionario §20 pp.168–171), proyección
+industrial congelada por pieza física (`PtxPartLabelData`/`buildPtxPartLabels`)
+y puente CNC `D<hex12>`/BARCODE. Autoridad y clasificación por campo en
+`docs/machines/ptx-cadmatic4/09_parts_inf_labels_cnc.md` (mapping §3,
+orientación de cantos §4, puente CNC §5, inventario UDI §6).
+
+```sh
+pnpm --filter @granete/excel test    # partLabels + partsInf + specPreflight(#789)
+                                     # + roundtrip(#789) + externalDialect + suite
+pnpm typecheck
+```
+
+Cobertura contractual exigida por #789:
+
+- proyección pura: el serializer/compiler no reconstruye etiqueta — todo
+  PARTS_INF es proyección de `PtxPartLabelData`; el verifier exige celda a
+  celda la igualdad con la etiqueta de SU pieza y que los campos sin
+  autoridad (EDG_PG*/FACE/BACK/CORE/PALLETP/COLOUR/SECOND_CUT) estén
+  AUSENTES (`parts_inf.authority_violation` ante un byte mutado);
+- identidad de medidas: FIN_* (terminada, copiada de la fila de ingeniería)
+  contra PARTS_REQ (corte) + descuento del optimizador, re-derivada de forma
+  independiente por el verifier (`parts_inf.finished_identity`) y afirmada
+  desde los bytes en el golden;
+- orientación de cantos: L2→EDGE1, L1→EDGE2, W1→EDGE3, W2→EDGE4 con trampas
+  asimétricas (3+1, sólo-L2, sólo-W1/W2, sin canto) en builder y golden —
+  cualquier swap de mapping o de eje falla;
+- ocurrencia física: PROD_NUM = `workshopOccurrenceOrdinal` congelado (#781);
+  golden con orden léxico de módulos OPUESTO al de ordinales y ocurrencia
+  repetida (`-L2`, ROOM distinto) — las etiquetas no cruzan ocurrencias;
+- puente CNC: `D<hex12>` determinista (namespaced sha256 del código de
+  fabricación), BARCODE1=`*D<hex12>*`, BARCODE2=código; duplicados de
+  DRAWING/BARCODE1 BLOQUEAN (`label_drawing_duplicate`/`label_barcode_duplicate`);
+  pieza sin mecanizado deja DRAWING/BARCODE1 vacíos;
+- PARTS_UDI: modelado estructural INFO1..60, INFO2 (encoding compacto
+  `2WE2LE`-style) clasificado UNKNOWN y JAMÁS generado; R2201/R7301 se leen
+  tipadas con referencias PART_INDEX → PARTS_REQ verificadas y el subset
+  ampliado pasa el strict spec preflight;
+- spec preflight extendido: TXT 200 en las 30 columnas de texto de PARTS_INF
+  y en INFO1..60 (document y bytes), IDX 1-250/1-9999, referencias
+  unknown; unicidad por pieza es PRODUCT (validate.ts DUPLICATE_INDEX), no
+  SPEC;
+- inmutabilidad r2/r3/r4: sin la opción `partLabels` no se emiten PARTS_INF/
+  PARTS_UDI y los goldens históricos recompilan byte-exact (regresión del
+  preflight en verde); sin cambios de adapter/profile/digests (#790/#793
+  son dueños del versionado r5).
+
+---
+
 ## 15. Definition of Verified
 
 Antes de declarar una feature verificada:

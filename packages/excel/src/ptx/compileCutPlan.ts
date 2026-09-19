@@ -129,11 +129,14 @@ import {
   type PtxGrain,
   type PtxOffcutRecord,
   type PtxPartReference,
+  type PtxPartsInfRecord,
+  type PtxPartsUdiRecord,
   type PtxPatternType,
   type PtxRecord,
   type PtxTrimType,
   type PtxVectorRecord,
 } from './records';
+import type { PtxPartLabelData } from './partLabels';
 import type { ScopedRegionRef } from './scopedRegionRef';
 import { PtxDocumentInvalidError, validatePtxDocument } from './validate';
 import { PTX_SPEC_PREFLIGHT_REVISION, ptxSpecPreflightDocument } from './specPreflight';
@@ -212,6 +215,29 @@ export interface CompileCutPlanToPtxOptions {
    * side of the same boundary is serializePtxDocumentBytesSpecChecked.
    */
   readonly strictSpecPreflight?: typeof PTX_SPEC_PREFLIGHT_REVISION;
+  /**
+   * r5 label projection (#789): one frozen PtxPartLabelData per PHYSICAL
+   * piece, keyed by manufacturingPartCode. When present, the compiler emits
+   * one PARTS_INF row per PARTS_REQ row immediately after the PARTS_REQ
+   * block (the PARTS_REQ→PARTS_INF adjacency is RECEIVER_EVIDENCED on
+   * R2201/R7301; the rest of the family order stays this revision's dialect
+   * — a full reorder belongs to the #790 receiver profile). The serializer
+   * NEVER consults any other source: cells are a pure projection of the
+   * label entry. Requires partCodeAuthority 'workshop-labelref' (the key IS
+   * the PARTS_REQ.CODE authority); a label without a matching placed piece,
+   * a placed piece without a label, or an ambiguous DRAWING/BARCODE1 token
+   * fails closed (label_* codes) — nothing is dropped, merged or renamed.
+   */
+  readonly partLabels?: readonly PtxPartLabelData[];
+  /**
+   * r5 structural PARTS_UDI rows (#789): emit one PARTS_UDI row per placed
+   * piece carrying the projection's INFO1 picture reference (when present)
+   * and otherwise EMPTY INFO cells. This models the family's PRESENCE
+   * (documented INFO1..60 shape) without inventing semantics: the compact
+   * edge encoding observed in the field samples (e.g. `2WE2LE`) is UNKNOWN
+   * and is never generated. The final receiver policy is #790.
+   */
+  readonly partsUdi?: 'structural';
 }
 
 /** Per-sheet slice of the inverse table linking durable identities to local PTX indexes. */
@@ -239,6 +265,13 @@ export interface PtxCompilationMapping {
   readonly partIndexByPieceRef: ReadonlyMap<string, number>;
   /** PART_INDEX → placed piece id (position i holds partIndex i+1). */
   readonly pieceRefByPartIndex: readonly string[];
+  /**
+   * #789 label projection inverse: PART_INDEX → the frozen label data that
+   * produced its PARTS_INF row (position i holds partIndex i+1). Entries are
+   * undefined when the compilation carried no partLabels option — the array
+   * itself is undefined then (nothing to audit).
+   */
+  readonly partLabelByPartIndex?: readonly (PtxPartLabelData | undefined)[];
   /** OFFCUT_INDEX → sheet-scoped remnant identity (position i holds offcutIndex i+1). */
   readonly offcutRegionRefByOffcutIndex: readonly ScopedRegionRef[];
   /** PTN_INDEX → sheetIndex (position i holds patternIndex i+1). */
@@ -271,6 +304,12 @@ export type PtxCompilationErrorCode =
   | 'ptx_compile.part_code_missing'
   | 'ptx_compile.part_code_too_long'
   | 'ptx_compile.part_code_duplicate'
+  | 'ptx_compile.label_invalid'
+  | 'ptx_compile.label_code_duplicate'
+  | 'ptx_compile.label_code_unknown'
+  | 'ptx_compile.label_missing'
+  | 'ptx_compile.label_drawing_duplicate'
+  | 'ptx_compile.label_barcode_duplicate'
   | 'ptx_compile.spec_preflight_failed'
   | 'ptx_compile.material_thickness_missing'
   | 'ptx_compile.material_conflict'
@@ -1196,6 +1235,27 @@ export function compileCutPlanToPtxDocument(
       { strictSpecPreflight: options.strictSpecPreflight },
     );
   }
+  if (options.partsUdi !== undefined && options.partsUdi !== 'structural') {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partsUdi sólo implementa 'structural' (#789: la familia modelada sin semántica inventada)",
+      { partsUdi: options.partsUdi },
+    );
+  }
+  if (options.partsUdi === 'structural' && options.partLabels === undefined) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partsUdi 'structural' requiere partLabels: las filas PARTS_UDI se derivan de la proyección de etiqueta congelada",
+      { partsUdi: options.partsUdi },
+    );
+  }
+  if (options.partLabels !== undefined && options.partCodeAuthority !== 'workshop-labelref') {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partLabels requiere partCodeAuthority 'workshop-labelref': la clave de la proyección ES el PARTS_REQ.CODE del candidato",
+      { partCodeAuthority: options.partCodeAuthority },
+    );
+  }
   if (cutPlan.sheets.length === 0) {
     throw new PtxCompilationError(
       'ptx_compile.no_sheets',
@@ -1407,6 +1467,170 @@ export function compileCutPlanToPtxDocument(
   }
 
   records.push(...partsReq);
+
+  // --- #789 label projection → PARTS_INF (+ structural PARTS_UDI) ----------
+  // Identity gates first (fail closed BEFORE any row is emitted):
+  //   physical piece ↔ manufacturingPartCode ↔ PARTS_REQ.CODE ↔ PART_INDEX
+  //   ↔ PARTS_INF ↔ DRAWING/BARCODE ↔ future CNC artifact.
+  // The rows below are a PURE projection of PtxPartLabelData: nothing here
+  // consults the BOM, the catalog, names or geometry to "complete" data.
+  // Position: immediately after the PARTS_REQ block — the PARTS_REQ →
+  // PARTS_INF → PARTS_UDI adjacency is RECEIVER_EVIDENCED on R2201/R7301;
+  // reordering the other families belongs to the #790 receiver profile.
+  let partLabelByPartIndex: readonly (PtxPartLabelData | undefined)[] | undefined;
+  if (options.partLabels !== undefined) {
+    const labelByCode = new Map<string, PtxPartLabelData>();
+    const drawingRefs = new Map<string, string>();
+    const barcode1Tokens = new Map<string, string>();
+    for (const label of options.partLabels) {
+      const code = requireAsciiIdentity(label.manufacturingPartCode, 'label manufacturingPartCode', {
+        manufacturingPartCode: label.manufacturingPartCode,
+      });
+      if (labelByCode.has(code)) {
+        throw new PtxCompilationError(
+          'ptx_compile.label_code_duplicate',
+          'Dos entradas de la proyección de etiqueta comparten el código de fabricación',
+          { manufacturingPartCode: code },
+        );
+      }
+      if (!seenPartCodes.has(code)) {
+        throw new PtxCompilationError(
+          'ptx_compile.label_code_unknown',
+          'La proyección de etiqueta referencia un código de fabricación sin pieza colocada en el plan (PARTS_REQ)',
+          { manufacturingPartCode: code, knownCodes: [...seenPartCodes.keys()] },
+        );
+      }
+      if (label.cncDrawingRef !== undefined) {
+        const previous = drawingRefs.get(label.cncDrawingRef);
+        if (previous !== undefined) {
+          throw new PtxCompilationError(
+            'ptx_compile.label_drawing_duplicate',
+            'Dos piezas físicas distintas comparten la referencia CNC de DRAWING: el puente hacia el futuro MPR/MPRX sería ambiguo',
+            { cncDrawingRef: label.cncDrawingRef, manufacturingPartCode: code, previousPartCode: previous },
+          );
+        }
+        drawingRefs.set(label.cncDrawingRef, code);
+      }
+      if (label.barcode1 !== undefined) {
+        const previous = barcode1Tokens.get(label.barcode1);
+        if (previous !== undefined) {
+          throw new PtxCompilationError(
+            'ptx_compile.label_barcode_duplicate',
+            'Dos piezas físicas distintas comparten el token de BARCODE1: el scan CNC sería ambiguo',
+            { barcode1: label.barcode1, manufacturingPartCode: code, previousPartCode: previous },
+          );
+        }
+        barcode1Tokens.set(label.barcode1, code);
+      }
+      if (label.barcode2 !== undefined && label.barcode2 !== code) {
+        // Product policy: BARCODE2 IS the manufacturing part code; a
+        // different value is a wiring mistake, not an alternative token.
+        throw new PtxCompilationError(
+          'ptx_compile.label_invalid',
+          'BARCODE2 debe ser el manufacturingPartCode de la pieza (token de tracking con autoridad real) o quedar vacío',
+          { manufacturingPartCode: code, barcode2: label.barcode2 },
+        );
+      }
+      if (!Number.isInteger(label.labelQuantity) || label.labelQuantity < 1) {
+        throw new PtxCompilationError(
+          'ptx_compile.label_invalid',
+          'LABEL_QTY debe ser un entero >= 1 (política: una etiqueta por pieza física)',
+          { manufacturingPartCode: code, labelQuantity: label.labelQuantity },
+        );
+      }
+      labelByCode.set(code, label);
+    }
+    for (const [code, partIndexOfCode] of seenPartCodes) {
+      if (!labelByCode.has(code)) {
+        throw new PtxCompilationError(
+          'ptx_compile.label_missing',
+          'Una pieza colocada no tiene proyección de etiqueta: PARTS_INF exige una fila por pieza física',
+          { manufacturingPartCode: code, partIndex: partIndexOfCode },
+        );
+      }
+    }
+
+    // Deterministic text rendering for the TXT-typed §20 columns: resolve the
+    // frozen magnitude at the compilation resolution (fail closed on a value
+    // that does not fit) and render it exactly like the serializer renders a
+    // real cell — one shared numeric-form rule across PARTS_REQ and PARTS_INF.
+    const txt = (value: number, field: string, code: string): string => {
+      const resolved = ptxResolveMagnitude(value, decimalPlaces, `PARTS_INF ${field} (${code})`);
+      const fixed = resolved.toFixed(decimalPlaces);
+      return fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
+    };
+    const cell = (value: string | undefined, field: string, code: string): string | undefined => {
+      if (value === undefined) return undefined;
+      const ascii = ptxAscii(value);
+      if (ascii === '') {
+        throw new PtxCompilationError(
+          'ptx_compile.label_invalid',
+          `El texto de etiqueta ${field} no tiene representación ASCII de impresión`,
+          { field, value, manufacturingPartCode: code },
+        );
+      }
+      return ascii;
+    };
+
+    const partsInf: PtxPartsInfRecord[] = [];
+    const partsUdi: PtxPartsUdiRecord[] = [];
+    const labelByPartIndex: (PtxPartLabelData | undefined)[] = pieceRefByPartIndex.map(
+      () => undefined,
+    );
+    for (const [code, partIndexOfCode] of [...seenPartCodes.entries()].sort(
+      (a, b) => a[1] - b[1],
+    )) {
+      const label = labelByCode.get(code)!;
+      labelByPartIndex[partIndexOfCode - 1] = label;
+      partsInf.push({
+        type: 'PARTS_INF',
+        jobIndex: 1,
+        partIndex: partIndexOfCode,
+        description: cell(label.description, 'DESC', code),
+        labelQuantity: String(label.labelQuantity),
+        finishedLength: txt(label.finishedLengthMm, 'FIN_LENGTH', code),
+        finishedWidth: txt(label.finishedWidthMm, 'FIN_WIDTH', code),
+        order: cell(label.orderRef, 'ORDER', code),
+        edge1: cell(label.edge1, 'EDGE1', code),
+        edge2: cell(label.edge2, 'EDGE2', code),
+        edge3: cell(label.edge3, 'EDGE3', code),
+        edge4: cell(label.edge4, 'EDGE4', code),
+        // EDG_PG1..4 stay ABSENT: Granete has no edge operation/program code
+        // authority (#789 decision — a value like "EDGE" or "1" would be
+        // invented semantics).
+        // FACE_LAM/BACK_LAM stay ABSENT (no separate lamination authority);
+        // CORE_MAT authority exists (board material) but stays unwritten
+        // until the #790 receiver profile decides it.
+        drawing: cell(label.cncDrawingRef, 'DRAWING', code),
+        product: cell(label.productCode, 'PRODUCT', code),
+        productInfo: cell(label.productInfo, 'PROD_INFO', code),
+        productWidth:
+          label.productWidthMm !== undefined ? txt(label.productWidthMm, 'PROD_WIDTH', code) : undefined,
+        productHeight:
+          label.productHeightMm !== undefined ? txt(label.productHeightMm, 'PROD_HGT', code) : undefined,
+        productDepth:
+          label.productDepthMm !== undefined ? txt(label.productDepthMm, 'PROD_DEPTH', code) : undefined,
+        productNumber: label.productNumber !== undefined ? String(label.productNumber) : undefined,
+        room: cell(label.room, 'ROOM', code),
+        barcode1: cell(label.barcode1, 'BARCODE1', code),
+        barcode2: cell(label.barcode2, 'BARCODE2', code),
+      });
+      if (options.partsUdi === 'structural') {
+        // INFO1 = the projection's picture reference when present; the rest
+        // stays EMPTY. The field samples' compact edge encoding (INFO2) is
+        // UNKNOWN and is NEVER generated (#789; #790 owns the receiver
+        // policy).
+        partsUdi.push({
+          type: 'PARTS_UDI',
+          jobIndex: 1,
+          partIndex: partIndexOfCode,
+          info: [cell(label.udiPictureRef, 'INFO1', code)],
+        });
+      }
+    }
+    records.push(...partsInf, ...partsUdi);
+    partLabelByPartIndex = labelByPartIndex;
+  }
 
   const offcutRecords: PtxOffcutRecord[] = [];
   const vectorRecords: PtxVectorRecord[] = [];
@@ -1638,6 +1862,7 @@ export function compileCutPlanToPtxDocument(
       ),
       partIndexByPieceRef,
       pieceRefByPartIndex,
+      ...(partLabelByPartIndex !== undefined ? { partLabelByPartIndex } : {}),
       offcutRegionRefByOffcutIndex,
       sheetIndexByPatternIndex,
       sheets: sheetMappings,

@@ -1132,3 +1132,102 @@ describe('#788 writer gating — compileCutPlanToPtxDocument strictSpecPreflight
     expect(verifyCutPlanPtxReadback(parsed, r4Plan(), compiled.mapping, options)).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #789 — PARTS_INF / PARTS_UDI: límites documentados TXT 200 / IDX / referencias
+// ---------------------------------------------------------------------------
+
+describe('#789 PARTS_INF/PARTS_UDI — límites §20 del diccionario', () => {
+  function docWithPartsInf(mutate?: (row: { type: 'PARTS_INF'; partIndex: number; drawing?: string; room?: string; jobIndex: number }) => void): PtxDocument {
+    const doc = labDoc();
+    const row: PtxRecord = {
+      type: 'PARTS_INF',
+      jobIndex: 1,
+      partIndex: 1,
+      labelQuantity: '1',
+      finishedLength: '450',
+      finishedWidth: '320',
+      drawing: 'D0123456789AB',
+      room: 'COCINA',
+    };
+    mutate?.(row as never);
+    return { ...doc, records: [...doc.records, row] };
+  }
+
+  it('PARTS_INF bien formada pasa (TXT columns dentro de 200, índices 1..N, referencia existente)', () => {
+    expect(ptxSpecPreflightDocument(docWithPartsInf())).toEqual([]);
+  });
+
+  it('DRAWING de 201 caracteres BLOQUEA con text_too_long (TXT 200 documentado)', () => {
+    const doc = docWithPartsInf((row) => {
+      row.drawing = 'D'.repeat(201);
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toContain('ptx_spec.text_too_long');
+    const issue = issues.find((i) => i.field === 'PARTS_INF.DRAWING')!;
+    expect(issue.maximum).toBe(200);
+    expect(issue.locator).toContain('PARTS_INF');
+  });
+
+  it('el límite aplica TAMBIÉN en bytes (mutación post-serialización detectada)', () => {
+    const doc = docWithPartsInf((row) => {
+      row.room = 'X'.repeat(201);
+    });
+    const bytes = serializePtxDocumentBytes(doc, LAB_TEXT_OPTIONS);
+    const issues = ptxSpecPreflightBytes(bytes);
+    expect(codes(issues)).toContain('ptx_spec.text_too_long');
+  });
+
+  it('PART_INDEX inexistente en PARTS_REQ BLOQUEA (reference_unknown)', () => {
+    const doc = docWithPartsInf((row) => {
+      row.partIndex = 99;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toContain('ptx_spec.reference_unknown');
+  });
+
+  it('JOB_INDEX de PARTS_INF fuera de 1..250 BLOQUEA (IDX documentado)', () => {
+    const doc = docWithPartsInf((row) => {
+      row.jobIndex = 251;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(issues.some((i) => i.field === 'PARTS_INF.JOB_INDEX')).toBe(true);
+  });
+
+  it('PARTS_UDI: INFO1 de 201 caracteres BLOQUEA; una fila bien formada pasa', () => {
+    const good = { ...labDoc(), records: [...labDoc().records, { type: 'PARTS_UDI' as const, jobIndex: 1, partIndex: 1, info: ['pic.png', undefined, 'LINEA-A', 'LINEA-A'] }] };
+    expect(ptxSpecPreflightDocument(good)).toEqual([]);
+
+    const bad = { ...labDoc(), records: [...labDoc().records, { type: 'PARTS_UDI' as const, jobIndex: 1, partIndex: 1, info: ['X'.repeat(201)] }] };
+    const issues = ptxSpecPreflightDocument(bad);
+    expect(issues.some((i) => i.field === 'PARTS_UDI.INFO1' && i.code === 'ptx_spec.text_too_long')).toBe(true);
+  });
+
+  it('PARTS_UDI con PART_INDEX sin PARTS_REQ BLOQUEA', () => {
+    const doc = { ...labDoc(), records: [...labDoc().records, { type: 'PARTS_UDI' as const, jobIndex: 1, partIndex: 42, info: [] }] };
+    expect(codes(ptxSpecPreflightDocument(doc))).toContain('ptx_spec.reference_unknown');
+  });
+
+  it('el catálogo documenta los 30 campos TXT de PARTS_INF y los 60 INFO de PARTS_UDI con localizador', () => {
+    const infTxt = PTX_SPEC_LIMITS.filter((l) => l.kind === 'text-length' && l.field.startsWith('PARTS_INF.'));
+    expect(infTxt).toHaveLength(30);
+    const udiInfo = PTX_SPEC_LIMITS.filter((l) => l.kind === 'text-length' && l.field.startsWith('PARTS_UDI.INFO'));
+    expect(udiInfo).toHaveLength(60);
+    expect(udiInfo.every((l) => l.kind === 'text-length' && l.maxLength === 200)).toBe(true);
+  });
+
+  it('PARTS_INF duplicada para la misma pieza BLOQUEA en validate.ts (contrato de producto, no spec)', () => {
+    const doc = {
+      ...docWithPartsInf(),
+      records: [
+        ...docWithPartsInf().records,
+        { type: 'PARTS_INF' as const, jobIndex: 1, partIndex: 1, labelQuantity: '1' },
+      ],
+    };
+    const issues = validatePtxDocument(doc);
+    expect(issues.some((i) => i.code === 'DUPLICATE_INDEX')).toBe(true);
+    // La especificación no documenta unicidad por pieza: el preflight NO lo
+    // reporta como ptx_spec.* (la separación SPEC vs PRODUCT se conserva).
+    expect(ptxSpecPreflightDocument(doc)).toEqual([]);
+  });
+});

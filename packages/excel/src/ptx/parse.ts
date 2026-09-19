@@ -94,6 +94,31 @@ const FAMILY_SPECS: Readonly<Record<string, FamilySpec>> = {
     // prefix must physically reach it (`...,QTY_REQ,,,GRAIN` is fine).
     required: 10,
   },
+  // #789: the full documented §20 width (pp.168–169) — 32 columns, every one
+  // after PART_INDEX is TXT 200. Required prefix: the two IDX columns only.
+  PARTS_INF: {
+    columns: [
+      'JOB_INDEX', 'PART_INDEX', 'DESC', 'LABEL_QTY', 'FIN_LENGTH', 'FIN_WIDTH', 'ORDER',
+      'EDGE1', 'EDGE2', 'EDGE3', 'EDGE4',
+      'EDG_PG1', 'EDG_PG2', 'EDG_PG3', 'EDG_PG4',
+      'FACE_LAM', 'BACK_LAM', 'CORE_MAT', 'PALLETP',
+      'DRAWING', 'PRODUCT', 'PROD_INFO',
+      'PROD_WIDTH', 'PROD_HGT', 'PROD_DEPTH', 'PROD_NUM',
+      'ROOM', 'BARCODE1', 'BARCODE2', 'COLOUR',
+      'SECOND_CUT_LENGTH', 'SECOND_CUT_WIDTH',
+    ],
+    required: 2,
+  },
+  // #789: JOB_INDEX + PART_INDEX + the 60 documented homogeneous INFO
+  // columns (§20 pp.169–171). Rows may end after any INFO column (trailing
+  // omitted) — the field samples carry INFO1..INFO4 only.
+  PARTS_UDI: {
+    columns: [
+      'JOB_INDEX', 'PART_INDEX',
+      ...Array.from({ length: 60 }, (_, i) => `INFO${i + 1}`),
+    ],
+    required: 2,
+  },
   BOARDS: {
     columns: ['JOB_INDEX', 'BRD_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH', 'QTY_STOCK', 'QTY_USED'],
     required: 6,
@@ -391,6 +416,63 @@ export function parseRecordRow(family: string, cells: readonly string[], lineNo:
         grain: c.enum<PtxGrain>(9, 'GRAIN', [0, 1, 2]),
         producedQuantity: c.optionalInt(10, 'QTY_PROD'),
       };
+    case 'PARTS_INF':
+      // #789: every column after the two IDX fields is TXT 200 (§20
+      // pp.168–169) — read verbatim as text; no numeric coercion. The
+      // empty-vs-omitted distinction: an existing empty cell reads back as
+      // undefined exactly like an omitted trailing cell (both mean "no
+      // value imposed"); the external-dialect reader is the one that
+      // distinguishes them for evidence purposes.
+      return {
+        type: 'PARTS_INF',
+        jobIndex: c.int(0, 'JOB_INDEX'),
+        partIndex: c.int(1, 'PART_INDEX'),
+        description: c.optionalText(2),
+        labelQuantity: c.optionalText(3),
+        finishedLength: c.optionalText(4),
+        finishedWidth: c.optionalText(5),
+        order: c.optionalText(6),
+        edge1: c.optionalText(7),
+        edge2: c.optionalText(8),
+        edge3: c.optionalText(9),
+        edge4: c.optionalText(10),
+        edgeProgram1: c.optionalText(11),
+        edgeProgram2: c.optionalText(12),
+        edgeProgram3: c.optionalText(13),
+        edgeProgram4: c.optionalText(14),
+        faceLaminate: c.optionalText(15),
+        backLaminate: c.optionalText(16),
+        coreMaterial: c.optionalText(17),
+        palletLayout: c.optionalText(18),
+        drawing: c.optionalText(19),
+        product: c.optionalText(20),
+        productInfo: c.optionalText(21),
+        productWidth: c.optionalText(22),
+        productHeight: c.optionalText(23),
+        productDepth: c.optionalText(24),
+        productNumber: c.optionalText(25),
+        room: c.optionalText(26),
+        barcode1: c.optionalText(27),
+        barcode2: c.optionalText(28),
+        colour: c.optionalText(29),
+        secondCutLength: c.optionalText(30),
+        secondCutWidth: c.optionalText(31),
+      };
+    case 'PARTS_UDI': {
+      // #789: JOB/PART + up to 60 INFO columns, homogeneous TXT. The model
+      // keeps the defined prefix of the info array; a row that ends early
+      // (trailing omitted) yields a shorter array, never padded with values.
+      const info: (string | undefined)[] = [];
+      for (let column = 2; column < cells.length; column++) {
+        info.push(c.optionalText(column));
+      }
+      return {
+        type: 'PARTS_UDI',
+        jobIndex: c.int(0, 'JOB_INDEX'),
+        partIndex: c.int(1, 'PART_INDEX'),
+        info,
+      };
+    }
     case 'BOARDS':
       return {
         type: 'BOARDS',

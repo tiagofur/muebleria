@@ -151,3 +151,93 @@ describe('PTX core mutation detection (independent readback)', () => {
     expect(ptxDocumentsEqual(parsed, original)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #789 — PARTS_INF / PARTS_UDI roundtrip y forma serializada
+// ---------------------------------------------------------------------------
+
+describe('#789 PARTS_INF/PARTS_UDI roundtrip y forma', () => {
+  const partsInfRow = {
+    type: 'PARTS_INF' as const,
+    jobIndex: 1,
+    partIndex: 1,
+    description: 'COSTADO',
+    labelQuantity: '1',
+    finishedLength: '450',
+    finishedWidth: '320',
+    order: 'R3',
+    edge1: 'C-ABS',
+    edge2: 'C-ABS',
+    drawing: 'D0123456789AB',
+    product: 'MOD-X',
+    productInfo: 'Modulo X',
+    productWidth: '600',
+    productHeight: '2000',
+    productDepth: '500',
+    productNumber: '1',
+    room: 'COCINA',
+    barcode1: '*D0123456789AB*',
+    barcode2: 'MOD-X-P01',
+  };
+
+  it('PARTS_INF serializa el ancho documentado completo (32 celdas) y roundtrip exacto', () => {
+    const original = { ...buildLabGuillotineDocument(), records: [...buildLabGuillotineDocument().records, partsInfRow] };
+    const text = serializePtxDocument(original);
+    const line = text.split('\r\n').find((l) => l.startsWith('PARTS_INF'))!;
+    expect(line.split(',')).toHaveLength(33); // familia + 32 columnas
+    // Las columnas finales documentadas sin valor van como celdas VACÍAS
+    // (trailing empties, la misma filosofía del writer para JOBS).
+    expect(line.endsWith(',,')).toBe(true);
+    const parsed = parsePtxDocumentText(text);
+    expect(validatePtxDocument(parsed)).toEqual([]);
+    expect(parsed).toEqual(original);
+  });
+
+  it('PARTS_UDI serializa sólo el prefijo INFO definido (trailing omitted, disciplina r4)', () => {
+    const original = {
+      ...buildLabGuillotineDocument(),
+      records: [
+        ...buildLabGuillotineDocument().records,
+        { type: 'PARTS_UDI' as const, jobIndex: 1, partIndex: 1, info: ['pic.png', undefined, 'LINEA-A', 'LINEA-A'] },
+        { type: 'PARTS_UDI' as const, jobIndex: 1, partIndex: 2, info: [] },
+      ],
+    };
+    const text = serializePtxDocument(original);
+    const lines = text.split('\r\n').filter((l) => l.startsWith('PARTS_UDI'));
+    // familia + JOB + PART + 4 INFO: el INFO2 vacío intermedio conserva su
+    // posición como celda vacía; el trailing no definido NO se escribe.
+    expect(lines[0]!.split(',')).toHaveLength(7);
+    expect(lines[0]).toBe('PARTS_UDI,1,1,pic.png,,LINEA-A,LINEA-A');
+    expect(lines[1]).toBe('PARTS_UDI,1,2'); // sin INFO definido: fila corta
+    const parsed = parsePtxDocumentText(text);
+    expect(validatePtxDocument(parsed)).toEqual([]);
+    expect(parsed).toEqual(original);
+  });
+
+  it('más de 32 columnas PARTS_INF / 62 PARTS_UDI BLOQUEA en el lector (TOO_MANY_COLUMNS)', () => {
+    const original = buildLabGuillotineDocument();
+    const base = serializePtxDocument(original);
+    const capture = (fn: () => unknown): { code: string } => {
+      try {
+        fn();
+      } catch (error) {
+        return error as { code: string };
+      }
+      throw new Error('se esperaba PtxParseError');
+    };
+    const infError = capture(() => parsePtxDocumentText(`${base}PARTS_INF,1,1${',X'.repeat(32)}\r\n`));
+    expect(infError.code).toBe('TOO_MANY_COLUMNS');
+    const udiError = capture(() => parsePtxDocumentText(`${base}PARTS_UDI,1,1${',X'.repeat(61)}\r\n`));
+    expect(udiError.code).toBe('TOO_MANY_COLUMNS');
+  });
+
+  it('fila PARTS_UDI corta estilo muestra (4 INFO) parsea con la posición exacta', () => {
+    const original = buildLabGuillotineDocument();
+    // Sin espacios tras comas: la tolerancia al dialecto con espacios vive en
+    // el lector externo (#788 externalDialect, probado allí con las muestras).
+    const text = `${serializePtxDocument(original)}PARTS_UDI,1,1,ETQ-A1.png,2WD2LD,LINEA-A,LINEA-A\r\n`;
+    const parsed = parsePtxDocumentText(text);
+    const udi = parsed.records.at(-1) as { type: 'PARTS_UDI'; info: readonly (string | undefined)[] };
+    expect(udi.info).toEqual(['ETQ-A1.png', '2WD2LD', 'LINEA-A', 'LINEA-A']);
+  });
+});

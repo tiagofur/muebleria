@@ -52,15 +52,19 @@
  * Documented but deliberately NOT enforced here (recorded, not invented
  * away): the material-code space/upper-case import normalization (§20 p.166
  * — receiver-side conversion, follow-up belongs with the MATERIALS receiver
- * tuning issue), and any PARTS_INF/PARTS_UDI field (200-char info limits)
- * until those families get their typed shape (#789).
+ * tuning issue). PARTS_INF/PARTS_UDI limits ARE enforced since #789 (TXT 200
+ * per column + the two IDX ranges + PART_INDEX references — §20 pp.168–171).
+ * PARTS_INF/PARTS_UDI per-part UNIQUENESS is a Granete product contract (the
+ * dictionary does not document it) and lives in validate.ts, never here.
  */
 
 import type {
   PtxDocument,
+  PtxPartsInfRecord,
+  PtxPartsUdiRecord,
   PtxRecord,
 } from './records';
-import { PTX_PATTERN_TYPE, PTX_SUPPORTED_CUT_FUNCTION_CODES } from './records';
+import { PTX_PARTS_UDI_INFO_COLUMN_COUNT, PTX_PATTERN_TYPE, PTX_SUPPORTED_CUT_FUNCTION_CODES } from './records';
 import { parsePtxDocumentBytes, PtxParseError } from './parse';
 import { serializePtxDocumentBytes, type PtxSerializationOptions } from './serialize';
 
@@ -192,6 +196,50 @@ const QTY_QUOTE =
 const DIM_QUOTE =
   "S03 V11 Interface Guide §20 p.166 'DIM Dimension. Number single. When working in millimetres these range from 0.0 to 9999.9. When working in decimal inches dimensions must range from 0.000 to 999.9'";
 
+// ---------------------------------------------------------------------------
+// PARTS_INF / PARTS_UDI TXT-200 dictionaries (#789)
+// ---------------------------------------------------------------------------
+
+const PARTS_INF_TXT_LOCATOR =
+  "S03 V11 Interface Guide §20 pp.168–169 (PARTS_INF): every column after PART_INDEX is documented 'TXT 200 chars max.'";
+
+const PARTS_INF_TXT_COLUMNS = [
+  'DESC', 'LABEL_QTY', 'FIN_LENGTH', 'FIN_WIDTH', 'ORDER',
+  'EDGE1', 'EDGE2', 'EDGE3', 'EDGE4',
+  'EDG_PG1', 'EDG_PG2', 'EDG_PG3', 'EDG_PG4',
+  'FACE_LAM', 'BACK_LAM', 'CORE_MAT', 'PALLETP',
+  'DRAWING', 'PRODUCT', 'PROD_INFO',
+  'PROD_WIDTH', 'PROD_HGT', 'PROD_DEPTH', 'PROD_NUM',
+  'ROOM', 'BARCODE1', 'BARCODE2', 'COLOUR',
+  'SECOND_CUT_LENGTH', 'SECOND_CUT_WIDTH',
+] as const;
+
+/** One text-length limit per documented PARTS_INF TXT column (static data). */
+const PARTS_INF_TXT_200_LIMITS: readonly PtxSpecTextLimit[] = PARTS_INF_TXT_COLUMNS.map(
+  (column) =>
+    ({
+      kind: 'text-length',
+      field: `PARTS_INF.${column}`,
+      maxLength: 200,
+      authority: SPEC_REQUIRED(`${PARTS_INF_TXT_LOCATOR} — ${column}`),
+    }) as const,
+);
+
+const PARTS_UDI_TXT_LOCATOR =
+  "S03 V11 Interface Guide §20 pp.169–171 (PARTS_UDI): INFO1..INFO60 'Information field N' columns, each 'TXT 200 chars max.'";
+
+/** One text-length limit per documented PARTS_UDI INFO column (static data). */
+const PARTS_UDI_TXT_200_LIMITS: readonly PtxSpecTextLimit[] = Array.from(
+  { length: PTX_PARTS_UDI_INFO_COLUMN_COUNT },
+  (_, i) =>
+    ({
+      kind: 'text-length',
+      field: `PARTS_UDI.INFO${i + 1}`,
+      maxLength: 200,
+      authority: SPEC_REQUIRED(`${PARTS_UDI_TXT_LOCATOR} — INFO${i + 1}`),
+    }) as const,
+);
+
 /**
  * Every limit enforced by ptxSpecPreflightDocument, each with its authority.
  * The dictionary types are the guide's own: TXT ("The maximum length of each
@@ -297,6 +345,22 @@ export const PTX_SPEC_LIMITS: readonly PtxSpecLimit[] = [
   { kind: 'qty-max', field: 'PATTERNS.MAX_BOOK', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.175 'MAX_BOOK Max sheets per book QTY'`) },
   { kind: 'qty-max', field: 'CUTS.QTY_RPT', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.178 'QTY_RPT Cut quantity QTY'`) },
   { kind: 'qty-max', field: 'CUTS.QTY_PARTS', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.178 'QTY_PARTS Total part quantity QTY Max 99999'`) },
+  // PARTS_INF (#789 — §20 pp.168–169): JOB_INDEX 'IDX 1-250', PART_INDEX
+  // 'IDX 1-9999' and EVERY remaining column documented as 'TXT 200 chars
+  // max.' (DESC, LABEL_QTY, FIN_LENGTH, FIN_WIDTH, ORDER, EDGE1..4,
+  // EDG_PG1..4, FACE_LAM, BACK_LAM, CORE_MAT, PALLETP, DRAWING, PRODUCT,
+  // PROD_INFO, PROD_WIDTH, PROD_HGT, PROD_DEPTH, PROD_NUM, ROOM, BARCODE1,
+  // BARCODE2, COLOUR, SECOND_CUT_LENGTH, SECOND_CUT_WIDTH). The dictionary
+  // types the numeric-LOOKING columns as TXT — no DIM/QTY/INT rule exists for
+  // this family, so none is enforced (nothing invented).
+  { kind: 'int-range', field: 'PARTS_INF.JOB_INDEX', min: 1, max: 250, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.168 (PARTS_INF) \'JOB_INDEX Job index IDX 1-250\'') },
+  { kind: 'int-range', field: 'PARTS_INF.PART_INDEX', min: 1, max: 9999, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.168 (PARTS_INF) \'PART_INDEX Part index IDX 1-9999\'') },
+  // PARTS_UDI (#789 — §20 pp.169–171): the same two IDX columns plus the 60
+  // homogeneous 'Information field N' columns, each 'TXT 200 chars max.'.
+  { kind: 'int-range', field: 'PARTS_UDI.JOB_INDEX', min: 1, max: 250, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.169 (PARTS_UDI) \'JOB_INDEX Job index IDX 1-250\'') },
+  { kind: 'int-range', field: 'PARTS_UDI.PART_INDEX', min: 1, max: 9999, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.169 (PARTS_UDI) \'PART_INDEX Part index IDX 1-9999\'') },
+  ...PARTS_INF_TXT_200_LIMITS,
+  ...PARTS_UDI_TXT_200_LIMITS,
 ];
 
 const LIMIT_BY_FIELD = new Map(PTX_SPEC_LIMITS.map((limit) => [limit.field, limit]));
@@ -372,6 +436,10 @@ function recordLabel(record: PtxRecord): string {
       return `JOBS job=${record.jobIndex}`;
     case 'PARTS_REQ':
       return `PARTS_REQ job=${record.jobIndex} part=${record.partIndex}`;
+    case 'PARTS_INF':
+      return `PARTS_INF job=${record.jobIndex} part=${record.partIndex}`;
+    case 'PARTS_UDI':
+      return `PARTS_UDI job=${record.jobIndex} part=${record.partIndex}`;
     case 'BOARDS':
       return `BOARDS job=${record.jobIndex} board=${record.boardIndex}`;
     case 'MATERIALS':
@@ -679,6 +747,58 @@ function checkRecordFields(record: PtxRecord, units: number, issues: PtxSpecIssu
       if (record.producedQuantity !== undefined) qtyIssue(record.producedQuantity, 'PARTS_REQ.QTY_PROD', label, issues);
       enumIssue(record.grain, 'PARTS_REQ.GRAIN', label, issues);
       break;
+    case 'PARTS_INF': {
+      // JOB_INDEX range is enforced through the family's OWN §20 row here
+      // (same 1-250 bound as JOBS.JOB_INDEX, its own locator).
+      intRangeIssue(record.jobIndex, 'PARTS_INF.JOB_INDEX', label, issues);
+      intRangeIssue(record.partIndex, 'PARTS_INF.PART_INDEX', label, issues);
+      // §20 documents every remaining column as TXT 200: text-length only,
+      // never a DIM/QTY/INT rule for this family (nothing invented).
+      const txtFields: readonly (readonly [string | undefined, string])[] = [
+        [record.description, 'PARTS_INF.DESC'],
+        [record.labelQuantity, 'PARTS_INF.LABEL_QTY'],
+        [record.finishedLength, 'PARTS_INF.FIN_LENGTH'],
+        [record.finishedWidth, 'PARTS_INF.FIN_WIDTH'],
+        [record.order, 'PARTS_INF.ORDER'],
+        [record.edge1, 'PARTS_INF.EDGE1'],
+        [record.edge2, 'PARTS_INF.EDGE2'],
+        [record.edge3, 'PARTS_INF.EDGE3'],
+        [record.edge4, 'PARTS_INF.EDGE4'],
+        [record.edgeProgram1, 'PARTS_INF.EDG_PG1'],
+        [record.edgeProgram2, 'PARTS_INF.EDG_PG2'],
+        [record.edgeProgram3, 'PARTS_INF.EDG_PG3'],
+        [record.edgeProgram4, 'PARTS_INF.EDG_PG4'],
+        [record.faceLaminate, 'PARTS_INF.FACE_LAM'],
+        [record.backLaminate, 'PARTS_INF.BACK_LAM'],
+        [record.coreMaterial, 'PARTS_INF.CORE_MAT'],
+        [record.palletLayout, 'PARTS_INF.PALLETP'],
+        [record.drawing, 'PARTS_INF.DRAWING'],
+        [record.product, 'PARTS_INF.PRODUCT'],
+        [record.productInfo, 'PARTS_INF.PROD_INFO'],
+        [record.productWidth, 'PARTS_INF.PROD_WIDTH'],
+        [record.productHeight, 'PARTS_INF.PROD_HGT'],
+        [record.productDepth, 'PARTS_INF.PROD_DEPTH'],
+        [record.productNumber, 'PARTS_INF.PROD_NUM'],
+        [record.room, 'PARTS_INF.ROOM'],
+        [record.barcode1, 'PARTS_INF.BARCODE1'],
+        [record.barcode2, 'PARTS_INF.BARCODE2'],
+        [record.colour, 'PARTS_INF.COLOUR'],
+        [record.secondCutLength, 'PARTS_INF.SECOND_CUT_LENGTH'],
+        [record.secondCutWidth, 'PARTS_INF.SECOND_CUT_WIDTH'],
+      ];
+      for (const [value, field] of txtFields) {
+        if (value !== undefined) textIssue(value, field, label, issues);
+      }
+      break;
+    }
+    case 'PARTS_UDI': {
+      intRangeIssue(record.jobIndex, 'PARTS_UDI.JOB_INDEX', label, issues);
+      intRangeIssue(record.partIndex, 'PARTS_UDI.PART_INDEX', label, issues);
+      record.info.forEach((value, i) => {
+        if (value !== undefined) textIssue(value, `PARTS_UDI.INFO${i + 1}`, label, issues);
+      });
+      break;
+    }
     case 'BOARDS':
       intRangeIssue(record.jobIndex, 'JOBS.JOB_INDEX', label, issues);
       intRangeIssue(record.boardIndex, 'BOARDS.BRD_INDEX', label, issues);
@@ -868,12 +988,25 @@ function checkReferences(doc: PtxDocument, tables: SpecTables, issues: PtxSpecIs
     if (record.type !== 'JOBS' && hasJobs && !tables.jobs.has(record.jobIndex)) {
       unknown('ptx_spec.reference_unknown', `${label} JOB_INDEX=${record.jobIndex} no tiene fila JOBS`, 'JOB_INDEX', record.jobIndex);
     }
-    switch (record.type) {
-      case 'PARTS_REQ':
-        if (!tables.materialsByJob.has(`${record.jobIndex}:${record.materialIndex}`)) {
-          unknown('ptx_spec.reference_unknown', `${label} MAT_INDEX=${record.materialIndex} sin MATERIALS en el job ${record.jobIndex}`, 'PARTS_REQ.MAT_INDEX', record.materialIndex);
-        }
-        break;
+      switch (record.type) {
+        case 'PARTS_REQ':
+          if (!tables.materialsByJob.has(`${record.jobIndex}:${record.materialIndex}`)) {
+            unknown('ptx_spec.reference_unknown', `${label} MAT_INDEX=${record.materialIndex} sin MATERIALS en el job ${record.jobIndex}`, 'PARTS_REQ.MAT_INDEX', record.materialIndex);
+          }
+          break;
+        case 'PARTS_INF':
+          // #789: the PARTS_INF row of one physical piece must resolve to the
+          // SAME PARTS_REQ row its PARTS_REQ.CODE/label came from — the
+          // identity chain PART_INDEX is structural, never name-based.
+          if (!tables.partsByJob.has(`${record.jobIndex}:${record.partIndex}`)) {
+            unknown('ptx_spec.reference_unknown', `${label} PART_INDEX=${record.partIndex} sin PARTS_REQ en el job ${record.jobIndex}`, 'PARTS_INF.PART_INDEX', record.partIndex);
+          }
+          break;
+        case 'PARTS_UDI':
+          if (!tables.partsByJob.has(`${record.jobIndex}:${record.partIndex}`)) {
+            unknown('ptx_spec.reference_unknown', `${label} PART_INDEX=${record.partIndex} sin PARTS_REQ en el job ${record.jobIndex}`, 'PARTS_UDI.PART_INDEX', record.partIndex);
+          }
+          break;
       case 'BOARDS':
         if (!tables.materialsByJob.has(`${record.jobIndex}:${record.materialIndex}`)) {
           unknown('ptx_spec.reference_unknown', `${label} MAT_INDEX=${record.materialIndex} sin MATERIALS en el job ${record.jobIndex}`, 'BOARDS.MAT_INDEX', record.materialIndex);

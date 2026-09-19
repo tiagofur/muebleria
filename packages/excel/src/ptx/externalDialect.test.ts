@@ -19,9 +19,17 @@ import {
   ptxExternalColumnPresence,
   PTX_DOCUMENTED_UNMODELED_FAMILIES,
   type PtxExternalModeledRow,
+  type PtxExternalRow,
 } from './externalDialect';
 import { ptxSpecPreflightDocument } from './specPreflight';
-import type { PtxBoardRecord, PtxCutRecord, PtxJobRecord, PtxMaterialRecord } from './records';
+import type {
+  PtxBoardRecord,
+  PtxCutRecord,
+  PtxJobRecord,
+  PtxMaterialRecord,
+  PtxPartsInfRecord,
+  PtxPartsUdiRecord,
+} from './records';
 
 const FIELD_DIR = new URL('../../../../docs/machines/ptx-cadmatic4/field/', import.meta.url);
 
@@ -63,13 +71,61 @@ describe('#788 parsing estructural de R2201 saneado (subset soportado)', () => {
     expect(new Set(cuts.map((c) => c.patternIndex))).toEqual(new Set([1, 2]));
   });
 
-  it('las familias documentadas no modeladas quedan registradas opacas (no parseadas, no ignoradas)', () => {
-    expect(readback.unmodeledFamilyCounts.get('PARTS_INF')).toBe(5);
-    expect(readback.unmodeledFamilyCounts.get('PARTS_UDI')).toBe(5);
+  it('PARTS_INF/PARTS_UDI (#789) se leen TIPADAS: presentes, no opacas, con sus relaciones', () => {
+    // Las familias de etiqueta dejaron de ser blobs opacos: cada fila llega
+    // como registro modelado y su PART_INDEX resuelve contra PARTS_REQ (lo
+    // comprueba el spec preflight del subset, abajo).
+    const partsInf = readback.records.filter((r) => r.type === 'PARTS_INF') as PtxPartsInfRecord[];
+    const partsUdi = readback.records.filter((r) => r.type === 'PARTS_UDI') as PtxPartsUdiRecord[];
+    expect(partsInf).toHaveLength(5);
+    expect(partsUdi).toHaveLength(5);
     expect(readback.unmodeledFamilyCounts.get('NOTES')).toBe(1);
+    expect(readback.unmodeledFamilyCounts.has('PARTS_INF')).toBe(false);
+    expect(readback.unmodeledFamilyCounts.has('PARTS_UDI')).toBe(false);
+    // Evidencia de campo preservada sin interpretarla: piezas 1-2 con los 4
+    // cantos, piezas 3-5 (ST_AJUSTE) sólo con los 2 lados longitud; DESC
+    // vacío presente; ROOM con valor; trailing SECOND_CUT_* omitido (29
+    // celdas de las 32 documentadas).
+    expect(partsInf[0]).toMatchObject({
+      jobIndex: 1,
+      partIndex: 1,
+      labelQuantity: '1',
+      finishedLength: '1897.0',
+      finishedWidth: '333.0',
+      order: 'MUESTRA-A:1',
+      edge1: 'C PVC MUESTRA-A 1X19_/LINEA-1',
+      edge2: 'C PVC MUESTRA-A 1X19_/LINEA-1',
+      drawing: 'ETQ-A1',
+      product: 'MOD-A1',
+      productInfo: 'CLOSET MODULAR ABIERTO',
+      productWidth: '356.00',
+      productHeight: '1900.00',
+      productDepth: '600.00',
+      productNumber: '20',
+      room: 'AMBIENTE 1',
+      barcode2: '*ETQ-A1*',
+    });
+    expect(partsInf[0]!.description).toBeUndefined();
+    expect(partsInf[2]).toMatchObject({ edge1: 'C PVC MUESTRA-B 1X22/LINEA-1', edge2: 'C PVC MUESTRA-B 1X22/LINEA-1' });
+    // Pieza 3 (ST_AJUSTE): sólo los DOS lados longitud llevan canto — los
+    // lados ancho (EDGE3/EDGE4) quedan ausentes. Observación de dialecto: la
+    // fila 3 del cliente lleva UNA celda vacía más que las filas 1-2 antes
+    // del texto 'ST_AJUSTE', que bajo las posiciones documentadas cae en
+    // PRODUCT; se lee literal por posición y NO se interpreta.
+    expect(partsInf[2]!.edge3).toBeUndefined();
+    expect(partsInf[2]!.edge4).toBeUndefined();
+    const infShape = readback.rows
+      .filter(hasPtxExternalShape)
+      .find((row) => row.family === 'PARTS_INF');
+    expect(infShape?.cellsProvided).toBe(29);
+    expect(infShape?.extraTrailingCells).toBe(0);
+    // PARTS_UDI: INFO1..INFO4 evidenciados (imagen, encoding compacto
+    // UNKNOWN, dos acabados) — se leen crudos, nunca se generan.
+    expect(partsUdi[0]).toMatchObject({ jobIndex: 1, partIndex: 1 });
+    expect(partsUdi[0]!.info).toEqual(['ETQ-A1.png', '2WD2LD', 'LINEA-A', 'LINEA-A']);
     const unmodeledTotal = [...readback.unmodeledFamilyCounts.values()].reduce((sum, count) => sum + count, 0);
-    // Cada fila del row view es exactamente: un registro modelado, una fila
-    // opaca no modelada o el HEADER — nada se cae fuera del inventario.
+    // Cada fila del row view es exactamente: un registro modelado (incluidas
+    // PARTS_INF/UDI), una fila opaca no modelada o el HEADER.
     expect(readback.rows).toHaveLength(readback.records.length + unmodeledTotal + 1);
   });
 
@@ -125,8 +181,16 @@ describe('#788 parsing estructural de R7301 saneado (subset soportado)', () => {
     expect(patterns.map((p) => (p as { patternType: number }).patternType)).toEqual([0, 1]);
     const cuts = readback.records.filter((r) => r.type === 'CUTS') as PtxCutRecord[];
     expect(cuts).toHaveLength(26); // 14 + 12
-    expect(readback.unmodeledFamilyCounts.get('PARTS_INF')).toBe(12);
-    expect(readback.unmodeledFamilyCounts.get('PARTS_UDI')).toBe(12);
+    // #789: PARTS_INF/PARTS_UDI tipadas; el uso de BARCODE1/BARCODE2 de esta
+    // muestra es OPUESTO al de R2201 (aquí BARCODE1 lleva el token) —
+    // evidencia de que la asignación de barcode es política de producto,
+    // nunca una regla universal copiable.
+    const partsInf = readback.records.filter((r) => r.type === 'PARTS_INF') as PtxPartsInfRecord[];
+    const partsUdi = readback.records.filter((r) => r.type === 'PARTS_UDI') as PtxPartsUdiRecord[];
+    expect(partsInf).toHaveLength(12);
+    expect(partsUdi).toHaveLength(12);
+    expect(partsInf[0]).toMatchObject({ barcode1: '*ETQ-B1*', order: 'Proyecto:1', room: 'TV', productNumber: '3' });
+    expect(partsUdi[0]!.info).toEqual(['r73p0024.png', undefined, 'LINEA-C', 'LINEA-C']);
     expect(readback.unmodeledFamilyCounts.get('NOTES')).toBe(1);
   });
 
@@ -235,6 +299,6 @@ describe('#788 fail-closed del lector externo', () => {
   });
 
   it('el catálogo de familias no modeladas es exactamente el documentado', () => {
-    expect([...PTX_DOCUMENTED_UNMODELED_FAMILIES]).toEqual(['PARTS_INF', 'PARTS_UDI', 'PARTS_DST', 'PTN_UDI', 'NOTES']);
+    expect([...PTX_DOCUMENTED_UNMODELED_FAMILIES]).toEqual(['PARTS_DST', 'PTN_UDI', 'NOTES']);
   });
 });
