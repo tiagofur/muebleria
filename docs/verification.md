@@ -568,7 +568,7 @@ selector corrió una sola vez con 3600 s y seleccionó `typescript`, `backend-go
 `organization-browser`, pero ninguno de esos gates corrió ni cuenta como PASS
 local.
 
-T6/T7 documental quedan registrados en el HEAD
+T6 queda registrado en el HEAD
 `d68aa969cbc47d243f1d51828ffbfa87866e3718`. `partLabels` requiere
 `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`; `partLabels` con la
 política ausente o `placement` falla cerrado como `ptx_compile.options_invalid`.
@@ -576,10 +576,17 @@ Las etiquetas no auto-seleccionan ni infieren esa política. Sin etiquetas, la
 opción ausente/`placement` conserva el comportamiento histórico, y sin etiquetas
 `part-local-pre-rotation-cut` es reutilizable/válida. La cobertura E2E
 CNC=false compiler→bytes→parse confirma DRAWING/BARCODE1 ausentes y BARCODE2
-ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC. Evidencia del
-writer previo: Excel 45 archivos / 539 PASS / 3 skips y `git diff --check`
-limpio. La verificación final del nuevo HEAD, el selector y CI exact-head siguen
-pendientes; no hay claim de entrega completa ni de aceptación de receptor/máquina.
+ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC.
+
+T7 sigue en curso para push/CI del mismo PR #797. Verificación local final del
+candidato `18d09e350c741b2c1a5f38ee95df22a1b161b700`: Excel 45 archivos / 539
+PASS / 3 skips, `pnpm typecheck` PASS y `git diff --check` PASS. El selector
+autorizado corrió una sola vez con 3600 s en ese candidato contra base
+`b7446866ed247677d8b8f83238cddbd96579db97` y bloqueó antes de selected gates
+porque falta un `DATABASE_URL` aislado. Los gates seleccionados de
+TypeScript/Go/Ruby/WebGL/Foundation no corrieron localmente y no son evidencia
+PASS. CI final del nuevo HEAD sigue pendiente; no hay claim de entrega completa
+ni de aceptación de receptor/máquina.
 
 Cobertura contractual exigida por #789/#797:
 

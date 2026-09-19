@@ -339,10 +339,17 @@ política; sin etiquetas, las políticas ausente/`placement` conservan el
 comportamiento histórico y `part-local-pre-rotation-cut` es reutilizable/válida.
 La cobertura E2E CNC=false compiler→bytes→parse confirma DRAWING/BARCODE1
 ausentes y BARCODE2 ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC.
-Evidencia del writer previo: Excel 45 archivos / 539 PASS / 3 skips y
-`git diff --check` limpio. La verificación final del nuevo HEAD, el selector y
-CI exact-head siguen pendientes; no hay claim de entrega completa ni de
-aceptación de receptor/máquina.
+
+Verificación local final del candidato
+`18d09e350c741b2c1a5f38ee95df22a1b161b700`: Excel 45 archivos / 539 PASS / 3
+skips, `pnpm typecheck` PASS y `git diff --check` PASS. El selector autorizado
+corrió una sola vez con 3600 s en ese candidato contra base
+`b7446866ed247677d8b8f83238cddbd96579db97` y bloqueó antes de selected gates
+porque falta un `DATABASE_URL` aislado. Los gates seleccionados de
+TypeScript/Go/Ruby/WebGL/Foundation no corrieron localmente y no son evidencia
+PASS. CI final del nuevo HEAD sigue pendiente; T7 sigue en curso para push/CI
+del mismo PR #797. No hay claim de entrega completa ni de aceptación de
+receptor/máquina.
 
 Inmutabilidad r2/r3/r4: los goldens históricos se recompilan byte-exact dentro
 de la suite focalizada; r2/r3/r4, FUNCTION 92, perfiles/adapters y salidas de

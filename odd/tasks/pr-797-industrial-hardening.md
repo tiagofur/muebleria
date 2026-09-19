@@ -57,11 +57,13 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
   - Added CNC=false bytes→parse E2E coverage proving absent DRAWING/BARCODE1 and authoritative BARCODE2 bound to `PARTS_REQ.CODE`; no CNC implementation change.
   - Current rotated fixture/mutation and historical r2/r3/r4/F92 paths remain covered. Writer evidence: Excel 45 files / 539 passed / 3 skipped; diff check clean. Work-unit commit: `d68aa969cbc47d243f1d51828ffbfa87866e3718`.
 
-- [x] **T7 — Document final policy gate and pending verification** (docs/progress only)
+- [ ] **T7 — Document final policy gate and pending verification** (docs/progress only; in progress for same PR push/CI)
   - Documented that `partLabels` requires `partsReqDimensionPolicy='part-local-pre-rotation-cut'`; absent/`placement` with labels fails closed as `ptx_compile.options_invalid`, and labels do not auto-select or infer the policy.
   - Documented that no-label absent/`placement` retain historical behavior and no-label part-local is reusable/valid.
   - Recorded CNC=false bytes→parse E2E evidence: DRAWING/BARCODE1 absent and BARCODE2 bound to `PARTS_REQ.CODE`; no CNC implementation change.
-  - Recorded commit `d68aa969cbc47d243f1d51828ffbfa87866e3718`, prior writer evidence 45 files / 539 passed / 3 skipped / diff clean, and final new-head verification/selector/CI still pending. No delivery-complete or receiver/machine acceptance claim.
+  - Recorded final local candidate `18d09e350c741b2c1a5f38ee95df22a1b161b700`: Excel 45 files / 539 passed / 3 skipped, `pnpm typecheck` PASS, and `git diff --check` PASS.
+  - Recorded selector attempt: ran once with 3600 seconds at candidate `18d09e350c741b2c1a5f38ee95df22a1b161b700` against base `b7446866ed247677d8b8f83238cddbd96579db97`; blocked before selected gates because isolated `DATABASE_URL` is absent. Selected TypeScript/Go/Ruby/WebGL/Foundation gates did not run locally and are not PASS evidence.
+  - Final new-head CI remains pending. No delivery-complete or receiver/machine acceptance claim.
 
 ## Acceptance / required checks
 
@@ -88,8 +90,8 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 - 2026-09-19: T4 completed by one scoped writer: the explicit r5 `part-local-pre-rotation-cut` policy was added to compiler and independent readback, with positive/negative rotated and non-rotated tests. Package Excel suite remained 45 files / 534 passed / 3 skipped; diff check clean. Work-unit commit `f4dac0af791fd58052b49b7acf91a31c70ebd118` records T4.
 - 2026-09-19: Published `0a524cc8c410bcfc17f59d1948a339fac0321056` to the same PR #797; exact-head CI reached SUCCESS. Final independent review identified the fail-open labels/policy configuration and missing CNC=false bytes→parse coverage, authorized as T6/T7 only.
 - 2026-09-19: T6 completed by one scoped writer: `partLabels` now requires the explicit r5 local policy; no-label policies remain valid, and CNC=false survives compiler→bytes→parse with only BARCODE2 bound to `PARTS_REQ.CODE`. Excel suite passed 45 files / 539 passed / 3 skipped; diff check clean. Work-unit commit `d68aa969cbc47d243f1d51828ffbfa87866e3718`.
-- 2026-09-19: T7 documentation/progress-only update recorded the final policy gate and pending evidence: final new-head verification, selector, and CI remain pending; no delivery-complete or receiver/machine acceptance claim.
+- 2026-09-19: T7 documentation/progress-only update recorded final local verification at candidate `18d09e350c741b2c1a5f38ee95df22a1b161b700`: Excel 45 files / 539 passed / 3 skipped, `pnpm typecheck` PASS, and `git diff --check` PASS. The selector ran once with 3600 seconds at that candidate against base `b7446866ed247677d8b8f83238cddbd96579db97` and blocked before selected gates because isolated `DATABASE_URL` is absent; selected TypeScript/Go/Ruby/WebGL/Foundation gates are not local PASS evidence. T7 remains in progress for same PR push/CI; final new-head CI remains pending; no delivery-complete or receiver/machine acceptance claim.
 
 ## Next step
 
-Run final new-head verification/selector/CI when authorized, then publish/update the same existing PR branch without claiming delivery complete until those checks are observed.
+Publish/update the same existing PR branch and observe final new-head CI before claiming delivery complete; local selector remains blocked without an isolated `DATABASE_URL` and selected gates are not local PASS evidence.
