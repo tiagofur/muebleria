@@ -408,13 +408,13 @@ export function nearestGlbVertex(
   let best: readonly [number, number, number] | undefined;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (let i = 0; i + 2 < vertices.length; i += 3) {
-    const dx = vertices[i] - target[0];
-    const dy = vertices[i + 1] - target[1];
-    const dz = vertices[i + 2] - target[2];
+    const dx = vertices[i]! - target[0];
+    const dy = vertices[i + 1]! - target[1];
+    const dz = vertices[i + 2]! - target[2];
     const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (distance < bestDistance) {
       bestDistance = distance;
-      best = [vertices[i], vertices[i + 1], vertices[i + 2]];
+      best = [vertices[i]!, vertices[i + 1]!, vertices[i + 2]!];
     }
   }
   if (!best) {

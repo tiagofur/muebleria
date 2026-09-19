@@ -162,7 +162,7 @@ describe('#669 canonical SKP/GLB parity', () => {
     expect(assetPoints.length).toBe(canonical.expected.referencePoints.length);
 
     canonical.expected.referencePoints.forEach((expected, index) => {
-      const worldPoint = applyAssemblyPlacement(world, assetPoints[index]);
+      const worldPoint = applyAssemblyPlacement(world, assetPoints[index]!);
       const delta = Math.hypot(
         worldPoint[0] - expected.expectedWorldMm[0],
         worldPoint[1] - expected.expectedWorldMm[1],
@@ -188,29 +188,33 @@ describe('#669 canonical SKP/GLB parity', () => {
       return Math.max(...values) - Math.min(...values);
     });
     canonical.asset.nominalExtentsMm.forEach((nominal, axis) => {
-      expect(Math.abs(extents[axis] - nominal)).toBeLessThan(tolerance.worldPointToleranceMm);
+      expect(Math.abs(extents[axis]! - nominal)).toBeLessThan(tolerance.worldPointToleranceMm);
     });
 
     const world = worldChain();
     const assetPoints = glbVertexWorldPoints();
     const worldPoints = assetPoints.map((p) => applyAssemblyPlacement(world, p));
     const distance = (a: readonly number[], b: readonly number[]) =>
-      Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
     const distances = canonical.expected.pairwiseDistancesMm;
-    expect(distance(worldPoints[0], worldPoints[1])).toBeCloseTo(distances.p0p1, 3);
-    expect(distance(worldPoints[1], worldPoints[2])).toBeCloseTo(distances.p1p2, 3);
-    expect(distance(worldPoints[0], worldPoints[2])).toBeCloseTo(distances.p0p2, 3);
+    const [d01, d12, d02] = [distances['p0p1'], distances['p1p2'], distances['p0p2']];
+    expect(d01, 'canonical pairwise p0p1').toBeDefined();
+    expect(d12, 'canonical pairwise p1p2').toBeDefined();
+    expect(d02, 'canonical pairwise p0p2').toBeDefined();
+    expect(distance(worldPoints[0]!, worldPoints[1]!)).toBeCloseTo(d01!, 3);
+    expect(distance(worldPoints[1]!, worldPoints[2]!)).toBeCloseTo(d12!, 3);
+    expect(distance(worldPoints[0]!, worldPoints[2]!)).toBeCloseTo(d02!, 3);
   });
 
   it('world chain stays rigid: scale [1,1,1], determinant +1, no shear, no mirror', () => {
     const world = worldChain();
     const det =
       world.basis.x[0] * (world.basis.y[1] * world.basis.z[2] - world.basis.y[2] * world.basis.z[1]) -
-      world.basis.x[1] * (world.basis.y[0] * world.basis.z[2] - world.basis.y[2] * world.basis.z[0]) +
-      world.basis.x[2] * (world.basis.y[0] * world.basis.z[1] - world.basis.y[1] * world.basis.z[0]);
+      world.basis.x[1]! * (world.basis.y[0]! * world.basis.z[2]! - world.basis.y[2]! * world.basis.z[0]!) +
+      world.basis.x[2]! * (world.basis.y[0]! * world.basis.z[1]! - world.basis.y[1]! * world.basis.z[0]!);
     expect(det).toBeCloseTo(canonical.expected.rigidity.determinant, 6);
     const dot = (a: readonly number[], b: readonly number[]) =>
-      a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+      a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
     expect(dot(world.basis.x, world.basis.y)).toBeCloseTo(0, 6);
     expect(dot(world.basis.x, world.basis.z)).toBeCloseTo(0, 6);
     expect(dot(world.basis.y, world.basis.z)).toBeCloseTo(0, 6);
@@ -241,16 +245,16 @@ describe('#669 canonical SKP/GLB parity', () => {
       );
 
     const wrongUnitAssetPoints = (scale: number) =>
-      canonical.glbRepresentation.expectedGlbReferencePointsM.map((p) =>
-        glbPointToAssetMm(glbSpace, [p[0] * scale, p[1] * scale, p[2] * scale]),
+      canonical.glbRepresentation.expectedGlbReferencePointsM.map(
+        (p) => glbPointToAssetMm(glbSpace, [p[0]! * scale, p[1]! * scale, p[2]! * scale]) as [number, number, number],
       );
 
     // Chain variants: each mutant mutates exactly one link of the composition.
     const normalizationWithBasis = (point: readonly number[], basis: AssemblyBasis) => {
       const origin = mountFrame.originMm;
-      const delta = [point[0] - origin[0], point[1] - origin[1], point[2] - origin[2]];
+      const delta = [point[0]! - origin[0], point[1]! - origin[1], point[2]! - origin[2]];
       const dotAxes = (a: readonly number[], b: readonly number[]) =>
-        a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]!;
       return [dotAxes(basis.x, delta), dotAxes(basis.y, delta), dotAxes(basis.z, delta)];
     };
     const transposedMountBasis: AssemblyBasis = {
@@ -271,18 +275,21 @@ describe('#669 canonical SKP/GLB parity', () => {
       },
       transposed: {
         chain: wrapWithFurnitureAssembly(member),
-        points: assetPoints.map((p) => normalizationWithBasis(p, transposedMountBasis)),
+        points: assetPoints.map(
+          (p) => normalizationWithBasis(p, transposedMountBasis) as [number, number, number],
+        ),
       },
     };
 
     for (const [mode, { chain, points }] of Object.entries(mutants)) {
       const minError = Math.min(
         ...points.map((p, index) => {
+          const expected = expectedWorlds[index]!;
           const worldPoint = applyAssemblyPlacement(chain, p);
           return Math.hypot(
-            worldPoint[0] - expectedWorlds[index][0],
-            worldPoint[1] - expectedWorlds[index][1],
-            worldPoint[2] - expectedWorlds[index][2],
+            worldPoint[0]! - expected[0],
+            worldPoint[1]! - expected[1],
+            worldPoint[2]! - expected[2],
           );
         }),
       );

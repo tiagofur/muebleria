@@ -27,9 +27,9 @@ function splitChunks(container: Uint8Array): [string, Uint8Array] {
   const binHeaderOffset = 20 + jsonLength;
   if (binHeaderOffset + 8 <= container.length) {
     const binLength = view.getUint32(binHeaderOffset, true);
-    binChunk = container.subarray(binHeaderOffset + 8, binHeaderOffset + 8 + binLength);
+    binChunk = new Uint8Array(container.subarray(binHeaderOffset + 8, binHeaderOffset + 8 + binLength));
   }
-  return [jsonText, binChunk];
+  return [jsonText, binChunk as Uint8Array];
 }
 
 function rebuildContainer(jsonText: string): Uint8Array {
@@ -111,7 +111,7 @@ describe('glbRepresentation container reader', () => {
 
   it('rejects a length that does not match the byte count', () => {
     const mutated = new Uint8Array(canonicalGlb);
-    mutated[8] = mutated[8] + 4;
+    mutated[8] = (mutated[8] ?? 0) + 4;
     expect(() => parseGlbContainer(mutated)).toThrow(GlbFormatError);
   });
 
@@ -131,7 +131,7 @@ describe('glbRepresentation container reader', () => {
     };
 
     const withExternalBuffer = rebuild((doc) => {
-      (doc.buffers as { uri?: string }[])[0].uri = 'https://external.example/bracket.bin';
+      (doc.buffers as { uri?: string }[])[0]!.uri = 'https://external.example/bracket.bin';
     });
     expect(
       validateGlbSelfContainedPolicy(withExternalBuffer).join('\n'),
@@ -186,18 +186,19 @@ describe('glbRepresentation container reader', () => {
       const segments = path.split('.');
       let current: unknown = doc;
       for (let i = 0; i < segments.length - 1; i++) {
-        const key = segments[i];
+        const key = segments[i]!;
         const container = current as Record<string, unknown>;
         const next: unknown = container[key];
-        if (i + 1 < segments.length && /^\d+$/.test(segments[i + 1] ?? '')) {
+        const nextSegment = segments[i + 1];
+        if (nextSegment !== undefined && /^\d+$/.test(nextSegment)) {
           const array = next as unknown[];
-          current = array[Number(segments[i + 1])];
+          current = array[Number(nextSegment)];
           i += 1;
         } else {
           current = next;
         }
       }
-      (current as Record<string, unknown>)[segments[segments.length - 1]] = value;
+      (current as Record<string, unknown>)[segments[segments.length - 1]!] = value;
     };
 
     for (const testCase of contract.cases) {

@@ -221,6 +221,23 @@ export interface HardwareVisualAssetBinding {
   readonly representation?: 'skp' | 'glb' | 'thumbnail';
   readonly sha256?: string;
   readonly validationState?: 'pending' | 'validated' | 'failed';
+  /**
+   * Server-resolved GLB co-representation (#669): when the binding pins an SKP
+   * revision this carries the derived GLB revision for web consumers (absent
+   * when none exists — partial capability, rendered procedurally); when the
+   * binding pins a GLB revision directly it mirrors that revision itself.
+   */
+  readonly glb?: HardwareVisualGlbBinding;
+}
+
+/** Exact GLB revision reference with the declared coordinate space of the file. */
+export interface HardwareVisualGlbBinding {
+  readonly revisionId: string;
+  readonly sha256: string;
+  readonly sourceRevisionId?: string;
+  readonly sizeBytes?: number;
+  readonly sourceUnits?: 'mm' | 'cm' | 'm' | 'inch';
+  readonly upAxis?: 'y' | 'z';
 }
 
 /**
