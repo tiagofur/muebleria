@@ -25,9 +25,9 @@
 
 import type {
   PtxDocument,
+  PtxDocumentedPatternType,
   PtxGrain,
   PtxHeaderRecord,
-  PtxPatternType,
   PtxPartReference,
   PtxRecord,
   PtxTrimType,
@@ -333,7 +333,11 @@ function parsePartReference(raw: string, lineNo: number): PtxPartReference {
 // Row → record
 // ---------------------------------------------------------------------------
 
-function parseHeaderRow(cells: readonly string[], lineNo: number): PtxHeaderRecord {
+/**
+ * HEADER row → typed record (#788: also consumed by the external-dialect
+ * reader). Pure; exported for reuse by readers only.
+ */
+export function parseHeaderRow(cells: readonly string[], lineNo: number): PtxHeaderRecord {
   const c = new CellCursor(cells, lineNo, 'HEADER');
   return {
     type: 'HEADER',
@@ -345,7 +349,13 @@ function parseHeaderRow(cells: readonly string[], lineNo: number): PtxHeaderReco
   };
 }
 
-function parseRecordRow(family: string, cells: readonly string[], lineNo: number): PtxRecord {
+/**
+ * Row → typed record for a modeled family (#788: also consumed by the
+ * external-dialect reader, which pre-trims unquoted cells and slices rows to
+ * the implemented width before delegating). Pure; exported for reuse by
+ * readers only — never by writers.
+ */
+export function parseRecordRow(family: string, cells: readonly string[], lineNo: number): PtxRecord {
   const c = new CellCursor(cells, lineNo, family);
   switch (family) {
     case 'JOBS':
@@ -360,7 +370,10 @@ function parseRecordRow(family: string, cells: readonly string[], lineNo: number
         status: c.optionalInt(6, 'STATUS'),
         optParam: c.optionalText(7),
         sawParam: c.optionalText(8),
-        cutTime: c.optionalReal(9, 'CUT_TIME'),
+        // §20 p.167 'CUT_TIME Total cut time INT' + §5 p.121 'Total cutting
+        // time for the job in seconds': INT contract — decimals are a parse
+        // error, not an alternate representation.
+        cutTime: c.optionalInt(9, 'CUT_TIME'),
         wastePercent: c.optionalReal(10, 'WASTE_PCNT'),
       };
     case 'PARTS_REQ':
@@ -413,17 +426,31 @@ function parseRecordRow(family: string, cells: readonly string[], lineNo: number
         rule3: c.optionalInt(17, 'RULE3'),
         rule4: c.optionalInt(18, 'RULE4'),
       };
-    case 'PATTERNS':
+    case 'PATTERNS': {
+      // #788 review r3: the READER represents the full documented domain
+      // INT 0-8 (§20 p.175) so the spec preflight can observe 5..8
+      // (grain-matching templates, S12) as SPEC-valid; the PRODUCT subset
+      // rejection lives in validate.ts, never in the parser. Only values
+      // outside the documented range are parse/spec-invalid.
+      const patternTypeRaw = c.int(3, 'TYPE');
+      if (patternTypeRaw < 0 || patternTypeRaw > 8) {
+        throw new PtxParseError(
+          'INVALID_ENUM_VALUE',
+          `PATTERNS.TYPE: ${patternTypeRaw} is outside the documented Pattern Exchange range 0-8 [S03 §20 p.175 'TYPE Pattern type INT 0-8']`,
+          lineNo,
+        );
+      }
       return {
         type: 'PATTERNS',
         jobIndex: c.int(0, 'JOB_INDEX'),
         patternIndex: c.int(1, 'PTN_INDEX'),
         boardIndex: c.int(2, 'BRD_INDEX'),
-        patternType: c.enum<PtxPatternType>(3, 'TYPE', [0, 1, 2, 3, 4]),
+        patternType: patternTypeRaw as PtxDocumentedPatternType,
         runQuantity: c.optionalInt(4, 'QTY_RUN'),
         cyclesQuantity: c.optionalInt(5, 'QTY_CYCLES'),
         maxBook: c.optionalInt(6, 'MAX_BOOK'),
       };
+    }
     case 'CUTS':
       return {
         type: 'CUTS',

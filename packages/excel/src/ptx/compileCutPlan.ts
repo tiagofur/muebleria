@@ -136,6 +136,7 @@ import {
 } from './records';
 import type { ScopedRegionRef } from './scopedRegionRef';
 import { PtxDocumentInvalidError, validatePtxDocument } from './validate';
+import { PTX_SPEC_PREFLIGHT_REVISION, ptxSpecPreflightDocument } from './specPreflight';
 
 // ---------------------------------------------------------------------------
 // Public contract
@@ -199,6 +200,18 @@ export interface CompileCutPlanToPtxOptions {
   readonly partCodeAuthority?: 'workshop-labelref';
   /** Hard length limit for PARTS_REQ.CODE under partCodeAuthority (r4: 50). */
   readonly partCodeMaxLength?: number;
+  /**
+   * r5 spec preflight (#788): when 'pattern-exchange-v1', the compiled
+   * document must ALSO pass the strict Pattern Exchange limit validator
+   * (documented text/index/header limits with primary-source locators)
+   * before compilation can return. Fail-closed on the FIRST violating
+   * candidate bytes: nothing is truncated, renamed or silently repaired —
+   * ptx_compile.spec_preflight_failed carries the ptx_spec.* issues. r2/r3/r4
+   * do not set it (frozen history: their 31/43-char TITLEs are exactly what
+   * this gate exists to block for future revisions). The serialized-bytes
+   * side of the same boundary is serializePtxDocumentBytesSpecChecked.
+   */
+  readonly strictSpecPreflight?: typeof PTX_SPEC_PREFLIGHT_REVISION;
 }
 
 /** Per-sheet slice of the inverse table linking durable identities to local PTX indexes. */
@@ -258,6 +271,7 @@ export type PtxCompilationErrorCode =
   | 'ptx_compile.part_code_missing'
   | 'ptx_compile.part_code_too_long'
   | 'ptx_compile.part_code_duplicate'
+  | 'ptx_compile.spec_preflight_failed'
   | 'ptx_compile.material_thickness_missing'
   | 'ptx_compile.material_conflict'
   | 'ptx_compile.material_without_boards'
@@ -1172,6 +1186,16 @@ export function compileCutPlanToPtxDocument(
       { offcutCutMarkers: options.offcutCutMarkers },
     );
   }
+  if (
+    options.strictSpecPreflight !== undefined &&
+    options.strictSpecPreflight !== PTX_SPEC_PREFLIGHT_REVISION
+  ) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      `strictSpecPreflight sólo implementa '${PTX_SPEC_PREFLIGHT_REVISION}' (#788: el conjunto documentado de límites Pattern Exchange)`,
+      { strictSpecPreflight: options.strictSpecPreflight },
+    );
+  }
   if (cutPlan.sheets.length === 0) {
     throw new PtxCompilationError(
       'ptx_compile.no_sheets',
@@ -1585,6 +1609,24 @@ export function compileCutPlanToPtxDocument(
   const issues = validatePtxDocument(document);
   if (issues.length > 0) {
     throw new PtxDocumentInvalidError(issues);
+  }
+
+  // #788 strict spec preflight (r5 groundwork): candidate revisions that
+  // declare 'pattern-exchange-v1' cannot even produce a DOCUMENT that
+  // violates a documented Pattern Exchange limit. Fail closed with every
+  // ptx_spec.* issue — the value is never truncated or rewritten. r2/r3/r4
+  // never reach this branch (option absent → frozen bytes unchanged).
+  if (options.strictSpecPreflight === PTX_SPEC_PREFLIGHT_REVISION) {
+    const specIssues = ptxSpecPreflightDocument(document);
+    if (specIssues.length > 0) {
+      throw new PtxCompilationError(
+        'ptx_compile.spec_preflight_failed',
+        `El candidato viola límites documentados de Pattern Exchange (${specIssues.length}); no se trunca ni reescribe nada: ${specIssues
+          .map((issue) => issue.message)
+          .join('; ')}`,
+        { specIssues },
+      );
+    }
   }
 
   return {

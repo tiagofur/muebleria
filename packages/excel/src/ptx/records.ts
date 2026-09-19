@@ -62,6 +62,16 @@ export const PTX_PATTERN_TYPE = {
 export type PtxPatternType = (typeof PTX_PATTERN_TYPE)[keyof typeof PTX_PATTERN_TYPE];
 
 /**
+ * The DOCUMENTED Pattern Exchange domain of PATTERNS.TYPE is INT 0-8
+ * (§20 p.175). The record model carries the documented domain so readers
+ * (parser, spec preflight) can represent and inspect every documented value:
+ * 5–8 are SPEC-valid grain-matching templates (S12). The candidate's
+ * productive subset remains PTX_PATTERN_TYPE (0–4) — validate.ts/compiler
+ * own that PRODUCT restriction and nothing here enables emitting 5–8.
+ */
+export type PtxDocumentedPatternType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+/**
  * CUTS FUNCTION dictionary [S03 pp.142–145; table p.178; S05]. Supporting a
  * code in the schema does NOT mean the target saw can execute that depth —
  * machine profiles govern the allowed subset.
@@ -241,7 +251,8 @@ export interface PtxPatternRecord {
   readonly jobIndex: number;
   readonly patternIndex: number;
   readonly boardIndex: number;
-  readonly patternType: PtxPatternType;
+  /** Documented domain 0–8 (§20 p.175); the productive subset is PTX_PATTERN_TYPE. */
+  readonly patternType: PtxDocumentedPatternType;
   readonly runQuantity?: number;
   readonly cyclesQuantity?: number;
   readonly maxBook?: number;

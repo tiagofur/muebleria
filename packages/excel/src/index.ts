@@ -182,6 +182,7 @@ export {
   type PtxPartReference,
   type PtxPartsReqRecord,
   type PtxPatternRecord,
+  type PtxDocumentedPatternType,
   type PtxPatternType,
   type PtxRecord,
   type PtxRecordType,
@@ -214,6 +215,50 @@ export {
   type PtxValidationIssue,
 } from './ptx/validate';
 export { ptxDocumentDifference, ptxDocumentsEqual } from './ptx/equivalence';
+
+// --- Strict Pattern Exchange spec preflight + external-dialect reader (#788,
+// r5 groundwork): documented field/index/header limits with primary-source
+// locators, an independent bytes-level validator, the fail-closed spec-checked
+// serialization boundary, and a tolerant structural reader for external
+// evidence files (R2201/R7301 shape). ---
+export {
+  PTX_SPEC_LIMITS,
+  PTX_SPEC_PREFLIGHT_REVISION,
+  PtxSpecPreflightError,
+  classifyPtxDocumentedEnumSupport,
+  ptxSpecPreflightBytes,
+  ptxSpecPreflightDocument,
+  serializePtxDocumentBytesSpecChecked,
+  type PtxSpecCapabilityVerdict,
+  type PtxSpecDimLimit,
+  type PtxSpecIntEnumLimit,
+  type PtxSpecIntFormLimit,
+  type PtxSpecIntRangeLimit,
+  type PtxSpecIntRangesLimit,
+  type PtxSpecIssue,
+  type PtxSpecIssueCode,
+  type PtxSpecLimit,
+  type PtxSpecLimitAuthority,
+  type PtxSpecLimitClassification,
+  type PtxSpecPreflightRevision,
+  type PtxSpecQtyLimit,
+  type PtxSpecTextLimit,
+} from './ptx/specPreflight';
+export {
+  PTX_DOCUMENTED_UNMODELED_FAMILIES,
+  hasPtxExternalShape,
+  parsePtxExternalBytes,
+  parsePtxExternalText,
+  ptxExternalColumnPresence,
+  type PtxDocumentedUnmodeledFamily,
+  type PtxExternalCellPresence,
+  type PtxExternalHeaderRow,
+  type PtxExternalModeledRow,
+  type PtxExternalReadback,
+  type PtxExternalRow,
+  type PtxExternalRowShape,
+  type PtxExternalUnmodeledRow,
+} from './ptx/externalDialect';
 
 // --- CutProgram → PTX compiler (#650 PR 5): compiles the real optimizer cut
 // program into the documented PTX subset above, with an inverse index mapping
