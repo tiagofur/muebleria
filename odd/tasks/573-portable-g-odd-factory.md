@@ -105,6 +105,12 @@ role skills, `CHECKPOINTS.md`, `feature_list.json`, `progress/current.md`,
     told the writer to commit the already-created decision record.
   - Outcome: semantic drift guard and artifact advance directly to fresh review and
     authorized parent publication.
+- [x] **GODD-C4 — Correct PR delivery and closure semantics**
+  - Route: strict-TDD mechanical correction; no contract or scope change.
+  - Trigger evidence: PR #800 delivers the bounded G-ODD migration, while historical
+    issue #573 still contains broader incomplete factory scope.
+  - Outcome: the execution artifact records partial delivery without claiming issue
+    completion or closure.
 
 ## Verification plan
 
@@ -118,7 +124,7 @@ role skills, `CHECKPOINTS.md`, `feature_list.json`, `progress/current.md`,
 - After final clean commit: `python3 scripts/factory_preflight.py --require-clean`.
 
 TDD mode was not configured for the original documentation migration. Strict TDD
-is enabled for GODD-C3; its focused RED/GREEN evidence is recorded below. Ordinary
+is enabled for GODD-C3 and GODD-C4; focused RED/GREEN evidence is recorded below. Ordinary
 contract tests and the repository-authoritative factory checks still apply.
 
 ## Delivery forecast
@@ -197,9 +203,17 @@ contract tests and the repository-authoritative factory checks still apply.
   failed because the current Next step still contained `commit`.
 - 2026-09-19: GODD-C3 GREEN — the same focused test passed after the Next step
   advanced directly to fresh independent review and authorized parent publication.
+- 2026-09-19: GODD-C4 RED —
+  `python3 -m unittest scripts.test_factory_workflow_contract.WorkflowContractTest.test_execution_artifact_records_partial_pr_delivery_without_closure -v`
+  failed because the artifact did not yet record PR #800.
+- 2026-09-19: PR #800 uses `Refs #573` with `Delivery: partial`. The G-ODD migration
+  is delivered by this PR, but historical #573 remains incomplete and open. This
+  delivery does not claim complete issue closure.
+- 2026-09-19: GODD-C4 GREEN — the same focused test passed after recording the
+  truthful partial-delivery/open-issue boundary.
 
 ## Next step
 
-Obtain a fresh independent re-review of the new exact HEAD. If approved, the parent
-may publish one PR under the authorized size exception for human review. Merge and
-issue closure remain human actions.
+Obtain a fresh independent re-review of the new exact HEAD and the PR #800 partial
+delivery record. If approved, the parent may publish this correction to PR #800 for
+human review. Merge and any later issue closure remain human actions.

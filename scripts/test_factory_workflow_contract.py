@@ -207,7 +207,10 @@ class WorkflowContractTest(unittest.TestCase):
         next_step = self.section(self.task_artifact, "## Next step", "\n## ").lower()
         self.assertIn("fresh independent re-review", next_step)
         self.assertIn("exception-ok", artifact)
-        self.assertIn("publish one pr", next_step)
+        self.assertRegex(
+            next_step,
+            r"publish(?:\s+one\s+pr|\s+this\s+correction\s+to\s+pr\s+#800)",
+        )
         if "exception-ok" in artifact:
             self.assertIsNone(
                 re.search(r"\b(?:commit|committing|create a commit)\b", next_step),
@@ -220,6 +223,29 @@ class WorkflowContractTest(unittest.TestCase):
         ):
             with self.subTest(pattern=pending_pattern):
                 self.assertIsNone(re.search(pending_pattern, next_step))
+
+    def test_execution_artifact_records_partial_pr_delivery_without_closure(self):
+        paragraphs = [
+            paragraph.lower()
+            for paragraph in re.split(r"\n\s*\n", self.task_artifact)
+            if "pr #800" in paragraph.lower()
+        ]
+        self.assertTrue(paragraphs, "The execution artifact must record PR #800")
+        delivery = "\n".join(paragraphs)
+        self.assertRegex(delivery, r"refs\s+#573")
+        self.assertRegex(delivery, r"delivery:\s*partial")
+        self.assertRegex(delivery, r"g-odd migration[\s\S]{0,120}delivered")
+        self.assertRegex(
+            delivery,
+            r"historical\s+#573[\s\S]{0,120}(?:incomplete|open)",
+        )
+        for false_closure in (
+            r"delivery:\s*complete",
+            r"(?:closes|fixes|resolves)\s+#573",
+            r"historical\s+#573[\s\S]{0,80}(?:completed|closed)",
+        ):
+            with self.subTest(pattern=false_closure):
+                self.assertIsNone(re.search(false_closure, delivery))
 
 
 if __name__ == "__main__":
