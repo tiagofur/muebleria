@@ -78,7 +78,7 @@ role skills, `CHECKPOINTS.md`, `feature_list.json`, `progress/current.md`,
   - Trigger evidence: leader/implementer/reviewer plus checkpoints, README, init,
     feature catalog metadata, progress ledger, and related reference docs must agree.
   - Outcome: roles consume G-ODD; legacy catalog/session-loop contradictions removed.
-- [ ] **GODD-3 — Pin the contract with tests and verification guidance**
+- [x] **GODD-3 — Pin the contract with tests and verification guidance**
   - Route: delegated direct (same single writer).
   - Trigger evidence: multi-file verification rules and drift guards; execution
     commands are delegated verification work under the authorized writer handoff.
@@ -129,8 +129,22 @@ contract tests and the repository-authoritative factory checks apply.
   execution; and corrected README, init, Git workflow, reference, and status docs.
   `python3 -m json.tool feature_list.json`, `bash -n init.sh`, and
   `git diff --check` passed before commit.
+- 2026-09-19: GODD-2 work-unit commit:
+  `5a255c112f28d054eaf390c12cb46411d72b2b97`.
+- 2026-09-19: GODD-3 added V0/V1/V2 candidate guidance to
+  `docs/verification.md` and replaced legacy string checks with eight portable
+  G-ODD drift tests in `scripts/test_factory_workflow_contract.py`.
+- 2026-09-19: Final pre-commit verification passed: `git diff --check`, JSON
+  parsing, `bash -n init.sh`, 33 factory tests, 16 publication metadata tests,
+  and read-only preflight (`PREFLIGHT_OK_NOT_VERIFIED`, tests `NOT_RUN`).
+  `verify_affected.py --base origin/main --plan` succeeded and conservatively
+  selected every product gate because global/tooling process inputs changed; this
+  plan is not product PASS and no product-code claim is made.
+- 2026-09-19: GODD-3 is the final work-unit commit containing this evidence; its
+  exact SHA is supplied in the handoff after commit creation.
 
 ## Next step
 
-Create the GODD-2 work-unit commit, record its identity, then pin the contract with
-factory tests and verification guidance under `GODD-3`.
+Create the GODD-3 work-unit commit, run the clean-tree preflight, mirror this final
+artifact, and hand the exact branch state to the parent for independent review and
+the over-budget delivery decision. Do not push or open a PR from this writer.

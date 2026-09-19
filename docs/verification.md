@@ -8,15 +8,54 @@
 ## 1. Principios
 
 1. Un test verde local es evidencia, no permiso para ignorar CI.
-2. `./init.sh` debe fallar de verdad si el entorno o los tests obligatorios fallan.
+2. `factory_preflight.py` is the routine read-only start; `./init.sh` must fail
+   truthfully when the historical full harness is explicitly required.
 3. Si una métrica, workflow o permiso cambió, probar el comportamiento, no sólo tipos.
 4. Exports físicos requieren fixture/golden/round-trip apropiado.
 5. TS↔Go duplicado requiere fixtures de contrato, no fe manual.
-6. Ninguna feature se marca `done` si falta evidencia exigida por su aceptación.
+6. No issue delivery is complete while its acceptance requires missing evidence.
 
 ---
 
-## 2. Gate local base
+## 2. Portable G-ODD verification
+
+Verification is selected by the claim, not by which agent or adapter is running:
+
+| Level | Question | Examples |
+| --- | --- | --- |
+| **V0 — Structural** | Is the candidate well-formed? | diff/readback, syntax, format, schema, generated drift |
+| **V1 — Functional** | Does affected behavior satisfy its contract? | unit, contract, integration, migration, positive/negative paths |
+| **V2 — Operational** | Does the real boundary work? | browser, PostgreSQL/RLS, SketchUp/TestUp, receiver or machine readback |
+
+Run every level applicable to the issue and delivery claim. A level blocked by
+missing infrastructure is `NOT_RUN` or `BLOCKED`, not PASS. Focused/jsdom evidence
+does not prove a real browser; compiler/serializer evidence does not prove a host,
+receiver, or physical machine.
+
+The candidate rhythm is: focused checks while implementing, final source-mutating
+normalization, freeze exact HEAD/base, one conservative affected verification run,
+fresh independent review, then current remote CI. A new HEAD invalidates review,
+CI, and handoff evidence for the previous candidate.
+
+CI validates a prepared frozen candidate; it is not the debugger. Diagnose failures
+locally, do not publish speculative commits merely to query CI, and never interpret
+an empty, stale, missing, cancelled, or required skipped result set as success.
+
+Routine structural start:
+
+```bash
+python3 scripts/factory_preflight.py
+python3 scripts/verify_affected.py --base origin/main --plan
+```
+
+`factory_preflight.py` remains read-only and returns
+`PREFLIGHT_OK_NOT_VERIFIED`. `verify_affected.py` is conservative: invalid or
+uncertain paths/pins expand verification rather than reducing it. Neither tool
+replaces issue-specific V1/V2 acceptance.
+
+---
+
+## 2A. Historical full local harness
 
 ```bash
 ./init.sh
@@ -121,10 +160,11 @@ PKs globales de `material_stock`/`project_picking` (migración 000091), cuyos
 
 ## 4. CI remoto
 
-Operational Core OC-002 implementa los required checks en `.github/workflows/ci.yml`:
+Operational Core OC-002 implements the remote checks in `.github/workflows/ci.yml`.
+Their result is evidence only for the exact tested commit and base:
 
 ```text
-1. feature-list/schema validation
+1. feature-list catalog/schema validation (not queue or ownership validation)
 2. pnpm install + typecheck + test (pnpm según packageManager)
 3. go test -v ./... con service container de Postgres (DATABASE_URL), para que
    los tests de integración de storage corran en vez de saltarse con t.Skip
