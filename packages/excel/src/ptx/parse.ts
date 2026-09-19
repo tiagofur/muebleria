@@ -25,18 +25,14 @@
 
 import type {
   PtxDocument,
+  PtxDocumentedPatternType,
   PtxGrain,
   PtxHeaderRecord,
-  PtxPatternType,
   PtxPartReference,
   PtxRecord,
   PtxTrimType,
   PtxUnits,
 } from './records';
-import { PTX_PATTERN_TYPE } from './records';
-
-/** Candidate subset of the documented PATTERNS.TYPE 0-8 (writer capability data). */
-const PATTERN_TYPE_PRODUCT_SUBSET: readonly PtxPatternType[] = Object.values(PTX_PATTERN_TYPE);
 
 export type PtxParseErrorCode =
   | 'NOT_PRINTABLE_ASCII'
@@ -374,7 +370,10 @@ export function parseRecordRow(family: string, cells: readonly string[], lineNo:
         status: c.optionalInt(6, 'STATUS'),
         optParam: c.optionalText(7),
         sawParam: c.optionalText(8),
-        cutTime: c.optionalReal(9, 'CUT_TIME'),
+        // §20 p.167 'CUT_TIME Total cut time INT' + §5 p.121 'Total cutting
+        // time for the job in seconds': INT contract — decimals are a parse
+        // error, not an alternate representation.
+        cutTime: c.optionalInt(9, 'CUT_TIME'),
         wastePercent: c.optionalReal(10, 'WASTE_PCNT'),
       };
     case 'PARTS_REQ':
@@ -428,12 +427,11 @@ export function parseRecordRow(family: string, cells: readonly string[], lineNo:
         rule4: c.optionalInt(18, 'RULE4'),
       };
     case 'PATTERNS': {
-      // Two distinct failures, never conflated (#788 review): outside the
-      // documented Pattern Exchange range 0-8 = spec-invalid; inside 0-8 but
-      // in 5..8 = documented grain-matching templates (S12) that this
-      // candidate's subset does not support — SPEC_VALID but product
-      // unsupported, and the message must not call it "invalid Pattern
-      // Exchange".
+      // #788 review r3: the READER represents the full documented domain
+      // INT 0-8 (§20 p.175) so the spec preflight can observe 5..8
+      // (grain-matching templates, S12) as SPEC-valid; the PRODUCT subset
+      // rejection lives in validate.ts, never in the parser. Only values
+      // outside the documented range are parse/spec-invalid.
       const patternTypeRaw = c.int(3, 'TYPE');
       if (patternTypeRaw < 0 || patternTypeRaw > 8) {
         throw new PtxParseError(
@@ -442,19 +440,12 @@ export function parseRecordRow(family: string, cells: readonly string[], lineNo:
           lineNo,
         );
       }
-      if (!(PATTERN_TYPE_PRODUCT_SUBSET as readonly number[]).includes(patternTypeRaw)) {
-        throw new PtxParseError(
-          'INVALID_ENUM_VALUE',
-          `PATTERNS.TYPE: ${patternTypeRaw} is documented Pattern Exchange (0-8; 5-8 are grain-matching templates, S12) but outside this candidate's supported subset [${PATTERN_TYPE_PRODUCT_SUBSET.join(', ')}] — fail closed without labeling it invalid Pattern Exchange`,
-          lineNo,
-        );
-      }
       return {
         type: 'PATTERNS',
         jobIndex: c.int(0, 'JOB_INDEX'),
         patternIndex: c.int(1, 'PTN_INDEX'),
         boardIndex: c.int(2, 'BRD_INDEX'),
-        patternType: patternTypeRaw as PtxPatternType,
+        patternType: patternTypeRaw as PtxDocumentedPatternType,
         runQuantity: c.optionalInt(4, 'QTY_RUN'),
         cyclesQuantity: c.optionalInt(5, 'QTY_CYCLES'),
         maxBook: c.optionalInt(6, 'MAX_BOOK'),

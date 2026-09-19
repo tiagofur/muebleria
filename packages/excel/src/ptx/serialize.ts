@@ -193,7 +193,10 @@ function jobLine(r: PtxJobRecord, f: Fmt): string {
     f.optInt(r.status, 'JOBS.STATUS'),
     f.optText(r.optParam, 'JOBS.OPT_PARAM'),
     f.optText(r.sawParam, 'JOBS.SAW_PARAM'),
-    f.optNum(r.cutTime, 'JOBS.CUT_TIME', f.real),
+    // §20 p.167 'CUT_TIME Total cut time INT': integer-only representation
+    // (a decimal CUT_TIME fails closed; absent serializes as the empty cell,
+    // which is what the frozen r2/r3/r4 goldens carry).
+    f.optInt(r.cutTime, 'JOBS.CUT_TIME'),
     f.optNum(r.wastePercent, 'JOBS.WASTE_PCNT', f.real),
   ].join(',');
 }

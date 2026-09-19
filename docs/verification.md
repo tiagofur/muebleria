@@ -489,17 +489,23 @@ Cobertura contractual exigida por #788:
   r2/r3/r4);
 - índices consecutivos/únicos/desde 1 y referencias por job (PART/BOARD/
   MATERIAL/PATTERN/Xn/JOBS) re-derivadas sin compartir código con validate.ts;
-- rangos DIM/QTY del diccionario (revisión independiente): DIM 9999.9 mm /
+- rangos DIM/QTY del diccionario (revisión): DIM 9999.9 mm /
   999.9 in PASS y 10000 / 1000 BLOCK según HEADER.UNITS, DIM negativo BLOCK,
-  QTY 99999 PASS / 100000 BLOCK, cobertura de todos los campos DIM/QTY
-  modelados, también sobre bytes mutados;
+  QTY 99999 PASS / 100000 BLOCK / QTY decimal 1.5 BLOCK (LONG INTEGER
+  documentado), cobertura de todos los campos DIM/QTY modelados, también
+  sobre bytes mutados;
 - enums/ranges documentados como SPEC (revisión): RULE1 1..9, RULE2/3/4 {0,1},
-  GRAIN {0,1,2}, JOBS.STATUS {0,1,2}, PATTERNS.TYPE 0..8, CUTS.FUNCTION
-  0..9 ∪ 90..99 — con la taxonomía tipada SPEC_INVALID /
+  GRAIN {0,1,2}, PATTERNS.TYPE 0..8, CUTS.FUNCTION 0..9 ∪ 90..99,
+  JOBS.STATUS/CUT_TIME/CUTS.SEQUENCE como forma INT (STATUS con 0/1/2
+  conocidos NO exhaustivos: otros enteros no son spec-invalid por valor;
+  sólo decimales bloquean) — con la taxonomía tipada SPEC_INVALID /
   SPEC_VALID_BUT_PRODUCT_UNSUPPORTED / PRODUCT_SUPPORTED
-  (`classifyPtxDocumentedEnumSupport`) sin habilitar capacidad nueva (TYPE
-  5..8 y FUNCTION 4..9/90/91/93..99 no reciben issue de spec; los rechaza
-  validate.ts como política de producto; el parser distingue ambos mensajes);
+  (`classifyPtxDocumentedEnumSupport`) sin habilitar capacidad nueva Y
+  VIGENTE EN BYTES: el lector representa TYPE 0..8
+  (`PtxDocumentedPatternType`) para que bytes con TYPE=6 queden sin spec
+  issue (clasificación SPEC_VALID_BUT_PRODUCT_UNSUPPORTED; producto
+  fail-closed vía validate/serialize) y bytes con TYPE=9 sean spec-error
+  con el rango documentado;
 - JOBS opcional bajo la especificación (§5 p.120): sin filas JOBS y un único
   job implícito es SPEC-válido; dos JOB_INDEX sin JOBS →
   `job_scope_ambiguous` fail-closed; el compiler de Granete sigue emitiendo

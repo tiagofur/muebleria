@@ -141,8 +141,9 @@ export interface PtxSpecDimLimit {
 
 /**
  * Dictionary QTY type (§20 p.166): "A long integer used to store quantity.
- * No quantity can be greater than 99999." Only the documented MAXIMUM is
- * enforced — minima and integrality semantics stay product/domain policy.
+ * No quantity can be greater than 99999." Both documented properties are
+ * enforced: LONG INTEGER (a decimal QTY is spec-invalid) and the MAXIMUM.
+ * Minima stay product/domain policy.
  */
 export interface PtxSpecQtyLimit {
   readonly kind: 'qty-max';
@@ -159,17 +160,35 @@ export interface PtxSpecIntRangesLimit {
   readonly authority: PtxSpecLimitAuthority;
 }
 
+/**
+ * Dictionary INT type FORM: the value must be an INTEGER when present.
+ * `knownValues` documents the KNOWN codes (e.g. JOBS.STATUS 0/1/2) WITHOUT
+ * claiming exhaustiveness — the guide itself warns for STATUS that "there may
+ * be a range of other error codes" (§5 p.120), so other integers are NOT
+ * spec-invalid merely for being outside the known set. Restricting them is
+ * PRODUCT/RECEIVER policy, never this preflight.
+ */
+export interface PtxSpecIntFormLimit {
+  readonly kind: 'int-form';
+  readonly field: string;
+  readonly knownValues?: readonly number[];
+  readonly authority: PtxSpecLimitAuthority;
+}
+
 export type PtxSpecLimit =
   | PtxSpecTextLimit
   | PtxSpecIntRangeLimit
   | PtxSpecIntEnumLimit
   | PtxSpecDimLimit
   | PtxSpecQtyLimit
-  | PtxSpecIntRangesLimit;
+  | PtxSpecIntRangesLimit
+  | PtxSpecIntFormLimit;
 
 const P167 = 'S03 V11 Interface Guide §20 p.167';
 const P118 = 'S03 V11 Interface Guide §4 p.118';
 const P166 = 'S03 V11 Interface Guide §20 p.166';
+const QTY_QUOTE =
+  "S03 V11 Interface Guide §20 p.166 'QTY A long integer used to store quantity. No quantity can be greater than 99999.'";
 const DIM_QUOTE =
   "S03 V11 Interface Guide §20 p.166 'DIM Dimension. Number single. When working in millimetres these range from 0.0 to 9999.9. When working in decimal inches dimensions must range from 0.000 to 999.9'";
 
@@ -223,8 +242,14 @@ export const PTX_SPEC_LIMITS: readonly PtxSpecLimit[] = [
   { kind: 'int-range', field: 'CUTS.PART_INDEX_X', min: 1, max: 7500, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.178 \'PART_INDEX Part/Offcut Index TXT 1-9999 or X1-X7500\'') },
   // Enums/ranges of already-modeled fields, classified as SPEC here instead
   // of relying on validate.ts (whose checks stay as the product-side gate).
-  { kind: 'int-enum', field: 'JOBS.STATUS', values: [0, 1, 2], authority: SPEC_REQUIRED(`${P167} 'STATUS Job status INT 0,1,2'`) },
-  { kind: 'int-enum', field: 'PARTS_REQ.GRAIN', values: [0, 1, 2], authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.168 \'GRAIN Grain INT 0,1,2\'') },
+  // JOBS.STATUS is deliberately NOT an int-enum: the guide documents 0/1/2 as
+  // the KNOWN codes and explicitly warns "there may be a range of other error
+  // codes" (§5 p.120) — other integers are not spec-invalid by value; only
+  // the INT FORM is enforced here.
+  { kind: 'int-form', field: 'JOBS.STATUS', knownValues: [0, 1, 2], authority: SPEC_REQUIRED(`${P167} 'STATUS Job status INT 0,1,2' + §5 p.120 '0 - not optimised 1 - optimised 2 - optimise failed Note: there may be a range of other error codes' (conocidos, NO exhaustivos)`) },
+  { kind: 'int-form', field: 'JOBS.CUT_TIME', authority: SPEC_REQUIRED(`${P167} 'CUT_TIME Total cut time INT' + §5 p.121 'Total cutting time for the job in seconds'`) },
+  { kind: 'int-form', field: 'CUTS.SEQUENCE', authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.178 \'SEQUENCE Cut sequence INT Number-Integer\'') },
+  { kind: 'int-enum', field: 'PARTS_REQ.GRAIN', values: [0, 1, 2], authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.168 \'GRAIN Grain INT 0,1,2\' + §6 pp.122–123 enumera exactamente 0/1/2 sin salvedad') },
   { kind: 'int-enum', field: 'MATERIALS.RULE2', values: [0, 1], authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.174 \'RULE2 Optimising rule 2 INT 0,1\'') },
   { kind: 'int-enum', field: 'MATERIALS.RULE3', values: [0, 1], authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.174 \'RULE3 Optimising rule 3 INT 0,1\'') },
   { kind: 'int-enum', field: 'MATERIALS.RULE4', values: [0, 1], authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.174 \'RULE4 Optimising rule 4 INT 0,1\'') },
@@ -259,19 +284,19 @@ export const PTX_SPEC_LIMITS: readonly PtxSpecLimit[] = [
   { kind: 'dim-range', field: 'OFFCUTS.WIDTH', min: 0, metricMax: 9999.9, inchesMax: 999.9, authority: SPEC_REQUIRED(`${DIM_QUOTE} + §20 p.175 'WIDTH Offcut width DIM'`) },
   { kind: 'dim-range', field: 'CUTS.DIMENSION', min: 0, metricMax: 9999.9, inchesMax: 999.9, authority: SPEC_REQUIRED(`${DIM_QUOTE} + §20 p.178 'DIMENSION Size of cut DIM'`) },
   // Dictionary QTY type (§20 p.166): "No quantity can be greater than 99999."
-  { kind: 'qty-max', field: 'PARTS_REQ.QTY_REQ', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY … No quantity can be greater than 99999.' + §20 p.168 'QTY_REQ … QTY Max 99999'`) },
-  { kind: 'qty-max', field: 'PARTS_REQ.QTY_OVER', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.168 'QTY_OVER … QTY Max 99999'`) },
-  { kind: 'qty-max', field: 'PARTS_REQ.QTY_UNDER', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.168 'QTY_UNDER … QTY Max 99999'`) },
-  { kind: 'qty-max', field: 'PARTS_REQ.QTY_PROD', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.168 'QTY_PROD … QTY Max 99999'`) },
-  { kind: 'qty-max', field: 'BOARDS.QTY_STOCK', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.173 'QTY_STOCK … QTY Max 99999'`) },
-  { kind: 'qty-max', field: 'BOARDS.QTY_USED', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.173 'QTY_USED … QTY Max 99999'`) },
-  { kind: 'qty-max', field: 'MATERIALS.BOOK', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.173 'BOOK Max sheets per book QTY'`) },
-  { kind: 'qty-max', field: 'OFFCUTS.OFC_QTY', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.175 'OFC_QTY Offcut quantity QTY Max 99999'`) },
-  { kind: 'qty-max', field: 'PATTERNS.QTY_RUN', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.175 'QTY_RUN Run quantity QTY'`) },
-  { kind: 'qty-max', field: 'PATTERNS.QTY_CYCLES', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.175 'QTY_CYCLES Cycle quantity QTY'`) },
-  { kind: 'qty-max', field: 'PATTERNS.MAX_BOOK', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.175 'MAX_BOOK Max sheets per book QTY'`) },
-  { kind: 'qty-max', field: 'CUTS.QTY_RPT', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.178 'QTY_RPT Cut quantity QTY'`) },
-  { kind: 'qty-max', field: 'CUTS.QTY_PARTS', max: 99999, authority: SPEC_REQUIRED(`${P166} 'QTY …' + §20 p.178 'QTY_PARTS Total part quantity QTY Max 99999'`) },
+  { kind: 'qty-max', field: 'PARTS_REQ.QTY_REQ', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.168 'QTY_REQ … QTY Max 99999'`) },
+  { kind: 'qty-max', field: 'PARTS_REQ.QTY_OVER', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.168 'QTY_OVER … QTY Max 99999'`) },
+  { kind: 'qty-max', field: 'PARTS_REQ.QTY_UNDER', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.168 'QTY_UNDER … QTY Max 99999'`) },
+  { kind: 'qty-max', field: 'PARTS_REQ.QTY_PROD', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.168 'QTY_PROD … QTY Max 99999'`) },
+  { kind: 'qty-max', field: 'BOARDS.QTY_STOCK', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.173 'QTY_STOCK … QTY Max 99999'`) },
+  { kind: 'qty-max', field: 'BOARDS.QTY_USED', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.173 'QTY_USED … QTY Max 99999'`) },
+  { kind: 'qty-max', field: 'MATERIALS.BOOK', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.173 'BOOK Max sheets per book QTY'`) },
+  { kind: 'qty-max', field: 'OFFCUTS.OFC_QTY', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.175 'OFC_QTY Offcut quantity QTY Max 99999'`) },
+  { kind: 'qty-max', field: 'PATTERNS.QTY_RUN', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.175 'QTY_RUN Run quantity QTY'`) },
+  { kind: 'qty-max', field: 'PATTERNS.QTY_CYCLES', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.175 'QTY_CYCLES Cycle quantity QTY'`) },
+  { kind: 'qty-max', field: 'PATTERNS.MAX_BOOK', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.175 'MAX_BOOK Max sheets per book QTY'`) },
+  { kind: 'qty-max', field: 'CUTS.QTY_RPT', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.178 'QTY_RPT Cut quantity QTY'`) },
+  { kind: 'qty-max', field: 'CUTS.QTY_PARTS', max: 99999, authority: SPEC_REQUIRED(`${QTY_QUOTE} + §20 p.178 'QTY_PARTS Total part quantity QTY Max 99999'`) },
 ];
 
 const LIMIT_BY_FIELD = new Map(PTX_SPEC_LIMITS.map((limit) => [limit.field, limit]));
@@ -295,6 +320,8 @@ export type PtxSpecIssueCode =
   | 'ptx_spec.function_code_invalid'
   | 'ptx_spec.dimension_out_of_range'
   | 'ptx_spec.quantity_out_of_range'
+  | 'ptx_spec.quantity_not_integer'
+  | 'ptx_spec.int_not_integer'
   | 'ptx_spec.job_scope_ambiguous'
   | 'ptx_spec.parse_error';
 
@@ -562,7 +589,11 @@ function dimIssue(
   }
 }
 
-/** Dictionary QTY maximum ("No quantity can be greater than 99999"). */
+/**
+ * Dictionary QTY maximum AND integrality ("A long integer used to store
+ * quantity. No quantity can be greater than 99999." §20 p.166): a decimal QTY
+ * is spec-invalid independently of validate.ts.
+ */
 function qtyIssue(
   value: number,
   field: string,
@@ -571,7 +602,18 @@ function qtyIssue(
 ): void {
   const limit = LIMIT_BY_FIELD.get(field) as PtxSpecQtyLimit | undefined;
   if (!limit) return;
-  if (!Number.isFinite(value) || value > limit.max) {
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    issues.push({
+      code: 'ptx_spec.quantity_not_integer',
+      message: `${rowLabel} ${field}=${value} no es un entero (QTY documentado como LONG INTEGER; un QTY decimal es inválido de especificación)`,
+      field,
+      classification: limit.authority.classification,
+      locator: limit.authority.locator,
+      observed: value,
+    });
+    return;
+  }
+  if (value > limit.max) {
     issues.push({
       code: 'ptx_spec.quantity_out_of_range',
       message: `${rowLabel} ${field}=${value} supera el máximo QTY documentado (${limit.max})`,
@@ -584,12 +626,40 @@ function qtyIssue(
   }
 }
 
+/**
+ * Dictionary INT FORM: integer when present. Known codes (if any) are
+ * documented in the issue message WITHOUT exhaustiveness claims.
+ */
+function intFormIssue(
+  value: number,
+  field: string,
+  rowLabel: string,
+  issues: PtxSpecIssue[],
+): void {
+  const limit = LIMIT_BY_FIELD.get(field) as PtxSpecIntFormLimit | undefined;
+  if (!limit) return;
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    issues.push({
+      code: 'ptx_spec.int_not_integer',
+      message: `${rowLabel} ${field}=${value} no es un entero (INT documentado${limit.knownValues ? `; códigos conocidos [${limit.knownValues.join(', ')}], no exhaustivos` : ''})`,
+      field,
+      classification: limit.authority.classification,
+      locator: limit.authority.locator,
+      observed: value,
+    });
+  }
+}
+
 function checkRecordFields(record: PtxRecord, units: number, issues: PtxSpecIssue[]): void {
   const label = recordLabel(record);
   switch (record.type) {
     case 'JOBS':
       intRangeIssue(record.jobIndex, 'JOBS.JOB_INDEX', label, issues);
-      if (record.status !== undefined) enumIssue(record.status, 'JOBS.STATUS', label, issues);
+      // STATUS: INT FORM only — 0/1/2 are the documented KNOWN codes and the
+      // guide warns other error codes may exist (§5 p.120); other integers
+      // are NOT spec-invalid by value (restricting them is product policy).
+      if (record.status !== undefined) intFormIssue(record.status, 'JOBS.STATUS', label, issues);
+      if (record.cutTime !== undefined) intFormIssue(record.cutTime, 'JOBS.CUT_TIME', label, issues);
       textIssue(record.name, 'JOBS.NAME', label, issues);
       if (record.description !== undefined) textIssue(record.description, 'JOBS.DESC', label, issues);
       if (record.customer !== undefined) textIssue(record.customer, 'JOBS.CUSTOMER', label, issues);
@@ -666,6 +736,9 @@ function checkRecordFields(record: PtxRecord, units: number, issues: PtxSpecIssu
       intRangeIssue(record.jobIndex, 'JOBS.JOB_INDEX', label, issues);
       intRangeIssue(record.patternIndex, 'PATTERNS.PTN_INDEX', label, issues);
       intRangeIssue(record.cutIndex, 'CUTS.CUT_INDEX', label, issues);
+      // §20 p.178 'SEQUENCE Cut sequence INT': integer form by the spec's own
+      // authority (validate.ts also checks it — this is the independent gate).
+      intFormIssue(record.sequence, 'CUTS.SEQUENCE', label, issues);
       if (record.comment !== undefined) textIssue(record.comment, 'CUTS.COMMENT', label, issues);
       dimIssue(record.dimension, 'CUTS.DIMENSION', units, label, issues);
       qtyIssue(record.repeatQuantity, 'CUTS.QTY_RPT', label, issues);

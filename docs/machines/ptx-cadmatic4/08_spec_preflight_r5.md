@@ -84,7 +84,12 @@ Citas verbatim extraídas del PDF (2026-09-18):
 §20 p.166/174 — MATERIALS: RULE1 "INT 1-9" · RULE2/RULE3/RULE4 "INT 0,1"
 §20 p.168 — PARTS_REQ: GRAIN "INT 0,1,2" · LENGTH/WIDTH "DIM" ·
              QTY_REQ/QTY_OVER/QTY_UNDER/QTY_PROD "QTY Max 99999"
-§20 p.167 — JOBS: STATUS "INT 0,1,2"
+§20 p.167 — JOBS: STATUS "INT 0,1,2" · CUT_TIME "Total cut time INT"
+§5  p.120 — STATUS: "0 - not optimised 1 - optimised 2 - optimise failed Note:
+             there may be a range of other error codes" (conocidos, NO
+             exhaustivos) · CUT_TIME: "Total cutting time for the job in
+             seconds" (§5 p.121)
+§20 p.178 — CUTS: SEQUENCE "Cut sequence INT Number-Integer"
 §20 p.175 — PATTERNS: TYPE "INT 0-8" · QTY_RUN/QTY_CYCLES/MAX_BOOK "QTY"
 §5  p.120 — "This record contains data about each job contained in the file.
              These records are optional and in the absence of job records all
@@ -121,8 +126,10 @@ sigue `notClaimed`.
 | Referencias | JOB/MAT/BRD/PTN/PART/Xn/CUT deben apuntar a filas existentes del job correspondiente | SPEC_REQUIRED | §4 p.118 + tablas §20 |
 | JOBS opcional | sin filas JOBS, un único job implícito es SPEC-válido; >1 JOB_INDEX sin JOBS → `job_scope_ambiguous` (fail closed, no inventado) | SPEC_REQUIRED | §5 p.120 (cita arriba) |
 | Campos DIM modelados (PARTS_REQ/BOARDS/OFFCUTS LENGTH+WIDTH, MATERIALS THICK/KERF_RIP/KERF_XCT/TRIM_*, CUTS DIMENSION) | magnitud 0..9999.9 (mm) / 0..999.9 (in) según HEADER.UNITS; sólo magnitud — precisión y mínimos semánticos quedan en producto | SPEC_REQUIRED | §20 p.166 (DIM, cita verbatim) + filas DIM por registro |
-| Campos QTY modelados (PARTS_REQ QTY_REQ/OVER/UNDER/PROD, BOARDS QTY_STOCK/USED, MATERIALS BOOK, OFFCUTS OFC_QTY, PATTERNS QTY_RUN/CYCLES/MAX_BOOK, CUTS QTY_RPT/QTY_PARTS) | ≤ 99999; sólo el máximo documentado — mínimos/integralidad quedan en producto | SPEC_REQUIRED | §20 p.166 (QTY, cita verbatim) |
-| JOBS.STATUS | ∈ {0, 1, 2} | SPEC_REQUIRED | §20 p.167 |
+| Campos QTY modelados (PARTS_REQ QTY_REQ/OVER/UNDER/PROD, BOARDS QTY_STOCK/USED, MATERIALS BOOK, OFFCUTS OFC_QTY, PATTERNS QTY_RUN/CYCLES/MAX_BOOK, CUTS QTY_RPT/QTY_PARTS) | ENTERO (LONG INTEGER: decimal = spec-invalid) Y ≤ 99999; mínimos quedan en producto | SPEC_REQUIRED | §20 p.166 (QTY, cita verbatim: "A long integer … No quantity can be greater than 99999.") |
+| JOBS.STATUS | forma INT (entero); 0/1/2 = códigos CONOCIDOS, no exhaustivos ("there may be a range of other error codes") — otros enteros no son spec-invalid por valor | SPEC_REQUIRED (forma INT) | §20 p.167 + §5 p.120 |
+| JOBS.CUT_TIME | forma INT (segundos) cuando está presente — parser/serializer/preflight comparten el contrato entero | SPEC_REQUIRED | §20 p.167 'CUT_TIME Total cut time INT' + §5 p.121 |
+| CUTS.SEQUENCE | forma INT (chequeo propio del spec preflight, independiente de validate.ts) | SPEC_REQUIRED | §20 p.178 'SEQUENCE Cut sequence INT Number-Integer' |
 | PARTS_REQ.GRAIN | ∈ {0, 1, 2} | SPEC_REQUIRED | §20 p.168 |
 | MATERIALS.RULE1 | 1..9 | SPEC_REQUIRED | §20 p.174 |
 | MATERIALS.RULE2 / RULE3 / RULE4 | ∈ {0, 1} | SPEC_REQUIRED | §20 p.174 |
@@ -148,12 +155,16 @@ PRODUCT_SUPPORTED                   documentado Y dentro del subset productivo
 ```
 
 Casos concretos: `PATTERNS.TYPE` 5..8 (plantillas de veta, S12) y
-`CUTS.FUNCTION` 4..9 / 90 / 91 / 93..99 son SPEC_VALID_BUT_PRODUCT_UNSUPPORTED;
-el mensaje del parser para TYPE 5..8 lo dice explícitamente (fail closed del
-lector SIN etiquetarlos inválidos). Los subsets productivos siguen siendo los
-const históricos de `records.ts` (`PTX_PATTERN_TYPE` 0..4,
+`CUTS.FUNCTION` 4..9 / 90 / 91 / 93..99 son SPEC_VALID_BUT_PRODUCT_UNSUPPORTED.
+La separación vale en document Y EN BYTES (ronda 3): el reading model de
+`PATTERNS.TYPE` es el dominio documentado 0..8 (`PtxDocumentedPatternType`;
+el parser sólo rechaza <0/>8 como fuera de diccionario), de modo que el spec
+preflight de bytes OBSERVA TYPE 5..8 sin clasificarlos spec-error, y la capa
+productiva los sigue rechazando (validate.ts INVALID_ENUM_VALUE +
+serializePtxDocument rehúsa entregar bytes). Los subsets productivos siguen
+siendo los const históricos de `records.ts` (`PTX_PATTERN_TYPE` 0..4,
 `PTX_SUPPORTED_CUT_FUNCTION_CODES` [0,1,2,3,92]) — nada de esto habilita
-emisión nueva.
+emisión nueva (test lo congela).
 
 ### VECTORS y VERSION: decisiones explícitas
 
@@ -289,7 +300,7 @@ claims de compatibilidad, `NOT_TESTED/notClaimed` permanece.
 ## 7. Verificación
 
 ```sh
-pnpm --filter @granete/excel test    # specPreflight.test.ts (70) +
+pnpm --filter @granete/excel test    # specPreflight.test.ts (77) +
                                      # externalDialect.test.ts (22) + suite completa
 pnpm typecheck
 ```
@@ -307,14 +318,26 @@ Ronda de revisión independiente (segunda): fronteras DIM métrico 9999.9
 PASS / 10000 BLOCK · DIM pulgadas 999.9 PASS / 1000 BLOCK (según
 HEADER.UNITS) · DIM negativo BLOCK · QTY 99999 PASS / 100000 BLOCK (más
 cobertura de todos los campos QTY modelados) · DIM/QTY también sobre bytes
-mutados post-serialización · RULE1=10 / RULE2=2 / GRAIN=3 / JOBS.STATUS=4 /
+mutados post-serialización · RULE1=10 / RULE2=2 / GRAIN=3 /
 PATTERNS.TYPE=9 / FUNCTION=81 BLOCK como spec · FUNCTION=4 y TYPE=6 sin issue
 de spec (SPEC_VALID_BUT_PRODUCT_UNSUPPORTED, rechazados por validate.ts) ·
-parser distingue TYPE 9 (fuera de diccionario) de TYPE 6 (documentado, no
-soportado) · taxonomía completa `classifyPtxDocumentedEnumSupport` · JOBS
+taxonomía completa `classifyPtxDocumentedEnumSupport` · JOBS
 ausente con job único PASS / con dos jobs `job_scope_ambiguous` / compiler
 sigue emitiendo JOBS explícito · VERSION 1/1.06/1.08 PASS (sin pin) y el
 issue de VERSION no afirma "verificado".
+
+Ronda de revisión (tercera): STATUS 0/1/2/4/17 válidos (forma INT; conocidos
+no exhaustivos) y STATUS decimal BLOCK (`int_not_integer`) · QTY decimal
+BLOCK (`quantity_not_integer`) en document y bytes · CUT_TIME entero PASS /
+decimal BLOCK en spec preflight, parser (INVALID_INTEGER) y serializer
+(fail-closed) · SEQUENCE decimal BLOCK en el spec preflight sin depender de
+validate.ts · **SPEC vs PRODUCT también en bytes**: el lector representa el
+dominio documentado TYPE 0..8 (`PtxDocumentedPatternType`), bytes con TYPE=6
+→ sin spec issue + clasificación
+`SPEC_VALID_BUT_PRODUCT_UNSUPPORTED` + producto fail-closed (validate
+INVALID_ENUM_VALUE y serialize rehúsa entregar bytes; subset productivo
+0..4 congelado), bytes con TYPE=9 → `ptx_spec.parse_error` con el rango
+documentado 0-8.
 
 ### Tabla final de reglas implementadas
 
@@ -331,8 +354,10 @@ issue de VERSION no afirma "verificado".
 | Referencias JOB/MAT/BRD/PTN/PART/Xn | §4 p.118 + §20 | existen | inexistentes (`reference_unknown`) | SPEC |
 | JOBS opcional, job implícito único | §5 p.120 | sin JOBS + 1 job | sin JOBS + 2 jobs (`job_scope_ambiguous`) | SPEC |
 | DIM 0..9999.9 mm / 0..999.9 in | §20 p.166 (DIM) | 9999.9 mm / 999.9 in | 10000 mm / 1000 in / negativo (`dimension_out_of_range`) | SPEC |
-| QTY ≤ 99999 | §20 p.166 (QTY) | 99999 | 100000 (`quantity_out_of_range`) | SPEC |
-| JOBS.STATUS ∈ {0,1,2} | §20 p.167 | 0..2 | 4 (`enum_value_invalid`) | SPEC |
+| QTY entero y ≤ 99999 | §20 p.166 (QTY: 'A long integer …') | 1, 99999 | 1.5 (`quantity_not_integer`) / 100000 (`quantity_out_of_range`) | SPEC |
+| JOBS.STATUS forma INT (conocidos 0/1/2, no exhaustivos) | §20 p.167 + §5 p.120 | 0/1/2 y otros enteros (4, 17) | decimal 1.5 (`int_not_integer`) | SPEC (forma); restringir otros enteros = PRODUCT/RECEIVER |
+| JOBS.CUT_TIME forma INT (segundos) | §20 p.167 + §5 p.121 | entero (821) | 1.5 (`int_not_integer`; parser INVALID_INTEGER; serializer fail-closed) | SPEC |
+| CUTS.SEQUENCE forma INT | §20 p.178 | entero | 1.5 (`int_not_integer`, chequeo propio del preflight) | SPEC |
 | PARTS_REQ.GRAIN ∈ {0,1,2} | §20 p.168 | 0..2 | 3 | SPEC |
 | MATERIALS.RULE1 1..9 | §20 p.174 | 1..9 | 10 | SPEC |
 | MATERIALS.RULE2/3/4 ∈ {0,1} | §20 p.174 | 0, 1 | 2 | SPEC |

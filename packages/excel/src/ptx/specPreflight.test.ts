@@ -505,6 +505,23 @@ describe('#788 máximo QTY del diccionario (99999)', () => {
     expect(issues[0]!.locator).toContain('No quantity can be greater than 99999');
   });
 
+  it('QTY decimal BLOQUEA como spec: ptx_spec.quantity_not_integer (LONG INTEGER documentado)', () => {
+    const doc = labDocWith((d) => {
+      const part = d.records.find((r) => r.type === 'PARTS_REQ');
+      (part as { requiredQuantity: number }).requiredQuantity = 1.5;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.quantity_not_integer']);
+    expect(issues[0]!.field).toBe('PARTS_REQ.QTY_REQ');
+    expect(issues[0]!.locator).toContain('long integer');
+    // En bytes el lector ya lo rechaza (INVALID_INTEGER → parse_error).
+    const bytes = serializePtxDocument(labDoc(), LAB_TEXT_OPTIONS).replace(
+      'PARTS_REQ,1,1,PART_A,1,450,320,1,0,0,0,1',
+      'PARTS_REQ,1,1,PART_A,1,450,320,1.5,0,0,0,1',
+    );
+    expect(codes(ptxSpecPreflightBytes(new TextEncoder().encode(bytes)))).toEqual(['ptx_spec.parse_error']);
+  });
+
   it('campos QTY modelados cubiertos: BOOK / OFC_QTY / QTY_RUN / QTY_CYCLES / MAX_BOOK / QTY_RPT / QTY_PARTS / QTY_STOCK', () => {
     const doc = labDocWith((d) => {
       const material = d.records.find((r) => r.type === 'MATERIALS');
@@ -582,14 +599,76 @@ describe('#788 enums y rangos documentados de campos modelados', () => {
     expect(issues[0]!.field).toBe('PARTS_REQ.GRAIN');
   });
 
-  it('JOBS.STATUS=4 BLOQUEA como spec (documentado INT 0,1,2)', () => {
+  it('JOBS.STATUS: 0/1/2 válidos; OTRO entero NO es spec-invalid (conocidos, no exhaustivos)', () => {
+    // §5 p.120: "0 - not optimised 1 - optimised 2 - optimise failed Note:
+    // there may be a range of other error codes" — la capa SPEC sólo exige
+    // la forma INT; restringir otros enteros es política PRODUCT/RECEIVER.
+    for (const status of [0, 1, 2, 4, 17]) {
+      const doc = labDocWith((d) => {
+        const job = d.records.find((r) => r.type === 'JOBS');
+        (job as { status?: number }).status = status;
+      });
+      expect(ptxSpecPreflightDocument(doc), `status=${status}`).toEqual([]);
+    }
+  });
+
+  it('JOBS.STATUS decimal BLOQUEA como spec (INT form): ptx_spec.int_not_integer', () => {
     const doc = labDocWith((d) => {
       const job = d.records.find((r) => r.type === 'JOBS');
-      (job as { status?: number }).status = 4;
+      (job as { status?: number }).status = 1.5;
     });
     const issues = ptxSpecPreflightDocument(doc);
-    expect(codes(issues)).toEqual(['ptx_spec.enum_value_invalid']);
+    expect(codes(issues)).toEqual(['ptx_spec.int_not_integer']);
     expect(issues[0]!.field).toBe('JOBS.STATUS');
+    expect(issues[0]!.locator).toContain('there may be a range of other error codes');
+    // En bytes, el lector ya rechaza el decimal (INVALID_INTEGER → parse_error).
+    const bytes = serializePtxDocument(labDoc(), LAB_TEXT_OPTIONS).replace(
+      'JOBS,1,C4D001,EXAMPLE ONLY,10/09/2026,,LAB,1,',
+      'JOBS,1,C4D001,EXAMPLE ONLY,10/09/2026,,LAB,1.5,',
+    );
+    expect(bytes).toContain('LAB,1.5,');
+    expect(codes(ptxSpecPreflightBytes(new TextEncoder().encode(bytes)))).toEqual(['ptx_spec.parse_error']);
+  });
+
+  it('JOBS.CUT_TIME entero PASA; decimal BLOQUEA como spec (INT, segundos)', () => {
+    const ok = labDocWith((d) => {
+      const job = d.records.find((r) => r.type === 'JOBS');
+      (job as { cutTime?: number }).cutTime = 821;
+    });
+    expect(ptxSpecPreflightDocument(ok)).toEqual([]);
+
+    const doc = labDocWith((d) => {
+      const job = d.records.find((r) => r.type === 'JOBS');
+      (job as { cutTime?: number }).cutTime = 1.5;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.int_not_integer']);
+    expect(issues[0]!.field).toBe('JOBS.CUT_TIME');
+    // Contrato de REPRESENTACIÓN entero end-to-end: el parser rechaza el
+    // decimal en bytes y el serializer no puede emitirlo (fail closed).
+    const parseError = captureParseErrorText(() =>
+      parsePtxDocumentText('HEADER,1,LAB,0,0,1\r\nJOBS,1,X,,,,,,,,1.5\r\n'),
+    );
+    expect(parseError.code).toBe('INVALID_INTEGER');
+    expect(parseError.message).toContain('CUT_TIME');
+    let serialized: string | undefined;
+    try {
+      serialized = serializePtxDocument(doc, LAB_TEXT_OPTIONS);
+    } catch (error) {
+      expect((error as Error).name).toBe('PtxFormatError');
+    }
+    expect(serialized).toBeUndefined();
+  });
+
+  it('CUTS.SEQUENCE decimal BLOQUEA en el spec preflight SIN depender de validate.ts', () => {
+    const doc = labDocWith((d) => {
+      const cut = d.records.find((r) => r.type === 'CUTS');
+      (cut as { sequence: number }).sequence = 1.5;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.int_not_integer']);
+    expect(issues[0]!.field).toBe('CUTS.SEQUENCE');
+    expect(issues[0]!.locator).toContain('Cut sequence INT');
   });
 
   it('CUTS.FUNCTION=81 BLOQUEA como spec (diccionario 0-9 / 90-99)', () => {
@@ -632,17 +711,63 @@ describe('#788 enums y rangos documentados de campos modelados', () => {
     expect(validatePtxDocument(doc).some((i) => i.code === 'INVALID_ENUM_VALUE')).toBe(true);
   });
 
-  it('el parser distingue TYPE fuera de diccionario (9) de TYPE documentado-no-soportado (5..8)', () => {
+  it('el lector representa el dominio documentado 0..8: TYPE=6 se lee; TYPE=9 es lo único inválido', () => {
+    // El READING model lleva 0..8 (§20 p.175): el parser ya NO rechaza 5..8 —
+    // la separación SPEC/PRODUCT también vale en bytes (ver bloque siguiente).
+    const parsed = parsePtxDocumentText('HEADER,1,LAB,0,0,1\r\nPATTERNS,1,1,1,6\r\n');
+    expect(parsed.records[0]).toMatchObject({ type: 'PATTERNS', patternType: 6 });
     const specInvalid = captureParseErrorText(() =>
       parsePtxDocumentText('HEADER,1,LAB,0,0,1\r\nPATTERNS,1,1,1,9\r\n'),
     );
     expect(specInvalid.message).toContain('outside the documented Pattern Exchange range 0-8');
-    const unsupported = captureParseErrorText(() =>
-      parsePtxDocumentText('HEADER,1,LAB,0,0,1\r\nPATTERNS,1,1,1,6\r\n'),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SPEC vs PRODUCT en BYTES (revisión r3: la frontera de bytes debe poder
+// observar valores documentados no soportados sin clasificarlos spec-error)
+// ---------------------------------------------------------------------------
+
+describe('#788 SPEC vs PRODUCT también en bytes (PATTERNS.TYPE)', () => {
+  const bytesWithType = (type: number): Uint8Array =>
+    new TextEncoder().encode(
+      serializePtxDocument(labDoc(), LAB_TEXT_OPTIONS).replace(
+        'PATTERNS,1,1,1,0,1,1,1',
+        `PATTERNS,1,1,1,${type},1,1,1`,
+      ),
     );
-    expect(unsupported.message).toContain("outside this candidate's supported subset");
-    expect(unsupported.message).toContain('documented Pattern Exchange');
-    expect(unsupported.message).not.toContain('is not one of the documented values');
+
+  it('bytes con TYPE=6: SIN spec issue y clasificación SPEC_VALID_BUT_PRODUCT_UNSUPPORTED', () => {
+    const bytes = bytesWithType(6);
+    expect(new TextDecoder().decode(bytes)).toContain('PATTERNS,1,1,1,6,1,1,1');
+    expect(ptxSpecPreflightBytes(bytes)).toEqual([]);
+    const parsed = parsePtxDocumentBytes(bytes);
+    const pattern = parsed.records.find((r): r is Extract<typeof r, { type: 'PATTERNS' }> => r.type === 'PATTERNS');
+    expect(pattern).toMatchObject({ patternType: 6 });
+    expect(classifyPtxDocumentedEnumSupport('PATTERNS.TYPE', pattern!.patternType)).toBe(
+      'SPEC_VALID_BUT_PRODUCT_UNSUPPORTED',
+    );
+  });
+
+  it('bytes con TYPE=6: el PRODUCTO sigue fail-closed (validate rechaza; serialize no entrega bytes)', () => {
+    const parsed = parsePtxDocumentBytes(bytesWithType(6));
+    expect(validatePtxDocument(parsed).some((i) => i.code === 'INVALID_ENUM_VALUE')).toBe(true);
+    let serialized: unknown;
+    try {
+      serialized = serializePtxDocument(parsed, LAB_TEXT_OPTIONS);
+    } catch (error) {
+      expect((error as Error).name).toBe('PtxDocumentInvalidError');
+    }
+    expect(serialized).toBeUndefined();
+    // El compiler productivo no gana capacidad: el subset histórico intacto.
+    expect(Object.values(PTX_PATTERN_TYPE)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('bytes con TYPE=9: SPEC_INVALID (parse_error con el rango documentado 0-8)', () => {
+    const issues = ptxSpecPreflightBytes(bytesWithType(9));
+    expect(codes(issues)).toEqual(['ptx_spec.parse_error']);
+    expect(issues[0]!.message).toContain('outside the documented Pattern Exchange range 0-8');
+    expect(issues[0]!.classification).toBe('SPEC_REQUIRED');
   });
 });
 
