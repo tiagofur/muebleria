@@ -188,6 +188,34 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("fresh independent re-review", next_step)
         self.assertNotIn("create the godd-3 work-unit commit", next_step)
 
+    def test_execution_artifact_has_completed_correction_boundary(self):
+        artifact = self.task_artifact.lower()
+        correction_sha = "afa766b7c0cd68de9098999158a9b2ec2d9593e1"
+        self.assertRegex(
+            artifact,
+            correction_sha + r"[\s\S]{0,220}1,525 authored changed lines",
+        )
+        self.assertRegex(
+            artifact,
+            correction_sha + r"[\s\S]{0,520}dirty: false",
+        )
+        self.assertRegex(
+            artifact,
+            r"mechanical exception[\s\S]{0,240}cannot truthfully[\s\S]{0,240}(?:sha|post-commit)",
+        )
+
+        next_step = self.section(self.task_artifact, "## Next step", "\n## ").lower()
+        self.assertIn("fresh independent re-review", next_step)
+        self.assertIn("ask-on-risk", next_step)
+        self.assertIn("parent", next_step)
+        for pending_pattern in (
+            r"complete (?:the )?(?:single )?correction commit",
+            r"create (?:the )?correction commit",
+            r"correction commit (?:is )?pending",
+        ):
+            with self.subTest(pattern=pending_pattern):
+                self.assertIsNone(re.search(pending_pattern, next_step))
+
 
 if __name__ == "__main__":
     unittest.main()

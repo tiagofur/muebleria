@@ -93,6 +93,12 @@ role skills, `CHECKPOINTS.md`, `feature_list.json`, `progress/current.md`,
     blockers on the exact candidate; no product or delivery scope was added.
   - Outcome: routine startup, task state, catalog governance, and semantic drift
     guards agree across every live factory entrypoint.
+- [x] **GODD-C2 — Reconcile post-commit temporal state**
+  - Route: direct mechanical correction; no contract or delivery scope change.
+  - Trigger evidence: re-review found only that the first correction could not
+    truthfully record its own post-commit SHA/clean state before that commit existed.
+  - Outcome: the artifact and drift guard describe the completed correction boundary
+    and point directly to fresh re-review plus the parent delivery decision.
 
 ## Verification plan
 
@@ -159,12 +165,20 @@ contract tests and the repository-authoritative factory checks apply.
   artifact's publication/count/commit state, and strengthen semantic drift guards.
 - 2026-09-19: GODD-C1 addressed all four findings. Required pre-commit checks passed:
   `git diff --check`, JSON parsing, `bash -n init.sh`, 36 factory tests, and 16
-  publication metadata tests. Final correction candidate: **1525 authored
-  changed lines**; generated files: none.
+  publication metadata tests.
+- 2026-09-19: GODD-C1 correction commit is
+  `afa766b7c0cd68de9098999158a9b2ec2d9593e1`. At that completed boundary the
+  candidate was **1,525 authored changed lines** across 17 files, with no generated
+  output. Post-commit `git diff --check`, JSON parsing, `bash -n init.sh`, and clean
+  preflight passed; preflight reported `dirty: false`,
+  `PREFLIGHT_OK_NOT_VERIFIED`, and tests `NOT_RUN`.
+- 2026-09-19: Re-review of `afa766b7c0cd68de9098999158a9b2ec2d9593e1`
+  found only stale temporal self-state, not a contract-scope defect. GODD-C2 is a
+  mechanical exception to the one-round target because a commit cannot truthfully
+  include knowledge of its own final SHA and post-commit clean check before it exists.
 
 ## Next step
 
-Complete the single correction commit and clean-tree checks, then return the exact
-HEAD for fresh independent re-review. After approval, the parent resolves the
-over-budget delivery strategy and may publish the branch/open the authorized PR.
-This writer performs no remote mutation.
+Run a fresh independent re-review of the new exact HEAD. If approved, the parent
+makes the `ask-on-risk` delivery decision and may publish the branch/open the
+authorized PR. This writer performs no remote mutation.
