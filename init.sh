@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # init.sh — Verificación e inicialización del entorno
 #
-# Lo ejecuta el agente al COMENZAR una sesión y antes de declarar cualquier
-# tarea como `done`. Si falla, la sesión no debe avanzar.
+# Validación histórica completa, ejecutada sólo cuando el alcance la requiere.
+# El arranque rutinario usa scripts/factory_preflight.py; este script no selecciona
+# trabajo, autoriza escrituras ni representa el loop normal G-ODD.
 #
 # Modos:
 #   bootstrap — monorepo TS aún no scaffolded; solo valida el harness.
@@ -31,7 +32,6 @@ echo "── 1. Verificando harness ──────────────�
 HARNESS_FILES=(
   "AGENTS.md"
   "feature_list.json"
-  "progress/current.md"
   "docs/prd-v2.md"
   "docs/architecture.md"
   "docs/conventions.md"
@@ -61,16 +61,15 @@ import json, sys
 try:
     data = json.load(open("feature_list.json"))
     valid = {"pending", "in_progress", "done", "blocked"}
-    in_progress = [f for f in data["features"] if f["status"] == "in_progress"]
-    if len(in_progress) > 1:
-        print(f"[FAIL]  Hay {len(in_progress)} features en in_progress (máximo 1)")
-        sys.exit(1)
     for f in data["features"]:
         if f["status"] not in valid:
             print(f"[FAIL]  Estado inválido en feature {f['id']}: {f['status']}")
             sys.exit(1)
-    print(f"[OK]    feature_list.json válido ({len(data['features'])} features, "
-          f"{len(in_progress)} en progreso)")
+    if data.get("rules", {}).get("catalog_only") is not True:
+        print("[FAIL]  feature_list.json must declare catalog_only")
+        sys.exit(1)
+    print(f"[OK]    feature_list.json valid ({len(data['features'])} historical entries; "
+          "not queue or ownership)")
 except Exception as e:
     print(f"[FAIL]  feature_list.json inválido: {e}")
     sys.exit(1)
@@ -256,8 +255,8 @@ if [ $EXIT_CODE -eq 0 ]; then
   echo ""
   info "Próximos pasos:"
   info "  1. Lee AGENTS.md para orientarte."
-  info "  2. Identifica la feature activa en progress/current.md."
-  info "  3. Respeta las fuentes canónicas y documenta antes de cerrar."
+  info "  2. Confirm the approved issue and current ownership."
+  info "  3. Choose Direct, ODD, or explicit SDD under the G-ODD contract."
 else
   fail "Entorno NO está listo. Resuelve los errores antes de avanzar."
 fi

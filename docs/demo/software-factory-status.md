@@ -33,7 +33,10 @@ El controlador instalado y su README se encuentran en
 `/Users/tiagofur/Documents/Codex/2026-09-06/referenced-chatgpt-conversation-this-is-an/outputs/granete-factory`.
 Su único estado está en `runtime/`; no copiarlo al repositorio ni crear otro estado
 predeterminado al versionar el controlador. Los informes completados son inmutables.
-`feature_list.json` conserva su función de ledger, no de cola de asignación.
+`feature_list.json` is catalog/legacy metadata, not a queue, scheduler, priority,
+reservation, ownership, or execution authority. `progress/current.md` is an optional
+human overview outside the normal agent loop. Current execution lives in the exact
+issue, ownership state, branch/PR, and the lane's single ODD/SDD artifact.
 
 ## Evidencia comprobada — 2026-09-07 UTC
 

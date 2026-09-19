@@ -100,7 +100,7 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Rutas | `apps/web/src/routes.ts` → `NAV_PATHS` |
 | Permisos | `packages/domain/src/rbac.ts` + contracts + enforcement backend |
 | Implementación actual | código + tests |
-| Ledger/historia | `feature_list.json` |
+| Catálogo/historia no operativa | `feature_list.json` |
 | Backlog operativo | GitHub issues |
 
 ### Regla de conflicto
@@ -141,13 +141,12 @@ Para Proyectar, el North Star define intención futura y código/tests lo implem
 
 Luego:
 
-1. lee `progress/current.md`;
-2. identifica la feature activa;
-3. lee docs canónicos del área;
-4. revisa la GitHub issue, comentarios y hard prerequisites;
-5. confirma que la base/branch de la issue no pisa un programa P0;
-6. no tomes automáticamente el `pending` de menor ID si contradice prioridad vigente;
-7. verifica la feature/PR realmente activa; no marques otra `in_progress` sin coordinación explícita ni reutilices F199/#458 como estado vigente histórico.
+1. read the exact approved GitHub issue and current ownership;
+2. choose Direct, ODD, or explicit SDD using the portable contract;
+3. read the canonical sources for the affected area;
+4. verify prerequisites, base, branch, and existing PR;
+5. do not read `progress/current.md` as startup context or select a pending
+   `feature_list.json` row; both are historical/optional context only.
 
 ### Si la issue toca Users, Memberships, Organizations, Auth o Sales Network
 
@@ -205,8 +204,8 @@ packages/
 backend-go/            API + application services + Postgres + auth + enforcement
 contracts/             OpenAPI, JSON Schemas y fixtures compartidos
 docs/                  contratos de producto/arquitectura/UX
-progress/              sesión/evidencia histórica
-feature_list.json      ledger de implementación
+progress/              archivos históricos y overview humano opcional
+feature_list.json      catálogo/metadata histórica, no autoridad operativa
 ```
 
 ### Bounded contexts conceptuales

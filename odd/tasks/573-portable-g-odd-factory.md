@@ -73,7 +73,7 @@ role skills, `CHECKPOINTS.md`, `feature_list.json`, `progress/current.md`,
   - Trigger evidence: coordinated changes across more than two non-trivial docs;
     reading prepares a multi-file write.
   - Outcome: central contract, navigation map, and `odd/tasks/` convention/template.
-- [ ] **GODD-2 — Align roles and legacy state surfaces**
+- [x] **GODD-2 — Align roles and legacy state surfaces**
   - Route: delegated direct (same single writer).
   - Trigger evidence: leader/implementer/reviewer plus checkpoints, README, init,
     feature catalog metadata, progress ledger, and related reference docs must agree.
@@ -122,8 +122,15 @@ contract tests and the repository-authoritative factory checks apply.
   line planning heuristic. No quality content was compressed to fit it; per
   `ask-on-risk`, the parent retains the delivery/slicing decision. This writer will
   not push or open a PR.
+- 2026-09-19: GODD-1 work-unit commit:
+  `a61a61ff59f4151edd469949d0fe61094c890033`.
+- 2026-09-19: GODD-2 aligned the three role skills and `CHECKPOINTS.md`; declared
+  `feature_list.json` catalog-only; moved `progress/current.md` outside normal
+  execution; and corrected README, init, Git workflow, reference, and status docs.
+  `python3 -m json.tool feature_list.json`, `bash -n init.sh`, and
+  `git diff --check` passed before commit.
 
 ## Next step
 
-Create the GODD-1 work-unit commit, record its identity, then align roles and legacy
-state surfaces under `GODD-2`.
+Create the GODD-2 work-unit commit, record its identity, then pin the contract with
+factory tests and verification guidance under `GODD-3`.

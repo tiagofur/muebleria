@@ -77,9 +77,9 @@ La contraseña se pide interactivamente (sin eco); en CI usa `ADMIN_PASSWORD`.
 ./init.sh
 ```
 
-Si el monorepo aún no existe (Fase 0), el script corre en **modo bootstrap**:
-verifica el harness y avisa que falta el scaffold. La primera feature
-pendiente en `feature_list.json` es exactamente eso.
+If the monorepo does not exist yet (Phase 0), the script runs in **bootstrap mode**
+and verifies the harness. `feature_list.json` is a historical catalog, not an
+instruction to select the first pending feature.
 
 Cuando el monorepo esté scaffolded:
 
@@ -116,7 +116,7 @@ Detalle y smoke: `docs/verification.md` § Nivel 6.
 .
 ├── AGENTS.md                   # Punto de entrada para agentes (mapa corto)
 ├── CHECKPOINTS.md              # Criterios de "estado final correcto"
-├── feature_list.json           # Alcance: una feature a la vez
+├── feature_list.json           # Historical catalog; not queue or ownership
 ├── init.sh                     # Verificación e inicialización del entorno
 │
 ├── docs/
@@ -132,7 +132,7 @@ Detalle y smoke: `docs/verification.md` § Nivel 6.
 │       └── reviewer/SKILL.md   # Revisor: aprueba o rechaza
 │
 ├── progress/
-│   ├── current.md              # Sesión activa (estado vivo)
+│   ├── current.md              # Optional human overview outside normal execution
 │   └── history.md              # Bitácora append-only de sesiones
 │
 ├── Plantilla_Muebles.xlsx      # Fuente de dominio (fórmulas, datos de referencia)
@@ -161,13 +161,14 @@ Este repo implementa el patrón **Líder-Implementador-Revisor**:
 
 | Pilar | Manifestación |
 |-------|--------------|
-| **El repositorio ES el sistema** | `AGENTS.md`, `init.sh`, `feature_list.json`, `progress/`, `docs/` |
+| **El repositorio ES el sistema** | `AGENTS.md`, G-ODD contract, code, tests, and canonical docs |
 | **Orquestación multi-agente** | `.agents/skills/` (platform-agnostic SKILL.md) |
 | **Supervisión y mejora** | `CHECKPOINTS.md`, `./init.sh` que corre tests reales |
 
 Principios clave:
 - **Divulgación progresiva:** `AGENTS.md` es un mapa, no un manual. Los detalles viven en `docs/`.
-- **Una feature a la vez:** `init.sh` rechaza más de un `in_progress`.
-- **Estado en disco:** `progress/current.md` y `history.md` sobreviven reinicios.
+- **One issue / one writer:** current ownership and an isolated branch; GitHub Issues is the queue.
+- **Recoverable execution:** ODD uses one `odd/tasks/<issue>-<slug>.md`; Direct creates no artifact and explicit SDD uses its canonical tasks.
+- **Auxiliary state:** `feature_list.json`, `progress/current.md`, and Engram are not operational authority.
 - **Verificación ejecutable:** `init.sh` corre los tests reales.
 - **Anti teléfono-descompuesto:** subagentes escriben resultados en archivos, solo devuelven una referencia.
