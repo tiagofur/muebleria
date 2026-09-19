@@ -119,9 +119,10 @@ contract tests and the repository-authoritative factory checks apply.
 - Original forecast: approximately 330–450 authored changed lines. Actual initial
   candidate: **1,405 authored changed lines** across 17 process/documentation files;
   generated files: none. The correction round must report its final count separately.
-- Delivery strategy: `ask-on-risk`.
-- Chain strategy: unresolved unless the honest running count exceeds ~400 lines;
-  parent owns that delivery decision before push or PR creation.
+- Delivery strategy: `exception-ok`, selected by the maintainer after the final
+  candidate reached 1,567 authored changed lines.
+- Chain strategy: not applicable. The independent reviewer found that splitting
+  the contract would create temporarily contradictory factory instructions.
 - Planned work-unit commits: one commit per task (`GODD-1` through `GODD-3`).
 
 ## Progress and evidence
@@ -176,9 +177,17 @@ contract tests and the repository-authoritative factory checks apply.
   found only stale temporal self-state, not a contract-scope defect. GODD-C2 is a
   mechanical exception to the one-round target because a commit cannot truthfully
   include knowledge of its own final SHA and post-commit clean check before it exists.
+- 2026-09-19: GODD-C2 commit
+  `0588fcfdae9a475abc35acca4daa9cf8b75746a7` reconciled the temporal state.
+  Fresh independent review approved that exact HEAD against `origin/main` at
+  `ffbdfe24de7153ed0e47c982fc30941b0039a013`; the clean candidate contained 1,567
+  authored changed lines across 17 process/documentation files and no product code.
+- 2026-09-19: The maintainer authorized the documented size exception and a single
+  PR for issue #573. The exception preserves one coherent contract review and does
+  not authorize merge, issue closure, or weaker verification.
 
 ## Next step
 
-Run a fresh independent re-review of the new exact HEAD. If approved, the parent
-makes the `ask-on-risk` delivery decision and may publish the branch/open the
-authorized PR. This writer performs no remote mutation.
+Commit this delivery-decision record, run the proportional clean checks, obtain a
+fresh independent re-review of the new exact HEAD, then publish one PR for human review.
+Merge and issue closure remain human actions.

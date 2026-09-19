@@ -206,8 +206,8 @@ class WorkflowContractTest(unittest.TestCase):
 
         next_step = self.section(self.task_artifact, "## Next step", "\n## ").lower()
         self.assertIn("fresh independent re-review", next_step)
-        self.assertIn("ask-on-risk", next_step)
-        self.assertIn("parent", next_step)
+        self.assertIn("exception-ok", artifact)
+        self.assertIn("publish one pr", next_step)
         for pending_pattern in (
             r"complete (?:the )?(?:single )?correction commit",
             r"create (?:the )?correction commit",
