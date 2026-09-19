@@ -28,7 +28,7 @@
 - Audit date: 2026-09-19.
 - Former ledger: 1,746 lines, ~266 KB, 60 H1 sections.
 - 46 distinct issue references were present; only 8 of those were still open at audit time.
-- Duplicate historical sections included #642 ×11 and #650 ×6.
+- The largest duplicate histories appeared 11 and 6 times respectively.
 - Open PRs at reset time: none.
 
 ## Open work and ownership
