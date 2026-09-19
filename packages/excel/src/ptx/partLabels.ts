@@ -329,13 +329,29 @@ export async function buildPtxPartLabelData(
   }
   // The ONLY L/W → EDGE translation: banded side carries the band code,
   // unbanded side stays undefined (empty cell). Never a synthesized value.
-  const edgeOf = (side: 'L1' | 'L2' | 'W1' | 'W2'): string | undefined =>
-    row[side] === 1 ? band : undefined;
+  const edgeOf = (side: 'L1' | 'L2' | 'W1' | 'W2'): string | undefined => {
+    if (row[side] !== 1) return undefined;
+    if (band === undefined) {
+      throw new PtxCompilationError(
+        'ptx_compile.label_invalid',
+        'Una bandera de canto exige edgeBandCode autoritativo no vacío',
+        { manufacturingPartCode, edgeFlags: [side] },
+      );
+    }
+    return band;
+  };
 
   const hasCnc = input.hasCncMachining === true;
   const cncDrawingRef = hasCnc
     ? await ptxCncDrawingRef(manufacturingPartCode, input.cncScope ?? '')
     : undefined;
+  if (row.materialCode === undefined) {
+    throw new PtxCompilationError(
+      'ptx_compile.label_invalid',
+      'CORE_MAT exige materialCode autoritativo no vacío',
+      { manufacturingPartCode },
+    );
+  }
 
   return {
     manufacturingPartCode,
