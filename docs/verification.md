@@ -482,22 +482,43 @@ Cobertura contractual exigida por #788:
   PASA;
 - independencia writer/validator: `ptxSpecPreflightBytes` parsea con el lector
   independiente y detecta mutaciones de bytes post-serialización (título,
-  enums, fila borrada, salto de índice, referencia colgante, código de 60);
-  `serializePtxDocumentBytesSpecChecked` no entrega bytes rechazados y
-  `compileCutPlanToPtxDocument({ strictSpecPreflight })` bloquea con
-  `ptx_compile.spec_preflight_failed` (opción inerte para r2/r3/r4);
+  enums, fila borrada, salto de índice, referencia colgante, código de 60,
+  DIM 10000, QTY 100000); `serializePtxDocumentBytesSpecChecked` no entrega
+  bytes rechazados y `compileCutPlanToPtxDocument({ strictSpecPreflight })`
+  bloquea con `ptx_compile.spec_preflight_failed` (opción inerte para
+  r2/r3/r4);
 - índices consecutivos/únicos/desde 1 y referencias por job (PART/BOARD/
   MATERIAL/PATTERN/Xn/JOBS) re-derivadas sin compartir código con validate.ts;
+- rangos DIM/QTY del diccionario (revisión independiente): DIM 9999.9 mm /
+  999.9 in PASS y 10000 / 1000 BLOCK según HEADER.UNITS, DIM negativo BLOCK,
+  QTY 99999 PASS / 100000 BLOCK, cobertura de todos los campos DIM/QTY
+  modelados, también sobre bytes mutados;
+- enums/ranges documentados como SPEC (revisión): RULE1 1..9, RULE2/3/4 {0,1},
+  GRAIN {0,1,2}, JOBS.STATUS {0,1,2}, PATTERNS.TYPE 0..8, CUTS.FUNCTION
+  0..9 ∪ 90..99 — con la taxonomía tipada SPEC_INVALID /
+  SPEC_VALID_BUT_PRODUCT_UNSUPPORTED / PRODUCT_SUPPORTED
+  (`classifyPtxDocumentedEnumSupport`) sin habilitar capacidad nueva (TYPE
+  5..8 y FUNCTION 4..9/90/91/93..99 no reciben issue de spec; los rechaza
+  validate.ts como política de producto; el parser distingue ambos mensajes);
+- JOBS opcional bajo la especificación (§5 p.120): sin filas JOBS y un único
+  job implícito es SPEC-válido; dos JOB_INDEX sin JOBS →
+  `job_scope_ambiguous` fail-closed; el compiler de Granete sigue emitiendo
+  su fila JOBS explícita (política de producto intacta);
+- VERSION: sólo la forma (positivo finito) es spec — 1/1.06/1.08 PASAN sin
+  pin arbitrario; el valor exacto queda UNKNOWN hasta receiver profile;
 - shapes externos: R2201/R7301 saneados se leen estructuralmente (lector
   tolerante: espacios, líneas en blanco, trailing documentado, familias
   PARTS_INF/PARTS_UDI/NOTES opacas; fixtures sin modificar), distinguiendo
   celda vacía de trailing omitido;
-- inmutabilidad: goldens r2/r3/r4 recompilan byte-exact con sus sha256 del
-  contrato industrial y el descriptor del adapter conserva su digest; los
-  bytes históricos se reportan honestamente como violadores del límite TITLE;
+- inmutabilidad: goldens r2/r3/r4 se RECOMPILAN de verdad (optimizeCutPlan →
+  compile → serialize, incluido r3 con GOLDEN_R3_*) a bytes byte-exact con
+  sus sha256 del contrato industrial y el descriptor del adapter conserva su
+  digest; los bytes históricos se reportan honestamente como violadores del
+  límite TITLE;
 - sin máquina, sin CADLink, sin nuevo candidato al cliente:
   `NOT_TESTED/notClaimed` permanece; etiquetas/CNC/receiver/CUTS/RLT/profile
-  r5 siguen en #789–#793.
+  r5 siguen en #789–#793 (la semántica FUNCTION 92 no se toca: #791 es su
+  dueño).
 
 ---
 

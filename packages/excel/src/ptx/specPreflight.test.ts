@@ -1,33 +1,51 @@
 /**
  * #788 — strict Pattern Exchange spec preflight tests (r5 groundwork).
  *
- * Covers the acceptance matrix of the issue: HEADER limits (TITLE <= 25
- * fail-closed without truncation), documented text/index limits, index
- * consecutiveness/referential integrity per job, bytes-level independence
- * (the validator catches defects introduced AFTER serialization), mutation
- * proofs, and the r2/r3/r4 immutability regression (frozen bytes keep their
- * digests AND are honestly reported as spec-violating — that is the defect
- * this preflight exists to block for r5, not something this PR repairs).
+ * Covers the acceptance matrix of the issue plus the independent-review
+ * round: HEADER limits (TITLE <= 25 fail-closed without truncation),
+ * documented text/index/DIM/QTY limits (units-aware), index
+ * consecutiveness/referential integrity per job, the documented JOBS-optional
+ * semantics, the SPEC vs PRODUCT capability taxonomy, bytes-level
+ * independence (the validator catches defects introduced AFTER
+ * serialization), mutation proofs, and the r2/r3/r4 immutability regression
+ * (frozen bytes keep their digests AND are honestly reported as
+ * spec-violating — that is the defect this preflight exists to block for r5,
+ * not something this PR repairs).
+ *
+ * History kept precise: earlier candidates were rejected in the field; r4 is
+ * the second real candidate documented in the dossier (#787) and was
+ * rejected — its TITLE (43 industrial / 33 lab) is the objective defect
+ * behind the title regressions below.
  */
 
 import { describe, expect, it } from 'vitest';
 import { optimizeCutPlan } from '@granete/domain';
 import type { PtxDocument, PtxPartReference, PtxRecord } from './records';
+import { PTX_PATTERN_TYPE, PTX_SUPPORTED_CUT_FUNCTION_CODES } from './records';
 import { buildLabGuillotineDocument } from './fixtures';
 import { serializePtxDocument, serializePtxDocumentBytes } from './serialize';
-import { parsePtxDocumentBytes } from './parse';
+import { parsePtxDocumentBytes, parsePtxDocumentText, PtxParseError } from './parse';
+import { validatePtxDocument } from './validate';
 import { compileCutPlanToPtxDocument, PtxCompilationError } from './compileCutPlan';
 import { verifyCutPlanPtxReadback } from './verifyCutPlanPtxReadback';
 import {
   PTX_SPEC_LIMITS,
   PTX_SPEC_PREFLIGHT_REVISION,
   PtxSpecPreflightError,
+  classifyPtxDocumentedEnumSupport,
   ptxSpecPreflightBytes,
   ptxSpecPreflightDocument,
   serializePtxDocumentBytesSpecChecked,
 } from './specPreflight';
 import { GOLDEN_OPTIONS, GOLDEN_TEXT, GOLDEN_ROWS, GOLDEN_MATERIALS, GOLDEN_CONFIG, GOLDEN_PROJECT_ID } from './cutPlanPtxGolden';
-import { GOLDEN_R3_OPTIONS, GOLDEN_R3_TEXT } from './cutPlanPtxGoldenR3';
+import {
+  GOLDEN_R3_CONFIG,
+  GOLDEN_R3_MATERIALS,
+  GOLDEN_R3_OPTIONS,
+  GOLDEN_R3_PROJECT_ID,
+  GOLDEN_R3_ROWS,
+  GOLDEN_R3_TEXT,
+} from './cutPlanPtxGoldenR3';
 import {
   GOLDEN_R4_CONFIG,
   GOLDEN_R4_MATERIALS,
@@ -63,6 +81,16 @@ function compileError(fn: () => unknown): PtxCompilationError {
     throw error;
   }
   throw new Error('se esperaba PtxCompilationError');
+}
+
+function captureParseErrorText(fn: () => unknown): PtxParseError {
+  try {
+    fn();
+  } catch (error) {
+    if (error instanceof PtxParseError) return error;
+    throw error;
+  }
+  throw new Error('se esperaba PtxParseError');
 }
 
 // ---------------------------------------------------------------------------
@@ -354,6 +382,371 @@ describe('#788 límites textuales documentados (códigos/comments/fields)', () =
 });
 
 // ---------------------------------------------------------------------------
+// Rangos DIM/QTY del diccionario (§20 p.166) — revisión independiente #788
+// ---------------------------------------------------------------------------
+
+describe('#788 rangos DIM del diccionario (units-aware)', () => {
+  const boardOf = (length: number, width: number) => (d: PtxDocument) => {
+    const board = d.records.find((r) => r.type === 'BOARDS');
+    (board as { length: number; width: number }).length = length;
+    (board as { length: number; width: number }).width = width;
+  };
+
+  it('DIM métrico 9999.9 PASA (frontera superior documentada)', () => {
+    const doc = labDocWith(boardOf(9999.9, 9999.9));
+    expect(doc.header.units).toBe(0);
+    expect(ptxSpecPreflightDocument(doc)).toEqual([]);
+  });
+
+  it('DIM métrico 10000 BLOQUEA con ptx_spec.dimension_out_of_range', () => {
+    const doc = labDocWith(boardOf(10000, 700));
+    const issues = ptxSpecPreflightDocument(doc);
+    const hits = issues.filter((i) => i.code === 'ptx_spec.dimension_out_of_range');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.field).toBe('BOARDS.LENGTH');
+    expect(hits[0]!.observed).toBe(10000);
+    expect(hits[0]!.maximum).toBe(9999.9);
+    expect(hits[0]!.locator).toContain('0.0 to 9999.9');
+  });
+
+  it('DIM en pulgadas decimales 999.9 PASA / 1000 BLOQUEA (según HEADER.UNITS=1)', () => {
+    const ok = labDocWith((d) => {
+      (d.header as { units: number }).units = 1;
+    });
+    // El lab usa mm: 1200x700 > 999.9 en modo pulgadas → BLOQUEA primero.
+    expect(
+      ptxSpecPreflightDocument(ok).some((i) => i.code === 'ptx_spec.dimension_out_of_range'),
+    ).toBe(true);
+
+    const boundary = labDocWith((d) => {
+      (d.header as { units: number }).units = 1;
+      const board = d.records.find((r) => r.type === 'BOARDS');
+      (board as { length: number; width: number }).length = 999.9;
+      (board as { length: number; width: number }).width = 99.9;
+      const material = d.records.find((r) => r.type === 'MATERIALS');
+      (material as { thickness: number }).thickness = 0.75;
+      (material as { kerfRip: number }).kerfRip = 0.17;
+      (material as { kerfCrosscut: number }).kerfCrosscut = 0.17;
+      for (const trim of ['trimFRip', 'trimVRip', 'trimFXct', 'trimVXct', 'trimHead', 'trimFRct', 'trimVRct'] as const) {
+        (material as unknown as Record<string, number>)[trim] = 0.39;
+      }
+      const offcut = d.records.find((r) => r.type === 'OFFCUTS');
+      if (offcut) {
+        (offcut as { length: number; width: number }).length = 999.9;
+        (offcut as { length: number; width: number }).width = 99.9;
+      }
+    });
+    expect(ptxSpecPreflightDocument(boundary)).toEqual([]);
+
+    const over = labDocWith((d) => {
+      (d.header as { units: number }).units = 1;
+      const board = d.records.find((r) => r.type === 'BOARDS');
+      (board as { length: number; width: number }).length = 1000;
+      (board as { length: number; width: number }).width = 99.9;
+      const material = d.records.find((r) => r.type === 'MATERIALS');
+      (material as { thickness: number }).thickness = 0.75;
+      (material as { kerfRip: number }).kerfRip = 0.17;
+      (material as { kerfCrosscut: number }).kerfCrosscut = 0.17;
+      for (const trim of ['trimFRip', 'trimVRip', 'trimFXct', 'trimVXct', 'trimHead', 'trimFRct', 'trimVRct'] as const) {
+        (material as unknown as Record<string, number>)[trim] = 0.39;
+      }
+      const offcut = d.records.find((r) => r.type === 'OFFCUTS');
+      if (offcut) {
+        (offcut as { length: number; width: number }).length = 999.9;
+        (offcut as { length: number; width: number }).width = 99.9;
+      }
+    });
+    const hits = ptxSpecPreflightDocument(over).filter((i) => i.code === 'ptx_spec.dimension_out_of_range');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.observed).toBe(1000);
+    expect(hits[0]!.maximum).toBe(999.9);
+  });
+
+  it('DIM negativo BLOQUEA (el piso documentado del tipo es 0.0; los mínimos semánticos >0 quedan en producto)', () => {
+    const doc = labDocWith((d) => {
+      const cut = d.records.find((r) => r.type === 'CUTS');
+      (cut as { dimension: number }).dimension = -1;
+    });
+    const hits = ptxSpecPreflightDocument(doc).filter((i) => i.code === 'ptx_spec.dimension_out_of_range');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.field).toBe('CUTS.DIMENSION');
+    expect(hits[0]!.minimum).toBe(0);
+  });
+
+  it('DIM fuera de rango en BYTES mutados post-serialización es detectado', () => {
+    const base = serializePtxDocument(labDoc(), LAB_TEXT_OPTIONS);
+    expect(base).toContain('BOARDS,1,1,BOARD_LAB,1,1200,700,1,1');
+    const mutated = base.replace('BOARDS,1,1,BOARD_LAB,1,1200,700,1,1', 'BOARDS,1,1,BOARD_LAB,1,10000,700,1,1');
+    const issues = ptxSpecPreflightBytes(new TextEncoder().encode(mutated));
+    expect(codes(issues)).toContain('ptx_spec.dimension_out_of_range');
+    expect(issues.find((i) => i.code === 'ptx_spec.dimension_out_of_range')!.observed).toBe(10000);
+  });
+});
+
+describe('#788 máximo QTY del diccionario (99999)', () => {
+  it('QTY 99999 PASA (frontera superior documentada)', () => {
+    const doc = labDocWith((d) => {
+      const part = d.records.find((r) => r.type === 'PARTS_REQ');
+      (part as { requiredQuantity: number }).requiredQuantity = 99999;
+    });
+    expect(ptxSpecPreflightDocument(doc)).toEqual([]);
+  });
+
+  it('QTY 100000 BLOQUEA con ptx_spec.quantity_out_of_range', () => {
+    const doc = labDocWith((d) => {
+      const part = d.records.find((r) => r.type === 'PARTS_REQ');
+      (part as { requiredQuantity: number }).requiredQuantity = 100000;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.quantity_out_of_range']);
+    expect(issues[0]!.field).toBe('PARTS_REQ.QTY_REQ');
+    expect(issues[0]!.observed).toBe(100000);
+    expect(issues[0]!.maximum).toBe(99999);
+    expect(issues[0]!.locator).toContain('No quantity can be greater than 99999');
+  });
+
+  it('campos QTY modelados cubiertos: BOOK / OFC_QTY / QTY_RUN / QTY_CYCLES / MAX_BOOK / QTY_RPT / QTY_PARTS / QTY_STOCK', () => {
+    const doc = labDocWith((d) => {
+      const material = d.records.find((r) => r.type === 'MATERIALS');
+      (material as { bookQuantity: number }).bookQuantity = 100000;
+      const offcut = d.records.find((r) => r.type === 'OFFCUTS');
+      (offcut as { producedQuantity?: number }).producedQuantity = 100000;
+      const pattern = d.records.find((r) => r.type === 'PATTERNS');
+      (pattern as { runQuantity?: number }).runQuantity = 100000;
+      (pattern as { cyclesQuantity?: number }).cyclesQuantity = 100000;
+      (pattern as { maxBook?: number }).maxBook = 100000;
+      const cut = d.records.find((r) => r.type === 'CUTS');
+      (cut as { repeatQuantity: number }).repeatQuantity = 100000;
+      const board = d.records.find((r) => r.type === 'BOARDS');
+      (board as { stockQuantity?: number }).stockQuantity = 100000;
+    });
+    const fields = ptxSpecPreflightDocument(doc)
+      .filter((i) => i.code === 'ptx_spec.quantity_out_of_range')
+      .map((i) => i.field);
+    expect(new Set(fields)).toEqual(
+      new Set([
+        'MATERIALS.BOOK',
+        'OFFCUTS.OFC_QTY',
+        'PATTERNS.QTY_RUN',
+        'PATTERNS.QTY_CYCLES',
+        'PATTERNS.MAX_BOOK',
+        'CUTS.QTY_RPT',
+        'BOARDS.QTY_STOCK',
+      ]),
+    );
+  });
+
+  it('QTY fuera de rango en BYTES mutados post-serialización es detectado', () => {
+    const base = serializePtxDocument(labDoc(), LAB_TEXT_OPTIONS);
+    const mutated = base.replace(
+      /PARTS_REQ,1,1,PART_A,1,450,320,1,0,0,0,1/,
+      'PARTS_REQ,1,1,PART_A,1,450,320,100000,0,0,0,1',
+    );
+    expect(mutated).not.toBe(base);
+    const issues = ptxSpecPreflightBytes(new TextEncoder().encode(mutated));
+    expect(codes(issues)).toContain('ptx_spec.quantity_out_of_range');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Enums/ranges documentados de campos ya modelados (revisión #788)
+// ---------------------------------------------------------------------------
+
+describe('#788 enums y rangos documentados de campos modelados', () => {
+  it('MATERIALS.RULE1=10 BLOQUEA (documentado INT 1-9)', () => {
+    const doc = labDocWith((d) => {
+      const material = d.records.find((r) => r.type === 'MATERIALS');
+      (material as { rule1?: number }).rule1 = 10;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.index_out_of_range']);
+    expect(issues[0]!.field).toBe('MATERIALS.RULE1');
+    expect(issues[0]!.locator).toContain('INT 1-9');
+  });
+
+  it('MATERIALS.RULE2=2 BLOQUEA (documentado INT 0,1)', () => {
+    const doc = labDocWith((d) => {
+      const material = d.records.find((r) => r.type === 'MATERIALS');
+      (material as { rule2?: number }).rule2 = 2;
+    });
+    expect(codes(ptxSpecPreflightDocument(doc))).toEqual(['ptx_spec.enum_value_invalid']);
+  });
+
+  it('PARTS_REQ.GRAIN=3 BLOQUEA como spec (documentado INT 0,1,2)', () => {
+    const doc = labDocWith((d) => {
+      const part = d.records.find((r) => r.type === 'PARTS_REQ');
+      (part as { grain: number }).grain = 3;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.enum_value_invalid']);
+    expect(issues[0]!.field).toBe('PARTS_REQ.GRAIN');
+  });
+
+  it('JOBS.STATUS=4 BLOQUEA como spec (documentado INT 0,1,2)', () => {
+    const doc = labDocWith((d) => {
+      const job = d.records.find((r) => r.type === 'JOBS');
+      (job as { status?: number }).status = 4;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.enum_value_invalid']);
+    expect(issues[0]!.field).toBe('JOBS.STATUS');
+  });
+
+  it('CUTS.FUNCTION=81 BLOQUEA como spec (diccionario 0-9 / 90-99)', () => {
+    const doc = labDocWith((d) => {
+      const cut = d.records.find((r) => r.type === 'CUTS');
+      (cut as { functionCode: number }).functionCode = 81;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.function_code_invalid']);
+    expect(issues[0]!.locator).toContain('0-9, 90-99');
+  });
+
+  it('CUTS.FUNCTION=4 NO es issue del spec preflight (SPEC_VALID_BUT_PRODUCT_UNSUPPORTED — dueño: validate.ts)', () => {
+    const doc = labDocWith((d) => {
+      const cut = d.records.find((r) => r.type === 'CUTS');
+      (cut as { functionCode: number }).functionCode = 4;
+    });
+    expect(ptxSpecPreflightDocument(doc)).toEqual([]);
+    // El lado producto sí lo rechaza (clasificación separada, sin confluencia):
+    expect(validatePtxDocument(doc).some((i) => i.code === 'UNSUPPORTED_FUNCTION_CODE')).toBe(true);
+  });
+
+  it('PATTERNS.TYPE=9 BLOQUEA como spec (documentado INT 0-8)', () => {
+    const doc = labDocWith((d) => {
+      const pattern = d.records.find((r) => r.type === 'PATTERNS');
+      (pattern as { patternType: number }).patternType = 9;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.index_out_of_range']);
+    expect(issues[0]!.field).toBe('PATTERNS.TYPE');
+    expect(issues[0]!.locator).toContain('INT 0-8');
+  });
+
+  it('PATTERNS.TYPE=6 NO es issue del spec preflight (template 5..8 = Pattern Exchange válido, no soportado por producto)', () => {
+    const doc = labDocWith((d) => {
+      const pattern = d.records.find((r) => r.type === 'PATTERNS');
+      (pattern as { patternType: number }).patternType = 6;
+    });
+    expect(ptxSpecPreflightDocument(doc)).toEqual([]);
+    expect(validatePtxDocument(doc).some((i) => i.code === 'INVALID_ENUM_VALUE')).toBe(true);
+  });
+
+  it('el parser distingue TYPE fuera de diccionario (9) de TYPE documentado-no-soportado (5..8)', () => {
+    const specInvalid = captureParseErrorText(() =>
+      parsePtxDocumentText('HEADER,1,LAB,0,0,1\r\nPATTERNS,1,1,1,9\r\n'),
+    );
+    expect(specInvalid.message).toContain('outside the documented Pattern Exchange range 0-8');
+    const unsupported = captureParseErrorText(() =>
+      parsePtxDocumentText('HEADER,1,LAB,0,0,1\r\nPATTERNS,1,1,1,6\r\n'),
+    );
+    expect(unsupported.message).toContain("outside this candidate's supported subset");
+    expect(unsupported.message).toContain('documented Pattern Exchange');
+    expect(unsupported.message).not.toContain('is not one of the documented values');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Taxonomía SPEC vs PRODUCT (revisión #788 — sin habilitar capacidades)
+// ---------------------------------------------------------------------------
+
+describe('#788 taxonomía SPEC_INVALID / SPEC_VALID_BUT_PRODUCT_UNSUPPORTED / PRODUCT_SUPPORTED', () => {
+  it('CUTS.FUNCTION: 81 SPEC_INVALID · 4/90/93 SPEC_VALID_BUT_PRODUCT_UNSUPPORTED · 0/1/2/3/92 PRODUCT_SUPPORTED', () => {
+    expect(classifyPtxDocumentedEnumSupport('CUTS.FUNCTION', 81)).toBe('SPEC_INVALID');
+    expect(classifyPtxDocumentedEnumSupport('CUTS.FUNCTION', -1)).toBe('SPEC_INVALID');
+    for (const code of [4, 5, 9, 90, 91, 93, 99]) {
+      expect(classifyPtxDocumentedEnumSupport('CUTS.FUNCTION', code)).toBe('SPEC_VALID_BUT_PRODUCT_UNSUPPORTED');
+    }
+    for (const code of [0, 1, 2, 3, 92]) {
+      expect(classifyPtxDocumentedEnumSupport('CUTS.FUNCTION', code)).toBe('PRODUCT_SUPPORTED');
+    }
+  });
+
+  it('PATTERNS.TYPE: 9 SPEC_INVALID · 5..8 SPEC_VALID_BUT_PRODUCT_UNSUPPORTED · 0..4 PRODUCT_SUPPORTED', () => {
+    expect(classifyPtxDocumentedEnumSupport('PATTERNS.TYPE', 9)).toBe('SPEC_INVALID');
+    expect(classifyPtxDocumentedEnumSupport('PATTERNS.TYPE', -1)).toBe('SPEC_INVALID');
+    for (const code of [5, 6, 7, 8]) {
+      expect(classifyPtxDocumentedEnumSupport('PATTERNS.TYPE', code)).toBe('SPEC_VALID_BUT_PRODUCT_UNSUPPORTED');
+    }
+    for (const code of [0, 1, 2, 3, 4]) {
+      expect(classifyPtxDocumentedEnumSupport('PATTERNS.TYPE', code)).toBe('PRODUCT_SUPPORTED');
+    }
+  });
+
+  it('la clasificación no habilita producción: el compiler sigue sin emitir 5..8 ni 4..9', () => {
+    // El subset productivo sigue siendo el const histórico de records.ts.
+    expect(Object.values(PTX_PATTERN_TYPE)).toEqual([0, 1, 2, 3, 4]);
+    expect([...PTX_SUPPORTED_CUT_FUNCTION_CODES]).toEqual([0, 1, 2, 3, 92]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JOBS opcional bajo la especificación (§5 p.120) — revisión #788
+// ---------------------------------------------------------------------------
+
+describe('#788 JOBS es opcional bajo la especificación (no bajo la política Granete)', () => {
+  const noJobsText = [
+    'HEADER,1,LAB,0,0,1',
+    'MATERIALS,1,1,MDF18,Desc,18,1,4,4',
+    'BOARDS,1,1,B1,1,1200,700',
+    'PATTERNS,1,1,1,0',
+    'CUTS,1,1,1,1,1,320.0,1,0',
+  ].join('\r\n') + '\r\n';
+
+  it('sin filas JOBS y UN único job implícito: SPEC-válido (semántica documentada §5 p.120)', () => {
+    const doc = parsePtxDocumentText(noJobsText);
+    expect(ptxSpecPreflightDocument(doc)).toEqual([]);
+  });
+
+  it('sin filas JOBS y DOS JOB_INDEX distintos: fail closed (job_scope_ambiguous, no inventado)', () => {
+    const two = noJobsText.replace('BOARDS,1,1,B1,1,1200,700', 'BOARDS,2,1,B1,1,1200,700');
+    const doc = parsePtxDocumentText(two);
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toContain('ptx_spec.job_scope_ambiguous');
+    expect(issues.find((i) => i.code === 'ptx_spec.job_scope_ambiguous')!.locator).toContain('§5 p.120');
+  });
+
+  it('CON filas JOBS la referencia sigue siendo obligatoria (comportamiento anterior conservado)', () => {
+    const doc = labDocWith((d) => {
+      const part = d.records.find((r) => r.type === 'PARTS_REQ');
+      (part as { jobIndex: number }).jobIndex = 2;
+    });
+    expect(codes(ptxSpecPreflightDocument(doc))).toContain('ptx_spec.reference_unknown');
+  });
+
+  it('la política de PRODUCTO no se debilita: el compiler de Granete sigue emitiendo su fila JOBS explícita', () => {
+    const planR4 = optimizeCutPlan(GOLDEN_R4_PROJECT_ID, GOLDEN_R4_ROWS, GOLDEN_R4_MATERIALS, GOLDEN_R4_CONFIG);
+    const compiled = compileCutPlanToPtxDocument(planR4, GOLDEN_R4_OPTIONS);
+    expect(compiled.document.records.filter((r) => r.type === 'JOBS')).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VERSION: forma comprobable, valor exacto UNKNOWN (revisión #788)
+// ---------------------------------------------------------------------------
+
+describe('#788 VERSION — sólo la forma es spec; el valor exacto es UNKNOWN hasta receiver profile', () => {
+  it('las formas documentadas 1 / 1.06 / 1.08 PASAN (ningún pin arbitrario)', () => {
+    for (const version of [1, 1.06, 1.08]) {
+      const doc = labDocWith((d) => {
+        (d.header as { version: number }).version = version;
+      });
+      expect(ptxSpecPreflightDocument(doc), `version=${version}`).toEqual([]);
+    }
+  });
+
+  it('el issue de VERSION describe la forma y la ambigüedad documentada, no un valor "verificado"', () => {
+    const doc = labDocWith((d) => {
+      (d.header as { version: number }).version = 0;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toEqual(['ptx_spec.header_version_invalid']);
+    expect(issues[0]!.message).toContain('ambiguo');
+    expect(issues[0]!.message).not.toContain('verificado');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Shapes: prefijo requerido / trailing opcional omitido (casos 14–15)
 // ---------------------------------------------------------------------------
 
@@ -518,6 +911,14 @@ describe('#788 inmutabilidad histórica r2/r3/r4', () => {
     );
     expect(new TextDecoder().decode(bytesR2)).toBe(GOLDEN_TEXT);
 
+    // r3 REAL recompile (#788 review): same pipeline as r2/r4, byte-exact.
+    const planR3 = optimizeCutPlan(GOLDEN_R3_PROJECT_ID, GOLDEN_R3_ROWS, GOLDEN_R3_MATERIALS, GOLDEN_R3_CONFIG);
+    const bytesR3 = serializePtxDocumentBytes(
+      compileCutPlanToPtxDocument(planR3, GOLDEN_R3_OPTIONS).document,
+      { decimalPlaces: GOLDEN_R3_OPTIONS.decimalPlaces },
+    );
+    expect(new TextDecoder().decode(bytesR3)).toBe(GOLDEN_R3_TEXT);
+
     const planR4 = optimizeCutPlan(GOLDEN_R4_PROJECT_ID, GOLDEN_R4_ROWS, GOLDEN_R4_MATERIALS, GOLDEN_R4_CONFIG);
     const bytesR4 = serializePtxDocumentBytes(
       compileCutPlanToPtxDocument(planR4, GOLDEN_R4_OPTIONS).document,
@@ -587,8 +988,9 @@ describe('#788 writer gating — compileCutPlanToPtxDocument strictSpecPreflight
     expect(new TextDecoder().decode(bytes)).toBe(GOLDEN_R4_TEXT);
   });
 
-  it('un candidato con TITLE de 23 chars PASA el gate completo: compile → serialize spec-checked → readback === []', () => {
-    const R5_LIKE_TITLE = 'GRANETE-PTX-R5-CANDIDATE'; // 23 chars <= 25
+  it('un candidato con TITLE de 24 chars PASA el gate completo: compile → serialize spec-checked → readback === []', () => {
+    const R5_LIKE_TITLE = 'GRANETE-PTX-R5-CANDIDATE'; // 24 chars <= 25
+    expect(R5_LIKE_TITLE.length).toBe(24);
     expect(R5_LIKE_TITLE.length).toBeLessThanOrEqual(25);
     const options = {
       ...GOLDEN_R4_OPTIONS,

@@ -33,6 +33,10 @@ import type {
   PtxTrimType,
   PtxUnits,
 } from './records';
+import { PTX_PATTERN_TYPE } from './records';
+
+/** Candidate subset of the documented PATTERNS.TYPE 0-8 (writer capability data). */
+const PATTERN_TYPE_PRODUCT_SUBSET: readonly PtxPatternType[] = Object.values(PTX_PATTERN_TYPE);
 
 export type PtxParseErrorCode =
   | 'NOT_PRINTABLE_ASCII'
@@ -423,17 +427,39 @@ export function parseRecordRow(family: string, cells: readonly string[], lineNo:
         rule3: c.optionalInt(17, 'RULE3'),
         rule4: c.optionalInt(18, 'RULE4'),
       };
-    case 'PATTERNS':
+    case 'PATTERNS': {
+      // Two distinct failures, never conflated (#788 review): outside the
+      // documented Pattern Exchange range 0-8 = spec-invalid; inside 0-8 but
+      // in 5..8 = documented grain-matching templates (S12) that this
+      // candidate's subset does not support — SPEC_VALID but product
+      // unsupported, and the message must not call it "invalid Pattern
+      // Exchange".
+      const patternTypeRaw = c.int(3, 'TYPE');
+      if (patternTypeRaw < 0 || patternTypeRaw > 8) {
+        throw new PtxParseError(
+          'INVALID_ENUM_VALUE',
+          `PATTERNS.TYPE: ${patternTypeRaw} is outside the documented Pattern Exchange range 0-8 [S03 §20 p.175 'TYPE Pattern type INT 0-8']`,
+          lineNo,
+        );
+      }
+      if (!(PATTERN_TYPE_PRODUCT_SUBSET as readonly number[]).includes(patternTypeRaw)) {
+        throw new PtxParseError(
+          'INVALID_ENUM_VALUE',
+          `PATTERNS.TYPE: ${patternTypeRaw} is documented Pattern Exchange (0-8; 5-8 are grain-matching templates, S12) but outside this candidate's supported subset [${PATTERN_TYPE_PRODUCT_SUBSET.join(', ')}] — fail closed without labeling it invalid Pattern Exchange`,
+          lineNo,
+        );
+      }
       return {
         type: 'PATTERNS',
         jobIndex: c.int(0, 'JOB_INDEX'),
         patternIndex: c.int(1, 'PTN_INDEX'),
         boardIndex: c.int(2, 'BRD_INDEX'),
-        patternType: c.enum<PtxPatternType>(3, 'TYPE', [0, 1, 2, 3, 4]),
+        patternType: patternTypeRaw as PtxPatternType,
         runQuantity: c.optionalInt(4, 'QTY_RUN'),
         cyclesQuantity: c.optionalInt(5, 'QTY_CYCLES'),
         maxBook: c.optionalInt(6, 'MAX_BOOK'),
       };
+    }
     case 'CUTS':
       return {
         type: 'CUTS',
