@@ -30,7 +30,7 @@ Extraída de la fuente primaria S03 (Magi-Cut Interface Guide V11) el
  16 FACE_LAM   'Face laminate TXT 200'
  17 BACK_LAM   'Back laminate TXT 200'
  18 CORE_MAT   'Core material TXT 200'   (el nombre documentado es CORE_MAT, no CORE)
- 19 PALLETP    'Pallet layout TXT 200'
+ 19 PALLET     'Pallet layout TXT 200'
  20 DRAWING    'Name of drawing file TXT 200'
  21 PRODUCT    'Product code TXT 200'
  22 PROD_INFO  'Product description TXT 200'
@@ -105,9 +105,9 @@ clave de la proyección es exactamente el `PARTS_REQ.CODE` del candidato.
 | EDGE4 (Right width) | bandera **W2** + `edgeBandCode` | ídem |
 | EDG_PG1..4 | **VACÍO** — Granete no tiene código de operación/programa de canto | UNKNOWN: no se inventan valores ("EDGE", "1", …) sólo porque la columna existe |
 | FACE_LAM / BACK_LAM | **VACÍO** — sin autoridad de laminación separada | UNKNOWN → vacío |
-| CORE_MAT | **VACÍO** — la autoridad EXISTE (código del tablero) pero redundante de MATERIALS; se decide en #790 | PRODUCT diferido |
-| PALLETP | **VACÍO** — sin flujo de pallet | UNKNOWN |
-| DRAWING | `D<hex12>` = sha256 namespaced del manufacturingPartCode (ver §5) | PRODUCT (identidad CNC); spec TXT 200 |
+| CORE_MAT | `row.materialCode` (`ProductionCutRow.materialCode`) | PRODUCT_POLICY: autoridad del tablero ya existente; no introduce receiver MATERIALS tuning |
+| PALLET | **VACÍO** — nombre nominal del campo; posición serializada sin cambios respecto del contrato de 32 columnas | UNKNOWN |
+| DRAWING | `D<hex12>` sólo con autoridad CNC explícita (`hasCncMachining: true`) y `cncScope` congelado no vacío (ver §5) | PRODUCT_POLICY sobre campo SPEC TXT 200; ausencia/false deja DRAWING y BARCODE1 vacíos |
 | PRODUCT | `unit.moduleCode` | PRODUCT |
 | PROD_INFO | `unit.moduleName` | PRODUCT |
 | PROD_WIDTH/HGT/DEPTH | `unit.module{Width,Height,Depth}Mm` (dims finales del mueble) | PRODUCT; §20 las tipa TXT |
@@ -138,21 +138,32 @@ EDGE3 (Left width)  ← W1        EDGE4 (Right width) ← W2
 El mapeo NO es simétrico (L1 NO alimenta EDGE1) a propósito: la trampa de
 los tests (`partLabels.test.ts`, golden) usa piezas con patrones asimétricos
 (3+1, sólo-L2, sólo-W1/W2) de modo que cualquier swap L1↔L2 o eje L↔W
-cambia el tuple emitido y falla. Límite honesto: Granete lleva UN canto por
-pieza, dos lados encintados con el mismo código no se distinguen por valor;
-lo plenamente distinguible —y cubierto— es el patrón por lado y por eje.
+cambia el tuple emitido y falla. Límite honesto: Granete lleva UN código de
+banda por pieza; piezas con dos o
+más lados encintados emiten el mismo `edgeBandCode` en cada lado marcado. Un
+flag de canto sin `edgeBandCode` autoritativo falla cerrado; distinguir códigos
+de banda distintos por lado queda fuera de #789/#797.
 
 ## 5. Puente CNC: DRAWING / BARCODE / colisiones
 
-- `cncDrawingRef = 'D' + sha256('granete:ptx-cnc-drawing:' + manufacturingPartCode)[0..12].toUpperCase()`
-  — ASCII, 13 chars, determinista, estable dentro del release (el código
-  está congelado), nunca un UUID, apto como basename futuro de MPR/MPRX.
-  Misma disciplina de 48 bits que el filename r4 `G<hex12>` (#781) pero en
-  espacio de nombres distinto: jamás colisionan por diseño.
-- Pieza sin mecanizado declarado (`hasCncMachining: false`): DRAWING y
-  BARCODE1 quedan VACÍOS — no se generan programas falsos; BARCODE2 (código
-  de fabricación) se mantiene porque el tracking no depende del mecanizado.
-- BARCODE1 = `*D<hex12>*` (Code 39 con asteriscos, como las muestras).
+Clasificación separada:
+
+- **SPEC:** DRAWING y BARCODE1 son columnas TXT 200 del diccionario §20; el
+  diccionario no define el algoritmo ni autoriza inferir mecanizado por nombre.
+- **PRODUCT POLICY:** `cncDrawingRef = 'D' + sha256('granete:ptx-cnc-drawing:' +
+  cncScope + ':' + manufacturingPartCode)[0..12].toUpperCase()` — ASCII, 13
+  chars, determinista, derivado sólo de un scope CNC/release congelado y
+  explícito más el código de fabricación. No es UUID, no usa reloj/azar y no
+  reserva un basename futuro cuando el mecanizado es desconocido.
+- **PRODUCT POLICY:** sólo `hasCncMachining: true` con `cncScope` no vacío emite
+  DRAWING y BARCODE1. `hasCncMachining: false` o ausente deja ambos campos
+  VACÍOS; BARCODE2 conserva el código de fabricación porque el tracking no
+  depende del mecanizado.
+- **RECEIVER EVIDENCE:** BARCODE1 usa el envoltorio Code 39 `*D<hex12>*`, forma
+  observada en las muestras; la columna BARCODE1 vs BARCODE2 sigue siendo
+  política de Granete porque R2201 y R7301 usan tokens opuestos.
+- **UNKNOWN:** no se genera MPR/MPRX/BHX, no se afirma aceptación CADLink y no
+  se infiere compatibilidad del centro CNC.
 - Fail-closed en el compiler: dos piezas con el mismo DRAWING →
   `ptx_compile.label_drawing_duplicate`; dos piezas con el mismo BARCODE1 →
   `ptx_compile.label_barcode_duplicate`; BARCODE2 ≠ código de fabricación →
@@ -220,7 +231,10 @@ de lados/cantos ya viaja en EDGE1..4.
   —trampa antisimétrica—, nombres de pieza distintos, patrones de canto
   3+1/todos/1-L2/sólo-eje-W/ninguno, dos materiales y dos cantos con
   espesores distintos, qty-2 con -C2, ROOM distinto en la ocurrencia
-  repetida, ORDER, drawing refs y barcodes) + tests en
+  repetida, ORDER, drawing refs y barcodes). El hardening #797 añade un caso
+  real del optimizador con `grain=0` y `allowRotationNoGrain`: la pieza queda
+  `rotated === true`, preserva lados físicos L1/L2/W1/W2 en la etiqueta (no
+  ejes del tablero), y pasa serialize→parse→readback independiente. Tests en
   `partLabels.test.ts`, `compileCutPlan.partsInf.test.ts`,
   `specPreflight.test.ts` (#789), `roundtrip.test.ts` (#789) y
   `externalDialect.test.ts` (R2201/R7301 ahora leídas TIPADAS en
@@ -234,7 +248,7 @@ de lados/cantos ya viaja en EDGE1..4.
 
 - #790 receiver profile HPP250/CAD4: shape final de columnas opcionales,
   orden completo de familias, MATERIALS receiver policy (BOOK/kerf/trims/
-  RULE1..4), CORE_MAT, INFO3/4, imagen de etiqueta.
+  RULE1..4), tuning receptor de materiales, INFO3/4 e imagen de etiqueta.
 - #791 CUTS diferencial (FUNCTION 90..99 como fases, no "92 = offcut").
 - Futuro CNC real: generación MPR/MPRX/BHX con basename = cncDrawingRef;
   el escaneo de BARCODE1 en el centro de mecanizado resuelve el programa.
@@ -243,22 +257,18 @@ de lados/cantos ya viaja en EDGE1..4.
 
 ## 10. Verificación ejecutada
 
+Evidencia enfocada observada para el hardening #797 sobre HEAD
+`5104cca822cc148979b802ccba6c0659c0b5e43d`:
+
 ```sh
-pnpm --filter @granete/excel test   # 45 archivos, 526 PASS + 3 skips
-pnpm test                           # monorepo exit 0 (domain 1560, storage 223,
-                                    # excel 526+3s, desktop 17, mobile 87, ui 1946, web 532)
-pnpm typecheck                      # 7/7
-GOFLAGS='-p=1' go test ./...        # backend-go exit 0 (PG 16 desechable; storage 324s,
-                                    # pilotreadiness 235s)
-bundle exec rake verify             # PATH rbenv 3.2.11: 880 runs/5951 + boundary 6/3179
-                                    # + RBZ sha f9f0f02c… verificado
-playwright tests/visual/proyectar-webgl.spec.ts   # 8/8
-foundation-gate-a --stage postgres  # PASS
-foundation-gate-a --stage browser   # [organization-gate] PASS
+pnpm --filter @granete/excel test   # 45 archivos, 534 PASS + 3 skips
 git diff --check                    # limpio
 ```
 
-Inmutabilidad r2/r3/r4: los goldens históricos se recompilan byte-exact
-dentro de la suite (regresión del preflight en verde) y el adapter/profile
-no fue tocado (`ptx-cadmatic-4@r4` / `granete-ptx@1.3.0` sin cambios — el
-versionado r5 es #790/#793).
+Checks pendientes para cierre/publish del PR: `pnpm typecheck`, selector actual,
+CI exact-head y cualquier gate adicional que el líder/verificador exija. No se
+registran como PASS hasta observarlos en este HEAD.
+
+Inmutabilidad r2/r3/r4: los goldens históricos se recompilan byte-exact dentro
+de la suite focalizada; r2/r3/r4, FUNCTION 92, perfiles/adapters y salidas de
+cliente quedan fuera de #797 y no fueron tocados por este hardening.

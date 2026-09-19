@@ -25,16 +25,17 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
   - Implemented explicit conservative machining authority and required deterministic frozen CNC/release scope for DRAWING; invalid engineering quantities and edge flags without an authoritative edge band code fail closed.
   - Projected `ProductionCutRow.materialCode` as `CORE_MAT`; renamed PALLETP nominal model to PALLET across typed contract surfaces.
   - Added focused unit/compiler tests for CNC true/false/missing, scope determinism, edge blocking, CORE_MAT, PALLET, and invalid quantities.
-  - Evidence: writer observed `pnpm --filter @granete/excel test` = 45 files / 534 passed / 3 skipped; `git diff --check` clean. Commit identity recorded after the work-unit commit.
+  - Evidence: writer observed `pnpm --filter @granete/excel test` = 45 files / 534 passed / 3 skipped; `git diff --check` clean. Work-unit commit: `5104cca822cc148979b802ccba6c0659c0b5e43d`.
 
 - [x] **T2 — Exercise real rotated optimizer label semantics** (delegated writer; same writer, next work unit)
   - Added a grain-free rotation-enabled fixture that demonstrably yields `piece.rotated === true` with asymmetric L/W edge flags.
   - It asserts code/PART_INDEX/finished dimensions/orientation-independent edges/REQ-INF relation and clean serialize→parse→independent readback.
-  - The r2/r3/r4 and FUNCTION 92 paths were not modified; package regression suite above exercised their existing tests. Commit identity recorded after the work-unit commit.
+  - The r2/r3/r4 and FUNCTION 92 paths were not modified; package regression suite above exercised their existing tests. Work-unit commit: `5104cca822cc148979b802ccba6c0659c0b5e43d`.
 
-- [ ] **T3 — Document, verify, publish same PR head** (delegated writer for docs; delegated verifier for commands)
-  - Update the required PTX docs, verification record, progress entry, and PR #797 body to accurately classify SPEC / PRODUCT POLICY / RECEIVER EVIDENCE / UNKNOWN.
-  - Run targeted Excel tests, package suite, typecheck, verification selector, diff check, then exact-head CI after a work-unit commit and push.
+- [ ] **T3 — Document, verify, publish same PR head** (docs in progress; verifier/publish still pending)
+  - Documentation update in progress for the required PTX docs, verification record, progress entry, and this task document to accurately classify SPEC / PRODUCT POLICY / RECEIVER EVIDENCE / UNKNOWN.
+  - Observed evidence available for this PR head: `pnpm --filter @granete/excel test` = 45 files / 534 passed / 3 skipped; `git diff --check` clean.
+  - Pending: typecheck, verification selector, exact-head CI, PR #797 body/readback, push/publish steps, and any delegated verification explicitly authorized later.
   - Do not merge, close #789, or open another PR.
 
 ## Acceptance / required checks
@@ -52,8 +53,9 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 
 - 2026-09-19: Isolated a clean detached worktree at approved PR HEAD after diagnosing the original worktree as an unrelated in-progress rebase with a conflict in `progress/current.md`. No recovery was applied to that original worktree.
 - 2026-09-19: Read-only mapping identified `partLabels.ts`, compiler, typed PTX records/parser/serializer/validator/spec preflight/verifier, real optimizer golden, focused tests, and required docs as the bounded scope.
-- 2026-09-19: T1/T2 completed by one scoped writer. The implementation is confined to 11 PTX files and has 301 additions / 61 deletions before docs. Focused package suite passed (45 files / 534 passed / 3 skipped); diff check clean.
+- 2026-09-19: T1/T2 completed by one scoped writer. The implementation is confined to 11 PTX files and has 301 additions / 61 deletions before docs. Focused package suite passed (45 files / 534 passed / 3 skipped); diff check clean. Work-unit commit `5104cca822cc148979b802ccba6c0659c0b5e43d` records T1/T2.
+- 2026-09-19: T3 documentation/progress update started at detached HEAD `5104cca822cc148979b802ccba6c0659c0b5e43d`; no tests were rerun in this documentation-only step per owner instruction.
 
 ## Next step
 
-Commit the completed code/test work unit, then delegate T3 documentation and required independent verification before pushing the same PR branch.
+Finish T3 by committing/pushing the documentation update only after authorized, then run/report the pending typecheck, selector, exact-head CI, PR body/readback, and publication verification on the same PR head.

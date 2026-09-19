@@ -537,45 +537,55 @@ y puente CNC `D<hex12>`/BARCODE. Autoridad y clasificación por campo en
 `docs/machines/ptx-cadmatic4/09_parts_inf_labels_cnc.md` (mapping §3,
 orientación de cantos §4, puente CNC §5, inventario UDI §6).
 
+Evidencia enfocada observada en el hardening #797, HEAD
+`5104cca822cc148979b802ccba6c0659c0b5e43d`:
+
 ```sh
-pnpm --filter @granete/excel test    # partLabels + partsInf + specPreflight(#789)
-                                     # + roundtrip(#789) + externalDialect + suite
-pnpm typecheck
+pnpm --filter @granete/excel test    # 45 archivos / 534 PASS / 3 skips
+git diff --check                    # limpio
 ```
 
-Cobertura contractual exigida por #789:
+Checks pendientes en este HEAD: `pnpm typecheck`, selector actual, CI exact-head
+y gates proporcionales que el líder/verificador ejecute antes de publicar/cerrar.
+
+Cobertura contractual exigida por #789/#797:
 
 - proyección pura: el serializer/compiler no reconstruye etiqueta — todo
   PARTS_INF es proyección de `PtxPartLabelData`; el verifier exige celda a
   celda la igualdad con la etiqueta de SU pieza y que los campos sin
-  autoridad (EDG_PG*/FACE/BACK/CORE/PALLETP/COLOUR/SECOND_CUT) estén
-  AUSENTES (`parts_inf.authority_violation` ante un byte mutado);
+  autoridad (EDG_PG*/FACE/BACK/PALLET/COLOUR/SECOND_CUT) estén AUSENTES
+  (`parts_inf.authority_violation` ante un byte mutado);
+- CORE_MAT: `ProductionCutRow.materialCode` es la autoridad del tablero; esto
+  no introduce tuning de MATERIALS/receptor, que sigue perteneciendo a #790;
 - identidad de medidas: FIN_* (terminada, copiada de la fila de ingeniería)
   contra PARTS_REQ (corte) + descuento del optimizador, re-derivada de forma
   independiente por el verifier (`parts_inf.finished_identity`) y afirmada
   desde los bytes en el golden;
 - orientación de cantos: L2→EDGE1, L1→EDGE2, W1→EDGE3, W2→EDGE4 con trampas
-  asimétricas (3+1, sólo-L2, sólo-W1/W2, sin canto) en builder y golden —
-  cualquier swap de mapping o de eje falla;
+  asimétricas y con un escenario real del optimizador `grain=0` +
+  `allowRotationNoGrain` que produce `piece.rotated === true`; las etiquetas
+  preservan lados físicos de pieza, no ejes del tablero;
+- edge fail-closed: cualquier bandera de canto sin `edgeBandCode` bloquea;
+  Granete sigue limitado a un código de banda por pieza;
 - ocurrencia física: PROD_NUM = `workshopOccurrenceOrdinal` congelado (#781);
   golden con orden léxico de módulos OPUESTO al de ordinales y ocurrencia
   repetida (`-L2`, ROOM distinto) — las etiquetas no cruzan ocurrencias;
-- puente CNC: `D<hex12>` determinista (namespaced sha256 del código de
-  fabricación), BARCODE1=`*D<hex12>*`, BARCODE2=código; duplicados de
-  DRAWING/BARCODE1 BLOQUEAN (`label_drawing_duplicate`/`label_barcode_duplicate`);
-  pieza sin mecanizado deja DRAWING/BARCODE1 vacíos;
+- puente CNC: DRAWING/BARCODE1 sólo existen con autoridad CNC explícita y
+  `cncScope` congelado no vacío; `D<hex12>` deriva de scope+CNC/release y
+  código de fabricación, no de un basename futuro para mecanizado desconocido;
+  autoridad false/ausente deja DRAWING/BARCODE1 vacíos; duplicados bloquean;
+- LABEL_QTY/quantities: una etiqueta por pieza física (`LABEL_QTY="1"`) y
+  cantidades inválidas de filas de ingeniería (0, negativas o decimales)
+  fallan cerrado;
 - PARTS_UDI: modelado estructural INFO1..60, INFO2 (encoding compacto
   `2WE2LE`-style) clasificado UNKNOWN y JAMÁS generado; R2201/R7301 se leen
-  tipadas con referencias PART_INDEX → PARTS_REQ verificadas y el subset
-  ampliado pasa el strict spec preflight;
-- spec preflight extendido: TXT 200 en las 30 columnas de texto de PARTS_INF
-  y en INFO1..60 (document y bytes), IDX 1-250/1-9999, referencias
-  unknown; unicidad por pieza es PRODUCT (validate.ts DUPLICATE_INDEX), no
-  SPEC;
+  tipadas con referencias PART_INDEX → PARTS_REQ verificadas;
+- spec preflight extendido: TXT 200 en las columnas de texto de PARTS_INF y en
+  INFO1..60 (document y bytes), IDX 1-250/1-9999; unicidad por pieza es
+  PRODUCT (validate.ts DUPLICATE_INDEX), no SPEC;
 - inmutabilidad r2/r3/r4: sin la opción `partLabels` no se emiten PARTS_INF/
-  PARTS_UDI y los goldens históricos recompilan byte-exact (regresión del
-  preflight en verde); sin cambios de adapter/profile/digests (#790/#793
-  son dueños del versionado r5).
+  PARTS_UDI y los goldens históricos recompilan byte-exact dentro de la suite;
+  r2/r3/r4, FUNCTION 92, adapter/profile y outputs cliente no se tocaron.
 
 ---
 
