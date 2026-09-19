@@ -12,7 +12,7 @@
 ## Editing contract
 
 1. Keep this file below **200 lines / ~20 KB**.
-2. An open issue appears **once** in the active/open table. Do not create a new H1 section for each review round.
+2. An open issue gets **one row** in the open-work table. Do not create a new H1 section for each review round.
 3. Do **not** paste test logs, full verification matrices, commit histories, long SHAs, review transcripts, or implementation narratives here.
 4. Detailed evidence belongs in the PR, issue comments, `docs/verification.md`, or the feature-specific document.
 5. A feature PR should normally update this file **at most once**, near a material ownership/status change or merge. If status did not materially change, omit `progress/current.md` from the PR.
@@ -35,43 +35,42 @@
 
 | Area | Issue(s) | Role / state | Next gate |
 | --- | --- | --- | --- |
-| PTX/CADmatic r5 | #787 | META open, approved | Keep r5 work inside #790–#793; no client field attempt before final gate. |
+| PTX/CADmatic r5 | #787 | META open, approved | Keep r5 execution in the ordered receiver → CUTS → CADLink → final-route rows below; no client field attempt before the final gate. |
 | PTX receiver | #790 | **Next PTX implementation**; open, approved | Receiver HPP250/CAD4: MATERIALS, BOOK, RULES and record shape. |
-| PTX CUTS | #791 | Queued after #790; open, approved | Correct 90..99 semantics and differential/golden r5. |
-| PTX CADLink | #792 | Queued after #791; open, approved | `/RESULT`, `.RLT` parser and reproducible field pack. |
+| PTX CUTS | #791 | Queued; open, approved | Correct 90..99 semantics and differential/golden r5. |
+| PTX CADLink | #792 | Queued; open, approved | `/RESULT`, `.RLT` parser and reproducible field pack. |
 | PTX final route | #793 | Final r5 gate; open, approved | Profile r5, adapter identity/routing, frozen CNC scope and final candidate. |
 | Hardware 3D | #666 | META open, approved | Coordinate remaining AS3D work without mixing scopes. |
 | Hardware resources | #667 | Open umbrella; M1/M2 history archived | Triage remaining umbrella scope before adding more work under it. |
-| SketchUp hardware SKP | #668 | Open/reopened | Preserve exact-asset/mounting guarantees; do not fold #669 into it. |
+| SketchUp hardware SKP | #668 | Open/reopened | Preserve exact-asset/mounting guarantees; keep GLB work separate. |
 | GLB / coherent 3D | #669 | **Next/current hardware implementation**; open | GLB representation across catalog/agregados/muebles/Proyectar. |
 | Rigid assemblies pilot | #670 | Open | Continue MERIVOBOX/pilot work under its own acceptance gates. |
 | Ops revision continuity | #741 | Open, not current priority | Resume only when explicitly reprioritized; preserve P1/P2 authority rules. |
 | SketchUp commercial | #677 | Open, not current priority | Resume live commercial total/delta work when reprioritized. |
 | Legacy pairing umbrella | #499 | Open, needs triage | Confirm remaining scope vs already merged handoff work before new implementation. |
 | Quote authority umbrella | #642 | Open, needs triage | Consolidate remaining acceptance instead of adding more progress sections here. |
-| PTX umbrella | #650 | Open, needs triage | Treat r5 execution as #787/#790–#793; close or redefine #650 only through its issue. |
+| PTX umbrella | #650 | Open, needs triage | Treat the r5 META/receiver chain as current execution; close or redefine this umbrella only through its issue. |
 
-## Current execution order
+## Stable execution invariants
 
 ### PTX/CADmatic 4 r5
 
-`#790 → #791 → #792 → #793 → independent final review → one controlled client attempt`
-
-Field rules that remain current:
+The PTX rows in the table are intentionally ordered **receiver → CUTS → CADLink → final route**.
 
 - r2/r3/r4 are historical evidence and must remain byte/digest stable.
-- #788 and #789 are completed; do not reopen their scope inside later PRs unless a concrete regression is demonstrated.
+- The strict preflight and label/identity increments are completed; later work should not silently reopen their scope.
 - No “CADmatic compatible”, “CADLink accepted”, or machine-validation claim before field evidence.
-- The final client attempt must capture CADLink `.RLT` evidence; verbal popup feedback alone is insufficient.
-- Productive CNC `DRAWING` scope in #793 must come from frozen release identity (for example `manufacturingFingerprint` or equivalent), never a free UI string.
+- No client field attempt before the final r5 route and independent final review.
+- The controlled field attempt must capture CADLink `.RLT` evidence; verbal popup feedback alone is insufficient.
+- Productive CNC `DRAWING` scope at the final route must come from frozen release identity (for example `manufacturingFingerprint` or equivalent), never a free UI string.
 
 ### Hardware / 3D
 
-`#669` is the next/current implementation surface.
+The **GLB / coherent 3D** row in the table is the next/current implementation surface.
 
-- Keep #668 (native SKP/download/mounting) and #670 (rigid assembly/pilot) as separate authorities.
-- Do not duplicate their detailed host evidence in this ledger.
-- New findings belong to their issue/PR or feature docs, then this table gets only a one-line state change.
+- Native SKP/download/mounting and rigid-assembly/pilot work remain separate authorities.
+- Do not duplicate host evidence or test matrices in this ledger.
+- New findings belong to their issue/PR or feature docs; this table gets only a one-line state change.
 
 ## Recently completed
 
