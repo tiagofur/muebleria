@@ -17,8 +17,12 @@ require 'testup/testcase'
 #             definitions reused, bottom panel 512 -> 712 mm, scale=[1,1,1], det=+1.0).
 #   E5 & E6:  Discrete variant switch (NL 450 -> NL 500) without scaling,
 #             runner definition switched, bottom length 434 -> 484 mm.
-#   E9 & E10: Non-identity compound transform: Furniture * Assembly * Member * MountFrame (originMm [15, 5, 2]).
-#   E11:      Save, close, and reopen .skp preserves assembly identities, transforms, and metadata.
+#   E9 & E10: Non-identity compound transform on REAL asymmetric asset geometry:
+#             Furniture * Assembly * Member(rotated) * inverse(MountFrame rotated),
+#             reference vertices of the bracket measured back from the loaded
+#             definition must land on the exact composed world points (F2 hardening).
+#   E11:      Save, close, and reopen .skp preserves assembly identities, transforms,
+#             metadata and the normalized bracket geometry.
 #   E12:      Undo and Redo revert and restore assembly geometry and metadata cleanly.
 #   E13:      Furniture-wide fail-before-mutate (1 failing member preserves existing geometry intact).
 #   E14:      Rigidity invariant across all mutations (all rigid members scale=[1,1,1] and det=+1.0).
@@ -29,6 +33,59 @@ module Granete
       EXPECTED_NAME = 'Granete for SketchUp'
       REPOSITORY_ROOT = File.expand_path('../../../..', __dir__)
       MM = 1.0 / 25.4
+
+      # F2 hardening fixture (#668/#670 audit): every scratch .skp now carries a
+      # real asymmetric stepped bracket, and every member is placed through a
+      # ROTATED MountFrame (det=+1, no mirror). The bracket is intentionally
+      # non-symmetric with distinct X/Y/Z extents so an omitted, doubled,
+      # transposed or unit-mangled normalization moves its reference points by
+      # whole millimeters — the world-point assertions cannot pass silently.
+      #
+      # Fixture contract kept for the future SKP/GLB parity work (#669):
+      #   nominal extents (x, y, z) .... 70 x 54 x 18 mm
+      #   reference points (asset mm) .. BRACKET_REFERENCE_POINTS_MM (P0, P1, P2)
+      #   MountFrame ................... origin [25, 30, 15], basis rotated +90 deg
+      #                                    about Z (x=[0,1,0], y=[-1,0,0], z=[0,0,1])
+      #   expected physical result ..... reference points land at
+      #                                    T_furniture * T_assembly * T_member
+      #                                    * inverse(T_mountFrame) * P_i
+      #                                    with pairwise distances preserved.
+      IDENTITY_BASIS = {
+        'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0]
+      }.freeze
+      BRACKET_BOTTOM_OUTLINE_MM = [
+        [17.0, 23.0, 11.0],
+        [87.0, 23.0, 11.0],
+        [87.0, 41.0, 11.0],
+        [31.0, 41.0, 11.0],
+        [31.0, 77.0, 11.0],
+        [17.0, 77.0, 11.0]
+      ].freeze
+      BRACKET_HEIGHT_MM = 18.0
+      BRACKET_REFERENCE_POINTS_MM = [
+        [17.0, 23.0, 11.0],
+        [87.0, 23.0, 11.0],
+        [31.0, 77.0, 11.0]
+      ].freeze
+      MOUNT_FRAME_ORIGIN_MM = [25.0, 30.0, 15.0].freeze
+      MOUNT_FRAME_BASIS = {
+        'x' => [0.0, 1.0, 0.0],
+        'y' => [-1.0, 0.0, 0.0],
+        'z' => [0.0, 0.0, 1.0]
+      }.freeze
+      # E9 non-identity member chain: side-left is translated and rotated about
+      # X (det=+1) so the mount rotation and the member rotation compose.
+      SIDE_LEFT_E9_TRANSLATION_MM = [3.0, 7.0, 1.0].freeze
+      SIDE_LEFT_E9_BASIS = {
+        'x' => [1.0, 0.0, 0.0],
+        'y' => [0.0, 0.0, 1.0],
+        'z' => [0.0, -1.0, 0.0]
+      }.freeze
+      E9_FURNITURE_ORIGIN_MM = [1200.0, 600.0, 300.0].freeze
+      E9_ASSEMBLY_TRANSLATION_MM = [15.0, 50.0, 100.0].freeze
+      GEOMETRY_EVIDENCE_PATH = 'progress/host_smoke_668_mount_frame_geometry_evidence.json'
+      POINT_TOLERANCE_MM = 1e-3
+      MUTANT_MIN_ERROR_MM = 1.0
 
       # Self-contained revision->path stub (TestUp only loads test/testup; the
       # unit suite's MerivoboxPilotTest::FakeDownloader is not available here).
@@ -50,7 +107,7 @@ module Granete
 
       # Shared evidence accumulator persisted to progress/host_smoke_670_e_merivobox_pilot_evidence.json
       class << self
-        attr_accessor :evidence
+        attr_accessor :evidence, :geometry_evidence
 
         def current_rbz_sha256
           rbz_path = File.join(REPOSITORY_ROOT, 'apps/sketchup-extension/dist/granete_for_sketchup.rbz')
@@ -76,8 +133,28 @@ module Granete
         'world_transform' => {}
       }
 
+      # Dedicated F2 evidence (host-measured bracket reference points) persisted
+      # to progress/host_smoke_668_mount_frame_geometry_evidence.json. The
+      # actualWorldMm values always come from real host readback.
+      self.geometry_evidence = {
+        'head' => current_head_sha,
+        'rbzSha256' => current_rbz_sha256,
+        'sketchupVersion' => nil,
+        'assetFixture' => {
+          'mountFrame' => { 'originMm' => MOUNT_FRAME_ORIGIN_MM, 'basis' => MOUNT_FRAME_BASIS },
+          'nominalExtentsMm' => [70.0, 54.0, 18.0],
+          'referencePoints' => []
+        },
+        'mutantSensitivityMinErrorMm' => {},
+        'rigidity' => nil
+      }
+
       def evidence
         self.class.evidence
+      end
+
+      def geometry_evidence
+        self.class.geometry_evidence
       end
 
       def self.installed_extension
@@ -102,6 +179,7 @@ module Granete
           asset_loader: @asset_loader
         )
         evidence['sketchup_version'] ||= Sketchup.version
+        geometry_evidence['sketchupVersion'] ||= Sketchup.version
       end
 
       def teardown
@@ -327,10 +405,15 @@ module Granete
         evidence['tests']['e5_e6_variant_switch'] = { 'status' => 'pass' }
       end
 
-      # E9 & E10: Non-identity MountFrame world transform composition
+      # E9 & E10: non-identity MountFrame world transform proven on REAL asset
+      # geometry (F2 hardening). The scratch .skp carries the asymmetric
+      # bracket; its reference vertices are measured back from the loaded
+      # definition through the productive pipeline (prefetch -> definitions.load
+      # -> compute_prepared_transform -> ComponentInstance) and must land at
+      # the exact composed world positions, computed ONLY from contract
+      # constants:
+      #   T_world(P) = T_furniture * T_assembly * T_member * inverse(T_mountFrame) * P
       def test_e9_e10_non_identity_mount_frame
-        # Non-identity MountFrame comes from the LAYOUT (mount_origin_mm below),
-        # exercised through the prepared-asset normalization path.
         loader = create_merivobox_asset_loader
         builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
           metadata_store: @metadata_store,
@@ -338,11 +421,16 @@ module Granete
         )
 
         layout_data = build_merivobox_layout(
-          width_mm: 600.0, nominal_depth_mm: 500.0, mount_origin_mm: [15.0, 5.0, 2.0]
+          width_mm: 600.0, nominal_depth_mm: 500.0,
+          side_left_translation_mm: SIDE_LEFT_E9_TRANSLATION_MM,
+          side_left_basis: SIDE_LEFT_E9_BASIS
         )
         parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(layout_data)
 
-        t_furniture = Geom::Transformation.translation(Geom::Vector3d.new(1200.0 * MM, 600.0 * MM, 300.0 * MM))
+        t_furniture = Geom::Transformation.translation(
+          Geom::Vector3d.new(E9_FURNITURE_ORIGIN_MM[0] * MM, E9_FURNITURE_ORIGIN_MM[1] * MM,
+                             E9_FURNITURE_ORIGIN_MM[2] * MM)
+        )
         result = builder.place_existing_furniture(
           model,
           furniture_instance_id: FI_1,
@@ -357,42 +445,63 @@ module Granete
 
         furniture = find_furniture(FI_1)
         side_l = find_child_by_name(furniture, 'Lateral Izquierdo')
-        refute_nil side_l
+        refute_nil side_l, 'sideLeft must be the real loaded asset (fallback would skip normalization)'
 
         t_world = furniture.transformation * side_l.transformation
         assert_rigid_transformation(t_world)
-
-        # Expected world point, composed from the layout contract constants
-        # (assembly placement starts at the interior boundary x = left panel):
-        #   furniture [1200, 600, 300]
-        #   + assembly placement [left_panel, 50, 100]
-        #   + member local [0, 0, 0]
-        #   - MountFrame origin [15, 5, 2]  (T_norm = inverse(T_mountFrame))
-        furniture_origin_mm = [1200.0, 600.0, 300.0]
-        assembly_placement_mm = [15.0, 50.0, 100.0]
-        member_local_mm = [0.0, 0.0, 0.0]
-        mount_origin = [15.0, 5.0, 2.0]
-        expected_mm = furniture_origin_mm.each_index.map do |i|
-          furniture_origin_mm[i] + assembly_placement_mm[i] + member_local_mm[i] - mount_origin[i]
-        end
-        actual_pt = Geom::Point3d.new(0, 0, 0).transform(t_world)
-        actual_mm = [actual_pt.x * 25.4, actual_pt.y * 25.4, actual_pt.z * 25.4]
-
-        error_mm = Math.sqrt(
-          ((actual_mm[0] - expected_mm[0])**2) +
-          ((actual_mm[1] - expected_mm[1])**2) +
-          ((actual_mm[2] - expected_mm[2])**2)
-        )
-
-        assert error_mm < 1e-3, "World point error #{error_mm} mm exceeds 1e-3 mm tolerance"
-
-        evidence['world_transform'] = {
-          'expected_world_point_mm' => expected_mm,
-          'actual_world_point_mm' => actual_mm,
-          'error_mm' => error_mm,
-          'tolerance_mm' => 1e-3
+        assert_no_shear(t_world, 'world chain')
+        geometry_evidence['rigidity'] = {
+          'scale' => calculate_matrix_scale(t_world).map { |v| (v * 1e6).round / 1e6 },
+          'determinant' => calculate_matrix_determinant(t_world)
         }
-        evidence['tests']['e9_e10_mount_frame_world_transform'] = { 'status' => 'pass', 'error_mm' => error_mm }
+
+        reference_points = BRACKET_REFERENCE_POINTS_MM.map do |asset_mm|
+          measured_local = measured_vertex_mm(side_l.definition, asset_mm)
+          actual_world = measured_world_vertex_mm(furniture, side_l, measured_local)
+          expected_world = expected_world_mm(asset_mm, :correct)
+          error_mm = point_distance_mm(actual_world, expected_world)
+          assert error_mm < POINT_TOLERANCE_MM,
+                 "reference point #{asset_mm.inspect}: world error #{error_mm} mm > #{POINT_TOLERANCE_MM} mm"
+          {
+            'assetMm' => asset_mm,
+            'expectedWorldMm' => expected_world,
+            'actualWorldMm' => actual_world,
+            'errorMm' => error_mm
+          }
+        end
+
+        # Rigid placement: distances between real vertices survive the whole
+        # chain unchanged (measured world vs authored asset space, in mm).
+        world_pts = reference_points.map { |rp| rp['actualWorldMm'] }
+        assert_in_delta point_distance_mm(BRACKET_REFERENCE_POINTS_MM[0], BRACKET_REFERENCE_POINTS_MM[1]),
+                        point_distance_mm(world_pts[0], world_pts[1]), POINT_TOLERANCE_MM
+        assert_in_delta point_distance_mm(BRACKET_REFERENCE_POINTS_MM[1], BRACKET_REFERENCE_POINTS_MM[2]),
+                        point_distance_mm(world_pts[1], world_pts[2]), POINT_TOLERANCE_MM
+
+        # Conceptual negatives (fixture sensitivity): a missing, doubled,
+        # transposed or unit-mangled normalization each move the reference
+        # points far beyond tolerance, so the assertions above fail loudly
+        # under any of those defects.
+        %i[omitted double transposed unit_double].each do |mode|
+          min_error = BRACKET_REFERENCE_POINTS_MM.map do |asset_mm|
+            point_distance_mm(expected_world_mm(asset_mm, mode), expected_world_mm(asset_mm, :correct))
+          end.min
+          assert min_error > MUTANT_MIN_ERROR_MM,
+                 "mutant :#{mode} would not be detectable (min error #{min_error} mm)"
+          geometry_evidence['mutantSensitivityMinErrorMm'][mode.to_s] = min_error
+        end
+
+        geometry_evidence['assetFixture']['referencePoints'] = reference_points
+        evidence['world_transform'] = {
+          'expected_world_point_mm' => reference_points[0]['expectedWorldMm'],
+          'actual_world_point_mm' => reference_points[0]['actualWorldMm'],
+          'error_mm' => reference_points[0]['errorMm'],
+          'tolerance_mm' => POINT_TOLERANCE_MM,
+          'reference_points_count' => reference_points.length
+        }
+        evidence['tests']['e9_e10_mount_frame_world_transform'] = {
+          'status' => 'pass', 'error_mm' => reference_points[0]['errorMm']
+        }
       end
 
       # E11: Save, close, and reopen .skp preserves MERIVOBOX assembly
@@ -431,6 +540,26 @@ module Granete
         assert_equal 'inst-merivobox-1', meta_side_r.dig('identity', 'assemblyInstanceId')
         assert_equal 'side-right', meta_side_r.dig('identity', 'memberId')
         assert_rigid_transformation(side_r.transformation)
+
+        # F2 (§ Save/Reopen): the reopened model keeps the exact asset revision
+        # identity AND the normalized bracket geometry — reference vertices
+        # still land on the composed world points (identity furniture
+        # transform, default side-left placement in this test's layout).
+        side_l_re = find_child_by_name(furniture_reopened, 'Lateral Izquierdo')
+        refute_nil side_l_re
+        meta_side_l = store_reopened.read(side_l_re)
+        assert_equal 'rev-mbx-side-1', meta_side_l.dig('identity', 'assetRevisionId'),
+                     'reopened member must keep its exact asset revision identity'
+        assert_rigid_transformation(side_l_re.transformation)
+        assert_no_shear(furniture_reopened.transformation * side_l_re.transformation, 'reopened world chain')
+        BRACKET_REFERENCE_POINTS_MM.each_with_index do |asset_mm, i|
+          measured_local = measured_vertex_mm(side_l_re.definition, asset_mm)
+          actual_world = measured_world_vertex_mm(furniture_reopened, side_l_re, measured_local)
+          expected_world = reopened_expected_world_mm(asset_mm)
+          error_mm = point_distance_mm(actual_world, expected_world)
+          assert error_mm < POINT_TOLERANCE_MM,
+                 "reopened reference point #{i} (#{asset_mm.inspect}): world error #{error_mm} mm"
+        end
 
         evidence['tests']['e11_save_close_reopen'] = { 'status' => 'pass' }
       end
@@ -639,19 +768,141 @@ module Granete
         ]
       end
 
+      # Columns of the 3x3 block must stay mutually orthogonal: no shear.
+      def assert_no_shear(trans, label)
+        a = trans.to_a
+        columns = [[a[0], a[1], a[2]], [a[4], a[5], a[6]], [a[8], a[9], a[10]]]
+        [[0, 1], [0, 2], [1, 2]].each do |i, j|
+          dot = dot3(columns[i], columns[j]).abs
+          assert dot < 1e-6, "#{label}: shear detected, |dot(col#{i},col#{j})| = #{dot}"
+        end
+      end
+
+      def dot3(vec_u, vec_v)
+        (vec_u[0] * vec_v[0]) + (vec_u[1] * vec_v[1]) + (vec_u[2] * vec_v[2])
+      end
+
+      def point_distance_mm(point_a, point_b)
+        Math.sqrt(((point_a[0] - point_b[0])**2) + ((point_a[1] - point_b[1])**2) +
+                  ((point_a[2] - point_b[2])**2))
+      end
+
+      # Geom::Transformation.axes semantics, evaluated in mm from constants:
+      # axes(o, x, y, z) maps p -> o + x*p[0] + y*p[1] + z*p[2].
+      def apply_axes_mm(origin_mm, basis, point_mm)
+        [0, 1, 2].map do |i|
+          origin_mm[i] +
+            (basis['x'][i] * point_mm[0]) +
+            (basis['y'][i] * point_mm[1]) +
+            (basis['z'][i] * point_mm[2])
+        end
+      end
+
+      # T_norm = inverse(T_mountFrame): T_norm(p) = [bx.(p-O), by.(p-O), bz.(p-O)]
+      # — mirrors Assets::MountFrame.derive_normalization exactly.
+      def normalization_mm(point_mm, origin: MOUNT_FRAME_ORIGIN_MM, basis: MOUNT_FRAME_BASIS)
+        delta = [0, 1, 2].map { |i| point_mm[i] - origin[i] }
+        [dot3(basis['x'], delta), dot3(basis['y'], delta), dot3(basis['z'], delta)]
+      end
+
+      # Mutant: normalization built with the basis used TRANSPOSED (rows as
+      # columns), i.e. R_mount instead of R_mount^T.
+      def normalization_transposed_mm(point_mm, origin: MOUNT_FRAME_ORIGIN_MM, basis: MOUNT_FRAME_BASIS)
+        delta = [0, 1, 2].map { |i| point_mm[i] - origin[i] }
+        [0, 1, 2].map do |i|
+          (basis['x'][i] * delta[0]) + (basis['y'][i] * delta[1]) + (basis['z'][i] * delta[2])
+        end
+      end
+
+      # E9 constant chain from a normalized asset point to world (mm):
+      # member (translated + rotated about X) -> assembly -> furniture.
+      def chain_to_world_mm(normalized_mm, unit_scale: 1.0)
+        member_origin = SIDE_LEFT_E9_TRANSLATION_MM.map { |v| v * unit_scale }
+        member = apply_axes_mm(member_origin, SIDE_LEFT_E9_BASIS, normalized_mm)
+        assembly = apply_axes_mm(E9_ASSEMBLY_TRANSLATION_MM.map { |v| v * unit_scale }, IDENTITY_BASIS, member)
+        apply_axes_mm(E9_FURNITURE_ORIGIN_MM.map { |v| v * unit_scale }, IDENTITY_BASIS, assembly)
+      end
+
+      # World position of a bracket vertex under each scenario, from constants:
+      # :correct (productive composition), or a conceptual defect for the
+      # sensitivity guards. :unit_double models a double mm/inches conversion
+      # as the translation chain scaled by 25.4 (inches read as millimeters).
+      def expected_world_mm(vertex_mm, mode)
+        normalized = case mode
+                     when :omitted then vertex_mm
+                     when :double then normalization_mm(normalization_mm(vertex_mm))
+                     when :transposed then normalization_transposed_mm(vertex_mm)
+                     else normalization_mm(vertex_mm)
+                     end
+        unit_scale = mode == :unit_double ? 25.4 : 1.0
+        chain_to_world_mm(normalized, unit_scale: unit_scale)
+      end
+
+      # E11 reopen chain: default layout (side-left at origin with identity
+      # basis) under an identity furniture transform.
+      def reopened_expected_world_mm(vertex_mm)
+        assembly = apply_axes_mm(E9_ASSEMBLY_TRANSLATION_MM, IDENTITY_BASIS, normalization_mm(vertex_mm))
+        apply_axes_mm([0.0, 0.0, 0.0], IDENTITY_BASIS, assembly)
+      end
+
+      # Measured (never literal) vertex data from a loaded definition.
+      def definition_vertex_positions(definition)
+        positions = []
+        definition.entities.each do |entity|
+          next unless entity.is_a?(Sketchup::Edge)
+
+          [entity.start.position, entity.end.position].each do |pos|
+            positions << [pos.x, pos.y, pos.z]
+          end
+        end
+        positions.uniq { |p| format('%<x>.6f|%<y>.6f|%<z>.6f', x: p[0], y: p[1], z: p[2]) }
+      end
+
+      # Finds the measured definition vertex matching an authored fixture point
+      # and returns its position in mm (real host readback, inches -> mm).
+      def measured_vertex_mm(definition, expected_asset_mm)
+        target = expected_asset_mm.map { |v| v * MM }
+        best = nil
+        best_distance = nil
+        definition_vertex_positions(definition).each do |pos|
+          d = point_distance_mm(pos, target)
+          next unless best_distance.nil? || d < best_distance
+
+          best = pos
+          best_distance = d
+        end
+        if best.nil? || best_distance > 1e-4
+          flunk "no measured vertex near #{expected_asset_mm.inspect} (best distance #{best_distance})"
+        end
+        best.map { |v| v * 25.4 }
+      end
+
+      # World position (mm) of a measured local vertex (mm) through the REAL
+      # instance chain read back from the model.
+      def measured_world_vertex_mm(furniture_instance, member_instance, vertex_local_mm)
+        local = Geom::Point3d.new(vertex_local_mm[0] * MM, vertex_local_mm[1] * MM, vertex_local_mm[2] * MM)
+        world = local.transform(furniture_instance.transformation * member_instance.transformation)
+        [world.x * 25.4, world.y * 25.4, world.z * 25.4]
+      end
+
       # Real, loadable .skp payloads built through the host itself (prepared in
       # setup before the active model is detached). Fake bytes would make
       # definitions.load fail and silently exercise the fallback-box path,
       # skipping the prepared/MountFrame normalization this smoke must prove.
+      # Each file carries the REAL asymmetric bracket geometry (F2 fixture) so
+      # the loaded definitions expose measurable reference vertices.
       def prepare_scratch_asset_skps
         @side_skp = File.join(@tmp_dir, 'mbx_side.skp')
         # One file per revision: distinct files load as distinct definitions,
         # so the NL450 -> NL500 variant switch is observable on the host.
         @runner450_skp = File.join(@tmp_dir, 'mbx_runner_450.skp')
         @runner500_skp = File.join(@tmp_dir, 'mbx_runner_500.skp')
-        write_scratch_skp(@side_skp)
-        write_scratch_skp(@runner450_skp)
-        write_scratch_skp(@runner500_skp)
+        # A fresh host model per file: the bracket edges must not accumulate
+        # across the three scratch assets.
+        [@side_skp, @runner450_skp, @runner500_skp].each do |path|
+          Sketchup.file_new
+          write_scratch_skp(path)
+        end
       end
 
       def create_merivobox_asset_loader
@@ -669,23 +920,50 @@ module Granete
       def write_scratch_skp(path)
         # Model#save (Save-As semantics) works on an untitled fresh model;
         # save_copy raises "Model must be saved before copying" on one.
+        build_bracket_geometry(model)
         saved = model.save(path)
         flunk 'saving the scratch asset model failed' unless [true, 0].include?(saved)
         path
+      end
+
+      # Authors the F2 asymmetric stepped bracket (fixture constants above) as
+      # explicit edges, so definitions.load exposes measurable vertices at the
+      # reference points. Authored in mm; SketchUp stores inches.
+      def build_bracket_geometry(host_model)
+        bottom = BRACKET_BOTTOM_OUTLINE_MM
+        top = bottom.map { |x, y, z| [x, y, z + BRACKET_HEIGHT_MM] }
+        entities = host_model.active_entities
+        bottom.each_index do |i|
+          j = (i + 1) % bottom.length
+          entities.add_line(point3d_mm(bottom[i]), point3d_mm(bottom[j]))
+          entities.add_line(point3d_mm(top[i]), point3d_mm(top[j]))
+          entities.add_line(point3d_mm(bottom[i]), point3d_mm(top[i]))
+        end
+      end
+
+      def point3d_mm(mm_point)
+        Geom::Point3d.new(mm_point[0] * MM, mm_point[1] * MM, mm_point[2] * MM)
       end
 
       def persist_evidence
         evidence_path = File.join(REPOSITORY_ROOT, 'progress/host_smoke_670_e_merivobox_pilot_evidence.json')
         FileUtils.mkdir_p(File.dirname(evidence_path))
         File.write(evidence_path, JSON.pretty_generate(self.class.evidence))
+
+        geometry_path = File.join(REPOSITORY_ROOT, GEOMETRY_EVIDENCE_PATH)
+        FileUtils.mkdir_p(File.dirname(geometry_path))
+        File.write(geometry_path, JSON.pretty_generate(self.class.geometry_evidence))
       end
 
       def build_merivobox_layout(
         width_mm: 600.0,
         nominal_depth_mm: 500.0,
-        mount_origin_mm: [15.0, 5.0, 2.0],
+        mount_origin_mm: MOUNT_FRAME_ORIGIN_MM,
+        mount_basis: MOUNT_FRAME_BASIS,
         left_panel_mm: 15.0,
-        right_panel_mm: 15.0
+        right_panel_mm: 15.0,
+        side_left_translation_mm: [0.0, 0.0, 0.0],
+        side_left_basis: IDENTITY_BASIS
       )
         lw_mm = width_mm - left_panel_mm - right_panel_mm
         is450 = (nominal_depth_mm - 450.0).abs < 1e-4
@@ -748,11 +1026,11 @@ module Granete
                   'preparationState' => 'prepared',
                   'mountFrame' => {
                     'originMm' => mount_origin_mm,
-                    'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+                    'basis' => mount_basis
                   },
                   'localTransform' => {
-                    'translationMm' => [0.0, 0.0, 0.0],
-                    'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+                    'translationMm' => side_left_translation_mm,
+                    'basis' => side_left_basis
                   }
                 },
                 {
@@ -765,7 +1043,7 @@ module Granete
                   'preparationState' => 'prepared',
                   'mountFrame' => {
                     'originMm' => mount_origin_mm,
-                    'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+                    'basis' => mount_basis
                   },
                   'localTransform' => {
                     'translationMm' => [lw_mm, 0.0, 0.0],
@@ -782,7 +1060,7 @@ module Granete
                   'preparationState' => 'prepared',
                   'mountFrame' => {
                     'originMm' => mount_origin_mm,
-                    'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+                    'basis' => mount_basis
                   },
                   'localTransform' => {
                     'translationMm' => [0.0, 0.0, 0.0],
@@ -799,7 +1077,7 @@ module Granete
                   'preparationState' => 'prepared',
                   'mountFrame' => {
                     'originMm' => mount_origin_mm,
-                    'basis' => { 'x' => [1.0, 0.0, 0.0], 'y' => [0.0, 1.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+                    'basis' => mount_basis
                   },
                   'localTransform' => {
                     'translationMm' => [lw_mm, 0.0, 0.0],
