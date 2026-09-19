@@ -1,54 +1,63 @@
-# CHECKPOINTS — Evaluación del estado final
+# Candidate checkpoints
 
-> En sistemas multi-agente no se evalúa el camino, se evalúa el destino.
-> El revisor recorre esta lista antes de aprobar cualquier feature.
+> Evaluate the destination and its evidence, not how many workflow steps an agent
+> performed. Apply only checkpoints relevant to the approved issue and claimed
+> delivery; an inapplicable product gate is `N/A`, not a fabricated PASS.
 
-## C1 — El harness está completo
+## C1 — Authority and identity
 
-- [ ] Existen los archivos base: `AGENTS.md`, `init.sh`, `feature_list.json`,
-      `progress/current.md`, `CHECKPOINTS.md`.
-- [ ] Existen los 4 docs: `docs/prd-v2.md`, `docs/architecture.md`,
-      `docs/conventions.md`, `docs/verification.md`.
-- [ ] Existen los 3 skills: `.agents/skills/leader/SKILL.md`,
-      `.agents/skills/implementer/SKILL.md`, `.agents/skills/reviewer/SKILL.md`.
-- [ ] `./init.sh` termina con exit code 0.
+- [ ] The exact GitHub issue is open, approved, and matches the candidate scope.
+- [ ] The lane is explicit: Direct has no execution artifact; ODD has exactly one
+      `odd/tasks/<issue>-<slug>.md`; explicit SDD has only its canonical tasks artifact.
+- [ ] One writer owns the branch/worktree; reservation/quarantine state is coherent.
+- [ ] PR, HEAD, base, branch, and changed paths were read back from current state.
+- [ ] No product code or unrelated issue scope is mixed into the candidate.
 
-## C2 — El estado es coherente
+## C2 — Architecture and contract
 
-- [ ] Como mucho una feature en `in_progress` en `feature_list.json`.
-- [ ] Toda feature `done` tiene tests asociados que pasan en `pnpm test`.
-- [ ] `progress/current.md` describe la sesión activa o está vacío
-      (no contiene basura de sesiones anteriores).
+- [ ] The change follows the applicable PRD, ADR, generated contract, migration,
+      architecture, conventions, and domain ownership rules.
+- [ ] Server authority remains server-side for security, tenant scope, lifecycle,
+      pricing, stock, concurrency, workflow, and persistent business state.
+- [ ] Generated outputs were regenerated from their source and drift checks pass.
+- [ ] Product claims distinguish implemented behavior from target/future behavior.
+- [ ] No secret, PII, silent legacy fallback, implicit `latest`, or unsafe recovery
+      entered the candidate or its evidence.
 
-## C3 — El código respeta la arquitectura
+## C3 — Proportional verification
 
-- [ ] `packages/domain` no importa react, electron, fs, ni librerías de xlsx.
-- [ ] `packages/ui` no implementa fórmulas de costo ni accede a fs.
-- [ ] `packages/excel` no importa react ni electron.
-- [ ] Errores del dominio son instancias de `DomainError` (o subclases),
-      no strings crudos ni `any`.
-- [ ] No hay `console.log` de debug sueltos; usa el logger de dominio si hace falta.
+- [ ] **V0 Structural:** diff/readback and applicable syntax, format, schema, and
+      generated-drift checks pass.
+- [ ] **V1 Functional:** focused positive/negative unit, contract, integration, or
+      persistence checks prove the affected behavior.
+- [ ] **V2 Operational:** required browser, PostgreSQL/RLS, SketchUp/TestUp,
+      receiver/machine, or other real-boundary evidence passes.
+- [ ] Required unavailable infrastructure is reported `NOT_RUN` or `BLOCKED`, never
+      converted into PASS or silently dropped from the delivery claim.
+- [ ] CI selection is conservative and every applicable result is current for the
+      exact HEAD/base. Empty, stale, missing, failed, cancelled, or required skipped
+      evidence does not pass.
 
-## C4 — La verificación es real
+## C4 — Independent review and correction
 
-- [ ] `pnpm --filter @granete/domain test` pasa al 100%.
-- [ ] Si la feature toca el export: test de fixture contra `ProductionCutRow[]`
-      esperado.
-- [ ] Si la feature toca storage: test con directorio temporal real (no mock de fs).
-- [ ] Golden test del motor de dominio (F003/F011): totales coinciden con
-      la plantilla dentro de tolerancia 0.01.
+- [ ] A fresh reviewer different from the writer inspected the actual pinned diff.
+- [ ] The reviewer checked acceptance, boundaries, error paths, evidence applicability,
+      publication semantics, and remaining scope rather than trusting a narrated PASS.
+- [ ] Concrete blockers were consolidated; optional suggestions did not expand DoD.
+- [ ] If the targeted single correction round did not resolve blockers, a human made
+      the stop/narrow/extend/follow-up decision. No loop-until-green or policy PASS.
 
-## C5 — La sesión se cerró bien
+## C5 — Publication and human delivery
 
-- [ ] No hay archivos sin trackear sospechosos (`*.tmp`, `dist/` dentro de
-      paquetes sin `.gitignore`).
-- [ ] `progress/history.md` tiene una entrada por la última sesión.
-- [ ] La feature trabajada refleja su estado correcto en `feature_list.json`.
-- [ ] `progress/current.md` está en plantilla limpia (no contiene la sesión
-      que acaba de cerrar).
+- [ ] Metadata passes `scripts/check_pr_metadata.py`: one approved issue, exactly one
+      supported `type:*` label, and valid complete/partial first lines.
+- [ ] `Closes/Fixes/Resolves + Delivery: complete` is used only for complete bounded
+      scope on `main`; `Refs + Delivery: partial` names remaining scope.
+- [ ] The pushed tree is clean, the PR is open/non-draft, and mergeability is known.
+- [ ] No auto-approval, API close, force-push, bypass, or automatic merge occurred.
+- [ ] The final state is ready for a human to recheck and merge, or is honestly
+      blocked with the smallest next action.
 
----
-
-**Cómo usar:** el agente revisor (`.agents/skills/reviewer/SKILL.md`)
-recorre cada checkbox, marca `[x]` o `[ ]`, y rechaza el cierre si quedan
-boxes vacíos en C1–C5.
+`feature_list.json`, `progress/current.md`, and Engram can provide historical context,
+but none is a checkpoint authority for current scope, ownership, code, review, CI,
+or delivery.

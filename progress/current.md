@@ -1,7 +1,10 @@
-# Granete — Current execution ledger
+# Granete — Optional human status overview
 
-> **Purpose:** this file is a short, low-conflict summary of work that is active or immediately next.
-> It is **not** the historical record, CI log, review diary, or technical specification.
+> **Purpose:** this file is an optional, low-conflict overview for humans. It sits
+> **outside the normal G-ODD execution loop**: agents do not read it at startup,
+> choose work from it, write it per task, or use it as ownership/execution authority.
+> It is **not** the queue, scheduler, historical record, CI log, review diary,
+> technical specification, reservation, or execution artifact.
 >
 > Historical snapshot before this reset:
 > `progress/archive/current-2026-09-19-pre-ledger-reset.md`
@@ -15,7 +18,8 @@
 2. An open issue gets **one row** in the open-work table. Do not create a new H1 section for each review round.
 3. Do **not** paste test logs, full verification matrices, commit histories, long SHAs, review transcripts, or implementation narratives here.
 4. Detailed evidence belongs in the PR, issue comments, `docs/verification.md`, or the feature-specific document.
-5. A feature PR should normally update this file **at most once**, near a material ownership/status change or merge. If status did not materially change, omit `progress/current.md` from the PR.
+5. A feature PR should normally omit this file. Update it only when a human-owned
+   overview materially changes, never merely because a task started or finished.
 6. When an issue closes, remove it from the open table and optionally add **one line** to “Recently completed”. Keep at most 10 recent entries.
 7. Structural edits to this ledger should be isolated in a docs/process PR. Feature branches should edit only their own row.
 8. On merge conflicts, GitHub issue/PR state wins. Never resolve a conflict by concatenating both historical blocks.

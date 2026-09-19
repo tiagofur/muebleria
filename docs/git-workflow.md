@@ -30,13 +30,15 @@ Los commits en rama WIP **no ensucian** el historial: se squash-mergeuean
 o borran después. Y son imposibles de perder mientras existan en
 `origin`.
 
-### Antes de declarar `done` (regla absoluta)
+### Before final handoff
 
-1. `pnpm test` (o `./init.sh`) verde.
-2. Si cambió TS: `pnpm typecheck` verde.
-3. Si cambiaste tipos: `pnpm typecheck` verde.
-4. **Push a origin** antes de cerrar la sesión. HEAD local == origin.
-5. Evidencia en `progress/current.md`.
+1. Record applicable V0/V1/V2 evidence for the exact candidate; use `./init.sh`
+   only when the issue explicitly requires the historical full harness.
+2. Keep each coherent work unit in a Conventional Commit with its tests and docs.
+3. Update the issue's single ODD/SDD execution artifact when that lane has one;
+   never use `progress/current.md` as routine task evidence.
+4. Push only with explicit remote authorization and verify local HEAD == remote HEAD.
+5. Hand the exact HEAD/base to a fresh independent reviewer before human merge.
 
 Si rompés paso 1-3, dejá la rama en estado verde-committed (aunque sea
 un `fixup!` temporal) antes de cerrar. Nunca te vayas con el repo en
@@ -189,7 +191,8 @@ done
 
 - `main` es **solo merges vía PR** desde `origin`. Nunca commitear
   directo.
-- Ramas de feature: `feat/<slug>-<issue>` o `fix/<slug>-<issue>`.
+- Ramas de trabajo: `<type>/<issue>-<slug>` usando un tipo Conventional Commit
+  (`feat`, `fix`, `docs`, `chore`, etc.).
 - Ramas WIP: `wip/<tema>` — para snapshots incompletos pushed.
 - Ramas de recuperación: `recover/<tema>`.
 - Hacé `git fetch --all --prune` al arrancar la sesión para ver el

@@ -4,20 +4,38 @@ Granete conecta venta → diseño → ingeniería → producción para carpinter
 fábricas pequeñas/medianas. Prioridad: DEMO integrada → MVP para dos prospectos.
 Este archivo es el mapa de entrada, no el PRD ni una instrucción de releer el repo.
 
-## Arranque y autorización
+## Start and authorization
 
-1. Lee la issue exacta, su aprobación, aceptación, exclusiones, base y PR existentes.
-2. Lee la skill de tu rol y `docs/demo/software-factory-human-start.md`.
-3. Ejecuta `python3 scripts/factory_preflight.py`; para entregar usa además
-   `--require-clean`. No instala, no ejecuta tests y NO autoriza escribir.
-4. Consulta `progress/current.md` y ownership/reserva vigentes sin sobrescribir
-   trabajo ajeno. GitHub Issues es la única cola; el ledger sólo conserva historia.
-5. Lee las fuentes **del área afectada** y sus prerequisites. No reinicies programas
-   ya implementados ni selecciones la primera feature pendiente del ledger.
+1. Read the exact approved issue, acceptance, exclusions, base, and existing PR.
+2. Read your role skill and `docs/demo/software-factory-human-start.md`.
+3. Run `python3 scripts/factory_preflight.py`; use `--require-clean` at final
+   handoff. It is read-only, runs no tests, and never authorizes a write.
+4. Verify current ownership/reservation without taking or deleting another
+   writer's work. GitHub Issues is the only operational queue.
+5. Read only the affected sources and prerequisites. Do not choose work from
+   `feature_list.json` or use `progress/current.md` as startup context.
 
 `./init.sh` conserva su comprobación completa histórica para uso explícito. No es
 el arranque rutinario del agente. Comandos locales y CI proporcional:
 `docs/demo/software-factory-human-start.md` § Verificación proporcional.
+
+## Portable G-ODD execution
+
+Granete owns one runtime-independent contract. When Gentle-AI is available it is
+the native adapter; when it is absent, repository docs, skills, and scripts are
+the manual adapter. The outcome and gates are identical.
+
+| Lane | Use | Execution artifact |
+| --- | --- | --- |
+| Direct | Small, understood, single-step change | None |
+| ODD | Substantial authorized work worth recovering | Exactly one `odd/tasks/<issue>-<slug>.md` |
+| Explicit SDD | The human explicitly requests proposal/spec/design/tasks | The canonical SDD tasks artifact; do not also create an ODD task file |
+
+Every issue has one writer. A different, fresh reviewer evaluates the exact
+HEAD/base. Prefer one well-prepared implementation pass; CI validates the frozen
+candidate and is not the debugging loop. Details, verification levels, and truth
+authority live in the human-start contract. Engram may mirror context but never
+overrides repository, GitHub, code, tests, or remote state.
 
 ## Roles y áreas
 
