@@ -175,6 +175,50 @@ func runCommitHooks(hooks *[]func(context.Context), ctx context.Context) {
 	}
 }
 
+// runInTenantTx executes tenant-scoped storage work inside the caller's
+// tenant transaction, or — when the caller stands outside the request
+// boundary — opens one dedicated pool-safe transaction (SET LOCAL app.*
+// actor, commit/rollback, nothing survives on the pooled connection).
+// FORCE RLS tables accessed through it can never execute with the tenant
+// actor unset, where PostgreSQL filters every row and surfaces existing data
+// as a silent business not-found. A missing organization scope is a caller
+// programming error surfaced as ErrNoOrgScope, never an empty-string tenant
+// query.
+func runInTenantTx[T any](s *PostgresStore, ctx context.Context, run func(context.Context) (T, error)) (T, error) {
+	var zero T
+	actor, _ := TenantActorFromCtx(ctx)
+	if actor.OrganizationID == "" {
+		actor.OrganizationID = OrgFromCtx(ctx)
+	}
+	if actor.OrganizationID == "" {
+		return zero, fmt.Errorf("%w: tenant-scoped storage call requires an organization scope", ErrNoOrgScope)
+	}
+	if transactionFromContext(ctx) != nil {
+		return run(ctx)
+	}
+	var result T
+	err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+		value, err := run(txCtx)
+		if err != nil {
+			return err
+		}
+		result = value
+		return nil
+	})
+	if err != nil {
+		return zero, err
+	}
+	return result, nil
+}
+
+// runInTenantTxErr is the error-only variant of runInTenantTx.
+func runInTenantTxErr(s *PostgresStore, ctx context.Context, run func(context.Context) error) error {
+	_, err := runInTenantTx(s, ctx, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, run(ctx)
+	})
+	return err
+}
+
 // WithinTenantTx executes one application transaction with pool-safe SET LOCAL
 // actor context. Commit and rollback both discard every app.* setting.
 func (s *PostgresStore) WithinTenantTx(
