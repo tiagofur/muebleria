@@ -1,7 +1,7 @@
 # Archived `progress/current.md` snapshot — 2026-09-19
 
 > Immutable historical snapshot captured from `main` after PR #797 / issue #789 merged.
-> This file preserves the former operational ledger verbatim below this separator.
+> The source content below is preserved byte-for-byte from the former `progress/current.md`.
 > Do not append new progress here; active status lives in `progress/current.md`.
 
 ---
