@@ -162,10 +162,10 @@ describe('#788 parsing estructural de R2201 saneado (subset soportado)', () => {
     expect(fn92!.partReference).toEqual({ kind: 'offcut', offcutIndex: 1 });
   });
 
-  it('el subset modelado pasa el strict spec preflight (índices y referencias del dialecto real)', () => {
-    // Observación sobre el SUBSET leído: las familias no modeladas están
-    // fuera del veredicto por construcción — esto no es un claim sobre el
-    // archivo completo ni sobre el receptor.
+  it('el subset modelado pasa el strict spec preflight sin convertir trailing receiver en autoridad Granete', () => {
+    // El row view conserva que BOARDS trae trailing receiver extra. El subset
+    // tipado usado por Granete no convierte esos valores en COST/STK_FLAG con
+    // autoridad de producto; los límites estrictos se prueban en specPreflight.
     expect(ptxSpecPreflightDocument({ header: readback.header!, records: readback.records })).toEqual([]);
   });
 });
@@ -214,7 +214,7 @@ describe('#788 parsing estructural de R7301 saneado (subset soportado)', () => {
     expect((boardRow as { extraTrailingCells: number }).extraTrailingCells).toBe(2);
   });
 
-  it('el subset modelado pasa el strict spec preflight', () => {
+  it('el subset modelado pasa el strict spec preflight sin convertir trailing receiver en autoridad Granete', () => {
     expect(ptxSpecPreflightDocument({ header: readback.header!, records: readback.records })).toEqual([]);
   });
 });

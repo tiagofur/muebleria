@@ -100,8 +100,8 @@ shape only where authority exists.
 | `BRD_INDEX`, `CODE`, `QTY_STOCK`, `LENGTH`, `WIDTH`, material/job references | `SPEC_REQUIRED` + existing product model | Keep current authoritative values and spec limits. |
 | Receiver order before `MATERIALS` | `RECEIVER_EVIDENCED` | Use only in the #790 lab receiver policy. |
 | Additional used/summary numeric fields already modeled by Granete | `PRODUCT_POLICY` | Emit only when the current model has explicit semantics. |
-| `COST` | `UNKNOWN` emitted value authority; optional trailing shape field only | Model as part of the receiver-safe trailing shape, but do not invent, copy, normalize, compute, or emit a cost value by default. Leave empty/omit according to row-shape policy. |
-| `STK_FLAG` | `UNKNOWN`; optional trailing shape field only | Model as part of the receiver-safe trailing shape, but do not invent or emit a stock flag value by default. It remains shape-only until separate authority exists. |
+| `COST` | `SPEC_REQUIRED` shape/domain: Pattern Exchange `FLT 0..9.99`; `UNKNOWN` Granete product authority | Receiver samples show values outside the spec range. Preserve that as unresolved receiver dialect evidence, but do not invent, copy, normalize, compute, or emit a cost value by default. Emitted: absent. |
+| `STK_FLAG` | `SPEC_REQUIRED` shape/domain: Pattern Exchange `INT 0..9`; `UNKNOWN` Granete product authority | Model the optional trailing field, but do not invent or emit a stock flag value by default. Emitted: absent. |
 | Other trailing optional cells | `UNKNOWN` | Preserve empty/omitted trailing discipline; no placeholder values. |
 
 ## 6. JOBS, PATTERNS, and CUTS trailing policy
@@ -142,12 +142,14 @@ The sanitized samples are strong receiver evidence, not a byte template.
 
 - Do not add `+0.3 mm` to `THICK`; Granete emits its authoritative material
   thickness only.
-- Do not copy `BOARDS.COST` or any cost-like sample value. `COST` is modeled
-  only as an optional trailing shape field; emitted value authority remains
-  `UNKNOWN` and the compiler/receiver policy does not invent or emit a value by
-  default.
-- Do not infer or emit `STK_FLAG`. It is modeled only as an optional trailing
-  shape field and remains `UNKNOWN`/shape-only until separate authority exists.
+- Do not copy `BOARDS.COST` or any cost-like sample value. Pattern Exchange
+  documents `COST` as `FLT 0..9.99`; receiver samples show out-of-range values,
+  which remain unresolved receiver dialect evidence. Granete product authority
+  is `UNKNOWN`, so the compiler/receiver policy does not invent or emit a value
+  by default.
+- Do not infer or emit `STK_FLAG`. Pattern Exchange documents `STK_FLAG` as
+  `INT 0..9`; Granete product authority remains `UNKNOWN`, so the compiler/
+  receiver policy does not invent or emit it by default.
 - Do not generate `PARTS_UDI.INFO2` compact edge encodings such as `2WE2LE`;
   their semantics remain `UNKNOWN`.
 - Do not copy or invent `NOTES` rows.

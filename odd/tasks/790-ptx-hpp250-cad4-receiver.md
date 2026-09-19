@@ -40,3 +40,10 @@ Implement the lab-only receiver-specific policy for Client A HOLZMA HPP 250 / CA
 - `pnpm --filter @granete/excel test` → PASS; 46 files / 559 passed + 3 skipped.
 - `pnpm typecheck` → PASS.
 - `git diff --check` → PASS.
+
+- Final micro-round after PR #801 CHANGES REQUESTED: added strict `BOARDS.COST` (`FLT 0..9.99`) and `BOARDS.STK_FLAG` (`INT 0..9`) SPEC_REQUIRED preflight gates; kept HPP250 candidate emitting both absent; documented external receiver COST discrepancy as unresolved evidence; made `FROM_MATERIAL` receiver source fail closed until real material resolution wiring exists.
+- Final micro-round focused test: `pnpm --filter @granete/excel test -- specPreflight.test.ts externalDialect.test.ts compileCutPlan.receiverPolicy.test.ts` → PASS; 46 files / 564 passed + 3 skipped.
+- Final micro-round required verification: `pnpm --filter @granete/excel test` → PASS; 46 files / 564 passed + 3 skipped.
+- Final micro-round required verification: `pnpm typecheck` → PASS.
+- Final micro-round required verification: `git diff --check` → PASS.
+- Final micro-round proportional selector: `python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600` → BLOCKED because isolated `DATABASE_URL` was missing for selected Go/PostgreSQL proofs.

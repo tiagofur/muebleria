@@ -1277,6 +1277,13 @@ function validateReceiverPolicyOption(policy: PtxReceiverPolicy | undefined): vo
       }
       continue;
     }
+    if (source === PTX_RECEIVER_FIELD_SOURCE.FROM_MATERIAL) {
+      receiverPolicyOptionError('receiverPolicy inválido: FROM_MATERIAL está reservado y no está soportado hasta que exista resolución real de material', {
+        receiverPolicyId: policy.id,
+        fieldName,
+        value: field.value,
+      });
+    }
     if (source === PTX_RECEIVER_FIELD_SOURCE.FROM_CUTPLAN_GEOMETRY) {
       if (!(PTX_RECEIVER_GEOMETRY_TRIM_FIELDS as readonly string[]).includes(fieldName)) {
         receiverPolicyOptionError('receiverPolicy inválido: FROM_CUTPLAN_GEOMETRY sólo está soportado para TRIM_* ejecutados', {

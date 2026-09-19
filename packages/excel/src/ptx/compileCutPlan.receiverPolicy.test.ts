@@ -299,6 +299,52 @@ describe('#790 HPP250 CAD4 receiver policy compiler wiring', () => {
     expect(error.code).toBe('ptx_compile.options_invalid');
   });
 
+
+  it('blocks FROM_MATERIAL receiver fields because material resolution is not wired yet', () => {
+    const mutatedPolicy = {
+      ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY,
+      materialFields: {
+        ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields,
+        BOOK: {
+          source: PTX_RECEIVER_FIELD_SOURCE.FROM_MATERIAL,
+          value: 3,
+        },
+      },
+    } as unknown as PtxReceiverPolicy;
+
+    const error = captureCompileError(() =>
+      compileCutPlanToPtxDocument(buildGoldenR4Plan(), {
+        ...GOLDEN_R4_OPTIONS,
+        receiverPolicy: mutatedPolicy,
+      }),
+    );
+
+    expect(error.code).toBe('ptx_compile.options_invalid');
+    expect(error.message).toContain('FROM_MATERIAL');
+  });
+
+  it('blocks FROM_MATERIAL receiver fields even when the value is absent', () => {
+    const mutatedPolicy = {
+      ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY,
+      materialFields: {
+        ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields,
+        BOOK: {
+          source: PTX_RECEIVER_FIELD_SOURCE.FROM_MATERIAL,
+        },
+      },
+    } as unknown as PtxReceiverPolicy;
+
+    const error = captureCompileError(() =>
+      compileCutPlanToPtxDocument(buildGoldenR4Plan(), {
+        ...GOLDEN_R4_OPTIONS,
+        receiverPolicy: mutatedPolicy,
+      }),
+    );
+
+    expect(error.code).toBe('ptx_compile.options_invalid');
+    expect(error.message).toContain('FROM_MATERIAL');
+  });
+
   it('uses a generic same-id receiver policy clone whose BOOK differs from the exported HPP250 policy', () => {
     const mutatedPolicy = {
       ...HPP250_CAD4_R5_LAB_RECEIVER_POLICY,

@@ -118,6 +118,14 @@ export interface PtxSpecIntRangeLimit {
   readonly authority: PtxSpecLimitAuthority;
 }
 
+export interface PtxSpecFloatRangeLimit {
+  readonly kind: 'float-range';
+  readonly field: string;
+  readonly min: number;
+  readonly max: number;
+  readonly authority: PtxSpecLimitAuthority;
+}
+
 export interface PtxSpecIntEnumLimit {
   readonly kind: 'int-enum';
   readonly field: string;
@@ -182,6 +190,7 @@ export interface PtxSpecIntFormLimit {
 export type PtxSpecLimit =
   | PtxSpecTextLimit
   | PtxSpecIntRangeLimit
+  | PtxSpecFloatRangeLimit
   | PtxSpecIntEnumLimit
   | PtxSpecDimLimit
   | PtxSpecQtyLimit
@@ -270,6 +279,8 @@ export const PTX_SPEC_LIMITS: readonly PtxSpecLimit[] = [
   { kind: 'int-range', field: 'BOARDS.BRD_INDEX', min: 1, max: 5000, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.173 \'BRD_INDEX Board index IDX 1-5000\'') },
   { kind: 'int-range', field: 'BOARDS.MAT_INDEX', min: 1, max: 9999, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.173 \'MAT_INDEX Material index IDX 1-9999\'') },
   { kind: 'text-length', field: 'BOARDS.CODE', maxLength: 50, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.173 \'CODE Board code TXT 50 chars max\'') },
+  { kind: 'float-range', field: 'BOARDS.COST', min: 0, max: 9.99, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.173 \'COST Board cost FLT 0-9.99\'') },
+  { kind: 'int-range', field: 'BOARDS.STK_FLAG', min: 0, max: 9, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.173 \'STK_FLAG Stock flag INT 0-9\'') },
   // MATERIALS (§20 pp.173–174).
   { kind: 'int-range', field: 'MATERIALS.MAT_INDEX', min: 1, max: 9999, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.173 \'MAT_INDEX Material index IDX 1-9999\'') },
   { kind: 'text-length', field: 'MATERIALS.CODE', maxLength: 50, authority: SPEC_REQUIRED('S03 V11 Interface Guide §20 p.173 \'CODE Material code TXT 50 chars max\'') },
@@ -387,6 +398,7 @@ export type PtxSpecIssueCode =
   | 'ptx_spec.quantity_not_integer'
   | 'ptx_spec.int_not_integer'
   | 'ptx_spec.number_not_finite'
+  | 'ptx_spec.float_out_of_range'
   | 'ptx_spec.job_scope_ambiguous'
   | 'ptx_spec.parse_error';
 
@@ -719,38 +731,24 @@ function intFormIssue(
   }
 }
 
-function productFiniteNumberShapeIssue(
+function floatRangeIssue(
   value: number,
   field: string,
   rowLabel: string,
   issues: PtxSpecIssue[],
 ): void {
-  if (!Number.isFinite(value)) {
+  const limit = LIMIT_BY_FIELD.get(field) as PtxSpecFloatRangeLimit | undefined;
+  if (!limit) return;
+  if (!Number.isFinite(value) || value < limit.min || value > limit.max) {
     issues.push({
-      code: 'ptx_spec.number_not_finite',
-      message: `${rowLabel} ${field}=${value} no es un número finito (shape check; sin dominio de negocio inventado)`,
+      code: 'ptx_spec.float_out_of_range',
+      message: `${rowLabel} ${field}=${value} fuera del rango FLT documentado [${limit.min}..${limit.max}]`,
       field,
-      classification: 'PRODUCT_POLICY',
-      locator: 'BOARDS.COST optional trailing shape (#790): documented cost per square area; authority text/domain not pinned here',
-      observed: String(value),
-    });
-  }
-}
-
-function productFiniteIntegerShapeIssue(
-  value: number,
-  field: string,
-  rowLabel: string,
-  issues: PtxSpecIssue[],
-): void {
-  if (!Number.isFinite(value) || !Number.isInteger(value)) {
-    issues.push({
-      code: 'ptx_spec.int_not_integer',
-      message: `${rowLabel} ${field}=${value} no es un entero finito (shape check; sin dominio de negocio inventado)`,
-      field,
-      classification: 'PRODUCT_POLICY',
-      locator: 'BOARDS.STK_FLAG optional trailing shape (#790): receiver-evidenced flag column; value domain not pinned here',
-      observed: String(value),
+      classification: limit.authority.classification,
+      locator: limit.authority.locator,
+      observed: value,
+      minimum: limit.min,
+      maximum: limit.max,
     });
   }
 }
@@ -845,11 +843,11 @@ function checkRecordFields(record: PtxRecord, units: number, issues: PtxSpecIssu
       dimIssue(record.width, 'BOARDS.WIDTH', units, label, issues);
       if (record.stockQuantity !== undefined) qtyIssue(record.stockQuantity, 'BOARDS.QTY_STOCK', label, issues);
       if (record.usedQuantity !== undefined) qtyIssue(record.usedQuantity, 'BOARDS.QTY_USED', label, issues);
-      // #790: COST/STK_FLAG authority is optional trailing shape only. Keep
-      // preflight to shape checks (finite number / finite integer), without
-      // inventing ranges, enums, or compiler emission authority.
-      if (record.cost !== undefined) productFiniteNumberShapeIssue(record.cost, 'BOARDS.COST', label, issues);
-      if (record.stockFlag !== undefined) productFiniteIntegerShapeIssue(record.stockFlag, 'BOARDS.STK_FLAG', label, issues);
+      // #790: optional trailing cells are still absent from Granete emission
+      // without product authority, but when present they must satisfy the
+      // documented Pattern Exchange field domains.
+      if (record.cost !== undefined) floatRangeIssue(record.cost, 'BOARDS.COST', label, issues);
+      if (record.stockFlag !== undefined) intRangeIssue(record.stockFlag, 'BOARDS.STK_FLAG', label, issues);
       break;
     case 'MATERIALS':
       intRangeIssue(record.jobIndex, 'JOBS.JOB_INDEX', label, issues);

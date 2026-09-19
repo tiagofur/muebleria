@@ -47,10 +47,13 @@ export interface PtxReceiverNumberFieldPolicy {
   readonly source: PtxReceiverFieldSource;
   /**
    * Source-dependent numeric policy:
-   * - FROM_MACHINE_PROFILE: required emitted value.
-   * - FROM_CUTPLAN_GEOMETRY: optional expected receiver value used only as a
-   *   constraint; emitted bytes still come from executed geometry.
-   * - OMIT_NO_OVERRIDE: must be absent.
+   * - FROM_MACHINE_PROFILE: supported now; required emitted value.
+   * - FROM_CUTPLAN_GEOMETRY: supported now only for executed geometry TRIM
+   *   fields; optional expected receiver value used only as a constraint;
+   *   emitted bytes still come from executed geometry.
+   * - OMIT_NO_OVERRIDE: supported now; must be absent.
+   * - FROM_MATERIAL: reserved contract; fail-closed until real material
+   *   resolution wiring exists.
    */
   readonly value?: number;
 }
