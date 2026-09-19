@@ -1,23 +1,13 @@
 {
-  "head": "159fa7e9e50e423249276a5cbc97549ec2cd2ce2",
+  "head": "08524bf171acbb44bc6435b27c0fd332c51de054",
   "rbz_sha256": "f9f0f02cc8a4ab87ac3e40796e5a29efda771a35f0ec0209b8fdba816564e524",
   "sketchup_version": "26.2.242",
   "ruby_version": "3.2.2",
   "platform": "arm64-darwin",
   "pilot": "BLUM_MERIVOBOX_HEIGHT_M",
   "tests": {
-    "e11_save_close_reopen": {
+    "e12_undo_redo": {
       "status": "pass"
-    },
-    "r12_canonical_parity": {
-      "status": "pass"
-    },
-    "e3_e20_rebuild_w800": {
-      "status": "pass"
-    },
-    "e9_e10_mount_frame_world_transform": {
-      "status": "pass",
-      "error_mm": 0.0
     },
     "e1_e2_insert_w600": {
       "status": "pass",
@@ -35,45 +25,55 @@
       },
       "rigidity_verified": true
     },
-    "e12_undo_redo": {
+    "e3_e20_rebuild_w800": {
       "status": "pass"
+    },
+    "e9_e10_mount_frame_world_transform": {
+      "status": "pass",
+      "error_mm": 0.0
     },
     "e5_e6_variant_switch": {
       "status": "pass"
     },
+    "e11_save_close_reopen": {
+      "status": "pass"
+    },
     "e13_fail_before_mutate": {
+      "status": "pass"
+    },
+    "r12_canonical_parity": {
       "status": "pass"
     }
   },
   "w600_to_w800_delta": {
     "side_right": {
       "before_translation_mm": [
-        570.0,
+        554.9999999999999,
         0.0,
         0.0
       ],
       "after_translation_mm": [
-        769.9999999999999,
+        754.9999999999999,
         0.0,
         0.0
       ],
-      "delta_mm": 199.9999999999999,
+      "delta_mm": 200.0,
       "definition_reused": true,
       "determinant_before": 1.0,
       "determinant_after": 1.0
     },
     "runner_right": {
       "before_translation_mm": [
-        570.0,
+        554.9999999999999,
         0.0,
         0.0
       ],
       "after_translation_mm": [
-        769.9999999999999,
+        754.9999999999999,
         0.0,
         0.0
       ],
-      "delta_mm": 199.9999999999999,
+      "delta_mm": 200.0,
       "definition_reused": true,
       "determinant_before": 1.0,
       "determinant_after": 1.0
@@ -102,16 +102,17 @@
   },
   "world_transform": {
     "expected_world_point_mm": [
-      1200.0,
-      645.0,
-      398.0
+      1211.0,
+      661.0,
+      409.0
     ],
     "actual_world_point_mm": [
-      1200.0,
-      645.0,
-      398.0
+      1211.0,
+      661.0,
+      409.0
     ],
     "error_mm": 0.0,
-    "tolerance_mm": 0.001
+    "tolerance_mm": 0.001,
+    "reference_points_count": 3
   }
 }
