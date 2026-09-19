@@ -1,6 +1,7 @@
 """Static G-ODD instruction-drift guards, not execution or product evidence."""
 import json
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,19 @@ class WorkflowContractTest(unittest.TestCase):
         cls.contract = CONTRACT_PATH.read_text()
         cls.agents = (ROOT / "AGENTS.md").read_text()
         cls.task_convention = (ROOT / "odd/tasks/README.md").read_text()
+        cls.readme = (ROOT / "README.md").read_text()
+        cls.agent_reference = (
+            ROOT / "docs/demo/software-factory-agent-reference.md"
+        ).read_text()
+        cls.task_artifact = (
+            ROOT / "odd/tasks/573-portable-g-odd-factory.md"
+        ).read_text()
+
+    @staticmethod
+    def section(text, heading, next_heading):
+        start = text.index(heading)
+        end = text.find(next_heading, start + len(heading))
+        return text[start:] if end == -1 else text[start:end]
 
     def test_roles_load_the_portable_contract(self):
         for role in ("leader", "implementer", "reviewer"):
@@ -119,6 +133,60 @@ class WorkflowContractTest(unittest.TestCase):
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.agents)
+
+    def test_routine_startup_is_read_only_preflight_in_live_entrypoints(self):
+        sections = (
+            self.section(self.readme, "## Cómo arrancar", "### Desktop"),
+            self.section(
+                self.agent_reference,
+                "## 2. Antes de empezar",
+                "### Si la issue toca",
+            ),
+        )
+        for start in sections:
+            normalized = start.lower()
+            with self.subTest(section=start.splitlines()[0]):
+                self.assertLess(
+                    normalized.index("factory_preflight.py"),
+                    normalized.index("init.sh"),
+                )
+                self.assertRegex(normalized, r"preflight[\s\S]{0,180}read-only|read-only[\s\S]{0,180}preflight")
+                self.assertRegex(normalized, r"init\.sh[\s\S]{0,160}(explicit|only when)")
+                self.assertNotRegex(
+                    start,
+                    r"```(?:bash|sh)?\s*\n\./init\.sh\s*\n```",
+                )
+
+    def test_live_reference_has_per_issue_writer_not_global_feature_governance(self):
+        live_docs = "\n".join((self.agents, self.contract, self.agent_reference))
+        lowered = live_docs.lower()
+        forbidden = (
+            r"una feature activa a la vez",
+            r"one feature (?:active )?at a time",
+            r"identifica la feature activa",
+            r"ledger:\s*`feature_list\.json`",
+        )
+        for pattern in forbidden:
+            with self.subTest(pattern=pattern):
+                self.assertIsNone(re.search(pattern, lowered))
+        self.assertRegex(lowered, r"one (?:approved )?issue[^\n]{0,80}one (?:active )?writer")
+        catalog_lines = [
+            line.lower()
+            for line in self.agent_reference.splitlines()
+            if "feature_list.json" in line
+        ]
+        self.assertTrue(any("catalog" in line or "histor" in line for line in catalog_lines))
+        self.assertTrue(any("never" in line or "not" in line for line in catalog_lines))
+
+    def test_execution_artifact_records_actual_candidate_and_remote_boundary(self):
+        artifact = self.task_artifact.lower()
+        self.assertIn("1,405 authored changed lines", artifact)
+        self.assertIn("c1c05fe63e5092669ff0ef94c7722dfc73b3a397", artifact)
+        self.assertRegex(artifact, r"writer[^\n]{0,100}(?:does not push|no remote mutation)")
+        self.assertRegex(artifact, r"parent[^\n]{0,160}(?:publish|open the authorized pr)")
+        next_step = self.section(self.task_artifact, "## Next step", "\n## ").lower()
+        self.assertIn("fresh independent re-review", next_step)
+        self.assertNotIn("create the godd-3 work-unit commit", next_step)
 
 
 if __name__ == "__main__":

@@ -74,11 +74,16 @@ La contraseña se pide interactivamente (sin eco); en CI usa `ADMIN_PASSWORD`.
 ## Cómo arrancar
 
 ```bash
-./init.sh
+python3 scripts/factory_preflight.py
 ```
 
-If the monorepo does not exist yet (Phase 0), the script runs in **bootstrap mode**
-and verifies the harness. `feature_list.json` is a historical catalog, not an
+This read-only routine preflight checks repository state and task tools. Its
+`PREFLIGHT_OK_NOT_VERIFIED` result runs no tests and proves no product behavior.
+
+Run `./init.sh` only when the approved issue explicitly requires the historical
+full harness. It may install dependencies and execute broad suites; it is not the
+routine startup command. In bootstrap mode it validates the harness without using
+`feature_list.json` to select work. That file is a historical catalog, not an
 instruction to select the first pending feature.
 
 Cuando el monorepo esté scaffolded:
@@ -163,12 +168,13 @@ Este repo implementa el patrón **Líder-Implementador-Revisor**:
 |-------|--------------|
 | **El repositorio ES el sistema** | `AGENTS.md`, G-ODD contract, code, tests, and canonical docs |
 | **Orquestación multi-agente** | `.agents/skills/` (platform-agnostic SKILL.md) |
-| **Supervisión y mejora** | `CHECKPOINTS.md`, `./init.sh` que corre tests reales |
+| **Supervisión y mejora** | `CHECKPOINTS.md`, proportional V0/V1/V2 checks, and explicit-only `./init.sh` full harness |
 
 Principios clave:
 - **Divulgación progresiva:** `AGENTS.md` es un mapa, no un manual. Los detalles viven en `docs/`.
 - **One issue / one writer:** current ownership and an isolated branch; GitHub Issues is the queue.
 - **Recoverable execution:** ODD uses one `odd/tasks/<issue>-<slug>.md`; Direct creates no artifact and explicit SDD uses its canonical tasks.
 - **Auxiliary state:** `feature_list.json`, `progress/current.md`, and Engram are not operational authority.
-- **Verificación ejecutable:** `init.sh` corre los tests reales.
+- **Executable verification:** `factory_preflight.py` starts read-only; affected
+  V0/V1/V2 checks prove the candidate; `init.sh` is explicit-only full validation.
 - **Anti teléfono-descompuesto:** subagentes escriben resultados en archivos, solo devuelven una referencia.

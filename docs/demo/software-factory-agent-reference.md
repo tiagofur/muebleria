@@ -136,10 +136,14 @@ Para Proyectar, el North Star define intención futura y código/tests lo implem
 ## 2. Antes de empezar
 
 ```bash
-./init.sh
+python3 scripts/factory_preflight.py
 ```
 
-Luego:
+Routine startup is read-only and returns `PREFLIGHT_OK_NOT_VERIFIED`; it does not
+install, test, reserve, or authorize. Run `./init.sh` only when the approved issue
+explicitly requires the historical full harness, never as the default start.
+
+Then:
 
 1. read the exact approved GitHub issue and current ownership;
 2. choose Direct, ODD, or explicit SDD using the portable contract;
@@ -235,8 +239,9 @@ Lee `docs/architecture.md` antes de inventar ownership nuevo.
 
 ## 4. Reglas duras
 
-- **Una feature activa a la vez** salvo coordinación explícita del programa.
-- **No `done` sin evidencia.** Ver `docs/verification.md`.
+- **One approved issue, one active writer** unless explicit human coordination
+  isolates ownership and branches. Parallel read-only exploration grants no writes.
+- **No complete delivery without evidence.** See `docs/verification.md`.
 - **No inventar métricas.** `actual | estimated | forecast | proxy | missing`.
 - **No usar `createdAt` como sustituto silencioso de un evento real.**
 - **No mezclar account, membership, organization, commercial, project, design,
@@ -395,7 +400,8 @@ Meta: #308.
 - Proyectar: `docs/proyectar-3d-roadmap-vnext.md`;
 - Digital Thread: #384 y Web tracker #396;
 - trabajo futuro: GitHub issues;
-- ledger: `feature_list.json`.
+- historical catalog/legacy metadata: `feature_list.json` (never queue, scheduler,
+  priority, ownership, reservation, or execution state).
 
 ### Prioridad reconciliada — corte 2026-09-05
 
@@ -414,8 +420,8 @@ exacta y bloqueos vigentes. #462/Gate B sigue gobernando Red de Ventas, no un re
 Gate A. El plan fechado contiene URLs, corte y limitaciones; verificar estado remoto
 antes de iniciar implementación. #398 cerrado no certifica navegador→máquina completo.
 
-Discovery/documentación no activa otra feature. No saltar hard prerequisites ni usar
-el menor ID pendiente del ledger como prioridad automática.
+Discovery/documentation does not authorize another issue or writer. Do not skip hard
+prerequisites or derive priority from any pending `feature_list.json` entry.
 
 ---
 
