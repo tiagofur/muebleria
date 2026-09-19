@@ -9,12 +9,20 @@
  * claim.
  */
 
+import { createHash } from 'node:crypto';
 import { optimizeCutPlan, type CutPlan } from '@granete/domain';
 import type { CompileCutPlanToPtxOptions, CompiledPtxCandidate } from './compileCutPlan';
 import { compileCutPlanToPtxDocument } from './compileCutPlan';
 import { buildPtxPartLabels, type PtxPartLabelData, type PtxPartLabelInput } from './partLabels';
 import { parsePtxDocumentBytes } from './parse';
-import type { PtxDocument } from './records';
+import type {
+  PtxBoardRecord,
+  PtxMaterialRecord,
+  PtxPartsInfRecord,
+  PtxPartsReqRecord,
+  PtxPartsUdiRecord,
+  PtxDocument,
+} from './records';
 import { serializePtxDocumentBytesSpecChecked } from './specPreflight';
 import { HPP250_CAD4_R5_LAB_RECEIVER_POLICY } from './receiverPolicy';
 import {
@@ -76,6 +84,79 @@ export interface GoldenR5Candidate {
   readonly compiled: CompiledPtxCandidate;
   readonly bytes: Uint8Array;
   readonly parsed: PtxDocument;
+}
+
+/**
+ * Deterministic LAB/TEST manifest for the #791 r5 golden bytes.
+ *
+ * LAB / TEST ONLY — NOT MACHINE VALIDATED. This is not a productive #793
+ * profile/adapter manifest and does not publish CADmatic/CADLink acceptance.
+ */
+export interface GoldenR5LabTestManifest {
+  readonly fixtureId: 'ptx-cut-plan-golden-r5-lab-test-791';
+  readonly labTestOnly: true;
+  readonly machineValidated: false;
+  readonly receiverPolicyId: string;
+  readonly title: string;
+  readonly decimalPlaces: number;
+  readonly strictSpecPreflight: CompileCutPlanToPtxOptions['strictSpecPreflight'];
+  readonly partsReqDimensionPolicy: CompileCutPlanToPtxOptions['partsReqDimensionPolicy'];
+  readonly partsUdiPolicy: CompileCutPlanToPtxOptions['partsUdi'];
+  readonly offcutCutMarkers: CompileCutPlanToPtxOptions['offcutCutMarkers'];
+  readonly sha256: string;
+  readonly byteLength: number;
+  readonly records: number;
+  readonly parts: number;
+  readonly materials: number;
+  readonly sheets: number;
+  readonly offcuts: number;
+  readonly partsInf: number;
+  readonly partsUdi: number;
+  readonly cncDrawings: number;
+}
+
+function sha256(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function recordsOf<T extends { readonly type: string }>(
+  records: readonly { readonly type: string }[],
+  type: T['type'],
+): T[] {
+  return records.filter((record): record is T => record.type === type);
+}
+
+export function buildGoldenR5LabTestManifest(candidate: GoldenR5Candidate): GoldenR5LabTestManifest {
+  const { bytes, parsed } = candidate;
+  const partsInf = recordsOf<PtxPartsInfRecord>(parsed.records, 'PARTS_INF');
+  const receiverPolicyId = GOLDEN_R5_OPTIONS.receiverPolicy?.id;
+
+  if (receiverPolicyId === undefined) {
+    throw new Error('Golden r5 LAB/TEST manifest requires an explicit receiver policy id');
+  }
+
+  return {
+    fixtureId: 'ptx-cut-plan-golden-r5-lab-test-791',
+    labTestOnly: true,
+    machineValidated: false,
+    receiverPolicyId,
+    title: GOLDEN_R5_TITLE,
+    decimalPlaces: GOLDEN_R5_DECIMAL_PLACES,
+    strictSpecPreflight: GOLDEN_R5_OPTIONS.strictSpecPreflight,
+    partsReqDimensionPolicy: GOLDEN_R5_OPTIONS.partsReqDimensionPolicy,
+    partsUdiPolicy: GOLDEN_R5_OPTIONS.partsUdi,
+    offcutCutMarkers: GOLDEN_R5_OPTIONS.offcutCutMarkers,
+    sha256: sha256(bytes),
+    byteLength: bytes.byteLength,
+    records: parsed.records.length,
+    parts: recordsOf<PtxPartsReqRecord>(parsed.records, 'PARTS_REQ').length,
+    materials: recordsOf<PtxMaterialRecord>(parsed.records, 'MATERIALS').length,
+    sheets: recordsOf<PtxBoardRecord>(parsed.records, 'BOARDS').length,
+    offcuts: parsed.records.filter((record) => record.type === 'OFFCUTS').length,
+    partsInf: partsInf.length,
+    partsUdi: recordsOf<PtxPartsUdiRecord>(parsed.records, 'PARTS_UDI').length,
+    cncDrawings: partsInf.filter((row) => row.drawing !== undefined).length,
+  };
 }
 
 export async function buildGoldenR5Candidate(): Promise<GoldenR5Candidate> {

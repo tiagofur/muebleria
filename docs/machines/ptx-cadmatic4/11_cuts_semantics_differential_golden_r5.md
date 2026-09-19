@@ -22,11 +22,11 @@ el offcut `Xn` correspondiente.
 
 | FUNCTION | Significado en especificación | Fase | Spec-valid | Soporte producto Granete | Emisión r5 | Evidencia receptor |
 |---|---|---:|---|---|---|---|
-| `0` | Corte normal / división productiva sin clasificación phase 1..3 específica | n/a | Sí | Soportado para el subconjunto existente cuando el compiler lo produce desde `CutProgram` | Permitida | Dialecto interno histórico y readback independiente; no es evidencia universal CAD4. |
+| `0` | Head cut | 0 | Sí | Soportado para el subconjunto existente cuando el compiler lo produce desde `CutProgram` | Permitida | Dialecto interno histórico y readback independiente; no es evidencia universal CAD4. |
 | `1` | Rip / phase 1 | 1 | Sí | Soportado como división productiva ejecutable | Permitida | Presente en el dialecto Granete y compatible con el modelo Pattern Exchange. |
 | `2` | Crosscut / phase 2 | 2 | Sí | Soportado como división productiva ejecutable y como producer requerido para el offcut rest-side | Permitida | R2201/R7301 muestran producers phase 2 antes de releases `92 + Xn`. |
 | `3` | Recut / phase 3 | 3 | Sí | Soportado para recuts dependientes ya representables | Permitida | R2201/R7301 muestran recut dependiente después del release. |
-| `90` | Trim/waste phase 0/normal según familia 90..99 | 0 / n/a | Sí | Sin emisión productiva r5 hasta tener evento físico demostrado | No emitir por ahora | Sin evidencia suficiente del receiver HPP250/CAD4 para publicar bytes. |
+| `90` | Trim/waste correspondiente a phase 0 | 0 | Sí | Sin emisión productiva r5 hasta tener evento físico demostrado | No emitir por ahora | Sin evidencia suficiente del receiver HPP250/CAD4 para publicar bytes. |
 | `91` | Trim/waste phase 1 | 1 | Sí | Conceptualmente distinto de `PART_INDEX`; no soportado por producto r5 actual | No emitir por ahora | Sin fixture receptor que justifique combinación actual. |
 | `92` | Trim/waste phase 2 | 2 | Sí | Soportado sólo para el evento físico rest-side offcut descrito abajo | Permitida sólo con regla r5 | Observado en R2201/R7301 como `FUNCTION 92` con `PART_INDEX X1`. |
 | `93` | Trim/waste phase 3 | 3 | Sí | Conceptualmente distinto de `PART_INDEX`; no soportado por producto r5 actual | No emitir por ahora | Sin fixture receptor que justifique combinación actual. |

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { validatePtxDocument } from './validate';
 import { ptxSpecPreflightDocument } from './specPreflight';
@@ -18,11 +17,32 @@ import {
   GOLDEN_R5_OPTIONS,
   GOLDEN_R5_TITLE,
   buildGoldenR5Candidate,
+  buildGoldenR5LabTestManifest,
+  type GoldenR5LabTestManifest,
 } from './cutPlanPtxGoldenR5';
 
-function sha256(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
-}
+const EXPECTED_GOLDEN_R5_LAB_TEST_MANIFEST = {
+  fixtureId: 'ptx-cut-plan-golden-r5-lab-test-791',
+  labTestOnly: true,
+  machineValidated: false,
+  receiverPolicyId: 'HPP250_CAD4_R5_LAB',
+  title: 'LAB-R5-GOLDEN-TEST-ONLY1',
+  decimalPlaces: 2,
+  strictSpecPreflight: 'pattern-exchange-v1',
+  partsReqDimensionPolicy: 'part-local-pre-rotation-cut',
+  partsUdiPolicy: 'structural',
+  offcutCutMarkers: 'function92-only',
+  sha256: '239e9f7c8989c5f3756545da94a184b7b79aa1bdda797755c065301917201932',
+  byteLength: 3303,
+  records: 60,
+  parts: 10,
+  materials: 2,
+  sheets: 4,
+  offcuts: 1,
+  partsInf: 10,
+  partsUdi: 10,
+  cncDrawings: 9,
+} as const satisfies GoldenR5LabTestManifest;
 
 function rows<T extends { readonly type: string }>(records: readonly { readonly type: string }[], type: T['type']): T[] {
   return records.filter((record): record is T => record.type === type);
@@ -95,29 +115,16 @@ describe('#791 deterministic LAB/TEST r5 golden', () => {
     expect(inf.some((row) => row.edge1 === undefined && row.edge2 === undefined && row.edge3 && row.edge4)).toBe(true);
   });
 
-  it('has a stable manifest summary', async () => {
-    const { bytes, parsed } = await buildGoldenR5Candidate();
-    const counts = {
-      records: parsed.records.length,
-      parts: rows<PtxPartsReqRecord>(parsed.records, 'PARTS_REQ').length,
-      materials: rows<PtxMaterialRecord>(parsed.records, 'MATERIALS').length,
-      sheets: rows<PtxBoardRecord>(parsed.records, 'BOARDS').length,
-      offcuts: parsed.records.filter((record) => record.type === 'OFFCUTS').length,
-      partsInf: rows<PtxPartsInfRecord>(parsed.records, 'PARTS_INF').length,
-      partsUdi: rows<PtxPartsUdiRecord>(parsed.records, 'PARTS_UDI').length,
-      cncDrawings: rows<PtxPartsInfRecord>(parsed.records, 'PARTS_INF').filter((row) => row.drawing !== undefined).length,
-    };
-    expect(sha256(bytes)).toBe('239e9f7c8989c5f3756545da94a184b7b79aa1bdda797755c065301917201932');
-    expect(bytes.byteLength).toBe(3303);
-    expect(counts).toEqual({
-      records: 60,
-      parts: 10,
-      materials: 2,
-      sheets: 4,
-      offcuts: 1,
-      partsInf: 10,
-      partsUdi: 10,
-      cncDrawings: 9,
-    });
+  it('has a deterministic LAB/TEST manifest derived from stable bytes', async () => {
+    const first = await buildGoldenR5Candidate();
+    const second = await buildGoldenR5Candidate();
+
+    const firstManifest = buildGoldenR5LabTestManifest(first);
+    const secondManifest = buildGoldenR5LabTestManifest(second);
+
+    expect(second.bytes).toEqual(first.bytes);
+    expect(secondManifest.sha256).toBe(firstManifest.sha256);
+    expect(secondManifest).toEqual(firstManifest);
+    expect(firstManifest).toEqual(EXPECTED_GOLDEN_R5_LAB_TEST_MANIFEST);
   });
 });
