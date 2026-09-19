@@ -43,11 +43,13 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 - [x] **T4 — Add explicit r5 part-local PARTS_REQ dimension policy** (delegated writer; trigger: multi-file write)
   - Added explicit `partsReqDimensionPolicy: 'placement' | 'part-local-pre-rotation-cut'`; default/absent preserves historical placement dimensions while r5 labels opts in explicitly rather than through `partLabels` implicitly.
   - Compiler and independently derived readback now apply the policy. The existing real rotated fixture proves placed 39×549 versus PARTS_REQ 549×39, GRAIN=0, FIN 550×40, edge mapping, clean bytes/readback, an old-dimension mutation `parts.dims`, and non-rotated equality.
-  - r2/r3/r4, adapter/profile, and FUNCTION 92 paths were not modified. Writer evidence: Excel 45 files / 534 passed / 3 skipped; diff check clean. Commit identity recorded after the work-unit commit.
+  - r2/r3/r4, adapter/profile, and FUNCTION 92 paths were not modified. Writer evidence: Excel 45 files / 534 passed / 3 skipped; diff check clean. Work-unit commit: `f4dac0af791fd58052b49b7acf91a31c70ebd118`.
 
 - [ ] **T5 — Document, verify, and publish r5 dimension correction** (delegated docs/verification)
-  - Update the required PTX documentation, verification record, progress, task mirror, and PR #797 body. Add production-only #793 CNC scope note without wiring it.
-  - Run package/type/diff/selector/CI checks under the user-authorized gates and report any infrastructure gap honestly.
+  - Documentation/progress updated for the r5 dimension policy: SPEC `PARTS_REQ` part-local cut dimensions with `GRAIN=0` rotation allowance; PRODUCT POLICY `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`; absent/`placement` preserves r2/r3/r4 byte-exact and is not coupled to `partLabels`; independent readback keeps FIN as original finished dimensions and checks `FIN = part-local cut + edge deductions`.
+  - Existing fixture facts recorded: rotated true; placed 39×549; `PARTS_REQ 549×39`; grain 0; `FIN 550×40`; `EDGE2`/`EDGE4`; old placement mutation fails with `parts.dims`; nonrotated equality remains.
+  - CNC scope note recorded only: #793 productive r5 must derive scope from `CutPlan.releaseBase.manufacturingFingerprint` or an authoritative frozen equivalent and block without `releaseBase`; `release:789:r5:*` strings remain laboratory fixtures. No wiring implemented.
+  - Work-unit recorded: `f4dac0af791fd58052b49b7acf91a31c70ebd118`. T5 remains pending verification/publish, PR #797 body update, selector/CI exact-head, and any authorized package/type checks.
 
 ## Acceptance / required checks
 
@@ -70,8 +72,8 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 - 2026-09-19: Independent local verifier found an initial TypeScript error in the new CORE_MAT authority path. The minimal fail-closed correction is `32518fc47273f74af71520985953f68d9ca32bf3`; exact-candidate re-verification passed Excel 45 files / 534 passed / 3 skipped, typecheck, and a prior diff check.
 - 2026-09-19: The authorized selector command `python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600` ran once at candidate `32518fc47273f74af71520985953f68d9ca32bf3` against base `b7446866ed247677d8b8f83238cddbd96579db97` and blocked before executing gates because it requires an isolated `DATABASE_URL`. Selected jobs were typescript, backend-go, sketchup-extension, proyectar-visual, foundation-postgres, and organization-browser; none ran and none count as PASS.
 - 2026-09-19: Published `f0543e7766730cf07e6917c2217cb5e496194f5d` to the existing PR #797. Its exact-head CI reached SUCCESS for all reported checks. New independent review identified the separate rotated-placement identity blocker, authorized as T4/T5 only.
-- 2026-09-19: T4 completed by one scoped writer: the explicit r5 `part-local-pre-rotation-cut` policy was added to compiler and independent readback, with positive/negative rotated and non-rotated tests. Package Excel suite remained 45 files / 534 passed / 3 skipped; diff check clean.
+- 2026-09-19: T4 completed by one scoped writer: the explicit r5 `part-local-pre-rotation-cut` policy was added to compiler and independent readback, with positive/negative rotated and non-rotated tests. Package Excel suite remained 45 files / 534 passed / 3 skipped; diff check clean. Work-unit commit `f4dac0af791fd58052b49b7acf91a31c70ebd118` records T4.
 
 ## Next step
 
-Commit T4, then delegate T5 documentation and required verification/publish steps on the same existing PR branch.
+Complete T5 verification/publish on the same existing PR branch: update PR #797 body, run only authorized checks beyond the already observed `git diff --check`, and report selector/CI exact-head truthfully.

@@ -90,7 +90,33 @@ proyecta: nunca consulta BOM, catálogo, SketchUp, nombres ni geometría para
 el optimizador asigna a las piezas colocadas (`unrollRows`), de modo que la
 clave de la proyección es exactamente el `PARTS_REQ.CODE` del candidato.
 
-## 3. Mapping Granete → PARTS_INF (autoridad por campo)
+## 3. Política r5 de dimensiones PARTS_REQ
+
+- **SPEC:** `PARTS_REQ.LENGTH` y `PARTS_REQ.WIDTH` describen las dimensiones
+  requeridas de la pieza de la lista de corte en el frame local de la pieza.
+  `PARTS_REQ.GRAIN=0` permite rotar la pieza durante la optimización. Esta
+  lectura documenta el significado de los bytes; no afirma aceptación por el
+  receptor ni por una máquina.
+- **PRODUCT POLICY r5:** el candidato r5 usa explícitamente
+  `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`. Cuando el
+  optimizador coloca una pieza rotada, el compiler escribe `PARTS_REQ`
+  intercambiando las dimensiones colocadas de vuelta al frame local de corte
+  de la pieza; no recalcula descuentos ni inventa una segunda geometría.
+- **Compatibilidad histórica:** la opción ausente, o `placement`, conserva la
+  política r2/r3/r4 byte-exact: `PARTS_REQ` refleja las dimensiones colocadas.
+  Esta compatibilidad no depende de `partLabels`; `partLabels` no cambia por
+  sí mismo la política de dimensiones.
+- **Readback independiente:** `verifyCutPlanPtxReadback` aplica una derivación
+  condicional independiente de la del compiler. `FIN_LENGTH`/`FIN_WIDTH` se
+  mantienen como dimensiones terminadas originales, y la identidad esperada
+  sigue siendo `FIN = corte local de pieza + descuentos de canto`.
+- **Fixture vigente:** el caso rotado real tiene `piece.rotated === true`,
+  colocación `39×549`, `PARTS_REQ 549×39`, `GRAIN=0`, `FIN 550×40` y cantos
+  `EDGE2`/`EDGE4`; una mutación vieja que vuelve `PARTS_REQ` a las dimensiones
+  colocadas falla con `parts.dims`, mientras que el caso no rotado conserva
+  igualdad entre dimensiones colocadas y locales.
+
+## 4. Mapping Granete → PARTS_INF (autoridad por campo)
 
 | Columna PTX | Fuente Granete | Autoridad / clasificación |
 |---|---|---|
@@ -99,7 +125,7 @@ clave de la proyección es exactamente el `PARTS_REQ.CODE` del candidato.
 | LABEL_QTY | `String(1)` — una fila por pieza física ⇒ una etiqueta por pieza | PRODUCT_POLICY documentada; NO copiada de las muestras; §20 la tipa TXT |
 | FIN_LENGTH / FIN_WIDTH | `row.lengthMm` / `row.widthMm` COPIADOS (convención terminada de la fila de ingeniería) | PRODUCT: la fila ES la verdad terminada; el descuento de canto vive SOLO en `unrollRows` (optimizador). Test de identidad: corte (PARTS_REQ) + descuento == terminada (PARTS_INF), desde los bytes |
 | ORDER | `orderRef` corto de release (p.ej. `R3`) | PRODUCT (referencia de obra); vacío si no existe |
-| EDGE1 (Btm length) | bandera **L2** + `edgeBandCode` | SPEC (nombre de columna §20) + PRODUCT (mapeo de lados, §4 abajo) |
+| EDGE1 (Btm length) | bandera **L2** + `edgeBandCode` | SPEC (nombre de columna §20) + PRODUCT (mapeo de lados, §5 abajo) |
 | EDGE2 (Top length) | bandera **L1** + `edgeBandCode` | ídem |
 | EDGE3 (Left width) | bandera **W1** + `edgeBandCode` | ídem |
 | EDGE4 (Right width) | bandera **W2** + `edgeBandCode` | ídem |
@@ -107,7 +133,7 @@ clave de la proyección es exactamente el `PARTS_REQ.CODE` del candidato.
 | FACE_LAM / BACK_LAM | **VACÍO** — sin autoridad de laminación separada | UNKNOWN → vacío |
 | CORE_MAT | `row.materialCode` (`ProductionCutRow.materialCode`) | PRODUCT_POLICY: autoridad del tablero ya existente; no introduce receiver MATERIALS tuning |
 | PALLET | **VACÍO** — nombre nominal del campo; posición serializada sin cambios respecto del contrato de 32 columnas | UNKNOWN |
-| DRAWING | `D<hex12>` sólo con autoridad CNC explícita (`hasCncMachining: true`) y `cncScope` congelado no vacío (ver §5) | PRODUCT_POLICY sobre campo SPEC TXT 200; ausencia/false deja DRAWING y BARCODE1 vacíos |
+| DRAWING | `D<hex12>` sólo con autoridad CNC explícita (`hasCncMachining: true`) y `cncScope` congelado no vacío (ver §6) | PRODUCT_POLICY sobre campo SPEC TXT 200; ausencia/false deja DRAWING y BARCODE1 vacíos |
 | PRODUCT | `unit.moduleCode` | PRODUCT |
 | PROD_INFO | `unit.moduleName` | PRODUCT |
 | PROD_WIDTH/HGT/DEPTH | `unit.module{Width,Height,Depth}Mm` (dims finales del mueble) | PRODUCT; §20 las tipa TXT |
@@ -118,7 +144,7 @@ clave de la proyección es exactamente el `PARTS_REQ.CODE` del candidato.
 | COLOUR | **VACÍO** — sin autoridad de color separada del material | UNKNOWN |
 | SECOND_CUT_* | **VACÍO** — sin segundo corte en el subconjunto | UNKNOWN |
 
-## 4. Orientación de cantos: L1/L2/W1/W2 → EDGE1..4
+## 5. Orientación de cantos: L1/L2/W1/W2 → EDGE1..4
 
 - Convención de taller de Granete (documentada en
   `packages/ui/src/components/editor/PlankEdgeDiagram.tsx` y usada por
@@ -144,7 +170,7 @@ más lados encintados emiten el mismo `edgeBandCode` en cada lado marcado. Un
 flag de canto sin `edgeBandCode` autoritativo falla cerrado; distinguir códigos
 de banda distintos por lado queda fuera de #789/#797.
 
-## 5. Puente CNC: DRAWING / BARCODE / colisiones
+## 6. Puente CNC: DRAWING / BARCODE / colisiones
 
 Clasificación separada:
 
@@ -169,7 +195,7 @@ Clasificación separada:
   `ptx_compile.label_barcode_duplicate`; BARCODE2 ≠ código de fabricación →
   `ptx_compile.label_invalid`. Nada se trunca ni se desambigua en silencio.
 
-## 6. PARTS_UDI: inventario, clasificación y política de #789
+## 7. PARTS_UDI: inventario, clasificación y política de #789
 
 | Campo | Clasificación | Decisión #789 |
 |---|---|---|
@@ -187,7 +213,7 @@ del receptor (imagen de diagrama de cantos incluida) es #790. El diagrama de
 cantos (Edging diagram de Magi-Cut) es PRESENTACIÓN, no autoridad: la verdad
 de lados/cantos ya viaja en EDGE1..4.
 
-## 7. Orden de records y shape
+## 8. Orden de records y shape
 
 - El compiler emite los bloques PARTS_INF y PARTS_UDI **inmediatamente
   después del bloque PARTS_REQ** (contiguos, orden por PART_INDEX). La
@@ -203,7 +229,7 @@ de lados/cantos ya viaja en EDGE1..4.
   omitted, la disciplina de OFFCUTS.OFC_QTY). El lector acepta filas más
   cortas (trailing opcional) y falla cerrado pasadas las 32/62 columnas.
 
-## 8. Verificación y gates
+## 9. Verificación y gates
 
 - `specPreflight` (extendido): TXT 200 por cada campo PARTS_INF y
   PARTS_UDI.INFO1..60; IDX 1-250/1-9999; referencias PART_INDEX → PARTS_REQ.
@@ -217,10 +243,10 @@ de lados/cantos ya viaja en EDGE1..4.
   los campos sin autoridad deben estar AUSENTES (un byte mutado que los
   rellena es `parts_inf.authority_violation`), y la IDENTIDAD DE MEDIDAS se
   re-deriva de forma independiente: la fila terminada del optimizador
-  (`originalLength/WidthMm`, preservada pre-rotación) y el corte colocado +
-  descuento (`length/widthMm` + banderas + espesor de banda) deben coincidir
-  con la etiqueta — una etiqueta cableada a la pieza equivocada falla en
-  dimensiones o cantos.
+  (`originalLength/WidthMm`, preservada pre-rotación) y el corte esperado bajo
+  la política activa (`placement` histórica o `part-local-pre-rotation-cut`
+  r5) + descuentos de canto deben coincidir con la etiqueta — una etiqueta
+  cableada a la pieza equivocada falla en dimensiones o cantos.
 - Gates del compiler: `label_missing`, `label_code_unknown`,
   `label_code_duplicate`, `label_drawing_duplicate`,
   `label_barcode_duplicate`, `label_invalid`, `options_invalid`
@@ -233,7 +259,8 @@ de lados/cantos ya viaja en EDGE1..4.
   espesores distintos, qty-2 con -C2, ROOM distinto en la ocurrencia
   repetida, ORDER, drawing refs y barcodes). El hardening #797 añade un caso
   real del optimizador con `grain=0` y `allowRotationNoGrain`: la pieza queda
-  `rotated === true`, preserva lados físicos L1/L2/W1/W2 en la etiqueta (no
+  `rotated === true`, colocada `39×549`, `PARTS_REQ 549×39`, `FIN 550×40`,
+  `EDGE2`/`EDGE4`; preserva lados físicos L1/L2/W1/W2 en la etiqueta (no
   ejes del tablero), y pasa serialize→parse→readback independiente. Tests en
   `partLabels.test.ts`, `compileCutPlan.partsInf.test.ts`,
   `specPreflight.test.ts` (#789), `roundtrip.test.ts` (#789) y
@@ -244,7 +271,7 @@ de lados/cantos ya viaja en EDGE1..4.
   inmutabilidad del preflight sigue en verde). Ningún golden histórico fue
   modificado.
 
-## 9. Pertenencia posterior (NO parte de #789)
+## 10. Pertenencia posterior (NO parte de #789)
 
 - #790 receiver profile HPP250/CAD4: shape final de columnas opcionales,
   orden completo de familias, MATERIALS receiver policy (BOOK/kerf/trims/
@@ -252,12 +279,17 @@ de lados/cantos ya viaja en EDGE1..4.
 - #791 CUTS diferencial (FUNCTION 90..99 como fases, no "92 = offcut").
 - Futuro CNC real: generación MPR/MPRX/BHX con basename = cncDrawingRef;
   el escaneo de BARCODE1 en el centro de mecanizado resuelve el programa.
+- #793 productivo r5: el scope CNC debe derivarse de
+  `CutPlan.releaseBase.manufacturingFingerprint` o de un equivalente congelado
+  autoritativo, y debe bloquearse si falta `releaseBase`. Los strings
+  `release:789:r5:*` siguen siendo fixtures de laboratorio; este documento no
+  implementa ese wiring.
 - Normalización de códigos del receptor (espacios→underscore, uppercase al
   importar, §20 p.166): riesgo de fusión de identidades, sigue en #790.
 
-## 10. Verificación ejecutada
+## 11. Verificación ejecutada
 
-Evidencia enfocada observada para el hardening #797:
+Evidencia enfocada observada para el hardening #797 antes de T4/T5:
 
 ```sh
 # HEAD 32518fc47273f74af71520985953f68d9ca32bf3
@@ -265,6 +297,13 @@ pnpm --filter @granete/excel test   # 45 archivos, 534 PASS + 3 skips
 pnpm typecheck                      # PASS
 # prior diff check                  # limpio
 ```
+
+T4 agregó la política explícita `partsReqDimensionPolicy:
+'part-local-pre-rotation-cut'` y la suite focalizada del writer volvió a pasar
+(45 archivos, 534 PASS + 3 skips) con `git diff --check` limpio. Work-unit
+registrado para T5 documental: `f4dac0af791fd58052b49b7acf91a31c70ebd118`.
+T5 queda pendiente de verificación proporcional, publicación y CI exact-head;
+no se han corrido tests nuevos en este paso documental.
 
 Intento de selector autorizado sobre el candidato
 `32518fc47273f74af71520985953f68d9ca32bf3` contra base

@@ -534,10 +534,10 @@ Modelo tipado de las familias de etiqueta (32 columnas PARTS_INF y
 JOB/PART+INFO1..60 PARTS_UDI según el diccionario §20 pp.168–171), proyección
 industrial congelada por pieza física (`PtxPartLabelData`/`buildPtxPartLabels`)
 y puente CNC `D<hex12>`/BARCODE. Autoridad y clasificación por campo en
-`docs/machines/ptx-cadmatic4/09_parts_inf_labels_cnc.md` (mapping §3,
-orientación de cantos §4, puente CNC §5, inventario UDI §6).
+`docs/machines/ptx-cadmatic4/09_parts_inf_labels_cnc.md` (política de dimensiones PARTS_REQ §3,
+mapping §4, orientación de cantos §5, puente CNC §6, inventario UDI §7).
 
-Evidencia enfocada observada en el hardening #797:
+Evidencia enfocada observada en el hardening #797 antes de T4/T5:
 
 ```sh
 # HEAD 32518fc47273f74af71520985953f68d9ca32bf3
@@ -545,6 +545,14 @@ pnpm --filter @granete/excel test    # 45 archivos / 534 PASS / 3 skips
 pnpm typecheck                      # PASS
 # prior diff check                  # limpio
 ```
+
+T4 agregó la política explícita `partsReqDimensionPolicy:
+'part-local-pre-rotation-cut'`; el writer observó de nuevo
+`pnpm --filter @granete/excel test` = 45 archivos / 534 PASS / 3 skips y
+`git diff --check` limpio. Work-unit registrado para T5 documental:
+`f4dac0af791fd58052b49b7acf91a31c70ebd118`. T5 sigue pendiente de
+verificación proporcional, publicación y CI exact-head; no se corrieron tests
+nuevos en este paso documental.
 
 Intento de selector autorizado sobre el candidato
 `32518fc47273f74af71520985953f68d9ca32bf3`, base
@@ -572,6 +580,15 @@ Cobertura contractual exigida por #789/#797:
   (`parts_inf.authority_violation` ante un byte mutado);
 - CORE_MAT: `ProductionCutRow.materialCode` es la autoridad del tablero; esto
   no introduce tuning de MATERIALS/receptor, que sigue perteneciendo a #790;
+- dimensión PARTS_REQ r5: `partsReqDimensionPolicy:
+  'part-local-pre-rotation-cut'` es política explícita del candidato r5;
+  `PARTS_REQ.LENGTH/WIDTH` expresan el corte local de pieza antes de rotación,
+  `GRAIN=0` permite rotación, y la política ausente/`placement` preserva r2/r3/r4
+  byte-exact sin acoplarse a `partLabels`;
+- fixture rotado vigente: pieza real `rotated === true`, colocada `39×549`,
+  `PARTS_REQ 549×39`, `GRAIN=0`, `FIN 550×40`, `EDGE2`/`EDGE4`; la mutación
+  vieja a dimensiones colocadas falla con `parts.dims` y el no rotado conserva
+  igualdad;
 - identidad de medidas: FIN_* (terminada, copiada de la fila de ingeniería)
   contra PARTS_REQ (corte) + descuento del optimizador, re-derivada de forma
   independiente por el verifier (`parts_inf.finished_identity`) y afirmada
@@ -601,6 +618,10 @@ Cobertura contractual exigida por #789/#797:
 - inmutabilidad r2/r3/r4: sin la opción `partLabels` no se emiten PARTS_INF/
   PARTS_UDI y los goldens históricos recompilan byte-exact dentro de la suite;
   r2/r3/r4, FUNCTION 92, adapter/profile y outputs cliente no se tocaron.
+- CNC productivo posterior: #793 debe derivar el scope desde
+  `CutPlan.releaseBase.manufacturingFingerprint` o equivalente congelado
+  autoritativo y bloquear sin `releaseBase`; `release:789:r5:*` queda como
+  fixture de laboratorio, no como wiring productivo.
 
 ---
 
