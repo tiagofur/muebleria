@@ -51,10 +51,108 @@ import type {
   PtxCompiledSheetMapping,
 } from './compileCutPlan';
 import { scopedRegionKey } from './scopedRegionRef';
+import {
+  PTX_RECEIVER_FIELD_SOURCE,
+  optionalReceiverExpectedNumber,
+  requiredReceiverNumber,
+  type PtxReceiverMaterialFieldName,
+} from './receiverPolicy';
 
 export interface CutPlanPtxReadbackIssue {
   readonly code: string;
   readonly message: string;
+}
+
+type ReceiverRecordFamily = NonNullable<
+  CompileCutPlanToPtxOptions['receiverPolicy']
+>['recordShape']['familyOrder'][number];
+
+function verifyReceiverRecordOrder(
+  parsed: PtxDocument,
+  familyOrder: readonly ReceiverRecordFamily[],
+  push: (code: string, message: string) => void,
+): void {
+  const orderIndex = new Map<ReceiverRecordFamily, number>(
+    familyOrder.map((family, index) => [family, index]),
+  );
+  const patternIndex = orderIndex.get('PATTERNS');
+  const cutsIndex = orderIndex.get('CUTS');
+  let highestPrePatternIndex = -1;
+  let sawPatternOrCut = false;
+  let currentPatternIndex: number | undefined;
+  let currentPatternPosition: number | undefined;
+  let cutsInCurrentPattern = 0;
+
+  const closeCurrentPatternGroup = (): void => {
+    if (currentPatternIndex !== undefined && cutsInCurrentPattern === 0) {
+      push(
+        'receiver.order',
+        `PATTERNS ${currentPatternIndex} en posición ${currentPatternPosition ?? '?'} no lleva CUTS antes del siguiente PATTERNS para receiverPolicy`,
+      );
+    }
+  };
+
+  parsed.records.forEach((record, position) => {
+    const family = record.type as ReceiverRecordFamily;
+    const index = orderIndex.get(family);
+    if (index === undefined) return;
+
+    if (record.type === 'PATTERNS') {
+      if (patternIndex === undefined) return;
+      closeCurrentPatternGroup();
+      if (highestPrePatternIndex > patternIndex) {
+        push(
+          'receiver.order',
+          `${family} en posición ${position + 1} aparece después de una familia posterior al bloque PATTERNS/CUTS`,
+        );
+      }
+      sawPatternOrCut = true;
+      currentPatternIndex = record.patternIndex;
+      currentPatternPosition = position + 1;
+      cutsInCurrentPattern = 0;
+      return;
+    }
+
+    if (record.type === 'CUTS') {
+      if (patternIndex === undefined || cutsIndex === undefined) return;
+      if (currentPatternIndex === undefined) {
+        push(
+          'receiver.order',
+          `CUTS en posición ${position + 1} aparece antes de PATTERNS para receiverPolicy`,
+        );
+      } else if (record.patternIndex !== currentPatternIndex) {
+        push(
+          'receiver.order',
+          `CUTS en posición ${position + 1} PTN_INDEX=${record.patternIndex} no corresponde al PATTERNS activo ${currentPatternIndex} para receiverPolicy`,
+        );
+      } else {
+        cutsInCurrentPattern += 1;
+      }
+      sawPatternOrCut = true;
+      return;
+    }
+
+    if (sawPatternOrCut) {
+      closeCurrentPatternGroup();
+      currentPatternIndex = undefined;
+      currentPatternPosition = undefined;
+      push(
+        'receiver.order',
+        `${family} en posición ${position + 1} aparece después del bloque PATTERNS/CUTS para receiverPolicy`,
+      );
+      return;
+    }
+
+    if (index < highestPrePatternIndex) {
+      push(
+        'receiver.order',
+        `${family} en posición ${position + 1} aparece fuera del orden receiverPolicy ${familyOrder.join(' > ')}`,
+      );
+      return;
+    }
+    highestPrePatternIndex = index;
+  });
+  closeCurrentPatternGroup();
 }
 
 // ---------------------------------------------------------------------------
@@ -438,7 +536,51 @@ export function verifyCutPlanPtxReadback(
     const factor = 10 ** options.decimalPlaces;
     return Math.round(value * factor) / factor;
   };
-  const expectedComment = (value: string): string | undefined => auxAscii(value) || undefined;
+  const expectedComment = (value: string): string | undefined =>
+    options.receiverPolicy?.recordShape?.emitCutComments === false
+      ? undefined
+      : auxAscii(value) || undefined;
+  const expectedReceiverMaterialNumber = (
+    fieldName: PtxReceiverMaterialFieldName,
+  ): number | undefined => {
+    if (options.receiverPolicy === undefined) return undefined;
+    try {
+      return requiredReceiverNumber(options.receiverPolicy, fieldName);
+    } catch {
+      push(
+        'receiver_policy.material_field_missing',
+        `receiverPolicy '${options.receiverPolicy.id}' no trae MATERIALS.${fieldName} numérico requerido para verificar el readback`,
+      );
+      return undefined;
+    }
+  };
+  const expectedReceiverOptionalNumber = (
+    fieldName: PtxReceiverMaterialFieldName,
+  ): number | undefined => {
+    if (options.receiverPolicy === undefined) return undefined;
+    try {
+      return optionalReceiverExpectedNumber(options.receiverPolicy, fieldName);
+    } catch {
+      push(
+        'receiver_policy.material_field_missing',
+        `receiverPolicy '${options.receiverPolicy.id}' trae MATERIALS.${fieldName} no numérico para verificar el readback`,
+      );
+      return undefined;
+    }
+  };
+  const expectedReceiverBook = (): number | undefined => {
+    if (options.receiverPolicy === undefined) return 1;
+    return expectedReceiverMaterialNumber('BOOK');
+  };
+  const expectedBookQuantity = expectedReceiverBook();
+
+  if (options.receiverPolicy !== undefined) {
+    verifyReceiverRecordOrder(
+      parsed,
+      options.receiverPolicy.recordShape.familyOrder,
+      push,
+    );
+  }
 
   // 2. Header carries the caller's declared candidate options.
   if (parsed.header.units !== PTX_UNITS.metric) {
@@ -474,6 +616,22 @@ export function verifyCutPlanPtxReadback(
     const list = cutsByPattern.get(row.patternIndex) ?? [];
     list.push(row);
     cutsByPattern.set(row.patternIndex, list);
+  }
+  if (options.receiverPolicy !== undefined) {
+    for (const row of boardRows) {
+      if (row.cost !== undefined) {
+        push(
+          'boards.cost_authority',
+          `BOARDS ${row.boardIndex} COST=${row.cost} lleva un valor sin autoridad Granete para receiverPolicy ${options.receiverPolicy.id}`,
+        );
+      }
+      if (row.stockFlag !== undefined) {
+        push(
+          'boards.stock_flag_authority',
+          `BOARDS ${row.boardIndex} STK_FLAG=${row.stockFlag} lleva un valor sin autoridad Granete para receiverPolicy ${options.receiverPolicy.id}`,
+        );
+      }
+    }
   }
 
   const globalOffcutIndexByRegion = new Map<string, number>();
@@ -581,8 +739,8 @@ export function verifyCutPlanPtxReadback(
 
   // 4. Materials: kerf must equal the plan kerf, thickness the industrial
   //    thickness (recomputed from the plan — raw codes, since the compiler
-  //    rejects non-ASCII identity), and BOOK the documented conservative
-  //    policy (1: "counts boards" is all S03 pp.134–135 establishes).
+  //    rejects non-ASCII identity), and BOOK the active max-sheets-per-book
+  //    policy (historical default 1 or receiver policy when opted in).
   const expectedThickness = new Map<string, number>();
   for (const sheet of cutPlan.sheets) {
     expectedThickness.set(sheet.materialCode, sheet.thicknessMm ?? Number.NaN);
@@ -619,41 +777,97 @@ export function verifyCutPlanPtxReadback(
     } else if (!close(row.thickness, snap(thickness))) {
       push('materials.thickness', `MATERIALS '${row.code}' THICK=${row.thickness} ≠ ${snap(thickness)}`);
     }
-    if (row.bookQuantity !== 1) {
-      push('materials.book', `MATERIALS '${row.code}' BOOK=${row.bookQuantity} ≠ 1 (política documentada: cuenta tableros, un tablero por ciclo; el total del job NO está establecido en S03)`);
+    if (expectedBookQuantity !== undefined && row.bookQuantity !== expectedBookQuantity) {
+      push('materials.book', `MATERIALS '${row.code}' BOOK=${row.bookQuantity} ≠ ${expectedBookQuantity} (max sheets per book / cutting-height capacity)`);
+    }
+    if (options.receiverPolicy !== undefined) {
+      const receiverChecks = [
+        ['KERF_RIP', row.kerfRip],
+        ['KERF_XCT', row.kerfCrosscut],
+        ['RULE1', row.rule1],
+        ['RULE2', row.rule2],
+        ['RULE3', row.rule3],
+        ['RULE4', row.rule4],
+      ] as const satisfies readonly (readonly [PtxReceiverMaterialFieldName, number | undefined])[];
+      for (const [field, actual] of receiverChecks) {
+        const expected = expectedReceiverMaterialNumber(field);
+        if (expected !== undefined && (actual === undefined || !close(actual, snap(expected)))) {
+          push('materials.receiver_policy', `MATERIALS '${row.code}' ${field}=${actual ?? 'ausente'} ≠ receiverPolicy ${snap(expected)}`);
+        }
+      }
     }
     if (r3) {
-      // r3 (#661): the four trims must equal the independently re-derived
-      // executed margins (totals including kerf); a side without a trim pass
-      // must stay ABSENT; HEAD/FRCT/VRCT must never carry an override (G3).
-      const expected = expectedTrimsByMaterial.get(row.code);
-      if (!expected) {
-        push('materials.trims', `MATERIALS '${row.code}' sin proyección de trims derivable para su material`);
-      } else if (expected === 'inconsistent') {
-        push('materials.trims', `MATERIALS '${row.code}': hojas del mismo material con refilados ejecutados distintos`);
-      } else {
-        const trimChecks = [
-          ['TRIM_FRIP', row.trimFRip, expected.trimFripMm],
-          ['TRIM_VRIP', row.trimVRip, expected.trimVripMm],
-          ['TRIM_FXCT', row.trimFXct, expected.trimFxctMm],
-          ['TRIM_VXCT', row.trimVXct, expected.trimVXctMm],
-        ] as const;
-        for (const [field, actual, expectedMm] of trimChecks) {
-          if (expectedMm === undefined) {
+      if (options.receiverPolicy !== undefined) {
+        const expected = expectedTrimsByMaterial.get(row.code);
+        const geometryTrimChecks = [
+          ['TRIM_FRIP', row.trimFRip, expected !== undefined && expected !== 'inconsistent' ? expected.trimFripMm : undefined],
+          ['TRIM_VRIP', row.trimVRip, expected !== undefined && expected !== 'inconsistent' ? expected.trimVripMm : undefined],
+          ['TRIM_FXCT', row.trimFXct, expected !== undefined && expected !== 'inconsistent' ? expected.trimFxctMm : undefined],
+          ['TRIM_VXCT', row.trimVXct, expected !== undefined && expected !== 'inconsistent' ? expected.trimVXctMm : undefined],
+        ] as const satisfies readonly (readonly [PtxReceiverMaterialFieldName, number | undefined, number | undefined])[];
+        if (!expected) {
+          push('materials.trims', `MATERIALS '${row.code}' sin proyección de trims derivable para su material`);
+        } else if (expected === 'inconsistent') {
+          push('materials.trims', `MATERIALS '${row.code}': hojas del mismo material con refilados ejecutados distintos`);
+        }
+        for (const [field, actual, executed] of geometryTrimChecks) {
+          const expectedReceiver = expectedReceiverOptionalNumber(field);
+          if (executed === undefined) {
             if (actual !== undefined) {
-              push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE (sin refilo ejecutado en ese lado; ausente ≠ 0)`);
+              push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE: no hay geometría ejecutada, ausente ≠ 0`);
             }
-          } else if (actual === undefined || !close(actual, snap(expectedMm))) {
-            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual ?? 'ausente'} ≠ margen ejecutado ${snap(expectedMm)} (total incluyendo kerf)`);
+            if (expectedReceiver !== undefined && expectedReceiver !== 0) {
+              push('materials.trims', `MATERIALS '${row.code}' ${field}=ausente pero receiverPolicy esperaba ${snap(expectedReceiver)}; no se fabrica cero ni override`);
+            }
+          } else if (actual === undefined || !close(actual, snap(executed))) {
+            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual ?? 'ausente'} ≠ margen ejecutado ${snap(executed)} (receiverPolicy no sobrescribe geometría)`);
+          } else if (expectedReceiver !== undefined && !close(actual, snap(expectedReceiver))) {
+            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} ≠ receiverPolicy expected ${snap(expectedReceiver)}`);
           }
         }
         for (const [field, actual] of [
           ['TRIM_HEAD', row.trimHead],
           ['TRIM_FRCT', row.trimFRct],
           ['TRIM_VRCT', row.trimVRct],
-        ] as const) {
-          if (actual !== undefined) {
-            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE (G3: los cuatro márgenes no alimentan HEAD/recut)`);
+        ] as const satisfies readonly (readonly [PtxReceiverMaterialFieldName, number | undefined])[]) {
+          const source = options.receiverPolicy.materialFields[field]?.source;
+          if (source === PTX_RECEIVER_FIELD_SOURCE.OMIT_NO_OVERRIDE && actual !== undefined) {
+            push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE por receiverPolicy OMIT_NO_OVERRIDE`);
+          }
+        }
+      } else {
+        // r3 (#661): the four trims must equal the independently re-derived
+        // executed margins (totals including kerf); a side without a trim pass
+        // must stay ABSENT; HEAD/FRCT/VRCT must never carry an override (G3).
+        const expected = expectedTrimsByMaterial.get(row.code);
+        if (!expected) {
+          push('materials.trims', `MATERIALS '${row.code}' sin proyección de trims derivable para su material`);
+        } else if (expected === 'inconsistent') {
+          push('materials.trims', `MATERIALS '${row.code}': hojas del mismo material con refilados ejecutados distintos`);
+        } else {
+          const trimChecks = [
+            ['TRIM_FRIP', row.trimFRip, expected.trimFripMm],
+            ['TRIM_VRIP', row.trimVRip, expected.trimVripMm],
+            ['TRIM_FXCT', row.trimFXct, expected.trimFxctMm],
+            ['TRIM_VXCT', row.trimVXct, expected.trimVXctMm],
+          ] as const;
+          for (const [field, actual, expectedMm] of trimChecks) {
+            if (expectedMm === undefined) {
+              if (actual !== undefined) {
+                push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE (sin refilo ejecutado en ese lado; ausente ≠ 0)`);
+              }
+            } else if (actual === undefined || !close(actual, snap(expectedMm))) {
+              push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual ?? 'ausente'} ≠ margen ejecutado ${snap(expectedMm)} (total incluyendo kerf)`);
+            }
+          }
+          for (const [field, actual] of [
+            ['TRIM_HEAD', row.trimHead],
+            ['TRIM_FRCT', row.trimFRct],
+            ['TRIM_VRCT', row.trimVRct],
+          ] as const) {
+            if (actual !== undefined) {
+              push('materials.trims', `MATERIALS '${row.code}' ${field}=${actual} debe estar AUSENTE (G3: los cuatro márgenes no alimentan HEAD/recut)`);
+            }
           }
         }
       }
@@ -923,6 +1137,7 @@ export function verifyCutPlanPtxReadback(
       close,
       snap,
       expectedComment,
+      expectedBookQuantity,
     });
   });
 
@@ -1031,6 +1246,7 @@ interface SheetVerificationContext {
   readonly close: (a: number, b: number) => boolean;
   readonly snap: (value: number) => number;
   readonly expectedComment: (value: string) => string | undefined;
+  readonly expectedBookQuantity: number | undefined;
 }
 
 function verifySheetReadback(ctx: SheetVerificationContext): void {
@@ -1050,6 +1266,7 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     close,
     snap,
     expectedComment,
+    expectedBookQuantity,
   } = ctx;
 
   const r3 = options.supportsPositiveTrim === true;
@@ -1108,12 +1325,15 @@ function verifySheetReadback(ctx: SheetVerificationContext): void {
     if (patternRow.boardIndex !== sheetMapping.boardIndex) {
       push('patterns.board', `PATTERNS BRD_INDEX=${patternRow.boardIndex} ≠ ${sheetMapping.boardIndex}`);
     }
-    if (
-      patternRow.runQuantity !== 1 ||
-      patternRow.cyclesQuantity !== 1 ||
-      patternRow.maxBook !== 1
-    ) {
-      push('patterns.compression', `PATTERNS QTY_RUN/QTY_CYCLES/MAX_BOOK=${patternRow.runQuantity}/${patternRow.cyclesQuantity}/${patternRow.maxBook} ≠ 1/1/1 (un tablero por ciclo, sin compresión)`);
+    if (patternRow.runQuantity !== 1 || patternRow.cyclesQuantity !== 1) {
+      push('patterns.compression', `PATTERNS QTY_RUN/QTY_CYCLES=${patternRow.runQuantity}/${patternRow.cyclesQuantity} ≠ 1/1 (un tablero por ciclo, sin compresión)`);
+    }
+    const expectedMaxBook =
+      options.receiverPolicy !== undefined && options.receiverPolicy.recordShape.requireBookMaxBookCoherence
+        ? expectedBookQuantity
+        : 1;
+    if (expectedMaxBook !== undefined && patternRow.maxBook !== expectedMaxBook) {
+      push('patterns.max_book', `PATTERNS MAX_BOOK=${patternRow.maxBook} ≠ ${expectedMaxBook} (coherencia BOOK/MAX_BOOK ${options.receiverPolicy?.recordShape.requireBookMaxBookCoherence === true ? 'activa' : 'inactiva'})`);
     }
   }
 
@@ -1413,6 +1633,14 @@ function materialTrimBytes(
   ctx: SheetVerificationContext,
   projection: LocalTrimProjection,
 ): { readonly trimFRip?: number; readonly trimVRip?: number; readonly trimFXct?: number; readonly trimVXct?: number } {
+  if (ctx.options.receiverPolicy !== undefined) {
+    return {
+      trimFRip: projection.trimFripMm,
+      trimVRip: projection.trimVripMm,
+      trimFXct: projection.trimFxctMm,
+      trimVXct: projection.trimVXctMm,
+    };
+  }
   const index = ctx.mapping.materialIndexByCode.get(ctx.sheet.materialCode);
   let row: PtxMaterialRecord | undefined;
   for (const record of ctx.parsed.records) {

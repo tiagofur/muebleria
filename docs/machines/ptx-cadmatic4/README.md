@@ -92,8 +92,9 @@ se conserva explícitamente; no se elimina por heurística ni por edad.
 7. [Plan r5](07_plan_r5_receiver_labels_cnc.md): implementación por fases del receiver HPP250/CAD4, etiquetas, PARTS_INF/UDI, puente CNC y preflight CADLink.
 8. [Strict spec preflight](08_spec_preflight_r5.md): validador independiente de límites documentados Pattern Exchange antes de serializar (#788, fase R5-A) — diccionario §20 de la Interface Guide con localizadores, fail-closed sin truncar y lector estructural del dialecto externo (R2201/R7301).
 9. [PARTS_INF/UDI y etiquetas](09_parts_inf_labels_cnc.md): modelo tipado de las familias de etiqueta, proyección industrial congelada por pieza física, mapping Granete → PARTS_INF con autoridad por campo y puente de identidad CNC DRAWING/BARCODE (#789, fase R5-B).
-10. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
-11. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
+10. [Receiver HPP250/CAD4](10_receiver_profile_hpp250_cad4.md): política lab-only para #790; autoridad de MATERIALS, orden de records, BOARDS/JOBS/PATTERNS/CUTS shape y límites CADLink sin publicar un perfil/adaptador r5 productivo.
+11. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
+12. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
    directa TS↔contrato↔Go.
 
 Los documentos `01`–`05` preservan investigación/decisiones históricas y no se reescriben para simular que conocían los resultados posteriores. `06` y `07` gobiernan el discovery y el plan de r5.

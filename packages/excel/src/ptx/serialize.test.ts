@@ -58,8 +58,10 @@ describe('serializePtxDocument', () => {
       const family = cells[0]!;
       if (!byFamily.has(family)) byFamily.set(family, cells);
     }
-    // cells include the family token, so length = content width + 1.
+    // cells include the family token, so length = content width + 1. BOARDS has
+    // optional trailing COST/STK_FLAG cells and default compiler rows omit them.
     for (const [family, cells] of byFamily) {
+      if (family === 'BOARDS') continue;
       expect(cells, family).toHaveLength(PTX_RECORD_CONTENT_WIDTH[family as keyof typeof PTX_RECORD_CONTENT_WIDTH] + 1);
     }
     expect(byFamily.get('HEADER')).toHaveLength(6);
@@ -97,6 +99,31 @@ describe('serializePtxDocument', () => {
     for (const byte of serializePtxDocumentBytes(buildLabGuillotineDocument())) {
       expect(byte).toBeLessThanOrEqual(0x7f);
     }
+  });
+
+  it('#790 emits BOARDS COST/STK_FLAG only when present and preserves STK_FLAG column position', () => {
+    const base = {
+      type: 'BOARDS' as const,
+      jobIndex: 1,
+      boardIndex: 1,
+      code: 'B',
+      materialIndex: 1,
+      length: 2800,
+      width: 2070,
+      stockQuantity: 3,
+      usedQuantity: 1,
+    };
+
+    expect(serializePtxDocumentUnchecked(minimalDoc([base]))).toContain('BOARDS,1,1,B,1,2800,2070,3,1\r\n');
+    expect(serializePtxDocumentUnchecked(minimalDoc([{ ...base, cost: 12.5 }]))).toContain(
+      'BOARDS,1,1,B,1,2800,2070,3,1,12.5\r\n',
+    );
+    expect(serializePtxDocumentUnchecked(minimalDoc([{ ...base, cost: 12.5, stockFlag: 1 }]))).toContain(
+      'BOARDS,1,1,B,1,2800,2070,3,1,12.5,1\r\n',
+    );
+    expect(serializePtxDocumentUnchecked(minimalDoc([{ ...base, stockFlag: 7 }]))).toContain(
+      'BOARDS,1,1,B,1,2800,2070,3,1,,7\r\n',
+    );
   });
 
   it('keeps explicit zero and absent value different (S06)', () => {

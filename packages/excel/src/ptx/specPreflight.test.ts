@@ -105,6 +105,7 @@ describe('#788 catálogo documentado de límites', () => {
       expect(limit.authority.locator).toMatch(/^S03 V11 Interface Guide §/);
       if (limit.kind === 'text-length') expect(limit.maxLength).toBeGreaterThan(0);
       if (limit.kind === 'int-range') expect(limit.min).toBeLessThan(limit.max);
+      if (limit.kind === 'float-range') expect(limit.min).toBeLessThan(limit.max);
       if (limit.kind === 'int-enum') expect(limit.values.length).toBeGreaterThan(0);
     }
   });
@@ -480,6 +481,86 @@ describe('#788 rangos DIM del diccionario (units-aware)', () => {
     const issues = ptxSpecPreflightBytes(new TextEncoder().encode(mutated));
     expect(codes(issues)).toContain('ptx_spec.dimension_out_of_range');
     expect(issues.find((i) => i.code === 'ptx_spec.dimension_out_of_range')!.observed).toBe(10000);
+  });
+});
+
+
+describe('#790 BOARDS COST/STK_FLAG strict spec preflight', () => {
+  it('BOARDS.COST aplica el rango FLT 0..9.99 documentado en documento tipado', () => {
+    for (const cost of [0, 9.99] as const) {
+      const doc = labDocWith((d) => {
+        const board = d.records.find((r) => r.type === 'BOARDS');
+        (board as { cost?: number }).cost = cost;
+      });
+      expect(ptxSpecPreflightDocument(doc), `COST=${cost}`).toEqual([]);
+    }
+
+    for (const cost of [10, -0.01] as const) {
+      const doc = labDocWith((d) => {
+        const board = d.records.find((r) => r.type === 'BOARDS');
+        (board as { cost?: number }).cost = cost;
+      });
+      const issues = ptxSpecPreflightDocument(doc);
+      expect(codes(issues), `COST=${cost}`).toEqual(['ptx_spec.float_out_of_range']);
+      expect(issues[0]).toMatchObject({
+        field: 'BOARDS.COST',
+        classification: 'SPEC_REQUIRED',
+        observed: cost,
+        minimum: 0,
+        maximum: 9.99,
+      });
+      expect(issues[0]!.locator).toContain('FLT 0-9.99');
+    }
+  });
+
+  it('BOARDS.COST aplica el rango también en bytes/readback', () => {
+    const base = serializePtxDocument(labDoc(), LAB_TEXT_OPTIONS);
+    const withCost = (cost: string) => base.replace(
+      'BOARDS,1,1,BOARD_LAB,1,1200,700,1,1',
+      `BOARDS,1,1,BOARD_LAB,1,1200,700,1,1,${cost}`,
+    );
+
+    expect(ptxSpecPreflightBytes(new TextEncoder().encode(withCost('9.99')))).toEqual([]);
+    const issues = ptxSpecPreflightBytes(new TextEncoder().encode(withCost('10')));
+    expect(codes(issues)).toEqual(['ptx_spec.float_out_of_range']);
+    expect(issues[0]).toMatchObject({ field: 'BOARDS.COST', classification: 'SPEC_REQUIRED', observed: 10 });
+    expect(issues[0]!.locator).toContain('FLT 0-9.99');
+  });
+
+  it('BOARDS.STK_FLAG aplica INT 0..9 documentado', () => {
+    for (const stockFlag of [0, 9] as const) {
+      const doc = labDocWith((d) => {
+        const board = d.records.find((r) => r.type === 'BOARDS');
+        (board as { stockFlag?: number }).stockFlag = stockFlag;
+      });
+      expect(ptxSpecPreflightDocument(doc), `STK_FLAG=${stockFlag}`).toEqual([]);
+    }
+
+    for (const stockFlag of [10, -1] as const) {
+      const doc = labDocWith((d) => {
+        const board = d.records.find((r) => r.type === 'BOARDS');
+        (board as { stockFlag?: number }).stockFlag = stockFlag;
+      });
+      const issues = ptxSpecPreflightDocument(doc);
+      expect(codes(issues), `STK_FLAG=${stockFlag}`).toEqual(['ptx_spec.index_out_of_range']);
+      expect(issues[0]).toMatchObject({
+        field: 'BOARDS.STK_FLAG',
+        classification: 'SPEC_REQUIRED',
+        observed: stockFlag,
+        minimum: 0,
+        maximum: 9,
+      });
+      expect(issues[0]!.locator).toContain('INT 0-9');
+    }
+
+    const decimal = labDocWith((d) => {
+      const board = d.records.find((r) => r.type === 'BOARDS');
+      (board as { stockFlag?: number }).stockFlag = 1.5;
+    });
+    const decimalIssues = ptxSpecPreflightDocument(decimal);
+    expect(codes(decimalIssues)).toEqual(['ptx_spec.index_out_of_range']);
+    expect(decimalIssues[0]).toMatchObject({ field: 'BOARDS.STK_FLAG', classification: 'SPEC_REQUIRED', observed: 1.5 });
+    expect(decimalIssues[0]!.locator).toContain('INT 0-9');
   });
 });
 

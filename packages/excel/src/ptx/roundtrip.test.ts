@@ -52,6 +52,33 @@ describe('PTX core roundtrip: records → serialize → bytes → parse → mode
     expect(parsed.header.title).toBe('GRANETE, "LAB"');
     expect(parsed).toEqual(original);
   });
+
+  it('#790 roundtrips optional BOARDS COST/STK_FLAG, including empty COST before STK_FLAG', () => {
+    const base = buildLabGuillotineDocument();
+    const original = {
+      ...base,
+      records: base.records.map((record) =>
+        record.type === 'BOARDS'
+          ? { ...record, cost: 12.5, stockFlag: 1 }
+          : record,
+      ),
+    };
+    const parsed = parsePtxDocumentBytes(serializePtxDocumentBytes(original));
+    expect(validatePtxDocument(parsed)).toEqual([]);
+    expect(parsed).toEqual(original);
+
+    const stockFlagOnly = {
+      ...base,
+      records: base.records.map((record) =>
+        record.type === 'BOARDS'
+          ? { ...record, stockFlag: 7 }
+          : record,
+      ),
+    };
+    const text = serializePtxDocument(stockFlagOnly);
+    expect(text).toContain('BOARDS,1,1,BOARD_LAB,1,1200,700,1,1,,7\r\n');
+    expect(parsePtxDocumentText(text)).toEqual(stockFlagOnly);
+  });
 });
 
 describe('PTX core mutation detection (independent readback)', () => {

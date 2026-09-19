@@ -29,7 +29,9 @@ import type {
   PtxMaterialRecord,
   PtxPartsInfRecord,
   PtxPartsUdiRecord,
+  PtxPatternRecord,
 } from './records';
+import { HPP250_CAD4_R5_LAB_RECEIVER_POLICY } from './receiverPolicy';
 
 const FIELD_DIR = new URL('../../../../docs/machines/ptx-cadmatic4/field/', import.meta.url);
 
@@ -160,10 +162,10 @@ describe('#788 parsing estructural de R2201 saneado (subset soportado)', () => {
     expect(fn92!.partReference).toEqual({ kind: 'offcut', offcutIndex: 1 });
   });
 
-  it('el subset modelado pasa el strict spec preflight (índices y referencias del dialecto real)', () => {
-    // Observación sobre el SUBSET leído: las familias no modeladas están
-    // fuera del veredicto por construcción — esto no es un claim sobre el
-    // archivo completo ni sobre el receptor.
+  it('el subset modelado pasa el strict spec preflight sin convertir trailing receiver en autoridad Granete', () => {
+    // El row view conserva que BOARDS trae trailing receiver extra. El subset
+    // tipado usado por Granete no convierte esos valores en COST/STK_FLAG con
+    // autoridad de producto; los límites estrictos se prueban en specPreflight.
     expect(ptxSpecPreflightDocument({ header: readback.header!, records: readback.records })).toEqual([]);
   });
 });
@@ -212,7 +214,7 @@ describe('#788 parsing estructural de R7301 saneado (subset soportado)', () => {
     expect((boardRow as { extraTrailingCells: number }).extraTrailingCells).toBe(2);
   });
 
-  it('el subset modelado pasa el strict spec preflight', () => {
+  it('el subset modelado pasa el strict spec preflight sin convertir trailing receiver en autoridad Granete', () => {
     expect(ptxSpecPreflightDocument({ header: readback.header!, records: readback.records })).toEqual([]);
   });
 });
@@ -220,6 +222,67 @@ describe('#788 parsing estructural de R7301 saneado (subset soportado)', () => {
 // ---------------------------------------------------------------------------
 // Shape: prefijo requerido / trailing opcional / vacío vs omitido
 // ---------------------------------------------------------------------------
+
+describe('#790 observed R2201/R7301 receiver evidence vs emitted policy', () => {
+  for (const [sample, name] of [
+    ['01_muestra_a_saneada.ptx.txt', 'R2201'],
+    ['02_muestra_b_saneada.ptx.txt', 'R7301'],
+  ] as const) {
+    it(`${name}: compares modeled observed evidence with HPP250 policy where the policy has authority`, () => {
+      const readback = parsePtxExternalText(readSample(sample));
+      const materialRows = readback.records.filter((r): r is PtxMaterialRecord => r.type === 'MATERIALS');
+      const patternRows = readback.records.filter((r): r is PtxPatternRecord => r.type === 'PATTERNS');
+      const boardRows = readback.records.filter((r): r is PtxBoardRecord => r.type === 'BOARDS');
+      const boardShapes = readback.rows.filter(hasPtxExternalShape).filter((row) => row.family === 'BOARDS');
+      const notesObserved = readback.unmodeledFamilyCounts.get('NOTES') ?? 0;
+
+      expect(materialRows.length).toBeGreaterThan(0);
+      expect(patternRows.length).toBeGreaterThan(0);
+      expect(boardRows.length).toBeGreaterThan(0);
+      expect(boardShapes.some((row) => row.extraTrailingCells >= 2)).toBe(true);
+      expect(notesObserved).toBeGreaterThan(0);
+
+      for (const material of materialRows) {
+        expect(material.bookQuantity).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.BOOK.value);
+        expect(material.kerfRip).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.KERF_RIP.value);
+        expect(material.kerfCrosscut).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.KERF_XCT.value);
+        expect(material.rule1).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.RULE1.value);
+        expect(material.rule2).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.RULE2.value);
+        expect(material.rule3).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.RULE3.value);
+        expect(material.rule4).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.RULE4.value);
+        // Observed receiver samples carry HEAD/FRCT/VRCT, but emitted Granete
+        // policy intentionally omits them until product/geometry authority exists.
+        expect(material.trimHead).toBe(20);
+        expect(material.trimFRct).toBe(20);
+        expect(material.trimVRct).toBe(0);
+        expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_HEAD.source).toBe('OMIT_NO_OVERRIDE');
+        expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_FRCT.source).toBe('OMIT_NO_OVERRIDE');
+        expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_VRCT.source).toBe('OMIT_NO_OVERRIDE');
+      }
+      expect(patternRows.every((row) => row.maxBook === HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.BOOK.value)).toBe(true);
+      expect(patternRows.every((row) => row.runQuantity === 1 && row.cyclesQuantity === 1)).toBe(true);
+
+      const observedFamilies: readonly string[] = readback.rows.filter(hasPtxExternalShape).map((row) => row.family);
+      const firstIndex = (family: string) => observedFamilies.indexOf(family);
+      for (const [before, after] of [
+        ['JOBS', 'PARTS_REQ'],
+        ['PARTS_REQ', 'PARTS_INF'],
+        ['PARTS_INF', 'PARTS_UDI'],
+        ['PARTS_UDI', 'BOARDS'],
+        ['BOARDS', 'MATERIALS'],
+        ['MATERIALS', 'PATTERNS'],
+      ] as const) {
+        expect(firstIndex(before), `${before} present`).toBeGreaterThanOrEqual(0);
+        expect(firstIndex(after), `${after} present`).toBeGreaterThanOrEqual(0);
+        expect(firstIndex(before), `${before} before ${after}`).toBeLessThan(firstIndex(after));
+      }
+      for (const family of HPP250_CAD4_R5_LAB_RECEIVER_POLICY.recordShape.familyOrder) {
+        if (family === 'CUTS') continue;
+        expect(firstIndex(family), `${family} observed`).toBeGreaterThanOrEqual(0);
+      }
+    });
+  }
+});
 
 describe('#788 empty field vs omitted trailing field', () => {
   const header = 'HEADER,1,LAB,0,0,1\r\n';

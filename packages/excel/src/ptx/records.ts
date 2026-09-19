@@ -192,10 +192,13 @@ export interface PtxPartsReqRecord {
 
 /**
  * BOARDS,JOB_INDEX,BRD_INDEX,CODE,MAT_INDEX,LENGTH,WIDTH,QTY_STOCK,QTY_USED
- * (implemented width: 9 cells with family). Documented columns COST..SUPPLIER
- * are not needed by the first profile and are not modeled — the reader fails
- * closed on them. Two board formats of the same finish/thickness need
- * distinct stock identities (investigation §4 BOARDS rule).
+ * [,COST[,STK_FLAG]] (default compiler width: 9 cells with family; modeled
+ * optional receiver shape: 11 cells with family). COST is the documented cost
+ * per square area and STK_FLAG is receiver-evidenced shape only; neither gives
+ * the compiler authority to emit values by default. Remaining documented
+ * columns after STK_FLAG stay unmodeled and fail closed. Two board formats of
+ * the same finish/thickness need distinct stock identities (investigation §4
+ * BOARDS rule).
  */
 export interface PtxBoardRecord {
   readonly type: 'BOARDS';
@@ -207,6 +210,10 @@ export interface PtxBoardRecord {
   readonly width: number;
   readonly stockQuantity?: number;
   readonly usedQuantity?: number;
+  /** BOARDS.COST: documented cost per square area; no compiler authority yet. */
+  readonly cost?: number;
+  /** BOARDS.STK_FLAG: receiver-evidenced trailing shape; not emitted by default. */
+  readonly stockFlag?: number;
 }
 
 /**
@@ -480,7 +487,7 @@ export const PTX_RECORD_CONTENT_WIDTH: Readonly<Record<PtxRecordType | 'HEADER',
   PARTS_REQ: 11,
   PARTS_INF: 32,
   PARTS_UDI: 62,
-  BOARDS: 8,
+  BOARDS: 10,
   MATERIALS: 19,
   PATTERNS: 7,
   CUTS: 10,

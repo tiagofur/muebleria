@@ -69,8 +69,10 @@ export class PtxParseError extends Error {
 // ---------------------------------------------------------------------------
 
 interface FamilySpec {
-  /** Column names after the family token (documented order). */
+  /** Column names after the family token that Granete historically modeled. */
   readonly columns: readonly string[];
+  /** Optional trailing columns accepted by the strict parser for this family. */
+  readonly optionalTrailingColumns?: readonly string[];
   /** How many of those columns are required (prefix). */
   readonly required: number;
 }
@@ -121,6 +123,7 @@ const FAMILY_SPECS: Readonly<Record<string, FamilySpec>> = {
   },
   BOARDS: {
     columns: ['JOB_INDEX', 'BRD_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH', 'QTY_STOCK', 'QTY_USED'],
+    optionalTrailingColumns: ['COST', 'STK_FLAG'],
     required: 6,
   },
   MATERIALS: {
@@ -263,7 +266,9 @@ function readCells(line: string, lineNo: number): string[] {
 // ---------------------------------------------------------------------------
 
 const INTEGER_PATTERN = /^\d+$/;
+const SIGNED_INTEGER_PATTERN = /^-?\d+$/;
 const NUMBER_PATTERN = /^\d+(\.\d+)?$/;
+const SIGNED_NUMBER_PATTERN = /^-?\d+(\.\d+)?$/;
 
 class CellCursor {
   constructor(
@@ -296,6 +301,15 @@ class CellCursor {
     return Number(raw);
   }
 
+  optionalFiniteInt(column: number, field: string): number | undefined {
+    const raw = this.cell(column);
+    if (raw === undefined || raw === '') return undefined;
+    if (!SIGNED_INTEGER_PATTERN.test(raw)) {
+      throw new PtxParseError('INVALID_INTEGER', `${this.family}.${field}: '${raw}' is not an integer`, this.lineNo);
+    }
+    return Number(raw);
+  }
+
   real(column: number, field: string): number {
     const raw = this.cell(column);
     if (raw === undefined || raw === '') {
@@ -312,6 +326,15 @@ class CellCursor {
     if (raw === undefined || raw === '') return undefined;
     if (!NUMBER_PATTERN.test(raw)) {
       throw new PtxParseError('INVALID_NUMBER', `${this.family}.${field}: '${raw}' is not a non-negative decimal number`, this.lineNo);
+    }
+    return Number(raw);
+  }
+
+  optionalFiniteNumber(column: number, field: string): number | undefined {
+    const raw = this.cell(column);
+    if (raw === undefined || raw === '') return undefined;
+    if (!SIGNED_NUMBER_PATTERN.test(raw)) {
+      throw new PtxParseError('INVALID_NUMBER', `${this.family}.${field}: '${raw}' is not a finite decimal number`, this.lineNo);
     }
     return Number(raw);
   }
@@ -484,6 +507,8 @@ export function parseRecordRow(family: string, cells: readonly string[], lineNo:
         width: c.real(5, 'WIDTH'),
         stockQuantity: c.optionalInt(6, 'QTY_STOCK'),
         usedQuantity: c.optionalInt(7, 'QTY_USED'),
+        cost: c.optionalFiniteNumber(8, 'COST'),
+        stockFlag: c.optionalFiniteInt(9, 'STK_FLAG'),
       };
     case 'MATERIALS':
       return {
@@ -619,10 +644,11 @@ export function parsePtxText(text: string): PtxRecordsReadback {
         lineNo,
       );
     }
-    if (content.length > spec.columns.length) {
+    const allowedColumns = [...spec.columns, ...(spec.optionalTrailingColumns ?? [])];
+    if (content.length > allowedColumns.length) {
       throw new PtxParseError(
         'TOO_MANY_COLUMNS',
-        `${family} implements ${spec.columns.length} column(s) [${spec.columns.join(',')}]; the extra ${content.length - spec.columns.length} column(s) are outside the documented subset (fail closed)`,
+        `${family} implements ${allowedColumns.length} column(s) [${allowedColumns.join(',')}]; the extra ${content.length - allowedColumns.length} column(s) are outside the documented subset (fail closed)`,
         lineNo,
       );
     }
