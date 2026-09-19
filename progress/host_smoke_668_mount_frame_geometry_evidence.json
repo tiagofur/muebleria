@@ -1,0 +1,106 @@
+{
+  "head": "08524bf171acbb44bc6435b27c0fd332c51de054",
+  "rbzSha256": "f9f0f02cc8a4ab87ac3e40796e5a29efda771a35f0ec0209b8fdba816564e524",
+  "sketchupVersion": "26.2.242",
+  "assetFixture": {
+    "mountFrame": {
+      "originMm": [
+        25.0,
+        30.0,
+        15.0
+      ],
+      "basis": {
+        "x": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "y": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "z": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    "nominalExtentsMm": [
+      70.0,
+      54.0,
+      18.0
+    ],
+    "referencePoints": [
+      {
+        "assetMm": [
+          17.0,
+          23.0,
+          11.0
+        ],
+        "expectedWorldMm": [
+          1211.0,
+          661.0,
+          409.0
+        ],
+        "actualWorldMm": [
+          1211.0,
+          661.0,
+          409.0
+        ],
+        "errorMm": 0.0
+      },
+      {
+        "assetMm": [
+          87.0,
+          23.0,
+          11.0
+        ],
+        "expectedWorldMm": [
+          1211.0,
+          661.0,
+          339.0
+        ],
+        "actualWorldMm": [
+          1211.0,
+          661.0,
+          339.00000000000006
+        ],
+        "errorMm": 5.684341886080802e-14
+      },
+      {
+        "assetMm": [
+          31.0,
+          77.0,
+          11.0
+        ],
+        "expectedWorldMm": [
+          1265.0,
+          661.0,
+          395.0
+        ],
+        "actualWorldMm": [
+          1265.0,
+          661.0,
+          395.00000000000006
+        ],
+        "errorMm": 5.684341886080802e-14
+      }
+    ]
+  },
+  "mutantSensitivityMinErrorMm": {
+    "omitted": 32.03123475609393,
+    "double": 32.03123475609393,
+    "transposed": 21.2602916254693,
+    "unit_double": 35156.10730214595
+  },
+  "rigidity": {
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "determinant": 1.0
+  }
+}

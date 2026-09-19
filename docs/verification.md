@@ -682,3 +682,45 @@ This unit adds no coordinator, lease store, GitHub writes, candidate execution o
 unattended validation. Discovery reports/claims stay unchanged; product execution
 remains disabled. Durable ownership, dispatch/cost accounting, persisted exact-head
 evidence, trusted enforcement and canary/rollback remain open under #573.
+
+## Hardening assemblies — tenant reads + MountFrame host (Refs #668, Refs #670)
+
+Corrección acotada de los hallazgos F1/F2 de la auditoría independiente de
+herrajes 3D/assemblies/MERIVOBOX (sin cambios de schema, resolver, BOM ni PTX):
+
+```sh
+# F1: tenant boundary bajo FORCE RLS (rol real granete_app_test, NOBYPASSRLS)
+docker run -d -e POSTGRES_PASSWORD=postgres -p 5466:5432 postgres:16
+DATABASE_URL='postgres://postgres:postgres@localhost:5466/muebles?sslmode=disable' \
+  go test ./internal/storage/ -run 'TestAgregadoFamily_TenantBoundary' -v
+
+# F2: smoke host real con geometría asimétrica + MountFrame rotado
+cd apps/sketchup-extension && bundle exec rake verify
+"/Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp" \
+  -RubyStartupArg "TestUp:CI:Config:$PWD/testup-ci-670e.yml"
+```
+
+- **F1 (reads tenant-scoped fuera del boundary)**: los 12 métodos de
+  `agregado_revisions.go` corren dentro de `runInTenantTx` — la tenant
+  transaction del request (AuthMiddleware) o el self-wrap canónico
+  `WithinTenantTx` (idiom `design_publish.go`) cuando el caller está fuera.
+  Org ausente → `ErrNoOrgScope` tipado. La matriz F1-A..F1-F (tests
+  `agregado_revisions_tenant_boundary_test.go`) exige: lectura exacta en tx;
+  org presente sin tx ENCUENTRA el dato existente (antes: falso
+  `ErrAgregadoRevisionNotFound` bajo FORCE RLS); cross-tenant fail-closed;
+  ruta histórica R1→S1→pin; pool de una conexión reutilizada entre tenants sin
+  leak del GUC; org vacío jamás degrada a not-found de negocio.
+- **F2 (host smoke con geometría real)**: los .skp scratch llevan un bracket
+  asimétrico (70×54×18 mm, sin espejo) y el MountFrame por defecto está
+  rotado (det=+1). E9/E10 mide vértices reales de la definición cargada por el
+  pipeline productivo y los compara contra
+  `T_furniture × T_assembly × T_member × inverse(T_mountFrame) × Pᵢ` desde
+  constantes (error ≤ 1e-3 mm, distancias preservadas, scale [1,1,1],
+  det +1, sin shear). Guardas de sensibilidad prueban que T_norm omitido
+  (32 mm), doble (32 mm), transpuesto (21 mm) o doble conversión mm/inches
+  (35156 mm) romperían el test. E11 verifica tras save/close/reopen la
+  identidad de revisión exacta y la geometría normalizada. Evidencia medida:
+  `progress/host_smoke_668_mount_frame_geometry_evidence.json` (fixture
+  documentado para la paridad SKP/GLB de #669).
+- F3 (`DEFAULT_THICKNESS_MM` del renderer genérico offline) queda
+  expresamente fuera de este hardening.
