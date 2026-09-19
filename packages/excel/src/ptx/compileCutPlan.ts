@@ -238,6 +238,14 @@ export interface CompileCutPlanToPtxOptions {
    * and is never generated. The final receiver policy is #790.
    */
   readonly partsUdi?: 'structural';
+  /**
+   * r5 PARTS_REQ dimensions policy (#789): absent preserves historical
+   * placement dimensions byte-for-byte. The r5 label route may explicitly
+   * request part-local pre-rotation cut dimensions; rotated optimizer pieces
+   * then swap placed length/width back to the part-local cut frame without
+   * recalculating edge-band deduction.
+   */
+  readonly partsReqDimensionPolicy?: 'placement' | 'part-local-pre-rotation-cut';
 }
 
 /** Per-sheet slice of the inverse table linking durable identities to local PTX indexes. */
@@ -1242,6 +1250,17 @@ export function compileCutPlanToPtxDocument(
       { partsUdi: options.partsUdi },
     );
   }
+  if (
+    options.partsReqDimensionPolicy !== undefined &&
+    options.partsReqDimensionPolicy !== 'placement' &&
+    options.partsReqDimensionPolicy !== 'part-local-pre-rotation-cut'
+  ) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partsReqDimensionPolicy sólo implementa 'placement' o 'part-local-pre-rotation-cut' (#789 r5)",
+      { partsReqDimensionPolicy: options.partsReqDimensionPolicy },
+    );
+  }
   if (options.partsUdi === 'structural' && options.partLabels === undefined) {
     throw new PtxCompilationError(
       'ptx_compile.options_invalid',
@@ -1404,14 +1423,18 @@ export function compileCutPlanToPtxDocument(
         }
         seenPartCodes.set(partCode, partIndex);
       }
+      const partLocalCutDimensions =
+        options.partsReqDimensionPolicy === 'part-local-pre-rotation-cut' && piece.rotated
+          ? { lengthMm: piece.widthMm, widthMm: piece.lengthMm }
+          : { lengthMm: piece.lengthMm, widthMm: piece.widthMm };
       partsReq.push({
         type: 'PARTS_REQ',
         jobIndex: 1,
         partIndex,
         code: partCode,
         materialIndex: materials.get(materialCode)!.index,
-        length: q(piece.lengthMm, `PARTS_REQ ${partIndex} LENGTH`),
-        width: q(piece.widthMm, `PARTS_REQ ${partIndex} WIDTH`),
+        length: q(partLocalCutDimensions.lengthMm, `PARTS_REQ ${partIndex} LENGTH`),
+        width: q(partLocalCutDimensions.widthMm, `PARTS_REQ ${partIndex} WIDTH`),
         requiredQuantity: 1,
         overQuantity: 0,
         underQuantity: 0,

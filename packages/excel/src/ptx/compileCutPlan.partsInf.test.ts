@@ -413,24 +413,53 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
         cncScope: 'release:789:r5:rotated-optimizer',
       })),
     );
+    const { partsReqDimensionPolicy: _explicitPolicy, ...historicalOptions } = LABELS_GOLDEN_OPTIONS;
+    const historical = compileCutPlanToPtxDocument(plan, {
+      ...historicalOptions,
+      title: 'LAB-ROT-R5',
+      partLabels: labels,
+    });
+    const partIndex = historical.mapping.partIndexByPieceRef.get(rotatedPiece.id)!;
+    const historicalPart = historical.document.records.find(
+      (record): record is PtxPartsReqRecord => record.type === 'PARTS_REQ' && record.partIndex === partIndex,
+    )!;
+    expect(historicalPart).toMatchObject({ length: 39, width: 549, grain: 0 });
+    expect(
+      verifyCutPlanPtxReadback(
+        parsePtxDocumentBytes(serializePtxDocumentBytesSpecChecked(historical.document, { decimalPlaces: 2 })),
+        plan,
+        historical.mapping,
+        { ...historicalOptions, title: 'LAB-ROT-R5', partLabels: labels },
+      ),
+    ).toEqual([]);
+
     const compiled = compileCutPlanToPtxDocument(plan, {
       ...LABELS_GOLDEN_OPTIONS,
       title: 'LAB-ROT-R5',
       partLabels: labels,
+      partsReqDimensionPolicy: 'part-local-pre-rotation-cut',
     });
-    const partIndex = compiled.mapping.partIndexByPieceRef.get(rotatedPiece.id)!;
     const part = compiled.document.records.find(
       (record): record is PtxPartsReqRecord => record.type === 'PARTS_REQ' && record.partIndex === partIndex,
+    )!;
+    const fixedPartIndex = compiled.mapping.partIndexByPieceRef.get(
+      plan.sheets.flatMap((sheet) => sheet.pieces).find((piece) => piece.labelRef === 'ROT-MOD-P01')!.id,
+    )!;
+    const fixedPart = compiled.document.records.find(
+      (record): record is PtxPartsReqRecord => record.type === 'PARTS_REQ' && record.partIndex === fixedPartIndex,
     )!;
     const inf = compiled.document.records.find(
       (record): record is PtxPartsInfRecord => record.type === 'PARTS_INF' && record.partIndex === partIndex,
     )!;
     expect(part.code).toBe('ROT-MOD-P02');
+    expect(part.partIndex).toBe(partIndex);
     expect(inf.barcode2).toBe('ROT-MOD-P02');
     expect(inf.finishedLength).toBe('550');
     expect(inf.finishedWidth).toBe('40');
-    expect(part.length).toBe(39);
-    expect(part.width).toBe(549);
+    expect(part.length).toBe(549);
+    expect(part.width).toBe(39);
+    expect(part.grain).toBe(0);
+    expect(fixedPart).toMatchObject({ length: 950, width: 580, grain: 1 });
     expect([inf.edge1, inf.edge2, inf.edge3, inf.edge4]).toEqual([
       undefined,
       BAND_ABS_1MM,
@@ -443,13 +472,30 @@ describe('#789 escenario dorado: 2 muebles, 3 ocurrencias, trampa antisimétrica
     const parsed = parsePtxDocumentBytes(bytes);
     expect(validatePtxDocument(parsed)).toEqual([]);
     expect(ptxSpecPreflightDocument(parsed)).toEqual([]);
+    const policyOptions: CompileCutPlanToPtxOptions = {
+      ...LABELS_GOLDEN_OPTIONS,
+      title: 'LAB-ROT-R5',
+      partLabels: labels,
+      partsReqDimensionPolicy: 'part-local-pre-rotation-cut',
+    };
+    expect(verifyCutPlanPtxReadback(parsed, plan, compiled.mapping, policyOptions)).toEqual([]);
+
+    const mutated = parsePtxDocumentBytes(
+      serializePtxDocumentBytesSpecChecked(
+        {
+          ...compiled.document,
+          records: compiled.document.records.map((record): PtxRecord =>
+            record.type === 'PARTS_REQ' && record.partIndex === partIndex
+              ? { ...record, length: 39, width: 549 }
+              : record,
+          ),
+        },
+        { decimalPlaces: 2 },
+      ),
+    );
     expect(
-      verifyCutPlanPtxReadback(parsed, plan, compiled.mapping, {
-        ...LABELS_GOLDEN_OPTIONS,
-        title: 'LAB-ROT-R5',
-        partLabels: labels,
-      }),
-    ).toEqual([]);
+      verifyCutPlanPtxReadback(mutated, plan, compiled.mapping, policyOptions).map((issue) => issue.code),
+    ).toContain('parts.dims');
   });
 });
 

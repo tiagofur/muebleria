@@ -691,8 +691,15 @@ export function verifyCutPlanPtxReadback(
     if (row.code !== expectedCode) {
       push('parts.code', `PARTS_REQ ${expectedPartIndex} CODE='${row.code}' ≠ '${expectedCode}'`);
     }
-    if (!close(row.length, snap(piece.lengthMm)) || !close(row.width, snap(piece.widthMm))) {
-      push('parts.dims', `PARTS_REQ ${expectedPartIndex} ${row.length}×${row.width} ≠ medidas resueltas ${snap(piece.lengthMm)}×${snap(piece.widthMm)} (pieza ${piece.id})`);
+    const expectedReqDimensions =
+      options.partsReqDimensionPolicy === 'part-local-pre-rotation-cut' && piece.rotated
+        ? { lengthMm: piece.widthMm, widthMm: piece.lengthMm }
+        : { lengthMm: piece.lengthMm, widthMm: piece.widthMm };
+    if (
+      !close(row.length, snap(expectedReqDimensions.lengthMm)) ||
+      !close(row.width, snap(expectedReqDimensions.widthMm))
+    ) {
+      push('parts.dims', `PARTS_REQ ${expectedPartIndex} ${row.length}×${row.width} ≠ medidas esperadas ${snap(expectedReqDimensions.lengthMm)}×${snap(expectedReqDimensions.widthMm)} bajo política ${options.partsReqDimensionPolicy ?? 'placement'} (pieza ${piece.id})`);
     }
     const expectedGrain = piece.grain === 0 ? 0 : 1;
     if (row.grain !== expectedGrain) {

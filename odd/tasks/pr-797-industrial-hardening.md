@@ -32,13 +32,22 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
   - It asserts code/PART_INDEX/finished dimensions/orientation-independent edges/REQ-INF relation and clean serialize→parse→independent readback.
   - The r2/r3/r4 and FUNCTION 92 paths were not modified; package regression suite above exercised their existing tests. Work-unit commit: `5104cca822cc148979b802ccba6c0659c0b5e43d`.
 
-- [ ] **T3 — Document, verify, publish same PR head** (selector infrastructure/CI/publish still pending)
+- [x] **T3 — Document, verify, publish same PR head** (completed as `f0543e7766730cf07e6917c2217cb5e496194f5d`)
   - Documentation/progress work-unit: `a2b2e303015d3f2021566f28dc1018baeff65e51` (`docs(ptx): record r5 label hardening`) accurately classifies SPEC / PRODUCT POLICY / RECEIVER EVIDENCE / UNKNOWN.
   - Initial typecheck exposed `materialCode` optional typing at `partLabels.ts:353`; a fail-closed correction without fallback is committed in `32518fc47273f74af71520985953f68d9ca32bf3` (`fix(ptx): validate core material authority`). Exact-candidate re-verification: Excel = 45 files / 534 passed / 3 skipped; `pnpm typecheck` PASS; prior `git diff --check` clean.
   - Authorized selector attempt: `python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600` ran once at candidate `32518fc47273f74af71520985953f68d9ca32bf3` against base `b7446866ed247677d8b8f83238cddbd96579db97` and blocked before gates because an isolated `DATABASE_URL` is required.
   - Selector selected `typescript`, `backend-go`, `sketchup-extension`, `proyectar-visual`, `foundation-postgres`, and `organization-browser`; none of those gates ran, and none are PASS evidence.
-  - Pending: selector infrastructure with isolated `DATABASE_URL`, exact-head CI, PR #797 body/readback, and push/publish steps.
-  - Do not merge, close #789, or open another PR.
+  - Local selector remained BLOCKED for isolated `DATABASE_URL`; exact-head PR CI later completed SUCCESS on all checks for `f0543e7766730cf07e6917c2217cb5e496194f5d`. The PR stays `Delivery: partial` because local selector infrastructure remains absent.
+  - No merge, closure of #789, or new PR occurred.
+
+- [x] **T4 — Add explicit r5 part-local PARTS_REQ dimension policy** (delegated writer; trigger: multi-file write)
+  - Added explicit `partsReqDimensionPolicy: 'placement' | 'part-local-pre-rotation-cut'`; default/absent preserves historical placement dimensions while r5 labels opts in explicitly rather than through `partLabels` implicitly.
+  - Compiler and independently derived readback now apply the policy. The existing real rotated fixture proves placed 39×549 versus PARTS_REQ 549×39, GRAIN=0, FIN 550×40, edge mapping, clean bytes/readback, an old-dimension mutation `parts.dims`, and non-rotated equality.
+  - r2/r3/r4, adapter/profile, and FUNCTION 92 paths were not modified. Writer evidence: Excel 45 files / 534 passed / 3 skipped; diff check clean. Commit identity recorded after the work-unit commit.
+
+- [ ] **T5 — Document, verify, and publish r5 dimension correction** (delegated docs/verification)
+  - Update the required PTX documentation, verification record, progress, task mirror, and PR #797 body. Add production-only #793 CNC scope note without wiring it.
+  - Run package/type/diff/selector/CI checks under the user-authorized gates and report any infrastructure gap honestly.
 
 ## Acceptance / required checks
 
@@ -50,6 +59,7 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 6. Invalid quantity `0`, negative, or decimal blocks.
 7. r2/r3/r4 recompile byte-exact and FUNCTION 92 remains unchanged.
 8. `pnpm --filter @granete/excel test`, `pnpm typecheck`, current selector, `git diff --check`, and exact-head CI are reported honestly.
+9. With `part-local-pre-rotation-cut`, a real rotated piece has PARTS_REQ part-local cut dimensions; an old placement-dimension mutation fails independent readback, while non-rotated dimensions are unchanged.
 
 ## Progress
 
@@ -59,7 +69,9 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 - 2026-09-19: T3 documentation/progress commit `a2b2e303015d3f2021566f28dc1018baeff65e51`; no tests were rerun in that documentation-only step per owner instruction.
 - 2026-09-19: Independent local verifier found an initial TypeScript error in the new CORE_MAT authority path. The minimal fail-closed correction is `32518fc47273f74af71520985953f68d9ca32bf3`; exact-candidate re-verification passed Excel 45 files / 534 passed / 3 skipped, typecheck, and a prior diff check.
 - 2026-09-19: The authorized selector command `python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600` ran once at candidate `32518fc47273f74af71520985953f68d9ca32bf3` against base `b7446866ed247677d8b8f83238cddbd96579db97` and blocked before executing gates because it requires an isolated `DATABASE_URL`. Selected jobs were typescript, backend-go, sketchup-extension, proyectar-visual, foundation-postgres, and organization-browser; none ran and none count as PASS.
+- 2026-09-19: Published `f0543e7766730cf07e6917c2217cb5e496194f5d` to the existing PR #797. Its exact-head CI reached SUCCESS for all reported checks. New independent review identified the separate rotated-placement identity blocker, authorized as T4/T5 only.
+- 2026-09-19: T4 completed by one scoped writer: the explicit r5 `part-local-pre-rotation-cut` policy was added to compiler and independent readback, with positive/negative rotated and non-rotated tests. Package Excel suite remained 45 files / 534 passed / 3 skipped; diff check clean.
 
 ## Next step
 
-Provide isolated selector infrastructure (`DATABASE_URL`), rerun the exact-head selector when authorized, then record final evidence, push only the existing PR branch, and await exact-head CI without merge or issue closure.
+Commit T4, then delegate T5 documentation and required verification/publish steps on the same existing PR branch.

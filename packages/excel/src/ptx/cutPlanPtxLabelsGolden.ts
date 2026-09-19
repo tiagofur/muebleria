@@ -262,4 +262,5 @@ export const LABELS_GOLDEN_OPTIONS: CompileCutPlanToPtxOptions = {
   partCodeMaxLength: 50,
   strictSpecPreflight: 'pattern-exchange-v1',
   partsUdi: 'structural',
+  partsReqDimensionPolicy: 'part-local-pre-rotation-cut',
 };
