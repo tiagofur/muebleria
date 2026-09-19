@@ -547,15 +547,15 @@ pnpm typecheck                      # PASS
 ```
 
 T4 agregó la política explícita `partsReqDimensionPolicy:
-'part-local-pre-rotation-cut'`; el writer observó de nuevo
-`pnpm --filter @granete/excel test` = 45 archivos / 534 PASS / 3 skips y
-`git diff --check` limpio. Work-unit registrado para T5 documental:
-`f4dac0af791fd58052b49b7acf91a31c70ebd118`. T5 sigue pendiente de
-verificación proporcional, publicación y CI exact-head; no se corrieron tests
-nuevos en este paso documental.
+'part-local-pre-rotation-cut'`. Work-unit de política:
+`f4dac0af791fd58052b49b7acf91a31c70ebd118`. La verificación local final del
+candidato rotado se hizo en `ed1d5066b61db18da64e774879f8f14f59b16011`; ese
+commit es una corrección test-only que importa `PtxRecord` después de la falla
+inicial de `pnpm typecheck` del candidato. Evidencia en `ed1d5066`: Excel 45
+archivos / 534 PASS / 3 skips, `pnpm typecheck` PASS y `git diff --check` PASS.
 
 Intento de selector autorizado sobre el candidato
-`32518fc47273f74af71520985953f68d9ca32bf3`, base
+`ed1d5066b61db18da64e774879f8f14f59b16011`, base
 `b7446866ed247677d8b8f83238cddbd96579db97`:
 
 ```sh
@@ -563,13 +563,13 @@ python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600
 ```
 
 Resultado: bloqueado antes de gates porque falta un `DATABASE_URL` aislado. El
-selector seleccionó `typescript`, `backend-go`, `sketchup-extension`,
-`proyectar-visual`, `foundation-postgres` y `organization-browser`, pero ninguno
-de esos gates corrió ni cuenta como PASS.
+selector corrió una sola vez con 3600 s y seleccionó `typescript`, `backend-go`,
+`sketchup-extension`, `proyectar-visual`, `foundation-postgres` y
+`organization-browser`, pero ninguno de esos gates corrió ni cuenta como PASS
+local.
 
-Checks pendientes en este HEAD: selector con infraestructura aislada, CI
-exact-head y gates proporcionales que el líder/verificador ejecute antes de
-publicar/cerrar.
+T5 sigue en curso: falta push al mismo PR #797 y CI exact-head del nuevo HEAD;
+no hay claim de entrega completa.
 
 Cobertura contractual exigida por #789/#797:
 

@@ -49,7 +49,8 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
   - Documentation/progress updated for the r5 dimension policy: SPEC `PARTS_REQ` part-local cut dimensions with `GRAIN=0` rotation allowance; PRODUCT POLICY `partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`; absent/`placement` preserves r2/r3/r4 byte-exact and is not coupled to `partLabels`; independent readback keeps FIN as original finished dimensions and checks `FIN = part-local cut + edge deductions`.
   - Existing fixture facts recorded: rotated true; placed 39×549; `PARTS_REQ 549×39`; grain 0; `FIN 550×40`; `EDGE2`/`EDGE4`; old placement mutation fails with `parts.dims`; nonrotated equality remains.
   - CNC scope note recorded only: #793 productive r5 must derive scope from `CutPlan.releaseBase.manufacturingFingerprint` or an authoritative frozen equivalent and block without `releaseBase`; `release:789:r5:*` strings remain laboratory fixtures. No wiring implemented.
-  - Work-unit recorded: `f4dac0af791fd58052b49b7acf91a31c70ebd118`. T5 remains pending verification/publish, PR #797 body update, selector/CI exact-head, and any authorized package/type checks.
+  - Work-unit containing the policy: `f4dac0af791fd58052b49b7acf91a31c70ebd118`. Final local candidate: `ed1d5066b61db18da64e774879f8f14f59b16011`, a test-only correction that imports `PtxRecord` after the initial candidate failed `pnpm typecheck`. Evidence at `ed1d5066`: Excel 45 files / 534 passed / 3 skipped; `pnpm typecheck` PASS; `git diff --check` PASS.
+  - Authorized selector ran once at `ed1d5066` against base `b7446866ed247677d8b8f83238cddbd96579db97` with 3600 s and blocked before selected gates because an isolated `DATABASE_URL` is required. Selected TypeScript/Go/Ruby/WebGL/Foundation gates did not run locally and are not PASS evidence. T5 remains pending same-PR push and exact-head CI; no delivery-complete claim.
 
 ## Acceptance / required checks
 
@@ -76,4 +77,4 @@ Correct the six approved industrial blockers/corrections on PR #797 without chan
 
 ## Next step
 
-Complete T5 verification/publish on the same existing PR branch: update PR #797 body, run only authorized checks beyond the already observed `git diff --check`, and report selector/CI exact-head truthfully.
+Push `ed1d5066b61db18da64e774879f8f14f59b16011` to the same existing PR #797 branch, update the PR body if still needed, and wait for exact-head CI. Do not claim selected local gates passed: the selector blocked before them because `DATABASE_URL` was not isolated.

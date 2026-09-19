@@ -299,14 +299,16 @@ pnpm typecheck                      # PASS
 ```
 
 T4 agregó la política explícita `partsReqDimensionPolicy:
-'part-local-pre-rotation-cut'` y la suite focalizada del writer volvió a pasar
-(45 archivos, 534 PASS + 3 skips) con `git diff --check` limpio. Work-unit
-registrado para T5 documental: `f4dac0af791fd58052b49b7acf91a31c70ebd118`.
-T5 queda pendiente de verificación proporcional, publicación y CI exact-head;
-no se han corrido tests nuevos en este paso documental.
+'part-local-pre-rotation-cut'`. Work-unit de política:
+`f4dac0af791fd58052b49b7acf91a31c70ebd118`. La verificación local final del
+candidato rotado de T5 se hizo en `ed1d5066b61db18da64e774879f8f14f59b16011`;
+ese commit es una corrección test-only que importa `PtxRecord` después de la
+falla inicial de `pnpm typecheck` del candidato. Evidencia en `ed1d5066`: Excel
+45 archivos / 534 PASS + 3 skips, `pnpm typecheck` PASS y `git diff --check`
+PASS.
 
 Intento de selector autorizado sobre el candidato
-`32518fc47273f74af71520985953f68d9ca32bf3` contra base
+`ed1d5066b61db18da64e774879f8f14f59b16011` contra base
 `b7446866ed247677d8b8f83238cddbd96579db97`:
 
 ```sh
@@ -314,14 +316,13 @@ python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600
 ```
 
 Resultado: bloqueado antes de ejecutar gates porque requiere un `DATABASE_URL`
-aislado. El selector alcanzó a seleccionar los jobs `typescript`, `backend-go`,
-`sketchup-extension`, `proyectar-visual`, `foundation-postgres` y
-`organization-browser`; ninguno de esos gates corrió ni se registra como PASS.
+aislado. El selector se ejecutó una sola vez con presupuesto de 3600 s y
+seleccionó los jobs `typescript`, `backend-go`, `sketchup-extension`,
+`proyectar-visual`, `foundation-postgres` y `organization-browser`; ninguno de
+esos gates corrió ni se registra como PASS local.
 
-Checks pendientes para cierre/publish del PR: infraestructura de selector con
-`DATABASE_URL` aislado, CI exact-head y cualquier gate adicional que el
-líder/verificador exija. No se registran como PASS hasta observarlos en este
-HEAD exacto.
+T5 sigue en curso: falta push al mismo PR #797 y CI exact-head del nuevo HEAD.
+No hay claim de entrega completa hasta observar esos checks en el HEAD exacto.
 
 Inmutabilidad r2/r3/r4: los goldens históricos se recompilan byte-exact dentro
 de la suite focalizada; r2/r3/r4, FUNCTION 92, perfiles/adapters y salidas de
