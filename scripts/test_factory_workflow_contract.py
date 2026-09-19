@@ -208,6 +208,11 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("fresh independent re-review", next_step)
         self.assertIn("exception-ok", artifact)
         self.assertIn("publish one pr", next_step)
+        if "exception-ok" in artifact:
+            self.assertIsNone(
+                re.search(r"\b(?:commit|committing|create a commit)\b", next_step),
+                "An exception-ok decision must advance to review/publication, not a pending commit",
+            )
         for pending_pattern in (
             r"complete (?:the )?(?:single )?correction commit",
             r"create (?:the )?correction commit",

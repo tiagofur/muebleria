@@ -99,6 +99,12 @@ role skills, `CHECKPOINTS.md`, `feature_list.json`, `progress/current.md`,
     truthfully record its own post-commit SHA/clean state before that commit existed.
   - Outcome: the artifact and drift guard describe the completed correction boundary
     and point directly to fresh re-review plus the parent delivery decision.
+- [x] **GODD-C3 — Advance the authorized delivery state**
+  - Route: strict-TDD mechanical correction; no contract or scope change.
+  - Trigger evidence: after `exception-ok` was recorded, the current next step still
+    told the writer to commit the already-created decision record.
+  - Outcome: semantic drift guard and artifact advance directly to fresh review and
+    authorized parent publication.
 
 ## Verification plan
 
@@ -111,8 +117,9 @@ role skills, `CHECKPOINTS.md`, `feature_list.json`, `progress/current.md`,
 - `python3 scripts/verify_affected.py --base origin/main --plan`.
 - After final clean commit: `python3 scripts/factory_preflight.py --require-clean`.
 
-TDD mode: not configured for this documentation/process migration. Ordinary
-contract tests and the repository-authoritative factory checks apply.
+TDD mode was not configured for the original documentation migration. Strict TDD
+is enabled for GODD-C3; its focused RED/GREEN evidence is recorded below. Ordinary
+contract tests and the repository-authoritative factory checks still apply.
 
 ## Delivery forecast
 
@@ -185,9 +192,14 @@ contract tests and the repository-authoritative factory checks apply.
 - 2026-09-19: The maintainer authorized the documented size exception and a single
   PR for issue #573. The exception preserves one coherent contract review and does
   not authorize merge, issue closure, or weaker verification.
+- 2026-09-19: GODD-C3 RED — after adding the generic pending-commit guard,
+  `python3 -m unittest scripts.test_factory_workflow_contract.WorkflowContractTest.test_execution_artifact_has_completed_correction_boundary -v`
+  failed because the current Next step still contained `commit`.
+- 2026-09-19: GODD-C3 GREEN — the same focused test passed after the Next step
+  advanced directly to fresh independent review and authorized parent publication.
 
 ## Next step
 
-Commit this delivery-decision record, run the proportional clean checks, obtain a
-fresh independent re-review of the new exact HEAD, then publish one PR for human review.
-Merge and issue closure remain human actions.
+Obtain a fresh independent re-review of the new exact HEAD. If approved, the parent
+may publish one PR under the authorized size exception for human review. Merge and
+issue closure remain human actions.
