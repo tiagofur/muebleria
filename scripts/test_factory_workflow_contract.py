@@ -21,12 +21,14 @@ BARE_CURRENT_FILENAME = re.compile(
     r"(?<![A-Za-z0-9_./-])current\.md(?![A-Za-z0-9_.-])", re.IGNORECASE
 )
 LIVE_FACTORY_PATHS = (
+    ".agents/skills/leader/SKILL.md",
     ".agents/skills/implementer/SKILL.md",
     ".agents/skills/reviewer/SKILL.md",
     "AGENTS.md",
     "CHECKPOINTS.md",
     "README.md",
     "init.sh",
+    "odd/tasks/README.md",
     "docs/verification.md",
     "docs/git-workflow.md",
     "docs/architecture/hardware-3d-assets-and-assemblies.md",
