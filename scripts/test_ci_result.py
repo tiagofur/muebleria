@@ -12,7 +12,7 @@ def fixture(plan=None):
     plan = copy.deepcopy(plan or full("test"))
     plan["tested_sha"] = SHA
     needs = {"impact": {"result": "success", "outputs": {"plan": json.dumps(plan)}},
-             "validate-ledger": {"result": "success"}}
+             "validate-catalog": {"result": "success"}}
     for job in JOBS:
         needs[job] = {"result": "success" if plan["jobs"][job] else "skipped"}
     return needs
@@ -56,8 +56,8 @@ class ResultTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_results(needs, SHA)
 
-    def test_failed_selector_or_ledger_rejected(self):
-        for key in ("impact", "validate-ledger"):
+    def test_failed_selector_or_catalog_rejected(self):
+        for key in ("impact", "validate-catalog"):
             needs = fixture()
             needs[key]["result"] = "failure"
             with self.assertRaises(ValueError):

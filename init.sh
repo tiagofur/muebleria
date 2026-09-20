@@ -52,28 +52,11 @@ for f in "${HARNESS_FILES[@]}"; do
   fi
 done
 
-# ── 2. Validar feature_list.json ─────────────────────────────────────────────
+# ── 2. Validar catálogo de capacidades ───────────────────────────────────────
 echo ""
-echo "── 2. Validando feature_list.json ──────────────────────"
+echo "── 2. Validando catálogo de capacidades ────────────────"
 
-python3 - <<'PY'
-import json, sys
-try:
-    data = json.load(open("feature_list.json"))
-    valid = {"pending", "in_progress", "done", "blocked"}
-    for f in data["features"]:
-        if f["status"] not in valid:
-            print(f"[FAIL]  Estado inválido en feature {f['id']}: {f['status']}")
-            sys.exit(1)
-    if data.get("rules", {}).get("catalog_only") is not True:
-        print("[FAIL]  feature_list.json must declare catalog_only")
-        sys.exit(1)
-    print(f"[OK]    feature_list.json valid ({len(data['features'])} historical entries; "
-          "not queue or ownership)")
-except Exception as e:
-    print(f"[FAIL]  feature_list.json inválido: {e}")
-    sys.exit(1)
-PY
+python3 scripts/validate_feature_catalog.py
 
 if [ $? -ne 0 ]; then EXIT_CODE=1; fi
 

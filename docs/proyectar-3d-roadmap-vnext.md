@@ -385,7 +385,7 @@ No inventar un segundo lifecycle provisional sólo para desbloquear UI.
 - posicionamiento: `docs/proyectar-3d-competitive-position.md`;
 - este documento: olas/issues;
 - GitHub #308: meta;
-- `feature_list.json`: ledger sólo cuando una feature entra a ejecución;
+- `feature_list.json`: catálogo estable de capacidades, nunca estado de ejecución;
 - `docs/design.md`: tokens/patrones visuales;
 - código/tests: implementación real.
 

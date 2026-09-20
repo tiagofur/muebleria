@@ -1,8 +1,18 @@
 """Static G-ODD instruction-drift guards, not execution or product evidence."""
+from copy import deepcopy
 import json
 from pathlib import Path
 import re
 import unittest
+
+from validate_feature_catalog import (
+    CatalogError,
+    FEATURE_KEYS,
+    OPERATIONAL_KEYS,
+    OPERATIONAL_TITLE,
+    TOP_LEVEL_KEYS,
+    validate_data,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,35 +34,6 @@ LIVE_FACTORY_PATHS = (
     "backend-go/internal/api/furniture_layout.go",
     "backend-go/internal/domain/engine/layout.go",
 )
-CATALOG_TOP_LEVEL_KEYS = {"schema_version", "project", "purpose", "features"}
-CATALOG_ENTRY_KEYS = {"id", "title", "summary", "canonical_docs"}
-CATALOG_OPERATIONAL_KEYS = {
-    "acceptance",
-    "blocked",
-    "branch",
-    "completedAt",
-    "created",
-    "createdAt",
-    "depends_on",
-    "evidence",
-    "github_issue",
-    "in_progress",
-    "lane",
-    "owner",
-    "phase",
-    "priority",
-    "queue",
-    "reservation",
-    "review_notes",
-    "scheduler",
-    "status",
-}
-OPERATIONAL_TITLE = re.compile(
-    r"\b(?:bug(?:fix)?|css|fix(?:es)?|hardening|refactor|review|slice|tests?)\b",
-    re.IGNORECASE,
-)
-
-
 class WorkflowContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -172,15 +153,16 @@ class WorkflowContractTest(unittest.TestCase):
 
     def test_capability_catalog_has_only_stable_product_metadata(self):
         catalog = json.loads((ROOT / "feature_list.json").read_text())
-        self.assertEqual(set(catalog), CATALOG_TOP_LEVEL_KEYS)
+        self.assertEqual(validate_data(catalog, ROOT), len(catalog["features"]))
+        self.assertEqual(set(catalog), TOP_LEVEL_KEYS)
         self.assertEqual(catalog["schema_version"], 2)
         self.assertGreaterEqual(len(catalog["features"]), 5)
         self.assertLessEqual(len(catalog["features"]), 30)
         identifiers = []
         for feature in catalog["features"]:
             with self.subTest(feature=feature.get("id")):
-                self.assertEqual(set(feature), CATALOG_ENTRY_KEYS)
-                self.assertFalse(set(feature) & CATALOG_OPERATIONAL_KEYS)
+                self.assertEqual(set(feature), FEATURE_KEYS)
+                self.assertFalse(set(feature) & OPERATIONAL_KEYS)
                 self.assertRegex(feature["id"], r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
                 self.assertTrue(feature["title"].strip())
                 self.assertTrue(feature["summary"].strip())
@@ -189,6 +171,21 @@ class WorkflowContractTest(unittest.TestCase):
                 self.assertTrue(feature["canonical_docs"])
             identifiers.append(feature["id"])
         self.assertEqual(len(identifiers), len(set(identifiers)))
+
+    def test_catalog_validator_rejects_operational_state_and_duplicate_ids(self):
+        catalog = json.loads((ROOT / "feature_list.json").read_text())
+        for field in ("status", "type", "category", "owner"):
+            invalid = deepcopy(catalog)
+            invalid["features"][0][field] = "pending"
+            with self.subTest(field=field), self.assertRaisesRegex(
+                CatalogError, "operational fields"
+            ):
+                validate_data(invalid, ROOT)
+
+        duplicate = deepcopy(catalog)
+        duplicate["features"][1]["id"] = duplicate["features"][0]["id"]
+        with self.assertRaisesRegex(CatalogError, "duplicate feature id"):
+            validate_data(duplicate, ROOT)
 
     def test_navigation_map_matches_portable_contract(self):
         for phrase in (

@@ -1268,7 +1268,7 @@ Si un ítem falla, no es done. Si un ítem no aplica, el commit/PR lo dice expl�
 7. **Iconos: solo Lucide React** — no mezclar librerías de icons
 8. **Modales con focus trap** — el Tab no debe salir del modal
 9. **No romper tests existentes** — el refactor es presentacional
-10. **Phased delivery** — una feature a la vez según `feature_list.json`
+10. **Phased delivery** — trabajo acotado por la issue aprobada y su writer activo
 11. **Botones BEM** — usar `.btn` / `.btn--primary` / `.btn--ghost` / `.btn--danger` / `.btn--small` (ver §5.1)
 12. **Pantallas nuevas** — documentar en §6 antes o junto con la implementación
 13. **Gate de calidad UI** — toda pantalla nueva o modificada pasa el §8 DoD antes de pedir review; el copy y el formato de datos cumplen §7

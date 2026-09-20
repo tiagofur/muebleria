@@ -576,7 +576,8 @@ Integrar herramientas externas es preferible a recrearlas cuando no sea parte de
 | Contract conceptual | `docs/sketchup-manufacturing-contract.md` |
 | Rutas | `apps/web/src/routes.ts` → `NAV_PATHS` |
 | Permisos ejecutables | `packages/domain/src/rbac.ts` / backend correspondiente |
-| Estado de implementación | código + tests + `feature_list.json` como ledger |
+| Estado de implementación | código + tests; GitHub Issues/PRs registran la entrega |
+| Catálogo de capacidades | `feature_list.json`, sin estado operativo |
 | Trabajo futuro | GitHub issues + roadmap canónico |
 | Baseline MVP histórico | `docs/history/prd.md` |
 
