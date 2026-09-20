@@ -318,6 +318,46 @@ export {
   verifyCutPlanPtxReadback,
   type CutPlanPtxReadbackIssue,
 } from './ptx/verifyCutPlanPtxReadback';
+// --- #792 CADLink .RLT result evidence: versioned documented error catalog,
+// fail-closed three-integer parser and the Granete diagnosis that preserves
+// field/line verbatim (no invented field-name mapping). LAB/offline only —
+// no CADLink execution, no support claim. ---
+export {
+  CADLINK_ERROR_CATALOG_V1,
+  CadlinkRltParseError,
+  cadlinkErrorCatalogEntry,
+  classifyCadlinkRlt,
+  diagnoseCadlinkRlt,
+  parseCadlinkRlt,
+  ptxLineContextAt,
+  type CadlinkErrorCatalog,
+  type CadlinkErrorCatalogEntry,
+  type CadlinkErrorCatalogScope,
+  type CadlinkRltDiagnosis,
+  type CadlinkRltOutcome,
+  type CadlinkRltParseErrorCode,
+  type CadlinkRltPtxLineContext,
+  type CadlinkRltResult,
+} from './ptx/cadlinkRlt';
+// --- #792 reproducible CADLink field pack: identity pins are REQUIRED from
+// the caller (#793 supplies the productive r5 ones; tests use LAB_TEST_ONLY),
+// every gate (parse/validate/spec/readback/receiver policy/pictures) blocks
+// before a single file exists, and the pack output is byte-deterministic. ---
+export {
+  analyzeCadlinkFieldResult,
+  buildCadlinkFieldPack,
+  cadlinkFieldPackIdentityPinsFromSelection,
+  CadlinkFieldPackError,
+  type CadlinkFieldExpectedIdentity,
+  type CadlinkFieldPack,
+  type CadlinkFieldPackBuildInput,
+  type CadlinkFieldPackErrorCode,
+  type CadlinkFieldPackFile,
+  type CadlinkFieldPackIdentityPins,
+  type CadlinkFieldPackPicture,
+  type CadlinkFieldResultAnalysis,
+  type MachineOutputSelectionLike,
+} from './ptx/cadlinkFieldPack';
 
 
 

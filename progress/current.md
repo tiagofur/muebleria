@@ -42,7 +42,7 @@
 | PTX/CADmatic r5 | #787 | META open, approved | Keep r5 execution in the ordered receiver → CUTS → CADLink → final-route rows below; no client field attempt before the final gate. |
 | PTX receiver | #790 | **Next PTX implementation**; open, approved | Receiver HPP250/CAD4: MATERIALS, BOOK, RULES and record shape. |
 | PTX CUTS | #791 | Queued; open, approved | Correct 90..99 semantics and differential/golden r5. |
-| PTX CADLink | #792 | Queued; open, approved | `/RESULT`, `.RLT` parser and reproducible field pack. |
+| PTX CADLink | #792 | **IMPLEMENTED_PENDING_REVIEW** (branch `feat/792-cadlink-rlt-field-pack`, base 9475da3a) | `/RESULT`, `.RLT` parser and reproducible field pack — offline/LAB only, golden #791 intact, awaiting independent review + merge; no client field attempt, no r5 productive identity (#793). |
 | PTX final route | #793 | Final r5 gate; open, approved | Profile r5, adapter identity/routing, frozen CNC scope and final candidate. |
 | Hardware 3D | #666 | META open, approved | Coordinate remaining AS3D work without mixing scopes. |
 | Hardware resources | #667 | Open umbrella; M1/M2 history archived | Triage remaining umbrella scope before adding more work under it. |
