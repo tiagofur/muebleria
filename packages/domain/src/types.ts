@@ -228,6 +228,21 @@ export interface HardwareVisualAssetBinding {
    * binding pins a GLB revision directly it mirrors that revision itself.
    */
   readonly glb?: HardwareVisualGlbBinding;
+  /**
+   * MountFrame of the bound revision in asset space (#668 server-resolved
+   * fact; mm, +Z up). Drives inverse(T_mountFrame) on every consumer.
+   */
+  readonly mountFrame?: HardwareVisualMountFrameBinding;
+}
+
+/** Mount anchor + canonical axes of a bound revision, in asset-space mm. */
+export interface HardwareVisualMountFrameBinding {
+  readonly originMm: readonly [number, number, number];
+  readonly basis: {
+    readonly x: readonly [number, number, number];
+    readonly y: readonly [number, number, number];
+    readonly z: readonly [number, number, number];
+  };
 }
 
 /** Exact GLB revision reference with the declared coordinate space of the file. */

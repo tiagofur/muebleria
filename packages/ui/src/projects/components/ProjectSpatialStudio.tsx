@@ -89,6 +89,7 @@ import {
   type ClipboardEntry,
   type LayoutCommandResult,
   type WallOpeningKind,
+  createCatalogVisualAssetLookup,
 } from '@granete/domain';
 import {
   ArrowDown,
@@ -861,6 +862,9 @@ export function ProjectSpatialStudio({
     const result = resolveProject3DPreview(project, catalog, {
       unplacedPolicy: 'hide',
       kitchenWallsOnly: true,
+      // #669: attach the exact visual pins (#668 binding) so members with a
+      // derived GLB render the exact web representation instead of a proxy.
+      visualAssetLookup: createCatalogVisualAssetLookup(catalog.hardware),
     });
     recordBomResolve(
       performance.now() - t0,

@@ -169,6 +169,7 @@ describe('GlbSceneCache', () => {
   }
 
   const representation = {
+    assetId: 'ast-glb-parity',
     revisionId: 'rev-glb-parity-bracket-1',
     sha256: 'sha256-' + hashOfFixture(),
     sourceUnits: canonical.glbRepresentation.sourceUnits,

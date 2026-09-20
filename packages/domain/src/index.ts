@@ -21,6 +21,7 @@ export type {
   Hardware,
   HardwareVisualAssetBinding,
   HardwareVisualGlbBinding,
+  HardwareVisualMountFrameBinding,
   User,
   UserRole,
   Customer,

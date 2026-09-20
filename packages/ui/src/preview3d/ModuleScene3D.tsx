@@ -6,6 +6,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type {
   Hardware,
+  ProjectedAssembly,
   ResolvedBoardPart,
   ResolvedHardwarePlacement,
 } from '@granete/domain';
@@ -61,6 +62,12 @@ export type ModuleScene3DProps = {
    * placements. Optional: when omitted (or no placements), no handles render.
    */
   readonly hardwareCatalog?: readonly Hardware[];
+  /**
+   * Resolved rigid assemblies (#670) projected for this module (#669): the
+   * GLB/procedural members render through the same FurnitureScene3D path used
+   * by Proyectar, with the session GLB source from context.
+   */
+  readonly assemblies?: readonly ProjectedAssembly[];
 };
 
 export { canUseWebGL } from './webglSupport';
@@ -88,6 +95,7 @@ export function ModuleScene3D({
   showOuterGhost = true,
   resolvedHardwarePlacements,
   hardwareCatalog,
+  assemblies,
 }: ModuleScene3DProps): ReactNode {
   return (
     <FurnitureScene3D
@@ -103,6 +111,7 @@ export function ModuleScene3D({
           originZ: 0,
           showOuterGhost,
           resolvedHardwarePlacements,
+          assemblies,
         },
       ]}
       totalWidth={width}

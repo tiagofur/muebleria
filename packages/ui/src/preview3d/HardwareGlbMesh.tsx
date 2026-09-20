@@ -47,7 +47,11 @@ export function HardwareGlbMesh({
 }: HardwareGlbMeshProps): ReactNode {
   const glb = member.glb;
   const [status, setStatus] = useState<HardwareGlbLoadStatus>('loading');
-  const [instance, setInstance] = useState<THREE.Group | null>(null);
+  // `mounted` couples the axis-swap group and the cloned instance and is
+  // created ONCE per exact revision inside the effect: R3F primitives must
+  // keep a stable identity — re-created objects get their imperatively added
+  // children detached by the reconciler.
+  const [mounted, setMounted] = useState<THREE.Group | null>(null);
   const [diagnostic, setDiagnostic] = useState<string | undefined>(undefined);
   const generationRef = useRef(0);
   const cache = glbCache ?? (glbSource ? useMemo(() => new GlbSceneCache(glbSource), [glbSource]) : undefined);
@@ -56,6 +60,7 @@ export function HardwareGlbMesh({
   const sha256 = glb?.sha256;
   const sourceUnits = glb?.sourceUnits;
   const upAxis = glb?.upAxis;
+  const assetId = member.assetId;
 
   useEffect(() => {
     if (!cache || !glb || !revisionId || !sha256) return;
@@ -63,14 +68,22 @@ export function HardwareGlbMesh({
     generationRef.current = generation;
     let cancelled = false;
     setStatus('loading');
-    setInstance(null);
+    setMounted(null);
     setDiagnostic(undefined);
 
     cache
-      .load({ revisionId, sha256, sourceUnits: sourceUnits ?? 'm', upAxis: upAxis ?? 'y' })
+      .load({
+        assetId,
+        revisionId,
+        sha256,
+        sourceUnits: sourceUnits ?? 'm',
+        upAxis: upAxis ?? 'y',
+      })
       .then((template) => {
         if (cancelled || generationRef.current !== generation) return;
-        setInstance(cloneGlbScene(template));
+        const swap = createAssetSpaceSwapGroup();
+        swap.add(cloneGlbScene(template));
+        setMounted(swap);
         setStatus('ready');
       })
       .catch((error: unknown) => {
@@ -85,18 +98,25 @@ export function HardwareGlbMesh({
       cancelled = true;
       generationRef.current += 1;
     };
-  }, [cache, revisionId, sha256, sourceUnits, upAxis, glb]);
+  }, [cache, assetId, revisionId, sha256, sourceUnits, upAxis, glb]);
 
   useEffect(() => {
     onStatusChange?.(status, diagnostic);
   }, [status, diagnostic, onStatusChange]);
 
-  const swapMounted = useMemo(() => {
-    if (!instance) return null;
-    const swap = createAssetSpaceSwapGroup();
-    swap.add(instance);
-    return swap;
-  }, [instance]);
+  // Stable identity: the reconciler must not churn the primitive's parent
+  // props across unrelated re-renders (it would detach mounted children).
+  const userData = useMemo(
+    () => ({
+      memberId: member.memberId,
+      glbRevisionId: glb?.revisionId ?? '',
+      glbSha256: glb?.sha256 ?? '',
+      glbSourceRevisionId: glb?.sourceRevisionId ?? '',
+      glbStatus: status,
+      ...(diagnostic ? { glbDiagnostic: diagnostic } : {}),
+    }),
+    [member.memberId, glb?.revisionId, glb?.sha256, glb?.sourceRevisionId, status, diagnostic],
+  );
 
   if (!glb) {
     return <>{fallback}</>;
@@ -112,17 +132,9 @@ export function HardwareGlbMesh({
             }
           : undefined
       }
-      data-testid={`hardware-glb-${status}-${member.memberId}`}
-      userData={{
-        memberId: member.memberId,
-        glbRevisionId: glb.revisionId,
-        glbSha256: glb.sha256,
-        glbSourceRevisionId: glb.sourceRevisionId,
-        glbStatus: status,
-        ...(diagnostic ? { glbDiagnostic: diagnostic } : {}),
-      }}
+      userData={userData}
     >
-      {status === 'ready' && swapMounted ? <primitive object={swapMounted} /> : fallback}
+      {status === 'ready' && mounted ? <primitive object={mounted} /> : fallback}
     </group>
   );
 }

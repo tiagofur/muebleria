@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -1516,3 +1517,281 @@ function createMerivoboxPilotSeedWorkspace() {
     },
   };
 }
+
+// ── Scenario 9 — #669: exact GLB representation rendered in real WebGL ────
+
+const glbParityCanonical = JSON.parse(
+  readFileSync(join(__dirname, '../../contracts/fixtures/glb-parity-canonical.json'), 'utf8'),
+) as {
+  readonly asset: {
+    readonly referencePointsAssetMm: readonly (readonly [number, number, number])[];
+  };
+  readonly expected: {
+    readonly pairwiseDistancesMm: Readonly<Record<string, number>>;
+  };
+};
+const glbParityBytes = readFileSync(
+  join(__dirname, '../../contracts/fixtures/glb-parity-bracket.glb'),
+);
+const glbParitySha = createHash('sha256').update(glbParityBytes).digest('hex');
+const GLB_SEAM_REVISION_ID = 'rev-runner-500-glb';
+
+test('Point 12: WebGL real — #669 exact GLB member renders with canonical units, rigidity and identity', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  const consoleErrors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      const text = msg.text();
+      if (!text.includes('favicon') && !text.includes('404')) {
+        consoleErrors.push(text);
+      }
+    }
+  });
+  page.on('pageerror', (err) => {
+    consoleErrors.push(err.message);
+  });
+
+  // Static byte seam (data-only, set before app mount): the exact committed
+  // parity GLB served for the seeded revision id + digest.
+  await page.addInitScript(
+    ({ revisionId, sha256, bytesBase64 }) => {
+      try {
+        (window as unknown as Record<string, unknown>).__graneteTestGlbAssets = {
+          [revisionId]: { sha256, bytesBase64 },
+        };
+      } catch {
+        /* seam unavailable */
+      }
+    },
+    {
+      revisionId: GLB_SEAM_REVISION_ID,
+      sha256: `sha256-${glbParitySha}`,
+      bytesBase64: glbParityBytes.toString('base64'),
+    },
+  );
+
+  // Clone the drawer seed and bind runner-500 (the variant the inserted
+  // module resolves) to the canonical MountFrame + GLB co-representation
+  // (only this test's workspace is affected).
+  const customWs = createDrawerAssemblySeedWorkspace();
+  const runner = customWs.catalog.hardware.find((h) => h.id === 'runner-500') as {
+    visualAsset?: Record<string, unknown>;
+  } & Record<string, unknown>;
+  expect(runner).toBeTruthy();
+  runner.visualAsset = {
+    ...(runner.visualAsset ?? {}),
+    mountFrame: {
+      originMm: [25, 30, 15],
+      basis: { x: [0, 1, 0], y: [-1, 0, 0], z: [0, 0, 1] },
+    },
+    glb: {
+      revisionId: GLB_SEAM_REVISION_ID,
+      sha256: `sha256-${glbParitySha}`,
+      sourceRevisionId: 'rev-runner-500',
+      sourceUnits: 'm',
+      upAxis: 'y',
+    },
+  };
+
+  await page.addInitScript((wsJson) => {
+    try {
+      sessionStorage.setItem('granete_session', 'guest');
+      sessionStorage.setItem('granete_proyectar_visible', '1');
+      localStorage.setItem('granete_guest_workspace', wsJson);
+      localStorage.setItem('muebles_workspace_v1', wsJson);
+    } catch {
+      /* storage unavailable */
+    }
+  }, JSON.stringify(customWs));
+
+  await page.goto('/quotes');
+  const draftCard = page.locator('.project-card', { hasText: 'Demo plantilla' }).first();
+  await draftCard.waitFor({ timeout: 20_000 });
+  await draftCard.click();
+  await page.waitForSelector('.workspace-chrome, .project-detail', { timeout: 20_000 });
+  await page.waitForSelector('[data-testid="project-chrome-projectar"]', { timeout: 20_000 });
+  await page.click('[data-testid="project-chrome-projectar"]');
+  await waitForStudioCanvas(page);
+  await insertFirstLibraryCard(page);
+  await fitCamera(page);
+  await settleCanvas(page);
+
+  const glbReport = await page.evaluate(
+    ({ referencePoints, pairwise }) => {
+      const scene = (window as unknown as { __graneteScene?: unknown }).__graneteScene as
+        | {
+            traverse: (cb: (o: unknown) => void) => void;
+          }
+        | undefined;
+      if (!scene) return { error: 'scene probe unavailable' };
+
+      type Object3D = {
+        userData: Record<string, unknown>;
+        isMesh?: boolean;
+        geometry?: {
+          attributes: { position?: { count: number; getX(i: number): number; getY(i: number): number; getZ(i: number): number } };
+        };
+        matrixWorld: { elements: number[]; determinant?(): number };
+        updateMatrixWorld: (force?: boolean) => void;
+        children: Object3D[];
+      };
+
+      scene.traverse(() => undefined);
+      let glbGroup: Object3D | undefined;
+      const meshes: Object3D[] = [];
+      const visit = (object: Object3D) => {
+        if (object.userData?.glbStatus === 'ready' && !glbGroup) glbGroup = object;
+        if (object.isMesh && object.geometry?.attributes?.position) meshes.push(object);
+        for (const child of object.children ?? []) visit(child);
+      };
+      const root = scene as unknown as Object3D;
+      visit(root);
+      if (!glbGroup) {
+        const statuses: string[] = [];
+        const members: string[] = [];
+        scene.traverse((o) => {
+          const ud = (o as Object3D).userData;
+          if (ud?.glbStatus) statuses.push(String(ud.glbStatus));
+          if (ud?.memberId) {
+            members.push(
+              `${String(ud.memberId)}:${String(ud.hardwareId)}:${String(ud.renderStatus)}:glb=${String(ud.glbRevisionId ?? 'none')}`,
+            );
+          }
+        });
+        return { error: `no ready glb member (statuses: ${statuses.join(',') || 'none'})`, members };
+      }
+
+      const group = glbGroup;
+      group.updateMatrixWorld(true);
+      // The GLB mesh lives under the group (axis swap + normalized geometry).
+      let mesh: Object3D | undefined;
+      const findMesh = (object: Object3D) => {
+        if (object.isMesh && object.geometry?.attributes?.position && !mesh) mesh = object;
+        for (const child of object.children ?? []) findMesh(child);
+      };
+      findMesh(group);
+      if (!mesh) {
+        const describe = (object: Object3D, depth: number): string => {
+          const type = String((object as unknown as { type?: string }).type ?? '?');
+          const meshFlag = object.isMesh ? '(mesh)' : '';
+          const childDescriptions = (object.children ?? [])
+            .slice(0, 6)
+            .map((child) => describe(child, depth + 1))
+            .join(',');
+          return `${type}${meshFlag}[${childDescriptions}]`;
+        };
+        let totalMeshes = 0;
+        scene.traverse((o) => {
+          if ((o as Object3D).isMesh) totalMeshes += 1;
+        });
+        return {
+          error: `glb group carries no mesh: ${describe(group, 0)}`,
+          totalMeshes,
+          glbDebug: group.userData,
+        };
+      }
+
+      const position = mesh.geometry!.attributes.position!;
+      const nearestVertex = (target: readonly number[]) => {
+        let best = [0, 0, 0];
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < position.count; i++) {
+          const candidate = [position.getX(i), position.getY(i), position.getZ(i)];
+          const distance = Math.hypot(
+            candidate[0] - target[0],
+            candidate[1] - target[1],
+            candidate[2] - target[2],
+          );
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = candidate;
+          }
+        }
+        return { vertex: best, distance: bestDistance };
+      };
+
+      // Baked asset-space extents (canonical bracket: 70 x 54 x 18 mm).
+      let min = [Infinity, Infinity, Infinity];
+      let max = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < position.count; i++) {
+        const candidate = [position.getX(i), position.getY(i), position.getZ(i)];
+        for (let axis = 0; axis < 3; axis++) {
+          min[axis] = Math.min(min[axis], candidate[axis]);
+          max[axis] = Math.max(max[axis], candidate[axis]);
+        }
+      }
+
+      // World-space reference points through the REAL scene graph matrices.
+      const matrix = mesh.matrixWorld.elements;
+      const transform = (p: readonly number[]) => [
+        matrix[0]! * p[0]! + matrix[4]! * p[1]! + matrix[8]! * p[2]! + matrix[12]!,
+        matrix[1]! * p[0]! + matrix[5]! * p[1]! + matrix[9]! * p[2]! + matrix[13]!,
+        matrix[2]! * p[0]! + matrix[6]! * p[1]! + matrix[10]! * p[2]! + matrix[14]!,
+      ];
+      const world = referencePoints.map((assetPoint) => transform(nearestVertex(assetPoint).vertex));
+      const distance = (a: readonly number[], b: readonly number[]) =>
+        Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
+
+      // Column norms (uniform scale) and determinant of the world matrix.
+      const columns = [
+        [matrix[0]!, matrix[1]!, matrix[2]!],
+        [matrix[4]!, matrix[5]!, matrix[6]!],
+        [matrix[8]!, matrix[9]!, matrix[10]!],
+      ];
+      const norms = columns.map((c) => Math.hypot(c[0]!, c[1]!, c[2]!));
+      const det =
+        matrix[0]! * (matrix[5]! * matrix[10]! - matrix[6]! * matrix[9]!) -
+        matrix[4]! * (matrix[1]! * matrix[10]! - matrix[2]! * matrix[9]!) +
+        matrix[8]! * (matrix[1]! * matrix[6]! - matrix[2]! * matrix[5]!);
+
+      return {
+        glbRevisionId: group.userData.glbRevisionId,
+        glbSourceRevisionId: group.userData.glbSourceRevisionId,
+        assemblyInstanceId: (group.userData as Record<string, unknown>).assemblyInstanceId ?? null,
+        bakedExtents: [max[0]! - min[0]!, max[1]! - min[1]!, max[2]! - min[2]!],
+        worldPairwise: [
+          distance(world[0]!, world[1]!),
+          distance(world[1]!, world[2]!),
+          distance(world[0]!, world[2]!),
+        ],
+        expectedPairwise: [pairwise.p0p1, pairwise.p1p2, pairwise.p0p2],
+        worldScaleNorms: norms,
+        worldDeterminant: det,
+      };
+    },
+    {
+      referencePoints: glbParityCanonical.asset.referencePointsAssetMm,
+      pairwise: glbParityCanonical.expected.pairwiseDistancesMm,
+    },
+  );
+
+  expect((glbReport as { error?: string }).error, JSON.stringify(glbReport)).toBeUndefined();
+  const report = glbReport as {
+    glbRevisionId: unknown;
+    glbSourceRevisionId: unknown;
+    bakedExtents: number[];
+    worldPairwise: number[];
+    expectedPairwise: number[];
+    worldScaleNorms: number[];
+    worldDeterminant: number;
+  };
+  expect(report.glbRevisionId).toBe(GLB_SEAM_REVISION_ID);
+  expect(report.glbSourceRevisionId).toBe('rev-runner-500');
+  // Canonical bracket extents in asset mm (baked once, single conversion).
+  report.bakedExtents.forEach((extent, axis) => {
+    expect(Math.abs(extent - [70, 54, 18][axis])).toBeLessThan(0.02);
+  });
+  // Pairwise distances survive the whole render chain unchanged (mm, rigid).
+  report.worldPairwise.forEach((measured, index) => {
+    expect(Math.abs(measured - report.expectedPairwise[index])).toBeLessThan(0.05);
+  });
+  // Uniform unit scale and a single mirror (the workshop→three axis swap).
+  report.worldScaleNorms.forEach((norm) => {
+    expect(Math.abs(norm - 1)).toBeLessThan(1e-3);
+  });
+  expect(Math.abs(report.worldDeterminant + 1)).toBeLessThan(1e-3);
+  expect(consoleErrors).toEqual([]);
+});

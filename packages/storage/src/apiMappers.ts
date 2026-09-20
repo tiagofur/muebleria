@@ -5,6 +5,7 @@
 
 import type {
   HardwareVisualGlbBinding,
+  HardwareVisualMountFrameBinding,
   AmbientCategory,
   AmbientMaterial,
   AmbientSurfaceType,
@@ -485,6 +486,7 @@ function normalizeVisualAsset(
     glbRaw && typeof glbRaw === 'object'
       ? normalizeVisualGlb(glbRaw as Record<string, unknown>)
       : undefined;
+  const mountFrame = normalizeVisualMountFrame(value.mountFrame);
   return {
     visualAsset: {
       assetId,
@@ -497,8 +499,34 @@ function normalizeVisualAsset(
         ? { validationState: stateRaw as 'pending' | 'validated' | 'failed' }
         : {}),
       ...(glb ? { glb } : {}),
+      ...(mountFrame ? { mountFrame } : {}),
     },
   };
+}
+
+/**
+ * MountFrame of the bound revision (#668 server-resolved fact): origin mm +
+ * orthonormal basis triples. Loose shape check only — the domain revalidates
+ * strictly (validateHardwareBasis) before any geometry depends on it.
+ */
+function normalizeVisualMountFrame(raw: unknown): HardwareVisualMountFrameBinding | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const value = raw as Record<string, unknown>;
+  const originRaw = value.originMm ?? value.origin_mm;
+  const basis = value.basis;
+  const triple = (v: unknown): readonly [number, number, number] | undefined =>
+    Array.isArray(v) && v.length === 3 && v.every((c) => typeof c === 'number' && Number.isFinite(c))
+      ? ([v[0], v[1], v[2]] as readonly [number, number, number])
+      : undefined;
+  const origin = triple(originRaw);
+  if (!origin) return undefined;
+  if (!basis || typeof basis !== 'object') return undefined;
+  const b = basis as Record<string, unknown>;
+  const x = triple(b.x);
+  const y = triple(b.y);
+  const z = triple(b.z);
+  if (!x || !y || !z) return undefined;
+  return { originMm: origin, basis: { x, y, z } };
 }
 
 /**

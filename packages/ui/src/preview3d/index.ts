@@ -125,3 +125,8 @@ export {
   type HardwareGlbLoadStatus,
   type HardwareGlbMeshProps,
 } from './HardwareGlbMesh';
+export {
+  GlbAssetSourceProvider,
+  useGlbAssetSource,
+  createWindowSeamGlbAssetSource,
+} from './glbAssetSourceContext';

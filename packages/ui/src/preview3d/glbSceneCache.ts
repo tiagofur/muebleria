@@ -40,10 +40,11 @@ export class GlbAssetLoadError extends Error {
 /** Session-scoped byte source for exact GLB revisions. */
 export interface GlbAssetSource {
   readonly ownerKey: string;
-  loadBytes(revisionId: string, sha256: string): Promise<ArrayBuffer>;
+  loadBytes(assetId: string, revisionId: string, sha256: string): Promise<ArrayBuffer>;
 }
 
 export interface GlbRepresentationRef {
+  readonly assetId?: string;
   readonly revisionId: string;
   readonly sha256: string;
   readonly sourceUnits: GlbCoordinateSpace['sourceUnits'];
@@ -154,7 +155,11 @@ export class GlbSceneCache {
     const promise = (async () => {
       let bytes: ArrayBuffer;
       try {
-        bytes = await this.source.loadBytes(representation.revisionId, representation.sha256);
+        bytes = await this.source.loadBytes(
+          representation.assetId ?? '',
+          representation.revisionId,
+          representation.sha256,
+        );
       } catch (cause) {
         throw new GlbAssetLoadError(
           'inaccessible',

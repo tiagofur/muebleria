@@ -46,6 +46,7 @@ import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementG
 import { BoardMesh } from './BoardMesh';
 import { AssemblyMesh } from './AssemblyMesh';
 import type { GlbAssetSource } from './glbSceneCache';
+import { useGlbAssetSource } from './glbAssetSourceContext';
 import type { ProjectedAssembly } from '@granete/domain';
 import {
   beginDragFeedbackSample,
@@ -2498,6 +2499,8 @@ export function FurnitureScene3D({
   onBoardPaintHover,
   boardPaintHoverModuleKey = null,
 }: FurnitureScene3DProps): ReactNode {
+  const contextGlbSource = useGlbAssetSource();
+  const effectiveGlbSource = glbSource ?? contextGlbSource;
   const controlsRef = useRef<any>(null);
   /**
    * Ref registrado por SceneContent (que has useThree access). Holds a
@@ -2797,7 +2800,7 @@ export function FurnitureScene3D({
               <ScenePerfProbe />
               <Suspense fallback={null}>
                 <SceneContent
-                  glbSource={glbSource}
+                  glbSource={effectiveGlbSource}
                   rawHardwarePlacements={rawHardwarePlacements}
                   onUpdateHardwarePlacement={onUpdateHardwarePlacement}
                   modules={sceneModules}
