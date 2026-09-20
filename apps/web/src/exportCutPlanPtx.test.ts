@@ -271,31 +271,6 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r5, #793)', () => {
         active: true,
       },
     ];
-    const row = (
-      partCode: string,
-      lengthMm: number,
-      widthMm: number,
-      materialName: string,
-      materialCode: string,
-    ): ProductionCutRow => ({
-      quantity: 1,
-      lengthMm,
-      widthMm,
-      description: `${partCode} lab`,
-      materialName,
-      materialCode,
-      grain: 1 as const,
-      L1: 0,
-      L2: 0,
-      W1: 0,
-      W2: 0,
-      partCode,
-      partName: partCode,
-      // #781 r4: workshop codes are fail-closed — lab rows carry one.
-      labelRef: `MOD-LAB-${partCode}`,
-      moduleCode: 'M01',
-      thicknessMm: 18,
-    });
     // #793: the productive r5 route needs a frozen release plan + its label
     // projection (two materials keep the by-material split meaningful).
     const { demand, catalog } = labRelease(['mat-a', 'mat-b']);
