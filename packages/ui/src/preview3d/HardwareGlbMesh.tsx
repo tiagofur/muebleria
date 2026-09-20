@@ -25,6 +25,24 @@ import {
  */
 export type HardwareGlbLoadStatus = 'loading' | 'ready' | 'corrupt' | 'inaccessible' | 'unsupported';
 
+/**
+ * The mounted GLB carries the EXACT authority/revision identity it was
+ * produced for (#669 review R19). Rendering it is decided purely by identity
+ * DURING render: the primitive may appear IFF the mounted identity equals the
+ * currently requested one — a stale mounted (previous cache/revision) is
+ * excluded from the new commit immediately, with no dependency on passive
+ * effect ordering.
+ */
+interface MountedGlb {
+  readonly object: THREE.Group;
+  readonly cache: GlbSceneCache;
+  readonly assetId: string | undefined;
+  readonly revisionId: string;
+  readonly sha256: string;
+  readonly sourceUnits: NonNullable<ProjectedRigidMember['glb']>['sourceUnits'];
+  readonly upAxis: NonNullable<ProjectedRigidMember['glb']>['upAxis'];
+}
+
 export type HardwareGlbMeshProps = {
   readonly member: ProjectedRigidMember;
   /**
@@ -50,11 +68,12 @@ export function HardwareGlbMesh({
 }: HardwareGlbMeshProps): ReactNode {
   const glb = member.glb;
   const [status, setStatus] = useState<HardwareGlbLoadStatus>('loading');
-  // `mounted` couples the axis-swap group and the cloned instance and is
-  // created ONCE per exact revision inside the effect: R3F primitives must
-  // keep a stable identity — re-created objects get their imperatively added
-  // children detached by the reconciler.
-  const [mounted, setMounted] = useState<THREE.Group | null>(null);
+  // `mounted` couples the axis-swap group, the cloned instance AND the
+  // authority/revision identity it was produced for. It is created ONCE per
+  // exact revision inside the effect: R3F primitives must keep a stable
+  // identity — re-created objects get their imperatively added children
+  // detached by the reconciler.
+  const [mounted, setMounted] = useState<MountedGlb | null>(null);
   const [diagnostic, setDiagnostic] = useState<string | undefined>(undefined);
   const generationRef = useRef(0);
   const cache = glbCache;
@@ -86,7 +105,16 @@ export function HardwareGlbMesh({
         if (cancelled || generationRef.current !== generation) return;
         const swap = createAssetSpaceSwapGroup();
         swap.add(cloneGlbScene(template));
-        setMounted(swap);
+        swap.name = template.name;
+        setMounted({
+          object: swap,
+          cache,
+          assetId,
+          revisionId,
+          sha256,
+          sourceUnits: sourceUnits ?? 'm',
+          upAxis: upAxis ?? 'y',
+        });
         setStatus('ready');
       })
       .catch((error: unknown) => {
@@ -127,6 +155,19 @@ export function HardwareGlbMesh({
     [member.memberId, glb?.revisionId, glb?.sha256, glb?.sourceRevisionId, status, diagnostic],
   );
 
+  // Identity gate (R19): evaluated during EVERY render, before any effect.
+  // A mounted object produced for a previous cache/revision is not part of
+  // the output of the new commit — the fallback renders instead until the
+  // new authority resolves.
+  const mountedIsCurrent =
+    Boolean(mounted && glb) &&
+    mounted!.cache === cache &&
+    mounted!.assetId === assetId &&
+    mounted!.revisionId === glb!.revisionId &&
+    mounted!.sha256 === glb!.sha256 &&
+    mounted!.sourceUnits === glb!.sourceUnits &&
+    mounted!.upAxis === glb!.upAxis;
+
   if (!glb) {
     return <>{fallback}</>;
   }
@@ -143,7 +184,11 @@ export function HardwareGlbMesh({
       }
       userData={userData}
     >
-      {status === 'ready' && mounted ? <primitive object={mounted} /> : fallback}
+      {status === 'ready' && mountedIsCurrent && mounted ? (
+        <primitive object={mounted.object} name={mounted.object.name} />
+      ) : (
+        fallback
+      )}
     </group>
   );
 }

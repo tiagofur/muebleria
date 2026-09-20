@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { render, waitFor } from '@testing-library/react';
 import * as THREE from 'three';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectedRigidMember } from '@granete/domain';
 import { GlbSceneCache } from './glbSceneCache';
@@ -264,5 +264,185 @@ describe('HardwareGlbMesh clone/dispose lifecycle (#669 review R15)', () => {
     // the live state: B's cache still serves, A honestly refuses.
     (a.cache as unknown as { dispose: () => void }).dispose?.();
     expect(b.load).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('HardwareGlbMesh mounted identity (#669 review R19)', () => {
+  const deferredCache = (templateName: string) => {
+    let resolveLoad: (template: THREE.Group) => void = () => {};
+    const load = vi.fn(
+      () =>
+        new Promise<THREE.Group>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    const cache = { ownerKey: `owner-${templateName}`, load } as unknown as GlbSceneCache;
+    return {
+      cache,
+      load,
+      resolveWith: () => {
+        const template = new THREE.Group();
+        template.name = templateName;
+        template.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()));
+        resolveLoad(template);
+      },
+    };
+  };
+  const mountedPrimitiveName = (host: HTMLElement): string | null =>
+    host.querySelector('primitive')?.getAttribute('name') ?? null;
+
+  it('a cache switch excludes the OLD primitive from the very first commit (before passive effects)', async () => {
+    const a = deferredCache('mounted-a');
+    const b = deferredCache('mounted-b');
+    const switchCommits: (string | null)[] = [];
+
+    const Harness = ({ cache }: { cache: GlbSceneCache }) => {
+      const hostRef = useRef<HTMLDivElement | null>(null);
+      // Layout phase of the HOST commit (the cache switch itself): records
+      // the committed output BEFORE any passive effect can clear a stale
+      // mounted object — precisely the window the old bug relied on.
+      useLayoutEffect(() => {
+        if (hostRef.current) switchCommits.push(mountedPrimitiveName(hostRef.current));
+      });
+      return (
+        <div ref={hostRef} data-harness="r19">
+          <HardwareGlbMesh
+            member={member}
+            glbCache={cache}
+            fallback={<group name="fallback" />}
+            onStatusChange={() => {}}
+          />
+        </div>
+      );
+    };
+
+    const { rerender } = render(<Harness cache={a.cache} />);
+    a.resolveWith();
+    await waitFor(
+      () => {
+        const host = document.querySelector('[data-harness="r19"]') as HTMLElement;
+        expect(mountedPrimitiveName(host)).toBe('mounted-a');
+      },
+      { timeout: 2000 },
+    );
+    expect(a.load).toHaveBeenCalledTimes(1);
+
+    // Authority switch with B still PENDING. The commit that renders cache B
+    // must NOT contain the old mounted-a primitive: asserted synchronously
+    // right after the rerender (DOM is the commit output) AND captured again
+    // in the layout phase of that same commit.
+    rerender(<Harness cache={b.cache} />);
+    const hostAfterSwitch = document.querySelector('[data-harness="r19"]') as HTMLElement;
+    expect(mountedPrimitiveName(hostAfterSwitch)).toBeNull(); // fallback, not mounted-a
+    expect(switchCommits[switchCommits.length - 1]).toBeNull();
+
+    b.resolveWith();
+    await waitFor(
+      () => {
+        const host = document.querySelector('[data-harness="r19"]') as HTMLElement;
+        expect(mountedPrimitiveName(host)).toBe('mounted-b');
+      },
+      { timeout: 2000 },
+    );
+    expect(b.load).toHaveBeenCalledTimes(1);
+    expect(a.load).toHaveBeenCalledTimes(1); // never reloaded through A
+  });
+});
+
+describe('HardwareGlbMesh real cache disposal (#669 review R20)', () => {
+  beforeAll(() => {
+    // jsdom's crypto lacks subtle; the cache verifies SHA-256 client-side.
+    const globalWithCrypto = globalThis as { crypto?: { subtle?: unknown } };
+    if (!globalWithCrypto.crypto?.subtle) {
+      globalWithCrypto.crypto = require('node:crypto').webcrypto as never;
+    }
+  });
+
+  it('survives a real cache switch: A disposed, old mounted unrenderable, B intact', async () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { join, dirname } = require('node:path') as typeof import('node:path');
+    const { fileURLToPath } = require('node:url') as typeof import('node:url');
+    const fixtureBytes = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../../../contracts/fixtures/glb-parity-bracket.glb',
+      ),
+    );
+    // Realm-local copy: a Node-Buffer pool slice fails `instanceof
+    // ArrayBuffer` inside jsdom's VM, which makes THREE.GLTFLoader take the
+    // plain-text branch. The browser app always gets realm-native buffers
+    // from fetch/atob — only this jsdom harness needs the explicit copy.
+    const fixtureArrayBuffer = (): ArrayBuffer => {
+      const copy = new Uint8Array(fixtureBytes.byteLength);
+      copy.set(fixtureBytes);
+      return copy.buffer as ArrayBuffer;
+    };
+
+    const representation = {
+      assetId: 'ast-glb-parity',
+      revisionId: 'rev-glb-parity-bracket-1',
+      sha256:
+        'sha256-' +
+        require('node:crypto')
+          .createHash('sha256')
+          .update(fixtureBytes)
+          .digest('hex'),
+      sourceUnits: 'm' as const,
+      upAxis: 'y' as const,
+    };
+    const sourceA = { ownerKey: 'owner-a', loadBytes: vi.fn(async () => fixtureArrayBuffer()) };
+    const sourceB = { ownerKey: 'owner-b', loadBytes: vi.fn(async () => fixtureArrayBuffer()) };
+    const cacheA = new GlbSceneCache(sourceA);
+    const cacheB = new GlbSceneCache(sourceB);
+
+    const hostRef = { current: null as HTMLDivElement | null };
+    const Harness = ({ cache }: { cache: GlbSceneCache }) => (
+      <div ref={hostRef} data-harness="r20">
+        <HardwareGlbMesh
+          member={{ ...member, glb: representation }}
+          glbCache={cache}
+          fallback={<group name="fallback" />}
+          onStatusChange={(status, diagnostic) => {
+            statuses.push(`${status}${diagnostic ? `: ${diagnostic}` : ''}`);
+          }}
+        />
+      </div>
+    );
+
+    const statuses: string[] = [];
+    const { rerender } = render(<Harness cache={cacheA} />);
+    await waitFor(
+      () => {
+        expect(statuses[statuses.length - 1]).toBe('ready');
+      },
+      { timeout: 3000 },
+    );
+    // eslint-disable-next-line no-console
+    console.log('R20 STATUSES', JSON.stringify(statuses.map((entry) => entry.slice(0, 300))));
+    expect(sourceA.loadBytes).toHaveBeenCalledTimes(1);
+
+    // Authority switch: the old A-mounted primitive is excluded from the
+    // commit immediately (identity gate), before A is disposed.
+    rerender(<Harness cache={cacheB} />);
+    expect(hostRef.current?.querySelector('primitive')).toBeNull();
+
+    // REAL disposal of A while B is still resolving: B's future template is
+    // a DIFFERENT parse with its own geometry, and the disposed A template
+    // can no longer be requested through any path.
+    cacheA.dispose();
+    await expect(cacheA.load(representation)).rejects.toThrow(/disposed/);
+
+    await waitFor(
+      () => {
+        expect(hostRef.current?.querySelector('primitive')).toBeTruthy();
+      },
+      { timeout: 3000 },
+    );
+    expect(sourceB.loadBytes).toHaveBeenCalledTimes(1);
+
+    // B keeps serving afterwards: its owner is intact (the isolation the
+    // provider guarantees on a session switch).
+    const templateB = await cacheB.load(representation);
+    expect(templateB.children.length).toBeGreaterThan(0);
   });
 });
