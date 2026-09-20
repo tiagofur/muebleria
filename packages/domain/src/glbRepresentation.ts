@@ -116,6 +116,8 @@ export interface GlbJsonDocument {
   readonly images?: readonly { uri?: unknown; bufferView?: unknown; mimeType?: unknown }[];
   readonly extensionsRequired?: readonly unknown[];
   readonly extensionsUsed?: readonly unknown[];
+  readonly skins?: readonly unknown[];
+  readonly animations?: readonly unknown[];
   [key: string]: unknown;
 }
 
@@ -259,6 +261,25 @@ export function validateGlbSelfContainedPolicy(
     issues.push(`glTF required extensions are not supported: ${extensionsRequired.join(', ')}`);
   }
 
+  // #669 supported subset: RIGID STATIC hardware only. The renderer flattens
+  // node transforms into baked geometry, so anything dynamic (skins,
+  // animations, morph targets) or any extension that can change how a mesh
+  // must be interpreted is rejected FAIL-CLOSED on both sides of the
+  // contract (upload and consumption) — a partially-understood file must
+  // never render as a silently degraded "exact" representation.
+  if ((json.skins ?? []).length > 0) {
+    issues.push('glTF skins are not supported (rigid static assets only)');
+  }
+  if ((json.animations ?? []).length > 0) {
+    issues.push('glTF animations are not supported (rigid static assets only)');
+  }
+  const extensionsUsed = json.extensionsUsed ?? [];
+  if (extensionsUsed.length > 0) {
+    issues.push(
+      `glTF extensions are not supported (allowed list is empty for this increment): ${extensionsUsed.join(', ')}`,
+    );
+  }
+
   for (const [index, image] of (json.images ?? []).entries()) {
     if (image?.uri !== undefined && image.uri !== null && image.uri !== '') {
       issues.push(`images[${index}].uri must be omitted (embedded bufferView only)`);
@@ -268,9 +289,23 @@ export function validateGlbSelfContainedPolicy(
     }
   }
 
+
   const meshes = json.meshes ?? [];
   if (meshes.length > limits.maxMeshes) {
     issues.push(`mesh count ${meshes.length} exceeds limit ${limits.maxMeshes}`);
+  }
+  // Morph targets cannot be preserved by the flatten-and-bake renderer.
+  for (const [meshIndex, mesh] of meshes.entries()) {
+    const weights = (mesh as { weights?: unknown[] })?.weights;
+    if (weights && weights.length > 0) {
+      issues.push(`meshes[${meshIndex}].weights (morph targets) are not supported`);
+    }
+    for (const [primIndex, primitive] of ((mesh as { primitives?: readonly unknown[] }).primitives ?? []).entries()) {
+      const targets = (primitive as { targets?: unknown[] })?.targets;
+      if (targets && targets.length > 0) {
+        issues.push(`meshes[${meshIndex}].primitives[${primIndex}].targets (morph targets) are not supported`);
+      }
+    }
   }
   const nodes = json.nodes ?? [];
   if (nodes.length > limits.maxNodes) {

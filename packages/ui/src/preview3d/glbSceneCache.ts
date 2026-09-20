@@ -92,8 +92,15 @@ export function normalizeGlbSceneToAssetMm(
   });
   const holder = new THREE.Group();
   holder.name = 'granete-glb-asset-mm';
+  // glTF nodes may SHARE one mesh/geometry; each mesh bakes its OWN node
+  // transform. Baking must therefore run on a PRIVATE copy for EVERY mesh:
+  // the first user would otherwise mutate the shared original that the
+  // second user clones from, compounding both transforms (#669 review R12).
+  // The template may still share geometry across Granete instances
+  // afterwards via cloneGlbScene().
   for (const mesh of meshes) {
     const baked = u.clone().multiply(mesh.matrixWorld);
+    mesh.geometry = mesh.geometry.clone();
     mesh.geometry.applyMatrix4(baked);
     mesh.geometry.computeBoundingBox();
     mesh.geometry.computeBoundingSphere();

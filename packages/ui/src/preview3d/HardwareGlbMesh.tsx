@@ -101,7 +101,13 @@ export function HardwareGlbMesh({
       cancelled = true;
       generationRef.current += 1;
     };
-  }, [cache, assetId, revisionId, sha256, sourceUnits, upAxis, glb]);
+    // Semantic identity ONLY (#669 review R11): a new-but-equivalent glb
+    // binding object (same revision/digest/units/axes/asset) must NOT restart
+    // the lifecycle — reference identity of `glb` is deliberately excluded so
+    // the mounted object (and its R3F children) cannot churn on parent
+    // re-renders. Real identity changes ARE part of the key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache, assetId, revisionId, sha256, sourceUnits, upAxis]);
 
   useEffect(() => {
     onStatusChange?.(status, diagnostic);

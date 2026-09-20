@@ -79,18 +79,23 @@ type glbJSONDocument struct {
 	Buffers            []glbJSONBuffer     `json:"buffers"`
 	Images             []glbJSONImage      `json:"images"`
 	ExtensionsRequired []string            `json:"extensionsRequired"`
+	ExtensionsUsed     []string            `json:"extensionsUsed"`
+	Skins              []json.RawMessage   `json:"skins"`
+	Animations         []json.RawMessage   `json:"animations"`
 }
 
 type glbJSONMesh struct {
 	Primitives []glbJSONPrimitive `json:"primitives"`
+	Weights    []float64          `json:"weights"`
 }
 
 type glbJSONPrimitive struct {
 	Attributes struct {
 		Position *int `json:"POSITION"`
 	} `json:"attributes"`
-	Indices *int `json:"indices"`
-	Mode    *int `json:"mode"`
+	Indices *int              `json:"indices"`
+	Mode    *int              `json:"mode"`
+	Targets []json.RawMessage `json:"targets"`
 }
 
 type glbJSONAccessor struct {
@@ -235,6 +240,31 @@ func ValidateGlbContainerStructure(r io.Reader, limits GlbValidationLimits) (*Gl
 	}
 	if len(doc.ExtensionsRequired) > 0 {
 		return nil, fmt.Errorf("%w: glTF required extensions are not supported: %s", ErrHardwareAssetInvalid, strings.Join(doc.ExtensionsRequired, ", "))
+	}
+
+	// #669 supported subset: RIGID STATIC hardware only (parity with the TS
+	// consumption validator). Skins, animations, morph targets and ANY used
+	// extension are rejected fail-closed: the renderer flattens node
+	// transforms into baked geometry and cannot preserve dynamic behaviour,
+	// so a partially-understood file must never become an "exact" revision.
+	if len(doc.Skins) > 0 {
+		return nil, fmt.Errorf("%w: glTF skins are not supported (rigid static assets only)", ErrHardwareAssetInvalid)
+	}
+	if len(doc.Animations) > 0 {
+		return nil, fmt.Errorf("%w: glTF animations are not supported (rigid static assets only)", ErrHardwareAssetInvalid)
+	}
+	if len(doc.ExtensionsUsed) > 0 {
+		return nil, fmt.Errorf("%w: glTF extensions are not supported (allowed list is empty for this increment): %s", ErrHardwareAssetInvalid, strings.Join(doc.ExtensionsUsed, ", "))
+	}
+	for meshIndex := range doc.Meshes {
+		if len(doc.Meshes[meshIndex].Weights) > 0 {
+			return nil, fmt.Errorf("%w: meshes[%d].weights (morph targets) are not supported", ErrHardwareAssetInvalid, meshIndex)
+		}
+		for primIndex := range doc.Meshes[meshIndex].Primitives {
+			if len(doc.Meshes[meshIndex].Primitives[primIndex].Targets) > 0 {
+				return nil, fmt.Errorf("%w: meshes[%d].primitives[%d].targets (morph targets) are not supported", ErrHardwareAssetInvalid, meshIndex, primIndex)
+			}
+		}
 	}
 
 	if int64(len(doc.Meshes)) > limits.MaxMeshes {

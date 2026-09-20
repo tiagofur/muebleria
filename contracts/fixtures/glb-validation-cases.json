@@ -11,27 +11,46 @@
     {
       "name": "bad-magic",
       "expect": "invalid",
-      "mutation": { "type": "bytes", "offset": 0, "hex": "58" }
+      "mutation": {
+        "type": "bytes",
+        "offset": 0,
+        "hex": "58"
+      }
     },
     {
       "name": "bad-container-version",
       "expect": "invalid",
-      "mutation": { "type": "bytes", "offset": 4, "hex": "01000000" }
+      "mutation": {
+        "type": "bytes",
+        "offset": 4,
+        "hex": "01000000"
+      }
     },
     {
       "name": "total-length-mismatch",
       "expect": "invalid",
-      "mutation": { "type": "bytes", "offset": 8, "hex": "04000000" }
+      "mutation": {
+        "type": "bytes",
+        "offset": 8,
+        "hex": "04000000"
+      }
     },
     {
       "name": "corrupt-json-chunk",
       "expect": "invalid",
-      "mutation": { "type": "bytes", "offset": 21, "hex": "7b" }
+      "mutation": {
+        "type": "bytes",
+        "offset": 21,
+        "hex": "7b"
+      }
     },
     {
       "name": "truncated-container",
       "expect": "invalid",
-      "mutation": { "type": "truncate", "bytesFromEnd": 8 }
+      "mutation": {
+        "type": "truncate",
+        "bytesFromEnd": 8
+      }
     },
     {
       "name": "external-buffer-uri",
@@ -48,7 +67,11 @@
       "mutation": {
         "type": "json-set",
         "path": "images",
-        "value": [{ "uri": "https://external.example/tex.png" }]
+        "value": [
+          {
+            "uri": "https://external.example/tex.png"
+          }
+        ]
       }
     },
     {
@@ -57,7 +80,11 @@
       "mutation": {
         "type": "json-set",
         "path": "images",
-        "value": [{ "mimeType": "image/png" }]
+        "value": [
+          {
+            "mimeType": "image/png"
+          }
+        ]
       }
     },
     {
@@ -66,7 +93,9 @@
       "mutation": {
         "type": "json-set",
         "path": "extensionsRequired",
-        "value": ["KHR_draco_mesh_compression"]
+        "value": [
+          "KHR_draco_mesh_compression"
+        ]
       }
     },
     {
@@ -75,13 +104,24 @@
       "mutation": {
         "type": "json-set",
         "path": "buffers",
-        "value": [{ "byteLength": 100 }, { "byteLength": 100 }]
+        "value": [
+          {
+            "byteLength": 100
+          },
+          {
+            "byteLength": 100
+          }
+        ]
       }
     },
     {
       "name": "no-meshes",
       "expect": "invalid",
-      "mutation": { "type": "json-set", "path": "meshes", "value": [] }
+      "mutation": {
+        "type": "json-set",
+        "path": "meshes",
+        "value": []
+      }
     },
     {
       "name": "primitive-without-position",
@@ -126,6 +166,63 @@
         "type": "json-set",
         "path": "asset.generator",
         "value": "another-exporter 9.9"
+      }
+    },
+    {
+      "name": "skin-present",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "skins",
+        "value": [
+          {}
+        ]
+      }
+    },
+    {
+      "name": "animation-present",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "animations",
+        "value": [
+          {}
+        ]
+      }
+    },
+    {
+      "name": "morph-targets-on-primitive",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "meshes.0.primitives.0.targets",
+        "value": [
+          {
+            "POSITION": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "mesh-morph-weights",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "meshes.0.weights",
+        "value": [
+          0.5
+        ]
+      }
+    },
+    {
+      "name": "extension-used-present",
+      "expect": "invalid",
+      "mutation": {
+        "type": "json-set",
+        "path": "extensionsUsed",
+        "value": [
+          "EXT_mesh_gpu_instancing"
+        ]
       }
     }
   ]

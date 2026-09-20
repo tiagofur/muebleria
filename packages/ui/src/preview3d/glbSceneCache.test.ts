@@ -370,3 +370,48 @@ describe('axis-swap and normalization determinants (#669 review)', () => {
     expect(detMember * detNormalization * detSwap).toBeLessThan(0);
   });
 });
+
+describe('normalizeGlbSceneToAssetMm shared geometry (#669 review R12)', () => {
+  it('bakes each node transform exactly once even when two meshes share one geometry', () => {
+    // glTF reality: several nodes can reference the same mesh/geometry with
+    // DIFFERENT matrixWorld. Non-trivial transforms so a double-bake cannot
+    // pass accidentally.
+    const shared = new THREE.BufferGeometry();
+    // Point at (1, 0, 0) metres in file space.
+    shared.setAttribute('position', new THREE.Float32BufferAttribute([1, 0, 0], 3));
+
+    const scene = new THREE.Group();
+    const meshA = new THREE.Mesh(shared, new THREE.MeshStandardMaterial());
+    meshA.position.set(1, 0, 0); // node A: translate +X (metres, raw file space)
+    const meshB = new THREE.Mesh(shared, new THREE.MeshStandardMaterial());
+    meshB.position.set(0, 0, -1); // node B: translate -Z (metres)
+    scene.add(meshA, meshB);
+    scene.updateMatrixWorld(true);
+    expect(meshA.geometry).toBe(meshB.geometry);
+
+    normalizeGlbSceneToAssetMm(scene, { sourceUnits: 'm', upAxis: 'y' });
+
+    // After normalization the geometries must be SEPARATE instances (the
+    // second node cloned before baking its own transform).
+    expect(meshA.geometry).not.toBe(meshB.geometry);
+    const positionA = meshA.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const positionB = meshB.geometry.getAttribute('position') as THREE.BufferAttribute;
+
+    // U maps glb (X,Y,Z) m -> asset (X,-Z,Y) mm.
+    // Node A: raw point (1,0,0) translated +X -> (2,0,0) m -> asset (2000, 0, 0) mm.
+    expect(positionA.getX(0)).toBeCloseTo(2000, 6);
+    expect(positionA.getY(0)).toBeCloseTo(0, 6);
+    expect(positionA.getZ(0)).toBeCloseTo(0, 6);
+
+    // Node B: raw point translated -Z -> (1,0,-1) m -> asset (1000, 1000, 0) mm.
+    // A double-bake (the bug) would land at (1000+1000*?, ...) — distinct by
+    // whole units, so this cannot pass with the compounding defect.
+    expect(positionB.getX(0)).toBeCloseTo(1000, 6);
+    expect(positionB.getY(0)).toBeCloseTo(1000, 6);
+    expect(positionB.getZ(0)).toBeCloseTo(0, 6);
+
+    // The original shared geometry was never mutated in place.
+    const original = shared.getAttribute('position') as THREE.BufferAttribute;
+    expect(original.getX(0)).toBeCloseTo(1, 9);
+  });
+});

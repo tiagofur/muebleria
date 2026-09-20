@@ -124,3 +124,145 @@ describe('HardwareGlbMesh stable lifecycle across unrelated re-renders', () => {
     );
   });
 });
+
+describe('HardwareGlbMesh semantic GLB identity (#669 review R11)', () => {
+  const baseMember = (glbObject: NonNullable<ProjectedRigidMember['glb']>): ProjectedRigidMember => ({
+    ...member,
+    glb: glbObject,
+  });
+  const glbObjectA = {
+    revisionId: 'rev-glb-1',
+    sha256: 'sha256-' + 'a'.repeat(64),
+    sourceUnits: 'm' as const,
+    upAxis: 'y' as const,
+  };
+  const glbObjectB = { ...glbObjectA }; // NEW reference, IDENTICAL semantics
+  const glbObjectG2 = {
+    revisionId: 'rev-glb-2',
+    sha256: 'sha256-' + 'b'.repeat(64),
+    sourceUnits: 'm' as const,
+    upAxis: 'y' as const,
+  };
+
+  it('an equivalent-but-new glb object does NOT restart the lifecycle; a real revision change does', async () => {
+    const load = vi.fn(async (representation: { revisionId: string }) => {
+      const template = new THREE.Group();
+      template.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()));
+      template.name = `template-${representation.revisionId}`;
+      return template;
+    });
+    const cache = { ownerKey: 'test-owner', load } as unknown as GlbSceneCache;
+    const statuses: HardwareGlbLoadStatus[] = [];
+
+    const { rerender } = render(
+      <HardwareGlbMesh
+        member={baseMember(glbObjectA)}
+        glbCache={cache}
+        fallback={<group name="fallback" />}
+        onStatusChange={(status) => statuses.push(status)}
+      />,
+    );
+    await waitFor(
+      () => {
+        expect(statuses[statuses.length - 1]).toBe('ready');
+      },
+      { timeout: 2000 },
+    );
+    expect(load).toHaveBeenCalledTimes(1);
+
+    // Same semantics, NEW object reference: no reload, no loading relapse.
+    rerender(
+      <HardwareGlbMesh
+        member={baseMember(glbObjectB)}
+        glbCache={cache}
+        fallback={<group name="fallback" />}
+        onStatusChange={(status) => statuses.push(status)}
+      />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(load).toHaveBeenCalledTimes(1);
+    // The lifecycle did NOT restart: no loading relapse after ready (a
+    // repeated 'ready' emission from the status-report effect is harmless).
+    const readyIndex = statuses.indexOf('ready');
+    expect(statuses.slice(readyIndex)).not.toContain('loading');
+    expect(statuses.filter((status) => status === 'loading')).toHaveLength(1);
+
+    // A REAL revision change (G1 -> G2) reloads through the semantic key.
+    rerender(
+      <HardwareGlbMesh
+        member={baseMember(glbObjectG2)}
+        glbCache={cache}
+        fallback={<group name="fallback" />}
+        onStatusChange={(status) => statuses.push(status)}
+      />,
+    );
+    await waitFor(
+      () => {
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(statuses[statuses.length - 1]).toBe('ready');
+      },
+      { timeout: 2000 },
+    );
+    expect(load.mock.calls[1]![0]).toMatchObject({ revisionId: 'rev-glb-2' });
+  });
+});
+
+describe('HardwareGlbMesh clone/dispose lifecycle (#669 review R15)', () => {
+  it('a source switch makes the member abandon the previous owner before its cache can be disposed', async () => {
+    // Ordering reasoning pinned by this test: React renders the consumer
+    // with the NEW cache in the same commit (mounted -> null, status ->
+    // loading, fallback rendered) BEFORE the provider's effect cleanup
+    // disposes the old cache. The old clone (which shares geometry with the
+    // old template) is unmounted by then, so no stable path keeps rendering
+    // geometry another owner disposed.
+    const makeCache = (ownerKey: string) => {
+      const template = new THREE.Group();
+      template.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()));
+      const load = vi.fn(async () => template);
+      return { cache: { ownerKey, load } as unknown as GlbSceneCache, load };
+    };
+    const a = makeCache('owner-a');
+    const b = makeCache('owner-b');
+    const statuses: HardwareGlbLoadStatus[] = [];
+
+    const { rerender } = render(
+      <HardwareGlbMesh
+        member={member}
+        glbCache={a.cache}
+        fallback={<group name="fallback" />}
+        onStatusChange={(status) => statuses.push(status)}
+      />,
+    );
+    await waitFor(
+      () => {
+        expect(statuses[statuses.length - 1]).toBe('ready');
+      },
+      { timeout: 2000 },
+    );
+    expect(a.load).toHaveBeenCalledTimes(1);
+
+    // Authority switch: the member immediately restarts against B (fallback
+    // meanwhile) and B serves its own template.
+    rerender(
+      <HardwareGlbMesh
+        member={member}
+        glbCache={b.cache}
+        fallback={<group name="fallback" />}
+        onStatusChange={(status) => statuses.push(status)}
+      />,
+    );
+    await waitFor(
+      () => {
+        expect(b.load).toHaveBeenCalledTimes(1);
+        expect(statuses[statuses.length - 1]).toBe('ready');
+      },
+      { timeout: 2000 },
+    );
+    // The member never reloaded through A after the switch.
+    expect(a.load).toHaveBeenCalledTimes(1);
+    // After the switch, disposing A (what the provider does) cannot touch
+    // the live state: B's cache still serves, A honestly refuses.
+    (a.cache as unknown as { dispose: () => void }).dispose?.();
+    expect(b.load).toHaveBeenCalledTimes(1);
+  });
+});
