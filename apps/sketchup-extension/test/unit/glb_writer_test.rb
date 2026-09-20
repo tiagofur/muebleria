@@ -35,7 +35,14 @@ class GlbWriterTest < Minitest::Test
 
   def setup
     @tmp_dir = Dir.mktmpdir('glb_writer_test')
+    # Self-sufficient model: sibling suites (e.g. digital_thread_contract)
+    # leave the shared stub's active_model nil in their teardowns, and
+    # minitest's random order decides whether we run after them.
+    if defined?(SketchupStub)
+      SketchupStub.active_model = SketchupStub::ModelStub.new
+    end
     @model = Sketchup.active_model
+    refute_nil @model
   end
 
   def teardown
