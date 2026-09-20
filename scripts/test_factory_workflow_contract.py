@@ -4,8 +4,53 @@ from pathlib import Path
 import re
 import unittest
 
+
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "docs/demo/software-factory-human-start.md"
+LIVE_FACTORY_PATHS = (
+    ".agents/skills/implementer/SKILL.md",
+    ".agents/skills/reviewer/SKILL.md",
+    "AGENTS.md",
+    "CHECKPOINTS.md",
+    "README.md",
+    "init.sh",
+    "docs/verification.md",
+    "docs/git-workflow.md",
+    "docs/architecture/hardware-3d-assets-and-assemblies.md",
+    "docs/hardware-3d-execution-plan.md",
+    "docs/demo/software-factory-agent-reference.md",
+    "docs/demo/software-factory-human-start.md",
+    "docs/demo/software-factory-status.md",
+    "backend-go/internal/api/furniture_layout.go",
+    "backend-go/internal/domain/engine/layout.go",
+)
+CATALOG_TOP_LEVEL_KEYS = {"schema_version", "project", "purpose", "features"}
+CATALOG_ENTRY_KEYS = {"id", "title", "summary", "canonical_docs"}
+CATALOG_OPERATIONAL_KEYS = {
+    "acceptance",
+    "blocked",
+    "branch",
+    "completedAt",
+    "created",
+    "createdAt",
+    "depends_on",
+    "evidence",
+    "github_issue",
+    "in_progress",
+    "lane",
+    "owner",
+    "phase",
+    "priority",
+    "queue",
+    "reservation",
+    "review_notes",
+    "scheduler",
+    "status",
+}
+OPERATIONAL_TITLE = re.compile(
+    r"\b(?:bug(?:fix)?|css|fix(?:es)?|hardening|refactor|review|slice|tests?)\b",
+    re.IGNORECASE,
+)
 
 
 class WorkflowContractTest(unittest.TestCase):
@@ -17,9 +62,6 @@ class WorkflowContractTest(unittest.TestCase):
         cls.readme = (ROOT / "README.md").read_text()
         cls.agent_reference = (
             ROOT / "docs/demo/software-factory-agent-reference.md"
-        ).read_text()
-        cls.task_artifact = (
-            ROOT / "odd/tasks/573-portable-g-odd-factory.md"
         ).read_text()
 
     @staticmethod
@@ -49,7 +91,6 @@ class WorkflowContractTest(unittest.TestCase):
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.contract)
-
         self.assertIn("No durable execution artifact", self.task_convention)
         self.assertIn("Exactly one", self.task_convention)
         self.assertIn("canonical SDD tasks artifact", self.task_convention)
@@ -95,41 +136,66 @@ class WorkflowContractTest(unittest.TestCase):
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.contract)
-
         template = (ROOT / ".github/PULL_REQUEST_TEMPLATE.md").read_text()
         self.assertTrue(template.startswith("Closes #<issue-number>\nDelivery: complete\n"))
         self.assertIn("complete => Closes/Fixes/Resolves #N", template)
         self.assertIn("partial => Refs #N", template)
 
-    def test_legacy_catalog_is_not_operational_authority(self):
-        catalog = json.loads((ROOT / "feature_list.json").read_text())
-        self.assertTrue(catalog["rules"]["catalog_only"])
-        self.assertNotIn("one_feature_at_a_time", catalog["rules"])
-        for authority in (
-            "queue",
-            "scheduler",
-            "priority",
-            "ownership",
-            "reservation",
-            "execution_state",
-        ):
-            self.assertIn(authority, catalog["rules"]["not_operational_authority"])
+    def test_global_current_file_and_live_references_are_absent(self):
+        self.assertFalse((ROOT / "progress/current.md").exists())
+        for relative in LIVE_FACTORY_PATHS:
+            text = (ROOT / relative).read_text()
+            with self.subTest(path=relative):
+                self.assertNotIn("progress/current.md", text)
 
-    def test_progress_is_outside_the_normal_loop(self):
-        progress = (ROOT / "progress/current.md").read_text()
-        writer = (ROOT / ".agents/skills/implementer/SKILL.md").read_text()
-        init = (ROOT / "init.sh").read_text()
-        self.assertIn("outside the normal G-ODD execution loop", progress)
-        self.assertIn("Do not use `feature_list.json` to choose work", writer)
-        self.assertNotIn('"progress/current.md"', init)
-        self.assertNotIn("len(in_progress)", init)
+    def test_completed_odd_artifacts_need_no_cleanup_or_global_scan(self):
+        for phrase in (
+            "remain in `odd/tasks/`",
+            "immutable history",
+            "never scan",
+            "No post-merge cleanup",
+            "Do not add front matter",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.task_convention)
+        self.assertFalse((ROOT / "odd/archive").exists())
+        for path in (ROOT / "odd/tasks").glob("*.md"):
+            if path.name == "README.md":
+                continue
+            with self.subTest(path=path.name):
+                self.assertRegex(path.name, r"^[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
+                self.assertFalse(path.read_text().startswith("---\n"))
+
+    def test_routine_preflight_does_not_read_global_catalog(self):
+        preflight = (ROOT / "scripts/factory_preflight.py").read_text()
+        self.assertNotIn("feature_list.json", preflight)
+
+    def test_capability_catalog_has_only_stable_product_metadata(self):
+        catalog = json.loads((ROOT / "feature_list.json").read_text())
+        self.assertEqual(set(catalog), CATALOG_TOP_LEVEL_KEYS)
+        self.assertEqual(catalog["schema_version"], 2)
+        self.assertGreaterEqual(len(catalog["features"]), 5)
+        self.assertLessEqual(len(catalog["features"]), 30)
+        identifiers = []
+        for feature in catalog["features"]:
+            with self.subTest(feature=feature.get("id")):
+                self.assertEqual(set(feature), CATALOG_ENTRY_KEYS)
+                self.assertFalse(set(feature) & CATALOG_OPERATIONAL_KEYS)
+                self.assertRegex(feature["id"], r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+                self.assertTrue(feature["title"].strip())
+                self.assertTrue(feature["summary"].strip())
+                self.assertIsNone(OPERATIONAL_TITLE.search(feature["title"]))
+                self.assertIsInstance(feature["canonical_docs"], list)
+                self.assertTrue(feature["canonical_docs"])
+            identifiers.append(feature["id"])
+        self.assertEqual(len(identifiers), len(set(identifiers)))
 
     def test_navigation_map_matches_portable_contract(self):
         for phrase in (
             "Portable G-ODD execution",
             "runtime-independent contract",
             "Exactly one `odd/tasks/<issue>-<slug>.md`",
-            "use `progress/current.md` as startup context",
+            "global progress ledger",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.agents)
@@ -150,8 +216,13 @@ class WorkflowContractTest(unittest.TestCase):
                     normalized.index("factory_preflight.py"),
                     normalized.index("init.sh"),
                 )
-                self.assertRegex(normalized, r"preflight[\s\S]{0,180}read-only|read-only[\s\S]{0,180}preflight")
-                self.assertRegex(normalized, r"init\.sh[\s\S]{0,160}(explicit|only when)")
+                self.assertRegex(
+                    normalized,
+                    r"preflight[\s\S]{0,180}read-only|read-only[\s\S]{0,180}preflight",
+                )
+                self.assertRegex(
+                    normalized, r"init\.sh[\s\S]{0,160}(explicit|only when)"
+                )
                 self.assertNotRegex(
                     start,
                     r"```(?:bash|sh)?\s*\n\./init\.sh\s*\n```",
@@ -169,83 +240,16 @@ class WorkflowContractTest(unittest.TestCase):
         for pattern in forbidden:
             with self.subTest(pattern=pattern):
                 self.assertIsNone(re.search(pattern, lowered))
-        self.assertRegex(lowered, r"one (?:approved )?issue[^\n]{0,80}one (?:active )?writer")
+        self.assertRegex(
+            lowered, r"one (?:approved )?issue[^\n]{0,80}one (?:active )?writer"
+        )
         catalog_lines = [
             line.lower()
             for line in self.agent_reference.splitlines()
             if "feature_list.json" in line
         ]
-        self.assertTrue(any("catalog" in line or "histor" in line for line in catalog_lines))
+        self.assertTrue(any("catalog" in line for line in catalog_lines))
         self.assertTrue(any("never" in line or "not" in line for line in catalog_lines))
-
-    def test_execution_artifact_records_actual_candidate_and_remote_boundary(self):
-        artifact = self.task_artifact.lower()
-        self.assertIn("1,405 authored changed lines", artifact)
-        self.assertIn("c1c05fe63e5092669ff0ef94c7722dfc73b3a397", artifact)
-        self.assertRegex(artifact, r"writer[^\n]{0,100}(?:does not push|no remote mutation)")
-        self.assertRegex(artifact, r"parent[^\n]{0,160}(?:publish|open the authorized pr)")
-        next_step = self.section(self.task_artifact, "## Next step", "\n## ").lower()
-        self.assertIn("fresh independent re-review", next_step)
-        self.assertNotIn("create the godd-3 work-unit commit", next_step)
-
-    def test_execution_artifact_has_completed_correction_boundary(self):
-        artifact = self.task_artifact.lower()
-        correction_sha = "afa766b7c0cd68de9098999158a9b2ec2d9593e1"
-        self.assertRegex(
-            artifact,
-            correction_sha + r"[\s\S]{0,220}1,525 authored changed lines",
-        )
-        self.assertRegex(
-            artifact,
-            correction_sha + r"[\s\S]{0,520}dirty: false",
-        )
-        self.assertRegex(
-            artifact,
-            r"mechanical exception[\s\S]{0,240}cannot truthfully[\s\S]{0,240}(?:sha|post-commit)",
-        )
-
-        next_step = self.section(self.task_artifact, "## Next step", "\n## ").lower()
-        self.assertIn("fresh independent re-review", next_step)
-        self.assertIn("exception-ok", artifact)
-        self.assertRegex(
-            next_step,
-            r"publish(?:\s+one\s+pr|\s+this\s+correction\s+to\s+pr\s+#800)",
-        )
-        if "exception-ok" in artifact:
-            self.assertIsNone(
-                re.search(r"\b(?:commit|committing|create a commit)\b", next_step),
-                "An exception-ok decision must advance to review/publication, not a pending commit",
-            )
-        for pending_pattern in (
-            r"complete (?:the )?(?:single )?correction commit",
-            r"create (?:the )?correction commit",
-            r"correction commit (?:is )?pending",
-        ):
-            with self.subTest(pattern=pending_pattern):
-                self.assertIsNone(re.search(pending_pattern, next_step))
-
-    def test_execution_artifact_records_partial_pr_delivery_without_closure(self):
-        paragraphs = [
-            paragraph.lower()
-            for paragraph in re.split(r"\n\s*\n", self.task_artifact)
-            if "pr #800" in paragraph.lower()
-        ]
-        self.assertTrue(paragraphs, "The execution artifact must record PR #800")
-        delivery = "\n".join(paragraphs)
-        self.assertRegex(delivery, r"refs\s+#573")
-        self.assertRegex(delivery, r"delivery:\s*partial")
-        self.assertRegex(delivery, r"g-odd migration[\s\S]{0,120}delivered")
-        self.assertRegex(
-            delivery,
-            r"historical\s+#573[\s\S]{0,120}(?:incomplete|open)",
-        )
-        for false_closure in (
-            r"delivery:\s*complete",
-            r"(?:closes|fixes|resolves)\s+#573",
-            r"historical\s+#573[\s\S]{0,80}(?:completed|closed)",
-        ):
-            with self.subTest(pattern=false_closure):
-                self.assertIsNone(re.search(false_closure, delivery))
 
 
 if __name__ == "__main__":

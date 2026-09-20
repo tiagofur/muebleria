@@ -102,7 +102,6 @@ class PreflightTest(unittest.TestCase):
         (self.root / "docs").mkdir()
         for path in ("AGENTS.md", "docs/verification.md"):
             (self.root / path).write_text("fixture")
-        (self.root / "feature_list.json").write_text('{"features": []}')
         for args in (("init", "-q"), ("config", "user.name", "Test"), ("config", "user.email", "test@example.invalid"), ("add", "."), ("commit", "-qm", "fixture")):
             subprocess.run(["git", "-C", str(self.root), *args], check=True, capture_output=True)
 
@@ -124,9 +123,17 @@ class PreflightTest(unittest.TestCase):
         self.assertTrue(factory_preflight.inspect(self.root)["dirty"])
         self.assertEqual(factory_preflight.inspect(self.root, require_clean=True)["status"], "BLOCKED")
 
-    def test_invalid_ledger_blocks(self):
-        (self.root / "feature_list.json").write_text('{"features":[{"status":"imagined"}]}')
-        self.assertEqual(factory_preflight.inspect(self.root)["status"], "BLOCKED")
+    def test_global_catalog_is_not_a_startup_dependency(self):
+        self.assertFalse((self.root / "feature_list.json").exists())
+        self.assertEqual(
+            factory_preflight.inspect(self.root)["status"],
+            "PREFLIGHT_OK_NOT_VERIFIED",
+        )
+        (self.root / "feature_list.json").write_text("{not-json")
+        self.assertEqual(
+            factory_preflight.inspect(self.root)["status"],
+            "PREFLIGHT_OK_NOT_VERIFIED",
+        )
 
 
 class WiringTest(unittest.TestCase):
