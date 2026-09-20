@@ -137,8 +137,7 @@ Detalle y smoke: `docs/verification.md` § Nivel 6.
 │       └── reviewer/SKILL.md   # Revisor: aprueba o rechaza
 │
 ├── progress/
-│   ├── current.md              # Optional human overview outside normal execution
-│   └── history.md              # Bitácora append-only de sesiones
+│   └── history.md              # Bitácora histórica; no estado de ejecución
 │
 ├── Plantilla_Muebles.xlsx      # Fuente de dominio (fórmulas, datos de referencia)
 ├── Plantilla_Optimizer.xlsx    # Contrato de salida (formato de export de corte)

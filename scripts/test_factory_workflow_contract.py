@@ -17,6 +17,9 @@ from validate_feature_catalog import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "docs/demo/software-factory-human-start.md"
+BARE_CURRENT_FILENAME = re.compile(
+    r"(?<![A-Za-z0-9_./-])current\.md(?![A-Za-z0-9_.-])", re.IGNORECASE
+)
 LIVE_FACTORY_PATHS = (
     ".agents/skills/implementer/SKILL.md",
     ".agents/skills/reviewer/SKILL.md",
@@ -128,6 +131,10 @@ class WorkflowContractTest(unittest.TestCase):
             text = (ROOT / relative).read_text()
             with self.subTest(path=relative):
                 self.assertNotIn("progress/current.md", text)
+                self.assertIsNone(
+                    BARE_CURRENT_FILENAME.search(text),
+                    "active surfaces must not advertise a bare current.md ledger",
+                )
 
     def test_completed_odd_artifacts_need_no_cleanup_or_global_scan(self):
         for phrase in (
