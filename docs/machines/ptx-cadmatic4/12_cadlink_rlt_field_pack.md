@@ -348,3 +348,14 @@ python3 scripts/verify_affected.py --base origin/main --plan
 
 El golden #791 NO se modifica (regresión custodiada por su test de manifest).
 r2/r3/r4/r5-LAB siguen byte-exact.
+
+## 11. Consumo productivo (#793) — cerrado
+
+`buildCadlinkFieldPack` ya recibe las identidades productivas reales:
+el generador `r5ReviewFieldPack.generate.test.ts` alimenta el builder con los
+pins `ptx-cadmatic-4@r5` / `granete-ptx@1.4.0` / `client-a-machine-b-hpp250@r1`
+tomados del `MachineOutputSelection` real, por la MISMA ruta productiva
+(generateSelectedCuttingOutput con la proyección frozen de labels). El pack
+final de revisión vive en `artifacts-local/ptx-r5-final-review/` (ignorado) —
+ver `13_final_r5_candidate_gate.md` §6. Sin envío: primero revisión
+independiente; el resultado de campo vuelve a #348.
